@@ -82,6 +82,8 @@ mod tests {
             content_type: None,
             final_url: None,
             context: Params::new().with(FILE, file),
+            refused: None,
+            headers: alloc::vec::Vec::new(),
         }
     }
 

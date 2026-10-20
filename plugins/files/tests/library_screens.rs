@@ -1,9 +1,9 @@
 //! The library with the real kernel and the standard app, on a device
 //! with buttons only and on one with touch only: an empty library, a
-//! folder with many books (every one reachable on both), nested folders
-//! and the way back out of them, books with odd names, both orders, the
-//! grid of covers, books removed while the list shows, and what a book's
-//! options write to the storage.
+//! library of many books (every one reachable on both), books in folders
+//! and the folders as collections on the shelves, books with odd names,
+//! both orders, the grid of covers, books removed while the list shows,
+//! and what a book's sheet writes to the storage.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -13,6 +13,9 @@ mod common;
 use common::*;
 
 const TEXT: &[u8] = b"Some text of a book.\n\nAnd more of it.\n";
+
+/// What the row above the books says while all books show.
+const ALL_BOOKS: &str = "All books";
 
 /// A library of `count` books named `Book 01.txt` and on in `books`.
 fn many(count: usize) -> Vec<(String, Vec<u8>)> {
@@ -36,8 +39,8 @@ fn library(device: DeviceInfo, config: &str, files: &[(String, Vec<u8>)]) -> App
     app
 }
 
-/// The rows the list shows now, by the first part of their label (the
-/// title, or a folder's name).
+/// The rows the list shows now, by the first part of their label (a
+/// book's title, a shelf's name).
 fn rows(app: &mut App) -> Vec<String> {
     app.parts()
         .into_iter()
@@ -46,22 +49,9 @@ fn rows(app: &mut App) -> Vec<String> {
         .collect()
 }
 
-/// The title in a row's label: its first part that is neither a letter
-/// nor a format (a cover without a picture shows the title's first letter
-/// and the format, in the grid before the title).
+/// The title in a row's label: its first part.
 fn first(label: &str) -> String {
-    let format = |part: &str| {
-        part.len() <= 4
-            && part
-                .chars()
-                .all(|c| c.is_ascii_uppercase() || c.is_ascii_digit())
-    };
-    label
-        .split(", ")
-        .find(|part| part.chars().count() > 1 && !format(part))
-        .or_else(|| label.split(", ").next())
-        .unwrap_or_default()
-        .to_string()
+    label.split(", ").next().unwrap_or_default().to_string()
 }
 
 /// Every row of the list, page by page: with buttons by going down from
@@ -72,6 +62,18 @@ fn every_row(app: &mut App, touch: bool) -> Vec<String> {
 }
 
 fn every_entry(app: &mut App, touch: bool, step: Id) -> Vec<String> {
+    // From the first book: the first page; with buttons up to the row
+    // above the books, then on.
+    app.repeat(actions::PREV_PAGE, 20);
+    if !touch {
+        for _ in 0..200 {
+            if app.focused().is_some_and(|f| first(&f) == ALL_BOOKS) {
+                break;
+            }
+            app.run(actions::UP);
+        }
+        app.run(step.clone());
+    }
     let mut seen: Vec<String> = Vec::new();
     for _ in 0..200 {
         if touch {
@@ -90,11 +92,11 @@ fn every_entry(app: &mut App, touch: bool, step: Id) -> Vec<String> {
                 break;
             };
             let focused = first(&focused);
-            // Past the last row, the order in the header; then the first.
+            // Past the last book, the row above the books; then the first.
             if seen.first() == Some(&focused) {
                 break;
             }
-            if !focused.contains('›') && !seen.contains(&focused) {
+            if focused != ALL_BOOKS && !seen.contains(&focused) {
                 seen.push(focused);
             }
             app.run(step.clone());
@@ -103,8 +105,45 @@ fn every_entry(app: &mut App, touch: bool, step: Id) -> Vec<String> {
     seen
 }
 
+/// Chooses what the library shows (`option` of the row above the books):
+/// with buttons up to that row and confirm, on touch screens a tap on it.
+fn show(app: &mut App, option: &str) {
+    if app.kernel.device().input.touch {
+        app.tap_on(ALL_BOOKS);
+    } else {
+        for _ in 0..200 {
+            if app.focused().is_some_and(|f| first(&f) == ALL_BOOKS) {
+                break;
+            }
+            app.run(actions::UP);
+        }
+        app.run(actions::CONFIRM);
+    }
+    assert_eq!(app.screen(), "files.list.show", "{}", app.described());
+    choose(app, option);
+    assert_eq!(app.screen(), "files.browser", "{}", app.described());
+}
+
+/// Opens the row named `label`: by buttons, down to it and confirm; by
+/// touch, a tap on it.
+fn open(app: &mut App, label: &str) {
+    if app.kernel.device().input.touch {
+        app.tap_on(label);
+        return;
+    }
+    for _ in 0..200 {
+        if app.focused().is_some_and(|f| first(&f) == label) {
+            app.run(actions::CONFIRM);
+            return;
+        }
+        app.run(actions::DOWN);
+    }
+    panic!("no row {label}:\n{}", app.described());
+}
+
 #[test]
 fn an_empty_library_says_where_books_come_from() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "", &[]);
         assert!(app.shows("No books here yet"), "{}", app.described());
@@ -122,6 +161,7 @@ fn an_empty_library_says_where_books_come_from() {
 /// library showed again).
 #[test]
 fn an_empty_library_shows_again_after_its_menu_closes() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "", &[]);
         app.run(actions::MENU);
@@ -134,6 +174,7 @@ fn an_empty_library_shows_again_after_its_menu_closes() {
 
 #[test]
 fn a_library_folder_that_is_missing_shows_as_empty() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "[files]\nroot = nowhere/at/all\n", &many(3));
         assert!(app.shows("No books here yet"), "{}", app.described());
@@ -143,6 +184,7 @@ fn a_library_folder_that_is_missing_shows_as_empty() {
 
 #[test]
 fn every_one_of_many_books_is_reached_by_buttons_and_by_touch() {
+    let _turn = turn();
     let books = many(57);
     let names: Vec<String> = (1..=57).map(|n| format!("Book {n:02}")).collect();
     for device in DEVICES {
@@ -155,9 +197,10 @@ fn every_one_of_many_books_is_reached_by_buttons_and_by_touch() {
 
 #[test]
 fn page_buttons_turn_whole_pages_and_come_back() {
+    let _turn = turn();
     let mut app = library(X4, "[files]\nsort = files.sort.name\n", &many(57));
     let first_page = rows(&mut app);
-    assert!(first_page.len() > 3 && first_page.len() < 57);
+    assert!(first_page.len() > 2 && first_page.len() < 57);
     app.run(actions::NEXT_PAGE);
     let second = rows(&mut app);
     assert!(second.iter().all(|r| !first_page.contains(r)), "{second:?}");
@@ -170,6 +213,7 @@ fn page_buttons_turn_whole_pages_and_come_back() {
 
 #[test]
 fn the_grid_of_covers_reaches_every_book_too() {
+    let _turn = turn();
     let books = many(23);
     let names: Vec<String> = (1..=23).map(|n| format!("Book {n:02}")).collect();
     for device in DEVICES {
@@ -188,54 +232,40 @@ fn the_grid_of_covers_reaches_every_book_too() {
 }
 
 #[test]
-fn nested_folders_open_and_back_returns_to_the_folder_left() {
+fn books_in_folders_are_listed_and_their_folders_are_collections() {
+    let _turn = turn();
     let files = vec![
         ("books/Zeta.txt".to_string(), TEXT.to_vec()),
         ("books/Alpha/Beta/Gamma/Deep.txt".to_string(), TEXT.to_vec()),
         ("books/Alpha/Side.txt".to_string(), TEXT.to_vec()),
         ("books/Omega/Other.txt".to_string(), TEXT.to_vec()),
     ];
-    // Buttons: confirm opens the focused folder, back goes up.
-    let mut app = library(X4, "", &files);
-    assert_eq!(rows(&mut app), ["Alpha", "Omega", "Zeta"]);
-    app.run(actions::CONFIRM);
-    assert_eq!(rows(&mut app), ["Beta", "Side"]);
-    app.run(actions::CONFIRM);
-    app.run(actions::CONFIRM);
-    assert_eq!(rows(&mut app), ["Deep"]);
-    assert!(app.shows("Gamma"), "the folder's name as the title");
-    app.run(actions::BACK);
-    app.run(actions::BACK);
-    app.run(actions::BACK);
-    // At the top again, the folder left focused.
-    assert_eq!(rows(&mut app), ["Alpha", "Omega", "Zeta"]);
-    assert_eq!(first(&app.focused().unwrap()), "Alpha");
-    app.run(actions::DOWN);
-    app.run(actions::CONFIRM);
-    assert_eq!(rows(&mut app), ["Other"]);
-    app.run(actions::BACK);
-    assert_eq!(first(&app.focused().unwrap()), "Omega");
-    // Back at the library folder leaves the library.
-    app.run(actions::BACK);
-    assert_eq!(app.screen(), "home.dashboard");
-
-    // Touch: a tap opens a folder, the arrow in the header goes up.
-    let mut app = library(TOUCH, "", &files);
-    app.tap_on("Alpha");
-    app.tap_on("Beta");
-    app.tap_on("Gamma");
-    assert_eq!(rows(&mut app), ["Deep"]);
-    app.tap_back();
-    assert_eq!(rows(&mut app), ["Gamma"]);
-    app.tap_back();
-    app.tap_back();
-    assert_eq!(rows(&mut app), ["Alpha", "Omega", "Zeta"]);
-    app.tap_back();
-    assert_eq!(app.screen(), "home.dashboard");
+    for device in DEVICES {
+        let mut app = library(device, "[files]\nsort = files.sort.name\n", &files);
+        // Every book, those in folders too, by title.
+        assert_eq!(rows(&mut app), ["Deep", "Other", "Side", "Zeta"]);
+        // The folders are on the shelves, each with the books below it.
+        show(&mut app, "Shelves");
+        let shelves = rows(&mut app);
+        assert!(shelves.contains(&"Alpha".to_string()), "{shelves:?}");
+        assert!(shelves.contains(&"Omega".to_string()), "{shelves:?}");
+        open(&mut app, "Alpha");
+        assert_eq!(app.screen(), "files.list.shelf");
+        assert!(app.shows("Alpha"), "the folder's name as the title");
+        assert_eq!(rows(&mut app), ["Deep", "Side"]);
+        // Back: the shelves as they were.
+        app.run(actions::BACK);
+        assert_eq!(app.screen(), "files.browser");
+        assert!(rows(&mut app).contains(&"Alpha".to_string()));
+        // Back at the library leaves it.
+        app.run(actions::BACK);
+        assert_eq!(app.screen(), "home.dashboard");
+    }
 }
 
 #[test]
 fn books_with_odd_names_show_and_open() {
+    let _turn = turn();
     let long = "L".repeat(180);
     let files = vec![
         ("books/Ünïcödé 日本語 📚.txt".to_string(), TEXT.to_vec()),
@@ -249,7 +279,10 @@ fn books_with_odd_names_show_and_open() {
     ];
     for device in DEVICES {
         let mut app = library(device, "[files]\nsort = files.sort.name\n", &files);
-        let shown = rows(&mut app);
+        let touch = device.input.touch;
+        let shown = every_row(&mut app, touch);
+        // Back to the first page.
+        app.repeat(actions::PREV_PAGE, 5);
         // No extension, hidden files and other readers' folders are no books.
         assert_eq!(shown.len(), 5, "{shown:?}");
         assert!(
@@ -262,10 +295,17 @@ fn books_with_odd_names_show_and_open() {
         assert!(!shown.iter().any(|r| r.contains("sdr")), "{shown:?}");
         // Each opens in the reader and comes back.
         for label in &shown {
-            if device.input.touch {
+            if touch {
+                // On the page it is on.
+                for _ in 0..5 {
+                    if app.find(label).is_some() {
+                        break;
+                    }
+                    app.tap_next_page();
+                }
                 app.tap_on(label);
             } else {
-                // From the first row, down to this one.
+                // From where the focus is, down to this one.
                 while first(&app.focused().unwrap_or_default()) != *label {
                     app.run(actions::DOWN);
                 }
@@ -279,28 +319,30 @@ fn books_with_odd_names_show_and_open() {
 }
 
 #[test]
-fn the_order_by_name_ignores_case_and_folders_come_first() {
+fn the_order_by_title_ignores_case_and_folders() {
+    let _turn = turn();
     let files = vec![
         ("books/banana.txt".to_string(), TEXT.to_vec()),
         ("books/Apple.txt".to_string(), TEXT.to_vec()),
         ("books/cherry.txt".to_string(), TEXT.to_vec()),
-        ("books/zfolder/x.txt".to_string(), TEXT.to_vec()),
-        ("books/Afolder/y.txt".to_string(), TEXT.to_vec()),
+        ("books/zfolder/Damson.txt".to_string(), TEXT.to_vec()),
+        ("books/Afolder/Elder.txt".to_string(), TEXT.to_vec()),
     ];
     let mut app = library(X4, "[files]\nsort = files.sort.name\n", &files);
-    assert_eq!(
-        rows(&mut app),
-        ["Afolder", "zfolder", "Apple", "banana", "cherry"]
-    );
+    let shown = every_row(&mut app, false);
+    let shown: Vec<String> = shown.iter().map(|r| r.to_lowercase()).collect();
+    assert_eq!(shown, ["apple", "banana", "cherry", "damson", "elder"]);
 }
 
 #[test]
 fn recently_read_books_come_first_in_the_order_they_were_read() {
+    let _turn = turn();
     let files = many(5);
     for device in DEVICES {
+        let touch = device.input.touch;
         let mut app = library(device, "", &files);
         assert_eq!(
-            rows(&mut app),
+            every_row(&mut app, touch),
             ["Book 01", "Book 02", "Book 03", "Book 04", "Book 05"]
         );
         for book in ["books/Book 04.txt", "books/Book 02.txt"] {
@@ -310,41 +352,49 @@ fn recently_read_books_come_first_in_the_order_they_were_read() {
         }
         assert_eq!(app.screen(), "files.browser");
         assert_eq!(
-            rows(&mut app),
+            every_row(&mut app, touch),
             ["Book 02", "Book 04", "Book 01", "Book 03", "Book 05"]
         );
-        // By name: as before; the order shows in the header.
+        // By title: as before.
         app.set("files.sort", "files.sort.name");
-        assert!(app.shows("By name"), "{}", app.described());
         assert_eq!(
-            rows(&mut app),
+            every_row(&mut app, touch),
             ["Book 01", "Book 02", "Book 03", "Book 04", "Book 05"]
         );
     }
 }
 
 #[test]
-fn the_order_in_the_header_opens_the_library_menu_by_buttons_and_touch() {
-    // Buttons: up from the first book reaches it.
+fn the_row_above_the_books_chooses_what_shows_and_the_title_opens_the_menu() {
+    let _turn = turn();
+    // Buttons: up from the first book reaches the row above the books.
     let mut app = library(X4, "", &many(3));
     app.run(actions::UP);
-    assert_eq!(app.focused().as_deref(), Some("Recently read ›"));
+    assert_eq!(app.focused().as_deref(), Some(ALL_BOOKS));
     app.run(actions::CONFIRM);
-    assert_eq!(app.screen(), "menu.list");
-    assert!(app.shows("Order of books"), "{}", app.described());
+    assert_eq!(app.screen(), "files.list.show");
     app.run(actions::BACK);
     assert_eq!(app.screen(), "files.browser");
     // Down from it, the first book again.
     app.run(actions::DOWN);
     assert_eq!(first(&app.focused().unwrap()), "Book 01");
+    // The menu button: the book's sheet; on the row above, the menu.
+    app.run(actions::UP);
+    app.run(actions::MENU);
+    assert_eq!(app.screen(), "menu.list");
+    assert!(app.shows("Order of books"), "{}", app.described());
 
     let mut app = library(TOUCH, "", &many(3));
-    app.tap_on("Recently read");
+    app.tap_on("Library");
     assert_eq!(app.screen(), "menu.list");
+    app.run(actions::BACK);
+    app.tap_on(ALL_BOOKS);
+    assert_eq!(app.screen(), "files.list.show");
 }
 
 #[test]
 fn a_book_removed_while_the_list_shows_goes_from_it() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "[files]\nsort = files.sort.name\n", &many(4));
         assert_eq!(rows(&mut app).len(), 4);
@@ -360,8 +410,10 @@ fn a_book_removed_while_the_list_shows_goes_from_it() {
 
 #[test]
 fn opening_a_book_removed_unannounced_does_not_break_the_library() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "[files]\nsort = files.sort.name\n", &many(2));
+        assert_eq!(rows(&mut app), ["Book 01", "Book 02"]);
         // Gone without anyone telling: the list still shows it.
         app.storage.remove("books/Book 01.txt").unwrap();
         if device.input.touch {
@@ -369,12 +421,7 @@ fn opening_a_book_removed_unannounced_does_not_break_the_library() {
         } else {
             app.run(actions::CONFIRM);
         }
-        // Whatever the reader makes of it, back leads to the library,
-        // which then lists what is there.
-        app.run(actions::BACK);
-        if app.screen() != "files.browser" {
-            app.run(actions::BACK);
-        }
+        // Not opened: the library says so and lists what is there.
         assert_eq!(app.screen(), "files.browser", "{}", app.described());
         assert_eq!(rows(&mut app), ["Book 02"]);
     }
@@ -384,6 +431,7 @@ fn opening_a_book_removed_unannounced_does_not_break_the_library() {
 /// library kept its focus).
 #[test]
 fn every_book_of_the_whole_library_folder_removed_leaves_it_empty() {
+    let _turn = turn();
     let mut app = library(TOUCH, "", &many(3));
     for n in 1..=3 {
         app.storage
@@ -401,9 +449,9 @@ fn every_book_of_the_whole_library_folder_removed_leaves_it_empty() {
     assert_eq!(app.screen(), "menu.list");
 }
 
-/// The options of the focused book: held on touch screens, the menu
-/// button with buttons only.
-fn options_of(app: &mut App, title: &str) {
+/// The sheet of the book `title`: held on touch screens, the menu button
+/// with buttons only.
+fn sheet_of(app: &mut App, title: &str) {
     if app.kernel.device().input.touch {
         app.long_press_on(title);
     } else {
@@ -412,11 +460,11 @@ fn options_of(app: &mut App, title: &str) {
         }
         app.run(actions::MENU);
     }
-    assert_eq!(app.screen(), "files.choice", "{}", app.described());
+    assert_eq!(app.screen(), "files.list.sheet", "{}", app.described());
 }
 
-/// Chooses `option` of the choice shown: by buttons, down to it and
-/// confirm; by touch, a tap on it.
+/// Chooses `option` of the choice or sheet shown: by buttons, down to it
+/// and confirm; by touch, a tap on it.
 fn choose(app: &mut App, option: &str) {
     if app.kernel.device().input.touch {
         app.tap_on(option);
@@ -437,9 +485,10 @@ fn choose(app: &mut App, option: &str) {
 
 #[test]
 fn favourites_are_kept_and_shown_on_their_shelf() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "[files]\nsort = files.sort.name\n", &many(3));
-        options_of(&mut app, "Book 02");
+        sheet_of(&mut app, "Book 02");
         choose(&mut app, "Add to favourites");
         assert_eq!(app.screen(), "files.browser");
         assert_eq!(
@@ -451,7 +500,7 @@ fn favourites_are_kept_and_shown_on_their_shelf() {
         assert!(!app.shows("Book 01"), "{}", app.described());
         app.run(actions::BACK);
         // And off again.
-        options_of(&mut app, "Book 02");
+        sheet_of(&mut app, "Book 02");
         choose(&mut app, "Remove from favourites");
         assert!(paperpaw_sdk::library::favourites(&app.storage).is_empty());
     }
@@ -459,15 +508,18 @@ fn favourites_are_kept_and_shown_on_their_shelf() {
 
 #[test]
 fn a_finished_book_moves_to_the_archive_folder_with_its_name_kept_free() {
+    let _turn = turn();
     let mut files = many(2);
     // A book of the same name is in the archive already.
     files.push(("books/Archive/Book 01.txt".to_string(), b"old".to_vec()));
     for device in DEVICES {
         let mut app = library(device, "[files]\nsort = files.sort.name\n", &files);
-        options_of(&mut app, "Book 01");
+        // The archive's books are not among the others.
+        assert_eq!(rows(&mut app), ["Book 01", "Book 02"]);
+        sheet_of(&mut app, "Book 01");
         choose(&mut app, "Mark as finished");
         assert!(app.shows("Finished"), "{}", app.described());
-        options_of(&mut app, "Book 01");
+        sheet_of(&mut app, "Book 01");
         choose(&mut app, "Move to the archive");
         assert_eq!(app.screen(), "files.browser");
         assert!(!app.storage.exists("books/Book 01.txt"));
@@ -480,25 +532,33 @@ fn a_finished_book_moves_to_the_archive_folder_with_its_name_kept_free() {
             app.storage.text("books/Archive/Book 01 (2).txt"),
             Some(String::from_utf8(TEXT.to_vec()).unwrap())
         );
-        // The archive is a folder of the library, first in the list.
-        assert_eq!(rows(&mut app), ["Archive", "Book 02"]);
+        // Gone from the list at once; the archive is on the shelves.
+        assert_eq!(rows(&mut app), ["Book 02"]);
+        show(&mut app, "Shelves");
+        open(&mut app, "Archive");
+        assert_eq!(rows(&mut app).len(), 2, "{}", app.described());
     }
 }
 
 #[test]
 fn a_book_in_the_archive_is_not_offered_to_be_archived_again() {
+    let _turn = turn();
     let files = vec![("books/Archive/Done.txt".to_string(), TEXT.to_vec())];
     let mut app = library(TOUCH, "", &files);
+    // Every book in the archive: the list says where they are.
+    assert!(app.shows("archive"), "{}", app.described());
+    show(&mut app, "Shelves");
     app.tap_on("Archive");
-    options_of(&mut app, "Done");
+    sheet_of(&mut app, "Done");
     assert!(!app.shows("Move to the archive"), "{}", app.described());
 }
 
 #[test]
-fn book_information_opens_from_the_options() {
+fn book_information_opens_from_the_sheet() {
+    let _turn = turn();
     for device in DEVICES {
         let mut app = library(device, "", &many(1));
-        options_of(&mut app, "Book 01");
+        sheet_of(&mut app, "Book 01");
         choose(&mut app, "Book information");
         assert_eq!(app.screen(), "files.info");
         assert!(app.shows("Book 01"), "{}", app.described());
@@ -509,25 +569,16 @@ fn book_information_opens_from_the_options() {
 
 #[test]
 fn searching_finds_books_by_their_title() {
+    let _turn = turn();
     for device in DEVICES {
         let files = vec![
             ("books/Moby Dick.txt".to_string(), TEXT.to_vec()),
             ("books/Dracula.txt".to_string(), TEXT.to_vec()),
         ];
         let mut app = library(device, "", &files);
-        // The catalog's freshness is known for the whole program, as on a
-        // device: the books of this library are new to it.
-        app.send(
-            paperpaw_sdk::builtin::events::LIBRARY_CHANGED,
-            Params::new(),
-        );
         app.will_type("  moby ");
         app.run(Id::new_static("files.search"));
-        assert_eq!(app.screen(), "files.shelf", "{}", app.described());
-        // The catalog is made in the background.
-        app.now += 5000;
-        let effects = app.kernel.tick(Instant(app.now));
-        app.settle(effects);
+        assert_eq!(app.screen(), "files.list.shelf", "{}", app.described());
         assert!(app.shows("Moby Dick"), "{}", app.described());
         assert!(!app.shows("Dracula"), "{}", app.described());
     }
@@ -535,6 +586,7 @@ fn searching_finds_books_by_their_title() {
 
 #[test]
 fn an_empty_search_opens_nothing() {
+    let _turn = turn();
     let mut app = library(X4, "", &many(1));
     app.will_type("   ");
     app.run(Id::new_static("files.search"));
@@ -542,8 +594,9 @@ fn an_empty_search_opens_nothing() {
 }
 
 #[test]
-fn many_books_in_many_folders_do_not_slow_the_first_page() {
-    // 400 books in 20 folders: the first page shows the folders at once.
+fn many_books_in_many_folders_show_at_once_and_their_folders_on_the_shelves() {
+    let _turn = turn();
+    // 400 books in 20 folders: the first page shows books at once.
     let files: Vec<(String, Vec<u8>)> = (0..400)
         .map(|n| {
             (
@@ -554,9 +607,9 @@ fn many_books_in_many_folders_do_not_slow_the_first_page() {
         .collect();
     let mut app = library(X4, "[files]\nsort = files.sort.name\n", &files);
     let shown = rows(&mut app);
-    assert_eq!(shown.first().map(String::as_str), Some("Shelf 00"));
-    app.run(actions::CONFIRM);
-    assert_eq!(rows(&mut app).first().map(String::as_str), Some("Book 000"));
-    let seen = every_row(&mut app, false);
-    assert_eq!(seen.len(), 20);
+    assert_eq!(shown.first().map(String::as_str), Some("Book 000"));
+    show(&mut app, "Shelves");
+    let shelves = every_row(&mut app, false);
+    let folders = shelves.iter().filter(|s| s.starts_with("Shelf ")).count();
+    assert_eq!(folders, 20, "{shelves:?}");
 }

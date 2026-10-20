@@ -185,7 +185,7 @@ impl ReaderScreen {
             .into_iter()
             .flatten()
             .filter(|s| s.page == book.page.start)
-            .filter_map(|s| aloud_area(&env, &words, s.from..s.to))
+            .filter_map(|s| aloud_area(&env, words, s.from..s.to))
             .reduce(|a, b| a.union(&b));
         if let Some(area) = area {
             cx.request_redraw_area(area);

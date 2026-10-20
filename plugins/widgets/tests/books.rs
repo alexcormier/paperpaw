@@ -72,6 +72,7 @@ impl Plugin for StandIn {
             description: Cow::Borrowed("Says where a book is read."),
             version: SDK_VERSION,
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

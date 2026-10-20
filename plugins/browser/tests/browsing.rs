@@ -515,7 +515,6 @@ fn fonts_without_a_fonts_folder_are_not_kept() {
 }
 
 #[test]
-#[ignore = "bug: a server's error page is not shown: error answers no longer reach the download file the browser reads"]
 fn errors_are_told_and_error_pages_shown() {
     let mut h = Harness::new();
     let call = h.go("https://e.example/missing.pdf");

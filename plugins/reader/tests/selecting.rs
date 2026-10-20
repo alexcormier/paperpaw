@@ -103,7 +103,6 @@ fn a_long_press_selects_the_word_held() {
 /// bookmark in the corner, or what `tap.top` does), so its words cannot
 /// be selected by touch.
 #[test]
-#[ignore = "bug: a long press in the top edge strip is never recognized (the kernel's edge swipes take the finger)"]
 fn a_long_press_on_the_first_line_selects_its_word() {
     let mut reading = numbered(TOUCH);
     let words = reading.words();
@@ -304,12 +303,9 @@ fn buttons_move_by_words_and_stop_at_the_ends() {
     assert_eq!(reading.turned(), 0);
 }
 
-/// While a word is chosen, the arrows are taken as page turns first
-/// (`page_turn` in the reader's screen, "pages by the arrows") and only
-/// then given to the selection: Down moves to the next word and Up to the
-/// one before, never to another line.
+/// While a word is chosen, Up and Down move to the line above or below
+/// (the arrows turn pages only while nothing is chosen).
 #[test]
-#[ignore = "bug: while a word is chosen, Up and Down move by words (the arrows are made page turns first)"]
 fn buttons_move_by_lines_and_stop_at_the_ends() {
     let mut reading = numbered(BUTTONS);
     let words = reading.words();

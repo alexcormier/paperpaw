@@ -39,6 +39,7 @@ paperpaw-plugin-stats.workspace = true
 paperpaw-plugin-battery.workspace = true
 paperpaw-plugin-widgets.workspace = true
 paperpaw-plugin-wifi.workspace = true
+paperpaw-plugin-power.workspace = true
 paperpaw-plugin-file-manager.workspace = true
 paperpaw-plugin-transfer.workspace = true
 paperpaw-plugin-browser.workspace = true

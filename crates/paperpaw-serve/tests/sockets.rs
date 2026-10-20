@@ -172,7 +172,6 @@ fn large_sends_arrive_whole_and_in_order() {
 }
 
 #[test]
-#[ignore = "bug: Close shuts the stream down at once, so sends still queued for the writing thread are lost"]
 fn what_was_sent_before_closing_still_arrives() {
     let (listener, port) = listener();
     let peer = thread::spawn(move || {

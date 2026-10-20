@@ -141,6 +141,8 @@ pub(super) struct GroupPage {
     pub(super) number_room: String,
     /// What the settings do, shown above them, where the group has it.
     pub(super) preview: Option<Preview>,
+    /// Covered by a full screen, and settings changed meanwhile.
+    pub(super) covered: Covered,
 }
 
 impl GroupPage {
@@ -246,7 +248,22 @@ impl GroupPage {
             noted,
             number_room,
             preview,
+            covered: Covered::default(),
         }
+    }
+
+    /// Makes the page anew for the settings now, keeping its focus and a
+    /// number being changed.
+    fn rebuild(&mut self, env: &Env<'_>) {
+        let focus = self.rows.focus;
+        let (keys, drag, dragged) = (self.keys, self.drag, self.dragged);
+        let editing = self.editing.take();
+        *self = Self::new(env, self.group.clone());
+        refocus(&mut self.rows, focus);
+        self.keys = keys;
+        self.editing = editing;
+        self.drag = drag;
+        self.dragged = dragged;
     }
 
     /// Focuses setting `id`, shown so (e.g. found by a search).
@@ -681,6 +698,24 @@ impl Screen for GroupPage {
         }
     }
 
+    fn on_hide(&mut self) {
+        self.covered.hide();
+    }
+
+    /// Asked for while covered: it comes once the page shows again, also
+    /// below an overlay left open above it (where `on_show` does not).
+    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        self.on_show(cx);
+    }
+
+    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        if self.covered.shown() {
+            let env = *cx.env();
+            self.rebuild(&env);
+            cx.request_redraw();
+        }
+    }
+
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         if let Some(picked) = CHOSEN.read(event, params) {
             if picked.path == self.group.as_str() {
@@ -690,17 +725,11 @@ impl Screen for GroupPage {
             return;
         }
         if *event == events::SETTING_CHANGED {
-            let env = *cx.env();
-            let focus = self.rows.focus;
-            let (keys, drag, dragged) = (self.keys, self.drag, self.dragged);
-            let editing = self.editing.take();
-            *self = Self::new(&env, self.group.clone());
-            refocus(&mut self.rows, focus);
-            self.keys = keys;
-            self.editing = editing;
-            self.drag = drag;
-            self.dragged = dragged;
-            cx.request_redraw();
+            if self.covered.changed(cx) {
+                let env = *cx.env();
+                self.rebuild(&env);
+                cx.request_redraw();
+            }
         } else if *event == events::PREVIEW_CHANGED {
             // A value being chosen, shown: its row and what it does.
             let env = *cx.env();

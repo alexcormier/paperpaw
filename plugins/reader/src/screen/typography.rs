@@ -356,10 +356,14 @@ impl Typography {
         let status = bottom.then(|| line(screen - edge - status_height));
         let hyphenation = (settings.read(&HYPHENATE) && env.hyphenation.get(language).is_some())
             .then(|| language.to_string());
+        // The plugins' stylesheets change what the book's text looks like.
+        let stylesheets = env.stylesheets.iter().fold(0u64, |hash, sheet| {
+            hash.rotate_left(5) ^ fnv1a64(sheet.as_bytes())
+        });
         let key = format!(
             "{:016x}",
             fnv1a64(format!(
-                "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}",
+                "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}|{stylesheets:x}",
                 paperpaw_sdk::layout::VERSION,
                 font.id(),
                 face_id(env, &fonts::READING_BOLD),

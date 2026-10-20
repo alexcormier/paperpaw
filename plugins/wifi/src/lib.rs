@@ -27,6 +27,7 @@ use paperpaw_sdk::builtin::{events, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
+use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
     Arg, Command, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
     SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
@@ -72,7 +73,10 @@ pub(crate) type Shared = Rc<RefCell<Policy>>;
 
 /// The radio stays on now: charging, and the user wants that.
 fn charging_keeps_it(env: &Env<'_>) -> bool {
-    env.settings.read(&WHILE_CHARGING) && env.status.battery.is_some_and(|b| b.charging)
+    // Offline keeps the radio off also while charging.
+    env.settings.read(&WHILE_CHARGING)
+        && env.status.battery.is_some_and(|b| b.charging)
+        && env.power.online()
 }
 
 fn idle_seconds(env: &Env<'_>) -> u64 {
@@ -95,7 +99,7 @@ fn schedule_off(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
     if wifi.state.is_on() && policy.may_go_off(charging_keeps_it(env)) {
         let at = env.now.add_millis(idle_seconds(env) * 1000);
         let params = Params::new().with(GENERATION, alloc::format!("{}", policy.generation));
-        out.push(Command::Schedule(IDLE_CHECK, params, at));
+        out.push(Command::Work(Work::at(IDLE_CHECK, at).with(params)));
     }
 }
 
@@ -108,10 +112,8 @@ fn schedule_retry(env: &Env<'_>, policy: &Policy, out: &mut Vec<Command>) {
     };
     if policy.still_wanted(wifi, env.now) || charging_keeps_it(env) {
         let params = Params::new().with(GENERATION, alloc::format!("{}", policy.generation));
-        out.push(Command::Schedule(
-            RETRY,
-            params,
-            env.now.add_millis(RETRY_MS),
+        out.push(Command::Work(
+            Work::at(RETRY, env.now.add_millis(RETRY_MS)).with(params),
         ));
     } else if !wifi.busy {
         schedule_off(env, policy, out);
@@ -187,6 +189,7 @@ impl Plugin for Wifi {
             ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -339,6 +342,13 @@ impl Plugin for Wifi {
         let p = policy.clone();
         r.on(events::NETWORK_IDLE, move |env, _, out| {
             schedule_off(env, &p.borrow(), out)
+        })?;
+        // Another power mode: a radio only charging kept on may go off.
+        let p = policy.clone();
+        r.on(events::POWER_CHANGED, move |env, (), out| {
+            if env.wifi.is_some_and(|w| !w.busy) {
+                schedule_off(env, &p.borrow(), out);
+            }
         })?;
         let p = policy.clone();
         r.subscribe(

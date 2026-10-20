@@ -238,12 +238,14 @@ impl Dictionary {
             if *budget == 0 {
                 break;
             }
-            let size = (entry.size as usize).min(MAX_DEFINITION).min(*budget);
+            let cap = MAX_DEFINITION.min(*budget);
+            let size = (entry.size as usize).min(cap);
             let data = self.dict.read(storage, entry.offset, size)?;
             let mut text = text::decode(&data, self.info.types.as_deref());
-            // Invalid UTF-8 can make the text longer than the data.
-            if text.len() > size {
-                let mut end = size;
+            // The text can be longer than the data (brackets and bullets
+            // added, invalid UTF-8 replaced): cut where it passes the cap.
+            if text.len() > cap {
+                let mut end = cap;
                 while !text.is_char_boundary(end) {
                     end -= 1;
                 }

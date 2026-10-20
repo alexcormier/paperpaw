@@ -138,19 +138,25 @@ impl Layout {
     }
 }
 
-/// Where the next marker is: read up to it, the marker byte returned.
+/// Where the next marker is: read up to it, the marker byte returned;
+/// [`END`] where the data ends without its end marker, as some files do,
+/// so that what there is is shown.
 fn next_marker(reader: &mut Reader<'_>) -> Result<u8, ImageError> {
     loop {
-        if reader.byte()? != 0xff {
-            continue;
+        match reader.next()? {
+            Some(0xff) => {}
+            Some(_) => continue,
+            None => return Ok(END),
         }
-        let mut marker = reader.byte()?;
-        while marker == 0xff {
-            marker = reader.byte()?;
+        let mut marker = reader.next()?;
+        while marker == Some(0xff) {
+            marker = reader.next()?;
         }
-        // Stuffed zeros and restarts belong to the data.
-        if marker != 0 && !(0xd0..=0xd7).contains(&marker) {
-            return Ok(marker);
+        match marker {
+            None => return Ok(END),
+            // Stuffed zeros and restarts belong to the data.
+            Some(marker) if marker != 0 && !(0xd0..=0xd7).contains(&marker) => return Ok(marker),
+            Some(_) => {}
         }
     }
 }
@@ -230,11 +236,7 @@ pub(crate) fn decode(
                 }
             }
         }
-        marker = match next_marker(reader) {
-            Ok(m) => m,
-            // Some files end without EOI: show what there is.
-            Err(_) => break,
-        };
+        marker = next_marker(reader)?;
     }
     output(&frame, &layout, &coefficients, fit, sink)
 }
@@ -275,7 +277,8 @@ enum Kind {
 }
 
 /// The marker [`scan`] returns for the image to end there: its scans
-/// went through more blocks than the data read may ask for.
+/// went through more blocks than the data read may ask for, or the data
+/// ended.
 const END: u8 = 0xd9;
 
 /// Decodes one scan (its header next) into `coefficients` (of the first
@@ -367,16 +370,16 @@ fn scan(
     // its data may ask for.
     let go = |bits: &Bits<'_, '_>, work: &mut u64, blocks: usize| {
         *work += blocks as u64;
-        if !bits.affords(*work) {
+        Ok(if !bits.affords(*work) {
             Go::End
-        } else if !bits.exhausted() {
+        } else if !bits.exhausted()? {
             Go::Decode
         } else if bits.resumes(restart) {
             // No data up to the next restart: nothing to add.
             Go::Skip
         } else {
             Go::Stop
-        }
+        })
     };
 
     if count == 1 {
@@ -388,7 +391,7 @@ fn scan(
         'blocks: for by in 0..blocks_y {
             for bx in 0..blocks_x {
                 before_mcu(&mut bits, &mut frame.components, &mut eob_run)?;
-                match go(&bits, work, 1) {
+                match go(&bits, work, 1)? {
                     Go::Decode => {}
                     Go::Skip => continue,
                     Go::Stop => break 'blocks,
@@ -417,7 +420,7 @@ fn scan(
         'mcus: for my in 0..layout.mcus_y {
             for mx in 0..layout.mcus_x {
                 before_mcu(&mut bits, &mut frame.components, &mut eob_run)?;
-                match go(&bits, work, mcu_blocks) {
+                match go(&bits, work, mcu_blocks)? {
                     Go::Decode => {}
                     Go::Skip => continue,
                     Go::Stop => break 'mcus,
@@ -446,6 +449,8 @@ fn scan(
             }
         }
     }
+    // Data cut short in the last blocks is an error.
+    bits.exhausted()?;
     match bits.marker {
         Some(marker) if !(0xd0..=0xd7).contains(&marker) => Ok(marker),
         _ => next_marker(bits.reader),

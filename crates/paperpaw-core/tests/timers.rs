@@ -9,13 +9,14 @@
 mod common;
 
 use common::{FULL, Harness, LATER, LATER2, REPEAT, WAKE};
+use paperpaw_core::sdk::work::Work;
 use paperpaw_core::sdk::{Command, Params};
 use paperpaw_platform::Instant;
 use proptest::prelude::*;
 use proptest::test_runner::Config;
 
 fn schedule(event: &paperpaw_core::sdk::Id, at: u64) -> Command {
-    Command::Schedule(event.clone(), Params::new(), Instant(at))
+    Command::Work(Work::at(event.clone(), Instant(at)))
 }
 
 #[test]
@@ -89,7 +90,7 @@ fn a_repeating_event_comes_once_per_period_even_after_a_jump() {
     harness.run(
         &mut kernel,
         0,
-        [Command::Schedule(LATER, params, Instant(1000))],
+        [Command::Work(Work::at(LATER, Instant(1000)).with(params))],
     );
     for at in [1000, 1500, 2000, 2999, 3000] {
         kernel.tick(Instant(at));
@@ -110,7 +111,7 @@ fn times_at_the_end_of_the_clock_do_not_overflow() {
     let effects = harness.run(
         &mut kernel,
         end - 10,
-        [Command::Schedule(LATER, params, Instant(end))],
+        [Command::Work(Work::at(LATER, Instant(end)).with(params))],
     );
     assert_eq!(effects.wake_at(), Some(Instant(end)));
     kernel.tick(Instant(end));

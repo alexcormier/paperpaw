@@ -143,7 +143,6 @@ proptest! {
     /// source, and later positions never map to earlier text (see the
     /// shrunk case below).
     #[test]
-    #[ignore = "bug: a position in a gap before the first checkpoint maps past the next character"]
     fn positions_map_in_order_and_never_past_the_next_character(
         start in 0u32..1000,
         chars in chars(),
@@ -217,7 +216,6 @@ proptest! {
     /// Runs stay sorted and apart when a replacement covers the end of
     /// one and the start of the next.
     #[test]
-    #[ignore = "bug: Block::replace makes runs overlap that both reach into the replaced text"]
     fn replacing_keeps_runs_apart(
         chars in chars(),
         cuts in proptest::collection::vec((any::<prop::sample::Index>(), any::<u8>()), 0..8),
@@ -304,9 +302,8 @@ proptest! {
 }
 
 /// The shrunk case of `replacing_keeps_runs_apart`: "BB" bold and "DD"
-/// italic, "BccD" replaced by "X": both runs now cover "X".
+/// italic, "BccD" replaced by "X": only the bold run may cover "X".
 #[test]
-#[ignore = "bug: Block::replace makes runs overlap that both reach into the replaced text"]
 fn replacing_the_end_of_one_run_and_the_start_of_the_next() {
     let (mut block, _) = decoded(0, &[]);
     block.text = String::from("aaBBccDDee");
@@ -375,11 +372,10 @@ fn a_later_checkpoint_at_the_same_index_wins() {
 }
 
 /// "Inside a gap (e.g. a dropped `\r`) map to the checkpoint", the map
-/// says; for a gap before its first checkpoint it counts on from the
-/// block's start instead: in `a<!-- a comment -->b` (text "ab") a
-/// position in the comment maps past "b", to the end of the block.
+/// says, also for a gap before its first checkpoint: in
+/// `a<!-- a comment -->b` (text "ab") a position in the comment maps to
+/// "b", not past it.
 #[test]
-#[ignore = "bug: a position in a gap before the first checkpoint maps past the next character"]
 fn a_position_in_a_gap_before_the_first_checkpoint_maps_to_the_next_character() {
     let (block, sources) = decoded(0, &[('a', 1, 0), ('b', 1, 19)]);
     assert_eq!(sources, [(0, 0), (1, 20)]);

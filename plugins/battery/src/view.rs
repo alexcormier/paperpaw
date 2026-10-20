@@ -73,11 +73,9 @@ fn percent(env: &Env<'_>, value: f32) -> String {
 /// The voltage, e.g. `4.01 V`.
 fn volts(env: &Env<'_>, millivolts: u16) -> String {
     let point = env.i18n.tr("battery.decimal-point");
-    format!(
-        "{}{point}{:02} V",
-        millivolts / 1000,
-        (millivolts % 1000 + 5) / 10
-    )
+    // Rounded to hundredths first, so that 3999 mV is 4.00 V.
+    let hundredths = (u32::from(millivolts) + 5) / 10;
+    format!("{}{point}{:02} V", hundredths / 100, hundredths % 100)
 }
 
 /// Plugins listed in each section.
@@ -89,6 +87,20 @@ fn plugin_name(env: &Env<'_>, id: &str) -> String {
         Some(info) => String::from(info.name(env.i18n)),
         None if id == "core" => String::from(env.i18n.tr("battery.core")),
         None => String::from(id),
+    }
+}
+
+/// What the reader set for `plugin`'s network, where it is not the
+/// default: off, as in Normal while saving, only when asked.
+fn network_setting(env: &Env<'_>, plugin: &str) -> String {
+    let off = env.settings.get(&format!("core.network.{plugin}"))
+        == Some(&paperpaw_sdk::SettingValue::Bool(false));
+    if off {
+        return String::from(env.i18n.tr("battery.network-off"));
+    }
+    match env.settings.text(&format!("core.saving.{plugin}")) {
+        choice @ ("core.saving.normal" | "core.saving.manual") => String::from(env.i18n.tr(choice)),
+        _ => String::new(),
     }
 }
 
@@ -241,6 +253,46 @@ impl BatteryView {
                     plugin_name(env, p.plugin.as_str()),
                     seconds(env, p.busy_us),
                 ));
+            }
+        }
+
+        // What each plugin did with the network this time awake, with what
+        // the reader set for it and what its background work last said:
+        // for everyone, so an exemption is never invisible.
+        let net = env.plugin_usage();
+        let mut net: Vec<_> = net.iter().filter(|p| p.requests + p.refused > 0).collect();
+        net.sort_by_key(|p| core::cmp::Reverse(p.requests + p.refused));
+        if !net.is_empty() {
+            lines.push(Line::Heading(tr("battery.network")));
+            for p in net.into_iter().take(PLUGINS_SHOWN) {
+                let id = p.plugin.as_str();
+                let value = env.i18n.plural(
+                    "battery.requests",
+                    i64::from(p.requests),
+                    &[("count", Arg::Int(i64::from(p.requests)))],
+                );
+                lines.push(Line::Value(plugin_name(env, id), value));
+                // Below: what was held back, what the reader set for it.
+                let mut more = Vec::new();
+                if p.refused > 0 {
+                    more.push(env.i18n.plural(
+                        "battery.refused",
+                        i64::from(p.refused),
+                        &[("count", Arg::Int(i64::from(p.refused)))],
+                    ));
+                }
+                let set = network_setting(env, id);
+                if !set.is_empty() {
+                    more.push(set);
+                }
+                if !more.is_empty() {
+                    lines.push(Line::Message(more.join(" · ")));
+                }
+                if let Ok(owner) = Id::parse(id)
+                    && let Some(note) = env.work.note(&owner)
+                {
+                    lines.push(Line::Message(note.text.clone()));
+                }
             }
         }
 

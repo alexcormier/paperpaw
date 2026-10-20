@@ -123,6 +123,7 @@ impl Plugin for Joplin {
             description: Cow::Borrowed("Keeps the highlights and notes of each book in Joplin."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -142,30 +143,45 @@ impl Plugin for Joplin {
         let state = run.clone();
         r.add_action(ActionSpec::new(SEND, "joplin.send").handler(
             move |env: &Env<'_>, out: &mut Vec<Command>| {
-                state.borrow_mut().start(env, Start::Action, out);
+                if env.reader {
+                    state.borrow_mut().start(env, Start::Action, out);
+                } else {
+                    let due = SEND_DUE.id().clone();
+                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                        due,
+                        core::time::Duration::from_secs(3600),
+                    )));
+                }
             },
         ))?;
+        let state = run.clone();
+        r.on(SEND_DUE, move |env, (), out| {
+            state.borrow_mut().start(env, Start::Action, out);
+        })?;
         r.add_menu_entry(MenuEntry {
             menu: menus::TOOLS,
             item: OPEN,
             order: 49,
         })?;
-        r.add_icon(OPEN, Cow::Borrowed("notebook"))?;
-        r.add_icon(SEND, Cow::Borrowed("cloud-upload"))?;
+        r.add_icon(OPEN, Cow::Borrowed("note"))?;
+        r.add_icon(SEND, Cow::Borrowed("upload"))?;
 
         // Any reader's notes, once exported as Markdown.
         let state = run.clone();
         r.on(events::NOTES_EXPORTED, move |env, exported, out| {
             if kept::add_waiting(env.storage, &exported.path).is_ok() {
                 state.borrow_mut().start(env, Start::Export, out);
+                retry_later(env, out);
             }
         })?;
+        // Notes still waiting: at the next connection, at the latest in
+        // half an hour (longer while saving).
         let state = run.clone();
-        r.on(events::WIFI_CHANGED, move |env, _, out| {
-            if env.wifi.is_some_and(|w| w.state.is_online()) {
-                state.borrow_mut().start(env, Start::Retry, out);
-            }
+        r.on(RETRY_DUE, move |env, (), out| {
+            state.borrow_mut().start(env, Start::Retry, out);
+            retry_later(env, out);
         })?;
+        r.on(events::STARTED, |env, _, out| retry_later(env, out))?;
         let state = run.clone();
         r.on(events::SETTING_CHANGED, move |_, changed, _| {
             if [SERVICE.as_str(), ADDRESS.as_str(), USER.as_str()].contains(&changed.id.as_str()) {
@@ -197,6 +213,21 @@ impl Plugin for Joplin {
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
+    }
+}
+
+/// Declared work: notes still waiting, sent again.
+const RETRY_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("joplin.retry");
+/// Declared work: a send no reader waits for (a rule's).
+const SEND_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("joplin.send-due");
+
+/// Declares the next try while notes wait.
+fn retry_later(env: &Env<'_>, out: &mut Vec<Command>) {
+    if !kept::waiting(env.storage).is_empty() {
+        let work = paperpaw_sdk::work::Work::network(RETRY_DUE.id().clone())
+            .within(core::time::Duration::from_secs(30 * 60))
+            .at_moments(paperpaw_sdk::work::Moments::ONLINE);
+        out.push(Command::Work(work));
     }
 }
 

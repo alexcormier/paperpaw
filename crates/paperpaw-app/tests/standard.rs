@@ -65,6 +65,7 @@ impl Plugin for Probe {
             description: Cow::Borrowed("Knows only the standard ids."),
             version: SDK_VERSION,
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

@@ -30,6 +30,7 @@ superseded by a new record that links back.
 | [0022](0022-plugins-in-updates.md) | Plugins in updates | Accepted |
 | [0023](0023-plugin-store.md) | The plugin store | Accepted |
 | [0024](0024-native-code-plugins.md) | Native code plugins as files | Accepted |
+| [0025](0025-power-saving.md) | Power saving: efficient by default, declared work, power modes | Accepted |
 
 ## Template
 

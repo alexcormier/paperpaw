@@ -89,9 +89,12 @@ impl Kernel {
         }
         let section = format!("keymap.{layer}");
         let action = action.as_ref();
-        // At once, also where it cannot be saved; the shell's overrides
-        // stay above it.
+        // At once, also where it cannot be saved. The shell's overrides stay
+        // above the user's bindings, but not for an input bound now: the
+        // choice made here wins (until the next start, where the shell's
+        // configuration is applied again).
         self.keys.user = bound(&self.keys.user, &section, input, action);
+        self.keys.shell = paperpaw_config::remove(&self.keys.shell, &section, input);
         self.update_config(&format_args!("`{section}.{input}`"), |source| {
             bound(source, &section, input, action)
         });

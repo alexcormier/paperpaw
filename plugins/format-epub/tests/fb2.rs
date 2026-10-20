@@ -90,7 +90,6 @@ fn broken_binaries_give_no_picture_and_no_panic() {
 }
 
 #[test]
-#[ignore = "bug: a later binary of the same id that fails to decode removes the picture of the first"]
 fn a_second_binary_of_the_same_id_does_not_undo_the_first() {
     let (storage, doc) = open(fb2(
         "",
@@ -145,7 +144,6 @@ fn sections_nested_very_deep_keep_their_text_and_contents() {
 }
 
 #[test]
-#[ignore = "bug: an empty self-closing section title shifts every later contents entry"]
 fn empty_section_titles_do_not_shift_the_contents() {
     // `<title/>` gets an anchor while converting but no contents entry
     // while scanning, so entry n leads to anchor n of another section.

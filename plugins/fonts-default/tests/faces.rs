@@ -234,7 +234,6 @@ fn the_icon_font_holds_the_icons_plugins_ask_for() {
 /// `cloud-upload`, which `tools/icons/subset.py` does not put into the
 /// icon font: its menu entries show no icon.
 #[test]
-#[ignore = "bug: the icons notebook and cloud-upload (joplin) are not in the icon font"]
 fn the_icon_font_holds_every_icon_plugins_ask_for() {
     let missing = missing_icons(&registered());
     assert!(missing.is_empty(), "icons without a drawing: {missing:#?}");

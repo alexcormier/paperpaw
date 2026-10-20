@@ -303,7 +303,14 @@ impl Kernel {
                 if let Some(handler) = &spec.handler {
                     let env = self.shared.env(self.now);
                     let _running = self.shared.meter.enter(action.namespace());
+                    let from = self.output.commands.len();
                     handler(&env, &mut self.output.commands);
+                    // Run by a rule, not the reader: nothing said over reading.
+                    let (reader, now) = (self.shared.reader, self.now);
+                    let top = self.stack.last().map(|s| s.id.namespace());
+                    let out = &mut self.output.commands;
+                    let owner = action.namespace();
+                    work::quiet(reader, top, now, from, owner, out, &mut self.works);
                 }
             }
             None => self.warn_runtime(format!("unknown action `{action}`")),

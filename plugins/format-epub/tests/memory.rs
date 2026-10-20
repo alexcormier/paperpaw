@@ -49,7 +49,6 @@ unsafe impl GlobalAlloc for Largest {
 static ALLOCATOR: Largest = Largest;
 
 #[test]
-#[ignore = "bug: an XPointer of a position past a chapter's end allocates a buffer as large as the distance"]
 fn xpointers_of_positions_far_past_a_chapters_end_ask_little_memory() {
     // A position kept from a longer edition of the book, or a stray one:
     // `xpointer` reads from the last text node to the position into one

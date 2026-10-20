@@ -144,7 +144,6 @@ fn markdown_line_ends_of_every_kind() {
 }
 
 #[test]
-#[ignore = "bug: two spaces at a line's end break the line before it, not after it"]
 fn markdown_two_spaces_break_the_line_after_them() {
     for md in ["one  \ntwo\nthree\n", "one  \r\ntwo\r\nthree\r\n"] {
         let (storage, doc) = markdown(md);
@@ -212,15 +211,14 @@ fn markdown_long_lines_convert() {
 }
 
 #[test]
-#[ignore = "bug: a Markdown line full of brackets takes quadratic time to convert"]
 fn markdown_lines_of_brackets_convert_in_linear_time() {
-    // Each `[` or `![` copies the rest of the line to look for its link:
-    // a line of 200,000 brackets takes hours. A few thousand take
-    // milliseconds if each is looked at once.
+    // A line of 200,000 brackets once took hours, as each `[` or `![`
+    // copied the rest of the line to look for its link. The text comes in
+    // blocks of at most 4000 characters, so the brackets are counted.
     let line = "[".repeat(200_000);
     let done = within(20, move || {
         let (storage, doc) = markdown(&line);
-        text(&doc, &storage).len()
+        text(&doc, &storage).matches('[').count()
     });
     assert_eq!(done, Some(200_000));
 }

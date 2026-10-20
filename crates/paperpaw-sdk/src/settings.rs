@@ -811,6 +811,14 @@ pub struct Settings {
     scope: Option<VecMap<Id, SettingValue>>,
     /// Values shown without being kept; `None`: as if not set.
     preview: VecMap<Id, Option<SettingValue>>,
+    /// Values a power mode wears over the reader's own, while it is worn
+    /// (see [`Settings::wear`]).
+    worn: VecMap<Id, SettingValue>,
+    /// Upper limits of numbers while a power mode is worn.
+    limits: VecMap<Id, SettingValue>,
+    /// The mode's values the reader changed while it was worn: theirs
+    /// until the next mode (see [`Settings::released`]).
+    released: Vec<Id>,
     presets: crate::presets::Presets,
 }
 
@@ -850,6 +858,67 @@ impl Settings {
                 self.preview.insert(id, value);
             }
         }
+    }
+
+    /// Wears a power mode's values over the reader's own, and keeps
+    /// numbers below its limits, until another mode is worn (see
+    /// [`power`](crate::power)): nothing is written, and the reader's own
+    /// values show again when the mode is taken off. Values of unknown
+    /// settings and those that do not fit are left out. The ids whose
+    /// shown value may have changed come back.
+    pub fn wear(&mut self, values: Vec<(Id, SettingValue)>, limits: Vec<(Id, i64)>) -> Vec<Id> {
+        let mut touched: Vec<Id> = self
+            .worn
+            .keys()
+            .chain(self.limits.keys())
+            .cloned()
+            .collect();
+        self.worn = VecMap::default();
+        self.limits = VecMap::default();
+        self.released.clear();
+        for (id, value) in values {
+            if self
+                .spec(id.as_str())
+                .is_some_and(|spec| spec.kind.accepts(&value))
+            {
+                touched.push(id.clone());
+                self.worn.insert(id, value);
+            }
+        }
+        for (id, limit) in limits {
+            let value = SettingValue::Int(limit);
+            if self
+                .spec(id.as_str())
+                .is_some_and(|spec| spec.kind.accepts(&value))
+            {
+                touched.push(id.clone());
+                self.limits.insert(id, value);
+            }
+        }
+        touched.sort();
+        touched.dedup();
+        touched
+    }
+
+    /// The mode's values the reader changed while it was worn, which are
+    /// theirs until the next mode, e.g. to keep across a restart.
+    pub fn released(&self) -> &[Id] {
+        &self.released
+    }
+
+    /// Lets go of the worn mode's value for `id`, as when the reader
+    /// changed it (e.g. after a restart, see [`Settings::released`]).
+    pub fn release(&mut self, id: &Id) {
+        let value = self.worn.remove(id.as_str()).is_some();
+        let limit = self.limits.remove(id.as_str()).is_some();
+        if (value || limit) && !self.released.contains(id) {
+            self.released.push(id.clone());
+        }
+    }
+
+    /// Whether a power mode holds `id` (a value or a limit).
+    pub fn is_worn(&self, id: &str) -> bool {
+        self.worn.contains_key(id) || self.limits.contains_key(id)
     }
 
     /// Whether values are shown without being kept.
@@ -978,6 +1047,8 @@ impl Settings {
             return Err(SettingError::InvalidValue);
         }
         let id = self.value_id(id)?;
+        // The reader's change wins over a mode's value until the next mode.
+        self.release(&id);
         self.values.insert(id, value);
         Ok(())
     }
@@ -1069,6 +1140,22 @@ impl Settings {
         if let Some(plain) = crate::id::unplaced(id) {
             return self.values.get(id).or_else(|| self.get(&plain));
         }
+        if let Some(value) = self.worn.get(id) {
+            return Some(value);
+        }
+        if let Some(limit @ SettingValue::Int(most)) = self.limits.get(id) {
+            let own = self.own(id);
+            return match own {
+                Some(SettingValue::Int(value)) if value <= most => own,
+                _ => Some(limit),
+            };
+        }
+        self.own(id)
+    }
+
+    /// The value of `id` without a power mode: the scope's, the reader's,
+    /// the one it follows, or the default.
+    fn own(&self, id: &str) -> Option<&SettingValue> {
         self.scoped_value(id)
             .or_else(|| self.values.get(id))
             .or_else(|| {
@@ -1262,6 +1349,49 @@ mod tests {
         assert_eq!(s.int("a.ends"), 4);
         s.set("a.sides", SettingValue::Int(12)).unwrap();
         assert_eq!(s.int("a.ends"), 4);
+    }
+
+    #[test]
+    fn a_power_mode_wears_values_and_limits_and_takes_them_off() {
+        let mut s = Settings::new();
+        for id in ["a.sleep", "a.light"] {
+            let spec = SettingSpec::new(
+                Id::new_static(id),
+                id,
+                SettingKind::Int { min: 0, max: 100 },
+                SettingValue::Int(10),
+            );
+            s.define(spec).unwrap();
+        }
+        s.set("a.light", SettingValue::Int(80)).unwrap();
+        let touched = s.wear(
+            alloc::vec![
+                (Id::new_static("a.sleep"), SettingValue::Int(5)),
+                (Id::new_static("a.unknown"), SettingValue::Int(1)),
+            ],
+            alloc::vec![(Id::new_static("a.light"), 50)],
+        );
+        assert_eq!(
+            touched,
+            [Id::new_static("a.light"), Id::new_static("a.sleep")]
+        );
+        assert_eq!(s.int("a.sleep"), 5);
+        assert_eq!(s.int("a.light"), 50, "kept below the limit");
+        // The reader's change wins over a mode's limit, too.
+        s.set("a.light", SettingValue::Int(90)).unwrap();
+        assert_eq!(s.int("a.light"), 90, "the reader's own");
+        // The reader's change wins over the mode's value.
+        s.set("a.sleep", SettingValue::Int(20)).unwrap();
+        assert_eq!(s.int("a.sleep"), 20);
+        assert!(!s.is_worn("a.light") && !s.is_worn("a.sleep"));
+        assert_eq!(
+            s.released(),
+            [Id::new_static("a.light"), Id::new_static("a.sleep")]
+        );
+        // Taken off: the reader's own values, nothing written by the mode.
+        s.wear(alloc::vec![], alloc::vec![]);
+        assert_eq!((s.int("a.sleep"), s.int("a.light")), (20, 90));
+        assert!(s.released().is_empty());
     }
 
     #[test]
