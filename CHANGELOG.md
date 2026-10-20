@@ -625,6 +625,16 @@ change the plugin SDK.
   1.97.0.0 with the Xtensa GCC 14.2.0 for the ESP32-S3 devices
   (`shells/xteink/versions.env`). The firmware is a workspace of its
   own, so it also builds in a checkout inside another one.
+- Releases name, for each device, the fingerprint a native code plugin
+  must have to run on its firmware (`paperpaw-<device>-<version>-abi.txt`,
+  16 hexadecimal digits), for the plugin library and authors. The
+  firmware's ELF file names it, the one its loader compares, and
+  `paperpaw-sign fingerprint` reads it; a release fails if the sample
+  code plugin, built and packed as an author does, does not fit its
+  firmware. CI checks the same for the X4, X4 Pro and X4 Classic, loads
+  a plugin built in another workspace into a kernel, keeps the SDK free
+  of mutable statics, and checks that the sample and its CI template
+  name the firmware's compilers.
 - Security: PaperPaw's own data (`.paperpaw`: passwords, trusted
   firmware keys, settings) can no longer be reached by another spelling
   of its name. On the X4's card a name stands for an entry by its long

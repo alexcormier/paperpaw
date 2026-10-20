@@ -6,7 +6,8 @@ name: Release
 # flash (which paperpaw.org offers for flashing in the browser) with a
 # signature file of its own, and the update file, both signed with the
 # firmware's key (the update is installed on the device); the list of the
-# plugins built in; their checksums. The release notes come from
+# plugins built in; the fingerprint native code plugins must have to run
+# on it (ADR 0024); their checksums. The release notes come from
 # CHANGELOG.md.
 on:
   push:
@@ -108,6 +109,15 @@ jobs:
           espflash save-image --chip "$FIRMWARE_CHIP" --merge --skip-padding --flash-size 16mb \
             "$elf" "$GITHUB_WORKSPACE/dist/paperpaw-$DEVICE-$VERSION.bin"
           espflash save-image --chip "$FIRMWARE_CHIP" --flash-size 16mb "$elf" "$RUNNER_TEMP/app.bin"
+      # Which code plugins run on it, for the plugin library and authors:
+      # the fingerprint alone, 16 hexadecimal digits.
+      - name: The sample code plugin fits the firmware
+        id: native
+        uses: ./.github/actions/native-sample
+      - name: The fingerprint
+        env:
+          FINGERPRINT: ${{ steps.native.outputs.fingerprint }}
+        run: echo "$FINGERPRINT" > "dist/paperpaw-$DEVICE-$VERSION-abi.txt"
       - name: Sign the update and the flash image with the firmware's key
         env:
           PAPERPAW_SIGNING_KEY: ${{ secrets.PAPERPAW_SIGNING_KEY }}
@@ -173,7 +183,8 @@ jobs:
           assets=("dist/paperpaw-$VERSION.apk" "dist/paperpaw-$VERSION.apk.sha256")
           # The devices of the firmware job.
           for device in x4 x4-pro x4-classic; do
-            for part in .bin .bin.sha256 .bin.sig -update.bin -update.bin.sha256 -plugins.txt; do
+            for part in .bin .bin.sha256 .bin.sig -update.bin -update.bin.sha256 -plugins.txt \
+              -abi.txt; do
               assets+=("dist/paperpaw-$device-$VERSION$part")
             done
           done
