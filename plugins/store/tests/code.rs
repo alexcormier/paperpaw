@@ -16,8 +16,7 @@ use paperpaw_native::signature::{public_key, sign};
 use paperpaw_native::{Chip, Header, LINK_BASE};
 use paperpaw_plugin_store::OPEN;
 use paperpaw_sdk::builtin::actions;
-use paperpaw_sdk::install::known_author;
-use paperpaw_sdk::native::{Fingerprint, Native};
+use paperpaw_sdk::native::{Fingerprint, Native, known_author};
 use paperpaw_sdk::{PluginKind, Storage, Version};
 
 const PAGE: &str = "https://paperpaw.org/api/v1/plugins/clock.json?device=x4&lang=en";

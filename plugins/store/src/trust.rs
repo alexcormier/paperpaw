@@ -2,7 +2,7 @@
 //! plugin may. A code plugin runs with full access to the device, so its
 //! code is checked whole first ([`check_file`]): made for this PaperPaw,
 //! and signed by its author, whose key is remembered at the first install
-//! ([`install::known_author`]). At the first install the key must be the
+//! ([`native::author`]). At the first install the key must be the
 //! one the library names for the plugin; later it must be the one
 //! remembered, and an update signed by another waits until the reader,
 //! warned, says to install it anyway.
@@ -11,8 +11,8 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_sdk::install::{self, Progress};
-use paperpaw_sdk::native::check_file;
+use paperpaw_sdk::install::Progress;
+use paperpaw_sdk::native::{self, Author, check_file};
 use paperpaw_sdk::{Command, Env, Storage};
 
 use crate::INSTALLER;
@@ -122,17 +122,14 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
     let Some(signature) = signature else {
         return Verdict::Refused(Refusal::Unsigned);
     };
-    match install::known_author(storage, plugin) {
-        Some(known) if known == signature.key => Verdict::Install {
-            author: Some(signature.key),
-        },
-        Some(_) => Verdict::OtherAuthor {
-            author: signature.key,
-        },
-        None if expected(storage, plugin) == Some(signature.key) => Verdict::Install {
-            author: Some(signature.key),
-        },
-        None => Verdict::Refused(Refusal::NotTheAuthor),
+    let key = signature.key;
+    match native::author(storage, plugin, &key) {
+        Author::Known => Verdict::Install { author: Some(key) },
+        Author::Other => Verdict::OtherAuthor { author: key },
+        Author::New if expected(storage, plugin) == Some(key) => {
+            Verdict::Install { author: Some(key) }
+        }
+        Author::New => Verdict::Refused(Refusal::NotTheAuthor),
     }
 }
 
@@ -145,7 +142,7 @@ pub(crate) fn install(
 ) -> Option<Progress> {
     let progress = INSTALLER.progress(env.storage)?;
     if let Some(key) = author {
-        install::remember_author(env.storage, &progress.plugin, &key);
+        native::remember_author(env.storage, &progress.plugin, &key);
     }
     let _ = env.storage.remove(&expected_path());
     INSTALLER.install(env, out)

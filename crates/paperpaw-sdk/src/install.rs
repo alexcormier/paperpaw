@@ -7,7 +7,7 @@
 //! folder PaperPaw does not load (`plugins/.<id>.part`) and checks each by
 //! its size and digest. Once all are there the job is complete: the owner
 //! looks at what came if it wants (a code plugin's author, see
-//! [`known_author`]) and has the kernel install it
+//! [`native::author`](crate::native::author)) and has the kernel install it
 //! ([`Installer::install`], [`Command::InstallPlugin`]): in place of every
 //! version of it before, which stays until the new one is all there, and
 //! with what was chosen from it still chosen. Nothing is unpacked and
@@ -516,41 +516,6 @@ impl Installer {
     }
 }
 
-/// Where the authors' keys of the code plugins installed are kept: one
-/// file for every store, so that a key stays known whichever installs.
-const AUTHORS: &str = crate::data_path!("plugin-authors.txt");
-
-/// The key of the author of plugin `plugin`'s code, as remembered at its
-/// first install ([`remember_author`]): an update signed by another is
-/// installed only when the reader says so, after a clear warning.
-pub fn known_author(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
-    let text = crate::read_file(storage, AUTHORS, 64 * 1024).ok()?;
-    let text = core::str::from_utf8(&text).ok()?;
-    let hex = text
-        .lines()
-        .find_map(|line| line.strip_prefix(plugin)?.strip_prefix('\t'))?;
-    let bytes = paperpaw_digest::hex::decode(hex.trim())?;
-    bytes.try_into().ok()
-}
-
-/// Remembers `key` as the author of plugin `plugin`'s code, in place of
-/// one known before; `false` if it could not be kept.
-pub fn remember_author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> bool {
-    let kept = crate::read_file(storage, AUTHORS, 64 * 1024).unwrap_or_default();
-    let kept = core::str::from_utf8(&kept).unwrap_or_default();
-    let mut text: String = kept
-        .lines()
-        .filter(|line| line.split('\t').next() != Some(plugin))
-        .map(|line| format!("{line}\n"))
-        .collect();
-    text.push_str(&format!(
-        "{plugin}\t{}\n",
-        paperpaw_digest::hex::encode(key)
-    ));
-    let _ = storage.create_dir(crate::data::DIR);
-    storage.write(AUTHORS, text.as_bytes()).is_ok()
-}
-
 /// `text` on one line without tabs, for the job's first line.
 fn plain(text: &str) -> String {
     text.chars()
@@ -694,16 +659,5 @@ mod tests {
         assert!(!Digest::Sha256("ab".into()).is_valid());
         assert!(!Digest::Sha1("0".repeat(40)).holds(&storage, "f"));
         assert!(Digest::parse("md5:00").is_none());
-    }
-
-    #[test]
-    fn authors_are_remembered_by_plugin() {
-        let storage = MemoryStorage::new();
-        assert_eq!(known_author(&storage, "clock"), None);
-        assert!(remember_author(&storage, "clock", &[1; 32]));
-        assert!(remember_author(&storage, "clock-face", &[2; 32]));
-        assert!(remember_author(&storage, "clock", &[3; 32]));
-        assert_eq!(known_author(&storage, "clock"), Some([3; 32]));
-        assert_eq!(known_author(&storage, "clock-face"), Some([2; 32]));
     }
 }

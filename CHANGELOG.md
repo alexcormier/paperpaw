@@ -141,7 +141,10 @@ change the plugin SDK.
   `PackageFile::digest` in place of `sha1`), `Received::Complete` and
   `Installer::install` (a job complete waits until its owner installs
   it, in place of `Received::Installed`), `Installer::folder`,
-  `install::known_author` and `remember_author`, `PluginInfo::update`
+  `native::author` (whether a signature's key is the plugin's author
+  known on the device, the first, or another), `native::known_author`
+  and `remember_author` (one file for every installer),
+  `PluginInfo::update`
   (a code plugin updated while it runs: the new version at the next
   start). Kernel: `Kernel::describe` also tells the notice shown over
   the screens.

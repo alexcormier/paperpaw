@@ -90,7 +90,7 @@ download written as it arrives, nothing unpacked in memory.
   installed its code is checked whole (`native::check_file`: header,
   digest, the author's signature): made for this firmware, and signed.
   At the first install the key must be the one the library names, and
-  it is remembered for the plugin (`install::remember_author`); an update
+  it is remembered for the plugin (`native::remember_author`); an update
   signed by another waits, with a warning in plain words, until the
   reader installs it anyway or not. Before the first code plugin the
   store says once what code plugins are (full access to the device,
