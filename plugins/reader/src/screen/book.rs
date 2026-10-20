@@ -236,9 +236,9 @@ impl Book {
         Ok(book)
     }
 
-    /// Parameters of the standard reading events; the page and the number
-    /// of pages once they are counted.
-    /// Where the book is read, for [`events::BOOK_OPENED`] and the others.
+    /// Where the book is read, for [`events::BOOK_OPENED`] and the other
+    /// standard reading events; the page and the number of pages once
+    /// they are counted.
     pub(super) fn reading(&self, env: &Env<'_>) -> events::Reading {
         let counted = self
             .index
@@ -386,39 +386,23 @@ impl Book {
     /// The start of the line `at` is in, as this book is laid out now
     /// (see `layout::line_start`).
     pub(super) fn line_start(&self, env: &Env<'_>, at: Locator) -> Locator {
-        let t = &self.typography;
-        let Some(faces) = Faces::new(env, t, self.embedded.as_ref()) else {
-            return at;
-        };
-        let patterns = t
-            .hyphenation
-            .as_deref()
-            .and_then(|language| env.hyphenation.get(language));
-        let hyphenate = |word: &str, out: &mut dyn FnMut(usize)| {
-            if let Some(patterns) = patterns {
-                patterns.hyphenate(word, out);
-            }
-        };
-        let filtered = Filtered {
-            document: self.document.as_ref(),
-            env,
-        };
-        let cx = LayoutContext {
-            document: &filtered,
-            storage: env.storage,
-            width: t.width,
-            style: &t.style,
-            typesetter: &faces,
-            hyphenate: patterns.is_some().then_some(&hyphenate as Hyphenate<'_>),
-        };
-        line_start(&cx, at).unwrap_or(at)
+        self.laid_out(env, |cx| line_start(cx, at).unwrap_or(at))
+            .unwrap_or(at)
     }
 
+    /// The page that starts at `at`, as this book is laid out now.
     pub(super) fn layout(&self, env: &Env<'_>, at: Locator) -> Result<Page, DocumentError> {
+        let height = self.typography.height;
+        self.laid_out(env, |cx| layout_page(cx, at, height))
+            .unwrap_or_else(|| Ok(Page::default()))
+    }
+
+    /// `f` with the context this book is laid out in now: its type, its
+    /// faces and hyphenation, the text through the plugins' filters;
+    /// `None` without the reading font.
+    fn laid_out<R>(&self, env: &Env<'_>, f: impl FnOnce(&LayoutContext<'_>) -> R) -> Option<R> {
         let t = &self.typography;
-        let Some(faces) = Faces::new(env, t, self.embedded.as_ref()) else {
-            return Ok(Page::default());
-        };
+        let faces = Faces::new(env, t, self.embedded.as_ref())?;
         let patterns = t
             .hyphenation
             .as_deref()
@@ -440,7 +424,7 @@ impl Book {
             typesetter: &faces,
             hyphenate: patterns.is_some().then_some(&hyphenate as Hyphenate<'_>),
         };
-        layout_page(&cx, at, t.height)
+        Some(f(&cx))
     }
 
     pub(super) fn progress_path(&self) -> String {
@@ -794,10 +778,6 @@ impl Book {
             .any(|m| m.kind == Kind::Bookmark && m.start >= start && m.start < end)
     }
 
-    /// Where the bookmark ribbon is: in the top margin, on the right.
-    /// The start of the page that contains `at`, as the page index has it
-    /// (so pages look the same as when paging there); `at` itself where
-    /// the index does not reach yet.
     /// Where the book is, for the skimming overlay: the page, the chapter
     /// and how far, in thousandths.
     pub(super) fn skim_params(&self, env: &Env<'_>) -> Params {
@@ -888,6 +868,9 @@ impl Book {
         Locator::new(sections.saturating_sub(1), 0)
     }
 
+    /// The start of the page that contains `at`, as the page index has it
+    /// (so pages look the same as when paging there); `at` itself where
+    /// the index does not reach yet.
     pub(super) fn page_start(&self, env: &Env<'_>, at: Locator) -> Locator {
         let Some(index) = &self.index else {
             return at;

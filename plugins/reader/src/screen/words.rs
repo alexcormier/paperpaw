@@ -26,11 +26,7 @@ pub(super) const SENTENCE_WORDS: usize = 30;
 /// The sentence around words `lo..=hi` of a page, as far as the page has
 /// it.
 pub(super) fn sentence(words: &[WordBox], lo: usize, hi: usize) -> String {
-    let ends = |w: &WordBox| {
-        w.text
-            .trim_end_matches(['"', '\'', '’', '”', '»', '«', ')'])
-            .ends_with(['.', '!', '?', '…'])
-    };
+    let ends = |w: &WordBox| crate::aloud::ends_sentence(&w.text);
     let mut first = lo;
     while first > 0 && lo - first < SENTENCE_WORDS && !ends(&words[first - 1]) {
         first -= 1;

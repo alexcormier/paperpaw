@@ -194,7 +194,6 @@ impl ReaderScreen {
         cx.command(Command::Emit(crate::SKIMMED, book.skim_params(&env)));
     }
 
-    /// Buttons while text is selected.
     /// Shows the next status line at the top (or bottom) and keeps the
     /// choice.
     fn next_status_line(&mut self, top: bool, cx: &mut Cx<'_, '_>) {
@@ -707,7 +706,10 @@ impl ReaderScreen {
     fn draw_book(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let book = match &mut self.book {
             Ok(book) => book,
-            Err(message) => return draw_message(canvas, env, message),
+            Err(message) => {
+                let area = Rect::from_size(env.device.display.width, env.device.display.height);
+                return ui::draw_message(canvas, env, &UiStyle::new(env), area, message);
+            }
         };
         // Word boxes are measured only when something is drawn on words.
         let has_highlights = book.marks.iter().any(|m| m.kind == Kind::Highlight);
@@ -979,27 +981,6 @@ fn page_turn(action: &Id) -> Option<Id> {
         Some(actions::NEXT_PAGE)
     } else {
         None
-    }
-}
-
-/// Centred, wrapped message text (errors, missing book).
-fn draw_message(canvas: &mut Canvas<'_>, env: &Env<'_>, message: &str) {
-    let Some(font) = env.fonts.role(fonts::UI.as_str()) else {
-        return;
-    };
-    let display = env.device.display;
-    let size = env.metrics.pt(12.0);
-    let margin = env.metrics.mm(8) as f32;
-    let width = f32::from(display.width) - 2.0 * margin;
-    let line_height = font.line_metrics(size).line_height;
-    let lines = font.wrap(size, message, width);
-    let mut baseline =
-        (f32::from(display.height) - line_height * lines.len() as f32) / 2.0 + line_height;
-    for range in lines {
-        let text = &message[range];
-        let x = (f32::from(display.width) - font.measure(size, text)) / 2.0;
-        font.draw(canvas, size, x, baseline as i32, text, Color::BLACK);
-        baseline += line_height;
     }
 }
 
