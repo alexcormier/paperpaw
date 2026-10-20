@@ -627,6 +627,11 @@ impl GridView {
                     }
                 }
                 self.items.remove(index);
+                // The focus goes to another item, which nobody chose to
+                // move or size.
+                if let Some(edit) = &mut self.edit {
+                    edit.mode = Mode::Choose;
+                }
                 self.target(&env);
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
@@ -1418,6 +1423,25 @@ mod tests {
         // Options of an item not there are not taken.
         assert_eq!(pick(&mut grid, &env, 5, "remove"), GridResponse::Handled);
         assert_eq!(grid.items().len(), 2);
+    }
+
+    #[test]
+    fn removing_an_item_ends_moving() {
+        let kit = Kit::new(true);
+        let env = kit.env();
+        let mut grid = edited(&env, &three());
+        assert_eq!(pick(&mut grid, &env, 0, "move"), GridResponse::Handled);
+        // `b` tapped while `a` is moved, and removed.
+        pointer(&mut grid, &env, PointerPhase::Down, 150, 50);
+        pointer(&mut grid, &env, PointerPhase::Up, 150, 50);
+        assert_eq!(grid.focus, 1);
+        changed(pick(&mut grid, &env, 1, "remove"));
+        // The focus is on `c` now, which nobody chose to move: the
+        // buttons move the focus, not `c`.
+        let (response, _) = act(&mut grid, &env, &actions::RIGHT);
+        assert_eq!(response, GridResponse::Handled);
+        assert_eq!(cells(&grid, 1), Cells::new(0, 1, 1, 1));
+        assert_eq!(grid.focus, 0);
     }
 
     #[test]
