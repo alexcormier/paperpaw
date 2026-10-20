@@ -151,20 +151,41 @@ impl Slider {
         }
     }
 
-    /// `value` within the range.
+    /// `value` within the range (a `max` below `min`, set through the
+    /// fields, counts as `min`).
     pub fn clamp(&self, value: i64) -> i64 {
-        value.clamp(self.min, self.max)
+        value.clamp(self.min, self.max.max(self.min))
     }
 
-    /// `value` moved by `steps` steps, within the range.
+    /// `value` moved by `steps` steps, within the range. From `max`
+    /// where the range is no whole number of steps, the first step down
+    /// goes to the last whole step (from 12 in fives to 10), as a drag
+    /// gives; elsewhere a step is `step` (as many back return to the
+    /// value).
     pub fn stepped(&self, value: i64, steps: i64) -> i64 {
-        self.clamp(value.saturating_add(steps.saturating_mul(self.step)))
+        let (min, max) = (i128::from(self.min), i128::from(self.max.max(self.min)));
+        let step = i128::from(self.step.max(1));
+        let value = i128::from(self.clamp(value));
+        let past = (max - min) % step;
+        let target = if steps < 0 && value == max && past != 0 {
+            max - past + (i128::from(steps) + 1) * step
+        } else {
+            value + i128::from(steps) * step
+        };
+        // Within the range, so within `i64`.
+        target.clamp(min, max) as i64
+    }
+
+    /// The width of the range, without overflow at the widest.
+    fn range(&self) -> f64 {
+        (i128::from(self.max) - i128::from(self.min)).max(0) as f64
     }
 
     /// How far along the track `value` is, from 0 to 1.
     pub fn share(&self, value: i64) -> f32 {
-        let range = (self.max - self.min).max(1) as f32;
-        ((self.clamp(value) - self.min) as f32 / range).clamp(0.0, 1.0)
+        let range = self.range().max(1.0);
+        let along = (i128::from(self.clamp(value)) - i128::from(self.min)) as f64;
+        (along / range).clamp(0.0, 1.0) as f32
     }
 
     /// The value for a finger at `x` on `track` (where the knob's middle
@@ -175,10 +196,13 @@ impl Slider {
         let width = (i32::from(track.width) - knob).max(1);
         let share = ((x - left) as f32 / width as f32).clamp(0.0, 1.0);
         if share >= 1.0 {
-            return self.max;
+            return self.clamp(self.max);
         }
-        let steps = ((self.max - self.min) as f32 * share / self.step as f32 + 0.5) as i64;
-        self.clamp(self.min + steps * self.step)
+        let step = self.step.max(1);
+        let steps = (self.range() * f64::from(share) / step as f64 + 0.5) as i128;
+        let value = i128::from(self.min) + steps * i128::from(step);
+        // At most `max`, so within `i64`.
+        self.clamp(value.min(i128::from(self.max)) as i64)
     }
 
     /// Where the middle of the knob is on `track` at `value`, as drawn
@@ -457,12 +481,20 @@ impl SliderDrag {
         // Further than this, a finger moves the knob: as far as a tap may
         // wander (about 3 mm).
         let slop = (style.finger * 3 / 7).max(style.gap).max(1) as i32;
-        let dragged = |drag: &Drag, x: i32| {
-            slider.value_at(track, slider.knob_x(track, drag.from) + x - drag.start)
+        // Where the finger came down, the value it had: with steps finer
+        // than pixels, the knob's pixel holds several values, and the one
+        // there need not be this one.
+        let dragged = |drag: &Drag, x: i32| match x - drag.start {
+            0 => drag.from,
+            moved => slider.value_at(track, slider.knob_x(track, drag.from) + moved),
         };
         match (event.phase, self.drag) {
-            (PointerPhase::Down, None) => {
+            // The same finger coming down again starts afresh: the end of
+            // its drag got lost, which would otherwise hold the knob for
+            // good. Another finger meanwhile is not taken.
+            (PointerPhase::Down, held) if held.is_none_or(|d| d.pointer == event.id) => {
                 if !band.contains(event.point) {
+                    self.drag = None;
                     return None;
                 }
                 let from = slider.clamp(value);
@@ -524,27 +556,7 @@ mod tests {
     use paperpaw_graphics::Framebuffer;
     use paperpaw_platform::PixelFormat;
 
-    const STYLE: UiStyle = UiStyle {
-        text: 20.0,
-        small: 15.0,
-        title: 23.0,
-        head: 23.0,
-        row: 60,
-        header: 64,
-        margin: 12,
-        gap: 8,
-        line: 2,
-        dark_header: false,
-        corner: 0,
-        strong: false,
-        pill: false,
-        focus: crate::ui::Focus::Fill,
-        separators: crate::ui::Separators::Line,
-        plain_header: false,
-        cards: false,
-        grays: 2,
-        finger: 0,
-    };
+    const STYLE: UiStyle = crate::ui::tests::STYLE;
 
     /// On a touch screen of 220 dpi: a fingertip 7 mm large.
     const TOUCH: UiStyle = UiStyle {
@@ -599,8 +611,34 @@ mod tests {
         assert_eq!(odd.stepped(0, -1), 0);
         assert_eq!(slider.stepped(135, 1), 140);
         assert_eq!(slider.stepped(135, -100), 100);
+        // From the end that is no whole step, down to the last whole
+        // step: 12 to 10, as a drag gives.
+        assert_eq!(odd.stepped(12, -1), 10);
+        assert_eq!(odd.stepped(12, -2), 5);
+        assert_eq!(odd.stepped(5, -1), 0);
+        // Elsewhere a step is a step, so as many back return.
+        assert_eq!(odd.stepped(7, 1), 12);
+        assert_eq!(odd.stepped(7, -1), 2);
         // Made right from wrong numbers.
         assert_eq!(Slider::new(5, 1), Slider::new(5, 5));
+        // Fields set past what the constructors allow do not bring it
+        // down.
+        let wrong = Slider {
+            min: 10,
+            max: 0,
+            step: 0,
+        };
+        assert_eq!(wrong.clamp(-3), 10);
+        assert_eq!(wrong.stepped(4, 3), 10);
+        assert_eq!(wrong.value_at(track, 200), 10);
+        assert_eq!(wrong.share(4), 0.0);
+        // The widest range neither overflows nor leaves it.
+        let widest = Slider::new(i64::MIN, i64::MAX);
+        assert_eq!(widest.stepped(i64::MAX, 1), i64::MAX);
+        assert_eq!(widest.stepped(i64::MIN, -1), i64::MIN);
+        assert_eq!(widest.value_at(track, 400), i64::MAX);
+        assert_eq!(widest.value_at(track, -10), i64::MIN);
+        assert!((widest.share(0) - 0.5).abs() < 0.01);
         assert_eq!(Slider::new(0, 9).step(0).step, 1);
         assert_eq!(Slider::new(3, 3).share(3), 0.0);
     }
@@ -694,7 +732,7 @@ mod tests {
 
     #[test]
     fn a_tap_steps_or_sets_where_it_lands() {
-        use PointerPhase::{Cancel, Down, Up};
+        use PointerPhase::{Cancel, Down, Move, Up};
         use SliderStep::{Cancelled, Chosen, Same};
         let tap = |x: i32, up: (i32, i32)| {
             let mut drag = SliderDrag::default();
@@ -722,8 +760,22 @@ mod tests {
         };
         let (slider, band) = across();
         assert_eq!(drag.on_pointer(&second, &TOUCH, &slider, band, 50), None);
+        assert_eq!(drag.dragging(), Some(50));
         assert_eq!(sample(&mut drag, Cancel, 0, 0), Some(Cancelled));
         assert_eq!(sample(&mut drag, Up, 0, 0), None);
+        // The same finger down again while its drag is held (its end got
+        // lost): taken afresh, not held for good.
+        let mut drag = SliderDrag::default();
+        sample(&mut drag, Down, 300, 140);
+        sample(&mut drag, Move, 360, 140);
+        assert_eq!(sample(&mut drag, Down, 102, 140), Some(Same));
+        assert_eq!(drag.dragging(), Some(50));
+        assert_eq!(sample(&mut drag, Up, 102, 140), Some(Chosen(0)));
+        // Down off the band over a lost drag: left to the screen, the
+        // drag gone.
+        sample(&mut drag, Down, 300, 140);
+        assert_eq!(sample(&mut drag, Down, 300, 90), None);
+        assert_eq!(drag.dragging(), None);
         // A value outside the range starts from its end.
         let mut drag = SliderDrag::default();
         drag.on_pointer(&pointer(Down, 300, 140), &TOUCH, &slider, band, 120);

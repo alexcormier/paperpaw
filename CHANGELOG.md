@@ -437,6 +437,56 @@ change the plugin SDK.
   in the emulator (a page of an empty listing was counted below zero).
 - Data files: a file marked `# format 0` is left as it is instead of
   stopping PaperPaw; versions start at 1.
+- The order of a status line's items can be changed with buttons alone:
+  *Menu* (a long press of *Confirm* on the X4) takes the focused item
+  along, the direction and page buttons move it, *Confirm* or *Back*
+  put it down. Items of plugins not there now keep their places when
+  others are shown, hidden or moved.
+- The choice overlay (what to do with a file, whether to delete it)
+  puts options that do not fit on pages, with a pager below them, so
+  every option can be reached by touch. On touch screens, a button
+  pressed on such a list or on a status line's items first shows the
+  focus instead of choosing a row nobody saw.
+- Home: on a touch screen with buttons, a tap during a move by the
+  buttons (e.g. on the pencil) keeps what they moved; the second of two
+  equal items without room is no longer dropped from the page.
+- Status lines draw nothing past their area: icons, gauges and bars
+  that do not fit whole are left out, a battery without its percentage
+  where only the battery fits. A word's background at the left edge of
+  the page keeps its padding on the right.
+- Sliders: the buttons come back from an end that is no whole step to
+  the steps a drag gives (from 12 in fives to 10, not 7); a drag brought
+  back to where it began keeps the value, also where steps are finer
+  than pixels; a touch whose end got lost no longer holds a slider or a
+  row's grip.
+- A kept thumbnail whose header claims a picture larger than the box it
+  was made for takes no memory for it (a file of 17 bytes could ask for
+  8 MB). Empty
+  screens in narrow areas leave out the paw (or the icon) that would
+  not fit.
+- SDK: `Settings::define` and `define_fixed` refuse a setting past the
+  32,768th of its kind instead of mixing it up with another; changing a
+  spec kept in the program with no place left for its copy says
+  `SettingError::Full`, and `Settings::set_choices` says whether it
+  did. `Thumbnail::kept` takes the box the thumbnail was made for and
+  reads no header claiming more.
+- Headers translate their page number; on and off in setting rows are
+  the kernel's words (`core.on`, `core.off`), also where the settings
+  plugin is switched off.
+- SDK: `ListView::confirm` (the first press shows a hidden focus) and
+  `ListView::set_len` (the focus kept in a shorter list).
+  `Slider::stepped` goes to the next step a drag gives;
+  `ui::next_value` steps from a value not among the options to the
+  first (or last) option and stays within a number's range at its
+  ends. Fields set past what the constructors allow no longer bring a
+  list down (`ListView::row` 0, more columns than fit, a `Slider` with
+  `max` below `min`), nor do `Rows::new` with marks and heights of
+  different lengths. Steppers measure the room of their value by its
+  width.
+- Headers: the back arrow's ink begins at the content's margin, where
+  list icons begin, and the title where labels after icons do; the next
+  page's arrow ends at the right margin (on the Boox the arrow sat 8 px
+  left of the icons).
 - SDK: helpers that plugins wrote each for themselves, now in one place.
   `Storage::ignores_case` says whether a storage takes `Books` for
   `books` (memory cards, Windows and macOS disks do), and

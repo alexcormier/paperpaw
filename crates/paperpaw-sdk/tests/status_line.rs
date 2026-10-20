@@ -16,7 +16,7 @@ use paperpaw_sdk::{
 };
 use proptest::prelude::*;
 
-use support::{Device, Harness, drawn_outside, frame};
+use support::{Device, Harness, PAPER, drawn_outside, frame};
 
 const PAGE: &str = "t.page";
 const CHAPTER: &str = "t.chapter";
@@ -257,4 +257,70 @@ fn items_and_lines_are_found_by_their_ids() {
     assert!(items.draw_line("t.bar", &mut frame.canvas(), &env, &status));
     assert!(!items.draw_line("t.unknown", &mut frame.canvas(), &env, &status));
     assert_eq!(drawn_outside(&mut frame, status.area), None);
+}
+
+/// In a line too narrow for its items (a widget of one cell), what does
+/// not fit whole is left out rather than drawn past the area: the battery
+/// keeps its gauge without the percentage where only that fits.
+#[test]
+fn a_narrow_line_leaves_out_what_does_not_fit() {
+    let h = harness();
+    let env = h.env();
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let context = Params::new().with("level", "80").with("page", "12 / 340");
+    for width in [20u16, 30, 45, 60, 90] {
+        let area = Rect::new(200, 100, width, 32);
+        let right = format!("{LEVEL}, {ICON}, {PAGE}");
+        let line = StatusLine {
+            area,
+            lists: ["", "", &right],
+            size: 20.0,
+            color: Color::BLACK,
+            percent: true,
+        };
+        let mut frame = frame(480, 800);
+        line.draw(&mut frame.canvas(), &env, &font, &context);
+        assert_eq!(drawn_outside(&mut frame, area), None, "{width} wide");
+    }
+}
+
+/// A wide line crowded by a long chapter title narrows its gaps; the
+/// right part is drawn with those gaps too, so it ends at the line's
+/// right edge with the battery and its percentage whole.
+#[test]
+fn a_crowded_line_keeps_its_right_part_whole_at_the_edge() {
+    let h = harness();
+    let env = h.env();
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let context = Params::new()
+        .with(
+            "chapter",
+            "A chapter with a title much too long for any status line at all",
+        )
+        .with("level", "80")
+        .with("page", "12 / 340");
+    let right = format!("{PAGE}, {ICON}, {LEVEL}");
+    for width in (300u16..=460).step_by(20) {
+        let area = Rect::new(10, 700, width, 32);
+        let line = StatusLine {
+            area,
+            lists: [CHAPTER, "", &right],
+            size: 20.0,
+            color: Color::BLACK,
+            percent: true,
+        };
+        let mut frame = frame(480, 800);
+        line.draw(&mut frame.canvas(), &env, &font, &context);
+        assert_eq!(drawn_outside(&mut frame, area), None, "{width} wide");
+        let view = frame.view();
+        let edge = area.x + area.width;
+        let last = (area.x..edge)
+            .rev()
+            .find(|&x| (area.y..area.y + area.height).any(|y| view.pixel(x, y) != PAPER))
+            .unwrap();
+        assert!(
+            last + 4 >= edge,
+            "{width} wide: ends at {last}, the edge is {edge}"
+        );
+    }
 }
