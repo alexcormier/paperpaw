@@ -11,10 +11,11 @@ change the plugin SDK.
   `unstable` `PageType`, `ReadingFaces`, `EmbeddedFonts`, `StatusRoom`,
   `WordBox`, `word_boxes`, `draw_lines`, `draw_image`. The reader uses
   them; pages look as before.
-- SDK: the reader's contents, search, marks and footnotes are standard
-  slots (`slots::TOC`, `SEARCH`, `ANNOTATIONS`, `FOOTNOTE`), and
-  following a link the standard event `events::FOLLOW_LINK`: a plugin
-  replaces one of them, or a reader of one's own uses the shipped ones.
+- SDK: the reader's contents, search, marks, footnotes and skimming are
+  standard slots (`slots::TOC`, `SEARCH`, `ANNOTATIONS`, `FOOTNOTE`,
+  `SKIM`), and following a link and skimming standard events
+  (`events::FOLLOW_LINK`, `SKIM`, `SKIMMED`): a plugin replaces one of
+  them, or a reader of one's own uses the shipped ones.
 - SDK: `positions`, where each book was left, shared like its
   annotations (`.paperpaw/positions`, moved and removed with the book):
   readers keep it, plugins read it without opening the book. The reader

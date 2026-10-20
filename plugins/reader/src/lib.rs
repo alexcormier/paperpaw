@@ -80,8 +80,6 @@ const SPOKEN: Id = Id::new_static("reader.spoken");
 /// reader to move with `reader.skim` and hears where the book is with
 /// `reader.skimmed`.
 pub const SKIM_SCREEN: Id = Id::new_static("reader.skim-screen");
-const SKIM: Id = Id::new_static("reader.skim");
-const SKIMMED: Id = Id::new_static("reader.skimmed");
 /// A footnote over the page (see `footnote`).
 pub const FOOTNOTE_SCREEN: Id = Id::new_static("reader.footnote");
 /// A sample of text set as the reading settings say, the preview above
@@ -336,6 +334,7 @@ impl Plugin for Reader {
         r.bind_slot(slots::ANNOTATIONS, ANNOTATIONS_SCREEN, Priority::DEFAULT)?;
         r.bind_slot(slots::FOOTNOTE, FOOTNOTE_SCREEN, Priority::DEFAULT)?;
         r.bind_slot(slots::SEARCH, SEARCH_SCREEN, Priority::DEFAULT)?;
+        r.bind_slot(slots::SKIM, SKIM_SCREEN, Priority::DEFAULT)?;
         r.add_action(paperpaw_sdk::ActionSpec::new(actions::TOC, "reader.toc"))?;
         r.add_screen(ScreenSpec::new(
             ANNOTATIONS_SCREEN,

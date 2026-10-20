@@ -225,6 +225,26 @@ pub fn paperpaw_sdk::builtin::events::SettingChanged::new(paperpaw_sdk::Id) -> S
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::SettingChanged
 pub fn paperpaw_sdk::builtin::events::SettingChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::SettingChanged::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::builtin::events::Skim
+pub paperpaw_sdk::builtin::events::Skim::path: alloc::string::String
+pub paperpaw_sdk::builtin::events::Skim::to: alloc::string::String
+impl paperpaw_sdk::builtin::events::Skim
+pub fn paperpaw_sdk::builtin::events::Skim::new(alloc::string::String, alloc::string::String) -> Self
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Skim
+pub fn paperpaw_sdk::builtin::events::Skim::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::Skim::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::builtin::events::Skimmed
+pub paperpaw_sdk::builtin::events::Skimmed::chapter: alloc::string::String
+pub paperpaw_sdk::builtin::events::Skimmed::marks: core::option::Option<alloc::string::String>
+pub paperpaw_sdk::builtin::events::Skimmed::page: alloc::string::String
+pub paperpaw_sdk::builtin::events::Skimmed::path: alloc::string::String
+pub paperpaw_sdk::builtin::events::Skimmed::permille: u32
+impl paperpaw_sdk::builtin::events::Skimmed
+pub fn paperpaw_sdk::builtin::events::Skimmed::marks(self, impl core::convert::Into<core::option::Option<alloc::string::String>>) -> Self
+pub fn paperpaw_sdk::builtin::events::Skimmed::new(alloc::string::String, alloc::string::String, alloc::string::String, u32) -> Self
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Skimmed
+pub fn paperpaw_sdk::builtin::events::Skimmed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::Skimmed::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::builtin::events::TextChosen
 pub paperpaw_sdk::builtin::events::TextChosen::action: paperpaw_sdk::Id
 pub paperpaw_sdk::builtin::events::TextChosen::end_offset: u32
@@ -294,6 +314,8 @@ pub const paperpaw_sdk::builtin::events::PREVIEW_CHANGED: paperpaw_sdk::event::E
 pub const paperpaw_sdk::builtin::events::RESUME: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::SCREEN_SHOWN: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::ScreenShown>
 pub const paperpaw_sdk::builtin::events::SETTING_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::SettingChanged>
+pub const paperpaw_sdk::builtin::events::SKIM: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::Skim>
+pub const paperpaw_sdk::builtin::events::SKIMMED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::Skimmed>
 pub const paperpaw_sdk::builtin::events::STARTED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::STATUS_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::STOPPING: paperpaw_sdk::event::Event<()>
@@ -482,6 +504,7 @@ pub const paperpaw_sdk::builtin::slots::REMOTE_KEYBOARD: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::SEARCH: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::SETTINGS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::SETUP: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::slots::SKIM: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::SLEEP: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::TOC: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::TRANSLATE: paperpaw_sdk::Id
@@ -892,6 +915,12 @@ pub fn paperpaw_sdk::builtin::events::ScreenShown::to_params(&self) -> paperpaw_
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::SettingChanged
 pub fn paperpaw_sdk::builtin::events::SettingChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::SettingChanged::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Skim
+pub fn paperpaw_sdk::builtin::events::Skim::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::Skim::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Skimmed
+pub fn paperpaw_sdk::builtin::events::Skimmed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::Skimmed::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::TextChosen
 pub fn paperpaw_sdk::builtin::events::TextChosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::TextChosen::to_params(&self) -> paperpaw_sdk::Params
@@ -4006,6 +4035,12 @@ pub fn paperpaw_sdk::builtin::events::ScreenShown::to_params(&self) -> paperpaw_
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::SettingChanged
 pub fn paperpaw_sdk::builtin::events::SettingChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::SettingChanged::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Skim
+pub fn paperpaw_sdk::builtin::events::Skim::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::Skim::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Skimmed
+pub fn paperpaw_sdk::builtin::events::Skimmed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::Skimmed::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::TextChosen
 pub fn paperpaw_sdk::builtin::events::TextChosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::TextChosen::to_params(&self) -> paperpaw_sdk::Params

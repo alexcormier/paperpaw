@@ -149,6 +149,12 @@ pub mod slots {
     /// [`URL`](super::params::URL), the link; going to the note sends
     /// [`events::FOLLOW_LINK`](super::events::FOLLOW_LINK).
     pub const FOOTNOTE: Id = Id::new_static("core.footnote");
+    /// Skimming through the book being read (an overlay): opened with the
+    /// parameters of [`events::Skimmed`](super::events::Skimmed) (where the
+    /// book is, where its chapters begin). It asks the reader to move with
+    /// [`events::SKIM`](super::events::SKIM) and hears where the book is
+    /// then with [`events::SKIMMED`](super::events::SKIMMED).
+    pub const SKIM: Id = Id::new_static("core.skim");
     /// Shows a short message ([`Command::Notify`](crate::Command::Notify))
     /// over whatever is open, for a few seconds: parameter
     /// [`TEXT`](super::params::TEXT). It gets no input and is closed by
@@ -452,6 +458,35 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// Where skimming asks the reader to go ([`SKIM`]), in the book
+        /// at `path`: `page:+10` (pages on, or back with `-`), `permille:250`
+        /// (that far into the book, in thousandths), `chapter:+1` (the
+        /// chapter after, or before with `-1`), or `back` (where skimming
+        /// began).
+        pub struct Skim {
+            pub path: String,
+            pub to: String,
+        }
+    }
+
+    crate::event_data! {
+        /// Where the book being skimmed is ([`SKIMMED`], and the parameters
+        /// the skimming overlay is opened with): its page as shown
+        /// (`12 / 340`, or a percentage), the chapter's title, how far in
+        /// it is (in thousandths).
+        pub struct Skimmed {
+            pub path: String,
+            pub page: String,
+            pub chapter: String,
+            pub permille: u32,
+        }
+        optional {
+            /// Where its chapters begin, in thousandths, comma-separated.
+            pub marks: String,
+        }
+    }
+
+    crate::event_data! {
         /// A link of a book to follow ([`FOLLOW_LINK`]): its target as the
         /// book has it (`notes.xhtml#n3`, a web address).
         pub struct FollowLink {
@@ -588,6 +623,11 @@ pub mod events {
     /// ([`DecorationTapped`]); sent for decorators that take taps (see
     /// [`decorations`](crate::decorations)), whose plugin answers.
     pub const DECORATION_TAPPED: Event<DecorationTapped> = Event::new("core.decoration-tapped");
+    /// Skimming asks the reader to go somewhere in the book ([`Skim`]).
+    pub const SKIM: Event<Skim> = Event::new("core.skim");
+    /// Where the book being skimmed is now ([`Skimmed`]): the reader tells
+    /// the skimming overlay after each move.
+    pub const SKIMMED: Event<Skimmed> = Event::new("core.skimmed");
     /// A link of the open book is to be followed ([`FollowLink`]), as a
     /// tap on it would: the reader goes there (or opens a web address in
     /// the browser). A footnote shown over the page sends it to go to the
@@ -1131,6 +1171,22 @@ mod tests {
             (back.start(), back.end()),
             (Locator::new(1, 10), Locator::new(1, 15))
         );
+    }
+
+    #[test]
+    fn skimming_says_where_the_book_is() {
+        use super::events::{SKIMMED, Skimmed};
+        let skimmed = Skimmed::new(
+            "books/a.epub".into(),
+            "12 / 340".into(),
+            "Chapter 2".into(),
+            35,
+        )
+        .marks(alloc::string::String::from("0,120,480"));
+        let crate::Command::Emit(event, params) = SKIMMED.emit(skimmed.clone()) else {
+            panic!("an event");
+        };
+        assert_eq!(SKIMMED.read(&event, &params), Some(skimmed));
     }
 
     #[test]

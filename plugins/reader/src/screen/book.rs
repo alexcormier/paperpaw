@@ -782,20 +782,18 @@ impl Book {
 
     /// Where the book is, for the skimming overlay: the page, the chapter
     /// and how far, in thousandths.
-    pub(super) fn skim_params(&self, env: &Env<'_>) -> Params {
+    pub(super) fn skimmed(&self, env: &Env<'_>) -> events::Skimmed {
         let chapter = self
             .chapter
             .as_ref()
             .map(|(_, _, title)| title.clone())
             .unwrap_or_default();
-        Params::new()
-            .with(params::PATH, self.path.clone())
-            .with(params::PAGE, self.position_label(env))
-            .with(params::TEXT, chapter)
-            .with(
-                crate::skim::AT,
-                format!("{}", (self.percent() * 10.0) as u32),
-            )
+        events::Skimmed::new(
+            self.path.clone(),
+            self.position_label(env),
+            chapter,
+            (self.percent() * 10.0) as u32,
+        )
     }
 
     /// Where `to` leads: `page:±n` pages on (or as many tenths of a

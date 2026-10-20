@@ -185,11 +185,8 @@ impl ReaderScreen {
             return;
         };
         self.skim_from.get_or_insert(book.page.start);
-        cx.command(Command::OpenScreen(
-            crate::SKIM_SCREEN,
-            book.skim_params(&env)
-                .with(crate::skim::MARKS, book.chapter_marks.clone()),
-        ));
+        let skimmed = book.skimmed(&env).marks(book.chapter_marks.clone());
+        cx.command(Command::OpenSlot(slots::SKIM, skimmed.to_params()));
     }
 
     /// Moves as the skimming overlay asks, and tells it where the book is.
@@ -208,7 +205,7 @@ impl ReaderScreen {
             let start = book.page_start(&env, target);
             book.show(cx, start, true);
         }
-        cx.command(Command::Emit(crate::SKIMMED, book.skim_params(&env)));
+        cx.command(events::SKIMMED.emit(book.skimmed(&env)));
     }
 
     /// Shows the next status line at the top (or bottom) and keeps the
@@ -871,9 +868,10 @@ impl ReaderScreen {
             }
             return;
         }
-        if *event == crate::SKIM && this_book {
-            let to = params.get(crate::skim::TO).unwrap_or_default().to_string();
-            self.skim(&to, cx);
+        if let Some(skim) = events::SKIM.read(event, params)
+            && skim.path == book.path
+        {
+            self.skim(&skim.to, cx);
             return;
         }
         if let Some(typed) = crate::NOTE_ENTERED.read(event, params)
