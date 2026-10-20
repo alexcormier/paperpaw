@@ -787,3 +787,25 @@ fn markdown_of_one_long_line_or_endless_brackets_takes_little() {
     assert!(heap < PLAIN_PEAK, "{heap} bytes at once");
     assert!(read.words >= 40_000);
 }
+
+#[test]
+fn the_first_pages_of_a_long_comic_are_kept_and_not_held_in_memory() {
+    // More pictures than are kept, the last in reading order first.
+    let mut zip = ZipBuilder::new();
+    for i in (0..6000).rev() {
+        zip = zip.stored(&format!("p{i:05}.jpg"), b"not a picture".to_vec());
+    }
+    let card = Card::new("book.cbz", zip.build());
+    let doc = paperpaw_plugin_format_epub::CbzDocument::open(&card, "book.cbz").unwrap();
+    assert_eq!(doc.sections(), 5000);
+    // Pages that cannot be shown are named.
+    let first = doc.block_at(&card, Locator::START).unwrap().unwrap();
+    assert_eq!(first.text, "p00000.jpg");
+    let last = doc.block_at(&card, Locator::new(4999, 0)).unwrap().unwrap();
+    assert_eq!(last.text, "p04999.jpg");
+    // Opened again, the order is read from the cache, not made again.
+    let (again, heap) =
+        peak(|| paperpaw_plugin_format_epub::CbzDocument::open(&card, "book.cbz").unwrap());
+    assert!(heap < 64 * 1024, "{heap} bytes at once");
+    assert_eq!(again.sections(), 5000);
+}

@@ -21,11 +21,20 @@ use paperpaw_sdk::zip::ZipArchive;
 use paperpaw_sdk::{Env, Storage};
 
 use crate::PLUGIN;
+use crate::cached;
 use crate::convert;
 use crate::package::error;
 
-/// Pages kept at most (names held in memory).
+/// Pages kept at most: the first in reading order.
 const MAX_PAGES: usize = 5000;
+/// Memory for picture names while the pages are put in order (a name and
+/// what holds it, about 16 bytes on the X4), and the longest name taken
+/// (no page is named longer).
+const MAX_NAMES: usize = 128 * 1024;
+const ENTRY: usize = 16;
+const MAX_NAME: usize = 1024;
+/// Marks a book without `ComicInfo.xml` in `pages.bin`.
+const NO_INFO: u32 = u32::MAX;
 /// Largest `ComicInfo.xml` read.
 const MAX_INFO: usize = 64 * 1024;
 
@@ -33,8 +42,10 @@ const MAX_INFO: usize = 64 * 1024;
 #[derive(Debug)]
 pub struct CbzDocument {
     archive: ZipArchive,
-    /// The pictures' names in the archive, in reading order.
-    pages: Vec<String>,
+    /// The number of pages; where each is in the archive is in the cache
+    /// (`pages.bin`: the record of `ComicInfo.xml`, then the pages' in
+    /// reading order, a u32 each), so the names are put in order once.
+    pages: u32,
     cache: String,
     metadata: Metadata,
     /// Pages in colour (ADR 0015).
@@ -99,36 +110,31 @@ impl CbzDocument {
         options: &paperpaw_sdk::OpenOptions,
     ) -> Result<Self, DocumentError> {
         let archive = ZipArchive::open(storage, path).map_err(error)?;
-        let mut pages: Vec<String> = Vec::new();
-        let mut info = None;
-        for entry in archive.entries(storage).filter_map(Result::ok) {
-            if entry.name.eq_ignore_ascii_case("ComicInfo.xml") {
-                info = Some(entry);
-            } else if is_picture(&entry.name) && pages.len() < MAX_PAGES {
-                pages.push(entry.name);
-            }
-        }
-        if pages.is_empty() {
-            return Err(DocumentError::Malformed(alloc::borrow::Cow::Borrowed(
-                "no pictures",
-            )));
-        }
-        pages.sort_by(|a, b| natural(a, b));
         let cache = format!(
             "{}/cbz-{}",
             Env::plugin_dir(PLUGIN.as_str()),
             paperpaw_sdk::library::key(path)
         );
         // Pictures decoded from another file of the same name go.
-        let stamp = format!("{} {}\n", crate::fingerprint(storage, path)?, pages.len());
+        let stamp = format!("{}\n", crate::fingerprint(storage, path)?);
         let stamp_path = format!("{cache}/source");
-        if paperpaw_sdk::read_file(storage, &stamp_path, 64).ok()
-            != Some(stamp.clone().into_bytes())
-        {
-            let _ = storage.remove_dir_all(&cache);
-            let _ = storage.create_dir(&cache);
-            storage.write(&stamp_path, stamp.as_bytes())?;
-        }
+        let list = format!("{cache}/pages.bin");
+        let fresh = paperpaw_sdk::read_file(storage, &stamp_path, 64).ok()
+            == Some(stamp.clone().into_bytes());
+        let pages = match storage.size(&list) {
+            Ok(size) if fresh && size >= 8 => (size / 4 - 1) as u32,
+            _ => {
+                let _ = storage.remove_dir_all(&cache);
+                let _ = storage.create_dir(&cache);
+                let pages = list_pages(storage, &archive, &list)?;
+                storage.write(&stamp_path, stamp.as_bytes())?;
+                pages
+            }
+        };
+        let info = cached::u32_at(storage, &list, 0)
+            .ok()
+            .filter(|&record| record != NO_INFO)
+            .and_then(|record| archive.entry_by_record(storage, record).ok());
         let mut metadata = info
             .and_then(|entry| comic_info(storage, &archive, &entry))
             .unwrap_or_default();
@@ -147,6 +153,13 @@ impl CbzDocument {
         })
     }
 
+    /// The archive entry of page `index`.
+    fn page(&self, storage: &dyn Storage, index: usize) -> Option<paperpaw_sdk::zip::Entry> {
+        let at = (index as u64 + 1) * 4;
+        let record = cached::u32_at(storage, &format!("{}/pages.bin", self.cache), at).ok()?;
+        self.archive.entry_by_record(storage, record).ok()
+    }
+
     /// Page `index` decoded no larger than `fit` allows into
     /// the picture `base` (see `pictures`), if it can be.
     fn picture(
@@ -160,12 +173,12 @@ impl CbzDocument {
             if crate::pictures::failed(storage, base) {
                 return None;
             }
-            let name = self.pages.get(index)?;
+            let entry = self.page(storage, index)?;
             let file = crate::pictures::file(base, self.color);
-            convert::decode_image(
+            convert::decode_entry(
                 storage,
                 &self.archive,
-                name,
+                &entry,
                 &file,
                 &self.cache,
                 fit,
@@ -176,6 +189,61 @@ impl CbzDocument {
         }
         crate::pictures::open(storage, base, self.color)
     }
+}
+
+/// Writes `pages.bin` to `list`: the record of `ComicInfo.xml`, then those
+/// of the pictures in reading order, the first [`MAX_PAGES`]. Their names
+/// are held in [`MAX_NAMES`] bytes: past that, the last in reading order
+/// go, so those kept are always the first. How many pages.
+fn list_pages(
+    storage: &dyn Storage,
+    archive: &ZipArchive,
+    list: &str,
+) -> Result<u32, DocumentError> {
+    let mut pages: Vec<(String, u32)> = Vec::new();
+    let mut bytes = 0;
+    let mut info = NO_INFO;
+    let keep = |pages: &mut Vec<(String, u32)>, count: usize| {
+        pages.sort_by(|a, b| natural(&a.0, &b.0));
+        pages.truncate(count);
+        pages
+            .iter()
+            .map(|(name, _)| name.len() + ENTRY)
+            .sum::<usize>()
+    };
+    for entry in archive.entries(storage) {
+        let entry = entry.map_err(error)?;
+        if entry.name.eq_ignore_ascii_case("ComicInfo.xml") {
+            info = entry.record();
+        } else if is_picture(&entry.name) && entry.name.len() <= MAX_NAME {
+            bytes += entry.name.len() + ENTRY;
+            let record = entry.record();
+            pages.push((entry.name, record));
+            if pages.len() > 2 * MAX_PAGES {
+                bytes = keep(&mut pages, MAX_PAGES);
+            } else if bytes > MAX_NAMES {
+                let count = if pages.len() > MAX_PAGES {
+                    MAX_PAGES
+                } else {
+                    pages.len() * 3 / 4
+                };
+                bytes = keep(&mut pages, count.max(1));
+            }
+        }
+    }
+    keep(&mut pages, MAX_PAGES);
+    if pages.is_empty() {
+        return Err(DocumentError::Malformed(alloc::borrow::Cow::Borrowed(
+            "no pictures",
+        )));
+    }
+    let mut data = Vec::new();
+    data.extend_from_slice(&info.to_le_bytes());
+    for (_, record) in &pages {
+        data.extend_from_slice(&record.to_le_bytes());
+    }
+    storage.write(list, &data)?;
+    Ok(pages.len() as u32)
 }
 
 /// Title, series and number, writers, summary, language and genres from
@@ -252,7 +320,7 @@ impl Document for CbzDocument {
     }
 
     fn sections(&self) -> u32 {
-        self.pages.len() as u32
+        self.pages
     }
 
     fn section_len(&self, _: u32) -> u32 {
@@ -261,7 +329,7 @@ impl Document for CbzDocument {
 
     fn block_at(&self, storage: &dyn Storage, at: Locator) -> Result<Option<Block>, DocumentError> {
         let index = at.section as usize;
-        if index >= self.pages.len() || at.offset >= 1 {
+        if index >= self.pages as usize || at.offset >= 1 {
             return Ok(None);
         }
         let cache = format!("{}/p{index}", self.cache);
@@ -269,7 +337,12 @@ impl Document for CbzDocument {
         // A picture that cannot be shown is named instead.
         let (kind, text) = match &image {
             Some(_) => (BlockKind::Image, String::new()),
-            None => (BlockKind::Paragraph, self.pages[index].clone()),
+            None => (
+                BlockKind::Paragraph,
+                self.page(storage, index)
+                    .map(|e| e.name)
+                    .unwrap_or_default(),
+            ),
         };
         Ok(Some(Block {
             kind,

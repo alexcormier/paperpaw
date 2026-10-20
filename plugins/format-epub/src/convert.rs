@@ -1755,7 +1755,20 @@ pub(crate) fn decode_image(
         .ok_or(DocumentError::Malformed(alloc::borrow::Cow::Borrowed(
             "missing image",
         )))?;
-    if let Some((offset, len)) = archive.stored_range(storage, &entry).map_err(error)? {
+    decode_entry(storage, archive, &entry, cache, dir, fit, color)
+}
+
+/// Decodes the image of archive entry `entry` as [`decode_image`] does.
+pub(crate) fn decode_entry(
+    storage: &dyn Storage,
+    archive: &ZipArchive,
+    entry: &Entry,
+    cache: &str,
+    dir: &str,
+    fit: Fit,
+    color: bool,
+) -> Result<(), DocumentError> {
+    if let Some((offset, len)) = archive.stored_range(storage, entry).map_err(error)? {
         return decode_range(
             storage,
             archive.path(),
@@ -1766,7 +1779,7 @@ pub(crate) fn decode_image(
             color,
         );
     }
-    let streamed = match archive.reader(storage, &entry) {
+    let streamed = match archive.reader(storage, entry) {
         Ok(reader) => {
             let mut source = EntrySource { storage, reader };
             decode_source(storage, &mut source, cache, fit, color)
@@ -1783,7 +1796,7 @@ pub(crate) fn decode_image(
     storage.write(&temp, &[])?;
     let mut failed = None;
     archive
-        .stream(storage, &entry, &mut |chunk| {
+        .stream(storage, entry, &mut |chunk| {
             failed = storage.append(&temp, chunk).err();
             failed.is_none()
         })
