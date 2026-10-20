@@ -6,6 +6,7 @@ mod draw;
 mod hands_free;
 mod linking;
 mod marks;
+mod sample;
 mod selecting;
 mod typography;
 mod words;
@@ -21,7 +22,8 @@ use paperpaw_sdk::builtin::{actions, events, fonts, params, slots};
 use paperpaw_sdk::document::{Document, DocumentError, Link, Locator};
 use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::layout::{
-    Face, Hyphenate, LayoutContext, Page, PageImage, Style, Typesetter, layout_page, line_start,
+    Face, Hyphenate, LayoutContext, Page, PageImage, PageLine, Style, Typesetter, layout_page,
+    line_start,
 };
 use paperpaw_sdk::status::context as status_context;
 use paperpaw_sdk::ui::{self, UiStyle};
@@ -43,6 +45,7 @@ use self::book::*;
 pub(crate) use self::book::{book_dir, remember_last};
 use self::hands_free::*;
 use self::linking::*;
+pub(crate) use self::sample::Sample;
 use self::typography::*;
 pub(crate) use self::words::WordBox;
 use self::words::*;

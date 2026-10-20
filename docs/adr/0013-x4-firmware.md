@@ -83,3 +83,85 @@ is held through resets (a pad hold), so it stays on while flashed.
 Measured on the device: a UC8179 (its VER register's third byte 0x01;
 Papyrix also knows X4 Pros with a UC8279, from 0x02, 0x68 or 0x69, which
 PaperPaw does not drive yet).
+
+## Later: the controller found at start (2026-10-20)
+
+Xteink ships its devices with different display controllers, batch by
+batch, and a driver for one shows nothing on another (an SSD1677's waits
+for its busy line to go low, which an UltraChip's holds high at rest).
+What the community documents (the FreeInk SDK, which reads the stock
+firmware, and Papyrix and Launcher after it, all MIT): the first X4 Pros
+have an SSD1677, later ones a UC8179 or a UC8279; the X4 Classic (an
+ESP32-S3 board with other pins) has any of the three. No ESP32-C3 X4 with
+an UltraChip has been reported, though these projects build their
+UltraChip drivers into their X4 firmware too.
+
+- **Asked at start, before the SPI bus takes the panel's lines**
+  (`paperpaw_x4::probe`, the boards' `probe` module): the panel answers on
+  the line it is sent on, so the firmware drives the lines itself and
+  reads the UltraChips' status (`FLG`, 0x71) and revision (`REV`, 0x70),
+  and looks at the busy line at rest. An SSD1677 holds it low and
+  answers nothing; an UltraChip holds it high and answers, the revision's
+  third byte naming the panel (the stock firmware's panel table: 0x01 and
+  0x40 a UC8179, 0x02, 0x03, 0x41, 0x42, 0x67 to 0x69 a UC8279). Two of
+  the three signs name an UltraChip; an SSD1677 needs all of its own.
+  **Anything else keeps the driver the device always had**: the X4 its
+  SSD1677, the X4 Pro its UC8179. The answers are logged at start
+  (`display: UC8179 (FLG 13, REV 00 00 01 FF FF, BUSY high at rest),
+  driven as UC8179`), all a report from a device with another
+  controller needs.
+- **One driver per controller family**, chosen by `paperpaw_x4::panel`:
+  `display` for the SSD1677 (unchanged; on the X4 Pro with its sides
+  swapped, as the X4 Pro turns), `uc8179` for both UltraChips. The
+  UC8279 differs in tables, as the FreeInk SDK records them from the X4
+  Pro: its panel setting (set again after the power comes on, which
+  resets it), a one-byte border setting, its frame rate, the panel on the
+  last 480 of its 600 lines in order, a fast refresh only within a
+  window. Its gray waveforms are not public: on a UC8279, grays are shown
+  in black and white for now.
+- **Without the memory for a frame** (an X4 with an UltraChip), the
+  UltraChip driver writes the bands into the controller's two frames as
+  the SSD1677's does, each through a window of its memory (`PTL`, as
+  GxEPD2 and the FreeInk SDK write parts of a frame), the layout of a
+  band shared with the SSD1677 (`bands`). Its four grays need the frame
+  shown in black and white first, then the grays' codes, two passes the
+  bands cannot give: grays are shown in black and white there.
+
+Not tried on a device yet: no device with these controllers is at hand.
+What is checked: the probe against simulated panels, every sequence and
+where each band lands against simulated controllers, the SSD1677's and
+the X4 Pro's UC8179's bytes unchanged. To check on one: that the log line
+names the controller, then a page turned fast and fully, the screen
+turned, sleep and waking, and (on a UC8179 with the frame kept) grays.
+
+## Later: the X4 Classic (2026-10-20)
+
+The X4 Classic ("X4 v2", X4C) is an ESP32-S3 board, not a revision of
+the X4: an ESP32-C3 image cannot run on it. The same firmware builds for
+it with the feature `x4-classic` (`cargo +esp x4classic`); `x4-pro` and
+`x4-classic` share what both ESP32-S3 devices build with (the feature
+`esp32s3`: the chip, its PSRAM as the heap, the card on its SD host,
+`card_pro.rs`, outer power seen by the USB frames, `usb_power.rs`).
+Its board (`board_classic.rs`) has what differs, from the FreeInk SDK's
+board table and Papyrix's notes (both from the stock firmware, MIT):
+
+- **The panel on other pins** (data/command GPIO 14, reset GPIO 10, busy
+  GPIO 18), the glass and memory of the X4 Pro (`Device::X4Pro`: a frame
+  kept, turned as the X4 Pro's), its controller asked at start like the
+  others' and driven as such; without a sure answer, a UC8179.
+- **The X4's seven buttons, each on a pin of its own**, low while
+  pressed (`State::keys`): back, confirm, left and right below the
+  screen (with the X4's row of hints), the page buttons on the side,
+  power. No touch, no front light.
+- **The card's power** on GPIO 6 (on while low), off for 80 ms first as
+  the stock firmware does; the gauge and the clock chip as on the X4 Pro.
+- **Its own id** (`xteink-x4-classic`, plugin libraries' `x4-classic`):
+  plugins made for the X4 or the X4 Pro are not offered to it until the
+  library lists it.
+
+Not tried on one: no X4 Classic is at hand. To check: the log line
+naming the controller, every button (the side buttons' direction above
+all, which the sources name differently), the screen's turning, the card,
+the battery's charge (the gauge may need its battery profile, which the
+stock firmware writes), whether the charging pin reads as on the X4 Pro,
+sleep and waking by the power button.

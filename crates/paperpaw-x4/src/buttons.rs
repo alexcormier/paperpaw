@@ -1,5 +1,7 @@
 //! The X4's buttons: six on two resistor ladders, each read as one
-//! voltage on an ADC pin, and the power button on its own pin.
+//! voltage on an ADC pin, and the power button on its own pin. The X4 Pro
+//! and the X4 Classic have each button on a pin of its own
+//! ([`State::pins`], [`State::keys`]).
 //!
 //! The front buttons (back, confirm, left, right) share one ladder, the
 //! two on the side (PaperPaw's page buttons) the other. Each pressed
@@ -73,6 +75,16 @@ impl State {
             u8::from(page_back) << side
                 | u8::from(page_forward) << (side + 1)
                 | u8::from(power) << (side + SIDE.len()),
+        )
+    }
+
+    /// The buttons down on a device with every button on a pin of its own
+    /// (the X4 Classic): whether each is down, in the order of [`ALL`].
+    pub fn keys(down: [bool; ALL.len()]) -> Self {
+        Self(
+            down.iter()
+                .enumerate()
+                .fold(0, |bits, (i, &d)| bits | u8::from(d) << i),
         )
     }
 
@@ -177,6 +189,21 @@ mod tests {
         // One of each ladder at once.
         let both = State::read(2694, 3, false);
         assert!(both.is_down(buttons::CONFIRM) && both.is_down(buttons::PAGE_FORWARD));
+    }
+
+    #[test]
+    fn keys_on_their_own_pins_name_buttons() {
+        for (i, name) in ALL.into_iter().enumerate() {
+            let mut down = [false; ALL.len()];
+            down[i] = true;
+            let state = State::keys(down);
+            assert!(ALL.iter().all(|b| state.is_down(b) == (*b == name)));
+        }
+        assert_eq!(State::keys([false; ALL.len()]), State(0));
+        assert_eq!(
+            State::keys([false, false, false, false, true, false, true]),
+            State::pins(true, false, true)
+        );
     }
 
     #[test]

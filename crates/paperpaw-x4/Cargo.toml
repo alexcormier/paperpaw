@@ -1,6 +1,6 @@
 [package]
 name = "paperpaw-x4"
-description = "The Xteink X4's hardware for PaperPaw's firmware: its SSD1677 display, button ladders and battery, against embedded-hal"
+description = "The Xteink X4's and X4 Pro's hardware for PaperPaw's firmware: their SSD1677 and UltraChip displays, buttons and battery, against embedded-hal"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

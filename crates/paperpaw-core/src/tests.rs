@@ -862,6 +862,10 @@ impl Screen for LifecycleScreen {
         cx.wake_at(at);
     }
 
+    fn on_hide(&mut self) {
+        self.log.borrow_mut().push(String::from("hide"));
+    }
+
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         self.ticks += 1;
         self.log.borrow_mut().push(alloc::format!(
@@ -910,8 +914,52 @@ impl Plugin for LifecyclePlugin {
                 ));
             }),
         )?;
+        // Back to the screen below, and at once another over it, as a
+        // menu that closes to open a screen does.
+        r.add_action(paperpaw_sdk::ActionSpec::new(SWAP, "swap").handler(
+            |_: &Env<'_>, out: &mut Vec<paperpaw_sdk::Command>| {
+                out.push(paperpaw_sdk::Command::Back);
+                out.push(paperpaw_sdk::Command::OpenScreen(
+                    Id::new_static("life.screen"),
+                    paperpaw_sdk::Params::new().with("path", "books/c.txt"),
+                ));
+            },
+        ))?;
         Ok(())
     }
+}
+
+const SWAP: Id = Id::new_static("life.swap");
+
+/// A full screen opened over another hides it ([`Screen::on_hide`]),
+/// shown again ([`Screen::on_show`]) when that one closes; a screen on
+/// top only for a moment, while the commands of a call run, is not shown.
+#[test]
+fn screens_below_a_full_screen_are_hidden_and_shown_once_on_top() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(LifecyclePlugin { log: log.clone() })
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let path = paperpaw_sdk::Params::new().with("path", "books/b.txt");
+    kernel.open_screen(Instant(1), Id::new_static("life.screen"), path);
+    assert_eq!(
+        *log.borrow(),
+        [
+            "open books/a.txt",
+            "show",
+            "open books/b.txt",
+            "hide",
+            "show"
+        ]
+    );
+    log.borrow_mut().clear();
+    kernel.run_action(Instant(2), SWAP);
+    assert_eq!(*log.borrow(), ["open books/c.txt", "hide", "show"]);
+    log.borrow_mut().clear();
+    kernel.run_action(Instant(3), actions::BACK);
+    assert_eq!(*log.borrow(), ["show"]);
 }
 
 #[test]

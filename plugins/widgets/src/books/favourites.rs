@@ -11,7 +11,7 @@ use paperpaw_sdk::widgets::{self, Align, Frame, Look, Size, Widget, WidgetSpec, 
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar};
 
 use super::shelf::{self, Place, Shelved};
-use super::{Book, add_settings, chosen, count, current, draw_message, frame_height};
+use super::{Book, Covers, add_settings, chosen, count, current, draw_message, frame_height};
 use paperpaw_sdk::SettingSpec;
 
 pub(crate) const ID: Id = Id::new_static(WIDGET);
@@ -81,6 +81,9 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 #[derive(Debug, Default)]
 struct Favourites {
     books: Vec<Shelved>,
+    /// Where it is drawn, once placed.
+    area: Option<Rect>,
+    covers: Covers,
 }
 
 impl Favourites {
@@ -96,6 +99,18 @@ impl Favourites {
         };
         let align = widgets::align(env, WIDGET);
         shelf::places(env, area, self.books.len(), Self::grid(env), label, align)
+    }
+
+    /// The covers shown, made small for where they go.
+    fn make_covers(&mut self, env: &Env<'_>) {
+        self.covers = match self.area {
+            Some(area) => {
+                let look = widgets::look::look(env, WIDGET, area);
+                let places = self.places(env, Self::content(env, &look));
+                shelf::covers(env, &places, &self.books)
+            }
+            None => Covers::default(),
+        };
     }
 
     fn content(env: &Env<'_>, look: &Look) -> Rect {
@@ -139,7 +154,17 @@ impl Widget for Favourites {
         let books = favourites(env, count(env, WIDGET, "count").min(24));
         let changed = books != self.books;
         self.books = books;
+        if changed {
+            self.make_covers(env);
+        }
         changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.make_covers(env);
+        }
     }
 
     fn live(&self) -> bool {
@@ -174,7 +199,7 @@ impl Widget for Favourites {
         let rest = Self::content(env, &look);
         let places = self.places(env, rest);
         shelf::draw_caption(canvas, env, WIDGET, &look, rest, &places, title);
-        shelf::draw(canvas, env, &look, &places, &self.books);
+        shelf::draw(canvas, env, &look, &places, &self.books, &self.covers);
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {

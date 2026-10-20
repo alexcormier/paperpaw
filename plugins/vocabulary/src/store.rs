@@ -7,10 +7,25 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::sync::atomic::{AtomicU32, Ordering};
 
 use paperpaw_sdk::{Env, Storage};
 
 use crate::PLUGIN;
+
+/// The changes made to the words since PaperPaw started: what the marks
+/// in books depend on, known without reading the file.
+static CHANGES: AtomicU32 = AtomicU32::new(0);
+
+/// How many times the words changed since PaperPaw started.
+pub(crate) fn changes() -> u32 {
+    CHANGES.load(Ordering::Relaxed)
+}
+
+fn changed() {
+    // Load and store: the device has no atomic adding, and one thread.
+    CHANGES.store(changes().wrapping_add(1), Ordering::Relaxed);
+}
 
 /// Words kept at most; the oldest go.
 pub(crate) const MAX_WORDS: usize = 2000;
@@ -191,6 +206,7 @@ fn rewrite(storage: &dyn Storage, mut keep: impl FnMut(usize, &Word) -> bool) {
     });
     let _ = storage.append(&temporary, out.as_bytes());
     let _ = storage.rename(&temporary, &file);
+    changed();
 }
 
 /// Adds `word` as the newest; an older entry of it goes, and the oldest
@@ -217,6 +233,7 @@ pub(crate) fn add(storage: &dyn Storage, word: &Word) {
         });
     }
     let _ = storage.append(&file(), word.line().as_bytes());
+    changed();
 }
 
 /// Deletes word number `n`.

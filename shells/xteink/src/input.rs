@@ -34,8 +34,8 @@ const QUEUE: usize = 32;
 /// the controller had it, to look into), moved, lifted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(
-    feature = "x4",
-    expect(dead_code, reason = "the X4 has no touch screen")
+    not(feature = "x4-pro"),
+    expect(dead_code, reason = "only the X4 Pro has a touch screen")
 )]
 pub enum Touch {
     Down(u16, u16, (u16, u16)),
@@ -67,7 +67,7 @@ pub struct Sampler {
     head: usize,
     len: usize,
     battery_read: u64,
-    /// A time to give the clock chip (the X4 Pro's), ms since 1970.
+    /// A time to give the clock chip (the ESP32-S3 devices'), ms since 1970.
     clock: Option<i64>,
 }
 
@@ -231,7 +231,8 @@ pub fn profile(start: bool) -> Option<Vec<u32>> {
     })
 }
 
-/// Gives the clock chip the time (on the X4 Pro; the X4 has none), from
+/// Gives the clock chip the time (on the X4 Pro and X4 Classic; the X4
+/// has none), from
 /// the interrupt that owns its bus.
 pub fn keep_time(unix_ms: i64) {
     critical_section::with(|cs| {

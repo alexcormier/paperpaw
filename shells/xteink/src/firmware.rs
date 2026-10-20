@@ -147,8 +147,8 @@ impl Firmware {
         level > 0 && self.light.is_some()
     }
 
-    /// The X4 has no light.
-    #[cfg(feature = "x4")]
+    /// The X4 and the X4 Classic have no light.
+    #[cfg(not(feature = "x4-pro"))]
     fn light(&mut self) -> bool {
         false
     }
@@ -396,8 +396,9 @@ impl Firmware {
             return self.sleep_on_usb();
         }
         let mut power = input::stop().expect("the power button");
-        // The X4 Pro holds its latch through resets: let go first.
-        #[cfg(feature = "x4-pro")]
+        // The ESP32-S3 devices hold their latch through resets: let go
+        // first.
+        #[cfg(feature = "esp32s3")]
         self.power_latch.set_pad_hold(false);
         self.power_latch.set_low();
         power.listen(Event::LowLevel);

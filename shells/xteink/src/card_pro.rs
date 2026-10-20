@@ -1,7 +1,8 @@
-//! The X4 Pro's microSD card, on the ESP32-S3's SD host (SDMMC, one data
-//! line), for PaperPaw's FAT storage: started as the SD specification
-//! says, then read and written block by block through a buffer in the
-//! chip's own RAM (its DMA does not reach the PSRAM).
+//! The microSD card of the X4 Pro and the X4 Classic, on the ESP32-S3's
+//! SD host (SDMMC, one data line), for PaperPaw's FAT storage: started as
+//! the SD specification says, then read and written block by block
+//! through a buffer in the chip's own RAM (its DMA does not reach the
+//! PSRAM).
 
 use alloc::boxed::Box;
 use core::cell::UnsafeCell;

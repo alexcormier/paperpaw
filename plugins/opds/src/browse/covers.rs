@@ -1,6 +1,7 @@
 //! The covers of a feed's entries, where the device has the memory for
 //! them: loaded one after the other for the page shown, decoded and
-//! kept, so they show at once the next time.
+//! kept, so they show at once the next time, and made small for their
+//! rows in memory, drawn from there.
 
 use super::*;
 
@@ -27,6 +28,15 @@ pub(super) fn cover_path(url: &str) -> String {
 }
 
 impl BrowseScreen {
+    /// `image` made small for the cover column of a row, as the panel
+    /// shows it.
+    fn small_cover(&self, env: &Env<'_>, image: &ImageRef) -> Option<Thumbnail> {
+        let pad = self.style.gap as u16 / 2;
+        let height = self.list.row_rect(0).height.saturating_sub(2 * pad);
+        let (w, h) = ui::fit_image(image, cover_width(&self.style), height);
+        Thumbnail::new(env.storage, image, w, h, env.device.display.format)
+    }
+
     /// The row of entry `i`, if it is on the page shown.
     pub(super) fn row_of(&self, i: usize) -> Option<usize> {
         let row = self.rows().iter().position(|r| *r == Row::Entry(i))?;
@@ -50,11 +60,15 @@ impl BrowseScreen {
             };
             let kept = cover_path(&url);
             if let Some(file) = paperpaw_sdk::image::ImageFile::open(env.storage, &kept) {
-                self.covers[i] = Some(ImageRef {
+                let image = ImageRef {
                     path: file.path,
                     width: file.width,
                     height: file.height,
-                });
+                };
+                match self.small_cover(&env, &image) {
+                    Some(small) => self.covers[i] = Some(small),
+                    None => self.failed.push(i),
+                }
                 continue;
             }
             if !env.caps.network {
@@ -105,9 +119,9 @@ impl BrowseScreen {
             })
             .flatten();
         let _ = env.storage.remove(&tmp);
-        match image {
-            Some(image) => {
-                self.covers[i] = Some(image);
+        match image.and_then(|image| self.small_cover(&env, &image)) {
+            Some(small) => {
+                self.covers[i] = Some(small);
                 if let Some(row) = self.row_of(i) {
                     cx.request_redraw_area(self.list.row_rect(row));
                     cx.request_refresh(RefreshMode::Fast);
