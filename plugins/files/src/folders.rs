@@ -86,7 +86,7 @@ impl FolderChooser {
             (Some(id), None) => env.settings.text(id.as_str()).trim_matches('/').to_string(),
             (None, None) => String::new(),
         };
-        let dir = if !current.is_empty() && env.storage.exists(&current) {
+        let dir = if !current.is_empty() && paperpaw_sdk::files::is_dir(env.storage, &current) {
             current
         } else {
             String::new()
@@ -325,16 +325,10 @@ impl Screen for FolderChooser {
             return;
         };
         let env = *cx.env();
-        let name = typed.text.as_str();
-        let name: String = name
-            .chars()
-            .filter(|c| !matches!(c, '/' | '\\' | ':') && !c.is_control())
-            .collect();
-        let name = name.trim().trim_start_matches('.');
-        if name.is_empty() {
+        let Some(name) = folder_name(&typed.text) else {
             return;
-        }
-        let path = paperpaw_sdk::files::join(&self.dir, name);
+        };
+        let path = paperpaw_sdk::files::join(&self.dir, &name);
         if env.storage.create_dir(&path).is_ok() {
             self.dir = path;
             self.load(&env);
@@ -402,5 +396,40 @@ impl Screen for FolderChooser {
             }
             None => Handled::No,
         }
+    }
+}
+
+/// `typed` made a name for a new folder that every file system takes as it
+/// is, the memory card's (FAT) and Windows' too: without the characters
+/// they refuse (`/ \ : * ? " < > |`, control characters), without dots at
+/// the start (hidden) and dots or spaces at the end (dropped); `None` where
+/// nothing is left.
+fn folder_name(typed: &str) -> Option<String> {
+    let name: String = typed
+        .chars()
+        .filter(|c| !matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|'))
+        .filter(|c| !c.is_control())
+        .collect();
+    let name = name
+        .trim()
+        .trim_start_matches('.')
+        .trim_end_matches(['.', ' '])
+        .trim_start();
+    paperpaw_sdk::files::is_plain_name(name).then(|| name.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::folder_name;
+
+    #[test]
+    fn folder_names_suit_every_file_system() {
+        assert_eq!(folder_name("  Fantasy  ").as_deref(), Some("Fantasy"));
+        assert_eq!(folder_name("Sci/Fi: *new*?").as_deref(), Some("SciFi new"));
+        assert_eq!(folder_name("..hidden").as_deref(), Some("hidden"));
+        assert_eq!(folder_name("Notes. . ").as_deref(), Some("Notes"));
+        assert_eq!(folder_name("a\"b<c>d|e").as_deref(), Some("abcde"));
+        assert_eq!(folder_name(" . . "), None);
+        assert_eq!(folder_name("..."), None);
     }
 }

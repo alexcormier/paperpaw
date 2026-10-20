@@ -6,6 +6,21 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Library: while a book or another full screen covers it, the library
+  lets go of its covers and page and reads nothing when books arrive or
+  a setting changes (a font size in the reader, say); it reads its
+  folder once when it shows again, and then only the page with the
+  book the focus was on, which keeps the focus (also after marking a
+  book finished or archiving one). Covers that could not be made small
+  show a stand-in instead of being read from the book in every band;
+  zipped books are named alike in the list and the grid; sizes in the
+  book information use the language's decimal mark. The folder chooser
+  opens in the folder set (it always started at the top), and names of
+  new folders leave out what the memory card and Windows refuse. The
+  shelves (by author, series, tag) make their catalog once, again only
+  after books came, went or moved, the library folder changed or after
+  half an hour, and making it goes on where a book was opened
+  meanwhile (it stayed at "Collecting the books" for good).
 - Vocabulary: the list of words is never lost to a failed read or
   write. It is written anew beside itself and put in its place only
   once complete, so a full card or a read error partway keeps it as
