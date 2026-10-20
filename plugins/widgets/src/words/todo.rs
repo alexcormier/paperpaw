@@ -873,3 +873,6 @@ mod tests {
         assert_eq!(cleaned(&"x".repeat(300)).len(), MAX_TEXT);
     }
 }
+
+#[cfg(test)]
+mod roundtrip_tests;
