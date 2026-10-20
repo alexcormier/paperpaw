@@ -12,7 +12,8 @@ use paperpaw_plugin_power::{MODE, Power};
 use paperpaw_sdk::builtin::settings;
 use paperpaw_sdk::power::{self, PowerLevel};
 use paperpaw_sdk::{
-    DeviceInfo, DisplayInfo, Id, InputCaps, Instant, MemoryClass, PixelFormat, SettingValue,
+    DeviceInfo, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage, PixelFormat,
+    SettingValue, Storage,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -42,7 +43,11 @@ struct Device {
 
 impl Device {
     fn new() -> Self {
-        let mut kernel = Kernel::builder(DEVICE).plugin(Power).build().unwrap();
+        let mut kernel = Kernel::builder(DEVICE)
+            .storage(MemoryStorage::new())
+            .plugin(Power)
+            .build()
+            .unwrap();
         kernel.start(Instant(0));
         Self { kernel, now: 0 }
     }
@@ -127,4 +132,61 @@ fn a_mode_chosen_by_hand_stays_whatever_the_battery() {
         device.kernel.settings().get(MODE.as_str()),
         Some(&SettingValue::Text("power.mode.offline".into()))
     );
+}
+
+#[test]
+fn a_mode_and_what_the_reader_took_back_stay_across_a_start() {
+    let mut device = Device::new();
+    device.battery(15, false);
+    assert_eq!(device.mode().1, PowerLevel::Saving);
+    // The reader wants the device to sleep later than Saving's limit.
+    device.now += 10;
+    device
+        .kernel
+        .set_setting(Instant(device.now), settings::SLEEP_AFTER.as_str(), "30")
+        .unwrap();
+    assert_eq!(device.sleep_after(), 30);
+    device.kernel.suspend(Instant(device.now + 10));
+    // A new start (on the X4, every wake) with what the card keeps.
+    let storage = MemoryStorage::new();
+    for path in [".paperpaw/power.ini", paperpaw_sdk::builtin::CONFIG_FILE] {
+        let bytes = paperpaw_sdk::read_file(device.kernel.storage(), path, 1 << 16).unwrap();
+        storage.write(path, &bytes).unwrap();
+    }
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage)
+        .plugin(Power)
+        .build()
+        .unwrap();
+    // The shell says the battery as it starts.
+    let battery = Battery {
+        percent: 15,
+        charging: false,
+        millivolts: None,
+    };
+    let status = SystemStatus {
+        clock: None,
+        battery: Some(battery),
+    };
+    kernel.set_status(Instant(0), status);
+    kernel.start(Instant(0));
+    assert_eq!(kernel.power().level, PowerLevel::Saving);
+    assert_eq!(
+        kernel.settings().int(settings::SLEEP_AFTER.as_str()),
+        30,
+        "theirs"
+    );
+}
+
+#[test]
+fn saving_keeps_a_shorter_sleep_as_it_is() {
+    let mut device = Device::new();
+    device.now += 10;
+    device
+        .kernel
+        .set_setting(Instant(device.now), settings::SLEEP_AFTER.as_str(), "2")
+        .unwrap();
+    device.battery(15, false);
+    assert_eq!(device.mode().1, PowerLevel::Saving);
+    assert_eq!(device.sleep_after(), 2, "a limit, not a value");
 }

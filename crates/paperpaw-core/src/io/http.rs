@@ -19,6 +19,9 @@ pub const MAX_RESPONSE_SMALL: usize = 64 << 10;
 /// How long a request may take in all unless it says
 /// ([`HttpOptions::timeout`]).
 pub const TIMEOUT_MS: u32 = 30_000;
+/// The same for a download to a file ([`HttpRequest::save_to`]), which
+/// may be large.
+pub const DOWNLOAD_TIMEOUT_MS: u32 = 10 * 60_000;
 /// Longest response body saved to a file, and longest file sent.
 pub const MAX_FILE: usize = 64 << 20;
 
@@ -216,7 +219,12 @@ impl Http {
         } else {
             max_body.unwrap_or(self.max_response).min(MAX_RESPONSE)
         };
-        let timeout_ms = timeout.map_or(TIMEOUT_MS, |t| {
+        let default = if request.save_to.is_some() {
+            DOWNLOAD_TIMEOUT_MS
+        } else {
+            TIMEOUT_MS
+        };
+        let timeout_ms = timeout.map_or(default, |t| {
             u32::try_from(t.as_millis()).unwrap_or(u32::MAX)
         });
         self.calls.push(HttpCall {
@@ -287,6 +295,28 @@ impl Http {
         let mut params = answer.to_params();
         params.set(http_params::BODY, body);
         out.push(Command::Emit(awaiting.reply, params));
+    }
+
+    /// Takes back the requests whose reply is `reply`, each answered with
+    /// the refusal `Cancelled`; an answer the shell brings later is passed
+    /// over.
+    pub fn cancel(&mut self, reply: &Id, out: &mut Vec<Command>) {
+        let cancelled: Vec<Awaiting> = {
+            let (gone, kept) = core::mem::take(&mut self.awaiting)
+                .into_iter()
+                .partition(|a| a.reply == *reply);
+            self.awaiting = kept;
+            gone
+        };
+        for awaiting in cancelled {
+            self.calls.retain(|call| call.id != awaiting.id);
+            let refusal = paperpaw_sdk::work::Refusal::new(
+                paperpaw_sdk::work::Reason::Cancelled,
+                paperpaw_sdk::work::Retry::Never,
+            );
+            let answer = HttpReply::refused(refusal, awaiting.context);
+            out.push(Command::Emit(awaiting.reply, answer.to_params()));
+        }
     }
 
     /// Whether a request made for the reader is not answered yet.
@@ -360,6 +390,48 @@ mod tests {
             body: body.to_vec(),
             ..HttpResponse::default()
         }
+    }
+
+    #[test]
+    fn options_reach_the_shell_and_headers_come_back() {
+        let storage = MemoryStorage::new();
+        let mut out = Vec::new();
+        let mut http = Http::for_memory(paperpaw_platform::MemoryClass::Small);
+        let plain = get("https://h.org/a", None);
+        let download = get("https://h.org/b", Some("b.epub"));
+        let asked = get("https://h.org/c", None)
+            .timeout(core::time::Duration::from_secs(5))
+            .want_headers(&["Last-Modified"])
+            .max_body(2048);
+        for request in [plain, download, asked] {
+            http.request(request, true, false, &storage, &mut out);
+        }
+        let calls = http.take();
+        let limits: Vec<_> = calls
+            .iter()
+            .map(|c| (c.timeout_ms, c.max_response))
+            .collect();
+        assert_eq!(
+            limits,
+            [
+                (TIMEOUT_MS, MAX_RESPONSE_SMALL),
+                (DOWNLOAD_TIMEOUT_MS, MAX_FILE),
+                (5000, 2048)
+            ]
+        );
+        assert_eq!(calls[2].want_headers, ["Last-Modified"]);
+        let response = HttpResponse {
+            id: calls[2].id,
+            status: 200,
+            headers: alloc::vec![(String::from("last-modified"), String::from("Tue"))],
+            ..HttpResponse::default()
+        };
+        http.answer(response, &storage, &mut out);
+        let Some(Command::Emit(_, params)) = out.last() else {
+            panic!("no reply");
+        };
+        let reply = HttpReply::from_params(params).unwrap();
+        assert_eq!(reply.header("Last-Modified"), Some("Tue"));
     }
 
     #[test]

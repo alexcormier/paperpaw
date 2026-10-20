@@ -62,6 +62,7 @@ impl Plugin for CorePlugin {
             order: 87,
             page: None,
         })?;
+        r.add_icon(crate::work::NETWORK_GROUP, Cow::Borrowed("world"))?;
         Ok(())
     }
 }
@@ -82,14 +83,14 @@ static POWER_MODES: [paperpaw_sdk::presets::Preset; 3] = [
         "core.power-mode",
         "core.power.saving",
         "core.power.saving.help",
-        "power.level = saving\npower.stretch = 4\ncore.sleep-after = 5\nx4.frontlight <= 50",
+        "power.level = saving\npower.stretch = 4\ncore.sleep-after <= 5\nx4.frontlight <= 50",
     ),
     paperpaw_sdk::presets::Preset::fixed(
         "core.offline",
         "core.power-mode",
         "core.power.offline",
         "core.power.offline.help",
-        "power.level = offline\npower.stretch = 4\ncore.sleep-after = 5\nx4.frontlight <= 30",
+        "power.level = offline\npower.stretch = 4\ncore.sleep-after <= 5\nx4.frontlight <= 30",
     ),
 ];
 

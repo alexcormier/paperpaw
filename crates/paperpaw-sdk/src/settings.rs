@@ -816,6 +816,9 @@ pub struct Settings {
     worn: VecMap<Id, SettingValue>,
     /// Upper limits of numbers while a power mode is worn.
     limits: VecMap<Id, SettingValue>,
+    /// The mode's values the reader changed while it was worn: theirs
+    /// until the next mode (see [`Settings::released`]).
+    released: Vec<Id>,
     presets: crate::presets::Presets,
 }
 
@@ -872,6 +875,7 @@ impl Settings {
             .collect();
         self.worn = VecMap::default();
         self.limits = VecMap::default();
+        self.released.clear();
         for (id, value) in values {
             if self
                 .spec(id.as_str())
@@ -894,6 +898,22 @@ impl Settings {
         touched.sort();
         touched.dedup();
         touched
+    }
+
+    /// The mode's values the reader changed while it was worn, which are
+    /// theirs until the next mode, e.g. to keep across a restart.
+    pub fn released(&self) -> &[Id] {
+        &self.released
+    }
+
+    /// Lets go of the worn mode's value for `id`, as when the reader
+    /// changed it (e.g. after a restart, see [`Settings::released`]).
+    pub fn release(&mut self, id: &Id) {
+        let value = self.worn.remove(id.as_str()).is_some();
+        let limit = self.limits.remove(id.as_str()).is_some();
+        if (value || limit) && !self.released.contains(id) {
+            self.released.push(id.clone());
+        }
     }
 
     /// Whether a power mode holds `id` (a value or a limit).
@@ -1028,7 +1048,7 @@ impl Settings {
         }
         let id = self.value_id(id)?;
         // The reader's change wins over a mode's value until the next mode.
-        self.worn.remove(id.as_str());
+        self.release(&id);
         self.values.insert(id, value);
         Ok(())
     }
@@ -1357,15 +1377,21 @@ mod tests {
         );
         assert_eq!(s.int("a.sleep"), 5);
         assert_eq!(s.int("a.light"), 50, "kept below the limit");
-        s.set("a.light", SettingValue::Int(30)).unwrap();
-        assert_eq!(s.int("a.light"), 30, "below the limit, the reader's own");
+        // The reader's change wins over a mode's limit, too.
+        s.set("a.light", SettingValue::Int(90)).unwrap();
+        assert_eq!(s.int("a.light"), 90, "the reader's own");
         // The reader's change wins over the mode's value.
         s.set("a.sleep", SettingValue::Int(20)).unwrap();
         assert_eq!(s.int("a.sleep"), 20);
-        assert!(s.is_worn("a.light") && !s.is_worn("a.sleep"));
+        assert!(!s.is_worn("a.light") && !s.is_worn("a.sleep"));
+        assert_eq!(
+            s.released(),
+            [Id::new_static("a.light"), Id::new_static("a.sleep")]
+        );
         // Taken off: the reader's own values, nothing written by the mode.
         s.wear(alloc::vec![], alloc::vec![]);
-        assert_eq!((s.int("a.sleep"), s.int("a.light")), (20, 30));
+        assert_eq!((s.int("a.sleep"), s.int("a.light")), (20, 90));
+        assert!(s.released().is_empty());
     }
 
     #[test]

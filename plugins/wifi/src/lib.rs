@@ -73,7 +73,10 @@ pub(crate) type Shared = Rc<RefCell<Policy>>;
 
 /// The radio stays on now: charging, and the user wants that.
 fn charging_keeps_it(env: &Env<'_>) -> bool {
-    env.settings.read(&WHILE_CHARGING) && env.status.battery.is_some_and(|b| b.charging)
+    // Offline keeps the radio off also while charging.
+    env.settings.read(&WHILE_CHARGING)
+        && env.status.battery.is_some_and(|b| b.charging)
+        && env.power.online()
 }
 
 fn idle_seconds(env: &Env<'_>) -> u64 {
@@ -339,6 +342,13 @@ impl Plugin for Wifi {
         let p = policy.clone();
         r.on(events::NETWORK_IDLE, move |env, _, out| {
             schedule_off(env, &p.borrow(), out)
+        })?;
+        // Another power mode: a radio only charging kept on may go off.
+        let p = policy.clone();
+        r.on(events::POWER_CHANGED, move |env, (), out| {
+            if env.wifi.is_some_and(|w| !w.busy) {
+                schedule_off(env, &p.borrow(), out);
+            }
         })?;
         let p = policy.clone();
         r.subscribe(

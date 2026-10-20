@@ -26,7 +26,7 @@
 //!
 //! Underneath, what an event carries travels as [`Params`] (named
 //! strings), so it can cross to plugins in other languages and be
-//! scheduled ([`Command::Schedule`]); events of other plugins, known only
+//! declared as work ([`work`](crate::work)); events of other plugins, known only
 //! at run time, are heard by id ([`Registrar::subscribe`](crate::Registrar::subscribe)).
 
 use alloc::boxed::Box;

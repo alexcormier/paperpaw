@@ -2466,7 +2466,6 @@ pub paperpaw_sdk::work::Work::key: alloc::string::String
 pub paperpaw_sdk::work::Work::moments: paperpaw_sdk::work::Moments
 pub paperpaw_sdk::work::Work::network: bool
 pub paperpaw_sdk::work::Work::params: paperpaw_sdk::Params
-pub paperpaw_sdk::work::Work::persist: bool
 pub paperpaw_sdk::work::Work::within: core::option::Option<core::time::Duration>
 impl paperpaw_sdk::work::Work
 pub fn paperpaw_sdk::work::Work::after(self, core::time::Duration) -> Self
@@ -2479,7 +2478,6 @@ pub fn paperpaw_sdk::work::Work::key(self, impl core::convert::Into<alloc::strin
 pub fn paperpaw_sdk::work::Work::network(impl core::convert::Into<paperpaw_sdk::Id>) -> Self
 pub fn paperpaw_sdk::work::Work::new(impl core::convert::Into<paperpaw_sdk::Id>) -> Self
 pub fn paperpaw_sdk::work::Work::optional(self) -> Self
-pub fn paperpaw_sdk::work::Work::persist(self) -> Self
 pub fn paperpaw_sdk::work::Work::retry(self, u32, u8) -> Self
 pub fn paperpaw_sdk::work::Work::with(self, paperpaw_sdk::Params) -> Self
 pub fn paperpaw_sdk::work::Work::within(self, core::time::Duration) -> Self
@@ -2576,7 +2574,6 @@ pub paperpaw_sdk::Command::ResetSetting(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Respond(paperpaw_sdk::ServerResponse)
 pub paperpaw_sdk::Command::Restart
 pub paperpaw_sdk::Command::RunAction(paperpaw_sdk::Id)
-pub paperpaw_sdk::Command::Schedule(paperpaw_sdk::Id, paperpaw_sdk::Params, paperpaw_platform::input::Instant)
 pub paperpaw_sdk::Command::Screenshot(alloc::string::String)
 pub paperpaw_sdk::Command::Serve
 pub paperpaw_sdk::Command::Serve::events: paperpaw_sdk::Id
@@ -3453,6 +3450,8 @@ pub fn paperpaw_sdk::Settings::presets(&self) -> &paperpaw_sdk::presets::Presets
 pub fn paperpaw_sdk::Settings::presets_mut(&mut self) -> &mut paperpaw_sdk::presets::Presets
 pub fn paperpaw_sdk::Settings::previewing(&self) -> bool
 pub fn paperpaw_sdk::Settings::read<T: paperpaw_sdk::setting::SettingType>(&self, &paperpaw_sdk::setting::Setting<T>) -> <T as paperpaw_sdk::setting::SettingType>::Value
+pub fn paperpaw_sdk::Settings::release(&mut self, &paperpaw_sdk::Id)
+pub fn paperpaw_sdk::Settings::released(&self) -> &[paperpaw_sdk::Id]
 pub fn paperpaw_sdk::Settings::reset(&mut self, &str) -> core::result::Result<(), paperpaw_sdk::SettingError>
 pub fn paperpaw_sdk::Settings::scope(&self) -> core::option::Option<&paperpaw_sdk::collections::VecMap<paperpaw_sdk::Id, paperpaw_sdk::SettingValue>>
 pub fn paperpaw_sdk::Settings::scoped_value(&self, &str) -> core::option::Option<&paperpaw_sdk::SettingValue>

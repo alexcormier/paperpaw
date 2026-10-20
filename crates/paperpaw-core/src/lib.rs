@@ -712,6 +712,8 @@ impl Kernel {
         }
         let thresholds = self.thresholds();
         for recognized in self.input.recognizer.tick(now, &thresholds) {
+            // A press held long enough: the reader's input too.
+            self.reader = true;
             self.recognized(recognized);
         }
         if let Some(top) = self.stack.last_mut()

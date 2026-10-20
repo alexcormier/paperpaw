@@ -15,8 +15,14 @@ impl Kernel {
         // A screen that set a scope may have closed.
         self.check_scope_owner();
         self.check_preview_owner();
+        // Work due now runs before the network is looked at, so that its
+        // requests want it in this call; what it brings due runs too.
+        for _ in 0..work::MAX_ROUNDS {
+            if !self.run_work() {
+                break;
+            }
+        }
         self.check_network();
-        self.run_work();
         self.run_commands();
         if let Some(row) = self.hint_row() {
             let (hints, held) = (self.current_hints(), self.current_holds());
@@ -84,7 +90,7 @@ impl Kernel {
         }
         let input = self.input.recognizer.next_deadline(&self.thresholds());
         let notice = self.notice.as_ref().map(|(_, until)| *until);
-        let work = self.works.next_wake(&self.shared.power, self.last_activity);
+        let work = self.works.next_wake(&self.base_power(), self.last_activity);
         // After a screenshot is drawn, a message says where it went.
         let shot = self
             .frame
@@ -164,11 +170,11 @@ impl Kernel {
             Command::Notify(text) | Command::Announce(text) => self.notify(text),
             Command::Emit(event, params) => self.emit(&event, &params),
             Command::RunAction(action) => self.dispatch(action),
-            command @ (Command::Work(_) | Command::CancelWork(..) | Command::Wear(_)) => {
-                self.apply_work(command);
-            }
-            #[expect(deprecated, reason = "timers of plugins not moved yet")]
-            command @ Command::Schedule(..) => self.apply_work(command),
+            command @ (Command::Work(_)
+            | Command::CancelWork(..)
+            | Command::CancelHttp(_)
+            | Command::Wear(_)
+            | Command::GoOnline) => self.apply_work(command),
             Command::Restart => self.restart = true,
             Command::LoadPlugin(folder) => self.load_plugin(&folder),
             Command::RemovePlugin(id) => self.remove_plugin(&id),
@@ -222,7 +228,7 @@ impl Kernel {
     }
 
     /// An event to its subscribers, then to every open screen.
-    fn emit(&mut self, event: &Id, params: &Params) {
+    pub(crate) fn emit(&mut self, event: &Id, params: &Params) {
         // A page turned, also by itself, is use.
         if *event == events::PAGE_TURNED {
             self.last_activity = self.now;

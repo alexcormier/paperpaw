@@ -28,6 +28,15 @@ use crate::Kernel;
 /// The settings group of every plugin's network.
 pub(crate) const NETWORK_GROUP: Id = Id::new_static("core.group.network");
 
+/// Where the worn power mode is kept across starts (on the X4, every
+/// wake is a start): its id, whether Automatic chose it, the values the
+/// reader took back.
+const POWER_FILE: &str = ".paperpaw/power.ini";
+
+/// Rounds of work in one call: work run may bring more due (a moment of
+/// its own, a job ready), at most this often.
+pub(crate) const MAX_ROUNDS: usize = 4;
+
 /// Without input this long, the screen still on: the `IDLE` moment.
 pub(crate) const IDLE_MS: u64 = 10_000;
 /// A job's progress is told at most this often.
@@ -143,6 +152,18 @@ pub(crate) struct Queue {
     exempt: Vec<(String, Exempt)>,
     /// What the reader set per plugin changed: read again.
     stale: bool,
+    /// The screen the reader chose *Go online* on while Offline: the
+    /// network for it until it closes ([`Command::GoOnline`]).
+    online_for: Option<Id>,
+    /// Works or their states changed since `Env::work` was made.
+    changed: bool,
+    /// Plugins refused for a full queue, told `WORK_ALLOWED` once there is
+    /// room again.
+    full: Vec<String>,
+    /// The device goes to sleep: the worn mode is written down.
+    keep: bool,
+    /// Plugins that declared work under another's name, to warn of.
+    foreign: Vec<String>,
 }
 
 impl Queue {
@@ -190,13 +211,27 @@ impl Queue {
 
     /// Declares `work`, in place of one with the same id and key.
     fn declare(&mut self, work: Work, now: Instant, out: &mut Vec<Command>) {
+        self.changed = true;
         let owner = String::from(work.id.namespace());
         let same = |e: &Entry| e.work.id == work.id && e.work.key == work.key;
         if let Some(entry) = self.entries.iter_mut().find(|e| same(e)) {
-            *entry = Entry::new(work, owner, now);
+            // Declared again: its time counts from the first declaring (a
+            // timer moves to its new time), a running job goes on.
+            let declared = if work.at.is_some() {
+                now
+            } else {
+                entry.declared
+            };
+            let old = mem::replace(entry, Entry::new(work, owner, declared));
+            entry.job = old.job;
+            entry.progress = old.progress;
+            entry.attempt = old.attempt;
             return;
         }
         if self.entries.iter().filter(|e| e.owner == owner).count() >= self.per_plugin {
+            if !self.full.contains(&owner) {
+                self.full.push(owner);
+            }
             let refused = WorkRefused {
                 work: work.id,
                 refusal: Refusal::new(Reason::TooOften, Retry::WhenAllowed),
@@ -207,8 +242,20 @@ impl Queue {
         self.entries.push(Entry::new(work, owner, now));
     }
 
+    /// Tells plugins refused for a full queue that there is room again.
+    fn allow_full(&mut self, out: &mut Vec<Command>) {
+        let (entries, per_plugin) = (&self.entries, self.per_plugin);
+        let before = self.full.len();
+        self.full
+            .retain(|owner| entries.iter().filter(|e| e.owner == *owner).count() >= per_plugin);
+        if self.full.len() < before {
+            out.push(events::WORK_ALLOWED.emit(()));
+        }
+    }
+
     /// Takes back the work with this id and key (any key: `None`).
     fn cancel(&mut self, id: &Id, key: Option<&str>) {
+        self.changed = true;
         self.entries
             .retain(|e| !(e.work.id == *id && key.is_none_or(|k| e.work.key == k)));
     }
@@ -247,6 +294,9 @@ impl Queue {
     pub(crate) fn next_wake(&self, power: &Power, last_activity: Instant) -> Option<Instant> {
         let mut next: Option<Instant> = None;
         let mut earliest = |at: Instant| next = Some(next.map_or(at, |n: Instant| n.min(at)));
+        if !self.moments.is_empty() {
+            earliest(Instant(0));
+        }
         for entry in &self.entries {
             match &entry.job {
                 Some(Job::Ready) => earliest(Instant(0)),
@@ -254,9 +304,17 @@ impl Queue {
                 Some(Job::For(_)) => {}
                 None if entry.held(&self.power_of(power, &entry.owner)) => {}
                 None => {
+                    // Only what can run then wakes the device: no work that
+                    // waits for charging or for the radio to be on anyway.
+                    let waits = (entry.work.charging && !self.charging)
+                        || (entry.work.importance == Importance::Optional
+                            && entry.work.network
+                            && !self.online);
                     if let Some(at) = entry.work.at {
                         earliest(at);
-                    } else if let Some(due) = entry.deadline(&self.power_of(power, &entry.owner)) {
+                    } else if !waits
+                        && let Some(due) = entry.deadline(&self.power_of(power, &entry.owner))
+                    {
                         earliest(due);
                     }
                     if entry.work.moments.contains(Moments::IDLE) && entry.job.is_none() {
@@ -315,8 +373,8 @@ impl Queue {
     }
 
     /// Why `entry` runs now, if it does.
-    fn why(&self, entry: &Entry, moments: Moments, env: &Env<'_>) -> Option<Why> {
-        let power = &self.power_of(env.power, &entry.owner);
+    fn why(&self, entry: &Entry, moments: Moments, env: &Env<'_>, base: &Power) -> Option<Why> {
+        let power = &self.power_of(base, &entry.owner);
         if entry.job.is_some() || entry.held(power) {
             return None;
         }
@@ -358,20 +416,22 @@ impl Entry {
 
 impl Kernel {
     /// Declares or takes back work ([`Command::Work`],
-    /// [`Command::CancelWork`], and timers of [`Command::Schedule`]).
+    /// [`Command::CancelWork`]), takes back requests
+    /// ([`Command::CancelHttp`]), wears a power mode ([`Command::Wear`]),
+    /// goes online for the screen in front ([`Command::GoOnline`]).
     pub(crate) fn apply_work(&mut self, command: Command) {
         match command {
             Command::Work(work) => self
                 .works
                 .declare(work, self.now, &mut self.output.commands),
-            #[expect(deprecated, reason = "timers of plugins not moved yet")]
-            Command::Schedule(event, params, at) => {
-                let work = Work::at(event, at).with(params);
-                self.works
-                    .declare(work, self.now, &mut self.output.commands);
-            }
             Command::CancelWork(id, key) => self.works.cancel(&id, key.as_deref()),
+            Command::CancelHttp(reply) => self.io.http.cancel(&reply, &mut self.output.commands),
             Command::Wear(wear) => self.wear(wear),
+            Command::GoOnline => {
+                self.works.online_for = self.stack.last().map(|top| top.id.clone());
+                // What waited may go on this connection.
+                self.output.commands.push(events::WORK_ALLOWED.emit(()));
+            }
             _ => {}
         }
     }
@@ -381,6 +441,63 @@ impl Kernel {
     /// mode and of every setting whose value shows otherwise now; work held
     /// back by Offline may go on once another mode is worn.
     fn wear(&mut self, wear: Wear) {
+        self.wear_mode(wear, true);
+        self.keep_power();
+    }
+
+    /// Writes the worn mode down, to wear again at the next start.
+    pub(crate) fn keep_power(&mut self) {
+        let power = &self.shared.power;
+        let released: Vec<&str> = self
+            .shared
+            .settings
+            .released()
+            .iter()
+            .map(|id| id.as_str())
+            .collect();
+        let text = alloc::format!(
+            "mode = {}\nautomatic = {}\nreleased = {}\n",
+            power.mode,
+            if power.automatic { "on" } else { "off" },
+            released.join(", ")
+        );
+        let _ = self.shared.storage.write(POWER_FILE, text.as_bytes());
+    }
+
+    /// Wears the mode kept at the last start again, with the values the
+    /// reader took back, before plugins start: the plugin that chooses
+    /// then finds it worn and changes nothing over the reader's choice.
+    pub(crate) fn restore_power(&mut self) {
+        let Ok(bytes) = paperpaw_sdk::read_file(self.shared.storage.as_ref(), POWER_FILE, 4096)
+        else {
+            return;
+        };
+        let text = String::from_utf8_lossy(&bytes);
+        let value = |key: &str| {
+            text.lines()
+                .filter_map(|line| line.split_once('='))
+                .find(|(k, _)| k.trim() == key)
+                .map(|(_, v)| v.trim())
+        };
+        let Some(mode) = value("mode").and_then(|m| Id::parse(m).ok()) else {
+            return;
+        };
+        let wear = Wear::new(mode);
+        let wear = if value("automatic") == Some("on") {
+            wear.automatic()
+        } else {
+            wear
+        };
+        self.wear_mode(wear, false);
+        for id in value("released").unwrap_or_default().split(',') {
+            if let Ok(id) = Id::parse(id.trim()) {
+                self.shared.settings.release(&id);
+            }
+        }
+    }
+
+    /// Wears `wear`'s mode; `tell` plugins of it (not before they start).
+    fn wear_mode(&mut self, wear: Wear, tell: bool) {
         let Some(preset) = self
             .shared
             .settings
@@ -414,6 +531,11 @@ impl Kernel {
         let before = self.shared.power.clone();
         let touched = self.shared.settings.wear(values, limits);
         self.shared.power = Power::new(level, wear.mode, wear.automatic, stretch);
+        // Deadlines and holds go by the level.
+        self.works.changed = true;
+        if !tell {
+            return;
+        }
         for id in touched {
             let changed = events::SettingChanged { id };
             self.output
@@ -428,12 +550,42 @@ impl Kernel {
         }
     }
 
-    /// Keeps what background work said, each plugin's last as its note.
+    /// Keeps what background work said, each plugin's last as its note,
+    /// and warns of work declared under another plugin's name.
     pub(crate) fn keep_notes(&mut self) {
+        for plugin in mem::take(&mut self.works.foreign) {
+            self.warn_runtime(alloc::format!(
+                "{plugin}: declared work under another plugin's name; it was dropped"
+            ));
+        }
         for (owner, note) in mem::take(&mut self.works.notes) {
             if let Ok(owner) = Id::parse(&owner) {
                 self.shared.work_states.set_note(owner, note);
             }
+        }
+    }
+
+    /// Whether the reader chose *Go online* on a screen still open.
+    fn went_online(&self) -> bool {
+        self.works
+            .online_for
+            .as_ref()
+            .is_some_and(|id| self.stack.iter().any(|s| s.id == *id))
+    }
+
+    /// The power work goes by: the mode's, but while the reader went
+    /// online in Offline, as Saving (what waited rides along).
+    pub(crate) fn base_power(&self) -> Power {
+        let power = &self.shared.power;
+        if power.level == PowerLevel::Offline && self.went_online() {
+            Power::new(
+                PowerLevel::Saving,
+                power.mode.clone(),
+                power.automatic,
+                power.stretch,
+            )
+        } else {
+            power.clone()
         }
     }
 
@@ -468,8 +620,11 @@ impl Kernel {
         self.works.exempt = exempt;
     }
 
-    /// Runs the work that is due, and a job's step where allowed.
-    pub(crate) fn run_work(&mut self) {
+    /// Runs the work that is due, as background work: its events emitted
+    /// and their commands carried out now, outside the reader's call (what
+    /// they say becomes notes, their requests are not the reader's); and a
+    /// job's step where allowed. Whether anything ran, or moments wait.
+    pub(crate) fn run_work(&mut self) -> bool {
         self.read_policy();
         // Network work of a plugin whose network is off can never run.
         let mut index = 0;
@@ -477,6 +632,7 @@ impl Kernel {
             let entry = &self.works.entries[index];
             if entry.work.network && self.works.network_off(&entry.owner) {
                 let entry = self.works.entries.remove(index);
+                self.works.changed = true;
                 let refused = WorkRefused {
                     work: entry.work.id,
                     refusal: Refusal::new(Reason::NetworkOff, Retry::Never),
@@ -488,56 +644,74 @@ impl Kernel {
                 index += 1;
             }
         }
-        let env = self.shared.env(self.now);
-        let moments = self.works.take_moments(&env, self.last_activity);
-        let mut index = 0;
-        while index < self.works.entries.len() {
-            let Some(why) = self.works.why(&self.works.entries[index], moments, &env) else {
-                index += 1;
-                continue;
-            };
-            let entry = &mut self.works.entries[index];
-            if self.works.specs.iter().any(|s| s.id == entry.work.id) {
-                entry.job = Some(Job::Ready);
-                entry.progress = None;
-                index += 1;
-                continue;
+        let base = self.base_power();
+        let mut due: Vec<(Id, Params)> = Vec::new();
+        let mut notes: Vec<(Id, paperpaw_sdk::work::Note)> = Vec::new();
+        let mut stepped = false;
+        {
+            let env = self.shared.env(self.now);
+            let moments = self.works.take_moments(&env, self.last_activity);
+            if moments.contains(Moments::SLEEP) {
+                self.works.keep = true;
             }
-            let mut params = entry.work.params.clone();
-            // A timer's event comes as it was asked for.
-            if why != Why::Time {
-                why.write(&mut params);
+            let mut index = 0;
+            while index < self.works.entries.len() {
+                let Some(why) = self
+                    .works
+                    .why(&self.works.entries[index], moments, &env, &base)
+                else {
+                    index += 1;
+                    continue;
+                };
+                self.works.changed = true;
+                let entry = &mut self.works.entries[index];
+                if self.works.specs.iter().any(|s| s.id == entry.work.id) {
+                    entry.job = Some(Job::Ready);
+                    entry.progress = None;
+                    index += 1;
+                    continue;
+                }
+                let mut params = entry.work.params.clone();
+                // A timer's event comes as it was asked for.
+                if why != Why::Time {
+                    why.write(&mut params);
+                }
+                due.push((entry.work.id.clone(), params));
+                if again(entry, self.now) {
+                    index += 1;
+                } else {
+                    self.works.entries.remove(index);
+                }
             }
-            self.output
-                .commands
-                .push(Command::Emit(entry.work.id.clone(), params));
-            if again(entry, self.now) {
-                index += 1;
-            } else {
-                self.works.entries.remove(index);
+            if mem::take(&mut self.works.ticking) {
+                let meter = &self.shared.meter;
+                let top = self.stack.last().map(|s| s.id.namespace());
+                let out = &mut self.output.commands;
+                stepped = step_job(&mut self.works, top, &env, meter, out, &mut notes);
             }
         }
-        let mut notes: Vec<(Id, paperpaw_sdk::work::Note)> = mem::take(&mut self.works.notes)
-            .into_iter()
-            .filter_map(|(owner, note)| Some((Id::parse(&owner).ok()?, note)))
-            .collect();
-        if mem::take(&mut self.works.ticking) {
-            let meter = &self.shared.meter;
-            let top = self.stack.last().map(|s| s.id.namespace());
-            step_job(
-                &mut self.works,
-                top,
-                &env,
-                meter,
-                &mut self.output.commands,
-                &mut notes,
-            );
+        self.works.allow_full(&mut self.output.commands);
+        if mem::take(&mut self.works.keep) {
+            self.keep_power();
         }
-        let states = self.works.states(env.power);
-        self.shared.work_states.set_works(states);
+        if mem::take(&mut self.works.changed) {
+            let states = self.works.states(&base);
+            self.shared.work_states.set_works(states);
+        }
         for (owner, note) in notes {
             self.shared.work_states.set_note(owner, note);
         }
+        // Background work, whatever call brought it due.
+        let ran = !due.is_empty() || stepped;
+        if ran || !self.output.commands.is_empty() {
+            let reader = mem::replace(&mut self.reader, false);
+            for (id, params) in due {
+                self.emit(&id, &params);
+            }
+            self.run_commands();
+            self.reader = reader;
+        }
+        ran || !self.works.moments.is_empty()
     }
 }
 
@@ -563,10 +737,19 @@ impl Kernel {
                 .is_none_or(|p| p.manifest.uses.contains(Uses::NETWORK));
         let owner = String::from(owner);
         self.read_policy();
+        let offline = self.base_power().level == PowerLevel::Offline;
+        let manual = self.works.power_of(&self.shared.power, &owner).level == PowerLevel::Offline
+            && self.shared.power.level != PowerLevel::Offline;
         let refusal = if !declared {
             Refusal::new(Reason::NotDeclared, Retry::Never)
         } else if self.works.network_off(&owner) {
             Refusal::new(Reason::NetworkOff, Retry::Never)
+        } else if offline && !(self.reader && self.went_online()) {
+            // Offline: only what the reader went online for goes out.
+            Refusal::new(Reason::Offline, Retry::WhenAllowed)
+        } else if manual && !self.reader {
+            // Only when the reader asks, for this plugin.
+            Refusal::new(Reason::Saving, Retry::WhenAllowed)
         } else {
             return Some(command);
         };
@@ -657,7 +840,7 @@ fn step_job(
     meter: &alloc::rc::Rc<crate::meter::Meter>,
     out: &mut Vec<Command>,
     notes: &mut Vec<(Id, paperpaw_sdk::work::Note)>,
-) {
+) -> bool {
     let now = env.now;
     for entry in &mut works.entries {
         if let Some(Job::Until(at)) = entry.job
@@ -667,15 +850,16 @@ fn step_job(
         }
     }
     let Some(index) = works.entries.iter().position(|e| e.job == Some(Job::Ready)) else {
-        return;
+        return false;
     };
+    works.changed = true;
     let Some(spec) = works
         .specs
         .iter()
         .find(|s| s.id == works.entries[index].work.id)
     else {
         works.entries.remove(index);
-        return;
+        return false;
     };
     let entry = &mut works.entries[index];
     let from = out.len();
@@ -686,6 +870,7 @@ fn step_job(
     // A job is background work: its notices become its plugin's note.
     let mut said = Queue::default();
     quiet(false, top, now, from, &entry.owner, out, &mut said);
+    works.foreign.append(&mut said.foreign);
     for (owner, note) in said.notes {
         if let Ok(owner) = Id::parse(&owner) {
             notes.push((owner, note));
@@ -721,19 +906,28 @@ fn step_job(
             let mut jitter = [0u8];
             env.random.fill(&mut jitter);
             let jitter = jitter[0];
-            entry.work.after = Some(paperpaw_sdk::work::backoff(entry.attempt, jitter));
-            entry.work.at = None;
+            let wait = paperpaw_sdk::work::backoff(entry.attempt, jitter);
+            // A timed job tries again at a new time, others after the wait.
+            if entry.work.at.is_some() {
+                entry.work.at = Some(now.add_millis(millis(Some(wait))));
+            } else {
+                entry.work.after = Some(wait);
+            }
             let owner = Id::parse(&entry.owner).unwrap_or_else(|_| entry.work.id.clone());
             tell(entry, out);
             notes.push((owner, paperpaw_sdk::work::Note { at: now, text }));
         }
     }
+    true
 }
 
-/// Background work says nothing over reading: the notices among `out`
-/// from `from` on, made by `owner` outside the reader's call and while
-/// another plugin's screen is on top (`top`), become its note (ADR 0025).
-/// On its own screen a plugin may say what it likes.
+/// What a plugin's handler sent, from `from` on in `out`: work declared
+/// under another plugin's name is taken out (each plugin's limit is its
+/// own; the name kept in `works.foreign` for a warning); and background
+/// work says nothing over reading: notices made by `owner` outside the
+/// reader's call and while another plugin's screen is on top (`top`)
+/// become its note (ADR 0025). On its own screen a plugin may say what it
+/// likes.
 pub(crate) fn quiet(
     reader: bool,
     top: Option<&str>,
@@ -743,6 +937,15 @@ pub(crate) fn quiet(
     out: &mut Vec<Command>,
     works: &mut Queue,
 ) {
+    let mut index = from;
+    while index < out.len() {
+        if matches!(&out[index], Command::Work(work) if work.id.namespace() != owner) {
+            out.remove(index);
+            works.foreign.push(String::from(owner));
+        } else {
+            index += 1;
+        }
+    }
     if reader || top == Some(owner) {
         return;
     }
@@ -768,8 +971,12 @@ fn again(entry: &mut Entry, now: Instant) -> bool {
         return false;
     };
     entry.declared = now;
-    entry.work.after = Some(every);
-    entry.work.at = None;
+    // A timer comes again a period later; other work after its period.
+    if entry.work.at.is_some() {
+        entry.work.at = Some(now.add_millis(millis(Some(every))));
+    } else {
+        entry.work.after = Some(every);
+    }
     entry.job = None;
     true
 }

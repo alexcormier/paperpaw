@@ -40,9 +40,9 @@
 //! - **At which moments** it may run ([`Moments`]): waking, a book opened
 //!   or closed, going to sleep, the radio on anyway, charging, idle.
 //!
-//! **A run** lasts while the requests made in handling the work's event,
-//! and in handling their answers, are not answered; the kernel keeps the
-//! radio on for them and knows when the work is done.
+//! **Its event is background work**, whatever brought it due: what the
+//! handler says becomes the plugin's note, and its requests are not the
+//! reader's. Its requests keep the radio on until they are answered.
 //!
 //! **Jobs** are work in steps: long work (an install, a catalog synced or
 //! walked, a book's pages counted) registers a step function for its id
@@ -98,7 +98,7 @@ impl Moments {
     pub const BOOK_OPENED: Moments = Moments(1 << 1);
     /// A book was closed.
     pub const BOOK_CLOSED: Moments = Moments(1 << 2);
-    /// The device goes to sleep; it waits a little for work running then.
+    /// The device goes to sleep.
     pub const SLEEP: Moments = Moments(1 << 3);
     /// The radio is on anyway, for the reader or for other work.
     pub const ONLINE: Moments = Moments(1 << 4);
@@ -216,8 +216,6 @@ pub struct Work {
     pub every: Option<Duration>,
     /// The moments at which it may run.
     pub moments: Moments,
-    /// Kept on the card and due at the next start, if it has not run.
-    pub persist: bool,
 }
 
 impl Work {
@@ -236,7 +234,6 @@ impl Work {
             within: None,
             every: None,
             moments: Moments::ALL,
-            persist: false,
         }
     }
 
@@ -265,13 +262,6 @@ impl Work {
     /// One of several works of the same id, e.g. a rule's timer.
     pub fn key(mut self, key: impl Into<String>) -> Self {
         self.key = key.into();
-        self
-    }
-
-    /// Kept across starts: written to the card and due at the next start
-    /// if it has not run (e.g. an install going on).
-    pub fn persist(mut self) -> Self {
-        self.persist = true;
         self
     }
 
@@ -537,8 +527,8 @@ pub enum WorkState {
     Waiting { due: Option<Instant> },
     /// Queued, but held back, e.g. by the mode.
     Held(Refusal),
-    /// Its event was emitted (or its steps go on) and its requests are
-    /// not all answered; a job's progress, if it says.
+    /// A job whose steps go on; its progress, if it says. (Work without
+    /// steps runs at once and is gone, or waits again for its period.)
     Running { progress: Option<Progress> },
 }
 
@@ -710,12 +700,9 @@ mod tests {
         assert_eq!(w.within, Some(Duration::from_secs(60)));
         assert_eq!(w.every, Some(Duration::from_secs(3600)));
         assert_eq!(w.moments, Moments::SLEEP);
-        let timer = Work::at(Id::new_static("rules.time"), Instant(5000))
-            .key("rule-3")
-            .persist();
+        let timer = Work::at(Id::new_static("rules.time"), Instant(5000)).key("rule-3");
         assert_eq!(timer.at, Some(Instant(5000)));
         assert_eq!(timer.key, "rule-3");
-        assert!(timer.persist);
         assert!(!timer.network);
         assert_eq!(timer.moments, Moments::NONE);
     }

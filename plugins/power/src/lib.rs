@@ -170,7 +170,7 @@ impl Plugin for Power {
             order: 86,
             page: None,
         })?;
-        r.add_icon(GROUP, Cow::Borrowed("battery"))?;
+        r.add_icon(GROUP, Cow::Borrowed("leaf"))?;
         r.add_settings(&SETTINGS)?;
         // The mode in the quick panel, as segments.
         r.add_menu_entry(MenuEntry {

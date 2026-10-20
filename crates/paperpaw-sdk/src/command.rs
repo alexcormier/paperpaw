@@ -39,7 +39,8 @@ pub struct HttpRequest {
 #[non_exhaustive]
 pub struct HttpOptions {
     /// How long it may take in all, the connection and TLS counted;
-    /// `None`: the default, 30 s.
+    /// `None`: the default, 30 s, or 10 minutes for a download to a file
+    /// ([`HttpRequest::save_to`]).
     pub timeout: Option<core::time::Duration>,
     /// Headers of the answer to pass back in
     /// [`HttpReply::headers`](crate::HttpReply), by name (any case).
@@ -374,15 +375,6 @@ pub enum Command {
         input: String,
         action: Option<Id>,
     },
-    /// Emits event `.0` with parameters `.1` at time `.2`, whatever screen
-    /// is open then: a timer for plugins, e.g. for something to do at a
-    /// time of day. Scheduling the same event again moves it; it is
-    /// emitted once.
-    #[deprecated(
-        since = "0.4.0",
-        note = "declare work at a time: `Command::Work(Work::at(event, at).with(params))`"
-    )]
-    Schedule(Id, Params, paperpaw_platform::Instant),
     /// Shows a short message for a few seconds, e.g. "Sync done", by the
     /// screen bound to [`slots::NOTICE`](crate::builtin::slots::NOTICE),
     /// over whatever is open and without taking any input. A newer
@@ -421,7 +413,8 @@ pub enum Command {
     /// [`work`](crate::work)): the same id replaces what was declared.
     Work(crate::work::Work),
     /// Takes back the work declared with this id and key (none: every
-    /// key of the id), with the requests of its run.
+    /// key of the id), if it has not run; requests made already are taken
+    /// back with [`CancelHttp`](Self::CancelHttp).
     CancelWork(Id, Option<String>),
     /// Takes back the plugin's requests whose reply is this event; each
     /// is answered with the refusal `Cancelled`.

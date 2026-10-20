@@ -332,6 +332,8 @@ impl KernelBuilder {
             kernel.apply_user_config(source);
             kernel.keys.shell.clone_from(source);
         }
+        // The power mode worn before, over the reader's settings.
+        kernel.restore_power();
         kernel.set_menu_titles();
         kernel.apply_reading_font();
         kernel.apply_status_font();

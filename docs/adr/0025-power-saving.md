@@ -219,11 +219,12 @@ What a work says:
 So the network is set up once for everything due: one connection on
 waking (kosync's pull, the weather, the news, an export waiting), one on
 going to sleep (the push, the statistics), and none in between unless a
-deadline comes. **Going to sleep** waits for the work running then, for
-at most `SLEEP_WORK_MS` (about 15 s; the sleep screen is already shown,
-so the reader does not wait), before switching off. Work that needs the
-network and was not done is written down and is due at the next wake
-(the X4 does not know how long it slept).
+deadline comes. **Going to sleep** is to wait for the work running then,
+for at most about 15 s (the sleep screen is already shown, so the
+reader does not wait), before switching off, and network work not done
+is to be written down and due at the next wake (the X4 does not know how
+long it slept). Both need the shells' part and come with it; until
+then a plugin declares again at the start what it still has to do.
 
 **A run** lasts as long as the requests made while handling the work's
 event, and the requests made while handling their answers, are not
@@ -284,10 +285,10 @@ of declared work, not a second model:
 - **Timers are work at a time**, keyed: `Work::at(id, time).key(k)`,
   taken back with `CancelWork`. One event may have as many timers as
   keys (a rule each), which `Command::Schedule` could not.
-- **Kept across starts** where a work says so (`persist()`): the kernel
-  writes its queue entry (id, key, parameters, attempt) to the card and
-  makes it due at the next wake. Network work not done when the device
-  goes to sleep is kept that way anyway.
+- **Across starts** the kernel keeps the power mode worn, with the
+  values of it the reader took back (on the X4 every wake is a start).
+  Work kept across starts by a mark of its own comes with the waiting
+  before sleep (above).
 - **HTTP requests** get what work needs of them: a `timeout` (30 s by
   default, the connection and TLS counted), the headers a plugin wants
   back (`want_headers`, opt-in; `HttpReply::headers`), a `max_body` for
@@ -440,8 +441,8 @@ is in use. Four are built in:
 | Mode | Level | Values it brings (each editable) |
 |------|-------|----------------------------------|
 | **Normal** | Normal | none |
-| **Saving** | Saving | the work limits above; the front light at most 50 %; `core.sleep-after` 5 min; the CPU at 80 MHz outside drawing, decoding and TLS; the buttons read every 60 ms instead of 30 |
-| **Offline** | Offline | the work limits above; the front light at most 30 %; `core.sleep-after` 5 min; the CPU as in Saving |
+| **Saving** | Saving | the work limits above; the front light at most 50 %; sleep after at most 5 min; the CPU at 80 MHz outside drawing, decoding and TLS; the buttons read every 60 ms instead of 30 |
+| **Offline** | Offline | the work limits above; the front light at most 30 %; sleep after at most 5 min; the CPU as in Saving |
 | **Automatic** | chosen | Saving below `power.saving-below` (20 %), Offline below `power.offline-below` (10 %), Normal again 5 % above each, and Normal while charging |
 
 **Mode values are a layer, not a change.** Wearing a mode puts its
@@ -465,7 +466,7 @@ kind = core.power-mode
 name = Commute
 description = Offline, a dim light, sleep after 3 minutes.
 power.level = offline
-core.sleep-after = 3
+core.sleep-after <= 3
 x4.frontlight <= 10
 ```
 

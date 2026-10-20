@@ -9,7 +9,9 @@ use paperpaw_sdk::builtin::{events, params};
 use paperpaw_sdk::wifi::WifiState;
 use paperpaw_sdk::work::{Moments, Progress, Step, Work, WorkSpec, WorkState};
 
+use crate::work::IDLE_MS;
 use crate::{Effects, WifiEvent};
+use paperpaw_platform::SystemStatus;
 
 /// Logs every event of its own, with why it came; its job counts three
 /// steps, then is done.
@@ -81,7 +83,38 @@ impl Plugin for WorkPlugin {
                 let id = params.get(params::ID).unwrap_or("");
                 log.borrow_mut().push(alloc::format!("changed {id}"));
             }),
-        )
+        )?;
+        // Work that fetches: its request goes out as it runs.
+        r.subscribe(
+            Id::new_static("wk.fetch"),
+            Box::new(|_, _, out| {
+                out.push(Command::Http(paperpaw_sdk::HttpRequest::get(
+                    "https://example.org/",
+                    Id::new_static("wk.answered"),
+                )));
+            }),
+        )?;
+        let log = self.log.clone();
+        r.subscribe(
+            Id::new_static("wk.answered"),
+            Box::new(move |_, params, _| {
+                let refused = params.get(paperpaw_sdk::work::params::REFUSED);
+                log.borrow_mut()
+                    .push(alloc::format!("answered {}", refused.unwrap_or("-")));
+            }),
+        )?;
+        for (event, name) in [
+            (events::NETWORK_WANTED.id(), "wanted"),
+            (events::WORK_ALLOWED.id(), "allowed"),
+            (events::WORK_REFUSED.id(), "refused"),
+        ] {
+            let log = self.log.clone();
+            r.subscribe(
+                event.clone(),
+                Box::new(move |_, _, _| log.borrow_mut().push(String::from(name))),
+            )?;
+        }
+        Ok(())
     }
 }
 
@@ -282,6 +315,13 @@ impl Plugin for Sayer {
             Box::new(|_, _, out| out.push(Command::Notify(String::from("synced")))),
         )?;
         r.subscribe(
+            Id::new_static("sy.foreign"),
+            Box::new(|_, _, out| {
+                let work = Work::new(Id::new_static("wk.push")).at_moments(Moments::NONE);
+                out.push(Command::Work(work));
+            }),
+        )?;
+        r.subscribe(
             Id::new_static("sy.remind"),
             Box::new(|_, _, out| out.push(Command::Announce(String::from("unplug")))),
         )?;
@@ -365,7 +405,7 @@ fn a_plugin_whose_network_is_off_gets_none() {
     let push = Work::network(Id::new_static("wk.push")).within(Duration::from_secs(1));
     declare(&mut kernel, 2, push);
     kernel.tick(Instant(5000));
-    assert!(log.borrow().is_empty(), "its network work never runs");
+    assert_eq!(*log.borrow(), ["refused"], "its network work never runs");
     assert_eq!(
         kernel.shared.work_states.get(&Id::new_static("wk.push")),
         None
@@ -376,7 +416,7 @@ fn a_plugin_whose_network_is_off_gets_none() {
     )));
     kernel.finish();
     assert!(kernel.take_io().is_empty(), "nor does a request go out");
-    assert_eq!(*log.borrow(), ["wk.closed -"], "it is answered at once");
+    assert_eq!(log.borrow()[1], "wk.closed -", "it is answered at once");
 }
 
 #[test]
@@ -398,8 +438,9 @@ fn an_exempt_plugin_keeps_normal_limits_in_saving() {
     kernel
         .set_setting(Instant(1), "core.saving.wk", "core.saving.normal")
         .unwrap();
+    // Declared again: counted from its first declaring, as in Normal now.
     let effects = declare(&mut kernel, 2, push());
-    assert_eq!(effects.wake_at(), Some(Instant(60_002)), "as in Normal");
+    assert_eq!(effects.wake_at(), Some(Instant(60_000)), "as in Normal");
     kernel
         .set_setting(Instant(3), "core.saving.wk", "core.saving.manual")
         .unwrap();
@@ -410,4 +451,252 @@ fn an_exempt_plugin_keeps_normal_limits_in_saving() {
         kernel.shared.work_states.get(&Id::new_static("wk.push")),
         Some(WorkState::Held(_))
     ));
+}
+
+fn wifi_kernel(log: &Log) -> Kernel {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(WorkPlugin { log: log.clone() })
+        .network(true)
+        .wifi(true)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    log.borrow_mut().clear();
+    kernel
+}
+
+#[test]
+fn work_due_at_a_tick_wants_the_network_in_that_call() {
+    let log = log();
+    let mut kernel = wifi_kernel(&log);
+    declare(
+        &mut kernel,
+        0,
+        Work::at(Id::new_static("wk.fetch"), Instant(7000)),
+    );
+    let effects = kernel.tick(Instant(7000));
+    assert_eq!(*log.borrow(), ["wanted"], "the radio is asked for now");
+    // And the wait for it ends in time, not at the next button press.
+    assert_eq!(effects.wake_at(), Some(Instant(37_000)));
+}
+
+#[test]
+fn work_that_cannot_run_wakes_nothing() {
+    let log = log();
+    let mut kernel = wifi_kernel(&log);
+    // Nice to have, the radio off: past its deadline it waits for the
+    // radio, without the device waking for it again and again.
+    let weather = Work::network(Id::new_static("wk.weather"))
+        .optional()
+        .within(Duration::from_secs(1))
+        .at_moments(Moments::ONLINE);
+    declare(&mut kernel, 0, weather);
+    let effects = kernel.tick(Instant(5000));
+    assert_eq!(effects.wake_at(), None);
+    let charging = Work::new(Id::new_static("wk.push"))
+        .charging()
+        .within(Duration::from_secs(1))
+        .at_moments(Moments::NONE);
+    declare(&mut kernel, 5000, charging);
+    let effects = kernel.tick(Instant(9000));
+    assert_eq!(effects.wake_at(), None);
+    assert!(log.borrow().is_empty());
+}
+
+#[test]
+fn a_running_job_declared_again_goes_on() {
+    let log = log();
+    let mut kernel = kernel(&log, false);
+    declare(&mut kernel, 0, Work::new(JOB).within(Duration::ZERO));
+    kernel.tick(Instant(1));
+    declare(&mut kernel, 2, Work::new(JOB).within(Duration::ZERO));
+    kernel.tick(Instant(3));
+    let steps: Vec<_> = log
+        .borrow()
+        .iter()
+        .filter(|l| l.starts_with("step"))
+        .cloned()
+        .collect();
+    assert_eq!(steps, ["step 1", "step 2"]);
+}
+
+#[test]
+fn a_repeating_timer_comes_again() {
+    let log = log();
+    let mut kernel = kernel(&log, false);
+    let timer = Work::at(Id::new_static("wk.repeat"), Instant(100)).every(Duration::from_secs(1));
+    declare(&mut kernel, 0, timer);
+    kernel.tick(Instant(100));
+    let effects = kernel.tick(Instant(101));
+    assert_eq!(effects.wake_at(), Some(Instant(1100)));
+    kernel.tick(Instant(1100));
+    assert_eq!(*log.borrow(), ["wk.repeat -", "wk.repeat -"]);
+}
+
+#[test]
+fn work_brought_due_by_the_readers_call_is_still_background() {
+    let mut kernel = sayer();
+    let say = Work::new(Id::new_static("sy.say")).at_moments(Moments::BOOK_CLOSED);
+    declare(&mut kernel, 1, say);
+    // The reader closes the book (a call of theirs): the work it brought
+    // due says nothing over reading all the same.
+    kernel.send_event(Instant(5), events::BOOK_CLOSED.id().clone(), Params::new());
+    assert!(kernel.notice.is_none());
+    assert!(
+        kernel
+            .shared
+            .work_states
+            .note(&Id::new_static("sy"))
+            .is_some()
+    );
+}
+
+#[test]
+fn a_held_button_is_the_readers_input() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(WorkPlugin { log })
+        .plugin(Sayer)
+        .user_config("[keymap.global]\nlong.menu = sy.act\n")
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.notice = None;
+    let button = |state| InputEvent::Button {
+        name: "menu",
+        state,
+    };
+    kernel.handle(Instant(100), button(ButtonState::Pressed));
+    kernel.tick(Instant(3000));
+    assert!(kernel.notice.is_some(), "the long press's answer shows");
+    kernel.handle(Instant(3100), button(ButtonState::Released));
+}
+
+#[test]
+fn moments_of_idling_and_charging() {
+    let log = log();
+    let mut kernel = kernel(&log, false);
+    let idle = Work::new(Id::new_static("wk.closed")).at_moments(Moments::IDLE);
+    let effects = declare(&mut kernel, 0, idle);
+    assert_eq!(effects.wake_at(), Some(Instant(IDLE_MS)));
+    kernel.tick(Instant(IDLE_MS));
+    assert_eq!(*log.borrow(), ["wk.closed idle"]);
+    let charging = Work::new(Id::new_static("wk.push")).at_moments(Moments::CHARGING);
+    declare(&mut kernel, IDLE_MS + 1, charging);
+    kernel.set_status(
+        Instant(IDLE_MS + 2),
+        SystemStatus {
+            clock: None,
+            battery: Some(paperpaw_platform::Battery {
+                percent: 50,
+                charging: true,
+                millivolts: None,
+            }),
+        },
+    );
+    assert_eq!(log.borrow()[1], "wk.push charging");
+}
+
+#[test]
+fn a_full_queue_refuses_and_then_allows_again() {
+    let log = log();
+    let mut kernel = kernel(&log, false);
+    for n in 0..33 {
+        let work = Work::new(Id::new_static("wk.push"))
+            .key(alloc::format!("{n}"))
+            .at_moments(Moments::NONE);
+        declare(&mut kernel, 1, work);
+    }
+    assert_eq!(*log.borrow(), ["refused"]);
+    kernel.apply(Command::CancelWork(
+        Id::new_static("wk.push"),
+        Some(String::from("0")),
+    ));
+    kernel.finish();
+    assert_eq!(*log.borrow(), ["refused", "allowed"]);
+}
+
+#[test]
+fn work_under_another_plugins_name_is_dropped() {
+    let mut kernel = sayer();
+    kernel.take_warnings();
+    // Sayer's handler of `sy.foreign` declares work as `wk`.
+    kernel.send_event(Instant(5), Id::new_static("sy.foreign"), Params::new());
+    assert_eq!(
+        kernel.shared.work_states.get(&Id::new_static("wk.push")),
+        None
+    );
+    assert!(
+        kernel
+            .take_warnings()
+            .iter()
+            .any(|w| w.message.contains("another plugin's name"))
+    );
+}
+
+#[test]
+fn a_plugin_that_does_not_declare_the_network_gets_none() {
+    let mut kernel = sayer();
+    kernel.take_warnings();
+    kernel.apply(Command::Http(paperpaw_sdk::HttpRequest::get(
+        "https://example.org/",
+        Id::new_static("sy.answer"),
+    )));
+    kernel.finish();
+    assert!(!kernel.io.http.busy());
+    assert!(
+        kernel
+            .take_warnings()
+            .iter()
+            .any(|w| w.message.contains("without declaring it"))
+    );
+}
+
+#[test]
+fn requests_are_taken_back_and_answered_so() {
+    let log = log();
+    let mut kernel = kernel(&log, true);
+    kernel.apply(Command::Http(paperpaw_sdk::HttpRequest::get(
+        "https://example.org/",
+        Id::new_static("wk.answered"),
+    )));
+    kernel.finish();
+    assert!(kernel.io.http.busy());
+    kernel.apply(Command::CancelHttp(Id::new_static("wk.answered")));
+    kernel.finish();
+    assert_eq!(*log.borrow(), ["answered cancelled"]);
+    assert!(!kernel.io.http.busy());
+}
+
+#[test]
+fn offline_lets_out_only_what_the_reader_went_online_for() {
+    let log = log();
+    let mut kernel = kernel(&log, true);
+    kernel.shared.power = paperpaw_sdk::power::Power::new(
+        paperpaw_sdk::power::PowerLevel::Offline,
+        paperpaw_sdk::power::OFFLINE,
+        false,
+        4,
+    );
+    let request = || {
+        Command::Http(paperpaw_sdk::HttpRequest::get(
+            "https://example.org/",
+            Id::new_static("wk.answered"),
+        ))
+    };
+    // Background: refused at once.
+    kernel.apply(request());
+    kernel.finish();
+    assert_eq!(*log.borrow(), ["answered offline"]);
+    // The reader, without going online: refused too.
+    kernel.reader = true;
+    kernel.apply(request());
+    kernel.finish();
+    assert_eq!(log.borrow()[1], "answered offline");
+    // Gone online on the screen in front: it goes out.
+    kernel.reader = true;
+    kernel.apply(Command::GoOnline);
+    kernel.apply(request());
+    kernel.finish();
+    assert!(kernel.io.http.busy(), "{:?}", log.borrow());
 }
