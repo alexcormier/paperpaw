@@ -204,7 +204,7 @@ impl Loaded {
 
 /// Draws a book's cover made small at the top left of `place`, centred
 /// in it; a stand-in with the title's first letter where it has none.
-fn draw_cover(
+pub(crate) fn draw_cover(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     style: &UiStyle,

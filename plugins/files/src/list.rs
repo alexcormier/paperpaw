@@ -27,6 +27,7 @@
 //! drawing.
 
 mod find;
+mod grid;
 mod index;
 mod rows;
 mod sheet;
@@ -61,7 +62,18 @@ const SHEET: Id = Id::new_static("files.list.sheet");
 const SHOW: Id = Id::new_static("files.list.show");
 const SHOWN: Event<paperpaw_sdk::ui::choice::Picked> = Event::new("files.list.shown");
 /// The choices of [`SHOW`]: the filters' names, then "Find".
-const SHOW_OPTIONS: [&str; 6] = ["all", "reading", "unread", "finished", "shelves", "find"];
+const SHOW_OPTIONS: [&str; 7] = [
+    "all", "reading", "unread", "finished", "next", "shelves", "find",
+];
+/// The filters of [`SHOW_OPTIONS`], in their order.
+const SHOW_FILTERS: [Filter; 6] = [
+    Filter::All,
+    Filter::Reading,
+    Filter::Unread,
+    Filter::Finished,
+    Filter::Next,
+    Filter::Shelves,
+];
 /// Steps of reading books' progress and of making the catalog, apart.
 const STEP_MS: u64 = 20;
 /// Books whose progress is read in one step.
@@ -134,6 +146,8 @@ fn read(path: &str, cx: &mut Cx<'_, '_>) {
 /// A shelf of the shelves' pill.
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ShelfRow {
+    /// "Next in your series" (a filter), else a shelf of `kind`.
+    next: bool,
     kind: shelf::Kind,
     /// The series' or folder's name (the folder's path for folders).
     name: String,
@@ -155,6 +169,11 @@ struct ListScreen {
     by_recent: bool,
     /// The books shown, as indices of the index's items.
     order: Vec<u16>,
+    /// How many books each of `order` stands for: more than one for a
+    /// series as a stack (covers only); empty where each is one.
+    counts: Vec<u16>,
+    /// The covers' grid, where books show as covers ([`crate::VIEW`]).
+    grid: Option<grid::Grid>,
     /// The shelves, while their pill is chosen.
     shelves: Vec<ShelfRow>,
     /// The first book shown is the one read last, as a large card.
@@ -205,6 +224,9 @@ impl ListScreen {
             filter: Filter::All,
             by_recent: env.settings.read(&crate::SORT) != crate::SORT_NAME,
             order: Vec::new(),
+            counts: Vec::new(),
+            grid: (env.settings.read(&crate::VIEW) == crate::VIEW_COVERS)
+                .then(|| grid::Grid::new(env, &style, &sizes, area.height)),
             shelves: Vec::new(),
             card: false,
             focus: 0,
@@ -238,6 +260,7 @@ impl ListScreen {
     fn refilter(&mut self, env: &Env<'_>) {
         self.focus = 0;
         self.loaded_page = None;
+        self.counts = Vec::new();
         if self.filter == Filter::Shelves {
             self.order = Vec::new();
             self.shelves = self.make_shelves(env);
@@ -245,8 +268,14 @@ impl ListScreen {
         } else {
             self.shelves = Vec::new();
             self.order = self.index.order(self.filter, self.by_recent);
-            // The card: the book read last, while it is read.
+            // As covers, the books of a series are one stack.
+            if self.grid.is_some() && self.filter == Filter::All {
+                (self.order, self.counts) = self.index.stacked(&self.order);
+            }
+            // The card: the book read last, while it is read (as covers,
+            // it is the first cover).
             self.card = self.by_recent
+                && self.grid.is_none()
                 && matches!(self.filter, Filter::All | Filter::Reading)
                 && self.order.first().is_some_and(|&i| {
                     let item = &self.index.items[usize::from(i)];
@@ -286,6 +315,7 @@ impl ListScreen {
                     row.finished += usize::from(finished);
                 }
                 None => rows.push(ShelfRow {
+                    next: false,
                     kind,
                     name: name.to_string(),
                     count: 1,
@@ -306,20 +336,33 @@ impl ListScreen {
         });
         series.sort_by_key(|r| r.name.to_lowercase());
         folders.sort_by_key(|r| r.name.to_lowercase());
-        let mut shelves = alloc::vec![
+        let next = self.index.order(Filter::Next, false).len();
+        let mut shelves = Vec::new();
+        if next > 0 {
+            shelves.push(ShelfRow {
+                next: true,
+                kind: shelf::Kind::Series,
+                name: String::new(),
+                count: next,
+                finished: 0,
+            });
+        }
+        shelves.extend([
             ShelfRow {
+                next: false,
                 kind: shelf::Kind::Favourites,
                 name: String::new(),
                 count: favourites,
                 finished: 0,
             },
             ShelfRow {
+                next: false,
                 kind: shelf::Kind::Authors,
                 name: String::new(),
                 count: authors.len(),
                 finished: 0,
             },
-        ];
+        ]);
         shelves.extend(series);
         shelves.extend(folders);
         shelves
@@ -351,19 +394,29 @@ impl ListScreen {
         room / rows
     }
 
-    /// Rows on a page, and on the first page below the card.
-    fn per_page(&self) -> usize {
-        usize::from(self.area.height / self.row_height().max(1)).max(1)
+    /// The covers' grid, while books show (not the shelves).
+    fn covers(&self) -> Option<&grid::Grid> {
+        self.grid
+            .as_ref()
+            .filter(|_| self.filter != Filter::Shelves)
     }
 
-    /// Entries on the first page: the card and the rows below it.
-    fn first_page(&self) -> usize {
-        if self.card {
-            let below = self.area.height.saturating_sub(self.sizes.card);
-            1 + usize::from(below / self.sizes.row.max(1))
-        } else {
-            self.per_page()
+    /// Entries on a page: rows, or covers.
+    fn per_page(&self) -> usize {
+        match self.covers() {
+            Some(g) => g.per_page(),
+            None => usize::from(self.area.height / self.row_height().max(1)).max(1),
         }
+    }
+
+    /// Entries on the first page: the card and the rows (or covers)
+    /// below it.
+    fn first_page(&self) -> usize {
+        if !self.card {
+            return self.per_page();
+        }
+        let below = self.area.height.saturating_sub(self.sizes.card);
+        1 + usize::from(below / self.sizes.row.max(1))
     }
 
     fn page_of(&self, index: usize) -> usize {
@@ -398,6 +451,9 @@ impl ListScreen {
         let slot = index - self.page_start(page);
         let a = self.area;
         let row = self.row_on(page);
+        if let Some(g) = self.covers() {
+            return g.place(a, a.y, slot);
+        }
         if self.card && page == 0 {
             if slot == 0 {
                 return Rect::new(a.x, a.y, a.width, self.sizes.card);
@@ -427,10 +483,10 @@ impl ListScreen {
                 continue;
             };
             let card = self.card && index == 0;
-            let cover = if card {
-                self.sizes.card_cover
-            } else {
-                self.sizes.cover
+            let cover = match self.covers() {
+                _ if card => self.sizes.card_cover,
+                Some(g) => g.cover,
+                None => self.sizes.cover,
             };
             let book = Loaded::load(env, line, item.recent != NEVER, cover, card);
             self.index.set_progress(item.hash, book.progress);
@@ -523,7 +579,9 @@ impl ListScreen {
             let Some(row) = self.shelves.get(index) else {
                 return;
             };
-            if row.kind == shelf::Kind::Authors {
+            if row.next {
+                self.set_filter(Filter::Next, cx);
+            } else if row.kind == shelf::Kind::Authors {
                 cx.command(Command::RunAction(crate::BY_AUTHOR));
             } else {
                 cx.command(shelf::open(row.kind, &row.name));
@@ -531,6 +589,11 @@ impl ListScreen {
             return;
         }
         if let Some(book) = self.book(index) {
+            if self.counts.get(index).is_some_and(|&c| c > 1) {
+                // A series as a stack: its books.
+                cx.command(shelf::open(shelf::Kind::Series, &book.series));
+                return;
+            }
             let path = book.path.clone();
             read(&path, cx);
         }
@@ -638,6 +701,7 @@ impl ListScreen {
         let key = match self.filter {
             Filter::Reading => "files.list.none.reading",
             Filter::Unread => "files.list.none.unread",
+            Filter::Next => "files.list.none.next",
             _ => "files.list.none.finished",
         };
         ui::draw_empty(canvas, env, style, area, "books", "", env.i18n.tr(key));
@@ -655,6 +719,11 @@ impl ListScreen {
         let ink = style.focus_ink(focused);
         let room = ui::icon_room(env, style, true);
         let (icon, title, note) = match row.kind {
+            _ if row.next => (
+                "arrow-bar-to-right",
+                env.i18n.tr("files.list.show.next").to_string(),
+                env.i18n.plural("files.books", row.count as i64, &[]),
+            ),
             shelf::Kind::Favourites => (
                 "star",
                 env.i18n.tr("files.favourites").to_string(),
@@ -715,7 +784,7 @@ impl Screen for ListScreen {
         self.header.draw(canvas, env, &style, title, None, paging);
         if let Some(row) = self.filter_row {
             if !self.index.items.is_empty() {
-                let shown = Filter::ALL
+                let shown = SHOW_FILTERS
                     .iter()
                     .position(|f| *f == self.filter)
                     .unwrap_or(0);
@@ -767,6 +836,14 @@ impl Screen for ListScreen {
             if self.card && index == 0 {
                 if let Some(book) = self.book(0) {
                     rows::draw_card(canvas, env, &style, &self.sizes, rect, focused, book);
+                }
+                continue;
+            }
+            if let Some(g) = self.covers() {
+                if let Some(book) = self.book(index) {
+                    let count = self.counts.get(index).copied().unwrap_or(1);
+                    let sizes = &self.sizes;
+                    grid::draw_cell(canvas, env, &style, sizes, g, rect, focused, book, count);
                 }
                 continue;
             }
@@ -838,8 +915,10 @@ impl Screen for ListScreen {
             return;
         }
         if self.index.unknown() > 0 {
-            if self.index.step(env.storage, STEP_BOOKS) && !matches!(self.filter, Filter::All) {
-                // Every book's progress known: the filter is right now.
+            let stacks = self.grid.is_some() && self.filter == Filter::All;
+            if self.index.step(env.storage, STEP_BOOKS) && (self.filter != Filter::All || stacks) {
+                // Every book's progress known: the filter (or which books
+                // are stacked) is right now.
                 let focus = self.focus;
                 self.refilter(&env);
                 self.focus = focus.min(self.len().saturating_sub(1));
@@ -867,9 +946,13 @@ impl Screen for ListScreen {
             self.set_filter(self.filter.step(steps), cx);
         } else if *a == actions::NEXT_PAGE || *a == actions::PREV_PAGE {
             self.turn(if *a == actions::NEXT_PAGE { 1 } else { -1 }, cx);
-        } else if [actions::UP, actions::PREVIOUS, actions::LEFT].contains(a) {
+        } else if *a == actions::UP || *a == actions::DOWN {
+            // A row: of covers in the grid.
+            let row = self.covers().map_or(1, |g| isize::from(g.columns as i16));
+            self.step(if *a == actions::UP { -row } else { row }, cx);
+        } else if [actions::PREVIOUS, actions::LEFT].contains(a) {
             self.step(-1, cx);
-        } else if [actions::DOWN, actions::NEXT, actions::RIGHT].contains(a) {
+        } else if [actions::NEXT, actions::RIGHT].contains(a) {
             self.step(1, cx);
         } else if *a == actions::CONFIRM && self.filter_focused {
             self.choose_shown(cx);
@@ -951,9 +1034,9 @@ impl Screen for ListScreen {
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         if let Some(picked) = SHOWN.read(event, params) {
             match SHOW_OPTIONS.iter().position(|o| *o == picked.option) {
-                Some(n) if n < Filter::ALL.len() => {
+                Some(n) if n < SHOW_FILTERS.len() => {
                     self.filter_focused = false;
-                    self.set_filter(Filter::ALL[n], cx);
+                    self.set_filter(SHOW_FILTERS[n], cx);
                     cx.request_redraw();
                 }
                 Some(_) => cx.command(Command::OpenScreen(FIND, Params::new())),

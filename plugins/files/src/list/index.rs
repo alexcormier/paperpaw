@@ -44,21 +44,53 @@ pub(crate) struct Item {
     pub(crate) progress: u8,
     /// Its place among the books read last (0 the last), or [`NEVER`].
     pub(crate) recent: u8,
+    /// Its series, as an index of [`Index::series`], or [`NO_SERIES`].
+    pub(crate) series: u16,
+    /// Its number in the series in tenths ([`number`]), to order by.
+    pub(crate) number: u16,
+}
+
+/// No series.
+pub(crate) const NO_SERIES: u16 = u16::MAX;
+/// Series told apart at most; books of others count as of none.
+const MAX_SERIES: usize = 500;
+
+/// A book's number in its series (`"2"`, `"2.5"`) in tenths, to order
+/// by; those without one last.
+pub(crate) fn number(text: &str) -> u16 {
+    let text = text.trim();
+    let (whole, part) = text.split_once('.').unwrap_or((text, ""));
+    let tenth = part
+        .bytes()
+        .next()
+        .filter(u8::is_ascii_digit)
+        .map_or(0, |d| d - b'0');
+    match whole.parse::<u16>() {
+        Ok(whole) => whole
+            .saturating_mul(10)
+            .saturating_add(u16::from(tenth))
+            .min(u16::MAX - 1),
+        Err(_) => u16::MAX,
+    }
 }
 
 /// What the library shows: all books, those by how far they are read,
-/// or the shelves (favourites, series, folders).
+/// the next book of each series being read, or the shelves (favourites,
+/// series, folders).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Filter {
     All,
     Reading,
     Unread,
     Finished,
+    /// For each series begun, its unread book of the lowest number.
+    Next,
     Shelves,
 }
 
 impl Filter {
-    /// Every filter, in the order of the pills.
+    /// The filters of the pills, in their order ([`Filter::Next`] is
+    /// on the shelves there).
     pub(crate) const ALL: [Filter; 5] = [
         Filter::All,
         Filter::Reading,
@@ -74,6 +106,7 @@ impl Filter {
             Filter::Reading => "files.list.filter.reading",
             Filter::Unread => "files.list.filter.unread",
             Filter::Finished => "files.list.filter.finished",
+            Filter::Next => "files.list.filter.next",
             Filter::Shelves => "files.list.filter.shelves",
         }
     }
@@ -92,7 +125,7 @@ impl Filter {
             Filter::Reading => (1..100).contains(&progress),
             Filter::Unread => progress == 0,
             Filter::Finished => progress == 100,
-            Filter::Shelves => false,
+            Filter::Next | Filter::Shelves => false,
         }
     }
 }
@@ -267,6 +300,8 @@ pub(crate) fn surname(authors: &str) -> &str {
 #[derive(Debug, Default)]
 pub(crate) struct Index {
     pub(crate) items: Vec<Item>,
+    /// The names of the series, as [`Item::series`] counts them.
+    pub(crate) series: Vec<String>,
     /// Items whose progress is still to be read, the next one last.
     pending: Vec<u16>,
 }
@@ -279,11 +314,22 @@ impl Index {
             .map(|p| hash(p))
             .collect();
         let mut items = Vec::new();
+        let mut series: Vec<String> = Vec::new();
         scan(storage, &mut |offset, line| {
             if items.len() >= MAX_BOOKS {
                 return;
             }
             let hash = hash(&line.path);
+            let of = if line.series.is_empty() {
+                NO_SERIES
+            } else if let Some(at) = series.iter().position(|s| *s == line.series) {
+                at as u16
+            } else if series.len() < MAX_SERIES {
+                series.push(line.series.clone());
+                (series.len() - 1) as u16
+            } else {
+                NO_SERIES
+            };
             items.push(Item {
                 offset,
                 hash,
@@ -294,10 +340,13 @@ impl Index {
                 ],
                 progress: UNKNOWN,
                 recent: rank(&opened, hash),
+                series: of,
+                number: number(&line.number),
             });
         });
         let mut index = Index {
             items,
+            series,
             pending: Vec::new(),
         };
         index.read_again();
@@ -358,6 +407,9 @@ impl Index {
     /// read last first (`by_recent`), the others by title. Books whose
     /// progress is not known yet are in "All" only.
     pub(crate) fn order(&self, filter: Filter, by_recent: bool) -> Vec<u16> {
+        if filter == Filter::Next {
+            return self.next_in_series(by_recent);
+        }
         let mut order: Vec<u16> = (0..self.items.len() as u16)
             .filter(|&i| {
                 let progress = self.items[usize::from(i)].progress;
@@ -370,6 +422,81 @@ impl Index {
             (recent, item.key, item.offset)
         });
         order
+    }
+}
+
+impl Index {
+    /// For each series begun (a book of it opened or read), its unread
+    /// book of the lowest number never opened: the series read last
+    /// first (`by_recent`), else by title.
+    fn next_in_series(&self, by_recent: bool) -> Vec<u16> {
+        let count = self.series.len();
+        // Per series: when a book of it was read last (or never), and
+        // its next book.
+        let mut last = alloc::vec![None::<u8>; count];
+        let mut next: Vec<Option<u16>> = alloc::vec![None; count];
+        for (i, item) in self.items.iter().enumerate() {
+            let at = usize::from(item.series);
+            if at >= count {
+                continue;
+            }
+            let begun = item.recent != NEVER || (1..=100).contains(&item.progress);
+            if begun {
+                last[at] = Some(last[at].map_or(item.recent, |l| l.min(item.recent)));
+            } else if item.progress == 0 {
+                let better = next[at].is_none_or(|n| {
+                    let other = &self.items[usize::from(n)];
+                    (item.number, item.key) < (other.number, other.key)
+                });
+                if better {
+                    next[at] = Some(i as u16);
+                }
+            }
+        }
+        let mut order: Vec<u16> = (0..count)
+            .filter(|&s| last[s].is_some())
+            .filter_map(|s| next[s])
+            .collect();
+        order.sort_by_key(|&i| {
+            let item = &self.items[usize::from(i)];
+            let recent = match last.get(usize::from(item.series)) {
+                Some(Some(recent)) if by_recent => *recent,
+                _ => NEVER,
+            };
+            (recent, item.key, item.offset)
+        });
+        order
+    }
+
+    /// `order` with the books of each series as one entry (a stack) at
+    /// the place of its first book there: the entries, and how many books
+    /// each stands for. Books being read stay on their own, to go on
+    /// reading them at once.
+    pub(crate) fn stacked(&self, order: &[u16]) -> (Vec<u16>, Vec<u16>) {
+        let mut entries: Vec<u16> = Vec::new();
+        let mut counts: Vec<u16> = Vec::new();
+        // Where each series' stack is among the entries.
+        let mut stacks: Vec<(u16, usize)> = Vec::new();
+        for &i in order {
+            let item = &self.items[usize::from(i)];
+            let series = if (1..100).contains(&item.progress) {
+                NO_SERIES
+            } else {
+                item.series
+            };
+            if series != NO_SERIES
+                && let Some(&(_, at)) = stacks.iter().find(|(s, _)| *s == series)
+            {
+                counts[at] += 1;
+                continue;
+            }
+            if series != NO_SERIES {
+                stacks.push((series, entries.len()));
+            }
+            entries.push(i);
+            counts.push(1);
+        }
+        (entries, counts)
     }
 }
 
