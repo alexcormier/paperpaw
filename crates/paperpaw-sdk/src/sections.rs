@@ -204,7 +204,8 @@ impl Sections {
 
     /// Draws the page with the focus with `draw_row(canvas, item, rect,
     /// focused)`: the focused entry (if `focus` shows) on black, thin lines
-    /// between entries but not above a heading.
+    /// between entries but not above a heading; with
+    /// [`UiStyle::cards`] the entries between headings on cards.
     pub fn draw(
         &self,
         canvas: &mut Canvas<'_>,
@@ -213,13 +214,39 @@ impl Sections {
         mut draw_row: impl FnMut(&mut Canvas<'_>, Item, Rect, bool),
     ) {
         let visible = self.visible();
+        if style.cards {
+            // Entry `e`'s section, its place there, whether it has a heading.
+            let at = |e: usize| {
+                self.section_of(e)
+                    .map(|(s, w)| (s, w, self.sections[s].heading))
+            };
+            super::rows::draw_cards(
+                canvas,
+                style,
+                &visible,
+                |item| matches!(item, Item::Entry(_)),
+                // An entry just before or after it, no heading between,
+                // on another page.
+                |item| match item {
+                    Item::Entry(e) => e > 0 && at(e).is_some_and(|(_, w, h)| w > 0 || !h),
+                    Item::Heading(_) => false,
+                },
+                |item| match item {
+                    Item::Entry(e) => match (at(e), at(e + 1)) {
+                        (Some((s, ..)), Some((next, _, h))) => next == s || !h,
+                        _ => false,
+                    },
+                    Item::Heading(_) => false,
+                },
+            );
+        }
         for (n, &(item, rect)) in visible.iter().enumerate() {
             let focused = focus && item == Item::Entry(self.focus);
             if let Item::Entry(_) = item {
                 canvas.describe(crate::semantics::Role::Row, "", rect, focused, None);
             }
             if focused {
-                crate::ui::draw_focus(canvas, style, rect);
+                super::rows::draw_entry_focus(canvas, style, rect);
             } else if matches!(item, Item::Entry(_))
                 && matches!(visible.get(n + 1), Some((Item::Entry(_), _)))
             {
@@ -301,6 +328,7 @@ impl Sections {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use paperpaw_platform::Color;
 
     /// Headings 10 high, entries 20, a page 60: a heading and two entries,
     /// or three entries.
@@ -352,6 +380,30 @@ mod tests {
         assert_eq!(list.page_entries(), 0..2);
         assert_eq!(list.hit(Point::new(5, 35)), Some(1));
         assert_eq!(list.hit(Point::new(5, 5)), None);
+    }
+
+    #[test]
+    fn cards_are_open_where_a_page_cuts_them() {
+        use crate::ui::rows::{card_frame, card_style};
+        let style = card_style();
+        // Black where a card's line is across the list at `y`.
+        let line = |list: &Sections, y: u16| {
+            let frame = card_frame(|canvas| list.draw(canvas, &style, false, |_, _, _, _| {}));
+            frame.view().pixel(50, y) == Color::BLACK
+        };
+        // A heading and two entries a page, its heading again on the next.
+        let mut headed = list(&[(true, 4)]);
+        assert!(line(&headed, 10) && !line(&headed, 49), "open below");
+        headed.turn(true);
+        assert!(
+            line(&headed, 10) && line(&headed, 49),
+            "closed below its heading"
+        );
+        // No headings: three entries a page.
+        let mut plain = list(&[(false, 5)]);
+        assert!(line(&plain, 0) && !line(&plain, 59));
+        plain.turn(true);
+        assert!(!line(&plain, 0) && line(&plain, 39), "open above");
     }
 
     #[test]

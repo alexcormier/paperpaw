@@ -6,6 +6,8 @@
 use alloc::vec::Vec;
 use core::ops::Range;
 
+use paperpaw_platform::Color;
+
 use crate::ui::{ListChange, UiStyle};
 use crate::{Canvas, Point, Rect};
 
@@ -109,7 +111,8 @@ impl Rows {
     /// Draws the rows of the focused page with `draw_row(canvas, index,
     /// rect, focused)`, headings included: the focused entry (if `focus`
     /// shows) on black, thin lines between entries but not above a
-    /// heading.
+    /// heading; with [`UiStyle::cards`] the entries between headings on
+    /// cards ([`draw_cards`]).
     pub fn draw(
         &self,
         canvas: &mut Canvas<'_>,
@@ -118,13 +121,25 @@ impl Rows {
         mut draw_row: impl FnMut(&mut Canvas<'_>, usize, Rect, bool),
     ) {
         let visible = self.visible();
+        if style.cards {
+            let entry = |i: usize| i < self.len() && !self.is_heading(i);
+            draw_cards(
+                canvas,
+                style,
+                &visible,
+                entry,
+                // An entry just before or after it, on another page.
+                |i| i > 0 && entry(i - 1),
+                |i| entry(i + 1),
+            );
+        }
         for (n, &(index, rect)) in visible.iter().enumerate() {
             let focused = focus && index == self.focus && !self.is_heading(index);
             if !self.is_heading(index) {
                 canvas.describe(crate::semantics::Role::Row, "", rect, focused, None);
             }
             if focused {
-                crate::ui::draw_focus(canvas, style, rect);
+                draw_entry_focus(canvas, style, rect);
             } else if !self.is_heading(index)
                 && visible
                     .get(n + 1)
@@ -214,6 +229,112 @@ impl Rows {
     }
 }
 
+/// Draws each run of entries in `visible` (rows between headings, where
+/// `entry` says it is one) on a rounded card, as [`UiStyle::cards`] asks:
+/// its sides where the focus of rows is ([`focus_rect`]), so the text in
+/// it stays on the margin; a very light gray on panels of 16 grays, a
+/// thin line round it on fewer. A run that goes on over a page break
+/// (`before` its first entry, `after` its last) is open there, except
+/// where its heading comes again above it.
+///
+/// [`focus_rect`]: crate::ui::focus_rect
+pub(super) fn draw_cards<T: Copy>(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    visible: &[(T, Rect)],
+    entry: impl Fn(T) -> bool,
+    before: impl Fn(T) -> bool,
+    after: impl Fn(T) -> bool,
+) {
+    for run in visible.split(|&(item, _)| !entry(item)) {
+        let (Some(&(first, top)), Some(&(last, bottom))) = (run.first(), run.last()) else {
+            continue;
+        };
+        let side = (style.margin / 2) as u16;
+        let side = side.min(top.width / 8);
+        let width = top.width - 2 * side;
+        let end = bottom.y + bottom.height;
+        let shown = Rect::new(top.x + side, top.y, width, end - top.y);
+        // Past a cut by more than a corner, so neither shows there.
+        let reach = (style.corner + style.line) as i32 + 1;
+        let open = visible.first().is_some_and(|&(_, at)| at == top) && before(first);
+        let y = i32::from(top.y) - if open { reach } else { 0 };
+        let height = (i32::from(end) + if after(last) { reach } else { 0 } - y) as u32;
+        let x = i32::from(shown.x);
+        let width = u32::from(width);
+        let mut canvas = canvas.clipped(shown);
+        if style.grays >= 16 {
+            canvas.fill_round_rect(x, y, width, height, style.corner, Color::gray(CARD_GRAY));
+        } else {
+            let line = (style.line / 2).max(1);
+            canvas.stroke_round_rect(x, y, width, height, line, style.corner, Color::BLACK);
+        }
+    }
+}
+
+/// The gray of cards on panels of 16 grays: the lightest gray they show.
+const CARD_GRAY: u8 = 238;
+
+/// Draws the focus of the entry in `rect`, kept off the edges of its
+/// card with [`UiStyle::cards`], its corners following the card's.
+pub(super) fn draw_entry_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
+    if !style.cards {
+        return crate::ui::draw_focus(canvas, style, rect);
+    }
+    // As far in from the card's sides as from the row's ends (less what
+    // the focus keeps from them anyway), drawn as for a row whose margin
+    // is what is left to the text (e.g. for a marker in there).
+    let inset = (style.margin / 6).max(style.line + 1).min(style.margin / 2);
+    let edge = (style.line as u16).min(rect.height / 8);
+    let side = (2 * inset) as u16;
+    let rect = rect.inset(
+        side,
+        (inset as u16).saturating_sub(edge).min(rect.height / 4),
+    );
+    let style = UiStyle {
+        margin: style.margin - 2 * inset,
+        corner: style.corner.saturating_sub(inset),
+        ..*style
+    };
+    crate::ui::draw_focus(canvas, &style, rect);
+}
+
+/// A style with cards on black and white, for tests.
+#[cfg(test)]
+pub(super) fn card_style() -> UiStyle {
+    UiStyle {
+        text: 20.0,
+        small: 15.0,
+        title: 23.0,
+        row: 20,
+        header: 24,
+        margin: 12,
+        gap: 8,
+        line: 2,
+        dark_header: false,
+        corner: 4,
+        strong: false,
+        pill: false,
+        focus: crate::ui::Focus::Fill,
+        separators: crate::ui::Separators::None,
+        plain_header: false,
+        cards: true,
+        paw: false,
+        grays: 2,
+    }
+}
+
+/// What `draw` draws on black and white, 100 by 70.
+#[cfg(test)]
+pub(super) fn card_frame(draw: impl FnOnce(&mut Canvas<'_>)) -> paperpaw_graphics::Framebuffer {
+    use paperpaw_platform::PixelFormat;
+    let mut frame = paperpaw_graphics::Framebuffer::new(100, 70, PixelFormat::Mono1).unwrap();
+    let mut canvas = frame.canvas();
+    canvas.clear(Color::WHITE);
+    draw(&mut canvas);
+    frame
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -276,5 +397,32 @@ mod tests {
         let visible: Vec<usize> = rows.visible().into_iter().map(|(i, _)| i).collect();
         assert_eq!(visible, [0, 3, 4], "the heading first");
         assert_eq!(rows.focus, 3);
+    }
+
+    #[test]
+    fn cards_are_open_where_a_page_cuts_them() {
+        let style = card_style();
+        // Four entries, two a page, no headings.
+        let mut rows = Rows::new(
+            Rect::new(0, 0, 100, 40),
+            alloc::vec![20; 4],
+            alloc::vec![false; 4],
+        );
+        let draw =
+            |rows: &Rows| card_frame(|canvas| rows.draw(canvas, &style, false, |_, _, _, _| {}));
+        let first = draw(&rows);
+        let (top, bottom) = (first.view().pixel(50, 0), first.view().pixel(50, 39));
+        assert_eq!((top, bottom), (Color::BLACK, Color::WHITE), "open below");
+        assert_eq!(
+            first.view().pixel(6, 39),
+            Color::BLACK,
+            "its side down to the cut"
+        );
+        assert_eq!(first.view().pixel(6, 40), Color::WHITE, "not past it");
+        rows.turn(true);
+        let second = draw(&rows);
+        let (top, bottom) = (second.view().pixel(50, 0), second.view().pixel(50, 39));
+        assert_eq!((top, bottom), (Color::WHITE, Color::BLACK), "open above");
+        assert_eq!(second.view().pixel(6, 0), Color::BLACK);
     }
 }
