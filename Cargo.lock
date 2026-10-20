@@ -1532,6 +1532,7 @@ dependencies = [
  "paperpaw-digest",
  "paperpaw-i18n",
  "paperpaw-json",
+ "paperpaw-platform",
  "paperpaw-sdk",
 ]
 

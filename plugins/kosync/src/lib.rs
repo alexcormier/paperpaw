@@ -11,12 +11,17 @@
 //!   sleeps or the app goes to the background; it is fetched when a book
 //!   opens and when the app comes back. If another device is further, a dialog offers to
 //!   go there (once for each position).
-//! - *Sync progress* in the reading menu's *More* does both at once.
+//! - Nothing is sent for a book while its progress is being fetched, nor
+//!   while the dialog is open: a further position on the server is never
+//!   overwritten before the user chose to stay.
+//! - *Sync progress* in the reading menu's *More* fetches the latest, then
+//!   sends this device's position unless another device is further.
 //! - The account (settings → *Progress sync*) keeps the user name in the
 //!   settings and only the MD5 of the password, as KOReader does. Its
 //!   screen also sets the server: KOReader's or any compatible one, also
 //!   below a path (`https://example.org/kosync`) or over plain `http` in a
-//!   home network.
+//!   home network. Another server signs out, however it was set: an
+//!   account's key belongs to its server.
 //!
 //! Needs a device with network ([`Capabilities::network`](paperpaw_sdk::Capabilities)).
 
@@ -98,6 +103,18 @@ struct Position {
     progress: f64,
 }
 
+/// Sending held back for a book while its progress on the server is being
+/// fetched and, if another device is further there, until the user chose
+/// whether to go there: sending first would overwrite the further position.
+#[derive(Debug, Clone, PartialEq)]
+struct Hold {
+    path: String,
+    /// Send this device's position when the hold ends with it kept.
+    send: bool,
+    /// Send it even if it was sent already (*Sync progress*).
+    force: bool,
+}
+
 #[derive(Debug, Default)]
 struct State {
     loaded: bool,
@@ -108,10 +125,13 @@ struct State {
     last_push: Option<Instant>,
     /// The book last fetched for, and when.
     last_pull: Option<(String, Instant)>,
+    hold: Option<Hold>,
     /// A position the user chose not to go to: book and progress.
     declined: Option<(String, String)>,
     /// Book fingerprints already computed.
     digests: Vec<(String, String)>,
+    /// The server the account belongs to; another one signs out.
+    server: Option<String>,
 }
 
 type Shared = Rc<RefCell<State>>;
@@ -149,6 +169,15 @@ pub(crate) fn save_key(key: Option<&str>) -> Command {
     })
 }
 
+/// Signs out: the account's key and user name go.
+pub(crate) fn sign_out() -> [Command; 3] {
+    [
+        save_key(None),
+        Command::set(&USER, Cow::Borrowed("")),
+        ACCOUNT_CHANGED.emit(()),
+    ]
+}
+
 /// Moves a key kept in the plugin's folder by earlier versions to the
 /// other passwords and keys.
 fn move_key(env: &Env<'_>, out: &mut Vec<Command>) {
@@ -164,6 +193,7 @@ fn move_key(env: &Env<'_>, out: &mut Vec<Command>) {
 
 impl State {
     fn load(&mut self, env: &Env<'_>) {
+        self.server.get_or_insert_with(|| server(env));
         if self.loaded {
             return;
         }
@@ -222,12 +252,23 @@ impl State {
         )))
     }
 
-    /// Sends the current position, unless it was sent already.
+    /// Sends the current position, unless it was sent already or is held
+    /// back (see [`Hold`]).
     fn push(&mut self, env: &Env<'_>, out: &mut Vec<Command>, force: bool) {
         let Some(position) = self.current.clone() else {
             return;
         };
+        if let Some(hold) = self.hold.as_mut().filter(|h| h.path == position.path) {
+            // Sent when the hold ends, if this position is kept.
+            hold.send = true;
+            hold.force |= force;
+            return;
+        }
         if !force && self.sent.as_ref() == Some(&position) {
+            return;
+        }
+        // Not worth opening the book for.
+        if !self.signed_in(env) {
             return;
         }
         let Some(digest) = self.digest(env, &position.path) else {
@@ -256,7 +297,9 @@ impl State {
         }
     }
 
-    /// Asks for the latest position of the book at `path`.
+    /// Asks for the latest position of the book at `path`, holding back
+    /// its sending until the answer; *Sync progress* (`manual`) sends after
+    /// it unless another device is further.
     fn pull(&mut self, env: &Env<'_>, out: &mut Vec<Command>, path: &str, manual: bool) {
         let Some(digest) = self.digest(env, path) else {
             return;
@@ -274,8 +317,120 @@ impl State {
         if let Some(command) = self.request(env, "GET", &target, None, &PULLED, params) {
             out.push(command);
             self.last_pull = Some((path.to_string(), env.now));
+            let held = self.hold.take().filter(|h| h.path == path);
+            self.hold = Some(Hold {
+                path: path.to_string(),
+                send: manual || held.as_ref().is_some_and(|h| h.send),
+                force: manual || held.is_some_and(|h| h.force),
+            });
         }
     }
+
+    /// Handles the server's answer to a fetch.
+    fn pulled(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+        let manual = reply.context.get(MANUAL) == Some("1");
+        let path = reply.context.get(params::PATH).unwrap_or_default();
+        let hold = self.hold.take_if(|h| h.path == path);
+        // The book was closed meanwhile.
+        if self.current.as_ref().is_none_or(|c| c.path != path) {
+            return;
+        }
+        let status = reply.status.to_string();
+        let status = status.as_str();
+        if reply.status != 200 {
+            if manual {
+                out.push(message(env, failure(status), status));
+            }
+            return;
+        }
+        let body = json::object(&reply.body);
+        let Some(remote) = remote_progress(&reply.body, &body) else {
+            // Not knowing the server's progress, nothing may overwrite it.
+            if manual {
+                out.push(message(env, "kosync.unreadable", status));
+            }
+            return;
+        };
+        let local: f64 = reply
+            .context
+            .get(LOCAL)
+            .and_then(|l| l.parse().ok())
+            .unwrap_or(0.0);
+        let from_here = json::text(&body, "device_id") == Some(self.device_id.as_str());
+        let declined = self
+            .declined
+            .as_ref()
+            .is_some_and(|(p, r)| p == path && *r == format!("{remote}"));
+        if !from_here && remote > local + FURTHER && (manual || !declined) {
+            // Further on another device: offer to go there, and send
+            // nothing until the user chose.
+            let device = json::text(&body, "device").unwrap_or("?");
+            let xpointer = json::text(&body, "progress").unwrap_or_default();
+            out.push(Command::OpenScreen(
+                CONFIRM_SCREEN,
+                Params::new()
+                    .with(params::PATH, path.to_string())
+                    .with(confirm::XPOINTER, xpointer.to_string())
+                    .with(confirm::PERCENTAGE, format!("{remote}"))
+                    .with(confirm::DEVICE, device.to_string()),
+            ));
+            self.hold = Some(hold.unwrap_or(Hold {
+                path: path.to_string(),
+                send: false,
+                force: false,
+            }));
+            return;
+        }
+        if manual {
+            out.push(message(env, "kosync.up-to-date", status));
+        }
+        if let Some(hold) = hold.filter(|h| h.send) {
+            self.push(env, out, hold.force);
+        }
+    }
+
+    /// The user closed the offer to go where another device is.
+    fn answered(&mut self, env: &Env<'_>, answer: &confirm::Answered, out: &mut Vec<Command>) {
+        self.hold.take_if(|h| h.path == answer.path);
+        // Gone there: the reader tells the new position as it shows it.
+        if !answer.stay {
+            return;
+        }
+        self.declined = Some((answer.path.clone(), answer.percentage.clone()));
+        // This device's position is the one to keep.
+        if self.current.as_ref().is_some_and(|c| c.path == answer.path) {
+            self.push(env, out, true);
+        }
+    }
+
+    /// The server setting changed: the account's key must not go to
+    /// another server.
+    fn server_changed(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+        let now = server(env);
+        let before = self.server.replace(now.clone());
+        if before.as_ref() != Some(&now) && self.signed_in(env) {
+            out.extend(sign_out());
+        }
+    }
+}
+
+/// The progress (0..1) in a sync server's answer `text`, read as `body`:
+/// 0 for a book it has none of (an object without one, e.g. `{}`); `None`
+/// if the answer is no object or its progress no number from 0 to 1.
+fn remote_progress(text: &str, body: &[(String, json::Value)]) -> Option<f64> {
+    if body.is_empty() {
+        let inner = text
+            .trim()
+            .strip_prefix('{')
+            .and_then(|t| t.strip_suffix('}'));
+        return inner.is_some_and(|i| i.trim().is_empty()).then_some(0.0);
+    }
+    if !body.iter().any(|(key, _)| key == "percentage") {
+        return Some(0.0);
+    }
+    let progress = json::number(body, "percentage")
+        .or_else(|| json::text(body, "percentage").and_then(|p| p.trim().parse().ok()))?;
+    (0.0..=1.0).contains(&progress).then_some(progress)
 }
 
 /// How this device shows up on others.
@@ -362,51 +517,6 @@ fn message(env: &Env<'_>, key: &str, status: &str) -> Command {
     Command::OpenScreen(CONFIRM_SCREEN, Params::new().with(params::TEXT, text))
 }
 
-/// Handles the server's answer to a fetch.
-fn pulled(state: &State, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
-    let manual = reply.context.get(MANUAL) == Some("1");
-    let path = reply.context.get(params::PATH).unwrap_or_default();
-    // The book was closed meanwhile.
-    if state.current.as_ref().is_none_or(|c| c.path != path) {
-        return;
-    }
-    let status = reply.status.to_string();
-    let status = status.as_str();
-    if reply.status != 200 {
-        if manual {
-            out.push(message(env, failure(status), status));
-        }
-        return;
-    }
-    let body = json::object(&reply.body);
-    let remote = json::number(&body, "percentage").unwrap_or(0.0);
-    let local: f64 = reply
-        .context
-        .get(LOCAL)
-        .and_then(|l| l.parse().ok())
-        .unwrap_or(0.0);
-    let from_here = json::text(&body, "device_id") == Some(state.device_id.as_str());
-    let declined = state
-        .declined
-        .as_ref()
-        .is_some_and(|(p, r)| p == path && *r == format!("{remote}"));
-    if !from_here && remote > local + FURTHER && (manual || !declined) {
-        // Further on another device: offer to go there.
-        let device = json::text(&body, "device").unwrap_or("?");
-        let xpointer = json::text(&body, "progress").unwrap_or_default();
-        out.push(Command::OpenScreen(
-            CONFIRM_SCREEN,
-            Params::new()
-                .with(params::PATH, path.to_string())
-                .with(confirm::XPOINTER, xpointer.to_string())
-                .with(confirm::PERCENTAGE, format!("{remote}"))
-                .with(confirm::DEVICE, device.to_string()),
-        ));
-    } else if manual {
-        out.push(message(env, "kosync.up-to-date", status));
-    }
-}
-
 /// The kosync plugin.
 #[derive(Debug, Default)]
 pub struct Kosync;
@@ -422,12 +532,14 @@ static SETTINGS: [SettingSpec; 3] = [
         .described("kosync.setting.user.help"),
     SettingSpec::fixed_switch(AUTO.static_str(), "kosync.setting.auto", true, GROUP)
         .described("kosync.setting.auto.help"),
+    // Set on the account screen too, which tells that it signs out.
     SettingSpec::fixed_text(
         SERVER.static_str(),
         "kosync.setting.server",
         DEFAULT_SERVER,
         GROUP,
     )
+    .with_extra(&ACCOUNT)
     .advanced()
     .described("kosync.setting.server.help"),
 ];
@@ -466,7 +578,17 @@ impl Plugin for Kosync {
             factory: Box::new(|env, params| Box::new(confirm::ConfirmScreen::new(env, params))),
         })?;
 
-        r.on(events::STARTED, |env, _, out| move_key(env, out))?;
+        let s = state.clone();
+        r.on(events::STARTED, move |env, _, out| {
+            move_key(env, out);
+            s.borrow_mut().server = Some(server(env));
+        })?;
+        let s = state.clone();
+        r.on(events::SETTING_CHANGED, move |env, changed, out| {
+            if changed.id == *SERVER.id() {
+                s.borrow_mut().server_changed(env, out);
+            }
+        })?;
         let s = state.clone();
         r.on(events::BOOK_OPENED, move |env, reading, out| {
             let mut state = s.borrow_mut();
@@ -533,8 +655,8 @@ impl Plugin for Kosync {
             }
         })?;
         let s = state.clone();
-        r.on(confirm::DECLINED, move |_, declined, _| {
-            s.borrow_mut().declined = Some((declined.path.clone(), declined.percentage.clone()));
+        r.on(confirm::ANSWERED, move |env, answer, out| {
+            s.borrow_mut().answered(env, answer, out);
         })?;
         let s = state.clone();
         r.on(ACCOUNT_CHANGED, move |_, (), _| {
@@ -551,7 +673,7 @@ impl Plugin for Kosync {
         })?;
         let s = state.clone();
         r.on(PULLED, move |env, reply, out| {
-            pulled(&s.borrow(), env, reply, out)
+            s.borrow_mut().pulled(env, reply, out);
         })?;
 
         // "Sync progress" in the reading menu's "More".
@@ -567,7 +689,8 @@ impl Plugin for Kosync {
                 let Some(path) = state.current.as_ref().map(|c| c.path.clone()) else {
                     return;
                 };
-                state.push(env, out, true);
+                // The server's first: sent after the answer, unless
+                // another device is further and the user goes there.
                 state.pull(env, out, &path, true);
             },
         ))?;
@@ -584,81 +707,4 @@ impl Plugin for Kosync {
 }
 
 #[cfg(test)]
-mod tests {
-    use paperpaw_i18n::{Catalog, check};
-
-    use super::*;
-
-    #[test]
-    fn translations_are_complete() {
-        let en = Catalog::parse(include_str!("../i18n/en.ini")).unwrap();
-        let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
-        let issues = check::compare(&en, &de);
-        assert!(issues.is_empty(), "{issues:?}");
-    }
-
-    #[test]
-    fn positions_come_from_reading_events() {
-        let reading = paperpaw_sdk::builtin::events::Reading {
-            path: "books/a.epub".into(),
-            title: String::new(),
-            progress: 42.5,
-            section: 3,
-            offset: 120,
-            page: None,
-            pages: None,
-            chapter: String::new(),
-            chapter_left: None,
-        };
-        let found = position(&reading);
-        assert_eq!(found.path, "books/a.epub");
-        assert_eq!(found.at, Locator::new(3, 120));
-        assert!((found.progress - 0.425).abs() < 1e-6);
-    }
-
-    #[test]
-    fn server_addresses_are_completed() {
-        assert_eq!(normalize_server(""), DEFAULT_SERVER);
-        assert_eq!(
-            normalize_server(" sync.example.org/ "),
-            "https://sync.example.org"
-        );
-        assert_eq!(
-            normalize_server("http://192.168.1.5:8081"),
-            "http://192.168.1.5:8081"
-        );
-        assert_eq!(
-            normalize_server("example.org/kosync"),
-            "https://example.org/kosync"
-        );
-        assert_eq!(
-            server_label("https://example.org/kosync"),
-            "example.org/kosync"
-        );
-        assert_eq!(server_label("http://nas:8081"), "http://nas:8081");
-    }
-
-    #[test]
-    fn failures_have_messages() {
-        assert_eq!(failure("0"), "kosync.unreachable");
-        assert_eq!(failure("401"), "kosync.wrong");
-        assert_eq!(failure("500"), "kosync.server-error");
-    }
-
-    /// What version 1 wrote stays readable (see `docs/data-files.md`).
-    #[test]
-    fn files_of_version_1_are_read() {
-        let storage = paperpaw_sdk::MemoryStorage::new()
-            .with("device.ini", include_str!("../testdata/device.ini.v1"))
-            .with("account.ini", include_str!("../testdata/account.ini.v1"));
-        assert_eq!(
-            super::read_value(&storage, "device.ini", "id").as_deref(),
-            Some("0123456789ABCDEF0123456789ABCDEF")
-        );
-        // Kept by earlier versions; moved to the passwords and keys.
-        assert_eq!(
-            super::read_value(&storage, "account.ini", "key").as_deref(),
-            Some("5f4dcc3b5aa765d61d8327deb882cf99")
-        );
-    }
-}
+mod tests;
