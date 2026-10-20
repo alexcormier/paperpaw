@@ -61,6 +61,8 @@ pub(super) struct Book {
     /// changed since.
     pub(super) saved_at: Option<paperpaw_sdk::Instant>,
     pub(super) unsaved: bool,
+    /// Whether it could not be written once (and the reader was told).
+    pub(super) save_failed: bool,
     pub(super) index: Option<PageIndex>,
     /// Where background pagination continues.
     pub(super) indexing: Option<Locator>,
@@ -192,6 +194,7 @@ impl Book {
             history: Vec::new(),
             saved_at: None,
             unsaved: false,
+            save_failed: false,
             dir,
             title,
             document,
@@ -442,29 +445,34 @@ impl Book {
 
     /// Writes the position now, or soon if it was written a moment ago;
     /// `true` while it waits ([`Book::save_due`]).
-    pub(super) fn position_changed(&mut self, env: &Env<'_>) -> bool {
+    pub(super) fn position_changed(&mut self, cx: &mut Cx<'_, '_>) -> bool {
+        let now = cx.env().now;
         let recent = self
             .saved_at
-            .is_some_and(|at| env.now.since(at) < SAVE_EVERY_MS);
+            .is_some_and(|at| now.since(at) < SAVE_EVERY_MS);
         self.unsaved = recent;
         if !recent {
-            self.save_position(env);
+            self.save_position(cx);
         }
         recent
     }
 
     /// Writes the position if it waits; `force` also before its time.
-    pub(super) fn save_due(&mut self, env: &Env<'_>, force: bool) {
+    pub(super) fn save_due(&mut self, cx: &mut Cx<'_, '_>, force: bool) {
+        let now = cx.env().now;
         let due = self
             .saved_at
-            .is_none_or(|at| env.now.since(at) >= SAVE_EVERY_MS);
+            .is_none_or(|at| now.since(at) >= SAVE_EVERY_MS);
         if self.unsaved && (force || due) {
             self.unsaved = false;
-            self.save_position(env);
+            self.save_position(cx);
         }
     }
 
-    pub(super) fn save_position(&mut self, env: &Env<'_>) {
+    /// Writes the position; where the storage refuses, says so once a
+    /// book (not at every page).
+    pub(super) fn save_position(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
         self.saved_at = Some(env.now);
         let start = self.page.start;
         let text = format!(
@@ -473,7 +481,11 @@ impl Book {
             start.offset,
             self.percent()
         );
-        let _ = env.storage.write(&self.progress_path(), text.as_bytes());
+        let saved = env.storage.write(&self.progress_path(), text.as_bytes());
+        if saved.is_err() && !self.save_failed {
+            self.save_failed = true;
+            cx.command(Command::Notify(env.i18n.tr("reader.not-saved").to_string()));
+        }
     }
 
     /// The start of the previous page: the page shown before (this
@@ -554,7 +566,7 @@ impl Book {
         // Found now, so the status lines read nothing while drawn.
         self.chapter_first(&env);
         self.update_links(&env);
-        if self.position_changed(&env) {
+        if self.position_changed(cx) {
             cx.wake_at(env.now.add_millis(SAVE_EVERY_MS));
         }
         if !self.web() {

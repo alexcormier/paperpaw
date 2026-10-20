@@ -153,7 +153,9 @@ impl ReaderScreen {
                     text: annotations::snippet(&text),
                     note: String::new(),
                 };
-                annotations::add(env.storage, &book.path, annotation);
+                if !annotations::add(env.storage, &book.path, annotation) {
+                    marks_not_saved(cx);
+                }
             }
             book.marks = annotations::marks(env.storage, &book.path);
             cx.command(annotations::changed(&book.path));

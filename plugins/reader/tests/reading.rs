@@ -47,14 +47,25 @@ const BOOK: &str = "books/alice.txt";
 const EPUB: &str = "books/alice.epub";
 
 /// A storage the test looks into while kernels have it. It refuses to
-/// add to page indexes once the appends in `.1` (if set) are used up, and
-/// to read files whose paths end as `.2` says (if set).
+/// add to page indexes once the appends in `.1` (if set) are used up, to
+/// read files whose paths end as `.2` says, and to write files whose paths
+/// hold what `.3` says (if set).
 #[derive(Clone, Default)]
 struct Shared(
     Rc<MemoryStorage>,
     Rc<std::cell::Cell<Option<u32>>>,
     Rc<std::cell::Cell<Option<&'static str>>>,
+    Rc<RefCell<Option<String>>>,
 );
+
+impl Shared {
+    fn refuses(&self, path: &str) -> bool {
+        self.3
+            .borrow()
+            .as_ref()
+            .is_some_and(|part| path.contains(part.as_str()))
+    }
+}
 
 impl Storage for Shared {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
@@ -67,9 +78,15 @@ impl Storage for Shared {
         self.0.size(path)
     }
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        if self.refuses(path) {
+            return Err(StorageError::Full);
+        }
         self.0.write(path, data)
     }
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        if self.refuses(path) {
+            return Err(StorageError::Full);
+        }
         if path.contains("/pages-") {
             match self.1.get() {
                 Some(0) => return Err(StorageError::Io),
@@ -89,6 +106,9 @@ impl Storage for Shared {
         self.0.exists(path)
     }
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        if self.refuses(to) {
+            return Err(StorageError::Full);
+        }
         self.0.rename(from, to)
     }
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
@@ -1181,5 +1201,109 @@ fn status_lines_switch_from_the_menu_without_a_touch_screen() {
     assert!(
         entries.iter().any(|e| e == "reader.next-status-line"),
         "{entries:?}"
+    );
+}
+
+/// The notices shown.
+type Notices = Rc<RefCell<Vec<String>>>;
+
+/// A plugin that shows notices as nothing and keeps their texts.
+struct NoticeTaker(Notices);
+
+/// A notice, shown as nothing.
+struct Notice;
+
+impl paperpaw_sdk::Screen for Notice {
+    fn draw(&mut self, _: &mut paperpaw_sdk::Canvas<'_>, _: &paperpaw_sdk::Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled {
+        paperpaw_sdk::Handled::No
+    }
+}
+
+impl Plugin for NoticeTaker {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("notices"),
+            name: "Notices".into(),
+            description: "Keeps the notices shown.".into(),
+            version: Version::new(0, 1, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let notices = self.0.clone();
+        r.add_screen(paperpaw_sdk::ScreenSpec {
+            id: Id::new_static("notices.notice"),
+            title: "notice".into(),
+            factory: Box::new(move |_, params| {
+                let text = params.get(params::TEXT).unwrap_or_default();
+                notices.borrow_mut().push(text.to_string());
+                Box::new(Notice)
+            }),
+        })?;
+        r.bind_slot(
+            slots::NOTICE,
+            Id::new_static("notices.notice"),
+            paperpaw_sdk::Priority::DEFAULT,
+        )
+    }
+}
+
+/// A kernel reading the book on `storage`, keeping the notices shown.
+fn with_notices(storage: Shared) -> (Reading, Notices) {
+    storage.create_dir("books").unwrap();
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    storage.write(BOOK, text.as_bytes()).unwrap();
+    let notices = Notices::default();
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage.clone())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_format_txt::TxtFormat)
+        .plugin(Reader)
+        .plugin(NoticeTaker(notices.clone()))
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let mut reading = Reading {
+        kernel,
+        storage,
+        heard: Heard::default(),
+        now: 0,
+        book: BOOK,
+    };
+    reading.settle(effects);
+    reading.open();
+    (reading, notices)
+}
+
+#[test]
+fn a_place_that_cannot_be_kept_is_said_once() {
+    let storage = Shared::default();
+    *storage.3.borrow_mut() = Some("progress.ini".into());
+    let (mut reading, notices) = with_notices(storage);
+    for _ in 0..3 {
+        reading.run(core_actions::NEXT_PAGE);
+    }
+    let said: Vec<String> = notices
+        .borrow()
+        .iter()
+        .filter(|n| n.contains("could not be saved"))
+        .cloned()
+        .collect();
+    assert_eq!(said.len(), 1, "{said:?}");
+}
+
+#[test]
+fn a_bookmark_that_cannot_be_kept_is_said() {
+    let storage = Shared::default();
+    *storage.3.borrow_mut() = Some(".paperpaw/annotations".into());
+    let (mut reading, notices) = with_notices(storage);
+    reading.run(actions::TOGGLE_BOOKMARK);
+    assert!(
+        notices.borrow().iter().any(|n| n.contains("bookmark")),
+        "{:?}",
+        notices.borrow()
     );
 }

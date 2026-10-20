@@ -285,7 +285,7 @@ impl ReaderScreen {
         let on_page = |m: &Mark| m.kind == Kind::Bookmark && m.start >= start && m.start < end;
         if !annotations::remove(env.storage, &book.path, on_page) {
             let text: Vec<&str> = book.page.lines.iter().map(|l| l.text.as_str()).collect();
-            annotations::add(
+            let kept = annotations::add(
                 env.storage,
                 &book.path,
                 Annotation {
@@ -302,6 +302,9 @@ impl ReaderScreen {
                     note: String::new(),
                 },
             );
+            if !kept {
+                marks_not_saved(cx);
+            }
         }
         book.marks = annotations::marks(env.storage, &book.path);
         cx.command(annotations::changed(&book.path));
@@ -332,7 +335,7 @@ impl Screen for ReaderScreen {
     fn on_close(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if let Ok(book) = &mut self.book {
-            book.save_due(&env, true);
+            book.save_due(cx, true);
         }
         if let Ok(book) = &self.book
             && !book.web()
@@ -398,7 +401,7 @@ impl Screen for ReaderScreen {
         let Ok(book) = &mut self.book else {
             return;
         };
-        book.save_due(&env, false);
+        book.save_due(cx, false);
         if book.index_step(&env) {
             let delay = match env.device.memory {
                 paperpaw_sdk::MemoryClass::Small => STEP_DELAY_SMALL_MS,
@@ -788,7 +791,7 @@ impl ReaderScreen {
         };
         // Asleep the device may lose its power: the position first.
         if *event == events::SUSPEND {
-            book.save_due(cx.env(), true);
+            book.save_due(cx, true);
         }
         let this_book = params.get(params::PATH) == Some(book.path.as_str());
         if *event == crate::SPOKEN && this_book {
@@ -843,7 +846,9 @@ impl ReaderScreen {
             let env = *cx.env();
             let note = typed.text.as_str();
             let now = paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0);
-            annotations::set_note(env.storage, &book.path, at, note, now);
+            if !annotations::set_note(env.storage, &book.path, at, note, now) {
+                marks_not_saved(cx);
+            }
             book.marks = annotations::marks(env.storage, &book.path);
             cx.command(annotations::changed(&book.path));
             cx.request_redraw();
@@ -970,6 +975,13 @@ impl ReaderScreen {
             cx.wake_at(now);
         }
     }
+}
+
+/// Says that a bookmark, highlight or note could not be kept: the book's
+/// annotations could not be read or written.
+pub(super) fn marks_not_saved(cx: &mut Cx<'_, '_>) {
+    let text = cx.env().i18n.tr("reader.marks-not-saved").to_string();
+    cx.command(Command::Notify(text));
 }
 
 /// The page turn an arrow stands for in a book: left and up back, right
