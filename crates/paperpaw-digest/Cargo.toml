@@ -13,6 +13,9 @@ keywords = ["md5", "sha1", "sha256", "fnv", "no-std"]
 
 [dependencies]
 paperpaw-platform.workspace = true
+# RustCrypto's SHA-256, in the X4's firmware already (its bootloader
+# crate's): no assembly, no CPU detection on the targets PaperPaw runs on.
+sha2 = { version = "0.11.1", default-features = false }
 
 [lints]
 workspace = true
