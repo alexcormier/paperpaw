@@ -71,6 +71,55 @@ change the plugin SDK.
   the screen (`Env::content`), not of the panel; without bars that is the
   same. `EnvParts` has no `screen_maker`: the kernel sets it with
   `Env::with_screen_maker` (feature `kernel`, as `ScreenMaker`).
+- SDK: block filters (`TextFilterSpec::block`) know where a block is
+  (`FilterContext`: the book, its language, the place) and may leave it
+  out (`Verdict::Drop`): the reader lays out, searches and shows notes
+  without it.
+- SDK: `reading::note_text`, the text a footnote shows;
+  `layout::{Line, wrap_lines, wrap_lines_hyphenated}` (feature
+  `unstable`).
+- Layout: `Style::widows` and `Style::orphans` (`Style::lines_kept`):
+  the fewest lines of a paragraph left alone at the top or bottom of a
+  page; 1 by default, as before.
+- SDK: `reading` holds the reader's building blocks for readers of
+  one's own: `FilteredDocument`, `PageIndex`, and with the feature
+  `unstable` `PageType`, `ReadingFaces`, `EmbeddedFonts`, `StatusRoom`,
+  `WordBox`, `word_boxes`, `draw_lines`, `draw_image`. The reader uses
+  them; pages look as before.
+- SDK: the reader's contents, search, marks, footnotes and skimming are
+  standard slots (`slots::TOC`, `SEARCH`, `ANNOTATIONS`, `FOOTNOTE`,
+  `SKIM`), and following a link and skimming standard events
+  (`events::FOLLOW_LINK`, `SKIM`, `SKIMMED`): a plugin replaces one of
+  them, or a reader of one's own uses the shipped ones.
+- SDK: `positions`, where each book was left, shared like its
+  annotations (`.paperpaw/positions`, moved and removed with the book):
+  readers keep it, plugins read it without opening the book. The reader
+  keeps its place there (a place kept before is read).
+- SDK: `reading::open_options` and `reading::conversion`: a plugin
+  opens a book as the reader does, so its places fit. KOReader's notes
+  exchange and the progress sync did not, and with the book's own
+  styles off or a stylesheet plugin on they converted the book a second
+  time and could meet other places.
+- SDK: the reading event of a book closed carries its place as an
+  XPointer (`Reading::xpointer`); the progress sync sends it as it is.
+- SDK: the type of book pages is standard, registered by the kernel as
+  the font size is: `settings::FONT_WEIGHT`, `WORD_SPACING`,
+  `LINE_SPACING`, `MARGIN`, `MARGIN_ENDS`, `JUSTIFY`, `HYPHENATE`,
+  `INDENT`, `PARAGRAPH_SPACING`, `PUBLISHER_STYLES` and `FOOTNOTES`
+  (`core.*`, were `reader.*`), so a reader of one's own reads them and
+  profiles, rules and themes set them for every reader. What was set
+  under the old ids is kept.
+- SDK: `pattern`, a small part of regular expressions (classes, word
+  edges, repeats, alternatives, groups, any case) without a library and
+  with bounded work; `decorations::PatternDecorator` marks the words
+  patterns find on a page, each in its role.
+- Plugins without code mark words by patterns with a `marks.ini`: a
+  section per kind of mark, its patterns and its look, set like any
+  mark's in Settings, Marks in the text. Its files' formats are now
+  version 2 (`DATA_FORMATS`).
+- SDK: any plugin reads the words of the page shown
+  (`reading::ask_page_words`, answered with `reading::PageWords` by the
+  reader while a book is open), not only decorators.
 - SDK: the screen stack, readable and steerable (gap A2).
   `Env::stack` lists the open screens (`StackEntry`: screen, slot,
   overlay, key) and `Env::top` the one shown; plugins subscribed to

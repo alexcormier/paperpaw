@@ -491,7 +491,11 @@ to `core.reader`) replaces the shipped one in full.
 | Text chosen, and the action chosen for it | `menus::SELECTION`, `events::TEXT_CHOSEN` | add an action to the menu, hear the event |
 | Notes exported as Markdown | `events::NOTES_EXPORTED` | for notes apps and syncs |
 | The reader's menus | `menus::READER`, `READER_MORE`, `READER_PANEL` | add entries there |
-| Font size | `settings::FONT_SIZE` | the kernel's setting, which readers read |
+| The type of pages | `settings::FONT_SIZE`, `FONT_WEIGHT`, `WORD_SPACING`, `LINE_SPACING`, `MARGIN`, `MARGIN_ENDS`, `JUSTIFY`, `HYPHENATE`, `INDENT`, `PARAGRAPH_SPACING`, `PUBLISHER_STYLES`, `FOOTNOTES` | the kernel's settings (each book may have its own), which readers read |
+| The page's words | `events::PAGE_WORDS_WANTED`, `reading::PageWords` | readers answer `reading::ask_page_words` |
+| Where a book was left | `positions::{load, save}`, `Reading::xpointer` with `BOOK_CLOSED` | readers keep it; syncs and lists read it without opening the book |
+| The contents, search, the marks, a footnote, skimming | `slots::TOC`, `SEARCH`, `ANNOTATIONS`, `FOOTNOTE`, `SKIM`, `events::FOLLOW_LINK`, `SKIM`, `SKIMMED` | bind a screen of one's own; readers open the slots, follow the links and go where skimming asks |
+| A book opened as the reader opens it | `reading::open_options`, `reading::conversion` | its places fit the reader's (a search, contents, an XPointer) |
 | Status lines' settings | `groups::STATUS_LINES` | the group readers put them in |
 | Reading aloud's settings | `setting_sections::ALOUD` | the section readers and shells put them in |
 | Key bindings while reading | the layer `[keymap.core.reader]` | the slot's layer, whichever screen fills it |
@@ -499,6 +503,23 @@ to `core.reader`) replaces the shipped one in full.
 A reader in turn sends the reading events (`BOOK_OPENED`, `PAGE_TURNED`,
 `BOOK_CLOSED`, `BOOK_FINISHED`), takes `GOTO`, and offers its actions
 in these menus.
+
+A reader of one's own builds on the shipped one's parts in
+`paperpaw_sdk::reading` rather than copying them: `FilteredDocument` (a
+book through the plugins' text filters), `PageIndex` (the starts of its
+pages, kept on the device), and with the feature `unstable` (as the
+layout, until 1.0) `PageType` (the page's box and type from the standard
+settings, its layout key), `ReadingFaces` (the faces with the book's own
+fonts and small capitals), `word_boxes`, `draw_lines` and `draw_image`;
+`reading::note_text` is the text a footnote shows. The layout keeps at
+least `Style::widows` lines of a paragraph at the top of a page and
+`orphans` at the bottom (`Style::lines_kept`, 1 by default), and
+`layout::wrap_lines_hyphenated` breaks lines of one's own as pages do.
+
+A text filter that needs to know where a block is, or leaves blocks out
+(a web page's adverts, printed page numbers in a book), is a block
+filter: `TextFilterSpec::block` gets a `FilterContext` (the book, its
+language, the place) and answers `Verdict::Keep` or `Verdict::Drop`.
 
 ### Services and points of your own
 
@@ -577,6 +598,35 @@ r.on(events::DECORATION_TAPPED, |env, tapped, out| { /* tapped.text */ })?;
   `decorations::draw_behind` and `draw_over`.
 - What changes widths (bold, a larger size) is a text filter instead: it
   lays the page out again.
+
+Words found by patterns need no code of one's own:
+`decorations::PatternDecorator` marks what its patterns
+(`paperpaw_sdk::pattern`, a small part of regular expressions: classes,
+`\b`, repeats, `|`, groups, `(?i)`, with bounded work) find on the page's
+text, each in its role:
+
+```rust
+let names = PatternDecorator::new()
+    .rule(Pattern::new(r"\b(?:Mr|Mrs|Miss)\. [A-Z]\w+").unwrap(), NAME)
+    .into_spec(Id::new_static("tale.names"), "tale.names");
+r.add_decorator(names)?;
+```
+
+A plugin without code does the same with a `marks.ini`, a section per
+role (`<plugin>.<section>`), its patterns and its look:
+
+```ini
+[names]
+title = Names
+pattern = \b(?:Mr|Mrs|Miss)\. [A-Z]\w+
+background = yellow
+line = wavy
+```
+
+Any plugin can read the words of the page shown, not only decorators:
+`reading::ask_page_words(&MY_WORDS)` asks the reader, which answers with
+the event `MY_WORDS`, a `reading::PageWords` (the book, the page's start
+and end, its words with their places).
 
 ### Widgets
 
@@ -942,11 +992,13 @@ plugins/large-print/
                  where scalable fonts are drawn)
   styles.css     a stylesheet for books, after a book's own (EPUB)
   presets.ini    ready-made sets of settings, e.g. home screen layouts
+  marks.ini      words marked on book pages by patterns (formats 2)
 ```
 
 `formats` says which version of these files' formats the plugin is made
-for (1 now, and if it is left out); a PaperPaw that reads an older one
-leaves the plugin out and says why, rather than reading it wrongly.
+for (2 now: `marks.ini` came with it; 1 if it is left out); a PaperPaw
+that reads an older one leaves the plugin out and says why, rather than
+reading it wrongly.
 
 Packs for other scripts (`tools/script-pack.py` builds Cyrillic and
 Greek for Literata) are read a glyph at a time, so devices with little

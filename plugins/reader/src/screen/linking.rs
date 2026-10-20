@@ -117,12 +117,12 @@ impl ReaderScreen {
             && let Ok(book) = &self.book
             && let Some(text) = book.note_text(&env, href)
         {
-            cx.command(Command::OpenScreen(
-                crate::FOOTNOTE_SCREEN,
+            cx.command(Command::OpenSlot(
+                slots::FOOTNOTE,
                 Params::new()
                     .with(params::TEXT, text)
                     .with(params::PATH, book.path.clone())
-                    .with(crate::footnote::HREF, href.to_string()),
+                    .with(params::URL, href.to_string()),
             ));
             return Handled::Yes;
         }

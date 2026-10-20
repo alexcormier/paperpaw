@@ -75,6 +75,12 @@ pub struct Style {
     /// The reader's choice wins over a book's justified text; centred and
     /// right-aligned blocks keep their alignment.
     pub justify: bool,
+    /// The fewest lines of a paragraph left alone at the top of a page (a
+    /// widow) and at the bottom (an orphan): a paragraph that would leave
+    /// fewer moves a line on, or goes to the next page whole. 1 lets lines
+    /// fall where they fall.
+    pub widows: u8,
+    pub orphans: u8,
 }
 
 impl Style {
@@ -85,7 +91,17 @@ impl Style {
             indent,
             em,
             justify,
+            widows: 1,
+            orphans: 1,
         }
+    }
+
+    /// The same, keeping at least `widows` lines of a paragraph at the top
+    /// of a page and `orphans` at the bottom (see [`Style::widows`]).
+    pub const fn lines_kept(mut self, widows: u8, orphans: u8) -> Self {
+        self.widows = widows;
+        self.orphans = orphans;
+        self
     }
 }
 
@@ -487,6 +503,26 @@ pub fn layout_page(
         for (n, line) in lines.iter().enumerate() {
             let fits = y + line_height <= height;
             if !fits && !page.is_past_end() {
+                // Widows and orphans: as many lines go on as the next page
+                // needs, or the paragraph goes whole where too few would
+                // stay here.
+                let left = lines.len() - n;
+                let back = usize::from(style.widows).saturating_sub(left).min(n);
+                let stay = n - back;
+                let orphans = usize::from(style.orphans.max(1));
+                let whole = had_content && stay < orphans;
+                // Starting the page, it cannot go whole: then it stays as
+                // it falls rather than leaving an orphan here.
+                let (stay, back) = match (whole, stay < orphans) {
+                    (true, _) => (0, n),
+                    (false, true) => (n, 0),
+                    (false, false) => (stay, back),
+                };
+                if back > 0 && (stay > 0 || had_content) {
+                    page.lines.truncate(page.lines.len() - back);
+                    let end = block.source_offset(from + lines[stay].range.start);
+                    return ended(page, Locator::new(at.section, end));
+                }
                 let end = block.source_offset(from + line.range.start);
                 return ended(page, Locator::new(at.section, end));
             }
@@ -658,7 +694,30 @@ mod tests {
         indent: 0.0,
         em: 10.0,
         justify: false,
+        widows: 1,
+        orphans: 1,
     };
+
+    #[test]
+    fn widows_and_orphans_move_lines_on() {
+        // A line, then a paragraph of three; pages of three lines.
+        let doc = Text::new("aaaa bbbb\ncccc dddd eeee ffff gggg hhhh\n");
+        let page = |style: &Style| {
+            let first = layout(&doc, 0, 30.0, style);
+            let next = layout(&doc, first.end.offset, 30.0, style);
+            (texts(&first).len(), texts(&next).len())
+        };
+        // As they fall: the paragraph's last line alone on the next page.
+        assert_eq!(page(&STYLE), (3, 1));
+        // Two at the top: a line more goes on.
+        assert_eq!(page(&STYLE.lines_kept(2, 1)), (2, 2));
+        // And two at the bottom: the paragraph goes whole.
+        assert_eq!(page(&STYLE.lines_kept(2, 2)), (1, 3));
+        // A paragraph that starts the page stays, whatever it leaves.
+        let long = Text::new("aaaa bbbb cccc dddd eeee ffff gggg hhhh\n");
+        let first = layout(&long, 0, 30.0, &STYLE.lines_kept(3, 3));
+        assert_eq!(texts(&first).len(), 3);
+    }
 
     fn texts(page: &Page) -> Vec<&str> {
         page.lines.iter().map(|l| l.text.as_str()).collect()

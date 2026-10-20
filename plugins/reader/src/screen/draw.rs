@@ -3,57 +3,6 @@
 
 use super::*;
 
-/// Draws `lines` laid out with `t`, their content box at `origin`, each
-/// word in its ink (`inks`, by the words' order as [`Book::words`] has
-/// them; black where none). Lines outside the part being drawn (another
-/// band) are only measured.
-pub(super) fn draw_lines(
-    canvas: &mut Canvas<'_>,
-    faces: &Faces<'_>,
-    t: &Typography,
-    (left, top): (f32, f32),
-    lines: &[PageLine],
-    inks: &[Option<Color>],
-) {
-    let clip = canvas.clip();
-    // The words counted as `words_of` counts them: a word that goes on
-    // in the next run (e.g. bold) is one word.
-    let mut ordinal = 0usize;
-    for line in lines {
-        let baseline = (top + line.baseline + 0.5) as i32;
-        let above = baseline - (2.0 * t.line_height) as i32;
-        let below = baseline + t.line_height as i32;
-        let shown = below >= i32::from(clip.y) && above <= clip.bottom() as i32;
-        let mut x = left + line.x;
-        let mut joined = false;
-        for run in &line.runs {
-            let text = &line.text[run.start..run.end];
-            let space = faces.space(run.face) + line.word_spacing;
-            for (i, word) in text.split(' ').enumerate() {
-                if i > 0 {
-                    x += space;
-                    joined = false;
-                }
-                if word.is_empty() {
-                    continue;
-                }
-                if !joined {
-                    ordinal += 1;
-                }
-                joined = true;
-                if !shown {
-                    x += faces.measure(run.face, word);
-                    continue;
-                }
-                match inks.get(ordinal - 1).copied().flatten() {
-                    Some(ink) => x += faces.draw_in(canvas, run.face, x, baseline, word, ink),
-                    None => x += faces.draw(canvas, run.face, x, baseline, word),
-                }
-            }
-        }
-    }
-}
-
 impl Book {
     /// The page's pictures and text, each word in its ink (`inks`, by the
     /// words' order as [`Book::words`] has them; black where none).
@@ -63,9 +12,9 @@ impl Book {
             return;
         };
         for image in &self.page.images {
-            draw_image(canvas, env, t, image);
+            paperpaw_sdk::reading::draw_image(canvas, env, t, image);
         }
-        draw_lines(canvas, &faces, t, (t.x, t.y), &self.page.lines, inks);
+        paperpaw_sdk::reading::draw_lines(canvas, &faces, t, (t.x, t.y), &self.page.lines, inks);
     }
 
     /// Where *Back* is offered on the page a link led to: a small button
@@ -286,24 +235,6 @@ impl Book {
             env.status_items.draw_line(id, canvas, env, &frame);
         }
     }
-}
-
-/// Draws an image at its place on the page.
-pub(super) fn draw_image(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    t: &Typography,
-    image: &PageImage,
-) {
-    let left = (t.x + image.x + 0.5) as i32;
-    let top = (t.y + image.y + 0.5) as i32;
-    let (w, h) = ((image.width + 0.5) as i32, (image.height + 0.5) as i32);
-    paperpaw_sdk::ui::draw_image(
-        canvas,
-        env.storage,
-        &image.image,
-        Rect::new(left as u16, top as u16, w as u16, h as u16),
-    );
 }
 
 /// Ticks on a bar across the book that deeper levels of the contents

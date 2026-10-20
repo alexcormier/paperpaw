@@ -67,11 +67,14 @@ mod menus;
 pub mod native;
 pub mod numbers;
 mod params;
+pub mod pattern;
 mod plugin;
 mod plugins;
+pub mod positions;
 pub mod power;
 pub mod presets;
 pub mod random;
+pub mod reading;
 pub mod replies;
 mod screen;
 pub mod secrets;
@@ -172,6 +175,9 @@ pub mod layout {
         Face, Hyphenate, LayoutContext, LineRun, Page, PageImage, PageLine, Style, Typesetter,
         VERSION, layout_page, line_start,
     };
+    /// Lines broken as the layout breaks them (see `paperpaw-text`): for
+    /// laying out text of one's own the way pages are, e.g. a note.
+    pub use paperpaw_text::{Line, wrap_lines, wrap_lines_hyphenated};
 }
 
 /// Streaming XML/XHTML tokenizer (see `paperpaw-xml`) for format plugins.

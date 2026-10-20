@@ -18,6 +18,9 @@
 //!   presets.ini    ready-made sets of settings, e.g. home screen layouts,
 //!                  a section each: [nook] kind = home.layout, name,
 //!                  description, then the values (home.page-1 = …)
+//!   marks.ini      words marked on book pages by patterns, a section each:
+//!                  [names] title, pattern (one or more), the look
+//!                  (background = yellow, line = wavy …); formats 2
 //! ```
 //!
 //! The kernel lists them like every other plugin, so they can be switched
@@ -61,6 +64,7 @@ pub(crate) struct DataPlugin {
     styles: RefCell<Option<String>>,
     settings: RefCell<Option<String>>,
     presets: RefCell<Option<String>>,
+    marks: RefCell<Option<String>>,
     /// Paths of font files.
     fonts: RefCell<Vec<String>>,
     /// Packs that extend other fonts: their paths and those fonts' ids.
@@ -171,6 +175,20 @@ impl Plugin for DataPlugin {
         if let Some(source) = self.presets.take() {
             for preset in presets(&self.manifest.id, &source)? {
                 r.add_preset(preset)?;
+            }
+        }
+        if let Some(source) = self.marks.take() {
+            let marks = paperpaw_sdk::decorations::MarkRules::parse(&self.manifest.id, &source)?;
+            for (role, title, look) in marks.roles {
+                paperpaw_sdk::decorations::add_role(r, &role, title, look)?;
+            }
+            if !marks.decorator.is_empty() {
+                let id = Id::parse(&format!("{}.marks", self.manifest.id)).map_err(|_| {
+                    RegisterError::Invalid {
+                        message: Cow::Borrowed("no decorator id"),
+                    }
+                })?;
+                r.add_decorator(marks.decorator.into_spec(id, self.manifest.name.clone()))?;
             }
         }
         Ok(())
@@ -372,6 +390,7 @@ fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, S
         styles: RefCell::new(read(storage, &format!("{path}/styles.css"), MAX_FILE)),
         settings: RefCell::new(read(storage, &format!("{path}/settings.ini"), MAX_FILE)),
         presets: RefCell::new(read(storage, &format!("{path}/presets.ini"), MAX_FILE)),
+        marks: RefCell::new(read(storage, &format!("{path}/marks.ini"), MAX_FILE)),
         fonts: RefCell::new(fonts),
         extensions: RefCell::new(extensions(&source, path)),
         faces: RefCell::new(faces),
@@ -440,6 +459,7 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
         styles: RefCell::new(None),
         settings: RefCell::new(None),
         presets: RefCell::new(None),
+        marks: RefCell::new(None),
         fonts: RefCell::new(fonts),
         extensions: RefCell::new(Vec::new()),
         faces: RefCell::new(Vec::new()),
@@ -752,7 +772,8 @@ kind = Not An Id
         let ini = |formats: &str| format!("[plugin]\nname = Large print\n{formats}");
         assert!(parse_manifest(&ini(""), "large").is_ok());
         assert!(parse_manifest(&ini("formats = 1\n"), "large").is_ok());
-        let later = parse_manifest(&ini("formats = 2\n"), "large").unwrap_err();
+        assert!(parse_manifest(&ini("formats = 2\n"), "large").is_ok());
+        let later = parse_manifest(&ini("formats = 3\n"), "large").unwrap_err();
         assert!(later.contains("later PaperPaw"), "{later}");
         assert!(parse_manifest(&ini("formats = new\n"), "large").is_err());
     }

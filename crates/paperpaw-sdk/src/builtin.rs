@@ -127,6 +127,34 @@ pub mod slots {
     pub const CHOOSE_FOLDER: Id = Id::new_static("core.choose-folder");
     /// Shows what is known of a book: parameter [`PATH`](super::params::PATH).
     pub const BOOK_INFO: Id = Id::new_static("core.book-info");
+    /// The contents of the book being read: parameters
+    /// [`PATH`](super::params::PATH) and, where it is read,
+    /// [`SECTION`](super::params::SECTION) and
+    /// [`OFFSET`](super::params::OFFSET). Choosing an entry closes it and
+    /// sends [`events::GOTO`](super::events::GOTO). The reader opens it;
+    /// bind another screen here for contents that look different.
+    pub const TOC: Id = Id::new_static("core.toc");
+    /// Where a text is found in a book: parameters
+    /// [`PATH`](super::params::PATH) and [`TEXT`](super::params::TEXT),
+    /// what to find. Choosing a place closes it and sends
+    /// [`events::GOTO`](super::events::GOTO) with the text found marked.
+    pub const SEARCH: Id = Id::new_static("core.search");
+    /// A book's bookmarks, highlights and notes: parameter
+    /// [`PATH`](super::params::PATH). Choosing one closes it and sends
+    /// [`events::GOTO`](super::events::GOTO).
+    pub const ANNOTATIONS: Id = Id::new_static("core.annotations");
+    /// A note shown over the page (an overlay), from a note mark followed:
+    /// parameters [`TEXT`](super::params::TEXT), the note,
+    /// [`PATH`](super::params::PATH), the book, and
+    /// [`URL`](super::params::URL), the link; going to the note sends
+    /// [`events::FOLLOW_LINK`](super::events::FOLLOW_LINK).
+    pub const FOOTNOTE: Id = Id::new_static("core.footnote");
+    /// Skimming through the book being read (an overlay): opened with the
+    /// parameters of [`events::Skimmed`](super::events::Skimmed) (where the
+    /// book is, where its chapters begin). It asks the reader to move with
+    /// [`events::SKIM`](super::events::SKIM) and hears where the book is
+    /// then with [`events::SKIMMED`](super::events::SKIMMED).
+    pub const SKIM: Id = Id::new_static("core.skim");
     /// Shows a short message ([`Command::Notify`](crate::Command::Notify))
     /// over whatever is open, for a few seconds: parameter
     /// [`TEXT`](super::params::TEXT). It gets no input and is closed by
@@ -283,6 +311,12 @@ pub mod events {
             /// page), once the reader counted the pages and where the
             /// chapter is known.
             pub chapter_left: u32,
+            /// The page's start as an XPointer (see
+            /// [`Document::xpointer`](crate::document::Document::xpointer)),
+            /// where the reader found it: with [`BOOK_CLOSED`], for a
+            /// sync that sends it on (finding it takes a while on small
+            /// devices, so not with every page).
+            pub xpointer: String,
         }
     }
 
@@ -429,6 +463,53 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// Where skimming asks the reader to go ([`SKIM`]), in the book
+        /// at `path`: `page:+10` (pages on, or back with `-`), `permille:250`
+        /// (that far into the book, in thousandths), `chapter:+1` (the
+        /// chapter after, or before with `-1`), or `back` (where skimming
+        /// began).
+        pub struct Skim {
+            pub path: String,
+            pub to: String,
+        }
+    }
+
+    crate::event_data! {
+        /// Where the book being skimmed is ([`SKIMMED`], and the parameters
+        /// the skimming overlay is opened with): its page as shown
+        /// (`12 / 340`, or a percentage), the chapter's title, how far in
+        /// it is (in thousandths).
+        pub struct Skimmed {
+            pub path: String,
+            pub page: String,
+            pub chapter: String,
+            pub permille: u32,
+        }
+        optional {
+            /// Where its chapters begin, in thousandths, comma-separated.
+            pub marks: String,
+        }
+    }
+
+    crate::event_data! {
+        /// A link of a book to follow ([`FOLLOW_LINK`]): its target as the
+        /// book has it (`notes.xhtml#n3`, a web address).
+        pub struct FollowLink {
+            pub path: String,
+            pub href: String,
+        }
+    }
+
+    crate::event_data! {
+        /// The words of the page shown are wanted ([`PAGE_WORDS_WANTED`],
+        /// see [`reading::ask_page_words`](crate::reading::ask_page_words)):
+        /// the reader answers with the event `reply`.
+        pub struct PageWordsWanted {
+            pub reply: Id,
+        }
+    }
+
+    crate::event_data! {
         /// A decorated word that was tapped, or chosen with the buttons
         /// ([`DECORATION_TAPPED`]): the decorator's mark it is in.
         pub struct DecorationTapped {
@@ -547,6 +628,20 @@ pub mod events {
     /// ([`DecorationTapped`]); sent for decorators that take taps (see
     /// [`decorations`](crate::decorations)), whose plugin answers.
     pub const DECORATION_TAPPED: Event<DecorationTapped> = Event::new("core.decoration-tapped");
+    /// Skimming asks the reader to go somewhere in the book ([`Skim`]).
+    pub const SKIM: Event<Skim> = Event::new("core.skim");
+    /// Where the book being skimmed is now ([`Skimmed`]): the reader tells
+    /// the skimming overlay after each move.
+    pub const SKIMMED: Event<Skimmed> = Event::new("core.skimmed");
+    /// A link of the open book is to be followed ([`FollowLink`]), as a
+    /// tap on it would: the reader goes there (or opens a web address in
+    /// the browser). A footnote shown over the page sends it to go to the
+    /// note.
+    pub const FOLLOW_LINK: Event<FollowLink> = Event::new("core.follow-link");
+    /// The words of the page shown are wanted ([`PageWordsWanted`]):
+    /// a reader with a book open answers with
+    /// [`reading::PageWords`](crate::reading::PageWords).
+    pub const PAGE_WORDS_WANTED: Event<PageWordsWanted> = Event::new("core.page-words-wanted");
     /// A word of a book was looked up ([`WordLookedUp`]).
     pub const WORD_LOOKED_UP: Event<WordLookedUp> = Event::new("core.word-looked-up");
     /// What a widget shows changed by other means than the events screens
@@ -877,6 +972,38 @@ pub mod settings {
     pub const FONT_SIZE: Setting<i64> = Setting::new("core.font-size");
     /// The value of [`READING_FONT`] for the plugins' choice.
     pub const DEFAULT_FONT: &str = "core.font.default";
+    /// Darker text: glyphs widened by up to this many steps (0 to 4). The
+    /// standard type of book pages, as [`FONT_SIZE`]: the kernel
+    /// registers them, each book may have its own ([`SCOPE_ONLY`]), every
+    /// reader reads them.
+    pub const FONT_WEIGHT: Setting<i64> = Setting::new("core.font-weight");
+    /// Space between words in percent of the font's (50 to 200).
+    pub const WORD_SPACING: Setting<i64> = Setting::new("core.word-spacing");
+    /// Distance between baselines in percent of the font size, at least
+    /// the font's own; below 100 that much of the font's own (80 to 250).
+    pub const LINE_SPACING: Setting<i64> = Setting::new("core.line-spacing");
+    /// Page margins in millimetres, at the sides (and at the top and
+    /// bottom while [`MARGIN_ENDS`] follows them).
+    pub const MARGIN: Setting<i64> = Setting::new("core.margin");
+    /// Margins at the top and bottom in millimetres; as [`MARGIN`] until
+    /// set.
+    pub const MARGIN_ENDS: Setting<i64> = Setting::new("core.margin-ends");
+    /// Lines of paragraphs as wide as the page.
+    pub const JUSTIFY: Setting<bool> = Setting::new("core.justify");
+    /// Words broken at line ends, in the book's language.
+    pub const HYPHENATE: Setting<bool> = Setting::new("core.hyphenate");
+    /// The first lines of paragraphs indented.
+    pub const INDENT: Setting<bool> = Setting::new("core.indent");
+    /// Space between paragraphs.
+    pub const PARAGRAPH_SPACING: Setting<bool> = Setting::new("core.paragraph-spacing");
+    /// The book's own styles (an EPUB's CSS), see
+    /// [`OpenOptions::publisher_styles`](crate::OpenOptions).
+    pub const PUBLISHER_STYLES: Setting<bool> = Setting::new("core.publisher-styles");
+    /// Notes shown over the page ([`FOOTNOTES_POPUP`]) or gone to
+    /// ([`FOOTNOTES_JUMP`]) when their mark is followed.
+    pub const FOOTNOTES: Setting<Text> = Setting::new("core.footnotes");
+    pub const FOOTNOTES_POPUP: &str = "core.footnotes.popup";
+    pub const FOOTNOTES_JUMP: &str = "core.footnotes.jump";
     /// The font of the status lines while reading
     /// ([`fonts::STATUS`](super::fonts::STATUS)): [`STATUS_FONT_UI`],
     /// [`STATUS_FONT_BOOK`] or a font family's name.
@@ -1064,6 +1191,22 @@ mod tests {
     }
 
     #[test]
+    fn skimming_says_where_the_book_is() {
+        use super::events::{SKIMMED, Skimmed};
+        let skimmed = Skimmed::new(
+            "books/a.epub".into(),
+            "12 / 340".into(),
+            "Chapter 2".into(),
+            35,
+        )
+        .marks(alloc::string::String::from("0,120,480"));
+        let crate::Command::Emit(event, params) = SKIMMED.emit(skimmed.clone()) else {
+            panic!("an event");
+        };
+        assert_eq!(SKIMMED.read(&event, &params), Some(skimmed));
+    }
+
+    #[test]
     fn reading_carries_the_chapter() {
         use super::events::Reading;
         let reading = Reading {
@@ -1076,9 +1219,14 @@ mod tests {
             pages: Some(300),
             chapter: "Down the Rabbit-Hole".into(),
             chapter_left: Some(7),
+            xpointer: Some("/body/DocFragment[4]/body/p[2]".into()),
         };
         let params = reading.to_params();
         assert_eq!(params.get("chapter_left"), Some("7"));
+        assert_eq!(
+            params.get("xpointer"),
+            Some("/body/DocFragment[4]/body/p[2]")
+        );
         assert_eq!(Reading::from_params(&params).unwrap(), reading);
         assert_eq!(reading.at(), Locator::new(3, 120));
         // A book without a table of contents, its pages not counted.

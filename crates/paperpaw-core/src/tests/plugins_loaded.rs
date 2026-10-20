@@ -205,3 +205,25 @@ fn a_themes_defaults_win_over_the_devices() {
     assert_eq!(kernel.settings().int("core.ui-size"), 14);
     assert_eq!(kernel.settings().int("core.font-size"), 12, "the user's");
 }
+
+/// A data plugin marks words by patterns: its `marks.ini` makes roles,
+/// their looks settings, and a decorator.
+#[test]
+fn a_data_plugin_marks_words_by_patterns() {
+    let storage = MemoryStorage::new()
+        .with(
+            "plugins/tale/plugin.ini",
+            "[plugin]\nname = Tale\nformats = 2\n",
+        )
+        .with(
+            "plugins/tale/marks.ini",
+            "[names]\ntitle = Names\npattern = \\bAlice\\b\nbackground = yellow\n",
+        );
+    let kernel = Kernel::builder(DEVICE).storage(storage).build().unwrap();
+    assert_eq!(
+        kernel.settings().text("tale.names.background"),
+        "core.tone.yellow"
+    );
+    let decorators = &kernel.shared.decorators;
+    assert!(decorators.get(&Id::new_static("tale.marks")).is_some());
+}
