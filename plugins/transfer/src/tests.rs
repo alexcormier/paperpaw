@@ -24,6 +24,19 @@ fn translations_are_complete() {
 }
 
 #[test]
+fn the_code_is_placed_inside_its_square_or_not_at_all() {
+    use paperpaw_sdk::Rect;
+    let area = Rect::new(0, 40, 480, 760);
+    // 29 modules and the white around them: 37, three pixels each.
+    assert_eq!(crate::code_place(area, 120, 29), Some((196, 56, 3)));
+    // Less room than a pixel per module (large fonts, a short screen in
+    // landscape): no code, the address is shown alone.
+    assert_eq!(crate::code_place(area, 36, 29), None);
+    assert_eq!(crate::code_place(area, 0, 29), None);
+    assert_eq!(crate::code_place(Rect::new(0, 40, 20, 760), 120, 29), None);
+}
+
+#[test]
 fn the_page_takes_its_texts() {
     assert!(crate::PAGE.contains("/*STRINGS*/{}"));
 }
@@ -101,14 +114,15 @@ fn wrong_keys_lock_for_a_while() {
     // The phone's page is guarded alike.
     use crate::phone::{Request, answer};
     let mut guard = Guard::new(KEY.to_string());
+    let storage = MemoryStorage::new().with("body", b"text".to_vec());
     let mut send = |key: &str| {
         let request = Request {
             method: "POST",
             target: &format!("/send?k={key}"),
-            body: Some(b"text".to_vec()),
+            body_file: Some("body"),
             at: Instant(5),
         };
-        let (response, text) = answer(7, &mut guard, "<page>", &request);
+        let (response, text) = answer(7, &mut guard, "<page>", &storage, &request);
         (response.status, text)
     };
     for _ in 0..WRONG_KEYS {
@@ -252,30 +266,42 @@ fn json_is_escaped() {
 
 #[test]
 fn text_typed_on_a_phone_comes_back() {
-    use crate::phone::{Request, answer};
+    use crate::phone::{MAX_TEXT, Request, answer};
     let page = "<html>page</html>";
+    let storage = MemoryStorage::new()
+        .with("body", "Schlüssel:fx".as_bytes().to_vec())
+        .with("long", vec![b'x'; MAX_TEXT + 1]);
     let mut guard = Guard::new(KEY.to_string());
-    let mut ask = |method, target, body: Option<&[u8]>| {
+    let mut ask = |method, target, body_file: Option<&str>| {
         let request = Request {
             method,
             target,
-            body: body.map(<[u8]>::to_vec),
+            body_file,
             at: Instant(0),
         };
-        let (response, text) = answer(7, &mut guard, page, &request);
+        let (response, text) = answer(7, &mut guard, page, &storage, &request);
         (response.status, response.body, text)
     };
     // Without the key: nothing.
     assert_eq!(ask("GET", "/", None).0, 403);
-    assert_eq!(ask("POST", "/send?k=wrong", Some(b"x")).2, None);
+    assert_eq!(ask("POST", "/send?k=wrong", Some("body")).2, None);
     // The page, then the text.
     let (status, body, text) = ask("GET", "/?k=abc", None);
     assert_eq!(
         (status, body.as_slice(), text),
         (200, page.as_bytes(), None)
     );
-    let (status, _, text) = ask("POST", "/send?k=abc", Some("Schlüssel:fx".as_bytes()));
+    // Too long: said so, and nothing goes to the keyboard (which would
+    // take an empty text and close).
+    let (status, _, text) = ask("POST", "/send?k=abc", Some("long"));
+    assert_eq!((status, text), (413, None));
+    let (status, _, text) = ask("POST", "/send?k=abc", Some("gone"));
+    assert_eq!((status, text), (500, None));
+    let (status, _, text) = ask("POST", "/send?k=abc", Some("body"));
     assert_eq!((status, text.as_deref()), (200, Some("Schlüssel:fx")));
+    // An empty field sends no body: an empty text.
+    let (status, _, text) = ask("POST", "/send?k=abc", None);
+    assert_eq!((status, text.as_deref()), (200, Some("")));
     assert_eq!(ask("GET", "/other?k=abc", None).0, 404);
 }
 

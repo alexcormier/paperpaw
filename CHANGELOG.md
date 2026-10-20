@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Wi-Fi transfer: where there is too little room for the QR code
+  (large fonts, a short screen turned), the address is shown without it;
+  the code's place was computed below zero. Typing on a phone: a text
+  too long for the device is refused with a message on the phone, which
+  keeps it; it arrived as an empty text, which cleared the field.
 - Wi-Fi: the radio goes off again once what waited for the network has
   failed (no saved network in reach, or none joined in the time a
   request waits). It went on looking for networks every ten seconds,
