@@ -59,6 +59,12 @@ change the plugin SDK.
   the latest after 30 minutes (two hours in Saving). Offline sends and
   fetches nothing; once allowed again, the books switched from go out,
   then the open one's latest is fetched before its own is sent.
+- Network per plugin (ADR 0025): under Settings, System, *Network per
+  plugin*, each plugin that uses the network has its own part: its
+  *Network* on or off (off, its requests and network work are refused,
+  `Reason::NetworkOff`), and *In saving modes*: follow the mode, as in
+  Normal (its work keeps Normal's limits while saving, not in Offline),
+  or only when asked (no background network at all).
 - SDK, HTTP: `HttpRequest` is made with `HttpRequest::get` or `new` and
   methods (`header`, `body`, `body_from`, `save_to`, `with`), no longer
   field by field (`#[non_exhaustive]`). A request may set a `timeout`

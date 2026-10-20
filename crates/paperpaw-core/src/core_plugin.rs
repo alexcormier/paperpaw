@@ -55,6 +55,13 @@ impl Plugin for CorePlugin {
         register_time_and_battery(r)?;
         register_keymaps_and_setup(r)?;
         r.add_presets(&POWER_MODES)?;
+        // Each plugin's network (its settings made by the kernel).
+        r.add_setting_group(SettingGroupSpec {
+            id: crate::work::NETWORK_GROUP,
+            title: Cow::Borrowed("core.group.network"),
+            order: 87,
+            page: None,
+        })?;
         Ok(())
     }
 }

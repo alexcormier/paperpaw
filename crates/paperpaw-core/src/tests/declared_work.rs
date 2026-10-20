@@ -345,3 +345,69 @@ fn what_the_reader_runs_may_say_so_and_an_announcement_always_may() {
             .is_none()
     );
 }
+
+fn saving() -> paperpaw_sdk::power::Power {
+    paperpaw_sdk::power::Power::new(
+        paperpaw_sdk::power::PowerLevel::Saving,
+        paperpaw_sdk::power::SAVING,
+        false,
+        4,
+    )
+}
+
+#[test]
+fn a_plugin_whose_network_is_off_gets_none() {
+    let log = log();
+    let mut kernel = kernel(&log, true);
+    kernel
+        .set_setting(Instant(1), "core.network.wk", "off")
+        .unwrap();
+    let push = Work::network(Id::new_static("wk.push")).within(Duration::from_secs(1));
+    declare(&mut kernel, 2, push);
+    kernel.tick(Instant(5000));
+    assert!(log.borrow().is_empty(), "its network work never runs");
+    assert_eq!(
+        kernel.shared.work_states.get(&Id::new_static("wk.push")),
+        None
+    );
+    kernel.apply(Command::Http(paperpaw_sdk::HttpRequest::get(
+        "https://example.org/",
+        Id::new_static("wk.closed"),
+    )));
+    kernel.finish();
+    assert!(kernel.take_io().is_empty(), "nor does a request go out");
+    assert_eq!(*log.borrow(), ["wk.closed -"], "it is answered at once");
+}
+
+#[test]
+fn an_exempt_plugin_keeps_normal_limits_in_saving() {
+    let log = log();
+    let mut kernel = kernel(&log, true);
+    kernel.shared.power = saving();
+    let push = || {
+        Work::network(Id::new_static("wk.push"))
+            .within(Duration::from_secs(60))
+            .at_moments(Moments::ONLINE)
+    };
+    let effects = declare(&mut kernel, 0, push());
+    assert_eq!(
+        effects.wake_at(),
+        Some(Instant(240_000)),
+        "four times as long"
+    );
+    kernel
+        .set_setting(Instant(1), "core.saving.wk", "core.saving.normal")
+        .unwrap();
+    let effects = declare(&mut kernel, 2, push());
+    assert_eq!(effects.wake_at(), Some(Instant(60_002)), "as in Normal");
+    kernel
+        .set_setting(Instant(3), "core.saving.wk", "core.saving.manual")
+        .unwrap();
+    declare(&mut kernel, 4, push());
+    kernel.tick(Instant(1_000_000));
+    assert!(log.borrow().is_empty(), "only when asked");
+    assert!(matches!(
+        kernel.shared.work_states.get(&Id::new_static("wk.push")),
+        Some(WorkState::Held(_))
+    ));
+}

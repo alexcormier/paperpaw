@@ -317,6 +317,8 @@ impl KernelBuilder {
                     ..code
                 }),
         );
+        // Every plugin's network, before the values kept for it are read.
+        kernel.define_network_settings();
         if let Some(source) = self.device_keymap.take() {
             kernel.load_device_keymap(source);
         }

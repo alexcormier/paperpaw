@@ -228,7 +228,7 @@ impl Kernel {
             self.last_activity = self.now;
         }
         // Moments for declared work, and jobs waiting for this event.
-        self.works.saw(event);
+        self.works.saw(event, params);
         let env = self.shared.env(self.now);
         for (_, plugin, handler) in self.subscriptions.iter().filter(|(id, ..)| id == event) {
             let _running = self.shared.meter.enter(plugin.as_str());

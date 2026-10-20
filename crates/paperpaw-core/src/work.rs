@@ -25,6 +25,9 @@ use paperpaw_sdk::{Command, Env, HttpReply, Id, Params, ServerNotice, SocketNoti
 
 use crate::Kernel;
 
+/// The settings group of every plugin's network.
+pub(crate) const NETWORK_GROUP: Id = Id::new_static("core.group.network");
+
 /// Without input this long, the screen still on: the `IDLE` moment.
 pub(crate) const IDLE_MS: u64 = 10_000;
 /// A job's progress is told at most this often.
@@ -87,6 +90,33 @@ fn millis(duration: Option<core::time::Duration>) -> u64 {
     duration.map_or(0, |d| u64::try_from(d.as_millis()).unwrap_or(u64::MAX))
 }
 
+/// What the reader set for a plugin that uses the network (ADR 0025).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Exempt {
+    /// Its work follows the mode.
+    Follow,
+    /// Its work keeps Normal's limits in Saving (not in Offline).
+    Normal,
+    /// No background network at all, in every mode.
+    Manual,
+}
+
+/// The setting of a plugin's network, and of its work in saving modes.
+pub(crate) fn network_setting(plugin: &str) -> String {
+    alloc::format!("core.network.{plugin}")
+}
+
+pub(crate) fn saving_setting(plugin: &str) -> String {
+    alloc::format!("core.saving.{plugin}")
+}
+
+/// The choices of [`saving_setting`], translation keys too.
+pub(crate) const SAVING_CHOICES: [&str; 3] = [
+    "core.saving.follow",
+    "core.saving.normal",
+    "core.saving.manual",
+];
+
 /// The work plugins declared, and the jobs' steps.
 #[derive(Debug, Default)]
 pub(crate) struct Queue {
@@ -107,13 +137,48 @@ pub(crate) struct Queue {
     ticking: bool,
     /// Notices of background work, as notes, not yet kept.
     notes: Vec<(String, paperpaw_sdk::work::Note)>,
+    /// Plugins whose network the reader switched off.
+    off: Vec<String>,
+    /// Plugins whose work does not follow the mode.
+    exempt: Vec<(String, Exempt)>,
+    /// What the reader set per plugin changed: read again.
+    stale: bool,
 }
 
 impl Queue {
     pub(crate) fn new(per_plugin: usize) -> Self {
         Self {
             per_plugin,
+            stale: true,
             ..Self::default()
+        }
+    }
+
+    /// Whether the reader switched `plugin`'s network off.
+    pub(crate) fn network_off(&self, plugin: &str) -> bool {
+        self.off.iter().any(|p| p == plugin)
+    }
+
+    /// The power `owner`'s work goes by: the mode's, unless the reader
+    /// exempted it.
+    fn power_of(&self, power: &Power, owner: &str) -> Power {
+        let exempt = self
+            .exempt
+            .iter()
+            .find(|(p, _)| p == owner)
+            .map_or(Exempt::Follow, |(_, e)| *e);
+        match exempt {
+            Exempt::Follow => power.clone(),
+            Exempt::Normal if power.level == PowerLevel::Saving => {
+                Power::new(PowerLevel::Normal, power.mode.clone(), power.automatic, 1)
+            }
+            Exempt::Normal => power.clone(),
+            Exempt::Manual => Power::new(
+                PowerLevel::Offline,
+                power.mode.clone(),
+                power.automatic,
+                power.stretch,
+            ),
         }
     }
 
@@ -148,8 +213,16 @@ impl Queue {
             .retain(|e| !(e.work.id == *id && key.is_none_or(|k| e.work.key == k)));
     }
 
-    /// An event was emitted: a moment, or what a job waited for.
-    pub(crate) fn saw(&mut self, event: &Id) {
+    /// An event was emitted: a moment, what a job waited for, or a
+    /// setting of a plugin's network changed.
+    pub(crate) fn saw(&mut self, event: &Id, params: &Params) {
+        if *event == events::SETTING_CHANGED
+            && params
+                .get(params::ID)
+                .is_some_and(|id| id.starts_with("core.network.") || id.starts_with("core.saving."))
+        {
+            self.stale = true;
+        }
         let moment = match event {
             e if *e == events::STARTED || *e == events::RESUME => Moments::WAKE,
             e if *e == events::BOOK_OPENED => Moments::BOOK_OPENED,
@@ -179,11 +252,11 @@ impl Queue {
                 Some(Job::Ready) => earliest(Instant(0)),
                 Some(Job::Until(at)) => earliest(*at),
                 Some(Job::For(_)) => {}
-                None if entry.held(power) => {}
+                None if entry.held(&self.power_of(power, &entry.owner)) => {}
                 None => {
                     if let Some(at) = entry.work.at {
                         earliest(at);
-                    } else if let Some(due) = entry.deadline(power) {
+                    } else if let Some(due) = entry.deadline(&self.power_of(power, &entry.owner)) {
                         earliest(due);
                     }
                     if entry.work.moments.contains(Moments::IDLE) && entry.job.is_none() {
@@ -203,6 +276,7 @@ impl Queue {
         self.entries
             .iter()
             .map(|e| {
+                let power = &self.power_of(power, &e.owner);
                 let state = if e.job.is_some() {
                     WorkState::Running {
                         progress: e.progress,
@@ -242,7 +316,8 @@ impl Queue {
 
     /// Why `entry` runs now, if it does.
     fn why(&self, entry: &Entry, moments: Moments, env: &Env<'_>) -> Option<Why> {
-        if entry.job.is_some() || entry.held(env.power) {
+        let power = &self.power_of(env.power, &entry.owner);
+        if entry.job.is_some() || entry.held(power) {
             return None;
         }
         if let Some(at) = entry.work.at {
@@ -261,7 +336,7 @@ impl Queue {
             return Some(Why::Moment(hit));
         }
         let optional_now = entry.work.importance == Importance::Optional && cheap;
-        let due = self.ticking && entry.deadline(env.power).is_some_and(|due| due <= env.now);
+        let due = self.ticking && entry.deadline(power).is_some_and(|due| due <= env.now);
         (due && (entry.work.importance == Importance::Expected || optional_now))
             .then_some(Why::Deadline)
     }
@@ -362,8 +437,57 @@ impl Kernel {
         }
     }
 
+    /// Reads what the reader set per plugin again, if it changed.
+    pub(crate) fn read_policy(&mut self) {
+        if !mem::take(&mut self.works.stale) {
+            return;
+        }
+        let settings = &self.shared.settings;
+        let networked = self
+            .shared
+            .plugins
+            .iter()
+            .filter(|p| p.manifest.uses.contains(Uses::NETWORK))
+            .map(|p| String::from(p.manifest.id.as_str()));
+        let (mut off, mut exempt) = (Vec::new(), Vec::new());
+        for plugin in networked {
+            let network = settings.get(&network_setting(&plugin));
+            if network == Some(&paperpaw_sdk::SettingValue::Bool(false)) {
+                off.push(plugin.clone());
+            }
+            let choice = match settings.text(&saving_setting(&plugin)) {
+                "core.saving.normal" => Exempt::Normal,
+                "core.saving.manual" => Exempt::Manual,
+                _ => Exempt::Follow,
+            };
+            if choice != Exempt::Follow {
+                exempt.push((plugin, choice));
+            }
+        }
+        self.works.off = off;
+        self.works.exempt = exempt;
+    }
+
     /// Runs the work that is due, and a job's step where allowed.
     pub(crate) fn run_work(&mut self) {
+        self.read_policy();
+        // Network work of a plugin whose network is off can never run.
+        let mut index = 0;
+        while index < self.works.entries.len() {
+            let entry = &self.works.entries[index];
+            if entry.work.network && self.works.network_off(&entry.owner) {
+                let entry = self.works.entries.remove(index);
+                let refused = WorkRefused {
+                    work: entry.work.id,
+                    refusal: Refusal::new(Reason::NetworkOff, Retry::Never),
+                };
+                self.output
+                    .commands
+                    .push(events::WORK_REFUSED.emit(refused));
+            } else {
+                index += 1;
+            }
+        }
         let env = self.shared.env(self.now);
         let moments = self.works.take_moments(&env, self.last_activity);
         let mut index = 0;
@@ -437,12 +561,16 @@ impl Kernel {
                 .plugins
                 .get(owner)
                 .is_none_or(|p| p.manifest.uses.contains(Uses::NETWORK));
-        if declared {
-            return Some(command);
-        }
         let owner = String::from(owner);
-        let refusal = Refusal::new(Reason::NotDeclared, Retry::Never);
-        let reason = String::from(Reason::NotDeclared.as_str());
+        self.read_policy();
+        let refusal = if !declared {
+            Refusal::new(Reason::NotDeclared, Retry::Never)
+        } else if self.works.network_off(&owner) {
+            Refusal::new(Reason::NetworkOff, Retry::Never)
+        } else {
+            return Some(command);
+        };
+        let reason = String::from(refusal.reason.as_str());
         let (event, params) = match command {
             Command::Http(request) => {
                 let reply = HttpReply::refused(refusal, request.params);
@@ -461,10 +589,63 @@ impl Kernel {
             _ => return None,
         };
         self.output.commands.push(Command::Emit(event, params));
-        self.warn_runtime(alloc::format!(
-            "{owner}: uses the network without declaring it (`Manifest::uses`)"
-        ));
+        if refusal.reason == Reason::NotDeclared {
+            self.warn_runtime(alloc::format!(
+                "{owner}: uses the network without declaring it (`Manifest::uses`)"
+            ));
+        }
         None
+    }
+
+    /// The reader's settings for each plugin that uses the network: its
+    /// network on or off, and its work in saving modes (ADR 0025), a
+    /// part of the group *Network per plugin* each, named as the plugin.
+    pub(crate) fn define_network_settings(&mut self) {
+        let networked: Vec<String> = self
+            .shared
+            .plugins
+            .iter()
+            .filter(|p| {
+                p.manifest.uses.contains(Uses::NETWORK) && p.manifest.id != crate::core_plugin::CORE
+            })
+            .map(|p| String::from(p.manifest.id.as_str()))
+            .collect();
+        for plugin in networked {
+            let section = alloc::format!("{plugin}.plugin.name");
+            let (Ok(network), Ok(saving)) = (
+                Id::parse(&network_setting(&plugin)),
+                Id::parse(&saving_setting(&plugin)),
+            ) else {
+                continue;
+            };
+            let specs = [
+                paperpaw_sdk::SettingSpec::new(
+                    network,
+                    "core.network.allowed",
+                    paperpaw_sdk::SettingKind::Bool,
+                    paperpaw_sdk::SettingValue::Bool(true),
+                )
+                .description("core.network.allowed.help"),
+                paperpaw_sdk::SettingSpec::new(
+                    saving,
+                    "core.saving.title",
+                    paperpaw_sdk::SettingKind::Choice(paperpaw_sdk::Choices::Fixed(
+                        &SAVING_CHOICES,
+                    )),
+                    paperpaw_sdk::SettingValue::Text(alloc::borrow::Cow::Borrowed(
+                        SAVING_CHOICES[0],
+                    )),
+                )
+                .description("core.saving.help"),
+            ];
+            for spec in specs {
+                let spec = spec.group(NETWORK_GROUP).section(section.clone());
+                if let Err(e) = self.shared.settings.define(spec) {
+                    self.warn_runtime(alloc::format!("{plugin}: {e:?}"));
+                }
+            }
+        }
+        self.works.stale = true;
     }
 }
 
@@ -641,8 +822,8 @@ mod tests {
     #[test]
     fn moments_come_from_events() {
         let mut queue = Queue::new(8);
-        queue.saw(&events::STARTED.id().clone());
-        queue.saw(&events::BOOK_CLOSED.id().clone());
+        queue.saw(&events::STARTED.id().clone(), &Params::new());
+        queue.saw(&events::BOOK_CLOSED.id().clone(), &Params::new());
         assert_eq!(queue.moments, Moments::WAKE | Moments::BOOK_CLOSED);
     }
 }
