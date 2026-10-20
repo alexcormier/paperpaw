@@ -5,12 +5,13 @@
 //!
 //! A book's pictures are decoded when a page shows them
 //! (`Document::prepare_image`), not when their chapter is converted: then
-//! they are noted ([`note`]) in `images.txt` of the book's cache, a line
+//! they are noted ([`note_all`]) in `images.txt` of the book's cache, a line
 //! each with the cache name, the size they are decoded to and their path
 //! in the archive, for pages to be laid out meanwhile.
 
 use alloc::format;
 use alloc::string::String;
+use alloc::vec::Vec;
 
 use paperpaw_sdk::Storage;
 use paperpaw_sdk::document::ImageRef;
@@ -37,54 +38,73 @@ fn list(dir: &str) -> String {
     format!("{dir}/images.txt")
 }
 
-/// Notes picture `base`, from `source` in the archive, to be decoded
-/// `size` large when a page shows it.
-pub(crate) fn note(storage: &dyn Storage, base: &str, size: (u32, u32), source: &str) {
-    let Some((dir, name)) = base.rsplit_once('/') else {
+/// A picture to be noted: its cache name (see [`file`]), the size it is
+/// decoded to and its path in the archive.
+#[derive(Debug)]
+pub(crate) struct Note {
+    pub base: String,
+    pub size: (u32, u32),
+    pub source: String,
+}
+
+/// Notes pictures to be decoded when a page shows them, those of one
+/// cache folder each, and empties `notes`. The list is read once for all
+/// of them, to leave out those noted before.
+pub(crate) fn note_all(storage: &dyn Storage, notes: &mut Vec<Note>) {
+    let Some(dir) = notes
+        .first()
+        .and_then(|n| n.base.rsplit_once('/'))
+        .map(|(d, _)| d)
+    else {
         return;
     };
-    if noted(storage, base).is_none() {
-        let line = format!("{name}\t{}\t{}\t{source}\n", size.0, size.1);
-        let _ = storage.append(&list(dir), line.as_bytes());
+    let path = list(dir);
+    let names: Vec<&str> = notes
+        .iter()
+        .map(|note| note.base.rsplit_once('/').map_or("", |(_, name)| name))
+        .collect();
+    // A picture of no size is never noted: it could not be laid out.
+    let mut fresh: Vec<bool> = notes
+        .iter()
+        .map(|note| note.size.0 > 0 && note.size.1 > 0)
+        .collect();
+    crate::cached::lines(storage, &path, |line| {
+        let noted = line.split('\t').next().unwrap_or_default();
+        for (name, fresh) in names.iter().zip(fresh.iter_mut()) {
+            *fresh &= *name != noted;
+        }
+        fresh.contains(&true)
+    });
+    let mut lines = String::new();
+    for ((note, name), _) in notes.iter().zip(&names).zip(&fresh).filter(|(_, f)| **f) {
+        let (width, height) = note.size;
+        lines.push_str(&format!("{name}\t{width}\t{height}\t{}\n", note.source));
     }
+    drop(names);
+    let _ = storage.append(&path, lines.as_bytes());
+    notes.clear();
 }
 
-/// Picture `base` as noted ([`note`]): the size it is decoded to and its
-/// path in the archive. The list is read a little at a time.
+/// Picture `base` as noted ([`note_all`]): the size it is decoded to and
+/// its path in the archive. The list is read a little at a time.
 pub(crate) fn noted(storage: &dyn Storage, base: &str) -> Option<((u32, u32), String)> {
     let (dir, name) = base.rsplit_once('/')?;
-    let path = list(dir);
-    let mut chunk = [0u8; 512];
-    let mut line: alloc::vec::Vec<u8> = alloc::vec::Vec::new();
-    let mut at = 0u64;
-    loop {
-        let n = storage.read_at(&path, at, &mut chunk).ok()?;
-        at += n as u64;
-        for &byte in &chunk[..n] {
-            if byte != b'\n' {
-                line.push(byte);
-                continue;
-            }
-            if let Some(found) = parse(&line, name) {
-                return Some(found);
-            }
-            line.clear();
-        }
-        if n == 0 {
-            return parse(&line, name);
-        }
-    }
+    let mut found = None;
+    crate::cached::lines(storage, &list(dir), |line| {
+        found = parse(line, name);
+        found.is_none()
+    });
+    found
 }
 
-/// A line of the list, if it notes picture `name`.
-fn parse(line: &[u8], name: &str) -> Option<((u32, u32), String)> {
-    let line = core::str::from_utf8(line).ok()?;
+/// A line of the list, if it notes picture `name` at a size it can have.
+fn parse(line: &str, name: &str) -> Option<((u32, u32), String)> {
     let mut fields = line.split('\t');
     if fields.next()? != name {
         return None;
     }
-    let width = fields.next()?.parse().ok()?;
-    let height = fields.next()?.parse().ok()?;
+    let width = fields.next()?.parse().ok().filter(|&w| w > 0)?;
+    let height = fields.next()?.parse().ok().filter(|&h| h > 0)?;
     Some(((width, height), String::from(fields.next()?)))
 }
 

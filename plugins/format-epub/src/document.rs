@@ -22,6 +22,10 @@ const MAX_FONT: u64 = 16 * 1024 * 1024;
 
 /// Marks a chapter whose converted length is not known yet.
 const UNKNOWN: u32 = u32::MAX;
+/// Marks a chapter that could not be converted since the book was opened:
+/// it is not tried again on every look at it, only when the book is
+/// opened again.
+const FAILED: u32 = u32::MAX - 1;
 
 /// An open EPUB. The package is read once into the cache; chapters are
 /// converted on first use and read from the cache afterwards. In memory:
@@ -74,16 +78,7 @@ struct Known {
 type SectionPages = (u32, Vec<(u32, String)>);
 
 fn paths(cache: &str, section: u32) -> CachePaths {
-    CachePaths {
-        dir: String::from(cache),
-        text: alloc::format!("{cache}/{section}.txt"),
-        index: alloc::format!("{cache}/{section}.idx"),
-        anchors: alloc::format!("{cache}/{section}.anc"),
-        links: alloc::format!("{cache}/{section}.lnk"),
-        positions: alloc::format!("{cache}/{section}.pos"),
-        xpointers: alloc::format!("{cache}/{section}.xpt"),
-        end: alloc::format!("{cache}/{section}.end"),
-    }
+    CachePaths::new(cache, &alloc::format!("{section}"))
 }
 
 /// What an XPointer points at: the section, the element path below
@@ -358,7 +353,7 @@ impl EpubDocument {
 
     fn length(&self, section: u32) -> Option<u32> {
         let length = self.lengths.get(section as usize)?.get();
-        (length != UNKNOWN).then_some(length)
+        (length != UNKNOWN && length != FAILED).then_some(length)
     }
 
     /// Converts a chapter if needed; returns its paths, text length and
@@ -368,13 +363,24 @@ impl EpubDocument {
         storage: &dyn Storage,
         section: u32,
     ) -> Result<(CachePaths, u32, u32), DocumentError> {
+        let (Some(chapter), Some(slot)) = (
+            self.spine.get(section as usize),
+            self.lengths.get(section as usize),
+        ) else {
+            return Err(DocumentError::Malformed(Cow::Borrowed("no such chapter")));
+        };
         let paths = self.paths(section);
         let length = match cached::u32_at(storage, &paths.end, 0) {
             Ok(length) => length,
+            Err(_) if slot.get() == FAILED => {
+                return Err(DocumentError::Malformed(Cow::Borrowed(
+                    "chapter cannot be read",
+                )));
+            }
             Err(_) => {
                 let entry = self
                     .archive
-                    .entry_by_record(storage, self.spine[section as usize].record)
+                    .entry_by_record(storage, chapter.record)
                     .map_err(package::error)?;
                 let mut rules = if self.styles {
                     package::styles(storage, &self.cache)
@@ -389,7 +395,7 @@ impl EpubDocument {
                     archive: &self.archive,
                     entry: &entry,
                 };
-                convert::convert(
+                let converted = convert::convert(
                     storage,
                     &source,
                     &paths,
@@ -397,12 +403,11 @@ impl EpubDocument {
                     self.styles,
                     self.color,
                     self.image_fit,
-                )?
+                );
+                converted.inspect_err(|_| slot.set(FAILED))?
             }
         };
-        if let Some(slot) = self.lengths.get(section as usize) {
-            slot.set(length);
-        }
+        slot.set(length);
         let blocks = (storage.size(&paths.index)? / u64::from(INDEX)) as u32;
         Ok((paths, length, blocks))
     }

@@ -23,6 +23,9 @@ const HTML_VERSION: u32 = 2;
 
 /// Marks a page whose converted length is not known yet.
 const UNKNOWN: u32 = u32::MAX;
+/// Marks a page that could not be converted since it was opened (see
+/// `document::FAILED`).
+const FAILED: u32 = u32::MAX - 1;
 /// Longest title kept.
 const TITLE: usize = 300;
 
@@ -141,16 +144,7 @@ impl HtmlDocument {
         if !styles {
             cache.push_str("/plain");
         }
-        let paths = CachePaths {
-            dir: cache.clone(),
-            text: format!("{cache}/0.txt"),
-            index: format!("{cache}/0.idx"),
-            anchors: format!("{cache}/0.anc"),
-            links: format!("{cache}/0.lnk"),
-            positions: format!("{cache}/0.pos"),
-            xpointers: format!("{cache}/0.xpt"),
-            end: format!("{cache}/0.end"),
-        };
+        let paths = CachePaths::new(&cache, "0");
         // Converted again when the file or the cache format changed.
         let head = crate::head(storage, path)?;
         let stamp = format!(
@@ -192,6 +186,11 @@ impl HtmlDocument {
     fn converted(&self, storage: &dyn Storage) -> Result<(u32, u32), DocumentError> {
         let length = match cached::u32_at(storage, &self.paths.end, 0) {
             Ok(length) => length,
+            Err(_) if self.length.get() == FAILED => {
+                return Err(DocumentError::Malformed(alloc::borrow::Cow::Borrowed(
+                    "cannot be read",
+                )));
+            }
             Err(_) => {
                 let source = Source::Html {
                     path: &self.path,
@@ -200,7 +199,7 @@ impl HtmlDocument {
                     pictures: self.pictures,
                 };
                 // Web pages' pictures are not fetched: no colour to ask for.
-                convert::convert(
+                let converted = convert::convert(
                     storage,
                     &source,
                     &self.paths,
@@ -208,7 +207,8 @@ impl HtmlDocument {
                     self.styles,
                     false,
                     convert::IMAGE_FIT,
-                )?
+                );
+                converted.inspect_err(|_| self.length.set(FAILED))?
             }
         };
         self.length.set(length);
@@ -228,7 +228,7 @@ impl Document for HtmlDocument {
 
     fn section_len(&self, _: u32) -> u32 {
         match self.length.get() {
-            UNKNOWN => self.size,
+            UNKNOWN | FAILED => self.size,
             length => length,
         }
     }

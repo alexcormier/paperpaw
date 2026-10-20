@@ -30,7 +30,13 @@
 //!
 //! All files are appended in small pieces while converting, and positions
 //! in a chapter are offsets into `<n>.txt`, so neither converting nor
-//! reading ever holds more than a block in memory.
+//! reading ever holds more than a block in memory. The pictures of a
+//! chapter are listed in `<n>.pic` while it is read and taken in after
+//! it, so they do not take memory either. What is kept per open element
+//! is bounded, and elements nested deeper than [`MAX_DEPTH`] are read as
+//! part of the deepest one, so no markup, however deep, exhausts memory;
+//! what is written for a chapter is bounded by its size (see
+//! [`budget`]).
 //!
 //! HTML files (e.g. web pages) are converted the same way, read as
 //! browsers do (see [`Source::Html`]), and FictionBooks, their elements
@@ -65,6 +71,26 @@ const LIMIT: usize = 4000;
 const FLUSH: usize = 1024;
 /// Index and anchors are written in chunks of about this size.
 const FLUSH_SMALL: usize = 256;
+/// Elements nested deeper are read as part of the deepest one.
+pub(crate) const MAX_DEPTH: usize = 128;
+/// Element names are kept to this length (no HTML name is longer).
+const MAX_NAME: usize = 32;
+/// Names of children counted per element; children of further names are
+/// numbered as if each were the first of its name.
+const MAX_CHILD_NAMES: usize = 16;
+/// Element paths (`div[2]/p[22]`) grow to at most this length; elements
+/// further down share the path of the last that fit.
+const MAX_PATH: usize = 160;
+/// A block of text from more text nodes than this, or whose text nodes'
+/// paths take more bytes, is continued in the next block, as one longer
+/// than [`LIMIT`] is.
+const MAX_ORIGINS: usize = 256;
+const MAX_ORIGIN_BYTES: usize = 8 * 1024;
+/// Pictures told apart per chapter, so each is listed once; more are
+/// listed as they come.
+const MAX_SEEN_PICTURES: usize = 512;
+/// Link targets longer than this are left out (no reader stores them).
+const MAX_HREF: usize = 2000;
 
 const FLAG_CONTINUES: u8 = 1;
 
@@ -132,7 +158,26 @@ pub(crate) struct CachePaths {
     pub links: String,
     pub positions: String,
     pub xpointers: String,
+    pub pictures: String,
     pub end: String,
+}
+
+impl CachePaths {
+    /// The files of chapter `name` (`0`, `12`, …) in the cache `dir`.
+    pub fn new(dir: &str, name: &str) -> Self {
+        let file = |extension: &str| alloc::format!("{dir}/{name}.{extension}");
+        CachePaths {
+            dir: String::from(dir),
+            text: file("txt"),
+            index: file("idx"),
+            anchors: file("anc"),
+            links: file("lnk"),
+            positions: file("pos"),
+            xpointers: file("xpt"),
+            pictures: file("pic"),
+            end: file("end"),
+        }
+    }
 }
 
 /// Images are decoded at most this large where the screen does not say
@@ -190,15 +235,14 @@ struct Frame {
     after: (Option<u16>, Option<u16>),
     /// The element's content is not shown (`<head>`, `display: none`, …).
     hides: bool,
-    /// Its number among its parent's children of the same name (1 for
-    /// the first).
-    index: u32,
     /// A link (`<a href>`): where it starts, and where it goes.
     link: Option<(u32, String)>,
     /// The reading matter of an HTML page: its content is shown.
     focus: bool,
-    /// How many children of each name it has had so far.
-    children: Vec<(String, u32)>,
+    /// How many children of each name (by its hash) it has had so far.
+    children: Vec<(u64, u32)>,
+    /// The length of the converter's element path before this element.
+    path: usize,
     /// Its children so far, elements and text nodes as crengine keeps
     /// them, and of these the text nodes.
     nodes: u32,
@@ -313,14 +357,21 @@ struct Converter<'a> {
     xpointers: String,
     /// The text node being read, if any.
     node: Option<TextNode>,
-    /// Where the characters of `text` come from.
+    /// Where the characters of `text` come from, and the bytes of the
+    /// paths of their text nodes.
     origins: Vec<Origin>,
+    origin_bytes: usize,
     /// Characters of `text` since the last origin.
     since_origin: u32,
     /// Where the next character pushed comes from, if from a text node.
     origin: Option<(Rc<str>, u32)>,
     /// Where the pending space comes from.
     space_origin: Option<(Rc<str>, u32)>,
+    /// The path of the innermost open element below `<body>`, e.g.
+    /// `div[2]/p[22]` (indexes count siblings of the same name).
+    path: String,
+    /// Where `<body>` is in the stack, while it is open.
+    body: Option<usize>,
     /// The element path of the block being collected.
     block_path: String,
     text: String,
@@ -339,6 +390,9 @@ struct Converter<'a> {
     padding: Option<u16>,
     /// Open elements.
     stack: Vec<Frame>,
+    /// Elements open below the deepest kept in `stack` (see
+    /// [`MAX_DEPTH`]).
+    overflow: u32,
     /// The book's stylesheet rules, plus those of `<style>` elements.
     rules: Rules,
     /// Whether the book's CSS applies.
@@ -346,8 +400,16 @@ struct Converter<'a> {
     css: css::Parser,
     /// Directory of the chapter in the archive, for relative links.
     base: String,
-    /// Images to decode after the chapter: (archive path, cache path).
-    images: Vec<(String, String)>,
+    /// Pending `<n>.pic` lines: the pictures to take in after the
+    /// chapter, by where they are (see [`Converter::image`]).
+    pictures: String,
+    /// Hashes of the pictures listed so far, sorted, to list each once.
+    seen: Vec<u64>,
+    /// Bytes written for the chapter so far, and the most there may be
+    /// (see [`budget`]). Once that is reached, nothing more is read.
+    written: core::cell::Cell<u64>,
+    budget: u64,
+    full: bool,
     kind: BlockKind,
     continues: bool,
     /// Depth inside elements whose content is not shown.
@@ -380,7 +442,7 @@ impl Converter<'_> {
             self.align.get_or_insert(align);
             self.indent = self.stack.last().and_then(|f| f.indent);
             self.size = self.stack.last().and_then(|f| f.size);
-            self.block_path = self.element_path();
+            self.block_path.clone_from(&self.path);
         }
         let start = self.text.len() as u32;
         if let Some((node, char)) = self.origin.take() {
@@ -389,6 +451,13 @@ impl Converter<'_> {
                 .last()
                 .is_some_and(|o| o.node == node && o.char + self.since_origin == char);
             if !follows {
+                if self
+                    .origins
+                    .last()
+                    .is_none_or(|o| !Rc::ptr_eq(&o.node, &node))
+                {
+                    self.origin_bytes += node.len();
+                }
                 self.origins.push(Origin {
                     at: start,
                     node,
@@ -442,9 +511,23 @@ impl Converter<'_> {
         self.text.clear();
         self.runs.clear();
         self.origins.clear();
+        self.origin_bytes = 0;
         self.kind = BlockKind::Paragraph;
-        if !self.images.iter().any(|(p, _)| *p == path) {
-            self.images.push((path, cache));
+        // Listed a line each: a path with a line break (`%0A`) names no
+        // picture of the book, and is shown as its alternative text.
+        if self.full || path.chars().any(char::is_control) {
+            return;
+        }
+        let hash = paperpaw_digest::fnv1a64(&path);
+        match self.seen.binary_search(&hash) {
+            Ok(_) => return,
+            Err(at) if self.seen.len() < MAX_SEEN_PICTURES => self.seen.insert(at, hash),
+            Err(_) => {}
+        }
+        self.pictures.push_str(&path);
+        self.pictures.push('\n');
+        if self.pictures.len() >= FLUSH_SMALL {
+            self.write_pictures();
         }
     }
 
@@ -475,6 +558,17 @@ impl Converter<'_> {
         for origin in &mut self.origins {
             origin.at -= n as u32;
         }
+        self.origin_bytes = self
+            .origins
+            .iter()
+            .enumerate()
+            .filter(|(i, o)| {
+                i.checked_sub(1)
+                    .and_then(|i| self.origins.get(i))
+                    .is_none_or(|before| !Rc::ptr_eq(&before.node, &o.node))
+            })
+            .map(|(_, o)| o.node.len())
+            .sum();
         self.text.replace_range(..n, "");
         let n = n as u32;
         self.runs.retain_mut(|run| {
@@ -523,10 +617,12 @@ impl Converter<'_> {
         })
     }
 
-    fn start(&mut self, name: &str, attrs: paperpaw_sdk::xml::Attrs<'_>, self_closing: bool) {
-        let _ = self_closing;
+    fn start(&mut self, name: &str, attrs: paperpaw_sdk::xml::Attrs<'_>) {
+        if self.full {
+            return;
+        }
         self.end_node();
-        let tag = local_name(name).to_ascii_lowercase();
+        let tag = element_name(name);
         let entered = self.dialect.as_mut().map(|d| d.enter(&tag, &attrs));
         let tag = match entered {
             Some(entered) => {
@@ -553,19 +649,21 @@ impl Converter<'_> {
                 .as_ref()
                 .is_some_and(|html| furniture(&tag, &attrs, html.focus.is_some()));
         // HTML leaves paragraphs and list items open: the next one ends
-        // them.
-        if self.html.is_some() {
-            let open = self.stack.last().map(|f| f.tag.as_str());
-            let closes = match tag.as_str() {
-                "li" => matches!(open, Some("li" | "p")),
-                "dt" | "dd" => matches!(open, Some("dt" | "dd" | "p")),
-                "td" | "th" => matches!(open, Some("td" | "th")),
-                "tr" => matches!(open, Some("tr" | "td" | "th")),
-                tag => is_block(tag) && open == Some("p"),
-            };
-            if closes && let Some(open) = open.map(String::from) {
-                self.end(&open);
-            }
+        // them. So do careless EPUBs with paragraphs, which XHTML never
+        // nests.
+        let open = self.stack.last().map(|f| f.tag.as_str());
+        let closes = match (self.html.is_some(), tag.as_str()) {
+            _ if self.overflow > 0 => false,
+            (false, "p") => self.dialect.is_none() && open == Some("p"),
+            (false, _) => false,
+            (true, "li") => matches!(open, Some("li" | "p")),
+            (true, "dt" | "dd") => matches!(open, Some("dt" | "dd" | "p")),
+            (true, "td" | "th") => matches!(open, Some("td" | "th")),
+            (true, "tr") => matches!(open, Some("tr" | "td" | "th")),
+            (true, tag) => is_block(tag) && open == Some("p"),
+        };
+        if closes && let Some(open) = open.map(String::from) {
+            self.close(&open);
         }
         // Block elements end the block before them (before their anchor is
         // placed, so it points at the new block), in the old style.
@@ -595,34 +693,63 @@ impl Converter<'_> {
             Some(size) => Some(size.of(parent_size.unwrap_or(100))),
             None => parent_size,
         };
-        // Its number among its parent's children of the same name.
-        if let Some(parent) = self.stack.last_mut() {
-            parent.nodes += 1;
+        if self.stack.len() >= MAX_DEPTH {
+            // Read as part of the deepest element kept.
+            self.overflow += 1;
+            return;
         }
+        // Its number among its parent's children of the same name.
+        let hash = paperpaw_digest::fnv1a64(&tag);
         let index = match self.stack.last_mut() {
-            Some(parent) => match parent.children.iter_mut().find(|(t, _)| *t == tag) {
-                Some((_, count)) => {
-                    *count += 1;
-                    *count
+            Some(parent) => {
+                parent.nodes += 1;
+                match parent.children.iter_mut().find(|(t, _)| *t == hash) {
+                    Some((_, count)) => {
+                        *count += 1;
+                        *count
+                    }
+                    None => {
+                        if parent.children.len() < MAX_CHILD_NAMES {
+                            parent.children.push((hash, 1));
+                        }
+                        1
+                    }
                 }
-                None => {
-                    parent.children.push((tag.clone(), 1));
-                    1
-                }
-            },
+            }
             None => 1,
         };
-        // `href`, also as FictionBook writes it (`l:href`).
+        // `href`, also as FictionBook writes it (`l:href`). A link inside
+        // a link is none (as in HTML), so one target at most is kept.
         let href = attrs
             .iter()
             .find(|(name, _)| local_name(name) == "href")
             .map(|(_, value)| decode(value));
         let link = match href {
-            Some(href) if tag == "a" && !hides && self.hidden == 0 => {
-                self.target(&href).map(|target| (self.here(), target))
+            Some(href)
+                if tag == "a"
+                    && !hides
+                    && self.hidden == 0
+                    && !self.stack.iter().any(|f| f.link.is_some()) =>
+            {
+                self.target(&href)
+                    .filter(|target| target.len() <= MAX_HREF)
+                    .map(|target| (self.here(), target))
             }
             _ => None,
         };
+        // Its path, below `<body>`.
+        let path = self.path.len();
+        if self.body.is_some() {
+            let segment = alloc::format!("{tag}[{index}]");
+            if path + 1 + segment.len() <= MAX_PATH {
+                if path > 0 {
+                    self.path.push('/');
+                }
+                self.path.push_str(&segment);
+            }
+        } else if tag == "body" {
+            self.body = Some(self.stack.len());
+        }
         let focus = self
             .html
             .as_ref()
@@ -633,10 +760,10 @@ impl Converter<'_> {
             self.hidden = self.hidden.saturating_sub(1);
         }
         self.stack.push(Frame {
-            index,
             link,
             focus,
             children: Vec::new(),
+            path,
             nodes: 0,
             texts: 0,
             block: is_block(&tag)
@@ -704,11 +831,22 @@ impl Converter<'_> {
 
     fn end(&mut self, name: &str) {
         self.end_node();
-        let tag = local_name(name).to_ascii_lowercase();
+        let tag = element_name(name);
         let tag = match self.dialect.as_mut() {
             Some(dialect) => dialect.leave(&tag),
             None => tag,
         };
+        if self.overflow > 0 {
+            // Ends the innermost of the elements not kept.
+            self.overflow -= 1;
+            return;
+        }
+        self.close(&tag);
+    }
+
+    /// Closes the innermost open element `tag`, and any left open inside
+    /// it.
+    fn close(&mut self, tag: &str) {
         let Some(open) = self.stack.iter().rposition(|f| f.tag == tag) else {
             return;
         };
@@ -716,11 +854,16 @@ impl Converter<'_> {
             if tag == "pre" {
                 self.flush();
                 self.pre = self.pre.saturating_sub(1);
-            } else if tag == "li" || is_block(&tag) {
+            } else if tag == "li" || is_block(tag) {
                 self.flush();
             }
         }
-        // Close the element (and any left open inside it).
+        if let Some(frame) = self.stack.get(open) {
+            self.path.truncate(frame.path);
+        }
+        if self.body.is_some_and(|body| body >= open) {
+            self.body = None;
+        }
         let (mut margin, mut padding) = (None, None);
         let here = self.position();
         for frame in self.stack.drain(open..) {
@@ -732,6 +875,7 @@ impl Converter<'_> {
             }
             if let Some((start, href)) = frame.link
                 && here > start
+                && !self.full
             {
                 self.links
                     .push_str(&alloc::format!("{start}\t{here}\t{href}\n"));
@@ -751,6 +895,9 @@ impl Converter<'_> {
     }
 
     fn characters(&mut self, text: &str) {
+        if self.full {
+            return;
+        }
         if self.stack.last().is_some_and(|f| f.tag == "style") {
             if self.styles {
                 self.css.feed(text, &mut self.rules);
@@ -794,7 +941,10 @@ impl Converter<'_> {
                 self.origin = origin;
                 self.push(c);
             }
-            if self.text.len() >= LIMIT {
+            if self.text.len() >= LIMIT
+                || self.origins.len() >= MAX_ORIGINS
+                || self.origin_bytes >= MAX_ORIGIN_BYTES
+            {
                 self.split();
             }
         }
@@ -803,7 +953,7 @@ impl Converter<'_> {
     /// A text node begins: counted as crengine counts it (see
     /// [`Converter::end_node`]).
     fn start_node(&mut self) {
-        let mut path = self.element_path();
+        let mut path = self.path.clone();
         let Some(parent) = self.stack.last_mut() else {
             return;
         };
@@ -899,6 +1049,7 @@ impl Converter<'_> {
         self.text.clear();
         self.runs.clear();
         self.origins.clear();
+        self.origin_bytes = 0;
         self.since_origin = 0;
         self.align = None;
         self.indent = None;
@@ -911,6 +1062,19 @@ impl Converter<'_> {
     /// Writes the first `len` bytes of the current text as a record and
     /// removes them from the text.
     fn write_record(&mut self, kind: BlockKind, len: usize) {
+        // Records are whole or left out, so what is written stays readable
+        // when the chapter's budget runs out.
+        let pending = self.out.len()
+            + self.index.len()
+            + self.anchors.len()
+            + self.links.len()
+            + self.positions.len()
+            + self.xpointers.len();
+        if self.full || self.written.get() + pending as u64 >= self.budget {
+            self.full = true;
+            self.drop_front(len);
+            return;
+        }
         let (kind, level) = encode_kind(kind);
         let flags = if self.continues { FLAG_CONTINUES } else { 0 };
         self.positions.push_str(&alloc::format!(
@@ -994,6 +1158,7 @@ impl Converter<'_> {
         if data.is_empty() || self.failed.is_some() {
             return None;
         }
+        self.written.set(self.written.get() + data.len() as u64);
         self.storage
             .append(path, data)
             .err()
@@ -1007,8 +1172,12 @@ impl Converter<'_> {
     }
 
     /// Notes that anchor `id` is here, written as they come (a book of
-    /// many sections would gather them all otherwise).
+    /// many sections would gather them all otherwise). An id with a line
+    /// break or tab, which no link can name, is left out.
     fn add_anchor(&mut self, id: &str) {
+        if self.full || id.chars().any(char::is_control) {
+            return;
+        }
         let at = self.here();
         self.anchors.push_str(&alloc::format!("{id}\t{at}\n"));
         if self.anchors.len() >= FLUSH_SMALL {
@@ -1020,20 +1189,6 @@ impl Converter<'_> {
         let failed = self.append(&self.paths.index, &self.index);
         self.failed = self.failed.take().or(failed);
         self.index.clear();
-    }
-
-    /// The path of the innermost open element below `<body>`, e.g.
-    /// `div[2]/p[22]` (indexes count siblings of the same name).
-    fn element_path(&self) -> String {
-        let body = self.stack.iter().position(|f| f.tag == "body");
-        let mut path = String::new();
-        for frame in body.map_or(&[][..], |b| &self.stack[b + 1..]) {
-            if !path.is_empty() {
-                path.push('/');
-            }
-            path.push_str(&alloc::format!("{}[{}]", frame.tag, frame.index));
-        }
-        path
     }
 
     fn write_positions(&mut self) {
@@ -1059,6 +1214,33 @@ impl Converter<'_> {
         self.failed = self.failed.take().or(failed);
         self.links.clear();
     }
+
+    fn write_pictures(&mut self) {
+        let failed = self.append(&self.paths.pictures, self.pictures.as_bytes());
+        self.failed = self.failed.take().or(failed);
+        self.pictures.clear();
+    }
+}
+
+/// An element's name as kept: without prefix, in lower case, at most
+/// [`MAX_NAME`] bytes.
+fn element_name(name: &str) -> String {
+    let mut name = local_name(name).to_ascii_lowercase();
+    let mut end = name.len().min(MAX_NAME);
+    while !name.is_char_boundary(end) {
+        end -= 1;
+    }
+    name.truncate(end);
+    name
+}
+
+/// The most bytes written for a chapter of `size` bytes: what it says
+/// grows a few times when its places are listed (`<n>.pos`, `<n>.xpt`),
+/// never by far more, and never past 64 MiB.
+fn budget(size: u64) -> u64 {
+    size.saturating_mul(16)
+        .saturating_add(1 << 20)
+        .min(64 << 20)
 }
 
 /// Elements without content or end tag in HTML.
@@ -1229,6 +1411,10 @@ pub(crate) fn convert(
         Source::Fb2 { .. } => Some(Box::new(crate::fb2::Fb2Dialect::default())),
         _ => None,
     };
+    let size = match source {
+        Source::Zip { entry, .. } => u64::from(entry.size),
+        Source::Html { path, .. } | Source::Fb2 { path, .. } => storage.size(path)?,
+    };
     let _ = storage.remove(&paths.end);
     for path in [
         &paths.text,
@@ -1237,6 +1423,7 @@ pub(crate) fn convert(
         &paths.links,
         &paths.positions,
         &paths.xpointers,
+        &paths.pictures,
     ] {
         storage.write(path, &[])?;
     }
@@ -1253,9 +1440,12 @@ pub(crate) fn convert(
         xpointers: String::new(),
         node: None,
         origins: Vec::new(),
+        origin_bytes: 0,
         since_origin: 0,
         origin: None,
         space_origin: None,
+        path: String::new(),
+        body: None,
         block_path: String::new(),
         // Blocks are split before they outgrow this, so it never grows.
         text: String::with_capacity(LIMIT + 4),
@@ -1266,11 +1456,16 @@ pub(crate) fn convert(
         margin: None,
         padding: None,
         stack: Vec::new(),
+        overflow: 0,
         rules,
         styles,
         css: css::Parser::new(&base),
         base,
-        images: Vec::new(),
+        pictures: String::new(),
+        seen: Vec::new(),
+        written: core::cell::Cell::new(0),
+        budget: budget(size),
+        full: false,
         kind: BlockKind::Paragraph,
         continues: false,
         // A page with reading matter shows nothing outside it.
@@ -1286,33 +1481,38 @@ pub(crate) fn convert(
         Source::Zip { .. } | Source::Fb2 { .. } => Tokenizer::new(),
         Source::Html { .. } => Tokenizer::html(),
     };
-    let mut handle = |token: Token<'_>| match token {
-        Token::Start {
-            name,
-            attrs,
-            self_closing,
-        } => {
-            converter.start(name, attrs, self_closing);
-            // Empty elements, also as HTML writes them (`<br>`).
-            if self_closing || is_void(local_name(name)) {
-                converter.end(name);
+    let full = core::cell::Cell::new(false);
+    let mut handle = |token: Token<'_>| {
+        match token {
+            Token::Start {
+                name,
+                attrs,
+                self_closing,
+            } => {
+                converter.start(name, attrs);
+                // Empty elements, also as HTML writes them (`<br>`).
+                if self_closing || is_void(local_name(name)) {
+                    converter.end(name);
+                }
             }
+            Token::End { name } => converter.end(name),
+            Token::Text(text) => converter.characters(&text),
+            Token::CData(text) => converter.characters(text),
         }
-        Token::End { name } => converter.end(name),
-        Token::Text(text) => converter.characters(&text),
-        Token::CData(text) => converter.characters(text),
+        full.set(converter.full);
     };
     match source {
+        // An archive entry is no longer inflated once the budget is spent.
         Source::Zip { archive, entry } => archive
             .stream(storage, entry, &mut |chunk| {
                 tokenizer.feed(chunk, &mut handle);
-                true
+                !full.get()
             })
             .map_err(error)?,
         Source::Html { path, .. } => {
             let mut chunk = [0u8; 1024];
             let mut at = 0u64;
-            loop {
+            while !full.get() {
                 let n = storage.read_at(path, at, &mut chunk)?;
                 if n == 0 {
                     break;
@@ -1333,58 +1533,87 @@ pub(crate) fn convert(
     converter.write_links();
     converter.write_positions();
     converter.write_xpointers();
+    converter.write_pictures();
     if let Some(e) = converter.failed {
         return Err(e);
     }
-    // Images after the text, so only one archive entry is inflated at a
-    // time. One that cannot be decoded is shown as its alternative text.
-    let images = core::mem::take(&mut converter.images);
     let length = converter.length;
     drop(converter);
-    // Decoded when a page shows them; their sizes now, from their first
-    // bytes, for the pages to be laid out (a big picture takes seconds to
-    // decode on small devices). Those whose size the first bytes do not
-    // say, decoded now.
-    if let Source::Zip { archive, .. } = source {
-        for (path, base) in &images {
-            if crate::pictures::has(storage, base, color) {
-                continue;
-            }
-            match image_size(storage, archive, path) {
-                Some((width, height)) => {
-                    crate::pictures::note(storage, base, fit.size(width, height), path);
-                }
-                None => {
-                    let file = crate::pictures::file(base, color);
-                    let _ = decode_image(storage, archive, path, &file, &paths.dir, fit, color);
-                }
-            }
-        }
-    }
-    // Pictures on the storage, beside a file made from Markdown.
-    if let Source::Html { pictures: true, .. } = source {
-        for (path, base) in &images {
-            if crate::pictures::has(storage, base, color) {
-                continue;
-            }
-            if let Ok(size) = storage.size(path) {
-                let file = crate::pictures::file(base, color);
-                let _ = decode_range(storage, path, 0, size, &file, fit, color);
-            }
-        }
-    }
-    if let Source::Fb2 { path, encoding } = source
-        && !images.is_empty()
-    {
-        let wanted: Vec<(String, String, Fit)> = images
-            .into_iter()
-            .map(|(id, base)| (id, crate::pictures::file(&base, color), fit))
-            .collect();
-        let _ = crate::fb2::decode_binaries(storage, path, *encoding, &wanted, &paths.dir, color);
-    }
+    take_pictures(storage, source, paths, color, fit);
+    let _ = storage.remove(&paths.pictures);
     // Last: its presence marks a complete conversion.
     storage.write(&paths.end, &length.to_le_bytes())?;
     Ok(length)
+}
+
+/// Pictures noted or decoded together, so the list of noted ones (or a
+/// FictionBook) is read once for each so many.
+const PICTURE_BATCH: usize = 32;
+
+/// Takes in the pictures listed in `<n>.pic`, after the text, so only one
+/// archive entry is inflated at a time. An EPUB's are decoded when a page
+/// shows them; their sizes now, from their first bytes, for the pages to
+/// be laid out (a big picture takes seconds to decode on small devices).
+/// Those whose size the first bytes do not say are decoded now, as are
+/// the pictures beside a file made from Markdown and a FictionBook's. One
+/// that cannot be decoded is shown as its alternative text.
+fn take_pictures(
+    storage: &dyn Storage,
+    source: &Source<'_>,
+    paths: &CachePaths,
+    color: bool,
+    fit: Fit,
+) {
+    let mut notes: Vec<crate::pictures::Note> = Vec::new();
+    let mut wanted: Vec<(String, String, Fit)> = Vec::new();
+    let decode_binaries = |wanted: &mut Vec<(String, String, Fit)>| {
+        if let Source::Fb2 { path, encoding } = source {
+            let _ =
+                crate::fb2::decode_binaries(storage, path, *encoding, wanted, &paths.dir, color);
+        }
+        wanted.clear();
+    };
+    crate::cached::lines(storage, &paths.pictures, |path| {
+        let base = image_path(&paths.dir, path);
+        if path.is_empty() || crate::pictures::has(storage, &base, color) {
+            return true;
+        }
+        match source {
+            Source::Zip { archive, .. } => match image_size(storage, archive, path) {
+                Some((width, height)) if width > 0 && height > 0 => {
+                    notes.push(crate::pictures::Note {
+                        base,
+                        size: fit.size(width, height),
+                        source: String::from(path),
+                    });
+                    if notes.len() >= PICTURE_BATCH {
+                        crate::pictures::note_all(storage, &mut notes);
+                    }
+                }
+                _ => {
+                    let file = crate::pictures::file(&base, color);
+                    let _ = decode_image(storage, archive, path, &file, &paths.dir, fit, color);
+                }
+            },
+            Source::Html { pictures, .. } => {
+                if let (true, Ok(size)) = (*pictures, storage.size(path)) {
+                    let file = crate::pictures::file(&base, color);
+                    let _ = decode_range(storage, path, 0, size, &file, fit, color);
+                }
+            }
+            Source::Fb2 { .. } => {
+                wanted.push((String::from(path), crate::pictures::file(&base, color), fit));
+                if wanted.len() >= PICTURE_BATCH {
+                    decode_binaries(&mut wanted);
+                }
+            }
+        }
+        true
+    });
+    crate::pictures::note_all(storage, &mut notes);
+    if !wanted.is_empty() {
+        decode_binaries(&mut wanted);
+    }
 }
 
 /// Alternative text with its whitespace collapsed, cut to at most `max`
@@ -1712,16 +1941,7 @@ mod tests {
             page.push_str(&alloc::format!("<a href=\"#n{i}\">{i}</a> "));
         }
         page.push_str("</p></body></html>");
-        let paths = CachePaths {
-            dir: String::from("c"),
-            text: String::from("c/0.txt"),
-            index: String::from("c/0.idx"),
-            anchors: String::from("c/0.anc"),
-            links: String::from("c/0.lnk"),
-            positions: String::from("c/0.pos"),
-            xpointers: String::from("c/0.xpt"),
-            end: String::from("c/0.end"),
-        };
+        let paths = CachePaths::new("c", "0");
         let storage = Spy {
             inner: paperpaw_sdk::MemoryStorage::new().with("page.html", page.as_str()),
             watched: paths.xpointers.clone(),

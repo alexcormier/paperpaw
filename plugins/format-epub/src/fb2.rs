@@ -40,6 +40,9 @@ use crate::convert::{self, CachePaths, INDEX, Source};
 const FB2_VERSION: u32 = 1;
 /// Marks a book whose converted length is not known yet.
 const UNKNOWN: u32 = u32::MAX;
+/// Marks a book that could not be converted since it was opened (see
+/// `document::FAILED`).
+const FAILED: u32 = u32::MAX - 1;
 /// Contents entries kept at most.
 const MAX_TOC: usize = 2000;
 /// Longest title of a contents entry kept.
@@ -406,16 +409,7 @@ impl Fb2Document {
         if !styles {
             cache.push_str("/plain");
         }
-        let paths = CachePaths {
-            dir: cache.clone(),
-            text: format!("{cache}/0.txt"),
-            index: format!("{cache}/0.idx"),
-            anchors: format!("{cache}/0.anc"),
-            links: format!("{cache}/0.lnk"),
-            positions: format!("{cache}/0.pos"),
-            xpointers: format!("{cache}/0.xpt"),
-            end: format!("{cache}/0.end"),
-        };
+        let paths = CachePaths::new(&cache, "0");
         // Read again when the file or the way it is read changed.
         let stamp = format!(
             "{}.{FB2_VERSION} {size} {:016x}\n",
@@ -477,12 +471,17 @@ impl Fb2Document {
     fn converted(&self, storage: &dyn Storage) -> Result<(u32, u32), DocumentError> {
         let length = match cached::u32_at(storage, &self.paths.end, 0) {
             Ok(length) => length,
+            Err(_) if self.length.get() == FAILED => {
+                return Err(DocumentError::Malformed(alloc::borrow::Cow::Borrowed(
+                    "cannot be read",
+                )));
+            }
             Err(_) => {
                 let source = Source::Fb2 {
                     path: &self.path,
                     encoding: self.encoding,
                 };
-                convert::convert(
+                let converted = convert::convert(
                     storage,
                     &source,
                     &self.paths,
@@ -490,7 +489,8 @@ impl Fb2Document {
                     self.styles,
                     self.color,
                     self.image_fit,
-                )?
+                );
+                converted.inspect_err(|_| self.length.set(FAILED))?
             }
         };
         self.length.set(length);
@@ -596,7 +596,7 @@ impl Document for Fb2Document {
 
     fn section_len(&self, _: u32) -> u32 {
         match self.length.get() {
-            UNKNOWN => self.size,
+            UNKNOWN | FAILED => self.size,
             length => length,
         }
     }
