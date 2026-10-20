@@ -230,7 +230,12 @@ fn details(env: &Env<'_>, info: &PluginInfo) -> String {
     let note = if info.manifest.id == CORE_PLUGIN {
         None
     } else if let Some(problem) = info.problem {
-        Some(i18n.tr(problem_key(problem)).to_string())
+        // Switched off by safe mode, or only held back at this start.
+        let key = match problem {
+            PluginProblem::SafeMode if !info.enabled => "plugin-manager.code.safe-mode-off",
+            _ => problem_key(problem),
+        };
+        Some(i18n.tr(key).to_string())
     } else if info.manifest.id == PLUGIN && info.required_for.is_empty() {
         Some(i18n.tr("plugin-manager.self").to_string())
     } else if !info.required_for.is_empty() {
@@ -279,36 +284,24 @@ fn details(env: &Env<'_>, info: &PluginInfo) -> String {
 /// switched off.
 fn safe_mode_notice(env: &Env<'_>, safe_mode: &SafeMode) -> String {
     let i18n = env.i18n;
-    let why = match safe_mode.reason {
-        SafeModeReason::KeyHeld => i18n.tr("plugin-manager.safe-mode.key"),
-        _ => i18n.tr("plugin-manager.safe-mode.failed"),
-    };
     let name = |id: &str| {
         env.plugins
             .get(id)
             .map_or_else(|| String::from(id), |p| String::from(p.name(i18n)))
     };
-    let last = match (&safe_mode.crashed, &safe_mode.last_loaded) {
-        (Some(id), _) => i18n.format(
+    // Short: a notice has a few lines. The plugin manager says the rest.
+    match (safe_mode.reason, &safe_mode.crashed, &safe_mode.last_loaded) {
+        (SafeModeReason::KeyHeld, ..) => String::from(i18n.tr("plugin-manager.safe-mode.key")),
+        (_, Some(id), _) => i18n.format(
             "plugin-manager.safe-mode.crashed",
             &[("name", Arg::Str(&name(id)))],
         ),
-        (None, Some(id)) => i18n.format(
+        (_, None, Some(id)) => i18n.format(
             "plugin-manager.safe-mode.last",
             &[("name", Arg::Str(&name(id)))],
         ),
-        (None, None) => String::new(),
-    };
-    let again = if safe_mode.switched_off.is_empty() {
-        ""
-    } else {
-        i18n.tr("plugin-manager.safe-mode.again")
-    };
-    [why, &last, again]
-        .into_iter()
-        .filter(|part| !part.is_empty())
-        .collect::<Vec<_>>()
-        .join(" ")
+        (_, None, None) => String::from(i18n.tr("plugin-manager.safe-mode.failed")),
+    }
 }
 
 /// Why a code plugin does not run, as said below its name.

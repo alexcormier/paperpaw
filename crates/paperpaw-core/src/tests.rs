@@ -1031,6 +1031,14 @@ impl Screen for HalfOverlay {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
         canvas.fill_rect(0, 45, 90, 45, Color::BLACK);
+        let area = Rect::new(0, 45, 90, 45);
+        canvas.describe(
+            paperpaw_sdk::semantics::Role::Text,
+            "overlay",
+            area,
+            false,
+            None,
+        );
     }
 
     fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
@@ -1172,6 +1180,9 @@ fn notices_show_over_everything_and_go_by_themselves() {
     assert_eq!(kernel.frame().pixel(0, 60), Color::BLACK);
     // Input still goes to the screen below.
     assert_eq!(kernel.active_screen().map(Id::as_str), Some("nt.base"));
+    // It is part of what the screen shows, read aloud too.
+    let shown = |kernel: &mut Kernel| kernel.describe().iter().any(|p| p.label == "overlay");
+    assert!(shown(&mut kernel));
 
     // Time is up: gone.
     let effects = kernel.tick(Instant(4000));
@@ -1182,6 +1193,7 @@ fn notices_show_over_everything_and_go_by_themselves() {
     render(&mut kernel);
     assert_eq!(kernel.frame().pixel(0, 60), Color::WHITE);
     assert_eq!(effects.wake_at(), None);
+    assert!(!shown(&mut kernel));
 }
 
 #[test]

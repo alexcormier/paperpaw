@@ -321,6 +321,11 @@ impl Kernel {
                 let area = own.unwrap_or(content);
                 active.screen.draw(&mut canvas.clipped(area), &env);
             }
+            // A notice showing over them is shown too.
+            if let Some((notice, _)) = &mut self.notice {
+                let area = notice.region(&env).unwrap_or(content);
+                notice.draw(&mut canvas.clipped(area), &env);
+            }
             if content.height < bounds.height {
                 let row = Rect::new(
                     0,
