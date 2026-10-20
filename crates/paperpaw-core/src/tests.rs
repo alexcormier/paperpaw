@@ -1002,6 +1002,13 @@ struct BaseScreen {
 impl Screen for BaseScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
         let clip = canvas.clip();
+        canvas.describe(
+            paperpaw_sdk::semantics::Role::Text,
+            "base",
+            clip,
+            false,
+            None,
+        );
         self.log
             .borrow_mut()
             .push(alloc::format!("draw base {}x{}", clip.width, clip.height));
@@ -1031,6 +1038,14 @@ impl Screen for HalfOverlay {
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
         canvas.fill_rect(0, 45, 90, 45, Color::BLACK);
+        let area = Rect::new(0, 45, 90, 45);
+        canvas.describe(
+            paperpaw_sdk::semantics::Role::Text,
+            "half",
+            area,
+            false,
+            None,
+        );
     }
 
     fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
@@ -1107,6 +1122,29 @@ fn overlays_redraw_only_their_region_and_close_on_outside_taps() {
     );
     assert_eq!(*log.borrow(), ["draw base 90x45"]);
     assert_eq!(kernel.frame().pixel(0, 60), Color::WHITE);
+}
+
+#[test]
+fn the_active_screen_is_described_alone() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(OverlayPlugin { log: log.clone() })
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    let labels = |described: Vec<paperpaw_sdk::semantics::Described>| -> Vec<String> {
+        described.into_iter().map(|d| d.label).collect()
+    };
+    assert_eq!(labels(kernel.described_active()), ["base"]);
+    press(&mut kernel, 100, "menu");
+    assert_eq!(kernel.active_screen().map(Id::as_str), Some("ov.half"));
+    // Everything shown, the base below the overlay too; the overlay
+    // alone.
+    assert_eq!(labels(kernel.described()), ["base", "half"]);
+    let half = kernel.described_active();
+    assert_eq!(half[0].clip, Rect::new(0, 45, 90, 45));
+    assert_eq!(labels(half), ["half"]);
 }
 
 /// The base screen and the half overlay as the notice.

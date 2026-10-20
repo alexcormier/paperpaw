@@ -348,6 +348,33 @@ impl Kernel {
         described
     }
 
+    /// What the screen shown tells as it draws (see
+    /// [`described`](Self::described)), alone: without the screens below
+    /// an overlay and the button hints, e.g. for checks that move the
+    /// focus through its parts. Draws it once, aside.
+    pub fn described_active(&mut self) -> Vec<paperpaw_sdk::semantics::Described> {
+        let bounds = self.framebuffer.bounds();
+        let Ok(mut aside) = Framebuffer::new(
+            bounds.width,
+            bounds.height,
+            paperpaw_platform::PixelFormat::Mono1,
+        ) else {
+            return Vec::new();
+        };
+        let env = self.shared.env(self.now);
+        let Some(active) = self.stack.last_mut() else {
+            return Vec::new();
+        };
+        let content = Rect::new(0, 0, env.device.display.width, env.device.display.height);
+        let area = active.screen.region(&env).unwrap_or(content);
+        let mut described = Vec::new();
+        active.screen.draw(
+            &mut aside.canvas().describing(&mut described).clipped(area),
+            &env,
+        );
+        described
+    }
+
     /// Times what the input started, and shows the busy mark first if it
     /// was slow the last time (or is a screen not opened yet), holding the
     /// work back until [`Kernel::proceed`].
