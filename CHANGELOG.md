@@ -28,6 +28,10 @@ change the plugin SDK.
   this file") instead of mixing both into it. A body for the plugin
   moves through the kernel without copies (it was held up to three
   times), and the X4 sends a request's body without copying it first.
+- Sockets: text read from a socket keeps a character whole where a read
+  ends inside it (it comes with the next read), so non-ASCII text, e.g.
+  Calibre's metadata, no longer turns into replacement characters at
+  random and no longer upsets a protocol that counts bytes.
 
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
