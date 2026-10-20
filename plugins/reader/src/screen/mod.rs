@@ -425,8 +425,10 @@ impl Screen for ReaderScreen {
             return Handled::Yes;
         }
         // The arrows turn pages as the page buttons do: the X4's buttons
-        // in front, a keyboard's arrows.
-        let turn = page_turn(action);
+        // in front, a keyboard's arrows; not while text or a link is
+        // chosen, where they move by words and lines.
+        let choosing = self.selection.is_some() || self.linking.is_some();
+        let turn = page_turn(action).filter(|_| !choosing);
         let action = turn.as_ref().unwrap_or(action);
         if *action == crate::actions::READ_ALOUD {
             self.start_aloud(cx);

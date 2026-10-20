@@ -304,12 +304,9 @@ fn buttons_move_by_words_and_stop_at_the_ends() {
     assert_eq!(reading.turned(), 0);
 }
 
-/// While a word is chosen, the arrows are taken as page turns first
-/// (`page_turn` in the reader's screen, "pages by the arrows") and only
-/// then given to the selection: Down moves to the next word and Up to the
-/// one before, never to another line.
+/// While a word is chosen, Up and Down move to the line above or below
+/// (the arrows turn pages only while nothing is chosen).
 #[test]
-#[ignore = "bug: while a word is chosen, Up and Down move by words (the arrows are made page turns first)"]
 fn buttons_move_by_lines_and_stop_at_the_ends() {
     let mut reading = numbered(BUTTONS);
     let words = reading.words();
