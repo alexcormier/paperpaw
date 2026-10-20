@@ -6,6 +6,29 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Security: a redirect no longer takes a request's credentials to
+  another server, nor any request from `https` down to plain `http`.
+  Every shell follows redirects by one rule (`paperpaw_http::follow`):
+  to another scheme, host or port only headers that never carry
+  credentials go along (`Accept`, `Range`, `User-Agent`, …; not
+  `Authorization`, cookies or a service's key headers), a body never
+  (the request fails), and from `https` to `http` not at all. Android
+  follows redirects itself for this, and now tells plugins where every
+  redirected answer came from (`final-url`), not only after a change
+  of scheme. Addresses with control characters are refused, spaces and
+  other bytes a request line cannot carry are percent-encoded, a
+  redirect's `Location` resolves as RFC 3986 says (`?query`, `../`),
+  and IPv6 hosts work (`http://[::1]:8080/`).
+- HTTP answers for a file (`save_to`): only a successful one (2xx) is
+  saved; an error's body (404, 500, also a 304) is its reason for the
+  plugin and leaves the file as it was, and the X4 replaces the old file
+  only once the new one is whole. A download longer than the limit
+  fails instead of being saved cut short. A second request saving to a
+  file another is still saving to fails at once ("already saving to
+  this file") instead of mixing both into it. A body for the plugin
+  moves through the kernel without copies (it was held up to three
+  times), and the X4 sends a request's body without copying it first.
+
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says

@@ -3,7 +3,10 @@
 //! time from the main loop (finding the host, connecting, sending,
 //! receiving), the protocol by `paperpaw_http`. A body meant for a file
 //! goes there as it comes (by way of a `.part` file, renamed once whole),
-//! so a large download never needs to fit in memory.
+//! so a large download never needs to fit in memory; an error's body is
+//! kept apart, never written over the file. Redirects are followed as
+//! `paperpaw_http::follow` says: never down to plain `http`, never with
+//! credentials to another server.
 //!
 //! `https://` goes over TLS (`tls`), with the certificate checked; one
 //! such connection at a time, for its memory.
@@ -28,6 +31,8 @@ const MAX_REDIRECTS: u32 = 10;
 /// Bytes gathered before they are appended to a file: few, larger writes
 /// to the card.
 const FILE_BUF: usize = 4096;
+/// Bytes of an error's body kept (its reason) where a file was asked for.
+const ERROR_BODY: usize = 4096;
 
 fn now_ms() -> u64 {
     esp_hal::time::Instant::now()
@@ -37,7 +42,8 @@ fn now_ms() -> u64 {
 
 /// Where a body goes.
 enum Sink {
-    Memory(Vec<u8>),
+    /// Up to so many bytes, the rest cut.
+    Memory(Vec<u8>, usize),
     File {
         /// The `.part` file written.
         part: String,
@@ -73,7 +79,8 @@ enum Phase {
     Resolving(dns::QueryHandle, u16),
     Exchanging {
         link: Link,
-        /// The head and body to send, and how much went.
+        /// The head to send; the body (`HttpCall::body`) follows it. How
+        /// much of both went.
         request: Vec<u8>,
         sent: usize,
         /// A file sent after them.
@@ -112,7 +119,7 @@ impl Calls {
                 buf: Vec::new(),
                 started: false,
             },
-            None => Sink::Memory(Vec::new()),
+            None => Sink::Memory(Vec::new(), call.max_response),
         };
         self.calls.push(Call {
             url: call.url.clone(),
@@ -255,8 +262,9 @@ impl Call {
             Ok(moved) => moved,
             Err(problem) => return Some(Err(problem)),
         };
+        let body = self.call.body.as_deref().unwrap_or_default();
         if link.ready(net) {
-            match send_request(link, net, storage, request, sent, upload.as_mut()) {
+            match send_request(link, net, storage, request, body, sent, upload.as_mut()) {
                 Ok(moved) => progress |= moved,
                 Err(problem) => return Some(Err(problem)),
             }
@@ -280,7 +288,8 @@ impl Call {
         if parser.head().is_some_and(|head| head.is_redirect()) {
             return self.redirect(net);
         }
-        let all_sent = *sent == request.len() && upload.as_ref().is_none_or(|u| u.at == u.size);
+        let all_sent =
+            *sent == request.len() + body.len() && upload.as_ref().is_none_or(|u| u.at == u.size);
         if parser.done() || (ended && all_sent && parser.close().is_ok()) {
             let head = parser.head().cloned().unwrap_or_default();
             return Some(Ok(HttpResponse {
@@ -303,7 +312,7 @@ impl Call {
                 "http: stalled, {} sent {}/{}",
                 link.describe(net),
                 sent,
-                request.len()
+                request.len() + body.len()
             );
             Some(Err("timed out"))
         } else {
@@ -338,9 +347,7 @@ impl Call {
             Some(upload) => Some(upload.size as usize),
             None => body.map(<[u8]>::len),
         };
-        let mut request =
-            paperpaw_http::request(&self.call.method, &url, &self.call.headers, body_len);
-        request.extend_from_slice(body.unwrap_or_default());
+        let request = paperpaw_http::request(&self.call.method, &url, &self.call.headers, body_len);
         // The secure session first: it takes the most memory.
         let tls = match url.https.then(|| crate::tls::Session::new(url.host)) {
             Some(Ok(session)) => Some(alloc::boxed::Box::new(session)),
@@ -364,8 +371,9 @@ impl Call {
         None
     }
 
-    /// Follows a redirect: the same request (a `GET` without body after a
-    /// 303, or a 301 or 302 of a `POST`) to where it leads.
+    /// Follows a redirect as `paperpaw_http::follow` says: the same
+    /// request (a `GET` without body after a 303, or a 301 or 302 of a
+    /// `POST`) to where it leads, without credentials to another server.
     fn redirect(&mut self, net: &mut Net) -> Option<Outcome> {
         let Phase::Exchanging { parser, .. } = &self.phase else {
             return None;
@@ -375,22 +383,25 @@ impl Call {
         if self.redirects > MAX_REDIRECTS {
             return Some(Err("too many redirects"));
         }
-        let Some(to) = head
-            .location
-            .as_deref()
-            .and_then(|location| paperpaw_http::redirect(&self.url, location))
-        else {
-            return Some(Err("not an address"));
+        let body = self.call.body.is_some() || self.call.body_from.is_some();
+        let redirect = match paperpaw_http::follow(
+            &self.url,
+            head.status,
+            head.location.as_deref().unwrap_or_default(),
+            &self.call.method,
+            body,
+        ) {
+            Ok(redirect) => redirect,
+            Err(refusal) => return Some(Err(refusal.reason())),
         };
-        if head.status == 303
-            || (matches!(head.status, 301 | 302) && self.call.method.eq_ignore_ascii_case("POST"))
-        {
+        if redirect.to_get {
             self.call.method = String::from("GET");
             self.call.body = None;
             self.call.body_from = None;
         }
+        redirect.keep(&mut self.call.headers);
         self.stop(net);
-        self.url = to;
+        self.url = redirect.url;
         self.phase = Phase::Waiting;
         self.until = now_ms() + OFFLINE_MS;
         None
@@ -406,10 +417,10 @@ impl Call {
     }
 
     /// The answer of a request done: the body in memory, or the file
-    /// made whole.
+    /// made whole (the old one replaced only then).
     fn finish(self, mut answer: HttpResponse, storage: &dyn Storage) -> HttpResponse {
         match self.sink {
-            Sink::Memory(body) => answer.body = body,
+            Sink::Memory(body, _) => answer.body = body,
             Sink::File { part, buf, started } => {
                 let path = self.call.save_to.as_deref().unwrap_or_default();
                 let written = if started {
@@ -417,8 +428,11 @@ impl Call {
                 } else {
                     storage.write(&part, &buf)
                 };
-                let _ = storage.remove(path);
-                if written.and_then(|()| storage.rename(&part, path)).is_err() {
+                let replaced = written.and_then(|()| {
+                    let _ = storage.remove(path);
+                    storage.rename(&part, path)
+                });
+                if replaced.is_err() {
                     let _ = storage.remove(&part);
                     return HttpResponse::failed(self.call.id, "could not write the file");
                 }
@@ -447,13 +461,19 @@ fn send_request(
     link: &mut Link,
     net: &mut Net,
     storage: &dyn Storage,
-    request: &[u8],
+    head: &[u8],
+    body: &[u8],
     sent: &mut usize,
     mut upload: Option<&mut Upload>,
 ) -> Result<bool, &'static str> {
     let mut progress = false;
-    while *sent < request.len() {
-        match link.send(net, &request[*sent..])? {
+    let total = head.len() + body.len();
+    while *sent < total {
+        let rest = match head.get(*sent..) {
+            Some(rest) if !rest.is_empty() => rest,
+            _ => &body[*sent - head.len()..],
+        };
+        match link.send(net, rest)? {
             0 => break,
             n => {
                 *sent += n;
@@ -461,7 +481,7 @@ fn send_request(
             }
         }
     }
-    while *sent == request.len()
+    while *sent == total
         && let Some(upload) = upload.as_deref_mut()
         && upload.at < upload.size
     {
@@ -484,8 +504,9 @@ fn send_request(
 
 /// The answer as far as it came, its body kept in `sink` (`got` bytes of
 /// at most `max`). Body bytes that come with the head wait until the head
-/// says whether they are wanted (not a redirect's). Whether some came,
-/// and whether the connection ended.
+/// says whether they are wanted (not a redirect's) and where they go (not
+/// to the file, for an error). Whether some came, and whether the
+/// connection ended.
 fn receive(
     link: &mut Link,
     net: &mut Net,
@@ -512,6 +533,15 @@ fn receive(
         if fed.is_err() {
             problem.get_or_insert("not an HTTP answer");
         }
+        // An error's body is its reason, not the file asked for.
+        if !had_head
+            && let Some(head) = parser.head()
+            && !(200..300).contains(&head.status)
+            && !head.is_redirect()
+            && matches!(sink, Sink::File { .. })
+        {
+            *sink = Sink::Memory(Vec::new(), ERROR_BODY);
+        }
         let redirect = parser.head().is_some_and(|head| head.is_redirect());
         if !early.is_empty() && !redirect {
             if let Err(e) = keep(sink, got, max, &early, storage) {
@@ -531,8 +561,8 @@ fn receive(
     }
 }
 
-/// Takes a piece of the body: into memory (cut at `max`) or towards the
-/// file (failing past `max`).
+/// Takes a piece of the body: into memory (cut at its limit) or towards
+/// the file (failing past `max`).
 fn keep(
     sink: &mut Sink,
     got: &mut u64,
@@ -542,8 +572,8 @@ fn keep(
 ) -> Result<(), &'static str> {
     *got += piece.len() as u64;
     match sink {
-        Sink::Memory(body) => {
-            let room = (max as usize).saturating_sub(body.len());
+        Sink::Memory(body, limit) => {
+            let room = limit.saturating_sub(body.len());
             let piece = &piece[..piece.len().min(room)];
             // Growing as it comes, without failing hard where memory ends.
             if body.try_reserve(piece.len()).is_err()
