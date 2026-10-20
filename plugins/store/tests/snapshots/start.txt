@@ -1,0 +1,6 @@
+Heading "More plugins"
+Row "Search" (focused)
+Row "New"
+Row "Reading, 1"
+Row "Look"
+Row "System, 1"

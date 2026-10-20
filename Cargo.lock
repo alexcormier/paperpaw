@@ -1411,6 +1411,7 @@ dependencies = [
 name = "paperpaw-fs"
 version = "0.4.0-dev"
 dependencies = [
+ "libc",
  "paperpaw-platform",
  "proptest",
 ]
@@ -1946,12 +1947,14 @@ version = "0.4.0-dev"
 dependencies = [
  "paperpaw-core",
  "paperpaw-digest",
+ "paperpaw-fs",
  "paperpaw-i18n",
  "paperpaw-json",
  "paperpaw-native",
  "paperpaw-platform",
  "paperpaw-plugin-fonts-browser",
  "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-keyboard",
  "paperpaw-plugin-menu",
  "paperpaw-sdk",
 ]
@@ -2105,6 +2108,7 @@ dependencies = [
  "paperpaw-layout",
  "paperpaw-native",
  "paperpaw-platform",
+ "paperpaw-qr",
  "paperpaw-text",
  "paperpaw-update",
  "paperpaw-xml",

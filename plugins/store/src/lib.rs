@@ -19,8 +19,13 @@ extern crate alloc;
 mod catalog;
 mod list;
 mod page;
-mod search;
+mod queue;
+mod room;
+mod rows;
+mod shots;
+mod source;
 mod trust;
+mod view;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -28,7 +33,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::install::{Installer, Received};
+use paperpaw_sdk::install::{Installer, Progress, Received};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::choice::Choice;
@@ -43,10 +48,12 @@ pub const PLUGIN: Id = Id::new_static("store");
 pub const OPEN: Id = Id::new_static("store.open");
 const LIST_SCREEN: Id = Id::new_static("store.list");
 const PAGE_SCREEN: Id = Id::new_static("store.plugin");
-const SEARCH_SCREEN: Id = Id::new_static("store.search");
+const VIEW_SCREEN: Id = Id::new_static("store.view");
+const SOURCE_SCREEN: Id = Id::new_static("store.source");
+const SHOTS_SCREEN: Id = Id::new_static("store.shots");
 const CHOICE: Id = Id::new_static("store.choice");
 /// The fonts browser's list, offered as the entry *Fonts*.
-const FONTS: Id = Id::new_static("fonts-browser.open");
+pub(crate) const FONTS: Id = Id::new_static("fonts-browser.open");
 /// The plugin manager's list of other places to get plugins.
 const MANAGER_MORE: Id = Id::new_static("plugin-manager.more");
 
@@ -100,9 +107,19 @@ impl Plugin for Store {
             factory: Box::new(|env, params| Box::new(page::PageScreen::new(env, params))),
         })?;
         r.add_screen(ScreenSpec {
-            id: SEARCH_SCREEN,
+            id: VIEW_SCREEN,
             title: Cow::Borrowed("store.title"),
-            factory: Box::new(|env, params| Box::new(search::SearchScreen::new(env, params))),
+            factory: Box::new(|env, params| Box::new(view::ViewScreen::new(env, params))),
+        })?;
+        r.add_screen(ScreenSpec {
+            id: SOURCE_SCREEN,
+            title: Cow::Borrowed("store.source"),
+            factory: Box::new(|env, params| Box::new(source::SourceScreen::new(env, params))),
+        })?;
+        r.add_screen(ScreenSpec {
+            id: SHOTS_SCREEN,
+            title: Cow::Borrowed("store.shots"),
+            factory: Box::new(|env, params| Box::new(shots::ShotsScreen::new(env, params))),
         })?;
         r.add_screen(ScreenSpec {
             id: CHOICE,
@@ -126,7 +143,13 @@ impl Plugin for Store {
         // Downloads go on while no screen of the store is open; one cut
         // off by a restart is begun anew from the plugin's page.
         r.on(DOWNLOADED, received)?;
-        r.on(events::STARTED, |env, _, _| INSTALLER.cancel(env.storage))?;
+        r.on(queue::FETCHED, queue::fetched)?;
+        r.on(events::STARTED, |env, _, _| {
+            // A download cut off by the restart is begun anew from its
+            // page, or first when the queue goes on.
+            queue::interrupted(env);
+            INSTALLER.cancel(env.storage);
+        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -134,13 +157,20 @@ impl Plugin for Store {
 }
 
 /// A file arrived (or did not): once all are here, the plugin installed
-/// if it may be (see [`trust`]), and said.
+/// if it may be (see [`trust`]), and said; then the next update waiting
+/// in the queue ([`queue`]) has its turn.
 fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
-    let done = match INSTALLER.received(env, reply, out) {
-        Received::Complete(done) => done,
-        Received::Failed(job) => return out.push(failed(env, &job.name)),
+    match INSTALLER.received(env, reply, out) {
+        Received::Complete(done) => finish(env, &done, out),
+        Received::Failed(job) => out.push(failed(env, &job.name)),
         Received::Next(_) | Received::Other => return,
-    };
+    }
+    queue::next(env, out);
+}
+
+/// Installs the plugin all of whose files are here, if it may be, and
+/// says so.
+fn finish(env: &Env<'_>, done: &Progress, out: &mut Vec<Command>) {
     let name = [("name", Arg::Str(&done.name))];
     let folder = INSTALLER.folder(env.storage).unwrap_or_default();
     let key = match trust::verdict(env, &done.plugin, &folder) {

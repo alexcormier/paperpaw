@@ -52,6 +52,7 @@
 extern crate alloc;
 
 mod disk;
+mod free;
 
 pub use disk::{BLOCK, BlockDisk, Blocks, DiskError, SharedDisk, VolumeError};
 
@@ -107,6 +108,10 @@ pub struct FatStorage<IO: ReadWriteSeek + 'static> {
     folders: RefCell<alloc::vec::Vec<(String, FatDir<IO>)>>,
     /// Writes back the disk's changed blocks, where the disk is shared.
     flush_disk: Option<alloc::boxed::Box<dyn Fn() -> bool>>,
+    /// Reads the volume's bytes, where the disk is shared: to count its
+    /// free space a part at a time ([`free`]).
+    read: Option<alloc::boxed::Box<free::Read>>,
+    free: RefCell<free::Free>,
 }
 
 impl<IO: ReadWriteSeek + 'static> core::fmt::Debug for FatStorage<IO> {
@@ -374,6 +379,8 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
             open: RefCell::new(alloc::vec::Vec::new()),
             folders: RefCell::new(alloc::vec::Vec::new()),
             flush_disk: None,
+            read: None,
+            free: RefCell::default(),
         }
     }
 
@@ -381,8 +388,88 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     /// changed blocks are written back when a call that changes the card
     /// returns (but [`Storage::append`]) and on [`Storage::sync`].
     pub fn with_disk<B: Blocks + 'static>(mut self, disk: SharedDisk<B>) -> Self {
+        let reader = disk.clone();
+        self.read = Some(alloc::boxed::Box::new(move |at, buf: &mut [u8]| {
+            // Where the file system was, kept: it seeks before it reads,
+            // but nothing of its own is moved.
+            let mut disk = reader.clone();
+            let Ok(was) = disk.seek(SeekFrom::Current(0)) else {
+                return false;
+            };
+            let read = disk.seek(SeekFrom::Start(at)).is_ok() && disk.read_exact(buf).is_ok();
+            disk.seek(SeekFrom::Start(was)).is_ok() && read
+        }));
         self.flush_disk = Some(alloc::boxed::Box::new(move || disk.flush_all().is_ok()));
         self
+    }
+
+    /// Follows a change of the free space: `taken` bytes in files written,
+    /// `freed` in files removed (each in whole clusters).
+    fn follow(&self, taken: u64, freed: u64) {
+        if self.read.is_some() {
+            let mut free = self.free.borrow_mut();
+            let (taken, freed) = (free.clusters(taken), free.clusters(freed));
+            free.changed(taken, freed);
+        }
+    }
+
+    /// The bytes of the file at `path` (0 where there is none), where the
+    /// free space is followed.
+    fn len_of(&self, path: &str) -> u64 {
+        if self.read.is_none() {
+            return 0;
+        }
+        Storage::size(self, path).unwrap_or(0)
+    }
+
+    /// The clusters the files and folders below `path` take, as bytes in
+    /// whole clusters, where the free space is followed.
+    fn tree_len(&self, path: &str) -> u64 {
+        if self.read.is_none() {
+            return 0;
+        }
+        let mut taken = 0;
+        let mut dirs = alloc::vec![String::from(path)];
+        while let Some(dir) = dirs.pop() {
+            taken += self.free.borrow().clusters(1) * self.cluster();
+            let _ = Storage::list(self, &dir, &mut |entry| {
+                let path = format!("{dir}/{}", entry.name);
+                if entry.is_dir {
+                    dirs.push(path);
+                } else {
+                    taken += self.free.borrow().clusters(entry.size) * self.cluster();
+                }
+            });
+        }
+        taken
+    }
+
+    /// The bytes the folders of `dir` that are not there yet take once
+    /// made (a cluster each), where the free space is followed.
+    fn new_dirs(&self, dir: &str) -> u64 {
+        if self.read.is_none() || dir.is_empty() {
+            return 0;
+        }
+        let mut made = 0;
+        let mut at = 0;
+        for part in dir.split('/') {
+            at += part.len();
+            if !self.is_there(&dir[..at]) {
+                made += 1;
+            }
+            at += 1;
+        }
+        made * self.cluster()
+    }
+
+    /// Bytes of a cluster, where known.
+    fn cluster(&self) -> u64 {
+        let free = self.free.borrow();
+        // One byte takes one cluster: its size is what `clusters` rounds to.
+        if free.clusters(1) == 0 {
+            return 0;
+        }
+        self.fs.cluster_size().into()
     }
 
     /// Whether a file or a folder is at `path`, looked up in its folder
@@ -667,17 +754,30 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     }
 
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
-        self.written(self.write_whole(path, data))
+        let before = self.len_of(path);
+        let made = self.new_dirs(parent(path));
+        let written = self.written(self.write_whole(path, data));
+        if written.is_ok() {
+            self.follow(made + data.len() as u64, before);
+        }
+        written
     }
 
     /// Kept in the open file until it is written back (see the [crate
     /// documentation](crate)).
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        let before = self.len_of(path);
+        let made = self.new_dirs(parent(path));
         self.with_open(path, true, |o| {
             o.file.seek(SeekFrom::End(0)).map_err(error)?;
             o.dirty = true;
             o.file.write_all(data).map_err(error)
-        })
+        })?;
+        // In whole clusters: what the file takes more, and its folders.
+        let more = self.free.borrow().clusters(before + data.len() as u64)
+            - self.free.borrow().clusters(before);
+        self.follow(made + more * self.cluster(), 0);
+        Ok(())
     }
 
     fn sync(&self) -> Result<(), StorageError> {
@@ -718,11 +818,26 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     }
 
     fn remove(&self, path: &str) -> Result<(), StorageError> {
-        self.written(self.remove_entry(path))
+        let before = self.len_of(path);
+        let removed = self.written(self.remove_entry(path));
+        if removed.is_ok() {
+            self.follow(0, before);
+        }
+        removed
     }
 
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
-        self.written(self.move_entry(from, to))
+        // A file it takes the place of is gone.
+        let replaced = if from.eq_ignore_ascii_case(to) {
+            0
+        } else {
+            self.len_of(to)
+        };
+        let moved = self.written(self.move_entry(from, to));
+        if moved.is_ok() {
+            self.follow(0, replaced);
+        }
+        moved
     }
 
     /// FAT names entries without regard to case.
@@ -730,12 +845,37 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         true
     }
 
+    /// With the disk shared ([`FatStorage::with_disk`], as on the
+    /// devices): at first what the card says of itself (FAT32), counted
+    /// exactly a part of the FAT at each ask, then followed as files are
+    /// written and removed; never all of the FAT at once (see [`free`]).
+    /// Without it, rust-fatfs's count (which may read all of the FAT).
+    fn free_space(&self) -> Option<u64> {
+        match &self.read {
+            Some(read) => self.free.borrow_mut().ask(read.as_ref()),
+            None => {
+                let stats = self.fs.stats().ok()?;
+                Some(u64::from(stats.free_clusters()) * u64::from(stats.cluster_size()))
+            }
+        }
+    }
+
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
-        self.written(self.create_dirs(path))
+        let made = self.new_dirs(path);
+        let created = self.written(self.create_dirs(path));
+        if created.is_ok() {
+            self.follow(made, 0);
+        }
+        created
     }
 
     fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
-        self.written(self.remove_tree(path))
+        let before = self.tree_len(path);
+        let removed = self.written(self.remove_tree(path));
+        if removed.is_ok() {
+            self.follow(0, before);
+        }
+        removed
     }
 }
 
@@ -778,6 +918,8 @@ mod tests {
     struct Cut {
         data: alloc::rc::Rc<RefCell<Vec<u8>>>,
         writes: alloc::rc::Rc<RefCell<Vec<Written>>>,
+        /// Blocks read so far.
+        reads: alloc::rc::Rc<core::cell::Cell<usize>>,
     }
 
     /// A block written to a card: its index, its bytes.
@@ -788,12 +930,18 @@ mod tests {
             Self {
                 data: alloc::rc::Rc::new(RefCell::new(data)),
                 writes: alloc::rc::Rc::default(),
+                reads: alloc::rc::Rc::default(),
             }
         }
 
         /// A card of 4 MB, formatted with `options`.
         fn formatted(options: FormatVolumeOptions) -> Self {
-            let mut formatted = StdIoWrapper::from(Cursor::new(vec![0u8; 4 << 20]));
+            Self::formatted_of(4 << 20, options)
+        }
+
+        /// A card of `size` bytes, formatted with `options`.
+        fn formatted_of(size: usize, options: FormatVolumeOptions) -> Self {
+            let mut formatted = StdIoWrapper::from(Cursor::new(vec![0u8; size]));
             fatfs::format_volume(&mut formatted, options).unwrap();
             Self::new(formatted.into_inner().into_inner())
         }
@@ -816,6 +964,7 @@ mod tests {
         fn read_block(&mut self, index: u32, block: &mut [u8; BLOCK]) -> Result<(), DiskError> {
             let at = index as usize * BLOCK;
             block.copy_from_slice(&self.data.borrow()[at..at + BLOCK]);
+            self.reads.set(self.reads.get() + 1);
             Ok(())
         }
 
@@ -835,6 +984,107 @@ mod tests {
     fn mounted(bytes: Vec<u8>) -> FatStorage<Disk> {
         let fs = FileSystem::new(StdIoWrapper::from(Cursor::new(bytes)), FsOptions::new()).unwrap();
         FatStorage::new(Box::leak(Box::new(fs)))
+    }
+
+    /// The free bytes rust-fatfs counts on the card now (all of the FAT
+    /// read where it must).
+    fn counted(s: &FatStorage<SharedDisk<Cut>>) -> u64 {
+        let stats = s.fs.stats().unwrap();
+        u64::from(stats.free_clusters()) * u64::from(stats.cluster_size())
+    }
+
+    /// Asks for the free space until it is counted exactly, each ask
+    /// reading only a part of the FAT; how many asks it took.
+    fn count_out(card: &Cut, s: &FatStorage<SharedDisk<Cut>>) -> usize {
+        for asks in 1..100 {
+            let before = card.reads.get();
+            s.free_space();
+            let read = card.reads.get() - before;
+            assert!(read <= free::STEP / BLOCK + 2, "{read} blocks at once");
+            if s.free.borrow().exact() {
+                return asks;
+            }
+        }
+        panic!("never counted");
+    }
+
+    /// A FAT32 card of 40 MB in clusters of 512 bytes: its FAT holds
+    /// 320 KB, more than one ask reads.
+    fn fat32() -> Cut {
+        let options = FormatVolumeOptions::new()
+            .fat_type(fatfs::FatType::Fat32)
+            .bytes_per_cluster(512);
+        Cut::formatted_of(40 << 20, options)
+    }
+
+    /// The card's own word serves at once, the FAT is counted a part at a
+    /// time, and what is written and removed is followed.
+    #[test]
+    fn free_space_is_counted_a_part_at_a_time() {
+        let card = fat32();
+        let s = card.storage();
+        let said = s.free_space().unwrap();
+        assert_eq!(said, counted(&s));
+        assert!(count_out(&card, &s) > 1);
+        assert_eq!(s.free_space(), Some(counted(&s)));
+        // Written, appended, made, replaced, moved and removed: followed
+        // cluster by cluster, without counting again.
+        s.write("books/a.bin", &vec![7u8; 64 * 1024]).unwrap();
+        assert_eq!(s.free_space(), Some(counted(&s)));
+        s.append("books/a.bin", &[1u8; 700]).unwrap();
+        s.sync().unwrap();
+        assert_eq!(s.free_space(), Some(counted(&s)));
+        s.write("books/a.bin", b"short").unwrap();
+        assert_eq!(s.free_space(), Some(counted(&s)));
+        s.write("b.bin", &vec![1u8; 3000]).unwrap();
+        s.rename("b.bin", "books/a.bin").unwrap();
+        assert_eq!(s.free_space(), Some(counted(&s)));
+        s.create_dir("x/y/z").unwrap();
+        s.write("x/y/z/c.bin", &vec![2u8; 5000]).unwrap();
+        assert_eq!(s.free_space(), Some(counted(&s)));
+        s.remove_dir_all("x").unwrap();
+        s.remove("books/a.bin").unwrap();
+        assert_eq!(s.free_space(), Some(counted(&s)));
+        // Asked on: nothing more to count.
+        let before = card.reads.get();
+        s.free_space();
+        assert_eq!(card.reads.get(), before);
+    }
+
+    /// A card that was not unmounted (the X4 never unmounts): rust-fatfs
+    /// would read all of its FAT; here the count the card keeps, out of
+    /// date, serves first, and counting a part at a time puts it right.
+    #[test]
+    fn a_card_not_unmounted_is_counted_a_part_at_a_time() {
+        let card = fat32();
+        let first = card.storage();
+        first.free_space();
+        first.write("big.bin", &vec![7u8; 200 * 1024]).unwrap();
+        first.sync().unwrap();
+        // Mounted again from what is on the card.
+        let card = Cut::new(card.image());
+        let s = card.storage();
+        let said = s.free_space().unwrap();
+        count_out(&card, &s);
+        let exact = s.free_space().unwrap();
+        assert_eq!(exact, counted(&s));
+        assert!(
+            said > exact,
+            "the count kept predates the file: {said} {exact}"
+        );
+    }
+
+    /// FAT12 and FAT16 keep no count: theirs is counted.
+    #[test]
+    fn small_cards_are_counted() {
+        for fat in [fatfs::FatType::Fat12, fatfs::FatType::Fat16] {
+            let card = Cut::formatted_of(8 << 20, FormatVolumeOptions::new().fat_type(fat));
+            let s = card.storage();
+            count_out(&card, &s);
+            assert_eq!(s.free_space(), Some(counted(&s)));
+            s.write("a.bin", &vec![1u8; 9000]).unwrap();
+            assert_eq!(s.free_space(), Some(counted(&s)));
+        }
     }
 
     #[test]

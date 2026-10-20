@@ -24,6 +24,7 @@ use paperpaw_native::index::{Index, Layout, Region, SECTOR};
 use paperpaw_native::{CODE_OFFSET, HEADER_LEN, Header, LINK_BASE, Relocator};
 use paperpaw_platform::Storage;
 use paperpaw_sdk::PluginProblem;
+use paperpaw_sdk::native::CodeRoom;
 
 use super::api::API;
 use super::partition::{Behind, PAGE, behind_image};
@@ -52,6 +53,8 @@ pub struct Flash {
     layout: Option<Option<Layout>>,
     /// The index sector was erased at this start.
     erased: bool,
+    /// Plugins placed at this start.
+    placed: u32,
 }
 
 impl Flash {
@@ -61,6 +64,7 @@ impl Flash {
             flash,
             layout: None,
             erased: false,
+            placed: 0,
         }
     }
 
@@ -107,6 +111,7 @@ impl Flash {
             .as_mut()
             .ok_or(PluginProblem::NoRoom)?;
         let placement = layout.place(header).map_err(|_| PluginProblem::NoRoom)?;
+        self.placed += 1;
         if placement.present {
             info!("native: {path} lies in flash at {:#x}", placement.at);
             return Ok(placement.base);
@@ -170,6 +175,27 @@ impl Flash {
             header.image_len.div_ceil(SECTOR)
         );
         Ok(placement.base)
+    }
+
+    /// The room for plugins at this start: the region they were placed
+    /// in, or, where none was placed, the one they would be (found, not
+    /// mapped); `None` where there is none (a bundle waits).
+    pub fn room(&self) -> Option<CodeRoom> {
+        let (start, end, images_end) = match &self.layout {
+            Some(Some(layout)) => {
+                let region = layout.region();
+                (region.start, region.end, layout.end())
+            }
+            Some(None) => return None,
+            None => {
+                let behind = behind_image(&mut self.flash.borrow_mut()).ok()?;
+                let (_, free) = free_entries();
+                let first_page = behind.start / PAGE;
+                let end = behind.end.min((first_page + free) * PAGE);
+                (behind.start, end, behind.start)
+            }
+        };
+        Some(CodeRoom::in_flash(start, end, images_end, self.placed))
     }
 
     /// Writes the index, if what lies in the region changed.

@@ -41,7 +41,9 @@ pub trait CodeLoader {
         code: &CodeFile<'_>,
     ) -> Result<Box<dyn Plugin>, PluginProblem>;
 
-    /// Every code plugin of this start is loaded.
+    /// Every code plugin of this start is loaded (in safe mode, none
+    /// was): e.g. say how much room is left for them
+    /// ([`paperpaw_sdk::native::keep_code_room`]).
     fn finish(&mut self, _storage: &dyn Storage) {}
 }
 
@@ -110,13 +112,14 @@ impl Kernel {
             }
             return;
         };
+        let storage = self.shared.storage.clone();
         if let Some(mut safe_mode) = safe_mode {
             self.hold_back(found, disabled, &mut safe_mode);
             native.safe_mode = Some(safe_mode);
             self.shared.native = Some(native);
+            loader.finish(storage.as_ref());
             return;
         }
-        let storage = self.shared.storage.clone();
         for plugin in found {
             let manifest = plugin.manifest();
             let id = manifest.id.clone();
@@ -504,6 +507,8 @@ mod tests {
         safe_mode.crashed = Some(String::from("zeta"));
         let kernel = kernel(&loader, "", Some(safe_mode));
         assert!(loader.asked.borrow().is_empty(), "no code at all");
+        // Told that loading is over: it says how much room is left.
+        assert!(*loader.finished.borrow());
         let zeta = info(&kernel, "zeta");
         assert_eq!(
             (zeta.enabled, zeta.problem),

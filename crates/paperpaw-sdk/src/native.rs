@@ -229,6 +229,180 @@ fn read_exact(
     Ok(())
 }
 
+/// The room code plugins run from, as the shell found it when it loaded
+/// them at this start: the X4's flash region behind the firmware, the X4
+/// Pro's PSRAM. The shell keeps it on the storage ([`keep_code_room`]);
+/// the store and the plugin manager read it ([`code_room`]) to say how
+/// much is left and to refuse a plugin that would not fit.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub struct CodeRoom {
+    /// Bytes code plugins may take in all.
+    pub total: u64,
+    /// Bytes the plugins loaded at this start take.
+    pub used: u64,
+    /// Each plugin's image takes a whole number of these bytes (at least
+    /// 1).
+    pub granule: u32,
+    /// Plugins at most, where the room limits their number (the X4's
+    /// index).
+    pub max_plugins: Option<u32>,
+    /// Plugins loaded at this start.
+    pub placed: u32,
+    /// The room is memory shared with everything else (the X4 Pro's
+    /// PSRAM): `total` is what was free when the plugins were loaded, an
+    /// estimate to say as "about".
+    pub shared: bool,
+}
+
+impl CodeRoom {
+    /// `total` bytes for code plugins, `used` of them taken, each image
+    /// taking whole `granule`s; no limit on their number, none placed, not
+    /// shared (see [`CodeRoom::with_plugins`], [`CodeRoom::shared`]).
+    pub fn new(total: u64, used: u64, granule: u32) -> Self {
+        Self {
+            total,
+            used,
+            granule: granule.max(1),
+            max_plugins: None,
+            placed: 0,
+            shared: false,
+        }
+    }
+
+    /// The same, with `placed` plugins placed at this start, `most` at
+    /// most.
+    pub fn with_plugins(mut self, placed: u32, most: Option<u32>) -> Self {
+        self.placed = placed;
+        self.max_plugins = most;
+        self
+    }
+
+    /// The same, in memory shared with everything else: what is free is
+    /// an estimate (the X4 Pro's PSRAM).
+    pub fn shared(mut self) -> Self {
+        self.shared = true;
+        self
+    }
+
+    /// The X4's room: the flash region from `start` to `end`, its first
+    /// sector the index of what lies in it, the images placed from there
+    /// up to `images_end` (`placed` of them), each in whole sectors, as
+    /// many as the index holds at most.
+    pub fn in_flash(start: u32, end: u32, images_end: u32, placed: u32) -> Self {
+        use paperpaw_native::index::{MAX_PLACED, SECTOR};
+        let first = start.saturating_add(SECTOR);
+        let total = end.saturating_sub(first);
+        let used = images_end.saturating_sub(first).min(total);
+        Self::new(u64::from(total), u64::from(used), SECTOR)
+            .with_plugins(placed, Some(MAX_PLACED as u32))
+    }
+
+    /// The X4 Pro's room: the PSRAM `used` by the `placed` images of this
+    /// start, and what was `free` of it beside them (shared with all else,
+    /// an estimate), each image aligned to a cache line of 32 bytes.
+    pub fn in_psram(used: u64, free: u64, placed: u32) -> Self {
+        Self::new(used.saturating_add(free), used, 32)
+            .with_plugins(placed, None)
+            .shared()
+    }
+
+    /// The bytes an image of `image_len` bytes, aligned to `align`, takes
+    /// where this room places it.
+    pub fn needs(&self, image_len: u64, align: u32) -> u64 {
+        let step = u64::from(self.granule.max(align).max(1));
+        image_len.div_ceil(step).saturating_mul(step)
+    }
+
+    /// Bytes left once `taken` bytes are taken.
+    pub fn left(&self, taken: u64) -> u64 {
+        self.total.saturating_sub(taken)
+    }
+
+    /// Whether one more plugin of `need` bytes ([`CodeRoom::needs`]) fits
+    /// beside `plugins` plugins taking `taken` bytes (see
+    /// [`installed_code_need`]).
+    pub fn fits(&self, taken: u64, plugins: u32, need: u64) -> bool {
+        let count = self.max_plugins.is_none_or(|most| plugins < most);
+        count && taken.saturating_add(need) <= self.total
+    }
+}
+
+/// Where the shell keeps the room of this start.
+const ROOM: &str = crate::data_path!("code-room.txt");
+
+/// The room code plugins have on this device, as the shell found it at
+/// this start; `None` where it loads none or did not say.
+pub fn code_room(storage: &dyn Storage) -> Option<CodeRoom> {
+    let text = crate::read_file(storage, ROOM, 256).ok()?;
+    let text = core::str::from_utf8(&text).ok()?;
+    let mut fields = text.split_whitespace();
+    let mut number = || fields.next()?.parse::<u64>().ok();
+    let (total, used, granule) = (number()?, number()?, number()?);
+    let (max, placed, shared) = (number()?, number()?, number()?);
+    Some(CodeRoom {
+        total,
+        used,
+        granule: u32::try_from(granule).ok()?.max(1),
+        max_plugins: u32::try_from(max).ok().filter(|&m| m > 0),
+        placed: u32::try_from(placed).ok()?,
+        shared: shared != 0,
+    })
+}
+
+/// Keeps `room` for [`code_room`] (`None`: there is none this start):
+/// the shell does, once it loaded the code plugins of this start. `false`
+/// if it could not be written.
+pub fn keep_code_room(storage: &dyn Storage, room: Option<&CodeRoom>) -> bool {
+    let Some(room) = room else {
+        return storage.remove(ROOM).is_ok() || !storage.exists(ROOM);
+    };
+    let text = alloc::format!(
+        "{} {} {} {} {} {}\n",
+        room.total,
+        room.used,
+        room.granule,
+        room.max_plugins.unwrap_or(0),
+        room.placed,
+        u8::from(room.shared)
+    );
+    let _ = storage.create_dir(crate::data::DIR);
+    storage.write(ROOM, text.as_bytes()).is_ok()
+}
+
+/// The bytes the code plugins installed take where `room` places them,
+/// and how many they are: each folder in `plugins` with a code file named
+/// `file` ([`Native::file`]), by its header. Those installed since the
+/// start (loaded only after a restart) count, those switched off too: what
+/// the next start would place at most. Folders whose names begin with a
+/// dot (a download being put together, e.g. `.clock.part`) are no plugins
+/// and do not count.
+pub fn installed_code_need(storage: &dyn Storage, room: &CodeRoom, file: &str) -> (u64, u32) {
+    let mut folders: Vec<String> = Vec::new();
+    let _ = storage.list(crate::builtin::PLUGIN_DIR, &mut |entry| {
+        if entry.is_dir && !entry.name.starts_with('.') {
+            folders.push(String::from(entry.name));
+        }
+    });
+    let (mut taken, mut count) = (0u64, 0u32);
+    for folder in folders {
+        let path = alloc::format!("{}/{folder}/{file}", crate::builtin::PLUGIN_DIR);
+        if let Some(header) = read_header(storage, &path) {
+            taken = taken.saturating_add(room.needs(u64::from(header.image_len), header.align));
+            count += 1;
+        }
+    }
+    (taken, count)
+}
+
+/// The header of the plugin file at `path`, if it has one this SDK reads
+/// (its first [`HEADER_LEN`] bytes only: the rest is not checked).
+pub fn read_header(storage: &dyn Storage, path: &str) -> Option<Header> {
+    let mut head = [0u8; HEADER_LEN];
+    read_exact(storage, path, 0, &mut head).ok()?;
+    Header::read(&head).ok()
+}
+
 /// Which build a code plugin fits: a hash of what it was built with.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Fingerprint(pub u64);
@@ -565,6 +739,112 @@ mod tests {
         let large = crate::MemoryStorage::new().with(INSTALLED, "x".repeat(70 * 1024));
         assert!(!remember_code(&large, "clock", &[2; 32]));
         assert_eq!(large.size(INSTALLED), Ok(70 * 1024));
+    }
+
+    /// A plugin file's header of an image of `len` bytes aligned to
+    /// `align`.
+    fn header_of(len: u32, align: u32) -> alloc::vec::Vec<u8> {
+        let header = Header {
+            chip: Chip::Esp32C3,
+            fingerprint: 1,
+            base: paperpaw_native::LINK_BASE,
+            image_len: len,
+            code_at: 64,
+            entry: 0,
+            api: 16,
+            relocs: 0,
+            align,
+            sha256: [0; 32],
+        };
+        header.to_bytes().to_vec()
+    }
+
+    #[test]
+    fn the_room_for_code_is_counted_as_the_device_places_it() {
+        let room = CodeRoom {
+            total: 40_960,
+            used: 8192,
+            granule: 4096,
+            max_plugins: Some(3),
+            placed: 1,
+            shared: false,
+        };
+        // Whole granules, or the image's own alignment where larger.
+        assert_eq!(room.needs(1, 16), 4096);
+        assert_eq!(room.needs(4096, 16), 4096);
+        assert_eq!(room.needs(4097, 16), 8192);
+        assert_eq!(room.needs(100, 16_384), 16_384);
+        assert_eq!(room.left(8192), 32_768);
+        assert!(room.fits(8192, 1, 32_768));
+        assert!(!room.fits(8192, 1, 32_769));
+        // No more plugins than the device places.
+        assert!(!room.fits(0, 3, 4096));
+        // Kept by the shell, read by the store; none at all is said too.
+        let storage = crate::MemoryStorage::new();
+        assert_eq!(code_room(&storage), None);
+        assert!(keep_code_room(&storage, Some(&room)));
+        assert_eq!(code_room(&storage), Some(room));
+        let shared = CodeRoom {
+            max_plugins: None,
+            shared: true,
+            granule: 32,
+            ..room
+        };
+        assert!(keep_code_room(&storage, Some(&shared)));
+        assert_eq!(code_room(&storage), Some(shared));
+        assert!(keep_code_room(&storage, None));
+        assert_eq!(code_room(&storage), None);
+        assert!(keep_code_room(&storage, None));
+    }
+
+    #[test]
+    fn the_room_is_made_as_each_device_places_code() {
+        // The X4: a region of 1 MB, its first sector the index, two
+        // images up to 40 KB after it.
+        let x4 = CodeRoom::in_flash(0x66_0000, 0x76_0000, 0x66_1000 + 40_960, 2);
+        assert_eq!((x4.total, x4.used, x4.granule), (1_044_480, 40_960, 4096));
+        assert_eq!((x4.placed, x4.max_plugins, x4.shared), (2, Some(83), false));
+        // Nothing placed yet: none of it used; a region too small: none.
+        assert_eq!(CodeRoom::in_flash(0, 0x10_0000, 0, 0).used, 0);
+        assert_eq!(CodeRoom::in_flash(0x1000, 0x1000, 0, 0).total, 0);
+        // The X4 Pro: what the images took and what was free beside them.
+        let pro = CodeRoom::in_psram(53_000, 6_000_000, 1);
+        assert_eq!((pro.total, pro.used, pro.granule), (6_053_000, 53_000, 32));
+        assert_eq!((pro.max_plugins, pro.shared), (None, true));
+    }
+
+    #[test]
+    fn installed_code_is_measured_by_its_headers() {
+        let room = CodeRoom {
+            total: 1 << 20,
+            granule: 4096,
+            ..CodeRoom::default()
+        };
+        let storage = crate::MemoryStorage::new()
+            .with("plugins/clock/code.ppn", header_of(5000, 16))
+            .with(
+                "plugins/clock/plugin.ini",
+                "[plugin]\n",
+            )
+            .with(
+                "plugins/theme/plugin.ini",
+                "[plugin]\n",
+            )
+            .with("plugins/broken/code.ppn", "PPNP but short")
+            // A download being put together: not installed.
+            .with("plugins/.clock.part/code.ppn", header_of(5000, 16))
+            .with("plugins/weather/code.ppn", header_of(100, 16));
+        // The theme has no code, the broken file no header.
+        assert_eq!(
+            installed_code_need(&storage, &room, "code.ppn"),
+            (8192 + 4096, 2)
+        );
+        assert_eq!(
+            read_header(&storage, "plugins/clock/code.ppn").map(|h| h.image_len),
+            Some(5000)
+        );
+        assert!(read_header(&storage, "plugins/broken/code.ppn").is_none());
+        assert_eq!(installed_code_need(&storage, &room, "code.so"), (0, 0));
     }
 
     #[test]

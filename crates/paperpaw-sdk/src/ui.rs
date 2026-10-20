@@ -283,7 +283,13 @@ impl UiStyle {
     /// Height of a row with a note: the title line, then up to
     /// [`NOTE_LINES`] lines of small text (see [`draw_noted_row`]).
     pub fn noted_row(&self) -> u32 {
-        let notes = (NOTE_LINES as f32 * self.small * NOTE_LINE_HEIGHT) as u32;
+        self.noted_row_of(NOTE_LINES)
+    }
+
+    /// Height of a row with a note of `lines` lines (e.g. 1 for denser
+    /// lists of many entries): a title line, then the note.
+    pub fn noted_row_of(&self, lines: usize) -> u32 {
+        let notes = (lines as f32 * self.small * NOTE_LINE_HEIGHT) as u32;
         self.title_band() + notes + self.gap * 3 / 2
     }
 
@@ -867,6 +873,23 @@ impl Header {
         } else {
             None
         }
+    }
+
+    /// Whether `point` is on the page number between the arrows, e.g. to
+    /// go to a page of a long list (the screen asks before
+    /// [`Header::tap`], which turns a page there).
+    pub fn on_page_number(
+        &self,
+        env: &Env<'_>,
+        style: &UiStyle,
+        point: Point,
+        page: Option<(usize, usize)>,
+    ) -> bool {
+        self.area.contains(point)
+            && self
+                .layout(env, style, page)
+                .pager
+                .is_some_and(|(_, label, _)| label.contains(point))
     }
 
     /// Whether `point` is on the header's title (e.g. to open a menu).
@@ -2263,6 +2286,39 @@ pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<Settin
         }
         _ => return None,
     })
+}
+
+// ---- QR codes ----------------------------------------------------------
+
+/// Draws `qr` as large as fits in `area`, centred, each module a whole
+/// number of pixels, with the four modules of white around it scanners
+/// expect; returns where it went with that white, or `None` (nothing
+/// drawn) if it does not fit.
+pub fn draw_qr(canvas: &mut Canvas<'_>, qr: &crate::qr::QrCode, area: Rect) -> Option<Rect> {
+    let modules = u16::try_from(qr.size()).ok()?.checked_add(8)?;
+    let scale = area.width.min(area.height) / modules;
+    if scale == 0 {
+        return None;
+    }
+    let side = scale * modules;
+    let x = area.x + (area.width - side) / 2;
+    let y = area.y + (area.height - side) / 2;
+    let (x0, y0) = (x + 4 * scale, y + 4 * scale);
+    canvas.fill(Rect::new(x, y, side, side), Color::WHITE);
+    for my in 0..qr.size() {
+        for mx in 0..qr.size() {
+            if qr.dark(mx, my) {
+                canvas.fill_rect(
+                    i32::from(x0 + mx as u16 * scale),
+                    i32::from(y0 + my as u16 * scale),
+                    u32::from(scale),
+                    u32::from(scale),
+                    Color::BLACK,
+                );
+            }
+        }
+    }
+    Some(Rect::new(x, y, side, side))
 }
 
 // ---- Images ------------------------------------------------------------

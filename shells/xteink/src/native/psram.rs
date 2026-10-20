@@ -10,6 +10,7 @@ use esp_alloc::MemoryCapability;
 use paperpaw_native::{CODE_OFFSET, HEADER_LEN, Header, Relocator};
 use paperpaw_platform::Storage;
 use paperpaw_sdk::PluginProblem;
+use paperpaw_sdk::native::CodeRoom;
 
 use super::api::API;
 
@@ -26,7 +27,11 @@ unsafe extern "C" {
 
 /// Places images in PSRAM.
 #[derive(Debug, Default)]
-pub struct Psram;
+pub struct Psram {
+    /// Bytes the images placed at this start take, and how many.
+    used: u64,
+    placed: u32,
+}
 
 impl Psram {
     /// Reads the image of the plugin file at `path` into PSRAM, checked
@@ -50,6 +55,8 @@ impl Psram {
         if ptr.is_null() {
             return Err(PluginProblem::NoRoom);
         }
+        self.used += layout.size().next_multiple_of(align) as u64;
+        self.placed += 1;
         // SAFETY: `len` bytes just allocated, used only here.
         let image = unsafe { core::slice::from_raw_parts_mut(ptr, len) };
         let base = ptr as u32;
@@ -74,6 +81,13 @@ impl Psram {
 
     /// Nothing to do once all are placed.
     pub fn finish(&mut self) {}
+
+    /// The room for plugins at this start: what they took, and the PSRAM
+    /// free beside it (shared with everything else kept there).
+    pub fn room(&self) -> Option<CodeRoom> {
+        let free = esp_alloc::HEAP.free_caps(MemoryCapability::External.into()) as u64;
+        Some(CodeRoom::in_psram(self.used, free, self.placed))
+    }
 }
 
 /// Reads the image into `image`, checks the file's digest and relocates

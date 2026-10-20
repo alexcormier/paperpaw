@@ -2533,6 +2533,7 @@ dependencies = [
  "paperpaw-layout",
  "paperpaw-native",
  "paperpaw-platform",
+ "paperpaw-qr",
  "paperpaw-text",
  "paperpaw-update",
  "paperpaw-xml",
