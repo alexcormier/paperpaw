@@ -538,14 +538,11 @@ impl Wall {
                 };
                 at.map(|r| r.grow(ring + self.style.line as u16 * 2 + 3))
             }
-            Zone::Pills => geo.pills.first().map(|r| {
-                Rect::new(
-                    0,
-                    r.y.saturating_sub(ring * 2),
-                    r.x * 2 + 2000,
-                    r.height + ring * 4,
-                )
-            }),
+            // The whole row: a pill's frame reaches out around it.
+            Zone::Pills => {
+                let (first, last) = (geo.pills.first()?, geo.pills.last()?);
+                Some(first.union(last).grow(ring * 2))
+            }
             Zone::Grid => {
                 let cover = self.cover_rect(focus);
                 let below = if geo.titles {
@@ -1229,10 +1226,11 @@ fn stack_lift(width: u16) -> u16 {
 }
 
 /// How the wall's covers are made small: as the panel shows them, but in
-/// black and white (dithered, an eighth of a byte a pixel) on small
-/// devices whose panels have a few grays (the X4 Pro): at 4 bits a pixel,
-/// nine covers took some 105 KB there, and the wall's pages peaked at
-/// 255 KB of 256. The large cover of the strip keeps its grays.
+/// black and white (dithered, an eighth of a byte a pixel) on devices of
+/// small memory whose panels show a few grays (e.g. the X4 once it draws
+/// its four grays): at 4 bits a pixel nine covers take some 105 KB, and
+/// the wall's pages peaked at 255 KB of 256 on such a device. The large
+/// cover of the strip keeps its grays.
 fn wall_format(env: &Env<'_>) -> paperpaw_sdk::PixelFormat {
     let display = env.device.display.format;
     let small = env.device.memory == paperpaw_sdk::MemoryClass::Small;
@@ -1806,12 +1804,7 @@ fn draw_stack(
     let size = style.small * 0.9;
     let small = font.line_metrics(size).line_height as u16;
     let inner = front.width.saturating_sub(4 * pad);
-    let lines: Vec<String> = font
-        .wrap(size, &card.name, f32::from(inner))
-        .into_iter()
-        .take(2)
-        .map(|r| card.name[r].to_string())
-        .collect();
+    let lines = name_lines(&font, size, &card.name, f32::from(inner));
     let plate_h = small * (lines.len() as u16 + 1) + pad * 2;
     let plate = Rect::new(
         front.x + pad,
@@ -1847,6 +1840,36 @@ fn draw_stack(
         &count,
         style.faint(80),
     );
+}
+
+/// A name in at most two lines of `width`, broken between words only: a
+/// word too long for a line, and what does not fit, end in "…".
+fn name_lines(
+    font: &paperpaw_sdk::FontHandle<'_>,
+    size: f32,
+    name: &str,
+    width: f32,
+) -> Vec<String> {
+    let mut lines: Vec<String> = Vec::new();
+    let mut words = name.split_whitespace().peekable();
+    while let Some(word) = words.next() {
+        let mut line = String::from(word);
+        while let Some(next) = words.peek() {
+            let longer = format!("{line} {next}");
+            if font.measure(size, &longer) > width {
+                break;
+            }
+            line = longer;
+            words.next();
+        }
+        if !lines.is_empty() && words.peek().is_some() {
+            // The last line takes the rest, shortened.
+            let rest: Vec<&str> = words.by_ref().collect();
+            line = format!("{line} {}", rest.join(" "));
+        }
+        lines.push(ui::fit(font, size, &line, width));
+    }
+    lines
 }
 
 impl Screen for Wall {
