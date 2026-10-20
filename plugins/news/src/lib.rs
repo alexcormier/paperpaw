@@ -618,3 +618,6 @@ mod tests {
         assert_eq!(feeds[1].name, "");
     }
 }
+
+#[cfg(test)]
+mod feeds_tests;
