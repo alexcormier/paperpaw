@@ -178,7 +178,6 @@ fn heads_with_huge_header_counts_hit_the_limit_in_small_pieces() {
 }
 
 #[test]
-#[ignore = "bug: MAX_HEAD is only checked while the head is incomplete, so a long head fed at once is taken"]
 fn a_head_longer_than_the_limit_is_malformed_however_it_comes() {
     let mut response = b"HTTP/1.1 200 OK\r\n".to_vec();
     response.extend_from_slice(b"X-Pad: ");

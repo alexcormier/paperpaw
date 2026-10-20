@@ -192,7 +192,11 @@ pub trait Screen {
 
     /// Called once when the screen is closed (gone back from, or replaced
     /// in its slot), before it is dropped: a moment to say so, e.g. the
-    /// reader emits that the book was closed.
+    /// reader emits that the book was closed. Also when the screen is made
+    /// anew for another size (turned, the row of hints changed): the old
+    /// one is dropped then too, so it keeps here what it would lose (a
+    /// position, text typed); the commands it gives then are not run, as
+    /// the screen stays open, made anew.
     fn on_close(&mut self, cx: &mut Cx<'_, '_>) {
         let _ = cx;
     }
@@ -215,7 +219,8 @@ pub struct Output {
     pub redraw: bool,
     /// Part of the screen to redraw, in screen coordinates.
     pub redraw_area: Option<Rect>,
-    /// When the active screen wants [`Screen::on_timer`] to be called.
+    /// When the screen wants [`Screen::on_timer`] to be called (see
+    /// [`Cx::wake_at`]).
     pub wake_at: Option<Instant>,
 }
 
@@ -265,8 +270,11 @@ impl<'a, 'e> Cx<'a, 'e> {
         self.output.redraw_area = Some(self.output.redraw_area.map_or(area, |a| a.union(&area)));
     }
 
-    /// Requests a call to [`Screen::on_timer`] at `at` (the earliest
-    /// request wins). Use `cx.env().now` for "as soon as possible".
+    /// Requests a call to [`Screen::on_timer`] of this screen at `at` (the
+    /// earliest request wins). Use `cx.env().now` for "as soon as
+    /// possible". It comes while the screen is on top: covered by another
+    /// (a menu, a keyboard), the time waits until it is on top again. It
+    /// is kept when the screen is made anew for another size.
     pub fn wake_at(&mut self, at: Instant) {
         self.output.wake_at = Some(self.output.wake_at.map_or(at, |w| w.min(at)));
     }

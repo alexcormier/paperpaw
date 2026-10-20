@@ -25,6 +25,7 @@ impl Plugin for Second {
             description: Cow::Borrowed("A second native plugin, to try several at once."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

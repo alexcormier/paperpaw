@@ -42,7 +42,9 @@ impl PngWriter {
         width: u32,
         height: u32,
     ) -> Result<Self, ImageError> {
-        if width == 0 || height == 0 || width + 1 > 0xffff {
+        // A row and its filter byte make one stored deflate block, of at
+        // most 0xffff bytes.
+        if width == 0 || height == 0 || width >= 0xffff {
             return Err(ImageError::Unsupported("PNG size"));
         }
         let mut head = Vec::new();

@@ -39,13 +39,57 @@ pub(crate) struct Timing {
     pub(crate) durations: Vec<(String, u32)>,
 }
 
+/// How a framebuffer draws, kept while it is made anew.
+#[derive(Debug, Clone, Copy)]
+struct Look {
+    inverted: bool,
+    pictures_kept: bool,
+    saturation: u16,
+    mono_coverage: u8,
+}
+
+impl Look {
+    fn of(framebuffer: &Framebuffer) -> Self {
+        Self {
+            inverted: framebuffer.is_inverted(),
+            pictures_kept: framebuffer.pictures_kept(),
+            saturation: framebuffer.saturation(),
+            mono_coverage: framebuffer.mono_coverage(),
+        }
+    }
+
+    /// `framebuffer`, drawing so.
+    fn on(self, mut framebuffer: Framebuffer) -> Framebuffer {
+        framebuffer.set_inverted(self.inverted);
+        framebuffer.set_pictures_kept(self.pictures_kept);
+        framebuffer.set_saturation(self.saturation);
+        framebuffer.set_mono_coverage(self.mono_coverage);
+        framebuffer
+    }
+}
+
+/// A framebuffer made by `make` in bands of `rows` rows, or of fewer
+/// (halved, down to `align`) where memory is short; `None` where not even
+/// that fits.
+fn with_fewer_rows(
+    rows: u16,
+    align: u16,
+    mut make: impl FnMut(u16) -> Result<Framebuffer, GraphicsError>,
+) -> Option<Framebuffer> {
+    let align = align.max(1);
+    let mut rows = rows.max(align);
+    loop {
+        if let Ok(framebuffer) = make(rows) {
+            return Some(framebuffer);
+        }
+        if rows <= align {
+            return None;
+        }
+        rows = (rows / 2 / align * align).max(align);
+    }
+}
+
 impl Kernel {
-    /// Draws everything that changed since the last call and passes it to
-    /// `out` as full-width rows of pixels, top to bottom: `out(top, rows)`
-    /// with `top` the screen row of the first one. Call it after each
-    /// [`start`](Kernel::start), [`handle`](Kernel::handle) or
-    /// [`tick`](Kernel::tick) whose effects contain a refresh, then refresh
-    /// the panel.
     /// Draws the whole screen again in four grays (two bits a pixel), in
     /// bands as [`Kernel::render`] passes them, for a shell that shows a
     /// frame's pictures in grays ([`Effects::grays`]): bands of as many
@@ -56,49 +100,75 @@ impl Kernel {
         let format = self.framebuffer.format();
         let bounds = self.framebuffer.bounds();
         let rows = self.framebuffer.rows();
-        let (inverted, saturation, kept, coverage) = (
-            self.framebuffer.is_inverted(),
-            self.framebuffer.saturation(),
-            self.framebuffer.pictures_kept(),
-            self.framebuffer.mono_coverage(),
-        );
+        let look = Look::of(&self.framebuffer);
         let bits = u32::from(format.bits_per_pixel()).max(1);
         let align = self.frame.row_align;
         let gray_rows = (((u32::from(rows) * bits / 2) as u16) / align * align)
             .max(align)
             .min(bounds.height);
-        let made = |width, height, rows, format| {
-            Framebuffer::banded(width, height, rows, format).map(|mut framebuffer| {
-                framebuffer.set_inverted(inverted);
-                framebuffer.set_pictures_kept(kept);
-                framebuffer.set_saturation(saturation);
-                framebuffer.set_mono_coverage(coverage);
-                framebuffer
-            })
-        };
         // The band goes first, the gray one taking its place.
         let Ok(none) = Framebuffer::new(1, 1, format) else {
             return false;
         };
         self.framebuffer = none;
-        let drawn = match made(bounds.width, bounds.height, gray_rows, PixelFormat::Gray2) {
-            Ok(gray) => {
-                self.framebuffer = gray;
+        let gray = with_fewer_rows(gray_rows, align, |rows| {
+            Framebuffer::banded(bounds.width, bounds.height, rows, PixelFormat::Gray2)
+        });
+        let drawn = match gray {
+            Some(gray) => {
+                self.framebuffer = look.on(gray);
                 self.frame.unrendered = Some(bounds);
                 self.render(out);
                 true
             }
-            Err(_) => false,
+            None => false,
         };
         if let Ok(none) = Framebuffer::new(1, 1, format) {
             self.framebuffer = none;
         }
-        if let Ok(band) = made(bounds.width, bounds.height, rows, format) {
-            self.framebuffer = band;
-        }
+        self.restore_frame(look, bounds.width, bounds.height, rows, format);
         drawn
     }
 
+    /// Makes the frame of `width` by `height` in bands of `rows` rows
+    /// (fewer where memory is short now, said in a warning), drawing as
+    /// `look` says; `false`, with a warning, where there is no memory for
+    /// it at all, which leaves nothing drawn until there is.
+    fn restore_frame(
+        &mut self,
+        look: Look,
+        width: u16,
+        height: u16,
+        rows: u16,
+        format: paperpaw_platform::PixelFormat,
+    ) -> bool {
+        let align = self.frame.row_align;
+        match with_fewer_rows(rows, align, |rows| {
+            Framebuffer::banded(width, height, rows, format)
+        }) {
+            Some(framebuffer) => {
+                if framebuffer.rows() < rows {
+                    let fewer = framebuffer.rows();
+                    self.warn_runtime(format!(
+                        "memory short: the frame is drawn in bands of {fewer} rows, not {rows}"
+                    ));
+                }
+                self.framebuffer = look.on(framebuffer);
+                true
+            }
+            None => {
+                self.warn_runtime(format!("no memory for a frame of {width}x{height}"));
+                false
+            }
+        }
+    }
+
+    /// Draws everything that changed since the last call and passes it to
+    /// `out` as full-width rows of pixels, top to bottom: `out(top, rows)`
+    /// with `top` the screen row of the first one. Call it after each
+    /// [`start`](Kernel::start), [`handle`](Kernel::handle) or
+    /// [`tick`](Kernel::tick) whose effects contain a refresh, then refresh
+    /// the panel.
     pub fn render(&mut self, out: &mut dyn FnMut(u16, FrameView<'_>)) {
         let Some(region) = self.frame.unrendered.take() else {
             return;
@@ -218,7 +288,12 @@ impl Kernel {
         true
     }
 
+    /// Marks `region` to be drawn again, as much of it as is on the
+    /// screen (an overlay may say it reaches past it).
     pub(crate) fn invalidate(&mut self, region: Rect) {
+        let Some(region) = region.intersection(&self.framebuffer.bounds()) else {
+            return;
+        };
         self.frame.pending = Some(self.frame.pending.map_or(region, |p| p.union(&region)));
     }
 
@@ -395,6 +470,7 @@ impl Kernel {
     /// Draws the whole screen again, refreshed fully: after the shell
     /// showed something of its own on the panel (e.g. a test picture).
     pub fn draw_again(&mut self, now: Instant) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         self.apply(Command::Redraw(RefreshMode::Full));
         self.finish()
@@ -402,11 +478,21 @@ impl Kernel {
 
     /// The screen has another size, e.g. turned (see
     /// [`Kernel::rotation`]): every open screen is made anew for it, with
-    /// what it was opened with, and the whole screen is drawn again.
+    /// what it was opened with, and the whole screen is drawn again. Turned
+    /// half way round, the size stays: the row of hints may come or go,
+    /// and the whole screen is drawn again.
     pub fn resize(&mut self, now: Instant, width: u16, height: u16) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
-        let display = self.shared.device.display;
-        if (display.width, display.height) != (width, height) && width > 0 && height > 0 {
+        let panel = self.framebuffer.bounds();
+        let format = self.shared.device.display.format;
+        if (panel.width, panel.height) == (width, height) {
+            let row = self.hint.height;
+            self.apply_hint_height();
+            if self.hint.height == row {
+                self.apply(Command::Redraw(RefreshMode::Full));
+            }
+        } else if width > 0 && height > 0 {
             // Bands take as much memory as before: fewer rows where the
             // screen got wider.
             let rows = match self.frame.band {
@@ -417,37 +503,52 @@ impl Kernel {
                 }
                 None => height,
             };
-            let (inverted, saturation, kept, coverage) = (
-                self.framebuffer.is_inverted(),
-                self.framebuffer.saturation(),
-                self.framebuffer.pictures_kept(),
-                self.framebuffer.mono_coverage(),
-            );
-            let before = (display.width, display.height, self.framebuffer.rows());
+            let look = Look::of(&self.framebuffer);
+            let before = self.framebuffer.rows();
             // The old frame goes first, the new one taking its place: beside
             // it, it would split the largest free block where memory is
             // short.
-            if let Ok(none) = Framebuffer::new(1, 1, display.format) {
+            if let Ok(none) = Framebuffer::new(1, 1, format) {
                 self.framebuffer = none;
             }
-            let made = Framebuffer::banded(width, height, rows, display.format);
-            let turned = made.is_ok();
-            if let Ok(mut framebuffer) =
-                made.or_else(|_| Framebuffer::banded(before.0, before.1, before.2, display.format))
-            {
-                framebuffer.set_inverted(inverted);
-                framebuffer.set_pictures_kept(kept);
-                framebuffer.set_saturation(saturation);
-                framebuffer.set_mono_coverage(coverage);
-                self.framebuffer = framebuffer;
-            }
+            let turned = self.restore_frame(look, width, height, rows, format);
             if turned {
                 self.shared.device.display.width = width;
                 self.shared.device.display.height = height;
                 self.hint.height = self.wanted_hint_height();
                 self.remake_screens();
+            } else {
+                self.restore_frame(look, panel.width, panel.height, before, format);
             }
         }
         self.finish()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use paperpaw_platform::PixelFormat;
+
+    /// Where memory is short, the frame is made in fewer rows, halved down
+    /// to the rows the panel takes at once; without memory even for that,
+    /// none.
+    #[test]
+    fn frames_are_made_in_fewer_rows_where_memory_is_short() {
+        let fits = |most: u16| {
+            move |rows: u16| {
+                if rows <= most {
+                    Framebuffer::banded(90, 100, rows, PixelFormat::Mono1)
+                } else {
+                    Err(GraphicsError::OutOfMemory { bytes: 0 })
+                }
+            }
+        };
+        let made = |most, rows, align| with_fewer_rows(rows, align, fits(most)).map(|f| f.rows());
+        assert_eq!(made(100, 100, 8), Some(100));
+        assert_eq!(made(30, 100, 8), Some(24));
+        assert_eq!(made(8, 100, 8), Some(8));
+        assert_eq!(made(7, 100, 8), None);
+        assert_eq!(made(60, 100, 1), Some(50));
     }
 }

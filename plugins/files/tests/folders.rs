@@ -108,6 +108,7 @@ fn choose(app: &mut App, label: &str) {
 /// (files only) and so always started at the top.
 #[test]
 fn it_starts_in_the_folder_set() {
+    let _turn = turn();
     let card = Card::new("start");
     for device in DEVICES {
         let mut app = chooser(device, card.storage(), "files.root");
@@ -127,6 +128,7 @@ fn it_starts_in_the_folder_set() {
 
 #[test]
 fn folders_open_and_parent_folder_goes_up_to_the_folder_left() {
+    let _turn = turn();
     let card = Card::new("up");
     for device in DEVICES {
         let mut app = chooser(device, card.storage(), "files.root");
@@ -161,6 +163,7 @@ fn folders_open_and_parent_folder_goes_up_to_the_folder_left() {
 
 #[test]
 fn a_folder_chosen_by_buttons_or_touch_is_kept_and_the_library_shows_it() {
+    let _turn = turn();
     let card = Card::new("choose");
     for device in DEVICES {
         let storage = card.storage();
@@ -181,8 +184,14 @@ fn a_folder_chosen_by_buttons_or_touch_is_kept_and_the_library_shows_it() {
         // The library lists that folder now, and after a restart too.
         let mut app = app.restart();
         app.run(actions::LIBRARY);
-        assert!(app.shows("Old"), "{}", app.described());
-        assert!(app.shows("B"), "{}", app.described());
+        // Its books, those in its folder Old too.
+        let books: Vec<String> = app
+            .parts()
+            .into_iter()
+            .filter(|p| p.role == Role::Row)
+            .map(|p| p.label)
+            .collect();
+        assert_eq!(books, ["a", "b"], "{}", app.described());
         assert!(!app.shows("Poems"), "{}", app.described());
         storage.set_config("");
     }
@@ -190,6 +199,7 @@ fn a_folder_chosen_by_buttons_or_touch_is_kept_and_the_library_shows_it() {
 
 #[test]
 fn back_goes_up_first_and_closes_the_chooser_at_the_top() {
+    let _turn = turn();
     let card = Card::new("back");
     let mut app = chooser(X4, card.storage(), "files.root");
     choose(&mut app, "Novels/");
@@ -215,6 +225,7 @@ fn back_goes_up_first_and_closes_the_chooser_at_the_top() {
 
 #[test]
 fn a_folder_set_that_is_gone_starts_at_the_top() {
+    let _turn = turn();
     let card = Card::new("gone");
     let storage = card.storage();
     storage.set_config("[files]\nroot = books/Vanished\n");
@@ -224,6 +235,7 @@ fn a_folder_set_that_is_gone_starts_at_the_top() {
 
 #[test]
 fn a_new_folder_is_made_where_shown_and_opened() {
+    let _turn = turn();
     let card = Card::new("new");
     for device in DEVICES {
         let storage = card.storage();
@@ -250,6 +262,7 @@ fn a_new_folder_is_made_where_shown_and_opened() {
 
 #[test]
 fn new_folder_names_cannot_leave_the_folder_or_name_none() {
+    let _turn = turn();
     let card = Card::new("escape");
     let storage = card.storage();
     let before = storage.names("books");
@@ -281,6 +294,7 @@ fn new_folder_names_cannot_leave_the_folder_or_name_none() {
 
 #[test]
 fn many_folders_are_paged_and_each_is_reached() {
+    let _turn = turn();
     let card = Card::new("many");
     let storage = card.storage();
     for n in 0..40 {

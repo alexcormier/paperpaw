@@ -183,7 +183,6 @@ proptest! {
     /// As [`wake_ups_asked_for_are_never_in_the_past`], with several
     /// fingers.
     #[test]
-    #[ignore = "bug: two fingers resting on the screen ask to be woken at once, for ever"]
     fn wake_ups_with_several_fingers_are_never_in_the_past(steps in prop::collection::vec(step(3), 0..40)) {
         wakes_ahead_after(&steps)?;
     }
@@ -192,7 +191,6 @@ proptest! {
 /// Found by `wake_ups_with_several_fingers_are_never_in_the_past`: two
 /// fingers down make no long press, but the time of one stays asked for.
 #[test]
-#[ignore = "bug: two fingers resting on the screen ask to be woken at once, for ever"]
 fn two_fingers_resting_on_the_screen_ask_for_no_wake_up_in_the_past() {
     let down = |id| Step::Pointer {
         id,
@@ -231,7 +229,6 @@ proptest! {
     /// As [`any_input_sequence_leaves_a_working_kernel`], with presses
     /// repeated by the system and releases lost or doubled.
     #[test]
-    #[ignore = "bug: a release eaten for a dropped press leaves a repeated press held down"]
     fn any_button_order_leaves_a_working_kernel(steps in prop::collection::vec(step(3), 0..60)) {
         works_after(&steps, false)?;
     }
@@ -240,7 +237,6 @@ proptest! {
 /// Found by `any_button_order_leaves_a_working_kernel`: the clock went
 /// back between a frame shown and a repeated press.
 #[test]
-#[ignore = "bug: a release eaten for a dropped press leaves a repeated press held down"]
 fn a_repeated_press_dropped_after_the_clock_went_back_does_not_stick() {
     let steps = [Step::Press(0), Step::Shown, Step::Wait(-2), Step::Press(0)];
     works_after(&steps, false).unwrap();
@@ -335,7 +331,6 @@ fn a_press_released_before_the_long_press_is_a_short_press() {
 /// repeat of it from the system's key repeat after the screen showed, is
 /// let go once: the button must not stay down.
 #[test]
-#[ignore = "bug: a release eaten for a dropped press leaves the repeated press held down"]
 fn a_dropped_press_repeated_after_the_frame_does_not_stick() {
     let harness = Harness::new();
     let mut kernel = harness.kernel();
@@ -367,7 +362,6 @@ fn a_dropped_press_repeated_after_the_frame_does_not_stick() {
 /// Two presses dropped while a screen came up (a key repeat) are let go
 /// once: the next real press must not lose its release.
 #[test]
-#[ignore = "bug: a dropped press repeated before the frame eats the release of the next press"]
 fn a_dropped_press_repeated_before_the_frame_does_not_eat_the_next_release() {
     let harness = Harness::new();
     let mut kernel = harness.kernel();

@@ -55,6 +55,7 @@ pub fn install(builder: KernelBuilder, fonts: Fonts) -> KernelBuilder {
         .plugin(paperpaw_plugin_stats::Stats)
         .plugin(paperpaw_plugin_battery::Battery)
         .plugin(paperpaw_plugin_wifi::Wifi)
+        .plugin(paperpaw_plugin_power::Power)
         .plugin(paperpaw_plugin_file_manager::FileManager)
         .plugin(paperpaw_plugin_transfer::Transfer)
         .plugin(paperpaw_plugin_opds::Opds)

@@ -527,7 +527,7 @@ impl SettingSpec {
         )
     }
 
-    /// A language, one of the installed translations' (or `auto`).
+    /// A language: the tag of one of the installed translations.
     pub fn language(
         setting: &Setting<Text>,
         title: impl Into<Cow<'static, str>>,
@@ -646,6 +646,9 @@ pub struct SettingGroupSpec {
 pub enum SettingError {
     Unknown,
     InvalidValue,
+    /// No place is left to keep a changed spec (more than 32,768
+    /// settings of a kind).
+    Full,
 }
 
 impl fmt::Display for SettingError {
@@ -653,6 +656,7 @@ impl fmt::Display for SettingError {
         f.write_str(match self {
             SettingError::Unknown => "unknown setting",
             SettingError::InvalidValue => "invalid value for this setting",
+            SettingError::Full => "no place left to change this setting",
         })
     }
 }
@@ -676,6 +680,9 @@ struct Specs {
 
 /// Marks a place in [`Specs::fixed`].
 const FIXED: u16 = 1 << 15;
+/// Specs of each kind (made at run time, kept in the program) a place of
+/// 15 bits holds: plenty, and two bytes a place on small devices.
+const PLACES: usize = FIXED as usize;
 
 impl Specs {
     fn at(&self, place: u16) -> &SettingSpec {
@@ -697,12 +704,15 @@ impl Specs {
         Some(self.at(self.by_id[at]))
     }
 
-    /// The spec `id` to change: a fixed one is copied first.
-    fn get_mut(&mut self, id: &str) -> Option<&mut SettingSpec> {
-        let at = self.find(id).ok()?;
+    /// The spec `id` to change: a fixed one is copied first, which needs
+    /// a place of its own.
+    fn get_mut(&mut self, id: &str) -> Result<&mut SettingSpec, SettingError> {
+        let at = self.find(id).map_err(|_| SettingError::Unknown)?;
         let place = self.by_id[at];
         let place = if place & FIXED == 0 {
             place
+        } else if self.owned.len() >= PLACES {
+            return Err(SettingError::Full);
         } else {
             let copy = self.fixed[usize::from(place & !FIXED)].clone();
             let owned = self.owned.len() as u16;
@@ -713,7 +723,7 @@ impl Specs {
             }
             owned
         };
-        Some(&mut self.owned[usize::from(place)])
+        Ok(&mut self.owned[usize::from(place)])
     }
 
     /// Adds `place`, whose spec's id is not there yet.
@@ -725,25 +735,35 @@ impl Specs {
         self.order.push(place);
     }
 
-    /// Adds `spec`, whose id is not there yet.
-    fn insert(&mut self, spec: SettingSpec) {
+    /// Adds `spec`, whose id is not there yet; `false` when no place is
+    /// left.
+    fn insert(&mut self, spec: SettingSpec) -> bool {
         if self.find(spec.id.as_str()).is_ok() {
-            return;
+            return true;
+        }
+        if self.owned.len() >= PLACES {
+            return false;
         }
         let place = self.owned.len() as u16;
         let id = spec.id.clone();
         self.owned.push(spec);
         self.index(id.as_str(), place);
+        true
     }
 
-    /// Adds the fixed `spec`, whose id is not there yet.
-    fn insert_fixed(&mut self, spec: &'static SettingSpec) {
+    /// Adds the fixed `spec`, whose id is not there yet; `false` when no
+    /// place is left.
+    fn insert_fixed(&mut self, spec: &'static SettingSpec) -> bool {
         if self.find(spec.id.as_str()).is_ok() {
-            return;
+            return true;
+        }
+        if self.fixed.len() >= PLACES {
+            return false;
         }
         let place = self.fixed.len() as u16 | FIXED;
         self.fixed.push(spec);
         self.index(spec.id.as_str(), place);
+        true
     }
 
     fn iter(&self) -> impl Iterator<Item = &SettingSpec> {
@@ -791,6 +811,14 @@ pub struct Settings {
     scope: Option<VecMap<Id, SettingValue>>,
     /// Values shown without being kept; `None`: as if not set.
     preview: VecMap<Id, Option<SettingValue>>,
+    /// Values a power mode wears over the reader's own, while it is worn
+    /// (see [`Settings::wear`]).
+    worn: VecMap<Id, SettingValue>,
+    /// Upper limits of numbers while a power mode is worn.
+    limits: VecMap<Id, SettingValue>,
+    /// The mode's values the reader changed while it was worn: theirs
+    /// until the next mode (see [`Settings::released`]).
+    released: Vec<Id>,
     presets: crate::presets::Presets,
 }
 
@@ -830,6 +858,67 @@ impl Settings {
                 self.preview.insert(id, value);
             }
         }
+    }
+
+    /// Wears a power mode's values over the reader's own, and keeps
+    /// numbers below its limits, until another mode is worn (see
+    /// [`power`](crate::power)): nothing is written, and the reader's own
+    /// values show again when the mode is taken off. Values of unknown
+    /// settings and those that do not fit are left out. The ids whose
+    /// shown value may have changed come back.
+    pub fn wear(&mut self, values: Vec<(Id, SettingValue)>, limits: Vec<(Id, i64)>) -> Vec<Id> {
+        let mut touched: Vec<Id> = self
+            .worn
+            .keys()
+            .chain(self.limits.keys())
+            .cloned()
+            .collect();
+        self.worn = VecMap::default();
+        self.limits = VecMap::default();
+        self.released.clear();
+        for (id, value) in values {
+            if self
+                .spec(id.as_str())
+                .is_some_and(|spec| spec.kind.accepts(&value))
+            {
+                touched.push(id.clone());
+                self.worn.insert(id, value);
+            }
+        }
+        for (id, limit) in limits {
+            let value = SettingValue::Int(limit);
+            if self
+                .spec(id.as_str())
+                .is_some_and(|spec| spec.kind.accepts(&value))
+            {
+                touched.push(id.clone());
+                self.limits.insert(id, value);
+            }
+        }
+        touched.sort();
+        touched.dedup();
+        touched
+    }
+
+    /// The mode's values the reader changed while it was worn, which are
+    /// theirs until the next mode, e.g. to keep across a restart.
+    pub fn released(&self) -> &[Id] {
+        &self.released
+    }
+
+    /// Lets go of the worn mode's value for `id`, as when the reader
+    /// changed it (e.g. after a restart, see [`Settings::released`]).
+    pub fn release(&mut self, id: &Id) {
+        let value = self.worn.remove(id.as_str()).is_some();
+        let limit = self.limits.remove(id.as_str()).is_some();
+        if (value || limit) && !self.released.contains(id) {
+            self.released.push(id.clone());
+        }
+    }
+
+    /// Whether a power mode holds `id` (a value or a limit).
+    pub fn is_worn(&self, id: &str) -> bool {
+        self.worn.contains_key(id) || self.limits.contains_key(id)
     }
 
     /// Whether values are shown without being kept.
@@ -879,7 +968,11 @@ impl Settings {
                 message: Cow::Borrowed("default value does not match the setting kind"),
             });
         }
-        self.specs.insert(spec);
+        if !self.specs.insert(spec) {
+            return Err(RegisterError::Invalid {
+                message: Cow::Borrowed("no place left for another setting"),
+            });
+        }
         Ok(())
     }
 
@@ -896,22 +989,33 @@ impl Settings {
                 message: Cow::Borrowed("default value does not match the setting kind"),
             });
         }
-        self.specs.insert_fixed(spec);
+        if !self.specs.insert_fixed(spec) {
+            return Err(RegisterError::Invalid {
+                message: Cow::Borrowed("no place left for another setting"),
+            });
+        }
         Ok(())
     }
 
     /// Replaces the options of a [`SettingKind::Choice`] setting, e.g. once
     /// all contributions it chooses from are known.
-    pub fn set_choices(&mut self, id: &str, options: impl Into<Choices>) {
-        if let Some(spec) = self.specs.get_mut(id) {
-            spec.kind = SettingKind::Choice(options.into());
+    ///
+    /// Whether it did: not for an unknown setting, nor where no place is
+    /// left to keep the changed spec ([`SettingError::Full`]).
+    pub fn set_choices(&mut self, id: &str, options: impl Into<Choices>) -> bool {
+        match self.specs.get_mut(id) {
+            Ok(spec) => {
+                spec.kind = SettingKind::Choice(options.into());
+                true
+            }
+            Err(_) => false,
         }
     }
 
     /// Changes a setting's default (e.g. device-specific defaults chosen by
     /// a shell). The user's own values still take precedence.
     pub fn set_default_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
-        let spec = self.specs.get_mut(id).ok_or(SettingError::Unknown)?;
+        let spec = self.specs.get_mut(id)?;
         spec.default = spec.kind.parse(text).ok_or(SettingError::InvalidValue)?;
         Ok(())
     }
@@ -943,6 +1047,8 @@ impl Settings {
             return Err(SettingError::InvalidValue);
         }
         let id = self.value_id(id)?;
+        // The reader's change wins over a mode's value until the next mode.
+        self.release(&id);
         self.values.insert(id, value);
         Ok(())
     }
@@ -1034,6 +1140,22 @@ impl Settings {
         if let Some(plain) = crate::id::unplaced(id) {
             return self.values.get(id).or_else(|| self.get(&plain));
         }
+        if let Some(value) = self.worn.get(id) {
+            return Some(value);
+        }
+        if let Some(limit @ SettingValue::Int(most)) = self.limits.get(id) {
+            let own = self.own(id);
+            return match own {
+                Some(SettingValue::Int(value)) if value <= most => own,
+                _ => Some(limit),
+            };
+        }
+        self.own(id)
+    }
+
+    /// The value of `id` without a power mode: the scope's, the reader's,
+    /// the one it follows, or the default.
+    fn own(&self, id: &str) -> Option<&SettingValue> {
         self.scoped_value(id)
             .or_else(|| self.values.get(id))
             .or_else(|| {
@@ -1227,6 +1349,49 @@ mod tests {
         assert_eq!(s.int("a.ends"), 4);
         s.set("a.sides", SettingValue::Int(12)).unwrap();
         assert_eq!(s.int("a.ends"), 4);
+    }
+
+    #[test]
+    fn a_power_mode_wears_values_and_limits_and_takes_them_off() {
+        let mut s = Settings::new();
+        for id in ["a.sleep", "a.light"] {
+            let spec = SettingSpec::new(
+                Id::new_static(id),
+                id,
+                SettingKind::Int { min: 0, max: 100 },
+                SettingValue::Int(10),
+            );
+            s.define(spec).unwrap();
+        }
+        s.set("a.light", SettingValue::Int(80)).unwrap();
+        let touched = s.wear(
+            alloc::vec![
+                (Id::new_static("a.sleep"), SettingValue::Int(5)),
+                (Id::new_static("a.unknown"), SettingValue::Int(1)),
+            ],
+            alloc::vec![(Id::new_static("a.light"), 50)],
+        );
+        assert_eq!(
+            touched,
+            [Id::new_static("a.light"), Id::new_static("a.sleep")]
+        );
+        assert_eq!(s.int("a.sleep"), 5);
+        assert_eq!(s.int("a.light"), 50, "kept below the limit");
+        // The reader's change wins over a mode's limit, too.
+        s.set("a.light", SettingValue::Int(90)).unwrap();
+        assert_eq!(s.int("a.light"), 90, "the reader's own");
+        // The reader's change wins over the mode's value.
+        s.set("a.sleep", SettingValue::Int(20)).unwrap();
+        assert_eq!(s.int("a.sleep"), 20);
+        assert!(!s.is_worn("a.light") && !s.is_worn("a.sleep"));
+        assert_eq!(
+            s.released(),
+            [Id::new_static("a.light"), Id::new_static("a.sleep")]
+        );
+        // Taken off: the reader's own values, nothing written by the mode.
+        s.wear(alloc::vec![], alloc::vec![]);
+        assert_eq!((s.int("a.sleep"), s.int("a.light")), (20, 90));
+        assert!(s.released().is_empty());
     }
 
     #[test]

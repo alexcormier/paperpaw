@@ -11,8 +11,6 @@ use std::rc::Rc;
 use paperpaw_core::Kernel;
 use paperpaw_platform::Rotation;
 use paperpaw_sdk::builtin::{events, params, slots};
-use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage, Params,
     PixelFormat, Storage, StorageError,
@@ -142,8 +140,20 @@ fn action(kernel: &mut Kernel, id: &'static str) {
 /// Covered by a book (here its information, also a full screen), the
 /// library reads nothing when books come or settings change: once, when
 /// it shows again.
+/// The tests' turns with the library: when its catalog was made is kept
+/// for the whole program, as on a device, so tests that make or read it
+/// take turns rather than run beside each other.
+static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Waits for this test's turn with the library.
+fn turn() -> std::sync::MutexGuard<'static, ()> {
+    TURN.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[test]
 fn hidden_it_reads_nothing_until_it_shows() {
+    let _turn = turn();
     let (mut kernel, listings) = library(card(5), "");
     let info = Params::new().with(params::PATH, "books/book 01.txt");
     let effects = kernel.open_screen(Instant(0), paperpaw_plugin_files::INFO_SCREEN, info);
@@ -168,10 +178,12 @@ fn hidden_it_reads_nothing_until_it_shows() {
 }
 
 /// Coming back, the focus is on the book it was on, on its page, and
-/// marking a book finished keeps the focus on it.
+/// marking a book finished on its sheet keeps the focus on it.
 #[test]
 fn the_focus_stays_on_its_book() {
-    let (mut kernel, _) = library(card(30), "[files]\nsort = files.sort.name\n");
+    let _turn = turn();
+    // The order as it comes: by recent reading.
+    let (mut kernel, _) = library(card(30), "");
     for _ in 0..13 {
         action(&mut kernel, "core.down");
     }
@@ -190,16 +202,10 @@ fn the_focus_stays_on_its_book() {
         focused(&mut kernel)
     );
 
-    let picked = Picked {
-        path: "books/book 13.txt".into(),
-        option: "finished".into(),
-    };
-    let effects = kernel.send_event(
-        Instant(0),
-        Id::new_static("files.book-chosen"),
-        picked.to_params(),
-    );
-    settle(&mut kernel, effects);
+    // Its sheet: Open, then Mark as finished.
+    action(&mut kernel, "core.menu");
+    action(&mut kernel, "core.down");
+    action(&mut kernel, "core.confirm");
     let shown = focused(&mut kernel);
     assert!(
         shown.contains("book 13") && shown.contains("Finished"),
@@ -207,10 +213,55 @@ fn the_focus_stays_on_its_book() {
     );
 }
 
+/// Buttons work as in every list: left and right move a book, page
+/// buttons turn a page, and before the first book is the row that
+/// chooses what is shown, which confirm opens.
+#[test]
+fn buttons_work_as_in_every_list() {
+    let _turn = turn();
+    let (mut kernel, _) = library(
+        card(30),
+        "[files]
+sort = files.sort.name
+",
+    );
+    assert!(focused(&mut kernel).contains("book 00"));
+    action(&mut kernel, "core.right");
+    assert!(focused(&mut kernel).contains("book 01"));
+    // A page on: its first book.
+    action(&mut kernel, "core.left");
+    action(&mut kernel, "core.next-page");
+    let shown = focused(&mut kernel);
+    assert!(
+        !shown.contains("book 00") && shown.contains("book 0"),
+        "{shown}"
+    );
+    action(&mut kernel, "core.prev-page");
+    assert!(focused(&mut kernel).contains("book 00"));
+    // Before the first book: what is shown, opening the choice of it.
+    action(&mut kernel, "core.left");
+    assert_eq!(focused(&mut kernel), "All books");
+    action(&mut kernel, "core.confirm");
+    assert_eq!(
+        kernel.active_screen().map(|id| id.as_str()),
+        Some("files.list.show")
+    );
+    // Unread: no book was opened.
+    action(&mut kernel, "core.down");
+    action(&mut kernel, "core.down");
+    action(&mut kernel, "core.confirm");
+    let shown = focused(&mut kernel);
+    assert!(shown.contains("book 00"), "{shown}");
+    kernel.render(&mut |_, _| {});
+    let parts = kernel.describe();
+    assert!(parts.iter().any(|p| p.label == "Unread"), "{parts:?}");
+}
+
 /// The folder chooser opens in the folder the setting names (a folder,
 /// not a file).
 #[test]
 fn the_folder_chooser_starts_in_the_folder_set() {
+    let _turn = turn();
     let storage = card(2)
         .with("books/Fantasy/a.txt", "A")
         .with("books/Fantasy/Old/b.txt", "B");

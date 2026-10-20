@@ -48,6 +48,8 @@ pub const PLUGIN: Id = Id::new_static("wallabag");
 pub const OPEN: Id = Id::new_static("wallabag.open");
 /// Fetches the articles.
 pub const FETCH: Id = Id::new_static("wallabag.fetch");
+/// Declared work: a fetch no reader waits for (a rule's).
+const FETCH_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("wallabag.fetch-due");
 /// The server's address, the user name and the API client's ID.
 pub const SERVER: Setting<Text> = Setting::new("wallabag.server");
 pub const USER: Setting<Text> = Setting::new("wallabag.user");
@@ -546,6 +548,7 @@ impl Plugin for Wallabag {
             description: Cow::Borrowed("Articles saved in Wallabag, fetched as books."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -565,9 +568,21 @@ impl Plugin for Wallabag {
         let s = state.clone();
         r.add_action(ActionSpec::new(FETCH, "wallabag.fetch").handler(
             move |env: &Env<'_>, out: &mut Vec<Command>| {
-                s.borrow_mut().start(env, out);
+                if env.reader {
+                    s.borrow_mut().start(env, out);
+                } else {
+                    let due = FETCH_DUE.id().clone();
+                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                        due,
+                        core::time::Duration::from_secs(3600),
+                    )));
+                }
             },
         ))?;
+        let s = state.clone();
+        r.on(FETCH_DUE, move |env, (), out| {
+            s.borrow_mut().start(env, out)
+        })?;
         r.add_menu_entry(MenuEntry {
             menu: menus::TOOLS,
             item: OPEN,

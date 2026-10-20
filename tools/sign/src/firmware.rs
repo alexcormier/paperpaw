@@ -5,7 +5,13 @@ use std::io::Write;
 
 use paperpaw_update::{AppInfo, Check, PLUGINS_AT, Plugins, TRAILER_LEN, Trailer};
 
+use crate::elf::Elf;
 use crate::secret_key;
+
+/// The symbol under which a firmware's ELF file holds the fingerprint
+/// native plugins must have (8 bytes, little-endian), as
+/// `shells/xteink/src/native` exports it.
+const FINGERPRINT_SYMBOL: &str = "PAPERPAW_NATIVE_FINGERPRINT";
 
 pub fn key(file: &str) -> Result<(), String> {
     let mut out = new_key_file(file).map_err(|e| match e.kind() {
@@ -123,9 +129,60 @@ pub fn plugins(image: &str) -> Result<(), String> {
     Ok(())
 }
 
+pub fn fingerprint(elf: &str) -> Result<(), String> {
+    let data = std::fs::read(elf).map_err(|e| format!("{elf}: {e}"))?;
+    let fingerprint = fingerprint_of(&data).map_err(|e| format!("{elf}: {e}"))?;
+    println!("{fingerprint:016x}");
+    Ok(())
+}
+
+/// The fingerprint a firmware's ELF file names.
+fn fingerprint_of(file: &[u8]) -> Result<u64, String> {
+    let elf = Elf::parse(file)?;
+    let (_, symbols) = elf.symbols()?.ok_or("no symbol table")?;
+    let symbol = symbols
+        .iter()
+        .find(|s| s.name == FINGERPRINT_SYMBOL)
+        .ok_or_else(|| format!("no {FINGERPRINT_SYMBOL}: a firmware without code plugins"))?;
+    let bytes = elf
+        .sections
+        .get(usize::from(symbol.shndx))
+        .filter(|_| symbol.size == 8)
+        .and_then(|section| {
+            let at = symbol.value.checked_sub(section.addr)? as usize;
+            elf.data(section).ok()?.get(at..at + 8)
+        })
+        .ok_or_else(|| format!("{FINGERPRINT_SYMBOL} is not 8 bytes of the file"))?;
+    let bytes: [u8; 8] = bytes.try_into().map_err(|_| "not 8 bytes")?;
+    Ok(u64::from_le_bytes(bytes))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::elf::build::Builder;
+    use crate::elf::{EM_XTENSA, ET_EXEC, SHF_ALLOC};
+
+    #[test]
+    fn the_firmware_names_its_fingerprint() {
+        let fingerprint = 0x86fe_a46c_f2a7_188a_u64;
+        let mut data = vec![0xAA; 4];
+        data.extend_from_slice(&fingerprint.to_le_bytes());
+        let mut b = Builder::new(EM_XTENSA, ET_EXEC);
+        let rodata = b.section(".rodata", SHF_ALLOC, 0x3c00_0020, &data, 4);
+        b.symbol(FINGERPRINT_SYMBOL, 0x3c00_0024, 8, rodata as u16, false);
+        assert_eq!(fingerprint_of(&b.build()), Ok(fingerprint));
+
+        let mut b = Builder::new(EM_XTENSA, ET_EXEC);
+        let rodata = b.section(".rodata", SHF_ALLOC, 0x3c00_0020, &data, 4);
+        b.symbol("main", 0x3c00_0020, 4, rodata as u16, false);
+        assert!(fingerprint_of(&b.build()).unwrap_err().starts_with("no "));
+        // Not in the file.
+        let mut b = Builder::new(EM_XTENSA, ET_EXEC);
+        let rodata = b.section(".rodata", SHF_ALLOC, 0x3c00_0020, &data, 4);
+        b.symbol(FINGERPRINT_SYMBOL, 0x3c00_0030, 8, rodata as u16, false);
+        assert!(fingerprint_of(&b.build()).is_err());
+    }
 
     #[test]
     fn a_key_is_made_once_for_its_owner() {

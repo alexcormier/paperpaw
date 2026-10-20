@@ -14,10 +14,10 @@ publish = false
 
 [dependencies]
 paperpaw-platform.workspace = true
-fatfs = { git = "https://github.com/rafalh/rust-fatfs", rev = "2aefc2a027ce94ed0671752814dac203f0450e11", default-features = false, features = ["alloc", "lfn", "unicode"] }
+fatfs = { git = "https://github.com/rafalh/rust-fatfs", rev = "38b3a7950bf0e765e34286d1dfe76c519ee347e2", default-features = false, features = ["alloc", "lfn", "unicode"] }
 
 [dev-dependencies]
-fatfs = { git = "https://github.com/rafalh/rust-fatfs", rev = "2aefc2a027ce94ed0671752814dac203f0450e11", default-features = false, features = ["alloc", "lfn", "unicode", "std"] }
+fatfs = { git = "https://github.com/rafalh/rust-fatfs", rev = "38b3a7950bf0e765e34286d1dfe76c519ee347e2", default-features = false, features = ["alloc", "lfn", "unicode", "std"] }
 proptest.workspace = true
 
 [lints]

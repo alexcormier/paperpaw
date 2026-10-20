@@ -65,7 +65,7 @@ const TOUCH: DeviceInfo = DeviceInfo {
 /// The longest name a network can have: 32 bytes.
 const LONGEST: &str = "abcdefghijklmnopqrstuvwxyz012345";
 /// As much of it as a row shows (the rest cut with an ellipsis).
-const LONGEST_SHOWN: &str = "abcdefghijklmnopqrstuvwxyz";
+const LONGEST_SHOWN: &str = "abcdefghijklmnop";
 const UNICODE: &str = "Café ☕ Netz";
 
 /// A storage the test looks into while kernels have it.
@@ -157,6 +157,7 @@ impl Plugin for NoticeKeeper {
             description: "Keeps the notices.".into(),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -453,9 +454,16 @@ fn odd_network_names_are_listed_strongest_first_each_once() {
         .map(|r| r.split(", ").next().unwrap())
         .collect();
     // No network without a name; "Home" once, at its strongest.
+    // The longest name shortened to the row (how far depends on the
+    // look's margins).
+    assert_eq!(names.len(), 4, "{rows:?}");
     assert_eq!(
-        names,
-        ["Home", UNICODE, "abcdefghijklmnopqrstuvwxyz…", "spaced"],
+        [names[0], names[1], names[3]],
+        ["Home", UNICODE, "spaced"],
+        "{rows:?}"
+    );
+    assert!(
+        names[2].starts_with("abcdefghijklmnop") && names[2].ends_with('…'),
         "{rows:?}"
     );
     assert!(rows[1].contains("Excellent signal"), "{rows:?}");
@@ -750,6 +758,7 @@ fn wanted_the_radio_joins_the_saved_network_and_goes_off_after() {
             content_type: None,
             url: None,
             saved: false,
+            headers: Vec::new(),
         },
     );
     device.settle(effects);

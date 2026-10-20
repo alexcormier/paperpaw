@@ -257,3 +257,78 @@ fn fonts_open_the_fonts_browser() {
     shopping.run(actions::CONFIRM);
     shopping.request("https://paperpaw.org/api/v1/fonts.json");
 }
+
+#[test]
+fn a_plugin_built_in_is_not_offered_over() {
+    // The library offers a plugin with the id of the fonts browser, which
+    // the firmware has built in.
+    let list = r#"{"format": 2, "plugins": [
+  {"id": "fonts-browser", "name": "Other fonts", "summary": "Takes the fonts browser's place.",
+    "group": "reading", "author": "Someone", "licence": "MIT", "kind": "data",
+    "latest": {"version": "9.0.0", "sdk": "0.4", "formats": 1, "size": 100}}]}"#;
+    let mut shopping = Shopping::new(list);
+    let shown = shopping.shown();
+    assert!(!shown.contains("Other fonts"), "{shown}");
+    // Its page, opened by its id, offers nothing to do with it.
+    shopping.now += 100;
+    shopping.kernel.open_screen(
+        Instant(shopping.now),
+        Id::new_static("store.plugin"),
+        Params::new().with(params::ID, "fonts-browser"),
+    );
+    let call = shopping
+        .request("https://paperpaw.org/api/v1/plugins/fonts-browser.json?device=x4&lang=en");
+    shopping.answer(
+        &call,
+        200,
+        list.replace("\"plugins\": [", "\"plugin\": ")
+            .replace("}]}", "}}")
+            .as_bytes(),
+    );
+    let shown = shopping.shown();
+    assert!(!shown.contains("Install"), "{shown}");
+    assert!(!shown.contains("Remove"), "{shown}");
+}
+
+#[test]
+fn a_page_fetched_for_another_plugin_is_not_taken() {
+    let manifest = manifest("1.0.0");
+    let mut shopping = Shopping::new(&list("1.0.0"));
+    // Airy's page asked for, into a file of its own; another plugin's
+    // page comes.
+    shopping.run(actions::DOWN);
+    shopping.run(actions::CONFIRM);
+    let call = shopping.request(PAGE);
+    assert_eq!(
+        call.save_to.as_deref(),
+        Some(".paperpaw/plugins/store/plugin-airy.part")
+    );
+    let other =
+        page("1.0.0", &manifest, CATALOG_DE).replace(r#""id": "airy""#, r#""id": "night-keys""#);
+    shopping.answer(&call, 200, other.as_bytes());
+    // *Install* downloads nothing of the other plugin.
+    shopping.run(actions::CONFIRM);
+    assert!(shopping.requests().is_empty());
+    assert_eq!(shopping.installed(), None);
+}
+
+#[test]
+fn the_pages_of_a_library_with_a_key_keep_it() {
+    let mut shopping = Shopping::new(&list("1.0.0"));
+    shopping.run(actions::BACK);
+    shopping.now += 100;
+    shopping
+        .kernel
+        .set_setting(
+            Instant(shopping.now),
+            "store.catalog",
+            "https://example.org/p/plugins.json?key=abc",
+        )
+        .unwrap();
+    shopping.run(OPEN);
+    let call = shopping.request("https://example.org/p/plugins.json?key=abc&device=x4&lang=en");
+    shopping.answer(&call, 200, list("1.0.0").as_bytes());
+    shopping.run(actions::DOWN);
+    shopping.run(actions::CONFIRM);
+    shopping.request("https://example.org/p/plugins/airy.json?key=abc&device=x4&lang=en");
+}

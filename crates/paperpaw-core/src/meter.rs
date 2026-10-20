@@ -119,6 +119,18 @@ impl Meter {
         }
     }
 
+    /// `plugin` reached for the network: it went out, or was refused.
+    pub(crate) fn network(&self, plugin: &str, refused: bool) {
+        let index = self.index(plugin);
+        let mut table = self.table.borrow_mut();
+        let p = &mut table[index];
+        if refused {
+            p.refused = p.refused.saturating_add(1);
+        } else {
+            p.requests = p.requests.saturating_add(1);
+        }
+    }
+
     /// `plugin`'s screen was on top for `millis`.
     pub(crate) fn shown(&self, plugin: &str, millis: u64) {
         let index = self.index(plugin);
@@ -197,6 +209,10 @@ impl Storage for Metered {
 
     fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
         self.inner.remove_dir_all(path)
+    }
+
+    fn ignores_case(&self) -> bool {
+        self.inner.ignores_case()
     }
 
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {

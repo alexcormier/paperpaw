@@ -187,7 +187,6 @@ fn one_reading_shows_the_charge_and_too_little_for_the_rest() {
 /// The voltage is shown with two decimals, rounded; from x.995 V on the
 /// rounding carries into the hundredths and the volts are not raised.
 #[test]
-#[ignore = "bug: 3999 mV shows as 3.100 V (the rounding does not carry into the volts)"]
 fn the_voltage_rounds_up_into_the_next_volt() {
     let mut device = Device::new(MemoryStorage::new(), "");
     device.measure(87, 3999, false);
@@ -258,14 +257,13 @@ fn every_line_of_the_view_can_be_seen() {
 }
 
 /// The hours left at this pace show whole beside their title on the X4's
-/// screen.
+/// screen (they were cut to "about 16 h aw..." while they said "awake").
 #[test]
-#[ignore = "bug: on the X4 the hours left are cut to \"about 16 h aw…\" beside \"Left at this pace\""]
 fn the_hours_left_are_shown_whole() {
     let mut device = Device::new(an_hour(), "");
     device.measure(80, 3950, false);
     let seen = every_page(&mut device);
-    assert!(has(&seen, "about 16 h awake"), "{seen:?}");
+    assert!(seen.iter().any(|r| r.ends_with("about 16 h")), "{seen:?}");
 }
 
 #[test]
@@ -284,4 +282,69 @@ fn a_hostile_log_shows_a_view_without_panicking() {
     device.measure(0, 0, false);
     let rows = device.view();
     assert!(has(&rows, "0 % · 0.00 V"), "{rows:?}");
+}
+
+/// Makes a request each time its action runs.
+struct Fetcher;
+
+impl paperpaw_sdk::Plugin for Fetcher {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest {
+            id: Id::new_static("net"),
+            name: "Fetcher".into(),
+            description: "".into(),
+            version: paperpaw_sdk::Version::new(1, 0, 0),
+            sdk: paperpaw_sdk::SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
+        }
+    }
+
+    fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        r.add_action(
+            paperpaw_sdk::ActionSpec::new(Id::new_static("net.go"), "go").handler(|_, out| {
+                out.push(paperpaw_sdk::Command::Http(paperpaw_sdk::HttpRequest::get(
+                    "https://example.org/",
+                    Id::new_static("net.answered"),
+                )));
+            }),
+        )
+    }
+}
+
+#[test]
+fn the_view_shows_what_each_plugin_did_with_the_network() {
+    let kernel = Kernel::builder(X4)
+        .storage(MemoryStorage::new())
+        .user_config("[core]\nlanguage = en\n")
+        .network(true)
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Battery)
+        .plugin(Fetcher)
+        .build()
+        .unwrap();
+    let mut device = Device { kernel, now: 0 };
+    let effects = device.kernel.start(Instant(0));
+    device.settle(effects);
+    for _ in 0..2 {
+        device.now += 100;
+        let effects = device
+            .kernel
+            .run_action(Instant(device.now), Id::new_static("net.go"));
+        device.settle(effects);
+    }
+    // The reader switches its network off: the next request is held back.
+    device.now += 100;
+    device
+        .kernel
+        .set_setting(Instant(device.now), "core.network.net", "off")
+        .unwrap();
+    device.now += 100;
+    let effects = device
+        .kernel
+        .run_action(Instant(device.now), Id::new_static("net.go"));
+    device.settle(effects);
+    let rows = device.view();
+    assert!(has(&rows, "Network this time awake"), "{rows:?}");
+    assert!(has(&rows, "2 requests"), "{rows:?}");
+    assert!(has(&rows, "1 held back · network off"), "{rows:?}");
 }

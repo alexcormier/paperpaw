@@ -151,8 +151,10 @@ impl Thumbnail {
 
     /// The thumbnail kept at `path` by [`Thumbnail::keep`] with `stamp`,
     /// if it is there: e.g. a cover in a list, read as a few kilobytes
-    /// instead of the picture.
-    pub fn kept(storage: &dyn Storage, path: &str, stamp: u64) -> Option<Self> {
+    /// instead of the picture. `fits` is the box it was made for (or a
+    /// larger one): a header claiming more is not read, so a file cut
+    /// short or another program's takes no memory for what is not there.
+    pub fn kept(storage: &dyn Storage, path: &str, stamp: u64, fits: (u16, u16)) -> Option<Self> {
         let mut header = [0u8; HEADER];
         if storage.read_at(path, 0, &mut header).ok()? != HEADER || &header[..4] != MAGIC {
             return None;
@@ -165,6 +167,9 @@ impl Thumbnail {
         let width = u16::from_le_bytes([header[4], header[5]]);
         let height = u16::from_le_bytes([header[6], header[7]]);
         let depth = Depth::of_bits(header[8])?;
+        if width > fits.0 || height > fits.1 {
+            return None;
+        }
         let len = depth.row(width) * usize::from(height);
         let mut pixels = Vec::new();
         pixels.try_reserve_exact(len).ok()?;
@@ -439,16 +444,16 @@ mod tests {
         );
         // Read from its own file, the picture gone.
         storage.remove("p.gray").unwrap();
-        let read = Thumbnail::kept(&storage, "p.thumb", 7).unwrap();
+        let read = Thumbnail::kept(&storage, "p.thumb", 7, (21, 10)).unwrap();
         assert_eq!(
             (read.width, read.height, read.depth, &read.pixels),
             (made.width, made.height, made.depth, &made.pixels)
         );
         // Another stamp, a broken file, none: not kept.
-        assert!(Thumbnail::kept(&storage, "p.thumb", 8).is_none());
+        assert!(Thumbnail::kept(&storage, "p.thumb", 8, (21, 10)).is_none());
         storage.write("p.thumb", b"QIT1").unwrap();
-        assert!(Thumbnail::kept(&storage, "p.thumb", 7).is_none());
-        assert!(Thumbnail::kept(&storage, "none.thumb", 7).is_none());
+        assert!(Thumbnail::kept(&storage, "p.thumb", 7, (21, 10)).is_none());
+        assert!(Thumbnail::kept(&storage, "none.thumb", 7, (21, 10)).is_none());
     }
 
     #[test]
@@ -459,7 +464,7 @@ mod tests {
         // Eight pixels a byte, rows whole bytes: a quarter of the grays.
         assert_eq!(thumb.bytes(), 3 * 10);
         assert!(thumb.keep(&storage, "m.thumb", 1));
-        let read = Thumbnail::kept(&storage, "m.thumb", 1).unwrap();
+        let read = Thumbnail::kept(&storage, "m.thumb", 1, (21, 10)).unwrap();
         assert_eq!((read.depth, read.bytes()), (Depth::Mono, 30));
         let mut frame = Framebuffer::new(30, 12, PixelFormat::Mono1).unwrap();
         let mut canvas = frame.canvas();

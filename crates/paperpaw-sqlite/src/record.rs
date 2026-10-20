@@ -185,13 +185,34 @@ fn compare_values(a: &Value, b: &Value) -> Ordering {
     };
     match (a, b) {
         (Value::Int(x), Value::Int(y)) => x.cmp(y),
-        (Value::Int(x), Value::Real(y)) => (*x as f64).total_cmp(y),
-        (Value::Real(x), Value::Int(y)) => x.total_cmp(&(*y as f64)),
+        (Value::Int(x), Value::Real(y)) => compare_int_real(*x, *y),
+        (Value::Real(x), Value::Int(y)) => compare_int_real(*y, *x).reverse(),
         (Value::Real(x), Value::Real(y)) => x.total_cmp(y),
         (Value::Text(x), Value::Text(y)) => x.as_bytes().cmp(y.as_bytes()),
         (Value::Blob(x), Value::Blob(y)) => x.cmp(y),
         _ => class(a).cmp(&class(b)),
     }
+}
+
+/// An integer and a real compared exactly, as SQLite does: not as two
+/// reals, which are wrong beyond 2^53.
+fn compare_int_real(int: i64, real: f64) -> Ordering {
+    // 2^63: no `i64` reaches it.
+    const LIMIT: f64 = 9_223_372_036_854_775_808.0;
+    if real.is_nan() {
+        return (int as f64).total_cmp(&real);
+    }
+    if real < -LIMIT {
+        return Ordering::Greater;
+    }
+    if real >= LIMIT {
+        return Ordering::Less;
+    }
+    // The whole part of `real` fits an `i64`, and as a real again it is
+    // exact: below 2^53 every whole number is, above it `real` is whole.
+    let whole = real as i64;
+    int.cmp(&whole)
+        .then_with(|| (whole as f64).total_cmp(&real))
 }
 
 /// The order of two index entries (records), column by column.

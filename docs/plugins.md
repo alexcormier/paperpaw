@@ -61,6 +61,7 @@ impl Plugin for Hello {
             description: Cow::Borrowed("A sample plugin to start from."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -241,8 +242,8 @@ turned, a book moved, books came into the library or left it, its
 bookmarks or highlights changed, a word looked up, a place in the open
 book to show, text chosen, notes exported, the device suspends or
 resumes. Plugins define their own the same way (in their namespace),
-and `Command::Schedule` emits
-one at a time of day. Underneath, what events carry travels as named
+and `EVENT.schedule(data, at)` emits one at a time (work at a time,
+below). Underneath, what events carry travels as named
 strings (`Params`): events known only at run time are heard by id with
 `r.subscribe`.
 
@@ -574,10 +575,46 @@ place for a key.
 
 ### The network
 
-`Command::Http` makes a request where the device has a network
-(`env.caps.network`); the answer comes as the request's reply event, an
-`HttpReply` with the status and the body, or saved to a file (`save_to`)
-for large ones.
+`Command::Http(HttpRequest::get(url, &FETCHED))` makes a request where
+the device has a network (`env.caps.network`); the answer comes as the
+request's reply event, an `HttpReply` with the status and the body, or
+saved to a file (`.save_to(path)`) for large ones. A request may set a
+`timeout`, the answer's headers it wants back (`want_headers`) and the
+longest body kept in memory (`max_body`, by default 64 KiB on small
+devices). Every request is answered once, also when it is refused
+(`HttpReply::refused` says why and when to try again). The manifest says
+that the plugin uses the network (`uses: Uses::NETWORK`); without it,
+requests are refused. In Offline (`env.power`), only what the reader went
+online for goes out: a screen that needs the network says so on itself
+and offers *Go online*, which sends `Command::GoOnline` (the network for
+that screen until it closes); anything else is refused with
+`Reason::Offline` and may try again on `events::WORK_ALLOWED`.
+`Command::CancelHttp` takes requests back.
+
+### Work in the background
+
+What a plugin does on its own, not because the reader just asked for
+it, it declares as work (`paperpaw_sdk::work`, ADR 0025), and the
+kernel runs it at the moment that costs least: waking, a book opened or
+closed, going to sleep, the radio on anyway, charging, idle.
+`Command::Work(Work::network(PUSH).within(Duration::from_secs(1800))
+.at_moments(Moments::BOOK_CLOSED | Moments::SLEEP))` sends the reading
+position when the book is closed or the device sleeps, at the latest
+after half an hour; the kernel then emits the work's event and the
+plugin makes its request. `optional()` work (weather, headlines) runs
+only while that is cheap, and never brings the radio on by itself.
+`Work::at(event, time)` is a timer, `every` repeats, `key` tells
+several works of one event apart, `Command::CancelWork` takes one back.
+`env.reader` says whether what is handled is the reader's own doing: an
+action the reader ran acts at once, the same action run by a rule
+declares `Work::when_cheap(id, within)` instead and waits for a good
+moment.
+Long work in steps (an install, a catalog walked) registers its step
+function (`r.add_work(WorkSpec::new(id, title, step))`) and is stepped
+between frames. `env.work` says where a work stands, for the plugin's
+own page; background work never shows a notice over reading. The power
+mode (`env.power`) makes deadlines longer or holds network work back;
+most plugins need not read it.
 Read large JSON answers as they stream with `paperpaw_json::stream`
 (the crate `paperpaw-json`), so they
 need little memory. `Command::Serve` serves HTTP to the local network,
@@ -736,14 +773,16 @@ Services between plugins are found by their type's name too, so a plugin
 built apart finds those of the firmware's plugins (see [Services and
 points of your own](#services-and-points-of-your-own)).
 
-### Publishing
+### Publishing a code plugin
 
 The plugin library (paperpaw.org) lists a code plugin with its folder
-and a build per device (`x4`, `x4-pro`), each a signed `.ppn` with the
-fingerprint it was built for, and the author's key. The sample's CI job
+and a build per reader (`x4`, `x4-pro`, `x4-classic`), each a signed
+`.ppn` with the fingerprint it was built for, the author's key, and its
+source, which the library rebuilds to compare. The sample's `build.sh`
+builds, packs and signs both files, and its CI job
 (`samples/hello-native/.github/workflows/build.yml`, for a plugin's own
-repository) builds, packs and signs both files on every tag, with the
-author's key kept as a secret of the repository.
+repository) runs it on every tag, with the author's key kept as a
+secret of the repository. [Publishing](#publishing) says how.
 
 ## Plugins without code
 
@@ -854,6 +893,126 @@ So anyone can make a home screen layout and share it: it is offered
 with the home screen's own. [`samples/plugins`](../samples/plugins) has
 five: large print, three themes (airy, paw, calm ink) and a layout
 (reading nook).
+
+## Publishing
+
+The plugin library on paperpaw.org is what the website lists and every
+reader's store (*More plugins*) installs from (ADR 0023). A plugin gets
+there in one of two ways, both through the same checks:
+
+- **The upload form** at <https://paperpaw.org/submit>, the main way:
+  sign in with a link sent by e-mail, upload the plugin's folder as a
+  ZIP (and a code plugin's builds), read the checks, complete the entry,
+  look at the preview, and send it to the moderators.
+- **A pull request** to the paperpaw.org repository that adds
+  `catalogue/<id>.toml`, for developers.
+
+An update is a new version with a higher number, the same way. The
+site's guide for authors, <https://paperpaw.org/authors>, has every
+field, check and limit; the skill's
+[`publishing.md`](../.claude/skills/paperpaw-plugin-development/publishing.md)
+walks an AI assistant helping an author through every step. In brief:
+
+### What is uploaded
+
+The plugin's folder as a ZIP, `plugin.ini` at its top (or inside one
+folder at its top), its `id` and `version` the ones published. Outside
+`store/` only `.ini`, `.css`, `.ttf`, `.otf`, `.ttc`, `.ppfp`, `.txt`,
+`.md` and `.png` files, at most 64 (63 for a code plugin), their paths
+of letters, digits, `.`, `_` and `-`, none starting with a dot, at most
+100 bytes; at most 20 MB zipped, 40 MB unpacked.
+
+A folder `store/` in it is for the store only, and is taken out of what
+readers install: `store/store.ini` gives the summary, description,
+group, tags, licence, source, SDK and translations, and names the
+screenshots beside it.
+
+```ini
+[store]
+summary = A large clock on the home screen, with the date below it.
+group = home
+tags = clock, widget
+licence = MIT
+source = https://codeberg.org/your-name/clock
+sdk = 0.5
+
+[source]
+repository = https://codeberg.org/your-name/clock
+revision = v1.0.0
+
+[screenshots]
+home.png = The home screen with the clock widget, on an Xteink X4.
+```
+
+It is PaperPaw's INI: a comment is a line of its own, never after a
+value.
+
+A code plugin adds one signed `.ppn` per reader (the form's fields
+`build-x4`, `build-x4-pro`, `build-x4-classic`) and the exact source of
+those builds: `[source]` names a public repository on `github.com`,
+`codeberg.org` or `gitlab.com` and the tag or commit built (with `path`
+and `bin` when the crate is not at the top or the binary not named as
+its package), or the source goes up as a ZIP (`source-zip`).
+
+### The author's key
+
+Code plugins are signed by their author with an Ed25519 key of their
+own, made once:
+
+```sh
+paperpaw-sign key ~/.paperpaw/author.key     # prints the public key, 64 hexadecimal digits
+```
+
+The file is the secret key: keep it outside every repository, keep a
+copy apart, never commit or share it. In CI it is a secret of the
+repository (`PAPERPAW_PLUGIN_KEY` in the sample's job); the site's page
+<https://paperpaw.org/authors/sign> also signs in the browser, the key
+never leaving the computer. The store reads the public key from the
+builds: all of them are signed by one key, and every update by the same
+one. Readers remember it at the first install and are warned when an
+update is signed by another; a lost key is changed only in the open,
+through the site's contact address.
+
+### Builds that match their source
+
+The site keeps each code plugin's source, shows it file by file, and
+rebuilds each build in a container with the toolchain its fingerprint
+names, with the sample's aliases (`cargo x4`, `cargo +esp x4pro`,
+`--locked`). It compares the result byte for byte with the build
+without its signature, and the plugin's page says *Verified: matches its
+source*, *Not rebuilt* or *Rebuilt, but does not match its source*. The
+rebuild runs in the paths of GitHub's runners, and paths end up in a
+build, so:
+
+- build with the sample's CI job
+  (`samples/hello-native/.github/workflows/build.yml`) from a pushed
+  tag;
+- commit `Cargo.lock`;
+- keep the release's compilers pinned (`rust-toolchain.toml`, the job's
+  `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`) and its SDK
+  (`paperpaw-sdk = "0.5"`);
+- never set `RUSTFLAGS`, which would replace the flags that link the
+  plugin;
+- put nothing of the moment or the computer into the code (a build
+  script writing the time, a user name, a random value);
+- name dependencies by version or a fixed commit, never a branch.
+
+The sample's `build.sh`, which the job runs, builds both readers, packs
+and signs the files, and zips the folder, with and without `store/`; the
+job attaches them to the tag's release with their SHA-256 and the
+catalogue's `[[versions]]` for them.
+
+### By pull request
+
+`catalogue/<id>.toml` holds what `store.ini` would, and `author`,
+`kind` and the versions; the folder lies at `catalogue/packages/<id>/`
+(without `store/`) or elsewhere as a ZIP (`url`, `sha256`). A code
+plugin adds `author_key`, `devices` (every reader with a build), and in
+each version `[versions.source]` and a `[[versions.builds]]` per reader
+with its `device`, its fingerprint as `abi` (which `paperpaw-sign
+plugin` prints), and its file. `samples/hello-native/catalogue.toml` is
+one to fill in; `paperpaw-website check` in a clone of the paperpaw.org
+repository runs the site's checks on it.
 
 [`Plugin`]: ../crates/paperpaw-sdk/src/plugin.rs
 [`Registrar`]: ../crates/paperpaw-sdk/src/plugin.rs

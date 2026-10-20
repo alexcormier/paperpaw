@@ -134,7 +134,6 @@ fn status_lines_are_told_only_of_what_they_show() {
 }
 
 #[test]
-#[ignore = "bug: wall clock readings far apart overflow when compared (a panic in debug builds)"]
 fn wall_clock_readings_that_make_no_sense_do_not_panic() {
     let harness = Harness::new();
     let mut kernel = kernel(&harness, MemoryStorage::new());

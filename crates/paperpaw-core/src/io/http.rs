@@ -9,10 +9,19 @@ use alloc::vec::Vec;
 
 use paperpaw_platform::{Storage, StorageError};
 use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::{Command, HttpReply, HttpRequest, Id, Params, http_params};
+use paperpaw_sdk::{Command, HttpOptions, HttpReply, HttpRequest, Id, Params, http_params};
 
 /// Longest response body passed on to plugins.
 pub const MAX_RESPONSE: usize = 1 << 20;
+/// Longest response body passed on to plugins on small devices, unless a
+/// request asks for more ([`HttpOptions::max_body`]).
+pub const MAX_RESPONSE_SMALL: usize = 64 << 10;
+/// How long a request may take in all unless it says
+/// ([`HttpOptions::timeout`]).
+pub const TIMEOUT_MS: u32 = 30_000;
+/// The same for a download to a file ([`HttpRequest::save_to`]), which
+/// may be large.
+pub const DOWNLOAD_TIMEOUT_MS: u32 = 10 * 60_000;
 /// Longest response body saved to a file, and longest file sent.
 pub const MAX_FILE: usize = 64 << 20;
 
@@ -35,6 +44,12 @@ pub struct HttpCall {
     /// ([`save_to`](Self::save_to)) instead, so that no file is saved cut
     /// short as if whole.
     pub max_response: usize,
+    /// How long it may take in all, the connection and TLS counted; the
+    /// shell answers with status 0 after that.
+    pub timeout_ms: u32,
+    /// Headers of the answer to pass back ([`HttpResponse::headers`]),
+    /// by name in any case.
+    pub want_headers: Vec<String>,
     /// The file in storage the body is for, if it is one (e.g. a
     /// download). A shell may write it there itself as it comes, for one
     /// too large for memory, and say so with [`HttpResponse::saved`];
@@ -84,6 +99,9 @@ pub struct HttpResponse {
     /// The body was written to [`HttpCall::save_to`] by the shell (and
     /// is not in `body`).
     pub saved: bool,
+    /// The headers asked for ([`HttpCall::want_headers`]) that the answer
+    /// had, their names in lower case.
+    pub headers: Vec<(String, String)>,
 }
 
 impl HttpResponse {
@@ -105,17 +123,44 @@ struct Awaiting {
     reply: Id,
     context: Params,
     save_to: Option<String>,
+    /// Made while the kernel handled the reader's input.
+    reader: bool,
 }
 
 /// Plugins' requests: those for the shell, and those it has not answered.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 pub(crate) struct Http {
     calls: Vec<HttpCall>,
     awaiting: Vec<Awaiting>,
     next: u32,
+    /// The longest body kept in memory unless a request says.
+    max_response: usize,
+}
+
+impl Default for Http {
+    fn default() -> Self {
+        Self {
+            calls: Vec::new(),
+            awaiting: Vec::new(),
+            next: 0,
+            max_response: MAX_RESPONSE,
+        }
+    }
 }
 
 impl Http {
+    /// Keeps bodies to what the device's memory allows by default.
+    pub fn for_memory(memory: paperpaw_platform::MemoryClass) -> Self {
+        let max_response = match memory {
+            paperpaw_platform::MemoryClass::Small => MAX_RESPONSE_SMALL,
+            paperpaw_platform::MemoryClass::Large => MAX_RESPONSE,
+        };
+        Self {
+            max_response,
+            ..Self::default()
+        }
+    }
+
     /// Queues a plugin's request for the shell, or fails it at once
     /// (without a network, or a file to send that is not there). One
     /// that saves to a file another request still saves to replaces that
@@ -124,6 +169,7 @@ impl Http {
         &mut self,
         request: HttpRequest,
         network: bool,
+        reader: bool,
         storage: &dyn Storage,
         out: &mut Vec<Command>,
     ) {
@@ -156,6 +202,12 @@ impl Http {
             let failed = HttpReply::failed("replaced by a newer request", older.context);
             reply(older.reply, failed, out);
         }
+        let HttpOptions {
+            timeout,
+            want_headers,
+            max_body,
+            ..
+        } = request.options().clone();
         let body = match request.body_from {
             Some(_) => None,
             None => request.body.map(String::into_bytes),
@@ -165,8 +217,16 @@ impl Http {
         let max_response = if request.save_to.is_some() {
             MAX_FILE
         } else {
-            MAX_RESPONSE
+            max_body.unwrap_or(self.max_response).min(MAX_RESPONSE)
         };
+        let default = if request.save_to.is_some() {
+            DOWNLOAD_TIMEOUT_MS
+        } else {
+            TIMEOUT_MS
+        };
+        let timeout_ms = timeout.map_or(default, |t| {
+            u32::try_from(t.as_millis()).unwrap_or(u32::MAX)
+        });
         self.calls.push(HttpCall {
             id,
             method: request.method,
@@ -175,6 +235,8 @@ impl Http {
             body,
             body_from: request.body_from,
             max_response,
+            timeout_ms,
+            want_headers,
             save_to: request.save_to.clone(),
         });
         self.awaiting.push(Awaiting {
@@ -182,6 +244,7 @@ impl Http {
             reply: request.reply,
             context: request.params,
             save_to: request.save_to,
+            reader,
         });
     }
 
@@ -226,10 +289,44 @@ impl Http {
             content_type: response.content_type,
             final_url: response.url,
             context: awaiting.context,
+            refused: None,
+            headers: response.headers,
         };
         let mut params = answer.to_params();
         params.set(http_params::BODY, body);
         out.push(Command::Emit(awaiting.reply, params));
+    }
+
+    /// Takes back the requests whose reply is `reply`, each answered with
+    /// the refusal `Cancelled`; an answer the shell brings later is passed
+    /// over.
+    pub fn cancel(&mut self, reply: &Id, out: &mut Vec<Command>) {
+        let cancelled: Vec<Awaiting> = {
+            let (gone, kept) = core::mem::take(&mut self.awaiting)
+                .into_iter()
+                .partition(|a| a.reply == *reply);
+            self.awaiting = kept;
+            gone
+        };
+        for awaiting in cancelled {
+            self.calls.retain(|call| call.id != awaiting.id);
+            let refusal = paperpaw_sdk::work::Refusal::new(
+                paperpaw_sdk::work::Reason::Cancelled,
+                paperpaw_sdk::work::Retry::Never,
+            );
+            let answer = HttpReply::refused(refusal, awaiting.context);
+            out.push(Command::Emit(awaiting.reply, answer.to_params()));
+        }
+    }
+
+    /// Whether a request made for the reader is not answered yet.
+    pub fn reader_waits(&self) -> bool {
+        self.awaiting.iter().any(|a| a.reader)
+    }
+
+    /// Whether request `id` was made for the reader.
+    pub fn of_reader(&self, id: u32) -> bool {
+        self.awaiting.iter().any(|a| a.id == id && a.reader)
     }
 
     /// The requests for the shell.
@@ -296,6 +393,48 @@ mod tests {
     }
 
     #[test]
+    fn options_reach_the_shell_and_headers_come_back() {
+        let storage = MemoryStorage::new();
+        let mut out = Vec::new();
+        let mut http = Http::for_memory(paperpaw_platform::MemoryClass::Small);
+        let plain = get("https://h.org/a", None);
+        let download = get("https://h.org/b", Some("b.epub"));
+        let asked = get("https://h.org/c", None)
+            .timeout(core::time::Duration::from_secs(5))
+            .want_headers(&["Last-Modified"])
+            .max_body(2048);
+        for request in [plain, download, asked] {
+            http.request(request, true, false, &storage, &mut out);
+        }
+        let calls = http.take();
+        let limits: Vec<_> = calls
+            .iter()
+            .map(|c| (c.timeout_ms, c.max_response))
+            .collect();
+        assert_eq!(
+            limits,
+            [
+                (TIMEOUT_MS, MAX_RESPONSE_SMALL),
+                (DOWNLOAD_TIMEOUT_MS, MAX_FILE),
+                (5000, 2048)
+            ]
+        );
+        assert_eq!(calls[2].want_headers, ["Last-Modified"]);
+        let response = HttpResponse {
+            id: calls[2].id,
+            status: 200,
+            headers: alloc::vec![(String::from("last-modified"), String::from("Tue"))],
+            ..HttpResponse::default()
+        };
+        http.answer(response, &storage, &mut out);
+        let Some(Command::Emit(_, params)) = out.last() else {
+            panic!("no reply");
+        };
+        let reply = HttpReply::from_params(params).unwrap();
+        assert_eq!(reply.header("Last-Modified"), Some("Tue"));
+    }
+
+    #[test]
     fn errors_never_overwrite_the_file() {
         let storage = MemoryStorage::new().with("book.epub", "old");
         let mut out = Vec::new();
@@ -304,6 +443,7 @@ mod tests {
             http.request(
                 get("https://h.org/b", Some("book.epub")),
                 true,
+                false,
                 &storage,
                 &mut out,
             );
@@ -323,6 +463,7 @@ mod tests {
         http.request(
             get("https://h.org/b", Some("book.epub")),
             true,
+            false,
             &storage,
             &mut out,
         );
@@ -340,6 +481,7 @@ mod tests {
         http.request(
             get("http://h.org/1", Some("dl.tmp")),
             true,
+            false,
             &storage,
             &mut out,
         );
@@ -347,6 +489,7 @@ mod tests {
         http.request(
             get("http://h.org/2", Some("DL.tmp")),
             true,
+            false,
             &storage,
             &mut out,
         );
@@ -372,8 +515,20 @@ mod tests {
         );
         assert_eq!(read_file(&storage, "DL.tmp", 64).unwrap(), b"new");
         // Not yet passed to the shell: only the newer one goes.
-        http.request(get("http://h.org/3", Some("a")), true, &storage, &mut out);
-        http.request(get("http://h.org/4", Some("a")), true, &storage, &mut out);
+        http.request(
+            get("http://h.org/3", Some("a")),
+            true,
+            false,
+            &storage,
+            &mut out,
+        );
+        http.request(
+            get("http://h.org/4", Some("a")),
+            true,
+            false,
+            &storage,
+            &mut out,
+        );
         let calls = http.take();
         assert_eq!(calls.len(), 1);
         assert_eq!(calls[0].url, "http://h.org/4");
@@ -384,7 +539,7 @@ mod tests {
         let storage = MemoryStorage::new();
         let mut out = Vec::new();
         let mut http = Http::default();
-        http.request(get("http://h.org/", None), true, &storage, &mut out);
+        http.request(get("http://h.org/", None), true, false, &storage, &mut out);
         http.take();
         http.answer(answer(200, b"caf\xc3\xa9 \xff"), &storage, &mut out);
         assert_eq!(replied(&out), (200, String::from("café \u{fffd}")));

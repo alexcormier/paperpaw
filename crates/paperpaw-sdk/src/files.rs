@@ -320,8 +320,9 @@ pub fn load_text_for_update(
     path: &str,
     cap: usize,
 ) -> Result<Option<String>, StorageError> {
+    // The mark is left out already: a second one belongs to the text.
     load_for_update(storage, path, cap)?
-        .map(text_of)
+        .map(|data| String::from_utf8(data).map_err(|_| StorageError::InvalidData))
         .transpose()
 }
 

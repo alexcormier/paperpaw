@@ -631,7 +631,10 @@ impl Screen for LockScreen {
         }
         let message = if self.waiting(env) {
             let seconds = self.state.wait_until.get().map_or(0, |until| {
-                until.millis().saturating_sub(env.now.millis()) / 1000 + 1
+                until
+                    .millis()
+                    .saturating_sub(env.now.millis())
+                    .div_ceil(1000)
             });
             Some(
                 env.i18n

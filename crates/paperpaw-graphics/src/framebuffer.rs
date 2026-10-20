@@ -445,6 +445,9 @@ impl Framebuffer {
         if !matches!(self.format.gray_levels(), Some(2..=16)) {
             return self.fill_clipped(rect, color);
         }
+        if rect.is_empty() {
+            return;
+        }
         let luma = color.luma();
         for y in rect.y..rect.bottom() as u16 {
             for x in rect.x..rect.right() as u16 {
@@ -452,6 +455,7 @@ impl Framebuffer {
                 self.store(x, y, value);
             }
         }
+        self.mark_dirty(rect);
     }
 
     /// Sets the pixel at `(x, y)` (inside the band) to `rgb` on colour

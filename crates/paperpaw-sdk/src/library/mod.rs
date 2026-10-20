@@ -78,6 +78,9 @@ pub struct Book {
     pub cover: Option<ImageRef>,
     /// Reading progress in percent, once opened.
     pub progress: Option<u8>,
+    /// The day the library first read the book ([`index`]), in days since
+    /// 1970 (UTC); none where the device did not know the date then.
+    pub added: Option<u32>,
     /// Fields plugins keep with the book: id (e.g. `myplugin.rating`)
     /// and value.
     pub fields: Vec<(String, String)>,
@@ -370,7 +373,7 @@ pub fn cover(
         book.size, image.path, image.width, image.height
     ));
     let file = cover_file(path);
-    if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp) {
+    if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp, (w, h)) {
         return Some(thumb);
     }
     let thumb = crate::ui::Thumbnail::new(storage, image, w, h, format)?;
@@ -412,7 +415,13 @@ fn update_list(
     if let Ok(mut list) = read_list(storage, path, max) {
         change(&mut list);
         list.truncate(max);
-        let _ = storage.write(path, list.join("\n").as_bytes());
+        let mut text = list.join("\n");
+        // Read without a byte order mark: a first path that begins with
+        // one (U+FEFF) keeps it behind a mark of the file's own.
+        if text.starts_with('\u{feff}') {
+            text.insert(0, '\u{feff}');
+        }
+        let _ = storage.write(path, text.as_bytes());
     }
 }
 
@@ -469,6 +478,7 @@ fn parse_details(source: &str) -> Book {
             (_, "cover-width") => cover_width = entry.value.as_u32(),
             (_, "cover-height") => cover_height = entry.value.as_u32(),
             (_, "progress") => book.progress = entry.value.as_u32().map(|p| p.min(100) as u8),
+            (_, "added") => book.added = entry.value.as_u32(),
             _ => {}
         }
     }
@@ -525,6 +535,9 @@ pub fn save(storage: &dyn Storage, path: &str, book: &Book) -> bool {
     if let Some(progress) = book.progress {
         set("progress", &progress.to_string());
     }
+    if let Some(added) = book.added {
+        set("added", &added.to_string());
+    }
     for (id, value) in &book.fields {
         ini = config::set(&ini, "field", id, fit(value));
     }
@@ -544,6 +557,9 @@ pub fn index(env: &Env<'_>, path: &str) -> Book {
     };
     book.size = storage.size(path).unwrap_or_default();
     book.indexed = true;
+    if book.added.is_none() {
+        book.added = today(env);
+    }
     if let Ok(document) = env.formats.open(storage, path) {
         // What the book names; else what its source said ([`provide`]).
         let metadata = document.metadata();
@@ -560,6 +576,32 @@ pub fn index(env: &Env<'_>, path: &str) -> Book {
         save(storage, path, &book);
     }
     book
+}
+
+/// Today in days since 1970 (UTC), as [`Book::added`] counts, if the
+/// device knows the date.
+pub fn today(env: &Env<'_>) -> Option<u32> {
+    crate::time::unix_seconds(env).and_then(|s| u32::try_from(s.div_euclid(86_400)).ok())
+}
+
+/// Books added this many days ago or less, and never opened, are new
+/// ([`is_new`]).
+pub const NEW_DAYS: u32 = 30;
+
+/// Whether `book` counts as new: added in the last [`NEW_DAYS`] days and
+/// never opened (no progress); `opened` says whether it was opened.
+pub fn is_new(env: &Env<'_>, book: &Book, opened: bool) -> bool {
+    is_new_on(book, opened, today(env))
+}
+
+/// [`is_new`] on the day `today` (none where the date is not known).
+pub fn is_new_on(book: &Book, opened: bool, today: Option<u32>) -> bool {
+    match (book.added, today) {
+        (Some(added), Some(today)) => {
+            !opened && book.progress.is_none() && today.saturating_sub(added) <= NEW_DAYS
+        }
+        _ => false,
+    }
 }
 
 /// What the library knows of the book at `path`, read from the book
@@ -738,6 +780,27 @@ mod tests {
     use crate::memory_storage::Unreadable;
 
     #[test]
+    fn new_books_are_added_lately_and_never_opened() {
+        let book = Book {
+            added: Some(100),
+            ..Book::default()
+        };
+        assert!(is_new_on(&book, false, Some(100 + NEW_DAYS)));
+        assert!(!is_new_on(&book, false, Some(101 + NEW_DAYS)), "too old");
+        assert!(!is_new_on(&book, true, Some(100)), "opened");
+        let begun = Book {
+            progress: Some(0),
+            ..book.clone()
+        };
+        assert!(!is_new_on(&begun, false, Some(100)), "begun");
+        assert!(!is_new_on(&book, false, None), "no date");
+        assert!(
+            !is_new_on(&Book::default(), false, Some(100)),
+            "never dated"
+        );
+    }
+
+    #[test]
     fn details_belong_to_one_file_version() {
         let storage = MemoryStorage::new().with("books/a.txt", "hello");
         let book = Book {
@@ -754,6 +817,7 @@ mod tests {
                 height: 40,
             }),
             progress: Some(12),
+            added: Some(20_000),
             fields: alloc::vec![("stars.rating".into(), "4".into())],
         };
         save(&storage, "books/a.txt", &book);

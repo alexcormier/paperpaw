@@ -1,0 +1,191 @@
+//! Calls into the kernel from the shell: what they count, what they say
+//! back, readings that make no sense.
+
+use super::*;
+use paperpaw_platform::{SystemStatus, WallClock};
+use paperpaw_sdk::semantics::Role;
+
+/// Rows of which one has the focus, moved by *Down*.
+struct RowsPlugin;
+
+struct Rows {
+    focus: usize,
+}
+
+impl Screen for Rows {
+    fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
+        for row in 0..3u16 {
+            let label = alloc::format!("Row {row}");
+            let area = Rect::new(0, row * 20, 90, 20);
+            canvas.describe(
+                Role::Row,
+                &label,
+                area,
+                usize::from(row) == self.focus,
+                None,
+            );
+        }
+    }
+
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        if *action == actions::DOWN {
+            self.focus = (self.focus + 1) % 3;
+            cx.request_redraw();
+            return Handled::Yes;
+        }
+        Handled::No
+    }
+}
+
+impl Plugin for RowsPlugin {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("rows"),
+            name: Cow::Borrowed("Rows"),
+            description: Cow::Borrowed(""),
+            version: Version::new(1, 0, 0),
+            sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_screen(ScreenSpec {
+            id: Id::new_static("rows.screen"),
+            title: Cow::Borrowed("rows"),
+            factory: Box::new(|_, _| Box::new(Rows { focus: 0 })),
+        })?;
+        r.bind_slot(
+            slots::HOME,
+            Id::new_static("rows.screen"),
+            Priority::DEFAULT,
+        )?;
+        Ok(())
+    }
+}
+
+/// What the shell is asked to say.
+fn said(kernel: &mut Kernel) -> Vec<String> {
+    kernel
+        .take_speech()
+        .into_iter()
+        .filter_map(|call| match call {
+            SpeechCall::Say { text, .. } => Some(text),
+            SpeechCall::Stop => None,
+        })
+        .collect()
+}
+
+/// Moving the focus quickly, each row is said in place of the one before
+/// (not left out while that is still spoken); while a plugin reads
+/// aloud, the focus is not said over it.
+#[test]
+fn the_focus_is_said_in_place_of_what_was_said_of_it() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(RowsPlugin)
+        .speech(true)
+        .setting_default(&settings::SPEAK_FOCUS, true)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    // Neither is done being said when the next comes.
+    press(&mut kernel, 10, "down");
+    press(&mut kernel, 100, "down");
+    assert_eq!(said(&mut kernel), ["Row 1", "Row 2"]);
+    // A plugin reads aloud: the focus waits.
+    kernel.apply(Command::Speak(paperpaw_sdk::Speech {
+        text: String::from("A page"),
+        language: String::new(),
+        rate: 100,
+        reply: Id::new_static("rows.read"),
+        params: paperpaw_sdk::Params::new(),
+        queue: false,
+    }));
+    kernel.finish();
+    press(&mut kernel, 200, "down");
+    assert_eq!(said(&mut kernel), ["A page"]);
+}
+
+/// Every call from the shell is counted as the kernel's work, also those
+/// that only redraw or pass on what happened.
+#[test]
+fn every_call_counts_as_the_kernels_work() {
+    let mut kernel = Kernel::builder(DEVICE).build().unwrap();
+    kernel.start(Instant(0));
+    let calls = |kernel: &Kernel| {
+        let usage = kernel.plugin_usage();
+        usage
+            .iter()
+            .find(|p| p.plugin.as_str() == "core")
+            .unwrap()
+            .calls
+    };
+    let mut before = calls(&kernel);
+    let steps: [&dyn Fn(&mut Kernel) -> crate::Effects; 5] = [
+        &|k| k.draw_again(Instant(10)),
+        &|k| k.resize(Instant(20), 80, 90),
+        &|k| k.speech_done(Instant(30), 7, true),
+        &|k| k.clipboard_text(Instant(40), None),
+        &|k| {
+            let event = crate::ServerEvent::Failed {
+                server: 9,
+                reason: String::new(),
+            };
+            k.server_event(Instant(50), event)
+        },
+    ];
+    for (i, step) in steps.iter().enumerate() {
+        step(&mut kernel);
+        let now = calls(&kernel);
+        assert!(now > before, "call {i} not counted");
+        before = now;
+    }
+}
+
+/// What the shell does after a call lists everything it is to do.
+#[test]
+fn the_effects_list_all_there_is_to_do() {
+    let effects = crate::Effects {
+        grays: true,
+        proceed: true,
+        sleep: true,
+        ..crate::Effects::default()
+    };
+    let all: Vec<crate::Effect> = effects.iter().collect();
+    assert_eq!(
+        all,
+        [
+            crate::Effect::Sleep,
+            crate::Effect::Grays,
+            crate::Effect::Proceed
+        ]
+    );
+}
+
+/// Wall clock readings far apart, at the ends of the clock, do not
+/// overflow when compared.
+#[test]
+fn wall_clock_readings_that_make_no_sense_do_not_panic() {
+    let mut kernel = Kernel::builder(DEVICE).build().unwrap();
+    kernel.start(Instant(0));
+    let clock = |at: u64, unix_millis: i64, offset: Option<i32>| {
+        Some(WallClock {
+            at: Instant(at),
+            unix_millis,
+            utc_offset_minutes: offset,
+        })
+    };
+    for (now, reading) in [
+        (10, clock(0, i64::MAX, None)),
+        (20, clock(0, i64::MIN, None)),
+        (u64::MAX, clock(0, 0, Some(i32::MAX))),
+        (30, clock(u64::MAX, i64::MAX, Some(i32::MIN))),
+    ] {
+        let status = SystemStatus {
+            clock: reading,
+            battery: None,
+        };
+        kernel.set_status(Instant(now), status);
+    }
+}

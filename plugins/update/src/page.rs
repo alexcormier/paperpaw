@@ -2,22 +2,24 @@
 //! few words below it, and up to two buttons at the bottom (the first one
 //! always the way on). While installing, a bar shows how far it is.
 //!
-//! A newer update on the card comes first; without one, the page offers
-//! to search online, and shows an update the server named (see
-//! [`online`]), then an older one on the card, which it says is older.
-//! An update that leaves out plugins built in now says which; one not
-//! signed by PaperPaw shows its key, which the reader accepts at each
-//! install.
+//! An update on the card comes first; without one, the page offers to
+//! search online, and shows an update the server named (see [`online`]).
+//! A file on the card no newer than the version running says so, is
+//! installed only as going back (or installing again), and gives way to
+//! a newer update the server named. An update that leaves out plugins
+//! built in now says which; one not signed by PaperPaw shows its key,
+//! which the reader accepts at each install.
 //!
 //! Buttons: up and down (or left and right) move between the buttons,
 //! *Select* chooses, *Back* closes (not while installing). Touch: tap.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::cmp::Ordering;
 
 use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::firmware::{
-    FirmwareCommand, FirmwareState, InstallFailure, Signer, Update, fingerprint,
+    FirmwareCommand, FirmwareState, InstallFailure, Signer, Update, compare_versions, fingerprint,
 };
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
@@ -43,13 +45,13 @@ enum View {
     Nothing,
     /// Files, but none for this device.
     Unfit(InstallFailure),
-    /// An update to install, whether it is newer than the running
-    /// firmware, and the plugin crates it leaves out.
+    /// An update to install, the plugin crates it leaves out, and how its
+    /// version compares with the one running (older: going back).
     Ready {
         update: Update,
         signer: Signer,
-        newer: bool,
         leaves: Vec<String>,
+        age: Ordering,
     },
     /// Asking the update server.
     Checking,
@@ -142,36 +144,35 @@ impl UpdatePage {
             FirmwareState::Idle | FirmwareState::Failed(_) => {}
         }
         let card = found::find(env.storage, firmware);
-        let ready = |update: Update| {
-            let leaves = update
-                .leaves_out(firmware)
-                .into_iter()
-                .map(String::from)
-                .collect();
-            View::Ready {
-                signer: update.signer(firmware),
-                newer: update.is_newer(firmware),
-                update,
-                leaves,
+        let offer = online::offer(env.storage, firmware);
+        let age = |update: &Update| compare_versions(&update.info.version, &firmware.version);
+        match (card, offer) {
+            // A newer update online comes before going back or installing
+            // the same again.
+            (Ok(update), offer) if offer.is_none() || age(&update).is_gt() => {
+                let signer = update.signer(firmware);
+                let leaves = update
+                    .leaves_out(firmware)
+                    .into_iter()
+                    .map(String::from)
+                    .collect();
+                View::Ready {
+                    age: age(&update),
+                    update,
+                    signer,
+                    leaves,
+                }
             }
-        };
-        let card = match card {
-            Ok(update) if update.is_newer(firmware) => return ready(update),
-            card => card,
-        };
-        if let Some(offer) = online::offer(env.storage, firmware) {
-            let leaves = offer
-                .leaves_out(firmware)
-                .into_iter()
-                .map(String::from)
-                .collect();
-            return View::Offer { offer, leaves };
-        }
-        match card {
-            // Older, or the same again: offered as such.
-            Ok(update) => ready(update),
-            Err(InstallFailure::Unreadable) => View::Nothing,
-            Err(why) => View::Unfit(why),
+            (_, Some(offer)) => {
+                let leaves = offer
+                    .leaves_out(firmware)
+                    .into_iter()
+                    .map(String::from)
+                    .collect();
+                View::Offer { offer, leaves }
+            }
+            (Err(InstallFailure::Unreadable) | Ok(_), None) => View::Nothing,
+            (Err(why), None) => View::Unfit(why),
         }
     }
 
@@ -241,6 +242,10 @@ impl UpdatePage {
                 }
                 buttons
             }
+            // Before going back, the way to search for a newer one.
+            View::Ready { age, .. } if !age.is_gt() && env.caps.network => {
+                alloc::vec![Button::Install, Button::Check, Button::Close]
+            }
             View::Ready { .. } => alloc::vec![Button::Install, Button::Close],
             View::Offer { .. } => alloc::vec![Button::Download, Button::Close],
             View::Unreachable { .. } => alloc::vec![Button::Check, Button::Close],
@@ -260,7 +265,20 @@ impl UpdatePage {
                     ..
                 },
             ) => "update.trust-install",
-            (Button::Install, View::Ready { newer: false, .. }) => "update.install-older",
+            (
+                Button::Install,
+                View::Ready {
+                    age: Ordering::Less,
+                    ..
+                },
+            ) => "update.install-older",
+            (
+                Button::Install,
+                View::Ready {
+                    age: Ordering::Equal,
+                    ..
+                },
+            ) => "update.reinstall",
             (Button::Install, View::Ready { leaves, .. }) if !leaves.is_empty() => {
                 "update.install-without"
             }
@@ -291,8 +309,8 @@ impl UpdatePage {
             View::Ready {
                 update,
                 signer,
-                newer,
                 leaves,
+                age,
             } => {
                 let version = Arg::Str(&update.info.version);
                 let current = &[("current", Arg::Str(current))];
@@ -303,18 +321,15 @@ impl UpdatePage {
                         with("update.unknown.title", &[("version", version)]),
                         with("update.unknown.help", &[("key", Arg::Str(&key))]),
                     )
-                } else if *newer {
-                    (
-                        with("update.ready.title", &[("version", version)]),
-                        with("update.ready.help", current),
-                    )
                 } else {
-                    (
-                        with("update.older.title", &[("version", version)]),
-                        with("update.older.help", current),
-                    )
+                    let (title, help) = match age {
+                        Ordering::Greater => ("update.ready.title", "update.ready.help"),
+                        Ordering::Equal => ("update.same.title", "update.same.help"),
+                        Ordering::Less => ("update.older.title", "update.older.help"),
+                    };
+                    (with(title, &[("version", version)]), with(help, current))
                 };
-                if *signer == Signer::Unknown && !*newer {
+                if *signer == Signer::Unknown && !age.is_gt() {
                     help.push(' ');
                     help.push_str(&with("update.older.note", current));
                 }
@@ -444,19 +459,19 @@ impl UpdatePage {
                 let View::Ready {
                     update,
                     signer,
-                    newer,
+                    age,
                     ..
                 } = &self.view
                 else {
                     return;
                 };
                 write_pair(env.storage, INSTALLING, &update.path, &update.info.version);
-                // What the reader saw and chose: the key shown, an older
-                // version said to be older.
+                // What the reader saw and chose: the key shown, a version
+                // not newer said to be so.
                 cx.command(Command::Firmware(FirmwareCommand::Install {
                     path: update.path.clone(),
                     key: (*signer == Signer::Unknown).then_some(update.trailer.key),
-                    older: !*newer,
+                    older: !age.is_gt(),
                 }));
                 self.view = View::Installing {
                     done: 0,
@@ -718,6 +733,7 @@ impl Screen for UpdatePage {
                     }
                 } else {
                     match self.look(&env) {
+                        View::Ready { age, .. } if !age.is_gt() => View::UpToDate,
                         View::Nothing | View::Unfit(_) => View::UpToDate,
                         view => view,
                     }

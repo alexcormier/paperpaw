@@ -141,7 +141,6 @@ fn a_taken_port_moves_on_to_a_free_one_near_it() {
 }
 
 #[test]
-#[ignore = "bug: Servers::listen tries port..port.saturating_add(20), an empty range for port 65535"]
 fn the_highest_port_can_be_listened_on() {
     match TcpListener::bind((Ipv4Addr::UNSPECIFIED, u16::MAX)) {
         Ok(probe) => drop(probe),

@@ -1,14 +1,16 @@
-//! The plugin store: the data plugins of a plugin library (paperpaw.org's
-//! by default) for this device, by group as the website shows them, with
-//! a search, each with a page to install, update or remove it (ADR 0023).
+//! The plugin store: the plugins of a plugin library (paperpaw.org's by
+//! default) for this device, by group as the website shows them, with a
+//! search, each with a page to install, update or remove it (ADR 0023).
 //! Fonts are one more entry, which opens the fonts browser where it is
 //! installed.
 //!
 //! The list is read as it streams into an index kept on the storage, so
 //! it may be as long as it likes; a plugin's files go straight to the
 //! storage, one after another, each checked ([`paperpaw_sdk::install`]).
-//! Built-in plugins and plugins with code are not listed: those come with
-//! the firmware.
+//! Plugins with code are listed where PaperPaw loads them and a build
+//! fits; their code is checked whole and signed by its author (`trust`,
+//! ADR 0024). Built-in plugins are not listed, nor a plugin that would
+//! take the place of one: those come with the firmware.
 
 #![no_std]
 
@@ -81,6 +83,7 @@ impl Plugin for Store {
             ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 

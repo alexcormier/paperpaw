@@ -39,10 +39,10 @@ fn replies(harness: &Harness) -> Vec<String> {
 }
 
 fn get(id: &str) -> Command {
-    Command::Http(HttpRequest {
-        params: Params::new().with("n", String::from(id)),
-        ..HttpRequest::new("GET", "http://example.org/", REPLY)
-    })
+    Command::Http(
+        HttpRequest::get("http://example.org/", REPLY)
+            .with(Params::new().with("n", String::from(id))),
+    )
 }
 
 fn http_calls(kernel: &mut Kernel) -> Vec<paperpaw_core::HttpCall> {
@@ -119,10 +119,7 @@ fn shells_with_memory_to_spare_load_a_file_to_send_whole() {
     kernel.storage().write("up.bin", &data).unwrap();
     kernel.storage().write("empty.bin", b"").unwrap();
     let put = |path: &str| {
-        Command::Http(HttpRequest {
-            body_from: Some(String::from(path)),
-            ..HttpRequest::new("PUT", "http://example.org/up", REPLY)
-        })
+        Command::Http(HttpRequest::new("PUT", "http://example.org/up", REPLY).body_from(path))
     };
     harness.run(&mut kernel, 10, [put("up.bin"), put("empty.bin")]);
     let mut calls = http_calls(&mut kernel);
@@ -150,10 +147,9 @@ fn a_failed_download_writes_nothing_where_the_file_was_to_go() {
     harness.run(
         &mut kernel,
         10,
-        [Command::Http(HttpRequest {
-            save_to: Some(String::from("books/kept.epub")),
-            ..HttpRequest::new("GET", "http://example.org/book", REPLY)
-        })],
+        [Command::Http(
+            HttpRequest::get("http://example.org/book", REPLY).save_to("books/kept.epub"),
+        )],
     );
     let call = http_calls(&mut kernel).remove(0);
     kernel.http_response(Instant(20), HttpResponse::failed(call.id, "timed out"));
@@ -401,7 +397,6 @@ fn an_answer_from_a_file_that_is_not_there_is_not_found() {
 /// A shell that reports a request twice (or reuses its number) must not
 /// have a later request reported with the first one's method and target.
 #[test]
-#[ignore = "bug: a request reported twice leaves a stale entry that later takes over its number"]
 fn a_request_reported_twice_does_not_confuse_a_later_one() {
     let harness = Harness::new();
     let mut kernel = kernel(&harness, |b| b.network(true));

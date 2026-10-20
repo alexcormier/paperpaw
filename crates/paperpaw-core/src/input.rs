@@ -41,6 +41,20 @@ struct TrackedPointer {
     long_fired: bool,
     /// Lifted as part of two fingers: no tap or swipe of its own.
     paired: bool,
+    /// Taken by the kernel at an edge: followed for its long press only,
+    /// what its lift makes is the edge's.
+    edge: Option<Edge>,
+}
+
+/// Where a finger taken at an edge came down.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Edge {
+    /// At the top or the bottom: held still and alone, a long press (the
+    /// first line of a page, the keyboard's bottom row).
+    End,
+    /// At a side, where a thumb rests holding the device: never a long
+    /// press.
+    Side,
 }
 
 #[derive(Debug, Default)]
@@ -80,6 +94,53 @@ impl Recognizer {
         }
     }
 
+    /// Whether button `name` is held: pressed and not let go yet.
+    pub(crate) fn holds(&self, name: &str) -> bool {
+        self.buttons.iter().any(|b| b.name == name)
+    }
+
+    /// Stops following finger `id`, without a gesture: it came down again,
+    /// so its touch before is over.
+    pub(crate) fn forget_pointer(&mut self, id: u8) {
+        self.pointers.retain(|p| p.id != id);
+    }
+
+    /// Follows a finger that came down at an edge, so that held still and
+    /// alone at the top or the bottom it becomes a long press as anywhere
+    /// else. It counts as no finger for two fingers together. Its moves
+    /// come through [`Self::pointer`], its lift through
+    /// [`Self::lift_edge`].
+    pub(crate) fn follow_edge(&mut self, event: &PointerEvent, now: Instant, edge: Edge) {
+        self.down(event, now, Some(edge));
+    }
+
+    /// The finger at an edge was lifted at `now`: whether its lift makes
+    /// nothing more, as it was a long press already or was held still as
+    /// long (a thumb resting at a side).
+    pub(crate) fn lift_edge(&mut self, id: u8, now: Instant, thresholds: &Thresholds) -> bool {
+        let Some(index) = self.pointers.iter().position(|p| p.id == id) else {
+            return false;
+        };
+        let pointer = self.pointers.swap_remove(index);
+        pointer.long_fired
+            || (!pointer.moved && now.since(pointer.since) >= thresholds.long_press_ms)
+    }
+
+    fn down(&mut self, event: &PointerEvent, now: Instant, edge: Option<Edge>) {
+        self.forget_pointer(event.id);
+        self.pointers.push(TrackedPointer {
+            id: event.id,
+            start: event.point,
+            last: event.point,
+            since: now,
+            tool: event.tool,
+            moved: false,
+            long_fired: false,
+            paired: false,
+            edge,
+        });
+    }
+
     /// Tracks a pointer the screen did not capture. Returns a gesture when
     /// the pointer is lifted.
     pub(crate) fn pointer(
@@ -91,19 +152,7 @@ impl Recognizer {
         let index = self.pointers.iter().position(|p| p.id == event.id);
         match (event.phase, index) {
             (PointerPhase::Down, _) => {
-                if let Some(i) = index {
-                    self.pointers.swap_remove(i);
-                }
-                self.pointers.push(TrackedPointer {
-                    id: event.id,
-                    start: event.point,
-                    last: event.point,
-                    since: now,
-                    tool: event.tool,
-                    moved: false,
-                    long_fired: false,
-                    paired: false,
-                });
+                self.down(event, now, None);
                 None
             }
             (PointerPhase::Move, Some(i)) => {
@@ -120,12 +169,17 @@ impl Recognizer {
                 if distance(pointer.start, event.point) > thresholds.tap_slop {
                     pointer.moved = true;
                 }
-                if pointer.long_fired || pointer.paired {
+                if pointer.long_fired || pointer.paired || pointer.edge.is_some() {
                     return None;
                 }
                 // Two fingers: a pinch if they moved apart or together;
-                // the other one then makes no gesture of its own.
-                if let Some(other) = self.pointers.iter_mut().find(|p| !p.paired) {
+                // the other one then makes no gesture of its own. Not
+                // with one at an edge, whose lift is the edge's.
+                if let Some(other) = self
+                    .pointers
+                    .iter_mut()
+                    .find(|p| !p.paired && p.edge.is_none())
+                {
                     other.paired = true;
                     let before = distance(pointer.start, other.start).max(1);
                     let now = distance(pointer.last, other.last);
@@ -168,8 +222,7 @@ impl Recognizer {
     /// Fires long presses that are due at `now`.
     pub(crate) fn tick(&mut self, now: Instant, thresholds: &Thresholds) -> Vec<Recognized> {
         let mut fired = Vec::new();
-        // Two fingers down: no long press, maybe a pinch.
-        let together = self.pointers.len() > 1;
+        let (together, alone) = (self.together(), self.pointers.len() == 1);
         for button in &mut self.buttons {
             if !button.long_fired && now.since(button.since) >= thresholds.long_press_ms {
                 button.long_fired = true;
@@ -180,9 +233,7 @@ impl Recognizer {
             }
         }
         for pointer in &mut self.pointers {
-            if !pointer.long_fired
-                && !pointer.moved
-                && !together
+            if pointer.waits(together, alone)
                 && now.since(pointer.since) >= thresholds.long_press_ms
             {
                 pointer.long_fired = true;
@@ -197,8 +248,10 @@ impl Recognizer {
         fired
     }
 
-    /// When the next long press could fire, if any.
+    /// When the next long press could fire, if any: as [`Self::tick`]
+    /// fires them, so that a time asked for is never one already past.
     pub(crate) fn next_deadline(&self, thresholds: &Thresholds) -> Option<Instant> {
+        let (together, alone) = (self.together(), self.pointers.len() == 1);
         let buttons = self
             .buttons
             .iter()
@@ -207,12 +260,33 @@ impl Recognizer {
         let pointers = self
             .pointers
             .iter()
-            .filter(|p| !p.long_fired && !p.moved)
+            .filter(|p| p.waits(together, alone))
             .map(|p| p.since);
         buttons
             .chain(pointers)
             .min()
             .map(|since| since.add_millis(thresholds.long_press_ms))
+    }
+
+    /// Two fingers down, not counting one at an edge (a thumb resting
+    /// there): no long press, maybe a pinch.
+    fn together(&self) -> bool {
+        self.pointers.iter().filter(|p| p.edge.is_none()).count() > 1
+    }
+}
+
+impl TrackedPointer {
+    /// Whether it may still become a long press: held still, not part of
+    /// two fingers before, and not with another (`together`); at an edge,
+    /// only at the top or the bottom, the only finger down (`alone`).
+    fn waits(&self, together: bool, alone: bool) -> bool {
+        let still = !self.long_fired && !self.moved && !self.paired;
+        still
+            && match self.edge {
+                None => !together,
+                Some(Edge::End) => alone,
+                Some(Edge::Side) => false,
+            }
     }
 }
 

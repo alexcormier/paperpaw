@@ -41,6 +41,8 @@ pub const OPEN: Id = Id::new_static("update.open");
 /// from a rule); says nothing otherwise.
 pub const CHECK: Id = Id::new_static("update.check");
 const PAGE: Id = Id::new_static("update.page");
+/// Declared work: a check no reader waits for (a rule's).
+const CHECK_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("update.check-due");
 /// The update being installed (its path and version), kept through the
 /// restart to say how it went.
 const INSTALLING: &str = "installing.txt";
@@ -74,14 +76,16 @@ pub(crate) fn write_pair(storage: &dyn Storage, name: &str, first: &str, second:
     let _ = storage.write(&file(name), format!("{first}\n{second}\n").as_bytes());
 }
 
-/// At start: how the update installed before went, and an update to offer.
+/// At start: how the update installed before went, and an update to
+/// offer. A download the restart cut off is let go.
 fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
     let storage = env.storage;
+    online::clear_download(storage);
     if let Some((path, version)) = read_pair(storage, INSTALLING) {
         let _ = storage.remove(&file(INSTALLING));
         if !firmware.undone && version == firmware.version {
             let _ = storage.remove(&path);
-            out.push(Command::Notify(
+            out.push(Command::Announce(
                 env.i18n
                     .format("update.done", &[("version", Arg::Str(&version))]),
             ));
@@ -89,7 +93,7 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
         }
     }
     if firmware.undone {
-        out.push(Command::Notify(env.i18n.format(
+        out.push(Command::Announce(env.i18n.format(
             "update.undone",
             &[("version", Arg::Str(&firmware.version))],
         )));
@@ -119,6 +123,7 @@ impl Plugin for Update {
             ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -136,10 +141,20 @@ impl Plugin for Update {
                 out.push(Command::OpenScreen(PAGE, Params::new()));
             },
         ))?;
-        r.add_action(
-            ActionSpec::new(CHECK, "update.check")
-                .handler(|env: &Env<'_>, out: &mut Vec<Command>| online::check(env, true, out)),
-        )?;
+        r.add_action(ActionSpec::new(CHECK, "update.check").handler(
+            |env: &Env<'_>, out: &mut Vec<Command>| {
+                if env.reader {
+                    online::check(env, true, out);
+                } else {
+                    let due = CHECK_DUE.id().clone();
+                    out.push(Command::Work(paperpaw_sdk::work::Work::when_cheap(
+                        due,
+                        core::time::Duration::from_secs(3600),
+                    )));
+                }
+            },
+        ))?;
+        r.on(CHECK_DUE, |env, (), out| online::check(env, true, out))?;
         r.set_menu_need(CHECK, MenuNeed::Firmware)?;
         r.add_icon(CHECK, Cow::Borrowed("cloud-download"))?;
         // Answers and downloads go on while the page is closed.

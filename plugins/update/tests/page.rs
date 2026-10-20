@@ -293,8 +293,11 @@ fn an_older_update_says_so_and_installs_only_as_chosen() {
     let mut device = Device::new(storage);
     device.run(OPEN);
     let shown = device.shown();
-    assert!(shown.contains("PaperPaw 0.3.0, not newer"), "{shown}");
-    assert!(shown.contains("Install anyway"), "{shown}");
+    assert!(
+        shown.contains("PaperPaw 0.3.0, an older version"),
+        "{shown}"
+    );
+    assert!(shown.contains("Install older version"), "{shown}");
     device.run(actions::CONFIRM);
     assert_eq!(
         device.install(),
@@ -456,4 +459,79 @@ fn a_search_in_the_background_offers_what_it_finds_once() {
     let call = device.request();
     device.answer(&call, 200, offer(5000).as_bytes());
     assert!(!device.shown().contains("is available"));
+}
+
+#[test]
+fn an_older_update_on_the_card_is_going_back() {
+    let storage = Shared::default();
+    storage
+        .write(
+            "updates/paperpaw-x4-0.3.0.bin",
+            &update_file("0.3.0", &[("paperpaw-plugin-stats", "0.3.0")]),
+        )
+        .unwrap();
+    let mut device = Device::new(storage);
+    device.run(OPEN);
+    let shown = device.shown();
+    assert!(
+        shown.contains("PaperPaw 0.3.0, an older version"),
+        "{shown}"
+    );
+    assert!(shown.contains("Install older version"), "{shown}");
+    // A newer one online is searched for from here, and comes first.
+    device.run(actions::DOWN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    device.answer(&call, 200, offer(5000).as_bytes());
+    let shown = device.shown();
+    assert!(shown.contains("PaperPaw 0.5.0 is available"), "{shown}");
+}
+
+#[test]
+fn the_same_version_on_the_card_is_installed_again_only() {
+    let storage = Shared::default();
+    storage
+        .write(
+            "updates/paperpaw-x4-0.4.0.bin",
+            &update_file("0.4.0", &[("paperpaw-plugin-stats", "0.4.0")]),
+        )
+        .unwrap();
+    let mut device = Device::new(storage);
+    device.run(OPEN);
+    let shown = device.shown();
+    assert!(shown.contains("PaperPaw 0.4.0 again"), "{shown}");
+    assert!(shown.contains("Install again"), "{shown}");
+    // The server knows nothing newer: up to date, not the file again.
+    device.run(actions::DOWN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    device.answer(&call, 200, br#"{"version": ""}"#);
+    let shown = device.shown();
+    assert!(shown.contains("PaperPaw is up to date"), "{shown}");
+}
+
+#[test]
+fn a_version_that_is_no_version_is_no_offer() {
+    let mut device = Device::new(Shared::default());
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    device.answer(
+        &call,
+        200,
+        br#"{"version": "0.5.0/../../paperpaw", "url": "/u.bin", "size": 10}"#,
+    );
+    let shown = device.shown();
+    assert!(shown.contains("PaperPaw is up to date"), "{shown}");
+    assert!(!device.storage.exists(".paperpaw/plugins/update/offer.txt"));
+}
+
+#[test]
+fn a_download_a_restart_cut_off_is_let_go() {
+    let storage = Shared::default();
+    storage.write("updates/.download", b"half").unwrap();
+    storage.write("updates/.download.part", b"half").unwrap();
+    let device = Device::new(storage);
+    assert!(!device.storage.exists("updates/.download"));
+    assert!(!device.storage.exists("updates/.download.part"));
 }

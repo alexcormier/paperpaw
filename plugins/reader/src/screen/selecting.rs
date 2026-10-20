@@ -28,6 +28,9 @@ impl ReaderScreen {
         let bar_before = self.selection.is_some_and(|s| s.mode == Mode::Bar);
         let bar_after = to.is_some_and(|s| s.mode == Mode::Bar);
         self.selection = to;
+        if let Ok(book) = &self.book {
+            self.selected_on = book.page.start;
+        }
         // Fast refreshes are black and white: they would hide the gray of
         // highlights.
         let highlights = self.book.as_ref().is_ok_and(|book| {
@@ -83,7 +86,7 @@ impl ReaderScreen {
                 cx.command(events::WORD_LOOKED_UP.emit(events::WordLookedUp {
                     word: phrase.to_string(),
                     language: book.language.clone(),
-                    text: sentence(&words, lo, hi),
+                    text: sentence(words, lo, hi),
                     path: book.path.clone(),
                     title: book.title.clone(),
                     section: start.section,
@@ -150,7 +153,9 @@ impl ReaderScreen {
                     text: annotations::snippet(&text),
                     note: String::new(),
                 };
-                annotations::add(env.storage, &book.path, annotation);
+                if !annotations::add(env.storage, &book.path, annotation) {
+                    marks_not_saved(cx);
+                }
             }
             book.marks = annotations::marks(env.storage, &book.path);
             cx.command(annotations::changed(&book.path));
@@ -249,7 +254,7 @@ impl ReaderScreen {
                         ..selection
                     };
                     self.set_selection(Some(to), cx);
-                } else if let Some(cursor) = selection.moved(a, &words) {
+                } else if let Some(cursor) = selection.moved(a, words) {
                     let anchor = if selection.mode == Mode::Choosing {
                         cursor
                     } else {
@@ -266,7 +271,7 @@ impl ReaderScreen {
                 }
             }
             Mode::Bar => {
-                let items = self.items(&env, &words);
+                let items = self.items(&env, words);
                 let focus = selection.focus.unwrap_or(0);
                 if *a == actions::CONFIRM {
                     if let Some(item) = items.get(focus) {

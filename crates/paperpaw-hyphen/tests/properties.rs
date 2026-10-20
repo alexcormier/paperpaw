@@ -191,9 +191,8 @@ fn exceptions_never_break_outside_the_word() {
 }
 
 /// TeX keeps `\lefthyphenmin` and `\righthyphenmin` also for words from
-/// its exception list; here exceptions break wherever they say.
+/// its exception list, and so do these.
 #[test]
-#[ignore = "bug: exceptions ignore the minimum characters before and after a hyphen"]
 fn exceptions_keep_the_minimums() {
     let table = compile("", "a-ble-s", 2, 2);
     let patterns = Patterns::new(&table).unwrap();
