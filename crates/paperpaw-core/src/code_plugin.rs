@@ -34,27 +34,14 @@ use crate::{Kernel, WarningSource};
 /// not fetch ([`native::remember_fetched`](paperpaw_sdk::native::remember_fetched))
 /// is not taken.
 pub(crate) fn fetched(storage: &dyn Storage, native: &Native) -> Vec<(Id, String)> {
-    let mut found = Vec::new();
-    let _ = storage.list(paperpaw_sdk::builtin::PLUGIN_DIR, &mut |entry| {
-        if entry.is_dir
-            && let Some(id) = paperpaw_sdk::native::fetched_plugin(entry.name)
-            && let Ok(id) = Id::parse(id)
-        {
-            found.push(id);
-        }
-    });
-    found
+    paperpaw_sdk::native::fetched_for(storage, native)
         .into_iter()
-        .filter_map(|id| {
-            let folder = paperpaw_sdk::native::fetched_folder(id.as_str());
-            let header = paperpaw_sdk::native::read_header(storage, &native.path(&folder))?;
-            let fetched = paperpaw_sdk::native::fetched_code(storage, id.as_str());
-            // Only what the update plugin fetched, and once it is named as
-            // installed, the code before no longer runs.
-            (header.fingerprint == native.fingerprint.0
-                && fetched == Some(header.sha256)
-                && paperpaw_sdk::native::remember_code(storage, id.as_str(), &header.sha256))
-            .then_some((id, folder))
+        .filter_map(|(id, sha256)| {
+            let id = Id::parse(&id).ok()?;
+            // Once it is named as installed, the code before no longer
+            // runs.
+            paperpaw_sdk::native::remember_code(storage, id.as_str(), &sha256)
+                .then(|| (id.clone(), paperpaw_sdk::native::fetched_folder(id.as_str())))
         })
         .collect()
 }
@@ -802,5 +789,23 @@ version = 2.0.0
             .build()
             .unwrap();
         assert!(kernel.storage().exists("plugins/.stats.next/code.ppn"));
+    }
+
+    #[test]
+    fn a_start_without_code_plugins_leaves_code_fetched_for_the_next() {
+        // An update's trial start loads no code plugins: what was fetched
+        // for it waits, and the firmware, seeing it, starts once more
+        // when the update is kept.
+        let native = Native::new("code.ppn");
+        let storage = fetched(native.fingerprint.0, true);
+        let kernel = Kernel::builder(DEVICE).storage(storage).build().unwrap();
+        let storage = kernel.storage();
+        assert!(storage.exists("plugins/.stats.next/code.ppn"));
+        let waiting = paperpaw_sdk::native::fetched_for(storage, &native);
+        assert_eq!(waiting, [("stats".into(), installed("stats"))]);
+        // For another firmware, nothing waits.
+        let mut other = Native::new("code.ppn");
+        other.fingerprint.0 ^= 1;
+        assert!(paperpaw_sdk::native::fetched_for(storage, &other).is_empty());
     }
 }

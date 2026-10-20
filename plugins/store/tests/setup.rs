@@ -241,3 +241,60 @@ fn built_in_ones_are_switched_on() {
             .all(|io| !matches!(io, paperpaw_core::Io::Http(_)))
     );
 }
+
+/// The kernel restarted on `storage`, as on an X4 loading code plugins:
+/// the store not opened.
+fn restarted(storage: common::Shared) -> paperpaw_core::Kernel {
+    let mut kernel = paperpaw_core::Kernel::builder(common::DEVICE)
+        .storage(storage)
+        .network(true)
+        .catalog_device("x4")
+        .code_plugins(native(), Box::new(common::NoCode))
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_menu::Menu)
+        .plugin(paperpaw_plugin_store::Store)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel
+}
+
+#[test]
+fn the_setups_plugins_go_on_after_a_restart_unasked_ones_do_not() {
+    let mut shopping = offer();
+    shopping.choose("Reading statistics");
+    for _ in 0..4 {
+        shopping.run(actions::DOWN);
+    }
+    shopping.run(actions::CONFIRM);
+    // Its page asked for, then a restart before anything came.
+    shopping.request(&page_url("stats"));
+    let storage = shopping.storage.clone();
+    let queue = String::from_utf8(
+        paperpaw_sdk::read_file(&storage, ".paperpaw/plugins/store/queue.txt", 4096).unwrap(),
+    )
+    .unwrap();
+    // Marked quiet one by one: an *Update all* put in later is not.
+    assert_eq!(queue, "> ~stats\n");
+    let mut kernel = restarted(storage.clone());
+    let asked: Vec<String> = kernel
+        .take_io()
+        .into_iter()
+        .filter_map(|io| match io {
+            paperpaw_core::Io::Http(call) => Some(call.url),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(asked, [page_url("stats")], "the store not opened");
+    // An update put in the queue the usual way waits for the store.
+    storage
+        .write(".paperpaw/plugins/store/queue.txt", b"> weather\n")
+        .unwrap();
+    let mut kernel = restarted(storage);
+    assert!(
+        kernel
+            .take_io()
+            .iter()
+            .all(|io| !matches!(io, paperpaw_core::Io::Http(_)))
+    );
+}

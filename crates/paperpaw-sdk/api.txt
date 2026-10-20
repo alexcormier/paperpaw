@@ -1258,6 +1258,7 @@ pub fn paperpaw_sdk::native::check_file(&dyn paperpaw_platform::storage::Storage
 pub fn paperpaw_sdk::native::code_room(&dyn paperpaw_platform::storage::Storage) -> core::option::Option<paperpaw_sdk::native::CodeRoom>
 pub fn paperpaw_sdk::native::fetched_code(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<[u8; 32]>
 pub fn paperpaw_sdk::native::fetched_folder(&str) -> alloc::string::String
+pub fn paperpaw_sdk::native::fetched_for(&dyn paperpaw_platform::storage::Storage, &paperpaw_sdk::native::Native) -> alloc::vec::Vec<(alloc::string::String, [u8; 32])>
 pub fn paperpaw_sdk::native::fetched_plugin(&str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::native::installed_code(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<[u8; 32]>
 pub fn paperpaw_sdk::native::installed_code_need(&dyn paperpaw_platform::storage::Storage, &paperpaw_sdk::native::CodeRoom, &str) -> (u64, u32)

@@ -19,7 +19,12 @@
 //! ```
 //!
 //! What is left to fetch is kept in the plugin's folder, so it goes on
-//! while the page is closed.
+//! while the page is closed; the plugin being fetched stays first until
+//! it is done. A restart (on the X4, every sleep) cuts its download off:
+//! it is begun anew when the update page shows again ([`resume`]), and
+//! what is left for an update installed meanwhile, or no longer newer, is
+//! let go at the start ([`interrupted`]). So the update never waits for
+//! its plugins for good: each one fetched or failed, it is ready.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -27,6 +32,7 @@ use alloc::vec::Vec;
 
 use paperpaw_json::stream::{Event as JsonEvent, Parser};
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::firmware::{Firmware, compare_versions};
 use paperpaw_sdk::install::{Digest, Installer, Package, PackageFile, Received};
 use paperpaw_sdk::native::{self, Author};
 use paperpaw_sdk::replies::HttpReply;
@@ -247,23 +253,66 @@ fn keep(storage: &dyn Storage, version: &str, builds: &[Build]) {
     let _ = storage.write(&file(QUEUE), text.as_bytes());
 }
 
-/// Fetches the next plugin left; when none is, says the update is ready.
-fn next(env: &Env<'_>, version: &str, out: &mut Vec<Command>) {
-    let storage = env.storage;
-    let mut left = paperpaw_sdk::read_file(storage, &file(QUEUE), 64 * 1024)
+/// The plugins left to fetch, the one being fetched first.
+fn left(storage: &dyn Storage) -> Vec<Build> {
+    paperpaw_sdk::read_file(storage, &file(QUEUE), 64 * 1024)
         .ok()
         .and_then(|t| String::from_utf8(t).ok())
         .map(|t| from_lines(t.lines().skip(1)))
-        .unwrap_or_default();
+        .unwrap_or_default()
+}
+
+/// The plugin being fetched is done, or failed: the next one's turn.
+fn done_with(storage: &dyn Storage, version: &str, plugin: &str) {
+    let mut left = left(storage);
+    if left.first().is_some_and(|b| b.package.plugin == plugin) {
+        left.remove(0);
+    }
+    keep(storage, version, &left);
+}
+
+/// At the start: a download the restart cut off is let go (begun anew by
+/// [`resume`]); what is left for an update that is no longer newer than
+/// `firmware` (installed meanwhile, or another chosen) is let go whole.
+pub(crate) fn interrupted(storage: &dyn Storage, firmware: &Firmware) {
+    if INSTALLER.progress(storage).is_some() {
+        INSTALLER.cancel(storage);
+    }
+    let version = paperpaw_sdk::read_file(storage, &file(QUEUE), 64 * 1024)
+        .ok()
+        .and_then(|t| String::from_utf8(t).ok())
+        .and_then(|t| t.lines().next().map(|v| v.trim().to_string()));
+    if version.is_some_and(|v| !compare_versions(&v, &firmware.version).is_gt()) {
+        for name in [QUEUE, CURRENT, FAILED] {
+            let _ = storage.remove(&file(name));
+        }
+    }
+}
+
+/// Goes on fetching (from the update page): after a restart cut it off.
+pub(crate) fn resume(env: &Env<'_>, out: &mut Vec<Command>) {
+    if INSTALLER.progress(env.storage).is_some() {
+        return;
+    }
+    if let Some(version) = fetching(env.storage) {
+        next(env, &version, out);
+    }
+}
+
+/// Fetches the next plugin left; when none is, says the update is ready.
+fn next(env: &Env<'_>, version: &str, out: &mut Vec<Command>) {
+    let storage = env.storage;
+    let mut left = left(storage);
     while !left.is_empty() {
-        let build = left.remove(0);
-        keep(storage, version, &left);
+        let build = left[0].clone();
         let current = format!("{} {}\n", build.package.plugin, build.author);
         let _ = storage.write(&file(CURRENT), current.as_bytes());
         if INSTALLER.start(env, &build.package, out) {
             return;
         }
         failed(storage, &build.package.name);
+        left.remove(0);
+        keep(storage, version, &left);
     }
     let _ = storage.remove(&file(QUEUE));
     let _ = storage.remove(&file(CURRENT));
@@ -313,8 +362,12 @@ pub(crate) fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>)
                 failed(storage, &progress.name);
             }
             INSTALLER.cancel(storage);
+            done_with(storage, &version, &progress.plugin);
         }
-        Received::Failed(progress) => failed(storage, &progress.name),
+        Received::Failed(progress) => {
+            failed(storage, &progress.name);
+            done_with(storage, &version, &progress.plugin);
+        }
     }
     next(env, &version, out);
 }

@@ -622,11 +622,11 @@ fn offer_with_code(size: usize, code: &[u8]) -> String {
     )
 }
 
-#[test]
-fn plugins_that_become_files_are_fetched_before_the_update() {
-    let storage = Shared::default();
+/// PaperPaw `version` with the statistics built in, loading code
+/// plugins, the card as `storage` has it.
+fn with_code(storage: Shared, version: &str) -> Device {
     let firmware = Firmware {
-        version: "0.4.0".into(),
+        version: version.into(),
         project: PROJECT.into(),
         chip: CHIP,
         keys: vec![paperpaw_update::public_key(&SEED)],
@@ -648,11 +648,77 @@ fn plugins_that_become_files_are_fetched_before_the_update() {
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    let mut device = Device {
+    Device {
         kernel,
         storage,
         now: 0,
-    };
+    }
+}
+
+/// The update 0.5.0 downloaded, the statistics' fetch begun: the request
+/// for its plugin.ini asked for, not answered.
+fn fetch_begun(device: &mut Device) -> Vec<u8> {
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    let file = update_file("0.5.0", &[("chess-for-paperpaw", "1.1.0")]);
+    let code = code_file();
+    device.answer(&call, 200, offer_with_code(file.len(), &code).as_bytes());
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    device.answer(&call, 200, &file);
+    code
+}
+
+#[test]
+fn a_fetch_a_restart_cut_off_goes_on_when_the_page_shows() {
+    let storage = Shared::default();
+    let mut device = with_code(storage.clone(), "0.4.0");
+    let code = fetch_begun(&mut device);
+    let call = device.request();
+    assert_eq!(call.url, "https://p.org/stats/plugin.ini");
+    // A restart (on the X4, sleep) cuts the download off. The update,
+    // downloaded, is offered at the start: its page shows, and the fetch
+    // goes on from the plugin cut off.
+    let mut device = with_code(storage, "0.4.0");
+    let call = device.request();
+    assert_eq!(call.url, "https://p.org/stats/plugin.ini");
+    assert!(device.shown().contains("Downloading PaperPaw 0.5.0"));
+    device.answer(&call, 200, PLUGIN_INI.as_bytes());
+    let call = device.request();
+    device.answer(&call, 200, &code);
+    assert!(device.storage.exists("plugins/.stats.next/code.ppn"));
+    let shown = device.shown();
+    assert!(shown.contains("Install"), "{shown}");
+}
+
+#[test]
+fn a_fetch_failing_does_not_hold_the_update_back() {
+    let storage = Shared::default();
+    let mut device = with_code(storage.clone(), "0.4.0");
+    fetch_begun(&mut device);
+    let call = device.request();
+    device.answer(&call, 0, b"no network");
+    let shown = device.shown();
+    // Ready, the statistics said to come from the store later.
+    assert!(shown.contains("Install"), "{shown}");
+    assert!(!device.storage.exists(".paperpaw/plugins/update/fetch.txt"));
+}
+
+#[test]
+fn what_is_left_for_an_update_installed_meanwhile_is_let_go() {
+    let storage = Shared::default();
+    let mut device = with_code(storage.clone(), "0.4.0");
+    fetch_begun(&mut device);
+    // Installed from elsewhere (the card) before the fetch was done.
+    let device = with_code(storage, "0.5.0");
+    assert!(!device.storage.exists(".paperpaw/plugins/update/fetch.txt"));
+    assert!(!device.storage.exists(".paperpaw/plugins/update/fetch-current.txt"));
+}
+
+#[test]
+fn plugins_that_become_files_are_fetched_before_the_update() {
+    let mut device = with_code(Shared::default(), "0.4.0");
     device.run(OPEN);
     device.run(actions::CONFIRM);
     let call = device.request();

@@ -84,6 +84,7 @@ pub(crate) fn write_pair(storage: &dyn Storage, name: &str, first: &str, second:
 fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
     let storage = env.storage;
     online::clear_download(storage);
+    fetch::interrupted(storage, firmware);
     if let Some((path, version)) = read_pair(storage, INSTALLING) {
         let _ = storage.remove(&file(INSTALLING));
         if !firmware.undone && version == firmware.version {
