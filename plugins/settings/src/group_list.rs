@@ -205,7 +205,7 @@ impl Screen for GroupList {
                     ui::draw_heading(canvas, env, &style, rect, &entry.title);
                     return;
                 };
-                let ink = if focused { Color::WHITE } else { Color::BLACK };
+                let ink = style.focus_ink(focused);
                 let icon = entry.icon.as_deref();
                 let rect = ui::draw_row_icon(canvas, env, &style, rect, room, icon, ink);
                 if *link == Link::Advanced {

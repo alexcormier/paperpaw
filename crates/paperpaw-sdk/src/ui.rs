@@ -568,12 +568,7 @@ pub fn draw_header(
         draw_label(&mut canvas, &font, style.small, right, area, note, ink);
         right -= margin;
     }
-    let title = fit(
-        &font,
-        style.head,
-        title,
-        right - f32::from(area.x) - margin,
-    );
+    let title = fit(&font, style.head, title, right - f32::from(area.x) - margin);
     draw_label(
         &mut canvas,
         &font,
@@ -1182,14 +1177,24 @@ pub fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, inde
     let y = rect.y + rect.height - line;
     match style.separators {
         Separators::Line => canvas.fill_tint(
-            Rect::new(rect.x + margin, y, rect.width.saturating_sub(2 * margin), line),
+            Rect::new(
+                rect.x + margin,
+                y,
+                rect.width.saturating_sub(2 * margin),
+                line,
+            ),
             Color::gray(190),
         ),
         Separators::Inset => {
             let start = margin + indent;
             let thin = (line / 2).max(1);
             canvas.fill_tint(
-                Rect::new(rect.x + start, y, rect.width.saturating_sub(start + margin), thin),
+                Rect::new(
+                    rect.x + start,
+                    y,
+                    rect.width.saturating_sub(start + margin),
+                    thin,
+                ),
                 Color::gray(210),
             );
         }
