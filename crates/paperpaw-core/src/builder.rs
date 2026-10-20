@@ -498,6 +498,7 @@ impl Kernel {
         } else {
             plugin_dirs
         };
+        self.restore_set_aside(&dirs);
         for dir in &dirs {
             let mut problems = Vec::new();
             let found = data_plugin::discover(self.shared.storage.as_ref(), dir, &mut |problem| {

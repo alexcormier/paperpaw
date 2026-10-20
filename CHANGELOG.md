@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Plugins: a plugin being updated when the power went is no longer
+  lost: the version set aside for the install is put back at the next
+  start.
 - Plugins: a plugin (also a data plugin folder) named `plugins`,
   `fonts`, `menus` or `slots` is refused with a warning: its settings in
   `paperpaw.ini` would have been read as that section's entries and
