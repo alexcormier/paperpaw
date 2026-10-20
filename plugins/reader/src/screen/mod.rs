@@ -800,6 +800,19 @@ impl ReaderScreen {
         if *event == events::SUSPEND || *event == events::STOPPING {
             book.save_due(cx, true);
         }
+        // Another plugin asks for the page's words.
+        if let Some(wanted) = events::PAGE_WORDS_WANTED.read(event, params) {
+            let (start, end) = (book.page.start, book.page.end);
+            let words = paperpaw_sdk::reading::PageWords::new(
+                book.path.clone(),
+                book.language.clone(),
+                start,
+                end,
+            )
+            .words(page_words(&book.page.lines));
+            cx.command(Command::Emit(wanted.reply, words.to_params()));
+            return;
+        }
         let this_book = params.get(params::PATH) == Some(book.path.as_str());
         if *event == crate::SPOKEN && this_book {
             self.spoken(params, cx);
@@ -984,6 +997,37 @@ impl ReaderScreen {
             cx.wake_at(now);
         }
     }
+}
+
+/// The words of `lines` with their places, from the lines (nothing
+/// measured); a word broken at the end of a line is its two parts, each
+/// with the whole word as its text (see `reading::Word`).
+pub(super) fn page_words(lines: &[PageLine]) -> Vec<paperpaw_sdk::reading::Word> {
+    use paperpaw_sdk::reading::Word;
+    let mut words: Vec<Word> = Vec::new();
+    for line in lines {
+        let parts = line.text.split(' ').filter(|part| !part.is_empty());
+        for (part, &(start, end)) in parts.zip(&line.words) {
+            let at = |offset| Locator::new(line.section, offset);
+            words.push(Word::new(part, at(start), at(end)));
+        }
+    }
+    for i in 1..words.len() {
+        let (first, next) = (&words[i - 1], &words[i]);
+        if !first.text.ends_with('-') || next.start != first.end {
+            continue;
+        }
+        // The layout's hyphen where the word is shorter in the book.
+        let in_book = first.end.offset.saturating_sub(first.start.offset) as usize;
+        let head = match in_book < first.text.len() {
+            true => &first.text[..first.text.len() - 1],
+            false => first.text.as_str(),
+        };
+        let whole = format!("{head}{}", next.text);
+        words[i - 1].text.clone_from(&whole);
+        words[i].text = whole;
+    }
+    words
 }
 
 /// The text of `lines` as the book has it: a word broken at the end of

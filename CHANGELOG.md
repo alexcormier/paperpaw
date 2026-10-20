@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `pattern`, a small part of regular expressions (classes, word
+  edges, repeats, alternatives, groups, any case) without a library and
+  with bounded work; `decorations::PatternDecorator` marks the words
+  patterns find on a page, each in its role.
+- Plugins without code mark words by patterns with a `marks.ini`: a
+  section per kind of mark, its patterns and its look, set like any
+  mark's in Settings, Marks in the text. Its files' formats are now
+  version 2 (`DATA_FORMATS`).
+- SDK: any plugin reads the words of the page shown
+  (`reading::ask_page_words`, answered with `reading::PageWords` by the
+  reader while a book is open), not only decorators.
 - Restarting no longer counts as going to sleep: after plugins were
   switched or an update installed, rules for "on sleep", sync on sleep,
   work waiting for sleep and the sleep counters no longer take the

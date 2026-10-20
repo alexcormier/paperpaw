@@ -578,6 +578,35 @@ r.on(events::DECORATION_TAPPED, |env, tapped, out| { /* tapped.text */ })?;
 - What changes widths (bold, a larger size) is a text filter instead: it
   lays the page out again.
 
+Words found by patterns need no code of one's own:
+`decorations::PatternDecorator` marks what its patterns
+(`paperpaw_sdk::pattern`, a small part of regular expressions: classes,
+`\b`, repeats, `|`, groups, `(?i)`, with bounded work) find on the page's
+text, each in its role:
+
+```rust
+let names = PatternDecorator::new()
+    .rule(Pattern::new(r"\b(?:Mr|Mrs|Miss)\. [A-Z]\w+").unwrap(), NAME)
+    .into_spec(Id::new_static("tale.names"), "tale.names");
+r.add_decorator(names)?;
+```
+
+A plugin without code does the same with a `marks.ini`, a section per
+role (`<plugin>.<section>`), its patterns and its look:
+
+```ini
+[names]
+title = Names
+pattern = \b(?:Mr|Mrs|Miss)\. [A-Z]\w+
+background = yellow
+line = wavy
+```
+
+Any plugin can read the words of the page shown, not only decorators:
+`reading::ask_page_words(&MY_WORDS)` asks the reader, which answers with
+the event `MY_WORDS`, a `reading::PageWords` (the book, the page's start
+and end, its words with their places).
+
 ### Widgets
 
 A widget is a [`Widget`] a screen makes and keeps
@@ -942,11 +971,13 @@ plugins/large-print/
                  where scalable fonts are drawn)
   styles.css     a stylesheet for books, after a book's own (EPUB)
   presets.ini    ready-made sets of settings, e.g. home screen layouts
+  marks.ini      words marked on book pages by patterns (formats 2)
 ```
 
 `formats` says which version of these files' formats the plugin is made
-for (1 now, and if it is left out); a PaperPaw that reads an older one
-leaves the plugin out and says why, rather than reading it wrongly.
+for (2 now: `marks.ini` came with it; 1 if it is left out); a PaperPaw
+that reads an older one leaves the plugin out and says why, rather than
+reading it wrongly.
 
 Packs for other scripts (`tools/script-pack.py` builds Cyrillic and
 Greek for Literata) are read a glyph at a time, so devices with little

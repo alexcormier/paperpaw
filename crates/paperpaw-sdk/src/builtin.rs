@@ -413,6 +413,15 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// The words of the page shown are wanted ([`PAGE_WORDS_WANTED`],
+        /// see [`reading::ask_page_words`](crate::reading::ask_page_words)):
+        /// the reader answers with the event `reply`.
+        pub struct PageWordsWanted {
+            pub reply: Id,
+        }
+    }
+
+    crate::event_data! {
         /// A decorated word that was tapped, or chosen with the buttons
         /// ([`DECORATION_TAPPED`]): the decorator's mark it is in.
         pub struct DecorationTapped {
@@ -531,6 +540,10 @@ pub mod events {
     /// ([`DecorationTapped`]); sent for decorators that take taps (see
     /// [`decorations`](crate::decorations)), whose plugin answers.
     pub const DECORATION_TAPPED: Event<DecorationTapped> = Event::new("core.decoration-tapped");
+    /// The words of the page shown are wanted ([`PageWordsWanted`]):
+    /// a reader with a book open answers with
+    /// [`reading::PageWords`](crate::reading::PageWords).
+    pub const PAGE_WORDS_WANTED: Event<PageWordsWanted> = Event::new("core.page-words-wanted");
     /// A word of a book was looked up ([`WordLookedUp`]).
     pub const WORD_LOOKED_UP: Event<WordLookedUp> = Event::new("core.word-looked-up");
     /// What a widget shows changed by other means than the events screens

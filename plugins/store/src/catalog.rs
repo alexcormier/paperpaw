@@ -1180,10 +1180,11 @@ mod tests {
 
     #[test]
     fn only_what_fits_is_listed_in_its_order() {
+        let later = format!(r#""formats": {}"#, paperpaw_sdk::DATA_FORMATS + 1);
         let storage = list(&[
             plugin("plain", "reading", ""),
             plugin("built", "reading", r#""built_in": true,"#),
-            plugin("later", "look", "").replace(r#""formats": 1"#, r#""formats": 2"#),
+            plugin("later", "look", "").replace(r#""formats": 1"#, &later),
             plugin("next-sdk", "look", "").replace(r#""sdk": "0.4""#, r#""sdk": "0.9""#),
             plugin("Bad_Id", "look", ""),
             plugin("phone", "look", r#""devices": ["android"],"#),

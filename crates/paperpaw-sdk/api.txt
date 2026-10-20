@@ -172,6 +172,13 @@ pub fn paperpaw_sdk::builtin::events::NotesExported::new(alloc::string::String, 
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::NotesExported
 pub fn paperpaw_sdk::builtin::events::NotesExported::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::NotesExported::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::builtin::events::PageWordsWanted
+pub paperpaw_sdk::builtin::events::PageWordsWanted::reply: paperpaw_sdk::Id
+impl paperpaw_sdk::builtin::events::PageWordsWanted
+pub fn paperpaw_sdk::builtin::events::PageWordsWanted::new(paperpaw_sdk::Id) -> Self
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::PageWordsWanted
+pub fn paperpaw_sdk::builtin::events::PageWordsWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::PageWordsWanted::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::builtin::events::Reading
 pub paperpaw_sdk::builtin::events::Reading::chapter: alloc::string::String
 pub paperpaw_sdk::builtin::events::Reading::chapter_left: core::option::Option<u32>
@@ -260,6 +267,7 @@ pub const paperpaw_sdk::builtin::events::NETWORK_IDLE: paperpaw_sdk::event::Even
 pub const paperpaw_sdk::builtin::events::NETWORK_WANTED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::NOTES_EXPORTED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::NotesExported>
 pub const paperpaw_sdk::builtin::events::PAGE_TURNED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::Reading>
+pub const paperpaw_sdk::builtin::events::PAGE_WORDS_WANTED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::PageWordsWanted>
 pub const paperpaw_sdk::builtin::events::PLUGINS_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::POWER_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::PREVIEW_CHANGED: paperpaw_sdk::event::Event<()>
@@ -726,6 +734,11 @@ pub paperpaw_sdk::decorations::Mark::start: paperpaw_document::Locator
 pub paperpaw_sdk::decorations::Mark::taps: bool
 impl paperpaw_sdk::decorations::Mark
 pub fn paperpaw_sdk::decorations::Mark::overlaps(&self, paperpaw_document::Locator, paperpaw_document::Locator) -> bool
+#[non_exhaustive] pub struct paperpaw_sdk::decorations::MarkRules
+pub paperpaw_sdk::decorations::MarkRules::decorator: paperpaw_sdk::decorations::PatternDecorator
+pub paperpaw_sdk::decorations::MarkRules::roles: alloc::vec::Vec<(paperpaw_sdk::Id, alloc::string::String, paperpaw_sdk::decorations::Decoration)>
+impl paperpaw_sdk::decorations::MarkRules
+pub fn paperpaw_sdk::decorations::MarkRules::parse(&paperpaw_sdk::Id, &str) -> core::result::Result<paperpaw_sdk::decorations::MarkRules, paperpaw_sdk::RegisterError>
 pub struct paperpaw_sdk::decorations::PageText<'a>
 pub paperpaw_sdk::decorations::PageText::language: &'a str
 pub paperpaw_sdk::decorations::PageText::path: &'a str
@@ -734,6 +747,13 @@ pub struct paperpaw_sdk::decorations::PageWord<'a>
 pub paperpaw_sdk::decorations::PageWord::end: paperpaw_document::Locator
 pub paperpaw_sdk::decorations::PageWord::start: paperpaw_document::Locator
 pub paperpaw_sdk::decorations::PageWord::text: &'a str
+pub struct paperpaw_sdk::decorations::PatternDecorator
+impl paperpaw_sdk::decorations::PatternDecorator
+pub fn paperpaw_sdk::decorations::PatternDecorator::decorate(&self, &paperpaw_sdk::decorations::PageText<'_>) -> alloc::vec::Vec<paperpaw_sdk::decorations::Decorated>
+pub fn paperpaw_sdk::decorations::PatternDecorator::into_spec(self, paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> paperpaw_sdk::decorations::DecoratorSpec
+pub fn paperpaw_sdk::decorations::PatternDecorator::is_empty(&self) -> bool
+pub fn paperpaw_sdk::decorations::PatternDecorator::new() -> Self
+pub fn paperpaw_sdk::decorations::PatternDecorator::rule(self, paperpaw_sdk::pattern::Pattern, paperpaw_sdk::Id) -> Self
 pub const paperpaw_sdk::decorations::AS_IS: &str
 pub const paperpaw_sdk::decorations::NONE: &str
 pub const paperpaw_sdk::decorations::THICKNESS: u8
@@ -821,6 +841,9 @@ pub fn paperpaw_sdk::builtin::events::MenuChanged::to_params(&self) -> paperpaw_
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::NotesExported
 pub fn paperpaw_sdk::builtin::events::NotesExported::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::NotesExported::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::PageWordsWanted
+pub fn paperpaw_sdk::builtin::events::PageWordsWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::PageWordsWanted::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Reading
 pub fn paperpaw_sdk::builtin::events::Reading::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Reading::to_params(&self) -> paperpaw_sdk::Params
@@ -839,6 +862,9 @@ pub fn paperpaw_sdk::builtin::events::WifiFailed::to_params(&self) -> paperpaw_s
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::WordLookedUp
 pub fn paperpaw_sdk::builtin::events::WordLookedUp::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::WordLookedUp::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::reading::PageWords
+pub fn paperpaw_sdk::reading::PageWords::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::reading::PageWords::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Chosen
 pub fn paperpaw_sdk::replies::Chosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Chosen::to_params(&self) -> paperpaw_sdk::Params
@@ -1391,6 +1417,25 @@ pub mod paperpaw_sdk::numbers
 pub const paperpaw_sdk::numbers::DECIMAL_MARK: &str
 pub fn paperpaw_sdk::numbers::decimal_mark<'e>(&paperpaw_sdk::Env<'e>) -> &'e str
 pub fn paperpaw_sdk::numbers::fixed(i64, u32, &str) -> alloc::string::String
+pub mod paperpaw_sdk::pattern
+#[non_exhaustive] pub enum paperpaw_sdk::pattern::PatternError
+pub paperpaw_sdk::pattern::PatternError::Syntax(usize)
+pub paperpaw_sdk::pattern::PatternError::TooLong
+pub paperpaw_sdk::pattern::PatternError::TooManyRepeats
+impl core::fmt::Display for paperpaw_sdk::pattern::PatternError
+pub fn paperpaw_sdk::pattern::PatternError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_sdk::pattern::Matches<'p, 't>
+impl core::iter::traits::iterator::Iterator for paperpaw_sdk::pattern::Matches<'_, '_>
+pub type paperpaw_sdk::pattern::Matches<'_, '_>::Item = (usize, usize)
+pub fn paperpaw_sdk::pattern::Matches<'_, '_>::next(&mut self) -> core::option::Option<(usize, usize)>
+pub struct paperpaw_sdk::pattern::Pattern
+impl paperpaw_sdk::pattern::Pattern
+pub fn paperpaw_sdk::pattern::Pattern::as_str(&self) -> &str
+pub fn paperpaw_sdk::pattern::Pattern::find_iter<'p, 't>(&'p self, &'t str) -> paperpaw_sdk::pattern::Matches<'p, 't>
+pub fn paperpaw_sdk::pattern::Pattern::is_match(&self, &str) -> bool
+pub fn paperpaw_sdk::pattern::Pattern::new(&str) -> core::result::Result<paperpaw_sdk::pattern::Pattern, paperpaw_sdk::pattern::PatternError>
+pub const paperpaw_sdk::pattern::MAX_PATTERN: usize
+pub const paperpaw_sdk::pattern::MAX_REPEAT: u32
 pub mod paperpaw_sdk::power
 pub enum paperpaw_sdk::power::PowerLevel
 pub paperpaw_sdk::power::PowerLevel::Normal
@@ -1461,6 +1506,27 @@ pub const fn paperpaw_sdk::random::Random::new(fn(&mut [u8]) -> bool) -> Self
 pub fn paperpaw_sdk::random::Random::token(&self, usize) -> core::option::Option<alloc::string::String>
 impl core::fmt::Debug for paperpaw_sdk::random::Random
 pub fn paperpaw_sdk::random::Random::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod paperpaw_sdk::reading
+#[non_exhaustive] pub struct paperpaw_sdk::reading::PageWords
+pub paperpaw_sdk::reading::PageWords::end: paperpaw_document::Locator
+pub paperpaw_sdk::reading::PageWords::language: alloc::string::String
+pub paperpaw_sdk::reading::PageWords::path: alloc::string::String
+pub paperpaw_sdk::reading::PageWords::start: paperpaw_document::Locator
+pub paperpaw_sdk::reading::PageWords::words: alloc::vec::Vec<paperpaw_sdk::reading::Word>
+impl paperpaw_sdk::reading::PageWords
+pub fn paperpaw_sdk::reading::PageWords::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, paperpaw_document::Locator, paperpaw_document::Locator) -> Self
+pub fn paperpaw_sdk::reading::PageWords::text(&self) -> alloc::string::String
+pub fn paperpaw_sdk::reading::PageWords::words(self, alloc::vec::Vec<paperpaw_sdk::reading::Word>) -> Self
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::reading::PageWords
+pub fn paperpaw_sdk::reading::PageWords::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::reading::PageWords::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::reading::Word
+pub paperpaw_sdk::reading::Word::end: paperpaw_document::Locator
+pub paperpaw_sdk::reading::Word::start: paperpaw_document::Locator
+pub paperpaw_sdk::reading::Word::text: alloc::string::String
+impl paperpaw_sdk::reading::Word
+pub fn paperpaw_sdk::reading::Word::new(impl core::convert::Into<alloc::string::String>, paperpaw_document::Locator, paperpaw_document::Locator) -> Self
+pub fn paperpaw_sdk::reading::ask_page_words(&paperpaw_sdk::event::Event<paperpaw_sdk::reading::PageWords>) -> paperpaw_sdk::Command
 pub mod paperpaw_sdk::replies
 #[non_exhaustive] pub enum paperpaw_sdk::replies::ServerNotice
 pub paperpaw_sdk::replies::ServerNotice::Failed
@@ -3854,6 +3920,9 @@ pub fn paperpaw_sdk::builtin::events::MenuChanged::to_params(&self) -> paperpaw_
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::NotesExported
 pub fn paperpaw_sdk::builtin::events::NotesExported::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::NotesExported::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::PageWordsWanted
+pub fn paperpaw_sdk::builtin::events::PageWordsWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::PageWordsWanted::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Reading
 pub fn paperpaw_sdk::builtin::events::Reading::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Reading::to_params(&self) -> paperpaw_sdk::Params
@@ -3872,6 +3941,9 @@ pub fn paperpaw_sdk::builtin::events::WifiFailed::to_params(&self) -> paperpaw_s
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::WordLookedUp
 pub fn paperpaw_sdk::builtin::events::WordLookedUp::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::WordLookedUp::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::reading::PageWords
+pub fn paperpaw_sdk::reading::PageWords::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::reading::PageWords::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Chosen
 pub fn paperpaw_sdk::replies::Chosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Chosen::to_params(&self) -> paperpaw_sdk::Params

@@ -1404,3 +1404,80 @@ fn a_page_back_over_looser_text_leaves_no_line_out() {
     let on = reading.kept();
     assert!(on >= starts[here], "{on:?} skips to {:?}", starts[here]);
 }
+
+/// The page words a plugin asked the reader for.
+type WordsAsked = Rc<RefCell<Option<paperpaw_sdk::reading::PageWords>>>;
+
+const WORDS_HEARD: paperpaw_sdk::event::Event<paperpaw_sdk::reading::PageWords> =
+    paperpaw_sdk::event::Event::new("asker.words");
+
+/// A plugin whose action `asker.ask` asks for the page's words.
+struct Asker(WordsAsked);
+
+impl Plugin for Asker {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("asker"), "Asker", Version::new(0, 1, 0))
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_action(
+            paperpaw_sdk::ActionSpec::new(Id::new_static("asker.ask"), "ask").handler(
+                |_: &paperpaw_sdk::Env<'_>, out: &mut Vec<paperpaw_sdk::Command>| {
+                    out.push(paperpaw_sdk::reading::ask_page_words(&WORDS_HEARD));
+                },
+            ),
+        )?;
+        let asked = self.0.clone();
+        r.on(WORDS_HEARD, move |_, words, _| {
+            *asked.borrow_mut() = Some(words.clone());
+        })
+    }
+}
+
+#[test]
+fn any_plugin_reads_the_words_of_the_page() {
+    let storage = Shared::default();
+    storage.create_dir("books").unwrap();
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    storage.write(BOOK, text.as_bytes()).unwrap();
+    let asked = WordsAsked::default();
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage.clone())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_format_txt::TxtFormat)
+        .plugin(Reader)
+        .plugin(Asker(asked.clone()))
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let mut reading = Reading {
+        kernel,
+        storage,
+        heard: Heard::default(),
+        now: 0,
+        book: BOOK,
+    };
+    reading.settle(effects);
+    // No book open: no answer.
+    reading.run(Id::new_static("asker.ask"));
+    assert!(asked.borrow().is_none());
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    reading.run(Id::new_static("asker.ask"));
+    let words = asked.borrow().clone().expect("the reader answered");
+    assert_eq!(words.path, BOOK);
+    assert!(words.words.len() > 20, "{}", words.words.len());
+    let kept = reading.kept();
+    assert_eq!(
+        words.start,
+        paperpaw_sdk::document::Locator::new(kept.0, kept.1)
+    );
+    // Each word is the book's text at its place.
+    for word in &words.words[..10] {
+        let from = word.start.offset as usize;
+        assert!(
+            text[from..].starts_with(word.text.trim_end_matches('-')),
+            "{word:?}"
+        );
+    }
+}
