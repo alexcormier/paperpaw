@@ -36,6 +36,7 @@ pub mod image;
 pub mod lint;
 pub mod package;
 pub mod perf;
+pub mod ppn;
 pub mod probe;
 pub mod reach;
 pub mod report;
