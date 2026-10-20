@@ -91,7 +91,9 @@ pub mod wifi;
 pub mod words;
 pub mod work;
 
-pub use action::{ActionHandler, ActionHint, ActionSpec, Actions};
+pub use action::{
+    ActionHandler, ActionHint, ActionParamsHandler, ActionSpec, Actions, Observer, ObserverSpec,
+};
 pub use command::{
     Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,
     http_params, server_params, socket_params, speech_params,

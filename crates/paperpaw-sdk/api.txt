@@ -203,8 +203,10 @@ pub fn paperpaw_sdk::builtin::events::ScreenShown::from_params(&paperpaw_sdk::Pa
 pub fn paperpaw_sdk::builtin::events::ScreenShown::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::builtin::events::SettingChanged
 pub paperpaw_sdk::builtin::events::SettingChanged::id: paperpaw_sdk::Id
+pub paperpaw_sdk::builtin::events::SettingChanged::old: core::option::Option<alloc::string::String>
 impl paperpaw_sdk::builtin::events::SettingChanged
 pub fn paperpaw_sdk::builtin::events::SettingChanged::new(paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::builtin::events::SettingChanged::old(self, impl core::convert::Into<core::option::Option<alloc::string::String>>) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::SettingChanged
 pub fn paperpaw_sdk::builtin::events::SettingChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::SettingChanged::to_params(&self) -> paperpaw_sdk::Params
@@ -527,10 +529,13 @@ pub use paperpaw_sdk::config::set
 pub use paperpaw_sdk::config::set_all
 pub mod paperpaw_sdk::contribution
 #[non_exhaustive] pub enum paperpaw_sdk::contribution::Contribution
-pub paperpaw_sdk::contribution::Contribution::Action(paperpaw_sdk::ActionSpec)
+pub paperpaw_sdk::contribution::Contribution::Action(alloc::boxed::Box<paperpaw_sdk::ActionSpec>)
+pub paperpaw_sdk::contribution::Contribution::ActionObserver(alloc::boxed::Box<paperpaw_sdk::ObserverSpec>)
+pub paperpaw_sdk::contribution::Contribution::ActionOverride(alloc::boxed::Box<paperpaw_sdk::action::ActionOverride>)
 pub paperpaw_sdk::contribution::Contribution::BookData(paperpaw_sdk::library::BookData)
 pub paperpaw_sdk::contribution::Contribution::Chrome(alloc::boxed::Box<paperpaw_sdk::chrome::ChromeSpec>)
 pub paperpaw_sdk::contribution::Contribution::Decorator(alloc::boxed::Box<paperpaw_sdk::decorations::DecoratorSpec>)
+pub paperpaw_sdk::contribution::Contribution::EventObserver(alloc::boxed::Box<paperpaw_sdk::ObserverSpec>)
 pub paperpaw_sdk::contribution::Contribution::FixedPresets(&'static [paperpaw_sdk::presets::Preset])
 pub paperpaw_sdk::contribution::Contribution::FixedSettings(&'static [paperpaw_sdk::SettingSpec])
 pub paperpaw_sdk::contribution::Contribution::Font(alloc::boxed::Box<paperpaw_sdk::FontSpec>)
@@ -652,7 +657,10 @@ pub fn paperpaw_sdk::contribution::Registrar::contribute(&mut self, paperpaw_sdk
 pub fn paperpaw_sdk::contribution::Registrar::contributions(&self) -> &[paperpaw_sdk::contribution::Contribution]
 pub fn paperpaw_sdk::contribution::Registrar::into_contributions(self) -> alloc::vec::Vec<paperpaw_sdk::contribution::Contribution>
 pub fn paperpaw_sdk::contribution::Registrar::new(paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::contribution::Registrar::observe_actions(&mut self, paperpaw_sdk::ObserverSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::observe_events(&mut self, paperpaw_sdk::ObserverSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::on<P: paperpaw_sdk::event::EventData>(&mut self, paperpaw_sdk::event::Event<P>, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &P, &mut alloc::vec::Vec<paperpaw_sdk::Command>) + 'static) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::override_action(&mut self, paperpaw_sdk::Id, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>) + 'static, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::plugin(&self) -> &paperpaw_sdk::Id
 pub fn paperpaw_sdk::contribution::Registrar::publish<T: core::any::Any>(&mut self, paperpaw_sdk::Id, T) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_menu_need(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::MenuNeed) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -2911,6 +2919,7 @@ pub paperpaw_sdk::Command::ResetSetting(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Respond(paperpaw_sdk::ServerResponse)
 pub paperpaw_sdk::Command::Restart
 pub paperpaw_sdk::Command::RunAction(paperpaw_sdk::Id)
+pub paperpaw_sdk::Command::RunActionWith(paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::Screenshot(alloc::string::String)
 #[non_exhaustive] pub paperpaw_sdk::Command::Serve
 pub paperpaw_sdk::Command::Serve::events: paperpaw_sdk::Id
@@ -2949,10 +2958,13 @@ impl paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::open_slot(paperpaw_sdk::Id) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::set<T: paperpaw_sdk::setting::SettingType>(&paperpaw_sdk::setting::Setting<T>, <T as paperpaw_sdk::setting::SettingType>::Input) -> paperpaw_sdk::Command
 #[non_exhaustive] pub enum paperpaw_sdk::Contribution
-pub paperpaw_sdk::Contribution::Action(paperpaw_sdk::ActionSpec)
+pub paperpaw_sdk::Contribution::Action(alloc::boxed::Box<paperpaw_sdk::ActionSpec>)
+pub paperpaw_sdk::Contribution::ActionObserver(alloc::boxed::Box<paperpaw_sdk::ObserverSpec>)
+pub paperpaw_sdk::Contribution::ActionOverride(alloc::boxed::Box<paperpaw_sdk::action::ActionOverride>)
 pub paperpaw_sdk::Contribution::BookData(paperpaw_sdk::library::BookData)
 pub paperpaw_sdk::Contribution::Chrome(alloc::boxed::Box<paperpaw_sdk::chrome::ChromeSpec>)
 pub paperpaw_sdk::Contribution::Decorator(alloc::boxed::Box<paperpaw_sdk::decorations::DecoratorSpec>)
+pub paperpaw_sdk::Contribution::EventObserver(alloc::boxed::Box<paperpaw_sdk::ObserverSpec>)
 pub paperpaw_sdk::Contribution::FixedPresets(&'static [paperpaw_sdk::presets::Preset])
 pub paperpaw_sdk::Contribution::FixedSettings(&'static [paperpaw_sdk::SettingSpec])
 pub paperpaw_sdk::Contribution::Font(alloc::boxed::Box<paperpaw_sdk::FontSpec>)
@@ -3203,14 +3215,21 @@ pub type paperpaw_sdk::setting::Text::Value<'a> = &'a str
 pub fn paperpaw_sdk::setting::Text::read(core::option::Option<&paperpaw_sdk::SettingValue>) -> &str
 pub fn paperpaw_sdk::setting::Text::write(alloc::borrow::Cow<'static, str>) -> paperpaw_sdk::SettingValue
 #[non_exhaustive] pub struct paperpaw_sdk::ActionSpec
+pub paperpaw_sdk::ActionSpec::description: core::option::Option<alloc::borrow::Cow<'static, str>>
 pub paperpaw_sdk::ActionSpec::handler: core::option::Option<paperpaw_sdk::ActionHandler>
+pub paperpaw_sdk::ActionSpec::handler_with: core::option::Option<paperpaw_sdk::ActionParamsHandler>
 pub paperpaw_sdk::ActionSpec::hint: paperpaw_sdk::ActionHint
 pub paperpaw_sdk::ActionSpec::id: paperpaw_sdk::Id
+pub paperpaw_sdk::ActionSpec::keywords: core::option::Option<alloc::borrow::Cow<'static, str>>
 pub paperpaw_sdk::ActionSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::ActionSpec
+pub fn paperpaw_sdk::ActionSpec::describe(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::ActionSpec::handler(self, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &mut alloc::vec::Vec<paperpaw_sdk::Command>) + 'static) -> Self
+pub fn paperpaw_sdk::ActionSpec::handler_with(self, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>) + 'static) -> Self
 pub fn paperpaw_sdk::ActionSpec::hint(self, paperpaw_sdk::ActionHint) -> Self
+pub fn paperpaw_sdk::ActionSpec::keywords(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::ActionSpec::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub fn paperpaw_sdk::ActionSpec::runs_itself(&self) -> bool
 impl core::fmt::Debug for paperpaw_sdk::ActionSpec
 pub fn paperpaw_sdk::ActionSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::Actions
@@ -3219,6 +3238,9 @@ pub fn paperpaw_sdk::Actions::contains(&self, &str) -> bool
 pub fn paperpaw_sdk::Actions::get(&self, &str) -> core::option::Option<&paperpaw_sdk::ActionSpec>
 pub fn paperpaw_sdk::Actions::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::ActionSpec>
 pub fn paperpaw_sdk::Actions::new() -> Self
+pub fn paperpaw_sdk::Actions::runnable(&self, &str) -> bool
+impl core::fmt::Debug for paperpaw_sdk::Actions
+pub fn paperpaw_sdk::Actions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::Capabilities
 pub paperpaw_sdk::Capabilities::black_and_white: bool
 pub paperpaw_sdk::Capabilities::button_row: bool
@@ -3577,6 +3599,13 @@ pub const fn paperpaw_sdk::Metrics::mm(&self, u32) -> u32
 pub const fn paperpaw_sdk::Metrics::new(u16) -> Self
 pub fn paperpaw_sdk::Metrics::pt(&self, f32) -> f32
 pub const fn paperpaw_sdk::Metrics::tenth_mm(&self, u32) -> u32
+#[non_exhaustive] pub struct paperpaw_sdk::ObserverSpec
+pub paperpaw_sdk::ObserverSpec::id: paperpaw_sdk::Id
+pub paperpaw_sdk::ObserverSpec::observer: paperpaw_sdk::Observer
+impl paperpaw_sdk::ObserverSpec
+pub fn paperpaw_sdk::ObserverSpec::new(paperpaw_sdk::Id, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>) + 'static) -> Self
+impl core::fmt::Debug for paperpaw_sdk::ObserverSpec
+pub fn paperpaw_sdk::ObserverSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::OpenOptions
 pub paperpaw_sdk::OpenOptions::color: bool
 pub paperpaw_sdk::OpenOptions::cover_fit: paperpaw_image::Fit
@@ -3682,7 +3711,10 @@ pub fn paperpaw_sdk::contribution::Registrar::contribute(&mut self, paperpaw_sdk
 pub fn paperpaw_sdk::contribution::Registrar::contributions(&self) -> &[paperpaw_sdk::contribution::Contribution]
 pub fn paperpaw_sdk::contribution::Registrar::into_contributions(self) -> alloc::vec::Vec<paperpaw_sdk::contribution::Contribution>
 pub fn paperpaw_sdk::contribution::Registrar::new(paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::contribution::Registrar::observe_actions(&mut self, paperpaw_sdk::ObserverSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::observe_events(&mut self, paperpaw_sdk::ObserverSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::on<P: paperpaw_sdk::event::EventData>(&mut self, paperpaw_sdk::event::Event<P>, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &P, &mut alloc::vec::Vec<paperpaw_sdk::Command>) + 'static) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::override_action(&mut self, paperpaw_sdk::Id, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>) + 'static, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::plugin(&self) -> &paperpaw_sdk::Id
 pub fn paperpaw_sdk::contribution::Registrar::publish<T: core::any::Any>(&mut self, paperpaw_sdk::Id, T) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_menu_need(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::MenuNeed) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -4060,9 +4092,11 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::takes_double_taps(&self) -> bool
 pub fn paperpaw_sdk::cover_fit(paperpaw_image::Fit) -> paperpaw_image::Fit
 pub fn paperpaw_sdk::read_file(&dyn paperpaw_platform::storage::Storage, &str, usize) -> core::result::Result<alloc::vec::Vec<u8>, paperpaw_platform::storage::StorageError>
 pub type paperpaw_sdk::ActionHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &mut alloc::vec::Vec<paperpaw_sdk::Command>)>
+pub type paperpaw_sdk::ActionParamsHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>)>
 pub type paperpaw_sdk::EventHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>)>
 pub type paperpaw_sdk::FormatOpener = alloc::boxed::Box<dyn core::ops::function::Fn(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::OpenOptions) -> core::result::Result<alloc::boxed::Box<dyn paperpaw_document::Document>, paperpaw_document::DocumentError>>
 pub type paperpaw_sdk::FormatPrepared = alloc::boxed::Box<dyn core::ops::function::Fn(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::OpenOptions) -> bool>
+pub type paperpaw_sdk::Observer = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>)>
 pub type paperpaw_sdk::ScreenFactory = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> alloc::boxed::Box<dyn paperpaw_sdk::Screen>>
 pub type paperpaw_sdk::StatusFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::status::StatusValue>>
 pub type paperpaw_sdk::StatusLineFn = alloc::boxed::Box<dyn core::ops::function::Fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>)>

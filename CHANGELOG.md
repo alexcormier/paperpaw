@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: actions with params, overrides and observers (gap E2).
+  `Command::RunActionWith(id, params)` runs an action with params, which
+  a handler made with `ActionSpec::handler_with` gets (a rule applying
+  the profile it names). `Registrar::override_action(action, handler,
+  priority)` puts a handler in place of any action's own; the one of the
+  highest priority runs, as for slots. `Registrar::observe_actions` and
+  `observe_events` (`ObserverSpec`) see every action run and every event
+  emitted (a macro recorder, rules on any event); nothing runs for them
+  where there are none. `ActionSpec::describe` and `keywords` give lists
+  and searches of actions their words; `Actions::runnable` tells actions
+  that run by themselves from screen actions. `SettingChanged` carries
+  the value before (`old`) where the kernel changed it. Breaking:
+  `Contribution::Action` holds a `Box<ActionSpec>`.
 - SDK: inputs of more kinds (gap E1). Key maps bind `double.<button>`
   (pressed twice), `double-tap.<zone>`, `tap2` (two fingers),
   `pinch.<out|in>`, a layer's own zones (`[zones.<layer>] <name> =

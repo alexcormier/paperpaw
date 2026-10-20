@@ -309,6 +309,11 @@ pub mod events {
         pub struct SettingChanged {
             pub id: Id,
         }
+        optional {
+            /// Its value before, as written in `paperpaw.ini`, where the
+            /// kernel knew it.
+            pub old: String,
+        }
     }
 
     crate::event_data! {

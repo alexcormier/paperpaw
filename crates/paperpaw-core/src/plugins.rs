@@ -276,6 +276,13 @@ impl Kernel {
             let _ = self.shared.hyphenation.add(spec);
         }
         self.subscriptions.append(&mut staging.subscriptions);
+        for (action, priority, handler) in staging.overrides.drain(..) {
+            self.shared
+                .actions
+                .add_override(action, priority, plugin.clone(), handler);
+        }
+        self.action_observers.append(&mut staging.action_observers);
+        self.event_observers.append(&mut staging.event_observers);
         self.plugin_defaults.extend(
             staging
                 .setting_defaults
@@ -793,6 +800,8 @@ impl Kernel {
         self.keys.user.shrink_to_fit();
         self.keys.shell.shrink_to_fit();
         self.subscriptions.shrink_to_fit();
+        self.action_observers.shrink_to_fit();
+        self.event_observers.shrink_to_fit();
         self.shared.plugins.shrink_to_fit();
         self.warnings.shrink_to_fit();
         let shared = &mut self.shared;

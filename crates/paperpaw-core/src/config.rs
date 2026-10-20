@@ -23,9 +23,16 @@ pub(crate) struct Scope {
 impl Kernel {
     /// Forgets a setting's value (see [`Command::ResetSetting`]): from the
     /// active scope, or from the configuration file.
+    /// Setting `id`'s value now, as written in `paperpaw.ini`.
+    pub(crate) fn setting_text(&self, id: &Id) -> Option<String> {
+        let value = self.shared.settings.get(id.as_str())?;
+        Some(value.to_config_text())
+    }
+
     pub(crate) fn reset_setting(&mut self, id: &Id) {
         let scoped = self.shared.settings.goes_to_scope(id.as_str());
         let before = self.scoped_values();
+        let old = self.setting_text(id);
         if let Err(error) = self.shared.settings.reset(id.as_str()) {
             return self.warn_runtime(format!("`{id}`: {error}"));
         }
@@ -40,9 +47,10 @@ impl Kernel {
             });
         }
         self.setting_changed(id);
+        let changed = events::SettingChanged::new(id.clone()).old(old);
         self.output
             .commands
-            .push(events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())));
+            .push(events::SETTING_CHANGED.emit(changed));
     }
 
     /// Writes a changed setting to the configuration file on the device,
@@ -77,9 +85,11 @@ impl Kernel {
         for (id, old) in before {
             if self.shared.settings.get(id.as_str()) != old.as_ref() {
                 self.setting_changed(&id);
+                let old = old.map(|value| value.to_config_text());
+                let changed = events::SettingChanged::new(id.clone()).old(old);
                 self.output
                     .commands
-                    .push(events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())));
+                    .push(events::SETTING_CHANGED.emit(changed));
             }
         }
     }

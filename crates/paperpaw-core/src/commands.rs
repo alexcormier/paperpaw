@@ -204,6 +204,7 @@ impl Kernel {
             Command::Notify(text) | Command::Announce(text) => self.notify(text),
             Command::Emit(event, params) => self.emit(&event, &params),
             Command::RunAction(action) => self.dispatch(action),
+            Command::RunActionWith(action, params) => self.dispatch_with(action, &params),
             command @ (Command::Work(_)
             | Command::CancelWork(..)
             | Command::CancelHttp(_)
@@ -321,6 +322,7 @@ impl Kernel {
         if *event == events::SETTING_CHANGED {
             self.sync_chromes();
         }
+        self.observe(event, params, false);
         self.chromes_hear(event, params);
         // Screens learn that they show from `on_show`.
         if *event == events::SCREEN_SHOWN {
@@ -341,18 +343,22 @@ impl Kernel {
             Command::SetSetting(id, value) if self.shared.settings.goes_to_scope(id.as_str()) => {
                 self.set_in_scope(&id, value);
             }
-            Command::SetSetting(id, value) => match self.shared.settings.set(id.as_str(), value) {
-                Ok(()) => {
-                    self.persist_setting(&id);
-                    self.setting_changed(&id);
-                    self.output.commands.push(
-                        events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())),
-                    );
+            Command::SetSetting(id, value) => {
+                let old = self.setting_text(&id);
+                match self.shared.settings.set(id.as_str(), value) {
+                    Ok(()) => {
+                        self.persist_setting(&id);
+                        self.setting_changed(&id);
+                        let changed = events::SettingChanged::new(id.clone()).old(old);
+                        self.output
+                            .commands
+                            .push(events::SETTING_CHANGED.emit(changed));
+                    }
+                    Err(error) => {
+                        self.warn_runtime(format!("`{id}`: {error}"));
+                    }
                 }
-                Err(error) => {
-                    self.warn_runtime(format!("`{id}`: {error}"));
-                }
-            },
+            }
             Command::ResetSetting(id) => self.reset_setting(&id),
             Command::PreviewSettings(values) => self.preview_settings(values),
             Command::SetScope(path) => self.set_scope(path),

@@ -492,6 +492,8 @@ impl KernelBuilder {
             timing: drawing::Timing::default(),
             framebuffer,
             subscriptions: Vec::new(),
+            action_observers: Vec::new(),
+            event_observers: Vec::new(),
             show_pending: false,
             notice: None,
             works: work::Queue::new(match self.device.memory {

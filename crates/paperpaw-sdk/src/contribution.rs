@@ -45,7 +45,7 @@ use crate::widgets::WidgetSpec;
 /// ones are boxed: a plugin's list stays small on small devices.
 #[non_exhaustive]
 pub enum Contribution {
-    Action(ActionSpec),
+    Action(Box<ActionSpec>),
     Screen(ScreenSpec),
     Slot(SlotSpec),
     /// A screen proposed for a slot (see [`Registrar::bind_slot`]).
@@ -136,6 +136,13 @@ pub enum Contribution {
     Chrome(Box<crate::chrome::ChromeSpec>),
     /// A named input (see [`keys::InputSpec`](crate::keys::InputSpec)).
     Input(crate::keys::InputSpec),
+    /// A handler put in place of an action's own, of any plugin
+    /// ([`Registrar::override_action`]).
+    ActionOverride(Box<crate::action::ActionOverride>),
+    /// Sees every action run ([`Registrar::observe_actions`]).
+    ActionObserver(Box<crate::action::ObserverSpec>),
+    /// Sees every event emitted ([`Registrar::observe_events`]).
+    EventObserver(Box<crate::action::ObserverSpec>),
     /// A recognizer of gestures (see [`keys::GestureSpec`](crate::keys::GestureSpec)).
     Gesture(Box<crate::keys::GestureSpec>),
     /// A job: work done in steps (see [`work`](crate::work)).
@@ -207,6 +214,9 @@ impl Contribution {
             Contribution::RefreshFilter(_) => "refresh-filter",
             Contribution::Chrome(_) => "chrome",
             Contribution::Input(_) => "input",
+            Contribution::ActionOverride(_) => "action-override",
+            Contribution::ActionObserver(_) => "action-observer",
+            Contribution::EventObserver(_) => "event-observer",
             Contribution::Gesture(_) => "gesture",
             Contribution::Work(_) => "work",
             Contribution::Widget(_) => "widget",
@@ -245,6 +255,7 @@ impl Contribution {
             Contribution::RefreshFilter(f) => &f.id,
             Contribution::Chrome(c) => &c.id,
             Contribution::Input(i) => &i.id,
+            Contribution::ActionObserver(o) | Contribution::EventObserver(o) => &o.id,
             Contribution::Gesture(g) => &g.id,
             Contribution::Work(w) => &w.id,
             Contribution::Widget(w) => &w.id,
@@ -330,7 +341,7 @@ impl Registrar {
     }
 
     pub fn add_action(&mut self, action: ActionSpec) -> Result<(), RegisterError> {
-        self.add(Contribution::Action(action))
+        self.add(Contribution::Action(Box::new(action)))
     }
 
     pub fn add_screen(&mut self, screen: ScreenSpec) -> Result<(), RegisterError> {
@@ -626,6 +637,43 @@ impl Registrar {
     /// [`filters`](crate::filters)).
     pub fn add_refresh_filter(&mut self, filter: RefreshFilterSpec) -> Result<(), RegisterError> {
         self.add(Contribution::RefreshFilter(filter))
+    }
+
+    /// Puts `handler` in place of action `action`'s own, also of another
+    /// plugin's (one with none too, e.g. a screen action where no screen
+    /// takes it): of several, the one of the highest priority runs, as
+    /// for slots. It gets the params the action was run with.
+    pub fn override_action(
+        &mut self,
+        action: Id,
+        handler: impl Fn(&crate::Env<'_>, &crate::Params, &mut Vec<crate::Command>) + 'static,
+        priority: Priority,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ActionOverride(Box::new(
+            crate::action::ActionOverride {
+                action,
+                handler: Box::new(handler),
+                priority,
+            },
+        )))
+    }
+
+    /// Sees every action run, with its params, before it runs (see
+    /// [`ObserverSpec`](crate::ObserverSpec)).
+    pub fn observe_actions(
+        &mut self,
+        observer: crate::action::ObserverSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ActionObserver(Box::new(observer)))
+    }
+
+    /// Sees every event emitted, with its params, after its subscribers
+    /// (see [`ObserverSpec`](crate::ObserverSpec)).
+    pub fn observe_events(
+        &mut self,
+        observer: crate::action::ObserverSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::EventObserver(Box::new(observer)))
     }
 
     /// Adds an input of one's own, `input.<id>`, bound in key maps as any

@@ -338,6 +338,11 @@ pub enum Command {
     /// and these params, else in place of what the slot shows (one
     /// launcher of several, chosen once).
     OpenInSlot(Id, Id, Params),
+    /// Runs action `.0` with params `.1`, as [`Command::RunAction`]: a
+    /// handler made with [`ActionSpec::handler_with`](crate::ActionSpec::handler_with)
+    /// gets them (a screen that takes the action does not), e.g. a
+    /// rule applying the profile it names.
+    RunActionWith(Id, Params),
     /// Raises the input `.0` as written in key maps (`button.menu`,
     /// `double-tap.center`, a plugin's `input.<id>`): it runs what the
     /// layers shown bind it to, as if it had come (switch access, chords

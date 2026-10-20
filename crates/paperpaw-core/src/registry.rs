@@ -153,6 +153,9 @@ pub(crate) struct Staging {
     pub(crate) setting_groups: Vec<SettingGroupSpec>,
     /// Events, the plugins that hear them, and their handlers.
     pub(crate) subscriptions: Vec<(Id, Id, EventHandler)>,
+    pub(crate) overrides: Vec<(Id, Priority, paperpaw_sdk::ActionParamsHandler)>,
+    pub(crate) action_observers: Vec<paperpaw_sdk::ObserverSpec>,
+    pub(crate) event_observers: Vec<paperpaw_sdk::ObserverSpec>,
     pub(crate) menu_entries: Vec<MenuEntry>,
     pub(crate) menu_sections: Vec<paperpaw_sdk::MenuSection>,
     pub(crate) icons: Vec<(Id, Cow<'static, str>)>,
@@ -232,7 +235,7 @@ pub(crate) fn stage(
 ) -> Result<(), RegisterError> {
     for contribution in contributions {
         match contribution {
-            Contribution::Action(action) => staging.actions.push(action),
+            Contribution::Action(action) => staging.actions.push(*action),
             Contribution::Screen(screen) => staging.screens.push(screen),
             Contribution::Slot(slot) => staging.slots.push(slot),
             Contribution::SlotBinding {
@@ -310,6 +313,14 @@ pub(crate) fn stage(
             Contribution::RefreshFilter(filter) => staging.refresh_filters.push(filter),
             Contribution::Chrome(chrome) => staging.chromes.push(*chrome),
             Contribution::Input(input) => staging.inputs.push(input),
+            Contribution::ActionOverride(over) => {
+                let over = *over;
+                staging
+                    .overrides
+                    .push((over.action, over.priority, over.handler));
+            }
+            Contribution::ActionObserver(observer) => staging.action_observers.push(*observer),
+            Contribution::EventObserver(observer) => staging.event_observers.push(*observer),
             Contribution::Gesture(gesture) => staging.gestures.push(*gesture),
             Contribution::Work(spec) => staging.works.push(*spec),
             Contribution::Widget(widget) => staging.widgets.push(*widget),

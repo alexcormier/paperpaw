@@ -552,30 +552,88 @@ impl Kernel {
     }
 
     pub(crate) fn dispatch(&mut self, action: Id) {
+        self.dispatch_with(action, &Params::new());
+    }
+
+    /// Runs `action` with `params`: seen by the observers of actions,
+    /// offered to the screens, else the handler put in its place with
+    /// the highest priority or its own.
+    pub(crate) fn dispatch_with(&mut self, action: Id, params: &Params) {
+        self.observe(&action, params, true);
         if self.offer(|screen, cx| screen.on_action(&action, cx)) == Handled::Yes {
             return;
         }
-        match self.shared.actions.get(action.as_str()) {
-            Some(spec) => {
-                if let Some(handler) = &spec.handler {
-                    let env = self.shared.env(self.now);
-                    let _running = self.shared.meter.enter(action.namespace());
-                    let from = self.output.commands.len();
-                    handler(&env, &mut self.output.commands);
-                    // Run by a rule, not the reader: nothing said over reading.
-                    let (reader, now) = (self.shared.reader, self.now);
-                    let top = self.stack.last().map(|s| s.id.namespace());
-                    let out = &mut self.output.commands;
-                    let owner = action.namespace();
-                    work::quiet(reader, top, now, from, owner, out, &mut self.works);
-                    // An action a screen guarding the device let pass (the
-                    // lock lets sleep pass): what it opens may show above.
-                    if self.guard().is_some() {
-                        self.trusted.extend(from..self.output.commands.len());
+        let env = self.shared.env(self.now);
+        let from = self.output.commands.len();
+        let owner =
+            if let Some((plugin, handler)) = self.shared.actions.override_of(action.as_str()) {
+                let _running = self.shared.meter.enter(plugin.as_str());
+                handler(&env, params, &mut self.output.commands);
+                plugin.clone()
+            } else {
+                match self.shared.actions.get(action.as_str()) {
+                    Some(spec) if spec.runs_itself() => {
+                        let _running = self.shared.meter.enter(action.namespace());
+                        let out = &mut self.output.commands;
+                        match (&spec.handler_with, &spec.handler) {
+                            (Some(handler), _) => handler(&env, params, out),
+                            (None, Some(handler)) => handler(&env, out),
+                            (None, None) => {}
+                        }
+                        action.clone()
                     }
+                    Some(_) => return,
+                    None => return self.warn_runtime(format!("unknown action `{action}`")),
                 }
-            }
-            None => self.warn_runtime(format!("unknown action `{action}`")),
+            };
+        // Run by a rule, not the reader: nothing said over reading.
+        let (reader, now) = (self.shared.reader, self.now);
+        let top = self.stack.last().map(|s| s.id.namespace());
+        let out = &mut self.output.commands;
+        work::quiet(
+            reader,
+            top,
+            now,
+            from,
+            owner.namespace(),
+            out,
+            &mut self.works,
+        );
+        // An action a screen guarding the device let pass (the lock lets
+        // sleep pass): what it opens may show above.
+        if self.guard().is_some() {
+            self.trusted.extend(from..self.output.commands.len());
+        }
+    }
+
+    /// The observers of actions (`actions`) or of events see `id` with
+    /// `params`. Nothing to do where there are none.
+    pub(crate) fn observe(&mut self, id: &Id, params: &Params, actions: bool) {
+        let observers = if actions {
+            &self.action_observers
+        } else {
+            &self.event_observers
+        };
+        if observers.is_empty() {
+            return;
+        }
+        let env = self.shared.env(self.now);
+        for spec in observers {
+            let _running = self.shared.meter.enter(spec.id.namespace());
+            let from = self.output.commands.len();
+            (spec.observer)(&env, id, params, &mut self.output.commands);
+            let top = self.stack.last().map(|s| s.id.namespace());
+            let (reader, now) = (self.shared.reader, self.now);
+            let out = &mut self.output.commands;
+            work::quiet(
+                reader,
+                top,
+                now,
+                from,
+                spec.id.namespace(),
+                out,
+                &mut self.works,
+            );
         }
     }
 

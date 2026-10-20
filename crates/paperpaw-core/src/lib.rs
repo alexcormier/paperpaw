@@ -313,6 +313,9 @@ pub struct Kernel {
     shared: Shared,
     framebuffer: Framebuffer,
     subscriptions: Vec<(Id, Id, EventHandler)>,
+    /// What sees every action run and every event emitted.
+    action_observers: Vec<paperpaw_sdk::ObserverSpec>,
+    event_observers: Vec<paperpaw_sdk::ObserverSpec>,
     /// The screen on top changed: it is told ([`Screen::on_show`]) once
     /// the commands of the call are done, so that one shown for a moment
     /// (e.g. below a menu that closes to open another screen) is not.
@@ -607,7 +610,9 @@ impl Kernel {
                 let below = self.stack.len().checked_sub(2)?;
                 Some(format!("back:{}", self.stack[below].id))
             }
-            Command::RunAction(action) => Some(format!("run:{action}")),
+            Command::RunAction(action) | Command::RunActionWith(action, _) => {
+                Some(format!("run:{action}"))
+            }
             _ => None,
         }
     }
