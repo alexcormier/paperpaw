@@ -11,10 +11,15 @@ impl Kernel {
         let Some(spec) = self.registry.screens.get(&id) else {
             return self.warn_runtime(format!("unknown screen `{id}`"));
         };
+        let serial = self.next_serial;
+        self.next_serial = serial.wrapping_add(1);
+        let key = paperpaw_sdk::ScreenKey::new(serial);
+        let entry = paperpaw_sdk::StackEntry::new(id.clone(), slot.clone(), false, key);
         // Made once, at the size it asked for: above the row of hints, or
-        // all of the screen.
+        // all of the screen, less the bars shown over it.
         let mut hinted = self.registry.hints_of(&id) == Hints::Shown;
-        self.shared.device.display.height = self.content_height(hinted);
+        let mut area = self.layout(hinted, &entry, None);
+        set_area(&mut self.shared, area);
         let running = self.shared.meter.enter(id.namespace());
         let mut screen = (spec.factory)(&self.shared.env(self.now), params);
         // It says otherwise of the row of hints: made again for the part
@@ -23,17 +28,17 @@ impl Kernel {
             && (own == Hints::Shown) != hinted
         {
             hinted = !hinted;
-            self.shared.device.display.height = self.content_height(hinted);
+            area = self.layout(hinted, &entry, None);
+            set_area(&mut self.shared, area);
             screen = (spec.factory)(&self.shared.env(self.now), params);
         }
         drop(running);
-        let serial = self.next_serial;
-        self.next_serial = serial.wrapping_add(1);
         let active = ActiveScreen {
             id,
             serial,
             slot,
             hinted,
+            area,
             params: params.clone(),
             screen,
             timer: None,
@@ -80,7 +85,7 @@ impl Kernel {
     }
 
     /// The topmost full screen: it and the overlays above it show.
-    fn shown_base(&self) -> usize {
+    pub(crate) fn shown_base(&self) -> usize {
         (0..self.stack.len())
             .rev()
             .find(|&i| self.overlay(i).is_none())
@@ -187,6 +192,7 @@ impl Kernel {
             .collect();
         self.shared.stack.clear();
         self.shared.stack.extend(entries);
+        self.sync_chromes();
     }
 
     /// Closes the open screen `key` (see [`Command::Close`]), leaving the
@@ -304,10 +310,14 @@ impl Kernel {
         }
     }
 
-    /// The region of an overlay, `None` for full screens.
+    /// The region of an overlay on the screen, `None` for full screens.
     pub(crate) fn overlay(&self, index: usize) -> Option<Rect> {
-        let env = self.shared.env(self.now);
-        self.stack.get(index)?.screen.region(&env)
+        let active = self.stack.get(index)?;
+        let base = self.shared.env(self.now);
+        let device = base.device_within(active.area);
+        let env = base.within(&device, active.area);
+        let region = active.screen.region(&env)?;
+        Some(chrome::on_screen(region, active.area))
     }
 
     /// What opening or closing screen `index` changes: its region, or
@@ -323,33 +333,31 @@ impl Kernel {
 
     /// The area screen `index` occupies.
     pub(crate) fn region_of(&self, index: usize) -> Rect {
-        self.overlay(index).unwrap_or_else(|| self.content())
+        self.overlay(index)
+            .unwrap_or_else(|| self.stack.get(index).map_or(self.content(), |s| s.area))
     }
 
-    /// The part of the screen that screens have: all of it, or the part
-    /// above the row of hints.
+    /// The part of the screen the screen on top has: all of it, or less
+    /// the row of hints and the bars shown.
     pub(crate) fn content(&self) -> Rect {
-        let display = self.shared.device.display;
-        Rect::new(0, 0, display.width, display.height)
+        self.shared.content
     }
 
-    /// The height screens have: all of the screen's, or the part above
-    /// the row of hints.
-    pub(crate) fn content_height(&self, hinted: bool) -> u16 {
-        let panel = self.framebuffer.bounds().height;
-        let row = if hinted { self.hint.height } else { 0 };
-        panel - row.min(panel / 2)
+    /// Screens are made for, and handled in, `area` now: the display as
+    /// they see it is as large.
+    pub(crate) fn apply_area(&mut self, area: Rect) {
+        set_area(&mut self.shared, area);
     }
 
     /// Sizes the content for the screen on top, after screens closed; all
     /// of the screen is drawn again if that changed it.
     pub(crate) fn sync_content(&mut self) {
         self.hint.until = None;
-        let before = self.shared.device.display.height;
-        if let Some(hinted) = self.stack.last().map(|s| s.hinted) {
-            self.shared.device.display.height = self.content_height(hinted);
+        let before = self.shared.content;
+        if let Some(area) = self.stack.last().map(|s| s.area) {
+            self.apply_area(area);
         }
-        if self.shared.device.display.height != before {
+        if self.shared.content != before {
             self.hint.shown.clear();
             let panel = self.framebuffer.bounds();
             self.invalidate(panel);
@@ -373,9 +381,12 @@ impl Kernel {
                 Handled::Yes
             });
             self.output.commands.truncate(asked);
-            self.shared.device.display.height = self.content_height(self.stack[i].hinted);
+            let entry = self.shared.stack[i].clone();
+            let area = self.layout(self.stack[i].hinted, &entry, None);
+            self.apply_area(area);
             let env = self.shared.env(now);
             let active = &mut self.stack[i];
+            active.area = area;
             let Some(spec) = self.registry.screens.get(&active.id) else {
                 continue;
             };
@@ -411,12 +422,22 @@ impl Kernel {
             self.output.redraw = earlier;
             return Handled::No;
         };
-        let env = self.shared.env(self.now);
+        let area = active.area;
+        let asked_area = self.output.redraw_area.take();
+        let base = self.shared.env(self.now);
+        let device = base.device_within(area);
+        let env = base.within(&device, area);
         let running = self.shared.meter.enter(active.id.namespace());
         let key = paperpaw_sdk::ScreenKey::new(active.serial);
         let mut cx = Cx::new(&env, &mut self.output).for_screen(key);
         let handled = f(active.screen.as_mut(), &mut cx);
         drop(running);
+        // A part it asked to draw again is in its own coordinates.
+        let own = mem::replace(&mut self.output.redraw_area, asked_area);
+        if let Some(own) = own.map(|own| chrome::on_screen(own, area)) {
+            let all = self.output.redraw_area.map_or(own, |a| a.union(&own));
+            self.output.redraw_area = Some(all);
+        }
         // The commands of a guarding screen, or of one above it, open
         // screens above it.
         if trusted {
@@ -480,6 +501,14 @@ impl Kernel {
         self.io.sockets.close_for_closed_screens(screens, out);
         self.io.speech.stop_for_closed_screens(screens);
     }
+}
+
+/// Screens are made for, and handled in, `area` now (see
+/// `Kernel::apply_area`).
+fn set_area(shared: &mut Shared, area: Rect) {
+    shared.device.display.width = area.width;
+    shared.device.display.height = area.height;
+    shared.content = area;
 }
 
 /// `source` with `input` in `section` bound to `action`, or to what the

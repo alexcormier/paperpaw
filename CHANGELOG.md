@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: bars that stay across the screens shown (gap A1, first part).
+  `Registrar::add_chrome(ChromeSpec::new(id, Edge::Bottom, factory))`
+  adds a bar along an edge (`size`, `shown` over which screens, `need`
+  such as a touch screen, `priority` among bars on one edge): an
+  ordinary screen drawn into its strip, which takes the gestures that
+  begin in it, hears every event and stays as screens open and close;
+  the screens get the rest of the screen. No bar shows while a screen
+  guards the device. `Env::content` says the part of the screen a
+  screen is made for, with its place; screens draw and get input from
+  its corner (`Env::within`, `Env::device_within` make the environment
+  for a part). `Canvas::offset` moves what a canvas draws, for a screen
+  drawn into part of the screen. `MenuNeed::met` says whether a device
+  has what a need asks for.
 - SDK: the screen stack, readable and steerable (gap A2).
   `Env::stack` lists the open screens (`StackEntry`: screen, slot,
   overlay, key) and `Env::top` the one shown; plugins subscribed to

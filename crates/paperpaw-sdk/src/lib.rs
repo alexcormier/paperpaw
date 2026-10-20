@@ -32,6 +32,7 @@ mod action;
 pub mod annotations;
 pub mod ask;
 pub mod builtin;
+pub mod chrome;
 pub mod collections;
 mod command;
 pub mod contribution;

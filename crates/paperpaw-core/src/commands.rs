@@ -293,6 +293,7 @@ impl Kernel {
                 &mut self.works,
             );
         }
+        self.chromes_hear(event, params);
         // Screens learn that they show from `on_show`.
         if *event == events::SCREEN_SHOWN {
             return;

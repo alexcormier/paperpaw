@@ -132,6 +132,13 @@ pub struct Env<'a> {
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
     pub clipboard: bool,
+    /// The part of the screen what is handled now is made for and drawn
+    /// into, with its place on the screen: all of it but bars and the row
+    /// of hints for a screen, a bar's strip for a bar. A screen draws and
+    /// gets input relative to its corner, and
+    /// [`device.display`](paperpaw_platform::DeviceInfo::display) has its
+    /// size.
+    pub content: paperpaw_platform::Rect,
     /// The open screens, the one shown last (see [`StackEntry`](crate::StackEntry)):
     /// what is shown, e.g. for a rule or a refresh filter.
     pub stack: &'a [crate::StackEntry],
@@ -238,6 +245,13 @@ pub struct EnvParts<'a> {
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
     pub clipboard: bool,
+    /// The part of the screen what is handled now is made for and drawn
+    /// into, with its place on the screen: all of it but bars and the row
+    /// of hints for a screen, a bar's strip for a bar. A screen draws and
+    /// gets input relative to its corner, and
+    /// [`device.display`](paperpaw_platform::DeviceInfo::display) has its
+    /// size.
+    pub content: paperpaw_platform::Rect,
     /// The open screens, the one shown last (see [`StackEntry`](crate::StackEntry)):
     /// what is shown, e.g. for a rule or a refresh filter.
     pub stack: &'a [crate::StackEntry],
@@ -299,6 +313,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             work: p.work,
             reader: p.reader,
             clipboard: p.clipboard,
+            content: p.content,
             stack: p.stack,
             slots: p.slots,
             screens: p.screens,
@@ -317,6 +332,34 @@ impl fmt::Debug for Env<'_> {
             .field("device", &self.device.id)
             .field("now", &self.now)
             .finish_non_exhaustive()
+    }
+}
+
+impl<'a> Env<'a> {
+    /// The device as a screen made for `area` sees it: the display as
+    /// large as `area` (see [`Env::within`]).
+    pub fn device_within(&self, area: paperpaw_platform::Rect) -> paperpaw_platform::DeviceInfo {
+        let mut device = *self.device;
+        device.display.width = area.width;
+        device.display.height = area.height;
+        device
+    }
+
+    /// This environment for a screen made for `area` of the screen (a
+    /// tab of a screen that hosts others, a bar): `device` is
+    /// [`Env::device_within`]`(area)`, and [`Env::content`] is `area`.
+    pub fn within<'b>(
+        &self,
+        device: &'b paperpaw_platform::DeviceInfo,
+        area: paperpaw_platform::Rect,
+    ) -> Env<'b>
+    where
+        'a: 'b,
+    {
+        let mut env: Env<'b> = *self;
+        env.device = device;
+        env.content = area;
+        env
     }
 }
 

@@ -79,8 +79,15 @@ impl Kernel {
         // is meant for it (a grip that moves a row, a handle), as apps on
         // phones keep such places from the system's gestures.
         let captured = self.input.captured.contains(&event.id);
-        if captured || event.phase == PointerPhase::Down {
-            let handled = self.with_top(|screen, cx| screen.on_pointer(&event, cx));
+        // A finger on a bar is the bar's: its gestures go to it.
+        let on_bar = event.phase == PointerPhase::Down && self.chrome_at(event.point).is_some();
+        if captured || (event.phase == PointerPhase::Down && !on_bar) {
+            let area = self.stack.last().map_or(Rect::default(), |top| top.area);
+            let seen = PointerEvent {
+                point: chrome::local(event.point, area),
+                ..event
+            };
+            let handled = self.with_top(|screen, cx| screen.on_pointer(&seen, cx));
             if captured {
                 if matches!(event.phase, PointerPhase::Up | PointerPhase::Cancel) {
                     self.input.captured.retain(|&id| id != event.id);
@@ -93,6 +100,7 @@ impl Kernel {
             }
         }
         if event.phase == PointerPhase::Down
+            && !on_bar
             && let Some(side) = self.edge_at(event.point)
         {
             self.input.edge_touch = Some(EdgeTouch {
@@ -130,11 +138,11 @@ impl Kernel {
         {
             return None;
         }
-        let display = self.shared.device.display;
+        let display = self.framebuffer.bounds();
         // Wide at the top and the bottom: on Android the outermost strip is
         // the system's (its notifications, its home), a swipe begun just
         // inside it is ours. Narrow at the sides, where pages are tapped.
-        let metrics = Metrics::new(display.dpi);
+        let metrics = Metrics::new(self.shared.device.display.dpi);
         let mm = |setting: &paperpaw_sdk::setting::Setting<i64>| {
             let value = self.shared.settings.read(setting).clamp(0, 50) as u32;
             metrics.mm(value) as i32
@@ -231,6 +239,11 @@ impl Kernel {
                     }
                     return;
                 }
+                if let Some((index, strip)) = self.chrome_at(gesture.start) {
+                    let seen = chrome::local_gesture(gesture, strip);
+                    self.with_chrome(index, |screen, cx| screen.on_gesture(seen, cx));
+                    return;
+                }
                 let overlay = self
                     .stack
                     .len()
@@ -245,12 +258,16 @@ impl Kernel {
                         paperpaw_sdk::Outside::Ignore => return,
                         paperpaw_sdk::Outside::PassThrough => {
                             let below = top.saturating_sub(1);
-                            self.with_screen(below, |screen, cx| screen.on_gesture(gesture, cx));
+                            let seen = chrome::local_gesture(gesture, self.stack[below].area);
+                            self.with_screen(below, |screen, cx| screen.on_gesture(seen, cx));
                             return;
                         }
                         _ => return self.close_top(paperpaw_sdk::CloseCause::TapOutside),
                     }
                 }
+                // In the coordinates of the screen on top.
+                let area = self.stack.last().map_or(Rect::default(), |top| top.area);
+                let gesture = chrome::local_gesture(gesture, area);
                 if self.offer(|screen, cx| screen.on_gesture(gesture, cx)) == Handled::Yes {
                     return;
                 }

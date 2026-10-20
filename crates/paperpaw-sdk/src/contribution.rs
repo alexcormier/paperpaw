@@ -132,6 +132,8 @@ pub enum Contribution {
     Decorator(Box<crate::decorations::DecoratorSpec>),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
+    /// A bar along an edge of the screen (see [`chrome`](crate::chrome)).
+    Chrome(Box<crate::chrome::ChromeSpec>),
     /// A job: work done in steps (see [`work`](crate::work)).
     Work(Box<crate::work::WorkSpec>),
     Widget(Box<WidgetSpec>),
@@ -199,6 +201,7 @@ impl Contribution {
             Contribution::Decorator(_) => "decorator",
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
+            Contribution::Chrome(_) => "chrome",
             Contribution::Work(_) => "work",
             Contribution::Widget(_) => "widget",
             Contribution::SetupStep(_) => "setup-step",
@@ -234,6 +237,7 @@ impl Contribution {
             Contribution::Decorator(d) => &d.id,
             Contribution::InputFilter(f) => &f.id,
             Contribution::RefreshFilter(f) => &f.id,
+            Contribution::Chrome(c) => &c.id,
             Contribution::Work(w) => &w.id,
             Contribution::Widget(w) => &w.id,
             Contribution::SetupStep(s) => &s.id,
@@ -614,6 +618,12 @@ impl Registrar {
     /// [`filters`](crate::filters)).
     pub fn add_refresh_filter(&mut self, filter: RefreshFilterSpec) -> Result<(), RegisterError> {
         self.add(Contribution::RefreshFilter(filter))
+    }
+
+    /// Adds a bar that stays along an edge of the screen across the
+    /// screens shown: tabs, a dock (see [`chrome`](crate::chrome)).
+    pub fn add_chrome(&mut self, chrome: crate::chrome::ChromeSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Chrome(Box::new(chrome)))
     }
 
     /// Adds a job: the steps of the work declared with its id (see

@@ -158,6 +158,7 @@ pub(crate) struct Staging {
     pub(crate) decorators: Vec<paperpaw_sdk::decorations::DecoratorSpec>,
     pub(crate) input_filters: Vec<paperpaw_sdk::filters::InputFilterSpec>,
     pub(crate) refresh_filters: Vec<paperpaw_sdk::filters::RefreshFilterSpec>,
+    pub(crate) chromes: Vec<paperpaw_sdk::chrome::ChromeSpec>,
     /// Jobs: the steps of declared work (see [`paperpaw_sdk::work`]).
     pub(crate) works: Vec<paperpaw_sdk::work::WorkSpec>,
     pub(crate) stylesheets: Vec<Cow<'static, str>>,
@@ -293,6 +294,7 @@ pub(crate) fn stage(
             Contribution::Decorator(decorator) => staging.decorators.push(*decorator),
             Contribution::InputFilter(filter) => staging.input_filters.push(filter),
             Contribution::RefreshFilter(filter) => staging.refresh_filters.push(filter),
+            Contribution::Chrome(chrome) => staging.chromes.push(*chrome),
             Contribution::Work(spec) => staging.works.push(*spec),
             Contribution::Widget(widget) => staging.widgets.push(*widget),
             Contribution::SetupStep(step) => staging.setup_steps.push(*step),

@@ -459,6 +459,28 @@ pub const paperpaw_sdk::builtin::CONFIG_FILE: &str
 pub const paperpaw_sdk::builtin::CORE_PLUGIN: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::GLOBAL_KEYMAP_LAYER: &str
 pub const paperpaw_sdk::builtin::PLUGIN_DIR: &str
+pub mod paperpaw_sdk::chrome
+#[non_exhaustive] pub enum paperpaw_sdk::chrome::Edge
+pub paperpaw_sdk::chrome::Edge::Bottom
+pub paperpaw_sdk::chrome::Edge::Left
+pub paperpaw_sdk::chrome::Edge::Right
+pub paperpaw_sdk::chrome::Edge::Top
+#[non_exhaustive] pub struct paperpaw_sdk::chrome::ChromeSpec
+pub paperpaw_sdk::chrome::ChromeSpec::edge: paperpaw_sdk::chrome::Edge
+pub paperpaw_sdk::chrome::ChromeSpec::factory: paperpaw_sdk::ScreenFactory
+pub paperpaw_sdk::chrome::ChromeSpec::id: paperpaw_sdk::Id
+pub paperpaw_sdk::chrome::ChromeSpec::need: core::option::Option<paperpaw_sdk::MenuNeed>
+pub paperpaw_sdk::chrome::ChromeSpec::priority: paperpaw_sdk::Priority
+pub paperpaw_sdk::chrome::ChromeSpec::shown: fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::StackEntry) -> bool
+pub paperpaw_sdk::chrome::ChromeSpec::size: fn(&paperpaw_sdk::Env<'_>) -> u16
+impl paperpaw_sdk::chrome::ChromeSpec
+pub fn paperpaw_sdk::chrome::ChromeSpec::need(self, paperpaw_sdk::MenuNeed) -> Self
+pub fn paperpaw_sdk::chrome::ChromeSpec::new(paperpaw_sdk::Id, paperpaw_sdk::chrome::Edge, paperpaw_sdk::ScreenFactory) -> Self
+pub fn paperpaw_sdk::chrome::ChromeSpec::priority(self, paperpaw_sdk::Priority) -> Self
+pub fn paperpaw_sdk::chrome::ChromeSpec::shown(self, fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::StackEntry) -> bool) -> Self
+pub fn paperpaw_sdk::chrome::ChromeSpec::size(self, fn(&paperpaw_sdk::Env<'_>) -> u16) -> Self
+impl core::fmt::Debug for paperpaw_sdk::chrome::ChromeSpec
+pub fn paperpaw_sdk::chrome::ChromeSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod paperpaw_sdk::collections
 pub struct paperpaw_sdk::collections::VecMap<K, V>
 impl<K: core::cmp::Ord, V> paperpaw_sdk::collections::VecMap<K, V>
@@ -502,6 +524,7 @@ pub mod paperpaw_sdk::contribution
 #[non_exhaustive] pub enum paperpaw_sdk::contribution::Contribution
 pub paperpaw_sdk::contribution::Contribution::Action(paperpaw_sdk::ActionSpec)
 pub paperpaw_sdk::contribution::Contribution::BookData(paperpaw_sdk::library::BookData)
+pub paperpaw_sdk::contribution::Contribution::Chrome(alloc::boxed::Box<paperpaw_sdk::chrome::ChromeSpec>)
 pub paperpaw_sdk::contribution::Contribution::Decorator(alloc::boxed::Box<paperpaw_sdk::decorations::DecoratorSpec>)
 pub paperpaw_sdk::contribution::Contribution::FixedPresets(&'static [paperpaw_sdk::presets::Preset])
 pub paperpaw_sdk::contribution::Contribution::FixedSettings(&'static [paperpaw_sdk::SettingSpec])
@@ -582,6 +605,7 @@ impl paperpaw_sdk::contribution::Registrar
 pub fn paperpaw_sdk::contribution::Registrar::add(&mut self, paperpaw_sdk::contribution::Contribution) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_action(&mut self, paperpaw_sdk::ActionSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_book_data(&mut self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_chrome(&mut self, paperpaw_sdk::chrome::ChromeSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_decorator(&mut self, paperpaw_sdk::decorations::DecoratorSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_font(&mut self, paperpaw_sdk::FontSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_font_extension(&mut self, paperpaw_sdk::Id, alloc::string::String, paperpaw_sdk::Id) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -2879,6 +2903,7 @@ pub fn paperpaw_sdk::Command::set<T: paperpaw_sdk::setting::SettingType>(&paperp
 #[non_exhaustive] pub enum paperpaw_sdk::Contribution
 pub paperpaw_sdk::Contribution::Action(paperpaw_sdk::ActionSpec)
 pub paperpaw_sdk::Contribution::BookData(paperpaw_sdk::library::BookData)
+pub paperpaw_sdk::Contribution::Chrome(alloc::boxed::Box<paperpaw_sdk::chrome::ChromeSpec>)
 pub paperpaw_sdk::Contribution::Decorator(alloc::boxed::Box<paperpaw_sdk::decorations::DecoratorSpec>)
 pub paperpaw_sdk::Contribution::FixedPresets(&'static [paperpaw_sdk::presets::Preset])
 pub paperpaw_sdk::Contribution::FixedSettings(&'static [paperpaw_sdk::SettingSpec])
@@ -2995,6 +3020,8 @@ pub paperpaw_sdk::MenuNeed::Sleep
 pub paperpaw_sdk::MenuNeed::Speech
 pub paperpaw_sdk::MenuNeed::Touch
 pub paperpaw_sdk::MenuNeed::Wifi
+impl paperpaw_sdk::MenuNeed
+pub fn paperpaw_sdk::MenuNeed::met(self, paperpaw_sdk::Capabilities) -> bool
 #[non_exhaustive] pub enum paperpaw_sdk::Outside
 pub paperpaw_sdk::Outside::Close
 pub paperpaw_sdk::Outside::Ignore
@@ -3180,6 +3207,7 @@ pub paperpaw_sdk::Env::book_data: &'a [paperpaw_sdk::library::BookData]
 pub paperpaw_sdk::Env::caps: paperpaw_sdk::Capabilities
 pub paperpaw_sdk::Env::catalog_device: core::option::Option<&'a str>
 pub paperpaw_sdk::Env::clipboard: bool
+pub paperpaw_sdk::Env::content: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::Env::decorators: &'a paperpaw_sdk::decorations::Decorators
 pub paperpaw_sdk::Env::device: &'a paperpaw_platform::DeviceInfo
 pub paperpaw_sdk::Env::firmware: core::option::Option<&'a paperpaw_sdk::firmware::Firmware>
@@ -3218,6 +3246,9 @@ pub fn paperpaw_sdk::Env<'_>::has_slot(&self, &paperpaw_sdk::Id) -> bool
 pub fn paperpaw_sdk::Env<'_>::plugin_dir(&str) -> alloc::string::String
 pub fn paperpaw_sdk::Env<'_>::plugin_usage(&self) -> alloc::vec::Vec<paperpaw_sdk::usage::PluginUsage>
 pub fn paperpaw_sdk::Env<'_>::top(&self) -> core::option::Option<&paperpaw_sdk::StackEntry>
+impl<'a> paperpaw_sdk::Env<'a>
+pub fn paperpaw_sdk::Env<'a>::device_within(&self, paperpaw_platform::geometry::Rect) -> paperpaw_platform::DeviceInfo
+pub fn paperpaw_sdk::Env<'a>::within<'b>(&self, &'b paperpaw_platform::DeviceInfo, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::Env<'b> where 'a: 'b
 impl core::fmt::Debug for paperpaw_sdk::Env<'_>
 pub fn paperpaw_sdk::Env<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::Event<P: paperpaw_sdk::event::EventData>
@@ -3585,6 +3616,7 @@ impl paperpaw_sdk::contribution::Registrar
 pub fn paperpaw_sdk::contribution::Registrar::add(&mut self, paperpaw_sdk::contribution::Contribution) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_action(&mut self, paperpaw_sdk::ActionSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_book_data(&mut self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_chrome(&mut self, paperpaw_sdk::chrome::ChromeSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_decorator(&mut self, paperpaw_sdk::decorations::DecoratorSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_font(&mut self, paperpaw_sdk::FontSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_font_extension(&mut self, paperpaw_sdk::Id, alloc::string::String, paperpaw_sdk::Id) -> core::result::Result<(), paperpaw_sdk::RegisterError>

@@ -338,6 +338,9 @@ impl Kernel {
         for filter in staging.refresh_filters.drain(..) {
             self.shared.refresh_filters.add(filter);
         }
+        for chrome in staging.chromes.drain(..) {
+            self.add_chrome(chrome);
+        }
         for spec in staging.works.drain(..) {
             self.works.add_spec(spec);
         }

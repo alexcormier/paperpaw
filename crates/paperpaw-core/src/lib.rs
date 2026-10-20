@@ -38,6 +38,7 @@
 extern crate alloc;
 
 mod builder;
+mod chrome;
 mod code_plugin;
 mod commands;
 mod config;
@@ -282,6 +283,10 @@ struct ActiveScreen {
     /// Made for the part above the row of hints (when the row shows), as
     /// it asked ([`Hints::Shown`]).
     hinted: bool,
+    /// The part of the screen it is made for and drawn into: all of it
+    /// but the bars shown over it and the row of hints (see
+    /// [`Env::content`]).
+    area: Rect,
     /// What it was opened with, e.g. the book.
     params: Params,
     screen: Box<dyn Screen>,
@@ -367,6 +372,11 @@ pub struct Kernel {
     io: network::IoState,
     frame: drawing::FrameState,
     keys: plugins::KeySources,
+    /// The bars along the edges of the screen plugins added
+    /// ([`paperpaw_sdk::chrome`]), the outermost first.
+    chromes: Vec<chrome::Chrome>,
+    /// Those shown now, by their place in `chromes`, with their strips.
+    chrome_strips: Vec<(usize, Rect)>,
     /// The plugin of each of `Shared::stylesheets`, to drop them with it.
     stylesheet_owners: Vec<Id>,
     timing: drawing::Timing,
@@ -1065,6 +1075,8 @@ struct Shared {
     /// The open screens as plugins see them ([`Env::stack`]), kept in
     /// step with the kernel's stack.
     stack: Vec<paperpaw_sdk::StackEntry>,
+    /// The part of the screen the screen on top has ([`Env::content`]).
+    content: Rect,
     /// Slots some screen is bound to.
     slots: Vec<Id>,
     /// Every screen, with the translation key of its name.
@@ -1124,6 +1136,7 @@ impl Shared {
             work: &self.work_states,
             reader: self.reader,
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
+            content: self.content,
             stack: &self.stack,
             slots: &self.slots,
             screens: &self.screens,

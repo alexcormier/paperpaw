@@ -111,6 +111,25 @@ pub enum MenuNeed {
     BlackAndWhite,
 }
 
+impl MenuNeed {
+    /// Whether a device that can do `caps` has what it needs (also for
+    /// [`ChromeSpec::need`](crate::chrome::ChromeSpec::need)).
+    pub fn met(self, caps: crate::Capabilities) -> bool {
+        match self {
+            MenuNeed::Speech => caps.speech,
+            MenuNeed::Sleep => caps.sleep,
+            MenuNeed::Rotation => caps.rotation,
+            MenuNeed::Colors => caps.colors,
+            MenuNeed::ButtonRow => caps.button_row,
+            MenuNeed::Wifi => caps.wifi,
+            MenuNeed::Firmware => caps.firmware,
+            MenuNeed::BlackAndWhite => caps.black_and_white,
+            MenuNeed::NoTouch => !caps.touch,
+            MenuNeed::Touch => caps.touch,
+        }
+    }
+}
+
 /// One entry of a resolved menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct MenuItem<'a> {
