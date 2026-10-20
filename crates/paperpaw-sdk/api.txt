@@ -312,7 +312,7 @@ pub mod paperpaw_sdk::builtin::setting_sections
 pub const paperpaw_sdk::builtin::setting_sections::ALOUD: &str
 pub const paperpaw_sdk::builtin::setting_sections::BEHAVIOUR: &str
 pub const paperpaw_sdk::builtin::setting_sections::FONT: &str
-pub const paperpaw_sdk::builtin::setting_sections::ORDER: &[&str]
+pub const paperpaw_sdk::builtin::setting_sections::ORDER: [&str; 4]
 pub const paperpaw_sdk::builtin::setting_sections::PAGE: &str
 pub mod paperpaw_sdk::builtin::settings
 pub const paperpaw_sdk::builtin::settings::BATTERY_LOW: paperpaw_sdk::setting::Setting<i64>
@@ -595,7 +595,7 @@ pub paperpaw_sdk::decorations::LineKind::Double
 pub paperpaw_sdk::decorations::LineKind::Solid
 pub paperpaw_sdk::decorations::LineKind::Wavy
 impl paperpaw_sdk::decorations::LineKind
-pub const paperpaw_sdk::decorations::LineKind::ALL: &'static [paperpaw_sdk::decorations::LineKind]
+pub const paperpaw_sdk::decorations::LineKind::ALL: [paperpaw_sdk::decorations::LineKind; 5]
 pub fn paperpaw_sdk::decorations::LineKind::from_id(&str) -> core::option::Option<paperpaw_sdk::decorations::LineKind>
 pub const fn paperpaw_sdk::decorations::LineKind::id(self) -> &'static str
 #[non_exhaustive] pub enum paperpaw_sdk::decorations::Tone
@@ -611,7 +611,7 @@ pub paperpaw_sdk::decorations::Tone::Red
 pub paperpaw_sdk::decorations::Tone::White
 pub paperpaw_sdk::decorations::Tone::Yellow
 impl paperpaw_sdk::decorations::Tone
-pub const paperpaw_sdk::decorations::Tone::ALL: &'static [paperpaw_sdk::decorations::Tone]
+pub const paperpaw_sdk::decorations::Tone::ALL: [paperpaw_sdk::decorations::Tone; 11]
 pub fn paperpaw_sdk::decorations::Tone::color(self) -> paperpaw_platform::pixel::Color
 pub fn paperpaw_sdk::decorations::Tone::from_id(&str) -> core::option::Option<paperpaw_sdk::decorations::Tone>
 pub const fn paperpaw_sdk::decorations::Tone::id(self) -> &'static str
@@ -1940,7 +1940,7 @@ pub fn paperpaw_sdk::web::percent_decode(&str) -> alloc::string::String
 pub fn paperpaw_sdk::web::user_agent() -> (alloc::string::String, alloc::string::String)
 pub mod paperpaw_sdk::widgets
 pub mod paperpaw_sdk::widgets::categories
-pub const paperpaw_sdk::widgets::categories::ALL: &[&str]
+pub const paperpaw_sdk::widgets::categories::ALL: [&str; 9]
 pub const paperpaw_sdk::widgets::categories::BOOKS: &str
 pub const paperpaw_sdk::widgets::categories::DEVICE: &str
 pub const paperpaw_sdk::widgets::categories::LAYOUT: &str
@@ -2146,7 +2146,7 @@ impl paperpaw_sdk::widgets::look::Wrapped
 pub fn paperpaw_sdk::widgets::look::Wrapped::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Align, paperpaw_platform::pixel::Color) -> u16
 pub fn paperpaw_sdk::widgets::look::Wrapped::height(&self, &paperpaw_sdk::Env<'_>) -> u16
 pub fn paperpaw_sdk::widgets::look::Wrapped::new(&paperpaw_sdk::Env<'_>, &str, f32, u16, u16) -> Self
-pub const paperpaw_sdk::widgets::ALIGNMENTS: &[&str]
+pub const paperpaw_sdk::widgets::ALIGNMENTS: [&str; 3]
 pub const paperpaw_sdk::widgets::FILL: &str
 pub const paperpaw_sdk::widgets::SPACE: &str
 pub const paperpaw_sdk::widgets::SPACE_SIZE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>

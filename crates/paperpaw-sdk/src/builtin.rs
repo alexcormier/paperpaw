@@ -933,7 +933,7 @@ pub mod setting_sections {
     pub const ALOUD: &str = "core.setting-section.aloud";
 
     /// The standard parts in their order.
-    pub const ORDER: &[&str] = &[FONT, PAGE, BEHAVIOUR, ALOUD];
+    pub const ORDER: [&str; 4] = [FONT, PAGE, BEHAVIOUR, ALOUD];
 }
 
 /// Sections of the main menu ([`menus::MAIN`]): plugins put their

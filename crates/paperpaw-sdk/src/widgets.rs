@@ -85,7 +85,7 @@ pub mod categories {
     pub const OTHER: &str = "core.widgets.other";
 
     /// Every kind, in the order screens show them.
-    pub const ALL: &[&str] = &[
+    pub const ALL: [&str; 9] = [
         TIME, BOOKS, READING, WORDS, PERSONAL, WORLD, DEVICE, LAYOUT, OTHER,
     ];
 }
@@ -475,7 +475,7 @@ pub fn fill_height(room: u32, used: u32, fills: usize) -> u16 {
 }
 
 /// The values of a widget's alignment setting ([`align_setting`]).
-pub const ALIGNMENTS: &[&str] = &["core.align.left", "core.align.center", "core.align.right"];
+pub const ALIGNMENTS: [&str; 3] = ["core.align.left", "core.align.center", "core.align.right"];
 
 /// Where a widget's text sits in its place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -529,7 +529,7 @@ pub fn align_setting(widget: &Id, default: Align) -> SettingSpec {
     SettingSpec::new(
         id,
         "core.setting.align",
-        SettingKind::Choice(crate::settings::Choices::Fixed(ALIGNMENTS)),
+        SettingKind::Choice(crate::settings::Choices::Fixed(&ALIGNMENTS)),
         SettingValue::Text(Cow::Borrowed(default.value())),
     )
     .group(widget.clone())
@@ -542,7 +542,7 @@ pub const fn align_spec(id: &'static str, widget: Id, default: Align) -> Setting
     SettingSpec::fixed_choice(
         id,
         "core.setting.align",
-        ALIGNMENTS,
+        &ALIGNMENTS,
         default.value(),
         widget,
     )
