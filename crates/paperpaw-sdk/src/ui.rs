@@ -1261,6 +1261,19 @@ pub fn draw_empty(
             at,
             style.faint(120),
         );
+        // With the paw motif, a small paw beside the icon, as if it had
+        // just walked past; the icon stays in the middle.
+        if style.paw {
+            let size = icon_size * 0.4;
+            let below = Rect::new(
+                area.x,
+                (y + icon_size - size) as u16,
+                area.width,
+                size as u16,
+            );
+            let x = centre(w) + w + gap / 2.0;
+            draw_icon(canvas, env, "paw", size, x, below, style.faint(120));
+        }
         y += icon_room;
     }
     if !title.is_empty() {

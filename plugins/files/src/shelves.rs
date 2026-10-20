@@ -262,19 +262,31 @@ impl Screen for ShelfScreen {
         self.header
             .draw(canvas, env, &style, &title, None, self.list.paging(len));
         if len == 0 {
-            let message = match &self.walk {
-                Some(walk) => env
-                    .i18n
-                    .plural("files.collecting", walk.found() as i64, &[]),
-                None if self.shelf == Shelf::Series => env.i18n.tr("files.no-series").to_string(),
-                None if self.shelf == Shelf::Tags => env.i18n.tr("files.no-tags").to_string(),
-                _ if self.shelf == Shelf::Favourites => {
-                    ui::tr_input(env, "files.no-favourites").to_string()
+            let area = self.list.area;
+            // An empty shelf says what would be on it.
+            let (icon, title, text) = match &self.walk {
+                Some(walk) => {
+                    let message = env
+                        .i18n
+                        .plural("files.collecting", walk.found() as i64, &[]);
+                    ui::draw_message(canvas, env, &style, area, &message);
+                    return;
                 }
-                _ if self.shelf == Shelf::Search => env.i18n.tr("files.search.none").to_string(),
-                None => env.i18n.tr("files.no-books").to_string(),
+                None if self.shelf == Shelf::Series => ("books", "", "files.no-series"),
+                None if self.shelf == Shelf::Tags => ("tag", "", "files.no-tags"),
+                _ if self.shelf == Shelf::Favourites => {
+                    ("star", "files.no-favourites.title", "files.no-favourites")
+                }
+                _ if self.shelf == Shelf::Search => ("search", "", "files.search.none"),
+                None => ("books", "", "files.no-books"),
             };
-            ui::draw_message(canvas, env, &style, self.list.area, &message);
+            let title = if title.is_empty() {
+                ""
+            } else {
+                env.i18n.tr(title)
+            };
+            let text = ui::tr_input(env, text);
+            ui::draw_empty(canvas, env, &style, area, icon, title, text);
             return;
         }
         let series = self.shelf == Shelf::Series;

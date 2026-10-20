@@ -234,8 +234,13 @@ impl Screen for InfoScreen {
 
         // The cover beside title and author.
         match (&layout.cover, &d.cover) {
-            (Some((at, Some(small))), _) => small.draw(canvas, at.x, at.y),
-            (Some((at, None)), Some(image)) => ui::draw_image(canvas, env.storage, image, *at),
+            (Some((at, Some(small))), _) => {
+                small.draw_round(canvas, at.x, at.y, crate::cover_radius(&style, *at));
+            }
+            (Some((at, None)), Some(image)) => {
+                let radius = crate::cover_radius(&style, *at);
+                crate::draw_cover_image(canvas, env, image, *at, radius, Some(Color::WHITE));
+            }
             _ => {}
         }
         let text_x = layout.text_x;

@@ -119,6 +119,8 @@ const HINTS_MS: u64 = 4000;
 const SLOW_MS: u32 = 400;
 /// The sign of the busy mark where no hint shows it.
 const BUSY_ICON: &str = "hourglass";
+/// The busy mark's sign with the paw motif (core.ui-motif).
+const BUSY_PAW: &str = "paw";
 /// What was timed is remembered for this many things at most.
 const TIMED: usize = 24;
 /// Default memory for glyphs rasterized at runtime.
