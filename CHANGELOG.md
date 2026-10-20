@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Screen: a full refresh a plugin's refresh filter asks for (a flash on
+  some page turns) starts the count to the next periodic full refresh
+  anew, where it came again as soon as if there had been none. How often
+  the screen is refreshed in full may be a book's own ("Only this
+  book"), e.g. more often for a comic.
 - Plugins: a data plugin updated or removed while running takes its
   stylesheet for books and its key bindings with it; before, the old
   version's applied until a restart, beside the new one's.
