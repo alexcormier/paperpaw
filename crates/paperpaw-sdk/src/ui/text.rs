@@ -120,6 +120,14 @@ pub fn switch_rect(style: &UiStyle, row: Rect) -> Rect {
 pub fn draw_switch(canvas: &mut Canvas<'_>, style: &UiStyle, row: Rect, on: bool, inverted: bool) {
     let r = switch_rect(style, row);
     canvas.describe(Role::Switch, "", r, false, Some(on));
+    let part = super::look::SwitchPart {
+        rect: r,
+        on,
+        inverted,
+    };
+    if style.look.switch(canvas, style, part) {
+        return;
+    }
     let (ink, paper) = if inverted {
         (Color::WHITE, Color::BLACK)
     } else {

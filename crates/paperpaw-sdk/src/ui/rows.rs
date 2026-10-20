@@ -339,6 +339,7 @@ pub(super) fn card_style() -> UiStyle {
         cards: true,
         grays: 2,
         finger: 0,
+        look: crate::ui::look::Look::none(),
     }
 }
 

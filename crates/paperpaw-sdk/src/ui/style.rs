@@ -56,6 +56,8 @@ pub struct UiStyle {
     /// The least size of what a finger sets or presses, about 7 mm, on
     /// touch screens; 0 with buttons alone (see [`UiStyle::touch_row`]).
     pub finger: u32,
+    /// The look a plugin gave the parts (see [`look`](super::look)).
+    pub look: super::look::Look,
 }
 
 /// How the focus of rows and items is drawn ([`draw_focus`]).
@@ -107,6 +109,7 @@ impl UiStyle {
         cards: false,
         grays: 2,
         finger: 0,
+        look: super::look::Look::none(),
     };
 
     pub fn new(env: &Env<'_>) -> Self {
@@ -157,6 +160,7 @@ impl UiStyle {
             cards: s.text(settings::UI_GROUPS.as_str()) == settings::GROUPS_CARDS,
             grays: env.device.display.format.gray_levels().unwrap_or(256),
             finger: if env.device.input.touch { m.mm(7) } else { 0 },
+            look: env.look,
         }
     }
 
@@ -304,6 +308,12 @@ pub fn focus_rect(style: &UiStyle, rect: Rect) -> Rect {
 /// way, so it looks the same everywhere.
 pub fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
     let r = focus_rect(style, rect);
+    if style
+        .look
+        .focus(canvas, style, super::look::FocusPart { rect: r })
+    {
+        return;
+    }
     // Items taller than wide (a cover) keep the corners.
     let radius = if r.width < r.height {
         style.corner
@@ -327,6 +337,10 @@ pub fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect) {
 /// are: `indent` is where the row's text starts after the margin (e.g.
 /// right of an icon), where faint lines start.
 pub fn draw_separator(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, indent: u16) {
+    let part = super::look::SeparatorPart { row: rect, indent };
+    if style.look.separator(canvas, style, part) {
+        return;
+    }
     let margin = style.margin as u16;
     let line = style.line as u16;
     let y = rect.y + rect.height - line;

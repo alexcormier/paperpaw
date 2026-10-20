@@ -242,6 +242,14 @@ impl Slider {
         value: i64,
         ink: Color,
     ) {
+        let part = super::look::SliderPart {
+            track,
+            knob_x: self.knob_x(track, value),
+            ink,
+        };
+        if style.look.slider(canvas, style, part) {
+            return;
+        }
         let knob = knob_size(track);
         // Half of the filled part's thickness: an eighth of the knob, at
         // least the interface's lines.

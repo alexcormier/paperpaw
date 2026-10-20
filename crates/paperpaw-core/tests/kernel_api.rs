@@ -326,3 +326,89 @@ proptest! {
         prop_assert_eq!(second.secrets().get("drv.key"), Some(value.as_str()));
     }
 }
+
+/// Sets looks for the parts of screens; its home screen tells which look
+/// its style has.
+struct Looks {
+    name: &'static str,
+    looks: Vec<(
+        &'static paperpaw_core::sdk::ui::look::Painters,
+        paperpaw_core::sdk::Priority,
+    )>,
+    seen: Rc<std::cell::RefCell<String>>,
+}
+
+struct LookScreen(Rc<std::cell::RefCell<String>>);
+
+impl paperpaw_core::sdk::Screen for LookScreen {
+    fn draw(&mut self, _: &mut paperpaw_core::sdk::Canvas<'_>, env: &paperpaw_core::sdk::Env<'_>) {
+        let style = paperpaw_core::sdk::ui::UiStyle::new(env);
+        *self.0.borrow_mut() = format!("{:?}", style.look);
+    }
+
+    fn on_action(
+        &mut self,
+        _: &paperpaw_core::sdk::Id,
+        _: &mut paperpaw_core::sdk::Cx<'_, '_>,
+    ) -> paperpaw_core::sdk::Handled {
+        paperpaw_core::sdk::Handled::No
+    }
+}
+
+impl Plugin for Looks {
+    fn manifest(&self) -> Manifest {
+        common::manifest(self.name)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        for (painters, priority) in &self.looks {
+            r.set_ui_look(painters, *priority)?;
+        }
+        if self.name == "looks-a" {
+            let screen = paperpaw_core::sdk::Id::new_static("looks-a.home");
+            let seen = self.seen.clone();
+            r.add_screen(paperpaw_core::sdk::ScreenSpec::new(
+                screen.clone(),
+                "looks-a.home",
+                Box::new(move |_, _| Box::new(LookScreen(seen.clone()))),
+            ))?;
+            r.bind_slot(slots::HOME, screen, paperpaw_core::sdk::Priority(1000))?;
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn the_look_of_the_highest_priority_is_used_of_equal_ones_the_later() {
+    use paperpaw_core::sdk::Priority;
+    use paperpaw_core::sdk::ui::UiStyle;
+    use paperpaw_core::sdk::ui::look::{FocusPart, Painters, SwitchPart};
+    fn switch(_: &mut paperpaw_core::sdk::Canvas<'_>, _: &UiStyle, _: &SwitchPart) -> bool {
+        true
+    }
+    fn focus(_: &mut paperpaw_core::sdk::Canvas<'_>, _: &UiStyle, _: &FocusPart) -> bool {
+        true
+    }
+    static PLAIN: Painters = Painters::new();
+    static SWITCHES: Painters = Painters::new().switch(switch);
+    static FOCUS: Painters = Painters::new().focus(focus);
+    let seen = Rc::new(std::cell::RefCell::new(String::new()));
+    let looks = |name, looks| Looks {
+        name,
+        looks,
+        seen: seen.clone(),
+    };
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(looks("looks-a", vec![(&PLAIN, Priority::DEFAULT)]))
+        .plugin(looks("looks-b", vec![(&SWITCHES, Priority::PREFERRED)]))
+        .plugin(looks(
+            "looks-c",
+            vec![(&FOCUS, Priority::PREFERRED), (&PLAIN, Priority::FALLBACK)],
+        ))
+        .storage(MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    common::render(&mut kernel);
+    assert_eq!(*seen.borrow(), format!("{:?}", FOCUS));
+}

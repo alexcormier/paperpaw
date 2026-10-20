@@ -817,6 +817,7 @@ mod tests {
             cards: false,
             grays: 2,
             finger: 0,
+            look: crate::ui::look::Look::none(),
         };
         // Without a frame, automatic is none: lined up with the margins;
         // inside one, normal, as frames always had it.

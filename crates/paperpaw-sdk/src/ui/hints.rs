@@ -34,9 +34,15 @@ pub fn draw_button_hints(
     pressed: Option<usize>,
 ) {
     let style = UiStyle::new(env);
-    canvas.fill(area, Color::WHITE);
     let line = style.line.min(u32::from(area.height));
+    let painted = style
+        .look
+        .hints(canvas, &style, super::look::HintsPart { area });
+    if !painted {
+        canvas.fill(area, Color::WHITE);
+    }
     match style.separators {
+        _ if painted => {}
         Separators::Line => canvas.fill_rect(
             i32::from(area.x),
             i32::from(area.y),

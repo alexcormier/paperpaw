@@ -61,6 +61,10 @@ pub(super) fn button_frame(
     on: bool,
     focused: bool,
 ) -> Option<Color> {
+    let part = super::look::ButtonPart { rect, on, focused };
+    if let Some(ink) = style.look.button(canvas, style, part) {
+        return Some(ink);
+    }
     let (back, ink) = if on {
         (Color::BLACK, Color::WHITE)
     } else {

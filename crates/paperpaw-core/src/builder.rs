@@ -429,6 +429,7 @@ impl KernelBuilder {
                 storage,
                 recall,
                 keymap: Keymap::default(),
+                look: (paperpaw_sdk::ui::look::Look::none(), None),
             },
             frame: drawing::FrameState {
                 pending: None,

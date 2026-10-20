@@ -17,6 +17,14 @@ pub fn draw_progress(
     permille: u16,
     ink: Color,
 ) {
+    let part = super::look::ProgressPart {
+        area,
+        permille: permille.min(1000),
+        ink,
+    };
+    if style.look.progress(canvas, style, part) {
+        return;
+    }
     let border = button_border(style);
     let radius = style.radius(u32::from(area.height));
     canvas.stroke_round(area, border, radius, ink);

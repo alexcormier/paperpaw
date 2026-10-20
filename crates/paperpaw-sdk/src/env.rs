@@ -104,6 +104,10 @@ pub struct Env<'a> {
     pub services: &'a crate::services::Services,
     /// What buttons, taps and swipes do (see [`keys`](crate::keys)).
     pub keys: &'a dyn crate::keys::KeyBindings,
+    /// The look a plugin gave the parts of screens, set with
+    /// [`Registrar::set_ui_look`](crate::Registrar::set_ui_look) (see
+    /// [`ui::look`](crate::ui::look)).
+    pub look: crate::ui::look::Look,
     /// What the device and its shell can do (network, speech, the sleep
     /// screen …).
     pub caps: Capabilities,
@@ -207,6 +211,10 @@ pub struct EnvParts<'a> {
     pub services: &'a crate::services::Services,
     /// What buttons, taps and swipes do (see [`keys`](crate::keys)).
     pub keys: &'a dyn crate::keys::KeyBindings,
+    /// The look a plugin gave the parts of screens, set with
+    /// [`Registrar::set_ui_look`](crate::Registrar::set_ui_look) (see
+    /// [`ui::look`](crate::ui::look)).
+    pub look: crate::ui::look::Look,
     /// What the device and its shell can do (network, speech, the sleep
     /// screen …).
     pub caps: Capabilities,
@@ -285,6 +293,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             setup: p.setup,
             services: p.services,
             keys: p.keys,
+            look: p.look,
             caps: p.caps,
             wifi: p.wifi,
             firmware: p.firmware,

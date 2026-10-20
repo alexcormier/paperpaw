@@ -327,6 +327,7 @@ impl Harness {
             setup: &self.setup,
             services: &self.services,
             keys: &NoKeys,
+            look: paperpaw_sdk::ui::look::Look::none(),
             caps: self.caps(),
             wifi: None,
             firmware: None,

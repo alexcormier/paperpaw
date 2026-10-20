@@ -724,3 +724,72 @@ fn a_qr_code_is_drawn_whole_or_not_at_all() {
     );
     assert!(!drawn_in(&small, Rect::new(0, 0, 480, 800)));
 }
+
+/// A look one plugin gives the parts: the SDK places them and tells
+/// screen readers what they are, the look paints them.
+#[test]
+fn a_look_paints_the_parts_and_keeps_what_they_say() {
+    use paperpaw_sdk::Color;
+    use paperpaw_sdk::ui::look::{ButtonPart, FocusPart, Look, Painters, SwitchPart};
+    const SWITCH: Color = Color::gray(100);
+    const FOCUS: Color = Color::gray(60);
+    const BUTTON: Color = Color::gray(140);
+    fn switch(canvas: &mut paperpaw_sdk::Canvas<'_>, _: &UiStyle, part: &SwitchPart) -> bool {
+        canvas.fill(part.rect, SWITCH);
+        true
+    }
+    fn focus(canvas: &mut paperpaw_sdk::Canvas<'_>, _: &UiStyle, part: &FocusPart) -> bool {
+        canvas.fill(part.rect, FOCUS);
+        true
+    }
+    fn button(
+        canvas: &mut paperpaw_sdk::Canvas<'_>,
+        _: &UiStyle,
+        part: &ButtonPart,
+    ) -> Option<Color> {
+        canvas.fill(part.rect, BUTTON);
+        Some(Color::WHITE)
+    }
+    static SQUARE: Painters = Painters::new().switch(switch).focus(focus).button(button);
+
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let row = Rect::new(0, 100, 480, 80);
+    let at = |style: &UiStyle| {
+        let (described, frame) = describe(480, 300, |canvas| {
+            ui::draw_switch(canvas, style, row, true, false);
+            ui::draw_focus(canvas, style, Rect::new(0, 200, 480, 60));
+            ui::draw_button(
+                canvas,
+                &env,
+                style,
+                Rect::new(20, 20, 100, 50),
+                "OK",
+                false,
+                false,
+            );
+        });
+        let view = frame.view();
+        let switch = ui::switch_rect(style, row);
+        let focus = ui::focus_rect(style, Rect::new(0, 200, 480, 60));
+        let shown = (
+            view.pixel(switch.x + 1, switch.y + switch.height / 2),
+            view.pixel(focus.x + 1, focus.y + focus.height / 2),
+            view.pixel(22, 22),
+        );
+        let said: Vec<(Role, Option<bool>)> = described.iter().map(|d| (d.role, d.on)).collect();
+        (shown, said)
+    };
+    let plain = UiStyle::new(&env);
+    let mut looked = plain;
+    looked.look = Look::of(&SQUARE);
+    let (before, said_before) = at(&plain);
+    let (after, said_after) = at(&looked);
+    assert_eq!(after, (SWITCH, FOCUS, BUTTON));
+    assert_ne!(before.0, SWITCH);
+    assert_ne!(before.1, FOCUS);
+    assert_ne!(before.2, BUTTON);
+    // What they are is told the same with any look.
+    assert_eq!(said_after, said_before);
+    assert!(said_after.contains(&(Role::Switch, Some(true))));
+}

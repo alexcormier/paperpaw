@@ -1084,6 +1084,9 @@ struct Shared {
     /// What the storage read during the call going on (see `recall`).
     recall: alloc::rc::Rc<recall::Recall>,
     keymap: Keymap,
+    /// The look of the parts of screens a plugin set, and its priority
+    /// (see [`Registrar::set_ui_look`](paperpaw_sdk::Registrar::set_ui_look)).
+    look: (paperpaw_sdk::ui::look::Look, Option<paperpaw_sdk::Priority>),
     /// What each plugin takes.
     meter: alloc::rc::Rc<meter::Meter>,
 }
@@ -1129,6 +1132,7 @@ impl Shared {
             random: self.random,
             storage: self.storage.as_ref(),
             keys: &self.keymap,
+            look: self.look.0,
         })
     }
 }

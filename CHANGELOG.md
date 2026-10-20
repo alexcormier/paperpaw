@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: a plugin gives the parts of every screen a look of its own:
+  `Registrar::set_ui_look(&'static Painters, Priority)` with painters
+  for switches, the focus, separators, buttons, headers, the row of
+  button hints, progress bars and sliders (`ui::look`). The SDK still
+  places the parts and describes them; `UiStyle::look` and `Env::look`
+  carry the look in use (the highest priority, of equal ones the later).
 - SDK: a setting's editor may be a slot (`SettingExtra::editor_slot`,
   `SettingSpec::editor_slot`), so a plugin filling it edits the setting
   too: `SettingExtra::editor` is now an `Editor` (`Screen` or `Slot`),

@@ -131,6 +131,7 @@ pub(crate) struct Staging {
     pub(crate) font_extensions: Vec<(Id, alloc::string::String, Id)>,
     pub(crate) font_faces: Vec<paperpaw_sdk::FontFace>,
     pub(crate) font_roles: Vec<(Id, Id, Priority)>,
+    pub(crate) ui_looks: Vec<(&'static paperpaw_sdk::ui::look::Painters, Priority)>,
     pub(crate) formats: Vec<FormatSpec>,
     pub(crate) hyphenation: Vec<HyphenationSpec>,
     pub(crate) setting_groups: Vec<SettingGroupSpec>,
@@ -299,6 +300,9 @@ pub(crate) fn stage(
             Contribution::Published { id, service, .. } => staging.services.push((id, service)),
             Contribution::ToPoint { point, text, .. } => staging.contributions.push((point, text)),
             Contribution::Translations(source) => staging.catalogs.push(catalog(source)?),
+            Contribution::UiLook {
+                painters, priority, ..
+            } => staging.ui_looks.push((painters, priority)),
             // A kind of a newer SDK than this kernel knows: said, not lost.
             other => {
                 return Err(RegisterError::Invalid {

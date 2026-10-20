@@ -1028,6 +1028,7 @@ mod tests {
                 setup: &self.setup,
                 services: &self.services,
                 keys: &NoKeys,
+                look: crate::ui::look::Look::none(),
                 caps: crate::Capabilities::default(),
                 wifi: None,
                 firmware: None,

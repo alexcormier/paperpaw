@@ -12,8 +12,14 @@ pub fn draw_header(
     title: &str,
     note: Option<&str>,
 ) {
-    style.header_background(canvas, area);
-    let ink = style.header_colors().1;
+    let part = super::look::HeaderPart { area };
+    let ink = match style.look.header(canvas, style, part) {
+        Some(ink) => ink,
+        None => {
+            style.header_background(canvas, area);
+            style.header_colors().1
+        }
+    };
     let Some(font) = style.font(env) else {
         return;
     };
