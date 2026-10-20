@@ -18,6 +18,7 @@ use winit::window::{Window, WindowId};
 use crate::budget;
 use crate::device::Device;
 use crate::headless;
+use crate::record::Recorder;
 
 const BACKGROUND: u32 = 0x0030_3030;
 /// Frame interval while an animation runs.
@@ -40,11 +41,16 @@ const KEYS: &[(KeyCode, &str)] = &[
     (KeyCode::KeyP, buttons::POWER),
 ];
 
-pub fn run(device: Device, screenshot_dir: PathBuf) -> Result<(), String> {
+pub fn run(
+    device: Device,
+    screenshot_dir: PathBuf,
+    recorder: Option<Recorder<std::fs::File>>,
+) -> Result<(), String> {
     let event_loop = EventLoop::new().map_err(|e| e.to_string())?;
     let mut app = App {
         device,
         screenshot_dir,
+        recorder,
         window: None,
         surface: None,
         cursor: PhysicalPosition::new(0.0, 0.0),
@@ -62,6 +68,8 @@ pub fn run(device: Device, screenshot_dir: PathBuf) -> Result<(), String> {
 struct App {
     device: Device,
     screenshot_dir: PathBuf,
+    /// Writes what is done as a flow's steps (`--record`).
+    recorder: Option<Recorder<std::fs::File>>,
     window: Option<Rc<Window>>,
     surface: Option<softbuffer::Surface<Rc<Window>, Rc<Window>>>,
     cursor: PhysicalPosition<f64>,
@@ -135,6 +143,9 @@ impl App {
     }
 
     fn pointer(&mut self, phase: PointerPhase, point: Point) {
+        if let Some(recorder) = &mut self.recorder {
+            recorder.pointer(phase, point, &mut self.device);
+        }
         self.device.input(InputEvent::Pointer(PointerEvent {
             id: 0,
             phase,
@@ -277,6 +288,9 @@ impl ApplicationHandler for App {
                         } else {
                             ButtonState::Released
                         };
+                        if let Some(recorder) = &mut self.recorder {
+                            recorder.button(name, pressed, &self.device);
+                        }
                         self.device.input(InputEvent::Button { name, state });
                         self.after_input();
                     }
