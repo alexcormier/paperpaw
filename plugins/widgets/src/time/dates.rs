@@ -48,6 +48,11 @@ impl MonthGrid {
         i32::from(week) * 7 + i32::from(column) - i32::from(self.offset)
     }
 
+    /// The week (row) day `day` (1 to `days`) is in.
+    pub(crate) fn week_of(&self, day: u8) -> u8 {
+        (self.offset + day.max(1) - 1) / 7
+    }
+
     /// The weekday of column `column` (0: Sunday).
     pub(crate) fn weekday_of(&self, column: u8) -> u8 {
         (self.week_start + column) % 7
@@ -74,6 +79,10 @@ mod tests {
         let october = MonthGrid::new(2026, 10, 0);
         assert_eq!((october.offset, october.weeks), (4, 5));
         assert_eq!(october.day_at(0, 4), 0);
+        // The 14th is in the third row, the 1st in the first.
+        assert_eq!(october.week_of(14), 2);
+        assert_eq!(october.week_of(1), 0);
+        assert_eq!(october.week_of(31), 4);
         assert_eq!(october.weekday_of(0), 0);
         // February 2026 from Monday: four full weeks, nothing else.
         let february = MonthGrid::new(2026, 2, 1);
