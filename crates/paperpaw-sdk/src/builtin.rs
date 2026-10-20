@@ -589,6 +589,10 @@ pub mod events {
     /// told [`Retry::WhenAllowed`](crate::work::Retry::WhenAllowed) may
     /// try again.
     pub const WORK_ALLOWED: Event<()> = Event::new("core.work-allowed");
+    /// A plugin's declared work changed its state or its progress (at most
+    /// once a second), sent to that plugin, e.g. for its page; the work's
+    /// id comes as [`params::ID`](super::params::ID).
+    pub const WORK_CHANGED: Event<()> = Event::new("core.work-changed");
 }
 
 /// Status items of the kernel (see [`status`](crate::status)).

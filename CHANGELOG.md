@@ -14,8 +14,12 @@ change the plugin SDK.
   (`power`: `PowerLevel`, `Power`), `Command::GoOnline`, and one answer
   for what did not run (`Refusal` with a `Reason` and when to `Retry`,
   `HttpReply::refused`, `events::WORK_REFUSED`, `WORK_ALLOWED`,
-  `POWER_CHANGED`). The kernel runs declared work in a following step;
-  until then these commands do nothing.
+  `POWER_CHANGED`). Jobs are work in steps (`WorkSpec`, `Step`,
+  `Registrar::add_work`, `events::WORK_CHANGED`), timers have keys
+  (`Work::key`, `Command::CancelWork(id, key)`), work may be kept across
+  starts (`Work::persist`), and `Command::CancelHttp` takes requests
+  back. The kernel runs declared work in a following step; until then
+  these commands do nothing.
 - A new look, rounder and friendlier: soft corners, pills for buttons,
   switches, chips and the highlight, plain headers (the title on the
   page, a little larger, no bar or line), faint lines between rows from

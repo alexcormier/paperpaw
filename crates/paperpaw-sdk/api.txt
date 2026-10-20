@@ -244,6 +244,7 @@ pub const paperpaw_sdk::builtin::events::WIFI_FAILED: paperpaw_sdk::event::Event
 pub const paperpaw_sdk::builtin::events::WIFI_SCANNED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::WORD_LOOKED_UP: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::WordLookedUp>
 pub const paperpaw_sdk::builtin::events::WORK_ALLOWED: paperpaw_sdk::event::Event<()>
+pub const paperpaw_sdk::builtin::events::WORK_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::WORK_REFUSED: paperpaw_sdk::event::Event<paperpaw_sdk::work::WorkRefused>
 pub mod paperpaw_sdk::builtin::fonts
 pub const paperpaw_sdk::builtin::fonts::ICONS: paperpaw_sdk::Id
@@ -519,6 +520,7 @@ pub paperpaw_sdk::contribution::Contribution::ToPoint::point: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::ToPoint::text: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::contribution::Contribution::Translations(alloc::borrow::Cow<'static, str>)
 pub paperpaw_sdk::contribution::Contribution::Widget(alloc::boxed::Box<paperpaw_sdk::widgets::WidgetSpec>)
+pub paperpaw_sdk::contribution::Contribution::Work(alloc::boxed::Box<paperpaw_sdk::work::WorkSpec>)
 impl paperpaw_sdk::contribution::Contribution
 pub fn paperpaw_sdk::contribution::Contribution::id(&self) -> core::option::Option<&paperpaw_sdk::Id>
 pub fn paperpaw_sdk::contribution::Contribution::kind(&self) -> &'static str
@@ -559,6 +561,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_stylesheet(&mut self, alloc::b
 pub fn paperpaw_sdk::contribution::Registrar::add_text_filter(&mut self, paperpaw_sdk::filters::TextFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_translations(&mut self, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_widget(&mut self, paperpaw_sdk::widgets::WidgetSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_work(&mut self, paperpaw_sdk::work::WorkSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::bind_font(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::bind_slot(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::contribute(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -2367,6 +2370,7 @@ pub enum paperpaw_sdk::work::Importance
 pub paperpaw_sdk::work::Importance::Expected
 pub paperpaw_sdk::work::Importance::Optional
 #[non_exhaustive] pub enum paperpaw_sdk::work::Reason
+pub paperpaw_sdk::work::Reason::Cancelled
 pub paperpaw_sdk::work::Reason::NetworkOff
 pub paperpaw_sdk::work::Reason::NoNetwork
 pub paperpaw_sdk::work::Reason::NotDeclared
@@ -2382,6 +2386,13 @@ pub paperpaw_sdk::work::Retry::After(paperpaw_platform::input::Instant)
 pub paperpaw_sdk::work::Retry::At(paperpaw_sdk::work::Moments)
 pub paperpaw_sdk::work::Retry::Never
 pub paperpaw_sdk::work::Retry::WhenAllowed
+pub enum paperpaw_sdk::work::Step
+pub paperpaw_sdk::work::Step::Continue
+pub paperpaw_sdk::work::Step::Done
+pub paperpaw_sdk::work::Step::Failed(alloc::string::String)
+pub paperpaw_sdk::work::Step::Progress(paperpaw_sdk::work::Progress)
+pub paperpaw_sdk::work::Step::Wait(paperpaw_platform::input::Instant)
+pub paperpaw_sdk::work::Step::WaitFor(paperpaw_sdk::Id)
 pub enum paperpaw_sdk::work::Why
 pub paperpaw_sdk::work::Why::Deadline
 pub paperpaw_sdk::work::Why::Moment(paperpaw_sdk::work::Moments)
@@ -2392,6 +2403,7 @@ pub fn paperpaw_sdk::work::Why::write(self, &mut paperpaw_sdk::Params)
 pub enum paperpaw_sdk::work::WorkState
 pub paperpaw_sdk::work::WorkState::Held(paperpaw_sdk::work::Refusal)
 pub paperpaw_sdk::work::WorkState::Running
+pub paperpaw_sdk::work::WorkState::Running::progress: core::option::Option<paperpaw_sdk::work::Progress>
 pub paperpaw_sdk::work::WorkState::Waiting
 pub paperpaw_sdk::work::WorkState::Waiting::due: core::option::Option<paperpaw_platform::input::Instant>
 pub struct paperpaw_sdk::work::Moments(_)
@@ -2418,6 +2430,11 @@ pub fn paperpaw_sdk::work::Moments::bitor(self, paperpaw_sdk::work::Moments) -> 
 pub struct paperpaw_sdk::work::Note
 pub paperpaw_sdk::work::Note::at: paperpaw_platform::input::Instant
 pub paperpaw_sdk::work::Note::text: alloc::string::String
+pub struct paperpaw_sdk::work::Progress
+pub paperpaw_sdk::work::Progress::done: u32
+pub paperpaw_sdk::work::Progress::of: u32
+impl paperpaw_sdk::work::Progress
+pub fn paperpaw_sdk::work::Progress::percent(self) -> u8
 pub struct paperpaw_sdk::work::Refusal
 pub paperpaw_sdk::work::Refusal::reason: paperpaw_sdk::work::Reason
 pub paperpaw_sdk::work::Refusal::retry: paperpaw_sdk::work::Retry
@@ -2432,9 +2449,11 @@ pub paperpaw_sdk::work::Work::charging: bool
 pub paperpaw_sdk::work::Work::every: core::option::Option<core::time::Duration>
 pub paperpaw_sdk::work::Work::id: paperpaw_sdk::Id
 pub paperpaw_sdk::work::Work::importance: paperpaw_sdk::work::Importance
+pub paperpaw_sdk::work::Work::key: alloc::string::String
 pub paperpaw_sdk::work::Work::moments: paperpaw_sdk::work::Moments
 pub paperpaw_sdk::work::Work::network: bool
 pub paperpaw_sdk::work::Work::params: paperpaw_sdk::Params
+pub paperpaw_sdk::work::Work::persist: bool
 pub paperpaw_sdk::work::Work::within: core::option::Option<core::time::Duration>
 impl paperpaw_sdk::work::Work
 pub fn paperpaw_sdk::work::Work::after(self, core::time::Duration) -> Self
@@ -2443,9 +2462,11 @@ pub fn paperpaw_sdk::work::Work::at_moments(self, paperpaw_sdk::work::Moments) -
 pub fn paperpaw_sdk::work::Work::charging(self) -> Self
 pub fn paperpaw_sdk::work::Work::every(self, core::time::Duration) -> Self
 pub fn paperpaw_sdk::work::Work::expected(self) -> Self
+pub fn paperpaw_sdk::work::Work::key(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::work::Work::network(impl core::convert::Into<paperpaw_sdk::Id>) -> Self
 pub fn paperpaw_sdk::work::Work::new(impl core::convert::Into<paperpaw_sdk::Id>) -> Self
 pub fn paperpaw_sdk::work::Work::optional(self) -> Self
+pub fn paperpaw_sdk::work::Work::persist(self) -> Self
 pub fn paperpaw_sdk::work::Work::retry(self, u32, u8) -> Self
 pub fn paperpaw_sdk::work::Work::with(self, paperpaw_sdk::Params) -> Self
 pub fn paperpaw_sdk::work::Work::within(self, core::time::Duration) -> Self
@@ -2455,9 +2476,18 @@ pub paperpaw_sdk::work::WorkRefused::work: paperpaw_sdk::Id
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::work::WorkRefused
 pub fn paperpaw_sdk::work::WorkRefused::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::work::WorkRefused::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::work::WorkSpec
+pub paperpaw_sdk::work::WorkSpec::id: paperpaw_sdk::Id
+pub paperpaw_sdk::work::WorkSpec::step: paperpaw_sdk::work::StepFn
+pub paperpaw_sdk::work::WorkSpec::title: alloc::borrow::Cow<'static, str>
+impl paperpaw_sdk::work::WorkSpec
+pub fn paperpaw_sdk::work::WorkSpec::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> paperpaw_sdk::work::Step + 'static) -> Self
+impl core::fmt::Debug for paperpaw_sdk::work::WorkSpec
+pub fn paperpaw_sdk::work::WorkSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const paperpaw_sdk::work::RETRY_FIRST: core::time::Duration
 pub const paperpaw_sdk::work::RETRY_MOST: core::time::Duration
 pub fn paperpaw_sdk::work::backoff(u32, u8) -> core::time::Duration
+pub type paperpaw_sdk::work::StepFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> paperpaw_sdk::work::Step>
 pub mod paperpaw_sdk::xml
 pub use paperpaw_sdk::xml::<<paperpaw_xml::*>>
 pub mod paperpaw_sdk::zip
@@ -2499,7 +2529,8 @@ pub paperpaw_sdk::Command::Broadcast::events: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Broadcast::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Broadcast::ports: alloc::vec::Vec<u16>
 pub paperpaw_sdk::Command::Broadcast::wait_ms: u32
-pub paperpaw_sdk::Command::CancelWork(paperpaw_sdk::Id)
+pub paperpaw_sdk::Command::CancelHttp(paperpaw_sdk::Id)
+pub paperpaw_sdk::Command::CancelWork(paperpaw_sdk::Id, core::option::Option<alloc::string::String>)
 pub paperpaw_sdk::Command::Connect
 pub paperpaw_sdk::Command::Connect::events: paperpaw_sdk::Id
 pub paperpaw_sdk::Command::Connect::host: alloc::string::String
@@ -2624,6 +2655,7 @@ pub paperpaw_sdk::Contribution::ToPoint::point: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::ToPoint::text: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::Contribution::Translations(alloc::borrow::Cow<'static, str>)
 pub paperpaw_sdk::Contribution::Widget(alloc::boxed::Box<paperpaw_sdk::widgets::WidgetSpec>)
+pub paperpaw_sdk::Contribution::Work(alloc::boxed::Box<paperpaw_sdk::work::WorkSpec>)
 impl paperpaw_sdk::contribution::Contribution
 pub fn paperpaw_sdk::contribution::Contribution::id(&self) -> core::option::Option<&paperpaw_sdk::Id>
 pub fn paperpaw_sdk::contribution::Contribution::kind(&self) -> &'static str
@@ -3240,6 +3272,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_stylesheet(&mut self, alloc::b
 pub fn paperpaw_sdk::contribution::Registrar::add_text_filter(&mut self, paperpaw_sdk::filters::TextFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_translations(&mut self, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_widget(&mut self, paperpaw_sdk::widgets::WidgetSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_work(&mut self, paperpaw_sdk::work::WorkSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::bind_font(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::bind_slot(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::contribute(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>

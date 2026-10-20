@@ -1,7 +1,8 @@
 # 0025. Power saving: efficient by default, declared work, power modes
 
 - Status: Accepted
-- Date: 2026-10-20
+- Date: 2026-10-20; jobs, timers by key, HTTP and servers (G2 of
+  the SDK gaps) folded in the same day
 
 ## Context
 
@@ -173,7 +174,7 @@ out.push(Command::Work(
     Work::network(PUSH)            // needs the network
         .expected()                // the reader counts on it
         .within(Duration::from_secs(30 * 60))
-        .at(Moments::BOOK_CLOSED | Moments::SLEEP | Moments::ONLINE),
+        .at_moments(Moments::BOOK_CLOSED | Moments::SLEEP | Moments::ONLINE),
 ));
 // Weather: whenever the radio is on anyway, at most once an hour.
 out.push(Command::Work(
@@ -185,9 +186,11 @@ out.push(Command::Work(Work::at(TIME, at_22).with(params)));
 
 What a work says:
 
-- **its id** (an event of the plugin): declaring the same id again
-  replaces it, so a plugin need not track what it declared;
-  `Command::CancelWork(id)` takes it back;
+- **its id** (an event of the plugin) and, where one event stands for
+  several works, a **key** (`key("rule-3")`): declaring the same id and
+  key again replaces it, so a plugin need not track what it declared;
+  `Command::CancelWork(id, key)` takes it back (no key: all of that
+  id);
 - **what it needs**: nothing, the network, or the device charging
   (`charging()`, e.g. a large download of covers);
 - **how much the reader counts on it**: `expected()` (a position, an
@@ -255,6 +258,61 @@ radio is on or the deadline allows, in Saving at the next connection.
 due, and in Normal and Saving the plugin switches on for either,
 silently, as today. It no longer needs retry rounds for work that can
 wait: the kernel declares it due again.
+
+### Jobs, timers, HTTP and servers: the same model
+
+The SDK gaps review (G2) asked for background jobs, timers that can be
+taken back, more of HTTP, and servers shared by plugins. They are parts
+of declared work, not a second model:
+
+- **Jobs are work in steps.** Long work (installing a plugin, syncing
+  OPDS catalogs, walking the library for its catalog, counting a book's
+  pages) registers a step function for its id,
+  `Registrar::add_work(WorkSpec::new(id, title, step))`, and is
+  declared like any other work. When it runs, the kernel calls `step`
+  instead of emitting the event, again and again while it says
+  `Step::Continue` (or `Step::Progress(done, of)`), each time after the
+  frame is drawn and only when no input waits, so the device answers at
+  once and can sleep between steps; `Step::Wait(at)` and
+  `Step::WaitFor(event)` (e.g. its request's reply) pause it, `Done`
+  ends it, `Failed` declares it again after the backoff. A step should
+  take a few milliseconds. `Env::work(id)` gives its state and progress
+  for the plugin's page, `events::WORK_CHANGED` tells such a page when
+  that changes (at most once a second); the title shows on the Power
+  page and in the battery view. Work without a step function is
+  simply its event, as above.
+- **Timers are work at a time**, keyed: `Work::at(id, time).key(k)`,
+  taken back with `CancelWork`. One event may have as many timers as
+  keys (a rule each), which `Command::Schedule` could not.
+- **Kept across starts** where a work says so (`persist()`): the kernel
+  writes its queue entry (id, key, parameters, attempt) to the card and
+  makes it due at the next wake. Network work not done when the device
+  goes to sleep is kept that way anyway.
+- **HTTP requests** get what work needs of them: a `timeout` (30 s by
+  default, the connection and TLS counted), the headers a plugin wants
+  back (`want_headers`, opt-in; `HttpReply::headers`), a `max_body` for
+  answers kept in memory that defaults by the device's memory
+  (`MemoryClass`: 64 KiB on the X4, 1 MiB elsewhere; larger answers go
+  to a file, `save_to`), and a body of bytes. `Command::CancelHttp`
+  takes back a plugin's requests with one reply event; cancelling a
+  work cancels the requests of its run. Every request is answered once:
+  with the answer, or with status 0 and a `Refusal` (`Cancelled`,
+  `Offline`, `NetworkOff`, …). Helpers for multipart bodies written to a
+  file and for cookies come with the SDK's `web`; TLS sockets and
+  websockets are for a later decision.
+- **Servers are the reader's connection.** One server owned by the
+  kernel takes routes of any plugin (`Registrar::add_web_route(RouteSpec
+  { prefix, event, title })`: transfer, typing on the phone, and what
+  community plugins add share one port and one radio). A plugin's own
+  server (`Command::Serve`) lives as long as its screen or until
+  stopped (`lifetime`). A running server keeps the radio on and the
+  device awake, as now, shows the status line's power mark as
+  *serving*, and work held back rides along on its connection. In
+  Saving and Offline a server left running stops after 10 minutes
+  without a request (`core.serve-idle`), so a forgotten transfer page
+  does not empty the battery.
+- **Limits by memory**: works per plugin (8 on the X4, 32 elsewhere),
+  requests at once and `max_body` follow `MemoryClass`.
 
 ### Quiet: background work never asks, never notifies
 
@@ -513,7 +571,11 @@ so all of it can be tried without hardware.
 
 - **SDK**: `work` (`Work`, `Moments`, `Command::Work`,
   `Command::CancelWork`, `Command::GoOnline`, `Refusal`, `Reason`,
-  `Retry`, `Env::work`, `events::WORK_REFUSED`, `events::WORK_ALLOWED`),
+  `Retry`, `Env::work`, `events::WORK_REFUSED`, `events::WORK_ALLOWED`,
+  `events::WORK_CHANGED`; jobs: `WorkSpec`, `Step`,
+  `Registrar::add_work`), HTTP (`HttpRequest::{timeout, want_headers,
+  max_body}`, `HttpReply::headers`, `Command::CancelHttp`), servers
+  (`Registrar::add_web_route`, `Serve`'s lifetime),
   `ui::offline_offer`, `HttpReply::refused`,
   `Manifest::uses`, `power` (`PowerLevel`, `Power`), `Env::power`,
   `events::POWER_CHANGED`, the settings' mode layer and limits.
@@ -575,8 +637,9 @@ with the battery plugin before and after each step:
   when the X4 is put away.
 - Going to sleep may take up to about 15 s longer, unseen behind the
   sleep screen; work not done is due at the next wake.
-- `Command::Schedule` goes; its callers move to `Work::at`. Plugins
-  that build `HttpRequest` field by field are not affected.
+- `Command::Schedule` goes; its callers move to `Work::at`. Install,
+  OPDS sync, the catalog walk and page counting become jobs instead of
+  each stepping itself; servers of plugins share one.
 - A plugin always knows why its work did not run and when to try
   again; a misbehaving plugin costs a refusal, not a connection, and
   shows up in the battery view.

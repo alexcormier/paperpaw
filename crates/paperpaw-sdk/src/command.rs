@@ -308,8 +308,12 @@ pub enum Command {
     /// Declares work for the kernel to run at the cheapest moment (see
     /// [`work`](crate::work)): the same id replaces what was declared.
     Work(crate::work::Work),
-    /// Takes back the work declared with this id, if it has not run.
-    CancelWork(Id),
+    /// Takes back the work declared with this id and key (none: every
+    /// key of the id), with the requests of its run.
+    CancelWork(Id, Option<String>),
+    /// Takes back the plugin's requests whose reply is this event; each
+    /// is answered with the refusal `Cancelled`.
+    CancelHttp(Id),
     /// The reader chose *Go online* where the mode is Offline (see
     /// [`power`](crate::power)): the network for the screen sending it
     /// until it closes; work held back runs on the same connection.

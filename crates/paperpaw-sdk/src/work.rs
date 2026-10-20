@@ -23,8 +23,10 @@
 //! # let _ = command;
 //! ```
 //!
-//! - **The id** is an event of the plugin. Declaring the same id again
-//!   replaces the work; [`Command::CancelWork`] takes it back.
+//! - **The id** is an event of the plugin, and a **key** tells apart
+//!   several works of one event ([`Work::key`], e.g. a timer for each
+//!   rule). Declaring the same id and key again replaces the work;
+//!   [`Command::CancelWork`] takes it back.
 //! - **What it needs**: nothing, the network ([`Work::network`]), the
 //!   device charging ([`Work::charging`]).
 //! - **How much the reader counts on it**: [`expected`](Work::expected)
@@ -42,6 +44,16 @@
 //! and in handling their answers, are not answered; the kernel keeps the
 //! radio on for them and knows when the work is done.
 //!
+//! **Jobs** are work in steps: long work (an install, a catalog synced or
+//! walked, a book's pages counted) registers a step function for its id
+//! ([`WorkSpec`], [`Registrar::add_work`]). When it runs, the kernel calls
+//! the step instead of emitting the event, again while it answers
+//! [`Step::Continue`], each time after the frame is drawn and only when no
+//! input waits, so the device answers at once and sleeps between steps.
+//! A step should take a few milliseconds.
+//!
+//! [`Registrar::add_work`]: crate::Registrar::add_work
+//!
 //! **Nothing is refused silently, nothing nags.** Work held back by the
 //! power mode stays queued and runs when allowed; work that can never run
 //! (the reader switched the plugin's network off, the manifest does not
@@ -58,12 +70,17 @@
 //! [`events::WORK_REFUSED`]: crate::builtin::events::WORK_REFUSED
 //! [`HttpReply::refused`]: crate::HttpReply::refused
 
+use alloc::boxed::Box;
 use alloc::string::{String, ToString};
+use alloc::vec::Vec;
+use core::fmt;
 use core::ops::BitOr;
 use core::time::Duration;
 
 use paperpaw_platform::Instant;
 
+use crate::command::Command;
+use crate::env::Env;
 use crate::event::EventData;
 use crate::id::Id;
 use crate::params::Params;
@@ -176,8 +193,11 @@ pub enum Importance {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Work {
-    /// The event emitted when it runs; the same id replaces it.
+    /// The event emitted when it runs (or the step function registered
+    /// for it); the same id and key replace it.
     pub id: Id,
+    /// Tells apart several works of one id; empty for one.
+    pub key: String,
     /// Passed with the event.
     pub params: Params,
     /// It needs the network.
@@ -196,6 +216,8 @@ pub struct Work {
     pub every: Option<Duration>,
     /// The moments at which it may run.
     pub moments: Moments,
+    /// Kept on the card and due at the next start, if it has not run.
+    pub persist: bool,
 }
 
 impl Work {
@@ -204,6 +226,7 @@ impl Work {
     pub fn new(id: impl Into<Id>) -> Self {
         Self {
             id: id.into(),
+            key: String::new(),
             params: Params::new(),
             network: false,
             charging: false,
@@ -213,6 +236,7 @@ impl Work {
             within: None,
             every: None,
             moments: Moments::ALL,
+            persist: false,
         }
     }
 
@@ -235,6 +259,19 @@ impl Work {
 
     pub fn with(mut self, params: Params) -> Self {
         self.params = params;
+        self
+    }
+
+    /// One of several works of the same id, e.g. a rule's timer.
+    pub fn key(mut self, key: impl Into<String>) -> Self {
+        self.key = key.into();
+        self
+    }
+
+    /// Kept across starts: written to the card and due at the next start
+    /// if it has not run (e.g. an install going on).
+    pub fn persist(mut self) -> Self {
+        self.persist = true;
         self
     }
 
@@ -318,10 +355,16 @@ pub enum Reason {
     Sleeping,
     /// The plugin asked again before it was told it might.
     TooOften,
+    /// The plugin took it back ([`Command::CancelWork`],
+    /// [`Command::CancelHttp`]).
+    ///
+    /// [`Command::CancelWork`]: crate::Command::CancelWork
+    /// [`Command::CancelHttp`]: crate::Command::CancelHttp
+    Cancelled,
 }
 
 impl Reason {
-    const NAMES: [(Reason, &'static str); 7] = [
+    const NAMES: [(Reason, &'static str); 8] = [
         (Reason::Offline, "offline"),
         (Reason::NetworkOff, "network-off"),
         (Reason::NotDeclared, "not-declared"),
@@ -329,6 +372,7 @@ impl Reason {
         (Reason::NoNetwork, "no-network"),
         (Reason::Sleeping, "sleeping"),
         (Reason::TooOften, "too-often"),
+        (Reason::Cancelled, "cancelled"),
     ];
 
     pub fn as_str(self) -> &'static str {
@@ -493,8 +537,82 @@ pub enum WorkState {
     Waiting { due: Option<Instant> },
     /// Queued, but held back, e.g. by the mode.
     Held(Refusal),
-    /// Its event was emitted and its requests are not all answered.
-    Running,
+    /// Its event was emitted (or its steps go on) and its requests are
+    /// not all answered; a job's progress, if it says.
+    Running { progress: Option<Progress> },
+}
+
+/// How far a job is: `done` of `of` (files, entries, pages).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct Progress {
+    pub done: u32,
+    pub of: u32,
+}
+
+impl Progress {
+    /// In percent, 0 to 100.
+    pub fn percent(self) -> u8 {
+        if self.of == 0 {
+            return 0;
+        }
+        (u64::from(self.done.min(self.of)) * 100 / u64::from(self.of)) as u8
+    }
+}
+
+/// What a job's step says ([`WorkSpec`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Step {
+    /// More to do: the next step after the frame, when no input waits.
+    Continue,
+    /// More to do, this far.
+    Progress(Progress),
+    /// Nothing to do before then.
+    Wait(Instant),
+    /// Nothing to do before this event, e.g. the reply to its request.
+    WaitFor(Id),
+    /// Done; declared again after `every`, if it says.
+    Done,
+    /// Failed: declared again after the backoff ([`backoff`]), with a
+    /// line for the plugin's note.
+    Failed(String),
+}
+
+/// One step of a job: the work's parameters, commands to send.
+pub type StepFn = Box<dyn Fn(&Env<'_>, &Params, &mut Vec<Command>) -> Step>;
+
+/// A job: a work done in steps (see the [module](self)), registered with
+/// [`Registrar::add_work`](crate::Registrar::add_work) and run when a
+/// [`Work`] of its id is due.
+#[non_exhaustive]
+pub struct WorkSpec {
+    pub id: Id,
+    /// Translation key of its name, shown on the Power page and in the
+    /// battery view ("Syncing catalogs").
+    pub title: alloc::borrow::Cow<'static, str>,
+    pub step: StepFn,
+}
+
+impl WorkSpec {
+    pub fn new(
+        id: impl Into<Id>,
+        title: impl Into<alloc::borrow::Cow<'static, str>>,
+        step: impl Fn(&Env<'_>, &Params, &mut Vec<Command>) -> Step + 'static,
+    ) -> Self {
+        Self {
+            id: id.into(),
+            title: title.into(),
+            step: Box::new(step),
+        }
+    }
+}
+
+impl fmt::Debug for WorkSpec {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("WorkSpec")
+            .field("id", &self.id)
+            .field("title", &self.title)
+            .finish_non_exhaustive()
+    }
 }
 
 /// What a plugin's background work last said, kept by the kernel in
@@ -533,8 +651,12 @@ mod tests {
         assert_eq!(w.within, Some(Duration::from_secs(60)));
         assert_eq!(w.every, Some(Duration::from_secs(3600)));
         assert_eq!(w.moments, Moments::SLEEP);
-        let timer = Work::at(Id::new_static("rules.time"), Instant(5000));
+        let timer = Work::at(Id::new_static("rules.time"), Instant(5000))
+            .key("rule-3")
+            .persist();
         assert_eq!(timer.at, Some(Instant(5000)));
+        assert_eq!(timer.key, "rule-3");
+        assert!(timer.persist);
         assert!(!timer.network);
         assert_eq!(timer.moments, Moments::NONE);
     }
@@ -578,6 +700,13 @@ mod tests {
             WorkRefused::from_params(&refused.to_params()),
             Some(refused)
         );
+    }
+
+    #[test]
+    fn progress_in_percent() {
+        assert_eq!(Progress { done: 1, of: 4 }.percent(), 25);
+        assert_eq!(Progress { done: 9, of: 4 }.percent(), 100);
+        assert_eq!(Progress { done: 3, of: 0 }.percent(), 0);
     }
 
     #[test]
