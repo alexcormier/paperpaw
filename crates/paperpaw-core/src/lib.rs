@@ -959,6 +959,19 @@ impl Kernel {
         effects
     }
 
+    /// PaperPaw stops: the device restarts or the app closes for good;
+    /// plugins hear [`events::STOPPING`]. Unlike [`Kernel::suspend`] it is
+    /// no sleep: none is counted, and no work waits for it.
+    pub fn stop(&mut self, now: Instant) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        self.output.commands.push(events::STOPPING.emit(()));
+        let effects = self.finish();
+        // What plugins saved, and what storage kept back, written.
+        let _ = self.shared.storage.sync();
+        effects
+    }
+
     /// Back from [`Kernel::suspend`].
     pub fn resume(&mut self, now: Instant) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);

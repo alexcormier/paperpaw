@@ -6,6 +6,18 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Restarting no longer counts as going to sleep: after plugins were
+  switched or an update installed, rules for "on sleep", sync on sleep,
+  work waiting for sleep and the sleep counters no longer take the
+  restart for a sleep, and the battery log ends the time awake there.
+  The reading position, the reading statistics and what the reading
+  widget shows are still saved before the restart, now also in the
+  emulator and on Android.
+- SDK: `events::STOPPING` (`core.stopping`): PaperPaw stops (the device
+  restarts, or an app closes for good); plugins save what is pending, as
+  at `SUSPEND`, but no `RESUME` follows and it is no sleep. Shells call
+  `Kernel::stop` for it.
+
 - Emulator: `--free-space <bytes>` makes the emulated storage say it has
   that much free, whatever the computer's disk has, so screenshots of the
   store look the same everywhere (the snapshot tests use it).

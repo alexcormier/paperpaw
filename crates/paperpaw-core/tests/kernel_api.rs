@@ -8,13 +8,16 @@
 
 mod common;
 
+use std::cell::Cell;
+use std::rc::Rc;
+
 use common::{BASE, DEVICE, Harness, LATER};
 use paperpaw_core::Kernel;
 use paperpaw_core::sdk::builtin::{events, slots};
 use paperpaw_core::sdk::secrets::{FILE as SECRETS, SecretChange};
 use paperpaw_core::sdk::{
-    Battery, Manifest, MemoryStorage, Params, Plugin, RegisterError, Registrar, SystemStatus,
-    WallClock,
+    Battery, DirEntry, Manifest, MemoryStorage, Params, Plugin, RegisterError, Registrar, Storage,
+    StorageError, SystemStatus, WallClock,
 };
 use paperpaw_platform::Instant;
 use proptest::prelude::*;
@@ -36,6 +39,7 @@ impl Plugin for Listener {
             events::BATTERY_MEASURED.id().clone(),
             events::SUSPEND.id().clone(),
             events::RESUME.id().clone(),
+            events::STOPPING.id().clone(),
         ] {
             let log = self.harness.log.clone();
             r.subscribe(
@@ -47,7 +51,50 @@ impl Plugin for Listener {
     }
 }
 
-fn kernel(harness: &Harness, storage: MemoryStorage) -> Kernel {
+/// A storage that counts how often it is told to write back what it kept
+/// back.
+#[derive(Clone, Default)]
+struct Synced {
+    files: Rc<MemoryStorage>,
+    syncs: Rc<Cell<u32>>,
+}
+
+impl Storage for Synced {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.files.read_at(path, offset, buf)
+    }
+
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.files.size(path)
+    }
+
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.files.write(path, data)
+    }
+
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.files.append(path, data)
+    }
+
+    fn sync(&self) -> Result<(), StorageError> {
+        self.syncs.set(self.syncs.get() + 1);
+        Ok(())
+    }
+
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.files.list(dir, visit)
+    }
+
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.files.remove(path)
+    }
+
+    fn create_dir(&self, path: &str) -> Result<(), StorageError> {
+        self.files.create_dir(path)
+    }
+}
+
+fn kernel(harness: &Harness, storage: impl Storage + 'static) -> Kernel {
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(harness.plugin())
         .plugin(Listener {
@@ -186,6 +233,18 @@ fn sleeping_and_waking_are_heard_and_counted() {
     assert_eq!(heard.iter().filter(|l| l.ends_with("resume")).count(), 4);
     assert_eq!(kernel.usage().sleeps, 5);
     assert_eq!(kernel.active_screen(), Some(&BASE));
+}
+
+#[test]
+fn stopping_is_heard_and_written_back_but_no_sleep() {
+    let harness = Harness::new();
+    let storage = Synced::default();
+    let mut kernel = kernel(&harness, storage.clone());
+    let synced = storage.syncs.get();
+    kernel.stop(Instant(1000));
+    assert_eq!(heard(&harness), ["heard core.stopping"]);
+    assert_eq!(kernel.usage().sleeps, 0);
+    assert_eq!(storage.syncs.get(), synced + 1);
 }
 
 #[test]
