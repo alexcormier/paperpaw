@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Emulator and Android: a file written whole is on the disk before it
+  replaces the old one, so a power cut leaves the old or the new, and
+  files of one name with other extensions (`a.x`, `a.y`) no longer
+  share one temporary file.
 - SDK: `Id::unplaced` gives an id without its placement
   (`widgets.clock@2.face` to `widgets.clock.face`) as an id; `placed`,
   which did the same under a name that said the opposite, stays until
