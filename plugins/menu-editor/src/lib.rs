@@ -703,7 +703,7 @@ impl Screen for EntryScreen {
             OPTIONS.len(),
             |canvas, index, rect, focused| {
                 let label = env.i18n.tr(OPTIONS[index]);
-                let color = if focused { Color::WHITE } else { Color::BLACK };
+                let color = style.focus_ink(focused);
                 ui::draw_label(canvas, &font, style.text, x, rect, label, color);
             },
         );

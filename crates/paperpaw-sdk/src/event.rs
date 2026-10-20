@@ -136,7 +136,78 @@ macro_rules! numbers {
         }
     )*};
 }
-numbers!(u8, u16, u32, u64, usize, i32, i64, f32);
+numbers!(u8, u16, u32, u64, usize, i32, i64);
+
+/// Read without `core`'s exact parser of floats: its tables are some
+/// 16 KB, which every native plugin taking a reading event would carry
+/// (ADR 0024). As near as the float can say (within a unit of its last
+/// place), which is all a parameter needs.
+impl ParamValue for f32 {
+    fn to_param(&self) -> String {
+        self.to_string()
+    }
+
+    fn from_param(text: &str) -> Option<Self> {
+        parse_f32(text.trim())
+    }
+}
+
+/// `[+-]digits[.digits][e[+-]digits]`, `inf` or `NaN`, as `f32`'s
+/// `Display` writes them.
+fn parse_f32(text: &str) -> Option<f32> {
+    let (negative, rest) = match text.as_bytes().first()? {
+        b'-' => (true, &text[1..]),
+        b'+' => (false, &text[1..]),
+        _ => (false, text),
+    };
+    let sign = if negative { -1.0 } else { 1.0 };
+    match rest {
+        "inf" | "infinity" => return Some(sign * f32::INFINITY),
+        "NaN" | "nan" => return Some(f32::NAN),
+        _ => {}
+    }
+    let (number, exponent) = match rest.find(['e', 'E']) {
+        Some(at) => (&rest[..at], rest[at + 1..].parse::<i32>().ok()?),
+        None => (rest, 0),
+    };
+    let (whole, fraction) = number.split_once('.').unwrap_or((number, ""));
+    if whole.is_empty() && fraction.is_empty() {
+        return None;
+    }
+    // The first 19 digits, as a whole number, and where the point is.
+    let mut mantissa: u64 = 0;
+    let mut digits = 0;
+    let mut scale = exponent;
+    for (i, b) in whole.bytes().chain(fraction.bytes()).enumerate() {
+        if !b.is_ascii_digit() {
+            return None;
+        }
+        let in_fraction = i >= whole.len();
+        if digits < 19 {
+            if mantissa > 0 || b != b'0' {
+                digits += 1;
+            }
+            mantissa = mantissa * 10 + u64::from(b - b'0');
+            scale -= i32::from(in_fraction);
+        } else if !in_fraction {
+            scale += 1;
+        }
+    }
+    // Powers of ten to 10^10 are exact in an f32 (5^10 < 2^24).
+    const TENS: [f32; 11] = [1e0, 1e1, 1e2, 1e3, 1e4, 1e5, 1e6, 1e7, 1e8, 1e9, 1e10];
+    let mut value = mantissa as f32;
+    while scale > 0 {
+        let step = scale.min(10);
+        value *= TENS[step as usize];
+        scale -= step;
+    }
+    while scale < 0 {
+        let step = (-scale).min(10);
+        value /= TENS[step as usize];
+        scale += step;
+    }
+    Some(sign * value)
+}
 
 /// An optional value: `None` when the event does not carry it.
 impl<T: ParamValue> ParamValue for Option<T> {
@@ -343,5 +414,38 @@ mod tests {
             MOVED.read(&id, &with_note).and_then(|m| m.note),
             Some(String::from("hi"))
         );
+    }
+
+    #[test]
+    fn floats_read_as_near_as_they_can_be() {
+        for value in [
+            0.0f32,
+            0.5,
+            1.0,
+            0.25,
+            0.333_333_34,
+            0.999_999_9,
+            1.5e-7,
+            12_345.678,
+            3.0e9,
+            7.0e-30,
+            f32::MAX,
+            f32::MIN_POSITIVE,
+        ] {
+            for v in [value, -value] {
+                let read = f32::from_param(&v.to_param()).unwrap();
+                let diff = (read - v).abs();
+                assert!(diff <= v.abs() * 2.5e-7, "{v}: read {read}");
+            }
+        }
+        assert_eq!(f32::from_param("1e3"), Some(1000.0));
+        assert_eq!(f32::from_param(" .5 "), Some(0.5));
+        assert_eq!(f32::from_param("5."), Some(5.0));
+        assert_eq!(f32::from_param("inf"), Some(f32::INFINITY));
+        assert_eq!(f32::from_param("-inf"), Some(f32::NEG_INFINITY));
+        assert!(f32::from_param("NaN").unwrap().is_nan());
+        for bad in ["", "-", ".", "1.2.3", "1e", "abc", "1,5", "--1", "1e3.5"] {
+            assert_eq!(f32::from_param(bad), None, "{bad:?}");
+        }
     }
 }

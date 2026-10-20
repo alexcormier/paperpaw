@@ -222,8 +222,19 @@ impl Remote {
                 for plugin in kernel.plugins().iter() {
                     let m = &plugin.manifest;
                     let on = if plugin.enabled { "on" } else { "off" };
-                    println!("PP:PLUGIN {} {on} {}", m.id, m.version);
+                    let code = match (plugin.kind, plugin.problem) {
+                        (paperpaw_sdk::PluginKind::Code, Some(problem)) => {
+                            alloc::format!(" code {problem:?}")
+                        }
+                        (paperpaw_sdk::PluginKind::Code, None) => String::from(" code"),
+                        _ => String::new(),
+                    };
+                    println!("PP:PLUGIN {} {on} {}{code}", m.id, m.version);
                 }
+                println!("PP:END");
+            }
+            Command::Native => {
+                crate::native::describe(&mut |line| println!("PP:NATIVE {line}"));
                 println!("PP:END");
             }
             Command::Actions(prefix) => {

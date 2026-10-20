@@ -1,0 +1,84 @@
+# A CI job for a native PaperPaw plugin's own repository (copy this
+# folder's files to start one): on every tag it builds the plugin for the
+# Xteink X4 and the X4 Pro, packs both files and signs them with the
+# author's key, and attaches them to the tag's release for the plugin
+# library. Nothing here runs in PaperPaw's own repository.
+#
+# The author's key: `paperpaw-sign key author.key` once, then its contents
+# as the repository's secret PAPERPAW_PLUGIN_KEY. Keep the file safe:
+# devices remember the key at the first install and warn when an update is
+# signed by another.
+name: Build
+
+on:
+  push:
+    tags: ["v*"]
+  pull_request:
+
+permissions:
+  contents: write
+
+env:
+  CARGO_TERM_COLOR: always
+  # The PaperPaw release the plugin is built for, and its compilers: a
+  # file runs only on firmware built by the same ones (the device's
+  # *About* names them).
+  PAPERPAW: "0.5.0"
+  RUST_X4: "1.99.0"
+  RUST_X4_PRO: "1.97.0.0"
+  # The plugin's binary crate, as in Cargo.toml.
+  PLUGIN: hello
+
+jobs:
+  build:
+    name: X4 and X4 Pro
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Compilers
+        run: |
+          rustup toolchain install "$RUST_X4" --profile minimal --target riscv32imc-unknown-none-elf
+          curl -sSfL https://github.com/esp-rs/espup/releases/latest/download/espup-x86_64-unknown-linux-gnu -o espup
+          chmod +x espup
+          ./espup install --targets esp32s3 --toolchain-version "$RUST_X4_PRO" \
+            --crosstool-toolchain-version 14.2.0_20241119
+      - name: paperpaw-sign, of the release
+        run: cargo "+$RUST_X4" install --locked --git https://github.com/hthoene/paperpaw --tag "v$PAPERPAW" paperpaw-sign
+      - name: Build
+        run: |
+          cargo "+$RUST_X4" build --release --target riscv32imc-unknown-none-elf
+          . "$HOME/export-esp.sh"
+          cargo +esp build --release --target xtensa-esp32s3-none-elf -Zbuild-std=core,alloc
+      - name: Pack and sign
+        env:
+          PAPERPAW_PLUGIN_KEY: ${{ secrets.PAPERPAW_PLUGIN_KEY }}
+        run: |
+          mkdir -p dist
+          key="$RUNNER_TEMP/author.key"
+          if [ -n "$PAPERPAW_PLUGIN_KEY" ]; then
+            printf '%s\n' "$PAPERPAW_PLUGIN_KEY" > "$key"
+            sign=(--key "$key")
+          else
+            # A pull request from a fork has no secrets: unsigned files.
+            sign=()
+          fi
+          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
+            version="${GITHUB_REF_NAME#v}"
+          else
+            version=dev
+          fi
+          paperpaw-sign pack "target/riscv32imc-unknown-none-elf/release/$PLUGIN" \
+            "dist/$PLUGIN-$version-x4.ppn" "${sign[@]}"
+          paperpaw-sign pack "target/xtensa-esp32s3-none-elf/release/$PLUGIN" \
+            "dist/$PLUGIN-$version-x4-pro.ppn" "${sign[@]}"
+          rm -f "$key"
+          (cd dist && sha256sum ./*.ppn > SHA256SUMS)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: plugin
+          path: dist/
+      - name: Release
+        if: startsWith(github.ref, 'refs/tags/')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" dist/* --title "$GITHUB_REF_NAME" --generate-notes

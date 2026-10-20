@@ -6,6 +6,46 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- A new look, rounder and friendlier: soft corners, pills for buttons,
+  switches, chips and the highlight, plain headers (the title on the
+  page, a little larger, no bar or line), faint lines between rows from
+  where their text starts, margins of 4 mm. Rows with
+  a note keep smaller corners, so the highlight never comes near their
+  text; the home screen's grid, its frames and the focus are round too.
+  A paw: beside the icon of empty screens (empty shelves of the library
+  now show an icon and a title too), as the busy mark, and on the X4 in
+  the hint of the button whose press is being worked on.
+- Appearance settings: the text size and contrast for everyone; with
+  advanced settings the header (plain, light, dark), corners (square,
+  slightly rounded, round, soft; round and soft make pills), the
+  highlight (dark bar, frame, light bar), lines between rows (faint,
+  lines, none), lists on cards, the size of headers' titles, margins,
+  rows and lines. Pebble, a theme for touch screens with lists on
+  rounded cards and a light highlight, comes switched off in the plugin
+  manager; `samples/plugins` has two more themes, Paw and Calm ink. The
+  classic look is the Airy sample's light headers and small corners.
+- Library: with round or soft corners, covers have rounded corners too,
+  at most as round as a book's. The grid of covers keeps its covers
+  clear of a framed focus, its focus a box; titles on a light focus
+  stay black.
+- Headers: their title, note, page number and arrows are centred by
+  their ink, no longer by their lines of text, which set them up to
+  nine pixels off the middle; the gray arrow at the first or last page
+  shows as gray on panels of black and white too.
+- Status lines: where their items would not fit whole (wide margins,
+  large text), the gaps between them narrow first, so the quick panel's
+  date is no longer shortened.
+- Setup: its margins are the menus' and a gap, no longer twice the
+  menus', so wide margins leave its choices room.
+- SDK: `UiStyle::{pill, focus, separators, plain_header, cards, grays,
+  head}`, `UiStyle::radius`, `focus_ink`, `focus_paper`, `focus_faint`,
+  `dark_focus`, `ui::draw_separator`, `ui::Focus`, `ui::Separators`,
+  `ui::PAW_ICON`, `Thumbnail::draw_round`; settings `core.ui-focus`,
+  `core.ui-separators`, `core.ui-groups`, `core.ui-title`,
+  `core.header.plain`, `core.corners.soft`; graphics:
+  `Canvas::fill_corners`, `round::corner_inset`. Plugins draw what is on
+  a focused row in `focus_ink` rather than white, so every highlight
+  works.
 - Books: no book can crash the X4 or exhaust its memory any more. A
   picture's long alternative text in CJK script crashed the EPUB
   converter, and with the last book reopened at start, possibly at
@@ -38,6 +78,44 @@ change the plugin SDK.
 - XTC books with damaged or oversized pages fail cleanly instead of
   crashing the X4 or filling the card, gray pages open much faster, and
   long chapter lists take little memory.
+- Native code plugins as files (ADR 0024, PLANNING P5): a code plugin
+  can be a file in its folder on the card (`plugins/<id>/code.ppn`),
+  which the Xteink X4 and X4 Pro load at their start, without a new
+  firmware: the X4 Pro runs it from PSRAM, the X4 writes it once into
+  flash behind its firmware and runs it from there, for some hundred
+  bytes of RAM. Its code is that of a plugin built in, with one line
+  more (`paperpaw_sdk::plugin!`); `paperpaw-sign pack` makes the file
+  and signs it as its author. A file fits the PaperPaw built by the same
+  compiler from the same SDK (its fingerprint, shown under *About* and
+  sent with the update check). Plugins the web flasher writes behind the
+  firmware are installed at the first start, their authors' keys
+  remembered as the store does; code signed by another author than the
+  version installed is not, and the plugin manager says so. Only code
+  installed runs: the store and the web flasher's install name a file
+  by its digest (kept in `.paperpaw`), and one put into a plugin's
+  folder otherwise, over the Wi-Fi transfer or on the card, is not
+  loaded (`tools/x4-remote.py --trust-code` names an author's own build
+  over USB). Safe mode:
+  after two starts that did not get to their first frame, or with *Back*
+  (X4) or *Home* (X4 Pro) held at power-on, PaperPaw starts without code
+  plugins and switches off the one that crashed; the plugin manager says why a code
+  plugin does not run. `samples/hello-native` is the sample plugin as a
+  file, with a CI job for a plugin's own repository.
+- SDK: `native` (the fingerprint, `plugin!`, `Env::native`,
+  `check_file`, `Native::not_installed`: plugins a shell did not
+  install at the start, and why; `remember_code` and `installed_code`:
+  the code installed, by its digest), `PluginProblem::NotInstalled` and
+  `Changed`, `PluginInfo::kind` and
+  `PluginInfo::problem`;
+  `Registrar::publish` publishes a service with its type's name, so
+  plugins built apart find it (`Registrar::add_service` is deprecated);
+  a float in an event's parameters is read without `core`'s large exact
+  parser (16 KB less in a native plugin that takes reading events).
+- Kernel: `KernelBuilder::code_plugins` with the shell's `CodeLoader`
+  (which loads a `CodeFile`: the plugin's id from its `plugin.ini`, its
+  path, the digest installed), `safe_mode` and
+  `install_plugin` (plugins a shell put in folders, installed before
+  plugins load); `Kernel::describe` describes a notice showing.
 - Dictionary: a damaged dictionary is no longer indexed again with
   every word looked up (each time reading its whole index): it is
   left out until its files change. The prepared indexes of
@@ -689,6 +767,27 @@ change the plugin SDK.
   once, and the X4 started again (found with the crash file's calls;
   the out-of-memory crashes seen in testing were this). Downloads of
   10 MB one after another now go through, at the peak 222 KB of the heap's 262 KB.
+- Code plugins in the store (ADR 0023, ADR 0024): listed where a build
+  fits the device and its firmware, installed with their code checked
+  whole and signed by their author. The store says once, before the
+  first, what code plugins are (full access to the device, safe mode if
+  one goes wrong); a plugin's page says it is one and which PaperPaw it
+  is made for, and offers *Restart now* once it is installed. The
+  author's key is remembered at the first install, and an update signed
+  by someone else is installed only when the reader says so after a
+  clear warning; code that is damaged, unsigned, built for another
+  firmware or not by the author the library names is not installed.
+  SDK: `install::Digest` (SHA-1 or SHA-256 for a package's files,
+  `PackageFile::digest` in place of `sha1`), `Received::Complete` and
+  `Installer::install` (a job complete waits until its owner installs
+  it, in place of `Received::Installed`), `Installer::folder`,
+  `native::author` (whether a signature's key is the plugin's author
+  known on the device, the first, or another), `native::known_author`
+  and `remember_author` (one file for every installer),
+  `PluginInfo::update`
+  (a code plugin updated while it runs: the new version at the next
+  start). Kernel: `Kernel::describe` also tells the notice shown over
+  the screens.
 - A plugin store on the device (*More plugins*, in the tools and in the
   plugin manager, PLANNING O6, ADR 0023): the data plugins of
   paperpaw.org's plugin library made for this device, PaperPaw version

@@ -8,38 +8,13 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::rc::Rc;
+mod common;
 
-use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
-use paperpaw_platform::Rotation;
-use paperpaw_plugin_store::{OPEN, Store};
+use common::{LIST, Shopping};
+use paperpaw_plugin_store::OPEN;
 use paperpaw_sdk::builtin::{actions, params};
-use paperpaw_sdk::{
-    DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage, Params,
-    PixelFormat, Storage, StorageError, Version,
-};
+use paperpaw_sdk::{Id, Instant, Params, Storage, Version};
 
-const DEVICE: DeviceInfo = DeviceInfo {
-    id: "xteink-x4",
-    name: "Xteink X4",
-    display: DisplayInfo {
-        width: 480,
-        height: 800,
-        dpi: 220,
-        format: PixelFormat::Mono1,
-        rotation: Rotation::Deg0,
-        color: None,
-    },
-    input: InputCaps {
-        buttons: true,
-        touch: false,
-        pen: false,
-        keys: &[],
-    },
-    memory: MemoryClass::Small,
-};
-
-const LIST: &str = "https://paperpaw.org/api/v1/plugins.json?device=x4&lang=en";
 const PAGE: &str = "https://paperpaw.org/api/v1/plugins/airy.json?device=x4&lang=en";
 
 fn manifest(version: &str) -> String {
@@ -88,132 +63,14 @@ fn page(version: &str, manifest: &str, catalog: &str) -> String {
     )
 }
 
-/// A storage the test looks into while the kernel has it.
-#[derive(Clone, Default)]
-struct Shared(Rc<MemoryStorage>);
-
-impl Storage for Shared {
-    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
-        self.0.read_at(path, offset, buf)
-    }
-    fn size(&self, path: &str) -> Result<u64, StorageError> {
-        self.0.size(path)
-    }
-    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
-        self.0.write(path, data)
-    }
-    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
-        self.0.append(path, data)
-    }
-    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
-        self.0.list(dir, visit)
-    }
-    fn remove(&self, path: &str) -> Result<(), StorageError> {
-        self.0.remove(path)
-    }
-    fn exists(&self, path: &str) -> bool {
-        self.0.exists(path)
-    }
-    fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
-        self.0.rename(from, to)
-    }
-    fn create_dir(&self, path: &str) -> Result<(), StorageError> {
-        self.0.create_dir(path)
-    }
-    fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
-        self.0.remove_dir_all(path)
-    }
+/// What the tests of Airy do with the store.
+trait Airy {
+    fn open_airy(&mut self, page: &str);
+    fn install(&mut self, version: &str, manifest: &str, catalog: &str);
+    fn installed(&self) -> Option<Version>;
 }
 
-struct Shopping {
-    kernel: Kernel,
-    storage: Shared,
-    now: u64,
-}
-
-impl Shopping {
-    /// The store opened and its list answered with `list`.
-    fn new(list: &str) -> Self {
-        Self::on(Some("x4"), list)
-    }
-
-    /// The store opened on a device libraries call `device`.
-    fn on(device: Option<&'static str>, list: &str) -> Self {
-        let storage = Shared::default();
-        let mut builder = Kernel::builder(DEVICE)
-            .storage(storage.clone())
-            .network(true)
-            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
-            .plugin(paperpaw_plugin_fonts_browser::FontsBrowser)
-            .plugin(Store);
-        if let Some(device) = device {
-            builder = builder.catalog_device(device);
-        }
-        let mut kernel = builder.build().unwrap();
-        kernel.start(Instant(0));
-        let mut shopping = Self {
-            kernel,
-            storage,
-            now: 0,
-        };
-        shopping.run(OPEN);
-        if device.is_some() {
-            let call = shopping.request(LIST);
-            shopping.answer(&call, 200, list.as_bytes());
-        }
-        shopping
-    }
-
-    fn run(&mut self, action: Id) {
-        self.now += 100;
-        self.kernel.run_action(Instant(self.now), action);
-    }
-
-    /// The requests the kernel asks the shell to make now.
-    fn requests(&mut self) -> Vec<HttpCall> {
-        self.kernel
-            .take_io()
-            .into_iter()
-            .filter_map(|io| match io {
-                Io::Http(call) => Some(call),
-                _ => None,
-            })
-            .collect()
-    }
-
-    /// The one request for `url` asked for now.
-    fn request(&mut self, url: &str) -> HttpCall {
-        let mut calls: Vec<HttpCall> = self
-            .requests()
-            .into_iter()
-            .filter(|c| c.url == url)
-            .collect();
-        assert_eq!(calls.len(), 1, "{url}: {calls:?}");
-        calls.remove(0)
-    }
-
-    fn answer(&mut self, call: &HttpCall, status: u16, body: &[u8]) {
-        self.now += 100;
-        let response = HttpResponse {
-            id: call.id,
-            status,
-            body: body.to_vec(),
-            ..HttpResponse::default()
-        };
-        self.kernel.http_response(Instant(self.now), response);
-    }
-
-    /// The labels of what the screen shows, in order.
-    fn shown(&mut self) -> String {
-        self.kernel.render(&mut |_, _| {});
-        self.kernel
-            .describe()
-            .into_iter()
-            .map(|p| p.label)
-            .collect::<Vec<_>>()
-            .join(" | ")
-    }
-
+impl Airy for Shopping {
     /// Airy's page opened from the list (the entry after *Search*), its
     /// page at the library answered with `page`.
     fn open_airy(&mut self, page: &str) {
@@ -385,7 +242,7 @@ fn a_search_finds_names_and_summaries() {
 
 #[test]
 fn a_device_no_library_knows_is_told_so() {
-    let mut shopping = Shopping::on(None, "");
+    let mut shopping = Shopping::on(None, None, "");
     assert!(shopping.requests().is_empty());
     let shown = shopping.shown();
     assert!(shown.contains("No plugins for this device"), "{shown}");

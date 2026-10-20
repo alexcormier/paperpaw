@@ -345,7 +345,7 @@ impl MenuScreen {
         let Some(font) = style.font(env) else {
             return;
         };
-        let ink = if focused { Color::WHITE } else { Color::BLACK };
+        let ink = style.focus_ink(focused);
         // The label and value right of the icons.
         let rect = ui::draw_row_icon(
             canvas,

@@ -9,7 +9,10 @@
 //! calls that led there, innermost first (the firmware is built with frame
 //! pointers): `tools/x4-remote.py --crashes` names their functions from
 //! the firmware's symbols. An allocation that failed says so this way
-//! too, with the code that asked for it.
+//! too, with the code that asked for it. A call in a native plugin's code
+//! is followed by the plugin and the offset into its file, e.g.
+//! `4280a1c4 (hello+0x7f30)`, and safe mode learns the plugin
+//! (`safe_mode::crashed_in`).
 
 use core::fmt::Write;
 
@@ -55,6 +58,7 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
     // addresses inside `core` and `alloc` are named the same way).
     let _ = write!(cut, " @");
     let mut last = 0;
+    let mut in_plugin = false;
     for frame in esp_backtrace::Backtrace::capture()
         .frames()
         .iter()
@@ -67,6 +71,14 @@ fn panic(info: &core::panic::PanicInfo<'_>) -> ! {
         }
         last = pc;
         let _ = write!(cut, " {pc:x}");
+        crate::native::attribute(pc as u32, &mut |id, offset| {
+            let _ = write!(cut, " ({id}+{offset:#x})");
+            // The innermost plugin is the one it happened in.
+            if !in_plugin {
+                in_plugin = true;
+                crate::safe_mode::crashed_in(id);
+            }
+        });
     }
     // SAFETY: one core, the firmware stopped: nothing else touches it.
     unsafe { core::ptr::addr_of_mut!(LAST).write_volatile(buf) };

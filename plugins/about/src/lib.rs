@@ -4,7 +4,8 @@
 //! Markdown), so it pages and reads like a book; PaperPaw's logo above it
 //! (the picture [`logo::LOGO`] names, if one does). Where PaperPaw is the
 //! firmware, also the plugins built into it, which an update brings
-//! again.
+//! again; where it loads native code plugins, what they must be built
+//! with to fit it (its fingerprint, as the plugin library lists builds).
 
 #![no_std]
 
@@ -12,13 +13,14 @@ extern crate alloc;
 
 use alloc::borrow::Cow;
 use alloc::format;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{menus, params, slots};
 use paperpaw_sdk::logo;
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, Version,
+    ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
+    Registrar, SDK_VERSION, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("about");
@@ -30,13 +32,13 @@ const LICENCES: &str = include_str!("../licences.md");
 const LOGO: &[u8] = include_bytes!("../logo.png");
 /// Where the page is written for the reader: in the plugin's folder, so
 /// it is no book.
-fn page_path() -> alloc::string::String {
+fn page_path() -> String {
     format!("{}/about.md", Env::plugin_dir(PLUGIN.as_str()))
 }
 
 /// The page's text, the logo first: the picture set, or PaperPaw's own
 /// written beside the page.
-fn page(env: &Env<'_>) -> alloc::string::String {
+fn page(env: &Env<'_>) -> String {
     let intro = env.i18n.tr("about.intro");
     let set = env.settings.read(&logo::LOGO).trim().trim_matches('/');
     let picture = if !set.is_empty() && env.storage.exists(set) {
@@ -46,12 +48,48 @@ fn page(env: &Env<'_>) -> alloc::string::String {
         if env.storage.size(&path).ok() != Some(LOGO.len() as u64) {
             let _ = env.storage.write(&path, LOGO);
         }
-        alloc::string::String::from("logo.png")
+        String::from("logo.png")
     };
     format!(
-        "![PaperPaw]({picture})\n\n# PaperPaw {}\n\n{intro}\n\nhttps://github.com/hthoene/paperpaw\n\n{LICENCES}",
-        env!("CARGO_PKG_VERSION")
+        "![PaperPaw]({picture})\n\n# PaperPaw {}\n\n{intro}\n\nhttps://github.com/hthoene/paperpaw\n\n{}{}{LICENCES}",
+        env!("CARGO_PKG_VERSION"),
+        built_in(env),
+        native(env),
     )
+}
+
+/// The plugins built into the firmware, where PaperPaw is it.
+fn built_in(env: &Env<'_>) -> String {
+    let Some(firmware) = env.firmware.filter(|f| !f.plugins.is_empty()) else {
+        return String::new();
+    };
+    let mut text = format!(
+        "## {}\n\n{}\n\n",
+        env.i18n.tr("about.plugins.title"),
+        env.i18n.tr("about.plugins.help")
+    );
+    for plugin in firmware.plugins.iter() {
+        text.push_str(&format!("- {} {}\n", plugin.name, plugin.version));
+    }
+    text.push('\n');
+    text
+}
+
+/// What native code plugins must be built with, where PaperPaw loads
+/// them.
+fn native(env: &Env<'_>) -> String {
+    let Some(native) = env.native else {
+        return String::new();
+    };
+    let fingerprint = native.fingerprint.to_string();
+    let help = env.i18n.format(
+        "about.native.help",
+        &[
+            ("fingerprint", Arg::Str(&fingerprint)),
+            ("toolchain", Arg::Str(&native.toolchain)),
+        ],
+    );
+    format!("## {}\n\n{help}\n\n", env.i18n.tr("about.native.title"))
 }
 
 /// The about page.

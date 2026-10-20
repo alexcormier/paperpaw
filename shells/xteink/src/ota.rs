@@ -79,8 +79,12 @@ struct Install {
     said: u32,
 }
 
+/// The flash, one handle for updates and native plugins (`native`): a
+/// second one would find its size anew, and not always.
+pub type Flash = alloc::rc::Rc<core::cell::RefCell<FlashStorage<'static>>>;
+
 pub struct Ota {
-    flash: FlashStorage<'static>,
+    flash: Flash,
     table: Box<[u8; PARTITION_TABLE_MAX_LEN]>,
     /// The running firmware is on trial: started for the first time.
     trial: bool,
@@ -95,8 +99,8 @@ impl Ota {
     /// Looks at what started and why (see the [module documentation](self));
     /// `None` without two app partitions (flashed before they came: the
     /// web flasher sets them up once).
-    pub fn start(flash: esp_hal::peripherals::FLASH<'static>) -> Option<Self> {
-        let mut flash = FlashStorage::new(flash);
+    pub fn start(shared: Flash) -> Option<Self> {
+        let mut flash = shared.borrow_mut();
         let mut table = Box::new([0u8; PARTITION_TABLE_MAX_LEN]);
         let booted = partitions::read_partition_table(&mut flash, &mut table[..])
             .and_then(|pt| pt.booted_partition())
@@ -151,8 +155,9 @@ impl Ota {
             Ok((region, _)) => region.partition_size() as u32,
             Err(_) => 0,
         };
+        drop(flash);
         Some(Self {
-            flash,
+            flash: shared,
             table,
             trial,
             undone,
@@ -161,13 +166,18 @@ impl Ota {
         })
     }
 
+    /// Whether the running firmware is on trial (an update's first start).
+    pub fn on_trial(&self) -> bool {
+        self.trial
+    }
+
     /// The running firmware got to its first frame: no longer on trial.
     pub fn confirm(&mut self) {
         if !self.trial {
             return;
         }
         self.trial = false;
-        let confirmed = OtaUpdater::new(&mut self.flash, &mut self.table)
+        let confirmed = OtaUpdater::new(&mut self.flash.borrow_mut(), &mut self.table)
             .and_then(|mut updater| updater.set_current_ota_state(OtaImageState::Valid));
         match confirmed {
             Ok(()) => info!("OTA: the update started cleanly"),
@@ -223,13 +233,12 @@ impl Ota {
             return Err(InstallFailure::Untrusted);
         }
         let check = Check::new(&update.trailer)?;
-        let mut updater =
-            OtaUpdater::new(&mut self.flash, &mut self.table).map_err(|_| InstallFailure::Write)?;
-        let (_, slot) = updater
-            .next_partition()
+        let mut flash = self.flash.borrow_mut();
+        let slot = OtaUpdater::new(&mut flash, &mut self.table)
+            .and_then(|mut updater| updater.next_partition().map(|(_, slot)| slot))
             .map_err(|_| InstallFailure::Write)?;
         let mut table = [0u8; PARTITION_TABLE_MAX_LEN];
-        let offset = partitions::read_partition_table(&mut self.flash, &mut table)
+        let offset = partitions::read_partition_table(&mut flash, &mut table)
             .and_then(|pt| pt.find_partition(PartitionType::App(slot)))
             .ok()
             .flatten()
@@ -279,6 +288,7 @@ impl Ota {
             let at = install.offset + install.done;
             if install.done.is_multiple_of(BLOCK) {
                 self.flash
+                    .borrow_mut()
                     .erase(at, at + BLOCK)
                     .map_err(|_| InstallFailure::Write)?;
             }
@@ -293,6 +303,7 @@ impl Ota {
             let words = len.div_ceil(4) * 4;
             install.buf[len..words].fill(0xFF);
             self.flash
+                .borrow_mut()
                 .write_nor(at, &install.buf[..words])
                 .map_err(|_| InstallFailure::Write)?;
             install.done += len as u32;
@@ -306,10 +317,12 @@ impl Ota {
             warn!("OTA: {}: {e}", install.path);
             return FirmwareState::Failed(e.into());
         }
-        let chosen = OtaUpdater::new(&mut self.flash, &mut self.table).and_then(|mut updater| {
-            updater.activate_next_partition()?;
-            updater.set_current_ota_state(OtaImageState::New)
-        });
+        let chosen = OtaUpdater::new(&mut self.flash.borrow_mut(), &mut self.table).and_then(
+            |mut updater| {
+                updater.activate_next_partition()?;
+                updater.set_current_ota_state(OtaImageState::New)
+            },
+        );
         match chosen {
             Ok(()) => {
                 info!("OTA: {} installed, started at the next start", install.path);
