@@ -118,7 +118,7 @@ impl Rows {
     /// rect, focused)`, headings included: the focused entry (if `focus`
     /// shows) on black, thin lines between entries but not above a
     /// heading; with [`UiStyle::cards`] the entries between headings on
-    /// cards ([`draw_cards`]).
+    /// rounded cards.
     pub fn draw(
         &self,
         canvas: &mut Canvas<'_>,

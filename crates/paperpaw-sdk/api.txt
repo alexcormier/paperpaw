@@ -312,7 +312,7 @@ pub mod paperpaw_sdk::builtin::setting_sections
 pub const paperpaw_sdk::builtin::setting_sections::ALOUD: &str
 pub const paperpaw_sdk::builtin::setting_sections::BEHAVIOUR: &str
 pub const paperpaw_sdk::builtin::setting_sections::FONT: &str
-pub const paperpaw_sdk::builtin::setting_sections::ORDER: [&str; 4]
+pub const paperpaw_sdk::builtin::setting_sections::ORDER: &[&str]
 pub const paperpaw_sdk::builtin::setting_sections::PAGE: &str
 pub mod paperpaw_sdk::builtin::settings
 pub const paperpaw_sdk::builtin::settings::BATTERY_LOW: paperpaw_sdk::setting::Setting<i64>
@@ -320,7 +320,7 @@ pub const paperpaw_sdk::builtin::settings::BUTTON_HINTS: paperpaw_sdk::setting::
 pub const paperpaw_sdk::builtin::settings::CLOCK_FORMAT: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::CONTRAST_NORMAL: &str
 pub const paperpaw_sdk::builtin::settings::CONTRAST_STRONG: &str
-pub const paperpaw_sdk::builtin::settings::CORNERS: [&str; 4]
+pub const paperpaw_sdk::builtin::settings::CORNERS: &[&str]
 pub const paperpaw_sdk::builtin::settings::DEFAULT_FONT: &str
 pub const paperpaw_sdk::builtin::settings::DEVELOPER: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::EDGE_ENDS: paperpaw_sdk::Id
@@ -340,18 +340,18 @@ pub const paperpaw_sdk::builtin::settings::KEYMAP_PRESET: paperpaw_sdk::setting:
 pub const paperpaw_sdk::builtin::settings::LANGUAGE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::LONG_PRESS_MS: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::MONO_TEXT: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
-pub const paperpaw_sdk::builtin::settings::MONO_TEXT_LEVELS: [&str; 3]
+pub const paperpaw_sdk::builtin::settings::MONO_TEXT_LEVELS: &[&str]
 pub const paperpaw_sdk::builtin::settings::NIGHT_MODE: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::NIGHT_PICTURES: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::NOTICE_SECONDS: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::OWN_PAPER: &str
 pub const paperpaw_sdk::builtin::settings::OWN_TEXT: &str
 pub const paperpaw_sdk::builtin::settings::PAPER_COLOR: paperpaw_sdk::Id
-pub const paperpaw_sdk::builtin::settings::PAPER_COLORS: [&str; 9]
+pub const paperpaw_sdk::builtin::settings::PAPER_COLORS: &[&str]
 pub const paperpaw_sdk::builtin::settings::PAPER_COLOR_OWN: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::settings::READING_FONT: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::ROTATION: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
-pub const paperpaw_sdk::builtin::settings::ROTATIONS: [&str; 4]
+pub const paperpaw_sdk::builtin::settings::ROTATIONS: &[&str]
 pub const paperpaw_sdk::builtin::settings::SCOPE_ONLY: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::SEPARATORS_INSET: &str
 pub const paperpaw_sdk::builtin::settings::SEPARATORS_LINE: &str
@@ -363,7 +363,7 @@ pub const paperpaw_sdk::builtin::settings::STATUS_FONT_BOOK: &str
 pub const paperpaw_sdk::builtin::settings::STATUS_FONT_UI: &str
 pub const paperpaw_sdk::builtin::settings::SWAP_PAGE_BUTTONS: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::TEXT_COLOR: paperpaw_sdk::Id
-pub const paperpaw_sdk::builtin::settings::TEXT_COLORS: [&str; 9]
+pub const paperpaw_sdk::builtin::settings::TEXT_COLORS: &[&str]
 pub const paperpaw_sdk::builtin::settings::TEXT_COLOR_OWN: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::settings::TIME_ZONE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TIME_ZONE_RULE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
@@ -595,7 +595,7 @@ pub paperpaw_sdk::decorations::LineKind::Double
 pub paperpaw_sdk::decorations::LineKind::Solid
 pub paperpaw_sdk::decorations::LineKind::Wavy
 impl paperpaw_sdk::decorations::LineKind
-pub const paperpaw_sdk::decorations::LineKind::ALL: [paperpaw_sdk::decorations::LineKind; 5]
+pub const paperpaw_sdk::decorations::LineKind::ALL: &'static [paperpaw_sdk::decorations::LineKind]
 pub fn paperpaw_sdk::decorations::LineKind::from_id(&str) -> core::option::Option<paperpaw_sdk::decorations::LineKind>
 pub const fn paperpaw_sdk::decorations::LineKind::id(self) -> &'static str
 #[non_exhaustive] pub enum paperpaw_sdk::decorations::Tone
@@ -611,7 +611,7 @@ pub paperpaw_sdk::decorations::Tone::Red
 pub paperpaw_sdk::decorations::Tone::White
 pub paperpaw_sdk::decorations::Tone::Yellow
 impl paperpaw_sdk::decorations::Tone
-pub const paperpaw_sdk::decorations::Tone::ALL: [paperpaw_sdk::decorations::Tone; 11]
+pub const paperpaw_sdk::decorations::Tone::ALL: &'static [paperpaw_sdk::decorations::Tone]
 pub fn paperpaw_sdk::decorations::Tone::color(self) -> paperpaw_platform::pixel::Color
 pub fn paperpaw_sdk::decorations::Tone::from_id(&str) -> core::option::Option<paperpaw_sdk::decorations::Tone>
 pub const fn paperpaw_sdk::decorations::Tone::id(self) -> &'static str
@@ -1711,6 +1711,7 @@ pub paperpaw_sdk::ui::ListView::shown: bool
 impl paperpaw_sdk::ui::ListView
 pub fn paperpaw_sdk::ui::ListView::column_count(&self) -> usize
 pub fn paperpaw_sdk::ui::ListView::columns(self, u32) -> Self
+pub fn paperpaw_sdk::ui::ListView::confirm(&mut self) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::ListView::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, usize, impl core::ops::function::FnMut(&mut paperpaw_graphics::canvas::Canvas<'_>, usize, paperpaw_platform::geometry::Rect, bool))
 pub fn paperpaw_sdk::ui::ListView::focus_on_keys(self, &paperpaw_sdk::Env<'_>) -> Self
 pub fn paperpaw_sdk::ui::ListView::hit(&self, paperpaw_platform::geometry::Point, usize) -> core::option::Option<usize>
@@ -1723,6 +1724,7 @@ pub fn paperpaw_sdk::ui::ListView::paging(&self, usize) -> core::option::Option<
 pub fn paperpaw_sdk::ui::ListView::request(&self, paperpaw_sdk::ui::ListChange, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::ListView::row_rect(&self, usize) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::ListView::rows(&self) -> usize
+pub fn paperpaw_sdk::ui::ListView::set_len(&mut self, usize)
 pub struct paperpaw_sdk::ui::Pager
 pub paperpaw_sdk::ui::Pager::area: paperpaw_platform::geometry::Rect
 impl paperpaw_sdk::ui::Pager
@@ -1938,7 +1940,7 @@ pub fn paperpaw_sdk::web::percent_decode(&str) -> alloc::string::String
 pub fn paperpaw_sdk::web::user_agent() -> (alloc::string::String, alloc::string::String)
 pub mod paperpaw_sdk::widgets
 pub mod paperpaw_sdk::widgets::categories
-pub const paperpaw_sdk::widgets::categories::ALL: [&str; 9]
+pub const paperpaw_sdk::widgets::categories::ALL: &[&str]
 pub const paperpaw_sdk::widgets::categories::BOOKS: &str
 pub const paperpaw_sdk::widgets::categories::DEVICE: &str
 pub const paperpaw_sdk::widgets::categories::LAYOUT: &str
@@ -2144,11 +2146,11 @@ impl paperpaw_sdk::widgets::look::Wrapped
 pub fn paperpaw_sdk::widgets::look::Wrapped::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Align, paperpaw_platform::pixel::Color) -> u16
 pub fn paperpaw_sdk::widgets::look::Wrapped::height(&self, &paperpaw_sdk::Env<'_>) -> u16
 pub fn paperpaw_sdk::widgets::look::Wrapped::new(&paperpaw_sdk::Env<'_>, &str, f32, u16, u16) -> Self
-pub const paperpaw_sdk::widgets::ALIGNMENTS: [&str; 3]
+pub const paperpaw_sdk::widgets::ALIGNMENTS: &[&str]
 pub const paperpaw_sdk::widgets::FILL: &str
 pub const paperpaw_sdk::widgets::SPACE: &str
 pub const paperpaw_sdk::widgets::SPACE_SIZE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
-pub const paperpaw_sdk::widgets::SPACE_SIZES: [&str; 3]
+pub const paperpaw_sdk::widgets::SPACE_SIZES: &[&str]
 pub trait paperpaw_sdk::widgets::Widget
 pub fn paperpaw_sdk::widgets::Widget::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::widgets::Widget::height(&self, &paperpaw_sdk::Env<'_>, u16) -> u16
