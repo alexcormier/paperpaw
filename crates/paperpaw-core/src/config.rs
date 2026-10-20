@@ -9,6 +9,47 @@ const MAX_CONFIG: usize = 64 * 1024;
 /// Largest settings file of a book read (see [`Command::SetScope`]).
 const MAX_SCOPE: usize = 16 * 1024;
 
+/// Settings that moved to the kernel, by the ids they had (the reader's
+/// type and the library folder, October 2026): read under those where
+/// the new ones are not set, so nothing chosen is lost.
+const MOVED: [(&str, &str); 12] = [
+    ("reader.font-weight", "core.font-weight"),
+    ("reader.word-spacing", "core.word-spacing"),
+    ("reader.line-spacing", "core.line-spacing"),
+    ("reader.margin", "core.margin"),
+    ("reader.margin-ends", "core.margin-ends"),
+    ("reader.justify", "core.justify"),
+    ("reader.hyphenate", "core.hyphenate"),
+    ("reader.indent", "core.indent"),
+    ("reader.paragraph-spacing", "core.paragraph-spacing"),
+    ("reader.publisher-styles", "core.publisher-styles"),
+    ("reader.footnotes", "core.footnotes"),
+    ("files.root", "core.library-folder"),
+];
+
+/// Of setting `id` with `value` as kept in a file, the id and value it
+/// has now where it moved (a moved choice's values too); `None` where it
+/// did not, or where `entries` (the ids the file sets) has the new one.
+fn moved(id: &str, value: &str, entries: &[String]) -> Option<(&'static str, String)> {
+    let (_, now) = MOVED.iter().find(|(old, _)| *old == id)?;
+    if entries.iter().any(|entry| entry == now) {
+        return None;
+    }
+    let value = match value.strip_prefix("reader.footnotes.") {
+        Some(choice) => format!("core.footnotes.{choice}"),
+        None => value.to_string(),
+    };
+    Some((now, value))
+}
+
+/// The ids of the settings `source` (a settings file) sets.
+fn entries(source: &str) -> Vec<String> {
+    paperpaw_config::parse(source)
+        .filter_map(Result::ok)
+        .map(|entry| format!("{}.{}", entry.section, entry.key))
+        .collect()
+}
+
 /// The active settings scope: a book's own settings.
 #[derive(Debug)]
 pub(crate) struct Scope {
@@ -112,16 +153,19 @@ impl Kernel {
         let values = read.map(|text| {
             let text = text.ok().flatten().unwrap_or_default();
             let mut values = paperpaw_sdk::collections::VecMap::new();
+            let ids = entries(&text);
             for entry in paperpaw_config::parse(&text).filter_map(Result::ok) {
-                let id = format!("{}.{}", entry.section, entry.key);
+                let mut id = format!("{}.{}", entry.section, entry.key);
+                let mut value = entry.value.as_str().into_owned();
+                if let Some((now, was)) = moved(&id, &value, &ids) {
+                    (id, value) = (now.to_string(), was);
+                }
                 let parsed = self
                     .shared
                     .settings
                     .specs()
                     .find(|spec| spec.id.as_str() == id)
-                    .and_then(|spec| {
-                        Some((spec.id.clone(), spec.kind.parse(&entry.value.as_str())?))
-                    });
+                    .and_then(|spec| Some((spec.id.clone(), spec.kind.parse(&value)?)));
                 if let Some((id, value)) = parsed {
                     values.insert(id, value);
                 }
@@ -362,6 +406,7 @@ impl Kernel {
     }
 
     pub(crate) fn apply_user_config(&mut self, source: &str) {
+        let ids = entries(source);
         for entry in paperpaw_config::parse(source) {
             let entry = match entry {
                 Ok(entry) => entry,
@@ -421,6 +466,12 @@ impl Kernel {
                 ),
                 section => {
                     let id = format!("{section}.{}", entry.key);
+                    let (id, value) = match moved(&id, &value, &ids) {
+                        Some((now, value)) => (now.to_string(), Cow::Owned(value)),
+                        // Moved, and set under its new id as well.
+                        None if MOVED.iter().any(|(old, _)| *old == id) => continue,
+                        None => (id, value),
+                    };
                     if let Err(error) = self.shared.settings.set_from_text(&id, &value) {
                         self.warn(WarningSource::UserConfig, line, format!("`{id}`: {error}"));
                     }
@@ -481,40 +532,6 @@ impl Kernel {
 /// failing card). A byte order mark at its start is left out.
 pub(crate) fn read_config(storage: &dyn Storage) -> Result<Option<String>, StorageError> {
     paperpaw_sdk::files::load_text_for_update(storage, CONFIG_FILE, MAX_CONFIG)
-}
-
-/// Settings that moved to another id, as `(section, key)` before and
-/// after: what was set is taken over once.
-const MOVED_SETTINGS: [(Place, Place); 1] = [(("files", "root"), ("core", "library-folder"))];
-
-/// Where a setting is kept: its section and key.
-type Place = (&'static str, &'static str);
-
-/// `source` with the values of moved settings ([`MOVED_SETTINGS`]) under
-/// their new ids (unless the new one is set too), written back where it
-/// changed.
-pub(crate) fn take_over_moved(storage: &dyn Storage, source: String) -> String {
-    let mut updated = source.clone();
-    for ((section, key), (to_section, to_key)) in MOVED_SETTINGS {
-        let mut old = None;
-        let mut new = false;
-        for entry in paperpaw_config::parse(&source).filter_map(Result::ok) {
-            if (entry.section, entry.key) == (section, key) {
-                old = Some(entry.value.as_str().into_owned());
-            }
-            new |= (entry.section, entry.key) == (to_section, to_key);
-        }
-        if let Some(old) = old {
-            if !new {
-                updated = paperpaw_config::set(&updated, to_section, to_key, &old);
-            }
-            updated = paperpaw_config::remove(&updated, section, key);
-        }
-    }
-    if updated != source {
-        let _ = storage.write(CONFIG_FILE, updated.as_bytes());
-    }
-    updated
 }
 
 /// Plugin ids switched on (`on`) or off in the `[plugins]` section of a

@@ -331,9 +331,9 @@ impl Reading {
         (value("section"), value("offset"))
     }
 
-    /// Where the reader keeps the position of the book.
+    /// Where the position of the book is kept.
     pub fn progress_path(&self) -> String {
-        format!("{}/progress.ini", paperpaw_plugin_reader_dir(&self.book))
+        paperpaw_sdk::positions::file(&self.book)
     }
 
     /// Where the reader said the book is, last: opened or turned to.

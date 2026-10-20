@@ -4,43 +4,6 @@
 
 use super::*;
 
-/// The book as the layout sees it: every block through the text
-/// filters of plugins (see `paperpaw_sdk::filters`).
-pub(crate) struct Filtered<'d, 'e> {
-    pub(crate) document: &'d dyn Document,
-    pub(crate) env: &'d Env<'e>,
-}
-
-impl Document for Filtered<'_, '_> {
-    fn metadata(&self) -> &paperpaw_sdk::document::Metadata {
-        self.document.metadata()
-    }
-
-    fn sections(&self) -> u32 {
-        self.document.sections()
-    }
-
-    fn section_len(&self, section: u32) -> u32 {
-        self.document.section_len(section)
-    }
-
-    fn block_at(
-        &self,
-        storage: &dyn paperpaw_sdk::Storage,
-        at: Locator,
-    ) -> Result<Option<paperpaw_sdk::document::Block>, DocumentError> {
-        let mut block = self.document.block_at(storage, at)?;
-        if let Some(block) = &mut block {
-            self.env.text_filters.apply(self.env, block);
-        }
-        Ok(block)
-    }
-
-    fn progress(&self, at: Locator) -> f32 {
-        self.document.progress(at)
-    }
-}
-
 /// The book being read.
 pub(super) struct Book {
     pub(super) path: String,
@@ -64,10 +27,11 @@ pub(super) struct Book {
     /// Whether it could not be written once (and the reader was told).
     pub(super) save_failed: bool,
     /// The conversion of the book its positions are in (see
-    /// [`conversion`]), and whether `progress.ini` holds the position's
-    /// XPointer too, to find it in another.
+    /// `reading::conversion`), and whether the position kept holds its
+    /// XPointer too, to find it in another; the XPointer found last.
     pub(super) conversion: u64,
     pub(super) pointed: bool,
+    pub(super) xpointer: Option<String>,
     pub(super) index: Option<PageIndex>,
     /// Where background pagination continues.
     pub(super) indexing: Option<Locator>,
@@ -122,51 +86,6 @@ pub(super) enum Target {
     Mark(usize),
 }
 
-/// The position kept in a book's `progress.ini`: where, in which
-/// conversion of the book (see [`conversion`]), and as an XPointer where
-/// it was kept with one (both added after version 1).
-pub(super) struct Kept {
-    pub(super) at: Locator,
-    pub(super) conversion: Option<u64>,
-    pub(super) xpointer: Option<String>,
-}
-
-/// The position kept in a book's `progress.ini` (see [`Kept`]).
-pub(super) fn kept_in(text: &str) -> Option<Kept> {
-    let (mut section, mut offset) = (None, None);
-    let (mut conversion, mut xpointer) = (None, None);
-    for entry in paperpaw_sdk::config::parse(text).filter_map(Result::ok) {
-        match (entry.section, entry.key) {
-            ("progress", "section") => section = entry.value.as_u32(),
-            ("progress", "offset") => offset = entry.value.as_u32(),
-            ("progress", "conversion") => {
-                conversion = u64::from_str_radix(&entry.value.as_str(), 16).ok();
-            }
-            ("progress", "xpointer") => xpointer = Some(entry.value.as_str().to_string()),
-            _ => {}
-        }
-    }
-    Some(Kept {
-        at: Locator::new(section?, offset?),
-        conversion,
-        xpointer,
-    })
-}
-
-/// Which conversion of a book the reader's options make: positions are
-/// those of one conversion (an EPUB's with its own styles holds style
-/// runs the one without them lacks, so its text is at other places).
-pub(super) fn conversion(env: &Env<'_>) -> u64 {
-    let styles = env
-        .settings
-        .bool(crate::settings::PUBLISHER_STYLES.as_str());
-    env.stylesheets
-        .iter()
-        .fold(fnv1a64([u8::from(styles)]), |hash, sheet| {
-            hash.rotate_left(5) ^ fnv1a64(sheet.as_bytes())
-        })
-}
-
 /// Remembers `path` as the book read last (reopened at start-up).
 pub(crate) fn remember_last(storage: &dyn paperpaw_sdk::Storage, path: &str) {
     let state = format!("[reader]\nlast = {}\n", paperpaw_sdk::config::quote(path));
@@ -190,7 +109,7 @@ impl Book {
             .get(params::PATH)
             .ok_or_else(|| env.i18n.tr("reader.no-book").to_string())?;
         let error = |e: DocumentError| format!("{}\n{e}", env.i18n.tr("reader.error"));
-        let options = open_options(env);
+        let options = paperpaw_sdk::reading::open_options(env);
         let document = env
             .formats
             .open_with(env.storage, path, &options)
@@ -204,7 +123,7 @@ impl Book {
             .language
             .clone()
             .unwrap_or_else(|| env.i18n.language().to_string());
-        let typography = Typography::new(env, &font, &language, document.whole_pages());
+        let typography = typography(env, &font, &language, document.whole_pages());
         let dir = book_dir(path);
         // Kept with the reader's data of the book before plugins shared
         // them: moved where they are now, if any are there.
@@ -232,8 +151,9 @@ impl Book {
             saved_at: None,
             unsaved: false,
             save_failed: false,
-            conversion: conversion(env),
+            conversion: paperpaw_sdk::reading::conversion(env),
             pointed: true,
+            xpointer: None,
             dir,
             title,
             document,
@@ -262,8 +182,8 @@ impl Book {
         // start.
         let saved = book.saved_position(env);
         let start = saved.map_or(Locator::START, |(at, _)| book.line_start(env, at));
-        // Found in another conversion: kept anew as one of this one.
-        book.unsaved = saved.is_some_and(|(_, found)| found);
+        // Found in another conversion, or kept before: kept anew.
+        book.unsaved = saved.is_some_and(|(_, anew)| anew);
         book.page = match book.layout(env, start) {
             Ok(page) if !page.is_past_end() => page,
             _ if start != Locator::START => book.layout(env, Locator::START).map_err(error)?,
@@ -387,8 +307,9 @@ impl Book {
         let Some(font) = self.font(env) else {
             return;
         };
-        self.typography = Typography::new(env, &font, &self.language, self.document.whole_pages());
+        self.typography = typography(env, &font, &self.language, self.document.whole_pages());
         self.words = core::cell::OnceCell::new();
+        self.xpointer = None;
         let start = self.line_start(env, self.page.start);
         if let Ok(page) = self.layout(env, start) {
             self.page = page;
@@ -455,31 +376,38 @@ impl Book {
                 patterns.hyphenate(word, out);
             }
         };
-        let filtered = Filtered {
-            document: self.document.as_ref(),
-            env,
-        };
+        let filtered = FilteredDocument::new(self.document.as_ref(), env);
         let cx = LayoutContext::new(&filtered, env.storage, t.width, &t.style, &faces)
             .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
         Some(f(&cx))
     }
 
-    pub(super) fn progress_path(&self) -> String {
+    /// Where the reader kept the position before positions were shared
+    /// (`positions`): read while there is no position of the book.
+    fn progress_path(&self) -> String {
         format!("{}/progress.ini", self.dir)
     }
 
-    /// The position kept, and whether it was found by its XPointer: kept
-    /// in another conversion of the book (its own styles switched since).
+    /// The position kept, and whether to keep it anew: found by its
+    /// XPointer (kept in another conversion of the book, its own styles
+    /// switched since), or kept where the reader kept it before.
     pub(super) fn saved_position(&self, env: &Env<'_>) -> Option<(Locator, bool)> {
-        let data = paperpaw_sdk::read_file(env.storage, &self.progress_path(), 4096).ok()?;
-        let kept = kept_in(core::str::from_utf8(&data).ok()?)?;
+        let (kept, before) = match paperpaw_sdk::positions::load(env.storage, &self.path) {
+            Some(kept) => (kept, false),
+            None => {
+                let data =
+                    paperpaw_sdk::read_file(env.storage, &self.progress_path(), 4096).ok()?;
+                let text = core::str::from_utf8(&data).ok()?;
+                (paperpaw_sdk::positions::Position::parse(text)?, true)
+            }
+        };
         let found = match (kept.conversion, &kept.xpointer) {
             (Some(conversion), Some(xpointer)) if conversion != self.conversion => {
                 self.document.locate_xpointer(env.storage, xpointer)
             }
             _ => None,
         };
-        Some(found.map_or((kept.at, false), |at| (at, true)))
+        Some(found.map_or((kept.at, before), |at| (at, true)))
     }
 
     pub(super) fn percent(&self) -> f32 {
@@ -520,24 +448,15 @@ impl Book {
         let env = *cx.env();
         self.saved_at = Some(env.now);
         let start = self.page.start;
-        let mut text = format!(
-            "[progress]\nsection = {}\noffset = {}\npercent = {:.1}\nconversion = {:016x}\n",
-            start.section,
-            start.offset,
-            self.percent(),
-            self.conversion,
-        );
-        let xpointer = pointed
-            .then(|| self.document.xpointer(env.storage, start))
-            .flatten();
-        if let Some(xpointer) = xpointer {
-            text.push_str(&format!(
-                "xpointer = {}\n",
-                paperpaw_sdk::config::quote(&xpointer)
-            ));
+        if pointed {
+            self.xpointer = self.document.xpointer(env.storage, start);
         }
         self.pointed = pointed;
-        let saved = env.storage.write(&self.progress_path(), text.as_bytes());
+        let position = paperpaw_sdk::positions::Position::new(start, self.percent())
+            .conversion(self.conversion)
+            .xpointer(self.xpointer.clone().filter(|_| pointed))
+            .updated(paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0));
+        let saved = paperpaw_sdk::positions::save(env.storage, &self.path, &position);
         if saved.is_err() && !self.save_failed {
             self.save_failed = true;
             cx.command(Command::Notify(env.i18n.tr("reader.not-saved").to_string()));
@@ -634,6 +553,7 @@ impl Book {
         }
         self.page = page;
         self.words = core::cell::OnceCell::new();
+        self.xpointer = None;
         self.prepare_images(&env);
         self.update_chapter(&env);
         // Found now, so the status lines read nothing while drawn.
@@ -790,10 +710,7 @@ impl Book {
         let mut at = self.document.link_target(env.storage, href)?;
         let mut text = String::new();
         // As the page shows it.
-        let filtered = Filtered {
-            document: self.document.as_ref(),
-            env,
-        };
+        let filtered = FilteredDocument::new(self.document.as_ref(), env);
         for _ in 0..4 {
             let Ok(Some(block)) = filtered.block_at(env.storage, at) else {
                 break;
@@ -865,20 +782,18 @@ impl Book {
 
     /// Where the book is, for the skimming overlay: the page, the chapter
     /// and how far, in thousandths.
-    pub(super) fn skim_params(&self, env: &Env<'_>) -> Params {
+    pub(super) fn skimmed(&self, env: &Env<'_>) -> events::Skimmed {
         let chapter = self
             .chapter
             .as_ref()
             .map(|(_, _, title)| title.clone())
             .unwrap_or_default();
-        Params::new()
-            .with(params::PATH, self.path.clone())
-            .with(params::PAGE, self.position_label(env))
-            .with(params::TEXT, chapter)
-            .with(
-                crate::skim::AT,
-                format!("{}", (self.percent() * 10.0) as u32),
-            )
+        events::Skimmed::new(
+            self.path.clone(),
+            self.position_label(env),
+            chapter,
+            (self.percent() * 10.0) as u32,
+        )
     }
 
     /// Where `to` leads: `page:±n` pages on (or as many tenths of a
@@ -1001,19 +916,6 @@ impl Book {
         }
         self.chapter = Some(chapter);
     }
-}
-
-/// How the reader opens books: with the publisher's styles as set, and
-/// the plugins' stylesheets. Its search and contents open them so too,
-/// or they would convert the book again (and find other places).
-pub(crate) fn open_options(env: &Env<'_>) -> paperpaw_sdk::OpenOptions {
-    let styles = env
-        .settings
-        .bool(crate::settings::PUBLISHER_STYLES.as_str());
-    env.formats
-        .options()
-        .publisher_styles(styles)
-        .css(env.stylesheets.join("\n"))
 }
 
 /// Whether the text filters do something else now than when the pages

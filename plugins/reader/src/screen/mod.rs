@@ -21,19 +21,15 @@ use paperpaw_sdk::builtin::{actions, events, fonts, params, slots};
 use paperpaw_sdk::digest::fnv1a64;
 use paperpaw_sdk::document::{Document, DocumentError, Link, Locator};
 use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::layout::{
-    Face, Hyphenate, LayoutContext, Page, PageImage, PageLine, Style, Typesetter, layout_page,
-    line_start,
-};
+use paperpaw_sdk::layout::{Hyphenate, LayoutContext, Page, PageLine, layout_page, line_start};
 use paperpaw_sdk::status::context as status_context;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Cx, Env, FontHandle, FontSet, Gesture, GestureKind, Handled, Id,
-    Params, Point, Rect, RefreshMode, Screen,
+    Arg, Canvas, Color, Command, Cx, Env, FontHandle, Gesture, GestureKind, Handled, Id, Params,
+    Point, Rect, RefreshMode, Screen,
 };
 
 use crate::annotations::{self, Annotation, Kind, Mark};
-use crate::index::PageIndex;
 use crate::selection::{self, Item, Mode, Selection};
 use crate::settings::{
     FONT_SIZE, FONT_WEIGHT, HYPHENATE, INDENT, JUSTIFY, LINE_SPACING, MARGIN, MARGIN_ENDS,
@@ -41,15 +37,32 @@ use crate::settings::{
 };
 use crate::status;
 use crate::{PLUGIN, state_path};
+use paperpaw_sdk::reading::{FilteredDocument, PageIndex};
 
 use self::book::*;
-pub(crate) use self::book::{Filtered, book_dir, open_options, remember_last};
+pub(crate) use self::book::{book_dir, remember_last};
 use self::hands_free::*;
 use self::linking::*;
 pub(crate) use self::sample::Sample;
 use self::typography::*;
 pub(crate) use self::words::WordBox;
 use self::words::*;
+pub(crate) use paperpaw_sdk::reading::open_options;
+
+/// The kernel's settings of the type of book pages: a change lays the
+/// book out anew (the font and the book's own styles open it again).
+const TYPE_SETTINGS: [&str; 10] = [
+    FONT_SIZE.static_str(),
+    FONT_WEIGHT.static_str(),
+    WORD_SPACING.static_str(),
+    LINE_SPACING.static_str(),
+    MARGIN.static_str(),
+    MARGIN_ENDS.static_str(),
+    JUSTIFY.static_str(),
+    HYPHENATE.static_str(),
+    INDENT.static_str(),
+    PARAGRAPH_SPACING.static_str(),
+];
 
 /// Pages laid out per background step; small enough to keep input snappy.
 const PAGES_PER_STEP: usize = 8;
@@ -172,11 +185,8 @@ impl ReaderScreen {
             return;
         };
         self.skim_from.get_or_insert(book.page.start);
-        cx.command(Command::OpenScreen(
-            crate::SKIM_SCREEN,
-            book.skim_params(&env)
-                .with(crate::skim::MARKS, book.chapter_marks.clone()),
-        ));
+        let skimmed = book.skimmed(&env).marks(book.chapter_marks.clone());
+        cx.command(Command::OpenSlot(slots::SKIM, skimmed.to_params()));
     }
 
     /// Moves as the skimming overlay asks, and tells it where the book is.
@@ -195,7 +205,7 @@ impl ReaderScreen {
             let start = book.page_start(&env, target);
             book.show(cx, start, true);
         }
-        cx.command(Command::Emit(crate::SKIMMED, book.skim_params(&env)));
+        cx.command(events::SKIMMED.emit(book.skimmed(&env)));
     }
 
     /// Shows the next status line at the top (or bottom) and keeps the
@@ -340,11 +350,17 @@ impl Screen for ReaderScreen {
         let env = *cx.env();
         if let Ok(book) = &mut self.book {
             book.save_due(cx, true);
+            // With its XPointer, for a sync (found when the place was
+            // kept, else now).
+            if book.xpointer.is_none() {
+                book.xpointer = book.document.xpointer(env.storage, book.page.start);
+            }
         }
         if let Ok(book) = &self.book
             && !book.web()
         {
-            cx.command(events::BOOK_CLOSED.emit(book.reading(&env)));
+            let reading = book.reading(&env).xpointer(book.xpointer.clone());
+            cx.command(events::BOOK_CLOSED.emit(reading));
         }
     }
 
@@ -538,14 +554,14 @@ impl Screen for ReaderScreen {
             ));
             Handled::Yes
         } else if *action == crate::actions::TOC {
-            cx.command(Command::OpenScreen(
-                crate::TOC_SCREEN,
+            cx.command(Command::OpenSlot(
+                slots::TOC,
                 crate::toc::locator_params(&book.path, book.page.start),
             ));
             Handled::Yes
         } else if *action == crate::actions::ANNOTATIONS {
-            cx.command(Command::OpenScreen(
-                crate::ANNOTATIONS_SCREEN,
+            cx.command(Command::OpenSlot(
+                slots::ANNOTATIONS,
                 Params::new().with(params::PATH, book.path.clone()),
             ));
             Handled::Yes
@@ -800,6 +816,19 @@ impl ReaderScreen {
         if *event == events::SUSPEND || *event == events::STOPPING {
             book.save_due(cx, true);
         }
+        // Another plugin asks for the page's words.
+        if let Some(wanted) = events::PAGE_WORDS_WANTED.read(event, params) {
+            let (start, end) = (book.page.start, book.page.end);
+            let words = paperpaw_sdk::reading::PageWords::new(
+                book.path.clone(),
+                book.language.clone(),
+                start,
+                end,
+            )
+            .words(page_words(&book.page.lines));
+            cx.command(Command::Emit(wanted.reply, words.to_params()));
+            return;
+        }
         let this_book = params.get(params::PATH) == Some(book.path.as_str());
         if *event == crate::SPOKEN && this_book {
             self.spoken(params, cx);
@@ -818,12 +847,10 @@ impl ReaderScreen {
             }
             return;
         }
-        if *event == crate::FOLLOW && this_book {
-            let href = params
-                .get(crate::footnote::HREF)
-                .unwrap_or_default()
-                .to_string();
-            self.follow(&href, cx);
+        if let Some(link) = events::FOLLOW_LINK.read(event, params)
+            && link.path == book.path
+        {
+            self.follow(&link.href, cx);
             return;
         }
         if let Some(goto) = events::GOTO.read(event, params)
@@ -841,9 +868,10 @@ impl ReaderScreen {
             }
             return;
         }
-        if *event == crate::SKIM && this_book {
-            let to = params.get(crate::skim::TO).unwrap_or_default().to_string();
-            self.skim(&to, cx);
+        if let Some(skim) = events::SKIM.read(event, params)
+            && skim.path == book.path
+        {
+            self.skim(&skim.to, cx);
             return;
         }
         if let Some(typed) = crate::NOTE_ENTERED.read(event, params)
@@ -867,8 +895,8 @@ impl ReaderScreen {
             let text = typed.text.trim();
             if !text.is_empty() {
                 self.last_search = text.to_string();
-                cx.command(Command::OpenScreen(
-                    crate::SEARCH_SCREEN,
+                cx.command(Command::OpenSlot(
+                    slots::SEARCH,
                     Params::new()
                         .with(params::PATH, book.path.clone())
                         .with(params::TEXT, text.to_string()),
@@ -914,10 +942,11 @@ impl ReaderScreen {
         // Which setting changed, if one did.
         let changed = events::SETTING_CHANGED.read(event, params).map(|c| c.id);
         let id = changed.as_ref().map_or("", Id::as_str);
-        // The kernel's settings the page's type depends on: the font and
-        // its size (the reader's own all begin with `reader.`).
-        let font_changed = id == paperpaw_sdk::builtin::settings::READING_FONT.as_str()
-            || id == FONT_SIZE.as_str();
+        // The kernel's settings the page's type depends on (the reader's
+        // own all begin with `reader.`).
+        let font_changed = TYPE_SETTINGS.contains(&id)
+            || id == paperpaw_sdk::builtin::settings::READING_FONT.as_str()
+            || id == crate::settings::PUBLISHER_STYLES.as_str();
         // How marks look, or what decorators mark (a switch, their data):
         // the page drawn again as it is laid out.
         if changed.is_some()
@@ -986,6 +1015,37 @@ impl ReaderScreen {
     }
 }
 
+/// The words of `lines` with their places, from the lines (nothing
+/// measured); a word broken at the end of a line is its two parts, each
+/// with the whole word as its text (see `reading::Word`).
+pub(super) fn page_words(lines: &[PageLine]) -> Vec<paperpaw_sdk::reading::Word> {
+    use paperpaw_sdk::reading::Word;
+    let mut words: Vec<Word> = Vec::new();
+    for line in lines {
+        let parts = line.text.split(' ').filter(|part| !part.is_empty());
+        for (part, &(start, end)) in parts.zip(&line.words) {
+            let at = |offset| Locator::new(line.section, offset);
+            words.push(Word::new(part, at(start), at(end)));
+        }
+    }
+    for i in 1..words.len() {
+        let (first, next) = (&words[i - 1], &words[i]);
+        if !first.text.ends_with('-') || next.start != first.end {
+            continue;
+        }
+        // The layout's hyphen where the word is shorter in the book.
+        let in_book = first.end.offset.saturating_sub(first.start.offset) as usize;
+        let head = match in_book < first.text.len() {
+            true => &first.text[..first.text.len() - 1],
+            false => first.text.as_str(),
+        };
+        let whole = format!("{head}{}", next.text);
+        words[i - 1].text.clone_from(&whole);
+        words[i].text = whole;
+    }
+    words
+}
+
 /// The text of `lines` as the book has it: a word broken at the end of
 /// a line is whole again, without the hyphen the layout put there (a
 /// hyphen of the book's own stays).
@@ -1042,7 +1102,10 @@ mod tests {
     #[test]
     fn positions_of_version_1_are_read() {
         assert_eq!(
-            super::book::kept_in(include_str!("../../testdata/progress.ini.v1")).map(|k| k.at),
+            paperpaw_sdk::positions::Position::parse(include_str!(
+                "../../testdata/progress.ini.v1"
+            ))
+            .map(|p| p.at),
             Some(paperpaw_sdk::document::Locator::new(7, 1234))
         );
     }
@@ -1072,44 +1135,5 @@ mod tests {
         let ticks = chapter_ticks(&flat);
         assert_eq!(ticks.len(), 120);
         assert_eq!(ticks.last(), Some(&952));
-    }
-
-    /// A position kept with its conversion and XPointer; without them (as
-    /// version 1 wrote it) the place alone.
-    #[test]
-    fn positions_keep_their_conversion_and_xpointer() {
-        let text = "[progress]\nsection = 2\noffset = 40\nconversion = 00000000000000ff\n\
-                    xpointer = \"/body/DocFragment[3]/body/p[2]/text()[1].5\"\n";
-        let kept = super::book::kept_in(text).unwrap();
-        assert_eq!(kept.at, paperpaw_sdk::document::Locator::new(2, 40));
-        assert_eq!(kept.conversion, Some(255));
-        assert_eq!(
-            kept.xpointer.as_deref(),
-            Some("/body/DocFragment[3]/body/p[2]/text()[1].5")
-        );
-        let old = super::book::kept_in("[progress]\nsection = 2\noffset = 40\n").unwrap();
-        assert_eq!((old.conversion, old.xpointer), (None, None));
-    }
-
-    #[test]
-    fn small_caps_split_lower_case() {
-        let parts: Vec<(&str, bool)> =
-            super::typography::small_caps_parts("Mr. Gregor Samsa").collect();
-        assert_eq!(
-            parts,
-            [
-                ("M", false),
-                ("r", true),
-                (". G", false),
-                ("regor", true),
-                (" S", false),
-                ("amsa", true)
-            ]
-        );
-        assert_eq!(super::typography::small_caps_parts("").count(), 0);
-        assert_eq!(
-            super::typography::small_caps_parts("straße").collect::<Vec<_>>(),
-            [("straße", true)]
-        );
     }
 }

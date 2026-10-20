@@ -247,12 +247,12 @@ mod tests {
     use super::*;
 
     fn word(text: &str, y: u16, start: u32, end: u32) -> WordBox {
-        WordBox {
-            area: Rect::new(0, y, 10, 10),
-            text: String::from(text),
-            start: Locator::new(0, start),
-            end: Locator::new(0, end),
-        }
+        WordBox::new(
+            Rect::new(0, y, 10, 10),
+            text,
+            Locator::new(0, start),
+            Locator::new(0, end),
+        )
     }
 
     #[test]

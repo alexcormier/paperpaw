@@ -289,9 +289,7 @@ impl KernelBuilder {
         kernel.read_secrets();
         paperpaw_sdk::library::take_over_old(kernel.shared.storage.as_ref());
         // The configuration file on the device, then the shell's overrides.
-        let stored = kernel
-            .read_stored_config()
-            .map(|source| crate::config::take_over_moved(kernel.shared.storage.as_ref(), source));
+        let stored = kernel.read_stored_config();
         let user_config = self.user_config.take();
         let configs: Vec<&str> = [stored.as_deref(), user_config.as_deref()]
             .into_iter()
