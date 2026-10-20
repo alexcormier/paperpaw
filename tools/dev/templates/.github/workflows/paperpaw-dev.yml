@@ -1,0 +1,43 @@
+# A CI job for a PaperPaw plugin's own repository (copy it to
+# .github/workflows/): on every push and pull request it runs the
+# plugin's tests (the snapshots among them) and paperpaw-dev's checks on
+# emulated devices, and keeps the report (target/paperpaw-dev, with
+# report.html, its pictures and contact sheets) as the run's artifact.
+# Nothing here runs in PaperPaw's own repository.
+name: paperpaw-dev
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # The plugin's id, as its Manifest says.
+  PLUGIN: my-plugin
+
+jobs:
+  check:
+    name: Plugin checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Tests and snapshots
+        run: cargo test
+      - name: paperpaw-dev
+        # Also when a test failed, for the whole report.
+        if: ${{ !cancelled() }}
+        # One variant a device (English, light, the default look); leave
+        # out --quick for every language, dark and every look.
+        run: cargo run --example paperpaw-dev -- check --plugin "$PLUGIN" --quick
+      - uses: actions/upload-artifact@v7
+        # The report also when a check failed: that is when it is read.
+        if: always()
+        with:
+          name: paperpaw-dev
+          path: target/paperpaw-dev
+          if-no-files-found: ignore
