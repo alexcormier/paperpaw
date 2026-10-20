@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Setup: *Back* on the first page asks whether to skip the setup, going
+  on first, where a stray press ended it for good; the *Skip setup*
+  button still skips at once. Without the settings plugin a choice of
+  many (the time zone) steps to the next option instead of doing
+  nothing.
 - Keyboard: it takes up to 2,000 characters, where long web addresses
   and keys were cut at 200 without a word; text past the limit is cut
   and the keyboard says so. The list of layouts finds the layouts the
