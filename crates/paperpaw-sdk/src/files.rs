@@ -49,6 +49,30 @@ pub fn is_hidden(path: &str) -> bool {
     path.split('/').any(|part| part.starts_with('.'))
 }
 
+/// Whether `name`, a part of a path that came from outside (a server,
+/// another device, a browser), is a plain name of a file or a folder: not
+/// hidden (PaperPaw's own data, [`data::DIR`](crate::data::DIR), and what
+/// plugins keep for themselves start with `.`), not `..`, and nothing a
+/// file system takes for another name or for more than one (a space at
+/// either end, a dot at the end, which Windows drops; `/`, `\`, `:`, NUL,
+/// control characters).
+pub fn is_plain_name(name: &str) -> bool {
+    !name.is_empty()
+        && !name.starts_with(['.', ' '])
+        && !name.ends_with(['.', ' '])
+        && !name.contains(['/', '\\', ':', '\0'])
+        && !name.chars().any(char::is_control)
+}
+
+/// `path` from outside as a path of plain names ([`is_plain_name`]),
+/// without `/` at either end; `None` where a part is not plain, or there
+/// is none. The short names FAT and NTFS keep beside long ones
+/// (`PAPERP~1` for `.paperpaw`) reach nothing on PaperPaw's storages.
+pub fn plain_path(path: &str) -> Option<String> {
+    let path = path.trim_matches('/');
+    path.split('/').all(is_plain_name).then(|| path.to_string())
+}
+
 /// A folder's entries: folders first, then by name (case ignored);
 /// names starting with `.` only with `hidden`.
 pub fn list(storage: &dyn Storage, dir: &str, hidden: bool) -> Result<Vec<Entry>, StorageError> {
@@ -217,6 +241,41 @@ mod tests {
             .with("books/A.epub", b"aaa".to_vec())
             .with("books/sub/c.txt", b"c".to_vec())
             .with("books/.hidden", b"h".to_vec())
+    }
+
+    #[test]
+    fn paths_from_outside_are_plain() {
+        assert_eq!(
+            plain_path("/Ann Author/A Book.epub/").as_deref(),
+            Some("Ann Author/A Book.epub")
+        );
+        assert_eq!(plain_path("Vol~1.txt").as_deref(), Some("Vol~1.txt"));
+        for bad in [
+            "",
+            "/",
+            "a//b",
+            ".",
+            "..",
+            "../x",
+            "a/../b",
+            ".paperpaw/secrets.txt",
+            ".PaperPaw/x",
+            "Books/.hidden",
+            ".paperpaw./x",
+            ".paperpaw /x",
+            "paperpaw./x",
+            "x.epub.",
+            "x.epub ",
+            " x",
+            "a\\b",
+            "C:/x",
+            "a:stream",
+            "a\0b",
+            "a\nb",
+            "a\tb",
+        ] {
+            assert_eq!(plain_path(bad), None, "{bad:?}");
+        }
     }
 
     #[test]

@@ -448,6 +448,7 @@ fn build_kernel(
         let mut builder = Kernel::builder(device)
             .storage(crate::trace::Traced(storage))
             .clock(micros)
+            .random(random)
             .glyph_cache(profile.glyph_cache)
             .network(true)
             .wifi(profile.wifi)
@@ -463,6 +464,9 @@ fn build_kernel(
         #[cfg(feature = "hello")]
         {
             builder = builder.plugin(paperpaw_sample_hello::Hello);
+        }
+        if let Some(light) = profile.light {
+            builder = builder.plugin(crate::light::Emulated(light));
         }
         if let Some(rows) = profile.frame_rows {
             builder = builder.frame_rows(rows);
@@ -489,6 +493,11 @@ fn turned(mut device: DeviceInfo, rotation: Rotation) -> DeviceInfo {
         (display.width, display.height) = (display.height, display.width);
     }
     device
+}
+
+/// Random bytes from the operating system.
+fn random(buf: &mut [u8]) -> bool {
+    getrandom::fill(buf).is_ok()
 }
 
 /// Microseconds since start, for measuring what plugins take.

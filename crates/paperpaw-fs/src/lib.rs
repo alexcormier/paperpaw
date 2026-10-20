@@ -39,9 +39,14 @@ impl DirStorage {
         if !is_valid_path(path) {
             return Err(StorageError::InvalidPath);
         }
-        Ok(path
-            .split('/')
-            .fold(self.root.clone(), |p, part| p.join(part)))
+        let mut full = self.root.clone();
+        for part in path.split('/') {
+            if !is_own_name(&full, part) {
+                return Err(StorageError::InvalidPath);
+            }
+            full.push(part);
+        }
+        Ok(full)
     }
 
     /// Closes the cached handle if it refers to `path` (before writes).
@@ -69,6 +74,30 @@ fn create_parent(path: &Path) -> Result<(), StorageError> {
         Some(parent) => fs::create_dir_all(parent).map_err(error),
         None => Ok(()),
     }
+}
+
+/// Whether `part` names what is in `dir` by its own name, not by another
+/// the system takes for it: FAT and NTFS keep a short name beside a long
+/// one (`PAPERP~1` beside `.paperpaw`), and Windows drops dots and spaces
+/// at the end of a name (`.paperpaw.` is `.paperpaw` there). Such a name
+/// reaches an entry by another spelling, e.g. PaperPaw's own data by a
+/// path that does not look hidden.
+fn is_own_name(dir: &Path, part: &str) -> bool {
+    if cfg!(windows) && part.ends_with(['.', ' ']) {
+        return false;
+    }
+    // Short names have a `~`: one is fine where nothing answers to it, or
+    // where the folder lists an entry by it.
+    !part.contains('~')
+        || fs::symlink_metadata(dir.join(part)).is_err()
+        || fs::read_dir(dir).is_ok_and(|entries| {
+            entries.flatten().any(|entry| {
+                entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|name| name.eq_ignore_ascii_case(part))
+            })
+        })
 }
 
 impl Storage for DirStorage {
@@ -213,6 +242,53 @@ mod tests {
         assert_eq!(storage.size("../outside"), Err(StorageError::InvalidPath));
         storage.remove("a/b.txt").unwrap();
         assert_eq!(storage.size("a/b.txt"), Err(StorageError::NotFound));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// What is there is not reached by another spelling the system takes
+    /// for it (where it keeps short names, as Windows mostly does); names
+    /// with `~` of their own are.
+    #[test]
+    fn other_spellings_reach_nothing() {
+        let root = std::env::temp_dir().join(format!("paperpaw-spellings-{}", std::process::id()));
+        let storage = DirStorage::new(&root).unwrap();
+        storage.write(".paperpaw/secrets.txt", b"password").unwrap();
+        storage.write("Books/A long title.epub", b"a book").unwrap();
+        for (other, own) in [
+            ("PAPERP~1/secrets.txt", ".paperpaw/secrets.txt"),
+            ("paperp~1/secrets.txt", ".paperpaw/secrets.txt"),
+            ("Books/ALONGT~1.EPU", "Books/A long title.epub"),
+        ] {
+            let mut buf = [0u8; 8];
+            let read = storage.read_at(other, 0, &mut buf);
+            assert!(read.is_err(), "{other}: {read:?}");
+            // Made anew where the system keeps no short names, refused
+            // where it does: what is there stays as it was.
+            let _ = storage.write(other, b"stolen");
+            let _ = storage.append(other, b"stolen");
+            assert_ne!(storage.size(own), Ok(6 + 6), "{other}");
+            let n = storage.read_at(own, 0, &mut buf).unwrap();
+            assert_ne!(&buf[..n.min(6)], b"stolen", "{other}");
+        }
+        assert_eq!(storage.size(".paperpaw/secrets.txt"), Ok(8));
+        assert_eq!(storage.size("Books/A long title.epub"), Ok(6));
+        if cfg!(windows) {
+            for other in [
+                ".paperpaw./secrets.txt",
+                ".paperpaw /secrets.txt",
+                ".paperpaw/secrets.txt.",
+            ] {
+                assert_eq!(
+                    storage.size(other),
+                    Err(StorageError::InvalidPath),
+                    "{other}"
+                );
+            }
+        }
+        storage.write("Books/Vol~1.txt", b"one").unwrap();
+        assert_eq!(storage.size("Books/Vol~1.txt"), Ok(3));
+        storage.remove("Books/Vol~1.txt").unwrap();
+        assert_eq!(storage.size(".paperpaw/secrets.txt"), Ok(8));
         fs::remove_dir_all(root).unwrap();
     }
 }

@@ -305,6 +305,45 @@ fn a_path_out_of_the_library_is_dropped() {
     assert_eq!(calibre.answers().len(), 1, "the NOOP after it was answered");
 }
 
+#[test]
+fn paperpaws_own_data_is_out_of_reach() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    storage
+        .write(".paperpaw/firmware-keys.txt", b"own key")
+        .unwrap();
+    storage.write(".paperpaw/secrets.txt", b"password").unwrap();
+    let config = format!("{CONFIG}[calibre]\naddress = 10.0.0.2\n");
+    let mut kernel = kernel(&storage, &config);
+    let calls = socket_calls(&mut kernel);
+    let [SocketCall::Connect { socket, .. }] = calls.as_slice() else {
+        panic!("{calls:?}");
+    };
+    kernel.socket_event(Instant(3), SocketEvent::Connected { socket: *socket });
+    let mut calibre = Peer::default();
+    // A hostile peer sends a key to trust, and deletes the passwords.
+    for lpath in [".paperpaw/firmware-keys.txt", ".PaperPaw/firmware-keys.txt"] {
+        calibre.wire.extend_from_slice(&frame(
+            op::SEND_BOOK,
+            &format!(r#"{{"lpath": "{lpath}", "length": 3, "metadata": {{}}}}"#),
+        ));
+        calibre.wire.extend_from_slice(b"bad");
+    }
+    calibre.wire.extend_from_slice(&frame(
+        op::DELETE_BOOK,
+        r#"{"lpaths": [".paperpaw/secrets.txt"]}"#,
+    ));
+    calibre.pump(&mut kernel);
+    assert_eq!(
+        paperpaw_sdk::read_file(&storage, ".paperpaw/firmware-keys.txt", 64).unwrap(),
+        b"own key"
+    );
+    assert!(!storage.exists(".paperpaw/firmware-keys.txt.part"));
+    assert_eq!(
+        paperpaw_sdk::read_file(&storage, ".paperpaw/secrets.txt", 64).unwrap(),
+        b"password"
+    );
+}
+
 /// What the kernel asks the shell to do with sockets.
 fn socket_calls(kernel: &mut Kernel) -> Vec<SocketCall> {
     let io = kernel.take_io().into_iter();

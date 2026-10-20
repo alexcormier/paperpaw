@@ -1,20 +1,4 @@
-//! The code plugins built into a firmware image, so that an update can
-//! bring the same ones and the web flasher can choose them again.
-//!
-//! The list sits in the image at [`PLUGINS_AT`], right after the
-//! application descriptor (the firmware puts it in the section
-//! `.flash.appdesc.plugins`, which the linker places there), so a few
-//! bytes read from the start of an app partition or an update file are
-//! enough:
-//!
-//! | Bytes | What |
-//! |-------|------|
-//! | 0..8 | `PPlugins` |
-//! | 8..10 | the format, 1 (little-endian) |
-//! | 10..12 | the length of the text that follows (little-endian) |
-//! | 12.. | the text: a line for each plugin crate, its name and its version, e.g. `paperpaw-plugin-stats 0.4.0` |
-//!
-//! Older images have no list: [`Plugins::read`] then finds nothing.
+//! The code plugins built into a firmware image ([`Plugins`]).
 
 use alloc::borrow::Cow;
 use alloc::string::String;
@@ -41,7 +25,23 @@ pub struct PluginCrate<'a> {
     pub version: &'a str,
 }
 
-/// The code plugins built into an image (see the [module](self)).
+/// The code plugins built into a firmware image, so that an update can
+/// bring the same ones and the web flasher can choose them again.
+///
+/// The list sits in the image at [`PLUGINS_AT`], right after the
+/// application descriptor (the firmware puts it in the section
+/// `.flash.appdesc.plugins`, which the linker places there), so a few
+/// bytes read from the start of an app partition or an update file are
+/// enough:
+///
+/// | Bytes | What |
+/// |-------|------|
+/// | 0..8 | `PPlugins` |
+/// | 8..10 | the format, 1 (little-endian) |
+/// | 10..12 | the length of the text that follows (little-endian) |
+/// | 12.. | the text: a line for each plugin crate, its name and its version, e.g. `paperpaw-plugin-stats 0.4.0` |
+///
+/// Older images have no list: [`Plugins::read`] then finds nothing.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Plugins {
     text: Cow<'static, str>,

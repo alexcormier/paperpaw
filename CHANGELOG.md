@@ -27,6 +27,36 @@ change the plugin SDK.
   only on touch screens; the full refresh every so many pages is basic.
 - SDK: `MenuNeed::Touch` for menu entries and settings that need a
   touch screen; `settings::SWAP_PAGE_BUTTONS`.
+- Quick panel and reader's panel: on touch screens their sliders (the
+  front light and its colour, the text size, spacing and margins) are as
+  on the settings pages, across the screen with their title and value
+  above, and every slider is a fingertip high (7 mm from the panel's
+  dpi) with a large knob. A finger that comes down anywhere on a
+  slider's band and moves sideways moves the knob as far as it moves
+  itself, from where it was, so it never jumps under the finger and the
+  finger need not hide it; a tap on the track sets the value there, a
+  tap on `−` or `+` (or beside them) one step. While it moves the value
+  shows at once, the light follows it, only the slider is drawn again
+  with a quick refresh, and nothing is read from the card; lifting the
+  finger keeps the value and refreshes the panel cleanly. The rest of
+  the track is a thin black line, which quick refreshes keep. The
+  panels' buttons are a fingertip high on touch screens too, a little
+  apart, and buttons share their rows evenly (four two and two, not
+  three and one), so the X4 Pro's quick panel fits on one page; the
+  quick panel may cover up to 95 % of the screen, as phones' quick
+  settings do. With the buttons, a slider is chosen and then moved as on
+  the settings pages. With buttons alone (the X4) the panels are as
+  before. The home screen no longer builds its widgets anew while a
+  value is shown above it, which read the card on every step. On Boox
+  devices the light follows a slider while it moves. The emulator has
+  the front light of the X4 Pro and the Boox profiles, and its scripts
+  can put a finger down, move and lift it step by step (`down`, `move`,
+  `up`).
+  SDK: `UiStyle::finger` (a fingertip's size on touch screens, 0 with
+  buttons alone) and `UiStyle::touch_row`; `ui::slider` bands are a
+  fingertip high on touch screens, `SliderDrag::on_pointer` takes the
+  slider's band, the style and its value and moves the knob relative to
+  where the finger came down, `Slider::knob_x` says where the knob is.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
@@ -35,6 +65,48 @@ change the plugin SDK.
   which reads high while charging, and the choice of level says so; the
   X4 Pro's fuel gauge reports it directly. In the rules file the
   trigger is `battery-at 80`.
+- Updates on the X4 Pro and the X4 Classic: they check update files for
+  their own chip, the ESP32-S3, where they checked for the X4's: an X4
+  Pro refused its own updates and would have taken the X4's. Each also
+  names its own firmware in its image (`paperpaw-xteink-pro`,
+  `paperpaw-xteink-classic`; the X4's stays `paperpaw-xteink`), as the
+  two share the chip but not the board. SDK: `firmware::CHIP_ESP32_S3`.
+- Releases carry the firmware of the X4 Pro and the X4 Classic as they
+  do the X4's: `paperpaw-x4-pro-<version>.bin` for the whole flash with
+  its signature file (`.bin.sig`), the signed update
+  (`-update.bin`), the plugins built in (`-plugins.txt`) and checksums,
+  and the same for `paperpaw-x4-classic`; a release fails if an update
+  is not for its device's chip. CI lints and builds all three. The
+  firmware's toolchains are pinned, as native code plugins need the
+  same compiler (ADR 0024): Rust 1.99.0 for the X4
+  (`shells/xteink/rust-toolchain.toml`), espup's `esp` toolchain
+  1.97.0.0 with the Xtensa GCC 14.2.0 for the ESP32-S3 devices
+  (`shells/xteink/versions.env`). The firmware is a workspace of its
+  own, so it also builds in a checkout inside another one.
+- Security: PaperPaw's own data (`.paperpaw`: passwords, trusted
+  firmware keys, settings) can no longer be reached by another spelling
+  of its name. On the X4's card a name stands for an entry by its long
+  name alone, by its short name only where it has no long one, so
+  `PAPERP~1` reaches nothing; the storage of the emulator and Android
+  takes no short name the system keeps for another (NTFS and FAT keep
+  them) and, on Windows, no name with a dot or space at the end.
+- Security: the Wi-Fi transfer finds every path a browser sends part by
+  part in the folders' listings: only entries listed by exactly that
+  name, nothing hidden, by any spelling (case, short names, dots or
+  spaces at the end). Its key, and the remote keyboard's, is drawn from
+  the platform's random source (65 bits, 13 letters and digits) once the
+  server runs; after five wrong keys no request is answered for a
+  minute. Tests send every hostile path we know of to every request, on
+  a card, in memory and on a storage as lax as Windows.
+- Security: Calibre's paths to books and Wallabag's ids of articles are
+  taken only as plain names: a peer posing as Calibre cannot write into
+  `.paperpaw` (e.g. trust a firmware key of its own), a hostile Wallabag
+  server cannot have a file deleted.
+- SDK: `Env::random` gives random bytes from the platform's source
+  (`random::Random`: `fill`, `token`), filled by each shell with
+  `KernelBuilder::random` (the system's on Android and desktops, the
+  chip's on the X4); `files::is_plain_name` and `files::plain_path`
+  check names and paths that come from outside.
 - Joplin (PLANNING C15, S1): a book's highlights and notes, once
   exported, become a note in Joplin, one per book, in a notebook named
   in the settings. Exporting again updates the note, also where it was
@@ -82,9 +154,7 @@ change the plugin SDK.
   *Back* goes back to the value before, and the row of hints says so
   (`−`, `+`, *Keep*, *Cancel*). By touch, a slider's knob follows the
   finger and the value is kept where it is lifted; `−` and `+` change it
-  a step at once, as before. The reader's panel shows its sliders'
-  values, and gives them `−` and `+` alone where the screen is too
-  narrow for a track (the X4 Pro).
+  a step at once, as before.
 - SDK: sliders as a building block for any plugin (`ui::slider`:
   `Slider`, `SliderDrag`, `SliderFocus`, `SliderParts`, `SliderStep`,
   `SliderView`, `band`, `band_height`, `key_step`, `marked`, `parts`,
@@ -95,8 +165,7 @@ change the plugin SDK.
   takes the knob along in the slider's steps and lifting it chooses the
   value, with the buttons left and right move it a step; `shows` says
   whether a setting gets one here (a touch screen). Screen readers
-  hear it as `semantics::Role::Slider`. The panel's sliders (the
-  frontlight) are drawn with it and keep to their steps. The help texts
+  hear it as `semantics::Role::Slider`. The help texts
   of the margins and the word spacing say more plainly what they do, and
   a test checks that every slider shows its unit.
 - Screens draw without reading the card (PLANNING §12.3, B3). The X4
