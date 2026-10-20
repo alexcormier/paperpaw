@@ -266,14 +266,8 @@ fn format(list: &List) -> String {
 /// but cannot be read (too large, not text, the card failing), so that
 /// it is not written over.
 fn load(storage: &dyn Storage, today: i64) -> Result<List, StorageError> {
-    match paperpaw_sdk::read_file(storage, &file(), 32 * 1024) {
-        Ok(data) => {
-            let text = String::from_utf8(data).map_err(|_| StorageError::Unsupported)?;
-            Ok(parse(&text, today))
-        }
-        Err(StorageError::NotFound) => Ok(List::default()),
-        Err(error) => Err(error),
-    }
+    let text = paperpaw_sdk::files::load_text_for_update(storage, &file(), 32 * 1024)?;
+    Ok(text.map_or_else(List::default, |text: String| parse(&text, today)))
 }
 
 fn save(storage: &dyn Storage, list: &List) -> Result<(), StorageError> {
@@ -1004,6 +998,10 @@ mod tests {
         // Larger than is read.
         storage.write(&file(), &[b'a'; 40 * 1024]).unwrap();
         assert!(load(&storage, 0).is_err());
+        // Saved by a program that marks UTF-8 at the start: read.
+        storage.write(&file(), b"\xef\xbb\xbfBuy bread\n").unwrap();
+        let items = load(&storage, 0).unwrap().items;
+        assert_eq!(items[0].text, "Buy bread");
     }
 
     #[test]
