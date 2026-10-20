@@ -12,7 +12,7 @@ use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar};
 
 use paperpaw_sdk::SettingSpec;
 
-use super::{chosen, frame_height, line, ui};
+use super::{chosen_name, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.day");
 
@@ -72,7 +72,11 @@ fn big_size(env: &Env<'_>, room: Option<f32>) -> f32 {
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (style, font) = ui(env);
-    let (Some(font), Some(t)) = (font, time::local_time(env)) else {
+    let Some(t) = time::local_time(env) else {
+        super::draw_no_time(canvas, env, &look);
+        return;
+    };
+    let Some(font) = font else {
         return;
     };
     let area = look.area;
@@ -86,7 +90,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             .format("widgets.year.week", &[("week", Arg::Int(i64::from(week)))])
     });
     let width = f32::from(area.width);
-    match chosen(env, ID.as_str(), "style") {
+    match chosen_name(env, ID.as_str(), "style") {
         "number" => {
             // "14" large; beside it the weekday, and the month below it.
             let number = format!("{}", t.day);

@@ -72,6 +72,18 @@ fn error(e: io::Error) -> StorageError {
     }
 }
 
+/// Puts the folder of `path` on the disk, so a file renamed into it is
+/// there after a power cut; where folders cannot be opened (Windows),
+/// the system does it.
+fn sync_dir(path: &Path) {
+    #[cfg(unix)]
+    if let Some(dir) = path.parent() {
+        let _ = File::open(dir).and_then(|dir| dir.sync_all());
+    }
+    #[cfg(not(unix))]
+    let _ = path;
+}
+
 fn create_parent(path: &Path) -> Result<(), StorageError> {
     match path.parent() {
         Some(parent) => fs::create_dir_all(parent).map_err(error),
@@ -182,10 +194,23 @@ impl Storage for DirStorage {
         let target = self.resolve(path)?;
         self.forget(path);
         create_parent(&target)?;
-        // Write a temporary file and rename it: never a half-written file.
-        let temp = target.with_extension("paperpaw-tmp");
-        fs::write(&temp, data).map_err(error)?;
-        fs::rename(&temp, &target).map_err(error)
+        // Write a temporary file beside it, on the disk before it is
+        // renamed over the file: never a half-written file, also after a
+        // power cut. Named after the whole name, so `a.x` and `a.y` do
+        // not share one.
+        let mut temp = target.clone().into_os_string();
+        temp.push(".paperpaw-tmp");
+        let temp = PathBuf::from(temp);
+        let written = File::create(&temp).and_then(|mut file| {
+            file.write_all(data)?;
+            file.sync_all()
+        });
+        if let Err(e) = written.and_then(|()| fs::rename(&temp, &target)) {
+            let _ = fs::remove_file(&temp);
+            return Err(error(e));
+        }
+        sync_dir(&target);
+        Ok(())
     }
 
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
@@ -273,6 +298,26 @@ impl Storage for DirStorage {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Files of one name with other extensions are written apart, and
+    /// nothing is left beside them.
+    #[test]
+    fn written_whole_by_their_own_temporary_files() {
+        let root = std::env::temp_dir().join(format!("paperpaw-temp-{}", std::process::id()));
+        let storage = DirStorage::new(&root).unwrap();
+        storage.write("a.x", b"x").unwrap();
+        // The temporary file of `a.y` was `a.paperpaw-tmp`, as `a.x`'s.
+        fs::write(root.join("a.paperpaw-tmp"), b"someone's").unwrap();
+        storage.write("a.y", b"y").unwrap();
+        assert_eq!(fs::read(root.join("a.paperpaw-tmp")).unwrap(), b"someone's");
+        let mut names = Vec::new();
+        storage
+            .list("", &mut |e| names.push(e.name.to_string()))
+            .unwrap();
+        names.sort();
+        assert_eq!(names, ["a.paperpaw-tmp", "a.x", "a.y"]);
+        fs::remove_dir_all(root).unwrap();
+    }
 
     #[test]
     fn round_trips_files_below_the_root() {

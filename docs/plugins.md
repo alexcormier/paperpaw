@@ -317,7 +317,7 @@ cargo run -p paperpaw-emulator -- --profile xteink-x4 --headless --script "confi
 | Settings and groups | `add_setting`, `add_setting_group` | Shown and saved by the kernel |
 | Setting defaults | `set_setting_default` | New defaults for other plugins' settings (themes) |
 | Event handlers | `subscribe` | React to events |
-| Key maps | `add_keymap`, `add_keymap_preset` | What buttons, taps and swipes do |
+| Key maps | `add_keymap`, `add_keymap_preset`, `add_keymap_when` | What buttons, taps and swipes do; bindings that apply while a switch is on |
 | Formats | `add_format` | Open a kind of file as a document to read; big pictures may be decoded when their page shows (`Document::prepare_image`) |
 | Fonts | `add_font`, `add_font_file`, `bind_font` | Fonts and the roles they fill |
 | Hyphenation | `add_hyphenation` | Patterns for a language |

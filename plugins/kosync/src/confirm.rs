@@ -24,16 +24,19 @@ pub(crate) const PERCENTAGE: &str = "percentage";
 /// Its position as KOReader's XPointer (may be empty).
 pub(crate) const XPOINTER: &str = "xpointer";
 
-/// Emitted when the user stays, with the book's path and [`PERCENTAGE`]:
-/// that position is not offered again.
-pub(crate) const DECLINED: Event<Declined> = Event::new("kosync.declined");
+/// Emitted when an offer closes, with the book's path, [`PERCENTAGE`] and
+/// whether the user stays: a position stayed away from is not offered
+/// again.
+pub(crate) const ANSWERED: Event<Answered> = Event::new("kosync.answered");
 
 paperpaw_sdk::event_data! {
-    /// The book and the position on another device the user stayed away
-    /// from ([`DECLINED`]).
-    pub(crate) struct Declined {
+    /// The book and the position on another device offered, and whether
+    /// the user stays where they are ([`ANSWERED`]): also when the offer
+    /// is left without a choice, as reading on overwrites it anyway.
+    pub(crate) struct Answered {
         pub(crate) path: String,
         pub(crate) percentage: String,
+        pub(crate) stay: bool,
     }
 }
 
@@ -46,6 +49,8 @@ pub(crate) struct ConfirmScreen {
     buttons: Vec<&'static str>,
     /// An offer (book, XPointer, progress); `None` for a message.
     offer: Option<(String, String, f64)>,
+    /// The user went where the offer leads.
+    went: bool,
     focus: usize,
 }
 
@@ -86,6 +91,7 @@ impl ConfirmScreen {
             text,
             buttons,
             offer,
+            went: false,
             focus: 0,
         }
     }
@@ -112,15 +118,10 @@ impl ConfirmScreen {
         Rect::new(x, row.y + (row.height - height) / 2, width, height)
     }
 
+    /// Closes with the button at `index`; staying is told on closing.
     fn choose(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         cx.command(Command::Back);
         if index != 0 {
-            if let Some((path, _, percentage)) = &self.offer {
-                cx.command(DECLINED.emit(Declined {
-                    path: path.clone(),
-                    percentage: format!("{percentage}"),
-                }));
-            }
             return;
         }
         let env = *cx.env();
@@ -138,6 +139,7 @@ impl ConfirmScreen {
             paperpaw_sdk::builtin::events::GOTO
                 .emit(paperpaw_sdk::builtin::events::Goto::new(path.clone(), at)),
         );
+        self.went = true;
     }
 }
 
@@ -230,6 +232,16 @@ impl Screen for ConfirmScreen {
             self.choose(index, cx);
         }
         Handled::Yes
+    }
+
+    fn on_close(&mut self, cx: &mut Cx<'_, '_>) {
+        if let Some((path, _, percentage)) = &self.offer {
+            cx.command(ANSWERED.emit(Answered {
+                path: path.clone(),
+                percentage: format!("{percentage}"),
+                stay: !self.went,
+            }));
+        }
     }
 }
 

@@ -107,11 +107,11 @@ fn lines_each(env: &Env<'_>) -> u16 {
     }
 }
 
-/// The feed a book stands for: its file's name (`News/Tagesschau.html`
-/// is "Tagesschau").
+/// The feed a book stands for: its file's name, without the mark of the
+/// feed's address (`News/Tagesschau (3fa9c2).html` is "Tagesschau").
 fn source(book: &str) -> &str {
     let file = book.rsplit('/').next().unwrap_or(book);
-    file.rsplit_once('.').map_or(file, |(stem, _)| stem)
+    crate::without_mark(file.rsplit_once('.').map_or(file, |(stem, _)| stem))
 }
 
 /// The headlines widget: the last ones fetched, read when updated.
@@ -325,6 +325,7 @@ mod tests {
     fn sources_are_named_by_their_books() {
         assert_eq!(source("books/News/Tagesschau.html"), "Tagesschau");
         assert_eq!(source("News/The Guardian.html"), "The Guardian");
+        assert_eq!(source("News/The Guardian (0a9fc2).html"), "The Guardian");
         assert_eq!(source("plain"), "plain");
     }
 

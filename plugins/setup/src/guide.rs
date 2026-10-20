@@ -6,24 +6,33 @@
 //!
 //! Buttons: up and down (or left and right) move between the card and
 //! the buttons; on a number, left and right change it. *Select* chooses,
-//! *Back* goes a page back. Page buttons turn pages. Touch: tap.
+//! *Back* goes a page back; on the first page it asks whether to skip
+//! the setup, as a stray press there would end it. Page buttons turn
+//! pages. Touch: tap.
+//!
+//! A choice of many opens the settings plugin's list; without it, the
+//! card steps through the options.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::event::Event;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setup::SetupPage;
+use paperpaw_sdk::ui::choice::{self, Picked};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Point, Rect,
     RefreshMode, Screen, SettingKind, SettingSpec, SettingValue,
 };
 
-use crate::mark_done;
+use crate::{CHOICE, mark_done};
 
 /// The settings plugin's list of choices, opened for a setting.
 const CHOOSE: Id = Id::new_static("settings.choose");
+/// Whether to skip the setup, asked by *Back* on the first page.
+const SKIP_CHOSEN: Event<Picked> = Event::new("setup.skip-chosen");
 /// Lines of the explanation at most; at the end, with no card, more.
 const HELP_LINES: usize = 6;
 const END_LINES: usize = 12;
@@ -337,6 +346,19 @@ impl Guide {
         cx.command(Command::Back);
     }
 
+    /// Asks whether to skip the setup: going on comes first.
+    fn ask_skip(&self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        cx.command(choice::open(
+            CHOICE,
+            &SKIP_CHOSEN,
+            env.i18n.tr("setup.skip-question"),
+            "",
+            "setup.option.",
+            &["stay", "skip"],
+        ));
+    }
+
     /// Changes the number by `step`.
     fn change(&mut self, step: i64, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
@@ -372,7 +394,12 @@ impl Guide {
                 } else if matches!(spec.kind, SettingKind::Bool) || ui::two_options(&env, spec) {
                     self.change(1, cx);
                 } else if matches!(spec.kind, SettingKind::Choice(_) | SettingKind::Language) {
-                    cx.command(Command::OpenScreen(CHOOSE, with_id()));
+                    // The settings plugin's list; without it, the next.
+                    if env.screens.iter().any(|(id, _)| *id == CHOOSE) {
+                        cx.command(Command::OpenScreen(CHOOSE, with_id()));
+                    } else {
+                        self.change(1, cx);
+                    }
                 }
             }
         }
@@ -600,7 +627,7 @@ impl Screen for Guide {
         let on_two = on_card && self.two(&env).is_some();
         if *a == actions::BACK {
             if self.page == 0 {
-                self.skip(cx);
+                self.ask_skip(cx);
             } else {
                 self.turn(self.page as isize - 1, cx);
             }
@@ -627,6 +654,15 @@ impl Screen for Guide {
             return Handled::No;
         }
         Handled::Yes
+    }
+
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        if SKIP_CHOSEN
+            .read(event, params)
+            .is_some_and(|p| p.option == "skip")
+        {
+            self.skip(cx);
+        }
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {

@@ -6,6 +6,12 @@
 //! file read or written pass by them, several in one command: a picture
 //! streamed through would push the FAT and the folders out.
 //!
+//! Changed blocks reach the disk in the order they were changed, and
+//! before whole blocks written past them: cut off at any point, the disk
+//! holds the changes up to one of them, none after (a file's data is not
+//! in clusters whose freeing is not on the disk yet). A block changed
+//! again after another one was is written back first, as it was.
+//!
 //! [`BlockDisk::volume`] finds the FAT volume on a card: most cards hold a
 //! partition table (MBR, sometimes GPT) and the file system in a partition
 //! after it; some hold the file system from the first block.
@@ -177,8 +183,9 @@ fn zeroed(len: usize) -> Option<Vec<u8>> {
 struct Slot {
     /// The disk's block it holds, if any.
     index: Option<u32>,
-    /// Changed since it was read.
-    dirty: bool,
+    /// When it was changed last (a count of changes), if since it was
+    /// read or written back.
+    changed: Option<u64>,
     /// When it was used last (a count of uses).
     used: u32,
     data: [u8; BLOCK],
@@ -186,7 +193,7 @@ struct Slot {
 
 const EMPTY: Slot = Slot {
     index: None,
-    dirty: false,
+    changed: None,
     used: 0,
     data: [0; BLOCK],
 };
@@ -204,6 +211,8 @@ pub struct BlockDisk<B: Blocks> {
     slots: Box<[Slot]>,
     /// Uses so far, to find the block used longest ago.
     uses: u32,
+    /// Changes so far, to write changed blocks back in order.
+    changes: u64,
     /// The block used last, to see blocks used one after the other.
     last: Option<u32>,
 }
@@ -259,6 +268,7 @@ impl<B: Blocks> BlockDisk<B> {
             size: u64::from(blocks) * BLOCK as u64,
             slots: vec![EMPTY; SLOTS].into_boxed_slice(),
             uses: 0,
+            changes: 0,
             last: None,
         }
     }
@@ -310,14 +320,32 @@ impl<B: Blocks> BlockDisk<B> {
     }
 
     /// The slot used longest ago, emptied (written back first if it
-    /// changed).
+    /// changed, after the blocks changed before it).
     fn oldest(&mut self) -> Result<usize, DiskError> {
         let i = (0..SLOTS)
             .min_by_key(|&i| self.slots[i].index.map_or(0, |_| self.slots[i].used))
             .unwrap_or(0);
-        self.write_back(i)?;
+        if let Some(changed) = self.slots[i].changed {
+            self.write_back(changed)?;
+        }
         self.slots[i].index = None;
         Ok(i)
+    }
+
+    /// Readies slot `i` for a change. Changed before another block was,
+    /// it is written back first as it is, after the blocks changed before
+    /// it: written back later with this change, it would reach the disk
+    /// before a change made earlier.
+    fn change(&mut self, i: usize) -> Result<(), DiskError> {
+        match self.slots[i].changed {
+            // Changed last: this change goes with the ones before.
+            Some(changed) if changed == self.changes => return Ok(()),
+            Some(changed) => self.write_back(changed)?,
+            None => {}
+        }
+        self.changes += 1;
+        self.slots[i].changed = Some(self.changes);
+        Ok(())
     }
 
     /// The disk, for tests.
@@ -338,11 +366,19 @@ impl<B: Blocks> BlockDisk<B> {
             .count()
     }
 
-    fn write_back(&mut self, i: usize) -> Result<(), DiskError> {
-        let slot = &mut self.slots[i];
-        if let (true, Some(index)) = (slot.dirty, slot.index) {
-            self.disk.write_block(index, &slot.data)?;
-            slot.dirty = false;
+    /// Writes back the blocks changed up to change `last`, in the order
+    /// they were changed: cut off at any point, the disk holds the
+    /// changes up to one of them, none after.
+    fn write_back(&mut self, last: u64) -> Result<(), DiskError> {
+        while let Some(i) = (0..SLOTS)
+            .filter(|&i| self.slots[i].changed.is_some_and(|c| c <= last))
+            .min_by_key(|&i| self.slots[i].changed)
+        {
+            let slot = &mut self.slots[i];
+            if let Some(index) = slot.index {
+                self.disk.write_block(index, &slot.data)?;
+            }
+            slot.changed = None;
         }
         Ok(())
     }
@@ -396,6 +432,10 @@ impl<B: Blocks> Write for BlockDisk<B> {
             let whole = if offset == 0 { (len - done) / BLOCK } else { 0 };
             let passing = self.passing(index, whole);
             if passing > 0 {
+                // After the changes before them: a file's data is not
+                // written into clusters before their freeing is on the
+                // disk, where a cut would leave them another file's.
+                self.flush()?;
                 let bytes = &buf[done..done + passing * BLOCK];
                 self.disk.write_blocks(index, bytes)?;
                 done += passing * BLOCK;
@@ -404,9 +444,9 @@ impl<B: Blocks> Write for BlockDisk<B> {
             }
             let n = (BLOCK - offset).min(len - done);
             // A whole block need not be read first.
-            let slot = &mut self.slots[self.load(index, n < BLOCK)?];
-            slot.data[offset..offset + n].copy_from_slice(&buf[done..done + n]);
-            slot.dirty = true;
+            let i = self.load(index, n < BLOCK)?;
+            self.change(i)?;
+            self.slots[i].data[offset..offset + n].copy_from_slice(&buf[done..done + n]);
             done += n;
             self.position += n as u64;
         }
@@ -414,7 +454,7 @@ impl<B: Blocks> Write for BlockDisk<B> {
     }
 
     fn flush(&mut self) -> Result<(), DiskError> {
-        (0..SLOTS).try_for_each(|i| self.write_back(i))
+        self.write_back(self.changes)
     }
 }
 
@@ -434,10 +474,10 @@ impl<B: Blocks> Seek for BlockDisk<B> {
 }
 
 /// A [`BlockDisk`] the file system and the storage share: the file system
-/// reads and writes it, the storage writes back its changed blocks on
-/// [`Storage::sync`](paperpaw_platform::Storage::sync) (see
-/// [`FatStorage::with_disk`](crate::FatStorage::with_disk)), also those
-/// of folders and of the FAT, which no file's flush would reach.
+/// reads and writes it, the storage writes back its changed blocks (those
+/// of folders and of the FAT too) when a call that changes the card
+/// returns and on [`Storage::sync`](paperpaw_platform::Storage::sync)
+/// (see [`FatStorage::with_disk`](crate::FatStorage::with_disk)).
 pub struct SharedDisk<B: Blocks>(alloc::rc::Rc<core::cell::RefCell<BlockDisk<B>>>);
 
 impl<B: Blocks> SharedDisk<B> {

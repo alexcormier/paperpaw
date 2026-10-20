@@ -246,6 +246,44 @@ impl Plugin for CbzFormat {
     }
 }
 
+/// Bytes at each end of a file that tell it from another of its size.
+const ENDS: usize = 4096;
+
+/// What tells the file at `path` from another of its name: its size and a
+/// hash of its first and last 4 KB, where an archive keeps its directory
+/// with the checksums of all it holds (storages tell no time a file was
+/// changed). On the heap: books are opened deep in the stack.
+pub(crate) fn fingerprint(
+    storage: &dyn paperpaw_sdk::Storage,
+    path: &str,
+) -> Result<alloc::string::String, paperpaw_sdk::StorageError> {
+    let size = storage.size(path)?;
+    let mut ends = vec![0u8; 2 * ENDS];
+    let (head, tail) = ends.split_at_mut(ENDS);
+    let head = read_full(storage, path, 0, head)?;
+    let tail = read_full(storage, path, size.saturating_sub(ENDS as u64), tail)?;
+    ends.copy_within(ENDS..ENDS + tail, head);
+    let hash = paperpaw_digest::fnv1a64(&ends[..head + tail]);
+    Ok(alloc::format!("{size} {hash:016x}"))
+}
+
+/// Fills `buf` from `offset` of `path` as far as the file goes; how much.
+fn read_full(
+    storage: &dyn paperpaw_sdk::Storage,
+    path: &str,
+    offset: u64,
+    buf: &mut [u8],
+) -> Result<usize, paperpaw_sdk::StorageError> {
+    let mut filled = 0;
+    while filled < buf.len() {
+        match storage.read_at(path, offset + filled as u64, &mut buf[filled..])? {
+            0 => break,
+            n => filled += n,
+        }
+    }
+    Ok(filled)
+}
+
 /// The first bytes of `path`, at most 4 KB: to know a file again, or what
 /// it is. On the heap: books are opened deep in the stack.
 pub(crate) fn head(
@@ -747,6 +785,32 @@ mod tests {
         assert_eq!((decoded.width, decoded.height), (37, 23));
         assert!(paperpaw_sdk::Storage::size(&storage, &decoded.path).is_ok());
         assert_eq!(doc.prepare_image(&storage, &decoded), None);
+    }
+
+    /// An alternative text of three-byte characters longer than a record
+    /// holds, so the record's limit falls inside a character.
+    #[test]
+    fn long_alternative_texts_are_cut_between_characters() {
+        let alt = "日".repeat(1320);
+        let ch2 = alloc::format!(
+            "<html><body><img src=\"../images/missing.png\" alt=\"{alt}\"/>\
+             <img src=\"../images/dot.png\" alt=\"{alt}\"/><p>Danach</p></body></html>"
+        );
+        let storage = epub(ch2);
+        let doc = EpubDocument::open(&storage, "books/test.epub").unwrap();
+        let found = blocks(&storage, &doc, 1);
+        let kinds: Vec<BlockKind> = found.iter().map(|(kind, _)| *kind).collect();
+        assert_eq!(
+            kinds,
+            [BlockKind::Paragraph, BlockKind::Image, BlockKind::Paragraph]
+        );
+        // The missing picture's alternative text, cut where a character
+        // ends, as is the shown one's.
+        for (_, text) in &found[..2] {
+            assert!(text.len() > 3000 && text.len() < 4000, "{}", text.len());
+            assert!(text.chars().all(|c| c == '日'));
+        }
+        assert_eq!(found[2].1, "Danach");
     }
 
     #[test]

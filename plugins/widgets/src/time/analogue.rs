@@ -11,7 +11,7 @@ use paperpaw_sdk::{Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar
 
 use paperpaw_sdk::SettingSpec;
 
-use super::{chosen, frame_height, line, ui};
+use super::{chosen_name, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.analogue-clock");
 
@@ -112,7 +112,11 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let area = look.area;
     let (style, font) = ui(env);
     let now = time::local_time(env);
-    let date = chosen(env, ID.as_str(), "date");
+    if now.is_none() {
+        super::draw_no_time(canvas, env, &look);
+        return;
+    }
+    let date = chosen_name(env, ID.as_str(), "date");
     let date_text = now.map(|t| super::date_text(env, ID.as_str(), t.year, t.month, t.day, false));
     // The date below takes a line; the face the rest, round.
     let below = match (&font, date, &date_text) {
@@ -133,7 +137,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 
     // Rings round the face.
     let ring = (radius / 40).max(1) + u32::from(style.line > 1);
-    match chosen(env, ID.as_str(), "ring") {
+    match chosen_name(env, ID.as_str(), "ring") {
         "one" => canvas.stroke_circle(center, radius, ring, ink),
         "two" => {
             canvas.stroke_circle(center, radius, ring, ink);
@@ -142,12 +146,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         _ => {}
     }
     // The ticks start inside the rings.
-    let edge = match chosen(env, ID.as_str(), "ring") {
+    let edge = match chosen_name(env, ID.as_str(), "ring") {
         "one" => r - ring as i32 * 3,
         "two" => r - ring as i32 * 6,
         _ => r - (r / 30).max(1),
     };
-    let face = chosen(env, ID.as_str(), "face");
+    let face = chosen_name(env, ID.as_str(), "face");
     let tick = (radius / 28).max(2);
     match face {
         "hours" | "minutes" => {
@@ -244,7 +248,7 @@ fn draw_hands(
     ink: Color,
 ) {
     let (hour, minute) = angles(now.hour, now.minute);
-    let scale = match chosen(env, ID.as_str(), "hands") {
+    let scale = match chosen_name(env, ID.as_str(), "hands") {
         "thin" => 6,
         "bold" => 15,
         _ => 10,

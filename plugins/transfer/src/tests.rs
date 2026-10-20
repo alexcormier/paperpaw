@@ -24,6 +24,19 @@ fn translations_are_complete() {
 }
 
 #[test]
+fn the_code_is_placed_inside_its_square_or_not_at_all() {
+    use paperpaw_sdk::Rect;
+    let area = Rect::new(0, 40, 480, 760);
+    // 29 modules and the white around them: 37, three pixels each.
+    assert_eq!(crate::code_place(area, 120, 29), Some((196, 56, 3)));
+    // Less room than a pixel per module (large fonts, a short screen in
+    // landscape): no code, the address is shown alone.
+    assert_eq!(crate::code_place(area, 36, 29), None);
+    assert_eq!(crate::code_place(area, 0, 29), None);
+    assert_eq!(crate::code_place(Rect::new(0, 40, 20, 760), 120, 29), None);
+}
+
+#[test]
 fn the_page_takes_its_texts() {
     assert!(crate::PAGE.contains("/*STRINGS*/{}"));
 }
@@ -101,14 +114,15 @@ fn wrong_keys_lock_for_a_while() {
     // The phone's page is guarded alike.
     use crate::phone::{Request, answer};
     let mut guard = Guard::new(KEY.to_string());
+    let storage = MemoryStorage::new().with("body", b"text".to_vec());
     let mut send = |key: &str| {
         let request = Request {
             method: "POST",
             target: &format!("/send?k={key}"),
-            body: Some(b"text".to_vec()),
+            body_file: Some("body"),
             at: Instant(5),
         };
-        let (response, text) = answer(7, &mut guard, "<page>", &request);
+        let (response, text) = answer(7, &mut guard, "<page>", &storage, &request);
         (response.status, text)
     };
     for _ in 0..WRONG_KEYS {
@@ -146,12 +160,12 @@ fn files_are_listed_and_fetched() {
     assert_eq!(status, 200);
     assert_eq!(
         String::from_utf8(body).unwrap(),
-        r#"[{"name":"Books","dir":true,"size":0}]"#
+        r#"{"entries":[{"name":"Books","dir":true,"size":0}]}"#
     );
     let (_, body, ..) = ask(&storage, "GET", "/api/list?k=abc&path=Books", None);
     assert_eq!(
         String::from_utf8(body).unwrap(),
-        r#"[{"name":"a b.epub","dir":false,"size":4}]"#
+        r#"{"entries":[{"name":"a b.epub","dir":false,"size":4}]}"#
     );
     let (status, _, from, done) = ask(
         &storage,
@@ -178,6 +192,96 @@ fn files_are_listed_and_fetched() {
     );
     let file = "/api/list?k=abc&path=Books/a%20b.epub";
     assert_eq!(ask(&storage, "GET", file, None).0, 404);
+}
+
+#[test]
+fn big_folders_are_listed_in_parts() {
+    // 1,000 books with long names: about 130 KB as one answer.
+    let storage = MemoryStorage::new();
+    for i in 0..1000 {
+        let name = format!("Books/{i:04} {}.epub", "A rather long title".repeat(5));
+        storage.write(&name, b"x").unwrap();
+    }
+    storage.write("Books/.hidden", b"x").unwrap();
+    let mut names = Vec::new();
+    let mut from = None;
+    let mut parts = 0;
+    loop {
+        let target = match from {
+            Some(from) => format!("/api/list?k=abc&path=Books&from={from}"),
+            None => String::from("/api/list?k=abc&path=Books"),
+        };
+        let (status, body, ..) = ask(&storage, "GET", &target, None);
+        assert_eq!(status, 200);
+        assert!(body.len() <= web::LIST_PART + 256, "{}", body.len());
+        let body = String::from_utf8(body).unwrap();
+        names.extend(
+            body.split("\"name\":\"")
+                .skip(1)
+                .map(|rest| rest.split('"').next().unwrap().to_string()),
+        );
+        parts += 1;
+        from = body
+            .rsplit_once(",\"next\":")
+            .map(|(_, next)| next.trim_end_matches('}').parse::<usize>().unwrap());
+        if from.is_none() {
+            break;
+        }
+    }
+    assert!(parts > 10, "{parts}");
+    assert_eq!(names.len(), 1000);
+    names.sort();
+    names.dedup();
+    assert_eq!(names.len(), 1000, "an entry listed twice");
+    // Past the end: nothing more.
+    let (_, body, ..) = ask(
+        &storage,
+        "GET",
+        "/api/list?k=abc&path=Books&from=5000",
+        None,
+    );
+    assert_eq!(body, br#"{"entries":[]}"#);
+}
+
+#[test]
+fn the_settings_file_is_read_only() {
+    for name in ["paperpaw.ini", "PaperPaw.INI"] {
+        let storage = MemoryStorage::new().with(
+            name,
+            b"[core]
+"
+            .to_vec(),
+        );
+        // Fetched, e.g. to keep a copy.
+        let fetch = format!("/api/file?k=abc&path={name}");
+        assert_eq!(ask(&storage, "GET", &fetch, None).0, 200);
+        // Neither deleted nor put back changed.
+        let delete = format!("/api/delete?k=abc&path={name}");
+        assert_eq!(ask(&storage, "POST", &delete, None).0, 403, "{name}");
+        assert!(storage.exists(name));
+        storage.remove(name).unwrap();
+        storage
+            .write(
+                "upload",
+                b"[kosync]
+server = x
+",
+            )
+            .unwrap();
+        let put = format!("/api/file?k=abc&path={name}");
+        let (status, .., done) = ask(&storage, "PUT", &put, Some("upload"));
+        assert_eq!(status, 403, "{name}");
+        assert_eq!(done, Some(Done::NotReceived(String::from(name))));
+        assert!(!storage.exists(name));
+        // Nor a folder in its place.
+        let mkdir = format!("/api/mkdir?k=abc&path={name}");
+        assert_eq!(ask(&storage, "POST", &mkdir, None).0, 403, "{name}");
+        // Elsewhere, a file of that name is just a file.
+        storage.write("upload", b"x").unwrap();
+        let put = format!("/api/file?k=abc&path=Books/{name}");
+        storage.write("Books/a.epub", b"x").unwrap();
+        assert_eq!(ask(&storage, "PUT", &put, Some("upload")).0, 200);
+    }
 }
 
 #[test]
@@ -252,30 +356,42 @@ fn json_is_escaped() {
 
 #[test]
 fn text_typed_on_a_phone_comes_back() {
-    use crate::phone::{Request, answer};
+    use crate::phone::{MAX_TEXT, Request, answer};
     let page = "<html>page</html>";
+    let storage = MemoryStorage::new()
+        .with("body", "Schlüssel:fx".as_bytes().to_vec())
+        .with("long", vec![b'x'; MAX_TEXT + 1]);
     let mut guard = Guard::new(KEY.to_string());
-    let mut ask = |method, target, body: Option<&[u8]>| {
+    let mut ask = |method, target, body_file: Option<&str>| {
         let request = Request {
             method,
             target,
-            body: body.map(<[u8]>::to_vec),
+            body_file,
             at: Instant(0),
         };
-        let (response, text) = answer(7, &mut guard, page, &request);
+        let (response, text) = answer(7, &mut guard, page, &storage, &request);
         (response.status, response.body, text)
     };
     // Without the key: nothing.
     assert_eq!(ask("GET", "/", None).0, 403);
-    assert_eq!(ask("POST", "/send?k=wrong", Some(b"x")).2, None);
+    assert_eq!(ask("POST", "/send?k=wrong", Some("body")).2, None);
     // The page, then the text.
     let (status, body, text) = ask("GET", "/?k=abc", None);
     assert_eq!(
         (status, body.as_slice(), text),
         (200, page.as_bytes(), None)
     );
-    let (status, _, text) = ask("POST", "/send?k=abc", Some("Schlüssel:fx".as_bytes()));
+    // Too long: said so, and nothing goes to the keyboard (which would
+    // take an empty text and close).
+    let (status, _, text) = ask("POST", "/send?k=abc", Some("long"));
+    assert_eq!((status, text), (413, None));
+    let (status, _, text) = ask("POST", "/send?k=abc", Some("gone"));
+    assert_eq!((status, text), (500, None));
+    let (status, _, text) = ask("POST", "/send?k=abc", Some("body"));
     assert_eq!((status, text.as_deref()), (200, Some("Schlüssel:fx")));
+    // An empty field sends no body: an empty text.
+    let (status, _, text) = ask("POST", "/send?k=abc", None);
+    assert_eq!((status, text.as_deref()), (200, Some("")));
     assert_eq!(ask("GET", "/other?k=abc", None).0, 404);
 }
 

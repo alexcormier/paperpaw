@@ -87,6 +87,9 @@ keytool="$(exe "$jdk_bin/keytool")"
 aapt2="$(exe "$tools/aapt2")"
 zipalign="$(exe "$tools/zipalign")"
 python="$(command -v python3 || command -v python)" || fail "no Python 3 found"
+usage="$("$zipalign" 2>&1 || true)"
+[[ "$usage" == *"-P <pagesize_kb>"* ]] \
+    || fail "$tools: build tools 35 or later are needed (zipalign -P)"
 
 if [[ -n "$reproducible" ]]; then
     rustc --version | grep -q "^rustc $RUST_VERSION " \
@@ -111,7 +114,25 @@ if command -v cygpath > /dev/null; then
     src="$(cygpath -w "$src")"
     cargo_home="$(cygpath -w "$cargo_home")"
 fi
-export RUSTFLAGS="${RUSTFLAGS:-} --remap-path-prefix=$src=/paperpaw --remap-path-prefix=$cargo_home=/cargo"
+flags=(
+    "--remap-path-prefix=$src=/paperpaw"
+    "--remap-path-prefix=$cargo_home=/cargo"
+    # Loadable where memory pages are 16 KB (Android 15 and later devices).
+    "-Clink-arg=-Wl,-z,max-page-size=16384"
+)
+# Passed apart (CARGO_ENCODED_RUSTFLAGS: separated by 0x1f), so paths with
+# spaces stay whole; the caller's own flags (e.g. -D warnings) come first.
+separator=$'\x1f'
+encoded="${CARGO_ENCODED_RUSTFLAGS:-}"
+if [[ -z "$encoded" && -n "${RUSTFLAGS:-}" ]]; then
+    read -ra own <<< "$RUSTFLAGS"
+    encoded="$(IFS="$separator"; echo "${own[*]}")"
+fi
+for flag in "${flags[@]}"; do
+    encoded="${encoded:+$encoded$separator}$flag"
+done
+export CARGO_ENCODED_RUSTFLAGS="$encoded"
+unset RUSTFLAGS
 export CARGO_PROFILE_RELEASE_STRIP=symbols
 cargo ndk -t arm64-v8a --platform 26 -o "$out/apk/lib" build "${cargo_profile[@]}" -p paperpaw-android
 
@@ -149,7 +170,8 @@ rm -f "$out/res.zip" "$out/unsigned.apk"
     --min-sdk-version 26 --target-sdk-version "$PLATFORM_VERSION"
 # The library, the books and the code: sorted, stored, at a fixed time.
 "$python" shells/android/pack.py "$out/unsigned.apk" "$out/apk"
-"$zipalign" -f -p 4 "$out/unsigned.apk" "$out/aligned.apk"
+# The library on 16 KB pages, which devices with 4 KB pages load as well.
+"$zipalign" -f -P 16 4 "$out/unsigned.apk" "$out/aligned.apk"
 
 if [[ -n "${PAPERPAW_UNSIGNED:-}" ]]; then
     mv "$out/aligned.apk" "$out/paperpaw-unsigned.apk"
