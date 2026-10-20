@@ -33,7 +33,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{CORE_PLUGIN, actions, events, menus};
-use paperpaw_sdk::native::{SafeMode, SafeModeReason};
+use paperpaw_sdk::native::{NotInstalled, NotInstalledReason, SafeMode, SafeModeReason};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
@@ -83,7 +83,15 @@ impl Plugin for PluginManager {
         })?;
         r.add_icon(OPEN, Cow::Borrowed("puzzle"))?;
         r.on(events::STARTED, |env, _, out| {
-            if let Some(safe_mode) = env.native.and_then(|n| n.safe_mode.as_ref()) {
+            let Some(native) = env.native else {
+                return;
+            };
+            // One notice shows at a time: safe mode's, the more
+            // important, last.
+            if let Some(notice) = not_installed_notice(env, &native.not_installed) {
+                out.push(Command::Notify(notice));
+            }
+            if let Some(safe_mode) = &native.safe_mode {
                 out.push(Command::Notify(safe_mode_notice(env, safe_mode)));
             }
         })?;
@@ -307,6 +315,32 @@ fn safe_mode_notice(env: &Env<'_>, safe_mode: &SafeMode) -> String {
         ),
         (_, None, None) => String::from(i18n.tr("plugin-manager.safe-mode.failed")),
     }
+}
+
+/// What is said of the plugins the shell did not install at the start:
+/// their names (those of the versions installed, or their ids), and why.
+fn not_installed_notice(env: &Env<'_>, not_installed: &[NotInstalled]) -> Option<String> {
+    let name = |n: &NotInstalled| {
+        let id = n.plugin.as_str();
+        env.plugins
+            .get(id)
+            .map_or_else(|| String::from(id), |p| String::from(p.name(env.i18n)))
+    };
+    let (key, names) = match not_installed {
+        [] => return None,
+        [one] => (
+            match one.reason {
+                NotInstalledReason::OtherAuthor => "plugin-manager.not-installed.other-author",
+                _ => "plugin-manager.not-installed.damaged",
+            },
+            name(one),
+        ),
+        several => (
+            "plugin-manager.not-installed.several",
+            several.iter().map(name).collect::<Vec<_>>().join(", "),
+        ),
+    };
+    Some(env.i18n.format(key, &[("name", Arg::Str(&names))]))
 }
 
 /// Why a code plugin does not run, as said below its name.

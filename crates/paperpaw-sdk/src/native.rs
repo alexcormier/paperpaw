@@ -227,6 +227,8 @@ pub struct Native {
     pub file: Cow<'static, str>,
     /// This start went without code plugins, and why.
     pub safe_mode: Option<SafeMode>,
+    /// Plugins the shell had to install at this start and did not.
+    pub not_installed: Vec<NotInstalled>,
 }
 
 impl Native {
@@ -237,6 +239,7 @@ impl Native {
             toolchain: Cow::Borrowed(TOOLCHAIN),
             file: file.into(),
             safe_mode: None,
+            not_installed: Vec::new(),
         }
     }
 
@@ -283,6 +286,34 @@ pub enum SafeModeReason {
     FailedStarts,
     /// The reader held the key for it at power-on.
     KeyHeld,
+}
+
+/// A plugin the shell had to install at this start (one the web flasher
+/// wrote behind the firmware, which the reader chose there) and did not:
+/// the plugin manager says which, and why.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct NotInstalled {
+    pub plugin: Id,
+    pub reason: NotInstalledReason,
+}
+
+impl NotInstalled {
+    pub fn new(plugin: Id, reason: NotInstalledReason) -> Self {
+        Self { plugin, reason }
+    }
+}
+
+/// Why a plugin was not installed at the start.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum NotInstalledReason {
+    /// Its code is signed by another author than the version installed
+    /// before ([`Author::Other`]): installed only when the reader says so,
+    /// where they are warned (the store).
+    OtherAuthor,
+    /// Its code is damaged, or no plugin file this PaperPaw reads.
+    Damaged,
 }
 
 /// The plugin a plugin file's entry made, for the shell that loaded it.

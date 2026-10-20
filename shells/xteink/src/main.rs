@@ -298,9 +298,9 @@ fn main() -> ! {
         clock::set(now(), unix_ms);
     }
     // Plugins the web flasher wrote behind the image, onto the card first.
-    let installs = native::bundle::stage(&flash, storage.as_ref()).unwrap_or_default();
+    let staged = native::bundle::stage(&flash, storage.as_ref()).unwrap_or_default();
     let code = code_plugins(ota.as_ref(), &flash);
-    let kernel = kernel(storage, ota.as_ref(), code, &installs);
+    let kernel = kernel(storage, ota.as_ref(), code, staged);
     // Light sleeps while idle on battery, the deep one at the end.
     power::init(LowPower::new(board.low_power));
     Firmware {
@@ -331,9 +331,14 @@ enum CodePlugins {
     None,
 }
 
-/// What this firmware loads, as plugins see it ([`paperpaw_sdk::Env`]).
-fn native() -> paperpaw_sdk::native::Native {
-    paperpaw_sdk::native::Native::new("code.ppn")
+/// What this firmware loads, as plugins see it ([`paperpaw_sdk::Env`]),
+/// with the plugins of the web flasher not installed.
+fn native(
+    not_installed: alloc::vec::Vec<paperpaw_sdk::native::NotInstalled>,
+) -> paperpaw_sdk::native::Native {
+    let mut native = paperpaw_sdk::native::Native::new("code.ppn");
+    native.not_installed = not_installed;
+    native
 }
 
 /// Loads nothing: in safe mode the kernel asks for no code.
@@ -382,7 +387,7 @@ fn kernel(
     storage: Box<dyn Storage>,
     ota: Option<&ota::Ota>,
     code: CodePlugins,
-    installs: &[(paperpaw_sdk::Id, alloc::string::String)],
+    staged: native::bundle::Staged,
 ) -> Kernel {
     #[cfg(feature = "remote")]
     let storage: Box<dyn Storage> = Box::new(traced::Traced(storage));
@@ -426,15 +431,20 @@ fn kernel(
         None => builder,
     };
     let builder = match code {
-        CodePlugins::Load(loader) => builder.code_plugins(native(), Box::new(loader)),
+        CodePlugins::Load(loader) => {
+            builder.code_plugins(native(staged.not_installed), Box::new(loader))
+        }
         CodePlugins::SafeMode(safe_mode) => builder
-            .code_plugins(native(), Box::new(NoCode))
+            .code_plugins(native(staged.not_installed), Box::new(NoCode))
             .safe_mode(safe_mode),
         CodePlugins::None => builder,
     };
-    let builder = installs.iter().fold(builder, |builder, (id, folder)| {
-        builder.install_plugin(id.clone(), folder.clone())
-    });
+    let builder = staged
+        .installs
+        .into_iter()
+        .fold(builder, |builder, (id, folder)| {
+            builder.install_plugin(id, folder)
+        });
     let builder = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs).plugin(device::X4);
     let mut kernel = builder.build().expect("kernel");
     for warning in kernel.take_warnings() {

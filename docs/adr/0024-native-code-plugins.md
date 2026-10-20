@@ -264,4 +264,9 @@ What the spike left open, as the implementation found it (2026-10-20):
   its table set by the shell.
 - **Author signatures** are a trailer in the `.ppn` itself
   (`paperpaw_native::signature`), so a file carries its signature
-  wherever it goes; the store remembers the author's key.
+  wherever it goes; the store and the firmware installing the web
+  flasher's bundle remember the author's key (one file for both,
+  `native::remember_author`). From the bundle, code signed by another
+  author than the version installed is not installed and the plugin
+  manager says so (`Native::not_installed`): the reader decides in the
+  store, where they are warned.

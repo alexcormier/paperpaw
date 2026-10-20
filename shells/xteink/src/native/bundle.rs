@@ -4,6 +4,10 @@
 //! each file checked by its SHA-256 as it is copied and a plugin's code by
 //! its author's signature, for the kernel to install before it loads
 //! plugins (`KernelBuilder::install_plugin`), so they run at this start.
+//! The author's key is remembered at a plugin's first install
+//! (`native::remember_author`); code signed by another author than the
+//! version installed before is not installed, and the plugin manager says
+//! so (`Native::not_installed`): the reader decides in the store, warned.
 //! Once they are all on the card, the bundle's first sector is erased
 //! (on the X4 its code plugins go there).
 //!
@@ -24,6 +28,7 @@ use paperpaw_native::index::SECTOR;
 use paperpaw_platform::Storage;
 use paperpaw_sdk::Id;
 use paperpaw_sdk::builtin::PLUGIN_DIR;
+use paperpaw_sdk::native::{self, Author, NotInstalled, NotInstalledReason};
 
 use super::partition::behind_image;
 use crate::ota::Flash;
@@ -43,10 +48,17 @@ impl Source for InFlash<'_> {
     }
 }
 
+/// What a bundle brought: each plugin to install, by its id and the
+/// folder it is in, and those not installed.
+#[derive(Default)]
+pub struct Staged {
+    pub installs: Vec<(Id, String)>,
+    pub not_installed: Vec<NotInstalled>,
+}
+
 /// Copies the plugins of the bundle behind the image onto the card, if
-/// there is one, and erases it (see the [module documentation](self)):
-/// each plugin's id and the folder it is in, for the kernel to install.
-pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Vec<(Id, String)>> {
+/// there is one, and erases it (see the [module documentation](self)).
+pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Staged> {
     let mut flash = flash.borrow_mut();
     let behind = behind_image(&mut flash).ok()?;
     let mut head = [0u8; 4];
@@ -74,34 +86,49 @@ pub fn stage(flash: &Flash, storage: &dyn Storage) -> Option<Vec<(Id, String)>> 
         flash: &mut flash,
         at: behind.start,
     };
-    let mut plugins: Vec<(Id, String)> = Vec::new();
+    let mut staged = Staged::default();
+    // The authors' keys of the plugins installed, kept once all are.
+    let mut authors: Vec<(&str, [u8; 32])> = Vec::new();
     for plugin in &bundle.plugins {
+        // The bundle's names are those of plugins (`Bundle::read`).
+        let Ok(id) = Id::parse(&plugin.id) else {
+            continue;
+        };
         let folder = format!("{PLUGIN_DIR}/.{}.part", plugin.id);
         if let Err(why) = copy(&mut source, storage, plugin, &folder, &mut buf) {
             // The card, most likely: tried again at the next start.
             warn!("bundle: {}: {why}; kept for the next start", plugin.id);
-            for (_, folder) in &plugins {
+            for (_, folder) in &staged.installs {
                 let _ = storage.remove_dir_all(folder);
             }
             let _ = storage.remove_dir_all(&folder);
             return None;
         }
-        if let Some(why) = refused(storage, &folder) {
-            warn!("bundle: {}: {why}; not installed", plugin.id);
-            let _ = storage.remove_dir_all(&folder);
-            continue;
+        match check(storage, &plugin.id, &folder) {
+            Ok(author) => {
+                authors.extend(author.map(|key| (plugin.id.as_str(), key)));
+                staged.installs.push((id, folder));
+            }
+            Err(reason) => {
+                warn!("bundle: {}: {reason:?}; not installed", plugin.id);
+                let _ = storage.remove_dir_all(&folder);
+                staged.not_installed.push(NotInstalled::new(id, reason));
+            }
         }
-        if let Ok(id) = Id::parse(&plugin.id) {
-            plugins.push((id, folder));
+    }
+    for (plugin, key) in authors {
+        if !native::remember_author(storage, plugin, &key) {
+            warn!("bundle: {plugin}: its author's key not kept");
         }
     }
     erase(&mut flash, behind.start);
     info!(
-        "bundle: {} plugins copied onto the card in {} ms",
-        plugins.len(),
-        (crate::micros() - started) / 1000
+        "bundle: {} plugins copied onto the card in {} ms, {} not installed",
+        staged.installs.len(),
+        (crate::micros() - started) / 1000,
+        staged.not_installed.len()
     );
-    Some(plugins)
+    Some(staged)
 }
 
 /// Copies `plugin`'s files into `folder`, each checked by its SHA-256.
@@ -156,16 +183,36 @@ fn copy_file(
     Ok(())
 }
 
-/// Why the plugin copied into `folder` is not installed: its code is not a
-/// plugin file, or its author's signature does not hold.
-fn refused(storage: &dyn Storage, folder: &str) -> Option<String> {
+/// Whether `plugin`, copied into `folder`, is installed: a data plugin
+/// is; a code plugin when its code is a plugin file whose author's
+/// signature holds, by the author of the version installed before if
+/// there was one. `Ok` with its author's key to remember at its first
+/// install.
+fn check(
+    storage: &dyn Storage,
+    plugin: &str,
+    folder: &str,
+) -> Result<Option<[u8; 32]>, NotInstalledReason> {
     let code = format!("{folder}/code.ppn");
     if !storage.exists(&code) {
-        return None;
+        return Ok(None);
     }
-    paperpaw_sdk::native::check_file(storage, &code)
-        .err()
-        .map(|problem| format!("{problem}"))
+    let (_, signature) = native::check_file(storage, &code).map_err(|problem| {
+        warn!("bundle: {plugin}: {problem}");
+        NotInstalledReason::Damaged
+    })?;
+    let Some(signature) = signature else {
+        // Not signed: one's own build, unless a signed one was installed.
+        return match native::known_author(storage, plugin) {
+            Some(_) => Err(NotInstalledReason::OtherAuthor),
+            None => Ok(None),
+        };
+    };
+    match native::author(storage, plugin, &signature.key) {
+        Author::Known => Ok(None),
+        Author::New => Ok(Some(signature.key)),
+        Author::Other => Err(NotInstalledReason::OtherAuthor),
+    }
 }
 
 /// Erases the bundle's first sector: what is behind it is no bundle.

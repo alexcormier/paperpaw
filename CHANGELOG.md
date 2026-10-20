@@ -16,14 +16,18 @@ change the plugin SDK.
   and signs it as its author. A file fits the PaperPaw built by the same
   compiler from the same SDK (its fingerprint, shown under *About* and
   sent with the update check). Plugins the web flasher writes behind the
-  firmware are installed at the first start. Safe mode: after two starts
-  that did not get to their first frame, or with *Back* (X4) or *Home*
-  (X4 Pro) held at power-on, PaperPaw starts without code plugins and
+  firmware are installed at the first start, their authors' keys
+  remembered as the store does; code signed by another author than the
+  version installed is not, and the plugin manager says so. Safe mode:
+  after two starts that did not get to their first frame, or with *Back*
+  (X4) or *Home* (X4 Pro) held at power-on, PaperPaw starts without code plugins and
   switches off the one that crashed; the plugin manager says why a code
   plugin does not run. `samples/hello-native` is the sample plugin as a
   file, with a CI job for a plugin's own repository.
 - SDK: `native` (the fingerprint, `plugin!`, `Env::native`,
-  `check_file`), `PluginInfo::kind` and `PluginInfo::problem`;
+  `check_file`, `Native::not_installed`: plugins a shell did not
+  install at the start, and why), `PluginInfo::kind` and
+  `PluginInfo::problem`;
   `Registrar::publish` publishes a service with its type's name, so
   plugins built apart find it (`Registrar::add_service` is deprecated);
   a float in an event's parameters is read without `core`'s large exact

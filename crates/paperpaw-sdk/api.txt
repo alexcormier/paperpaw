@@ -1149,6 +1149,9 @@ pub enum paperpaw_sdk::native::Author
 pub paperpaw_sdk::native::Author::Known
 pub paperpaw_sdk::native::Author::New
 pub paperpaw_sdk::native::Author::Other
+#[non_exhaustive] pub enum paperpaw_sdk::native::NotInstalledReason
+pub paperpaw_sdk::native::NotInstalledReason::Damaged
+pub paperpaw_sdk::native::NotInstalledReason::OtherAuthor
 #[non_exhaustive] pub enum paperpaw_sdk::native::SafeModeReason
 pub paperpaw_sdk::native::SafeModeReason::FailedStarts
 pub paperpaw_sdk::native::SafeModeReason::KeyHeld
@@ -1160,11 +1163,17 @@ pub fn paperpaw_sdk::native::Fingerprint::fmt(&self, &mut core::fmt::Formatter<'
 #[non_exhaustive] pub struct paperpaw_sdk::native::Native
 pub paperpaw_sdk::native::Native::file: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::native::Native::fingerprint: paperpaw_sdk::native::Fingerprint
+pub paperpaw_sdk::native::Native::not_installed: alloc::vec::Vec<paperpaw_sdk::native::NotInstalled>
 pub paperpaw_sdk::native::Native::safe_mode: core::option::Option<paperpaw_sdk::native::SafeMode>
 pub paperpaw_sdk::native::Native::toolchain: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::native::Native
 pub fn paperpaw_sdk::native::Native::new(impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::native::Native::path(&self, &str) -> alloc::string::String
+#[non_exhaustive] pub struct paperpaw_sdk::native::NotInstalled
+pub paperpaw_sdk::native::NotInstalled::plugin: paperpaw_sdk::Id
+pub paperpaw_sdk::native::NotInstalled::reason: paperpaw_sdk::native::NotInstalledReason
+impl paperpaw_sdk::native::NotInstalled
+pub fn paperpaw_sdk::native::NotInstalled::new(paperpaw_sdk::Id, paperpaw_sdk::native::NotInstalledReason) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::native::SafeMode
 pub paperpaw_sdk::native::SafeMode::crashed: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::native::SafeMode::last_loaded: core::option::Option<alloc::string::String>
