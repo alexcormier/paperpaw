@@ -176,8 +176,12 @@ and the plugin manager says why.
   once the update is downloaded, the device fetches them, checks each
   author, and puts them into `plugins/.<id>.next`, their code named as
   fetched (`native::remember_fetched`); the updated firmware installs
-  those built for it at its first start, before plugins are found, so
-  they run at once and offline. Their settings and data on the card were
+  those built for it before plugins are found, from the first start it
+  loads code plugins at: an update's first start, on trial, loads none,
+  so once it keeps the update (half a minute) it starts once more, and
+  they run from then on, also offline. A fetch cut off by a restart goes
+  on when the update page shows, as far as the room for code holds the
+  plugins. Their settings and data on the card were
   never touched. A plugin that could not be fetched comes from the store
   after the update. The Android app does the same when it is updated.
 - **The web flasher** writes the firmware and, behind its image in the
