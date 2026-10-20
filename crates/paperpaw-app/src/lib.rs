@@ -23,6 +23,12 @@
 
 #![no_std]
 
+extern crate alloc;
+
+mod pebble;
+
+pub use pebble::Pebble;
+
 use paperpaw_core::KernelBuilder;
 
 /// How the default fonts are shipped.
@@ -93,6 +99,19 @@ pub const STORE_PLUGINS: [&str; 20] = [
     "weather",
     "widgets",
 ];
+
+/// Whether PaperPaw ran on `storage` before (it keeps its folder or its
+/// configuration there, also under its old name): a shell that builds in
+/// the plugins the store offers but switches them off for a new reader
+/// keeps them as they were for one who had them (on as they shipped, off
+/// where the reader switched one off), so nobody loses one by an update.
+pub fn ran_before(storage: &dyn paperpaw_core::sdk::Storage) -> bool {
+    paperpaw_core::sdk::data::take_over_old_name(storage);
+    storage.exists(paperpaw_core::sdk::builtin::CONFIG_FILE)
+        || storage
+            .list(paperpaw_core::sdk::data::DIR, &mut |_| {})
+            .is_ok()
+}
 
 /// The plugin crates this build has (`paperpaw-plugin-…`), sorted: what
 /// the X4's firmware lists in its image (ADR 0022).
@@ -191,7 +210,9 @@ pub fn install_with(
         b = offered(b, shipped_off, paperpaw_plugin_joplin::Joplin);
         b = offered(b, shipped_off, paperpaw_plugin_wallabag::Wallabag);
     }
+    // A theme of the app's own, off as it ships, on every device.
     let builder = b
+        .plugin_off(Pebble)
         .plugin(paperpaw_plugin_keyboard::Keyboard)
         .plugin(paperpaw_plugin_settings::SettingsPlugin)
         .plugin(paperpaw_plugin_plugin_manager::PluginManager);

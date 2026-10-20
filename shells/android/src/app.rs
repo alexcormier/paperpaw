@@ -463,12 +463,9 @@ fn start_kernel(
         Vec::new()
     };
     // The plugins the store offers as files are built in here (an app
-    // from Play may load no code from files), switched off until the
-    // reader wants one; one used before, its data kept, stays on.
-    let used: Vec<&str> = paperpaw_app::STORE_PLUGINS
-        .into_iter()
-        .filter(|id| storage.exists(&paperpaw_sdk::Env::plugin_dir(id)))
-        .collect();
+    // from Play may load no code from files), switched off for a new
+    // reader until wanted; for one who ran PaperPaw before, as they were.
+    let ran_before = paperpaw_app::ran_before(&storage);
     let mut builder = Kernel::builder(device)
         .clock(micros)
         .random(random)
@@ -503,7 +500,7 @@ fn start_kernel(
     let builder = paperpaw_app::install_with(
         builder,
         paperpaw_app::Fonts::Outline,
-        paperpaw_app::StorePlugins::Off(&|id| used.contains(&id)),
+        paperpaw_app::StorePlugins::Off(&|_| ran_before),
     )
     .plugin(AndroidPlugin {
             app: app.clone(),

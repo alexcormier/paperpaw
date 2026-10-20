@@ -73,13 +73,15 @@ fn plugins(kernel: &Kernel) -> Vec<(String, PluginState)> {
         .collect()
 }
 
-/// The crate a plugin comes from: the formats of `format-epub` share it.
-fn crate_of(id: &str) -> String {
+/// The crate a plugin comes from: the formats of `format-epub` share it;
+/// none for the app's own (Pebble), which no plugin crate lists.
+fn crate_of(id: &str) -> Option<String> {
     let id = match id {
         "format-html" | "format-fb2" | "format-markdown" | "format-cbz" => "format-epub",
+        "pebble" => return None,
         id => id,
     };
-    format!("paperpaw-plugin-{id}")
+    Some(format!("paperpaw-plugin-{id}"))
 }
 
 #[test]
@@ -90,10 +92,19 @@ fn the_lean_set_keeps_what_a_beginner_needs() {
     let plugins = plugins(&kernel);
     for id in ALWAYS {
         assert!(
-            plugins.iter().any(|(p, state)| p == id && *state == PluginState::Running),
+            plugins
+                .iter()
+                .any(|(p, state)| p == id && *state == PluginState::Running),
             "{id} is missing: {plugins:?}"
         );
     }
+    // The app's own theme, off as it ships.
+    assert!(
+        plugins
+            .iter()
+            .any(|(p, state)| p == "pebble" && *state == PluginState::Off),
+        "{plugins:?}"
+    );
     for id in paperpaw_app::STORE_PLUGINS {
         assert!(
             plugins.iter().all(|(p, _)| p != id),
@@ -105,7 +116,10 @@ fn the_lean_set_keeps_what_a_beginner_needs() {
 #[test]
 fn the_crates_listed_are_those_installed() {
     let kernel = paperpaw_app::install(builder(), fonts()).build().unwrap();
-    let mut installed: Vec<String> = plugins(&kernel).iter().map(|(id, _)| crate_of(id)).collect();
+    let mut installed: Vec<String> = plugins(&kernel)
+        .iter()
+        .filter_map(|(id, _)| crate_of(id))
+        .collect();
     installed.sort();
     installed.dedup();
     let listed: Vec<&str> = paperpaw_app::CRATES.split(',').collect();
@@ -137,6 +151,50 @@ fn built_in_store_plugins_are_off_unless_used() {
         };
         assert_eq!(state, want, "{id}");
     }
+}
+
+#[test]
+fn a_reader_who_ran_paperpaw_before_keeps_the_plugins_as_they_were() {
+    // A new reader: the store plugins off (Android).
+    assert!(!paperpaw_app::ran_before(&MemoryStorage::new()));
+    // One with PaperPaw's folder, its configuration, or either under the
+    // name before 0.4: as they were, whatever plugin they used.
+    for path in [
+        ".paperpaw/plugins/setup/done",
+        "paperpaw.ini",
+        ".quireink/secrets.txt",
+        "quireink.ini",
+    ] {
+        let storage = MemoryStorage::new().with(path, "");
+        assert!(paperpaw_app::ran_before(&storage), "{path}");
+    }
+}
+
+#[cfg(feature = "store-plugins")]
+#[test]
+fn a_store_plugin_switched_off_before_stays_off() {
+    // Android, for a reader who ran PaperPaw before and switched one off.
+    let storage = MemoryStorage::new()
+        .with(".paperpaw/plugins/setup/done", "")
+        .with(
+            "paperpaw.ini",
+            "[core]\nlanguage = en\n\n[plugins]\nrules = off\n",
+        );
+    let ran_before = paperpaw_app::ran_before(&storage);
+    let kernel = paperpaw_app::install_with(
+        Kernel::builder(DEVICE).storage(storage),
+        fonts(),
+        paperpaw_app::StorePlugins::Off(&|_| ran_before),
+    )
+    .build()
+    .unwrap();
+    let plugins = plugins(&kernel);
+    let state = |id: &str| plugins.iter().find(|(p, _)| p == id).map(|(_, s)| *s);
+    assert_eq!(state("aids"), Some(PluginState::Running));
+    assert_eq!(state("stats"), Some(PluginState::Running));
+    assert_eq!(state("rules"), Some(PluginState::Off));
+    // Off as it always shipped.
+    assert_eq!(state("browser"), Some(PluginState::Off));
 }
 
 #[cfg(feature = "store-plugins")]
