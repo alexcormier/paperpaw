@@ -18,6 +18,7 @@ path = "src/main.rs"
 paperpaw-emulator = { path = "../../shells/desktop" }
 paperpaw-core = { workspace = true, features = ["color", "outline"] }
 paperpaw-config.workspace = true
+paperpaw-digest.workspace = true
 paperpaw-fs.workspace = true
 paperpaw-graphics = { workspace = true, features = ["color"] }
 paperpaw-i18n.workspace = true
