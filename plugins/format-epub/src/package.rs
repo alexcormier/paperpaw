@@ -25,10 +25,10 @@ use alloc::vec::Vec;
 
 use paperpaw_digest::fnv1a64;
 use paperpaw_sdk::Storage;
-use paperpaw_sdk::config;
 use paperpaw_sdk::document::{DocumentError, Metadata};
 use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
 use paperpaw_sdk::zip::ZipArchive;
+use paperpaw_sdk::{config, web};
 
 use crate::css;
 use crate::obfuscation::Method;
@@ -153,13 +153,13 @@ fn dir_of(path: &str) -> &str {
 /// and a fragment.
 pub(crate) fn resolve(base: &str, href: &str) -> (String, Option<String>) {
     let (path, fragment) = match href.split_once('#') {
-        Some((p, f)) => (p, Some(percent_decode(f))),
+        Some((p, f)) => (p, Some(web::percent_decode(f))),
         None => (href, None),
     };
     let joined = if path.is_empty() {
         String::from(base.trim_end_matches('/'))
     } else {
-        alloc::format!("{base}{}", percent_decode(path))
+        alloc::format!("{base}{}", web::percent_decode(path))
     };
     let mut parts: Vec<&str> = Vec::new();
     for part in joined.split('/') {
@@ -172,26 +172,6 @@ pub(crate) fn resolve(base: &str, href: &str) -> (String, Option<String>) {
         }
     }
     (parts.join("/"), fragment)
-}
-
-fn percent_decode(text: &str) -> String {
-    let bytes = text.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let mut i = 0;
-    while i < bytes.len() {
-        if bytes[i] == b'%'
-            && let Some(byte) = text
-                .get(i + 1..i + 3)
-                .and_then(|h| u8::from_str_radix(h, 16).ok())
-        {
-            out.push(byte);
-            i += 3;
-            continue;
-        }
-        out.push(bytes[i]);
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
 }
 
 /// The most of a description kept, in bytes.
@@ -1000,9 +980,9 @@ fn write_ini(
     cover: Option<&str>,
     book: &str,
 ) -> Result<(), DocumentError> {
-    let mut ini = String::new();
-    let mut set = |section: &str, key: &str, value: &str| {
-        ini = config::set(&ini, section, key, value);
+    let mut entries: Vec<(&str, String, String)> = Vec::new();
+    let mut set = |section: &'static str, key: &str, value: &str| {
+        entries.push((section, String::from(key), String::from(value)));
     };
     set("cache", "version", &CACHE_VERSION.to_string());
     set("cache", "source", book);
@@ -1032,6 +1012,7 @@ fn write_ini(
     if let Some(cover) = cover {
         set("book", "cover", cover);
     }
+    let ini = config::set_all("", entries);
     storage.write(&path(cache, "package.ini"), ini.as_bytes())?;
     Ok(())
 }
@@ -1183,6 +1164,8 @@ mod tests {
             ("OEBPS/Text/ch 2.xhtml".into(), Some("sec-1".into()))
         );
         assert_eq!(resolve("", "./a.xhtml"), ("a.xhtml".into(), None));
+        // Only two hex digits are an escape, no sign.
+        assert_eq!(resolve("", "a%+1.xhtml"), ("a%+1.xhtml".into(), None));
     }
 
     #[test]

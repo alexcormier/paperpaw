@@ -1661,7 +1661,6 @@ impl paperpaw_sdk::image::Source for StorageSource<'_> {
     }
 }
 
-/// A compressed entry of the archive, inflated as it is read.
 /// Bytes read from a picture to tell its size.
 const SIZE_HEAD: usize = 16 * 1024;
 
@@ -1703,6 +1702,7 @@ fn image_size(storage: &dyn Storage, archive: &ZipArchive, path: &str) -> Option
     paperpaw_sdk::image::dimensions(&head[..filled])
 }
 
+/// A compressed entry of the archive, inflated as it is read.
 struct EntrySource<'a> {
     storage: &'a dyn Storage,
     reader: paperpaw_sdk::zip::EntryReader<'a>,

@@ -254,9 +254,9 @@ impl XtcDocument {
             metadata.title = Some(name.rsplit_once('.').map_or(name, |(s, _)| s).to_string());
         }
         let cache = format!(
-            "{}/{:016x}",
+            "{}/{}",
             Env::plugin_dir(PLUGIN.as_str()),
-            fnv1a64(path.as_bytes())
+            paperpaw_sdk::library::key(path)
         );
         // Pages decoded from another file of the same name go.
         let stamp = format!("{} {pages}\n", fingerprint(storage, path, size)?);
