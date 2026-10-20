@@ -6,6 +6,25 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: helpers that plugins wrote each for themselves, now in one place.
+  `Storage::ignores_case` says whether a storage takes `Books` for
+  `books` (memory cards, Windows and macOS disks do), and
+  `files::same_path` and `files::is_within` compare paths as it does;
+  `files::has_extension` ignores case everywhere. Files made in parts
+  (downloads, copies) go to `files::part_path` and are put in place
+  when whole with `files::put_in_place` or `files::put_in_free_place`.
+  `web::USER_AGENT` names PaperPaw with its version (`web::user_agent`
+  as a header), `web::base_url` makes a server's address as entered a
+  base URL. `time::clock_of` and `time::twelve_hours` write a time of
+  day as the user wants it; the calendar is public: `time::is_leap`,
+  `days_in_month`, `days_in_year`, `days_from_civil`,
+  `civil_from_days`, `weekday`, `weekday_of`, `day_of_year`,
+  `iso_week`. `numbers::decimal_mark` is the language's decimal mark,
+  `numbers::fixed` writes numbers with it.
+- Files: a copy cut short (a full card) no longer leaves a half file
+  that looks whole: each file is copied to a part and put in place when
+  whole. A folder is not moved or copied into itself by another case of
+  its name, and finding a free name ends after 65,536 tries.
 - Data that cannot be read is no longer written over: annotations, the
   books opened last, the favourites and a book's details were taken for
   empty when their file could not be read (a failing card, a file too

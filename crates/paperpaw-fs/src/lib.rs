@@ -15,6 +15,8 @@ pub struct DirStorage {
     root: PathBuf,
     /// The file read last, kept open for sequential reads.
     open: RefCell<Option<(String, File)>>,
+    /// The file system takes names in any case for the same entry.
+    ignores_case: bool,
 }
 
 impl DirStorage {
@@ -27,6 +29,7 @@ impl DirStorage {
         let root = root.into();
         fs::create_dir_all(&root)?;
         Ok(Self {
+            ignores_case: ignores_case(&root),
             root,
             open: RefCell::new(None),
         })
@@ -98,6 +101,49 @@ fn is_own_name(dir: &Path, part: &str) -> bool {
                     .is_some_and(|name| name.eq_ignore_ascii_case(part))
             })
         })
+}
+
+/// Whether the file system at `root` takes a name in another case for the
+/// same entry (NTFS, APFS, FAT; not ext4): asked of the root or the
+/// nearest folder above it whose name has letters, in the other case.
+fn ignores_case(root: &Path) -> bool {
+    let probe = root.ancestors().find_map(|dir| {
+        let name = dir.file_name()?.to_str()?;
+        let other: String = name
+            .chars()
+            .map(|c| {
+                if c.is_lowercase() {
+                    c.to_ascii_uppercase()
+                } else {
+                    c.to_ascii_lowercase()
+                }
+            })
+            .collect();
+        (other != name).then(|| (dir, dir.with_file_name(other)))
+    });
+    match probe {
+        Some((dir, other)) => same_entry(dir, &other),
+        None => cfg!(any(windows, target_os = "macos")),
+    }
+}
+
+/// Whether paths `a` and `b` lead to the same entry.
+#[cfg(unix)]
+fn same_entry(a: &Path, b: &Path) -> bool {
+    use std::os::unix::fs::MetadataExt;
+    match (fs::metadata(a), fs::metadata(b)) {
+        (Ok(a), Ok(b)) => a.dev() == b.dev() && a.ino() == b.ino(),
+        _ => false,
+    }
+}
+
+/// Whether paths `a` and `b` lead to the same entry.
+#[cfg(not(unix))]
+fn same_entry(a: &Path, b: &Path) -> bool {
+    match (fs::canonicalize(a), fs::canonicalize(b)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    }
 }
 
 impl Storage for DirStorage {
@@ -213,6 +259,10 @@ impl Storage for DirStorage {
         }
     }
 
+    fn ignores_case(&self) -> bool {
+        self.ignores_case
+    }
+
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         if let Some(real) = self.resolve(path).ok().as_deref().and_then(Path::to_str) {
             with(real);
@@ -242,6 +292,17 @@ mod tests {
         assert_eq!(storage.size("../outside"), Err(StorageError::InvalidPath));
         storage.remove("a/b.txt").unwrap();
         assert_eq!(storage.size("a/b.txt"), Err(StorageError::NotFound));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// Whether the storage ignores case is asked of the file system.
+    #[test]
+    fn knows_whether_case_counts() {
+        let root = std::env::temp_dir().join(format!("paperpaw-case-{}", std::process::id()));
+        let storage = DirStorage::new(&root).unwrap();
+        storage.write("Mixed.txt", b"x").unwrap();
+        let other = storage.resolve("mixed.txt").map(|p| p.exists());
+        assert_eq!(storage.ignores_case(), other == Ok(true));
         fs::remove_dir_all(root).unwrap();
     }
 

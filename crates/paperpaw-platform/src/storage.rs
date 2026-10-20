@@ -117,6 +117,13 @@ pub trait Storage {
         Err(StorageError::Unsupported)
     }
 
+    /// Whether names that differ only in case name the same entry, as on
+    /// FAT (memory cards), NTFS and APFS: `Books/A.epub` is
+    /// `books/a.epub` there. Storages that wrap another say what it says.
+    fn ignores_case(&self) -> bool {
+        false
+    }
+
     /// Calls `with` with the file's path in the device's own file system,
     /// for platform code that opens files only by name (e.g. a system PDF
     /// renderer); does nothing where files have none.
@@ -266,6 +273,12 @@ impl<B: Storage, M: Storage> Storage for Mounted<B, M> {
     fn sync(&self) -> Result<(), StorageError> {
         let base = self.base.sync();
         self.mounted.sync().and(base)
+    }
+
+    /// Where either ignores case: a path is taken for another more often
+    /// then, never less.
+    fn ignores_case(&self) -> bool {
+        self.base.ignores_case() || self.mounted.ignores_case()
     }
 }
 
