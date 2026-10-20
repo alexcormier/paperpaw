@@ -135,8 +135,8 @@ impl Kernel {
         // the system's (its notifications, its home), a swipe begun just
         // inside it is ours. Narrow at the sides, where pages are tapped.
         let metrics = Metrics::new(display.dpi);
-        let mm = |id: &Id| {
-            let value = self.shared.settings.int(id.as_str()).clamp(0, 50) as u32;
+        let mm = |setting: &paperpaw_sdk::setting::Setting<i64>| {
+            let value = self.shared.settings.read(setting).clamp(0, 50) as u32;
             metrics.mm(value) as i32
         };
         let (across, along) = (

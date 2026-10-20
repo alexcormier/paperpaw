@@ -327,8 +327,8 @@ pub const paperpaw_sdk::builtin::settings::CONTRAST_STRONG: &str
 pub const paperpaw_sdk::builtin::settings::CORNERS: &[&str]
 pub const paperpaw_sdk::builtin::settings::DEFAULT_FONT: &str
 pub const paperpaw_sdk::builtin::settings::DEVELOPER: paperpaw_sdk::setting::Setting<bool>
-pub const paperpaw_sdk::builtin::settings::EDGE_ENDS: paperpaw_sdk::Id
-pub const paperpaw_sdk::builtin::settings::EDGE_SIDES: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::settings::EDGE_ENDS: paperpaw_sdk::setting::Setting<i64>
+pub const paperpaw_sdk::builtin::settings::EDGE_SIDES: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::FLASH_SCREENS: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::FOCUS_FILL: &str
 pub const paperpaw_sdk::builtin::settings::FOCUS_RING: &str
@@ -350,9 +350,9 @@ pub const paperpaw_sdk::builtin::settings::NIGHT_PICTURES: paperpaw_sdk::setting
 pub const paperpaw_sdk::builtin::settings::NOTICE_SECONDS: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::OWN_PAPER: &str
 pub const paperpaw_sdk::builtin::settings::OWN_TEXT: &str
-pub const paperpaw_sdk::builtin::settings::PAPER_COLOR: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::settings::PAPER_COLOR: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::PAPER_COLORS: &[&str]
-pub const paperpaw_sdk::builtin::settings::PAPER_COLOR_OWN: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::settings::PAPER_COLOR_OWN: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::READING_FONT: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::ROTATION: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::ROTATIONS: &[&str]
@@ -366,9 +366,9 @@ pub const paperpaw_sdk::builtin::settings::STATUS_FONT: paperpaw_sdk::setting::S
 pub const paperpaw_sdk::builtin::settings::STATUS_FONT_BOOK: &str
 pub const paperpaw_sdk::builtin::settings::STATUS_FONT_UI: &str
 pub const paperpaw_sdk::builtin::settings::SWAP_PAGE_BUTTONS: paperpaw_sdk::setting::Setting<bool>
-pub const paperpaw_sdk::builtin::settings::TEXT_COLOR: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::settings::TEXT_COLOR: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TEXT_COLORS: &[&str]
-pub const paperpaw_sdk::builtin::settings::TEXT_COLOR_OWN: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::settings::TEXT_COLOR_OWN: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TIME_ZONE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::TIME_ZONE_RULE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::UI_CONTRAST: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
@@ -376,12 +376,12 @@ pub const paperpaw_sdk::builtin::settings::UI_CORNERS: paperpaw_sdk::setting::Se
 pub const paperpaw_sdk::builtin::settings::UI_FOCUS: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::UI_GROUPS: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::UI_HEADER: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
-pub const paperpaw_sdk::builtin::settings::UI_LINES: paperpaw_sdk::Id
-pub const paperpaw_sdk::builtin::settings::UI_MARGIN: paperpaw_sdk::Id
-pub const paperpaw_sdk::builtin::settings::UI_ROW: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::settings::UI_LINES: paperpaw_sdk::setting::Setting<i64>
+pub const paperpaw_sdk::builtin::settings::UI_MARGIN: paperpaw_sdk::setting::Setting<i64>
+pub const paperpaw_sdk::builtin::settings::UI_ROW: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::UI_SEPARATORS: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::UI_SIZE: paperpaw_sdk::setting::Setting<i64>
-pub const paperpaw_sdk::builtin::settings::UI_TITLE: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::settings::UI_TITLE: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::WEEK_START: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub fn paperpaw_sdk::builtin::settings::parse_rgb(&str) -> core::option::Option<[u8; 3]>
 pub fn paperpaw_sdk::builtin::settings::rgb(&str) -> core::option::Option<[u8; 3]>

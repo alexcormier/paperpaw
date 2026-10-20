@@ -411,9 +411,10 @@ impl Kernel {
     /// of the frame so; the frame does not change when they do.
     pub fn colors(&self) -> [[u8; 3]; 2] {
         use paperpaw_sdk::builtin::settings;
-        let text = |id: &Id| self.shared.settings.text(id.as_str());
+        use paperpaw_sdk::setting::{Setting, Text};
+        let text = |setting: &Setting<Text>| self.shared.settings.text(setting.as_str());
         // A preset, or one's own colour code; black and white otherwise.
-        let rgb = |id: &Id, own: &str, code: &Id, fallback: [u8; 3]| {
+        let rgb = |id: &Setting<Text>, own: &str, code: &Setting<Text>, fallback: [u8; 3]| {
             let value = text(id);
             if value == own {
                 settings::parse_rgb(text(code))

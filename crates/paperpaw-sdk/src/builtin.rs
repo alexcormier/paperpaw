@@ -630,7 +630,6 @@ pub mod screens {
 
 /// Global settings.
 pub mod settings {
-    use crate::Id;
     use crate::setting::{Setting, Text};
 
     /// UI language tag, e.g. `en` or `de`.
@@ -656,9 +655,9 @@ pub mod settings {
     ];
     /// How far in from the top and the bottom edge a swipe begins to count
     /// as one in from the edge, in millimetres (0: none).
-    pub const EDGE_ENDS: Id = Id::new_static("core.edge-ends");
+    pub const EDGE_ENDS: Setting<i64> = Setting::new("core.edge-ends");
     /// The same at the left and right edges.
-    pub const EDGE_SIDES: Id = Id::new_static("core.edge-sides");
+    pub const EDGE_SIDES: Setting<i64> = Setting::new("core.edge-sides");
     /// Say what the buttons move to (a row, a button), where the device
     /// speaks: for using PaperPaw without seeing the screen.
     pub const SPEAK_FOCUS: Setting<bool> = Setting::new("core.speak-focus");
@@ -702,14 +701,14 @@ pub mod settings {
     /// shell tints the screen (see [`MenuNeed::Colors`](crate::MenuNeed)).
     /// Everything is drawn in grays; the shell shows black as this colour,
     /// white as [`PAPER_COLOR`] and the grays between them.
-    pub const TEXT_COLOR: Id = Id::new_static("core.text-color");
+    pub const TEXT_COLOR: Setting<Text> = Setting::new("core.text-color");
     /// The colour white is shown in: one of [`PAPER_COLORS`].
-    pub const PAPER_COLOR: Id = Id::new_static("core.paper-color");
+    pub const PAPER_COLOR: Setting<Text> = Setting::new("core.paper-color");
     /// The own text colour, used when [`TEXT_COLOR`] is [`OWN_TEXT`]: a
     /// colour code such as `#5b4636` (see [`parse_rgb`]).
-    pub const TEXT_COLOR_OWN: Id = Id::new_static("core.text-color-own");
+    pub const TEXT_COLOR_OWN: Setting<Text> = Setting::new("core.text-color-own");
     /// The own paper colour, used when [`PAPER_COLOR`] is [`OWN_PAPER`].
-    pub const PAPER_COLOR_OWN: Id = Id::new_static("core.paper-color-own");
+    pub const PAPER_COLOR_OWN: Setting<Text> = Setting::new("core.paper-color-own");
     /// The value of [`TEXT_COLOR`] that takes [`TEXT_COLOR_OWN`].
     pub const OWN_TEXT: &str = "core.color.own";
     /// The value of [`PAPER_COLOR`] that takes [`PAPER_COLOR_OWN`].
@@ -778,11 +777,11 @@ pub mod settings {
         }
     }
     /// Margin of menus and lists, in millimetres.
-    pub const UI_MARGIN: Id = Id::new_static("core.ui-margin");
+    pub const UI_MARGIN: Setting<i64> = Setting::new("core.ui-margin");
     /// Height of list rows, in percent of a line of text.
-    pub const UI_ROW: Id = Id::new_static("core.ui-row");
+    pub const UI_ROW: Setting<i64> = Setting::new("core.ui-row");
     /// Width of lines and borders, in tenths of a millimetre.
-    pub const UI_LINES: Id = Id::new_static("core.ui-lines");
+    pub const UI_LINES: Setting<i64> = Setting::new("core.ui-lines");
     /// Headers dark ([`HEADER_DARK`]), light ([`HEADER_LIGHT`]) or plain,
     /// without a bar or a line ([`HEADER_PLAIN`]).
     pub const UI_HEADER: Setting<Text> = Setting::new("core.ui-header");
@@ -816,7 +815,7 @@ pub mod settings {
     pub const GROUPS_PLAIN: &str = "core.groups.plain";
     pub const GROUPS_CARDS: &str = "core.groups.cards";
     /// Size of headers' titles, in percent of the text's.
-    pub const UI_TITLE: Id = Id::new_static("core.ui-title");
+    pub const UI_TITLE: Setting<i64> = Setting::new("core.ui-title");
     /// Gray text such as hints and notes: as it is, or black for strong
     /// contrast ([`CONTRAST_STRONG`]), e.g. on screens with few grays.
     pub const UI_CONTRAST: Setting<Text> = Setting::new("core.ui-contrast");

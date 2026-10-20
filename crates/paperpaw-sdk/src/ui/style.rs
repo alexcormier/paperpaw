@@ -88,18 +88,18 @@ impl UiStyle {
             .role(fonts::UI.as_str())
             .map_or(text * 1.25, |f| f.line_metrics(text).line_height);
         let s = env.settings;
-        let rows = s.int(settings::UI_ROW.as_str()).clamp(120, 300) as f32 / 100.0;
+        let rows = s.read(&settings::UI_ROW).clamp(120, 300) as f32 / 100.0;
         Self {
             text,
             small: m.pt(base * 0.75),
             title: m.pt(base * 1.15),
-            head: m.pt(base * s.int(settings::UI_TITLE.as_str()).clamp(100, 200) as f32 / 100.0),
+            head: m.pt(base * s.read(&settings::UI_TITLE).clamp(100, 200) as f32 / 100.0),
             row: (line_height * rows) as u32,
             header: (line_height * (rows + 0.1)) as u32,
-            margin: m.mm(s.int(settings::UI_MARGIN.as_str()).clamp(0, 15) as u32),
+            margin: m.mm(s.read(&settings::UI_MARGIN).clamp(0, 15) as u32),
             gap: m.mm(2),
             line: m
-                .tenth_mm(s.int(settings::UI_LINES.as_str()).clamp(1, 10) as u32)
+                .tenth_mm(s.read(&settings::UI_LINES).clamp(1, 10) as u32)
                 .max(1),
             dark_header: s.text(settings::UI_HEADER.as_str()) == settings::HEADER_DARK,
             corner: match settings::CORNERS
