@@ -1,10 +1,11 @@
 screen menu.list
 Text "Alice's Adventures in Wonderland"
 Text "1 / 447"
+Text "Font"
 Text "Contents"
 Text "Search"
 Text "Notes"
-Text "Font"
 Text "Night"
+Text "Bookmark"
 Text "More"
 Text "Home"

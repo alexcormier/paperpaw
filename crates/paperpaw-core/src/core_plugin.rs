@@ -653,7 +653,7 @@ fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// Buttons, the panel's refresh, sleep, rotation, notices and long
 /// presses.
-static DEVICE: [SettingSpec; 8] = [
+static DEVICE: [SettingSpec; 9] = [
     SettingSpec::fixed_choice(
         settings::KEYMAP_PRESET.static_str(),
         "core.setting.keymap-preset",
@@ -670,7 +670,6 @@ static DEVICE: [SettingSpec; 8] = [
         6,
         groups::DISPLAY,
     )
-    .advanced()
     .with_extra(&PAGES)
     .described("core.setting.full-refresh-interval.help"),
     SettingSpec::fixed_switch(
@@ -698,6 +697,7 @@ static DEVICE: [SettingSpec; 8] = [
         settings::ROTATIONS[0],
         groups::DISPLAY,
     )
+    .scoped()
     .described("core.setting.rotation.help"),
     SettingSpec::fixed_switch(
         settings::BUTTON_HINTS.static_str(),
@@ -706,6 +706,13 @@ static DEVICE: [SettingSpec; 8] = [
         groups::CONTROLS,
     )
     .described("core.setting.button-hints.help"),
+    SettingSpec::fixed_switch(
+        settings::SWAP_PAGE_BUTTONS.static_str(),
+        "core.setting.swap-page-buttons",
+        false,
+        groups::CONTROLS,
+    )
+    .described("core.setting.swap-page-buttons.help"),
     SettingSpec::fixed_number(
         settings::NOTICE_SECONDS.static_str(),
         "core.setting.notice-seconds",
@@ -735,6 +742,9 @@ fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.set_menu_need(settings::SLEEP_AFTER, paperpaw_sdk::MenuNeed::Sleep)?;
     r.set_menu_need(settings::ROTATION, paperpaw_sdk::MenuNeed::Rotation)?;
     r.set_menu_need(settings::BUTTON_HINTS, paperpaw_sdk::MenuNeed::ButtonRow)?;
+    for edge in [settings::EDGE_ENDS, settings::EDGE_SIDES] {
+        r.set_menu_need(edge, paperpaw_sdk::MenuNeed::Touch)?;
+    }
     Ok(())
 }
 

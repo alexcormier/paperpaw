@@ -90,6 +90,45 @@ change the plugin SDK.
   as bright as the first); 1 % is dimmer than the least light before,
   100 % as bright. `−` and `+` change it a
   percent, a slider moves it further; its colour stays in fives.
+- Reading (PLANNING T1 to T12), after a comparison with CrossPoint,
+  CrossInk and KOReader:
+  - Holding a page button goes a chapter on or back (*Hold a page
+    button for the next chapter* under Controls, advanced, turns it off,
+    and a page then turns as its button goes down); *Next chapter* and
+    *Previous chapter* can be put on any button or gesture. Going a
+    chapter on goes to the first that begins on a later page, and
+    skimming goes chapter by chapter also through parts.
+  - The X4's front buttons Left and Right turn pages in a book, as they
+    did nothing there; *Swap the page buttons* under Controls turns the
+    page buttons the other way round while reading.
+  - Holding *Select* while reading sets or removes the page's bookmark
+    (one press with buttons instead of five); *Bookmark* sits in the
+    reader's bar instead of under *More*, and *Font* comes first in it,
+    focused as it opens (two presses instead of five).
+  - *Go to a percentage* and *Go to page* in *More*.
+  - Status items: the page in the chapter (5 / 25), the pages left in
+    it, and how far into it the page is as a short bar.
+  - *Margins at the top and bottom* (advanced), as the sides until
+    changed; *Space between paragraphs* and *Indent paragraphs* as two
+    switches (who had turned indents off turns the spacing on for the
+    look of before); line spacing down to 80 %, closer than the font
+    sets its lines.
+  - *Turn the screen* may be a book's own: turned while reading with
+    *Only this book* on, for that book alone.
+  - Fixed: a page back after a jump (contents, skimming, a chapter)
+    went to the page read before the jump.
+- Settings: rarely changed reading settings (reopening the last book,
+  footnotes, the seconds between pages turned by themselves, the status
+  lines' distance from the edge, replaced words, the dictionary folder,
+  keeping words looked up, the language to translate into, the corner
+  bookmark) are at the advanced level; those about taps and swipes show
+  only on touch screens; the full refresh every so many pages is basic.
+- SDK: `MenuNeed::Touch` for menu entries and settings that need a
+  touch screen; `settings::SWAP_PAGE_BUTTONS`;
+  `Registrar::add_keymap_when` (`Contribution::KeymapWhen`) for key
+  bindings that apply while a switch is on; `SettingExtra::follows` for a
+  setting that has another's value until set itself;
+  `StatusValue::Bar` for status items shown as a short bar.
 - Quick panel and reader's panel: on touch screens their sliders (the
   front light and its colour, the text size, spacing and margins) are as
   on the settings pages, across the screen with their title and value

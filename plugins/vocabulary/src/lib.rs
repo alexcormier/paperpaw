@@ -70,6 +70,7 @@ static SETTINGS: [SettingSpec; 2] = [
         true,
         groups::READING,
     )
+    .advanced()
     .with_extra(&IN_DICTIONARY)
     .described("vocabulary.setting.collect.help"),
     SettingSpec::fixed_switch(

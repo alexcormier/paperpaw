@@ -97,6 +97,11 @@ pub enum StatusValue {
     /// An icon by name ([`icons`](crate::icons)), e.g. while reading
     /// aloud.
     Icon(Cow<'static, str>),
+    /// A short bar filled this far, in thousandths, e.g. how far into a
+    /// chapter the page is.
+    Bar {
+        permille: u16,
+    },
 }
 
 /// Computes an item's value; `None` hides it (e.g. no battery).
@@ -310,7 +315,13 @@ fn value_width(
             battery_width(size) + size * 0.3 + font.measure(size, &level_text(*percent))
         }
         StatusValue::Level { .. } => battery_width(size),
+        StatusValue::Bar { .. } => bar_width(size),
     }
+}
+
+/// A bar's length: about as long as a short word.
+fn bar_width(size: f32) -> f32 {
+    size * 4.0
 }
 
 fn level_text(percent: u8) -> String {
@@ -378,6 +389,19 @@ fn draw_values(
                     x += size * 0.3;
                     x += font.draw(canvas, size, x, baseline, &level_text(*percent), color);
                 }
+            }
+            StatusValue::Bar { permille } => {
+                // As thick as the line of the book's progress bar, on the
+                // middle of the text's capitals.
+                let thickness = (size * 0.3).max(3.0) as u32;
+                let line = (size / 12.0).max(1.0) as u32;
+                let middle = baseline - (metrics.ascent * 0.35) as i32;
+                let top = middle - thickness as i32 / 2;
+                let width = bar_width(size);
+                canvas.stroke_rect(x as i32, top, width as u32, thickness, line, color);
+                let filled = width * f32::from((*permille).min(1000)) / 1000.0;
+                canvas.fill_rect(x as i32, top, filled as u32, thickness, color);
+                x += width;
             }
         }
         x += gap;

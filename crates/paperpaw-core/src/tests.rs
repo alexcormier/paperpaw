@@ -2283,6 +2283,26 @@ name = Other
     assert!(storage.exists("plugins/other/plugin.ini"));
 }
 
+/// Swapped page buttons apply while reading only (the reader's tests
+/// show them swapped there): elsewhere they stay as they are.
+#[test]
+fn page_buttons_stay_outside_the_reader() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin::new("a", &log))
+        .setting_default(&settings::SWAP_PAGE_BUTTONS, true)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    press(&mut kernel, 100, "page-forward");
+    press(&mut kernel, 300, "page-back");
+    press(&mut kernel, 500, "confirm");
+    assert_eq!(
+        *log.borrow(),
+        ["a:core.next-page", "a:core.prev-page", "a:core.confirm"]
+    );
+}
+
 #[test]
 fn keymap_presets_follow_device_defaults_and_switch_at_runtime() {
     let log = log();

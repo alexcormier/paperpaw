@@ -63,6 +63,7 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
     "dictionaries",
     groups::READING,
 )
+.advanced()
 .with_extra(&FOLDER_EXTRA)
 .described("dictionary.setting.folder.help")];
 

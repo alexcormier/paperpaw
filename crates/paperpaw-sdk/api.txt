@@ -352,6 +352,7 @@ pub const paperpaw_sdk::builtin::settings::SPEAK_FOCUS: paperpaw_sdk::setting::S
 pub const paperpaw_sdk::builtin::settings::STATUS_FONT: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::STATUS_FONT_BOOK: &str
 pub const paperpaw_sdk::builtin::settings::STATUS_FONT_UI: &str
+pub const paperpaw_sdk::builtin::settings::SWAP_PAGE_BUTTONS: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::TEXT_COLOR: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::settings::TEXT_COLORS: [&str; 9]
 pub const paperpaw_sdk::builtin::settings::TEXT_COLOR_OWN: paperpaw_sdk::Id
@@ -459,6 +460,9 @@ pub paperpaw_sdk::contribution::Contribution::Keymap(alloc::borrow::Cow<'static,
 pub paperpaw_sdk::contribution::Contribution::KeymapPreset
 pub paperpaw_sdk::contribution::Contribution::KeymapPreset::id: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::KeymapPreset::source: alloc::borrow::Cow<'static, str>
+pub paperpaw_sdk::contribution::Contribution::KeymapWhen
+pub paperpaw_sdk::contribution::Contribution::KeymapWhen::setting: paperpaw_sdk::Id
+pub paperpaw_sdk::contribution::Contribution::KeymapWhen::source: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::contribution::Contribution::MenuEntry(paperpaw_sdk::MenuEntry)
 pub paperpaw_sdk::contribution::Contribution::MenuNeed
 pub paperpaw_sdk::contribution::Contribution::MenuNeed::item: paperpaw_sdk::Id
@@ -517,6 +521,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_icon(&mut self, impl core::con
 pub fn paperpaw_sdk::contribution::Registrar::add_input_filter(&mut self, paperpaw_sdk::filters::InputFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_keymap(&mut self, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_keymap_preset(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_keymap_when(&mut self, &paperpaw_sdk::setting::Setting<bool>, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_entry(&mut self, paperpaw_sdk::MenuEntry) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_section(&mut self, paperpaw_sdk::MenuSection) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_preset(&mut self, paperpaw_sdk::presets::Preset) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -1409,6 +1414,8 @@ pub const paperpaw_sdk::status::context::CHAPTER: &str
 pub const paperpaw_sdk::status::context::CHAPTERS: &str
 pub const paperpaw_sdk::status::context::PAGE: &str
 pub enum paperpaw_sdk::status::StatusValue
+pub paperpaw_sdk::status::StatusValue::Bar
+pub paperpaw_sdk::status::StatusValue::Bar::permille: u16
 pub paperpaw_sdk::status::StatusValue::Icon(alloc::borrow::Cow<'static, str>)
 pub paperpaw_sdk::status::StatusValue::Level
 pub paperpaw_sdk::status::StatusValue::Level::charging: bool
@@ -2326,6 +2333,9 @@ pub paperpaw_sdk::Contribution::Keymap(alloc::borrow::Cow<'static, str>)
 pub paperpaw_sdk::Contribution::KeymapPreset
 pub paperpaw_sdk::Contribution::KeymapPreset::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::KeymapPreset::source: alloc::borrow::Cow<'static, str>
+pub paperpaw_sdk::Contribution::KeymapWhen
+pub paperpaw_sdk::Contribution::KeymapWhen::setting: paperpaw_sdk::Id
+pub paperpaw_sdk::Contribution::KeymapWhen::source: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::Contribution::MenuEntry(paperpaw_sdk::MenuEntry)
 pub paperpaw_sdk::Contribution::MenuNeed
 pub paperpaw_sdk::Contribution::MenuNeed::item: paperpaw_sdk::Id
@@ -2407,6 +2417,7 @@ pub paperpaw_sdk::MenuNeed::NoTouch
 pub paperpaw_sdk::MenuNeed::Rotation
 pub paperpaw_sdk::MenuNeed::Sleep
 pub paperpaw_sdk::MenuNeed::Speech
+pub paperpaw_sdk::MenuNeed::Touch
 pub paperpaw_sdk::MenuNeed::Wifi
 pub enum paperpaw_sdk::PluginState
 pub paperpaw_sdk::PluginState::Failed
@@ -2503,6 +2514,8 @@ pub paperpaw_sdk::SocketRead::File::path: alloc::string::String
 pub paperpaw_sdk::SocketRead::Text
 pub paperpaw_sdk::SocketRead::Text::max: u32
 pub enum paperpaw_sdk::StatusValue
+pub paperpaw_sdk::StatusValue::Bar
+pub paperpaw_sdk::StatusValue::Bar::permille: u16
 pub paperpaw_sdk::StatusValue::Icon(alloc::borrow::Cow<'static, str>)
 pub paperpaw_sdk::StatusValue::Level
 pub paperpaw_sdk::StatusValue::Level::charging: bool
@@ -2935,6 +2948,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_icon(&mut self, impl core::con
 pub fn paperpaw_sdk::contribution::Registrar::add_input_filter(&mut self, paperpaw_sdk::filters::InputFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_keymap(&mut self, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_keymap_preset(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_keymap_when(&mut self, &paperpaw_sdk::setting::Setting<bool>, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_entry(&mut self, paperpaw_sdk::MenuEntry) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_section(&mut self, paperpaw_sdk::MenuSection) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_preset(&mut self, paperpaw_sdk::presets::Preset) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -3012,6 +3026,7 @@ impl<T: paperpaw_sdk::setting::SettingType> core::fmt::Display for paperpaw_sdk:
 pub fn paperpaw_sdk::setting::Setting<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::SettingExtra
 pub paperpaw_sdk::SettingExtra::editor: core::option::Option<paperpaw_sdk::Id>
+pub paperpaw_sdk::SettingExtra::follows: core::option::Option<&'static str>
 pub paperpaw_sdk::SettingExtra::secret: bool
 pub paperpaw_sdk::SettingExtra::section: core::option::Option<alloc::borrow::Cow<'static, str>>
 pub paperpaw_sdk::SettingExtra::slider: bool
@@ -3019,6 +3034,7 @@ pub paperpaw_sdk::SettingExtra::step: i64
 pub paperpaw_sdk::SettingExtra::unit: core::option::Option<alloc::borrow::Cow<'static, str>>
 impl paperpaw_sdk::SettingExtra
 pub const fn paperpaw_sdk::SettingExtra::editor(self, paperpaw_sdk::Id) -> Self
+pub const fn paperpaw_sdk::SettingExtra::follows(self, &'static str) -> Self
 pub const fn paperpaw_sdk::SettingExtra::new() -> Self
 pub const fn paperpaw_sdk::SettingExtra::secret(self) -> Self
 pub const fn paperpaw_sdk::SettingExtra::section(self, &'static str) -> Self
