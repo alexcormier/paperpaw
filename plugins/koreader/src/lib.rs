@@ -2,18 +2,27 @@
 //! with KOReader, for books read in both on one device (or one library
 //! folder synced between devices).
 //!
-//! KOReader keeps what it knows of a book beside it, in `Book.sdr`. When
-//! PaperPaw opens a book that has such a folder, and when its bookmarks or
-//! highlights change, this plugin reads KOReader's (`metadata.epub.lua`),
-//! takes over what is new there, and leaves what is new here in
-//! `Book.epub.annotations.lua`: KOReader takes that over the next time it
-//! opens the book, and removes the file. Positions are KOReader's
-//! XPointers ([`Document::xpointer`](paperpaw_sdk::document::Document)),
-//! so EPUBs only.
+//! KOReader keeps what it knows of a book beside it, in
+//! `Book.sdr/metadata.epub.lua`. When PaperPaw opens a book that has such
+//! a file, and when its bookmarks or highlights change, this plugin reads
+//! it, takes over what is new there, and leaves what is new here in
+//! `Book.sdr/Book.epub.annotations.lua`: KOReader takes that over the
+//! next time it opens the book, and removes the file. Positions are
+//! KOReader's XPointers
+//! ([`Document::xpointer`](paperpaw_sdk::document::Document)), so EPUBs
+//! only.
 //!
 //! What is removed on one side goes on the other too: the plugin keeps
-//! which annotations both had at the last exchange. A note changed on
-//! both sides keeps the later change.
+//! which annotations both had at the last exchange, and their notes then.
+//! A note changed on one side only goes to the other; one changed on both
+//! keeps the later change.
+//!
+//! A file of either side that is there but cannot be read or understood
+//! stops the exchange: nothing changes on either side until it can be.
+//! So does a missing one of KOReader (as while a sync has brought the
+//! folder but not yet the file in it). Annotations go to KOReader with
+//! the time they were made: while neither they nor the clock tell it,
+//! they wait here.
 
 #![no_std]
 
@@ -23,15 +32,18 @@ pub mod lua;
 
 use alloc::borrow::Cow;
 use alloc::format;
+use alloc::rc::Rc;
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::cell::RefCell;
 
 use paperpaw_sdk::annotations::{self, Annotation, Kind, Mark};
 use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::document::{Document, Locator};
 use paperpaw_sdk::time::{self, LocalTime};
 use paperpaw_sdk::{
-    Command, Env, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Storage, Version,
+    Env, Id, Manifest, MemoryClass, Plugin, RegisterError, Registrar, SDK_VERSION, Storage,
+    StorageError, Version,
 };
 
 use lua::{Table, Value};
@@ -41,9 +53,54 @@ pub const PLUGIN: Id = Id::new_static("koreader");
 /// those of other devices).
 const DEVICE: &str = "PaperPaw";
 /// Longest KOReader file read.
-const MAX_FILE: usize = 4 << 20;
+pub const MAX_FILE: usize = 4 << 20;
+/// Longest KOReader file read on devices with a few hundred kilobytes
+/// ([`MemoryClass::Small`]): some fifty annotations. The books of larger
+/// ones are not exchanged there.
+pub const MAX_FILE_SMALL: usize = 32 << 10;
+/// Longest file of what is known read.
+const MAX_KNOWN: usize = 1 << 20;
 /// Most text taken from a book for a highlight.
 const MAX_TEXT: usize = 4096;
+
+/// A file that is there but cannot be read or understood (too large, an
+/// error of the card, not KOReader's form): the exchange stops without
+/// changing anything on either side.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Unreadable;
+
+/// The longest KOReader file read on a device with `memory`.
+pub fn max_file(memory: MemoryClass) -> usize {
+    if memory == MemoryClass::Small {
+        MAX_FILE_SMALL
+    } else {
+        MAX_FILE
+    }
+}
+
+/// The file at `path`, `None` if there is none. At most `limit` bytes,
+/// in memory asked for rather than taken, read whole or not at all.
+fn load(storage: &dyn Storage, path: &str, limit: usize) -> Result<Option<Vec<u8>>, Unreadable> {
+    let size = match storage.size(path) {
+        Ok(size) => usize::try_from(size).map_err(|_| Unreadable)?,
+        Err(StorageError::NotFound) => return Ok(None),
+        Err(_) => return Err(Unreadable),
+    };
+    if size > limit {
+        return Err(Unreadable);
+    }
+    let mut data = Vec::new();
+    data.try_reserve_exact(size).map_err(|_| Unreadable)?;
+    data.resize(size, 0);
+    let mut filled = 0;
+    while filled < size {
+        match storage.read_at(path, filled as u64, &mut data[filled..]) {
+            Ok(0) | Err(_) => return Err(Unreadable),
+            Ok(n) => filled += n,
+        }
+    }
+    Ok(Some(data))
+}
 
 /// KOReader's folder for the book at `book`: `Book.sdr` beside it.
 pub fn sidecar(book: &str) -> String {
@@ -87,11 +144,30 @@ fn key_of(mark: &Mark) -> Key {
     }
 }
 
-fn load_known(storage: &dyn Storage, book: &str) -> Vec<Key> {
-    let Ok(data) = paperpaw_sdk::read_file(storage, &known_file(book), 1 << 20) else {
-        return Vec::new();
+/// An annotation both sides had at the last exchange: where it is, and
+/// a fingerprint of the note both had on it then (`None` where their
+/// notes differed, or in what an older version kept).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Known {
+    key: Key,
+    note: Option<u64>,
+}
+
+/// A fingerprint of `note` (64-bit FNV-1a): whether it changed since.
+fn fingerprint(note: &str) -> u64 {
+    note.bytes().fold(0xcbf2_9ce4_8422_2325, |hash, b| {
+        (hash ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3)
+    })
+}
+
+/// What both sides had at the last exchange, a line each: kind, start,
+/// end and the note's fingerprint (`b 3 120 3 120 5d2c…`).
+fn load_known(storage: &dyn Storage, book: &str) -> Result<Vec<Known>, Unreadable> {
+    let Some(data) = load(storage, &known_file(book), MAX_KNOWN)? else {
+        return Ok(Vec::new());
     };
-    String::from_utf8_lossy(&data)
+    let text = core::str::from_utf8(&data).map_err(|_| Unreadable)?;
+    Ok(text
         .lines()
         .filter_map(|line| {
             let mut fields = line.split(' ');
@@ -103,19 +179,33 @@ fn load_known(storage: &dyn Storage, book: &str) -> Vec<Key> {
             let mut number = || fields.next()?.parse::<u32>().ok();
             let start = Locator::new(number()?, number()?);
             let end = Locator::new(number()?, number()?);
-            Some((kind, start, end))
+            let note = fields
+                .next()
+                .and_then(|hex| u64::from_str_radix(hex, 16).ok());
+            Some(Known {
+                key: (kind, start, end),
+                note,
+            })
         })
-        .collect()
+        .collect())
 }
 
-fn save_known(storage: &dyn Storage, book: &str, known: &[Key]) {
+fn save_known(storage: &dyn Storage, book: &str, known: &[Known]) {
     let mut out = String::new();
-    for (kind, start, end) in known {
+    for Known {
+        key: (kind, start, end),
+        note,
+    } in known
+    {
         let kind = if *kind == Kind::Bookmark { 'b' } else { 'h' };
         out.push_str(&format!(
-            "{kind} {} {} {} {}\n",
+            "{kind} {} {} {} {}",
             start.section, start.offset, end.section, end.offset
         ));
+        if let Some(note) = note {
+            out.push_str(&format!(" {note:016x}"));
+        }
+        out.push('\n');
     }
     let _ = storage.write(&known_file(book), out.as_bytes());
 }
@@ -127,24 +217,94 @@ fn has_entries(storage: &dyn Storage, dir: &str) -> bool {
     any
 }
 
-/// The annotations of KOReader's file at `path` (empty if there is none).
-fn read_items(storage: &dyn Storage, path: &str) -> Vec<Table> {
-    let Ok(data) = paperpaw_sdk::read_file(storage, path, MAX_FILE) else {
-        return Vec::new();
+/// The annotations of KOReader's file at `path`, read if it is at most
+/// `limit` bytes; `None` if there is no such file, none if it keeps none.
+fn read_items(
+    storage: &dyn Storage,
+    path: &str,
+    limit: usize,
+) -> Result<Option<Vec<Table>>, Unreadable> {
+    let Some(data) = load(storage, path, limit)? else {
+        return Ok(None);
     };
-    let Some(Value::Table(root)) = lua::parse(&String::from_utf8_lossy(&data)) else {
-        return Vec::new();
+    let text = core::str::from_utf8(&data).map_err(|_| Unreadable)?;
+    let Some(Value::Table(mut root)) = lua::parse(text) else {
+        return Err(Unreadable);
     };
-    let Some(Value::Table(items)) = root.get("annotations") else {
-        return Vec::new();
+    drop(data);
+    let at = root
+        .fields
+        .iter()
+        .position(|(key, _)| matches!(key, Value::Str(s) if s == "annotations"));
+    let Some(at) = at else {
+        // Older KOReaders kept them apart, in a form not read here.
+        return if root.get("bookmarks").is_some() || root.get("highlight").is_some() {
+            Err(Unreadable)
+        } else {
+            Ok(Some(Vec::new()))
+        };
     };
-    items
-        .list()
-        .filter_map(|item| match item {
-            Value::Table(t) => Some(t.clone()),
+    let Value::Table(items) = root.fields.swap_remove(at).1 else {
+        return Err(Unreadable);
+    };
+    drop(root);
+    // A list of tables, nothing else: what is not understood is not
+    // passed on, so it must not be there.
+    let mut items = items
+        .fields
+        .into_iter()
+        .map(|field| match field {
+            (Value::Number(n), Value::Table(item)) => Some((n.parse::<u64>().ok()?, item)),
             _ => None,
         })
-        .collect()
+        .collect::<Option<Vec<_>>>()
+        .ok_or(Unreadable)?;
+    items.sort_by_key(|(n, _)| *n);
+    Ok(Some(items.into_iter().map(|(_, item)| item).collect()))
+}
+
+/// KOReader's side of an exchange.
+#[derive(Debug)]
+pub struct Theirs {
+    /// What KOReader has, or, while it has not taken over the last
+    /// exchange, what it will have.
+    pub items: Vec<Table>,
+    /// Whether the last exchange still waits for KOReader.
+    pub pending: bool,
+}
+
+/// KOReader's side for the book at `book`, from files of at most `limit`
+/// bytes. `None` while KOReader keeps no file for it, also while a sync
+/// has brought its folder but not yet the file in it: then there is
+/// nothing to exchange with, and what both had stays known.
+pub fn read_theirs(
+    storage: &dyn Storage,
+    book: &str,
+    limit: usize,
+) -> Result<Option<Theirs>, Unreadable> {
+    let pending = storage.exists(&exchange_file(book));
+    let path = if pending {
+        exchange_file(book)
+    } else {
+        metadata_file(book)
+    };
+    Ok(read_items(storage, &path, limit)?.map(|items| Theirs { items, pending }))
+}
+
+/// The annotations here of the book at `book`. [`annotations::load`]
+/// gives none for a file it cannot read, so a file that is there but gave
+/// none is taken as one that cannot be read.
+fn load_ours(storage: &dyn Storage, book: &str) -> Result<Vec<Annotation>, Unreadable> {
+    let ours = annotations::load(storage, book);
+    let gone = matches!(
+        storage.size(&annotations::file(book)),
+        Ok(0) | Err(StorageError::NotFound)
+    );
+    if ours.is_empty() && !gone {
+        Err(Unreadable)
+    } else {
+        Ok(ours)
+    }
 }
 
 /// What an exchange works with.
@@ -293,11 +453,13 @@ fn annotation_of(x: &Exchange<'_>, item: &Table, (kind, start, end): Key) -> Ann
     }
 }
 
-/// Annotation `a` as KOReader keeps it.
+/// Annotation `a` as KOReader keeps it; `None` where it cannot be placed
+/// there, or while neither it nor the clock tells when it was made
+/// (KOReader knows annotations by that time).
 fn item_of(x: &Exchange<'_>, a: &Annotation) -> Option<Value> {
     let (doc, storage) = (x.doc, x.storage);
+    let created = known_time([a.created, x.now])?;
     let page = doc.xpointer(storage, a.mark.start)?;
-    let created = if a.created > 0 { a.created } else { x.now };
     let optional = |v: Option<String>| v.map_or(Value::Nil, |v| lua::string(&v));
     let note = optional((!a.note.is_empty()).then(|| a.note.clone()));
     let updated = optional((a.updated > 0).then(|| datetime(x, a.updated)));
@@ -333,30 +495,32 @@ fn item_of(x: &Exchange<'_>, a: &Annotation) -> Option<Value> {
     })
 }
 
-/// Exchanges the annotations of the book at `book` with KOReader's;
-/// `true` if those here changed.
-pub fn exchange(x: &Exchange<'_>, book: &str) -> bool {
+/// The first of `times` that is known (seconds since 1970 over 0).
+fn known_time(times: impl IntoIterator<Item = i64>) -> Option<i64> {
+    times.into_iter().find(|&t| t > 0)
+}
+
+/// Exchanges the annotations of the book at `book` with KOReader's side
+/// `theirs`; `true` if those here changed. Nothing changes on either side
+/// if a file here cannot be read.
+pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Unreadable> {
     let (doc, storage) = (x.doc, x.storage);
     // Only where KOReader's positions are understood.
     if doc.xpointer(storage, Locator::new(0, 0)).is_none() {
-        return false;
+        return Ok(false);
     }
-    // While KOReader has not taken over the last exchange, that is what
-    // it will have; else what it has.
-    let pending = storage.exists(&exchange_file(book));
-    let theirs = read_items(
-        storage,
-        &if pending {
-            exchange_file(book)
-        } else {
-            metadata_file(book)
-        },
-    );
-    let known = load_known(storage, book);
-    let mut ours = annotations::load(storage, book);
+    let Theirs {
+        items: theirs,
+        pending,
+    } = theirs;
+    let known = load_known(storage, book)?;
+    let mut ours = load_ours(storage, book)?;
+    let known_of = |key: Key| known.iter().find(|k| k.key == key);
     let mut matched = alloc::vec![false; ours.len()];
     let (mut ours_changed, mut theirs_changed) = (false, false);
     let mut items: Vec<Value> = Vec::new();
+    // What both have after this exchange.
+    let mut shared: Vec<Known> = Vec::new();
     for mut item in theirs {
         let Some(key) = locate(x, &item) else {
             items.push(Value::Table(item));
@@ -366,31 +530,59 @@ pub fn exchange(x: &Exchange<'_>, book: &str) -> bool {
             matched[i] = true;
             let a = &mut ours[i];
             let note = annotations::one_line(item.str("note").unwrap_or_default());
+            let mut same = true;
             if note != a.note {
                 let changed = item
                     .str("datetime_updated")
                     .or(item.str("datetime"))
                     .unwrap_or_default();
                 let their_time = unix_of(x, changed);
-                if their_time > a.updated.max(a.created) {
-                    a.mark.noted = !note.is_empty();
-                    a.note = note;
-                    a.updated = their_time;
-                    ours_changed = true;
-                } else {
-                    let ours_note = (!a.note.is_empty()).then(|| lua::string(&a.note));
-                    item.set("note", ours_note.unwrap_or(Value::Nil));
-                    let time = if a.updated > 0 { a.updated } else { x.now };
-                    item.set("datetime_updated", lua::string(&datetime(x, time)));
-                    theirs_changed = true;
+                let our_time = a.updated.max(a.created);
+                // A note changed on one side since the last exchange goes
+                // to the other; one changed on both, the later change,
+                // where both times are known. Else both stay as they are.
+                let before = known_of(key).and_then(|k| k.note);
+                let theirs_wins = match before {
+                    Some(n) if n == fingerprint(&a.note) => Some(true),
+                    Some(n) if n == fingerprint(&note) => Some(false),
+                    _ if their_time > 0 && our_time > 0 => Some(their_time > our_time),
+                    _ => None,
+                };
+                match theirs_wins {
+                    Some(true) => {
+                        a.mark.noted = !note.is_empty();
+                        a.note = note;
+                        if their_time > 0 {
+                            a.updated = their_time;
+                        }
+                        ours_changed = true;
+                    }
+                    Some(false) => {
+                        let ours_note = (!a.note.is_empty()).then(|| lua::string(&a.note));
+                        item.set("note", ours_note.unwrap_or(Value::Nil));
+                        if let Some(time) = known_time([a.updated, a.created, x.now]) {
+                            item.set("datetime_updated", lua::string(&datetime(x, time)));
+                        }
+                        theirs_changed = true;
+                    }
+                    None => same = false,
                 }
             }
+            shared.push(Known {
+                key,
+                note: same.then(|| fingerprint(&a.note)),
+            });
             items.push(Value::Table(item));
-        } else if known.contains(&key) {
+        } else if known_of(key).is_some() {
             // Removed here: not passed on.
             theirs_changed = true;
         } else {
-            ours.push(annotation_of(x, &item, key));
+            let a = annotation_of(x, &item, key);
+            shared.push(Known {
+                key,
+                note: Some(fingerprint(&a.note)),
+            });
+            ours.push(a);
             matched.push(true);
             ours_changed = true;
             items.push(Value::Table(item));
@@ -401,12 +593,18 @@ pub fn exchange(x: &Exchange<'_>, book: &str) -> bool {
     for (a, matched) in ours.into_iter().zip(matched) {
         if matched {
             kept.push(a);
-        } else if known.contains(&key_of(&a.mark)) && !pending {
+        } else if known_of(key_of(&a.mark)).is_some() && !pending {
             ours_changed = true;
         } else {
+            // Those not passed on now are not known to both, so they are
+            // offered again next time.
             if let Some(item) = item_of(x, &a) {
                 items.push(item);
                 theirs_changed = true;
+                shared.push(Known {
+                    key: key_of(&a.mark),
+                    note: Some(fingerprint(&a.note)),
+                });
             }
             kept.push(a);
         }
@@ -415,26 +613,31 @@ pub fn exchange(x: &Exchange<'_>, book: &str) -> bool {
         annotations::save(storage, book, &kept);
     }
     if theirs_changed {
+        let at = known_time([x.now]).map(|now| lua::string(&datetime(x, now)));
         let file = lua::table([
             ("annotations", Value::Table(Table::from_list(items))),
-            ("datetime", lua::string(&datetime(x, x.now))),
+            ("datetime", at.unwrap_or(Value::Nil)),
             ("device_id", lua::string(DEVICE)),
         ]);
         let _ = storage.write(&exchange_file(book), lua::write(&file).as_bytes());
     }
-    let known: Vec<Key> = kept.iter().map(|a| key_of(&a.mark)).collect();
-    save_known(storage, book, &known);
-    ours_changed
+    if shared != known {
+        save_known(storage, book, &shared);
+    }
+    Ok(ours_changed)
 }
 
 /// Exchanges the annotations of the book at `book` with KOReader's, if
-/// KOReader knows the book.
-fn exchange_book(env: &Env<'_>, book: &str, out: &mut Vec<Command>) {
-    if !has_entries(env.storage, &sidecar(book)) {
-        return;
-    }
+/// KOReader keeps any for it; `true` if those here changed.
+fn exchange_book(env: &Env<'_>, book: &str) -> bool {
+    // KOReader's side first: most books have none, and then the book
+    // need not be opened.
+    let limit = max_file(env.device.memory);
+    let Ok(Some(theirs)) = read_theirs(env.storage, book, limit) else {
+        return false;
+    };
     let Ok(doc) = env.formats.open(env.storage, book) else {
-        return;
+        return false;
     };
     let local = |unix| time::local_seconds(env, unix);
     let x = Exchange {
@@ -455,8 +658,29 @@ fn exchange_book(env: &Env<'_>, book: &str, out: &mut Vec<Command>) {
             "lighten"
         },
     };
-    if exchange(&x, book) {
-        out.push(annotations::changed(book));
+    exchange(&x, book, theirs).unwrap_or(false)
+}
+
+/// The book whose annotations this plugin announced as changed last: the
+/// announcement comes back to it, and needs no exchange.
+#[derive(Debug, Default)]
+pub struct Announced(RefCell<Option<String>>);
+
+impl Announced {
+    /// Remembers that the change of `book`'s annotations is announced.
+    pub fn set(&self, book: &str) {
+        *self.0.borrow_mut() = Some(String::from(book));
+    }
+
+    /// Whether the change of `book`'s annotations is the one announced
+    /// (once).
+    pub fn is_own(&self, book: &str) -> bool {
+        let mut announced = self.0.borrow_mut();
+        let own = announced.as_deref() == Some(book);
+        if own {
+            *announced = None;
+        }
+        own
     }
 }
 
@@ -496,11 +720,19 @@ impl Plugin for KoReader {
         // What both sides had at the last exchange, by book: moved and
         // removed with it.
         r.add_book_data(Env::plugin_dir(PLUGIN.as_str()), "")?;
-        r.on(events::BOOK_OPENED, |env, reading, out| {
-            exchange_book(env, &reading.path, out);
+        let announced = Rc::new(Announced::default());
+        let opened = Rc::clone(&announced);
+        r.on(events::BOOK_OPENED, move |env, reading, out| {
+            if exchange_book(env, &reading.path) {
+                opened.set(&reading.path);
+                out.push(annotations::changed(&reading.path));
+            }
         })?;
-        r.on(events::ANNOTATIONS_CHANGED, |env, changed, out| {
-            exchange_book(env, &changed.path, out);
+        r.on(events::ANNOTATIONS_CHANGED, move |env, changed, out| {
+            if !announced.is_own(&changed.path) && exchange_book(env, &changed.path) {
+                announced.set(&changed.path);
+                out.push(annotations::changed(&changed.path));
+            }
         })?;
         r.on(events::BOOK_MOVED, |env, moved, _| {
             moved_book(env, &moved.from, &moved.path);
