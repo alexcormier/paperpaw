@@ -296,6 +296,13 @@ pub fn draw_frame(canvas: &mut Canvas<'_>, env: &Env<'_>, widget: &str, area: Re
             ui::button_border(&style),
             Color::BLACK,
         ),
+        Frame::Card if style.grays <= 2 => {
+            // A light gray would be a heavy pattern on black and white:
+            // the sparsest there is, in a thin line as cards in lists.
+            canvas.fill_round_shaded(area, style.corner, Color::gray(240));
+            let line = (style.line / 2).max(1);
+            canvas.stroke_round(area, line, style.corner, Color::BLACK);
+        }
         Frame::Card => canvas.fill_round_shaded(area, style.corner, Color::gray(225)),
         Frame::Dark => ui::fill_round(canvas, &style, area, Color::BLACK),
     }

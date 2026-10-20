@@ -9,10 +9,16 @@
 //!
 //! ```json
 //! {"project": "paperpaw-xteink", "chip": 5, "version": "0.4.0",
-//!  "plugins": ["paperpaw-plugin-stats 0.4.0", "..."]}
+//!  "plugins": ["paperpaw-plugin-stats 0.4.0", "..."],
+//!  "abi": "f1f6cd5dd377bb4d", "code": ["hello 0.1.0", "..."]}
 //! ```
 //!
-//! and the answer names the newest update for it, or none (`version`
+//! `abi` is the fingerprint native code plugins must have to run here
+//! (ADR 0024), `code` the code plugins installed with their versions, so
+//! the server can say which have builds for an update; both are left out
+//! where the firmware loads no code plugins.
+//!
+//! The answer names the newest update for it, or none (`version`
 //! empty, or no newer than the one running):
 //!
 //! ```json
@@ -38,9 +44,10 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::firmware::{Firmware, Plugins, UPDATE_DIR, compare_versions};
+use paperpaw_sdk::native::Native;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, Storage};
+use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, PluginKind, Storage};
 
 use crate::{OFFERED, PAGE, file, read_pair, write_pair};
 
@@ -187,20 +194,34 @@ pub(crate) fn server_name(env: &Env<'_>) -> String {
     String::from(name.split('/').next().unwrap_or(name))
 }
 
-/// The question's body (see the [module](self)).
-fn question(firmware: &Firmware) -> String {
+/// The question's body (see the [module](self)): what runs, and the code
+/// plugins installed (`code`, with `native` where they load).
+fn question(firmware: &Firmware, native: Option<&Native>, code: &[(&str, String)]) -> String {
     let plugins: Vec<String> = firmware
         .plugins
         .iter()
         .map(|c| paperpaw_json::string(&format!("{} {}", c.name, c.version)))
         .collect();
-    format!(
-        "{{\"project\":{},\"chip\":{},\"version\":{},\"plugins\":[{}]}}",
+    let mut body = format!(
+        "{{\"project\":{},\"chip\":{},\"version\":{},\"plugins\":[{}]",
         paperpaw_json::string(&firmware.project),
         firmware.chip,
         paperpaw_json::string(&firmware.version),
         plugins.join(",")
-    )
+    );
+    if let Some(native) = native {
+        let code: Vec<String> = code
+            .iter()
+            .map(|(id, version)| paperpaw_json::string(&format!("{id} {version}")))
+            .collect();
+        body.push_str(&format!(
+            ",\"abi\":\"{}\",\"code\":[{}]",
+            native.fingerprint,
+            code.join(",")
+        ));
+    }
+    body.push('}');
+    body
 }
 
 /// Asks the server for an update; `quiet` from the action, which offers
@@ -215,7 +236,13 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Vec<Command>) {
         String::from("content-type"),
         String::from("application/json"),
     ));
-    request.body = Some(question(firmware));
+    let code: Vec<(&str, String)> = env
+        .plugins
+        .iter()
+        .filter(|p| p.kind == PluginKind::Code)
+        .map(|p| (p.manifest.id.as_str(), p.manifest.version.to_string()))
+        .collect();
+    request.body = Some(question(firmware, env.native, &code));
     if quiet {
         request.params.set(QUIET, "1");
     }
@@ -306,7 +333,10 @@ pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command
 
 #[cfg(test)]
 mod tests {
+    use alloc::string::String;
+
     use paperpaw_sdk::firmware::{Firmware, Plugins};
+    use paperpaw_sdk::native::{Fingerprint, Native};
 
     use super::{Offer, question};
 
@@ -323,9 +353,19 @@ mod tests {
     #[test]
     fn the_question_says_what_runs() {
         assert_eq!(
-            question(&firmware()),
+            question(&firmware(), None, &[]),
             "{\"project\":\"paperpaw-xteink\",\"chip\":5,\"version\":\"0.4.0\",\
              \"plugins\":[\"paperpaw-plugin-stats 0.4.0\",\"paperpaw-plugin-chess 1.0.0\"]}"
+        );
+        // Where code plugins load: the fingerprint and those installed.
+        let mut native = Native::new("code.ppn");
+        native.fingerprint = Fingerprint(0xf1f6_cd5d_d377_bb4d);
+        let code = [("hello", String::from("0.1.0"))];
+        assert_eq!(
+            question(&firmware(), Some(&native), &code),
+            "{\"project\":\"paperpaw-xteink\",\"chip\":5,\"version\":\"0.4.0\",\
+             \"plugins\":[\"paperpaw-plugin-stats 0.4.0\",\"paperpaw-plugin-chess 1.0.0\"],\
+             \"abi\":\"f1f6cd5dd377bb4d\",\"code\":[\"hello 0.1.0\"]}"
         );
     }
 

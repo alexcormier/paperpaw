@@ -220,11 +220,7 @@ impl Screen for EditScreen {
             &style,
             rows.len(),
             |canvas, index, rect, focused| {
-                let ink = if focused {
-                    paperpaw_sdk::Color::WHITE
-                } else {
-                    paperpaw_sdk::Color::BLACK
-                };
+                let ink = style.focus_ink(focused);
                 let (icon, title, value) = match rows[index] {
                     Row::Widget(at) => {
                         let id = list.get(at).map_or("", String::as_str);

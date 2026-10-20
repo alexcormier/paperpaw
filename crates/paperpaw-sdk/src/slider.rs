@@ -528,6 +528,7 @@ mod tests {
         text: 20.0,
         small: 15.0,
         title: 23.0,
+        head: 23.0,
         row: 60,
         header: 64,
         margin: 12,
@@ -536,6 +537,12 @@ mod tests {
         dark_header: false,
         corner: 0,
         strong: false,
+        pill: false,
+        focus: crate::ui::Focus::Fill,
+        separators: crate::ui::Separators::Line,
+        plain_header: false,
+        cards: false,
+        grays: 2,
         finger: 0,
     };
 

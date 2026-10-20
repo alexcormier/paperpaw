@@ -25,6 +25,8 @@ paperpaw-hyphen.workspace = true
 paperpaw-image.workspace = true
 paperpaw-update.workspace = true
 paperpaw-digest.workspace = true
+# Native code plugins' files and the table plugins are given (`native`).
+paperpaw-native.workspace = true
 
 [features]
 default = []

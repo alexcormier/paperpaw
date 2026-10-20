@@ -65,8 +65,11 @@ paperpaw-platform = { path = "../../crates/paperpaw-platform" }
 paperpaw-x4 = { path = "../../crates/paperpaw-x4" }
 paperpaw-fat = { path = "../../crates/paperpaw-fat" }
 paperpaw-http = { path = "../../crates/paperpaw-http" }
-# A file's MD5 over USB (`remote`), to check what came.
+# A file's MD5 over USB (`remote`), to check what came; native plugins'
+# SHA-256.
 paperpaw-digest = { path = "../../crates/paperpaw-digest" }
+# Native code plugins' files (`src/native`).
+paperpaw-native = { path = "../../crates/paperpaw-native" }
 # Their settings' ids, for the X4's defaults.
 paperpaw-plugin-reader = { path = "../../plugins/reader" }
 paperpaw-plugin-wifi = { path = "../../plugins/wifi" }

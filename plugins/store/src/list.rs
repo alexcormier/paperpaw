@@ -233,11 +233,9 @@ impl ListScreen {
     fn loaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let fetched = catalog::list_part();
-        let device = env.catalog_device.unwrap_or_default();
-        let index = (200..300)
-            .contains(&reply.status)
-            .then(|| catalog::take(env.storage, &fetched, device))
-            .flatten();
+        let index = catalog::Device::of(&env)
+            .filter(|_| (200..300).contains(&reply.status))
+            .and_then(|device| catalog::take(env.storage, &fetched, &device));
         match index {
             Some(index) => {
                 self.index = Some(index);
@@ -311,12 +309,22 @@ pub(crate) fn open_page(n: usize, plugin: &Entry) -> Command {
 }
 
 /// What the row of `plugin` says at its end: how far its download is,
-/// whether it is here, or its size.
+/// whether it waits for the reader or a restart, whether it is here, or
+/// its size.
 pub(crate) fn state(env: &Env<'_>, job: Option<&Progress>, plugin: &Entry) -> String {
     if let Some(job) = job.filter(|j| j.plugin == plugin.id) {
+        if job.done >= job.total {
+            return env.i18n.tr("store.state.waiting").to_string();
+        }
         return format!("{} / {}", job.done, job.total);
     }
-    let key = if plugin.newer(env) {
+    let restart = env
+        .plugins
+        .get(&plugin.id)
+        .is_some_and(paperpaw_sdk::PluginInfo::restart_needed);
+    let key = if restart {
+        "store.state.restart"
+    } else if plugin.newer(env) {
         "store.state.update"
     } else if plugin.installed(env).is_some() {
         "store.state.installed"

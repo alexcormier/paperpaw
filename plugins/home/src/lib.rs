@@ -508,11 +508,7 @@ impl Dashboard {
             let mut x = i32::from(f.x) + (i32::from(f.width) - total as i32) / 2;
             let y = i32::from(f.y) + (i32::from(f.height) - dot as i32) / 2;
             for page in 0..self.pages {
-                if page == self.page {
-                    canvas.fill_rect(x, y, dot, dot, Color::BLACK);
-                } else {
-                    canvas.stroke_rect(x, y, dot, dot, style.line.max(1), Color::BLACK);
-                }
+                pages::draw_dot(canvas, env, &style, (x, y), dot, page == self.page);
                 x += spacing as i32;
             }
         }

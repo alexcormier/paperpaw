@@ -766,18 +766,40 @@ pub mod settings {
     pub const UI_ROW: Id = Id::new_static("core.ui-row");
     /// Width of lines and borders, in tenths of a millimetre.
     pub const UI_LINES: Id = Id::new_static("core.ui-lines");
-    /// Headers dark ([`HEADER_DARK`]) or light ([`HEADER_LIGHT`]).
+    /// Headers dark ([`HEADER_DARK`]), light ([`HEADER_LIGHT`]) or plain,
+    /// without a bar or a line ([`HEADER_PLAIN`]).
     pub const UI_HEADER: Setting<Text> = Setting::new("core.ui-header");
     pub const HEADER_DARK: &str = "core.header.dark";
     pub const HEADER_LIGHT: &str = "core.header.light";
+    pub const HEADER_PLAIN: &str = "core.header.plain";
     /// Corners of highlights, buttons and boxes: one of [`CORNERS`].
     pub const UI_CORNERS: Setting<Text> = Setting::new("core.ui-corners");
-    /// The values of [`UI_CORNERS`]: square, slightly rounded, round.
-    pub const CORNERS: [&str; 3] = [
+    /// The values of [`UI_CORNERS`]: square, slightly rounded, round,
+    /// soft (rounder still). With round and soft ones, small shapes
+    /// (buttons, switches, the focus) are pills.
+    pub const CORNERS: [&str; 4] = [
         "core.corners.square",
         "core.corners.small",
         "core.corners.round",
+        "core.corners.soft",
     ];
+    /// How the focus is drawn: a dark bar, a frame, a light bar (a frame
+    /// on panels of black and white alone).
+    pub const UI_FOCUS: Setting<Text> = Setting::new("core.ui-focus");
+    pub const FOCUS_FILL: &str = "core.focus.fill";
+    pub const FOCUS_RING: &str = "core.focus.ring";
+    pub const FOCUS_SOFT: &str = "core.focus.soft";
+    /// The lines between rows: light, faint from the text, none.
+    pub const UI_SEPARATORS: Setting<Text> = Setting::new("core.ui-separators");
+    pub const SEPARATORS_LINE: &str = "core.separators.line";
+    pub const SEPARATORS_INSET: &str = "core.separators.inset";
+    pub const SEPARATORS_NONE: &str = "core.separators.none";
+    /// The sections of lists as they are or on rounded cards.
+    pub const UI_GROUPS: Setting<Text> = Setting::new("core.ui-groups");
+    pub const GROUPS_PLAIN: &str = "core.groups.plain";
+    pub const GROUPS_CARDS: &str = "core.groups.cards";
+    /// Size of headers' titles, in percent of the text's.
+    pub const UI_TITLE: Id = Id::new_static("core.ui-title");
     /// Gray text such as hints and notes: as it is, or black for strong
     /// contrast ([`CONTRAST_STRONG`]), e.g. on screens with few grays.
     pub const UI_CONTRAST: Setting<Text> = Setting::new("core.ui-contrast");

@@ -41,7 +41,7 @@ use paperpaw_sdk::library::listing::{Entry, Listing, UNRANKED};
 use paperpaw_sdk::library::{self, Book};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::ui::{self, ListChange, ListView, Thumbnail, UiStyle};
+use paperpaw_sdk::ui::{self, Focus, ListChange, ListView, Thumbnail, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, MenuEntry,
     Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
@@ -782,14 +782,53 @@ fn row_thumb(style: &UiStyle, rect: Rect) -> Rect {
 /// Where a cell of the grid shows its cover, above its title's lines.
 fn cell_cover(env: &Env<'_>, style: &UiStyle, rect: Rect) -> Option<Rect> {
     let gap = style.gap as u16;
+    let side = cell_side(style, rect.width);
     let line = style.font(env)?.line_metrics(style.small).line_height as u16;
-    let width = rect.width.saturating_sub(2 * gap);
+    let width = rect.width.saturating_sub(2 * side);
     Some(Rect::new(
-        rect.x + gap,
+        rect.x + side,
         rect.y + gap,
         width,
         rect.height.saturating_sub(2 * gap + 2 * line),
     ))
+}
+
+/// How far the covers of the grid sit in from the sides of their cells
+/// `width` pixels wide: clear of the focus drawn around a cell
+/// ([`ui::focus_rect`]), a line apart from a frame.
+fn cell_side(style: &UiStyle, width: u16) -> u16 {
+    let focus = ui::focus_rect(style, Rect::new(0, 0, width, width)).x;
+    let frame = match style.focus {
+        Focus::Fill => 0,
+        Focus::Soft if style.grays > 2 => 0,
+        _ => (style.line * 2).max(3) as u16,
+    };
+    (style.gap as u16).max(focus + frame + style.line as u16)
+}
+
+/// The style the grid's focus is drawn with: around a cover and its
+/// title, a box with the style's corners, not a pill.
+fn grid_style(style: &UiStyle) -> UiStyle {
+    UiStyle {
+        pill: false,
+        ..*style
+    }
+}
+
+/// The corners of covers, `area` the place of one: the style's, but as
+/// small as a book's, so a narrow cover stays a box.
+pub(crate) fn cover_radius(style: &UiStyle, area: Rect) -> u32 {
+    style.corner.min(u32::from(area.width.min(area.height)) / 8)
+}
+
+/// The corners of covers' pictures: as [`cover_radius`] where corners
+/// are round (at least the gap), square for smaller ones, as before.
+pub(crate) fn picture_radius(style: &UiStyle, area: Rect) -> u32 {
+    if style.corner >= style.gap {
+        cover_radius(style, area)
+    } else {
+        0
+    }
 }
 
 /// A book's file name without its extension, and its format as the
@@ -822,7 +861,7 @@ fn draw_row(
         book,
         thumb: small,
     } = shown;
-    let fg = if focused { Color::WHITE } else { Color::BLACK };
+    let fg = style.focus_ink(focused);
     let thumb = row_thumb(style, rect);
     let text_x = thumb.x + thumb.width;
     let text = Rect::new(
@@ -844,7 +883,7 @@ fn draw_row(
         Some(small) => {
             let x = thumb.x + thumb.width.saturating_sub(small.width()) / 2;
             let y = thumb.y + thumb.height.saturating_sub(small.height()) / 2;
-            small.draw(canvas, x, y);
+            small.draw_round(canvas, x, y, picture_radius(style, thumb));
         }
         None => {
             let title = &*shown_title(book, stem);
@@ -870,17 +909,22 @@ fn list_view(env: &Env<'_>, style: &UiStyle, area: Rect) -> ListView {
     if env.settings.read(&VIEW) != VIEW_COVERS {
         return ListView::new(area, style.noted_row()).focus_on_keys(env);
     }
-    // Covers line up with the margins, as text does.
-    let inset = style.margin.saturating_sub(style.gap) as u16;
-    let area = Rect::new(
-        area.x + inset,
-        area.y,
-        area.width.saturating_sub(2 * inset),
-        area.height,
-    );
-    let columns = (u32::from(area.width) / env.metrics.mm(30).max(1)).max(3);
+    let margin = style.margin as u16;
+    let room = |inset: u16| area.width.saturating_sub(2 * inset);
+    let within = room(margin.saturating_sub(style.gap as u16));
+    let columns = (u32::from(within) / env.metrics.mm(30).max(1)).max(3);
+    // Covers line up with the margins, as text does: the cells reach
+    // as far past them as covers sit in, which depends a little on the
+    // cells' width.
+    let mut side = style.gap as u16;
+    for _ in 0..3 {
+        let inset = margin.saturating_sub(side);
+        side = cell_side(style, room(inset) / columns as u16);
+    }
+    let inset = margin.saturating_sub(side);
+    let area = Rect::new(area.x + inset, area.y, room(inset), area.height);
     let cell = u32::from(area.width) / columns;
-    let cover = cell.saturating_sub(2 * style.gap) * 4 / 3;
+    let cover = cell.saturating_sub(2 * u32::from(cell_side(style, cell as u16))) * 4 / 3;
     let title = style.font(env).map_or(style.row / 2, |f| {
         f.line_metrics(style.small).line_height as u32
     });
@@ -903,18 +947,16 @@ fn draw_cell(
         book,
         thumb: small,
     } = shown;
-    let fg = if focused { Color::WHITE } else { Color::BLACK };
-    let gap = style.gap as u16;
+    let fg = style.focus_ink(focused);
     let (Some(font), Some(cover)) = (style.font(env), cell_cover(env, style, rect)) else {
         return;
     };
     let line = font.line_metrics(style.small).line_height as u16;
     let width = cover.width;
-    let label_area =
-        |n: u16| Rect::new(rect.x + gap, cover.y + cover.height + n * line, width, line);
+    let label_area = |n: u16| Rect::new(cover.x, cover.y + cover.height + n * line, width, line);
     if entry.is_dir {
         draw_folder(canvas, style, cover, fg);
-        let x = f32::from(rect.x + gap);
+        let x = f32::from(cover.x);
         ui::draw_label(
             canvas,
             &font,
@@ -932,23 +974,19 @@ fn draw_cell(
         // On the line its title starts, at the bottom of its place.
         Some(small) => {
             let y = cover.y + cover.height.saturating_sub(small.height());
-            small.draw(canvas, cover.x, y);
+            small.draw_round(canvas, cover.x, y, picture_radius(style, cover));
         }
         None => draw_placeholder(canvas, env, style, cover, title, &format, fg),
     }
     // The title, then how far it is read.
-    let x = f32::from(rect.x + gap);
+    let x = f32::from(cover.x);
     ui::draw_label(canvas, &font, style.small, x, label_area(0), title, fg);
     let progress = match book.and_then(|b| b.progress) {
         Some(100) => env.i18n.tr("files.finished").to_string(),
         Some(p) if p > 0 => format!("{p} %"),
         _ => book.and_then(|b| b.author.clone()).unwrap_or_default(),
     };
-    let gray = if focused {
-        Color::gray(215)
-    } else {
-        style.faint(80)
-    };
+    let gray = style.focus_faint(focused, 80);
     ui::draw_label(
         canvas,
         &font,
@@ -982,7 +1020,8 @@ fn draw_placeholder(
     format: &str,
     color: Color,
 ) {
-    ui::stroke_round(canvas, style, area, ui::button_border(style), color);
+    let radius = cover_radius(style, area);
+    canvas.stroke_round(area, ui::button_border(style), radius, color);
     let Some(font) = style.font(env) else {
         return;
     };
@@ -1068,8 +1107,9 @@ impl Screen for Browser {
         }
         let (first, page, thumbs) = (self.first, &self.page, &self.thumbs);
         let grid = self.list.column_count() > 1;
+        let focus_style = if grid { grid_style(&style) } else { style };
         self.list
-            .draw(canvas, &style, len, |canvas, index, rect, focused| {
+            .draw(canvas, &focus_style, len, |canvas, index, rect, focused| {
                 let slot = index.checked_sub(first);
                 if let Some((entry, book)) = slot.and_then(|i| page.get(i)) {
                     let thumb = slot.and_then(|i| thumbs.get(i)).and_then(Option::as_ref);
