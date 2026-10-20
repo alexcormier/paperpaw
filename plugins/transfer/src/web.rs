@@ -219,3 +219,6 @@ pub fn json_string(text: &str) -> String {
     out.push('"');
     out
 }
+
+#[cfg(test)]
+mod paths_tests;
