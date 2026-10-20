@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `library::clean_up_unused` removes what is kept for books no
+  longer on the storage without touching what any book there needs:
+  the data of files of formats switched off stays, and so does the data
+  of a book opened by another spelling of its folder (a card's `Books`
+  read as the library folder `books`). Where a folder cannot be listed,
+  nothing is removed.
 - Library: a folder that has become empty no longer stops the library
   in the emulator (a page of an empty listing was counted below zero).
 - Data files: a file marked `# format 0` is left as it is instead of
