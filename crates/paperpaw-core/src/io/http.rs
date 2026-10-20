@@ -40,7 +40,9 @@ pub struct HttpCall {
     /// too large for memory, and say so with [`HttpResponse::saved`];
     /// otherwise the kernel writes the body it gets. Only a successful
     /// answer's (2xx) body is the file: an error's is its reason, and the
-    /// file stays as it was.
+    /// file stays as it was. A later call saving to the same file (in
+    /// any case) replaces this one: a shell that writes the file itself
+    /// drops this one's transfer then; its answer is passed over.
     pub save_to: Option<String>,
 }
 
@@ -115,8 +117,9 @@ pub(crate) struct Http {
 
 impl Http {
     /// Queues a plugin's request for the shell, or fails it at once
-    /// (without a network, a file to send that is not there, or a file
-    /// to save to that another request is saving to).
+    /// (without a network, or a file to send that is not there). One
+    /// that saves to a file another request still saves to replaces that
+    /// one, which fails at once.
     pub fn request(
         &mut self,
         request: HttpRequest,
@@ -139,16 +142,19 @@ impl Http {
             return reply(request.reply, failed, out);
         }
         // Two answers in one file (and in one partial file of the shell)
-        // would mix.
+        // would mix: the newer request replaces the older one, whose
+        // answer is passed over when it comes (shells drop its transfer).
         if let Some(path) = &request.save_to
-            && self.awaiting.iter().any(|a| {
+            && let Some(at) = self.awaiting.iter().position(|a| {
                 a.save_to
                     .as_deref()
                     .is_some_and(|other| other.eq_ignore_ascii_case(path))
             })
         {
-            let failed = HttpReply::failed("already saving to this file", request.params);
-            return reply(request.reply, failed, out);
+            let older = self.awaiting.remove(at);
+            self.calls.retain(|call| call.id != older.id);
+            let failed = HttpReply::failed("replaced by a newer request", older.context);
+            reply(older.reply, failed, out);
         }
         let body = match request.body_from {
             Some(_) => None,
@@ -327,7 +333,7 @@ mod tests {
     }
 
     #[test]
-    fn one_request_at_a_time_saves_to_a_file() {
+    fn a_newer_request_for_a_file_replaces_the_older() {
         let storage = MemoryStorage::new();
         let mut out = Vec::new();
         let mut http = Http::default();
@@ -337,27 +343,40 @@ mod tests {
             &storage,
             &mut out,
         );
+        assert_eq!(http.take().len(), 1);
         http.request(
             get("http://h.org/2", Some("DL.tmp")),
             true,
             &storage,
             &mut out,
         );
-        assert_eq!(http.take().len(), 1);
         assert_eq!(
             replied(&out),
-            (0, String::from("already saving to this file"))
+            (0, String::from("replaced by a newer request"))
         );
-        // Once the first is answered, the file is free again.
+        let calls = http.take();
+        assert_eq!(calls.len(), 1);
+        // The older one's answer comes late: passed over, the file not
+        // written.
         out.clear();
-        http.answer(answer(200, b"one"), &storage, &mut out);
-        http.request(
-            get("http://h.org/2", Some("dl.tmp")),
-            true,
+        http.answer(answer(200, b"old"), &storage, &mut out);
+        assert!(out.is_empty());
+        assert!(!storage.exists("dl.tmp"));
+        http.answer(
+            HttpResponse {
+                id: calls[0].id,
+                ..answer(200, b"new")
+            },
             &storage,
             &mut out,
         );
-        assert_eq!(http.take().len(), 1);
+        assert_eq!(read_file(&storage, "DL.tmp", 64).unwrap(), b"new");
+        // Not yet passed to the shell: only the newer one goes.
+        http.request(get("http://h.org/3", Some("a")), true, &storage, &mut out);
+        http.request(get("http://h.org/4", Some("a")), true, &storage, &mut out);
+        let calls = http.take();
+        assert_eq!(calls.len(), 1);
+        assert_eq!(calls[0].url, "http://h.org/4");
     }
 
     #[test]

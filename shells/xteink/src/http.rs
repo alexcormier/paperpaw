@@ -103,6 +103,8 @@ struct Call {
     got: u64,
     /// Until when it may wait for the network, or for progress.
     until: u64,
+    /// A later call saves to the same file: this one ends unanswered.
+    replaced: bool,
 }
 
 /// The requests going on.
@@ -112,7 +114,22 @@ pub struct Calls {
 }
 
 impl Calls {
+    /// Starts a request; one saving to the same file as an earlier one
+    /// replaces it (the kernel passes over the earlier one's answer), so
+    /// that two never write one file.
     pub fn add(&mut self, call: HttpCall) {
+        if let Some(path) = &call.save_to {
+            for earlier in &mut self.calls {
+                if earlier
+                    .call
+                    .save_to
+                    .as_deref()
+                    .is_some_and(|other| other.eq_ignore_ascii_case(path))
+                {
+                    earlier.replaced = true;
+                }
+            }
+        }
         let sink = match &call.save_to {
             Some(path) => Sink::File {
                 part: alloc::format!("{path}.part"),
@@ -129,6 +146,7 @@ impl Calls {
             sink,
             got: 0,
             until: now_ms() + OFFLINE_MS,
+            replaced: false,
         });
     }
 
@@ -158,6 +176,14 @@ impl Calls {
                 .iter()
                 .filter(|c| !matches!(c.phase, Phase::Waiting) && c.secure())
                 .count();
+            if self.calls[at].replaced {
+                let mut call = self.calls.remove(at);
+                if let Some(net) = net.as_deref_mut() {
+                    call.stop(net);
+                }
+                call.discard(storage);
+                continue;
+            }
             let call = &mut self.calls[at];
             // A TLS connection takes some 40 KB: one at a time.
             let may_open = open < MAX_CALLS && (!call.secure() || (secure == 0 && clock_ready));

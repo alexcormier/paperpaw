@@ -23,9 +23,10 @@ change the plugin SDK.
   saved; an error's body (404, 500, also a 304) is its reason for the
   plugin and leaves the file as it was, and the X4 replaces the old file
   only once the new one is whole. A download longer than the limit
-  fails instead of being saved cut short. A second request saving to a
-  file another is still saving to fails at once ("already saving to
-  this file") instead of mixing both into it. A body for the plugin
+  fails instead of being saved cut short. A request saving to a file
+  another is still saving to replaces that one (it fails at once,
+  "replaced by a newer request", and its late answer is passed over)
+  instead of both being mixed into the file. A body for the plugin
   moves through the kernel without copies (it was held up to three
   times), and the X4 sends a request's body without copying it first.
 - Sockets: text read from a socket keeps a character whole where a read
