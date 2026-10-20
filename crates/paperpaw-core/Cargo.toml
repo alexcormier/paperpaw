@@ -29,6 +29,7 @@ paperpaw-sdk.workspace = true
 paperpaw-text.workspace = true
 # Loads a native plugin built apart (tests/native_plugin.rs).
 libloading = "0.8"
+proptest.workspace = true
 
 [lints]
 workspace = true

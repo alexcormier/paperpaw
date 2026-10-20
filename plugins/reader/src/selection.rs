@@ -307,3 +307,6 @@ fn nearest_on_line(words: &[WordBox], index: usize, below: bool) -> usize {
         .min_by_key(|(_, w)| center(&w.area).abs_diff(center(current)))
         .map_or(index, |(i, _)| i)
 }
+
+#[cfg(test)]
+mod moving_tests;

@@ -413,3 +413,6 @@ mod tests {
         assert!(BitmapFont::new(data).unwrap().has_char('b'));
     }
 }
+
+#[cfg(test)]
+mod format_tests;

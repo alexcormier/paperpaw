@@ -139,3 +139,6 @@ mod tests {
         assert_eq!(entries[1].url, "https://www.gutenberg.org/");
     }
 }
+
+#[cfg(test)]
+mod format_tests;

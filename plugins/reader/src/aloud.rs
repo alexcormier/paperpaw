@@ -97,3 +97,6 @@ mod tests {
         );
     }
 }
+
+#[cfg(test)]
+mod sentence_tests;

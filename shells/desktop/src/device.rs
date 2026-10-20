@@ -563,8 +563,9 @@ mod tests {
     use super::*;
     use paperpaw_core::WifiCommand;
 
-    /// The heap budget counts every thread's kernel: one device at a time.
-    static ONE_AT_A_TIME: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    /// The heap budget counts every thread's kernel: one device at a time,
+    /// and none while the budget's own tests read its counters.
+    use crate::budget::accounting_tests::LOCK as ONE_AT_A_TIME;
 
     fn device(name: &str) -> (Device, std::path::PathBuf) {
         let root =
