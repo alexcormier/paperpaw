@@ -8,6 +8,7 @@
 
 use alloc::string::String;
 use alloc::vec::Vec;
+use core::net::SocketAddr;
 
 use paperpaw_core::{
     Effects, HttpCall, Kernel, ServerCall, ServerEvent, SocketCall, SocketEvent, WifiCommand,
@@ -51,6 +52,7 @@ enum Sync {
     },
     Asking {
         socket: SocketHandle,
+        asked: sntp::Asked,
         until: u64,
     },
 }
@@ -261,11 +263,16 @@ impl Network {
                 }
                 None => Sync::Resolving { query, until },
             },
-            Sync::Asking { socket, until } => {
+            Sync::Asking {
+                socket,
+                asked,
+                until,
+            } => {
                 let udp = net.udp(socket);
                 let mut time = None;
-                while let Ok((data, _)) = udp.recv() {
-                    time = time.or(sntp::answer(data));
+                while let Ok((data, meta)) = udp.recv() {
+                    let from = SocketAddr::new(meta.endpoint.addr.into(), meta.endpoint.port);
+                    time = time.or(asked.answer(data, from));
                 }
                 if let Some(unix_ms) = time {
                     net.release_udp(socket);
@@ -278,7 +285,11 @@ impl Network {
                     net.release_udp(socket);
                     self.sync_failed(ms)
                 } else {
-                    Sync::Asking { socket, until }
+                    Sync::Asking {
+                        socket,
+                        asked,
+                        until,
+                    }
                 }
             }
         };
@@ -369,16 +380,22 @@ impl Network {
     }
 }
 
-/// Sends an SNTP request to `address`.
+/// Sends an SNTP request to `address`, with a random number its answer
+/// must give back.
 fn ask(net: &mut Net, address: smoltcp::wire::IpAddress, ms: u64) -> Sync {
     let Ok(socket) = net.open_udp(2, 2 * sntp::MESSAGE) else {
         return Sync::Idle {
             not_before: ms + RETRY_MS,
         };
     };
+    let rng = esp_hal::rng::Rng::new();
+    let asked = sntp::Asked {
+        server: SocketAddr::new(address.into(), sntp::PORT),
+        nonce: u64::from(rng.random()) << 32 | u64::from(rng.random()),
+    };
     if net
         .udp(socket)
-        .send_slice(&sntp::request(), (address, sntp::PORT))
+        .send_slice(&asked.request(), (address, sntp::PORT))
         .is_err()
     {
         net.release_udp(socket);
@@ -388,6 +405,7 @@ fn ask(net: &mut Net, address: smoltcp::wire::IpAddress, ms: u64) -> Sync {
     }
     Sync::Asking {
         socket,
+        asked,
         until: ms + ASK_MS,
     }
 }

@@ -844,6 +844,10 @@ change the plugin SDK.
   lookup said "no such host" until the radio went off). Requests made
   while a network is being joined wait for its address, as they were
   meant to, instead of failing at once.
+- X4: the clock takes the time only from the server asked and only its
+  answer to that request (the random number sent with it given back), no
+  longer any answer that comes. `paperpaw-x4`: `sntp::Asked` (its
+  `request` and `answer`) in place of `sntp::request` and `sntp::answer`.
 - The X4's remote control over USB (test builds) does much more, for
   developing on the device: the card (`ls`, `stat`, `md5`, `rm` also of
   folders, `mkdir`, `mv`, `sync`; `tools/x4-remote.py` pushes and pulls
