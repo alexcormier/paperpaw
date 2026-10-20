@@ -23,7 +23,7 @@ mod reading;
 mod series;
 mod shelf;
 #[cfg(test)]
-mod tests;
+pub(crate) mod tests;
 
 use alloc::borrow::Cow;
 use alloc::format;
@@ -537,7 +537,11 @@ pub(crate) fn draw_ring(
 ) {
     let style = UiStyle::new(env);
     let thickness = thickness.min(radius);
-    let fine = (style.line).clamp(1, thickness);
+    if thickness == 0 {
+        // No room for a ring.
+        return;
+    }
+    let fine = style.line.clamp(1, thickness);
     // The fine line in the middle of the ring's width.
     let track = radius - (thickness - fine) / 2;
     canvas.stroke_circle(center, track, fine, look.ink);

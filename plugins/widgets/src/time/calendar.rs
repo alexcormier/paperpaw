@@ -136,7 +136,13 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     };
     let area = look.area;
     let month = MonthGrid::new(today.year, today.month, week_start(env, ID.as_str()));
-    if !widgets::shows(env, ID.as_str(), "next") {
+    // Two months: side by side where the place is wide, else one below
+    // the other; this one alone where two have no room.
+    let gap = style.gap as u16 * 2;
+    let wide = area.width > area.height * 5 / 4;
+    let least = (super::line(&font, style.small) * 4.0) as u16;
+    let room = if wide { area.width } else { area.height };
+    if !widgets::shows(env, ID.as_str(), "next") || super::fitting(room, gap, least, 2) < 2 {
         draw_month(
             canvas,
             env,
@@ -149,17 +155,14 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         );
         return;
     }
-    // Two months: side by side where the place is wide, else one below
-    // the other.
-    let gap = style.gap as u16 * 2;
-    let (first, second) = if area.width > area.height * 5 / 4 {
-        let w = (area.width - gap) / 2;
+    let (first, second) = if wide {
+        let w = super::share(area.width, gap, 2);
         (
             Rect::new(area.x, area.y, w, area.height),
             Rect::new(area.x + w + gap, area.y, w, area.height),
         )
     } else {
-        let h = (area.height - gap) / 2;
+        let h = super::share(area.height, gap, 2);
         (
             Rect::new(area.x, area.y, area.width, h),
             Rect::new(area.x, area.y + h + gap, area.width, h),

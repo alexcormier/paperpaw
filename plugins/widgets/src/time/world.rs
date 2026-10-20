@@ -235,22 +235,26 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let Some(font) = font else {
         return;
     };
-    let places = places(env);
+    let mut places = places(env);
     if places.is_empty() {
         widgets::draw_message(canvas, env, &look, env.i18n.tr("widgets.world-clock.empty"));
         return;
     }
     let area = look.area;
-    let n = places.len() as u16;
+    let gap = style.gap as u16;
     let columns = match chosen(env, ID.as_str(), "layout") {
         "rows" => false,
         "columns" => true,
-        _ => area.width / n > area.height * 9 / 10 && n > 1,
+        _ => area.width / places.len() as u16 > area.height * 9 / 10 && places.len() > 1,
     };
-    let gap = style.gap as u16;
+    // Where not all have room, those first chosen.
+    let least = line(&font, style.small) as u16;
+    let room = if columns { area.width } else { area.height };
+    places.truncate(super::fitting(room, gap, least, places.len()));
+    let n = places.len() as u16;
     // Rows with the name beside the time where every name has room
     // there, else with the name above it.
-    let row_h = (area.height - gap * (n - 1)) / n;
+    let row_h = super::share(area.height, gap, n);
     let stacked = !columns
         && places.iter().any(|place| {
             let clock = super::clock_text(env, &place.time);
@@ -265,7 +269,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let any_note = !stacked && places.iter().any(|p| !note(env, p).is_empty());
         let notes = if any_note { 2.0 } else { 1.0 };
         let (w, h) = if columns {
-            ((area.width - gap * (n - 1)) / n, area.height)
+            (super::share(area.width, gap, n), area.height)
         } else {
             (area.width, row_h)
         };
@@ -283,10 +287,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     for (i, place) in places.iter().enumerate() {
         let i = i as u16;
         let cell = if columns {
-            let w = (area.width - gap * (n - 1)) / n;
+            let w = super::share(area.width, gap, n);
             Rect::new(area.x + i * (w + gap), area.y, w, area.height)
         } else {
-            let h = (area.height - gap * (n - 1)) / n;
+            let h = super::share(area.height, gap, n);
             Rect::new(area.x, area.y + i * (h + gap), area.width, h)
         };
         if columns || stacked {
@@ -297,10 +301,11 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         // A fine line between places.
         if i > 0 && look.frame != Frame::Dark {
             let thick = style.line as u16;
+            let back = (gap / 2 + thick / 2).min(gap);
             let between = if columns {
-                Rect::new(cell.x - gap / 2 - thick / 2, cell.y, thick, cell.height)
+                Rect::new(cell.x - back, cell.y, thick.min(gap), cell.height)
             } else {
-                Rect::new(cell.x, cell.y - gap / 2 - thick / 2, cell.width, thick)
+                Rect::new(cell.x, cell.y - back, cell.width, thick.min(gap))
             };
             canvas.fill_shaded(between, paperpaw_sdk::Color::gray(200));
         }

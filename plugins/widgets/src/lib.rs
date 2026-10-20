@@ -16,6 +16,11 @@ mod books;
 mod time;
 mod words;
 
+#[cfg(test)]
+mod draw_tests;
+#[cfg(test)]
+mod harness;
+
 use alloc::borrow::Cow;
 
 use paperpaw_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version};
