@@ -19,6 +19,45 @@ pub struct Manifest {
     pub version: Version,
     /// The SDK version the plugin was built against.
     pub sdk: Version,
+    /// What it uses beyond its own files, e.g. the network: shown before
+    /// it is installed, and the kernel refuses what is not declared
+    /// (ADR 0024, ADR 0025).
+    pub uses: Uses,
+}
+
+/// What a plugin uses beyond its own files ([`Manifest::uses`]).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+pub struct Uses(u8);
+
+impl Uses {
+    /// Nothing beyond its own files.
+    pub const NOTHING: Uses = Uses(0);
+    /// The network: requests, servers, connections, declared network
+    /// work. Without it they are refused
+    /// ([`Reason::NotDeclared`](crate::work::Reason::NotDeclared)), and
+    /// with it the reader can switch the plugin's network off.
+    pub const NETWORK: Uses = Uses(1);
+
+    /// Whether everything in `other` is declared.
+    pub const fn contains(self, other: Uses) -> bool {
+        self.0 & other.0 == other.0
+    }
+
+    pub const fn bits(self) -> u8 {
+        self.0
+    }
+
+    pub const fn from_bits(bits: u8) -> Uses {
+        Uses(bits & Uses::NETWORK.0)
+    }
+}
+
+impl core::ops::BitOr for Uses {
+    type Output = Uses;
+
+    fn bitor(self, other: Uses) -> Uses {
+        Uses(self.0 | other.0)
+    }
 }
 
 /// A PaperPaw plugin.

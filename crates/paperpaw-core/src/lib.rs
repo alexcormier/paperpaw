@@ -58,6 +58,7 @@ mod registry;
 mod screens;
 #[cfg(test)]
 mod tests;
+mod work;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -308,8 +309,13 @@ pub struct Kernel {
     /// the commands of the call are done, so that one shown for a moment
     /// (e.g. below a menu that closes to open another screen) is not.
     show_pending: bool,
-    /// Events plugins asked for at a time ([`Command::Schedule`]).
-    scheduled: Vec<(Instant, Id, Params)>,
+    /// Work plugins declared, timers among it (see [`work`]).
+    works: work::Queue,
+    /// The call comes from the reader (input, what the shell opens or
+    /// runs for them, the answer to a request made so): what plugins say
+    /// shows. Otherwise it is background work, whose notices become
+    /// notes (see [`work`]).
+    reader: bool,
     /// The short message showing ([`Command::Notify`]) and until when.
     notice: Option<(Box<dyn Screen>, Instant)>,
     stack: Vec<ActiveScreen>,
@@ -444,6 +450,7 @@ impl Kernel {
     /// Handles an input event.
     pub fn handle(&mut self, now: Instant, event: InputEvent) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        self.reader = true;
         if self.stale(now, &event) {
             return self.finish();
         }
@@ -705,6 +712,8 @@ impl Kernel {
         }
         let thresholds = self.thresholds();
         for recognized in self.input.recognizer.tick(now, &thresholds) {
+            // A press held long enough: the reader's input too.
+            self.reader = true;
             self.recognized(recognized);
         }
         if let Some(top) = self.stack.last_mut()
@@ -719,10 +728,9 @@ impl Kernel {
         if self.notice.as_ref().is_some_and(|(_, until)| *until <= now) {
             self.end_notice();
         }
-        while let Some(due) = self.scheduled.iter().position(|(at, ..)| *at <= now) {
-            let (_, event, params) = self.scheduled.remove(due);
-            self.output.commands.push(Command::Emit(event, params));
-        }
+        // Times and deadlines come due here; jobs step only here, never
+        // while input waits.
+        self.works.ticking();
         self.finish()
     }
 
@@ -745,6 +753,12 @@ impl Kernel {
     /// The device's storage, e.g. for a shell that copies files onto it.
     pub fn storage(&self) -> &dyn Storage {
         self.shared.storage.as_ref()
+    }
+
+    /// The power level and mode worn (see [`paperpaw_sdk::power`]), e.g.
+    /// for a shell that slows its processor down while saving.
+    pub fn power(&self) -> &paperpaw_sdk::power::Power {
+        &self.shared.power
     }
 
     pub fn settings(&self) -> &Settings {
@@ -863,6 +877,8 @@ impl Kernel {
     /// test.
     pub fn send_event(&mut self, now: Instant, event: Id, params: Params) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        // Asked from outside (a remote control, a test): as the reader.
+        self.reader = true;
         self.now = now;
         self.output.commands.push(Command::Emit(event, params));
         self.run_commands();
@@ -879,6 +895,7 @@ impl Kernel {
     /// with", a remote control).
     pub fn open_slot(&mut self, now: Instant, slot: Id, params: Params) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        self.reader = true;
         self.now = now;
         self.last_activity = now;
         self.output.commands.push(Command::OpenSlot(slot, params));
@@ -890,6 +907,7 @@ impl Kernel {
     /// asked by a shell's remote control or a test.
     pub fn open_screen(&mut self, now: Instant, screen: Id, params: Params) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        self.reader = true;
         self.now = now;
         self.last_activity = now;
         self.output
@@ -903,6 +921,7 @@ impl Kernel {
     /// first), e.g. asked by a shell's remote control or a test.
     pub fn run_action(&mut self, now: Instant, action: Id) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);
+        self.reader = true;
         self.now = now;
         self.last_activity = now;
         self.dispatch(action);
@@ -1009,6 +1028,10 @@ struct Shared {
     /// How code plugins are loaded, where they are (see
     /// [`KernelBuilder::code_plugins`]).
     native: Option<paperpaw_sdk::native::Native>,
+    /// The power level and mode in use (see [`paperpaw_sdk::power`]).
+    power: paperpaw_sdk::power::Power,
+    /// Where declared work stands, and plugins' notes (see [`work`]).
+    work_states: paperpaw_sdk::work::WorkStates,
     /// Text copied here.
     clipboard: String,
     /// The system's clipboard has text (see
@@ -1069,6 +1092,8 @@ impl Shared {
             wifi: self.wifi.as_ref(),
             firmware: self.firmware.as_ref(),
             native: self.native.as_ref(),
+            power: &self.power,
+            work: &self.work_states,
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
             slots: &self.slots,
             screens: &self.screens,

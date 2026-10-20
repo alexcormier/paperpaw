@@ -15,6 +15,13 @@ impl Kernel {
         // A screen that set a scope may have closed.
         self.check_scope_owner();
         self.check_preview_owner();
+        // Work due now runs before the network is looked at, so that its
+        // requests want it in this call; what it brings due runs too.
+        for _ in 0..work::MAX_ROUNDS {
+            if !self.run_work() {
+                break;
+            }
+        }
         self.check_network();
         self.run_commands();
         if let Some(row) = self.hint_row() {
@@ -83,7 +90,7 @@ impl Kernel {
         }
         let input = self.input.recognizer.next_deadline(&self.thresholds());
         let notice = self.notice.as_ref().map(|(_, until)| *until);
-        let scheduled = self.scheduled.iter().map(|(at, ..)| *at).min();
+        let work = self.works.next_wake(&self.base_power(), self.last_activity);
         // After a screenshot is drawn, a message says where it went.
         let shot = self
             .frame
@@ -97,7 +104,7 @@ impl Kernel {
             input,
             timer,
             notice,
-            scheduled,
+            work,
             self.sleep_due(),
             shot,
             self.network_deadline(),
@@ -115,6 +122,10 @@ impl Kernel {
             self.shared.recall.clear();
         }
         self.timed();
+        // What background work said in this call, kept as notes.
+        self.keep_notes();
+        // The next call is the reader's only if it says so.
+        self.reader = false;
         effects
     }
 
@@ -144,6 +155,10 @@ impl Kernel {
 
     /// Carries out a command, by its kind.
     pub(crate) fn apply(&mut self, command: Command) {
+        // Network use the plugin's manifest does not declare: refused.
+        let Some(command) = self.declared_network(command) else {
+            return;
+        };
         match command {
             Command::OpenSlot(slot, params) => self.open_slot_command(slot, params),
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
@@ -152,13 +167,14 @@ impl Kernel {
                     self.close_above(self.stack.len() - 2);
                 }
             }
-            Command::Notify(text) => self.notify(text),
+            Command::Notify(text) | Command::Announce(text) => self.notify(text),
             Command::Emit(event, params) => self.emit(&event, &params),
             Command::RunAction(action) => self.dispatch(action),
-            Command::Schedule(event, params, at) => {
-                self.scheduled.retain(|(_, e, _)| *e != event);
-                self.scheduled.push((at, event, params));
-            }
+            command @ (Command::Work(_)
+            | Command::CancelWork(..)
+            | Command::CancelHttp(_)
+            | Command::Wear(_)
+            | Command::GoOnline) => self.apply_work(command),
             Command::Restart => self.restart = true,
             Command::LoadPlugin(folder) => self.load_plugin(&folder),
             Command::RemovePlugin(id) => self.remove_plugin(&id),
@@ -212,15 +228,29 @@ impl Kernel {
     }
 
     /// An event to its subscribers, then to every open screen.
-    fn emit(&mut self, event: &Id, params: &Params) {
+    pub(crate) fn emit(&mut self, event: &Id, params: &Params) {
         // A page turned, also by itself, is use.
         if *event == events::PAGE_TURNED {
             self.last_activity = self.now;
         }
+        // Moments for declared work, and jobs waiting for this event.
+        self.works.saw(event, params);
         let env = self.shared.env(self.now);
         for (_, plugin, handler) in self.subscriptions.iter().filter(|(id, ..)| id == event) {
             let _running = self.shared.meter.enter(plugin.as_str());
+            let from = self.output.commands.len();
             handler(&env, params, &mut self.output.commands);
+            // Background work says nothing over reading.
+            let top = self.stack.last().map(|s| s.id.namespace());
+            work::quiet(
+                self.reader,
+                top,
+                self.now,
+                from,
+                plugin.as_str(),
+                &mut self.output.commands,
+                &mut self.works,
+            );
         }
         for index in 0..self.stack.len() {
             self.with_screen(index, |screen, cx| {
@@ -353,9 +383,10 @@ impl Kernel {
                     .command(command, network, screens, &*self.shared.storage, out);
             }
             Command::Http(request) => {
+                let reader = self.reader;
                 self.io
                     .http
-                    .request(request, network, &*self.shared.storage, out)
+                    .request(request, network, reader, &*self.shared.storage, out)
             }
             _ => {}
         }

@@ -123,6 +123,7 @@ impl Plugin for Joplin {
             description: Cow::Borrowed("Keeps the highlights and notes of each book in Joplin."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 

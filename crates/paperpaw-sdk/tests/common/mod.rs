@@ -139,6 +139,8 @@ impl Harness {
             wifi: None,
             firmware: None,
             native: None,
+            power: paperpaw_sdk::power::Power::normal(),
+            work: paperpaw_sdk::work::WorkStates::none(),
             clipboard: false,
             slots: &[],
             screens: &[],

@@ -64,6 +64,8 @@ const HTTP_KEYS: &[&str] = &[
     http_params::ETAG,
     http_params::CONTENT_TYPE,
     http_params::FINAL_URL,
+    paperpaw_sdk::work::params::REFUSED,
+    paperpaw_sdk::work::params::RETRY,
 ];
 
 proptest! {
@@ -91,11 +93,11 @@ proptest! {
         prop_assert_eq!(nearly(SAMPLE.read(&event, &params), &sample), Some(sample.clone()));
         // Another event's id: not this one.
         prop_assert_eq!(SAMPLE.read(&Id::new_static("t.other"), &params), None);
-        let Command::Schedule(event, params, at) = SAMPLE.schedule(sample.clone(), Instant(5)) else {
-            panic!("a scheduled event");
+        let Command::Work(work) = SAMPLE.schedule(sample.clone(), Instant(5)) else {
+            panic!("work at a time");
         };
-        prop_assert_eq!(at, Instant(5));
-        prop_assert_eq!(nearly(SAMPLE.read(&event, &params), &sample), Some(sample));
+        prop_assert_eq!(work.at, Some(Instant(5)));
+        prop_assert_eq!(nearly(SAMPLE.read(&work.id, &work.params), &sample), Some(sample));
     }
 
     /// Whatever parameters come, reading them does not panic.
@@ -127,7 +129,11 @@ proptest! {
         final_url in proptest::option::of("https://[a-z./]{0,12}"),
         context in context(HTTP_KEYS),
     ) {
-        let reply = HttpReply { status, body, etag, content_type, final_url, context };
+        let mut reply = HttpReply::failed(body, context);
+        reply.status = status;
+        reply.etag = etag;
+        reply.content_type = content_type;
+        reply.final_url = final_url;
         let back = HttpReply::from_params(&reply.to_params()).unwrap();
         prop_assert_eq!(back.ok(), (200..300).contains(&status));
         prop_assert_eq!(back, reply);

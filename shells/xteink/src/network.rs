@@ -322,6 +322,8 @@ impl Network {
                     } else {
                         64 * 1024
                     },
+                    timeout_ms: 30_000,
+                    want_headers: Vec::new(),
                     save_to,
                 });
             }

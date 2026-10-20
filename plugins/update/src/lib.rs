@@ -81,7 +81,7 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
         let _ = storage.remove(&file(INSTALLING));
         if !firmware.undone && version == firmware.version {
             let _ = storage.remove(&path);
-            out.push(Command::Notify(
+            out.push(Command::Announce(
                 env.i18n
                     .format("update.done", &[("version", Arg::Str(&version))]),
             ));
@@ -89,7 +89,7 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
         }
     }
     if firmware.undone {
-        out.push(Command::Notify(env.i18n.format(
+        out.push(Command::Announce(env.i18n.format(
             "update.undone",
             &[("version", Arg::Str(&firmware.version))],
         )));
@@ -119,6 +119,7 @@ impl Plugin for Update {
             ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 

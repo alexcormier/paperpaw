@@ -1012,6 +1012,8 @@ mod tests {
                 wifi: None,
                 firmware: None,
                 native: None,
+                power: crate::power::Power::normal(),
+                work: crate::work::WorkStates::none(),
                 clipboard: false,
                 slots: &[],
                 screens: &[],

@@ -574,6 +574,7 @@ impl Plugin for Probe {
             description: Cow::Borrowed("A screen that reads while it draws."),
             version: SDK_VERSION,
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

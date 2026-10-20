@@ -2047,6 +2047,7 @@ dependencies = [
  "paperpaw-plugin-news",
  "paperpaw-plugin-opds",
  "paperpaw-plugin-plugin-manager",
+ "paperpaw-plugin-power",
  "paperpaw-plugin-profiles",
  "paperpaw-plugin-reader",
  "paperpaw-plugin-readwise",
@@ -2365,6 +2366,13 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-plugin-manager"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-power"
 version = "0.4.0-dev"
 dependencies = [
  "paperpaw-sdk",

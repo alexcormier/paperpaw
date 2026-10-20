@@ -29,6 +29,7 @@ impl Plugin for Pebble {
             ),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_core::sdk::Uses::NOTHING,
         }
     }
 

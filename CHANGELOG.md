@@ -67,6 +67,83 @@ change the plugin SDK.
   changed while the library shows (how books show, the order, the size
   of the interface) apply at once. On devices of little memory (the X4)
   it lists 2000 books at most and says how many there are beyond.
+- SDK, power saving (ADR 0025): a plugin's manifest says what it uses
+  (`Manifest::uses`, `Uses::NETWORK`): every plugin that reaches the
+  network must declare it. Declared work (`work`: `Work`, `Moments`,
+  `Command::Work`, `Command::CancelWork`; jobs in steps with `WorkSpec`,
+  `Step`, `Registrar::add_work`, `events::WORK_CHANGED`; keys for
+  several works of one event), power levels and modes (`power`:
+  `PowerLevel`, `Power`, `Wear`; `Env::power`, `Env::work`), and one
+  answer for what did not run (`Refusal` with a `Reason` and when to
+  `Retry`; `events::WORK_REFUSED`, `WORK_ALLOWED`, `POWER_CHANGED`).
+  Breaking: `Command::Schedule` is gone (work at a time, `Work::at`, or
+  `EVENT.schedule`, replaces it); `HttpReply` has two more public
+  fields, `refused` and `headers`, so replies built field by field need
+  them; `Manifest` has `uses`.
+- Kernel, declared work (ADR 0025): one queue for plugins' timers and
+  work. Work runs at its time, at one of its moments (waking, a book
+  opened or closed, going to sleep, the radio on anyway, charging, idle)
+  or at its deadline, whichever comes first, as background work even
+  when the reader's own doing brought it due; work that needs the
+  network and is only nice to have runs only while the radio is on
+  anyway, and nothing wakes the device for work that cannot run then.
+  Declared again, work keeps its first time and a running job goes on;
+  a timer with a period comes again. Jobs take one step a tick, never
+  while input waits. A plugin may have 8 works on the X4 (32 elsewhere),
+  declared under its own name only; a full queue says `WORK_ALLOWED`
+  once there is room again.
+- Network by the power mode and the manifest: requests, servers and
+  sockets of a plugin whose manifest does not declare the network are
+  refused (`Reason::NotDeclared`). In Offline only what the reader went
+  online for goes out (`Command::GoOnline`, for the screen in front
+  until it closes); anything else is refused (`Reason::Offline`) and
+  may try again when allowed. `Command::CancelHttp` takes a plugin's
+  requests back, each answered as cancelled.
+- Quiet reading (ADR 0025): background work says nothing over reading.
+  A notice from an event handler, an action run by a rule or a job,
+  outside the reader's own doing and over another plugin's screen,
+  becomes that plugin's note (`Env::work`, `WorkStates::note`), to show
+  on its own page. What the reader does (a held button too), answers to
+  their requests, Wi-Fi while they wait for the network and a plugin's
+  own screen still say what they like. `Command::Announce` is for what
+  must reach the reader anyway: a rule's message they set up, and what
+  happened to the device (safe mode, plugins not installed, an update
+  installed).
+- Power modes (ADR 0025): Normal, Saving, Offline and Automatic, chosen
+  in the quick panel (four segments where they fit) or under Settings,
+  System, Power.
+  Automatic goes by the battery: Saving below 20 %, Offline below 10 %,
+  back 5 % above each, Normal while charging; it switches silently, and
+  the status lines show a leaf while saving and Wi-Fi crossed out while
+  offline, nothing in Normal. Saving makes declared work wait four times
+  as long, sleeps after at most 5 minutes and keeps the front light at
+  most at half; Offline keeps the radio off for background work, also
+  while charging. A mode's values and limits lie over the reader's own
+  (`Settings::wear`) and go when it ends; what the reader changes while
+  it is worn is theirs until the next mode, also across a start. The
+  modes are presets (`core.power-mode`), worn with `Command::Wear`;
+  `Kernel::power` tells shells the level.
+- Progress sync (kosync) by the power mode: silently, when a book opens
+  or closes, on waking and before sleep, as before; while reading with
+  the radio off, the progress goes out when the radio is on anyway, at
+  the latest after 30 minutes (two hours in Saving). Offline sends and
+  fetches nothing; once allowed again, the books switched from go out,
+  then the open one's latest is fetched before its own is sent.
+- Network per plugin (ADR 0025): under Settings, System, *Network per
+  plugin*, each plugin that uses the network has its own part: its
+  *Network* on or off (off, its requests and network work are refused,
+  `Reason::NetworkOff`), and *In saving modes*: follow the mode, as in
+  Normal (its work keeps Normal's limits while saving, not in Offline),
+  or only when asked (no background network at all).
+- SDK, HTTP: `HttpRequest` is made with `HttpRequest::get` or `new` and
+  methods (`header`, `body`, `body_from`, `save_to`, `with`), no longer
+  field by field (`#[non_exhaustive]`). A request may set a `timeout`
+  (by default 30 s, 10 minutes for a download to a file), the answer's
+  headers it wants back (`want_headers`, read with `HttpReply::header`)
+  and the longest body kept in memory (`max_body`); by default that is
+  64 KiB on the X4 and the X4 Pro (it was 1 MiB everywhere) and 1 MiB
+  elsewhere. Every shell keeps the time limit and passes the headers
+  back.
 - Themes: a theme's defaults (a data plugin's `settings.ini`, or the
   Pebble theme switched on) win over the device's own: a large-print
   theme now enlarges the interface on the X4 too, whose own default is

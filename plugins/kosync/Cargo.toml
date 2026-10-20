@@ -16,6 +16,7 @@ paperpaw-digest.workspace = true
 paperpaw-sdk.workspace = true
 
 [dev-dependencies]
+paperpaw-plugin-power.workspace = true
 paperpaw-core.workspace = true
 paperpaw-i18n.workspace = true
 paperpaw-platform.workspace = true

@@ -383,6 +383,9 @@ pub struct Head {
     /// `Content-Length`, if given.
     pub length: Option<u64>,
     pub chunked: bool,
+    /// The headers asked for ([`Parser::wanting`]) that came, their names
+    /// in lower case.
+    pub headers: Vec<(String, String)>,
 }
 
 impl Head {
@@ -425,6 +428,8 @@ pub struct Parser {
     head: Option<Head>,
     /// The request was `HEAD`: no body follows.
     no_body: bool,
+    /// Headers to keep, in lower case ([`Head::headers`]).
+    wanted: Vec<String>,
 }
 
 impl Parser {
@@ -435,7 +440,14 @@ impl Parser {
             line: Vec::new(),
             head: None,
             no_body: method.eq_ignore_ascii_case("HEAD"),
+            wanted: Vec::new(),
         }
+    }
+
+    /// Keeps these headers of the answer too ([`Head::headers`]).
+    pub fn wanting(mut self, names: &[String]) -> Self {
+        self.wanted = names.iter().map(|n| n.to_ascii_lowercase()).collect();
+        self
     }
 
     /// The head, once it came.
@@ -503,7 +515,7 @@ impl Parser {
             return Err(Error::Malformed);
         }
         let rest_len = self.line.len() - (end + 4);
-        let head = parse_head(&self.line[..end]).ok_or(Error::Malformed)?;
+        let head = parse_head(&self.line[..end], &self.wanted).ok_or(Error::Malformed)?;
         self.line.clear();
         let rest = &data[data.len() - rest_len..];
         // An interim answer (e.g. 100 Continue): the real one follows.
@@ -582,7 +594,7 @@ fn find(haystack: &[u8], needle: &[u8]) -> Option<usize> {
     haystack.windows(needle.len()).position(|w| w == needle)
 }
 
-fn parse_head(bytes: &[u8]) -> Option<Head> {
+fn parse_head(bytes: &[u8], wanted: &[String]) -> Option<Head> {
     let text = core::str::from_utf8(bytes).ok()?;
     let mut lines = text.split("\r\n");
     let status_line = lines.next()?;
@@ -599,7 +611,11 @@ fn parse_head(bytes: &[u8]) -> Option<Head> {
             continue;
         };
         let value = value.trim();
-        match name.trim().to_ascii_lowercase().as_str() {
+        let name = name.trim().to_ascii_lowercase();
+        if wanted.contains(&name) {
+            head.headers.push((name.clone(), value.to_string()));
+        }
+        match name.as_str() {
             "content-type" => head.content_type = Some(value.to_string()),
             "etag" => head.etag = Some(value.to_string()),
             "location" => head.location = Some(value.to_string()),
@@ -887,6 +903,19 @@ mod tests {
         assert_eq!(
             (head.location.as_deref(), body.len(), done),
             (Some("/x"), 0, true)
+        );
+    }
+
+    #[test]
+    fn wanted_headers_are_kept_in_lower_case() {
+        let mut parser = Parser::new("GET").wanting(&[String::from("Last-Modified")]);
+        let answer: &[u8] =
+            b"HTTP/1.1 200 OK\r\nlast-modified: Tue\r\nX-Other: 1\r\nContent-Length: 0\r\n\r\n";
+        parser.feed(answer, &mut |_| {}).unwrap();
+        let head = parser.head().unwrap();
+        assert_eq!(
+            head.headers,
+            [(String::from("last-modified"), String::from("Tue"))]
         );
     }
 

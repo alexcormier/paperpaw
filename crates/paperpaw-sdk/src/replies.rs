@@ -57,15 +57,25 @@ pub struct HttpReply {
     /// The request's own parameters
     /// ([`HttpRequest::params`](crate::HttpRequest)).
     pub context: Params,
+    /// Why it was not sent, if it was not (status 0): the power mode, the
+    /// reader switched the plugin's network off, too soon again, and when
+    /// to try again (see [`work`](crate::work)).
+    pub refused: Option<crate::work::Refusal>,
+    /// The headers asked for that the answer had
+    /// ([`HttpOptions::want_headers`](crate::HttpOptions)), their names in
+    /// lower case.
+    pub headers: alloc::vec::Vec<(String, String)>,
 }
 
 impl HttpReply {
-    const KEYS: [&'static str; 5] = [
+    const KEYS: [&'static str; 7] = [
         http_params::STATUS,
         http_params::BODY,
         http_params::ETAG,
         http_params::CONTENT_TYPE,
         http_params::FINAL_URL,
+        crate::work::params::REFUSED,
+        crate::work::params::RETRY,
     ];
 
     /// No answer (status 0), for `reason`.
@@ -77,7 +87,25 @@ impl HttpReply {
             content_type: None,
             final_url: None,
             context,
+            refused: None,
+            headers: alloc::vec::Vec::new(),
         }
+    }
+
+    /// Not sent, for `refusal` (status 0, its reason as the body).
+    pub fn refused(refusal: crate::work::Refusal, context: Params) -> Self {
+        Self {
+            refused: Some(refusal),
+            ..Self::failed(refusal.reason.as_str(), context)
+        }
+    }
+
+    /// The header `name` of the answer, if it was asked for and came.
+    pub fn header(&self, name: &str) -> Option<&str> {
+        self.headers
+            .iter()
+            .find(|(n, _)| n.eq_ignore_ascii_case(name))
+            .map(|(_, v)| v.as_str())
     }
 
     /// Whether the status says it succeeded (2xx).
@@ -100,6 +128,15 @@ impl EventData for HttpReply {
                 params.set(key, value.clone());
             }
         }
+        if let Some(refusal) = &self.refused {
+            refusal.write(&mut params);
+        }
+        for (name, value) in &self.headers {
+            params.set(
+                alloc::format!("{}{}", http_params::HEADER, name.to_ascii_lowercase()),
+                value.clone(),
+            );
+        }
         params
     }
 
@@ -110,7 +147,18 @@ impl EventData for HttpReply {
             etag: text(params, http_params::ETAG),
             content_type: text(params, http_params::CONTENT_TYPE),
             final_url: text(params, http_params::FINAL_URL),
-            context: context(params, &Self::KEYS),
+            context: context(params, &Self::KEYS)
+                .iter()
+                .filter(|(k, _)| !k.starts_with(http_params::HEADER))
+                .fold(Params::new(), |p, (k, v)| p.with(String::from(k), v)),
+            refused: crate::work::Refusal::read(params),
+            headers: params
+                .iter()
+                .filter_map(|(k, v)| {
+                    let name = k.strip_prefix(http_params::HEADER)?;
+                    Some((String::from(name), String::from(v)))
+                })
+                .collect(),
         })
     }
 }
@@ -389,10 +437,22 @@ mod tests {
             content_type: None,
             final_url: None,
             context: Params::new().with("run", "4"),
+            refused: None,
+            headers: alloc::vec![(String::from("last-modified"), String::from("Tue"))],
         };
         let back = HttpReply::from_params(&reply.to_params()).unwrap();
         assert_eq!(back, reply);
         assert!(back.ok());
+        assert_eq!(back.header("Last-Modified"), Some("Tue"));
+        let refusal = crate::work::Refusal::new(
+            crate::work::Reason::Offline,
+            crate::work::Retry::WhenAllowed,
+        );
+        let refused = HttpReply::refused(refusal, Params::new().with("run", "5"));
+        let back = HttpReply::from_params(&refused.to_params()).unwrap();
+        assert_eq!(back, refused);
+        assert_eq!(back.status, 0);
+        assert_eq!(back.context, Params::new().with("run", "5"));
         let request = ServerNotice::Request {
             server: Id::new_static("a.server"),
             request: 7,

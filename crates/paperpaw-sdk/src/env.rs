@@ -116,6 +116,11 @@ pub struct Env<'a> {
     /// How native code plugins are loaded here, e.g. which builds fit
     /// (see [`native`](crate::native)); `None` where PaperPaw loads none.
     pub native: Option<&'a crate::native::Native>,
+    /// The power level and mode in use (see [`power`](crate::power)).
+    pub power: &'a crate::power::Power,
+    /// Where declared work stands, and plugins' notes (see
+    /// [`work`](crate::work)).
+    pub work: &'a crate::work::WorkStates,
     /// Whether there is text on the clipboard, copied here
     /// ([`Command::SetClipboard`](crate::Command::SetClipboard)) or, where
     /// the system has a clipboard, in another app; read it with
@@ -208,6 +213,11 @@ pub struct EnvParts<'a> {
     /// How native code plugins are loaded here, e.g. which builds fit
     /// (see [`native`](crate::native)); `None` where PaperPaw loads none.
     pub native: Option<&'a crate::native::Native>,
+    /// The power level and mode in use (see [`power`](crate::power)).
+    pub power: &'a crate::power::Power,
+    /// Where declared work stands, and plugins' notes (see
+    /// [`work`](crate::work)).
+    pub work: &'a crate::work::WorkStates,
     /// Whether there is text on the clipboard, copied here
     /// ([`Command::SetClipboard`](crate::Command::SetClipboard)) or, where
     /// the system has a clipboard, in another app; read it with
@@ -267,6 +277,8 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             wifi: p.wifi,
             firmware: p.firmware,
             native: p.native,
+            power: p.power,
+            work: p.work,
             clipboard: p.clipboard,
             slots: p.slots,
             screens: p.screens,

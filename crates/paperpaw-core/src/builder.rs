@@ -317,6 +317,8 @@ impl KernelBuilder {
                     ..code
                 }),
         );
+        // Every plugin's network, before the values kept for it are read.
+        kernel.define_network_settings();
         if let Some(source) = self.device_keymap.take() {
             kernel.load_device_keymap(source);
         }
@@ -330,6 +332,8 @@ impl KernelBuilder {
             kernel.apply_user_config(source);
             kernel.keys.shell.clone_from(source);
         }
+        // The power mode worn before, over the reader's settings.
+        kernel.restore_power();
         kernel.set_menu_titles();
         kernel.apply_reading_font();
         kernel.apply_status_font();
@@ -398,6 +402,8 @@ impl KernelBuilder {
                 wifi: caps.wifi.then(paperpaw_sdk::wifi::Wifi::default),
                 firmware: self.firmware.take(),
                 native: None,
+                power: paperpaw_sdk::power::Power::default(),
+                work_states: paperpaw_sdk::work::WorkStates::default(),
                 clipboard: String::new(),
                 system_clipboard: false,
                 slots: Vec::new(),
@@ -438,7 +444,7 @@ impl KernelBuilder {
                 swapped: Vec::new(),
             },
             io: network::IoState {
-                http: io::http::Http::default(),
+                http: io::http::Http::for_memory(self.device.memory),
                 servers: io::servers::Servers::default(),
                 sockets: io::sockets::Sockets::default(),
                 speech: io::speech::Speech::default(),
@@ -457,7 +463,11 @@ impl KernelBuilder {
             subscriptions: Vec::new(),
             show_pending: false,
             notice: None,
-            scheduled: Vec::new(),
+            reader: false,
+            works: work::Queue::new(match self.device.memory {
+                paperpaw_platform::MemoryClass::Small => 8,
+                paperpaw_platform::MemoryClass::Large => 32,
+            }),
             stack: Vec::new(),
             output: Output::default(),
             warnings: Vec::new(),
