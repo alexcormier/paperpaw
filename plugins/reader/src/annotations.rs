@@ -100,7 +100,8 @@ impl AnnotationsScreen {
     /// Writes the notes as Markdown and tells where.
     fn export(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let (title, author) = match env.formats.open(env.storage, &self.path) {
+        let options = crate::screen::open_options(&env);
+        let (title, author) = match env.formats.open_with(env.storage, &self.path, &options) {
             Ok(document) => {
                 let m = document.metadata();
                 (m.title.clone().unwrap_or_default(), m.authors.join(", "))

@@ -46,21 +46,54 @@ const BOOK: &str = "books/alice.txt";
 /// The same book with a table of contents.
 const EPUB: &str = "books/alice.epub";
 
-/// A storage the test looks into while kernels have it.
+/// A storage the test looks into while kernels have it. It refuses to
+/// add to page indexes once the appends in `.1` (if set) are used up, to
+/// read files whose paths end as `.2` says, and to write files whose paths
+/// hold what `.3` says (if set).
 #[derive(Clone, Default)]
-struct Shared(Rc<MemoryStorage>);
+struct Shared(
+    Rc<MemoryStorage>,
+    Rc<std::cell::Cell<Option<u32>>>,
+    Rc<std::cell::Cell<Option<&'static str>>>,
+    Rc<RefCell<Option<String>>>,
+);
+
+impl Shared {
+    fn refuses(&self, path: &str) -> bool {
+        self.3
+            .borrow()
+            .as_ref()
+            .is_some_and(|part| path.contains(part.as_str()))
+    }
+}
 
 impl Storage for Shared {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        if self.2.get().is_some_and(|end| path.ends_with(end)) {
+            return Err(StorageError::Io);
+        }
         self.0.read_at(path, offset, buf)
     }
     fn size(&self, path: &str) -> Result<u64, StorageError> {
         self.0.size(path)
     }
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        if self.refuses(path) {
+            return Err(StorageError::Full);
+        }
         self.0.write(path, data)
     }
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        if self.refuses(path) {
+            return Err(StorageError::Full);
+        }
+        if path.contains("/pages-") {
+            match self.1.get() {
+                Some(0) => return Err(StorageError::Io),
+                Some(left) => self.1.set(Some(left - 1)),
+                None => {}
+            }
+        }
         self.0.append(path, data)
     }
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
@@ -73,6 +106,9 @@ impl Storage for Shared {
         self.0.exists(path)
     }
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        if self.refuses(to) {
+            return Err(StorageError::Full);
+        }
         self.0.rename(from, to)
     }
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
@@ -272,6 +308,9 @@ fn a_larger_font_keeps_the_place() {
         reading.run(core_actions::NEXT_PAGE);
     }
     let before = reading.kept();
+    reading.run(core_actions::NEXT_PAGE);
+    let next = reading.kept();
+    reading.run(core_actions::PREV_PAGE);
     reading.run(actions::FONT_LARGER);
     let after = reading.kept();
     // The page starts where a line starts, at the place read or just
@@ -280,6 +319,31 @@ fn a_larger_font_keeps_the_place() {
     assert!(
         after.1 <= before.1 && after.1 + 400 > before.1,
         "{after:?} for {before:?}"
+    );
+    // Laid out anew: larger letters, less on a page.
+    reading.run(core_actions::NEXT_PAGE);
+    let larger = reading.kept();
+    assert!(
+        larger.1 - after.1 < next.1 - before.1,
+        "{after:?} to {larger:?}, before {before:?} to {next:?}"
+    );
+}
+
+#[test]
+fn the_size_slider_lays_the_book_out_anew() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let start = reading.kept();
+    reading.run(core_actions::NEXT_PAGE);
+    let page = reading.kept().1 - start.1;
+    reading.run(core_actions::PREV_PAGE);
+    set(&mut reading, settings::FONT_SIZE.static_str(), "8");
+    let small = reading.kept();
+    reading.run(core_actions::NEXT_PAGE);
+    assert!(
+        reading.kept().1 - small.1 > page,
+        "more on a page in small letters"
     );
 }
 
@@ -717,4 +781,612 @@ fn a_percentage_is_gone_to_and_back_returns() {
     reading.run(core_actions::BACK);
     reading.run(core_actions::BACK);
     assert_eq!(reading.kept(), before);
+}
+
+/// Where pages 0 to `pages` of the book begin, turned to one by one, and
+/// the storage with the book's position after the last of them.
+fn page_starts(pages: usize) -> (Shared, Vec<(u32, u32)>) {
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    page_starts_of(text, pages)
+}
+
+/// The same for the book `text`.
+fn page_starts_of(text: &str, pages: usize) -> (Shared, Vec<(u32, u32)>) {
+    let storage = Shared::default();
+    let mut reading = Reading::with_book(storage.clone(), BOOK, text.as_bytes());
+    reading.open();
+    let mut starts = vec![reading.kept()];
+    for _ in 0..pages {
+        reading.run(core_actions::NEXT_PAGE);
+        starts.push(reading.kept());
+    }
+    (storage, starts)
+}
+
+/// The book opened again where it was left, its page index made anew
+/// as far as one step of eight pages before the storage refuses more.
+fn reopened_with_a_short_index(storage: &Shared) -> Reading {
+    let dir = format!(
+        ".paperpaw/plugins/reader/books/{:016x}",
+        paperpaw_digest::fnv1a64(BOOK)
+    );
+    let mut indexes = Vec::new();
+    storage
+        .list(&dir, &mut |entry| {
+            if entry.name.starts_with("pages-") {
+                indexes.push(format!("{dir}/{}", entry.name));
+            }
+        })
+        .unwrap();
+    assert!(!indexes.is_empty());
+    for index in indexes {
+        storage.remove(&index).unwrap();
+    }
+    storage.1.set(Some(1));
+    // The book is on the card already.
+    let mut reading = Reading::with_book(storage.clone(), BOOK, b"");
+    reading.open();
+    reading
+}
+
+#[test]
+fn a_page_back_stays_near_where_the_index_does_not_reach() {
+    let (storage, starts) = page_starts(12);
+    let mut reading = reopened_with_a_short_index(&storage);
+    assert_eq!(reading.kept(), starts[12]);
+    reading.run(core_actions::PREV_PAGE);
+    let back = reading.kept();
+    // About the page before: not the last page the index knows (the
+    // eighth), nor where it was.
+    assert!(
+        starts[10] < back && back < starts[12],
+        "{back:?} in {starts:?}"
+    );
+    // And on from there, past the page left.
+    reading.run(core_actions::NEXT_PAGE);
+    reading.run(core_actions::NEXT_PAGE);
+    assert!(reading.kept() > starts[12], "{:?}", reading.kept());
+}
+
+#[test]
+fn an_index_the_storage_stops_taking_is_still_used() {
+    let (storage, starts) = page_starts(12);
+    let mut reading = reopened_with_a_short_index(&storage);
+    // The pages it holds are gone to by number.
+    reading.now += 10;
+    let params = Params::new()
+        .with(params::PATH, BOOK)
+        .with(params::TEXT, "4");
+    let effects = reading.kernel.send_event(
+        Instant(reading.now),
+        Id::new_static("reader.page-entered"),
+        params,
+    );
+    reading.settle(effects);
+    assert_eq!(reading.kept(), starts[3]);
+    reading.run(core_actions::PREV_PAGE);
+    assert_eq!(reading.kept(), starts[2]);
+}
+
+#[test]
+fn a_position_that_cannot_be_laid_out_opens_the_book_at_its_start() {
+    let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
+    let storage = Shared::default();
+    let mut reading = Reading::with_book(storage.clone(), EPUB, epub);
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let second = reading.kept();
+    reading.run(core_actions::BACK);
+    let dir = format!(
+        ".paperpaw/plugins/reader/books/{:016x}",
+        paperpaw_digest::fnv1a64(EPUB)
+    );
+    storage
+        .write(
+            &format!("{dir}/progress.ini"),
+            b"[progress]\nsection = 2\noffset = 100\n",
+        )
+        .unwrap();
+    // Its third part cannot be read (a damaged card, say).
+    storage.2.set(Some("/2.txt"));
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    assert_eq!(reading.kept(), second);
+}
+
+/// The page indexes kept for `book`.
+fn indexes(storage: &Shared, book: &str) -> Vec<String> {
+    let dir = format!(
+        ".paperpaw/plugins/reader/books/{:016x}",
+        paperpaw_digest::fnv1a64(book)
+    );
+    let mut found = Vec::new();
+    let _ = storage.list(&dir, &mut |entry| {
+        if entry.name.starts_with("pages-") {
+            found.push(entry.name.to_string());
+        }
+    });
+    found
+}
+
+/// The pages of the book as counted once it is opened.
+fn pages_counted(reading: &mut Reading) -> u32 {
+    reading.run(core_actions::NEXT_PAGE);
+    let last = reading.heard.borrow().last().unwrap().1.clone();
+    last.pages.expect("the pages are counted")
+}
+
+#[test]
+fn another_edition_of_a_book_is_counted_anew() {
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    let storage = Shared::default();
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    let whole = pages_counted(&mut reading);
+    // Replaced by a shorter one under the same name, and opened again.
+    let half = &text[..text.len() / 2];
+    let half = &half[..half.rfind('\n').unwrap()];
+    storage.write(BOOK, half.as_bytes()).unwrap();
+    let mut again = Reading::new(storage);
+    again.open();
+    let shorter = pages_counted(&mut again);
+    let mut fresh = Reading::with_book(Shared::default(), BOOK, half.as_bytes());
+    fresh.open();
+    assert_eq!(shorter, pages_counted(&mut fresh));
+    assert!(shorter < whole, "{shorter} of {whole}");
+}
+
+#[test]
+fn page_indexes_of_layouts_left_do_not_pile_up() {
+    let storage = Shared::default();
+    let mut reading = Reading::new(storage.clone());
+    reading.open();
+    for size in 10..20 {
+        set(
+            &mut reading,
+            settings::FONT_SIZE.static_str(),
+            &size.to_string(),
+        );
+    }
+    let kept = indexes(&storage, BOOK).len();
+    assert!((1..=4).contains(&kept), "{kept} indexes");
+}
+
+#[test]
+fn text_chosen_is_let_go_when_the_page_turns_by_itself() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    reading.run(actions::SELECT);
+    reading.run(actions::AUTO_TURN);
+    let before = reading.kept();
+    // The page turns by itself.
+    reading.now += 120_000;
+    let effects = reading.kernel.tick(Instant(reading.now));
+    reading.settle(effects);
+    reading.run(actions::AUTO_TURN);
+    assert!(reading.kept() > before);
+    // Nothing chosen on the new page: the page is marked as without.
+    reading.run(actions::TOGGLE_BOOKMARK);
+    let marks = paperpaw_sdk::annotations::marks(&reading.storage, BOOK);
+    assert_eq!(marks.iter().filter(|m| m.kind == Kind::Bookmark).count(), 1);
+}
+
+#[test]
+fn search_and_contents_read_the_book_as_the_page_shows_it() {
+    let epub = include_bytes!("../../../samples/library/books/alice-in-wonderland.epub");
+    let storage = Shared::default();
+    let mut reading = Reading::with_book(storage.clone(), EPUB, epub);
+    // Without the book's own styles: its chapters converted into a cache
+    // of their own.
+    set(&mut reading, "reader.publisher-styles", "off");
+    reading.open();
+    reading.run(actions::TOC);
+    reading.run(core_actions::BACK);
+    reading.now += 10;
+    let params = Params::new()
+        .with(params::PATH, EPUB)
+        .with(params::TEXT, "Rabbit");
+    let effects = reading.kernel.send_event(
+        Instant(reading.now),
+        Id::new_static("reader.search-entered"),
+        params,
+    );
+    reading.settle(effects);
+    assert_eq!(
+        reading.kernel.active_screen().map(Id::as_str),
+        Some("reader.search-results")
+    );
+    // No chapter converted with the styles as well.
+    let cache = format!(
+        ".paperpaw/plugins/format-epub/{}",
+        paperpaw_sdk::library::key(EPUB)
+    );
+    let mut styled = Vec::new();
+    storage
+        .list(&cache, &mut |entry| {
+            let chapter = entry.name.strip_suffix(".txt");
+            if chapter.is_some_and(|c| c.bytes().all(|b| b.is_ascii_digit())) {
+                styled.push(entry.name.to_string());
+            }
+        })
+        .unwrap();
+    assert!(styled.is_empty(), "{styled:?}");
+}
+
+/// How often a status item was asked what it shows.
+type Asked = Rc<std::cell::Cell<u32>>;
+
+/// A plugin with a status item that counts how often it is asked.
+struct Counter(Asked);
+
+impl Plugin for Counter {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("counter"),
+            name: "Counter".into(),
+            description: "Counts what status items are asked.".into(),
+            version: Version::new(0, 1, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let asked = self.0.clone();
+        r.add_status_item(paperpaw_sdk::StatusItemSpec {
+            id: Id::new_static("counter.item"),
+            title: "counter".into(),
+            value: Box::new(move |_, _| {
+                asked.set(asked.get() + 1);
+                None
+            }),
+        })
+    }
+}
+
+#[test]
+fn a_page_drawn_in_bands_asks_the_status_line_once() {
+    let storage = Shared::default();
+    storage.create_dir("books").unwrap();
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    storage.write(BOOK, text.as_bytes()).unwrap();
+    let asked = Asked::default();
+    // Bands of a hundred rows, as on the X4.
+    let mut kernel = Kernel::builder(DEVICE)
+        .frame_rows(100)
+        .setting_default_text("reader.status.bottom-left", "counter.item")
+        .setting_default_text("reader.status.top-lines", "")
+        .storage(storage.clone())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_format_txt::TxtFormat)
+        .plugin(Reader)
+        .plugin(Counter(asked.clone()))
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let mut reading = Reading {
+        kernel,
+        storage,
+        heard: Heard::default(),
+        now: 0,
+        book: BOOK,
+    };
+    reading.settle(effects);
+    reading.open();
+    reading.kernel.render(&mut |_, _| {});
+    reading.run(core_actions::NEXT_PAGE);
+    asked.set(0);
+    let mut bands = 0;
+    reading.kernel.render(&mut |_, _| bands += 1);
+    assert!(bands > 4, "{bands} bands");
+    assert!(
+        (1..=2).contains(&asked.get()),
+        "asked {} times",
+        asked.get()
+    );
+}
+
+#[test]
+fn small_devices_count_pages_with_rests_between() {
+    let storage = Shared::default();
+    storage.create_dir("books").unwrap();
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    storage.write(BOOK, text.as_bytes()).unwrap();
+    // The X4: about half a second to lay out a page.
+    let small = DeviceInfo {
+        memory: MemoryClass::Small,
+        ..DEVICE
+    };
+    let mut kernel = Kernel::builder(small)
+        .storage(storage.clone())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_format_txt::TxtFormat)
+        .plugin(Reader)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let params = Params::new().with(params::PATH, BOOK);
+    let mut effects = kernel.open_slot(Instant(10), slots::READER, params);
+    // Two seconds of counting.
+    let mut now = 10;
+    while let Some(at) = effects.wake_at().filter(|at| at.0 <= 2010) {
+        now = now.max(at.0);
+        effects = kernel.tick(Instant(now));
+    }
+    let index = indexes(&storage, BOOK).pop().expect("an index");
+    let dir = format!(
+        ".paperpaw/plugins/reader/books/{:016x}",
+        paperpaw_digest::fnv1a64(BOOK)
+    );
+    let pages = storage.size(&format!("{dir}/{index}")).unwrap() / 8;
+    // A page and a rest as long, not a page every two milliseconds.
+    assert!((1..=8).contains(&pages), "{pages} pages counted");
+}
+
+#[test]
+fn where_i_was_chosen_with_the_buttons_returns() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let before = reading.kept();
+    reading.run(actions::SKIM_BOOK);
+    reading.run(core_actions::NEXT_PAGE);
+    assert_ne!(reading.kept(), before);
+    // The buttons below the bar: Chapter back, Where I was, Chapter on,
+    // Page number; down moves to the first, then the next.
+    reading.run(core_actions::DOWN);
+    reading.run(core_actions::DOWN);
+    reading.run(core_actions::CONFIRM);
+    assert_eq!(
+        reading.kernel.active_screen().map(Id::as_str),
+        Some("reader.screen")
+    );
+    assert_eq!(reading.kept(), before);
+}
+
+#[test]
+fn select_in_the_skimming_bar_stays_where_it_went() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    reading.run(actions::SKIM_BOOK);
+    reading.run(core_actions::NEXT_PAGE);
+    let skimmed = reading.kept();
+    reading.run(core_actions::CONFIRM);
+    assert_eq!(
+        reading.kernel.active_screen().map(Id::as_str),
+        Some("reader.screen")
+    );
+    assert_eq!(reading.kept(), skimmed);
+}
+
+/// The entries of a menu as a plugin's action finds them.
+type Entries = Rc<RefCell<Vec<String>>>;
+
+/// A plugin whose action `looker.look` notes the reader's More menu.
+struct MenuLook(Entries);
+
+impl Plugin for MenuLook {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("looker"),
+            name: "Menus".into(),
+            description: "Looks into menus.".into(),
+            version: Version::new(0, 1, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let entries = self.0.clone();
+        r.add_action(
+            paperpaw_sdk::ActionSpec::new(Id::new_static("looker.look"), "look").handler(
+                move |env: &paperpaw_sdk::Env<'_>, _: &mut Vec<paperpaw_sdk::Command>| {
+                    *entries.borrow_mut() = env
+                        .menus
+                        .items(paperpaw_plugin_reader::MORE_MENU.as_str())
+                        .iter()
+                        .map(|item| item.id.as_str().to_string())
+                        .collect();
+                },
+            ),
+        )
+    }
+}
+
+#[test]
+fn status_lines_switch_from_the_menu_without_a_touch_screen() {
+    let entries = Entries::default();
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(Shared::default())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Reader)
+        .plugin(MenuLook(entries.clone()))
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let mut reading = Reading {
+        kernel,
+        storage: Shared::default(),
+        heard: Heard::default(),
+        now: 0,
+        book: BOOK,
+    };
+    reading.settle(effects);
+    reading.run(Id::new_static("looker.look"));
+    let entries = entries.borrow();
+    assert!(
+        entries.iter().any(|e| e == "reader.next-status-line"),
+        "{entries:?}"
+    );
+}
+
+/// The notices shown.
+type Notices = Rc<RefCell<Vec<String>>>;
+
+/// A plugin that shows notices as nothing and keeps their texts.
+struct NoticeTaker(Notices);
+
+/// A notice, shown as nothing.
+struct Notice;
+
+impl paperpaw_sdk::Screen for Notice {
+    fn draw(&mut self, _: &mut paperpaw_sdk::Canvas<'_>, _: &paperpaw_sdk::Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled {
+        paperpaw_sdk::Handled::No
+    }
+}
+
+impl Plugin for NoticeTaker {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("notices"),
+            name: "Notices".into(),
+            description: "Keeps the notices shown.".into(),
+            version: Version::new(0, 1, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let notices = self.0.clone();
+        r.add_screen(paperpaw_sdk::ScreenSpec {
+            id: Id::new_static("notices.notice"),
+            title: "notice".into(),
+            factory: Box::new(move |_, params| {
+                let text = params.get(params::TEXT).unwrap_or_default();
+                notices.borrow_mut().push(text.to_string());
+                Box::new(Notice)
+            }),
+        })?;
+        r.bind_slot(
+            slots::NOTICE,
+            Id::new_static("notices.notice"),
+            paperpaw_sdk::Priority::DEFAULT,
+        )
+    }
+}
+
+/// A kernel reading the book on `storage`, keeping the notices shown.
+fn with_notices(storage: Shared) -> (Reading, Notices) {
+    storage.create_dir("books").unwrap();
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    storage.write(BOOK, text.as_bytes()).unwrap();
+    let notices = Notices::default();
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage.clone())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_format_txt::TxtFormat)
+        .plugin(Reader)
+        .plugin(NoticeTaker(notices.clone()))
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let mut reading = Reading {
+        kernel,
+        storage,
+        heard: Heard::default(),
+        now: 0,
+        book: BOOK,
+    };
+    reading.settle(effects);
+    reading.open();
+    (reading, notices)
+}
+
+#[test]
+fn a_place_that_cannot_be_kept_is_said_once() {
+    let storage = Shared::default();
+    *storage.3.borrow_mut() = Some("progress.ini".into());
+    let (mut reading, notices) = with_notices(storage);
+    for _ in 0..3 {
+        reading.run(core_actions::NEXT_PAGE);
+    }
+    let said: Vec<String> = notices
+        .borrow()
+        .iter()
+        .filter(|n| n.contains("could not be saved"))
+        .cloned()
+        .collect();
+    assert_eq!(said.len(), 1, "{said:?}");
+}
+
+#[test]
+fn a_bookmark_that_cannot_be_kept_is_said() {
+    let storage = Shared::default();
+    *storage.3.borrow_mut() = Some(".paperpaw/annotations".into());
+    let (mut reading, notices) = with_notices(storage);
+    reading.run(actions::TOGGLE_BOOKMARK);
+    assert!(
+        notices.borrow().iter().any(|n| n.contains("bookmark")),
+        "{:?}",
+        notices.borrow()
+    );
+}
+
+#[test]
+fn a_page_back_after_returning_from_a_jump_is_the_page_before() {
+    let (storage, starts) = page_starts(3);
+    let mut reading = Reading::new(storage);
+    reading.open();
+    assert_eq!(reading.kept(), starts[3]);
+    reading.now += 10;
+    let params = Params::new()
+        .with(params::PATH, BOOK)
+        .with(params::TEXT, "20");
+    let effects = reading.kernel.send_event(
+        Instant(reading.now),
+        Id::new_static("reader.page-entered"),
+        params,
+    );
+    reading.settle(effects);
+    assert!(reading.kept() > starts[3]);
+    reading.run(core_actions::BACK);
+    assert_eq!(reading.kept(), starts[3]);
+    reading.run(core_actions::PREV_PAGE);
+    assert_eq!(reading.kept(), starts[2]);
+}
+
+/// The book opened again at `at`, with a short page index (see
+/// [`reopened_with_a_short_index`]).
+fn reopened_at(storage: &Shared, at: (u32, u32)) -> Reading {
+    let dir = format!(
+        ".paperpaw/plugins/reader/books/{:016x}",
+        paperpaw_digest::fnv1a64(BOOK)
+    );
+    let progress = format!("[progress]\nsection = {}\noffset = {}\n", at.0, at.1);
+    storage
+        .write(&format!("{dir}/progress.ini"), progress.as_bytes())
+        .unwrap();
+    reopened_with_a_short_index(storage)
+}
+
+#[test]
+fn a_page_back_over_looser_text_leaves_no_line_out() {
+    // Short lines of talk, then long paragraphs: a page of the talk holds
+    // far less text than a page of the paragraphs after it.
+    let mut text = String::new();
+    for i in 0..400 {
+        text.push_str(&format!("\"Yes,\" said {i}.\n\n"));
+    }
+    let words = "word ".repeat(120);
+    for _ in 0..60 {
+        text.push_str(&words);
+        text.push_str("\n\n");
+    }
+    let loose = u32::try_from(text.find("word").unwrap()).unwrap();
+    let (storage, starts) = page_starts_of(&text, 200);
+    // The second page of the paragraphs.
+    let here = starts
+        .iter()
+        .position(|s| s.1 > loose)
+        .map(|i| i + 1)
+        .unwrap();
+    let mut reading = reopened_at(&storage, starts[here]);
+    reading.run(core_actions::PREV_PAGE);
+    let back = reading.kept();
+    assert!(back < starts[here], "{back:?}");
+    // The page there reaches the page left: on from it, nothing skipped.
+    reading.run(core_actions::NEXT_PAGE);
+    let on = reading.kept();
+    assert!(on >= starts[here], "{on:?} skips to {:?}", starts[here]);
 }

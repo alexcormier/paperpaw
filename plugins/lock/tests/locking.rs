@@ -495,7 +495,6 @@ fn many_wrong_tries_make_the_next_one_wait() {
 /// The seconds left are counted up from whole seconds plus one: the
 /// wait of 30 s shows as 31 s when it begins (and 1 s as 2 s).
 #[test]
-#[ignore = "bug: the wait shows one second too many at whole seconds (31 s for 30 s)"]
 fn the_wait_shows_the_seconds_left() {
     let storage = Shared::default();
     Device::start(TOUCH, storage.clone()).set_pin("2468");
@@ -504,8 +503,25 @@ fn the_wait_shows_the_seconds_left() {
         device.enter_pin("1111");
     }
     assert!(device.says("Wait 30 s."), "{:?}", device.texts());
-    device.wait(WAIT_MS - 1000);
-    assert!(device.says("Wait 1 s."), "{:?}", device.texts());
+    // Counted down (the screen is drawn again each second) and never to
+    // 0 s, then the PIN is asked for again.
+    let mut last = String::new();
+    for _ in 0..200 {
+        device.wait(250);
+        let texts = device.texts();
+        match texts.iter().find(|t| t.contains("Wait")) {
+            Some(wait) => {
+                assert!(!wait.ends_with("Wait 0 s."), "{wait:?}");
+                last = wait.clone();
+            }
+            None => break,
+        }
+    }
+    assert!(
+        last.ends_with("Wait 1 s.") || last.ends_with("Wait 2 s."),
+        "{last:?}"
+    );
+    assert!(!device.says("Wait"), "{:?}", device.texts());
 }
 
 #[test]
@@ -714,7 +730,6 @@ fn a_kept_code_without_a_kind_locks_nothing() {
 /// as the kinds agree, but no code ever matches it: the device is locked
 /// for good, where a code without a kind locks nothing.
 #[test]
-#[ignore = "bug: a kept code without salt or hash locks the device with no code that opens it"]
 fn a_damaged_kept_code_does_not_lock_for_good() {
     for damaged in ["pin:", "pin:salt", "pin::", "pin:salt:"] {
         let device = with_kept_code(damaged);

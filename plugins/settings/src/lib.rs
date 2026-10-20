@@ -327,6 +327,38 @@ fn end_preview(env: &Env<'_>, cx: &mut Cx<'_, '_>) {
     }
 }
 
+/// Whether a page is covered by a full screen and settings changed
+/// meanwhile: it is made anew once it shows, not for each change.
+#[derive(Debug, Default, Clone, Copy)]
+struct Covered {
+    hidden: bool,
+    stale: bool,
+}
+
+impl Covered {
+    /// A setting changed: `true` if the page is made anew now. Covered,
+    /// it is noted and a timer asked for, which comes once the page shows
+    /// again (see the pages' `on_timer`).
+    fn changed(&mut self, cx: &mut Cx<'_, '_>) -> bool {
+        if self.hidden && !self.stale {
+            let now = cx.env().now;
+            cx.wake_at(now);
+        }
+        self.stale |= self.hidden;
+        !self.hidden
+    }
+
+    fn hide(&mut self) {
+        self.hidden = true;
+    }
+
+    /// The page shows again: `true` if it is to be made anew.
+    fn shown(&mut self) -> bool {
+        self.hidden = false;
+        core::mem::take(&mut self.stale)
+    }
+}
+
 /// The page shown in a header: its number and the number of pages.
 fn paging(rows: &ui::Rows) -> Option<(usize, usize)> {
     Some(rows.paging())

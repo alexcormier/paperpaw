@@ -104,18 +104,13 @@ fn check_structure(text: &str, lines: &[Line], advance: fn(char) -> f32) {
         assert!(!shown.contains('\n'));
         assert!(!shown.ends_with(' '), "trailing space in {shown:?}");
         assert_eq!(line.spaces, shown.matches(' ').count(), "{shown:?}");
-        // (A paragraph's last line before spaces is reported with their
-        // width; see `the_last_line_is_reported_without_trailing_spaces`.)
-        let followed_by_spaces = text[range.end..].starts_with(' ');
-        if !(line.last && followed_by_spaces) {
-            let hyphen = if line.hyphen { advance('-') } else { 0.0 };
-            let width = measure(shown, advance) + hyphen;
-            assert!(
-                (line.width - width).abs() < 1e-3,
-                "{shown:?} reported {} wide, is {width}",
-                line.width
-            );
-        }
+        let hyphen = if line.hyphen { advance('-') } else { 0.0 };
+        let width = measure(shown, advance) + hyphen;
+        assert!(
+            (line.width - width).abs() < 1e-3,
+            "{shown:?} reported {} wide, is {width}",
+            line.width
+        );
         if line.hyphen {
             assert!(!line.last);
             let next = text[range.end..].chars().next();
@@ -185,7 +180,7 @@ proptest! {
     }
 
     /// Glyphs of one width and a first line no wider than the others (an
-    /// indent): the cases the bugs below leave out.
+    /// indent).
     #[test]
     fn lines_of_even_glyphs_fit_and_are_stable(
         text in text(),
@@ -201,7 +196,6 @@ proptest! {
     }
 
     #[test]
-    #[ignore = "bug: after a break the next character is not checked against the new line"]
     fn lines_of_varied_glyphs_fit_and_are_stable(
         text in text(),
         width in 0.5f32..30.0,
@@ -225,11 +219,10 @@ proptest! {
     }
 }
 
-/// After breaking at a space, the character that did not fit is added to
-/// the new line without checking that it fits there: a narrow word, a
-/// space and a word of wide glyphs give a line wider than the box.
+/// After breaking at a space, the character that did not fit must be
+/// checked against the new line too: a narrow word, a space and a word of
+/// wide glyphs must not give a line wider than the box.
 #[test]
-#[ignore = "bug: after a break the next character is not checked against the new line"]
 fn the_character_after_a_break_must_fit_the_new_line() {
     let advance = |c: char| match c {
         'i' => 1.0,
@@ -246,11 +239,10 @@ fn the_character_after_a_break_must_fit_the_new_line() {
     assert_eq!(shown, [("i", 1.0), ("WW", 6.0), ("W", 3.0)]);
 }
 
-/// After a break the text carried to the next line is not broken again:
-/// where the first line is wider than the next (a hanging indent, which
-/// books set with a negative indent), the second line keeps all of it.
+/// After a break the text carried to the next line is broken again where
+/// it does not fit: the first line may be wider than the next (a hanging
+/// indent, which books set with a negative indent).
 #[test]
-#[ignore = "bug: text carried to a narrower next line is not broken again"]
 fn text_carried_to_a_narrower_line_is_broken_again() {
     let text = "aaaa-aaaaaaa";
     let lines = wrap_lines(text, |n| if n == 0 { 10.0 } else { 2.0 }, even);
@@ -259,11 +251,10 @@ fn text_carried_to_a_narrower_line_is_broken_again() {
     }
 }
 
-/// The width of a paragraph's last line counts the spaces after it,
-/// although its range leaves them out: right-aligned and centred lines
-/// end short of where they should.
+/// The width of a paragraph's last line leaves out the spaces after it,
+/// as its range does, or right-aligned and centred lines would end short
+/// of where they should.
 #[test]
-#[ignore = "bug: a last line's width includes the spaces after it"]
 fn the_last_line_is_reported_without_trailing_spaces() {
     for text in ["ab  ", "ab  \ncd"] {
         let lines = wrap_lines(text, |_| 10.0, even);

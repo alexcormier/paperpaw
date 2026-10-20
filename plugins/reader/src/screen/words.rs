@@ -26,11 +26,7 @@ pub(super) const SENTENCE_WORDS: usize = 30;
 /// The sentence around words `lo..=hi` of a page, as far as the page has
 /// it.
 pub(super) fn sentence(words: &[WordBox], lo: usize, hi: usize) -> String {
-    let ends = |w: &WordBox| {
-        w.text
-            .trim_end_matches(['"', '\'', '’', '”', '»', '«', ')'])
-            .ends_with(['.', '!', '?', '…'])
-    };
+    let ends = |w: &WordBox| crate::aloud::ends_sentence(&w.text);
     let mut first = lo;
     while first > 0 && lo - first < SENTENCE_WORDS && !ends(&words[first - 1]) {
         first -= 1;
@@ -48,9 +44,10 @@ pub(super) fn sentence(words: &[WordBox], lo: usize, hi: usize) -> String {
 
 impl Book {
     /// The words of the page with their boxes on the screen, in reading
-    /// order, measured as they are drawn.
-    pub(super) fn words(&self, env: &Env<'_>) -> Vec<WordBox> {
-        self.words_of(env, &self.page)
+    /// order, measured as they are drawn: once a page (a page drawn in
+    /// bands is drawn several times).
+    pub(super) fn words(&self, env: &Env<'_>) -> &[WordBox] {
+        self.words.get_or_init(|| self.words_of(env, &self.page))
     }
 
     /// The words of `page`, as [`Book::words`].

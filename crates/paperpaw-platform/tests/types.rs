@@ -199,8 +199,8 @@ fn rect_helpers_at_the_edges_of_u16() {
     );
 }
 
+/// Rects reaching past 65535 must not wrap to a tiny one.
 #[test]
-#[ignore = "bug: Rect::union casts the joined width to u16, so rects reaching past 65535 wrap to a tiny one"]
 fn the_union_of_far_apart_rects_never_shrinks() {
     let a = Rect::new(0, 0, 10, 10);
     let b = Rect::new(65_530, 0, 10, 10);

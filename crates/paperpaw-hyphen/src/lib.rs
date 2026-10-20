@@ -182,8 +182,10 @@ impl<'a> Patterns<'a> {
             return;
         }
         let offsets: Vec<usize> = word.char_indices().map(|(i, _)| i).collect();
+        let allowed = self.left_min..=n - self.right_min;
         if let Some(found) = self.exception(&chars[1..=n]) {
-            for p in found {
+            // Exceptions keep the minimums too, as in TeX.
+            for p in found.into_iter().filter(|p| allowed.contains(p)) {
                 out(offsets[p]);
             }
             return;
@@ -211,7 +213,7 @@ impl<'a> Patterns<'a> {
             }
         }
         // A hyphen before letter p (0-based) sits at values[p + 1].
-        for p in self.left_min..=n - self.right_min {
+        for p in allowed {
             if values[p + 1] % 2 == 1 {
                 out(offsets[p]);
             }

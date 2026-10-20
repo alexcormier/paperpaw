@@ -229,7 +229,10 @@ impl Servers {
                 method,
                 target,
                 body: false,
-            } => self.pass_request(server, request, method, target, None, storage, out),
+            } => {
+                self.forget_incoming(request, storage);
+                self.pass_request(server, request, method, target, None, storage, out);
+            }
             ServerEvent::Request {
                 server,
                 request,
@@ -238,6 +241,7 @@ impl Servers {
                 body: true,
             } => {
                 // The body is saved as it comes, then the plugin is told.
+                self.forget_incoming(request, storage);
                 let tmp = format!("{}/tmp", paperpaw_sdk::data::DIR);
                 let path = format!("{tmp}/request-{request}");
                 let _ = storage.create_dir(&tmp);
@@ -312,6 +316,16 @@ impl Servers {
             body_file: body,
         };
         tell(&running.events, notice, out);
+    }
+
+    /// Forgets what came before of a request numbered `request`: the shell
+    /// reported it again, or reuses its number for a new one, whose body
+    /// must not go where the old one's did.
+    fn forget_incoming(&mut self, request: u32, storage: &dyn Storage) {
+        while let Some(at) = self.incoming.iter().position(|i| i.request == request) {
+            let incoming = self.incoming.remove(at);
+            self.forget_body(request, &incoming.path, storage);
+        }
     }
 
     /// Removes the body of `request`, e.g. after the connection was lost.

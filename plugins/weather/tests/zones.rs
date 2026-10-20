@@ -47,7 +47,7 @@ fn texts(offset: i32, config: &str) -> Vec<String> {
         .with(KEPT, include_str!("../testdata/weather.txt.v1"));
     let config = format!(
         "[core]\nlanguage = en\n\
-         [home]\npage-1 = weather.now 0/0 4x2, weather.forecast 0/2 4x2\n{PLACE}{config}"
+         [home]\npage-1 = weather.now 0/0 4x3, weather.forecast 0/3 4x3\n{PLACE}{config}"
     );
     let builder = Kernel::builder(DEVICE)
         .storage(storage)

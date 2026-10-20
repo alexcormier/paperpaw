@@ -318,11 +318,10 @@ fn a_sink_that_stops_stops_decoding() {
 }
 
 #[test]
-#[ignore = "bug: a GIF sink that stops decoding is still offered the rows of the rest of an LZW string"]
 fn rows_finished_inside_one_code_stop_at_the_first_refusal() {
-    // A picture one pixel wide: one LZW string covers many rows. The
-    // error of the sink is kept (`failure`) but the string's indices go
-    // on, and every row they finish is offered again.
+    // A picture one pixel wide: one LZW string covers many rows. Once
+    // the sink refused one, the rows the rest of the string finishes
+    // must not be offered.
     let mut gif = Gif::new(1, 40, 2, 0);
     gif.indices = vec![0; 40];
     // A real encoder's codes: 0, then 00, 000, ... (strings of the table).

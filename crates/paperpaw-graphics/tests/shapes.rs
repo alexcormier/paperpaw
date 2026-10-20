@@ -204,7 +204,6 @@ proptest! {
 }
 
 #[test]
-#[ignore = "bug: round::point_at rounds negative offsets toward zero, up to a pixel off the nearest"]
 fn points_round_to_the_nearest_pixel_either_way() {
     // `point_at` says "rounded to the nearest pixel", but its first
     // division truncates toward zero: at 243 degrees and radius 359 the
@@ -225,7 +224,6 @@ fn points_round_to_the_nearest_pixel_either_way() {
 }
 
 #[test]
-#[ignore = "bug: rounded rectangles lose a pixel on each side of every row within the radius"]
 fn rounded_rectangles_reach_their_sides_where_the_circle_does() {
     // `corner_inset` rounds the inset up to whole pixels, so every row
     // within the radius of an edge loses at least a pixel on each side,
@@ -241,7 +239,6 @@ fn rounded_rectangles_reach_their_sides_where_the_circle_does() {
 }
 
 #[test]
-#[ignore = "bug: an arc of exactly half a turn leaves out both its edges"]
 fn two_half_rings_make_the_ring() {
     // `Arc::holds` takes a direction on the arc when it is not
     // clockwise of `from` and clockwise of `to`; for half a turn `to` is

@@ -2,8 +2,9 @@
 //! a bar across the book with its chapters (tap anywhere on it to go
 //! there), and buttons for the chapter before and after, back to where
 //! skimming began, and a page number on the keyboard. With buttons, the
-//! page buttons go ten pages, left and right a chapter, confirm stays
-//! and back returns to where one was.
+//! page buttons go ten pages, left and right a chapter, up and down move
+//! to the buttons below the bar, confirm presses the one moved to (with
+//! none, stays) and back returns to where one was.
 //!
 //! It asks the reader to move with the event [`crate::SKIM`] and is told
 //! where the book is with [`crate::SKIMMED`].
@@ -45,7 +46,7 @@ pub(crate) struct SkimScreen {
     /// The bar and the buttons.
     bar: Rect,
     buttons: [Rect; 4],
-    /// The button the buttons point at (none after a touch).
+    /// The button the buttons moved to (none at first and after a touch).
     focus: Option<usize>,
 }
 
@@ -74,7 +75,7 @@ impl SkimScreen {
             )
         });
         let mut screen = Self {
-            focus: (!env.device.input.touch).then_some(1),
+            focus: None,
             style,
             region,
             path: params.get(params::PATH).unwrap_or_default().to_string(),
@@ -240,19 +241,20 @@ impl Screen for SkimScreen {
             self.go("chapter:+1", cx);
         } else if *a == actions::UP || *a == actions::DOWN {
             let len = BUTTONS.len();
-            let at = self.focus.unwrap_or(0);
-            self.focus = Some(if *a == actions::UP {
-                (at + len - 1) % len
-            } else {
-                (at + 1) % len
+            let down = *a == actions::DOWN;
+            self.focus = Some(match self.focus {
+                None if down => 0,
+                None => len - 1,
+                Some(at) if down => (at + 1) % len,
+                Some(at) => (at + len - 1) % len,
             });
             cx.request_redraw_area(self.region);
             cx.request_refresh(RefreshMode::Fast);
         } else if *a == actions::CONFIRM {
             match self.focus {
-                Some(i) if i != 1 => self.press(i, cx),
+                Some(i) => self.press(i, cx),
                 // Stays where it is.
-                _ => cx.command(Command::Back),
+                None => cx.command(Command::Back),
             }
         } else if *a == actions::BACK {
             self.go("back", cx);

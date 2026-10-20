@@ -85,12 +85,12 @@ impl ReaderScreen {
                 Some(Target::Link(i)) => book.links.get(i).cloned(),
                 Some(Target::Mark(i)) => {
                     // The plugin answers (e.g. the word's meaning).
-                    book.tap_mark(&words, i, cx);
+                    book.tap_mark(words, i, cx);
                     None
                 }
                 None => None,
             };
-            let link = link.map(|l| (l.href.clone(), link_label(book, &words, &l)));
+            let link = link.map(|l| (l.href.clone(), link_label(book, words, &l)));
             self.set_linking(None, cx);
             if let Some((href, label)) = link {
                 return self.open_link(&href, &label, cx);

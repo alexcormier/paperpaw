@@ -142,9 +142,11 @@ fn books_by_author_listed_and_opened() {
         );
         choose(&mut app, "Die Verwandlung");
         assert_eq!(app.screen(), "reader.screen");
+        // Back: the author's books, the authors, the library.
+        app.run(actions::BACK);
+        assert_eq!(app.screen(), "files.list.shelf");
         app.run(actions::BACK);
         assert_eq!(app.screen(), SHELF);
-        app.run(actions::BACK);
         app.run(actions::BACK);
         assert_eq!(app.screen(), "files.browser");
     }

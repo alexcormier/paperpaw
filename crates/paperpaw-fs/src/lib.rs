@@ -35,10 +35,17 @@ impl DirStorage {
         })
     }
 
-    fn resolve(&self, path: &str) -> Result<PathBuf, StorageError> {
-        if path.is_empty() {
+    /// The folder `dir`, the root itself for `""` (to list or make it).
+    fn resolve_dir(&self, dir: &str) -> Result<PathBuf, StorageError> {
+        if dir.is_empty() {
             return Ok(self.root.clone());
         }
+        self.resolve(dir)
+    }
+
+    /// The file or folder `path` inside the root: never the root itself,
+    /// which no write, removal or move may reach.
+    fn resolve(&self, path: &str) -> Result<PathBuf, StorageError> {
         if !is_valid_path(path) {
             return Err(StorageError::InvalidPath);
         }
@@ -168,6 +175,10 @@ impl Storage for DirStorage {
         let Some((_, file)) = open.as_mut() else {
             return Err(StorageError::Io);
         };
+        // Past where any file can reach (and a seek can go): its end.
+        if offset > i64::MAX as u64 {
+            return Ok(0);
+        }
         file.seek(SeekFrom::Start(offset)).map_err(error)?;
         let mut filled = 0;
         while filled < buf.len() {
@@ -233,7 +244,7 @@ impl Storage for DirStorage {
     }
 
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
-        for entry in fs::read_dir(self.resolve(dir)?).map_err(error)? {
+        for entry in fs::read_dir(self.resolve_dir(dir)?).map_err(error)? {
             let entry = entry.map_err(error)?;
             let Ok(name) = entry.file_name().into_string() else {
                 continue;
@@ -272,7 +283,7 @@ impl Storage for DirStorage {
     }
 
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
-        fs::create_dir_all(self.resolve(path)?).map_err(error)
+        fs::create_dir_all(self.resolve_dir(path)?).map_err(error)
     }
 
     fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {

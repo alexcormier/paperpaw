@@ -216,7 +216,7 @@ enum Op {
 
 /// Texts typed: words, now and then a line break or tab inside, spaces
 /// round them, nothing but spaces, or very long; never beginning with
-/// "x " (which reads as an item done, a bug of its own).
+/// "x " (kept with a date in front, which the unit tests check).
 fn typed() -> impl Strategy<Value = String> {
     prop_oneof![
         4 => "[A-Za-z0-9äöüß][A-Za-z0-9äöüß ,.!?]{0,30}",

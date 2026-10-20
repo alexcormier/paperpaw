@@ -272,17 +272,23 @@ impl Block {
             map.checkpoint(t as usize, s);
         }
         self.map = map;
+        // The new text takes the style of the first run reaching into the
+        // replaced text; runs after it that reach in too start behind it.
         let end = (from + with.len()) as u32;
+        let mut claimed = false;
         for run in &mut self.runs {
             let (start, stop) = (run.start as usize, run.end as usize);
             if stop <= from {
                 continue;
             }
-            run.start = if start >= to {
-                shift(run.start)
+            if start >= to {
+                run.start = shift(run.start);
+            } else if claimed {
+                run.start = end;
             } else {
-                run.start.min(from as u32)
-            };
+                run.start = run.start.min(from as u32);
+                claimed = true;
+            }
             run.end = if stop >= to { shift(run.end) } else { end };
         }
         self.runs.retain(|run| run.start < run.end);
@@ -358,14 +364,12 @@ impl OffsetMap {
         let i = self
             .checkpoints
             .partition_point(|&(_, source)| source <= offset);
-        match i.checked_sub(1).map(|i| self.checkpoints[i]) {
-            Some((text, source)) => {
-                // Inside a gap (e.g. a dropped `\r`) map to the checkpoint.
-                let next_text = self.checkpoints.get(i).map_or(u32::MAX, |c| c.0);
-                (text + (offset - source)).min(next_text) as usize
-            }
-            None => offset.saturating_sub(start) as usize,
-        }
+        // Before the first checkpoint, text and source start together.
+        let (text, source) = i.checked_sub(1).map_or((0, start), |i| self.checkpoints[i]);
+        // Inside a gap (e.g. a dropped `\r`) map to the checkpoint after it.
+        let next_text = self.checkpoints.get(i).map_or(u32::MAX, |c| c.0);
+        text.saturating_add(offset.saturating_sub(source))
+            .min(next_text) as usize
     }
 }
 

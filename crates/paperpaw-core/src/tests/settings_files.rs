@@ -173,6 +173,14 @@ fn bindings_made_keep_the_shells_own() {
         Some(&actions::TOGGLE_NIGHT_MODE)
     );
     assert_eq!(kernel.resolve(&key("up")), Some(&actions::HOME), "kept");
+    // One the shell binds, bound here: the choice made here wins.
+    kernel.apply(Command::Bind {
+        layer: String::from("global"),
+        input: String::from("button.up"),
+        action: Some(actions::NOTHING),
+    });
+    kernel.finish();
+    assert_eq!(kernel.resolve(&key("up")), Some(&actions::NOTHING));
 }
 
 const BOOK_SETTINGS: &str = "books/a/settings.ini";

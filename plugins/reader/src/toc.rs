@@ -123,7 +123,8 @@ pub(crate) struct TocScreen {
 impl TocScreen {
     pub(crate) fn open(env: &Env<'_>, params: &Params) -> Self {
         let path = params.get(params::PATH).unwrap_or_default().to_string();
-        let document = env.formats.open(env.storage, &path).ok();
+        let options = crate::screen::open_options(env);
+        let document = env.formats.open_with(env.storage, &path, &options).ok();
         let len = document
             .as_ref()
             .map_or(0, |d| d.toc_len(env.storage) as usize);

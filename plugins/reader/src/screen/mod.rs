@@ -43,7 +43,7 @@ use crate::status;
 use crate::{PLUGIN, state_path};
 
 use self::book::*;
-pub(crate) use self::book::{book_dir, remember_last};
+pub(crate) use self::book::{Filtered, book_dir, open_options, remember_last};
 use self::hands_free::*;
 use self::linking::*;
 pub(crate) use self::sample::Sample;
@@ -61,6 +61,11 @@ const PAGES_PER_STEP_SMALL: usize = 1;
 /// Pause between background steps.
 const STEP_DELAY_MS: u64 = 2;
 
+/// On small devices a rest as long as a step: the CPU rests (and the X4
+/// sleeps lightly) half the time while pages are counted, instead of
+/// running flat out for minutes.
+const STEP_DELAY_SMALL_MS: u64 = 500;
+
 /// The position is written at most this often while pages turn; always
 /// when the book is closed or the device sleeps. A card is slow to write
 /// to, and turning pages quickly should not wait for it.
@@ -69,6 +74,17 @@ const SAVE_EVERY_MS: u64 = 5000;
 /// Pages remembered for going back before the index covers them.
 const HISTORY: usize = 64;
 
+/// Page indexes of a book's layouts kept before a new one removes them.
+const INDEXES_KEPT: usize = 4;
+
+/// The least text, in bytes, a page back goes where the page index does
+/// not reach (the page shown holding less, e.g. a picture).
+const MIN_PAGE_BACK: u32 = 200;
+
+/// Pages laid out at most to find one that reaches the page left, where
+/// the page index does not reach (each takes half a second on the X4).
+const PAGE_BACK_TRIES: usize = 3;
+
 /// Places jumps were made from (links, contents, search, page numbers),
 /// kept for *Back*.
 const RETURNS: usize = 32;
@@ -76,8 +92,9 @@ const RETURNS: usize = 32;
 /// Shows a book page by page.
 pub(crate) struct ReaderScreen {
     book: Result<Book, String>,
-    /// Text chosen on the page (see `selection`).
+    /// Text chosen on the page (see `selection`), and the page's start.
     selection: Option<Selection>,
+    selected_on: Locator,
     /// A link being chosen with the buttons.
     linking: Option<Linking>,
     /// The last search, offered again.
@@ -115,6 +132,7 @@ impl ReaderScreen {
             book,
             preparing,
             selection: None,
+            selected_on: Locator::START,
             linking: None,
             last_search: String::new(),
             status_shown: String::new(),
@@ -180,7 +198,6 @@ impl ReaderScreen {
         cx.command(Command::Emit(crate::SKIMMED, book.skim_params(&env)));
     }
 
-    /// Buttons while text is selected.
     /// Shows the next status line at the top (or bottom) and keeps the
     /// choice.
     fn next_status_line(&mut self, top: bool, cx: &mut Cx<'_, '_>) {
@@ -271,8 +288,8 @@ impl ReaderScreen {
         let (start, end) = (book.page.start, book.page.end);
         let on_page = |m: &Mark| m.kind == Kind::Bookmark && m.start >= start && m.start < end;
         if !annotations::remove(env.storage, &book.path, on_page) {
-            let text: Vec<&str> = book.page.lines.iter().map(|l| l.text.as_str()).collect();
-            annotations::add(
+            let text = page_text(&book.page.lines);
+            let kept = annotations::add(
                 env.storage,
                 &book.path,
                 Annotation {
@@ -285,10 +302,13 @@ impl ReaderScreen {
                     percent: (book.percent() + 0.5) as u8,
                     created: paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0),
                     updated: 0,
-                    text: annotations::snippet(&text.join(" ")),
+                    text: annotations::snippet(&text),
                     note: String::new(),
                 },
             );
+            if !kept {
+                marks_not_saved(cx);
+            }
         }
         book.marks = annotations::marks(env.storage, &book.path);
         cx.command(annotations::changed(&book.path));
@@ -319,7 +339,7 @@ impl Screen for ReaderScreen {
     fn on_close(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if let Ok(book) = &mut self.book {
-            book.save_due(&env, true);
+            book.save_due(cx, true);
         }
         if let Ok(book) = &self.book
             && !book.web()
@@ -329,73 +349,15 @@ impl Screen for ReaderScreen {
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let book = match &mut self.book {
-            Ok(book) => book,
-            Err(message) => return draw_message(canvas, env, message),
-        };
-        // Word boxes are measured only when something is drawn on words.
-        let has_highlights = book.marks.iter().any(|m| m.kind == Kind::Highlight);
-        let words = if has_highlights
-            || self.selection.is_some()
-            || self.linking.is_some()
-            || book.found.is_some()
-            || self.aloud.is_some()
-            || !book.links.is_empty()
-            || !env.decorators.is_empty()
+        self.draw_book(canvas, env);
+        // Kept from the first band of a frame to its last only: on the X4
+        // a page's words take some 15 KiB.
+        if let Ok(book) = &mut self.book
+            && canvas.clip().bottom() >= u32::from(env.device.display.height)
         {
-            book.words(env)
-        } else {
-            Vec::new()
-        };
-        book.update_decorations(env, &words);
-        let book = &*book;
-        // The sentence read aloud, where it is on this page.
-        let aloud = self
-            .aloud
-            .filter(|a| {
-                a.now.page == book.page.start
-                    && env.settings.read(&crate::settings::ALOUD_HIGHLIGHT)
-            })
-            .map(|a| (a.now.from, a.now.to));
-        let marks = book.page_marks(env, aloud, &words);
-        marks.draw_behind(canvas, env);
-        book.draw_page(canvas, env, &marks.inks);
-        marks.draw_over(canvas, env);
-        book.draw_note_signs(canvas, env, &words);
-        book.draw_back(canvas, env);
-        book.draw_status(canvas, env);
-        if book.bookmarked() {
-            book.draw_ribbon(canvas, env);
-        }
-        // A bar at the bottom hides the status line under it entirely.
-        let bar = self.linking.is_some() || self.selection.is_some_and(|s| s.mode == Mode::Bar);
-        if let Some(status) = book.typography.status.filter(|_| bar) {
-            canvas.fill(status, Color::WHITE);
-        }
-        if let Some(linking) = self.linking {
-            draw_linking(canvas, env, book, &words, linking);
-        }
-        let Some(selection) = self.selection else {
-            return;
-        };
-        let (lo, hi) = selection.range();
-        let line = env.metrics.tenth_mm(4).max(2);
-        for b in selection::line_boxes(&words, |i| (lo..=hi).contains(&i)) {
-            canvas.stroke_rect(
-                i32::from(b.x) - 4,
-                i32::from(b.y) - 2,
-                u32::from(b.width) + 8,
-                u32::from(b.height) + 4,
-                line,
-                Color::BLACK,
-            );
-        }
-        if selection.mode == Mode::Bar {
-            let items = self.items(env, &words);
-            selection::draw_bar(canvas, env, &items, selection.focus);
+            book.words.take();
         }
     }
-
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if self.preparing.is_some() {
             // Shown saying so first, then prepared.
@@ -443,11 +405,16 @@ impl Screen for ReaderScreen {
         let Ok(book) = &mut self.book else {
             return;
         };
-        book.save_due(&env, false);
+        book.save_due(cx, false);
         if book.index_step(&env) {
-            cx.wake_at(env.now.add_millis(STEP_DELAY_MS));
+            let delay = match env.device.memory {
+                paperpaw_sdk::MemoryClass::Small => STEP_DELAY_SMALL_MS,
+                _ => STEP_DELAY_MS,
+            };
+            cx.wake_at(env.now.add_millis(delay));
         }
         self.auto_turn_due(cx);
+        self.let_go_of_other_pages(cx);
         // Page numbers once counted, the time, the battery, …
         self.update_status(cx);
     }
@@ -462,8 +429,10 @@ impl Screen for ReaderScreen {
             return Handled::Yes;
         }
         // The arrows turn pages as the page buttons do: the X4's buttons
-        // in front, a keyboard's arrows.
-        let turn = page_turn(action);
+        // in front, a keyboard's arrows; not while text or a link is
+        // chosen, where they move by words and lines.
+        let choosing = self.selection.is_some() || self.linking.is_some();
+        let turn = page_turn(action).filter(|_| !choosing);
         let action = turn.as_ref().unwrap_or(action);
         if *action == crate::actions::READ_ALOUD {
             self.start_aloud(cx);
@@ -672,9 +641,9 @@ impl Screen for ReaderScreen {
         };
         let link = at(gesture.start)
             .and_then(|i| book.link_of(&words[i]))
-            .map(|link| (link.href.clone(), link_label(book, &words, link)));
+            .map(|link| (link.href.clone(), link_label(book, words, link)));
         // A mark whose plugin hears taps on it.
-        let tapped = at(gesture.start).and_then(|i| book.tappable_at(&words, i));
+        let tapped = at(gesture.start).and_then(|i| book.tappable_at(words, i));
         match (gesture.kind, self.selection) {
             (GestureKind::Tap, None)
                 if env.settings.read(&crate::settings::CORNER_BOOKMARK)
@@ -704,7 +673,7 @@ impl Screen for ReaderScreen {
             }
             (GestureKind::Tap, None) if tapped.is_some() => {
                 if let Some(mark) = tapped {
-                    book.tap_mark(&words, mark, cx);
+                    book.tap_mark(words, mark, cx);
                 }
                 Handled::Yes
             }
@@ -716,7 +685,7 @@ impl Screen for ReaderScreen {
                 None => Handled::No,
             },
             (GestureKind::Tap, Some(selection)) => {
-                let items = self.items(&env, &words);
+                let items = self.items(&env, words);
                 if let Some(item) = selection::item_at(&env, &items, gesture.start) {
                     self.activate(&item.id, cx);
                 } else if let Some(word) = at(gesture.start) {
@@ -736,12 +705,99 @@ impl Screen for ReaderScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        self.event(event, params, cx);
+        self.let_go_of_other_pages(cx);
+    }
+}
+
+impl ReaderScreen {
+    /// The page, its marks and status lines, and what is chosen on it.
+    fn draw_book(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        let book = match &mut self.book {
+            Ok(book) => book,
+            Err(message) => {
+                let area = Rect::from_size(env.device.display.width, env.device.display.height);
+                return ui::draw_message(canvas, env, &UiStyle::new(env), area, message);
+            }
+        };
+        // Word boxes are measured only when something is drawn on words.
+        let has_highlights = book.marks.iter().any(|m| m.kind == Kind::Highlight);
+        let measured = has_highlights
+            || self.selection.is_some()
+            || self.linking.is_some()
+            || book.found.is_some()
+            || self.aloud.is_some()
+            || !book.links.is_empty()
+            || !env.decorators.is_empty();
+        book.update_decorations(env);
+        let Ok(book) = &self.book else {
+            return;
+        };
+        let words = if measured { book.words(env) } else { &[] };
+        // The sentence read aloud, where it is on this page.
+        let aloud = self
+            .aloud
+            .filter(|a| {
+                a.now.page == book.page.start
+                    && env.settings.read(&crate::settings::ALOUD_HIGHLIGHT)
+            })
+            .map(|a| (a.now.from, a.now.to));
+        let marks = book.page_marks(env, aloud, words);
+        marks.draw_behind(canvas, env);
+        book.draw_page(canvas, env, &marks.inks);
+        marks.draw_over(canvas, env);
+        book.draw_note_signs(canvas, env, words);
+        book.draw_back(canvas, env);
+        book.draw_status(canvas, env);
+        if book.bookmarked() {
+            book.draw_ribbon(canvas, env);
+        }
+        // A bar at the bottom hides the status line under it entirely.
+        let bar = self.linking.is_some() || self.selection.is_some_and(|s| s.mode == Mode::Bar);
+        if let Some(status) = book.typography.status.filter(|_| bar) {
+            canvas.fill(status, Color::WHITE);
+        }
+        if let Some(linking) = self.linking {
+            draw_linking(canvas, env, book, words, linking);
+        }
+        let Some(selection) = self.selection else {
+            return;
+        };
+        let (lo, hi) = selection.range();
+        let line = env.metrics.tenth_mm(4).max(2);
+        for b in selection::line_boxes(words, |i| (lo..=hi).contains(&i)) {
+            canvas.stroke_rect(
+                i32::from(b.x) - 4,
+                i32::from(b.y) - 2,
+                u32::from(b.width) + 8,
+                u32::from(b.height) + 4,
+                line,
+                Color::BLACK,
+            );
+        }
+        if selection.mode == Mode::Bar {
+            let items = self.items(env, words);
+            selection::draw_bar(canvas, env, &items, selection.focus);
+        }
+    }
+
+    /// Lets go of text chosen on a page no longer shown: read aloud,
+    /// skimmed or turned by itself, its words are those of another page.
+    fn let_go_of_other_pages(&mut self, cx: &mut Cx<'_, '_>) {
+        if let (Some(_), Ok(book)) = (self.selection, &self.book)
+            && book.page.start != self.selected_on
+        {
+            self.set_selection(None, cx);
+        }
+    }
+
+    fn event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let Ok(book) = &mut self.book else {
             return;
         };
         // Asleep the device may lose its power: the position first.
         if *event == events::SUSPEND {
-            book.save_due(cx.env(), true);
+            book.save_due(cx, true);
         }
         let this_book = params.get(params::PATH) == Some(book.path.as_str());
         if *event == crate::SPOKEN && this_book {
@@ -796,7 +852,9 @@ impl Screen for ReaderScreen {
             let env = *cx.env();
             let note = typed.text.as_str();
             let now = paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0);
-            annotations::set_note(env.storage, &book.path, at, note, now);
+            if !annotations::set_note(env.storage, &book.path, at, note, now) {
+                marks_not_saved(cx);
+            }
             book.marks = annotations::marks(env.storage, &book.path);
             cx.command(annotations::changed(&book.path));
             cx.request_redraw();
@@ -855,7 +913,10 @@ impl Screen for ReaderScreen {
         // Which setting changed, if one did.
         let changed = events::SETTING_CHANGED.read(event, params).map(|c| c.id);
         let id = changed.as_ref().map_or("", Id::as_str);
-        let font_changed = id == paperpaw_sdk::builtin::settings::READING_FONT.as_str();
+        // The kernel's settings the page's type depends on: the font and
+        // its size (the reader's own all begin with `reader.`).
+        let font_changed = id == paperpaw_sdk::builtin::settings::READING_FONT.as_str()
+            || id == FONT_SIZE.as_str();
         // How marks look, or what decorators mark (a switch, their data):
         // the page drawn again as it is laid out.
         if changed.is_some()
@@ -922,6 +983,41 @@ impl Screen for ReaderScreen {
     }
 }
 
+/// The text of `lines` as the book has it: a word broken at the end of
+/// a line is whole again, without the hyphen the layout put there (a
+/// hyphen of the book's own stays).
+pub(super) fn page_text(lines: &[PageLine]) -> String {
+    let mut out = String::new();
+    let mut joined = false;
+    for (i, line) in lines.iter().enumerate() {
+        if i > 0 && !joined {
+            out.push(' ');
+        }
+        let last = line.words.last().copied();
+        let next = lines.get(i + 1).filter(|n| n.section == line.section);
+        let first = next.and_then(|n| n.words.first().copied());
+        // The word goes on in the next line, at once.
+        joined = line.text.ends_with('-')
+            && matches!((last, first), (Some((_, end)), Some((start, _))) if start == end);
+        let mut text = line.text.as_str();
+        if let Some((start, end)) = last.filter(|_| joined) {
+            let word = text.rsplit(' ').next().unwrap_or(text);
+            if (end.saturating_sub(start) as usize) < word.len() {
+                text = &text[..text.len() - 1];
+            }
+        }
+        out.push_str(text);
+    }
+    out
+}
+
+/// Says that a bookmark, highlight or note could not be kept: the book's
+/// annotations could not be read or written.
+pub(super) fn marks_not_saved(cx: &mut Cx<'_, '_>) {
+    let text = cx.env().i18n.tr("reader.marks-not-saved").to_string();
+    cx.command(Command::Notify(text));
+}
+
 /// The page turn an arrow stands for in a book: left and up back, right
 /// and down on.
 fn page_turn(action: &Id) -> Option<Id> {
@@ -931,27 +1027,6 @@ fn page_turn(action: &Id) -> Option<Id> {
         Some(actions::NEXT_PAGE)
     } else {
         None
-    }
-}
-
-/// Centred, wrapped message text (errors, missing book).
-fn draw_message(canvas: &mut Canvas<'_>, env: &Env<'_>, message: &str) {
-    let Some(font) = env.fonts.role(fonts::UI.as_str()) else {
-        return;
-    };
-    let display = env.device.display;
-    let size = env.metrics.pt(12.0);
-    let margin = env.metrics.mm(8) as f32;
-    let width = f32::from(display.width) - 2.0 * margin;
-    let line_height = font.line_metrics(size).line_height;
-    let lines = font.wrap(size, message, width);
-    let mut baseline =
-        (f32::from(display.height) - line_height * lines.len() as f32) / 2.0 + line_height;
-    for range in lines {
-        let text = &message[range];
-        let x = (f32::from(display.width) - font.measure(size, text)) / 2.0;
-        font.draw(canvas, size, x, baseline as i32, text, Color::BLACK);
-        baseline += line_height;
     }
 }
 
@@ -967,6 +1042,33 @@ mod tests {
             super::book::position_in(include_str!("../../testdata/progress.ini.v1")),
             Some(paperpaw_sdk::document::Locator::new(7, 1234))
         );
+    }
+
+    #[test]
+    fn chapters_in_parts_get_ticks_while_they_leave_room() {
+        use super::draw::chapter_ticks;
+        // Two parts of three chapters each.
+        let book = [
+            (0, 0),
+            (1, 10),
+            (1, 200),
+            (1, 400),
+            (0, 500),
+            (1, 510),
+            (1, 700),
+        ];
+        assert_eq!(chapter_ticks(&book), [0, 10, 200, 400, 500, 510, 700]);
+        // Too many chapters for the bar: the parts only.
+        let mut many = alloc::vec![(0, 0), (0, 500)];
+        many.extend((1..200).map(|i| (1, i * 5)));
+        many.sort_by_key(|&(_, at)| at);
+        assert_eq!(chapter_ticks(&many), [0, 500]);
+        assert!(chapter_ticks(&[]).is_empty());
+        // Many chapters without parts: each its tick, along the whole bar.
+        let flat: Vec<(u8, u32)> = (0..120).map(|i| (0, i * 8)).collect();
+        let ticks = chapter_ticks(&flat);
+        assert_eq!(ticks.len(), 120);
+        assert_eq!(ticks.last(), Some(&952));
     }
 
     #[test]

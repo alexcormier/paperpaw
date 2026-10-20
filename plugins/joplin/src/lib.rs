@@ -150,8 +150,8 @@ impl Plugin for Joplin {
             item: OPEN,
             order: 49,
         })?;
-        r.add_icon(OPEN, Cow::Borrowed("notebook"))?;
-        r.add_icon(SEND, Cow::Borrowed("cloud-upload"))?;
+        r.add_icon(OPEN, Cow::Borrowed("note"))?;
+        r.add_icon(SEND, Cow::Borrowed("upload"))?;
 
         // Any reader's notes, once exported as Markdown.
         let state = run.clone();

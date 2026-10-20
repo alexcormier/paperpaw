@@ -75,9 +75,11 @@ fn utf8_with_and_without_bom() {
 
 #[test]
 fn a_bom_keeps_utf8_even_with_invalid_bytes() {
-    let (storage, doc) = open(b"\xef\xbb\xbfGr\xf6\xdfe \xff ok\n".to_vec());
+    // A byte that starts no character is read as Windows-1252; the UTF-8
+    // around it stays UTF-8.
+    let (storage, doc) = open(b"\xef\xbb\xbfGr\xf6\xdfe \xc3\xbc \xff ok\n".to_vec());
     let words = words(&doc, &storage);
-    assert_eq!(words, ["Gr\u{fffd}\u{fffd}e", "\u{fffd}", "ok"]);
+    assert_eq!(words, ["Größe", "ü", "ÿ", "ok"]);
 }
 
 #[test]
@@ -97,14 +99,14 @@ fn invalid_utf8_at_the_start_means_windows_1252() {
 }
 
 #[test]
-fn invalid_utf8_after_the_sniffed_start_is_replaced() {
+fn invalid_utf8_after_the_sniffed_start_is_read_as_windows_1252() {
     // 16 KB of valid UTF-8 decide the encoding; a bad byte later is one
-    // replacement character, not a switch of encoding.
+    // Windows-1252 letter, not a switch of encoding.
     let mut file = "ä ".repeat(10_000).into_bytes();
     file.extend_from_slice(b"bad \xff byte\n");
     let (storage, doc) = open(file);
     let words = words(&doc, &storage);
-    assert_eq!(words[words.len() - 3..], ["bad", "\u{fffd}", "byte"]);
+    assert_eq!(words[words.len() - 3..], ["bad", "ÿ", "byte"]);
     assert_eq!(words.iter().filter(|w| *w == "ä").count(), 10_000);
 }
 
@@ -167,7 +169,6 @@ fn windows_line_ends_are_line_ends() {
 }
 
 #[test]
-#[ignore = "bug: old Mac line ends (CR alone) are dropped, gluing the words of two lines"]
 fn old_mac_line_ends_part_words() {
     let (storage, doc) = open(b"First line\rsecond line\r\rNext\r".to_vec());
     let words = words(&doc, &storage);

@@ -188,7 +188,6 @@ fn redirects_from_unusable_bases_are_none() {
 }
 
 #[test]
-#[ignore = "bug: a base like http://h.org?x has an empty path, which redirect() does not merge as `/`, so a relative Location is lost (http://h.org/)"]
 fn relative_locations_from_a_base_without_a_path() {
     assert_eq!(
         redirect("http://h.org?page=1", "login").unwrap(),

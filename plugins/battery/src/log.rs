@@ -134,7 +134,7 @@ pub(crate) fn parse(line: &str) -> Option<(Kind, Reading)> {
     for refreshes in usage.refreshes.iter_mut() {
         *refreshes = next()?.parse().ok()?;
     }
-    usage.pixels = next()?.parse::<u64>().ok()? * 1000;
+    usage.pixels = next()?.parse::<u64>().ok()?.saturating_mul(1000);
     usage.inputs = next()?.parse().ok()?;
     usage.panel_ms = next()?.parse().ok()?;
     let pages = next()?.parse().ok()?;
@@ -304,8 +304,11 @@ impl Sessions {
                 rest.extend_from_slice(&buf[..n]);
                 // Whole lines; the rest waits for its end.
                 if let Some(end) = rest.iter().rposition(|&b| b == b'\n') {
-                    if let Ok(text) = core::str::from_utf8(&rest[..=end]) {
-                        sessions.read_text(text);
+                    // Line by line: a damaged one loses only itself.
+                    for line in rest[..end].split(|&b| b == b'\n') {
+                        if let Ok(text) = core::str::from_utf8(line) {
+                            sessions.read_text(text);
+                        }
                     }
                     rest.drain(..=end);
                 }
@@ -330,9 +333,10 @@ impl Sessions {
     pub fn totals(&self) -> Totals {
         let mut totals = Totals::default();
         for s in self.counting() {
-            totals.millis += s.millis();
-            totals.used += s.used().unwrap_or(0) as u32;
-            totals.pages += s.pages();
+            // Saturating: a hostile log's numbers must not overflow.
+            totals.millis = totals.millis.saturating_add(s.millis());
+            totals.used = totals.used.saturating_add(s.used().unwrap_or(0) as u32);
+            totals.pages = totals.pages.saturating_add(s.pages());
         }
         totals
     }
