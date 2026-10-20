@@ -845,6 +845,21 @@ change the plugin SDK.
   `heap` says the most the heap held since start, the log says the heap
   after every frame, and failed requests are logged with their host
   (`wifi:status`, `wifi:scan`, `http:get:` as script steps).
+- X4: losing the network's address (as on every joining again) lets go
+  of what was open on it: plugins' servers no longer keep listening and
+  holding their memory (some 12 KB a connection), nor requests theirs
+  (some 17 KB), and name lookups no longer pile up (after four, every
+  lookup said "no such host" until the radio went off). Requests made
+  while a network is being joined wait for its address, as they were
+  meant to, instead of failing at once.
+- X4: the clock takes the time only from the server asked and only its
+  answer to that request (the random number sent with it given back), no
+  longer any answer that comes. `paperpaw-x4`: `sntp::Asked` (its
+  `request` and `answer`) in place of `sntp::request` and `sntp::answer`.
+- X4: two clients sending or reading a byte now and then no longer hold
+  a plugin's server for good: a request's body and its answer must move
+  16 KB every 30 s (as a request's head must come whole in 30 s), while
+  a large upload or download that moves takes as long as it needs.
 - The X4's remote control over USB (test builds) does much more, for
   developing on the device: the card (`ls`, `stat`, `md5`, `rm` also of
   folders, `mkdir`, `mv`, `sync`; `tools/x4-remote.py` pushes and pulls

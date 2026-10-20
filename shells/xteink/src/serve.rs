@@ -30,8 +30,11 @@ const BUFFERS: net::Buffers = net::Buffers {
 const PART: usize = 16 * 1024;
 /// Ports tried after the one asked for, if it is taken.
 const MORE_PORTS: u16 = 20;
-/// How long a request's head may take to come, and its plugin to answer;
-/// how long a connection may make no progress, and take to close.
+/// How long a request's head may take to come in all, and its plugin to
+/// answer; how long a connection may make no progress, and take to close.
+/// Progress is a whole [`PART`] of a body or an answer moved: a client
+/// trickling bytes cannot hold a connection, while a large upload or
+/// download that moves takes as long as it needs.
 const HEAD_MS: u64 = 30_000;
 const ANSWER_MS: u64 = 120_000;
 const STALL_MS: u64 = 30_000;
@@ -191,12 +194,24 @@ impl Servers {
     }
 
     /// The network went (or is another one now): every server fails, and
-    /// requests going on are forgotten.
-    pub fn lost(&mut self, kernel: &mut Kernel, now: Instant) -> Vec<Effects> {
+    /// requests going on are forgotten. Their sockets are let go on `net`
+    /// if they were opened on it (else they went with an earlier one).
+    pub fn lost(
+        &mut self,
+        net: Option<&mut Net>,
+        kernel: &mut Kernel,
+        now: Instant,
+    ) -> Vec<Effects> {
+        let mut net = net.filter(|net| net.generation() == self.generation);
         let mut effects = Vec::new();
         for server in core::mem::take(&mut self.servers) {
-            for request in server.slots.iter().filter_map(Slot::request) {
-                effects.push(kernel.server_event(now, ServerEvent::Closed { request }));
+            for slot in &server.slots {
+                if let Some(net) = net.as_deref_mut() {
+                    net.release(slot.socket);
+                }
+                if let Some(request) = slot.request() {
+                    effects.push(kernel.server_event(now, ServerEvent::Closed { request }));
+                }
             }
             let event = failed(server.number, "the network went away");
             effects.push(kernel.server_event(now, event));
@@ -211,7 +226,7 @@ impl Servers {
             return effects;
         }
         if net.generation() != self.generation {
-            return self.lost(kernel, now);
+            return self.lost(None, kernel, now);
         }
         for server in &mut self.servers {
             for slot in &mut server.slots {
@@ -423,8 +438,8 @@ impl Slot {
             });
             let Ok(n) = got else { break };
             *left -= n as u64;
-            self.since = ms;
             if part.len() >= PART || *left == 0 {
+                self.since = ms;
                 events.push(ServerEvent::Body {
                     request,
                     data: core::mem::take(part),
@@ -460,8 +475,10 @@ impl Slot {
         while *sent < out.len() && socket.can_send() {
             match socket.send_slice(&out[*sent..]) {
                 Ok(n) if n > 0 => {
+                    if part_done(*sent as u64, (*sent + n) as u64) {
+                        self.since = ms;
+                    }
                     *sent += n;
-                    self.since = ms;
                 }
                 _ => break,
             }
@@ -508,9 +525,9 @@ impl Slot {
     }
 }
 
-/// As much of `file` from `at` on as the socket takes, `since` set when
-/// some went; false where the file is gone or shorter than it was (the
-/// connection ends early).
+/// As much of `file` from `at` on as the socket takes, `since` set when a
+/// part of it went; false where the file is gone or shorter than it was
+/// (the connection ends early).
 fn send_file(
     socket: &mut tcp::Socket<'_>,
     kernel: &Kernel,
@@ -530,11 +547,19 @@ fn send_file(
         });
         match read {
             Ok(Some(n)) if n > 0 => {
+                if part_done(*at, *at + n as u64) {
+                    *since = ms;
+                }
                 *at += n as u64;
-                *since = ms;
             }
             _ => return false,
         }
     }
     true
+}
+
+/// Whether moving on from `from` to `to` bytes finished a [`PART`]: only
+/// that counts as progress (see [`HEAD_MS`]).
+fn part_done(from: u64, to: u64) -> bool {
+    from / PART as u64 != to / PART as u64
 }

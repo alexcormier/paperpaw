@@ -226,6 +226,10 @@ impl Call {
     /// One step on; the outcome once there is one.
     fn step(&mut self, net: &mut Net, storage: &dyn Storage, may_open: bool) -> Option<Outcome> {
         let now = now_ms();
+        if net.address().is_none() && !matches!(self.phase, Phase::Waiting) {
+            // The address went: what was open on it is gone.
+            return Some(Err("no network"));
+        }
         match self.phase {
             Phase::Waiting => self.start(net, storage, may_open, now),
             Phase::Resolving(query, port) => {
