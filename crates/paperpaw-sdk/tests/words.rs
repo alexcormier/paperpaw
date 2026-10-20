@@ -28,7 +28,7 @@ fn page<'a>(texts: &'a [String]) -> Vec<PageWord<'a>> {
 /// Words as books have them: letters of several scripts, digits,
 /// apostrophes, punctuation around them, combining accents.
 fn word() -> impl Strategy<Value = String> {
-    "[(\"']?[a-zA-ZäöüßẞÄÖÜéçİıΣσς日本0-9]{1,6}(['’][a-z]{1,2})?\u{0301}?[.,;!?)\"—-]?"
+    "[(\"']?[a-zA-ZäöüßẞÄÖÜéçİıΣσς日本0-9]{1,6}(['’][a-z]{1,2})?\u{0301}?[.,;!?)\"\u{2014}-]?"
 }
 
 proptest! {
@@ -65,7 +65,7 @@ proptest! {
     #[test]
     fn found_runs_are_entries_in_order(
         entries in proptest::collection::vec(proptest::collection::vec(word(), 1..3), 0..8),
-        texts in proptest::collection::vec(prop_oneof![word(), Just("—".to_string()), Just("...".to_string())], 0..30),
+        texts in proptest::collection::vec(prop_oneof![word(), Just("\u{2014}".to_string()), Just("...".to_string())], 0..30),
     ) {
         let phrases: Vec<String> = entries.iter().map(|words| words.join(" ")).collect();
         let set = WordSet::new(&phrases);
