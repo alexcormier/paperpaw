@@ -1192,6 +1192,17 @@ pub paperpaw_sdk::native::NotInstalledReason::OtherAuthor
 #[non_exhaustive] pub enum paperpaw_sdk::native::SafeModeReason
 pub paperpaw_sdk::native::SafeModeReason::FailedStarts
 pub paperpaw_sdk::native::SafeModeReason::KeyHeld
+pub struct paperpaw_sdk::native::CodeRoom
+pub paperpaw_sdk::native::CodeRoom::granule: u32
+pub paperpaw_sdk::native::CodeRoom::max_plugins: core::option::Option<u32>
+pub paperpaw_sdk::native::CodeRoom::placed: u32
+pub paperpaw_sdk::native::CodeRoom::shared: bool
+pub paperpaw_sdk::native::CodeRoom::total: u64
+pub paperpaw_sdk::native::CodeRoom::used: u64
+impl paperpaw_sdk::native::CodeRoom
+pub fn paperpaw_sdk::native::CodeRoom::fits(&self, u64, u32, u64) -> bool
+pub fn paperpaw_sdk::native::CodeRoom::left(&self, u64) -> u64
+pub fn paperpaw_sdk::native::CodeRoom::needs(&self, u64, u32) -> u64
 pub struct paperpaw_sdk::native::Fingerprint(pub u64)
 impl paperpaw_sdk::native::Fingerprint
 pub fn paperpaw_sdk::native::Fingerprint::parse(&str) -> core::option::Option<paperpaw_sdk::native::Fingerprint>
@@ -1223,8 +1234,12 @@ pub const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint
 pub const paperpaw_sdk::native::TOOLCHAIN: &str
 pub fn paperpaw_sdk::native::author(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32]) -> paperpaw_sdk::native::Author
 pub fn paperpaw_sdk::native::check_file(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<(paperpaw_native::header::Header, core::option::Option<paperpaw_native::signature::Signature>), paperpaw_native::header::Problem>
+pub fn paperpaw_sdk::native::code_room(&dyn paperpaw_platform::storage::Storage) -> core::option::Option<paperpaw_sdk::native::CodeRoom>
 pub fn paperpaw_sdk::native::installed_code(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<[u8; 32]>
+pub fn paperpaw_sdk::native::installed_code_need(&dyn paperpaw_platform::storage::Storage, &paperpaw_sdk::native::CodeRoom, &str) -> (u64, u32)
+pub fn paperpaw_sdk::native::keep_code_room(&dyn paperpaw_platform::storage::Storage, core::option::Option<&paperpaw_sdk::native::CodeRoom>) -> bool
 pub fn paperpaw_sdk::native::known_author(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<[u8; 32]>
+pub fn paperpaw_sdk::native::read_header(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_native::header::Header>
 pub fn paperpaw_sdk::native::remember_author(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32]) -> bool
 pub fn paperpaw_sdk::native::remember_code(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32]) -> bool
 pub unsafe fn paperpaw_sdk::native::take(*mut core::ffi::c_void) -> core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::Plugin>>
@@ -1257,6 +1272,8 @@ pub fn paperpaw_sdk::presets::Presets::remove_plugin(&mut self, &str)
 pub fn paperpaw_sdk::presets::Presets::shrink_to_fit(&mut self)
 pub fn paperpaw_sdk::presets::applied(&paperpaw_sdk::Settings, &[(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)]) -> bool
 pub fn paperpaw_sdk::presets::commands(&paperpaw_sdk::Settings, &[(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)]) -> alloc::vec::Vec<paperpaw_sdk::Command>
+pub mod paperpaw_sdk::qr
+pub use paperpaw_sdk::qr::<<paperpaw_qr::*>>
 pub mod paperpaw_sdk::random
 pub struct paperpaw_sdk::random::Random
 impl paperpaw_sdk::random::Random
@@ -1774,6 +1791,7 @@ pub paperpaw_sdk::ui::Header::note_focused: bool
 impl paperpaw_sdk::ui::Header
 pub fn paperpaw_sdk::ui::Header::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &str, core::option::Option<&str>, core::option::Option<(usize, usize)>)
 pub fn paperpaw_sdk::ui::Header::new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, bool) -> Self
+pub fn paperpaw_sdk::ui::Header::on_page_number(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Point, core::option::Option<(usize, usize)>) -> bool
 pub fn paperpaw_sdk::ui::Header::on_title(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Point, core::option::Option<(usize, usize)>) -> bool
 pub fn paperpaw_sdk::ui::Header::tap(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Point, core::option::Option<(usize, usize)>) -> core::option::Option<paperpaw_sdk::Id>
 pub struct paperpaw_sdk::ui::ListView
@@ -1924,6 +1942,7 @@ pub fn paperpaw_sdk::ui::UiStyle::font<'a>(&self, &paperpaw_sdk::Env<'a>) -> cor
 pub fn paperpaw_sdk::ui::UiStyle::header_colors(&self) -> (paperpaw_platform::pixel::Color, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::UiStyle::new(&paperpaw_sdk::Env<'_>) -> Self
 pub fn paperpaw_sdk::ui::UiStyle::noted_row(&self) -> u32
+pub fn paperpaw_sdk::ui::UiStyle::noted_row_of(&self, usize) -> u32
 pub fn paperpaw_sdk::ui::UiStyle::radius(&self, u32) -> u32
 pub fn paperpaw_sdk::ui::UiStyle::touch_row(&self, u32) -> u32
 pub const paperpaw_sdk::ui::HOLD_ICON: &str
@@ -1949,6 +1968,7 @@ pub fn paperpaw_sdk::ui::draw_note(&mut paperpaw_graphics::canvas::Canvas<'_>, &
 pub fn paperpaw_sdk::ui::draw_note_line(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str)
 pub fn paperpaw_sdk::ui::draw_noted_row(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str, &str, &str)
 pub fn paperpaw_sdk::ui::draw_number(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, &str, &str, core::option::Option<bool>)
+pub fn paperpaw_sdk::ui::draw_qr(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_qr::QrCode, paperpaw_platform::geometry::Rect) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::draw_row_icon(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, u16, core::option::Option<&str>, paperpaw_platform::pixel::Color) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::draw_separator(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, u16)
 pub fn paperpaw_sdk::ui::draw_stepper(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, &str, &str, bool)

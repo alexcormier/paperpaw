@@ -131,6 +131,12 @@ pub mod config {
 }
 
 /// The format-independent document model (see `paperpaw-document`).
+/// QR codes, e.g. of an address to open on a phone (see `paperpaw-qr`;
+/// [`ui::draw_qr`] draws one).
+pub mod qr {
+    pub use paperpaw_qr::*;
+}
+
 pub mod document {
     pub use paperpaw_document::*;
 }

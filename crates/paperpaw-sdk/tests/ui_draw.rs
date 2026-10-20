@@ -541,3 +541,59 @@ fn an_empty_screen_shows_its_icon_when_there_is_room() {
     let top = Rect::new(0, 100, 480, 200);
     assert!(drawn_in(&frame, top));
 }
+
+/// The page number between a header's arrows is told apart from them, so
+/// that a long list can ask for a page there; without pages there is none.
+#[test]
+fn the_page_number_is_hit_where_it_is_drawn() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let header = Header::new(&env, &style, true);
+    let page = Some((1, 30));
+    let (described, _) = describe(480, 800, |c| {
+        header.draw(c, &env, &style, "Reading", None, page);
+    });
+    let number = described
+        .iter()
+        .find(|d| d.label.contains("30"))
+        .expect("the page number");
+    assert!(header.on_page_number(&env, &style, middle(number.area), page));
+    // Not the title, nor without pages.
+    let title = described.iter().find(|d| d.label == "Reading").unwrap();
+    assert!(!header.on_page_number(&env, &style, middle(title.area), page));
+    assert!(!header.on_page_number(&env, &style, middle(number.area), None));
+}
+
+/// Rows with a note of one line are lower than those of two, as high as
+/// a title and that line.
+#[test]
+fn noted_rows_grow_with_their_lines() {
+    let h = Harness::new(Device::BUTTONS);
+    let style = UiStyle::new(&h.env());
+    assert_eq!(style.noted_row_of(ui::NOTE_LINES), style.noted_row());
+    assert!(style.noted_row_of(1) < style.noted_row());
+    assert!(style.noted_row_of(1) > style.row * 3 / 4);
+}
+
+/// A QR code takes whole pixels a module, square, inside its area, with
+/// white around it; one that does not fit is not drawn.
+#[test]
+fn a_qr_code_is_drawn_whole_or_not_at_all() {
+    let qr = paperpaw_sdk::qr::QrCode::new(b"https://codeberg.org/someone/clock").unwrap();
+    let area = Rect::new(40, 100, 300, 260);
+    let mut drawn = frame(480, 800);
+    let at = ui::draw_qr(&mut drawn.canvas(), &qr, area).unwrap();
+    assert_eq!(at.width, at.height);
+    assert_eq!(at.width % (qr.size() as u16 + 8), 0);
+    assert!(at.x >= area.x && at.right() <= area.right());
+    assert!(at.y >= area.y && at.bottom() <= area.bottom());
+    assert!(drawn_in(&drawn, at));
+    assert_eq!(drawn_outside(&mut drawn, at), None);
+    let mut small = frame(480, 800);
+    assert_eq!(
+        ui::draw_qr(&mut small.canvas(), &qr, Rect::new(0, 0, 20, 20)),
+        None
+    );
+    assert!(!drawn_in(&small, Rect::new(0, 0, 480, 800)));
+}

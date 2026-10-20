@@ -219,6 +219,10 @@ impl Storage for Recalled {
         self.recall.ignores_case
     }
 
+    fn free_space(&self) -> Option<u64> {
+        self.inner.free_space()
+    }
+
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         self.inner.local_path(path, with);
     }

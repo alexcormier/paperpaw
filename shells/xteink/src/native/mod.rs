@@ -251,8 +251,13 @@ impl CodeLoader for Loader {
         self.load_file(storage, code)
     }
 
-    fn finish(&mut self, _storage: &dyn Storage) {
+    fn finish(&mut self, storage: &dyn Storage) {
         self.place.finish();
+        // For the store and the plugin manager: how much room is left.
+        let room = self.place.room();
+        if !paperpaw_sdk::native::keep_code_room(storage, room.as_ref()) {
+            warn!("native: the room for code plugins could not be kept");
+        }
     }
 }
 

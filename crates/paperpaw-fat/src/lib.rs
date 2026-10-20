@@ -721,6 +721,14 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         true
     }
 
+    /// The card's own count of its free clusters (FAT32 keeps it in its
+    /// information sector); where it has none, its table is read once and
+    /// the count kept from then on.
+    fn free_space(&self) -> Option<u64> {
+        let stats = self.fs.stats().ok()?;
+        Some(u64::from(stats.free_clusters()) * u64::from(stats.cluster_size()))
+    }
+
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
         self.written(self.create_dirs(path))
     }
@@ -826,6 +834,18 @@ mod tests {
     fn mounted(bytes: Vec<u8>) -> FatStorage<Disk> {
         let fs = FileSystem::new(StdIoWrapper::from(Cursor::new(bytes)), FsOptions::new()).unwrap();
         FatStorage::new(Box::leak(Box::new(fs)))
+    }
+
+    /// The card says how much it has free, less once a file is written.
+    #[test]
+    fn free_space_is_the_cards() {
+        let card = Cut::formatted(FormatVolumeOptions::new());
+        let s = card.storage();
+        let before = s.free_space().unwrap();
+        assert!(before > 0);
+        s.write("big.bin", &vec![7u8; 64 * 1024]).unwrap();
+        let after = s.free_space().unwrap();
+        assert!(after + 64 * 1024 <= before, "{before} {after}");
     }
 
     #[test]

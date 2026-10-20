@@ -805,6 +805,10 @@ impl Storage for Volumes {
         self.0.ignores_case()
     }
 
+    fn free_space(&self) -> Option<u64> {
+        self.0.free_space()
+    }
+
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         self.0.local_path(path, with);
     }
