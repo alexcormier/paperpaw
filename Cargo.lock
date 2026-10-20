@@ -1521,16 +1521,26 @@ dependencies = [
 name = "paperpaw-plugin-file-manager"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-app",
+ "paperpaw-core",
+ "paperpaw-fs",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]
 name = "paperpaw-plugin-files"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-app",
+ "paperpaw-core",
+ "paperpaw-fs",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]
@@ -1593,8 +1603,12 @@ dependencies = [
 name = "paperpaw-plugin-home"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-app",
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]
@@ -1692,16 +1706,24 @@ dependencies = [
 name = "paperpaw-plugin-menu"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-app",
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]
 name = "paperpaw-plugin-menu-editor"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-app",
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]
@@ -1793,16 +1815,24 @@ dependencies = [
 name = "paperpaw-plugin-settings"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-app",
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]
 name = "paperpaw-plugin-setup"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-app",
+ "paperpaw-core",
  "paperpaw-i18n",
+ "paperpaw-platform",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]
