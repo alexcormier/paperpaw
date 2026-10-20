@@ -5,6 +5,7 @@
 //! kernel may use. Values marked "unverified" are best guesses until checked
 //! on real hardware.
 
+use crate::light::Light;
 use paperpaw_platform::{
     ColorPanel, DeviceInfo, DisplayInfo, InputCaps, MemoryClass, PixelFormat, Rotation, buttons,
 };
@@ -55,6 +56,8 @@ pub struct Profile {
     /// The buttons in a row below the screen, left to right (see
     /// `KernelBuilder::button_row`).
     pub button_row: &'static [&'static str],
+    /// The device's front light, if it has one.
+    pub light: Option<Light>,
     /// One-line description for `--list-profiles`.
     pub summary: &'static str,
 }
@@ -115,6 +118,7 @@ pub const PROFILES: &[Profile] = &[
         catalog_device: Some("x4"),
         sleep: true,
         button_row: &X4_ROW,
+        light: None,
         summary: "ESP32-C3, 4.3\" 800x480, buttons only, 256 KiB heap budget",
     },
     Profile {
@@ -163,6 +167,14 @@ pub const PROFILES: &[Profile] = &[
         catalog_device: Some("x4-pro"),
         sleep: true,
         button_row: &[],
+        // As the X4 Pro's shell has it: percent in fives, cool and warm
+        // LEDs.
+        light: Some(Light {
+            max: 100,
+            step: 5,
+            percent: true,
+            warmth: true,
+        }),
         summary: "ESP32-S3 (unverified), 4.3\" 800x480, touch + buttons, 256 KiB heap budget",
     },
     Profile {
@@ -197,6 +209,14 @@ pub const PROFILES: &[Profile] = &[
         catalog_device: Some("android"),
         sleep: false,
         button_row: &[],
+        // Unverified: Onyx's levels from 0 to 255, warm and cool LEDs;
+        // the Android shell takes the device's range, in steps of 1.
+        light: Some(Light {
+            max: 255,
+            step: 1,
+            percent: false,
+            warmth: true,
+        }),
         summary: "Android, 7\" Carta 1300 1264x1680, touch + page buttons",
     },
     Profile {
@@ -234,6 +254,7 @@ pub const PROFILES: &[Profile] = &[
         catalog_device: None,
         sleep: true,
         button_row: &[],
+        light: None,
         summary: "Linux, 7\" Kaleido 3 colour 1264x1680, touch + page buttons",
     },
     Profile {
@@ -268,6 +289,7 @@ pub const PROFILES: &[Profile] = &[
         catalog_device: None,
         sleep: true,
         button_row: &[],
+        light: None,
         summary: "Linux, 6.8\" 1236x1648, touch only",
     },
     Profile {
@@ -302,6 +324,7 @@ pub const PROFILES: &[Profile] = &[
         catalog_device: None,
         sleep: true,
         button_row: &[],
+        light: None,
         summary: "Linux, 6\" 1072x1448, touch only",
     },
     Profile {
@@ -337,6 +360,7 @@ pub const PROFILES: &[Profile] = &[
         catalog_device: None,
         sleep: true,
         button_row: &[],
+        light: None,
         summary: "Generic 6\" 600x800, only page buttons (also: Bluetooth page turners)",
     },
 ];

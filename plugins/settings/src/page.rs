@@ -615,8 +615,12 @@ impl Screen for GroupPage {
         }) else {
             return Handled::No;
         };
-        let track = ui::slider::parts(&self.style, ui::slider::band(&self.style, rect)).track;
-        let Some(step) = self.drag.on_pointer(event, &slider, track) else {
+        let band = ui::slider::band(&self.style, rect);
+        let value = env.settings.int(id.as_str());
+        let Some(step) = self
+            .drag
+            .on_pointer(event, &self.style, &slider, band, value)
+        else {
             return Handled::No;
         };
         let before = match self.dragged {

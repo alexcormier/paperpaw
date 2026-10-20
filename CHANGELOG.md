@@ -6,6 +6,36 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Quick panel and reader's panel: on touch screens their sliders (the
+  front light and its colour, the text size, spacing and margins) are as
+  on the settings pages, across the screen with their title and value
+  above, and every slider is a fingertip high (7 mm from the panel's
+  dpi) with a large knob. A finger that comes down anywhere on a
+  slider's band and moves sideways moves the knob as far as it moves
+  itself, from where it was, so it never jumps under the finger and the
+  finger need not hide it; a tap on the track sets the value there, a
+  tap on `−` or `+` (or beside them) one step. While it moves the value
+  shows at once, the light follows it, only the slider is drawn again
+  with a quick refresh, and nothing is read from the card; lifting the
+  finger keeps the value and refreshes the panel cleanly. The rest of
+  the track is a thin black line, which quick refreshes keep. The
+  panels' buttons are a fingertip high on touch screens too, a little
+  apart, and buttons share their rows evenly (four two and two, not
+  three and one), so the X4 Pro's quick panel fits on one page; the
+  quick panel may cover up to 95 % of the screen, as phones' quick
+  settings do. With the buttons, a slider is chosen and then moved as on
+  the settings pages. With buttons alone (the X4) the panels are as
+  before. The home screen no longer builds its widgets anew while a
+  value is shown above it, which read the card on every step. On Boox
+  devices the light follows a slider while it moves. The emulator has
+  the front light of the X4 Pro and the Boox profiles, and its scripts
+  can put a finger down, move and lift it step by step (`down`, `move`,
+  `up`).
+  SDK: `UiStyle::finger` (a fingertip's size on touch screens, 0 with
+  buttons alone) and `UiStyle::touch_row`; `ui::slider` bands are a
+  fingertip high on touch screens, `SliderDrag::on_pointer` takes the
+  slider's band, the style and its value and moves the knob relative to
+  where the finger came down, `Slider::knob_x` says where the knob is.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
@@ -103,9 +133,7 @@ change the plugin SDK.
   *Back* goes back to the value before, and the row of hints says so
   (`−`, `+`, *Keep*, *Cancel*). By touch, a slider's knob follows the
   finger and the value is kept where it is lifted; `−` and `+` change it
-  a step at once, as before. The reader's panel shows its sliders'
-  values, and gives them `−` and `+` alone where the screen is too
-  narrow for a track (the X4 Pro).
+  a step at once, as before.
 - SDK: sliders as a building block for any plugin (`ui::slider`:
   `Slider`, `SliderDrag`, `SliderFocus`, `SliderParts`, `SliderStep`,
   `SliderView`, `band`, `band_height`, `key_step`, `marked`, `parts`,
@@ -116,8 +144,7 @@ change the plugin SDK.
   takes the knob along in the slider's steps and lifting it chooses the
   value, with the buttons left and right move it a step; `shows` says
   whether a setting gets one here (a touch screen). Screen readers
-  hear it as `semantics::Role::Slider`. The panel's sliders (the
-  frontlight) are drawn with it and keep to their steps. The help texts
+  hear it as `semantics::Role::Slider`. The help texts
   of the margins and the word spacing say more plainly what they do, and
   a test checks that every slider shows its unit.
 - Screens draw without reading the card (PLANNING §12.3, B3). The X4

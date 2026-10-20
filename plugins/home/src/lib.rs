@@ -583,7 +583,7 @@ impl Screen for Dashboard {
         } else if *event == events::SETTING_CHANGED
             || *event == events::LIBRARY_CHANGED
             || *event == events::BOOK_MOVED
-            || layouts::shows_anew(event)
+            || (self.chooser.is_some() && layouts::shows_anew(event))
         {
             // The widgets made anew, what they show read again.
             self.mark_stale(cx);

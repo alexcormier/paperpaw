@@ -1573,6 +1573,7 @@ pub fn paperpaw_sdk::ui::slider::Slider::clamp(&self, i64) -> i64
 pub fn paperpaw_sdk::ui::slider::Slider::draw_band(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
 pub fn paperpaw_sdk::ui::slider::Slider::draw_row(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
 pub fn paperpaw_sdk::ui::slider::Slider::draw_track(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, i64, paperpaw_platform::pixel::Color)
+pub fn paperpaw_sdk::ui::slider::Slider::knob_x(&self, paperpaw_platform::geometry::Rect, i64) -> i32
 pub const fn paperpaw_sdk::ui::slider::Slider::new(i64, i64) -> Self
 pub fn paperpaw_sdk::ui::slider::Slider::of(&paperpaw_sdk::SettingSpec) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::slider::Slider::share(&self, i64) -> f32
@@ -1582,7 +1583,7 @@ pub fn paperpaw_sdk::ui::slider::Slider::value_at(&self, paperpaw_platform::geom
 pub struct paperpaw_sdk::ui::slider::SliderDrag
 impl paperpaw_sdk::ui::slider::SliderDrag
 pub fn paperpaw_sdk::ui::slider::SliderDrag::dragging(&self) -> core::option::Option<i64>
-pub fn paperpaw_sdk::ui::slider::SliderDrag::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::slider::Slider, paperpaw_platform::geometry::Rect) -> core::option::Option<paperpaw_sdk::ui::slider::SliderStep>
+pub fn paperpaw_sdk::ui::slider::SliderDrag::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::Slider, paperpaw_platform::geometry::Rect, i64) -> core::option::Option<paperpaw_sdk::ui::slider::SliderStep>
 pub struct paperpaw_sdk::ui::slider::SliderParts
 pub paperpaw_sdk::ui::slider::SliderParts::minus: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::slider::SliderParts::plus: paperpaw_platform::geometry::Rect
@@ -1714,6 +1715,7 @@ pub fn paperpaw_sdk::ui::slider::Slider::clamp(&self, i64) -> i64
 pub fn paperpaw_sdk::ui::slider::Slider::draw_band(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
 pub fn paperpaw_sdk::ui::slider::Slider::draw_row(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::SliderView<'_>)
 pub fn paperpaw_sdk::ui::slider::Slider::draw_track(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, i64, paperpaw_platform::pixel::Color)
+pub fn paperpaw_sdk::ui::slider::Slider::knob_x(&self, paperpaw_platform::geometry::Rect, i64) -> i32
 pub const fn paperpaw_sdk::ui::slider::Slider::new(i64, i64) -> Self
 pub fn paperpaw_sdk::ui::slider::Slider::of(&paperpaw_sdk::SettingSpec) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::slider::Slider::share(&self, i64) -> f32
@@ -1723,7 +1725,7 @@ pub fn paperpaw_sdk::ui::slider::Slider::value_at(&self, paperpaw_platform::geom
 pub struct paperpaw_sdk::ui::SliderDrag
 impl paperpaw_sdk::ui::slider::SliderDrag
 pub fn paperpaw_sdk::ui::slider::SliderDrag::dragging(&self) -> core::option::Option<i64>
-pub fn paperpaw_sdk::ui::slider::SliderDrag::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::slider::Slider, paperpaw_platform::geometry::Rect) -> core::option::Option<paperpaw_sdk::ui::slider::SliderStep>
+pub fn paperpaw_sdk::ui::slider::SliderDrag::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::Slider, paperpaw_platform::geometry::Rect, i64) -> core::option::Option<paperpaw_sdk::ui::slider::SliderStep>
 pub struct paperpaw_sdk::ui::SliderParts
 pub paperpaw_sdk::ui::SliderParts::minus: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::SliderParts::plus: paperpaw_platform::geometry::Rect
@@ -1752,6 +1754,7 @@ pub fn paperpaw_sdk::ui::Thumbnail::width(&self) -> u16
 pub struct paperpaw_sdk::ui::UiStyle
 pub paperpaw_sdk::ui::UiStyle::corner: u32
 pub paperpaw_sdk::ui::UiStyle::dark_header: bool
+pub paperpaw_sdk::ui::UiStyle::finger: u32
 pub paperpaw_sdk::ui::UiStyle::gap: u32
 pub paperpaw_sdk::ui::UiStyle::header: u32
 pub paperpaw_sdk::ui::UiStyle::line: u32
@@ -1767,6 +1770,7 @@ pub fn paperpaw_sdk::ui::UiStyle::font<'a>(&self, &paperpaw_sdk::Env<'a>) -> cor
 pub fn paperpaw_sdk::ui::UiStyle::header_colors(&self) -> (paperpaw_platform::pixel::Color, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::UiStyle::new(&paperpaw_sdk::Env<'_>) -> Self
 pub fn paperpaw_sdk::ui::UiStyle::noted_row(&self) -> u32
+pub fn paperpaw_sdk::ui::UiStyle::touch_row(&self, u32) -> u32
 pub const paperpaw_sdk::ui::HOLD_ICON: &str
 pub const paperpaw_sdk::ui::ICON_SCALE: f32
 pub const paperpaw_sdk::ui::NOTE_LINES: usize
