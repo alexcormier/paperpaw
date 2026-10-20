@@ -74,7 +74,8 @@ static SETTINGS: [SettingSpec; 10] = [
         &CHANGES,
         CHANGES[0],
         ID,
-    ),
+    )
+    .described("widgets.setting.change.help"),
     widgets::part_spec(
         "widgets.quote.author",
         ID,

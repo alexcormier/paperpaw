@@ -62,7 +62,8 @@ static SETTINGS: [SettingSpec; 10] = [
         &CHANGES,
         CHANGES[0],
         ID,
-    ),
+    )
+    .described("widgets.books.setting.highlight-change.help"),
     widgets::part_spec(
         "widgets.highlight.caption",
         ID,

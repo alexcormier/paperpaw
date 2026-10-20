@@ -59,7 +59,8 @@ static SETTINGS: [SettingSpec; 11] = [
         &STARTS,
         STARTS[0],
         ID,
-    ),
+    )
+    .described("widgets.books.setting.series-start.help"),
     widgets::part_spec(
         "widgets.series.caption",
         ID,

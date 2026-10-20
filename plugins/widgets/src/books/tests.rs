@@ -787,10 +787,21 @@ fn long_titles_in_lines_as_even_as_can_be() {
 #[test]
 fn every_setting_has_a_name_in_both_languages() {
     let mut h = Harness::new(MemoryStorage::new());
+    // Every widget of the pack's, not only the books': values such as
+    // `widgets.ring.one` and `.two` look like plural forms to the
+    // comparison of the catalogs, which would not miss one.
+    let groups: Vec<String> = h
+        .widgets
+        .iter()
+        .map(|(id, _)| id.as_str().to_string())
+        .collect();
     for language in ["en", "de"] {
         h.i18n.set_language(language);
         for spec in h.settings.specs() {
-            if !IDS.contains(&h.settings.group_of(spec).as_str()) {
+            if !groups
+                .iter()
+                .any(|g| g == h.settings.group_of(spec).as_str())
+            {
                 continue;
             }
             let mut keys = vec![spec.title.to_string()];
@@ -804,6 +815,31 @@ fn every_setting_has_a_name_in_both_languages() {
         }
         for id in IDS {
             assert!(h.i18n.get(h.widgets.title(id).unwrap()).is_some(), "{id}");
+        }
+    }
+}
+
+/// The settings whose names and values do not say all they do are
+/// explained, in both languages.
+#[test]
+fn settings_that_need_it_are_explained() {
+    let mut h = Harness::new(MemoryStorage::new());
+    for language in ["en", "de"] {
+        h.i18n.set_language(language);
+        for id in [
+            "widgets.quote.change",
+            "widgets.picture.change",
+            "widgets.highlight.change",
+            "widgets.series.start",
+            "widgets.series.name",
+            "widgets.next.pick",
+            "widgets.countdown.date",
+            "widgets.picture.folder",
+            "widgets.quote.source",
+        ] {
+            let spec = h.settings.spec(id).unwrap();
+            let help = spec.description.as_deref().unwrap_or_default();
+            assert!(h.i18n.get(help).is_some(), "{language}: {id}");
         }
     }
 }

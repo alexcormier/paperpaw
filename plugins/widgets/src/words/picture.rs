@@ -77,7 +77,8 @@ static SETTINGS: [SettingSpec; 5] = [
         &CHANGES,
         CHANGES[0],
         ID,
-    ),
+    )
+    .described("widgets.setting.change.help"),
     SettingSpec::fixed_choice(
         "widgets.picture.fit",
         "widgets.picture.setting.fit",
