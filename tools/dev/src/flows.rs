@@ -58,7 +58,7 @@
 use std::path::{Path, PathBuf};
 
 use paperpaw_core::sdk::SettingValue;
-use paperpaw_core::sdk::semantics::{self, Part, Role};
+use paperpaw_core::sdk::semantics::{self, Part};
 use paperpaw_emulator::headless;
 use paperpaw_emulator::profiles::Profile;
 use paperpaw_platform::Rect;
@@ -738,15 +738,6 @@ fn failed(
         finding = finding.plugin(plugin);
     }
     Ok(finding)
-}
-
-/// Whether `part` is something to act on: a row, button, switch or
-/// slider.
-pub fn is_target(part: &Part) -> bool {
-    matches!(
-        part.role,
-        Role::Row | Role::Button | Role::Switch | Role::Slider
-    )
 }
 
 #[cfg(test)]
