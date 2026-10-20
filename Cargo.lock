@@ -1854,6 +1854,7 @@ dependencies = [
  "paperpaw-update",
  "paperpaw-xml",
  "paperpaw-zip",
+ "proptest",
 ]
 
 [[package]]

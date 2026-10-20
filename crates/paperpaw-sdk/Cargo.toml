@@ -26,6 +26,9 @@ paperpaw-image.workspace = true
 paperpaw-update.workspace = true
 paperpaw-digest.workspace = true
 
+[dev-dependencies]
+proptest.workspace = true
+
 [features]
 default = []
 # Scalable OpenType/TrueType fonts (see paperpaw-text).
