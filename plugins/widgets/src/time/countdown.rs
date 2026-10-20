@@ -52,7 +52,8 @@ static SETTINGS: [SettingSpec; 10] = [
         &STYLES,
         STYLES[0],
         ID,
-    ),
+    )
+    .described("widgets.countdown.style.help"),
     widgets::size_spec("widgets.countdown.size", ID, Size::Fit, true),
     widgets::part_spec(
         "widgets.countdown.show-date",
@@ -174,6 +175,8 @@ pub(super) struct Shown {
     pub note: String,
     /// The whole as a sentence: "12 days until Holiday".
     pub sentence: String,
+    /// What the number counts where the note has no room: "days".
+    pub short: String,
 }
 
 /// The texts for `days` days to (or since) `title`.
@@ -185,26 +188,31 @@ pub(super) fn shown(i18n: &paperpaw_sdk::Translator, days: i64, title: &str) -> 
             big: word("widgets.countdown.today"),
             note: String::from(title),
             sentence: i18n.format("widgets.countdown.today-is", &args),
+            short: String::new(),
         },
         1 => Shown {
             big: word("widgets.countdown.tomorrow"),
             note: String::from(title),
             sentence: i18n.format("widgets.countdown.tomorrow-is", &args),
+            short: String::new(),
         },
         -1 => Shown {
             big: word("widgets.countdown.yesterday"),
             note: String::from(title),
             sentence: i18n.format("widgets.countdown.yesterday-was", &args),
+            short: String::new(),
         },
         2.. => Shown {
             big: format!("{days}"),
             note: i18n.plural("widgets.countdown.until", days, &args),
             sentence: i18n.plural("widgets.countdown.days-until", days, &args),
+            short: i18n.plural("widgets.countdown.unit", days, &[]),
         },
         _ => Shown {
             big: format!("{}", -days),
             note: i18n.plural("widgets.countdown.since", -days, &args),
             sentence: i18n.plural("widgets.countdown.days-ago", -days, &args),
+            short: i18n.plural("widgets.countdown.ago", -days, &[]),
         },
     }
 }
@@ -356,6 +364,11 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                 (width, height),
                 most,
             )?,
+            // What the number counts, where that fits whole; else the
+            // note shortened.
+            None if !shown.short.is_empty() && font.measure(style.small, &shown.short) <= width => {
+                (style.small, alloc::vec![shown.short.clone()])
+            }
             None => (
                 style.small,
                 alloc::vec![paperpaw_sdk::ui::fit(

@@ -37,7 +37,8 @@ static SETTINGS: [SettingSpec; 8] = [
         &STYLES,
         STYLES[0],
         ID,
-    ),
+    )
+    .described("widgets.battery.style.help"),
     widgets::part_spec(
         "widgets.battery.percent",
         ID,

@@ -57,7 +57,8 @@ static SETTINGS: [SettingSpec; 11] = [
         &SOURCES,
         SOURCES[0],
         ID,
-    ),
+    )
+    .described("widgets.highlight.source.help"),
     SettingSpec::fixed_choice(
         "widgets.highlight.change",
         "widgets.books.setting.highlight-change",

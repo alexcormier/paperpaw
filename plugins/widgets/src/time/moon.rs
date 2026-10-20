@@ -53,14 +53,16 @@ static SETTINGS: [SettingSpec; 9] = [
         &SHADOWS,
         SHADOWS[0],
         ID,
-    ),
+    )
+    .described("widgets.moon.shadow.help"),
     SettingSpec::fixed_choice(
         "widgets.moon.hemisphere",
         "widgets.setting.hemisphere",
         &HEMISPHERES,
         HEMISPHERES[0],
         ID,
-    ),
+    )
+    .described("widgets.moon.hemisphere.help"),
     super::date_format_spec("widgets.moon.date-format", ID, super::DATE_FORMATS[0]),
 ];
 

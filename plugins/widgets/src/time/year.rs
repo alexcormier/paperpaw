@@ -36,7 +36,8 @@ static SETTINGS: [SettingSpec; 9] = [
         &STYLES,
         STYLES[0],
         ID,
-    ),
+    )
+    .described("widgets.year-progress.style.help"),
     widgets::part_spec(
         "widgets.year-progress.year",
         ID,
@@ -115,12 +116,16 @@ fn shows(env: &Env<'_>) -> String {
 }
 
 /// The notes below the bar, as the settings want them: "Day 287 of
-/// 365", "Week 42", "78 days left".
-fn notes(env: &Env<'_>, p: &Progress) -> Vec<String> {
+/// 365", "Week 42", "78 days left"; with `short`, "Day 287".
+fn notes(env: &Env<'_>, p: &Progress, short: bool) -> Vec<String> {
     let mut notes = Vec::new();
     if widgets::shows(env, ID.as_str(), "day") {
         notes.push(env.i18n.format(
-            "widgets.year.day",
+            if short {
+                "widgets.year.day-short"
+            } else {
+                "widgets.year.day"
+            },
             &[
                 ("day", Arg::Int(i64::from(p.day))),
                 ("days", Arg::Int(i64::from(p.days))),
@@ -196,11 +201,13 @@ struct BarParts {
 }
 
 /// How notes may be laid out: whole in up to two lines, whole in one,
-/// shortened at the end of one, or not at all.
+/// in their short forms on one ("Day 287"), shortened at the end of one,
+/// or not at all.
 #[derive(Clone, Copy, PartialEq)]
 enum Notes {
     Two,
     One,
+    Short,
     Cut,
     None,
 }
@@ -226,7 +233,8 @@ fn draw_bar(
     let area = look.area;
     let width = f32::from(area.width);
     let height = f32::from(area.height);
-    let items = notes(env, p);
+    let items = notes(env, p, false);
+    let short = notes(env, p, true);
     let text = percent_text(p);
     let percent = widgets::shows(env, ID.as_str(), "percent");
     let ink = |lines: Vec<&str>, size: f32| {
@@ -257,9 +265,11 @@ fn draw_bar(
         (true, Notes::One, true),
         (true, Notes::Two, false),
         (true, Notes::One, false),
+        (true, Notes::Short, false),
         (true, Notes::Cut, false),
         (false, Notes::Two, false),
         (false, Notes::One, false),
+        (false, Notes::Short, false),
         (false, Notes::Cut, false),
         (false, Notes::None, true),
         (false, Notes::None, false),
@@ -274,6 +284,7 @@ fn draw_bar(
         let notes = match kind {
             Notes::Two => super::pack(font, style.small, &items, width, 2),
             Notes::One | Notes::Cut => super::pack(font, style.small, &items, width, 1),
+            Notes::Short => super::pack(font, style.small, &short, width, 1),
             Notes::None => Vec::new(),
         };
         // Whole notes only, but where they may be shortened.
@@ -418,7 +429,7 @@ fn draw_ring(
 ) {
     let (style, _) = ui(env);
     let align = widgets::align(env, ID.as_str());
-    let notes = notes(env, p);
+    let notes = notes(env, p, false);
     let small = line(font, style.small);
     let side = area.height.min(area.width);
     // Beside it where the notes have room there, else below it.

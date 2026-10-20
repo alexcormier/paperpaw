@@ -35,7 +35,8 @@ static SETTINGS: [SettingSpec; 8] = [
         &STYLES,
         STYLES[0],
         ID,
-    ),
+    )
+    .described("widgets.day.style.help"),
     widgets::size_spec("widgets.day.size", ID, Size::Fit, true),
     super::date_format_spec("widgets.day.date-format", ID, super::DATE_FORMATS[0]),
     widgets::part_spec("widgets.day.year", ID, "widgets.setting.year", true),

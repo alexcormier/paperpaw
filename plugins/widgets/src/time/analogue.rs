@@ -50,28 +50,32 @@ static SETTINGS: [SettingSpec; 9] = [
         &FACES,
         FACES[1],
         ID,
-    ),
+    )
+    .described("widgets.analogue-clock.face.help"),
     SettingSpec::fixed_choice(
         "widgets.analogue-clock.ring",
         "widgets.setting.ring",
         &RINGS,
         RINGS[1],
         ID,
-    ),
+    )
+    .described("widgets.analogue-clock.ring.help"),
     SettingSpec::fixed_choice(
         "widgets.analogue-clock.hands",
         "widgets.setting.hands",
         &HANDS,
         HANDS[1],
         ID,
-    ),
+    )
+    .described("widgets.analogue-clock.hands.help"),
     SettingSpec::fixed_choice(
         "widgets.analogue-clock.date",
         "widgets.setting.clock-date",
         &DATES,
         DATES[0],
         ID,
-    ),
+    )
+    .described("widgets.analogue-clock.date.help"),
     super::date_format_spec(
         "widgets.analogue-clock.date-format",
         ID,
