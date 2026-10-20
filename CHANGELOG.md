@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Update: an update file on the card no newer than the version running
+  says so (*an older version*, *again*) and installs as *Install older
+  version* or *Install again*, with *Search online* beside it; a newer
+  update the server names comes first. A version from the update server
+  that is no version (with `/`, say) is no offer, so it can no longer
+  name a file outside `updates`, and a download a restart cut off
+  (`updates/.download`, `.download.part`) is removed at start.
 - A new look, rounder and friendlier: soft corners, pills for buttons,
   switches, chips and the highlight, plain headers (the title on the
   page, a little larger, no bar or line), faint lines between rows from
