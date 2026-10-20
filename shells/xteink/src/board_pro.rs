@@ -59,7 +59,8 @@ pub struct CardParts {
 }
 
 /// What the input interrupt reads: the side buttons, and on the I²C bus
-/// the touch screen and the fuel gauge.
+/// the touch screen; the main loop reads the fuel gauge and sets the
+/// clock on the bus too (see `input`).
 pub struct Keys {
     pub up: Input<'static>,
     pub down: Input<'static>,

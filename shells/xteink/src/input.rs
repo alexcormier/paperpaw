@@ -1,16 +1,21 @@
-//! The buttons, the touch screen (the X4 Pro's) and the battery, read in a
-//! timer's interrupt every
-//! [`SAMPLE_MS`]: a press is seen while PaperPaw is busy for a second or
-//! more (laying out a page, counting a book's pages), and waits in a queue
-//! until the main loop takes it ([`next`]). Each keeps the time it came,
-//! so a long press stays long.
+//! The buttons and the touch screen (the X4 Pro's), read in a timer's
+//! interrupt every [`SAMPLE_MS`]: a press is seen while PaperPaw is busy
+//! for a second or more (laying out a page, counting a book's pages), and
+//! waits in a queue until the main loop takes it ([`next`]). Each keeps
+//! the time it came, so a long press stays long.
+//!
+//! The battery and the clock chip change slowly: the main loop reads and
+//! sets them when it needs to ([`percent`], [`keep_time`]), with the parts
+//! taken out of the interrupt's hands meanwhile. On the I²C bus of the
+//! X4 Pro and the X4 Classic a reading takes a millisecond or two: in the
+//! interrupt it would hold off every other one (the radio's too).
 //!
 //! The same interrupt can note where the processor is each time, for
 //! finding out where the time goes ([`profile`]).
 
 #[cfg(feature = "remote")]
 use alloc::vec::Vec;
-use core::cell::RefCell;
+use core::cell::{Cell, RefCell};
 use core::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use critical_section::Mutex;
@@ -25,7 +30,7 @@ use crate::board::Keys;
 
 /// How often the buttons are read.
 const SAMPLE_MS: u64 = 5;
-/// How often the battery is read.
+/// How often the battery is read at most.
 const BATTERY_MS: u64 = 1000;
 /// Presses and releases waiting; more are dropped.
 const QUEUE: usize = 32;
@@ -57,7 +62,9 @@ pub enum Change {
 /// What the interrupt reads with, and what it found.
 pub struct Sampler {
     timer: PeriodicTimer<'static, Blocking>,
-    keys: Keys,
+    /// Taken out while the main loop reads the battery or sets the clock
+    /// ([`with_keys`]): the interrupt passes over them meanwhile.
+    keys: Option<Keys>,
     power: Input<'static>,
     debouncer: Debouncer,
     /// Woken by the power button, it is still down: it counts once let go.
@@ -66,9 +73,6 @@ pub struct Sampler {
     /// Where the next change goes, and how many wait.
     head: usize,
     len: usize,
-    battery_read: u64,
-    /// A time to give the clock chip (the ESP32-S3 devices'), ms since 1970.
-    clock: Option<i64>,
 }
 
 static SAMPLER: Mutex<RefCell<Option<Sampler>>> = Mutex::new(RefCell::new(None));
@@ -81,10 +85,9 @@ const PROFILE_SAMPLES: usize = 3000;
 /// Memory left free for PaperPaw while profiling.
 #[cfg(feature = "remote")]
 const PROFILE_SPARE: usize = 64 * 1024;
-/// The battery's voltage, in millivolts, and its charge in percent (0
-/// until first read).
-static MILLIVOLTS: AtomicU32 = AtomicU32::new(0);
-static PERCENT: AtomicU32 = AtomicU32::new(0);
+/// The battery's last reading: when (ms since the start), its charge in
+/// percent and its voltage in millivolts.
+static BATTERY: Mutex<Cell<Option<(u64, u8, u16)>>> = Mutex::new(Cell::new(None));
 /// When the readings began (ms since the start).
 static STARTED: AtomicU32 = AtomicU32::new(0);
 /// The power button is down now (not debounced).
@@ -108,35 +111,26 @@ impl Sampler {
         timer.set_interrupt_handler(sample);
         Self {
             timer,
-            keys,
+            keys: Some(keys),
             power,
             debouncer: Debouncer::new(),
             power_armed: false,
             queue: [None; QUEUE],
             head: 0,
             len: 0,
-            battery_read: 0,
-            clock: None,
         }
     }
 
-    /// One reading of everything.
+    /// One reading of the buttons and the touch screen.
     fn read(&mut self) {
+        let Some(keys) = self.keys.as_mut() else {
+            return;
+        };
         let now = millis();
-        if self.battery_read == 0 || now - self.battery_read >= BATTERY_MS {
-            self.battery_read = now;
-            if let Some((percent, millivolts)) = self.keys.battery() {
-                MILLIVOLTS.store(u32::from(millivolts), Ordering::Relaxed);
-                PERCENT.store(u32::from(percent), Ordering::Relaxed);
-            }
-        }
-        if let Some(unix_ms) = self.clock.take() {
-            self.keys.set_clock(unix_ms);
-        }
         let power_down = self.power.is_low();
         POWER_DOWN.store(power_down, Ordering::Relaxed);
         self.power_armed |= !power_down;
-        let (reading, levels) = self.keys.read(self.power_armed && power_down);
+        let (reading, levels) = keys.read(self.power_armed && power_down);
         // Only the interrupt writes it (the X4's chip has no atomic adds).
         SAMPLES.store(
             SAMPLES.load(Ordering::Relaxed).wrapping_add(1),
@@ -153,8 +147,7 @@ impl Sampler {
         self.debouncer.update(reading, now, &mut |name, down| {
             push(Change::Button(name, down, now));
         });
-        self.keys
-            .touch(&mut |touch| push(Change::Touch(touch, now)));
+        keys.touch(&mut |touch| push(Change::Touch(touch, now)));
     }
 }
 
@@ -234,25 +227,53 @@ pub fn profile(start: bool) -> Option<Vec<u32>> {
     })
 }
 
-/// Gives the clock chip the time (on the X4 Pro and X4 Classic; the X4
-/// has none), from
-/// the interrupt that owns its bus.
-pub fn keep_time(unix_ms: i64) {
+/// Runs `work` on the parts the interrupt reads with, taken out of its
+/// hands for the time (it passes over them), so slow work on them holds
+/// no interrupt off. From the main loop only.
+fn with_keys<R>(work: impl FnOnce(&mut Keys) -> R) -> Option<R> {
+    let mut keys = critical_section::with(|cs| SAMPLER.borrow_ref_mut(cs).as_mut()?.keys.take())?;
+    let done = work(&mut keys);
     critical_section::with(|cs| {
         if let Some(s) = SAMPLER.borrow_ref_mut(cs).as_mut() {
-            s.clock = Some(unix_ms);
+            s.keys = Some(keys);
         }
     });
+    Some(done)
+}
+
+/// Gives the clock chip the time (on the X4 Pro and X4 Classic; the X4
+/// has none).
+pub fn keep_time(unix_ms: i64) {
+    with_keys(|keys| keys.set_clock(unix_ms));
+}
+
+/// The battery's charge in percent and its voltage in millivolts (0 until
+/// read), read again when the last reading is [`BATTERY_MS`] old.
+fn battery() -> (u8, u16) {
+    let now = millis();
+    let last = critical_section::with(|cs| BATTERY.borrow(cs).get());
+    if let Some((at, percent, millivolts)) = last
+        && now - at < BATTERY_MS
+    {
+        return (percent, millivolts);
+    }
+    match with_keys(Keys::battery).flatten() {
+        Some((percent, millivolts)) => {
+            critical_section::with(|cs| BATTERY.borrow(cs).set(Some((now, percent, millivolts))));
+            (percent, millivolts)
+        }
+        None => last.map_or((0, 0), |(_, percent, millivolts)| (percent, millivolts)),
+    }
 }
 
 /// The battery's voltage, in millivolts.
 pub fn millivolts() -> u16 {
-    MILLIVOLTS.load(Ordering::Relaxed) as u16
+    battery().1
 }
 
 /// The battery's charge, in percent.
 pub fn percent() -> u8 {
-    PERCENT.load(Ordering::Relaxed) as u8
+    battery().0
 }
 
 /// Readings so far, and the last readings of the front and side ladders.
@@ -278,7 +299,8 @@ pub fn held(button: &str) -> bool {
     critical_section::with(|cs| {
         SAMPLER.borrow_ref(cs).as_ref().is_some_and(|s| {
             s.debouncer.is_down(button)
-                || (button == paperpaw_platform::buttons::HOME && s.keys.home_down())
+                || (button == paperpaw_platform::buttons::HOME
+                    && s.keys.as_ref().is_some_and(Keys::home_down))
         })
     })
 }

@@ -65,8 +65,8 @@ pub struct CardParts {
     pub delay: Delay,
 }
 
-/// What the input interrupt reads: the buttons, and on the I²C bus the
-/// fuel gauge.
+/// What the input interrupt reads: the buttons; and the I²C bus, on which
+/// the main loop reads the fuel gauge and sets the clock (see `input`).
 pub struct Keys {
     pub back: Input<'static>,
     pub confirm: Input<'static>,
