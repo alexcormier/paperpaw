@@ -31,3 +31,8 @@ preset in `presets.ini`, offered with the home screen's own layouts.
 tools, a screen for touch and buttons, a setting, an event and
 translations. [Writing plugins](../docs/plugins.md) walks through it; try
 it with `cargo run -p paperpaw-emulator --features hello`.
+
+`hello-native` is the same plugin as a file the X4 and the X4 Pro load
+at their start, without a new firmware, in a workspace of its own with a
+CI job for a plugin's repository; see its [README](hello-native/README.md)
+and [Plugins as files](../docs/plugins.md#plugins-as-files).

@@ -1,6 +1,6 @@
 [package]
 name = "paperpaw-sign"
-description = "Signs PaperPaw firmware images as update files, makes signing keys and shows what an update file holds"
+description = "Signs PaperPaw firmware images as update files, makes signing keys, makes native plugin files and signs them, and shows what such files hold"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -12,6 +12,8 @@ publish = false
 
 [dependencies]
 paperpaw-update = { workspace = true }
+paperpaw-native = { workspace = true }
+paperpaw-digest = { workspace = true }
 # Only for new keys.
 ed25519-compact = { version = "2.6", default-features = false, features = ["random"] }
 

@@ -109,6 +109,11 @@ impl Keys {
         )
     }
 
+    /// Whether the home key is down, as the touch controller said last.
+    pub fn home_down(&self) -> bool {
+        self.home
+    }
+
     /// Sets the clock chip, which keeps the time while the X4 Pro is off.
     pub fn set_clock(&mut self, unix_ms: i64) {
         let _ = bm8563::write(&mut self.i2c, &bm8563::Time::from_unix_ms(unix_ms));

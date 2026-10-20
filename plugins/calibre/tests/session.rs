@@ -535,8 +535,9 @@ fn a_message_larger_than_the_device_holds_ends_the_connection() {
     assert!(calibre.closed);
 }
 
+/// A character split between socket reads stays whole (H-8), so
+/// Calibre's framing by bytes keeps in step.
 #[test]
-#[ignore = "bug: H-8, the kernel reads socket text lossily per read, so a             character split between reads becomes two replacement             characters and Calibre's framing by bytes slips"]
 fn a_character_split_between_reads_keeps_messages_in_step() {
     let storage = Shared(Rc::new(MemoryStorage::new()));
     let (mut kernel, mut calibre) = connected(DEVICE, &storage);

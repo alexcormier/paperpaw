@@ -730,3 +730,6 @@ mod tests {
         assert_eq!(feed.entries[0].title, "b");
     }
 }
+
+#[cfg(test)]
+mod hostile_tests;

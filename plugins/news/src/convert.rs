@@ -493,3 +493,6 @@ mod tests {
         assert!(size < 2000, "{size}");
     }
 }
+
+#[cfg(test)]
+mod hostile_tests;
