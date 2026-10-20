@@ -302,6 +302,13 @@ impl Kernel {
     /// [`paperpaw_sdk::semantics`]): for reading the screen aloud,
     /// automation and tests. Draws them once, aside.
     pub fn describe(&mut self) -> Vec<paperpaw_sdk::semantics::Part> {
+        paperpaw_sdk::semantics::parts(self.described())
+    }
+
+    /// What [`describe`](Self::describe) puts together: everything the
+    /// drawing helpers told as they drew, in drawing order, each with the
+    /// clip it was drawn in, e.g. for checks of text cut at a cell's edge.
+    pub fn described(&mut self) -> Vec<paperpaw_sdk::semantics::Described> {
         let bounds = self.framebuffer.bounds();
         let Ok(mut aside) = Framebuffer::new(
             bounds.width,
@@ -338,7 +345,7 @@ impl Kernel {
                 );
             }
         }
-        paperpaw_sdk::semantics::parts(described)
+        described
     }
 
     /// Times what the input started, and shows the busy mark first if it

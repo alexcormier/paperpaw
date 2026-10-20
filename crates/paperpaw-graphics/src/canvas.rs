@@ -32,6 +32,10 @@ pub struct Described {
     pub focused: bool,
     /// Switched on or off, for switches and buttons that are either.
     pub on: Option<bool>,
+    /// What the canvas showed when it was described (its clip): the
+    /// screen, cell or row it was drawn into. An area reaching past it
+    /// was cut (see `paperpaw-dev`'s checks).
+    pub clip: Rect,
 }
 
 /// What a described part is.
@@ -98,6 +102,7 @@ impl<'a> Canvas<'a> {
         focused: bool,
         on: Option<bool>,
     ) {
+        let clip = self.clip;
         if let Some(sink) = self.described.as_deref_mut() {
             sink.push(Described {
                 role,
@@ -105,6 +110,7 @@ impl<'a> Canvas<'a> {
                 area,
                 focused,
                 on,
+                clip,
             });
         }
     }
