@@ -188,8 +188,16 @@ fn connect<'a>(
         &[JValue::Bool(0)],
     )?;
     set_method(env, &conn, &call.method)?;
-    env.call_method(&conn, "setConnectTimeout", "(I)V", &[JValue::Int(15_000)])?;
-    env.call_method(&conn, "setReadTimeout", "(I)V", &[JValue::Int(60_000)])?;
+    // Java limits connecting and each read, not the whole: both to the
+    // call's time, connecting to 15 s at most.
+    let limit = i32::try_from(call.timeout_ms).unwrap_or(i32::MAX).max(1);
+    env.call_method(
+        &conn,
+        "setConnectTimeout",
+        "(I)V",
+        &[JValue::Int(limit.min(15_000))],
+    )?;
+    env.call_method(&conn, "setReadTimeout", "(I)V", &[JValue::Int(limit)])?;
     for (name, value) in &call.headers {
         let (name, value) = (env.new_string(name)?, env.new_string(value)?);
         env.call_method(
@@ -272,6 +280,12 @@ fn answer(
     };
     let etag = header(env, conn, "ETag")?;
     let content_type = header(env, conn, "Content-Type")?;
+    let mut headers = Vec::new();
+    for name in &call.want_headers {
+        if let Some(value) = header(env, conn, name)? {
+            headers.push((name.to_ascii_lowercase(), value));
+        }
+    }
     // Errors come with a body too, e.g. the server's reason.
     let stream = if status >= 400 {
         "getErrorStream"
@@ -317,5 +331,6 @@ fn answer(
         content_type,
         url: None,
         saved: false,
+        headers,
     })
 }

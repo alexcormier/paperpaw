@@ -125,6 +125,7 @@ impl Plugin for Sleep {
             ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -182,9 +183,10 @@ fn picture(env: &Env<'_>) -> Option<ImageRef> {
     // One after the other, from where the last sleep left off.
     let next = next_picture(env.storage);
     let name = &pictures[next % pictures.len()];
-    let _ = env
-        .storage
-        .write(&data("next.txt"), format!("{}", next + 1).as_bytes());
+    let _ = env.storage.write(
+        &data("next.txt"),
+        format!("{}", next.wrapping_add(1)).as_bytes(),
+    );
     let display = env.device.display;
     let fit = paperpaw_sdk::image::Fit::screen(display.width.into(), display.height.into());
     // In colour on colour screens (ADR 0015).

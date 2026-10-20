@@ -41,7 +41,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
 
 /// A card that counts how often the library folder is listed.
 struct Counted {
-    inner: MemoryStorage,
+    inner: Rc<MemoryStorage>,
     listings: Rc<Cell<usize>>,
 }
 
@@ -93,15 +93,27 @@ fn shown(kernel: &mut Kernel) -> String {
     labels.join("\n")
 }
 
+/// The tests' turns with the library: when its catalog was made is kept
+/// for the whole program, as on a device, so tests that make or read it
+/// take turns rather than run beside each other.
+static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Waits for this test's turn with the library.
+fn turn() -> std::sync::MutexGuard<'static, ()> {
+    TURN.lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
 #[test]
 fn the_catalog_is_made_once_and_after_changes() {
-    let storage = (0..40).fold(MemoryStorage::new(), |card, i| {
+    let _turn = turn();
+    let storage = Rc::new((0..40).fold(MemoryStorage::new(), |card, i| {
         card.with(&format!("books/book {i:02}.txt"), "Some text.")
-    });
+    }));
     let listings = Rc::new(Cell::new(0));
     let mut kernel = Kernel::builder(DEVICE)
         .storage(Counted {
-            inner: storage,
+            inner: Rc::clone(&storage),
             listings: Rc::clone(&listings),
         })
         .user_config("[core]\nlanguage = en\n")
@@ -114,7 +126,27 @@ fn the_catalog_is_made_once_and_after_changes() {
     run(&mut kernel, effects, 100);
     let by_author = paperpaw_plugin_files::BY_AUTHOR;
 
-    // The first steps of making the catalog, then a full screen on top.
+    // The library (the home screen here) made the catalog; by author
+    // shows it.
+    let effects = kernel.run_action(Instant(0), by_author.clone());
+    run(&mut kernel, effects, 1000);
+    let text = shown(&mut kernel);
+    assert!(text.contains("40 books"), "{text}");
+    let effects = kernel.run_action(Instant(0), actions::BACK);
+    run(&mut kernel, effects, 100);
+
+    // Without a catalog, the library covered: by author makes it. Its
+    // first steps, then a full screen on top; back, it goes on to the end.
+    let info = Params::new().with(params::PATH, "books/book 02.txt");
+    let effects = kernel.open_screen(Instant(0), paperpaw_plugin_files::INFO_SCREEN, info);
+    run(&mut kernel, effects, 100);
+    storage.remove(".paperpaw/library/catalog.txt").unwrap();
+    let effects = kernel.send_event(
+        Instant(0),
+        events::LIBRARY_CHANGED.id().clone(),
+        Params::new(),
+    );
+    run(&mut kernel, effects, 100);
     let effects = kernel.run_action(Instant(0), by_author.clone());
     run(&mut kernel, effects, 2);
     assert!(
@@ -125,11 +157,13 @@ fn the_catalog_is_made_once_and_after_changes() {
     let info = Params::new().with(params::PATH, "books/book 01.txt");
     let effects = kernel.open_screen(Instant(0), paperpaw_plugin_files::INFO_SCREEN, info);
     run(&mut kernel, effects, 100);
-    // Back: it goes on to the end.
     let effects = kernel.run_action(Instant(0), actions::BACK);
     run(&mut kernel, effects, 1000);
     let text = shown(&mut kernel);
     assert!(text.contains("40 books"), "{text}");
+    // Back to the library, past the information.
+    let effects = kernel.run_action(Instant(0), actions::BACK);
+    run(&mut kernel, effects, 100);
 
     // Shown again: the catalog made is taken as it is.
     let effects = kernel.run_action(Instant(0), actions::BACK);

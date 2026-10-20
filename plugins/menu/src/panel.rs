@@ -22,7 +22,7 @@ use paperpaw_sdk::{
     PointerEvent, PointerPhase, Rect, RefreshMode, Screen, SettingKind, SettingSpec, SettingValue,
 };
 
-use crate::{CHOOSE_SCREEN, is_menu};
+use crate::{choose, is_menu};
 use paperpaw_sdk::setting::Setting;
 
 /// Most switches or buttons in one row.
@@ -552,13 +552,16 @@ impl PanelScreen {
             // By touch see `on_pointer`, with the buttons `on_action`.
             Control::Slide(_) => {}
             Control::Open(id) => {
-                let screen = spec(&env, id)
-                    .and_then(|s| s.extra().editor.clone())
-                    .unwrap_or(CHOOSE_SCREEN);
-                cx.command(Command::OpenScreen(
-                    screen,
-                    Params::new().with("id", id.as_str().to_string()),
-                ));
+                let Some(setting) = spec(&env, id) else {
+                    return;
+                };
+                match &setting.extra().editor {
+                    Some(editor) => cx.command(Command::OpenScreen(
+                        editor.clone(),
+                        Params::new().with("id", id.as_str().to_string()),
+                    )),
+                    None => choose(&env, setting, cx),
+                }
             }
             Control::Run(id) if is_menu(&env, id) => {
                 cx.command(Command::Back);

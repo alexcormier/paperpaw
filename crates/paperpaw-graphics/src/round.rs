@@ -22,17 +22,22 @@ const SINES: [i16; 91] = [
 
 /// How far row `row` of a shape `height` rows high with corners of
 /// `radius` starts in from its sides (at most half its height and width,
-/// as the caller makes sure).
+/// as the caller makes sure): the pixels the circle leaves at least half
+/// of, at the middle of the row.
 pub fn corner_inset(radius: u32, row: u32, height: u32) -> u32 {
     let from_edge = row.min(height - 1 - row);
     if from_edge >= radius {
         return 0;
     }
-    // The circle's half width at the middle of the row, in half pixels.
+    // The circle's half width at the middle of the row, in half pixels:
+    // the square root of `square`, `dx` rounded down.
     let r = 2 * u64::from(radius);
     let dy = r - 2 * u64::from(from_edge) - 1;
-    let dx = (r * r - dy * dy).isqrt();
-    (r - dx).div_ceil(2) as u32
+    let square = r * r - dy * dy;
+    let dx = square.isqrt();
+    // The inset (r - root) / 2 pixels, rounded to the nearest (half a
+    // pixel in): where the root is no whole number it lies above `dx`.
+    ((r + 1 - dx - u64::from(dx * dx != square)) / 2) as u32
 }
 
 /// The sine and cosine of `degrees` (any, taken round the circle), times
@@ -55,7 +60,9 @@ pub fn sin_cos(degrees: i32) -> (i32, i32) {
 /// the edges of the plane of points, where it would lie past them).
 pub fn point_at(center: Point, radius: i32, degrees: i32) -> Point {
     let (sin, cos) = sin_cos(degrees);
-    let scale = |v: i32| (i64::from(v) * i64::from(radius) * 2 / i64::from(UNIT) + 1).div_euclid(2);
+    let scale = |v: i32| {
+        (i64::from(v) * i64::from(radius) * 2 + i64::from(UNIT)).div_euclid(2 * i64::from(UNIT))
+    };
     let clamp = |v: i64| v.clamp(i32::MIN.into(), i32::MAX.into()) as i32;
     Point::new(
         clamp(i64::from(center.x) + scale(sin)),
@@ -97,7 +104,8 @@ impl Arc {
         self.sweep >= 360
     }
 
-    /// Whether the direction east `x`, north `y` lies on the arc.
+    /// Whether the direction east `x`, north `y` lies on the arc: from
+    /// `from` on, up to `to`.
     pub(crate) fn holds(&self, x: i64, y: i64) -> bool {
         if self.full() {
             return true;
@@ -106,6 +114,14 @@ impl Arc {
             return false;
         }
         let p = (x, y);
+        if self.sweep == 180 {
+            // `to` is `from` reversed: the half plane clockwise of `from`
+            // and the direction of `from` itself, so that the two halves
+            // of a ring share no edge and leave none out.
+            let (a, b) = (self.from, p);
+            let along = a.1 * b.0 == a.0 * b.1 && a.0 * b.0 + a.1 * b.1 > 0;
+            return clockwise_after(a, b) || along;
+        }
         let between = |a, b| !clockwise_after(p, a) && clockwise_after(p, b);
         if self.sweep <= 180 {
             between(self.from, self.to)
@@ -204,7 +220,8 @@ mod tests {
         // Past the plane's edges: at them.
         let far = Point::new(i32::MAX, i32::MIN);
         assert_eq!(point_at(far, i32::MAX, 45), Point::new(i32::MAX, i32::MIN));
-        assert_eq!(point_at(far, i32::MIN, 45).x, i32::MAX - 1_518_485_687);
+        // 1_518_485_687.5 and a little more to the left: rounded to the nearest.
+        assert_eq!(point_at(far, i32::MIN, 45).x, i32::MAX - 1_518_485_688);
         // Any angle, the largest too (127 degrees round the circle).
         assert!(Arc::new(i32::MAX, 90).holds(2, -10));
         assert!(!Arc::new(i32::MAX, 90).holds(-10, -1));

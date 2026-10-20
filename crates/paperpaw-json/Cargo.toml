@@ -14,5 +14,8 @@ keywords = ["json", "streaming", "no-std"]
 [dependencies]
 paperpaw-platform.workspace = true
 
+[dev-dependencies]
+proptest.workspace = true
+
 [lints]
 workspace = true

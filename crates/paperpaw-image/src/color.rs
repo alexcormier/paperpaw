@@ -28,7 +28,7 @@ impl ColorFile {
     /// Opens a decoded colour image, checking its size.
     pub fn open(storage: &dyn Storage, path: &str) -> Option<ColorFile> {
         let mut header = [0u8; HEADER as usize];
-        if storage.read_at(path, 0, &mut header).ok()? != header.len() || &header[..4] != MAGIC {
+        if !crate::gray::read_all(storage, path, 0, &mut header) || &header[..4] != MAGIC {
             return None;
         }
         let width = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);

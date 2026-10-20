@@ -30,6 +30,11 @@ pub(crate) enum Refusal {
     NotTheAuthor,
     /// This PaperPaw loads no code plugins.
     Unsupported,
+    /// The device has a plugin of its id it cannot replace: one built in,
+    /// or one of the other kind.
+    Taken,
+    /// Its code does not fit in the room left for code plugins.
+    NoRoom,
 }
 
 impl Refusal {
@@ -41,6 +46,8 @@ impl Refusal {
             Refusal::Unsigned => "store.refused.unsigned",
             Refusal::NotTheAuthor => "store.refused.not-the-author",
             Refusal::Unsupported => "store.refused.unsupported",
+            Refusal::Taken => "store.refused.taken",
+            Refusal::NoRoom => "store.refused.no-room",
         }
     }
 }
@@ -115,6 +122,9 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
         .iter()
         .map(|name| format!("{folder}/{name}"))
         .find(|path| storage.exists(path));
+    if !crate::catalog::may_install(env.plugins, plugin, code.is_some()) {
+        return Verdict::Refused(Refusal::Taken);
+    }
     let Some(code) = code else {
         return Verdict::Install { code: None };
     };
@@ -127,6 +137,15 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
     };
     if header.fingerprint != native.fingerprint.0 {
         return Verdict::Refused(Refusal::OtherBuild);
+    }
+    // Where the room for code is known, it must fit beside the others
+    // (in place of its version before).
+    let room = crate::room::Room::of(env, Some(plugin));
+    if let Some(code_room) = room.code {
+        let need = code_room.needs(u64::from(header.image_len), header.align);
+        if !code_room.fits(room.taken, room.plugins, need) {
+            return Verdict::Refused(Refusal::NoRoom);
+        }
     }
     let Some(signature) = signature else {
         return Verdict::Refused(Refusal::Unsigned);

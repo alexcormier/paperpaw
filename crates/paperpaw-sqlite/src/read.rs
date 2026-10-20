@@ -364,35 +364,81 @@ fn zeroed(len: usize) -> Result<Vec<u8>, Error> {
     Ok(bytes)
 }
 
-/// The column names of a `CREATE TABLE` statement, in order.
+/// The column names of a `CREATE TABLE` statement, in order. SQLite
+/// keeps the statement as it was written: comments and quoted names and
+/// texts are passed over, with the commas and brackets in them.
 pub fn columns(sql: &str) -> Vec<String> {
-    let (Some(open), Some(close)) = (sql.find('('), sql.rfind(')')) else {
-        return Vec::new();
-    };
-    let body = &sql[open + 1..close.max(open + 1)];
+    // The definitions between the outermost brackets, without comments.
     let mut parts = Vec::new();
-    let (mut depth, mut start) = (0, 0);
-    for (i, c) in body.char_indices() {
+    let mut part = String::new();
+    let mut depth = 0u32;
+    let mut chars = sql.chars().peekable();
+    while let Some(c) = chars.next() {
         match c {
-            '(' => depth += 1,
-            ')' => depth -= 1,
-            ',' if depth == 0 => {
-                parts.push(&body[start..i]);
-                start = i + 1;
+            '-' if chars.peek() == Some(&'-') => {
+                chars.find(|&c| c == '\n');
+                part.push(' ');
+                continue;
+            }
+            '/' if chars.peek() == Some(&'*') => {
+                chars.next();
+                let mut last = ' ';
+                chars.find(|&c| core::mem::replace(&mut last, c) == '*' && c == '/');
+                part.push(' ');
+                continue;
+            }
+            '\'' | '"' | '`' | '[' => {
+                // Up to the closing quote; a quote doubled stands for
+                // itself.
+                let close = if c == '[' { ']' } else { c };
+                let mut quoted = String::from(c);
+                while let Some(q) = chars.next() {
+                    quoted.push(q);
+                    if q == close {
+                        if c != '['
+                            && let Some(again) = chars.next_if_eq(&close)
+                        {
+                            quoted.push(again);
+                        } else {
+                            break;
+                        }
+                    }
+                }
+                if depth > 0 {
+                    part.push_str(&quoted);
+                }
+                continue;
+            }
+            '(' => {
+                depth += 1;
+                if depth == 1 {
+                    continue;
+                }
+            }
+            ')' => {
+                depth = depth.saturating_sub(1);
+                if depth == 0 {
+                    parts.push(core::mem::take(&mut part));
+                    break;
+                }
+            }
+            ',' if depth == 1 => {
+                parts.push(core::mem::take(&mut part));
+                continue;
             }
             _ => {}
         }
+        if depth > 0 {
+            part.push(c);
+        }
     }
-    parts.push(&body[start..]);
+    if depth > 0 {
+        // Not closed: no statement.
+        return Vec::new();
+    }
     parts
         .into_iter()
         .filter_map(|part| {
-            // Lines may hold comments.
-            let part: String = part
-                .lines()
-                .map(|l| l.split("--").next().unwrap_or(""))
-                .collect::<Vec<_>>()
-                .join(" ");
             let name = part
                 .split_whitespace()
                 .next()?

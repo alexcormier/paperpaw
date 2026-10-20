@@ -21,7 +21,11 @@
 //! where each line begins (4 bytes each). In memory are only the runs of
 //! plugins of one group, so the list may grow without limit. A plugin's
 //! page asks for it with its files (`plugins/<id>.json`, the same fields
-//! and `latest.files`), read when it comes.
+//! and `latest.files`, with the list's own query), read when it comes.
+//!
+//! A plugin of the library is passed over where the device has a plugin
+//! of that id it cannot take the place of ([`may_install`]): one built
+//! in, or one of the other kind.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -31,7 +35,7 @@ use paperpaw_json::stream::{Event, read_file};
 use paperpaw_sdk::install::{self, Digest, MAX_FILES, Package, PackageFile};
 use paperpaw_sdk::native::Fingerprint;
 use paperpaw_sdk::web::{encode, join_url};
-use paperpaw_sdk::{Env, Storage, Version};
+use paperpaw_sdk::{Env, PluginKind, Plugins, Storage, Version};
 
 use crate::PLUGIN;
 
@@ -65,13 +69,14 @@ pub(crate) fn group(name: &str) -> usize {
 }
 
 /// What the store installs for: the device as plugin libraries call it,
-/// and, where PaperPaw loads code plugins, the build they must be made
-/// for and the name their code gets.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+/// where PaperPaw loads code plugins the build they must be made for and
+/// the name their code gets, and the plugins it has.
+#[derive(Debug, Clone, Copy)]
 pub(crate) struct Device<'a> {
     pub name: &'a str,
     pub fingerprint: Option<Fingerprint>,
     pub code_file: &'a str,
+    pub plugins: Option<&'a Plugins>,
 }
 
 impl<'a> Device<'a> {
@@ -81,8 +86,21 @@ impl<'a> Device<'a> {
             name: env.catalog_device?,
             fingerprint: env.native.map(|native| native.fingerprint),
             code_file: env.native.map_or("", |native| &native.file),
+            plugins: Some(env.plugins),
         })
     }
+}
+
+/// Whether a plugin `id` of the library, with code or without, may take
+/// the place of what `plugins` has of that id: nothing, or a plugin of
+/// the same kind installed before. A built-in plugin comes only with the
+/// firmware, and one kind does not replace the other.
+pub(crate) fn may_install(plugins: &Plugins, id: &str, code: bool) -> bool {
+    plugins.get(id).is_none_or(|info| match info.kind {
+        PluginKind::BuiltIn => false,
+        PluginKind::Data => !code,
+        PluginKind::Code => code,
+    })
 }
 
 /// A plugin the library offers for this device: a data plugin, or a code
@@ -104,6 +122,10 @@ pub(crate) struct Entry {
     pub code: bool,
     /// Bytes to download, its code with them.
     pub size: u64,
+    /// When it was first published and when its newest version, as
+    /// `yyyymmdd` (0 where the library does not say).
+    pub added: u32,
+    pub updated: u32,
 }
 
 impl Entry {
@@ -127,10 +149,12 @@ impl Entry {
     fn line(&self) -> String {
         let clean = |s: &str| s.replace(['\t', '\n', '\r'], " ");
         format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             self.group,
             self.size,
             u8::from(self.code),
+            self.added,
+            self.updated,
             clean(&self.id),
             clean(&self.version),
             clean(&self.sdk),
@@ -142,11 +166,13 @@ impl Entry {
     }
 
     fn parse(line: &str) -> Option<Entry> {
-        let mut f = line.splitn(10, '\t');
+        let mut f = line.splitn(12, '\t');
         Some(Entry {
             group: f.next()?.parse().ok()?,
             size: f.next()?.parse().ok()?,
             code: f.next()? == "1",
+            added: f.next()?.parse().ok()?,
+            updated: f.next()?.parse().ok()?,
             id: f.next()?.to_string(),
             version: f.next()?.to_string(),
             sdk: f.next()?.to_string(),
@@ -166,6 +192,9 @@ struct Build {
     url: String,
     size: u64,
     sha256: String,
+    /// The bytes its image takes where the device places it (its
+    /// header's), where the library says.
+    image_len: Option<u64>,
 }
 
 /// What is known of the plugin being read.
@@ -187,6 +216,53 @@ struct Item {
     /// The build being read, and the one for this device and PaperPaw.
     build: Build,
     code: Option<PackageFile>,
+    /// What only a plugin's page says.
+    more: More,
+    shot: Shot,
+}
+
+/// A screenshot of a plugin, as its page lists them.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct Shot {
+    pub url: String,
+    pub width: u32,
+    pub height: u32,
+    pub size: u64,
+}
+
+/// Screenshots of a plugin at most, and their longest side.
+pub(crate) const MAX_SHOTS: usize = 4;
+const MAX_SHOT_SIDE: u32 = 2560;
+
+/// What a plugin's page tells beyond the list: where its source is, since
+/// when its author publishes, whether its build was checked against its
+/// source, screenshots.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct More {
+    pub source: String,
+    /// `yyyymmdd`, 0 where not said.
+    pub author_since: u32,
+    pub author_plugins: u32,
+    /// `verified`, `unverified`, `failed`, or empty.
+    pub verified: String,
+    /// Bytes of memory it takes while running at most, where its author
+    /// measured it (`latest.heap`).
+    pub heap: Option<u64>,
+    /// The bytes the code of the build for this device takes where it is
+    /// placed (`latest.builds[].image_len`), where the library says.
+    pub image_len: Option<u64>,
+    pub shots: Vec<Shot>,
+}
+
+/// `yyyymmdd` of a date written `YYYY-MM-DD` (or a year alone), 0 for
+/// anything else.
+pub(crate) fn date(text: &str) -> u32 {
+    let digits: String = text.chars().filter(char::is_ascii_digit).take(8).collect();
+    match digits.len() {
+        8 => digits.parse().unwrap_or(0),
+        4 => digits.parse::<u32>().map_or(0, |y| y * 10000 + 101),
+        _ => 0,
+    }
 }
 
 impl Item {
@@ -198,15 +274,19 @@ impl Item {
     }
 
     /// Whether this device can install it: a data plugin, or one with code
-    /// built for it.
-    fn fits(&self) -> bool {
+    /// built for it, that takes the place of none of its own.
+    fn fits(&self, device: &Device<'_>) -> bool {
         let entry = &self.entry;
         let kind = match self.kind.as_str() {
             "data" => true,
             "code" => self.code.is_some(),
             _ => false,
         };
+        let code = self.code.is_some();
         kind && !self.built_in
+            && device
+                .plugins
+                .is_none_or(|plugins| may_install(plugins, &entry.id, code))
             && (!self.devices || self.device)
             && install::is_plugin_name(&entry.id)
             && !entry.name.is_empty()
@@ -228,6 +308,26 @@ impl Item {
                 "kind" => self.kind = cut(value, MAX_NAME),
                 "built_in" => self.built_in = value == "true",
                 "author_key" => self.author_key = cut(value, MAX_NAME),
+                "added" => entry.added = date(value),
+                // Its home; `latest.source.url` (that version's source)
+                // goes before it.
+                "source" if value.starts_with("https://") && self.more.source.is_empty() => {
+                    self.more.source = cut(value, 200);
+                }
+                "author_since" => self.more.author_since = date(value),
+                "author_plugins" => self.more.author_plugins = value.parse().unwrap_or(0),
+                _ => {}
+            },
+            [latest, source, url] if latest == "latest" && source == "source" && url == "url" => {
+                if value.starts_with("https://") {
+                    self.more.source = cut(value, 200);
+                }
+            }
+            [shots, at, key] if shots == "screenshots" && at == "[]" => match key.as_str() {
+                "url" => self.shot.url = cut(value, 300),
+                "width" => self.shot.width = value.parse().unwrap_or(0),
+                "height" => self.shot.height = value.parse().unwrap_or(0),
+                "size" => self.shot.size = value.parse().unwrap_or(0),
                 _ => {}
             },
             [devices, at] if devices == "devices" && at == "[]" => {
@@ -239,6 +339,18 @@ impl Item {
                 "sdk" => entry.sdk = cut(value, MAX_NAME),
                 "formats" => self.formats = value.parse().unwrap_or(u32::MAX),
                 "size" => entry.size = value.parse().unwrap_or(0),
+                "date" => entry.updated = date(value),
+                "heap" => self.more.heap = value.parse().ok().filter(|&h| h > 0),
+                // Code plugins only: the device's build was rebuilt from
+                // its source and matches.
+                "verified" if self.more.verified.is_empty() => {
+                    self.more.verified = if value == "true" {
+                        "verified"
+                    } else {
+                        "unverified"
+                    }
+                    .into();
+                }
                 _ => {}
             },
             [latest, files, at, key] if latest == "latest" && files == "files" && at == "[]" => {
@@ -259,6 +371,8 @@ impl Item {
                     "url" => build.url = value.to_string(),
                     "size" => build.size = value.parse().unwrap_or(0),
                     "sha256" => build.sha256 = value.to_ascii_lowercase(),
+                    "image_len" => build.image_len = value.parse().ok(),
+                    "rebuilt" if value == "differs" => self.more.verified = "failed".into(),
                     _ => {}
                 }
             }
@@ -285,12 +399,33 @@ impl Item {
                 .fingerprint
                 .is_some_and(|f| Fingerprint::parse(&build.abi) == Some(f));
         if fits && self.code.is_none() {
+            self.more.image_len = build.image_len;
             self.code = Some(PackageFile {
                 path: device.code_file.to_string(),
                 url: build.url,
                 size: build.size,
                 digest: Digest::Sha256(build.sha256),
             });
+        }
+    }
+
+    /// A screenshot of `screenshots` was read whole.
+    fn shot_done(&mut self) {
+        let shot = core::mem::take(&mut self.shot);
+        // The library keeps them as their authors made them: only those
+        // PaperPaw decodes, and not too large to decode here.
+        let path = shot
+            .url
+            .split(['?', '#'])
+            .next()
+            .unwrap_or("")
+            .to_ascii_lowercase();
+        let readable = [".png", ".jpg", ".jpeg"]
+            .iter()
+            .any(|end| path.ends_with(end));
+        let small = shot.width <= MAX_SHOT_SIDE && shot.height <= MAX_SHOT_SIDE;
+        if self.more.shots.len() < MAX_SHOTS && readable && small {
+            self.more.shots.push(shot);
         }
     }
 
@@ -351,7 +486,7 @@ fn read_list(
         Event::Value([key], value) if key == "format" => format = value.parse::<u32>().ok(),
         Event::Open([list, at]) if list == "plugins" && at == "[]" => item = Some(Item::new()),
         Event::Close([list, at]) if list == "plugins" && at == "[]" => {
-            if let Some(done) = item.take().filter(Item::fits) {
+            if let Some(done) = item.take().filter(|item| item.fits(device)) {
                 found(done.finish());
             }
         }
@@ -380,6 +515,7 @@ pub(crate) struct Plugin {
     pub entry: Entry,
     pub package: Package,
     pub author_key: Option<[u8; 32]>,
+    pub more: More,
 }
 
 /// Reads a plugin's page at `path` (`{"format": 2, "plugin": {…}}`): the
@@ -401,12 +537,17 @@ fn read_plugin(
         Event::Close([plugin, rest @ ..]) if plugin == "plugin" && is_build(rest) => {
             item.build_done(device);
         }
+        Event::Close([plugin, shots, at])
+            if plugin == "plugin" && shots == "screenshots" && at == "[]" =>
+        {
+            item.shot_done();
+        }
         Event::Value([plugin, rest @ ..], value) if plugin == "plugin" => {
             item.read(rest, value, device);
         }
         _ => {}
     });
-    if format != Some(FORMAT) || !item.fits() {
+    if format != Some(FORMAT) || !item.fits(device) {
         return None;
     }
     let mut files = core::mem::take(&mut item.files);
@@ -416,6 +557,10 @@ fn read_plugin(
     }
     let author_key = key(&item.author_key);
     let code = item.code.is_some();
+    let mut more = core::mem::take(&mut item.more);
+    for shot in &mut more.shots {
+        shot.url = join_url(base, &shot.url);
+    }
     let entry = item.finish();
     let package = Package {
         plugin: entry.id.clone(),
@@ -428,6 +573,7 @@ fn read_plugin(
         entry,
         package,
         author_key,
+        more,
     })
 }
 
@@ -441,8 +587,10 @@ pub(crate) fn list_part() -> String {
     file("list.part")
 }
 
-pub(crate) fn plugin_part() -> String {
-    file("plugin.part")
+/// Where plugin `id`'s page is fetched to: a file of its own, so that
+/// pages fetched at once do not write into each other.
+pub(crate) fn plugin_part(id: &str) -> String {
+    file(&format!("plugin-{id}.part"))
 }
 
 fn index_path() -> String {
@@ -463,7 +611,7 @@ fn hits_path() -> String {
 
 /// The first line of an index's head: its format, then the runs of
 /// plugins of one group (`group:count`), in order.
-const HEADER: &str = "store-index 3";
+const HEADER: &str = "store-index 4";
 
 /// The address of the list at `list` for `device` in `language`.
 pub(crate) fn list_url(list: &str, device: &str, language: &str) -> String {
@@ -476,10 +624,16 @@ pub(crate) fn list_url(list: &str, device: &str, language: &str) -> String {
 }
 
 /// The address of plugin `id`'s page, beside the list at `list` (the
-/// setting's, without the device and the language), for `device` in
-/// `language`.
+/// setting's, without the device and the language) and with its query
+/// (a library may want a key there), for `device` in `language`.
 pub(crate) fn plugin_url(list: &str, device: &str, language: &str, id: &str) -> String {
-    let page = join_url(list, &format!("plugins/{}.json", encode(id)));
+    let list = list.split('#').next().unwrap_or(list);
+    let (address, query) = list.split_once('?').unwrap_or((list, ""));
+    let mut page = join_url(address, &format!("plugins/{}.json", encode(id)));
+    if !query.is_empty() {
+        page.push('?');
+        page.push_str(query);
+    }
     list_url(&page, device, language)
 }
 
@@ -597,6 +751,7 @@ impl Index {
         &self.runs
     }
 
+    #[cfg(test)]
     pub(crate) fn len(&self) -> usize {
         self.runs.iter().map(|(_, count)| count).sum()
     }
@@ -611,27 +766,303 @@ impl Index {
     /// left aside), keeping the hits on the storage; how many there are.
     pub(crate) fn search(&self, storage: &dyn Storage, query: &str) -> usize {
         let query = query.trim().to_lowercase();
-        let hits = hits_path();
-        let mut written = storage.write(&hits, b"").is_ok();
-        let mut found: Vec<u8> = Vec::new();
-        let mut count = 0;
-        for n in 0..self.len() {
-            let Some(entry) = self.entry(storage, n) else {
-                continue;
-            };
-            if entry.name.to_lowercase().contains(&query)
-                || entry.summary.to_lowercase().contains(&query)
-            {
-                found.extend_from_slice(&(n as u32).to_le_bytes());
-                count += 1;
-                if found.len() >= WRITE_AT {
-                    written &= storage.append(&hits, &found).is_ok();
-                    found.clear();
+        self.pick(
+            storage,
+            |_, entry| {
+                (entry.name.to_lowercase().contains(&query)
+                    || entry.summary.to_lowercase().contains(&query))
+                .then_some(0)
+            },
+            Order::Name,
+            usize::MAX,
+        )
+    }
+
+    /// Each plugin with its place, read through the index once, in order.
+    pub(crate) fn scan(&self, storage: &dyn Storage, found: &mut dyn FnMut(usize, Entry)) {
+        let path = index_path();
+        let mut buf = [0u8; 512];
+        let mut line: Vec<u8> = Vec::new();
+        let (mut at, mut n) = (0u64, 0usize);
+        while let Ok(read) = storage.read_at(&path, at, &mut buf) {
+            if read == 0 {
+                break;
+            }
+            at += read as u64;
+            for &byte in &buf[..read] {
+                if byte != b'\n' {
+                    if line.len() <= MAX_LINE {
+                        line.push(byte);
+                    }
+                    continue;
                 }
+                if let Some(entry) = core::str::from_utf8(&line).ok().and_then(Entry::parse) {
+                    found(n, entry);
+                }
+                line.clear();
+                n += 1;
             }
         }
-        written &= storage.append(&hits, &found).is_ok();
-        if written { count } else { 0 }
+    }
+
+    /// Keeps the plugins `keep` takes (with a rank, for
+    /// [`Order::Rank`]), in `order`, `most` of them at most, on the storage
+    /// (read back with [`hit`]); how many there are.
+    ///
+    /// However many plugins there are, little is held at once: by name
+    /// they are written as they are read; by a key, the best `most` are
+    /// kept while reading where that is few, and otherwise runs of
+    /// [`RUN`] are sorted, kept on the storage and merged.
+    pub(crate) fn pick(
+        &self,
+        storage: &dyn Storage,
+        mut keep: impl FnMut(usize, &Entry) -> Option<u32>,
+        order: Order,
+        most: usize,
+    ) -> usize {
+        let hits = hits_path();
+        let mut out = Output::new(storage, &hits);
+        if order == Order::Name {
+            self.scan(storage, &mut |n, entry| {
+                if out.count < most && keep(n, &entry).is_some() {
+                    out.push(n as u32);
+                }
+            });
+            return out.finish();
+        }
+        let key = |entry: &Entry, rank: u32| match order {
+            Order::Added => entry.added,
+            Order::Updated => entry.updated,
+            Order::Name | Order::Rank => rank,
+        };
+        if most <= RUN {
+            // The best few, kept in order while reading.
+            let mut best: Vec<Keyed> = Vec::new();
+            self.scan(storage, &mut |n, entry| {
+                if let Some(rank) = keep(n, &entry) {
+                    let item = (key(&entry, rank), n as u32);
+                    let at = best.partition_point(|b| before(*b, item));
+                    if at < most {
+                        if best.len() == most {
+                            best.pop();
+                        }
+                        best.insert(at, item);
+                    }
+                }
+            });
+            for (_, n) in best {
+                out.push(n);
+            }
+            return out.finish();
+        }
+        // Runs sorted on the storage, then merged.
+        let runs_path = file("sort.bin");
+        let mut runs: Vec<u32> = Vec::new();
+        let mut run: Vec<Keyed> = Vec::new();
+        let mut kept = storage.write(&runs_path, b"").is_ok();
+        let mut flush = |run: &mut Vec<Keyed>, runs: &mut Vec<u32>| {
+            run.sort_by(|a, b| order_of(*a, *b));
+            let mut bytes = Vec::with_capacity(run.len() * 8);
+            for (key, n) in run.iter() {
+                bytes.extend_from_slice(&key.to_le_bytes());
+                bytes.extend_from_slice(&n.to_le_bytes());
+            }
+            kept &= storage.append(&runs_path, &bytes).is_ok();
+            runs.push(run.len() as u32);
+            run.clear();
+        };
+        self.scan(storage, &mut |n, entry| {
+            if let Some(rank) = keep(n, &entry) {
+                run.push((key(&entry, rank), n as u32));
+                if run.len() == RUN {
+                    flush(&mut run, &mut runs);
+                }
+            }
+        });
+        if !run.is_empty() {
+            flush(&mut run, &mut runs);
+        }
+        drop(run);
+        if !kept {
+            let _ = storage.remove(&runs_path);
+            return 0;
+        }
+        let mut cursors: Vec<Cursor> = Vec::with_capacity(runs.len());
+        let mut at = 0u64;
+        for len in runs {
+            cursors.push(Cursor::new(at, len));
+            at += u64::from(len) * 8;
+        }
+        while out.count < most {
+            let mut first: Option<(usize, Keyed)> = None;
+            for (i, cursor) in cursors.iter_mut().enumerate() {
+                if let Some(item) = cursor.head(storage, &runs_path)
+                    && first.is_none_or(|(_, best)| before(item, best))
+                {
+                    first = Some((i, item));
+                }
+            }
+            let Some((i, (_, n))) = first else {
+                break;
+            };
+            cursors[i].next();
+            out.push(n);
+        }
+        let _ = storage.remove(&runs_path);
+        out.finish()
+    }
+}
+
+/// A plugin with the key it is ordered by: (key, its place in the index).
+type Keyed = (u32, u32);
+
+/// Plugins ordered by a key in memory at once (8 bytes each): longer lists
+/// are sorted in runs of this many on the storage.
+pub(crate) const RUN: usize = 512;
+
+/// Entries of a run read at once while runs are merged.
+const MERGE_READ: usize = 16;
+
+/// The order of plugins by a key: the highest (newest) first; of one key,
+/// in the list's order.
+fn order_of(a: Keyed, b: Keyed) -> core::cmp::Ordering {
+    b.0.cmp(&a.0).then(a.1.cmp(&b.1))
+}
+
+fn before(a: Keyed, b: Keyed) -> bool {
+    order_of(a, b) == core::cmp::Ordering::Less
+}
+
+/// Where a sorted run on the storage is read while merging.
+struct Cursor {
+    /// The byte of the next entry not read yet, and how many are left.
+    at: u64,
+    left: u32,
+    read: [Keyed; MERGE_READ],
+    /// The next of those read, and how many were.
+    next: usize,
+    len: usize,
+}
+
+impl Cursor {
+    fn new(at: u64, left: u32) -> Self {
+        Self {
+            at,
+            left,
+            read: [(0, 0); MERGE_READ],
+            next: 0,
+            len: 0,
+        }
+    }
+
+    /// The run's first entry not taken yet.
+    fn head(&mut self, storage: &dyn Storage, path: &str) -> Option<Keyed> {
+        if self.next == self.len {
+            let want = (self.left as usize).min(MERGE_READ);
+            if want == 0 {
+                return None;
+            }
+            let mut bytes = [0u8; MERGE_READ * 8];
+            let mut got = 0;
+            while got < want * 8 {
+                match storage.read_at(path, self.at + got as u64, &mut bytes[got..want * 8]) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => got += n,
+                }
+            }
+            let entries = got / 8;
+            for (slot, chunk) in self.read.iter_mut().zip(bytes[..entries * 8].chunks(8)) {
+                let word = |at: usize| {
+                    u32::from_le_bytes([chunk[at], chunk[at + 1], chunk[at + 2], chunk[at + 3]])
+                };
+                *slot = (word(0), word(4));
+            }
+            self.at += (entries * 8) as u64;
+            self.left = if entries == want {
+                self.left - want as u32
+            } else {
+                0
+            };
+            self.next = 0;
+            self.len = entries;
+            if entries == 0 {
+                return None;
+            }
+        }
+        Some(self.read[self.next])
+    }
+
+    fn next(&mut self) {
+        self.next += 1;
+    }
+}
+
+/// The plugins picked, written to the storage a piece at a time.
+struct Output<'a> {
+    storage: &'a dyn Storage,
+    path: &'a str,
+    bytes: Vec<u8>,
+    count: usize,
+    written: bool,
+}
+
+impl<'a> Output<'a> {
+    fn new(storage: &'a dyn Storage, path: &'a str) -> Self {
+        Self {
+            written: storage.write(path, b"").is_ok(),
+            storage,
+            path,
+            bytes: Vec::new(),
+            count: 0,
+        }
+    }
+
+    fn push(&mut self, n: u32) {
+        self.bytes.extend_from_slice(&n.to_le_bytes());
+        self.count += 1;
+        if self.bytes.len() >= WRITE_AT {
+            self.written &= self.storage.append(self.path, &self.bytes).is_ok();
+            self.bytes.clear();
+        }
+    }
+
+    /// How many were picked; none where they could not be kept.
+    fn finish(mut self) -> usize {
+        self.written &= self.storage.append(self.path, &self.bytes).is_ok();
+        if self.written { self.count } else { 0 }
+    }
+}
+
+/// The order a view of the plugins shows them in.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Order {
+    /// The list's: by name.
+    Name,
+    /// Newest first.
+    Added,
+    /// Most recently updated first.
+    Updated,
+    /// Highest rank first (as `pick` was given), then by name.
+    Rank,
+}
+
+impl Order {
+    pub(crate) const ALL: [Order; 3] = [Order::Name, Order::Added, Order::Updated];
+
+    pub(crate) fn key(self) -> &'static str {
+        match self {
+            Order::Name => "name",
+            Order::Added => "added",
+            Order::Updated => "updated",
+            Order::Rank => "rank",
+        }
+    }
+
+    pub(crate) fn of(key: &str) -> Order {
+        Order::ALL
+            .into_iter()
+            .find(|o| o.key() == key)
+            .unwrap_or(Order::Name)
     }
 }
 
@@ -691,6 +1122,7 @@ mod tests {
         name: "x4",
         fingerprint: Some(Fingerprint(0x0123_4567_89ab_cdef)),
         code_file: "code.ppn",
+        plugins: None,
     };
 
     fn plugin(id: &str, group: &str, extra: &str) -> String {
@@ -913,6 +1345,11 @@ mod tests {
             plugin_url(list, "x4", "en", "airy"),
             "https://paperpaw.org/api/v1/plugins/airy.json?device=x4&lang=en"
         );
+        // A library's key goes with its pages.
+        assert_eq!(
+            plugin_url("https://x/lib/p.json?key=1#top", "x4", "en", "airy"),
+            "https://x/lib/plugins/airy.json?key=1&device=x4&lang=en"
+        );
     }
 
     #[test]
@@ -935,6 +1372,144 @@ mod tests {
         let index = take(&storage, "p.json", &X4).unwrap();
         assert_eq!(index.len(), 0);
         assert_eq!(hit(&storage, 0), None);
+    }
+
+    #[test]
+    fn dates_are_read_as_numbers() {
+        assert_eq!(date("2026-10-07"), 20261007);
+        assert_eq!(date("2026-10-07T12:00:00Z"), 20261007);
+        assert_eq!(date("2024"), 20240101);
+        assert_eq!(date("soon"), 0);
+        assert_eq!(date(""), 0);
+    }
+
+    #[test]
+    fn a_page_tells_its_source_author_and_screenshots() {
+        let more = r#""source": "https://example.org/airy", "author_since": "2024-03-02",
+  "author_plugins": 3, "screenshots": [
+    {"url": "s/1.png", "width": 360, "height": 600, "size": 2000},
+    {"url": "s/2.webp", "width": 360, "height": 600, "size": 2000},
+    {"url": "s/3.JPG?v=2", "width": 360, "height": 600, "size": 2000},
+    {"url": "s/4.png", "width": 4000, "height": 600, "size": 2000},
+    {"url": "http://example.org/5.jpeg", "width": 10, "height": 10, "size": 20},
+    {"url": "s/6.png", "width": 10, "height": 10, "size": 20}],"#;
+        let storage = page_of(&file("plugin.ini"), "data", more);
+        let plugin = read_plugin(&storage, "a.json", &X4, BASE).unwrap();
+        let more = &plugin.more;
+        assert_eq!(more.source, "https://example.org/airy");
+        assert_eq!((more.author_since, more.author_plugins), (20240302, 3));
+        // Data plugins carry no build to check.
+        assert_eq!(more.verified, "");
+        // Only what PaperPaw decodes, not too large, four at most; their
+        // addresses relative to the page's.
+        let shots: Vec<&str> = more.shots.iter().map(|s| s.url.as_str()).collect();
+        assert_eq!(
+            shots,
+            [
+                "https://paperpaw.org/api/v1/plugins/s/1.png",
+                "https://paperpaw.org/api/v1/plugins/s/3.JPG?v=2",
+                "http://example.org/5.jpeg",
+                "https://paperpaw.org/api/v1/plugins/s/6.png"
+            ]
+        );
+        assert_eq!((more.heap, more.image_len), (None, None));
+    }
+
+    #[test]
+    fn a_code_plugins_page_tells_whether_its_build_was_checked() {
+        let author = format!(r#""author_key": "{KEY}", "source": "https://example.org/clock","#);
+        let with = |latest: &str, build: &str| {
+            let storage = page_of(&file("plugin.ini"), "code", &author);
+            let text = paperpaw_sdk::read_file(&storage, "a.json", 1 << 16).unwrap();
+            let text = String::from_utf8(text)
+                .unwrap()
+                .replace(r#""latest": {"#, &format!(r#""latest": {{{latest}"#))
+                .replace(r#""device": "x4","#, &format!(r#""device": "x4", {build}"#));
+            let storage = MemoryStorage::new().with("a.json", text);
+            read_plugin(&storage, "a.json", &X4, BASE).unwrap().more
+        };
+        let more = with(
+            r#""verified": true, "heap": 40000,
+  "source": {"url": "https://example.org/clock/src/tag/v1.0.0"},"#,
+            r#""image_len": 9000, "rebuilt": "matches","#,
+        );
+        assert_eq!(more.verified, "verified");
+        assert_eq!(more.source, "https://example.org/clock/src/tag/v1.0.0");
+        assert_eq!((more.heap, more.image_len), (Some(40000), Some(9000)));
+        let more = with(r#""verified": false,"#, r#""rebuilt": "differs","#);
+        assert_eq!(more.verified, "failed");
+        assert_eq!(more.source, "https://example.org/clock");
+        let more = with(r#""verified": false,"#, r#""rebuilt": "none","#);
+        assert_eq!(more.verified, "unverified");
+    }
+
+    #[test]
+    fn plugins_are_picked_in_the_order_asked() {
+        let dated = |id: &str, added: &str, date: &str| {
+            plugin(id, "look", "")
+                .replace(r#""kind""#, &format!(r#""added": "{added}", "kind""#))
+                .replace(r#""size": 30"#, &format!(r#""size": 30, "date": "{date}""#))
+        };
+        let storage = list(&[
+            dated("a", "2025-01-01", "2026-03-01"),
+            dated("b", "2026-01-01", "2026-01-01"),
+            dated("c", "2025-06-01", "2026-09-01"),
+            plugin("d", "system", ""),
+        ]);
+        let index = take(&storage, "p.json", &X4).unwrap();
+        let picked = |order: Order, most: usize| {
+            let count = index.pick(
+                &storage,
+                |_, e| (e.group == group("look")).then_some(u32::from(e.id == "c")),
+                order,
+                most,
+            );
+            (0..count)
+                .map(|n| index.entry(&storage, hit(&storage, n).unwrap()).unwrap().id)
+                .collect::<Vec<_>>()
+        };
+        assert_eq!(picked(Order::Name, usize::MAX), ["a", "b", "c"]);
+        assert_eq!(picked(Order::Name, 2), ["a", "b"]);
+        assert_eq!(picked(Order::Added, usize::MAX), ["b", "c", "a"]);
+        assert_eq!(picked(Order::Added, 1), ["b"]);
+        assert_eq!(picked(Order::Updated, usize::MAX), ["c", "a", "b"]);
+        assert_eq!(picked(Order::Rank, usize::MAX), ["c", "a", "b"]);
+        // Read through the index in one pass, every plugin.
+        let mut ids = Vec::new();
+        index.scan(&storage, &mut |n, e| ids.push((n, e.id)));
+        assert_eq!(ids.len(), 4);
+        assert_eq!(ids[3], (3, String::from("d")));
+    }
+
+    #[test]
+    fn long_lists_are_sorted_in_runs_on_the_storage() {
+        // More plugins than a run holds, their dates in no order, many of
+        // one day.
+        let count = 3 * RUN + 77;
+        let day = |i: usize| 20250101 + ((i * 7919) % 400) as u32;
+        let plugins: Vec<String> = (0..count)
+            .map(|i| {
+                let date = day(i).to_string();
+                let date = format!("{}-{}-{}", &date[..4], &date[4..6], &date[6..]);
+                plugin(&format!("p{i:05}"), "look", "")
+                    .replace(r#""kind""#, &format!(r#""added": "{date}", "kind""#))
+            })
+            .collect();
+        let storage = list(&plugins);
+        let index = take(&storage, "p.json", &X4).unwrap();
+        let mut expected: Vec<(u32, u32)> = (0..count).map(|i| (day(i), i as u32)).collect();
+        expected.sort_by(|a, b| order_of(*a, *b));
+        for most in [usize::MAX, RUN + 1, 30] {
+            let picked = index.pick(&storage, |_, _| Some(0), Order::Added, most);
+            let want: Vec<u32> = expected.iter().take(most).map(|(_, n)| *n).collect();
+            assert_eq!(picked, want.len());
+            let got: Vec<u32> = (0..picked)
+                .map(|h| hit(&storage, h).unwrap() as u32)
+                .collect();
+            assert_eq!(got, want, "{most}");
+        }
+        // The runs are gone again.
+        assert!(!storage.exists(&file("sort.bin")));
     }
 
     #[test]

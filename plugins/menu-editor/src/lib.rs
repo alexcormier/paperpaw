@@ -61,6 +61,7 @@ impl Plugin for MenuEditor {
             description: Cow::Borrowed("Reorders, removes and adds the entries of every menu."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

@@ -37,6 +37,7 @@ impl Plugin for Hyphenation {
             ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -90,3 +91,6 @@ mod tests {
         assert_eq!(hyphenated(EN, "table"), "ta-ble");
     }
 }
+
+#[cfg(test)]
+mod words_tests;

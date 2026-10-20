@@ -224,7 +224,13 @@ impl Listing<'_> {
         }
         let rank = self.rank(entry);
         let mut entries = self.before(Some(entry), rank % rows);
-        let rest = self.after(entries.last(), rows - entries.len());
+        // An entry that starts its page: the page goes on from the one
+        // before it (or from the start), so that it holds the entry.
+        let from = match entries.last() {
+            Some(last) => Some(last.clone()),
+            None => self.before(Some(entry), 1).pop(),
+        };
+        let rest = self.after(from.as_ref(), rows - entries.len());
         entries.extend(rest);
         (rank - rank % rows, entries)
     }

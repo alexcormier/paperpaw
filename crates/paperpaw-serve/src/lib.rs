@@ -264,7 +264,7 @@ impl Servers {
             wake();
         };
         // The port asked for, else the next free ones.
-        let listener = (port..port.saturating_add(20))
+        let listener = (port..=port.saturating_add(19))
             .find_map(|p| TcpListener::bind((Ipv4Addr::UNSPECIFIED, p)).ok());
         let Some(listener) = listener else {
             send(ServerEvent::Failed {

@@ -49,14 +49,29 @@ impl Kernel {
 
     pub(crate) fn pointer(&mut self, event: PointerEvent) {
         // Swipes in from an edge come before the screen sees the finger.
+        // Held still there, it becomes a long press all the same.
         if let Some(touch) = self.input.edge_touch.filter(|t| t.id == event.id) {
             match event.phase {
                 PointerPhase::Up => {
                     self.input.edge_touch = None;
-                    self.edge_lifted(touch, event.point);
+                    let thresholds = self.thresholds();
+                    if !self
+                        .input
+                        .recognizer
+                        .lift_edge(event.id, self.now, &thresholds)
+                    {
+                        self.edge_lifted(touch, event.point);
+                    }
                 }
-                PointerPhase::Cancel => self.input.edge_touch = None,
-                _ => {}
+                PointerPhase::Cancel => {
+                    self.input.edge_touch = None;
+                    self.input.recognizer.forget_pointer(event.id);
+                }
+                PointerPhase::Move => {
+                    let thresholds = self.thresholds();
+                    self.input.recognizer.pointer(&event, self.now, &thresholds);
+                }
+                PointerPhase::Down => {}
             }
             return;
         }
@@ -86,6 +101,11 @@ impl Kernel {
                 start: event.point,
                 tool: event.tool,
             });
+            let edge = match side {
+                Direction::Up | Direction::Down => input::Edge::End,
+                Direction::Left | Direction::Right => input::Edge::Side,
+            };
+            self.input.recognizer.follow_edge(&event, self.now, edge);
             return;
         }
         let thresholds = self.thresholds();
@@ -96,7 +116,7 @@ impl Kernel {
 
     /// How the screen shown takes gestures (`gestures.policy`).
     pub(crate) fn policy(&self) -> keymap::Policy {
-        keymap::Policy::of(self.resolve(&InputKey::Policy).as_ref())
+        keymap::Policy::of(self.resolve(&InputKey::Policy))
     }
 
     /// The edge a finger coming down at `point` may swipe in from: one
@@ -137,7 +157,7 @@ impl Kernel {
         };
         let bound = self
             .resolve(&InputKey::Edge(side))
-            .is_some_and(|action| action != paperpaw_sdk::builtin::actions::NOTHING);
+            .is_some_and(|action| *action != paperpaw_sdk::builtin::actions::NOTHING);
         bound.then_some(side)
     }
 
@@ -250,24 +270,28 @@ impl Kernel {
     /// Resolves an input through the key map layers of the active screen,
     /// its slot and the global layer.
     pub(crate) fn route_key(&mut self, key: InputKey) {
-        if let Some(action) = self.resolve(&key) {
+        if let Some(action) = self.resolve(&key).cloned() {
             self.dispatch(action);
         }
     }
 
     /// What `key` is bound to in the key map layers of the active screen,
     /// its slot and the global layer.
-    pub(crate) fn resolve(&self, key: &InputKey) -> Option<Id> {
-        let top = self.stack.last();
-        let mut layers: Vec<&str> = Vec::with_capacity(3);
-        if let Some(top) = top {
-            layers.push(top.id.as_str());
+    /// It runs many times in each call (the row of hints asks for every
+    /// button in it), so it allocates nothing.
+    pub(crate) fn resolve(&self, key: &InputKey) -> Option<&Id> {
+        let mut layers = [GLOBAL_KEYMAP_LAYER; 3];
+        let mut count = 0;
+        if let Some(top) = self.stack.last() {
+            layers[0] = top.id.as_str();
+            count = 1;
             if let Some(slot) = &top.slot {
-                layers.push(slot.as_str());
+                layers[1] = slot.as_str();
+                count = 2;
             }
         }
-        layers.push(GLOBAL_KEYMAP_LAYER);
-        self.shared.keymap.resolve(&layers, key).cloned()
+        // The global layer last, already in place.
+        self.shared.keymap.resolve(&layers[..=count], key)
     }
 
     pub(crate) fn dispatch(&mut self, action: Id) {
@@ -279,37 +303,80 @@ impl Kernel {
                 if let Some(handler) = &spec.handler {
                     let env = self.shared.env(self.now);
                     let _running = self.shared.meter.enter(action.namespace());
+                    let from = self.output.commands.len();
                     handler(&env, &mut self.output.commands);
+                    // Run by a rule, not the reader: nothing said over reading.
+                    let (reader, now) = (self.shared.reader, self.now);
+                    let top = self.stack.last().map(|s| s.id.namespace());
+                    let out = &mut self.output.commands;
+                    let owner = action.namespace();
+                    work::quiet(reader, top, now, from, owner, out, &mut self.works);
                 }
             }
             None => self.warn_runtime(format!("unknown action `{action}`")),
         }
     }
 
+    /// The name the recognizer knows button `name` by while it is held:
+    /// the other page button's where it was pressed swapped (see
+    /// `Kernel::page_buttons_swapped`).
+    fn held_as(&self, name: &'static str) -> &'static str {
+        use paperpaw_platform::buttons::{PAGE_BACK, PAGE_FORWARD};
+        match name {
+            PAGE_FORWARD if self.input.swapped.contains(&name) => PAGE_BACK,
+            PAGE_BACK if self.input.swapped.contains(&name) => PAGE_FORWARD,
+            _ => name,
+        }
+    }
+
     /// Whether `event` belongs to a press dropped (see [`Kernel::shown`]).
+    /// A button or a finger is down once at a time: its release ends the
+    /// press of it held, the one taken or the one dropped, and a press
+    /// taken ends one dropped before whose release was missed.
     pub(crate) fn stale(&mut self, now: Instant, event: &InputEvent) -> bool {
         let early = self.input.stale_before.is_some_and(|before| now < before)
             || self.input.shown_at[0].is_some_and(|before| now < before);
         match event {
-            InputEvent::Button {
-                name,
-                state: ButtonState::Pressed,
-            } if early => {
-                self.input.dropped_buttons.push(name);
-                true
-            }
-            InputEvent::Button {
-                name,
-                state: ButtonState::Released,
-            } => match self.input.dropped_buttons.iter().position(|b| b == name) {
-                Some(at) => {
-                    self.input.dropped_buttons.remove(at);
-                    true
+            InputEvent::Button { name, state } => {
+                let held = self.input.recognizer.holds(self.held_as(name));
+                let dropped = self.input.dropped_buttons.iter().position(|b| b == name);
+                let pressed = *state == ButtonState::Pressed;
+                if let Some(at) = dropped
+                    && (!pressed || !early)
+                {
+                    self.input.dropped_buttons.swap_remove(at);
                 }
-                None => false,
-            },
-            InputEvent::Pointer(p) if p.phase == PointerPhase::Down && early => {
-                self.input.dropped_pointers.push(p.id);
+                // Pressed again while held: the press held goes on, its
+                // release is still to come.
+                if pressed && early && !held && dropped.is_none() {
+                    self.input.dropped_buttons.push(name);
+                }
+                if pressed {
+                    early
+                } else {
+                    !held && dropped.is_some()
+                }
+            }
+            InputEvent::Pointer(p) if p.phase == PointerPhase::Down => {
+                let dropped = self
+                    .input
+                    .dropped_pointers
+                    .iter()
+                    .position(|&id| id == p.id);
+                if !early {
+                    if let Some(at) = dropped {
+                        self.input.dropped_pointers.swap_remove(at);
+                    }
+                    return false;
+                }
+                // Down again: the touch of that finger before is over.
+                self.input.recognizer.forget_pointer(p.id);
+                if self.input.edge_touch.is_some_and(|t| t.id == p.id) {
+                    self.input.edge_touch = None;
+                }
+                if dropped.is_none() {
+                    self.input.dropped_pointers.push(p.id);
+                }
                 true
             }
             InputEvent::Pointer(p) => match self

@@ -5,12 +5,12 @@
 use super::*;
 
 impl Kernel {
+    /// Opens screen `id` with `params` on top, for `slot` if it was bound
+    /// to one.
     pub(crate) fn open(&mut self, id: Id, slot: Option<Id>, params: &Params) {
         let Some(spec) = self.registry.screens.get(&id) else {
             return self.warn_runtime(format!("unknown screen `{id}`"));
         };
-        // Made as the full screen it opens over, which an overlay shares;
-        // a full screen that wants the other size is made again for it.
         // Made once, at the size it asked for: above the row of hints, or
         // all of the screen.
         let hinted = self.registry.hints_of(&id) == Hints::Shown;
@@ -22,12 +22,16 @@ impl Kernel {
             self.hide_from(self.shown_base());
         }
         self.screens_changed = true;
+        let serial = self.next_serial;
+        self.next_serial = serial.wrapping_add(1);
         self.stack.push(ActiveScreen {
             id,
+            serial,
             slot,
             hinted,
             params: params.clone(),
             screen,
+            timer: None,
         });
         let top = self.stack.len() - 1;
         let overlay = self.overlay(top);
@@ -84,21 +88,16 @@ impl Kernel {
             return self.warn_runtime(format!("cannot bind `{input}` in `{layer}`"));
         }
         let section = format!("keymap.{layer}");
-        match &action {
-            Some(action) => self.save_config(&section, input, action.as_str()),
-            None => {
-                let storage = self.shared.storage.as_ref();
-                let source = read_config(storage).unwrap_or_default();
-                let updated = paperpaw_config::remove(&source, &section, input);
-                let _ = storage.write(CONFIG_FILE, updated.as_bytes());
-            }
-        }
-        // The user's bindings as the file has them now.
-        let source = read_config(self.shared.storage.as_ref()).unwrap_or_default();
-        self.keys
-            .sources
-            .retain(|(origin, _)| *origin != Origin::User);
-        self.keys.sources.push((Origin::User, Cow::Owned(source)));
+        let action = action.as_ref();
+        // At once, also where it cannot be saved. The shell's overrides stay
+        // above the user's bindings, but not for an input bound now: the
+        // choice made here wins (until the next start, where the shell's
+        // configuration is applied again).
+        self.keys.user = bound(&self.keys.user, &section, input, action);
+        self.keys.shell = paperpaw_config::remove(&self.keys.shell, &section, input);
+        self.update_config(&format_args!("`{section}.{input}`"), |source| {
+            bound(source, &section, input, action)
+        });
         self.rebuild_keymap();
     }
 
@@ -149,7 +148,6 @@ impl Kernel {
         self.stack.get(index)?.screen.region(&env)
     }
 
-    /// The area a screen occupies.
     /// What opening or closing screen `index` changes: its region, or
     /// all of the screen where it washes out what lies below it
     /// ([`Screen::dims_below`](paperpaw_sdk::Screen::dims_below)).
@@ -161,6 +159,7 @@ impl Kernel {
         }
     }
 
+    /// The area screen `index` occupies.
     pub(crate) fn region_of(&self, index: usize) -> Rect {
         self.overlay(index).unwrap_or_else(|| self.content())
     }
@@ -200,12 +199,24 @@ impl Kernel {
     pub(crate) fn remake_screens(&mut self) {
         let now = self.now;
         for i in 0..self.stack.len() {
-            let Some(spec) = self.registry.screens.get(&self.stack[i].id) else {
+            if !self.registry.screens.contains_key(&self.stack[i].id) {
                 continue;
-            };
+            }
+            // The old one goes: told as when it closes, so it keeps what
+            // it would lose (a reading position, text typed). What it asks
+            // for then is not done: the screen stays open, made anew.
+            let asked = self.output.commands.len();
+            self.with_screen(i, |screen, cx| {
+                screen.on_close(cx);
+                Handled::Yes
+            });
+            self.output.commands.truncate(asked);
             self.shared.device.display.height = self.content_height(self.stack[i].hinted);
             let env = self.shared.env(now);
             let active = &mut self.stack[i];
+            let Some(spec) = self.registry.screens.get(&active.id) else {
+                continue;
+            };
             let _running = self.shared.meter.enter(active.id.namespace());
             active.screen = (spec.factory)(&env, &active.params);
         }
@@ -240,6 +251,11 @@ impl Kernel {
         let mut cx = Cx::new(&env, &mut self.output);
         let handled = f(active.screen.as_mut(), &mut cx);
         drop(running);
+        // A time it asked for is its own: it waits while the screen is
+        // covered.
+        if let Some(at) = self.output.wake_at.take() {
+            active.timer = Some(active.timer.map_or(at, |t| t.min(at)));
+        }
         // `request_redraw` means the caller's own region. A screen below an
         // overlay is still partly visible (e.g. the page behind a menu that
         // changes a reading setting); one below a full screen is redrawn
@@ -272,8 +288,6 @@ impl Kernel {
     /// screens and refreshing quickly when only overlays changed.
     pub(crate) fn screen_changed(&mut self, region: Rect, overlays_only: bool) {
         self.input.captured.clear();
-        self.screen_timer = None;
-        self.output.wake_at = None;
         self.invalidate(region);
         let flash = self
             .shared
@@ -294,6 +308,15 @@ impl Kernel {
         self.io.servers.stop_for_closed_screens(screens, out);
         self.io.sockets.close_for_closed_screens(screens, out);
         self.io.speech.stop_for_closed_screens(screens);
+    }
+}
+
+/// `source` with `input` in `section` bound to `action`, or to what the
+/// plugins bind it to (`None`).
+fn bound(source: &str, section: &str, input: &str, action: Option<&Id>) -> String {
+    match action {
+        Some(action) => paperpaw_config::set(source, section, input, action.as_str()),
+        None => paperpaw_config::remove(source, section, input),
     }
 }
 
@@ -323,10 +346,4 @@ pub(crate) fn uncovered(area: Rect, cover: Rect) -> Option<Rect> {
         return Some(Rect::new(area.x, area.y, area.width, common.y - area.y));
     }
     Some(area)
-}
-
-/// Identifies an open screen instance (by its address), e.g. the owner of
-/// a settings scope.
-pub(crate) fn screen_key(screen: &ActiveScreen) -> usize {
-    core::ptr::from_ref::<dyn Screen>(screen.screen.as_ref()).cast::<()>() as usize
 }

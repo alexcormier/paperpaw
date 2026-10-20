@@ -193,6 +193,7 @@ impl Plugin for Translate {
             description: Cow::Borrowed("Translates selected text online, with DeepL."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -581,3 +582,6 @@ mod tests {
         assert!(issues.is_empty(), "{issues:?}");
     }
 }
+
+#[cfg(test)]
+mod answer_tests;

@@ -232,3 +232,6 @@ mod tests {
         assert_ne!(page_name("https://a.org/"), page_name("https://a.org/x"));
     }
 }
+
+#[cfg(test)]
+mod hostile_tests;

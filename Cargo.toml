@@ -47,6 +47,7 @@ members = [
     "plugins/stats",
     "plugins/battery",
     "plugins/wifi",
+    "plugins/power",
     "plugins/file-manager",
     "plugins/transfer",
     "plugins/browser",
@@ -128,6 +129,7 @@ paperpaw-plugin-calibre = { path = "plugins/calibre", version = "0.4.0-dev" }
 paperpaw-plugin-stats = { path = "plugins/stats", version = "0.4.0-dev" }
 paperpaw-plugin-battery = { path = "plugins/battery", version = "0.4.0-dev" }
 paperpaw-plugin-wifi = { path = "plugins/wifi", version = "0.4.0-dev" }
+paperpaw-plugin-power = { path = "plugins/power", version = "0.4.0-dev" }
 paperpaw-plugin-file-manager = { path = "plugins/file-manager", version = "0.4.0-dev" }
 paperpaw-plugin-transfer = { path = "plugins/transfer", version = "0.4.0-dev" }
 paperpaw-plugin-browser = { path = "plugins/browser", version = "0.4.0-dev" }
@@ -164,6 +166,8 @@ paperpaw-plugin-format-epub = { path = "plugins/format-epub", version = "0.4.0-d
 paperpaw-plugin-format-txt = { path = "plugins/format-txt", version = "0.4.0-dev" }
 paperpaw-plugin-format-xtc = { path = "plugins/format-xtc", version = "0.4.0-dev" }
 paperpaw-plugin-fonts-default = { path = "plugins/fonts-default", version = "0.4.0-dev", default-features = false }
+# Tests only: property-based tests (parsers never panic, round trips).
+proptest = { version = "1.5", default-features = false, features = ["std"] }
 
 [workspace.lints.rust]
 unsafe_op_in_unsafe_fn = "deny"

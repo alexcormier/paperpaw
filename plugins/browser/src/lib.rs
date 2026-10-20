@@ -81,6 +81,7 @@ impl Plugin for Browser {
             ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -220,21 +221,16 @@ impl BrowserScreen {
             .i18n
             .format("browser.loading", &[("host", Arg::Str(&host))]);
         self.say(message, cx);
-        cx.command(Command::Http(HttpRequest {
-            headers: Vec::from([
-                (
-                    String::from("User-Agent"),
-                    String::from("PaperPaw/0.1 (e-reader)"),
-                ),
-                (
-                    String::from("Accept"),
-                    String::from("text/html,application/xhtml+xml,application/epub+zip,*/*"),
-                ),
-            ]),
-            save_to: Some(download_path()),
-            params: Params::new().with(params::URL, url.to_string()),
-            ..HttpRequest::new("GET", url, LOADED)
-        }));
+        cx.command(Command::Http(
+            HttpRequest::get(url, LOADED)
+                .header("User-Agent", "PaperPaw/0.1 (e-reader)")
+                .header(
+                    "Accept",
+                    "text/html,application/xhtml+xml,application/epub+zip,*/*",
+                )
+                .save_to(download_path())
+                .with(Params::new().with(params::URL, url.to_string())),
+        ));
     }
 
     /// Shows page `entry` (already loaded) in the reader.
@@ -271,6 +267,11 @@ impl BrowserScreen {
                 .i18n
                 .format("browser.failed", &[("host", Arg::Str(&host))]);
             return self.say(message, cx);
+        }
+        // An error's page comes as text, not saved to the download file
+        // (so a download never holds an error page): kept there to show.
+        if status >= 400 {
+            let _ = env.storage.write(&tmp, reply.body.as_bytes());
         }
         let mut head = [0u8; 512];
         let n = env.storage.read_at(&tmp, 0, &mut head).unwrap_or(0);

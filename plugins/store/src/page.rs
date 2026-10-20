@@ -17,19 +17,20 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::install::Progress;
+use paperpaw_sdk::install::{self, Progress};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::choice::{self, Picked};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Params,
-    Rect, RefreshMode, Screen, files,
+    Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
+    MemoryClass, Params, Rect, RefreshMode, Screen, files,
 };
 
-use crate::catalog::{self, Device, Entry, Index, Plugin};
+use crate::catalog::{self, Device, Entry, Index, More, Plugin};
 use crate::list::ENTRY;
-use crate::{CATALOG, CHOICE, DOWNLOADED, INSTALLER, failed, trust};
+use crate::room::Room;
+use crate::{CATALOG, CHOICE, DOWNLOADED, INSTALLER, failed, queue, trust};
 
 /// The answer to *Remove?*.
 const REMOVE: Event<Picked> = Event::new("store.remove");
@@ -38,6 +39,16 @@ const DETAILS: Event<HttpReply> = Event::new("store.details");
 
 /// Lines of the summary at most.
 const SUMMARY_LINES: usize = 8;
+
+/// A plugin that takes more memory than this while it runs is said to be
+/// tight on devices with little ([`MemoryClass::Small`]: the X4 keeps
+/// about twice this free while the reader is open).
+const TIGHT_HEAP: u64 = 32 * 1024;
+
+/// Screenshots larger than these are not fetched on devices with little
+/// memory: decoding them would take too much of it.
+const SMALL_SHOT_SIDE: u32 = 1280;
+const SMALL_SHOT_BYTES: u64 = 300 * 1000;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Row {
@@ -52,6 +63,12 @@ enum Row {
     Cancel,
     /// The update signed by another author: install it anyway.
     Anyway,
+    /// Not installed: there is no room for it.
+    NoRoom,
+    /// Its screenshots, one after another.
+    Shots,
+    /// Where its source is, as a QR code.
+    Source,
 }
 
 /// What the page shows above its rows.
@@ -93,6 +110,9 @@ pub(crate) struct PageScreen {
     notice: bool,
     /// The download going on, or the job waiting for the reader's word.
     job: Option<Progress>,
+    /// The room left for plugins: read when the page opens and when
+    /// plugins change, never while drawing.
+    room: Room,
 }
 
 impl PageScreen {
@@ -106,6 +126,7 @@ impl PageScreen {
         // The rows go below the text, where it ends (see `draw`).
         let area = Rect::new(0, top, display.width, status.y.saturating_sub(top));
         let id = params.get(params::ID).unwrap_or_default().to_string();
+        let id_for_room = id.clone();
         // What the list says of it, while its own page is fetched.
         let plugin = params
             .get(ENTRY)
@@ -123,8 +144,17 @@ impl PageScreen {
             waiting: false,
             notice: false,
             job: INSTALLER.progress(env.storage),
+            room: Room::of(env, Some(&id_for_room)),
             style,
             header,
+        }
+    }
+
+    /// What the library says the plugin's code takes, where it says.
+    fn image_len(&self) -> Option<u64> {
+        match &self.details {
+            Details::Here(details) => details.more.image_len,
+            _ => None,
         }
     }
 
@@ -147,6 +177,22 @@ impl PageScreen {
     }
 
     fn rows(&self, env: &Env<'_>) -> Vec<Row> {
+        let mut rows = self.action_rows(env);
+        if self.shown() == Shown::Plugin
+            && let Details::Here(plugin) = &self.details
+        {
+            if !plugin.more.shots.is_empty() {
+                rows.push(Row::Shots);
+            }
+            if !plugin.more.source.is_empty() {
+                rows.push(Row::Source);
+            }
+        }
+        rows
+    }
+
+    /// What can be done with the plugin.
+    fn action_rows(&self, env: &Env<'_>) -> Vec<Row> {
         let Some(plugin) = &self.plugin else {
             return Vec::new();
         };
@@ -159,8 +205,15 @@ impl PageScreen {
             return alloc::vec![Row::Stop];
         }
         let Some(info) = env.plugins.get(&plugin.id) else {
+            if !self.room.fits(plugin, self.image_len()) {
+                return alloc::vec![Row::NoRoom];
+            }
             return alloc::vec![Row::Install];
         };
+        // Not this one to install over, update or remove.
+        if !catalog::may_install(env.plugins, &plugin.id, plugin.code) {
+            return Vec::new();
+        }
         // A restart first where one is waited for; a code plugin removed
         // runs on until then, and offers nothing else.
         let mut rows = Vec::new();
@@ -184,7 +237,9 @@ impl PageScreen {
     /// Asks the library for the plugin's page.
     fn fetch(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some(device) = Device::of(&env).filter(|_| env.caps.network) else {
+        let Some(device) =
+            Device::of(&env).filter(|_| env.caps.network && install::is_plugin_name(&self.id))
+        else {
             self.details = Details::Failed;
             return;
         };
@@ -192,7 +247,7 @@ impl PageScreen {
         let language = env.i18n.language();
         let url = catalog::plugin_url(list.trim(), device.name, language, &self.id);
         let mut request = HttpRequest::new("GET", &url, DETAILS);
-        request.save_to = Some(catalog::plugin_part());
+        request.save_to = Some(catalog::plugin_part(&self.id));
         request.params = Params::new().with(params::ID, self.id.clone());
         cx.command(Command::Http(request));
         self.details = Details::Asked(url);
@@ -204,13 +259,23 @@ impl PageScreen {
             return;
         };
         let address = reply.final_url.clone().unwrap_or_else(|| url.clone());
-        let fetched = catalog::plugin_part();
+        let fetched = catalog::plugin_part(&self.id);
         let read = Device::of(&env)
             .filter(|_| (200..300).contains(&reply.status))
-            .and_then(|device| catalog::plugin(env.storage, &fetched, &address, &device));
+            .and_then(|device| catalog::plugin(env.storage, &fetched, &address, &device))
+            // The page asked for, not another one's.
+            .filter(|plugin| plugin.entry.id == self.id);
         let _ = env.storage.remove(&fetched);
         match read {
-            Some(plugin) => {
+            Some(mut plugin) => {
+                // Only screenshots this device can decode well.
+                if env.device.memory == MemoryClass::Small {
+                    plugin.more.shots.retain(|shot| {
+                        shot.width <= SMALL_SHOT_SIDE
+                            && shot.height <= SMALL_SHOT_SIDE
+                            && shot.size <= SMALL_SHOT_BYTES
+                    });
+                }
                 self.plugin = Some(plugin.entry.clone());
                 self.details = Details::Here(Box::new(plugin));
                 if core::mem::take(&mut self.waiting) {
@@ -283,6 +348,11 @@ impl PageScreen {
         };
         match self.rows(&env).get(index).copied() {
             Some(Row::Install | Row::Update) => self.install(cx),
+            Some(Row::NoRoom) => {
+                if let Some(text) = self.room.needs(&env, plugin, self.image_len()) {
+                    cx.command(Command::Notify(text));
+                }
+            }
             Some(Row::Understood) => {
                 trust::tell(env.storage);
                 self.notice = false;
@@ -292,6 +362,13 @@ impl PageScreen {
                 if self.shown() == Shown::OtherAuthor {
                     INSTALLER.cancel(env.storage);
                     self.job = None;
+                    // The next update waiting has its turn.
+                    let mut out = Vec::new();
+                    queue::next(&env, &mut out);
+                    for command in out {
+                        cx.command(command);
+                    }
+                    self.job = INSTALLER.progress(env.storage);
                 }
                 self.notice = false;
                 self.list.focus = 0;
@@ -303,6 +380,7 @@ impl PageScreen {
                     INSTALLER.cancel(env.storage);
                     out.push(failed(&env, &plugin.name));
                 }
+                queue::next(&env, &mut out);
                 for command in out {
                     cx.command(command);
                 }
@@ -312,11 +390,27 @@ impl PageScreen {
             }
             Some(Row::Stop) => {
                 INSTALLER.cancel(env.storage);
-                self.job = None;
+                // Only this one stops: the next update waiting goes on.
+                let mut out = Vec::new();
+                queue::next(&env, &mut out);
+                for command in out {
+                    cx.command(command);
+                }
+                self.job = INSTALLER.progress(env.storage);
                 self.list.focus = 0;
                 self.redraw(cx);
             }
             Some(Row::Restart) => cx.command(Command::Restart),
+            Some(Row::Shots) => {
+                if let Details::Here(details) = &self.details {
+                    cx.command(crate::shots::open(&details.more.shots));
+                }
+            }
+            Some(Row::Source) => {
+                if let Details::Here(details) = &self.details {
+                    cx.command(crate::source::open(&plugin.name, &details.more.source));
+                }
+            }
             Some(Row::Remove) => {
                 let title = env
                     .i18n
@@ -360,55 +454,122 @@ impl PageScreen {
             Row::Understood => (tr("store.code.understood"), String::new()),
             Row::Cancel => (tr("store.not-now"), String::new()),
             Row::Anyway => (tr("store.other-author.anyway"), String::new()),
+            Row::NoRoom => (
+                tr("store.no-room"),
+                files::size(plugin.size, env.i18n.tr("store.decimal")),
+            ),
+            Row::Shots => {
+                let count = match &self.details {
+                    Details::Here(details) => details.more.shots.len(),
+                    _ => 0,
+                };
+                (tr("store.shots"), format!("{count}  ›"))
+            }
+            Row::Source => (tr("store.source"), String::from("›")),
         }
     }
 
     /// What the page says above its rows: what the plugin does and the
     /// facts in small print, or the notice, or the warning.
-    fn texts(&self, env: &Env<'_>, plugin: &Entry) -> (String, Vec<String>) {
+    fn texts(&self, env: &Env<'_>, plugin: &Entry) -> (String, Vec<(&'static str, String)>) {
         let name = [("name", Arg::Str(&plugin.name))];
         match self.shown() {
             Shown::Notice => (env.i18n.tr("store.code.notice").to_string(), Vec::new()),
             Shown::OtherAuthor => (
                 env.i18n.format("store.other-author", &name),
-                alloc::vec![env.i18n.tr("store.other-author.help").to_string()],
+                alloc::vec![("", env.i18n.tr("store.other-author.help").to_string())],
             ),
-            Shown::Plugin => (plugin.summary.clone(), facts(env, plugin)),
+            Shown::Plugin => {
+                let more = match &self.details {
+                    Details::Here(details) => Some(&details.more),
+                    _ => None,
+                };
+                let room = (&self.room, self.image_len());
+                (plugin.summary.clone(), facts(env, plugin, more, room))
+            }
         }
     }
 }
 
-/// The facts below the summary: by whom, under which licence, which
-/// version and how large, which version is here; for a code plugin, that
-/// it is one and which PaperPaw it is made for.
-fn facts(env: &Env<'_>, plugin: &Entry) -> Vec<String> {
+/// The facts below the summary, each with its icon: whether it has code
+/// (and so full access) or is data alone, whether its build was checked
+/// against its source, by whom and since when they publish, its version,
+/// size and licence, which version is here.
+fn facts(
+    env: &Env<'_>,
+    plugin: &Entry,
+    more: Option<&More>,
+    (room, image_len): (&Room, Option<u64>),
+) -> Vec<(&'static str, String)> {
     let i18n = env.i18n;
     let mut facts = Vec::new();
-    let mut first = Vec::new();
+    if plugin.code {
+        facts.push((
+            "key",
+            i18n.format("store.kind.code", &[("sdk", Arg::Str(&plugin.sdk))]),
+        ));
+    } else {
+        facts.push(("puzzle", i18n.tr("store.kind.data").to_string()));
+    }
+    match more.map(|m| m.verified.as_str()) {
+        Some("verified") => facts.push(("circle-check", i18n.tr("store.verified").to_string())),
+        Some("failed") => facts.push(("x", i18n.tr("store.verified.failed").to_string())),
+        Some("unverified") => facts.push(("circle", i18n.tr("store.verified.not").to_string())),
+        _ => {}
+    }
     if !plugin.author.is_empty() {
-        first.push(i18n.format("store.by", &[("author", Arg::Str(&plugin.author))]));
-    }
-    if !plugin.licence.is_empty() {
-        first.push(i18n.format("store.licence", &[("licence", Arg::Str(&plugin.licence))]));
-    }
-    if !first.is_empty() {
-        facts.push(first.join(" · "));
+        let by = match more.filter(|m| m.author_since > 0) {
+            Some(more) => {
+                let year = (more.author_since / 10000).to_string();
+                i18n.plural(
+                    "store.by-since",
+                    i64::from(more.author_plugins),
+                    &[
+                        ("author", Arg::Str(&plugin.author)),
+                        ("year", Arg::Str(&year)),
+                    ],
+                )
+            }
+            None => i18n.format("store.by", &[("author", Arg::Str(&plugin.author))]),
+        };
+        facts.push(("user", by));
     }
     let size = files::size(plugin.size, i18n.tr("store.decimal"));
-    facts.push(i18n.format(
+    let mut version = i18n.format(
         "store.version",
         &[
             ("version", Arg::Str(&plugin.version)),
             ("size", Arg::Str(&size)),
         ],
-    ));
-    if plugin.code {
-        facts.push(i18n.format("store.code", &[("sdk", Arg::Str(&plugin.sdk))]));
+    );
+    if !plugin.licence.is_empty() {
+        version.push_str(" · ");
+        version.push_str(&i18n.format("store.licence", &[("licence", Arg::Str(&plugin.licence))]));
+    }
+    facts.push(("info-circle", version));
+    // The room it needs, and what is left.
+    if plugin.installed(env).is_none()
+        && let Some(needs) = room.needs(env, plugin, image_len)
+    {
+        facts.push(("stack-2", needs));
+    }
+    if let Some(heap) = more.and_then(|m| m.heap) {
+        let size = files::size(heap, i18n.tr("store.decimal"));
+        let small = env.device.memory == MemoryClass::Small;
+        let key = if small && heap > TIGHT_HEAP {
+            "store.heap.tight"
+        } else {
+            "store.heap"
+        };
+        facts.push(("chart-bar", i18n.format(key, &[("size", Arg::Str(&size))])));
     }
     if let Some(installed) = plugin.installed(env) {
-        facts.push(i18n.format(
-            "store.installed-version",
-            &[("version", Arg::Str(&installed.to_string()))],
+        facts.push((
+            "check",
+            i18n.format(
+                "store.installed-version",
+                &[("version", Arg::Str(&installed.to_string()))],
+            ),
         ));
     }
     facts
@@ -454,8 +615,16 @@ impl Screen for PageScreen {
         let margin = style.margin as f32;
         let width = f32::from(self.list.area.width) - 2.0 * margin;
         let mut y = f32::from(self.top);
-        let mut paragraph = |y: &mut f32, text: &str, size: f32, color: Color, most: usize| {
+        let paragraph = |canvas: &mut Canvas<'_>,
+                         y: &mut f32,
+                         text: &str,
+                         size: f32,
+                         color: Color,
+                         most: usize,
+                         indent: f32| {
             let metrics = font.line_metrics(size);
+            let width = width - indent;
+            let margin = margin + indent;
             let lines = font.wrap(size, text, width);
             let shown = lines.len().min(most);
             let area = Rect::new(
@@ -477,10 +646,26 @@ impl Screen for PageScreen {
             }
         };
         let (text, facts) = self.texts(env, plugin);
-        paragraph(&mut y, &text, style.text, Color::BLACK, SUMMARY_LINES);
+        paragraph(
+            canvas,
+            &mut y,
+            &text,
+            style.text,
+            Color::BLACK,
+            SUMMARY_LINES,
+            0.0,
+        );
         y += style.gap as f32;
-        for fact in facts {
-            paragraph(&mut y, &fact, style.small, style.faint(80), 3);
+        // The facts each after its icon, their texts lined up.
+        let room = f32::from(ui::icon_room(env, &style, true));
+        let icon_size = style.small * ui::ICON_SCALE;
+        let line = font.line_metrics(style.small).line_height;
+        for (icon, fact) in facts {
+            let first = Rect::new(0, y as u16, self.list.area.width, line as u16);
+            let ink = style.faint(80);
+            ui::draw_icon(canvas, env, icon, icon_size, margin, first, ink);
+            paragraph(canvas, &mut y, &fact, style.small, ink, 3, room);
+            y += style.gap as f32 / 3.0;
         }
         let gap = style.gap as u16;
         self.list.area.y = y as u16 + gap;
@@ -515,7 +700,9 @@ impl Screen for PageScreen {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        self.job = INSTALLER.progress(cx.env().storage);
+        let env = *cx.env();
+        self.job = INSTALLER.progress(env.storage);
+        self.room = Room::of(&env, Some(&self.id));
         if self.details == Details::None {
             self.fetch(cx);
         }
@@ -582,7 +769,11 @@ impl Screen for PageScreen {
                 self.list.focus = 0;
             }
         } else if DOWNLOADED.read(event, params).is_some() || *event == events::PLUGINS_CHANGED {
-            self.job = INSTALLER.progress(cx.env().storage);
+            let env = *cx.env();
+            self.job = INSTALLER.progress(env.storage);
+            if *event == events::PLUGINS_CHANGED {
+                self.room = Room::of(&env, Some(&self.id));
+            }
             let len = self.rows(cx.env()).len();
             self.list.focus = self.list.focus.min(len.saturating_sub(1));
             self.redraw(cx);

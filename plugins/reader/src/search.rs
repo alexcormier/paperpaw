@@ -6,6 +6,7 @@
 //! emits `core.goto` with the start and end of the match, so the
 //! reader shows its page and marks it.
 
+use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -15,7 +16,8 @@ use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::document::{Block, Document, Locator};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, RefreshMode, Screen,
+    Arg, Canvas, Command, Cx, Env, FontHandle, Gesture, GestureKind, Handled, Id, Params,
+    RefreshMode, Screen,
 };
 
 use paperpaw_sdk::builtin::events;
@@ -33,6 +35,7 @@ struct Hit {
     start: Locator,
     end: Locator,
     percent: u8,
+    /// The text around the match as its row shows it (see [`with_hit`]).
     snippet: String,
 }
 
@@ -64,7 +67,8 @@ impl SearchScreen {
             .trim()
             .to_string();
         let needle: Vec<char> = query.chars().map(lower).collect();
-        let document = env.formats.open(env.storage, &path).ok();
+        let options = crate::screen::open_options(env);
+        let document = env.formats.open_with(env.storage, &path, &options).ok();
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
@@ -93,8 +97,17 @@ impl SearchScreen {
             return false;
         };
         let first_new = self.hits.len();
+        let font = self.style.font(env);
+        // The row's title: the list's width less the margins and the gap
+        // kept before a value.
+        let width = f32::from(self.list.area.width) - 4.0 * self.style.margin as f32;
+        // The text as the page shows it (see `paperpaw_sdk::filters`).
+        let filtered = crate::screen::Filtered {
+            document: document.as_ref(),
+            env,
+        };
         for _ in 0..BLOCKS_PER_STEP {
-            match document.block_at(env.storage, at) {
+            match filtered.block_at(env.storage, at) {
                 Ok(Some(block)) => {
                     for (start, end) in find(&block.text, &self.needle) {
                         if self.hits.len() == MAX_HITS {
@@ -106,7 +119,17 @@ impl SearchScreen {
                             start: start_at,
                             end: Locator::new(at.section, block.source_offset(end)),
                             percent: (document.progress(start_at) * 100.0) as u8,
-                            snippet: snippet(&block, start, end),
+                            snippet: {
+                                let shown = snippet(&block, start, end);
+                                let at = snippet_at(&block.text, start, end);
+                                match &font {
+                                    Some(font) => {
+                                        with_hit(font, self.style.text, &shown, at, width)
+                                            .into_owned()
+                                    }
+                                    None => shown,
+                                }
+                            },
                         });
                     }
                     if self.more {
@@ -198,16 +221,8 @@ fn find(text: &str, needle: &[char]) -> Vec<(usize, usize)> {
 
 /// The match with some context, on one line.
 fn snippet(block: &Block, start: usize, end: usize) -> String {
+    let (from, to) = snippet_range(&block.text, start, end);
     let text = &block.text;
-    let from = text[..start]
-        .char_indices()
-        .rev()
-        .nth(BEFORE - 1)
-        .map_or(0, |(i, _)| i);
-    let to = text[end..]
-        .char_indices()
-        .nth(AFTER)
-        .map_or(text.len(), |(i, _)| end + i);
     let mut out = String::new();
     if from > 0 {
         out.push('…');
@@ -221,6 +236,69 @@ fn snippet(block: &Block, start: usize, end: usize) -> String {
         out.push('…');
     }
     out
+}
+
+/// Where the match `start..end` is in its snippet (see [`snippet`]), in
+/// characters.
+fn snippet_at(text: &str, start: usize, end: usize) -> (usize, usize) {
+    let (from, _) = snippet_range(text, start, end);
+    let before = usize::from(from > 0) + text[from..start].chars().count();
+    (before, before + text[start..end].chars().count())
+}
+
+/// The part of `text` a snippet of the match `start..end` shows.
+fn snippet_range(text: &str, start: usize, end: usize) -> (usize, usize) {
+    let from = text[..start]
+        .char_indices()
+        .rev()
+        .nth(BEFORE - 1)
+        .map_or(0, |(i, _)| i);
+    let to = text[end..]
+        .char_indices()
+        .nth(AFTER)
+        .map_or(text.len(), |(i, _)| end + i);
+    (from, to)
+}
+
+/// `snippet` shown in `width`: where it does not fit up to the end of the
+/// match at characters `at`, it begins later (at a word, after `…`), so
+/// that the word found is in the row and not cut off with the context
+/// after it.
+fn with_hit<'s>(
+    font: &FontHandle<'_>,
+    size: f32,
+    snippet: &'s str,
+    at: (usize, usize),
+    width: f32,
+) -> Cow<'s, str> {
+    let byte = |chars: usize| {
+        snippet
+            .char_indices()
+            .nth(chars)
+            .map_or(snippet.len(), |(i, _)| i)
+    };
+    let (start, end) = (byte(at.0), byte(at.1));
+    // Room for an ellipsis at either end.
+    let room = width - 2.0 * font.measure(size, "…");
+    let mut used = 0.0;
+    let mut from = end;
+    for (i, c) in snippet[..end].char_indices().rev() {
+        used += font.advance(size, c);
+        if used > room {
+            break;
+        }
+        from = i;
+    }
+    if from == 0 || snippet[..from].chars().all(|c| c == '…') {
+        return Cow::Borrowed(snippet);
+    }
+    // A match wider than the row: from its start, cut at the end.
+    from = from.min(start);
+    // From the start of a word, before the match.
+    if let Some(space) = snippet.get(from..start).and_then(|s| s.find(' ')) {
+        from += space;
+    }
+    Cow::Owned(format!("…{}", snippet[from..].trim_start()))
 }
 
 impl Screen for SearchScreen {
@@ -341,3 +419,6 @@ mod tests {
         assert!(find(text, &[]).is_empty());
     }
 }
+
+#[cfg(test)]
+mod matching_tests;

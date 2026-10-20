@@ -1,6 +1,6 @@
 Heading "Clock"
 Text "A clock on the home screen."
-Text "By Someone · Licence: MIT"
-Text "Version 1.0.0, 337 B"
-Text "Code plugin for PaperPaw 0.4. It runs with full access to this device."
+Text "Code plugin for PaperPaw 0.4: runs with full access to this device."
+Text "By Someone"
+Text "Version 1.0.0, 337 B · Licence: MIT"
 Row "Install, 337 B" (focused)

@@ -283,7 +283,13 @@ impl UiStyle {
     /// Height of a row with a note: the title line, then up to
     /// [`NOTE_LINES`] lines of small text (see [`draw_noted_row`]).
     pub fn noted_row(&self) -> u32 {
-        let notes = (NOTE_LINES as f32 * self.small * NOTE_LINE_HEIGHT) as u32;
+        self.noted_row_of(NOTE_LINES)
+    }
+
+    /// Height of a row with a note of `lines` lines (e.g. 1 for denser
+    /// lists of many entries): a title line, then the note.
+    pub fn noted_row_of(&self, lines: usize) -> u32 {
+        let notes = (lines as f32 * self.small * NOTE_LINE_HEIGHT) as u32;
         self.title_band() + notes + self.gap * 3 / 2
     }
 
@@ -678,6 +684,10 @@ struct HeaderParts {
     /// Previous page, page label, next page.
     pager: Option<(Rect, Rect, Rect)>,
     title: Rect,
+    /// Where the middles of the back, previous and next arrows are drawn:
+    /// the back arrow's ink starts at the margin, the next arrow's ends
+    /// there, as the content of the screen does.
+    arrows: (i32, i32, i32),
 }
 
 impl Header {
@@ -693,29 +703,53 @@ impl Header {
         }
     }
 
-    fn page_label(page: (usize, usize)) -> String {
-        format!("{} / {}", page.0 + 1, page.1)
+    /// Page `page.0` (0-based) of `page.1`, e.g. "2 / 5".
+    fn page_label(env: &Env<'_>, page: (usize, usize)) -> String {
+        let (shown, pages) = (page.0.saturating_add(1), page.1);
+        env.i18n.format(
+            "core.page-of",
+            &[
+                ("page", paperpaw_i18n::Arg::Int(shown as i64)),
+                ("pages", paperpaw_i18n::Arg::Int(pages as i64)),
+            ],
+        )
     }
 
     fn layout(&self, env: &Env<'_>, style: &UiStyle, page: Option<(usize, usize)>) -> HeaderParts {
         let a = self.area;
         let square = a.height;
-        let back = self.back.then(|| Rect::new(a.x, a.y, square, a.height));
-        let mut left = a.x
-            + if self.back {
-                square
-            } else {
-                style.margin as u16
-            };
+        let margin = style.margin as u16;
+        let (reach, ink) = chevron_extent(style);
+        let start = i32::from(a.x) + i32::from(margin);
+        let end = i32::from(a.x) + i32::from(a.width) - i32::from(margin);
+        // The back arrow where the content's icons are, the title where
+        // the labels after them begin (as far as the arrow leaves room).
+        let back_x = start + reach;
+        let mut left = if self.back {
+            let column = (style.text * ICON_SCALE) as u16 + style.gap as u16;
+            a.x + margin + column.max(ink as u16 + style.gap as u16)
+        } else {
+            a.x + margin
+        };
+        let back = self
+            .back
+            .then(|| Rect::new(a.x, a.y, left.saturating_sub(a.x), a.height));
         let mut right = a.x + a.width;
+        let mut arrows = (back_x, 0, end - reach - 1);
         let pager = match (page, style.font(env)) {
             (Some(page), Some(font)) if page.1 > 1 => {
-                let label = font.measure(style.small, &Self::page_label(page)) as u16;
-                let arrow = if self.arrows { square * 4 / 5 } else { 0 };
-                let margin = if self.arrows { 0 } else { style.margin as u16 };
-                let next = Rect::new(right - arrow - margin, a.y, arrow, a.height);
-                let label = Rect::new(next.x - label, a.y, label, a.height);
-                let prev = Rect::new(label.x - arrow, a.y, arrow, a.height);
+                let label = font.measure(style.small, &Self::page_label(env, page)) as u16;
+                let (next, prev_end) = if self.arrows {
+                    // A finger's room round the arrow, out to the edge.
+                    let arrow = square * 4 / 5;
+                    let x = (arrows.2 - i32::from(arrow / 2)).max(i32::from(a.x)) as u16;
+                    (Rect::new(x, a.y, right.saturating_sub(x), a.height), arrow)
+                } else {
+                    (Rect::new(right - margin, a.y, 0, a.height), 0)
+                };
+                let label = Rect::new(next.x.saturating_sub(label), a.y, label, a.height);
+                let prev = Rect::new(label.x.saturating_sub(prev_end), a.y, prev_end, a.height);
+                arrows.1 = i32::from(prev.x) + i32::from(prev.width) / 2;
                 right = prev.x;
                 Some((prev, label, next))
             }
@@ -728,6 +762,7 @@ impl Header {
             back,
             pager,
             title: Rect::new(left, a.y, right.saturating_sub(left), a.height),
+            arrows,
         }
     }
 
@@ -753,9 +788,8 @@ impl Header {
         // Everything centred in the band by its ink: the arrows by their
         // drawing, each text by its letters.
         let band = style.header_band(self.area);
-        let middle = |area: Rect| Rect::new(area.x, band.y, area.width, band.height);
-        let arrow = |canvas: &mut Canvas<'_>, area: Rect, left: bool, color: Color| {
-            let (x, y) = center(middle(area));
+        let arrow = |canvas: &mut Canvas<'_>, x: i32, left: bool, color: Color| {
+            let (_, y) = center(band);
             draw_chevron(canvas, style, x, y, left, color);
         };
         let t = parts.title;
@@ -770,17 +804,20 @@ impl Header {
             x
         });
         let title = fit(&font, style.head, title, right - f32::from(t.x));
-        let label = page.filter(|_| parts.pager.is_some()).map(Self::page_label);
+        let label = page
+            .filter(|_| parts.pager.is_some())
+            .map(|page| Self::page_label(env, page));
         let baseline = |size: f32, text: &str| ink_baseline(&font, band, size, text);
-        if let Some(back) = parts.back {
-            arrow(canvas, back, true, ink);
+        let (back_x, prev_x, next_x) = parts.arrows;
+        if parts.back.is_some() {
+            arrow(canvas, back_x, true, ink);
         }
-        if let (Some((prev, at, next)), Some(page), Some(text)) = (parts.pager, page, &label) {
+        if let (Some((_, at, _)), Some(page), Some(text)) = (parts.pager, page, &label) {
             if self.arrows {
                 // At the first or last page, the arrow is gray.
                 let color = |end: bool| if end { Color::gray(150) } else { ink };
-                arrow(canvas, prev, true, color(page.0 == 0));
-                arrow(canvas, next, false, color(page.0 + 1 >= page.1));
+                arrow(canvas, prev_x, true, color(page.0 == 0));
+                arrow(canvas, next_x, false, color(page.0 + 1 >= page.1));
             }
             let x = f32::from(at.x);
             let y = baseline(style.small, text);
@@ -838,6 +875,23 @@ impl Header {
         }
     }
 
+    /// Whether `point` is on the page number between the arrows, e.g. to
+    /// go to a page of a long list (the screen asks before
+    /// [`Header::tap`], which turns a page there).
+    pub fn on_page_number(
+        &self,
+        env: &Env<'_>,
+        style: &UiStyle,
+        point: Point,
+        page: Option<(usize, usize)>,
+    ) -> bool {
+        self.area.contains(point)
+            && self
+                .layout(env, style, page)
+                .pager
+                .is_some_and(|(_, label, _)| label.contains(point))
+    }
+
     /// Whether `point` is on the header's title (e.g. to open a menu).
     pub fn on_title(
         &self,
@@ -893,7 +947,7 @@ impl Pager {
         let Some(font) = style.font(env) else {
             return;
         };
-        let label = Header::page_label(page);
+        let label = Header::page_label(env, page);
         let x = f32::from(a.x) + (f32::from(a.width) - font.measure(style.small, &label)) / 2.0;
         draw_label(canvas, &font, style.small, x, a, &label, Color::BLACK);
         if self.arrows {
@@ -946,8 +1000,9 @@ pub fn draw_chevron(
     color: Color,
 ) {
     let half = (style.title * 0.38) as i32;
-    let width = half * 4 / 5;
+    let (_, extent) = chevron_extent(style);
     let thickness = (style.line * 3).max(3);
+    let width = extent - thickness as i32;
     for dy in -half..=half {
         let dx = width * dy.abs() / half.max(1);
         let tip = if left {
@@ -966,6 +1021,15 @@ pub fn draw_chevron(
             canvas.fill_tint(Rect::new(x, y, thickness as u16, 1), color);
         }
     }
+}
+
+/// How far a chevron's ink reaches from the middle it is drawn at to its
+/// point, and how wide its ink is (see [`draw_chevron`]).
+fn chevron_extent(style: &UiStyle) -> (i32, i32) {
+    let half = (style.title * 0.38) as i32;
+    let width = half * 4 / 5;
+    let thickness = (style.line * 3).max(3) as i32;
+    (width / 2, width + thickness)
 }
 
 fn label_mid(label: Rect) -> i32 {
@@ -1298,7 +1362,9 @@ pub fn draw_empty(
     let room = f32::from(area.height);
     let text_height = |n: usize| line * n as f32;
     let words = if title.is_empty() { 0.0 } else { title_line };
-    let with_icon = icon_width(env, icon, icon_size) > 0.0
+    let icon_w = icon_width(env, icon, icon_size);
+    let with_icon = icon_w > 0.0
+        && icon_w <= f32::from(area.width)
         && icon_size + gap * 2.0 + words + gap + text_height(lines.len()) <= room;
     let icon_room = if with_icon {
         icon_size + gap * 2.0
@@ -1315,7 +1381,7 @@ pub fn draw_empty(
     let mut y = f32::from(area.y) + ((room - total) * 0.42).max(0.0);
     let centre = |w: f32| f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
     if with_icon {
-        let w = icon_width(env, icon, icon_size);
+        let w = icon_w;
         let at = Rect::new(area.x, y as u16, area.width, icon_size as u16);
         draw_icon(
             canvas,
@@ -1336,7 +1402,11 @@ pub fn draw_empty(
             size as u16,
         );
         let x = centre(w) + w + gap / 2.0;
-        draw_icon(canvas, env, PAW_ICON, size, x, below, style.faint(120));
+        // Only where it fits beside the icon (not in a narrow area).
+        let right = f32::from(area.x) + f32::from(area.width);
+        if x + icon_width(env, PAW_ICON, size) <= right {
+            draw_icon(canvas, env, PAW_ICON, size, x, below, style.faint(120));
+        }
         y += icon_room;
     }
     if !title.is_empty() {
@@ -1502,8 +1572,18 @@ impl ListView {
     /// A grid of `columns` items a row instead of a list (rows are then
     /// `row` high and items as wide as a column).
     pub fn columns(mut self, columns: u32) -> Self {
-        self.columns = columns.max(1);
+        self.columns = columns.clamp(1, u32::from(u16::MAX));
         self
+    }
+
+    /// The height of a row, at least 1 (`row` is a field anyone can set).
+    fn row_height(&self) -> u32 {
+        self.row.max(1)
+    }
+
+    /// The width of a column, at least 1.
+    fn column_width(&self) -> u16 {
+        (self.area.width / self.columns as u16).max(1)
     }
 
     /// Items side by side in a row.
@@ -1513,7 +1593,7 @@ impl ListView {
 
     /// Items per page (rows times columns).
     pub fn rows(&self) -> usize {
-        ((u32::from(self.area.height) / self.row).max(1) * self.columns) as usize
+        ((u32::from(self.area.height) / self.row_height()).max(1) * self.columns) as usize
     }
 
     /// The page containing the focus (0-based).
@@ -1521,7 +1601,8 @@ impl ListView {
         self.focus / self.rows()
     }
 
-    /// The page and the number of pages, e.g. for [`Header::draw`].
+    /// The page and the number of pages, e.g. for [`Header::draw`]; always
+    /// `Some` (a list of one page shows no page number there).
     pub fn paging(&self, len: usize) -> Option<(usize, usize)> {
         Some((self.page(), self.pages(len)))
     }
@@ -1535,6 +1616,30 @@ impl ListView {
     pub fn focus_on_keys(mut self, env: &Env<'_>) -> Self {
         self.shown = !env.device.input.touch;
         self
+    }
+
+    /// The item a confirming button chooses, or `None` while the focus is
+    /// hidden (on touch screens before a button moved it): then this first
+    /// press shows the focus instead, so that a button never chooses a row
+    /// nobody saw (draw again, as for [`ListChange::Focus`]).
+    pub fn confirm(&mut self) -> Option<usize> {
+        if self.shown {
+            Some(self.focus)
+        } else {
+            self.shown = true;
+            self.before = self.focus;
+            None
+        }
+    }
+
+    /// Keeps the focus among `len` items after the list changed (the last
+    /// one if it was past the end); the page follows the focus.
+    pub fn set_len(&mut self, len: usize) {
+        let last = len.saturating_sub(1);
+        if self.focus > last {
+            self.before = self.focus;
+            self.focus = last;
+        }
     }
 
     /// Moves the focus by a navigation action among `len` items (see
@@ -1577,12 +1682,13 @@ impl ListView {
     /// The rectangle of visible item `slot` (0 = top left of the page).
     pub fn row_rect(&self, slot: usize) -> Rect {
         let columns = self.columns as usize;
-        let width = self.area.width / self.columns as u16;
+        let width = self.column_width();
+        let row = self.row_height();
         Rect::new(
             self.area.x + (slot % columns) as u16 * width,
-            self.area.y + ((slot / columns) as u32 * self.row) as u16,
+            self.area.y + ((slot / columns) as u32 * row) as u16,
             width,
-            self.row as u16,
+            row as u16,
         )
     }
 
@@ -1591,8 +1697,8 @@ impl ListView {
         if !self.area.contains(point) {
             return None;
         }
-        let line = ((point.y - i32::from(self.area.y)) as u32 / self.row) as usize;
-        let width = u32::from(self.area.width / self.columns as u16).max(1);
+        let line = ((point.y - i32::from(self.area.y)) as u32 / self.row_height()) as usize;
+        let width = u32::from(self.column_width());
         let column = ((point.x - i32::from(self.area.x)) as u32 / width) as usize;
         let slot = line * self.columns as usize + column.min(self.columns as usize - 1);
         let index = self.page() * self.rows() + slot;
@@ -1941,13 +2047,11 @@ pub fn draw_number(
     room: &str,
     focus: Option<bool>,
 ) {
-    let room = if room.len() < value.len() {
-        value
-    } else {
-        room
+    let Some(font) = style.font(env) else {
+        return;
     };
-    let (Some(font), Some((minus, plus))) = (style.font(env), stepper(env, style, rect, room))
-    else {
+    let room = wider(&font, style.text, room, value);
+    let Some((minus, plus)) = stepper(env, style, rect, room) else {
         return;
     };
     let margin = style.margin as f32;
@@ -1967,6 +2071,18 @@ pub fn draw_number(
     );
     draw_button(canvas, env, style, minus, "−", false, focus == Some(false));
     draw_button(canvas, env, style, plus, "+", false, focus == Some(true));
+}
+
+/// The wider of `room` and `value` as drawn: the room a stepper keeps for
+/// its value, so that steppers of stacked rows line up while no value is
+/// wider than that room (measured, not counted in bytes: "−" or "•" take
+/// three bytes and are narrow).
+fn wider<'a>(font: &FontHandle<'_>, size: f32, room: &'a str, value: &'a str) -> &'a str {
+    if font.measure(size, room) < font.measure(size, value) {
+        value
+    } else {
+        room
+    }
 }
 
 /// Where `value` starts, centred between the buttons `minus` and `plus`.
@@ -1990,13 +2106,11 @@ pub fn draw_stepper(
     room: &str,
     editing: bool,
 ) {
-    let room = if room.len() < value.len() {
-        value
-    } else {
-        room
+    let Some(font) = style.font(env) else {
+        return;
     };
-    let (Some(font), Some((minus, plus))) = (style.font(env), stepper(env, style, rect, room))
-    else {
+    let room = wider(&font, style.text, room, value);
+    let Some((minus, plus)) = stepper(env, style, rect, room) else {
         return;
     };
     let margin = style.margin as f32;
@@ -2057,8 +2171,8 @@ pub fn setting_value(env: &Env<'_>, spec: &SettingSpec) -> String {
 
 fn plain_setting_value(env: &Env<'_>, spec: &SettingSpec) -> String {
     match env.settings.get(spec.id.as_str()) {
-        Some(SettingValue::Bool(true)) => env.i18n.tr("settings.on").to_string(),
-        Some(SettingValue::Bool(false)) => env.i18n.tr("settings.off").to_string(),
+        Some(SettingValue::Bool(true)) => env.i18n.tr("core.on").to_string(),
+        Some(SettingValue::Bool(false)) => env.i18n.tr("core.off").to_string(),
         Some(SettingValue::Int(v)) => match &spec.extra().unit {
             Some(unit) => env.i18n.plural(unit, *v, &[]),
             None => format!("{v}"),
@@ -2143,9 +2257,15 @@ pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<Settin
     let current = env.settings.get(spec.id.as_str())?;
     let cycle = |options: &[&str], value: &str| -> SettingValue {
         let len = options.len().max(1) as i64;
-        let index = options.iter().position(|o| *o == value).unwrap_or(0) as i64;
+        // From a value not among the options, the first step on is the
+        // first option and the first step back the last.
+        let index = match options.iter().position(|o| *o == value) {
+            Some(index) => index as i64,
+            None if step > 0 => -1,
+            None => len,
+        };
         let next = options
-            .get((index + step).rem_euclid(len) as usize)
+            .get(index.saturating_add(step).rem_euclid(len) as usize)
             .copied()
             .unwrap_or_default();
         SettingValue::Text(Cow::Owned(next.to_string()))
@@ -2153,7 +2273,8 @@ pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<Settin
     Some(match (&spec.kind, current) {
         (SettingKind::Bool, SettingValue::Bool(v)) => SettingValue::Bool(!v),
         (SettingKind::Int { min, max }, SettingValue::Int(v)) => {
-            SettingValue::Int((v + step * spec.extra().step).clamp(*min, *max))
+            let next = v.saturating_add(step.saturating_mul(spec.extra().step));
+            SettingValue::Int(next.clamp(*min, (*max).max(*min)))
         }
         (SettingKind::Choice(options), SettingValue::Text(v)) => {
             let options: Vec<&str> = options.iter().collect();
@@ -2165,6 +2286,39 @@ pub fn next_value(env: &Env<'_>, spec: &SettingSpec, step: i64) -> Option<Settin
         }
         _ => return None,
     })
+}
+
+// ---- QR codes ----------------------------------------------------------
+
+/// Draws `qr` as large as fits in `area`, centred, each module a whole
+/// number of pixels, with the four modules of white around it scanners
+/// expect; returns where it went with that white, or `None` (nothing
+/// drawn) if it does not fit.
+pub fn draw_qr(canvas: &mut Canvas<'_>, qr: &crate::qr::QrCode, area: Rect) -> Option<Rect> {
+    let modules = u16::try_from(qr.size()).ok()?.checked_add(8)?;
+    let scale = area.width.min(area.height) / modules;
+    if scale == 0 {
+        return None;
+    }
+    let side = scale * modules;
+    let x = area.x + (area.width - side) / 2;
+    let y = area.y + (area.height - side) / 2;
+    let (x0, y0) = (x + 4 * scale, y + 4 * scale);
+    canvas.fill(Rect::new(x, y, side, side), Color::WHITE);
+    for my in 0..qr.size() {
+        for mx in 0..qr.size() {
+            if qr.dark(mx, my) {
+                canvas.fill_rect(
+                    i32::from(x0 + mx as u16 * scale),
+                    i32::from(y0 + my as u16 * scale),
+                    u32::from(scale),
+                    u32::from(scale),
+                    Color::BLACK,
+                );
+            }
+        }
+    }
+    Some(Rect::new(x, y, side, side))
 }
 
 // ---- Images ------------------------------------------------------------
@@ -2317,8 +2471,31 @@ pub fn fit_image(image: &ImageRef, width: u16, height: u16) -> (u16, u16) {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    /// Sizes for tests: no fonts needed, nothing rounded.
+    pub(crate) const STYLE: UiStyle = UiStyle {
+        text: 20.0,
+        small: 15.0,
+        title: 23.0,
+        head: 23.0,
+        row: 60,
+        header: 64,
+        margin: 12,
+        gap: 8,
+        line: 2,
+        dark_header: false,
+        corner: 0,
+        strong: false,
+        pill: false,
+        focus: crate::ui::Focus::Fill,
+        separators: crate::ui::Separators::Line,
+        plain_header: false,
+        cards: false,
+        grays: 2,
+        finger: 0,
+    };
 
     #[test]
     fn list_pages_focus_and_hits() {
@@ -2341,5 +2518,40 @@ mod tests {
         assert_eq!(list.move_focus(-1, 7), ListChange::Page);
         assert_eq!(list.focus, 6);
         assert_eq!(list.move_focus(1, 0), ListChange::None);
+    }
+
+    #[test]
+    fn a_hidden_focus_is_shown_before_a_button_chooses() {
+        let mut list = ListView::new(Rect::new(0, 0, 200, 300), 100);
+        list.shown = false;
+        list.focus = 2;
+        // The first press shows the focus; the second chooses.
+        assert_eq!(list.confirm(), None);
+        assert!(list.shown);
+        assert_eq!(list.confirm(), Some(2));
+        // Shorter lists keep the focus on their last item.
+        list.set_len(2);
+        assert_eq!(list.focus, 1);
+        list.set_len(5);
+        assert_eq!(list.focus, 1);
+        list.set_len(0);
+        assert_eq!(list.focus, 0);
+    }
+
+    #[test]
+    fn lists_with_fields_set_wrong_do_not_panic() {
+        // Rows 0 high, set through the field after `new`.
+        let mut list = ListView::new(Rect::new(0, 0, 200, 300), 100);
+        list.row = 0;
+        assert_eq!(list.rows(), 300);
+        assert_eq!(list.hit(Point::new(10, 2), 5), Some(2));
+        assert_eq!(list.hit(Point::new(10, 10), 5), None);
+        assert_eq!(list.row_rect(2).height, 1);
+        // More columns than a u16 holds, or than the list is wide.
+        let grid = ListView::new(Rect::new(0, 0, 200, 300), 100).columns(70_000);
+        assert_eq!(grid.column_count(), usize::from(u16::MAX));
+        assert_eq!(grid.row_rect(1).width, 1);
+        assert_eq!(grid.hit(Point::new(150, 10), 3), None);
+        assert_eq!(grid.hit(Point::new(0, 10), 3), Some(0));
     }
 }

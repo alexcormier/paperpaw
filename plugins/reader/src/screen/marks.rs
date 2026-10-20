@@ -69,7 +69,7 @@ fn whole_words(words: &[WordBox]) -> Vec<Option<String>> {
 impl Book {
     /// Asks the decorators for this page's marks if the page or what their
     /// marks depend on changed since they were asked.
-    pub(super) fn update_decorations(&mut self, env: &Env<'_>, words: &[WordBox]) {
+    pub(super) fn update_decorations(&mut self, env: &Env<'_>) {
         if env.decorators.is_empty() {
             self.decorated.clear();
             return;
@@ -78,6 +78,13 @@ impl Book {
         if self.decorated_for == Some(key) {
             return;
         }
+        self.decorated = self.decorate(env);
+        self.decorated_for = Some(key);
+    }
+
+    /// What the decorators mark on the page.
+    fn decorate(&self, env: &Env<'_>) -> Vec<decorations::Mark> {
+        let words = self.words(env);
         let whole = whole_words(words);
         let page_words: Vec<PageWord<'_>> = words
             .iter()
@@ -93,8 +100,7 @@ impl Book {
             language: &self.language,
             words: &page_words,
         };
-        self.decorated = env.decorators.decorate(env, &page);
-        self.decorated_for = Some(key);
+        env.decorators.decorate(env, &page)
     }
 
     /// The decorator's mark that takes taps at word `index`, if any.

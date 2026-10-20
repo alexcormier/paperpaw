@@ -435,7 +435,12 @@ pub(crate) fn decode_binaries(
     let mut handle = |token: Token<'_>| match token {
         Token::Start { name, attrs, .. } if local_name(name) == "binary" => {
             let id = attrs.get("id").unwrap_or_default();
-            current = wanted.iter().position(|(w, ..)| *w == id);
+            // The first binary of an id that decodes is the picture; a
+            // later one of the same id is not decoded over it.
+            current = wanted
+                .iter()
+                .position(|(w, ..)| *w == id)
+                .filter(|at| !done.contains(at));
             if current.is_some() {
                 base64 = Base64::default();
                 failed = storage.write(&temp, &[]).err().or(failed.take());

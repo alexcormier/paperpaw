@@ -1,0 +1,251 @@
+//! *About PaperPaw* with the real kernel: the page is written to the
+//! plugin's folder and opened in the reader, with the version, the
+//! address and the licences, and the logo beside it (or the picture the
+//! logo setting names, where it is there); when the page cannot be
+//! written, nothing is opened.
+
+// Tests panic on purpose when something is wrong.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use paperpaw_core::{Effects, Kernel};
+use paperpaw_platform::{
+    DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation,
+};
+use paperpaw_plugin_about::About;
+use paperpaw_sdk::builtin::{params, slots};
+use paperpaw_sdk::{
+    Canvas, Cx, DirEntry, Env, Handled, Id, Manifest, MemoryStorage, Plugin, Priority,
+    RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, Storage, StorageError, Version,
+};
+
+const DEVICE: DeviceInfo = DeviceInfo {
+    id: "test",
+    name: "Test",
+    display: DisplayInfo {
+        width: 480,
+        height: 800,
+        dpi: 220,
+        format: PixelFormat::Gray4,
+        rotation: Rotation::Deg0,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: true,
+        touch: false,
+        pen: false,
+        keys: &[],
+    },
+    memory: MemoryClass::Large,
+};
+
+const PAGE: &str = ".paperpaw/plugins/about/about.md";
+const LOGO: &str = ".paperpaw/plugins/about/logo.png";
+const BUNDLED: &[u8] = include_bytes!("../logo.png");
+
+/// The paths the reader was opened with.
+type Opened = Rc<RefCell<Vec<String>>>;
+
+/// A reader that keeps what it is asked to open.
+struct Reader(Opened);
+
+struct Blank;
+
+impl Screen for Blank {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+}
+
+impl Plugin for Reader {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("fake-reader"),
+            name: "Reader".into(),
+            description: "Keeps what it opens.".into(),
+            version: Version::new(0, 1, 0),
+            sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let opened = self.0.clone();
+        r.add_screen(ScreenSpec {
+            id: Id::new_static("fake-reader.screen"),
+            title: "Reader".into(),
+            factory: Box::new(move |_, params| {
+                opened
+                    .borrow_mut()
+                    .push(params.get(params::PATH).unwrap_or_default().to_string());
+                Box::new(Blank)
+            }),
+        })?;
+        r.bind_slot(
+            slots::READER,
+            Id::new_static("fake-reader.screen"),
+            Priority::DEFAULT,
+        )
+    }
+}
+
+struct Device {
+    kernel: Kernel,
+    now: u64,
+    opened: Opened,
+}
+
+impl Device {
+    fn new(storage: MemoryStorage, config: &str) -> Self {
+        let opened = Opened::default();
+        let kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .user_config(format!("[core]\nlanguage = en\n{config}"))
+            .plugin(About)
+            .plugin(Reader(opened.clone()))
+            .build()
+            .unwrap();
+        let mut device = Self {
+            kernel,
+            now: 0,
+            opened,
+        };
+        let effects = device.kernel.start(Instant(0));
+        device.settle(effects);
+        device
+    }
+
+    fn settle(&mut self, mut effects: Effects) {
+        for _ in 0..10_000 {
+            let Some(at) = effects.wake_at() else {
+                return;
+            };
+            if at.0 > self.now + 1000 {
+                return;
+            }
+            self.now = self.now.max(at.0);
+            effects = self.kernel.tick(Instant(self.now));
+        }
+    }
+
+    fn open(&mut self) {
+        self.now += 100;
+        let effects = self
+            .kernel
+            .run_action(Instant(self.now), Id::new_static("about.open"));
+        self.settle(effects);
+    }
+
+    fn read(&self, path: &str) -> Option<Vec<u8>> {
+        paperpaw_sdk::read_file(self.kernel.storage(), path, 1 << 22).ok()
+    }
+
+    fn page(&self) -> String {
+        String::from_utf8(self.read(PAGE).unwrap()).unwrap()
+    }
+}
+
+#[test]
+fn the_page_is_written_and_opened_in_the_reader() {
+    let mut device = Device::new(MemoryStorage::new(), "");
+    device.open();
+    assert_eq!(*device.opened.borrow(), [PAGE]);
+    let page = device.page();
+    assert!(
+        page.starts_with("![PaperPaw](logo.png)\n\n# PaperPaw "),
+        "{page}"
+    );
+    assert!(page.contains(env!("CARGO_PKG_VERSION")));
+    assert!(page.contains("https://github.com/hthoene/paperpaw"));
+    // The licences of what it bundles.
+    assert!(page.contains("Literata"));
+    assert!(page.contains("SIL Open Font License"));
+    assert_eq!(device.read(LOGO).unwrap(), BUNDLED);
+    // Closed and opened again: the same page, not one added to the
+    // other.
+    device.now += 100;
+    let effects = device
+        .kernel
+        .run_action(Instant(device.now), paperpaw_sdk::builtin::actions::BACK);
+    device.settle(effects);
+    device.open();
+    assert_eq!(device.page(), page);
+    assert_eq!(*device.opened.borrow(), [PAGE, PAGE]);
+}
+
+#[test]
+fn a_damaged_logo_is_written_anew() {
+    let storage = MemoryStorage::new().with(LOGO, b"broken".to_vec());
+    let mut device = Device::new(storage, "");
+    device.open();
+    assert_eq!(device.read(LOGO).unwrap(), BUNDLED);
+}
+
+#[test]
+fn the_logo_set_is_shown_where_it_is_there() {
+    let storage = MemoryStorage::new().with("Pictures/me.png", BUNDLED);
+    let mut device = Device::new(storage, "logo = /Pictures/me.png/\n");
+    device.open();
+    assert!(device.page().starts_with("![PaperPaw](/Pictures/me.png)"));
+    // PaperPaw's own is not needed then.
+    assert!(device.read(LOGO).is_none());
+
+    let mut device = Device::new(MemoryStorage::new(), "logo = Pictures/gone.png\n");
+    device.open();
+    assert!(device.page().starts_with("![PaperPaw](logo.png)"));
+    assert_eq!(device.read(LOGO).unwrap(), BUNDLED);
+}
+
+/// A card that is full for the plugin's folder.
+struct Full(MemoryStorage);
+
+impl Storage for Full {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.0.read_at(path, offset, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.0.size(path)
+    }
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        if path.starts_with(".paperpaw/plugins/about") {
+            return Err(StorageError::Full);
+        }
+        self.0.write(path, data)
+    }
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.0.append(path, data)
+    }
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.0.list(dir, visit)
+    }
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.0.remove(path)
+    }
+    fn exists(&self, path: &str) -> bool {
+        self.0.exists(path)
+    }
+    fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        self.0.rename(from, to)
+    }
+    fn create_dir(&self, path: &str) -> Result<(), StorageError> {
+        self.0.create_dir(path)
+    }
+}
+
+#[test]
+fn nothing_opens_when_the_page_cannot_be_written() {
+    let opened = Opened::default();
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(Full(MemoryStorage::new()))
+        .plugin(About)
+        .plugin(Reader(opened.clone()))
+        .build()
+        .unwrap();
+    let _ = kernel.start(Instant(0));
+    let _ = kernel.run_action(Instant(100), Id::new_static("about.open"));
+    assert!(opened.borrow().is_empty());
+}

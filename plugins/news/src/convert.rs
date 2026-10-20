@@ -225,7 +225,8 @@ impl Reader<'_> {
         };
         let Some(article) = &mut self.article else {
             if field == Field::Title && self.channel_title.len() < MAX_FIELD {
-                self.channel_title.push_str(text);
+                let room = MAX_FIELD - self.channel_title.len();
+                self.channel_title.push_str(&cut(text, room));
             }
             return;
         };
@@ -493,3 +494,6 @@ mod tests {
         assert!(size < 2000, "{size}");
     }
 }
+
+#[cfg(test)]
+mod hostile_tests;

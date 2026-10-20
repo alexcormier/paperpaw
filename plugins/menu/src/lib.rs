@@ -115,6 +115,7 @@ impl Plugin for Menu {
             ),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -184,7 +185,23 @@ struct MenuScreen {
 pub(crate) const DEPTH: &str = "depth";
 
 /// The settings plugin's list for choosing a value.
-pub(crate) const CHOOSE_SCREEN: Id = Id::new_static("settings.choose");
+const CHOOSE_SCREEN: Id = Id::new_static("settings.choose");
+
+/// Chooses a value of choice or language setting `spec`: in the settings
+/// plugin's list, or the next value at once where that plugin is
+/// replaced or off.
+pub(crate) fn choose(env: &Env<'_>, spec: &SettingSpec, cx: &mut Cx<'_, '_>) {
+    if env.screens.iter().any(|(id, _)| *id == CHOOSE_SCREEN) {
+        cx.command(Command::OpenScreen(
+            CHOOSE_SCREEN,
+            Params::new().with(params::ID, spec.id.as_str().to_string()),
+        ));
+    } else if let Some(value) = ui::next_value(env, spec, 1) {
+        cx.command(Command::SetSetting(spec.id.clone(), value));
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Fast);
+    }
+}
 
 impl MenuScreen {
     fn new(env: &Env<'_>, params: &Params) -> Self {
@@ -323,10 +340,7 @@ impl MenuScreen {
             // The list of the standard settings plugin (a choice of two
             // switches at once, below).
             SettingKind::Choice(_) | SettingKind::Language if !ui::two_options(&env, spec) => {
-                cx.command(Command::OpenScreen(
-                    CHOOSE_SCREEN,
-                    Params::new().with("id", spec.id.as_str().to_string()),
-                ));
+                choose(&env, spec, cx);
             }
             _ => self.step(&env, spec, 1, cx),
         }

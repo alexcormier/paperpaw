@@ -19,6 +19,7 @@ impl Plugin for Crash {
             description: "Panics at every start, to try safe mode.".into(),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 

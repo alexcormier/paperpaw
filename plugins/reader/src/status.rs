@@ -196,7 +196,7 @@ static SETTINGS: [SettingSpec; 11] = [
     part(
         BOTTOM_RIGHT,
         "reader.status.bottom-right",
-        "wifi.status, core.status.battery, reader.status.page",
+        "wifi.status, power.status, core.status.battery, reader.status.page",
         &BOTTOM_ITEMS,
     ),
     SettingSpec::fixed_switch(
@@ -495,3 +495,6 @@ fn items_signature(env: &Env<'_>, context: &Params) -> String {
     }
     out
 }
+
+#[cfg(test)]
+mod choice_tests;

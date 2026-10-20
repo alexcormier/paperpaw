@@ -112,6 +112,7 @@ impl Plugin for TestPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: self.sdk,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -292,6 +293,7 @@ impl Plugin for Opener {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -644,6 +646,7 @@ impl Plugin for EdgeHolderPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -772,16 +775,17 @@ struct FontPlugin;
 impl Plugin for FontPlugin {
     fn manifest(&self) -> Manifest {
         Manifest {
-            id: Id::new_static("fonts"),
+            id: Id::new_static("type"),
             name: Cow::Borrowed("Fonts"),
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        for name in ["fonts.serif", "fonts.sans"] {
+        for name in ["type.serif", "type.sans"] {
             let mut pack = paperpaw_text::PackBuilder::new();
             let metrics = paperpaw_text::LineMetrics {
                 ascent: 8.0,
@@ -798,7 +802,7 @@ impl Plugin for FontPlugin {
         }
         r.bind_font(
             paperpaw_sdk::builtin::fonts::UI,
-            Id::new_static("fonts.sans"),
+            Id::new_static("type.sans"),
             Priority::DEFAULT,
         )?;
         Ok(())
@@ -811,19 +815,19 @@ fn font_roles_follow_proposals_and_user_config() {
     let fonts = kernel.fonts();
     assert_eq!(
         fonts.role("core.font-ui").unwrap().id().as_str(),
-        "fonts.sans"
+        "type.sans"
     );
     // No proposal for reading: the first registered font is used.
     assert_eq!(
         fonts.role("core.font-reading").unwrap().id().as_str(),
-        "fonts.serif"
+        "type.serif"
     );
 
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(FontPlugin)
         .user_config(
             "[fonts]
-core.font-ui = fonts.serif
+core.font-ui = type.serif
 core.font-reading = nope.font
 ",
         )
@@ -831,7 +835,7 @@ core.font-reading = nope.font
         .unwrap();
     assert_eq!(
         kernel.fonts().role("core.font-ui").unwrap().id().as_str(),
-        "fonts.serif"
+        "type.serif"
     );
     let warnings = kernel.take_warnings();
     assert_eq!(warnings.len(), 1);
@@ -888,6 +892,7 @@ impl Plugin for LifecyclePlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -1061,6 +1066,7 @@ impl Plugin for OverlayPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -1160,6 +1166,7 @@ impl Plugin for NoticePlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -1236,13 +1243,13 @@ fn scheduled_events_come_at_their_time() {
     kernel.start(Instant(0));
     let event = Id::new_static("ov.later");
     let params = paperpaw_sdk::Params::new().with("id", "x");
-    kernel.apply(Command::Schedule(
-        event.clone(),
-        params.clone(),
-        Instant(9000),
+    kernel.apply(Command::Work(
+        paperpaw_sdk::work::Work::at(event.clone(), Instant(9000)).with(params.clone()),
     ));
     // Scheduled again: moved, not doubled.
-    kernel.apply(Command::Schedule(event, params, Instant(5000)));
+    kernel.apply(Command::Work(
+        paperpaw_sdk::work::Work::at(event, Instant(5000)).with(params),
+    ));
     assert_eq!(kernel.finish().wake_at(), Some(Instant(5000)));
     log.borrow_mut().clear();
     kernel.tick(Instant(4999));
@@ -1421,6 +1428,7 @@ impl Plugin for GrayPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -1601,10 +1609,10 @@ ui-size = 12
 
 #[test]
 fn http_requests_go_to_the_shell_and_answers_come_back() {
-    let request = |id: &str| paperpaw_sdk::HttpRequest {
-        headers: alloc::vec![(String::from("accept"), String::from("text/plain"))],
-        params: paperpaw_sdk::Params::new().with("id", String::from(id)),
-        ..paperpaw_sdk::HttpRequest::new("GET", "https://example.org/x", Id::new_static("ov.reply"))
+    let request = |id: &str| {
+        paperpaw_sdk::HttpRequest::get("https://example.org/x", Id::new_static("ov.reply"))
+            .header("accept", "text/plain")
+            .with(paperpaw_sdk::Params::new().with("id", String::from(id)))
     };
     // With network: the shell gets it and answers.
     let log = log();
@@ -1781,11 +1789,11 @@ fn files_go_up_and_come_down() {
         .unwrap();
     kernel.start(Instant(0));
     let reply = Id::new_static("core.test-reply");
-    kernel.request(paperpaw_sdk::HttpRequest {
-        body_from: Some(String::from("up.bin")),
-        save_to: Some(String::from("down.bin")),
-        ..paperpaw_sdk::HttpRequest::new("PUT", "https://example.org/f", reply.clone())
-    });
+    kernel.request(
+        paperpaw_sdk::HttpRequest::new("PUT", "https://example.org/f", reply.clone())
+            .body_from("up.bin")
+            .save_to("down.bin"),
+    );
     let calls = kernel.take_requests();
     // The shell reads the file to send, so it never needs to fit in memory.
     assert_eq!(calls[0].body, None);
@@ -1802,6 +1810,7 @@ fn files_go_up_and_come_down() {
             content_type: Some(String::from("application/epub+zip")),
             url: Some(String::from("https://example.org/g")),
             saved: false,
+            headers: Vec::new(),
         },
     );
     let storage = kernel.shared.storage.as_ref();
@@ -1810,10 +1819,9 @@ fn files_go_up_and_come_down() {
         b"\xffbinary"
     );
     // Written by the shell itself as it came: left as it is.
-    kernel.request(paperpaw_sdk::HttpRequest {
-        save_to: Some(String::from("kept.bin")),
-        ..paperpaw_sdk::HttpRequest::new("GET", "http://example.org/k", reply.clone())
-    });
+    kernel.request(
+        paperpaw_sdk::HttpRequest::get("http://example.org/k", reply.clone()).save_to("kept.bin"),
+    );
     let calls = kernel.take_requests();
     kernel.storage().write("kept.bin", b"streamed").unwrap();
     kernel.http_response(
@@ -1830,10 +1838,10 @@ fn files_go_up_and_come_down() {
         b"streamed"
     );
     // A file that is not there fails at once.
-    kernel.request(paperpaw_sdk::HttpRequest {
-        body_from: Some(String::from("missing.bin")),
-        ..paperpaw_sdk::HttpRequest::new("PUT", "https://example.org/f", reply)
-    });
+    kernel.request(
+        paperpaw_sdk::HttpRequest::new("PUT", "https://example.org/f", reply)
+            .body_from("missing.bin"),
+    );
     assert!(kernel.take_requests().is_empty());
 }
 
@@ -2488,8 +2496,12 @@ fn turned_screens_are_made_anew_for_the_new_size() {
     // The same screens, in the same order.
     let reopened: Vec<Id> = kernel.stack.iter().map(|s| s.id.clone()).collect();
     assert_eq!(reopened, open);
-    // The same size again: nothing to do.
-    assert!(kernel.resize(Instant(300), 120, 60).refresh().is_none());
+    // The same size again (turned half way round): drawn whole.
+    let effects = kernel.resize(Instant(300), 120, 60);
+    assert_eq!(
+        effects.refresh().map(|(_, mode)| mode),
+        Some(RefreshMode::Full)
+    );
 }
 
 #[test]
@@ -2702,6 +2714,7 @@ impl Plugin for ServicePlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -2764,6 +2777,7 @@ impl Plugin for FilterPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -2848,6 +2862,7 @@ impl Plugin for SizedPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -2969,6 +2984,7 @@ impl Plugin for PicturePlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
@@ -3024,6 +3040,7 @@ impl Plugin for NetPlugin {
             description: Cow::Borrowed(""),
             version: Version::new(1, 0, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NETWORK,
         }
     }
 
@@ -3141,6 +3158,10 @@ fn network_work_fails_when_no_network_comes() {
     assert_eq!(
         log.borrow().as_slice(),
         ["core.network-wanted ", "net.reply 0", "core.network-idle "]
+    );
+    assert!(
+        !kernel.shared.wifi.as_ref().unwrap().wanted,
+        "the radio may go off"
     );
     assert!(kernel.take_requests().is_empty());
     assert_eq!(kernel.finish().wake_at(), None);
@@ -3288,3 +3309,13 @@ fn overlays_leave_the_rows_they_do_not_cover() {
     assert_eq!(uncovered(part, Rect::new(0, 500, 480, 100)), Some(part));
     assert_eq!(uncovered(part, Rect::new(40, 200, 400, 600)), Some(part));
 }
+
+mod clean_up;
+mod declared_work;
+mod frames;
+mod input;
+mod kernel_calls;
+mod plugins_loaded;
+mod screen_life;
+mod settings_files;
+mod storage;

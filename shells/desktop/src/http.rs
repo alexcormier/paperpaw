@@ -65,13 +65,18 @@ fn run(call: HttpCall) -> HttpResponse {
         ..HttpResponse::default()
     };
     let mut command = Command::new("curl");
+    let seconds = call.timeout_ms.div_ceil(1000).max(1).to_string();
+    // The status, the ETag, the content type, the final address and the
+    // headers asked for, a line each after the body.
+    let mut written =
+        String::from("\n%{http_code}\n%header{etag}\n%{content_type}\n%{url_effective}");
+    for name in &call.want_headers {
+        written.push_str(&format!("\n%header{{{name}}}"));
+    }
     command
-        .args(["-sS", "-L", "--max-redirs", "10", "--max-time", "120"])
+        .args(["-sS", "-L", "--max-redirs", "10", "--max-time", &seconds])
         .args(["-X", &call.method])
-        .args([
-            "-w",
-            "\n%{http_code}\n%header{etag}\n%{content_type}\n%{url_effective}",
-        ]);
+        .args(["-w", &written]);
     for (name, value) in &call.headers {
         command.args(["-H", &format!("{name}: {value}")]);
     }
@@ -103,8 +108,9 @@ fn run(call: HttpCall) -> HttpResponse {
     if !output.status.success() {
         return failed(String::from_utf8_lossy(&output.stderr).trim().to_string());
     }
-    // The body, then lines with the status, the ETag, the content type
-    // and the final address (`-w`), read from the end.
+    // The body, then lines with the status, the ETag, the content type,
+    // the final address and the headers asked for (`-w`), read from the
+    // end.
     let mut out = output.stdout;
     let mut line = || {
         let at = out.iter().rposition(|&b| b == b'\n').unwrap_or(0);
@@ -112,6 +118,13 @@ fn run(call: HttpCall) -> HttpResponse {
         out.truncate(at);
         (!text.is_empty()).then_some(text)
     };
+    let mut headers = Vec::new();
+    for name in call.want_headers.iter().rev() {
+        if let Some(value) = line() {
+            headers.push((name.to_ascii_lowercase(), value));
+        }
+    }
+    headers.reverse();
     let url = line().filter(|url| *url != call.url);
     let content_type = line();
     let etag = line();
@@ -125,5 +138,6 @@ fn run(call: HttpCall) -> HttpResponse {
         content_type,
         url,
         saved: false,
+        headers,
     }
 }

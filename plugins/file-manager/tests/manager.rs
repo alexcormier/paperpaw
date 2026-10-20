@@ -54,6 +54,7 @@ impl Plugin for Spy {
             description: Cow::Borrowed("Hears books moving."),
             version: Version::new(0, 1, 0),
             sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
         }
     }
 
