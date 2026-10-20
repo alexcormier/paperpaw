@@ -15,7 +15,10 @@ change the plugin SDK.
   long press on the arrows beside it). Rows are denser
   (name, size or an installed or update mark, one line of what it does):
   five a page on the X4 instead of three. *Update all* among the
-  installed plugins updates them one after another. A plugin's page
+  installed plugins updates them one after another (those waiting
+  marked so); one stopped or set aside lets the next go on, and the rest
+  wait through a restart or a lost connection until the store is opened
+  again. The order of a long list says how to go to a page. A plugin's page
   says whether it is a code plugin (full access to the device) or data
   only, whether its build was checked against its source, since when
   its author publishes and how many plugins they have, how much room it
@@ -25,11 +28,15 @@ change the plugin SDK.
   that does not fit in the room left for code plugins is not offered,
   or refused once downloaded.
 - SDK: `Storage::free_space` says how many bytes a storage has free
-  where it can tell (memory cards by their own count, the desktop and
-  Android by the file system); storages that wrap another forward it.
-  `native::CodeRoom`, `native::code_room` and `native::keep_code_room`
-  say how much room code plugins have and take (the X4's flash region,
-  the X4 Pro's PSRAM), as the shell found it at the start;
+  where it can tell (the desktop and Android by the file system);
+  storages that wrap another forward it. A memory card says the count it
+  keeps at once, counts its FAT exactly a part at each ask (never all of
+  it at once, as rust-fatfs does on a card not unmounted) and follows
+  what is written and removed from then on.
+  `native::CodeRoom` (with `CodeRoom::in_flash` and `in_psram`),
+  `native::code_room` and `native::keep_code_room` say how much room
+  code plugins have and take (the X4's flash region, the X4 Pro's PSRAM),
+  as the shell found it at the start, also in safe mode;
   `native::installed_code_need` and `native::read_header` measure the
   code installed. `ui::draw_qr` draws a QR code (`paperpaw_sdk::qr`),
   `Header::on_page_number` tells a tap on a header's page number, and

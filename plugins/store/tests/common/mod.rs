@@ -39,10 +39,29 @@ pub const DEVICE: DeviceInfo = DeviceInfo {
 /// The list for the X4.
 pub const LIST: &str = "https://paperpaw.org/api/v1/plugins.json?device=x4&lang=en";
 
-/// A storage the test looks into while the kernel has it, with as much
-/// free space as the test says (none said: not known).
-#[derive(Clone, Default)]
-pub struct Shared(pub Rc<MemoryStorage>, pub Rc<std::cell::Cell<Option<u64>>>);
+/// A storage the test looks into while the kernel has it (in memory, or
+/// on the disk), with as much free space as the test says (none said: not
+/// known).
+#[derive(Clone)]
+pub struct Shared(pub Rc<dyn Storage>, pub Rc<std::cell::Cell<Option<u64>>>);
+
+impl Default for Shared {
+    fn default() -> Self {
+        Self(Rc::new(MemoryStorage::new()), Rc::default())
+    }
+}
+
+impl Shared {
+    /// A storage in a folder of its own on the disk: what it holds takes
+    /// no memory.
+    pub fn on_disk(name: &str) -> Self {
+        let root =
+            std::env::temp_dir().join(format!("paperpaw-store-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        let storage = paperpaw_fs::DirStorage::new(&root).unwrap();
+        Self(Rc::new(storage), Rc::default())
+    }
+}
 
 impl Storage for Shared {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
@@ -121,13 +140,33 @@ impl Shopping {
         list: &str,
         storage: Shared,
     ) -> Self {
-        let mut builder = Kernel::builder(DEVICE)
+        Self::of(DEVICE, device, native, list, storage)
+    }
+
+    /// The store on the X4 Pro (touch and buttons), its list answered with
+    /// `list`.
+    pub fn touch(list: &str) -> Self {
+        let mut pro = DEVICE;
+        pro.input.touch = true;
+        Self::of(pro, Some("x4-pro"), None, list, Shared::default())
+    }
+
+    fn of(
+        info: DeviceInfo,
+        device: Option<&'static str>,
+        native: Option<Native>,
+        list: &str,
+        storage: Shared,
+    ) -> Self {
+        let mut builder = Kernel::builder(info)
             .storage(storage.clone())
             .network(true)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(paperpaw_plugin_fonts_browser::FontsBrowser)
             // Shows the notices.
             .plugin(paperpaw_plugin_menu::Menu)
+            // Asks for text and numbers.
+            .plugin(paperpaw_plugin_keyboard::Keyboard)
             .plugin(Store);
         if let Some(device) = device {
             builder = builder.catalog_device(device);
@@ -143,8 +182,9 @@ impl Shopping {
             now: 0,
         };
         shopping.run(OPEN);
-        if device.is_some() {
-            let call = shopping.request(LIST);
+        if let Some(device) = device {
+            let list_url = LIST.replace("device=x4&", &format!("device={device}&"));
+            let call = shopping.request(&list_url);
             shopping.answer(&call, 200, list.as_bytes());
         }
         shopping
@@ -208,6 +248,27 @@ impl Shopping {
             self.run(paperpaw_sdk::builtin::actions::DOWN);
         }
         panic!("{label}: {}", self.shown());
+    }
+
+    /// A finger on the screen at `x`, `y`: a tap, or held for a second.
+    pub fn touch_at(&mut self, x: i32, y: i32, held: bool) {
+        use paperpaw_sdk::{InputEvent, Point, PointerEvent, PointerPhase, PointerTool};
+        let event = |phase| {
+            InputEvent::Pointer(PointerEvent {
+                id: 0,
+                phase,
+                point: Point::new(x, y),
+                tool: PointerTool::Finger,
+                pressure: 1000,
+            })
+        };
+        self.now += 200;
+        self.kernel
+            .handle(Instant(self.now), event(PointerPhase::Down));
+        self.now += if held { 1000 } else { 60 };
+        self.kernel.tick(Instant(self.now));
+        self.kernel
+            .handle(Instant(self.now), event(PointerPhase::Up));
     }
 
     /// The labels of what the screen shows, in order.

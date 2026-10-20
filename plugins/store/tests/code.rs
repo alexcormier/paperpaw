@@ -284,11 +284,13 @@ fn without_code_plugins_none_is_listed() {
 /// A storage where code plugins have `total` bytes, in pages of 4 KiB,
 /// and another code plugin takes one page.
 fn with_room(total: u64) -> Shared {
+    with_room_for(total, 83)
+}
+
+/// As [`with_room`], for `most` code plugins at most.
+fn with_room_for(total: u64, most: u32) -> Shared {
     let storage = Shared::default();
-    let room = format!(
-        "{total} 4096 4096 83 1 0
-"
-    );
+    let room = format!("{total} 4096 4096 {most} 1 0\n");
     storage
         .write(".paperpaw/code-room.txt", room.as_bytes())
         .unwrap();
@@ -334,6 +336,30 @@ fn code_that_does_not_fit_is_refused_once_here() {
     let shown = shopping.shown().replace(" | ", " ");
     assert!(
         shown.contains("not enough room left for code plugins"),
+        "{shown}"
+    );
+}
+
+#[test]
+fn code_that_just_fits_is_installed() {
+    // Room for exactly two pages and two plugins: the other one's and
+    // the clock's. The clock's download, put together beside it, is not
+    // counted as one more.
+    let storage = with_room_for(8192, 2);
+    let mut shopping = Shopping::with(Some("x4"), Some(native()), &list("1.0.0"), storage);
+    first_install(&mut shopping, "1.0.0", &ppn(BUILD, Some(&AUTHOR)));
+    assert_eq!(installed(&shopping), Some(Version::new(1, 0, 0)));
+    assert!(shopping.storage.exists("plugins/clock/code.ppn"));
+    // Now the room is full: the Installed list says so.
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(OPEN);
+    shopping.serve(LIST, list("1.0.0").as_bytes());
+    shopping.choose("Installed");
+    let shown = shopping.shown();
+    assert!(
+        shown.contains("code plugins: 8.0 KB of 8.0 KB used"),
         "{shown}"
     );
 }

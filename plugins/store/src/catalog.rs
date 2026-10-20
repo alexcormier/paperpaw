@@ -808,6 +808,11 @@ impl Index {
     /// Keeps the plugins `keep` takes (with a rank, for
     /// [`Order::Rank`]), in `order`, `most` of them at most, on the storage
     /// (read back with [`hit`]); how many there are.
+    ///
+    /// However many plugins there are, little is held at once: by name
+    /// they are written as they are read; by a key, the best `most` are
+    /// kept while reading where that is few, and otherwise runs of
+    /// [`RUN`] are sorted, kept on the storage and merged.
     pub(crate) fn pick(
         &self,
         storage: &dyn Storage,
@@ -816,42 +821,215 @@ impl Index {
         most: usize,
     ) -> usize {
         let hits = hits_path();
-        let mut written = storage.write(&hits, b"").is_ok();
-        let mut found: Vec<u8> = Vec::new();
-        let mut dated: Vec<(u32, u32)> = Vec::new();
-        let mut count = 0;
-        self.scan(storage, &mut |n, entry| {
-            if count >= most && order == Order::Name {
-                return;
-            }
-            let Some(rank) = keep(n, &entry) else {
-                return;
-            };
-            match order {
-                Order::Name => {
-                    found.extend_from_slice(&(n as u32).to_le_bytes());
-                    count += 1;
-                    if found.len() >= WRITE_AT {
-                        written &= storage.append(&hits, &found).is_ok();
-                        found.clear();
+        let mut out = Output::new(storage, &hits);
+        if order == Order::Name {
+            self.scan(storage, &mut |n, entry| {
+                if out.count < most && keep(n, &entry).is_some() {
+                    out.push(n as u32);
+                }
+            });
+            return out.finish();
+        }
+        let key = |entry: &Entry, rank: u32| match order {
+            Order::Added => entry.added,
+            Order::Updated => entry.updated,
+            Order::Name | Order::Rank => rank,
+        };
+        if most <= RUN {
+            // The best few, kept in order while reading.
+            let mut best: Vec<Keyed> = Vec::new();
+            self.scan(storage, &mut |n, entry| {
+                if let Some(rank) = keep(n, &entry) {
+                    let item = (key(&entry, rank), n as u32);
+                    let at = best.partition_point(|b| before(*b, item));
+                    if at < most {
+                        if best.len() == most {
+                            best.pop();
+                        }
+                        best.insert(at, item);
                     }
                 }
-                Order::Added => dated.push((entry.added, n as u32)),
-                Order::Updated => dated.push((entry.updated, n as u32)),
-                Order::Rank => dated.push((rank, n as u32)),
+            });
+            for (_, n) in best {
+                out.push(n);
+            }
+            return out.finish();
+        }
+        // Runs sorted on the storage, then merged.
+        let runs_path = file("sort.bin");
+        let mut runs: Vec<u32> = Vec::new();
+        let mut run: Vec<Keyed> = Vec::new();
+        let mut kept = storage.write(&runs_path, b"").is_ok();
+        let mut flush = |run: &mut Vec<Keyed>, runs: &mut Vec<u32>| {
+            run.sort_by(|a, b| order_of(*a, *b));
+            let mut bytes = Vec::with_capacity(run.len() * 8);
+            for (key, n) in run.iter() {
+                bytes.extend_from_slice(&key.to_le_bytes());
+                bytes.extend_from_slice(&n.to_le_bytes());
+            }
+            kept &= storage.append(&runs_path, &bytes).is_ok();
+            runs.push(run.len() as u32);
+            run.clear();
+        };
+        self.scan(storage, &mut |n, entry| {
+            if let Some(rank) = keep(n, &entry) {
+                run.push((key(&entry, rank), n as u32));
+                if run.len() == RUN {
+                    flush(&mut run, &mut runs);
+                }
             }
         });
-        if order != Order::Name {
-            // Newest first; of one day, in the list's order.
-            dated.sort_by(|a, b| b.0.cmp(&a.0).then(a.1.cmp(&b.1)));
-            dated.truncate(most);
-            count = dated.len();
-            for (_, n) in dated {
-                found.extend_from_slice(&n.to_le_bytes());
+        if !run.is_empty() {
+            flush(&mut run, &mut runs);
+        }
+        drop(run);
+        if !kept {
+            let _ = storage.remove(&runs_path);
+            return 0;
+        }
+        let mut cursors: Vec<Cursor> = Vec::with_capacity(runs.len());
+        let mut at = 0u64;
+        for len in runs {
+            cursors.push(Cursor::new(at, len));
+            at += u64::from(len) * 8;
+        }
+        while out.count < most {
+            let mut first: Option<(usize, Keyed)> = None;
+            for (i, cursor) in cursors.iter_mut().enumerate() {
+                if let Some(item) = cursor.head(storage, &runs_path)
+                    && first.is_none_or(|(_, best)| before(item, best))
+                {
+                    first = Some((i, item));
+                }
+            }
+            let Some((i, (_, n))) = first else {
+                break;
+            };
+            cursors[i].next();
+            out.push(n);
+        }
+        let _ = storage.remove(&runs_path);
+        out.finish()
+    }
+}
+
+/// A plugin with the key it is ordered by: (key, its place in the index).
+type Keyed = (u32, u32);
+
+/// Plugins ordered by a key in memory at once (8 bytes each): longer lists
+/// are sorted in runs of this many on the storage.
+pub(crate) const RUN: usize = 512;
+
+/// Entries of a run read at once while runs are merged.
+const MERGE_READ: usize = 16;
+
+/// The order of plugins by a key: the highest (newest) first; of one key,
+/// in the list's order.
+fn order_of(a: Keyed, b: Keyed) -> core::cmp::Ordering {
+    b.0.cmp(&a.0).then(a.1.cmp(&b.1))
+}
+
+fn before(a: Keyed, b: Keyed) -> bool {
+    order_of(a, b) == core::cmp::Ordering::Less
+}
+
+/// Where a sorted run on the storage is read while merging.
+struct Cursor {
+    /// The byte of the next entry not read yet, and how many are left.
+    at: u64,
+    left: u32,
+    read: [Keyed; MERGE_READ],
+    /// The next of those read, and how many were.
+    next: usize,
+    len: usize,
+}
+
+impl Cursor {
+    fn new(at: u64, left: u32) -> Self {
+        Self {
+            at,
+            left,
+            read: [(0, 0); MERGE_READ],
+            next: 0,
+            len: 0,
+        }
+    }
+
+    /// The run's first entry not taken yet.
+    fn head(&mut self, storage: &dyn Storage, path: &str) -> Option<Keyed> {
+        if self.next == self.len {
+            let want = (self.left as usize).min(MERGE_READ);
+            if want == 0 {
+                return None;
+            }
+            let mut bytes = [0u8; MERGE_READ * 8];
+            let mut got = 0;
+            while got < want * 8 {
+                match storage.read_at(path, self.at + got as u64, &mut bytes[got..want * 8]) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => got += n,
+                }
+            }
+            let entries = got / 8;
+            for (slot, chunk) in self.read.iter_mut().zip(bytes[..entries * 8].chunks(8)) {
+                let word = |at: usize| {
+                    u32::from_le_bytes([chunk[at], chunk[at + 1], chunk[at + 2], chunk[at + 3]])
+                };
+                *slot = (word(0), word(4));
+            }
+            self.at += (entries * 8) as u64;
+            self.left = if entries == want {
+                self.left - want as u32
+            } else {
+                0
+            };
+            self.next = 0;
+            self.len = entries;
+            if entries == 0 {
+                return None;
             }
         }
-        written &= storage.append(&hits, &found).is_ok();
-        if written { count } else { 0 }
+        Some(self.read[self.next])
+    }
+
+    fn next(&mut self) {
+        self.next += 1;
+    }
+}
+
+/// The plugins picked, written to the storage a piece at a time.
+struct Output<'a> {
+    storage: &'a dyn Storage,
+    path: &'a str,
+    bytes: Vec<u8>,
+    count: usize,
+    written: bool,
+}
+
+impl<'a> Output<'a> {
+    fn new(storage: &'a dyn Storage, path: &'a str) -> Self {
+        Self {
+            written: storage.write(path, b"").is_ok(),
+            storage,
+            path,
+            bytes: Vec::new(),
+            count: 0,
+        }
+    }
+
+    fn push(&mut self, n: u32) {
+        self.bytes.extend_from_slice(&n.to_le_bytes());
+        self.count += 1;
+        if self.bytes.len() >= WRITE_AT {
+            self.written &= self.storage.append(self.path, &self.bytes).is_ok();
+            self.bytes.clear();
+        }
+    }
+
+    /// How many were picked; none where they could not be kept.
+    fn finish(mut self) -> usize {
+        self.written &= self.storage.append(self.path, &self.bytes).is_ok();
+        if self.written { self.count } else { 0 }
     }
 }
 
@@ -1301,6 +1479,37 @@ mod tests {
         index.scan(&storage, &mut |n, e| ids.push((n, e.id)));
         assert_eq!(ids.len(), 4);
         assert_eq!(ids[3], (3, String::from("d")));
+    }
+
+    #[test]
+    fn long_lists_are_sorted_in_runs_on_the_storage() {
+        // More plugins than a run holds, their dates in no order, many of
+        // one day.
+        let count = 3 * RUN + 77;
+        let day = |i: usize| 20250101 + ((i * 7919) % 400) as u32;
+        let plugins: Vec<String> = (0..count)
+            .map(|i| {
+                let date = day(i).to_string();
+                let date = format!("{}-{}-{}", &date[..4], &date[4..6], &date[6..]);
+                plugin(&format!("p{i:05}"), "look", "")
+                    .replace(r#""kind""#, &format!(r#""added": "{date}", "kind""#))
+            })
+            .collect();
+        let storage = list(&plugins);
+        let index = take(&storage, "p.json", &X4).unwrap();
+        let mut expected: Vec<(u32, u32)> = (0..count).map(|i| (day(i), i as u32)).collect();
+        expected.sort_by(|a, b| order_of(*a, *b));
+        for most in [usize::MAX, RUN + 1, 30] {
+            let picked = index.pick(&storage, |_, _| Some(0), Order::Added, most);
+            let want: Vec<u32> = expected.iter().take(most).map(|(_, n)| *n).collect();
+            assert_eq!(picked, want.len());
+            let got: Vec<u32> = (0..picked)
+                .map(|h| hit(&storage, h).unwrap() as u32)
+                .collect();
+            assert_eq!(got, want, "{most}");
+        }
+        // The runs are gone again.
+        assert!(!storage.exists(&file("sort.bin")));
     }
 
     #[test]

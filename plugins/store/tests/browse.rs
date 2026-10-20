@@ -135,8 +135,16 @@ fn a_long_list_goes_to_a_page() {
         .collect();
     let mut shopping = Shopping::new(&list(&many));
     shopping.choose("Reading");
-    assert!(shopping.shown().contains("P00"));
-    // Which page: as the keyboard a long press of Select opens answers.
+    let shown = shopping.shown();
+    assert!(shown.contains("P00"), "{shown}");
+    // Said under the order, where a list has pages.
+    assert!(shown.contains("Hold Select to go to a page."), "{shown}");
+    // A long press of Select asks which page.
+    shopping.run(actions::MENU);
+    let shown = shopping.shown();
+    assert!(shown.contains("Go to page (1 to "), "{shown}");
+    shopping.run(actions::BACK);
+    // Answered as the keyboard answers.
     shopping.now += 100;
     let typed = Params::new().with(params::TEXT, "3");
     shopping
@@ -273,4 +281,133 @@ fn a_plugins_page_says_where_its_source_is() {
     // The screenshot fetched when shown.
     shopping.choose("Screenshots");
     shopping.request(&format!("{BASE}/shots/apple-1.png"));
+}
+
+fn many(count: usize) -> String {
+    let entries: Vec<String> = (0..count)
+        .map(|n| {
+            entry(
+                &format!("p{n:02}"),
+                "reading",
+                "1.0.0",
+                "2026-01-01",
+                "2026-01-01",
+                10,
+            )
+        })
+        .collect();
+    list(&entries)
+}
+
+#[test]
+fn on_touch_screens_the_page_number_goes_to_a_page() {
+    let mut shopping = Shopping::touch(&many(40));
+    shopping.choose("Reading");
+    let shown = shopping.shown();
+    assert!(
+        shown.contains("Tap the page number to go to a page."),
+        "{shown}"
+    );
+    // A long press on the arrows beside it: a large place for a finger.
+    shopping.touch_at(470, 30, true);
+    let shown = shopping.shown();
+    assert!(shown.contains("Go to page (1 to "), "{shown}");
+    shopping.run(actions::BACK);
+    // A tap on the number itself, wherever it is between the arrows.
+    let mut asked = false;
+    for x in (240..480).step_by(4) {
+        shopping.touch_at(x, 30, false);
+        let shown = shopping.shown();
+        if shown.contains("Go to page (1 to ") {
+            asked = true;
+            break;
+        }
+        // An arrow turned the page: back to the first.
+        shopping.run(actions::PREV_PAGE);
+    }
+    assert!(asked, "{}", shopping.shown());
+}
+
+/// A grey picture of 4 by 4 pixels.
+const PNG: &[u8] = &[
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 4, 0, 0, 0, 4, 8, 0, 0,
+    0, 0, 140, 154, 193, 162, 0, 0, 0, 16, 73, 68, 65, 84, 120, 156, 99, 108, 96, 96, 96, 96, 98,
+    64, 33, 0, 9, 228, 0, 136, 82, 22, 78, 95, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130,
+];
+
+#[test]
+fn a_screenshot_turned_past_is_not_shown_for_another() {
+    let mut shopping = Shopping::new(&fruit());
+    shopping.choose("Reading");
+    shopping.choose("Apple");
+    let more = r#""screenshots": [
+    {"url": "shots/a.png", "width": 4, "height": 4, "size": 73},
+    {"url": "shots/b.png", "width": 4, "height": 4, "size": 73}],"#;
+    shopping.serve(&page_url("apple"), page("apple", "1.0.0", more).as_bytes());
+    shopping.choose("Screenshots");
+    let first = shopping.request(&format!("{BASE}/shots/a.png"));
+    // On to the second before the first came.
+    shopping.run(actions::NEXT_PAGE);
+    let second = shopping.request(&format!("{BASE}/shots/b.png"));
+    let gray = ".paperpaw/plugins/store/shot.gray";
+    shopping.answer(&first, 200, PNG);
+    assert!(!shopping.storage.exists(gray), "the first is not shown");
+    assert!(
+        !shopping
+            .storage
+            .exists(".paperpaw/plugins/store/shot-0.part")
+    );
+    let shown = shopping.shown();
+    assert!(shown.contains("Loading"), "{shown}");
+    shopping.answer(&second, 200, PNG);
+    assert!(shopping.storage.exists(gray));
+    let shown = shopping.shown();
+    assert!(!shown.contains("Loading"), "{shown}");
+}
+
+#[test]
+fn the_queue_goes_on_after_a_stop_and_a_restart() {
+    let updates = list(&[
+        entry("apple", "reading", "1.1.0", "2025-01-01", "2026-01-01", 300),
+        entry(
+            "cherry",
+            "reading",
+            "2.0.0",
+            "2025-06-01",
+            "2026-09-01",
+            300,
+        ),
+    ]);
+    let mut shopping = Shopping::with(Some("x4"), None, &updates, with_two());
+    shopping.choose("Installed");
+    shopping.choose("Update all");
+    shopping.serve(&page_url("apple"), page("apple", "1.1.0", "").as_bytes());
+    let apple = shopping.requests();
+    assert_eq!(apple.len(), 1, "{apple:?}");
+    // Cherry waits its turn, said in its row.
+    let shown = shopping.shown();
+    assert!(shown.contains("Cherry, Waiting"), "{shown}");
+    // Apple stopped on its page: cherry's turn.
+    shopping.choose("Apple");
+    shopping.serve(&page_url("apple"), page("apple", "1.1.0", "").as_bytes());
+    shopping.choose("Stop downloading");
+    shopping.serve(&page_url("cherry"), page("cherry", "2.0.0", "").as_bytes());
+    let cherry = shopping.requests();
+    assert_eq!(cherry.len(), 1, "{cherry:?}");
+    assert_eq!(version(&shopping, "apple"), Some(Version::new(1, 0, 0)));
+    // A restart cuts cherry's download off: nothing is fetched at the
+    // start, and it goes on when the store is opened again.
+    shopping.now += 100;
+    shopping.kernel.send_event(
+        Instant(shopping.now),
+        Id::new_static("core.started"),
+        Params::new(),
+    );
+    assert!(shopping.requests().is_empty());
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(paperpaw_plugin_store::OPEN);
+    let asked: Vec<String> = shopping.requests().into_iter().map(|c| c.url).collect();
+    assert!(asked.contains(&page_url("cherry")), "{asked:?}");
 }

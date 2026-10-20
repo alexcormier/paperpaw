@@ -385,6 +385,14 @@ impl Screen for ListScreen {
         if !self.asked {
             self.asked = true;
             self.fetch(cx);
+            // Updates waiting since the last visit (a restart, no
+            // connection) go on.
+            let env = *cx.env();
+            let mut out = Vec::new();
+            crate::queue::next(&env, &mut out);
+            for command in out {
+                cx.command(command);
+            }
         }
     }
 

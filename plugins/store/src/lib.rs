@@ -144,8 +144,10 @@ impl Plugin for Store {
         r.on(DOWNLOADED, received)?;
         r.on(queue::FETCHED, queue::fetched)?;
         r.on(events::STARTED, |env, _, _| {
+            // A download cut off by the restart is begun anew from its
+            // page, or first when the queue goes on.
+            queue::interrupted(env);
             INSTALLER.cancel(env.storage);
-            queue::clear(env);
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

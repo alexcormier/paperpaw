@@ -100,6 +100,9 @@ pub(crate) struct ViewScreen {
     /// The plugins of the page shown: their place in the index.
     page: Vec<(usize, Entry)>,
     job: Option<Progress>,
+    /// The plugins waiting in the update queue (read with the job, never
+    /// while drawing).
+    queued: Vec<String>,
     /// The plugins of the installed list with an update.
     updates: Vec<String>,
     /// What the installed list says at its foot of the room left (read
@@ -136,6 +139,7 @@ impl ViewScreen {
             page: Vec::new(),
             job: INSTALLER.progress(env.storage),
             updates: Vec::new(),
+            queued: queue::waiting(env),
             room: None,
         };
         screen.pick(env);
@@ -258,6 +262,7 @@ impl ViewScreen {
                         cx.command(command);
                     }
                     self.job = INSTALLER.progress(env.storage);
+                    self.queued = queue::waiting(&env);
                     self.redraw(cx);
                 }
             }
@@ -333,6 +338,8 @@ impl Screen for ViewScreen {
             ui::draw_note_line(canvas, env, &style, self.status, room);
         }
         let job = self.job.as_ref();
+        let queued = self.queued.as_slice();
+        let jump = self.list.pages(self.len()) > 1;
         let room = ui::icon_room(env, &style, true);
         let top = &self.top;
         let order = self.order;
@@ -357,18 +364,30 @@ impl Screen for ViewScreen {
                             String::new(),
                         ),
                     };
+                    // Below the order of a long list: how to go to a page.
+                    if top == Top::Sort && jump {
+                        let band = ui::title_area(&style, rect);
+                        let rest =
+                            ui::draw_row_icon(canvas, env, &style, band, room, Some(icon), ink);
+                        ui::draw_value_row(canvas, env, &style, rest, focused, name, &value);
+                        let help = ui::tr_input(env, "store.jump.help");
+                        rows::draw_note(canvas, env, &style, rect, rest.x, focused, help);
+                        return;
+                    }
                     let rest = ui::draw_row_icon(canvas, env, &style, rect, room, Some(icon), ink);
                     ui::draw_value_row(canvas, env, &style, rest, focused, name, &value);
                     return;
                 }
                 if let Some((_, plugin)) = self.plugin(row) {
-                    rows::draw(canvas, env, &style, rect, focused, plugin, job);
+                    rows::draw(canvas, env, &style, rect, focused, plugin, job, queued);
                 }
             });
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        self.job = INSTALLER.progress(cx.env().storage);
+        let env = *cx.env();
+        self.job = INSTALLER.progress(env.storage);
+        self.queued = queue::waiting(&env);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -440,6 +459,7 @@ impl Screen for ViewScreen {
             }
         } else if DOWNLOADED.read(event, params).is_some() || *event == events::PLUGINS_CHANGED {
             self.job = INSTALLER.progress(env.storage);
+            self.queued = queue::waiting(&env);
             // What is installed and has updates changed.
             if *event == events::PLUGINS_CHANGED && self.view == View::Installed {
                 self.pick(&env);

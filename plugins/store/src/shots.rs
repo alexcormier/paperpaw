@@ -22,6 +22,8 @@ use crate::{PLUGIN, SHOTS_SCREEN};
 
 /// The answer with a screenshot.
 const FETCHED: Event<HttpReply> = Event::new("store.shot");
+/// Parameter of the answer: which screenshot it is.
+const SHOT: &str = "shot";
 
 /// The command that shows `shots`.
 pub(crate) fn open(shots: &[Shot]) -> Command {
@@ -34,6 +36,11 @@ pub(crate) fn open(shots: &[Shot]) -> Command {
 
 fn file(name: &str) -> String {
     format!("{}/{name}", paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()))
+}
+
+/// Where screenshot `at` is downloaded to.
+fn part(at: usize) -> String {
+    file(&format!("shot-{at}.part"))
 }
 
 /// What is shown.
@@ -86,8 +93,11 @@ impl ShotsScreen {
         let Some(url) = self.urls.get(self.at) else {
             return;
         };
+        // Each in a file of its own, its answer known by its number: one
+        // turned past while it came is not shown for another.
         let mut request = HttpRequest::new("GET", url, FETCHED);
-        request.save_to = Some(file("shot.part"));
+        request.save_to = Some(part(self.at));
+        request.params = Params::new().with(SHOT, self.at.to_string());
         cx.command(Command::Http(request));
         self.picture = Picture::Loading;
         cx.request_redraw();
@@ -194,7 +204,19 @@ impl Screen for ShotsScreen {
             return;
         };
         let env = *cx.env();
-        let part = file("shot.part");
+        let Some(at) = reply
+            .context
+            .get(SHOT)
+            .and_then(|at| at.parse::<usize>().ok())
+        else {
+            return;
+        };
+        let part = part(at);
+        if at != self.at {
+            // Turned past meanwhile: not this one's picture.
+            let _ = env.storage.remove(&part);
+            return;
+        }
         let fit = Fit::screen(u32::from(self.area.width), u32::from(self.area.height));
         let image = (200..300)
             .contains(&reply.status)
