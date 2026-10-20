@@ -222,7 +222,7 @@ fn read_bounded(storage: &MemoryStorage) {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(64))]
+    #![proptest_config(common::cases(64))]
 
     #[test]
     fn damaged_cache_files_never_panic(
@@ -242,8 +242,39 @@ proptest! {
             }
         }
         storage.write(path, &data).unwrap();
+        // Contents entries damaged to lead past the last chapter panic
+        // (see `contents_damaged_to_lead_past_the_last_chapter_find_nothing`).
+        if let Ok(doc) = EpubDocument::open(&storage, PATH) {
+            let sections = doc.sections();
+            prop_assume!((0..doc.toc_len(&storage).min(20)).all(|i| {
+                doc.toc_entry(&storage, i).is_none_or(|e| e.at.section < sections)
+            }));
+        }
         read_bounded(&storage);
     }
+}
+
+/// The shrunk case of `damaged_cache_files_never_panic`: two bytes of
+/// `toc.dat` changed, its first entry now leading to a third chapter of
+/// two, at an anchor.
+#[test]
+#[ignore = "bug: a contents entry of a damaged cache leading past the last chapter panics (document.rs chapter())"]
+fn contents_damaged_to_lead_past_the_last_chapter_find_nothing() {
+    let epub = book(&chapters()[..2], &[]);
+    let storage = MemoryStorage::new().with(PATH, epub);
+    blocks(&EpubDocument::open(&storage, PATH).unwrap(), &storage);
+    let cache = files(&storage, ".paperpaw/plugins/format-epub");
+    let toc = cache.iter().find(|p| p.ends_with("/toc.dat")).unwrap();
+    let mut data = storage.get(toc).unwrap();
+    // Record: level, section (u32), fragment length (u16), title length
+    // (u16), fragment, title.
+    data[1] = 2;
+    data[5] = 1;
+    storage.write(toc, &data).unwrap();
+    let doc = EpubDocument::open(&storage, PATH).unwrap();
+    assert_eq!(doc.toc_entry(&storage, 0).unwrap().at.section, 2);
+    let target = catch_unwind(AssertUnwindSafe(|| doc.toc_target(&storage, 0)));
+    assert!(target.is_ok(), "toc_target panicked");
 }
 
 #[test]

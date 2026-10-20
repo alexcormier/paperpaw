@@ -10,6 +10,16 @@ use std::cell::{Cell, RefCell};
 use paperpaw_sdk::document::{Block, DirEntry, Document, Locator};
 use paperpaw_sdk::zip::testing::ZipBuilder;
 use paperpaw_sdk::{MemoryStorage, Storage, StorageError};
+use proptest::test_runner::Config as ProptestConfig;
+
+/// `cases` cases, or as many as `PROPTEST_CASES` says, for longer runs.
+pub fn cases(cases: u32) -> ProptestConfig {
+    let cases = std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(cases);
+    ProptestConfig::with_cases(cases)
+}
 
 /// Where the plugins keep what they make of books.
 pub const CACHE: &str = ".paperpaw/plugins/";

@@ -182,8 +182,17 @@ fn shows(page: &Page, at: Locator) -> bool {
     })
 }
 
+/// `cases` cases, or as many as `PROPTEST_CASES` says, for longer runs.
+fn cases(cases: u32) -> ProptestConfig {
+    let cases = std::env::var("PROPTEST_CASES")
+        .ok()
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(cases);
+    ProptestConfig::with_cases(cases)
+}
+
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+    #![proptest_config(cases(48))]
 
     #[test]
     fn every_position_in_a_block_finds_that_block(

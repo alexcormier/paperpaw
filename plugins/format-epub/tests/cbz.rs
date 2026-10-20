@@ -202,7 +202,7 @@ fn many_pages_are_capped() {
 const NAME: &[char] = &['0', '1', '2', '9', 'a', 'B', 'z', '_', '-', ' ', 'é'];
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(128))]
+    #![proptest_config(common::cases(128))]
 
     #[test]
     fn any_names_sort_without_panic(names in prop::collection::btree_set(

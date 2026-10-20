@@ -176,7 +176,7 @@ fn chapters() -> impl Strategy<Value = Vec<String>> {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(32))]
+    #![proptest_config(common::cases(32))]
 
     #[test]
     fn positions_survive_relayout(

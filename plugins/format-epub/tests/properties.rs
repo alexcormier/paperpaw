@@ -116,7 +116,7 @@ fn exercise(data: Vec<u8>) {
 }
 
 proptest! {
-    #![proptest_config(ProptestConfig::with_cases(48))]
+    #![proptest_config(common::cases(48))]
 
     #[test]
     fn generated_books_give_back_all_their_words_in_order(
