@@ -6,7 +6,7 @@
 
 use alloc::borrow::Cow;
 
-use paperpaw_core::sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version};
+use paperpaw_core::sdk::{Id, Manifest, Plugin, RegisterError, Registrar, Version};
 
 /// The theme.
 #[derive(Debug)]
@@ -21,16 +21,9 @@ const DEFAULTS: [(&str, &str); 3] = [
 
 impl Plugin for Pebble {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("pebble"),
-            name: Cow::Borrowed("Pebble"),
-            description: Cow::Borrowed(
-                "A theme for touch screens: lists on rounded cards, a light highlight.",
-            ),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_core::sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("pebble"), "Pebble", Version::new(1, 0, 0))
+            .description("A theme for touch screens: lists on rounded cards, a light highlight.")
+            .uses(paperpaw_core::sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

@@ -755,7 +755,7 @@ impl Widget for Card {
             .book
             .as_ref()
             .map_or(Command::RunAction(actions::LIBRARY), Book::open);
-        alloc::vec![WidgetTarget { area, command }]
+        alloc::vec![WidgetTarget::new(area, command)]
     }
 }
 
@@ -1029,9 +1029,8 @@ impl Widget for Shelf {
             .places
             .iter()
             .zip(&self.books)
-            .map(|((cover, title), book)| WidgetTarget {
-                area: title.map_or(*cover, |t| cover.union(&t)),
-                command: book.open(),
+            .map(|((cover, title), book)| {
+                WidgetTarget::new(title.map_or(*cover, |t| cover.union(&t)), book.open())
             })
             .collect()
     }

@@ -6,7 +6,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -66,14 +65,9 @@ impl StandIn {
 
 impl Plugin for StandIn {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("stand-in"),
-            name: Cow::Borrowed("Stand-in"),
-            description: Cow::Borrowed("Says where a book is read."),
-            version: SDK_VERSION,
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("stand-in"), "Stand-in", SDK_VERSION)
+            .description("Says where a book is read.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

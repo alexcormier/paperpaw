@@ -209,10 +209,7 @@ impl Widget for Note {
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         let question = ask::text(env.i18n.tr("widgets.note.setting.text"), &TYPED)
             .initial(env.settings.read(&TEXT));
-        alloc::vec![WidgetTarget {
-            area,
-            command: question.command(),
-        }]
+        alloc::vec![WidgetTarget::new(area, question.command())]
     }
 }
 

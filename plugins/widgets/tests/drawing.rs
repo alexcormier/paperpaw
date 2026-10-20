@@ -628,21 +628,19 @@ fn filled() -> MemoryStorage {
             ".paperpaw/plugins/widgets/quotes.txt",
             "A quote of my own | Me\n",
         );
-    let book = paperpaw_sdk::library::Book {
-        size: 6,
-        indexed: true,
-        title: Some("The One Book".to_string()),
-        author: Some("Ann Author".to_string()),
-        series: Some("Tales".to_string()),
-        series_index: Some("1".to_string()),
-        cover: Some(paperpaw_sdk::document::ImageRef {
+    let book = paperpaw_sdk::library::Book::default()
+        .size(6)
+        .indexed(true)
+        .title("The One Book".to_string())
+        .author("Ann Author".to_string())
+        .series("Tales".to_string())
+        .series_index("1".to_string())
+        .cover(paperpaw_sdk::document::ImageRef {
             path: cover.to_string(),
             width: 60,
             height: 90,
-        }),
-        progress: Some(40),
-        ..paperpaw_sdk::library::Book::default()
-    };
+        })
+        .progress(40);
     paperpaw_sdk::library::save(&storage, "books/one.epub", &book);
     paperpaw_sdk::library::catalog::write(
         &storage,

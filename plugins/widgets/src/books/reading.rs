@@ -339,7 +339,7 @@ impl Widget for Reading {
             .map_or(Command::RunAction(actions::LIBRARY), |(book, _)| {
                 book.open()
             });
-        alloc::vec![WidgetTarget { area, command }]
+        alloc::vec![WidgetTarget::new(area, command)]
     }
 }
 

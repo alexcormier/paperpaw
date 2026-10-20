@@ -52,7 +52,7 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::work::{Moments, Work};
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, HttpRequest, Id, Instant, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec,
+    RegisterError, Registrar, ScreenSpec, SettingGroupSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("kosync");
@@ -624,39 +624,28 @@ static SETTINGS: [SettingSpec; 3] = [
 
 impl Plugin for Kosync {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Progress sync"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "Progress sync", paperpaw_sdk::package_version!())
+            .description(
                 "Syncs the reading position with KOReader's sync server, also with KOReader.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+            )
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
-        r.add_setting_group(SettingGroupSpec {
-            id: GROUP,
-            title: Cow::Borrowed("kosync.group"),
-            order: 28,
-            page: None,
-        })?;
+        r.add_setting_group(SettingGroupSpec::new(GROUP, "kosync.group").order(28))?;
         r.add_icon(GROUP, Cow::Borrowed("devices"))?;
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec {
-            id: ACCOUNT_SCREEN,
-            title: Cow::Borrowed("kosync.group"),
-            factory: Box::new(|env, _| Box::new(account::AccountScreen::new(env))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CONFIRM_SCREEN,
-            title: Cow::Borrowed("kosync.group"),
-            factory: Box::new(|env, params| Box::new(confirm::ConfirmScreen::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            ACCOUNT_SCREEN,
+            "kosync.group",
+            Box::new(|env, _| Box::new(account::AccountScreen::new(env))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CONFIRM_SCREEN,
+            "kosync.group",
+            Box::new(|env, params| Box::new(confirm::ConfirmScreen::new(env, params))),
+        ))?;
 
         let s = state.clone();
         r.on(events::STARTED, move |env, _, out| {
@@ -803,11 +792,9 @@ impl Plugin for Kosync {
                 state.pull(env, out, &path, true);
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: paperpaw_sdk::builtin::menus::READER_MORE,
-            item: SYNC_NOW,
-            order: 25,
-        })?;
+        r.add_menu_entry(
+            MenuEntry::new(paperpaw_sdk::builtin::menus::READER_MORE, SYNC_NOW).order(25),
+        )?;
         r.add_icon(SYNC_NOW, Cow::Borrowed("refresh"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

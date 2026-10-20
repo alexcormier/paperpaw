@@ -38,7 +38,7 @@ use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, PluginInfo, PluginKind, PluginProblem, PluginState, Rect,
-    RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, Version,
+    RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("plugin-manager");
@@ -56,32 +56,23 @@ pub struct PluginManager;
 
 impl Plugin for PluginManager {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Plugin manager"),
-            description: Cow::Borrowed("Lists the plugins and switches them on and off."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Plugin manager", Version::new(0, 1, 0))
+            .description("Lists the plugins and switches them on and off.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("plugin-manager.title"),
-            factory: Box::new(|env, _| Box::new(PluginList::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "plugin-manager.title",
+            Box::new(|env, _| Box::new(PluginList::new(env))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "plugin-manager.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::SETTINGS,
-            item: OPEN,
-            order: 220,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(220))?;
         r.add_icon(OPEN, Cow::Borrowed("puzzle"))?;
         r.on(events::STARTED, |env, _, out| {
             let Some(native) = env.native else {

@@ -15,7 +15,7 @@ use paperpaw_sdk::builtin::{events, params, slots};
 use paperpaw_sdk::{
     Canvas, Cx, DeviceInfo, DirEntry, DisplayInfo, Env, Handled, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, Point, Priority, RegisterError,
-    Registrar, SDK_VERSION, Screen, ScreenSpec, Storage, StorageError, Version,
+    Registrar, Screen, ScreenSpec, Storage, StorageError, Version,
 };
 
 /// A device with buttons and no touch screen, as the X4.
@@ -122,14 +122,13 @@ impl Screen for Stand {
 
 impl Plugin for Recorder {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("recorder"),
-            name: "Recorder".into(),
-            description: "Hears what the reader tells others.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            Id::new_static("recorder"),
+            "Recorder",
+            Version::new(0, 1, 0),
+        )
+        .description("Hears what the reader tells others.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -158,14 +157,14 @@ impl Plugin for Recorder {
         ] {
             let screen = Id::new_static(screen);
             let heard = self.0.clone();
-            r.add_screen(ScreenSpec {
-                id: screen.clone(),
-                title: "recorder".into(),
-                factory: Box::new(move |_, params| {
+            r.add_screen(ScreenSpec::new(
+                screen.clone(),
+                "recorder",
+                Box::new(move |_, params| {
                     heard.borrow_mut().slots.push((name, params.clone()));
                     Box::new(Stand)
                 }),
-            })?;
+            ))?;
             r.bind_slot(slot, screen, Priority::DEFAULT)?;
         }
         Ok(())

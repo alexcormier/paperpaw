@@ -24,8 +24,8 @@ use paperpaw_sdk::builtin::{actions, params, slots};
 use paperpaw_sdk::semantics::{self, Part, Role};
 use paperpaw_sdk::{
     ActionSpec, Canvas, Command, Cx, DirEntry, Env, Handled, HttpRequest, Id, Manifest,
-    MemoryStorage, Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, Storage, StorageError, Version,
+    MemoryStorage, Params, Plugin, Priority, RegisterError, Registrar, Screen, ScreenSpec, Storage,
+    StorageError, Version,
 };
 
 /// An X4 as the emulator's profile has it: buttons, no touch.
@@ -151,27 +151,22 @@ impl Screen for Notice {
 
 impl Plugin for NoticeKeeper {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("notices"),
-            name: "Notices".into(),
-            description: "Keeps the notices.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(Id::new_static("notices"), "Notices", Version::new(0, 1, 0))
+            .description("Keeps the notices.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let notices = self.0.clone();
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("notices.screen"),
-            title: "Notice".into(),
-            factory: Box::new(move |_, params| {
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("notices.screen"),
+            "Notice",
+            Box::new(move |_, params| {
                 let text = params.get(params::TEXT).unwrap_or_default();
                 notices.borrow_mut().push(text.to_string());
                 Box::new(Notice)
             }),
-        })?;
+        ))?;
         r.bind_slot(
             slots::NOTICE,
             Id::new_static("notices.screen"),

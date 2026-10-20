@@ -144,13 +144,13 @@ impl Widget for Ring {
             return super::open_statistics(area);
         }
         // Without a goal: where it is set.
-        alloc::vec![WidgetTarget {
+        alloc::vec![WidgetTarget::new(
             area,
-            command: Command::OpenSlot(
+            Command::OpenSlot(
                 slots::SETTINGS,
                 Params::new().with(params::ID, crate::GROUP.as_str()),
-            ),
-        }]
+            )
+        )]
     }
 }
 

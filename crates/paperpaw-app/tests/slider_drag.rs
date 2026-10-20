@@ -10,7 +10,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -25,7 +24,7 @@ use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::Slider;
 use paperpaw_sdk::{
-    Manifest, MemoryStorage, MenuEntry, Plugin, RegisterError, Registrar, SDK_VERSION, SettingSpec,
+    Manifest, MemoryStorage, MenuEntry, Plugin, RegisterError, Registrar, SettingSpec,
     SettingValue, Version,
 };
 
@@ -65,14 +64,13 @@ struct Light;
 
 impl Plugin for Light {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: paperpaw_sdk::Id::new_static("test"),
-            name: Cow::Borrowed("Light"),
-            description: Cow::Borrowed("A light set with a slider."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            paperpaw_sdk::Id::new_static("test"),
+            "Light",
+            Version::new(0, 1, 0),
+        )
+        .description("A light set with a slider.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -82,11 +80,7 @@ impl Plugin for Light {
                 .step(5)
                 .slider(),
         )?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::QUICK,
-            item: LIGHT.into(),
-            order: 20,
-        })
+        r.add_menu_entry(MenuEntry::new(menus::QUICK, LIGHT.into()).order(20))
     }
 }
 

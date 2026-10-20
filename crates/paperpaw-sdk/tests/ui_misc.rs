@@ -196,13 +196,13 @@ proptest! {
         let mut ids = Vec::new();
         for (n, need) in NEEDS.iter().enumerate() {
             let id = Id::parse(&format!("t.entry{n}")).unwrap();
-            menus.add(MenuEntry { menu: menu.clone(), item: id.clone(), order: n as i16 });
+            menus.add(MenuEntry::new(menu.clone(), id.clone()).order(n as i16));
             menus.set_title(id.clone(), Cow::Borrowed("t.title"));
             menus.set_need(id.clone(), *need);
             ids.push(id);
         }
         let plain = Id::new_static("t.plain");
-        menus.add(MenuEntry { menu: menu.clone(), item: plain.clone(), order: 99 });
+        menus.add(MenuEntry::new(menu.clone(), plain.clone()).order(99));
         menus.set_title(plain.clone(), Cow::Borrowed("t.title"));
         let has = [
             caps.speech, caps.sleep, caps.rotation, !caps.touch, caps.button_row,
@@ -239,19 +239,12 @@ fn entries_come_in_their_order_headings_among_them() {
     let menu = Id::new_static("t.menu");
     for (item, order) in [("t.c", 30), ("t.a", 10), ("t.b", 10), ("t.d", -5)] {
         let id = Id::parse(item).unwrap();
-        menus.add(MenuEntry {
-            menu: menu.clone(),
-            item: id.clone(),
-            order,
-        });
+        menus.add(MenuEntry::new(menu.clone(), id.clone()).order(order));
         menus.set_title(id, Cow::Borrowed(item));
     }
-    menus.add_section(MenuSection {
-        id: Id::new_static("t.heading"),
-        title: Cow::Borrowed("t.heading.title"),
-        menu: menu.clone(),
-        order: 20,
-    });
+    menus.add_section(
+        MenuSection::new(Id::new_static("t.heading"), "t.heading.title", menu.clone()).order(20),
+    );
     menus.set_icon(Id::new_static("t.a"), Cow::Borrowed("books"));
     let items = menus.items("t.menu");
     let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();

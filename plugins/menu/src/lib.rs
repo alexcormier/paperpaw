@@ -27,8 +27,8 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
-    Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingKind, SettingSpec, Version,
+    Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingKind,
+    SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("menu");
@@ -107,42 +107,35 @@ static SETTINGS: [SettingSpec; 5] = [
 
 impl Plugin for Menu {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Menu"),
-            description: Cow::Borrowed(
-                "The menu at the bottom of the screen, with actions and settings.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Menu", Version::new(0, 1, 0))
+            .description("The menu at the bottom of the screen, with actions and settings.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("menu.title"),
-            factory: Box::new(|env, params| {
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "menu.title",
+            Box::new(|env, params| {
                 if params.get(params::MODE) == Some(bar::MODE) || tiles(env, params) {
                     Box::new(bar::BarScreen::new(env, params))
                 } else {
                     Box::new(MenuScreen::new(env, params))
                 }
             }),
-        })?;
+        ))?;
         r.bind_slot(slots::MENU, SCREEN, Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec {
-            id: PANEL,
-            title: Cow::Borrowed("menu.title"),
-            factory: Box::new(|env, params| Box::new(panel::PanelScreen::open(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            PANEL,
+            "menu.title",
+            Box::new(|env, params| Box::new(panel::PanelScreen::open(env, params))),
+        ))?;
         r.bind_slot(slots::PANEL, PANEL, Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec {
-            id: NOTICE,
-            title: Cow::Borrowed("menu.title"),
-            factory: Box::new(|env, params| Box::new(notice::NoticeScreen::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            NOTICE,
+            "menu.title",
+            Box::new(|env, params| Box::new(notice::NoticeScreen::new(env, params))),
+        ))?;
         r.bind_slot(slots::NOTICE, NOTICE, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

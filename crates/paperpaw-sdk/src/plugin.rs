@@ -7,6 +7,7 @@ use crate::version::Version;
 
 /// Static information about a plugin.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Manifest {
     /// Plugin id; also the namespace of all its contributions.
     pub id: Id,
@@ -23,6 +24,35 @@ pub struct Manifest {
     /// it is installed, and the kernel refuses what is not declared
     /// (ADR 0024, ADR 0025).
     pub uses: Uses,
+}
+
+impl Manifest {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(id: Id, name: impl Into<Cow<'static, str>>, version: Version) -> Self {
+        Self {
+            id,
+            name: name.into(),
+            version,
+            description: Cow::Borrowed(""),
+            sdk: crate::SDK_VERSION,
+            uses: Uses::default(),
+        }
+    }
+
+    pub fn description(mut self, description: impl Into<Cow<'static, str>>) -> Self {
+        self.description = description.into();
+        self
+    }
+
+    pub fn sdk(mut self, sdk: Version) -> Self {
+        self.sdk = sdk;
+        self
+    }
+
+    pub fn uses(mut self, uses: Uses) -> Self {
+        self.uses = uses;
+        self
+    }
 }
 
 /// What a plugin uses beyond its own files ([`Manifest::uses`]).
@@ -89,10 +119,21 @@ impl Priority {
 
 /// A named UI role (home, library, reader, …) bound to a screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SlotSpec {
     pub id: Id,
     /// Translation key of the slot's display name.
     pub title: Cow<'static, str>,
+}
+
+impl SlotSpec {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(id: Id, title: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            id,
+            title: title.into(),
+        }
+    }
 }
 
 /// Why a contribution was rejected.

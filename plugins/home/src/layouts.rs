@@ -134,14 +134,16 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     ))?;
     r.add_icon(CHOOSE, Cow::Borrowed("layout"))?;
     // In the first-run setup, after the practical steps.
-    r.add_setup_step(SetupStepSpec {
-        id: Id::new_static("home.setup.layout"),
-        title: Cow::Borrowed("home.setup.layout"),
-        help: Cow::Borrowed("home.setup.layout.help"),
-        order: 65,
-        page: SetupPage::Screen(SCREEN),
-        applies: Some(Box::new(|env: &Env<'_>| offered(env).nth(1).is_some())),
-    })?;
+    r.add_setup_step(
+        SetupStepSpec::new(
+            Id::new_static("home.setup.layout"),
+            "home.setup.layout",
+            SetupPage::Screen(SCREEN),
+        )
+        .help("home.setup.layout.help")
+        .order(65)
+        .applies(Box::new(|env: &Env<'_>| offered(env).nth(1).is_some())),
+    )?;
     Ok(())
 }
 

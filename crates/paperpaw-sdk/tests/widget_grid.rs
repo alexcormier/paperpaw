@@ -52,10 +52,7 @@ impl Widget for Book {
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        vec![WidgetTarget {
-            area,
-            command: Command::RunAction(OPEN),
-        }]
+        vec![WidgetTarget::new(area, Command::RunAction(OPEN))]
     }
 }
 

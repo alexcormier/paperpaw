@@ -70,11 +70,9 @@ impl BrowseScreen {
         paperpaw_sdk::library::provide(
             env.storage,
             &target,
-            paperpaw_sdk::library::Provided {
-                title: reply.context.get(params::TITLE).map(String::from),
-                author: reply.context.get(AUTHORS).and_then(first),
-                ..Default::default()
-            },
+            paperpaw_sdk::library::Provided::default()
+                .title(reply.context.get(params::TITLE).map(String::from))
+                .author(reply.context.get(AUTHORS).and_then(first)),
         );
         self.message = None;
         let text = env.i18n.format(

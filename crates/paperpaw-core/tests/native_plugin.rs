@@ -26,9 +26,7 @@ use paperpaw_platform::{
 use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::native::support::{Api, ApiSlot, Entry};
 use paperpaw_sdk::native::{FINGERPRINT, take};
-use paperpaw_sdk::{
-    Command, Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
-};
+use paperpaw_sdk::{Command, Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, Version};
 
 const DEVICE: DeviceInfo = DeviceInfo {
     id: "test",
@@ -134,14 +132,9 @@ struct Looks(Rc<Cell<(Option<Version>, Option<Version>)>>);
 
 impl Plugin for Looks {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("looks"),
-            name: "Looks".into(),
-            description: "".into(),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("looks"), "Looks", Version::new(1, 0, 0))
+            .description("")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

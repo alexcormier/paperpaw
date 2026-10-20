@@ -217,10 +217,12 @@ impl Widget for Headlines {
         let rows = rows(env, &look, self.shown.len());
         let caption = env.i18n.tr("news.title");
         if let Some(top) = rows.0 {
-            let at = Look {
-                area: Rect::new(look.area.x, top, look.area.width, look.area.height),
-                ..look
-            };
+            let at = look.within(Rect::new(
+                look.area.x,
+                top,
+                look.area.width,
+                look.area.height,
+            ));
             widgets::draw_caption(canvas, env, NAME, &at, caption);
         }
         for (n, row) in rows.1.iter().enumerate() {
@@ -232,21 +234,20 @@ impl Widget for Headlines {
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         let look = widgets::look::look(env, NAME, area);
         if self.shown.is_empty() {
-            return alloc::vec![WidgetTarget {
-                area,
-                command: Command::RunAction(OPEN),
-            }];
+            return alloc::vec![WidgetTarget::new(area, Command::RunAction(OPEN))];
         }
         rows(env, &look, self.shown.len())
             .1
             .into_iter()
             .zip(&self.shown)
-            .map(|(row, (_, book))| WidgetTarget {
-                area: row,
-                command: Command::OpenSlot(
-                    slots::READER,
-                    Params::new().with(params::PATH, book.to_string()),
-                ),
+            .map(|(row, (_, book))| {
+                WidgetTarget::new(
+                    row,
+                    Command::OpenSlot(
+                        slots::READER,
+                        Params::new().with(params::PATH, book.to_string()),
+                    ),
+                )
             })
             .collect()
     }

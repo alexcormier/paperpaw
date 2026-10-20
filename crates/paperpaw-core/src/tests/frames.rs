@@ -48,31 +48,25 @@ impl Screen for Base {
 
 impl Plugin for FramesPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("frames"),
-            name: Cow::Borrowed("Frames"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("frames"), "Frames", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.0.clone();
-        r.add_screen(ScreenSpec {
-            id: BASE,
-            title: Cow::Borrowed("base"),
-            factory: Box::new(move |_, _| {
+        r.add_screen(ScreenSpec::new(
+            BASE,
+            "base",
+            Box::new(move |_, _| {
                 log.borrow_mut().push(String::from("base made"));
                 Box::new(Base)
             }),
-        })?;
+        ))?;
         r.bind_slot(slots::HOME, BASE, Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec {
-            id: PANEL,
-            title: Cow::Borrowed("panel"),
-            factory: Box::new(|_, params| {
+        r.add_screen(ScreenSpec::new(
+            PANEL,
+            "panel",
+            Box::new(|_, params| {
                 let top = params.get("top").and_then(|t| t.parse().ok()).unwrap_or(45);
                 let past = params.get("past").is_some();
                 let height = if past { 90 } else { 90 - top };
@@ -80,7 +74,7 @@ impl Plugin for FramesPlugin {
                     region: Rect::new(0, top, 90, height),
                 })
             }),
-        })?;
+        ))?;
         r.bind_slot(slots::MENU, PANEL, Priority::DEFAULT)?;
         Ok(())
     }
@@ -163,27 +157,21 @@ struct Flash;
 
 impl Plugin for Flash {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("flash"),
-            name: Cow::Borrowed("Flash"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("flash"), "Flash", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let seen = core::cell::Cell::new(0u32);
-        r.add_refresh_filter(paperpaw_sdk::filters::RefreshFilterSpec {
-            id: Id::new_static("flash.first"),
-            title: Cow::Borrowed("flash"),
-            filter: Box::new(move |_, refresh| {
+        r.add_refresh_filter(paperpaw_sdk::filters::RefreshFilterSpec::new(
+            Id::new_static("flash.first"),
+            "flash",
+            Box::new(move |_, refresh| {
                 seen.set(seen.get() + 1);
                 (seen.get() == 2 && refresh.mode == RefreshMode::Partial)
                     .then_some(RefreshMode::Full)
             }),
-        })
+        ))
     }
 }
 

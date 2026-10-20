@@ -32,14 +32,8 @@ struct LibraryFolder;
 
 impl Plugin for LibraryFolder {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("files"),
-            name: Cow::Borrowed("Files"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("files"), "Files", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

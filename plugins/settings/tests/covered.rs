@@ -6,7 +6,6 @@
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use std::alloc::{GlobalAlloc, Layout, System};
-use std::borrow::Cow;
 use std::cell::Cell;
 use std::rc::Rc;
 
@@ -18,8 +17,7 @@ use paperpaw_sdk::widgets::{Widget, WidgetSpec};
 use paperpaw_sdk::{
     Canvas, Cx, DeviceInfo, DisplayInfo, Env, Handled, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, Rect, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, SettingGroupSpec, SettingKind, SettingSpec, SettingValue,
-    Version,
+    Screen, ScreenSpec, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, Version,
 };
 
 /// The system's allocator, counting the blocks this thread takes.
@@ -105,28 +103,17 @@ struct Probe(Rc<Cell<usize>>);
 
 impl Plugin for Probe {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("probe"),
-            name: Cow::Borrowed("Probe"),
-            description: Cow::Borrowed(""),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("probe"), "Probe", Version::new(0, 1, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: COVER,
-            title: Cow::Borrowed("probe"),
-            factory: Box::new(|_, _| Box::new(Blank)),
-        })?;
-        r.add_setting_group(SettingGroupSpec {
-            id: GROUP,
-            title: Cow::Borrowed("probe.group"),
-            order: 0,
-            page: None,
-        })?;
+        r.add_screen(ScreenSpec::new(
+            COVER,
+            "probe",
+            Box::new(|_, _| Box::new(Blank)),
+        ))?;
+        r.add_setting_group(SettingGroupSpec::new(GROUP, "probe.group"))?;
         r.add_setting(
             SettingSpec::new(
                 Id::new_static(SIZE),

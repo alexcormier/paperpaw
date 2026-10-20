@@ -247,10 +247,10 @@ impl Widget for Year {
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        alloc::vec![WidgetTarget {
+        alloc::vec![WidgetTarget::new(
             area,
-            command: Command::OpenScreen(BOOKS, Params::new()),
-        }]
+            Command::OpenScreen(BOOKS, Params::new())
+        )]
     }
 }
 

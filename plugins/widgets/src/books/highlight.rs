@@ -332,10 +332,7 @@ impl Widget for HighlightWidget {
             return Vec::new();
         };
         let goto = Goto::to(quote.path.clone(), quote.start).marking(quote.end);
-        alloc::vec![WidgetTarget {
-            area,
-            command: OPEN_AT.emit(goto),
-        }]
+        alloc::vec![WidgetTarget::new(area, OPEN_AT.emit(goto))]
     }
 }
 

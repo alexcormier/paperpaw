@@ -28,14 +28,9 @@ pub(crate) struct CorePlugin;
 
 impl Plugin for CorePlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: CORE,
-            name: Cow::Borrowed("PaperPaw kernel"),
-            description: Cow::Borrowed("Runs screens, input, settings and plugins."),
-            version: SDK_VERSION,
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(CORE, "PaperPaw kernel", SDK_VERSION)
+            .description("Runs screens, input, settings and plugins.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -56,12 +51,9 @@ impl Plugin for CorePlugin {
         register_keymaps_and_setup(r)?;
         r.add_presets(&POWER_MODES)?;
         // Each plugin's network (its settings made by the kernel).
-        r.add_setting_group(SettingGroupSpec {
-            id: crate::work::NETWORK_GROUP,
-            title: Cow::Borrowed("core.group.network"),
-            order: 87,
-            page: None,
-        })?;
+        r.add_setting_group(
+            SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network").order(87),
+        )?;
         r.add_icon(crate::work::NETWORK_GROUP, Cow::Borrowed("world"))?;
         Ok(())
     }
@@ -339,11 +331,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_book_data(alloc::format!("{}/books", library::DIR), "")?;
     r.add_book_data(alloc::format!("{}/covers", library::DIR), "")?;
     // In the device's part of the settings, before *About*.
-    r.add_menu_entry(paperpaw_sdk::MenuEntry {
-        menu: menus::SETTINGS,
-        item: actions::CLEAN_UP,
-        order: 98,
-    })?;
+    r.add_menu_entry(paperpaw_sdk::MenuEntry::new(menus::SETTINGS, actions::CLEAN_UP).order(98))?;
     r.add_icon(actions::CLEAN_UP, Cow::Borrowed("eraser"))?;
     Ok(())
 }
@@ -358,36 +346,31 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
         (slots::MENU, "core.slot.menu"),
         (slots::SETTINGS, "core.slot.settings"),
     ] {
-        r.add_slot(SlotSpec {
-            id: id.clone(),
-            title: Cow::Borrowed(title),
-        })?;
+        r.add_slot(SlotSpec::new(id.clone(), title))?;
         // Lowest possible priority: any real screen wins.
         r.bind_slot(id, screens::PLACEHOLDER, Priority(i16::MIN))?;
     }
     // Choosing the items or lines of a status line, for any setting.
-    r.add_screen(ScreenSpec {
-        id: screens::STATUS_ITEMS,
-        title: Cow::Borrowed("core.status.choose"),
-        factory: Box::new(|env, params| {
-            Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, params))
-        }),
-    })?;
-    r.add_screen(ScreenSpec {
-        id: screens::STATUS_LINES,
-        title: Cow::Borrowed("core.status.choose"),
-        factory: Box::new(|env, params| {
+    r.add_screen(ScreenSpec::new(
+        screens::STATUS_ITEMS,
+        "core.status.choose",
+        Box::new(|env, params| Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, params))),
+    ))?;
+    r.add_screen(ScreenSpec::new(
+        screens::STATUS_LINES,
+        "core.status.choose",
+        Box::new(|env, params| {
             let params = params
                 .clone()
                 .with(params::MODE, paperpaw_sdk::ui::items::LINES);
             Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, &params))
         }),
-    })?;
-    r.add_screen(ScreenSpec {
-        id: screens::PLACEHOLDER,
-        title: Cow::Borrowed("core.screen.placeholder"),
-        factory: Box::new(|_, _| Box::new(PlaceholderScreen)),
-    })?;
+    ))?;
+    r.add_screen(ScreenSpec::new(
+        screens::PLACEHOLDER,
+        "core.screen.placeholder",
+        Box::new(|_, _| Box::new(PlaceholderScreen)),
+    ))?;
     Ok(())
 }
 
@@ -410,11 +393,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_icon(menus::READER_MORE, Cow::Borrowed("dots"))?;
     // A short main menu; the tools plugins bring are one entry, so it
     // stays the same however many there are.
-    r.add_menu_entry(MenuEntry {
-        menu: menus::TOOLS,
-        item: actions::SCREENSHOT,
-        order: 95,
-    })?;
+    r.add_menu_entry(MenuEntry::new(menus::TOOLS, actions::SCREENSHOT).order(95))?;
     r.add_icon(actions::SCREENSHOT, Cow::Borrowed("camera"))?;
     for (action, order, icon) in [
         (actions::HOME, 10, "home"),
@@ -423,11 +402,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
         (settings::NIGHT_MODE.into(), 85, "moon"),
         (actions::SETTINGS, 90, "settings"),
     ] {
-        r.add_menu_entry(MenuEntry {
-            menu: menus::MAIN,
-            item: action.clone(),
-            order,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::MAIN, action.clone()).order(order))?;
         r.add_icon(action, Cow::Borrowed(icon))?;
     }
 
@@ -441,11 +416,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
         (actions::SLEEP, 70),
         (actions::SETTINGS, 90),
     ] {
-        r.add_menu_entry(MenuEntry {
-            menu: menus::QUICK,
-            item,
-            order,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::QUICK, item).order(order))?;
     }
     r.add_icon(
         actions::QUICK_PANEL,
@@ -471,12 +442,9 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
             200,
         ),
     ] {
-        r.add_menu_section(paperpaw_sdk::MenuSection {
-            id,
-            title: Cow::Borrowed(title),
-            menu: menus::SETTINGS,
-            order,
-        })?;
+        r.add_menu_section(
+            paperpaw_sdk::MenuSection::new(id, title, menus::SETTINGS).order(order),
+        )?;
     }
     for (id, title, order, icon) in [
         (groups::READING, "core.group.reading", 10, "book"),
@@ -495,12 +463,7 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
         (groups::OTHER, "core.group.other", 100, "dots"),
         (groups::DEVELOPER, "core.group.developer", 95, "bug"),
     ] {
-        r.add_setting_group(SettingGroupSpec {
-            id: id.clone(),
-            title: Cow::Borrowed(title),
-            order,
-            page: None,
-        })?;
+        r.add_setting_group(SettingGroupSpec::new(id.clone(), title).order(order))?;
         r.add_icon(id, Cow::Borrowed(icon))?;
     }
     Ok(())
@@ -1049,35 +1012,35 @@ static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::fixed_number(
 /// The time of day and the battery, for status lines.
 fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&TIME)?;
-    r.add_status_item(StatusItemSpec {
-        id: status_items::CLOCK,
-        title: Cow::Borrowed("core.status.clock"),
-        value: Box::new(|env, _| time::clock_text(env).map(StatusValue::Text)),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: status_items::DATE,
-        title: Cow::Borrowed("core.status.date"),
-        value: Box::new(|env, _| time::date_text(env).map(StatusValue::Text)),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: status_items::DATE_SHORT,
-        title: Cow::Borrowed("core.status.date-short"),
-        value: Box::new(|env, _| time::short_date_text(env).map(StatusValue::Text)),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: status_items::BATTERY,
-        title: Cow::Borrowed("core.status.battery"),
-        value: Box::new(|env, _| {
+    r.add_status_item(StatusItemSpec::new(
+        status_items::CLOCK,
+        "core.status.clock",
+        Box::new(|env, _| time::clock_text(env).map(StatusValue::Text)),
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        status_items::DATE,
+        "core.status.date",
+        Box::new(|env, _| time::date_text(env).map(StatusValue::Text)),
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        status_items::DATE_SHORT,
+        "core.status.date-short",
+        Box::new(|env, _| time::short_date_text(env).map(StatusValue::Text)),
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        status_items::BATTERY,
+        "core.status.battery",
+        Box::new(|env, _| {
             env.status.battery.map(|b| StatusValue::Level {
                 percent: b.percent,
                 charging: b.charging,
             })
         }),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: status_items::BATTERY_LOW,
-        title: Cow::Borrowed("core.status.battery-low"),
-        value: Box::new(|env, _| {
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        status_items::BATTERY_LOW,
+        "core.status.battery-low",
+        Box::new(|env, _| {
             let low = env.settings.read(&settings::BATTERY_LOW);
             env.status
                 .battery
@@ -1087,7 +1050,7 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
                     charging: b.charging,
                 })
         }),
-    })?;
+    ))?;
     r.add_settings(&BATTERY_LOW)?;
     Ok(())
 }
@@ -1105,36 +1068,39 @@ fn register_keymaps_and_setup(r: &mut Registrar) -> Result<(), RegisterError> {
     )?;
     // The first-run setup: the language, the buttons where there is
     // no touch, the time zone where the system has none.
-    r.add_setup_step(paperpaw_sdk::setup::SetupStepSpec {
-        id: Id::new_static("core.setup.language"),
-        title: Cow::Borrowed(""),
-        help: Cow::Borrowed(""),
-        order: 10,
-        page: paperpaw_sdk::setup::SetupPage::Setting(settings::LANGUAGE.into()),
-        applies: None,
-    })?;
-    r.add_setup_step(paperpaw_sdk::setup::SetupStepSpec {
-        id: Id::new_static("core.setup.buttons"),
-        title: Cow::Borrowed(""),
-        help: Cow::Borrowed(""),
-        order: 20,
-        page: paperpaw_sdk::setup::SetupPage::Setting(settings::KEYMAP_PRESET.into()),
-        applies: Some(Box::new(|env: &paperpaw_sdk::Env<'_>| {
+    r.add_setup_step(
+        paperpaw_sdk::setup::SetupStepSpec::new(
+            Id::new_static("core.setup.language"),
+            "",
+            paperpaw_sdk::setup::SetupPage::Setting(settings::LANGUAGE.into()),
+        )
+        .order(10),
+    )?;
+    r.add_setup_step(
+        paperpaw_sdk::setup::SetupStepSpec::new(
+            Id::new_static("core.setup.buttons"),
+            "",
+            paperpaw_sdk::setup::SetupPage::Setting(settings::KEYMAP_PRESET.into()),
+        )
+        .order(20)
+        .applies(Box::new(|env: &paperpaw_sdk::Env<'_>| {
             env.device.input.buttons && !env.device.input.touch
         })),
-    })?;
-    r.add_setup_step(paperpaw_sdk::setup::SetupStepSpec {
-        id: Id::new_static("core.setup.time-zone"),
-        title: Cow::Borrowed(""),
-        help: Cow::Borrowed("core.setup.time-zone.help"),
-        order: 40,
-        page: paperpaw_sdk::setup::SetupPage::Setting(settings::TIME_ZONE.into()),
-        applies: Some(Box::new(|env: &paperpaw_sdk::Env<'_>| {
+    )?;
+    r.add_setup_step(
+        paperpaw_sdk::setup::SetupStepSpec::new(
+            Id::new_static("core.setup.time-zone"),
+            "",
+            paperpaw_sdk::setup::SetupPage::Setting(settings::TIME_ZONE.into()),
+        )
+        .help("core.setup.time-zone.help")
+        .order(40)
+        .applies(Box::new(|env: &paperpaw_sdk::Env<'_>| {
             env.status
                 .clock
                 .is_none_or(|c| c.utc_offset_minutes.is_none())
         })),
-    })?;
+    )?;
     r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
     r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
     Ok(())

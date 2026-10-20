@@ -40,7 +40,7 @@ use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, SDK_VERSION, ScreenSpec, SettingSpec, Version,
+    Registrar, ScreenSpec, SettingSpec, Version,
 };
 use trust::Verdict;
 
@@ -83,50 +83,43 @@ pub struct Store;
 
 impl Plugin for Store {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("More plugins"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "More plugins", Version::new(0, 1, 0)).description(
                 "Finds plugins for this device on the internet and installs, updates and removes them.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+            ).uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec {
-            id: LIST_SCREEN,
-            title: Cow::Borrowed("store.title"),
-            factory: Box::new(|env, _| Box::new(list::ListScreen::new(env))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: PAGE_SCREEN,
-            title: Cow::Borrowed("store.title"),
-            factory: Box::new(|env, params| Box::new(page::PageScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: VIEW_SCREEN,
-            title: Cow::Borrowed("store.title"),
-            factory: Box::new(|env, params| Box::new(view::ViewScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: SOURCE_SCREEN,
-            title: Cow::Borrowed("store.source"),
-            factory: Box::new(|env, params| Box::new(source::SourceScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: SHOTS_SCREEN,
-            title: Cow::Borrowed("store.shots"),
-            factory: Box::new(|env, params| Box::new(shots::ShotsScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("store.title"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            LIST_SCREEN,
+            "store.title",
+            Box::new(|env, _| Box::new(list::ListScreen::new(env))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            PAGE_SCREEN,
+            "store.title",
+            Box::new(|env, params| Box::new(page::PageScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            VIEW_SCREEN,
+            "store.title",
+            Box::new(|env, params| Box::new(view::ViewScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            SOURCE_SCREEN,
+            "store.source",
+            Box::new(|env, params| Box::new(source::SourceScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            SHOTS_SCREEN,
+            "store.shots",
+            Box::new(|env, params| Box::new(shots::ShotsScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "store.title",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "store.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
@@ -134,11 +127,7 @@ impl Plugin for Store {
         ))?;
         // With the tools, and in the plugin manager.
         for (menu, order) in [(menus::TOOLS, 90), (MANAGER_MORE, 10)] {
-            r.add_menu_entry(MenuEntry {
-                menu,
-                item: OPEN,
-                order,
-            })?;
+            r.add_menu_entry(MenuEntry::new(menu, OPEN).order(order))?;
         }
         r.add_icon(OPEN, Cow::Borrowed("cloud-download"))?;
         // Downloads go on while no screen of the store is open; one cut

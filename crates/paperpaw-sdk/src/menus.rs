@@ -6,6 +6,7 @@ use crate::id::Id;
 
 /// Puts an action or a setting into a menu.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct MenuEntry {
     /// The menu, e.g. [`builtin::menus::MAIN`](crate::builtin::menus::MAIN)
     /// or `reader.menu`.
@@ -18,9 +19,26 @@ pub struct MenuEntry {
     pub order: i16,
 }
 
+impl MenuEntry {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(menu: Id, item: Id) -> Self {
+        Self {
+            menu,
+            item,
+            order: 0,
+        }
+    }
+
+    pub fn order(mut self, order: i16) -> Self {
+        self.order = order;
+        self
+    }
+}
+
 /// A heading in a menu: the entries after it, up to the next heading,
 /// belong to it (see [`Registrar::add_menu_section`](crate::Registrar::add_menu_section)).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct MenuSection {
     /// `<plugin>.<name>`; also usable in the user's menu definitions.
     pub id: Id,
@@ -29,6 +47,23 @@ pub struct MenuSection {
     pub menu: Id,
     /// Position among the menu's entries; lower comes first.
     pub order: i16,
+}
+
+impl MenuSection {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(id: Id, title: impl Into<Cow<'static, str>>, menu: Id) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            menu,
+            order: 0,
+        }
+    }
+
+    pub fn order(mut self, order: i16) -> Self {
+        self.order = order;
+        self
+    }
 }
 
 /// What a menu entry needs to be offered (see

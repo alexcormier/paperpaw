@@ -9,7 +9,7 @@ use std::borrow::Cow;
 use paperpaw_core::sdk::builtin::{groups, menus};
 use paperpaw_core::sdk::setting::Setting;
 use paperpaw_core::sdk::{
-    Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar, SDK_VERSION, SettingSpec, Version,
+    Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar, SettingSpec, Version,
 };
 
 /// How bright the light is (0 off).
@@ -60,14 +60,13 @@ emulator.warmth.help = Wie warm (gelb) das Licht ist, angenehmer für die Augen 
 
 impl Plugin for Emulated {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("emulator"),
-            name: Cow::Borrowed("Front light"),
-            description: Cow::Borrowed("The emulated device's front light, set as on the device."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_core::sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            Id::new_static("emulator"),
+            "Front light",
+            Version::new(0, 1, 0),
+        )
+        .description("The emulated device's front light, set as on the device.")
+        .uses(paperpaw_core::sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -99,11 +98,9 @@ impl Plugin for Emulated {
                 (menus::MAIN, 82),
                 (menus::QUICK, 20),
             ] {
-                r.add_menu_entry(MenuEntry {
-                    menu,
-                    item: item.clone().into(),
-                    order: order + n as i16,
-                })?;
+                r.add_menu_entry(
+                    MenuEntry::new(menu, item.clone().into()).order(order + n as i16),
+                )?;
             }
         }
         r.add_icon(&FRONTLIGHT, Cow::Borrowed("bulb"))?;

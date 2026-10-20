@@ -41,9 +41,7 @@ use alloc::boxed::Box;
 use alloc::vec;
 
 use paperpaw_sdk::document::Document;
-use paperpaw_sdk::{
-    FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
-};
+use paperpaw_sdk::{FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, Version};
 
 pub use cbz::CbzDocument;
 pub use document::EpubDocument;
@@ -69,14 +67,9 @@ pub const MARKDOWN: Id = Id::new_static("format-markdown.markdown");
 
 /// A plugin's manifest: its id, its name and what it does.
 fn manifest(id: Id, name: &'static str, description: &'static str) -> Manifest {
-    Manifest {
-        id,
-        name: Cow::Borrowed(name),
-        description: Cow::Borrowed(description),
-        version: Version::new(0, 1, 0),
-        sdk: SDK_VERSION,
-        uses: paperpaw_sdk::Uses::NOTHING,
-    }
+    Manifest::new(id, name, Version::new(0, 1, 0))
+        .description(description)
+        .uses(paperpaw_sdk::Uses::NOTHING)
 }
 
 /// EPUB books. HTML, FictionBook, Markdown and comic books are plugins of
@@ -98,16 +91,18 @@ impl Plugin for EpubFormat {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
         r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "")?;
-        r.add_format(FormatSpec {
-            id: FORMAT,
-            title: Cow::Borrowed("format-epub.title"),
-            extensions: vec![Cow::Borrowed("epub")],
-            open: Box::new(|storage, path, options| {
-                EpubDocument::open_options(storage, path, options)
-                    .map(|d| Box::new(d) as Box<dyn Document>)
-            }),
-            prepared: Some(Box::new(EpubDocument::prepared)),
-        })?;
+        r.add_format(
+            FormatSpec::new(
+                FORMAT,
+                "format-epub.title",
+                vec![Cow::Borrowed("epub")],
+                Box::new(|storage, path, options| {
+                    EpubDocument::open_options(storage, path, options)
+                        .map(|d| Box::new(d) as Box<dyn Document>)
+                }),
+            )
+            .prepared(Box::new(EpubDocument::prepared)),
+        )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -131,20 +126,19 @@ impl Plugin for HtmlFormat {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
         r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "html-")?;
-        r.add_format(FormatSpec {
-            id: HTML,
-            title: Cow::Borrowed("format-html.title"),
-            extensions: vec![
+        r.add_format(FormatSpec::new(
+            HTML,
+            "format-html.title",
+            vec![
                 Cow::Borrowed("html"),
                 Cow::Borrowed("htm"),
                 Cow::Borrowed("xhtml"),
             ],
-            open: Box::new(|storage, path, options| {
+            Box::new(|storage, path, options| {
                 HtmlDocument::open(storage, path, options.publisher_styles)
                     .map(|d| Box::new(d) as Box<dyn Document>)
             }),
-            prepared: None,
-        })?;
+        ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/html/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/html/de.ini")))?;
         Ok(())
@@ -167,16 +161,15 @@ impl Plugin for Fb2Format {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
         r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "fb2-")?;
-        r.add_format(FormatSpec {
-            id: FB2,
-            title: Cow::Borrowed("format-fb2.title"),
-            extensions: vec![Cow::Borrowed("fb2"), Cow::Borrowed("fb2.zip")],
-            open: Box::new(|storage, path, options| {
+        r.add_format(FormatSpec::new(
+            FB2,
+            "format-fb2.title",
+            vec![Cow::Borrowed("fb2"), Cow::Borrowed("fb2.zip")],
+            Box::new(|storage, path, options| {
                 Fb2Document::open_options(storage, path, options)
                     .map(|d| Box::new(d) as Box<dyn Document>)
             }),
-            prepared: None,
-        })?;
+        ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/fb2/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/fb2/de.ini")))?;
         Ok(())
@@ -199,16 +192,15 @@ impl Plugin for MarkdownFormat {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
         r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "md-")?;
-        r.add_format(FormatSpec {
-            id: MARKDOWN,
-            title: Cow::Borrowed("format-markdown.title"),
-            extensions: vec![Cow::Borrowed("md"), Cow::Borrowed("markdown")],
-            open: Box::new(|storage, path, options| {
+        r.add_format(FormatSpec::new(
+            MARKDOWN,
+            "format-markdown.title",
+            vec![Cow::Borrowed("md"), Cow::Borrowed("markdown")],
+            Box::new(|storage, path, options| {
                 MarkdownDocument::open(storage, path, options.publisher_styles)
                     .map(|d| Box::new(d) as Box<dyn Document>)
             }),
-            prepared: None,
-        })?;
+        ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/markdown/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/markdown/de.ini")))?;
         Ok(())
@@ -231,16 +223,15 @@ impl Plugin for CbzFormat {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
         r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "cbz-")?;
-        r.add_format(FormatSpec {
-            id: CBZ,
-            title: Cow::Borrowed("format-cbz.title"),
-            extensions: vec![Cow::Borrowed("cbz")],
-            open: Box::new(|storage, path, options| {
+        r.add_format(FormatSpec::new(
+            CBZ,
+            "format-cbz.title",
+            vec![Cow::Borrowed("cbz")],
+            Box::new(|storage, path, options| {
                 CbzDocument::open_options(storage, path, options)
                     .map(|d| Box::new(d) as Box<dyn Document>)
             }),
-            prepared: None,
-        })?;
+        ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/cbz/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/cbz/de.ini")))?;
         Ok(())

@@ -718,25 +718,27 @@ fn package(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Finding)) {
     let files: Vec<PackageFile> = folder
         .files
         .iter()
-        .map(|file| PackageFile {
-            path: file.path.clone(),
-            url: format!(
-                "https://paperpaw.org/api/v1/plugins/{id}/1.0.0/{}",
-                file.path
-            ),
-            size: file.size,
-            digest: Digest::Sha1(
-                std::fs::read(&file.full)
-                    .map(|bytes| paperpaw_digest::sha1::hex(&bytes))
-                    .unwrap_or_default(),
-            ),
+        .map(|file| {
+            PackageFile::new(
+                file.path.clone(),
+                format!(
+                    "https://paperpaw.org/api/v1/plugins/{id}/1.0.0/{}",
+                    file.path
+                ),
+                file.size,
+                Digest::Sha1(
+                    std::fs::read(&file.full)
+                        .map(|bytes| paperpaw_digest::sha1::hex(&bytes))
+                        .unwrap_or_default(),
+                ),
+            )
         })
         .collect();
-    let package = Package {
-        plugin: id.clone(),
-        name: folder.manifest.name.clone().unwrap_or_else(|| id.clone()),
-        files,
-    };
+    let package = Package::new(
+        id.clone(),
+        folder.manifest.name.clone().unwrap_or_else(|| id.clone()),
+    )
+    .files(files);
     if !package.is_valid() {
         add(Finding::error(
             "package.files",

@@ -117,10 +117,10 @@ impl Widget for Settable {
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         let params = Params::new().with(params::ID, alloc::string::ToString::to_string(&self.id));
-        alloc::vec![WidgetTarget {
+        alloc::vec![WidgetTarget::new(
             area,
-            command: Command::OpenSlot(slots::SETTINGS, params),
-        }]
+            Command::OpenSlot(slots::SETTINGS, params)
+        )]
     }
 }
 

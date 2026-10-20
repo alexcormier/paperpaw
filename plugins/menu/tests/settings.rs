@@ -16,8 +16,7 @@ use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::{
     Canvas, Choices, Cx, DeviceInfo, DisplayInfo, Env, Handled, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, MenuEntry, Params, PixelFormat, Plugin, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, SettingGroupSpec, SettingKind, SettingSpec, SettingValue,
-    Version,
+    Screen, ScreenSpec, SettingGroupSpec, SettingKind, SettingSpec, SettingValue, Version,
 };
 
 /// An X4: buttons, no touch.
@@ -78,30 +77,19 @@ struct Probe;
 
 impl Plugin for Probe {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("probe"),
-            name: Cow::Borrowed("Probe"),
-            description: Cow::Borrowed(""),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("probe"), "Probe", Version::new(0, 1, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         for id in [BASE, EDITOR] {
-            r.add_screen(ScreenSpec {
+            r.add_screen(ScreenSpec::new(
                 id,
-                title: Cow::Borrowed("probe"),
-                factory: Box::new(|_, _| Box::new(Blank)),
-            })?;
+                "probe",
+                Box::new(|_, _| Box::new(Blank)),
+            ))?;
         }
-        r.add_setting_group(SettingGroupSpec {
-            id: GROUP,
-            title: Cow::Borrowed("probe.group"),
-            order: 0,
-            page: None,
-        })?;
+        r.add_setting_group(SettingGroupSpec::new(GROUP, "probe.group"))?;
         let choice = |id: Id| {
             SettingSpec::new(
                 id.clone(),
@@ -123,17 +111,9 @@ impl Plugin for Probe {
             .group(GROUP),
         )?;
         for (order, item) in [KIND, MANY, SIZE].into_iter().enumerate() {
-            r.add_menu_entry(MenuEntry {
-                menu: BAR_MENU,
-                item,
-                order: order as i16,
-            })?;
+            r.add_menu_entry(MenuEntry::new(BAR_MENU, item).order(order as i16))?;
         }
-        r.add_menu_entry(MenuEntry {
-            menu: CHOICES,
-            item: MANY,
-            order: 0,
-        })?;
+        r.add_menu_entry(MenuEntry::new(CHOICES, MANY))?;
         Ok(())
     }
 }

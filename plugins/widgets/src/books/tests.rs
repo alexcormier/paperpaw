@@ -56,21 +56,19 @@ pub(crate) fn library() -> MemoryStorage {
                    n: &str,
                    progress: Option<u8>| {
         let storage = storage.with(path, "a book");
-        let book = library::Book {
-            size: 6,
-            indexed: true,
-            title: Some(title.to_string()),
-            author: Some("Ann Author".to_string()),
-            series: (!series.is_empty()).then(|| series.to_string()),
-            series_index: (!n.is_empty()).then(|| n.to_string()),
-            cover: (!series.is_empty()).then(|| ImageRef {
+        let book = library::Book::default()
+            .size(6)
+            .indexed(true)
+            .title(title.to_string())
+            .author("Ann Author".to_string())
+            .series((!series.is_empty()).then(|| series.to_string()))
+            .series_index((!n.is_empty()).then(|| n.to_string()))
+            .cover((!series.is_empty()).then(|| ImageRef {
                 path: COVER.to_string(),
                 width: COVER_SIZE.0,
                 height: COVER_SIZE.1,
-            }),
-            progress,
-            ..library::Book::default()
-        };
+            }))
+            .progress(progress);
         library::save(&storage, path, &book);
         records.push(catalog::Record::of(path, &book));
         storage
@@ -433,11 +431,9 @@ fn a_long_series_is_kept_round_the_book_being_read() {
     let records: Vec<catalog::Record> = (1..=150)
         .rev()
         .map(|n| {
-            let book = library::Book {
-                series: Some("Long".to_string()),
-                series_index: Some(n.to_string()),
-                ..library::Book::default()
-            };
+            let book = library::Book::default()
+                .series("Long".to_string())
+                .series_index(n.to_string());
             catalog::Record::of(&alloc::format!("books/long/{n:03}.epub"), &book)
         })
         .collect();

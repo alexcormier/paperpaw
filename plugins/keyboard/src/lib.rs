@@ -53,8 +53,8 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params, Plugin,
-    Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingSpec, Version,
+    Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
+    Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("keyboard");
@@ -120,42 +120,37 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed(
 
 impl Plugin for Keyboard {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Keyboard"),
-            description: Cow::Borrowed("Enters text on the screen, by touch or with the buttons."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Keyboard", Version::new(0, 1, 0))
+            .description("Enters text on the screen, by touch or with the buttons.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // The layout in use; the next keyboard opens with it.
         let current = Rc::new(Cell::new(0usize));
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("keyboard.title"),
-            factory: Box::new(move |env, params| {
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "keyboard.title",
+            Box::new(move |env, params| {
                 Box::new(KeyboardScreen::new(env, params, current.clone()))
             }),
-        })?;
+        ))?;
         r.bind_slot(slots::KEYBOARD, SCREEN, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec {
-            id: CHOOSE_SCREEN,
-            title: Cow::Borrowed("keyboard.setting.layouts"),
-            factory: Box::new(|env, _| Box::new(choose::ChooseScreen::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            CHOOSE_SCREEN,
+            "keyboard.setting.layouts",
+            Box::new(|env, _| Box::new(choose::ChooseScreen::new(env))),
+        ))?;
         // The first-run setup: the layouts to type with.
-        r.add_setup_step(paperpaw_sdk::setup::SetupStepSpec {
-            id: Id::new_static("keyboard.setup"),
-            title: Cow::Borrowed(""),
-            help: Cow::Borrowed(""),
-            order: 60,
-            page: paperpaw_sdk::setup::SetupPage::Setting(LAYOUTS_SETTING.into()),
-            applies: None,
-        })?;
+        r.add_setup_step(
+            paperpaw_sdk::setup::SetupStepSpec::new(
+                Id::new_static("keyboard.setup"),
+                "",
+                paperpaw_sdk::setup::SetupPage::Setting(LAYOUTS_SETTING.into()),
+            )
+            .order(60),
+        )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

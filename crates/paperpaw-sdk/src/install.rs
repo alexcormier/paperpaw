@@ -165,6 +165,7 @@ impl Digest {
 
 /// One file of a plugin to download.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct PackageFile {
     /// Where it goes in the plugin's folder, e.g. `i18n/de.ini`.
     pub path: String,
@@ -172,6 +173,18 @@ pub struct PackageFile {
     pub url: String,
     pub size: u64,
     pub digest: Digest,
+}
+
+impl PackageFile {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(path: String, url: String, size: u64, digest: Digest) -> Self {
+        Self {
+            path,
+            url,
+            size,
+            digest,
+        }
+    }
 }
 
 impl PackageFile {
@@ -187,10 +200,27 @@ impl PackageFile {
 /// A data plugin to install: its id (the folder it gets), a name for
 /// messages, its files.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Package {
     pub plugin: String,
     pub name: String,
     pub files: Vec<PackageFile>,
+}
+
+impl Package {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(plugin: String, name: String) -> Self {
+        Self {
+            plugin,
+            name,
+            files: Vec::new(),
+        }
+    }
+
+    pub fn files(mut self, files: Vec<PackageFile>) -> Self {
+        self.files = files;
+        self
+    }
 }
 
 impl Package {

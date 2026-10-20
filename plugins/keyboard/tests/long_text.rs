@@ -4,7 +4,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -17,8 +16,7 @@ use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::{
     ActionSpec, Command, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
-    MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION,
-    Version,
+    MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -49,14 +47,8 @@ struct Asker(Rc<RefCell<Vec<String>>>);
 
 impl Plugin for Asker {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("asker"),
-            name: Cow::Borrowed("Asker"),
-            description: Cow::Borrowed(""),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("asker"), "Asker", Version::new(0, 1, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

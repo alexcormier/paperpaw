@@ -51,7 +51,7 @@ use paperpaw_sdk::builtin::{events, menus, params};
 use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Instant, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, StorageError, time,
+    Registrar, ScreenSpec, SettingGroupSpec, SettingSpec, StorageError, time,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -444,29 +444,22 @@ pub struct Stats;
 
 impl Plugin for Stats {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Reading statistics"),
-            description: Cow::Borrowed(
-                "Records how long and how much you read, with a calendar and every book's numbers.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(
+            PLUGIN,
+            "Reading statistics",
+            paperpaw_sdk::package_version!(),
+        )
+        .description(
+            "Records how long and how much you read, with a calendar and every book's numbers.",
+        )
+        .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
         widget::register(r)?;
         left::register(r)?;
-        r.add_setting_group(SettingGroupSpec {
-            id: GROUP,
-            title: Cow::Borrowed("stats.group"),
-            order: 25,
-            page: None,
-        })?;
+        r.add_setting_group(SettingGroupSpec::new(GROUP, "stats.group").order(25))?;
         r.add_icon(GROUP, Cow::Borrowed("chart-bar"))?;
         r.add_settings(&SETTINGS)?;
 
@@ -540,26 +533,26 @@ impl Plugin for Stats {
         sync::register(r, Rc::new(RefCell::new(sync::Sync::default())))?;
 
         // The views.
-        r.add_screen(ScreenSpec {
-            id: OVERVIEW,
-            title: Cow::Borrowed("stats.title"),
-            factory: Box::new(|env, params| Box::new(overview::Overview::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CALENDAR,
-            title: Cow::Borrowed("stats.calendar"),
-            factory: Box::new(|env, _| Box::new(calendar::Calendar::new(env))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: BOOKS,
-            title: Cow::Borrowed("stats.books"),
-            factory: Box::new(|env, _| Box::new(books::BookList::new(env))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: BOOK,
-            title: Cow::Borrowed("stats.title"),
-            factory: Box::new(|env, params| Box::new(book::BookView::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            OVERVIEW,
+            "stats.title",
+            Box::new(|env, params| Box::new(overview::Overview::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CALENDAR,
+            "stats.calendar",
+            Box::new(|env, _| Box::new(calendar::Calendar::new(env))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            BOOKS,
+            "stats.books",
+            Box::new(|env, _| Box::new(books::BookList::new(env))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            BOOK,
+            "stats.title",
+            Box::new(|env, params| Box::new(book::BookView::new(env, params))),
+        ))?;
         let s = state;
         r.add_action(ActionSpec::new(OPEN, "stats.title").handler(
             move |env: &Env<'_>, out: &mut Vec<Command>| {
@@ -581,11 +574,7 @@ impl Plugin for Stats {
             },
         ))?;
         for (menu, order) in [(menus::TOOLS, 35), (menus::READER_MORE, 30)] {
-            r.add_menu_entry(MenuEntry {
-                menu,
-                item: OPEN,
-                order,
-            })?;
+            r.add_menu_entry(MenuEntry::new(menu, OPEN).order(order))?;
         }
         r.add_icon(OPEN, Cow::Borrowed("chart-bar"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

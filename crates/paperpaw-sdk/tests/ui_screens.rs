@@ -265,11 +265,11 @@ fn status_harness(device: Device, value: &str) -> Harness {
         ("t.page", "t.page"),
         ("t.battery", "t.battery"),
     ] {
-        h.status_items.add(StatusItemSpec {
-            id: Id::new_static(id),
-            title: Cow::Borrowed(title),
-            value: Box::new(|_, _| Some(StatusValue::Text("x".into()))),
-        });
+        h.status_items.add(StatusItemSpec::new(
+            Id::new_static(id),
+            title,
+            Box::new(|_, _| Some(StatusValue::Text("x".into()))),
+        ));
     }
     h.settings
         .define(SettingSpec::list(

@@ -31,8 +31,8 @@ use paperpaw_sdk::ui::choice::{self, Choice};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingSpec, SettingValue, Storage, StorageError, Version,
+    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    SettingSpec, SettingValue, Storage, StorageError, Version,
 };
 
 use paperpaw_sdk::files::{self as ops, Entry};
@@ -91,40 +91,31 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
 
 impl Plugin for FileManager {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("File manager"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "File manager", Version::new(0, 1, 0))
+            .description(
                 "Every folder and file on the device: open, rename, move, copy and delete them.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+            )
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("file-manager.title"),
-            factory: Box::new(|env, params| Box::new(Browser::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("file-manager.title"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "file-manager.title",
+            Box::new(|env, params| Box::new(Browser::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "file-manager.title",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "file-manager.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::TOOLS,
-            item: OPEN,
-            order: 45,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(45))?;
         r.add_icon(OPEN, Cow::Borrowed("folder"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

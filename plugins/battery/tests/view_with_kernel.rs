@@ -289,14 +289,13 @@ struct Fetcher;
 
 impl paperpaw_sdk::Plugin for Fetcher {
     fn manifest(&self) -> paperpaw_sdk::Manifest {
-        paperpaw_sdk::Manifest {
-            id: Id::new_static("net"),
-            name: "Fetcher".into(),
-            description: "".into(),
-            version: paperpaw_sdk::Version::new(1, 0, 0),
-            sdk: paperpaw_sdk::SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        paperpaw_sdk::Manifest::new(
+            Id::new_static("net"),
+            "Fetcher",
+            paperpaw_sdk::Version::new(1, 0, 0),
+        )
+        .description("")
+        .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {

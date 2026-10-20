@@ -46,29 +46,23 @@ impl Screen for Plain {
 
 impl Plugin for GuardPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("g"),
-            name: Cow::Borrowed("Guard"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("g"), "Guard", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let locked = self.0.clone();
-        r.add_screen(ScreenSpec {
-            id: LOCK,
-            title: Cow::Borrowed("lock"),
-            factory: Box::new(move |_, _| Box::new(Lock(locked.clone()))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            LOCK,
+            "lock",
+            Box::new(move |_, _| Box::new(Lock(locked.clone()))),
+        ))?;
         for id in [CHILD, OTHER, Id::new_static("g.home")] {
-            r.add_screen(ScreenSpec {
+            r.add_screen(ScreenSpec::new(
                 id,
-                title: Cow::Borrowed("plain"),
-                factory: Box::new(|_, _| Box::new(Plain)),
-            })?;
+                "plain",
+                Box::new(|_, _| Box::new(Plain)),
+            ))?;
         }
         r.bind_slot(slots::HOME, Id::new_static("g.home"), Priority::DEFAULT)
     }

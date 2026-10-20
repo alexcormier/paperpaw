@@ -30,8 +30,8 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Params,
-    Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingSpec, Storage, StorageError, Version,
+    Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
+    Storage, StorageError, Version,
 };
 use paperpaw_stardict::{Builder, Dictionary};
 
@@ -69,22 +69,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
 
 impl Plugin for DictionaryPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Dictionary"),
-            description: Cow::Borrowed("Looks up words in StarDict dictionaries."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Dictionary", Version::new(0, 1, 0))
+            .description("Looks up words in StarDict dictionaries.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: POPUP,
-            title: Cow::Borrowed("dictionary.title"),
-            factory: Box::new(|env, params| Box::new(Popup::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            POPUP,
+            "dictionary.title",
+            Box::new(|env, params| Box::new(Popup::new(env, params))),
+        ))?;
         r.bind_slot(slots::LOOKUP, POPUP, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

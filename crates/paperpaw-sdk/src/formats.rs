@@ -97,6 +97,7 @@ impl OpenOptions {
 }
 
 /// A file format contribution (TXT, EPUB, FB2, …).
+#[non_exhaustive]
 pub struct FormatSpec {
     /// `<plugin>.<name>`, e.g. `format-txt.txt`.
     pub id: Id,
@@ -110,6 +111,29 @@ pub struct FormatSpec {
     /// converted into a cache), which takes a while the first time: a
     /// reader says so meanwhile. `None`: always at once.
     pub prepared: Option<FormatPrepared>,
+}
+
+impl FormatSpec {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(
+        id: Id,
+        title: impl Into<Cow<'static, str>>,
+        extensions: Vec<Cow<'static, str>>,
+        open: FormatOpener,
+    ) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            extensions,
+            open,
+            prepared: None,
+        }
+    }
+
+    pub fn prepared(mut self, prepared: FormatPrepared) -> Self {
+        self.prepared = Some(prepared);
+        self
+    }
 }
 
 impl fmt::Debug for FormatSpec {

@@ -8,9 +8,7 @@ use alloc::borrow::Cow;
 
 use paperpaw_sdk::builtin::groups;
 use paperpaw_sdk::setting::Setting;
-use paperpaw_sdk::{
-    Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, SettingSpec, Version,
-};
+use paperpaw_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SettingSpec, Version};
 
 pub const PLUGIN: Id = Id::new_static("x4");
 /// The processor sleeps lightly while idle on battery (see `power`).
@@ -89,14 +87,9 @@ impl Plugin for X4 {
             "Xteink X4 Classic",
             "What only the Xteink X4 Classic has to set.",
         );
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed(name),
-            description: Cow::Borrowed(description),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, name, Version::new(0, 1, 0))
+            .description(description)
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -122,11 +115,7 @@ fn register_light(r: &mut Registrar) -> Result<(), RegisterError> {
             (menus::MAIN, 82),
             (menus::QUICK, 20),
         ] {
-            r.add_menu_entry(MenuEntry {
-                menu,
-                item: item.clone().into(),
-                order: order + n as i16,
-            })?;
+            r.add_menu_entry(MenuEntry::new(menu, item.clone().into()).order(order + n as i16))?;
         }
     }
     r.add_icon(&FRONTLIGHT, Cow::Borrowed("bulb"))?;

@@ -17,7 +17,7 @@ use paperpaw_plugin_diagnostics::Diagnostics;
 use paperpaw_sdk::builtin::{actions, slots};
 use paperpaw_sdk::{
     Canvas, Cx, Env, Handled, Id, Manifest, MemoryStorage, Plugin, Priority, RegisterError,
-    Registrar, SDK_VERSION, Screen, ScreenSpec, Version,
+    Registrar, Screen, ScreenSpec, Version,
 };
 
 const WIDTH: u16 = 480;
@@ -299,22 +299,17 @@ impl Screen for Blank {
 
 impl Plugin for OtherHome {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("other"),
-            name: "Other home".into(),
-            description: "A home screen.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("other"), "Other home", Version::new(0, 1, 0))
+            .description("A home screen.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("other.home"),
-            title: "Home".into(),
-            factory: Box::new(|_, _| Box::new(Blank)),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("other.home"),
+            "Home",
+            Box::new(|_, _| Box::new(Blank)),
+        ))?;
         r.bind_slot(slots::HOME, Id::new_static("other.home"), Priority::DEFAULT)
     }
 }

@@ -5,7 +5,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -17,7 +16,7 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{
     DeviceInfo, DisplayInfo, Id, InputCaps, Instant, Manifest, MemoryClass, MemoryStorage, Params,
-    PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
+    PixelFormat, Plugin, RegisterError, Registrar, Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -48,14 +47,9 @@ struct Spy(Moved);
 
 impl Plugin for Spy {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("spy"),
-            name: Cow::Borrowed("Spy"),
-            description: Cow::Borrowed("Hears books moving."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("spy"), "Spy", Version::new(0, 1, 0))
+            .description("Hears books moving.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

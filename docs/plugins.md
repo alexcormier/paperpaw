@@ -55,21 +55,16 @@ pub struct Hello;
 
 impl Plugin for Hello {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Hello"),
-            description: Cow::Borrowed("A sample plugin to start from."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Hello", Version::new(0, 1, 0))
+            .description("A sample plugin to start from.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, out| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         }))?;
-        r.add_menu_entry(MenuEntry { menu: menus::TOOLS, item: OPEN, order: 90 })?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(90))?;
         r.add_icon(OPEN, Cow::Borrowed("star"))?;
         // … the screen, a setting, an event, translations
         Ok(())
@@ -127,7 +122,7 @@ impl Screen for HelloScreen {
 ```
 
 Screens are made by a factory each time they open
-(`r.add_screen(ScreenSpec { id, title, factory })`). Return
+(`r.add_screen(ScreenSpec::new(id, title, factory))`). Return
 `Handled::No` for what a screen does not handle: the kernel then runs
 the action's own handler (e.g. the menu button opens the menu).
 

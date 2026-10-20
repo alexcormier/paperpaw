@@ -42,8 +42,7 @@ use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::document::{Document, Locator};
 use paperpaw_sdk::time::{self, LocalTime};
 use paperpaw_sdk::{
-    Env, Id, Manifest, MemoryClass, Plugin, RegisterError, Registrar, SDK_VERSION, Storage,
-    StorageError,
+    Env, Id, Manifest, MemoryClass, Plugin, RegisterError, Registrar, Storage, StorageError,
 };
 
 use lua::{Table, Value};
@@ -710,17 +709,9 @@ pub struct KoReader;
 
 impl Plugin for KoReader {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("KOReader"),
-            description: Cow::Borrowed(
-                "Shares bookmarks and highlights with KOReader for books read in both.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "KOReader", paperpaw_sdk::package_version!())
+            .description("Shares bookmarks and highlights with KOReader for books read in both.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

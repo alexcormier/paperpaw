@@ -6,8 +6,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
-
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::{
     ButtonState, InputEvent, Point, PointerEvent, PointerPhase, PointerTool, Rotation,
@@ -21,7 +19,7 @@ use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::{
     Canvas, Cx, DeviceInfo, DisplayInfo, Env, EventData, Handled, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, Priority, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, Storage, Version,
+    Screen, ScreenSpec, Storage, Version,
 };
 
 const LOCK: Id = Id::new_static("lock.screen");
@@ -71,22 +69,16 @@ impl Screen for PanelScreen {
 
 impl Plugin for Panel {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("test"),
-            name: Cow::Borrowed("Panel"),
-            description: Cow::Borrowed(""),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("test"), "Panel", Version::new(0, 1, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: PANEL,
-            title: Cow::Borrowed("test.panel"),
-            factory: Box::new(|_, _| Box::new(PanelScreen)),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            PANEL,
+            "test.panel",
+            Box::new(|_, _| Box::new(PanelScreen)),
+        ))?;
         r.bind_slot(slots::PANEL, PANEL, Priority::DEFAULT)
     }
 }

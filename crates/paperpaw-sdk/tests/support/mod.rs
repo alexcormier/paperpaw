@@ -308,12 +308,12 @@ pub fn pointer(phase: PointerPhase, x: i32, y: i32) -> PointerEvent {
 /// A tap at `point`.
 pub fn tap(x: i32, y: i32) -> paperpaw_sdk::Gesture {
     let point = Point::new(x, y);
-    paperpaw_sdk::Gesture {
-        kind: paperpaw_sdk::GestureKind::Tap,
-        start: point,
-        end: point,
-        tool: PointerTool::Finger,
-    }
+    paperpaw_sdk::Gesture::new(
+        paperpaw_sdk::GestureKind::Tap,
+        point,
+        point,
+        PointerTool::Finger,
+    )
 }
 
 /// The middle of `rect`.

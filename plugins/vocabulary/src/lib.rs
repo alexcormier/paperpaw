@@ -37,8 +37,8 @@ use paperpaw_sdk::ui::choice::{self, Choice};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingExtra, SettingSpec, StorageError,
+    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    SettingExtra, SettingSpec, StorageError,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -100,17 +100,9 @@ pub struct Vocabulary;
 
 impl Plugin for Vocabulary {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Vocabulary"),
-            description: Cow::Borrowed(
-                "Keeps the words you look up, with their sentences, to go over later.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Vocabulary", paperpaw_sdk::package_version!())
+            .description("Keeps the words you look up, with their sentences, to go over later.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -126,35 +118,27 @@ impl Plugin for Vocabulary {
                 out.push(Command::Notify(message));
             }
         })?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::READER_MORE,
-            item: MARK.id().clone(),
-            order: 40,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::READER_MORE, MARK.id().clone()).order(40))?;
         r.add_icon(&MARK, Cow::Borrowed("vocabulary"))?;
         r.add_settings(&LEARNING_LOOK)?;
         r.add_decorator(marks::decorator(&changes))?;
         r.on(events::DECORATION_TAPPED, marks::tapped)?;
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("vocabulary.title"),
-            factory: Box::new(move |env, _| Box::new(WordsScreen::new(env, changes.clone()))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("vocabulary.title"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "vocabulary.title",
+            Box::new(move |env, _| Box::new(WordsScreen::new(env, changes.clone()))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "vocabulary.title",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "vocabulary.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::TOOLS,
-            item: OPEN,
-            order: 36,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(36))?;
         r.add_icon(OPEN, Cow::Borrowed("vocabulary"))?;
         widget::register(r)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

@@ -1,7 +1,6 @@
 //! Status items "Time left in chapter" and "Time left in book": the pages
 //! still to read at one's reading speed, as recorded by the statistics.
 
-use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::string::String;
@@ -120,10 +119,10 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         (BOOK, "stats.status.left-book", "stats.left.book", false),
     ] {
         let s = shared.clone();
-        r.add_status_item(StatusItemSpec {
+        r.add_status_item(StatusItemSpec::new(
             id,
-            title: Cow::Borrowed(title),
-            value: Box::new(move |env, context| {
+            title,
+            Box::new(move |env, context| {
                 let speed = s.borrow().known.flatten()?;
                 let seconds = (pages_left(context, chapter)? * speed) as u64;
                 let time = fmt::duration(env, seconds.max(60));
@@ -131,7 +130,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                     env.i18n.format(key, &[("time", Arg::Str(&time))]),
                 ))
             }),
-        })?;
+        ))?;
     }
     Ok(())
 }

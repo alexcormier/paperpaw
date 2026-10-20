@@ -12,9 +12,7 @@ use alloc::borrow::Cow;
 
 extern crate alloc;
 
-use paperpaw_sdk::{
-    HyphenationSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
-};
+use paperpaw_sdk::{HyphenationSpec, Id, Manifest, Plugin, RegisterError, Registrar, Version};
 
 pub const PLUGIN: Id = Id::new_static("hyphenation");
 pub const GERMAN: Id = Id::new_static("hyphenation.de");
@@ -29,26 +27,19 @@ pub struct Hyphenation;
 
 impl Plugin for Hyphenation {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Hyphenation (German, English)"),
-            description: Cow::Borrowed(
-                "Hyphenation patterns for German and English, for evenly set text.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            PLUGIN,
+            "Hyphenation (German, English)",
+            Version::new(0, 1, 0),
+        )
+        .description("Hyphenation patterns for German and English, for evenly set text.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         for (id, language, patterns) in [(ENGLISH, "en", EN), (GERMAN, "de", DE)] {
-            r.add_hyphenation(HyphenationSpec {
-                id,
-                language: Cow::Borrowed(language),
-                patterns,
-            })?;
+            r.add_hyphenation(HyphenationSpec::new(id, language, patterns))?;
         }
         Ok(())
     }

@@ -371,13 +371,13 @@ pub(crate) fn register(
     r.on(UPLOADED, move |env, reply, out| {
         s.borrow_mut().uploaded(env, reply, out);
     })?;
-    r.add_screen(ScreenSpec {
-        id: SCREEN,
-        title: Cow::Borrowed("stats.sync.title"),
-        factory: alloc::boxed::Box::new(move |env, _| {
+    r.add_screen(ScreenSpec::new(
+        SCREEN,
+        "stats.sync.title",
+        alloc::boxed::Box::new(move |env, _| {
             alloc::boxed::Box::new(SyncScreen::new(env, sync.clone()))
         }),
-    })
+    ))
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

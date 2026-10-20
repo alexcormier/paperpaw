@@ -8,25 +8,19 @@
 
 extern crate alloc;
 
-use alloc::borrow::Cow;
 use alloc::string::String;
 
 use paperpaw_sdk::{
-    ActionSpec, Command, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
+    ActionSpec, Command, Id, Manifest, Plugin, RegisterError, Registrar, Version,
 };
 
 struct Second;
 
 impl Plugin for Second {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("second"),
-            name: Cow::Borrowed("Second"),
-            description: Cow::Borrowed("A second native plugin, to try several at once."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("second"), "Second", Version::new(0, 1, 0))
+            .description("A second native plugin, to try several at once.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

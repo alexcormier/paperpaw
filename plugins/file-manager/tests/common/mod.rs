@@ -22,7 +22,7 @@ pub use paperpaw_sdk::{DirEntry, Id, MemoryStorage, Params, Storage, StorageErro
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Handled, Manifest, Plugin, Priority, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, Version,
+    Screen, ScreenSpec, Version,
 };
 
 /// An X4 as the emulator's profile has it: buttons, no touch.
@@ -180,27 +180,26 @@ const KEYBOARD_SCREEN: Id = Id::new_static("test-keyboard.screen");
 
 impl Plugin for TestKeyboard {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("test-keyboard"),
-            name: "Test keyboard".into(),
-            description: "Types what the test says.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            Id::new_static("test-keyboard"),
+            "Test keyboard",
+            Version::new(0, 1, 0),
+        )
+        .description("Types what the test says.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: KEYBOARD_SCREEN,
-            title: "test-keyboard".into(),
-            factory: Box::new(|_, params| {
+        r.add_screen(ScreenSpec::new(
+            KEYBOARD_SCREEN,
+            "test-keyboard",
+            Box::new(|_, params| {
                 ASKED.with(|asked| asked.borrow_mut().push(params.clone()));
                 Box::new(Keyboard {
                     params: params.clone(),
                 })
             }),
-        })?;
+        ))?;
         r.bind_slot(slots::KEYBOARD, KEYBOARD_SCREEN, Priority(100))?;
         Ok(())
     }

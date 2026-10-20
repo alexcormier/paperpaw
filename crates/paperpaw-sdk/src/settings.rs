@@ -630,6 +630,7 @@ pub enum Level {
 
 /// A group of settings, shown together on one page.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SettingGroupSpec {
     pub id: Id,
     /// Translation key of the group's name.
@@ -641,6 +642,28 @@ pub struct SettingGroupSpec {
     /// group), e.g. Wi-Fi with its networks; it shows the group's
     /// settings itself.
     pub page: Option<Id>,
+}
+
+impl SettingGroupSpec {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(id: Id, title: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            order: 0,
+            page: None,
+        }
+    }
+
+    pub fn order(mut self, order: i32) -> Self {
+        self.order = order;
+        self
+    }
+
+    pub fn page(mut self, page: impl Into<Option<Id>>) -> Self {
+        self.page = page.into();
+        self
+    }
 }
 
 /// Why a setting could not be changed.

@@ -6,8 +6,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
-
 use paperpaw_core::{Io, Kernel, WifiEvent};
 use paperpaw_platform::Rotation;
 use paperpaw_plugin_wifi::Wifi;
@@ -15,7 +13,7 @@ use paperpaw_sdk::secrets::{FILE, Secrets};
 use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiNetwork, WifiState};
 use paperpaw_sdk::{
     Command, DeviceInfo, DisplayInfo, HttpRequest, Id, InputCaps, Instant, Manifest, MemoryClass,
-    MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
+    MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -46,14 +44,8 @@ struct Probe;
 
 impl Plugin for Probe {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("probe"),
-            name: Cow::Borrowed("Probe"),
-            description: Cow::Borrowed(""),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(Id::new_static("probe"), "Probe", Version::new(0, 1, 0))
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

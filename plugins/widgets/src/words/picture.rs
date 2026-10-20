@@ -309,10 +309,7 @@ impl Widget for PictureWidget {
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        alloc::vec![WidgetTarget {
-            area,
-            command: NEXT.emit(()),
-        }]
+        alloc::vec![WidgetTarget::new(area, NEXT.emit(()))]
     }
 }
 

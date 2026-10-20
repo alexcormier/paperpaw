@@ -30,7 +30,7 @@ use paperpaw_sdk::wifi::{self, JoinFailure, WifiCommand, WifiState};
 use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
     Arg, Command, Env, Id, Manifest, MenuNeed, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
+    ScreenSpec, SettingGroupSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
 };
 
 use paperpaw_sdk::setting::{Setting, Text};
@@ -182,16 +182,9 @@ static SETTINGS: [SettingSpec; 3] = [
 
 impl Plugin for Wifi {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Wi-Fi"),
-            description: Cow::Borrowed(
-                "Joins Wi-Fi networks when needed and switches the radio off after.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(PLUGIN, "Wi-Fi", Version::new(0, 1, 0))
+            .description("Joins Wi-Fi networks when needed and switches the radio off after.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -199,32 +192,31 @@ impl Plugin for Wifi {
 
         // The settings, on the group's own page; only where PaperPaw
         // manages Wi-Fi.
-        r.add_setting_group(SettingGroupSpec {
-            id: GROUP,
-            title: Cow::Borrowed("wifi.title"),
-            order: 85,
-            page: Some(PAGE),
-        })?;
+        r.add_setting_group(
+            SettingGroupSpec::new(GROUP, "wifi.title")
+                .order(85)
+                .page(PAGE),
+        )?;
         r.add_icon(GROUP, Cow::Borrowed("wifi"))?;
-        r.add_status_item(StatusItemSpec {
-            id: STATUS,
-            title: Cow::Borrowed("wifi.status.item"),
-            value: Box::new(|env, _| {
+        r.add_status_item(StatusItemSpec::new(
+            STATUS,
+            "wifi.status.item",
+            Box::new(|env, _| {
                 env.wifi
                     .is_some_and(|w| w.state.is_online())
                     .then_some(StatusValue::Icon(Cow::Borrowed("wifi")))
             }),
-        })?;
+        ))?;
         r.add_settings(&SETTINGS)?;
         for spec in &SETTINGS {
             r.set_menu_need(spec.id.clone(), MenuNeed::Wifi)?;
         }
         let p = policy.clone();
-        r.add_screen(ScreenSpec {
-            id: PAGE,
-            title: Cow::Borrowed("wifi.title"),
-            factory: Box::new(move |env, _| Box::new(page::WifiPage::new(env, p.clone()))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            PAGE,
+            "wifi.title",
+            Box::new(move |env, _| Box::new(page::WifiPage::new(env, p.clone()))),
+        ))?;
 
         // A plugin wants the network.
         let p = policy.clone();
@@ -429,14 +421,16 @@ impl Plugin for Wifi {
 
         // The first-run setup: a network to join, where PaperPaw runs
         // the radio.
-        r.add_setup_step(paperpaw_sdk::setup::SetupStepSpec {
-            id: Id::new_static("wifi.setup"),
-            title: Cow::Borrowed("wifi.title"),
-            help: Cow::Borrowed("wifi.setup.help"),
-            order: 50,
-            page: paperpaw_sdk::setup::SetupPage::Screen(PAGE),
-            applies: Some(Box::new(|env: &Env<'_>| env.wifi.is_some())),
-        })?;
+        r.add_setup_step(
+            paperpaw_sdk::setup::SetupStepSpec::new(
+                Id::new_static("wifi.setup"),
+                "wifi.title",
+                paperpaw_sdk::setup::SetupPage::Screen(PAGE),
+            )
+            .help("wifi.setup.help")
+            .order(50)
+            .applies(Box::new(|env: &Env<'_>| env.wifi.is_some())),
+        )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

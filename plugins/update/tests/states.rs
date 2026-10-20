@@ -9,7 +9,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -22,8 +21,8 @@ use paperpaw_sdk::firmware::{
 };
 use paperpaw_sdk::{
     Canvas, Cx, DeviceInfo, DirEntry, DisplayInfo, Env, Handled, Id, InputCaps, Instant, Manifest,
-    MemoryClass, MemoryStorage, PixelFormat, Plugin, Priority, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, Storage, StorageError, Version,
+    MemoryClass, MemoryStorage, PixelFormat, Plugin, Priority, RegisterError, Registrar, Screen,
+    ScreenSpec, Storage, StorageError, Version,
 };
 
 const fn device(touch: bool) -> DeviceInfo {
@@ -126,28 +125,22 @@ impl Screen for Notice {
 
 impl Plugin for Notices {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("notices"),
-            name: Cow::Borrowed("Notices"),
-            description: Cow::Borrowed(""),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(Id::new_static("notices"), "Notices", Version::new(0, 1, 0))
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let said = self.0.clone();
         let id = Id::new_static("notices.notice");
-        r.add_screen(ScreenSpec {
-            id: id.clone(),
-            title: Cow::Borrowed(""),
-            factory: Box::new(move |_, p| {
+        r.add_screen(ScreenSpec::new(
+            id.clone(),
+            "",
+            Box::new(move |_, p| {
                 said.borrow_mut()
                     .push(p.get(params::TEXT).unwrap_or_default().to_string());
                 Box::new(Notice)
             }),
-        })?;
+        ))?;
         r.bind_slot(slots::NOTICE, id, Priority::DEFAULT)
     }
 }

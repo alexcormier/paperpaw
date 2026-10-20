@@ -5,15 +5,12 @@
 //! Sessions add it besides the plugins being checked (see [`add`]); the
 //! checks leave its namespace, [`PLUGIN`], out.
 
-use std::borrow::Cow;
 use std::sync::Mutex;
 
 use paperpaw_core::KernelBuilder;
 use paperpaw_platform::Rect;
 use paperpaw_sdk::widgets::{Widget, WidgetSpec};
-use paperpaw_sdk::{
-    Canvas, Env, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
-};
+use paperpaw_sdk::{Canvas, Env, Id, Manifest, Plugin, RegisterError, Registrar, Version};
 
 use crate::AddPlugins;
 
@@ -62,14 +59,13 @@ struct Probe;
 
 impl Plugin for Probe {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static(PLUGIN),
-            name: Cow::Borrowed("paperpaw-dev"),
-            description: Cow::Borrowed("Measures where widgets are drawn, for paperpaw-dev."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            Id::new_static(PLUGIN),
+            "paperpaw-dev",
+            Version::new(0, 1, 0),
+        )
+        .description("Measures where widgets are drawn, for paperpaw-dev.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

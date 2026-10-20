@@ -18,11 +18,23 @@ use crate::params::Params;
 pub type ScreenFactory = Box<dyn Fn(&Env<'_>, &Params) -> Box<dyn Screen>>;
 
 /// A screen contribution.
+#[non_exhaustive]
 pub struct ScreenSpec {
     pub id: Id,
     /// Translation key of the screen's display name.
     pub title: Cow<'static, str>,
     pub factory: ScreenFactory,
+}
+
+impl ScreenSpec {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(id: Id, title: impl Into<Cow<'static, str>>, factory: ScreenFactory) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            factory,
+        }
+    }
 }
 
 impl fmt::Debug for ScreenSpec {

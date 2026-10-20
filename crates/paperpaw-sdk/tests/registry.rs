@@ -148,11 +148,8 @@ fn presets_kept_in_the_program_are_checked_like_others() {
 #[test]
 fn every_kind_of_contribution_says_what_it_is() {
     let mut r = registrar();
-    r.add_slot(SlotSpec {
-        id: Id::new_static("demo.slot"),
-        title: Cow::Borrowed(""),
-    })
-    .unwrap();
+    r.add_slot(SlotSpec::new(Id::new_static("demo.slot"), ""))
+        .unwrap();
     r.bind_slot(
         Id::new_static("core.reader"),
         Id::new_static("demo.screen"),
@@ -253,10 +250,12 @@ fn input_filters_take_what_the_first_one_does_not_pass() {
         name,
         state: ButtonState::Pressed,
     };
-    let make = |id: &'static str, verdict: fn(&InputEvent) -> InputVerdict| InputFilterSpec {
-        id: Id::new_static(id),
-        title: Cow::Borrowed(""),
-        filter: Box::new(move |_, event| verdict(event)),
+    let make = |id: &'static str, verdict: fn(&InputEvent) -> InputVerdict| {
+        InputFilterSpec::new(
+            Id::new_static(id),
+            "",
+            Box::new(move |_, event| verdict(event)),
+        )
     };
     let h = common::Harness::new();
     let env = h.env();
@@ -304,23 +303,23 @@ fn refresh_filters_change_the_mode_in_turn_and_full_covers_the_screen() {
         screen: Some(Id::new_static("core.reader")),
     };
     assert_eq!(filters.apply(&env, refresh.clone(), screen), refresh);
-    filters.add(RefreshFilterSpec {
-        id: Id::new_static("f.full"),
-        title: Cow::Borrowed(""),
-        filter: Box::new(|_, r| {
+    filters.add(RefreshFilterSpec::new(
+        Id::new_static("f.full"),
+        "",
+        Box::new(|_, r| {
             (r.screen
                 .as_ref()
                 .is_some_and(|s| s.as_str() == "core.reader"))
             .then_some(RefreshMode::Full)
         }),
-    });
+    ));
     // A later filter sees the change and may take it back; the region
     // stays the whole screen.
-    filters.add(RefreshFilterSpec {
-        id: Id::new_static("f.fast"),
-        title: Cow::Borrowed(""),
-        filter: Box::new(|_, r| (r.mode == RefreshMode::Full).then_some(RefreshMode::Fast)),
-    });
+    filters.add(RefreshFilterSpec::new(
+        Id::new_static("f.fast"),
+        "",
+        Box::new(|_, r| (r.mode == RefreshMode::Full).then_some(RefreshMode::Fast)),
+    ));
     let changed = filters.apply(&env, refresh.clone(), screen);
     assert_eq!((changed.mode, changed.region), (RefreshMode::Fast, screen));
     let elsewhere = Refresh {
@@ -337,12 +336,12 @@ fn text_filter_signatures_name_those_that_do_something() {
     let env = h.env();
     assert_eq!(filters.signature(&env), "");
     for (id, signature) in [("f.bold", "on"), ("f.idle", ""), ("f.size", "3")] {
-        filters.add(TextFilterSpec {
-            id: Id::new_static(id),
-            title: Cow::Borrowed(""),
-            filter: Box::new(|_, _| {}),
-            signature: Box::new(move |_| signature.to_string()),
-        });
+        filters.add(TextFilterSpec::new(
+            Id::new_static(id),
+            "",
+            Box::new(|_, _| {}),
+            Box::new(move |_| signature.to_string()),
+        ));
     }
     filters.shrink_to_fit();
     assert_eq!(filters.signature(&env), "f.bold=on;f.size=3;");
@@ -370,10 +369,8 @@ fn breaks(hyphenation: &Hyphenation, language: &str, word: &str) -> Option<Vec<u
 #[test]
 fn hyphenation_falls_back_to_the_base_language_and_back() {
     let mut hyphenation = Hyphenation::new();
-    let spec = |id: &'static str, language: &'static str| HyphenationSpec {
-        id: Id::new_static(id),
-        language: Cow::Borrowed(language),
-        patterns: patterns(language),
+    let spec = |id: &'static str, language: &'static str| {
+        HyphenationSpec::new(Id::new_static(id), language, patterns(language))
     };
     hyphenation.add(spec("h.de", "de")).unwrap();
     hyphenation.add(spec("h.de-at", "de-AT")).unwrap();
@@ -398,11 +395,7 @@ fn hyphenation_falls_back_to_the_base_language_and_back() {
     assert_eq!(breaks(&hyphenation, "fr", "abcd"), None);
     assert_eq!(breaks(&hyphenation, "", "abcd"), None);
     // Patterns that are no patterns are refused.
-    let broken = HyphenationSpec {
-        id: Id::new_static("h.broken"),
-        language: Cow::Borrowed("xx"),
-        patterns: b"not compiled patterns",
-    };
+    let broken = HyphenationSpec::new(Id::new_static("h.broken"), "xx", b"not compiled patterns");
     assert!(matches!(
         hyphenation.add(broken),
         Err(RegisterError::Invalid { .. })
@@ -415,22 +408,20 @@ fn later_hyphenation_of_a_language_wins() {
     let mut hyphenation = Hyphenation::new();
     for (id, text) in [("h.one", "a1b"), ("h.two", "b1c")] {
         hyphenation
-            .add(HyphenationSpec {
-                id: Id::parse(id).unwrap(),
-                language: Cow::Borrowed("de"),
-                patterns: Box::leak(
-                    paperpaw_sdk::hyphen::compile(text, "", 1, 1).into_boxed_slice(),
-                ),
-            })
+            .add(HyphenationSpec::new(
+                Id::parse(id).unwrap(),
+                "de",
+                Box::leak(paperpaw_sdk::hyphen::compile(text, "", 1, 1).into_boxed_slice()),
+            ))
             .unwrap();
     }
     let mut only_two = Hyphenation::new();
     only_two
-        .add(HyphenationSpec {
-            id: Id::new_static("h.two"),
-            language: Cow::Borrowed("de"),
-            patterns: Box::leak(paperpaw_sdk::hyphen::compile("b1c", "", 1, 1).into_boxed_slice()),
-        })
+        .add(HyphenationSpec::new(
+            Id::new_static("h.two"),
+            "de",
+            Box::leak(paperpaw_sdk::hyphen::compile("b1c", "", 1, 1).into_boxed_slice()),
+        ))
         .unwrap();
     assert_eq!(
         breaks(&hyphenation, "de", "abcd"),
@@ -472,13 +463,12 @@ fn services_are_found_by_id_and_type_and_the_first_wins() {
 }
 
 fn format(id: &'static str, extensions: &[&'static str]) -> FormatSpec {
-    FormatSpec {
-        id: Id::new_static(id),
-        title: Cow::Borrowed(""),
-        extensions: extensions.iter().map(|e| Cow::Borrowed(*e)).collect(),
-        open: Box::new(|_, _, _| Err(DocumentError::UnsupportedFormat)),
-        prepared: None,
-    }
+    FormatSpec::new(
+        Id::new_static(id),
+        "",
+        extensions.iter().map(|e| Cow::Borrowed(*e)).collect(),
+        Box::new(|_, _, _| Err(DocumentError::UnsupportedFormat)),
+    )
 }
 
 #[test]
@@ -540,14 +530,8 @@ fn register_errors_say_what_is_wrong() {
         "why"
     );
     assert!(Priority::FALLBACK < Priority::DEFAULT && Priority::DEFAULT < Priority::PREFERRED);
-    let manifest = Manifest {
-        id: Id::new_static("demo"),
-        name: Cow::Borrowed("Demo"),
-        description: Cow::Borrowed(""),
-        version: Version::new(1, 0, 0),
-        sdk: paperpaw_sdk::SDK_VERSION,
-        uses: paperpaw_sdk::Uses::NOTHING,
-    };
+    let manifest = Manifest::new(Id::new_static("demo"), "Demo", Version::new(1, 0, 0))
+        .uses(paperpaw_sdk::Uses::NOTHING);
     assert_eq!(manifest.clone(), manifest);
 }
 

@@ -47,8 +47,8 @@ use paperpaw_sdk::builtin::{
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::{
-    Command, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar, SDK_VERSION,
-    ScreenSpec, SettingSpec, Version,
+    Command, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar, ScreenSpec,
+    SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("reader");
@@ -464,16 +464,9 @@ static SETTINGS: [SettingSpec; 20] = [
 
 impl Plugin for Reader {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Reader"),
-            description: Cow::Borrowed(
-                "Shows books page by page, with table of contents and reading settings.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Reader", Version::new(0, 1, 0))
+            .description("Shows books page by page, with table of contents and reading settings.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -485,41 +478,39 @@ impl Plugin for Reader {
         )?;
         // The page takes all of the screen; the buttons' row comes on a press.
         r.set_screen_hints(SCREEN, paperpaw_sdk::Hints::OnPress)?;
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("reader.title"),
-            factory: Box::new(|env, params| Box::new(screen::ReaderScreen::open(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "reader.title",
+            Box::new(|env, params| Box::new(screen::ReaderScreen::open(env, params))),
+        ))?;
         r.bind_slot(slots::READER, SCREEN, Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec {
-            id: TOC_SCREEN,
-            title: Cow::Borrowed("reader.toc"),
-            factory: Box::new(|env, params| Box::new(toc::TocScreen::open(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            TOC_SCREEN,
+            "reader.toc",
+            Box::new(|env, params| Box::new(toc::TocScreen::open(env, params))),
+        ))?;
         r.add_action(paperpaw_sdk::ActionSpec::new(actions::TOC, "reader.toc"))?;
-        r.add_screen(ScreenSpec {
-            id: ANNOTATIONS_SCREEN,
-            title: Cow::Borrowed("reader.annotations"),
-            factory: Box::new(|env, params| {
-                Box::new(annotations::AnnotationsScreen::open(env, params))
-            }),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            ANNOTATIONS_SCREEN,
+            "reader.annotations",
+            Box::new(|env, params| Box::new(annotations::AnnotationsScreen::open(env, params))),
+        ))?;
         status::register(r)?;
-        r.add_screen(ScreenSpec {
-            id: SKIM_SCREEN,
-            title: Cow::Borrowed("reader.skim"),
-            factory: Box::new(|env, params| Box::new(skim::SkimScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: FOOTNOTE_SCREEN,
-            title: Cow::Borrowed("reader.title"),
-            factory: Box::new(|env, params| Box::new(footnote::FootnoteScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: SEARCH_SCREEN,
-            title: Cow::Borrowed("reader.search"),
-            factory: Box::new(|env, params| Box::new(search::SearchScreen::open(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SKIM_SCREEN,
+            "reader.skim",
+            Box::new(|env, params| Box::new(skim::SkimScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            FOOTNOTE_SCREEN,
+            "reader.title",
+            Box::new(|env, params| Box::new(footnote::FootnoteScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            SEARCH_SCREEN,
+            "reader.search",
+            Box::new(|env, params| Box::new(search::SearchScreen::open(env, params))),
+        ))?;
         for (id, title) in [
             (actions::SEARCH, "reader.search"),
             (actions::GO_TO_PAGE, "reader.go-to-page"),
@@ -559,11 +550,7 @@ impl Plugin for Reader {
             (actions::EXTEND, 80),
             (actions::CANCEL, 90),
         ] {
-            r.add_menu_entry(paperpaw_sdk::MenuEntry {
-                menu: SELECTION_MENU,
-                item,
-                order,
-            })?;
+            r.add_menu_entry(paperpaw_sdk::MenuEntry::new(SELECTION_MENU, item).order(order))?;
         }
 
         r.add_settings(&SETTINGS)?;
@@ -673,7 +660,7 @@ impl Plugin for Reader {
             (MORE_MENU, core_actions::SETTINGS, 50),
         ];
         for (menu, item, order) in entries {
-            r.add_menu_entry(paperpaw_sdk::MenuEntry { menu, item, order })?;
+            r.add_menu_entry(paperpaw_sdk::MenuEntry::new(menu, item).order(order))?;
         }
         // Short menus: reading aloud where the device speaks; choosing
         // text and links and switching status lines (a tap on one by
@@ -714,14 +701,14 @@ impl Plugin for Reader {
         r.on(events::STARTED, |env, (), out| reopen_last_book(env, out))?;
         r.on(events::BOOK_MOVED, |env, moved, _| book_moved(env, moved))?;
         // The first-run setup: how large the text is.
-        r.add_setup_step(paperpaw_sdk::setup::SetupStepSpec {
-            id: Id::new_static("reader.setup.font-size"),
-            title: Cow::Borrowed(""),
-            help: Cow::Borrowed(""),
-            order: 30,
-            page: paperpaw_sdk::setup::SetupPage::Setting(settings::FONT_SIZE.into()),
-            applies: None,
-        })?;
+        r.add_setup_step(
+            paperpaw_sdk::setup::SetupStepSpec::new(
+                Id::new_static("reader.setup.font-size"),
+                "",
+                paperpaw_sdk::setup::SetupPage::Setting(settings::FONT_SIZE.into()),
+            )
+            .order(30),
+        )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

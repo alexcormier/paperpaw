@@ -4,15 +4,12 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
-
 use paperpaw_core::Kernel;
 use paperpaw_platform::Rotation;
 use paperpaw_plugin_plugin_manager::{OPEN, PluginManager};
 use paperpaw_sdk::{
     ActionSpec, Command, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
-    MemoryClass, MemoryStorage, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION,
-    Version,
+    MemoryClass, MemoryStorage, PixelFormat, Plugin, RegisterError, Registrar, Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -43,14 +40,13 @@ struct Installer;
 
 impl Plugin for Installer {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("installer"),
-            name: Cow::Borrowed("Installer"),
-            description: Cow::Borrowed("Installs a plugin."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            Id::new_static("installer"),
+            "Installer",
+            Version::new(0, 1, 0),
+        )
+        .description("Installs a plugin.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

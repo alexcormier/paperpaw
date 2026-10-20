@@ -158,9 +158,17 @@ pub type WidgetFactory = Box<dyn Fn(&Env<'_>) -> Box<dyn Widget>>;
 /// A place in a widget that does something: a tap on it, or confirm
 /// once buttons moved the focus there, runs `command`.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct WidgetTarget {
     pub area: Rect,
     pub command: crate::Command,
+}
+
+impl WidgetTarget {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(area: Rect, command: crate::Command) -> Self {
+        Self { area, command }
+    }
 }
 
 /// A widget contribution: its id, its name and how it is made.

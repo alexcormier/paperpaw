@@ -7,7 +7,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -22,7 +21,7 @@ use paperpaw_sdk::web::percent_decode;
 use paperpaw_sdk::{
     Canvas, Cx, DeviceInfo, DisplayInfo, Env, Handled, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, Priority, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, Version,
+    Screen, ScreenSpec, Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -60,27 +59,26 @@ impl Screen for Silent {
 
 impl Plugin for Keyboard {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("test-keyboard"),
-            name: Cow::Borrowed("Keyboard"),
-            description: Cow::Borrowed("Keeps the questions for the test."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(
+            Id::new_static("test-keyboard"),
+            "Keyboard",
+            Version::new(0, 1, 0),
+        )
+        .description("Keeps the questions for the test.")
+        .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let screen = Id::new_static("test-keyboard.keys");
         let asked = self.0.clone();
-        r.add_screen(ScreenSpec {
-            id: screen.clone(),
-            title: Cow::Borrowed("keys"),
-            factory: Box::new(move |_, p| {
+        r.add_screen(ScreenSpec::new(
+            screen.clone(),
+            "keys",
+            Box::new(move |_, p| {
                 asked.borrow_mut().push(p.clone());
                 Box::new(Silent)
             }),
-        })?;
+        ))?;
         r.bind_slot(slots::KEYBOARD, screen, Priority::PREFERRED)
     }
 }

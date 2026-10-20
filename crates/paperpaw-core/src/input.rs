@@ -190,12 +190,12 @@ impl Recognizer {
                     } else {
                         return None;
                     };
-                    return Some(Recognized::Gesture(Gesture {
+                    return Some(Recognized::Gesture(Gesture::new(
                         kind,
-                        start: pointer.start,
-                        end: pointer.last,
-                        tool: pointer.tool,
-                    }));
+                        pointer.start,
+                        pointer.last,
+                        pointer.tool,
+                    )));
                 }
                 let kind = if !pointer.moved {
                     GestureKind::Tap
@@ -204,12 +204,12 @@ impl Recognizer {
                 } else {
                     return None;
                 };
-                Some(Recognized::Gesture(Gesture {
+                Some(Recognized::Gesture(Gesture::new(
                     kind,
-                    start: pointer.start,
-                    end: pointer.last,
-                    tool: pointer.tool,
-                }))
+                    pointer.start,
+                    pointer.last,
+                    pointer.tool,
+                )))
             }
             (PointerPhase::Cancel, Some(i)) => {
                 self.pointers.swap_remove(i);
@@ -237,12 +237,12 @@ impl Recognizer {
                 && now.since(pointer.since) >= thresholds.long_press_ms
             {
                 pointer.long_fired = true;
-                fired.push(Recognized::Gesture(Gesture {
-                    kind: GestureKind::LongPress,
-                    start: pointer.start,
-                    end: pointer.last,
-                    tool: pointer.tool,
-                }));
+                fired.push(Recognized::Gesture(Gesture::new(
+                    GestureKind::LongPress,
+                    pointer.start,
+                    pointer.last,
+                    pointer.tool,
+                )));
             }
         }
         fired

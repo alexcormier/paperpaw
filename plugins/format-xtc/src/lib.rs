@@ -35,8 +35,7 @@ use paperpaw_sdk::document::{
 };
 use paperpaw_sdk::image::{GrayFile, GrayWriter, ImageError, ImageSink};
 use paperpaw_sdk::{
-    Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Storage,
-    StorageError, Version,
+    Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, Storage, StorageError, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("format-xtc");
@@ -491,30 +490,22 @@ pub struct XtcFormat;
 
 impl Plugin for XtcFormat {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("XTC"),
-            description: Cow::Borrowed(
-                "Opens XTC and XTCH books, the Xteink readers' pre-rendered pages.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "XTC", Version::new(0, 1, 0))
+            .description("Opens XTC and XTCH books, the Xteink readers' pre-rendered pages.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is decoded of each book, moved and removed with it.
         r.add_book_data(Env::plugin_dir(PLUGIN.as_str()), "")?;
-        r.add_format(FormatSpec {
-            id: FORMAT,
-            title: Cow::Borrowed("format-xtc.title"),
-            extensions: vec![Cow::Borrowed("xtc"), Cow::Borrowed("xtch")],
-            open: Box::new(|storage, path, _| {
+        r.add_format(FormatSpec::new(
+            FORMAT,
+            "format-xtc.title",
+            vec![Cow::Borrowed("xtc"), Cow::Borrowed("xtch")],
+            Box::new(|storage, path, _| {
                 XtcDocument::open(storage, path).map(|d| Box::new(d) as Box<dyn Document>)
             }),
-            prepared: None,
-        })?;
+        ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

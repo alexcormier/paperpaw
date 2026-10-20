@@ -193,14 +193,13 @@ struct BuiltInStats;
 
 impl paperpaw_sdk::Plugin for BuiltInStats {
     fn manifest(&self) -> paperpaw_sdk::Manifest {
-        paperpaw_sdk::Manifest {
-            id: Id::new_static("stats"),
-            name: "Reading statistics".into(),
-            description: "Reading statistics.".into(),
-            version: paperpaw_sdk::Version::new(0, 4, 0),
-            sdk: paperpaw_sdk::SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        paperpaw_sdk::Manifest::new(
+            Id::new_static("stats"),
+            "Reading statistics",
+            paperpaw_sdk::Version::new(0, 4, 0),
+        )
+        .description("Reading statistics.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, _: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {

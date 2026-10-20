@@ -5,8 +5,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
-
 use paperpaw_core::KernelBuilder;
 use paperpaw_dev::cli::Context;
 use paperpaw_dev::reach::{self, Limits};
@@ -18,7 +16,7 @@ use paperpaw_sdk::builtin::menus;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::{
     ActionSpec, Canvas, Command, Cx, Env, Handled, Id, Manifest, MenuEntry, Params, Plugin,
-    RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, Version,
+    RegisterError, Registrar, Screen, ScreenSpec, Version,
 };
 
 const OPEN: Id = Id::new_static("trapped.open");
@@ -31,37 +29,28 @@ struct Trapped;
 
 impl Plugin for Trapped {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("trapped"),
-            name: Cow::Borrowed("Trapped"),
-            description: Cow::Borrowed("Fails the reach check on purpose."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("trapped"), "Trapped", Version::new(0, 1, 0))
+            .description("Fails the reach check on purpose.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: STUCK,
-            title: Cow::Borrowed("trapped.stuck"),
-            factory: Box::new(|_, _| Box::new(Stuck)),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: HIDDEN,
-            title: Cow::Borrowed("trapped.hidden"),
-            factory: Box::new(|_, _| Box::new(Hidden)),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            STUCK,
+            "trapped.stuck",
+            Box::new(|_, _| Box::new(Stuck)),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            HIDDEN,
+            "trapped.hidden",
+            Box::new(|_, _| Box::new(Hidden)),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "trapped.open").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(STUCK, Params::new()));
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::TOOLS,
-            item: OPEN,
-            order: 0,
-        })
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN))
     }
 }
 

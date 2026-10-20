@@ -201,6 +201,7 @@ impl Padding {
 
 /// A widget's place inside its frame, and the colours to draw in there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Look {
     /// Where its content goes.
     pub area: Rect,
@@ -211,6 +212,24 @@ pub struct Look {
     /// What lies behind it: white, or black on a dark card.
     pub paper: Color,
     pub frame: Frame,
+}
+
+impl Look {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(area: Rect, ink: Color, faint: Color, paper: Color, frame: Frame) -> Self {
+        Self {
+            area,
+            ink,
+            faint,
+            paper,
+            frame,
+        }
+    }
+
+    /// The same look in another area (e.g. a caption's).
+    pub fn within(self, area: Rect) -> Self {
+        Self { area, ..self }
+    }
 }
 
 /// The id of `widget`'s setting `key`: `<widget>.<key>`.

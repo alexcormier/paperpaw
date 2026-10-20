@@ -23,7 +23,7 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::semantics::{self, Part, Role};
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MemoryStorage, Params, Plugin, RegisterError,
-    Registrar, SDK_VERSION, Version,
+    Registrar, Version,
 };
 use proptest::prelude::*;
 
@@ -75,14 +75,13 @@ struct Listener(Rc<RefCell<Vec<Typed>>>);
 
 impl Plugin for Listener {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("listener"),
-            name: "Listener".into(),
-            description: "Hears the typed text.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            Id::new_static("listener"),
+            "Listener",
+            Version::new(0, 1, 0),
+        )
+        .description("Hears the typed text.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

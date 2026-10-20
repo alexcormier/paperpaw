@@ -18,7 +18,7 @@ use paperpaw_plugin_about::About;
 use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::{
     Canvas, Cx, DirEntry, Env, Handled, Id, Manifest, MemoryStorage, Plugin, Priority,
-    RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, Storage, StorageError, Version,
+    RegisterError, Registrar, Screen, ScreenSpec, Storage, StorageError, Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -63,28 +63,27 @@ impl Screen for Blank {
 
 impl Plugin for Reader {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("fake-reader"),
-            name: "Reader".into(),
-            description: "Keeps what it opens.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            Id::new_static("fake-reader"),
+            "Reader",
+            Version::new(0, 1, 0),
+        )
+        .description("Keeps what it opens.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let opened = self.0.clone();
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("fake-reader.screen"),
-            title: "Reader".into(),
-            factory: Box::new(move |_, params| {
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("fake-reader.screen"),
+            "Reader",
+            Box::new(move |_, params| {
                 opened
                     .borrow_mut()
                     .push(params.get(params::PATH).unwrap_or_default().to_string());
                 Box::new(Blank)
             }),
-        })?;
+        ))?;
         r.bind_slot(
             slots::READER,
             Id::new_static("fake-reader.screen"),

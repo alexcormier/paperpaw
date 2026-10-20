@@ -11,11 +11,23 @@ use crate::plugin::RegisterError;
 
 /// Hyphenation patterns for a language, compiled with
 /// [`hyphen::compile`](crate::hyphen::compile).
+#[non_exhaustive]
 pub struct HyphenationSpec {
     pub id: Id,
     /// Language tag, e.g. `de` or `en-US`.
     pub language: Cow<'static, str>,
     pub patterns: &'static [u8],
+}
+
+impl HyphenationSpec {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(id: Id, language: impl Into<Cow<'static, str>>, patterns: &'static [u8]) -> Self {
+        Self {
+            id,
+            language: language.into(),
+            patterns,
+        }
+    }
 }
 
 impl fmt::Debug for HyphenationSpec {

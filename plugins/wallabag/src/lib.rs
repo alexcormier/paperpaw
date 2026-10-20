@@ -39,8 +39,8 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::web::{clean_name, encode};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
-    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingSpec, Storage, StorageError,
+    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec, SettingSpec, Storage, StorageError,
 };
 
 pub const PLUGIN: Id = Id::new_static("wallabag");
@@ -542,25 +542,19 @@ static SETTINGS: [SettingSpec; 3] = [
 
 impl Plugin for Wallabag {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Wallabag"),
-            description: Cow::Borrowed("Articles saved in Wallabag, fetched as books."),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(PLUGIN, "Wallabag", paperpaw_sdk::package_version!())
+            .description("Articles saved in Wallabag, fetched as books.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::default();
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("wallabag.title"),
-            factory: Box::new(|env, _| Box::new(SetupScreen::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "wallabag.title",
+            Box::new(|env, _| Box::new(SetupScreen::new(env))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "wallabag.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
@@ -584,11 +578,7 @@ impl Plugin for Wallabag {
         r.on(FETCH_DUE, move |env, (), out| {
             s.borrow_mut().start(env, out)
         })?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::TOOLS,
-            item: OPEN,
-            order: 48,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(48))?;
         r.add_icon(OPEN, Cow::Borrowed("article"))?;
         r.add_icon(FETCH, Cow::Borrowed("refresh"))?;
         type Step = fn(&mut Fetch, &Env<'_>, &HttpReply, &mut Vec<Command>);

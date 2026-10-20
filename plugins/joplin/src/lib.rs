@@ -48,7 +48,7 @@ use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingExtra, SettingSpec,
+    ScreenSpec, SettingExtra, SettingSpec,
 };
 
 pub use send::DEFAULT_NOTEBOOK;
@@ -117,25 +117,19 @@ pub struct Joplin;
 
 impl Plugin for Joplin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Joplin"),
-            description: Cow::Borrowed("Keeps the highlights and notes of each book in Joplin."),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(PLUGIN, "Joplin", paperpaw_sdk::package_version!())
+            .description("Keeps the highlights and notes of each book in Joplin.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let run: Rc<RefCell<Run>> = Rc::default();
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("joplin.title"),
-            factory: Box::new(|env, _| Box::new(setup::SetupScreen::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "joplin.title",
+            Box::new(|env, _| Box::new(setup::SetupScreen::new(env))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "joplin.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
@@ -159,11 +153,7 @@ impl Plugin for Joplin {
         r.on(SEND_DUE, move |env, (), out| {
             state.borrow_mut().start(env, Start::Action, out);
         })?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::TOOLS,
-            item: OPEN,
-            order: 49,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(49))?;
         r.add_icon(OPEN, Cow::Borrowed("note"))?;
         r.add_icon(SEND, Cow::Borrowed("upload"))?;
 

@@ -34,7 +34,7 @@ use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::firmware::Firmware;
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, MenuNeed, Params, Plugin,
-    RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingSpec, Storage, Version,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, Storage, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("update");
@@ -119,27 +119,22 @@ pub struct Update;
 
 impl Plugin for Update {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Update"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "Update", Version::new(0, 1, 0))
+            .description(
                 "Installs firmware updates, from the card or downloaded from the internet.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+            )
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
         // Only where PaperPaw updates the firmware.
         r.set_menu_need(online::SERVER.id().clone(), MenuNeed::Firmware)?;
-        r.add_screen(ScreenSpec {
-            id: PAGE,
-            title: Cow::Borrowed("update.title"),
-            factory: Box::new(|env, _| Box::new(page::UpdatePage::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            PAGE,
+            "update.title",
+            Box::new(|env, _| Box::new(page::UpdatePage::new(env))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "update.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(PAGE, Params::new()));
@@ -166,11 +161,7 @@ impl Plugin for Update {
         r.on(online::DOWNLOADED, online::downloaded)?;
         r.on(fetch::FETCHED, fetch::received)?;
         // In the device's part of the settings, before *About*.
-        r.add_menu_entry(MenuEntry {
-            menu: menus::SETTINGS,
-            item: OPEN,
-            order: 98,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(98))?;
         r.set_menu_need(OPEN, MenuNeed::Firmware)?;
         r.add_icon(OPEN, Cow::Borrowed("circle-arrow-up"))?;
         r.on(events::STARTED, |env, _, out| {

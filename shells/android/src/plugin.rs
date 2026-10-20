@@ -8,7 +8,7 @@ use paperpaw_sdk::builtin::{events, groups, menus, params};
 use paperpaw_sdk::document::Document;
 use paperpaw_sdk::{
     ActionSpec, Canvas, Command, Cx, Env, FormatSpec, Handled, Id, Manifest, MenuEntry, MenuNeed,
-    Params, Plugin, Rect, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, SettingSpec,
+    Params, Plugin, Rect, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
     Version,
 };
 
@@ -54,14 +54,9 @@ pub struct AndroidPlugin {
 
 impl Plugin for AndroidPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Android"),
-            description: Cow::Borrowed("Connects PaperPaw to Android, e.g. to your book folders."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Android", Version::new(0, 1, 0))
+            .description("Connects PaperPaw to Android, e.g. to your book folders.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -75,27 +70,22 @@ impl Plugin for AndroidPlugin {
         )?;
         if !self.shared_storage {
             // First on the home screen until access is granted.
-            r.add_menu_entry(MenuEntry {
-                menu: HOME_ACTIONS,
-                item: ALLOW_STORAGE,
-                order: 0,
-            })?;
+            r.add_menu_entry(MenuEntry::new(HOME_ACTIONS, ALLOW_STORAGE))?;
         }
         if let Some(frontlight) = self.frontlight {
             self.register_frontlight(r, frontlight)?;
         }
         self.register_voice(r)?;
         let (app, screen) = (self.app.clone(), self.screen);
-        r.add_format(FormatSpec {
-            id: PDF,
-            title: Cow::Borrowed("android.pdf"),
-            extensions: vec![Cow::Borrowed("pdf")],
-            open: Box::new(move |storage, path, _| {
+        r.add_format(FormatSpec::new(
+            PDF,
+            "android.pdf",
+            vec![Cow::Borrowed("pdf")],
+            Box::new(move |storage, path, _| {
                 crate::pdf::PdfDocument::open(&app, storage, path, screen)
                     .map(|d| Box::new(d) as Box<dyn Document>)
             }),
-            prepared: None,
-        })?;
+        ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -141,11 +131,11 @@ impl AndroidPlugin {
         )?;
         r.set_menu_need(VOICE, MenuNeed::Speech)?;
         let app = self.app.clone();
-        r.add_screen(ScreenSpec {
-            id: VOICE_SCREEN,
-            title: Cow::Borrowed("android.voice"),
-            factory: Box::new(move |_, _| Box::new(VoiceSettings { app: app.clone() })),
-        })
+        r.add_screen(ScreenSpec::new(
+            VOICE_SCREEN,
+            "android.voice",
+            Box::new(move |_, _| Box::new(VoiceSettings { app: app.clone() })),
+        ))
     }
 
     /// Brightness and warmth as settings, also in the reader's and the
@@ -189,11 +179,9 @@ impl AndroidPlugin {
         // settings in the main menu.
         for (n, item) in items.into_iter().enumerate() {
             for (menu, order) in [(READER_PANEL, -10), (menus::MAIN, 82), (menus::QUICK, 20)] {
-                r.add_menu_entry(MenuEntry {
-                    menu,
-                    item: item.clone().into(),
-                    order: order + n as i16,
-                })?;
+                r.add_menu_entry(
+                    MenuEntry::new(menu, item.clone().into()).order(order + n as i16),
+                )?;
             }
         }
         r.add_icon(FRONTLIGHT, Cow::Borrowed("bulb"))?;

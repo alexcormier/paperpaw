@@ -6,7 +6,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::sync::Mutex;
 
 use paperpaw_core::KernelBuilder;
@@ -79,35 +78,30 @@ struct Probe;
 
 impl Plugin for Probe {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("perf-probe"),
-            name: Cow::Borrowed("Perf probe"),
-            description: Cow::Borrowed("Screens that break the X4's budgets."),
-            version: SDK_VERSION,
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("perf-probe"), "Perf probe", SDK_VERSION)
+            .description("Screens that break the X4's budgets.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("perf-probe.reads"),
-            title: Cow::Borrowed("perf-probe.reads"),
-            factory: Box::new(|_, _| Box::new(Reads)),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("perf-probe.big"),
-            title: Cow::Borrowed("perf-probe.big"),
-            factory: Box::new(|_, _| Box::new(Big(vec![1; 200 * 1024]))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("perf-probe.leaks"),
-            title: Cow::Borrowed("perf-probe.leaks"),
-            factory: Box::new(|_, _| {
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("perf-probe.reads"),
+            "perf-probe.reads",
+            Box::new(|_, _| Box::new(Reads)),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("perf-probe.big"),
+            "perf-probe.big",
+            Box::new(|_, _| Box::new(Big(vec![1; 200 * 1024]))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("perf-probe.leaks"),
+            "perf-probe.leaks",
+            Box::new(|_, _| {
                 LEAKED.lock().unwrap().push(vec![1; 1024]);
                 Box::new(Leaks)
             }),
-        })?;
+        ))?;
         r.add_widget(WidgetSpec::new(
             Id::new_static("perf-probe.widget"),
             "perf-probe.widget",

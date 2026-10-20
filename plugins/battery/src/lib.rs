@@ -23,7 +23,7 @@ use core::cell::RefCell;
 use paperpaw_sdk::builtin::{events, groups, menus};
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingSpec, time,
+    ScreenSpec, SettingSpec, time,
 };
 
 use log::{Kind, Reading};
@@ -153,17 +153,11 @@ static SETTINGS: [SettingSpec; 2] = [
 
 impl Plugin for Battery {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Battery use"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "Battery use", paperpaw_sdk::package_version!())
+            .description(
                 "Records the battery while the device is awake and shows how long it lasts.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+            )
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -201,24 +195,20 @@ impl Plugin for Battery {
 
         // The view.
         let s = state.clone();
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("battery.title"),
-            factory: Box::new(move |env, _| {
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "battery.title",
+            Box::new(move |env, _| {
                 let now = reading(env, &s.borrow());
                 Box::new(view::BatteryView::new(env, now, &dir()))
             }),
-        })?;
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "battery.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::TOOLS,
-            item: OPEN,
-            order: 37,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(37))?;
         r.add_icon(OPEN, Cow::Borrowed("battery"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

@@ -21,7 +21,7 @@ use paperpaw_sdk::builtin::groups;
 use paperpaw_sdk::document::{Block, BlockKind, Run, TextStyle};
 use paperpaw_sdk::filters::TextFilterSpec;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::{Env, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, SettingSpec};
+use paperpaw_sdk::{Env, Id, Manifest, Plugin, RegisterError, Registrar, SettingSpec};
 
 pub const PLUGIN: Id = Id::new_static("aids");
 /// Setting: the first half of every word in bold.
@@ -143,48 +143,40 @@ static SETTINGS: [SettingSpec; 2] = [
 
 impl Plugin for Aids {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Reading aids"),
-            description: Cow::Borrowed(
-                "Bold word beginnings, replaced words: text as you want it.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Reading aids", paperpaw_sdk::package_version!())
+            .description("Bold word beginnings, replaced words: text as you want it.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_text_filter(TextFilterSpec {
-            id: Id::new_static("aids.bold"),
-            title: Cow::Borrowed("aids.setting.bold-beginnings"),
-            filter: Box::new(|env: &Env<'_>, block: &mut Block| {
+        r.add_text_filter(TextFilterSpec::new(
+            Id::new_static("aids.bold"),
+            "aids.setting.bold-beginnings",
+            Box::new(|env: &Env<'_>, block: &mut Block| {
                 if env.settings.read(&BOLD_BEGINNINGS) {
                     bold_beginnings(block);
                 }
             }),
-            signature: Box::new(|env: &Env<'_>| {
+            Box::new(|env: &Env<'_>| {
                 if env.settings.read(&BOLD_BEGINNINGS) {
                     String::from("on")
                 } else {
                     String::new()
                 }
             }),
-        })?;
-        r.add_text_filter(TextFilterSpec {
-            id: Id::new_static("aids.replace"),
-            title: Cow::Borrowed("aids.setting.replace"),
-            filter: Box::new(|env: &Env<'_>, block: &mut Block| {
+        ))?;
+        r.add_text_filter(TextFilterSpec::new(
+            Id::new_static("aids.replace"),
+            "aids.setting.replace",
+            Box::new(|env: &Env<'_>, block: &mut Block| {
                 let list = pairs(env.settings.read(&REPLACE));
                 if !list.is_empty() {
                     replace(block, &list);
                 }
             }),
-            signature: Box::new(|env: &Env<'_>| env.settings.read(&REPLACE).trim().to_string()),
-        })?;
+            Box::new(|env: &Env<'_>| env.settings.read(&REPLACE).trim().to_string()),
+        ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

@@ -279,7 +279,7 @@ mod tests {
     use alloc::rc::Rc;
     use core::cell::RefCell;
 
-    use paperpaw_sdk::{ActionSpec, MemoryStorage, SDK_VERSION, Version};
+    use paperpaw_sdk::{ActionSpec, MemoryStorage, Version};
 
     use super::*;
     use crate::tests::DEVICE;
@@ -289,14 +289,9 @@ mod tests {
 
     impl Plugin for Code {
         fn manifest(&self) -> Manifest {
-            Manifest {
-                id: Id::new_static(self.0),
-                name: Cow::Borrowed("Code"),
-                description: Cow::Borrowed("Native code."),
-                version: Version::new(1, 0, 0),
-                sdk: SDK_VERSION,
-                uses: paperpaw_sdk::Uses::NOTHING,
-            }
+            Manifest::new(Id::new_static(self.0), "Code", Version::new(1, 0, 0))
+                .description("Native code.")
+                .uses(paperpaw_sdk::Uses::NOTHING)
         }
 
         fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

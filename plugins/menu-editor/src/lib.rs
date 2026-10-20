@@ -25,8 +25,8 @@ use paperpaw_sdk::builtin::{actions, menus};
 use paperpaw_sdk::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, PointerEvent, Rect, RefreshMode, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec,
+    MenuEntry, Params, Plugin, PointerEvent, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("menu-editor");
@@ -55,15 +55,9 @@ pub struct MenuEditor;
 
 impl Plugin for MenuEditor {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Menu editor"),
-            description: Cow::Borrowed("Reorders, removes and adds the entries of every menu."),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Menu editor", paperpaw_sdk::package_version!())
+            .description("Reorders, removes and adds the entries of every menu.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -76,22 +70,14 @@ impl Plugin for MenuEditor {
             (ADD_SCREEN, |env, p| Box::new(AddScreen::open(env, p))),
         ];
         for (id, open) in screens {
-            r.add_screen(ScreenSpec {
-                id,
-                title: Cow::Borrowed("menu-editor.title"),
-                factory: Box::new(open),
-            })?;
+            r.add_screen(ScreenSpec::new(id, "menu-editor.title", Box::new(open)))?;
         }
         r.add_action(ActionSpec::new(OPEN, "menu-editor.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(MENUS_SCREEN, Params::new()));
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::SETTINGS,
-            item: OPEN,
-            order: 210,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(210))?;
         r.add_icon(OPEN, Cow::Borrowed("menu-2"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

@@ -37,7 +37,7 @@ use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::secrets::SecretChange;
-use paperpaw_sdk::{Command, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION};
+use paperpaw_sdk::{Command, Id, Manifest, Plugin, RegisterError, Registrar};
 
 use send::{Run, Start};
 
@@ -208,15 +208,9 @@ pub struct Readwise;
 
 impl Plugin for Readwise {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Readwise"),
-            description: Cow::Borrowed("Sends the highlights of exported notes to Readwise."),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(PLUGIN, "Readwise", paperpaw_sdk::package_version!())
+            .description("Sends the highlights of exported notes to Readwise.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

@@ -21,8 +21,8 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingSpec, Version,
+    MenuEntry, Params, Plugin, Rect, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
+    Version,
 };
 
 /// Ids start with the plugin's id: `hello.…`.
@@ -38,14 +38,9 @@ pub struct Hello;
 
 impl Plugin for Hello {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Hello"),
-            description: Cow::Borrowed("A sample plugin to start from."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Hello", Version::new(0, 1, 0))
+            .description("A sample plugin to start from.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -57,20 +52,16 @@ impl Plugin for Hello {
         r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, out| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         }))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::TOOLS,
-            item: OPEN,
-            order: 90,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(90))?;
         r.add_icon(OPEN, Cow::Borrowed("star"))?;
 
         // The screen, made each time it opens.
         let count = opened.clone();
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("hello.title"),
-            factory: Box::new(move |env, _| Box::new(HelloScreen::new(env, count.get()))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "hello.title",
+            Box::new(move |env, _| Box::new(HelloScreen::new(env, count.get()))),
+        ))?;
 
         // The setting: shown in the settings, saved by the kernel.
         r.add_setting(

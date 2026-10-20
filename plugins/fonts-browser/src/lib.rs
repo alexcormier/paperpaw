@@ -26,7 +26,7 @@ use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingSpec,
+    ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("fonts-browser");
@@ -54,36 +54,28 @@ pub struct FontsBrowser;
 
 impl Plugin for FontsBrowser {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("More fonts"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "More fonts", paperpaw_sdk::package_version!()).description(
                 "Shows fonts from the internet, each with a sample, and downloads them to read with.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+            ).uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec {
-            id: LIST_SCREEN,
-            title: Cow::Borrowed("fonts-browser.title"),
-            factory: Box::new(|env, _| Box::new(list::ListScreen::new(env))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: FONT_SCREEN,
-            title: Cow::Borrowed("fonts-browser.title"),
-            factory: Box::new(|env, params| Box::new(font::FontScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("fonts-browser.title"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            LIST_SCREEN,
+            "fonts-browser.title",
+            Box::new(|env, _| Box::new(list::ListScreen::new(env))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            FONT_SCREEN,
+            "fonts-browser.title",
+            Box::new(|env, params| Box::new(font::FontScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "fonts-browser.title",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "fonts-browser.more").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
@@ -91,11 +83,7 @@ impl Plugin for FontsBrowser {
         ))?;
         // After the fonts to choose from, where they are chosen.
         for setting in [settings::READING_FONT, settings::STATUS_FONT] {
-            r.add_menu_entry(MenuEntry {
-                menu: setting.id().clone(),
-                item: OPEN,
-                order: 0,
-            })?;
+            r.add_menu_entry(MenuEntry::new(setting.id().clone(), OPEN))?;
         }
         r.add_icon(OPEN, Cow::Borrowed("typography"))?;
         // Downloads go on while no screen of the plugin is open; one cut

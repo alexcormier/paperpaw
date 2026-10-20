@@ -37,12 +37,30 @@ pub type TextFilterFn = Box<dyn Fn(&Env<'_>, &mut Block)>;
 pub type TextFilterSignatureFn = Box<dyn Fn(&Env<'_>) -> String>;
 
 /// A text filter contribution.
+#[non_exhaustive]
 pub struct TextFilterSpec {
     pub id: Id,
     /// Translation key of its name.
     pub title: Cow<'static, str>,
     pub filter: TextFilterFn,
     pub signature: TextFilterSignatureFn,
+}
+
+impl TextFilterSpec {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(
+        id: Id,
+        title: impl Into<Cow<'static, str>>,
+        filter: TextFilterFn,
+        signature: TextFilterSignatureFn,
+    ) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            filter,
+            signature,
+        }
+    }
 }
 
 impl fmt::Debug for TextFilterSpec {
@@ -115,11 +133,23 @@ pub type InputFilterFn = Box<dyn Fn(&Env<'_>, &InputEvent) -> InputVerdict>;
 /// maps do, in the order the plugins registered. One that takes a finger
 /// takes it whole, from down to up; one that takes a button, its release
 /// too.
+#[non_exhaustive]
 pub struct InputFilterSpec {
     pub id: Id,
     /// Translation key of its name.
     pub title: Cow<'static, str>,
     pub filter: InputFilterFn,
+}
+
+impl InputFilterSpec {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(id: Id, title: impl Into<Cow<'static, str>>, filter: InputFilterFn) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            filter,
+        }
+    }
 }
 
 impl fmt::Debug for InputFilterSpec {
@@ -177,11 +207,23 @@ pub type RefreshFilterFn = Box<dyn Fn(&Env<'_>, &Refresh) -> Option<RefreshMode>
 /// decided (after the periodic full refresh) and may change its mode;
 /// later filters see the change. A full refresh then covers the whole
 /// screen.
+#[non_exhaustive]
 pub struct RefreshFilterSpec {
     pub id: Id,
     /// Translation key of its name.
     pub title: Cow<'static, str>,
     pub filter: RefreshFilterFn,
+}
+
+impl RefreshFilterSpec {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(id: Id, title: impl Into<Cow<'static, str>>, filter: RefreshFilterFn) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            filter,
+        }
+    }
 }
 
 impl fmt::Debug for RefreshFilterSpec {

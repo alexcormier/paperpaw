@@ -31,7 +31,7 @@ use alloc::borrow::Cow;
 
 use paperpaw_sdk::builtin::fonts;
 use paperpaw_sdk::{
-    Font, FontSpec, Id, Manifest, Plugin, Priority, RegisterError, Registrar, SDK_VERSION, Version,
+    Font, FontSpec, Id, Manifest, Plugin, Priority, RegisterError, Registrar, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("fonts-default");
@@ -131,14 +131,9 @@ pub struct DefaultFonts;
 pub struct DefaultFontPacks;
 
 fn manifest() -> Manifest {
-    Manifest {
-        id: PLUGIN,
-        name: Cow::Borrowed("Default fonts"),
-        description: Cow::Borrowed("Literata for reading and Source Sans for menus."),
-        version: Version::new(0, 1, 0),
-        sdk: SDK_VERSION,
-        uses: paperpaw_sdk::Uses::NOTHING,
-    }
+    Manifest::new(PLUGIN, "Default fonts", Version::new(0, 1, 0))
+        .description("Literata for reading and Source Sans for menus.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
 }
 
 fn register(r: &mut Registrar, faces: Faces, icons: &'static [u8]) -> Result<(), RegisterError> {

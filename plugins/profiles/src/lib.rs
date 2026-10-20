@@ -33,8 +33,7 @@ use paperpaw_sdk::ui::choice::{self, Choice};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec,
+    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 use crate::profile::Profile;
@@ -67,30 +66,22 @@ pub struct Profiles;
 
 impl Plugin for Profiles {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Reading profiles"),
-            description: Cow::Borrowed(
-                "Named sets of reading and display settings, switched with a tap.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Reading profiles", paperpaw_sdk::package_version!())
+            .description("Named sets of reading and display settings, switched with a tap.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: LIST_SCREEN,
-            title: Cow::Borrowed("profiles.title"),
-            factory: Box::new(|env, _| Box::new(ListScreen::new(env))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("profiles.title"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            LIST_SCREEN,
+            "profiles.title",
+            Box::new(|env, _| Box::new(ListScreen::new(env))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "profiles.title",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "profiles.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
@@ -108,11 +99,7 @@ impl Plugin for Profiles {
             },
         ))?;
         for (menu, order) in [(menus::READER_MORE, 15), (menus::SETTINGS, 205)] {
-            r.add_menu_entry(MenuEntry {
-                menu,
-                item: OPEN,
-                order,
-            })?;
+            r.add_menu_entry(MenuEntry::new(menu, OPEN).order(order))?;
         }
         r.add_icon(OPEN, Cow::Borrowed("stack-2"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

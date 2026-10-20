@@ -141,19 +141,19 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
         }
         changed.changed(out, &ID);
     })?;
-    r.add_screen(ScreenSpec {
-        id: SCREEN,
-        title: Cow::Borrowed("widgets.todo"),
-        factory: Box::new({
+    r.add_screen(ScreenSpec::new(
+        SCREEN,
+        "widgets.todo",
+        Box::new({
             let changes = changes.clone();
             move |env, _| Box::new(TodoScreen::new(env, changes.clone()))
         }),
-    })?;
-    r.add_screen(ScreenSpec {
-        id: CHOICE,
-        title: Cow::Borrowed("widgets.todo"),
-        factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-    })?;
+    ))?;
+    r.add_screen(ScreenSpec::new(
+        CHOICE,
+        "widgets.todo",
+        Box::new(|env, params| Box::new(Choice::new(env, params))),
+    ))?;
     r.add_action(ActionSpec::new(OPEN, "widgets.todo").handler(
         |_: &Env<'_>, out: &mut Vec<Command>| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
@@ -424,33 +424,21 @@ impl Widget for TodoWidget {
         let places = places(env, look.area, self);
         let open = Command::OpenScreen(SCREEN, Params::new());
         if self.items.is_empty() {
-            return alloc::vec![WidgetTarget {
-                area,
-                command: open,
-            }];
+            return alloc::vec![WidgetTarget::new(area, open)];
         }
         let mut targets = Vec::new();
         if let Some(caption) = places.caption {
-            targets.push(WidgetTarget {
-                area: caption,
-                command: open.clone(),
-            });
+            targets.push(WidgetTarget::new(caption, open.clone()));
         }
         for (row, item) in places.rows.iter().zip(&self.items) {
             let mut params = Params::new().with(TEXT, item.text.clone());
             if item.done.is_some() {
                 params.set(WAS_DONE, "1");
             }
-            targets.push(WidgetTarget {
-                area: *row,
-                command: TICKED.emit(params),
-            });
+            targets.push(WidgetTarget::new(*row, TICKED.emit(params)));
         }
         if let Some((row, _)) = places.more {
-            targets.push(WidgetTarget {
-                area: row,
-                command: open,
-            });
+            targets.push(WidgetTarget::new(row, open));
         }
         targets
     }
@@ -772,17 +760,17 @@ impl Screen for TodoScreen {
                     rect.width.saturating_sub(2 * margin),
                     rect.height,
                 );
-                let look = Look {
-                    area: inner,
+                let look = Look::new(
+                    inner,
                     ink,
-                    faint: if focused && style.dark_focus() {
+                    if focused && style.dark_focus() {
                         Color::gray(200)
                     } else {
                         style.faint(90)
                     },
                     paper,
-                    frame: widgets::Frame::None,
-                };
+                    widgets::Frame::None,
+                );
                 if row == 0 {
                     let icon = style.text * 1.1;
                     let width =
@@ -825,13 +813,13 @@ impl Screen for TodoScreen {
                 row.width.saturating_sub(2 * style.margin as u16),
                 style.row as u16 * 2,
             );
-            let look = Look {
+            let look = Look::new(
                 area,
-                ink: style.faint(90),
-                faint: style.faint(90),
-                paper: Color::WHITE,
-                frame: widgets::Frame::None,
-            };
+                style.faint(90),
+                style.faint(90),
+                Color::WHITE,
+                widgets::Frame::None,
+            );
             widgets::draw_message(canvas, env, &look, env.i18n.tr(key));
         }
     }

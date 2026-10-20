@@ -25,8 +25,8 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::web::encode;
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
-    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, Version,
+    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("wikipedia");
@@ -66,22 +66,17 @@ pub struct Wikipedia;
 
 impl Plugin for Wikipedia {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Wikipedia"),
-            description: Cow::Borrowed("Looks words up online, beside the dictionaries."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(PLUGIN, "Wikipedia", Version::new(0, 1, 0))
+            .description("Looks words up online, beside the dictionaries.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("wikipedia.title"),
-            factory: Box::new(|env, params| Box::new(Summary::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "wikipedia.title",
+            Box::new(|env, params| Box::new(Summary::new(env, params))),
+        ))?;
         r.bind_slot(slots::LOOKUP_ONLINE, SCREEN, Priority::DEFAULT)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

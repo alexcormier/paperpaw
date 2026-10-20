@@ -23,9 +23,7 @@ use alloc::boxed::Box;
 use alloc::vec;
 
 use paperpaw_sdk::document::Document;
-use paperpaw_sdk::{
-    Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version,
-};
+use paperpaw_sdk::{Env, FormatSpec, Id, Manifest, Plugin, RegisterError, Registrar, Version};
 
 pub use document::TxtDocument;
 
@@ -38,29 +36,22 @@ pub struct TxtFormat;
 
 impl Plugin for TxtFormat {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Plain text"),
-            description: Cow::Borrowed("Opens plain text files (.txt)."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Plain text", Version::new(0, 1, 0))
+            .description("Opens plain text files (.txt).")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // Copies in UTF-8 of UTF-16 files, moved and removed with them.
         r.add_book_data(Env::plugin_dir(PLUGIN.as_str()), "")?;
-        r.add_format(FormatSpec {
-            id: FORMAT,
-            title: Cow::Borrowed("format-txt.title"),
-            extensions: vec![Cow::Borrowed("txt"), Cow::Borrowed("text")],
-            // Plain text has no styles of its own.
-            open: Box::new(|storage, path, _| {
+        r.add_format(FormatSpec::new(
+            FORMAT,
+            "format-txt.title",
+            vec![Cow::Borrowed("txt"), Cow::Borrowed("text")],
+            Box::new(|storage, path, _| {
                 TxtDocument::open(storage, path).map(|d| Box::new(d) as Box<dyn Document>)
             }),
-            prepared: None,
-        })?;
+        ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

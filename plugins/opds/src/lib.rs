@@ -40,7 +40,7 @@ use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, SDK_VERSION, ScreenSpec, SettingSpec, Version,
+    Registrar, ScreenSpec, SettingSpec, Version,
 };
 
 use crate::catalogs::Catalog;
@@ -204,44 +204,39 @@ static SETTINGS: [SettingSpec; 2] = [
 
 impl Plugin for Opds {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("OPDS catalogs"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "OPDS catalogs", Version::new(0, 1, 0))
+            .description(
                 "Browses OPDS catalogs, downloads their books and keeps folders in sync with them.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+            )
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let temp = TempFiles::default();
         let state = Rc::new(RefCell::new(Sync::new(temp.clone())));
         let shared = state.clone();
-        r.add_screen(ScreenSpec {
-            id: LIST_SCREEN,
-            title: Cow::Borrowed("opds.title"),
-            factory: Box::new(move |env, _| Box::new(list::ListScreen::new(env, shared.clone()))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: BROWSE_SCREEN,
-            title: Cow::Borrowed("opds.title"),
-            factory: Box::new(move |env, params| {
+        r.add_screen(ScreenSpec::new(
+            LIST_SCREEN,
+            "opds.title",
+            Box::new(move |env, _| Box::new(list::ListScreen::new(env, shared.clone()))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            BROWSE_SCREEN,
+            "opds.title",
+            Box::new(move |env, params| {
                 Box::new(browse::BrowseScreen::new(env, params, temp.clone()))
             }),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: EDIT_SCREEN,
-            title: Cow::Borrowed("opds.title"),
-            factory: Box::new(|env, params| Box::new(edit::EditScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("opds.title"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            EDIT_SCREEN,
+            "opds.title",
+            Box::new(|env, params| Box::new(edit::EditScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "opds.title",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "opds.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
@@ -265,11 +260,7 @@ impl Plugin for Opds {
         r.on(SYNC_DUE, move |env, (), out| {
             shared.borrow_mut().start(env, marked(env), out);
         })?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::TOOLS,
-            item: OPEN,
-            order: 45,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(45))?;
         r.add_icon(OPEN, Cow::Borrowed("book-download"))?;
         r.add_icon(SYNC, Cow::Borrowed("refresh"))?;
         r.on(events::STARTED, |env, _, out| {

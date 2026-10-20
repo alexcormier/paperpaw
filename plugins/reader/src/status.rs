@@ -210,29 +210,33 @@ static SETTINGS: [SettingSpec; 11] = [
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
-    r.add_status_line(StatusLineSpec {
-        id: lines::ITEMS,
-        title: Cow::Borrowed("reader.status.line.items"),
-        draw: Box::new(|canvas, env, frame| {
-            let Some(font) = env.fonts.role(fonts::STATUS.as_str()) else {
-                return;
-            };
-            let line = StatusLine {
-                area: frame.area,
-                lists: lists(env, frame.top),
-                size: frame.size,
-                color: frame.color,
-                percent: env.settings.read(&PERCENT),
-            };
-            line.draw(canvas, env, &font, frame.context);
-        }),
-        signature: Some(Box::new(items_signature)),
-    })?;
-    r.add_status_line(StatusLineSpec {
-        id: lines::PROGRESS,
-        title: Cow::Borrowed("reader.status.line.progress"),
-        draw: Box::new(draw_progress),
-        signature: Some(Box::new(|_, cx| {
+    r.add_status_line(
+        StatusLineSpec::new(
+            lines::ITEMS,
+            "reader.status.line.items",
+            Box::new(|canvas, env, frame| {
+                let Some(font) = env.fonts.role(fonts::STATUS.as_str()) else {
+                    return;
+                };
+                let line = StatusLine {
+                    area: frame.area,
+                    lists: lists(env, frame.top),
+                    size: frame.size,
+                    color: frame.color,
+                    percent: env.settings.read(&PERCENT),
+                };
+                line.draw(canvas, env, &font, frame.context);
+            }),
+        )
+        .signature(Box::new(items_signature)),
+    )?;
+    r.add_status_line(
+        StatusLineSpec::new(
+            lines::PROGRESS,
+            "reader.status.line.progress",
+            Box::new(draw_progress),
+        )
+        .signature(Box::new(|_, cx| {
             format!(
                 "{}|{}|{}",
                 cx.get(params::PROGRESS).unwrap_or_default(),
@@ -240,67 +244,69 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                 cx.get(context::CHAPTERS).unwrap_or_default().len(),
             )
         })),
-    })?;
-    r.add_status_line(StatusLineSpec {
-        id: lines::EMPTY,
-        title: Cow::Borrowed("reader.status.line.empty"),
-        draw: Box::new(|_, _, _| {}),
-        signature: Some(Box::new(|_, _| String::new())),
-    })?;
+    )?;
+    r.add_status_line(
+        StatusLineSpec::new(
+            lines::EMPTY,
+            "reader.status.line.empty",
+            Box::new(|_, _, _| {}),
+        )
+        .signature(Box::new(|_, _| String::new())),
+    )?;
     let text = |value: Option<&str>| value.map(|v| StatusValue::Text(v.to_string()));
-    r.add_status_item(StatusItemSpec {
-        id: items::TITLE,
-        title: Cow::Borrowed("reader.status.item.title"),
-        value: Box::new(move |_, cx| text(cx.get(params::TITLE))),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: items::CHAPTER,
-        title: Cow::Borrowed("reader.status.item.chapter"),
-        value: Box::new(move |_, cx| text(cx.get(context::CHAPTER).or(cx.get(params::TITLE)))),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: items::ALOUD,
-        title: Cow::Borrowed("reader.status.item.aloud"),
-        value: Box::new(|_, cx| {
+    r.add_status_item(StatusItemSpec::new(
+        items::TITLE,
+        "reader.status.item.title",
+        Box::new(move |_, cx| text(cx.get(params::TITLE))),
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        items::CHAPTER,
+        "reader.status.item.chapter",
+        Box::new(move |_, cx| text(cx.get(context::CHAPTER).or(cx.get(params::TITLE)))),
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        items::ALOUD,
+        "reader.status.item.aloud",
+        Box::new(|_, cx| {
             cx.get(ALOUD_CONTEXT)
                 .map(|icon| StatusValue::Icon(Cow::Owned(icon.to_string())))
         }),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: items::PRINTED_PAGE,
-        title: Cow::Borrowed("reader.status.item.printed-page"),
-        value: Box::new(|env, cx| {
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        items::PRINTED_PAGE,
+        "reader.status.item.printed-page",
+        Box::new(|env, cx| {
             let page = cx.get(PRINTED_CONTEXT)?;
             Some(StatusValue::Text(
                 env.i18n
                     .format("reader.printed-page", &[("page", Arg::Str(page))]),
             ))
         }),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: items::CHAPTER_PAGE,
-        title: Cow::Borrowed("reader.status.item.chapter-page"),
-        value: Box::new(|env, cx| {
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        items::CHAPTER_PAGE,
+        "reader.status.item.chapter-page",
+        Box::new(|env, cx| {
             let (page, pages) = chapter_pages(cx)?;
             Some(StatusValue::Text(env.i18n.format(
                 "reader.page",
                 &[("page", Arg::Int(page)), ("pages", Arg::Int(pages))],
             )))
         }),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: items::CHAPTER_BAR,
-        title: Cow::Borrowed("reader.status.item.chapter-bar"),
-        value: Box::new(|_, cx| {
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        items::CHAPTER_BAR,
+        "reader.status.item.chapter-bar",
+        Box::new(|_, cx| {
             let (page, pages) = chapter_pages(cx)?;
             let permille = (page * 1000 / pages.max(1)).clamp(0, 1000) as u16;
             Some(StatusValue::Bar { permille })
         }),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: items::CHAPTER_LEFT,
-        title: Cow::Borrowed("reader.status.item.chapter-left"),
-        value: Box::new(|env, cx| {
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        items::CHAPTER_LEFT,
+        "reader.status.item.chapter-left",
+        Box::new(|env, cx| {
             let (page, pages) = chapter_pages(cx)?;
             let left = pages - page;
             Some(StatusValue::Text(env.i18n.plural(
@@ -309,23 +315,23 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
                 &[("count", Arg::Int(left))],
             )))
         }),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: items::PAGE,
-        title: Cow::Borrowed("reader.status.item.page"),
-        value: Box::new(move |_, cx| text(cx.get(context::PAGE))),
-    })?;
-    r.add_status_item(StatusItemSpec {
-        id: items::PROGRESS,
-        title: Cow::Borrowed("reader.status.item.progress"),
-        value: Box::new(|env, cx| {
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        items::PAGE,
+        "reader.status.item.page",
+        Box::new(move |_, cx| text(cx.get(context::PAGE))),
+    ))?;
+    r.add_status_item(StatusItemSpec::new(
+        items::PROGRESS,
+        "reader.status.item.progress",
+        Box::new(|env, cx| {
             let percent: f32 = cx.get(params::PROGRESS)?.parse().ok()?;
             Some(StatusValue::Text(env.i18n.format(
                 "reader.percent",
                 &[("percent", Arg::Int(percent as i64))],
             )))
         }),
-    })?;
+    ))?;
     Ok(())
 }
 

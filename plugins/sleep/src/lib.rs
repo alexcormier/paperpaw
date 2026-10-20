@@ -40,8 +40,7 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::Widget;
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Handled, Id, Manifest, MenuNeed, Params, Plugin, Priority,
-    Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, SettingSpec,
-    Version,
+    Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("sleep");
@@ -117,16 +116,11 @@ static SETTINGS: [SettingSpec; 3] = [
 
 impl Plugin for Sleep {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Sleep screen"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "Sleep screen", Version::new(0, 1, 0))
+            .description(
                 "Shows the book's cover, your pictures or a message while the device sleeps.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+            )
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -136,11 +130,11 @@ impl Plugin for Sleep {
         }
         // Asleep, the buttons do nothing but wake the device.
         r.set_screen_hints(SCREEN, paperpaw_sdk::Hints::Hidden)?;
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("sleep.title"),
-            factory: Box::new(|env, _| Box::new(SleepScreen::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "sleep.title",
+            Box::new(|env, _| Box::new(SleepScreen::new(env))),
+        ))?;
         r.bind_slot(slots::SLEEP, SCREEN, Priority::DEFAULT)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

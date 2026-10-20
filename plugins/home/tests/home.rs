@@ -7,7 +7,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use paperpaw_core::{Effects, Kernel};
@@ -20,7 +19,7 @@ use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::widgets::{Widget, WidgetSpec};
 use paperpaw_sdk::{
     Canvas, Env, Id, Manifest, MemoryStorage, Params, Plugin, Rect, RegisterError, Registrar,
-    SDK_VERSION, SettingSpec, Version,
+    SettingSpec, Version,
 };
 
 /// A device with `touch` or buttons alone, `width` pixels wide.
@@ -69,14 +68,9 @@ impl Widget for ProbeWidget {
 
 impl Plugin for Probe {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("probe"),
-            name: Cow::Borrowed("Probe"),
-            description: Cow::Borrowed("Counts widgets made"),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("probe"), "Probe", Version::new(0, 1, 0))
+            .description("Counts widgets made")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

@@ -8,7 +8,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -23,7 +22,7 @@ use paperpaw_sdk::secrets::{FILE, SecretChange, Secrets};
 use paperpaw_sdk::{
     Canvas, Cx, DeviceInfo, DirEntry, DisplayInfo, Env, Handled, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, Priority, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, Storage, StorageError, Version,
+    Screen, ScreenSpec, Storage, StorageError, Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -138,29 +137,28 @@ impl Screen for Silent {
 
 impl Plugin for Notices {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("test-notices"),
-            name: Cow::Borrowed("Notices"),
-            description: Cow::Borrowed("Keeps the notices for the test."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(
+            Id::new_static("test-notices"),
+            "Notices",
+            Version::new(0, 1, 0),
+        )
+        .description("Keeps the notices for the test.")
+        .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let screen = Id::new_static("test-notices.notice");
         let heard = self.0.clone();
-        r.add_screen(ScreenSpec {
-            id: screen.clone(),
-            title: Cow::Borrowed("notice"),
-            factory: Box::new(move |_, p| {
+        r.add_screen(ScreenSpec::new(
+            screen.clone(),
+            "notice",
+            Box::new(move |_, p| {
                 heard
                     .borrow_mut()
                     .push(p.get(params::TEXT).unwrap_or_default().to_string());
                 Box::new(Silent)
             }),
-        })?;
+        ))?;
         r.bind_slot(slots::NOTICE, screen, Priority::PREFERRED)
     }
 }

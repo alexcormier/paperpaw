@@ -17,7 +17,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::fmt::Write as _;
 use std::rc::Rc;
@@ -568,22 +567,17 @@ struct Probe;
 
 impl Plugin for Probe {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("probe"),
-            name: Cow::Borrowed("Probe"),
-            description: Cow::Borrowed("A screen that reads while it draws."),
-            version: SDK_VERSION,
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("probe"), "Probe", SDK_VERSION)
+            .description("A screen that reads while it draws.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("probe.reads"),
-            title: Cow::Borrowed("probe.reads"),
-            factory: Box::new(|_, _| Box::new(Reads)),
-        })
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("probe.reads"),
+            "probe.reads",
+            Box::new(|_, _| Box::new(Reads)),
+        ))
     }
 }
 

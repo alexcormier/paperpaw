@@ -31,7 +31,7 @@ use paperpaw_sdk::builtin::{events, menus, slots};
 use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, RegisterError,
-    Registrar, SDK_VERSION, ScreenSpec, Version, library,
+    Registrar, ScreenSpec, Version, library,
 };
 
 pub const PLUGIN: Id = Id::new_static("setup");
@@ -59,39 +59,30 @@ pub struct Setup;
 
 impl Plugin for Setup {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Setup"),
-            description: Cow::Borrowed("A short guide through the settings that matter."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Setup", Version::new(0, 1, 0))
+            .description("A short guide through the settings that matter.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("setup.title"),
-            factory: Box::new(|env, _| Box::new(guide::Guide::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "setup.title",
+            Box::new(|env, _| Box::new(guide::Guide::new(env))),
+        ))?;
         r.bind_slot(slots::SETUP, SCREEN, Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("setup.title"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "setup.title",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "setup.open").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenSlot(slots::SETUP, Params::new()));
             },
         ))?;
         // In the device's part of the settings, before *About*.
-        r.add_menu_entry(MenuEntry {
-            menu: menus::SETTINGS,
-            item: OPEN,
-            order: 97,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(97))?;
         r.add_icon(OPEN, Cow::Borrowed("wand"))?;
         // The first start: the guide, once.
         r.on(events::STARTED, |env, _, out| {

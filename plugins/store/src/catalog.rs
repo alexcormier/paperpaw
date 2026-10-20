@@ -401,12 +401,12 @@ impl Item {
                 .is_some_and(|f| Fingerprint::parse(&build.abi) == Some(f));
         if fits && self.code.is_none() {
             self.more.image_len = build.image_len;
-            self.code = Some(PackageFile {
-                path: device.code_file.to_string(),
-                url: build.url,
-                size: build.size,
-                digest: Digest::Sha256(build.sha256),
-            });
+            self.code = Some(PackageFile::new(
+                device.code_file.to_string(),
+                build.url,
+                build.size,
+                Digest::Sha256(build.sha256),
+            ));
         }
     }
 
@@ -563,11 +563,7 @@ fn read_plugin(
         shot.url = join_url(base, &shot.url);
     }
     let entry = item.finish();
-    let package = Package {
-        plugin: entry.id.clone(),
-        name: entry.name.clone(),
-        files,
-    };
+    let package = Package::new(entry.id.clone(), entry.name.clone()).files(files);
     // A code plugin names the key its author signs with.
     let whole = package.is_valid() && (!code || author_key.is_some());
     whole.then_some(Plugin {

@@ -329,14 +329,12 @@ mod tests {
             .iter()
             .map(|(path, author, title, series, number, tags)| {
                 let some = |s: &str| (!s.is_empty()).then(|| String::from(s));
-                let book = library::Book {
-                    author: some(author),
-                    title: some(title),
-                    series: some(series),
-                    series_index: some(number),
-                    tags: tags.iter().map(|t| String::from(*t)).collect(),
-                    ..library::Book::default()
-                };
+                let book = library::Book::default()
+                    .author(some(author))
+                    .title(some(title))
+                    .series(some(series))
+                    .series_index(some(number))
+                    .tags(tags.iter().map(|t| String::from(*t)).collect());
                 Record::of(path, &book)
             })
             .collect();

@@ -5,8 +5,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
-
 use paperpaw_core::Kernel;
 use paperpaw_i18n::Arg;
 use paperpaw_platform::{
@@ -69,14 +67,9 @@ struct Probe;
 
 impl Plugin for Probe {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("probe"),
-            name: Cow::Borrowed("Probe"),
-            description: Cow::Borrowed("Shows the store's notices."),
-            version: SDK_VERSION,
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(Id::new_static("probe"), "Probe", SDK_VERSION)
+            .description("Shows the store's notices.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

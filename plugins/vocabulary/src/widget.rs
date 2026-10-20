@@ -202,10 +202,7 @@ fn captioned(
     let (block, cap) = captioned_block(env, widget, look.area, height);
     let total = block.height;
     if cap > 0 {
-        let at = Look {
-            area: block,
-            ..*look
-        };
+        let at = look.within(block);
         widgets::draw_caption(canvas, env, widget, &at, text);
     }
     Rect::new(block.x, block.y + cap, block.width, height.min(total - cap))
@@ -276,10 +273,7 @@ fn draw_empty(
 
 /// A tap opens the list of words.
 fn open_words(area: Rect) -> Vec<WidgetTarget> {
-    alloc::vec![WidgetTarget {
-        area,
-        command: Command::RunAction(OPEN),
-    }]
+    alloc::vec![WidgetTarget::new(area, Command::RunAction(OPEN))]
 }
 
 /// The day it is where the reader is, counted from 1970; `None` where the
@@ -498,10 +492,7 @@ fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, laid: &Laid) {
     let area = look.area;
     if laid.caption > 0 {
         let caption = caption_text(env, id);
-        let at = Look {
-            area: laid.block,
-            ..*look
-        };
+        let at = look.within(laid.block);
         widgets::draw_caption(canvas, env, id, &at, caption);
     }
     let align = widgets::align(env, id);

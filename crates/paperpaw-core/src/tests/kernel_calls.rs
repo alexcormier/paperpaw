@@ -39,22 +39,16 @@ impl Screen for Rows {
 
 impl Plugin for RowsPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("rows"),
-            name: Cow::Borrowed("Rows"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("rows"), "Rows", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("rows.screen"),
-            title: Cow::Borrowed("rows"),
-            factory: Box::new(|_, _| Box::new(Rows { focus: 0 })),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("rows.screen"),
+            "rows",
+            Box::new(|_, _| Box::new(Rows { focus: 0 })),
+        ))?;
         r.bind_slot(
             slots::HOME,
             Id::new_static("rows.screen"),

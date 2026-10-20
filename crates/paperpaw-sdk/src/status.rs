@@ -47,6 +47,7 @@ pub mod context {
 
 /// Where and how a status line is drawn (see [`StatusLineSpec`]).
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct StatusFrame<'a> {
     pub area: Rect,
     /// The line above the text, else below it.
@@ -58,6 +59,19 @@ pub struct StatusFrame<'a> {
     pub context: &'a Params,
 }
 
+impl<'a> StatusFrame<'a> {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(area: Rect, top: bool, size: f32, color: Color, context: &'a Params) -> Self {
+        Self {
+            area,
+            top,
+            size,
+            color,
+            context,
+        }
+    }
+}
+
 /// Draws a status line into its frame's area (cleared before).
 pub type StatusLineFn = Box<dyn Fn(&mut Canvas<'_>, &Env<'_>, &StatusFrame<'_>)>;
 
@@ -66,6 +80,7 @@ pub type StatusLineFn = Box<dyn Fn(&mut Canvas<'_>, &Env<'_>, &StatusFrame<'_>)>
 pub type StatusSignatureFn = Box<dyn Fn(&Env<'_>, &Params) -> String>;
 
 /// A whole status line contributed by a plugin.
+#[non_exhaustive]
 pub struct StatusLineSpec {
     pub id: Id,
     /// Translation key of its name in settings, e.g. "Progress bar".
@@ -74,6 +89,23 @@ pub struct StatusLineSpec {
     /// What it shows; without one it is redrawn when the context
     /// changes (the page, the chapter, …).
     pub signature: Option<StatusSignatureFn>,
+}
+
+impl StatusLineSpec {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(id: Id, title: impl Into<Cow<'static, str>>, draw: StatusLineFn) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            draw,
+            signature: None,
+        }
+    }
+
+    pub fn signature(mut self, signature: StatusSignatureFn) -> Self {
+        self.signature = Some(signature);
+        self
+    }
 }
 
 impl fmt::Debug for StatusLineSpec {
@@ -109,11 +141,23 @@ pub enum StatusValue {
 pub type StatusFn = Box<dyn Fn(&Env<'_>, &Params) -> Option<StatusValue>>;
 
 /// A status item contribution.
+#[non_exhaustive]
 pub struct StatusItemSpec {
     pub id: Id,
     /// Translation key of its name in settings, e.g. "Battery".
     pub title: Cow<'static, str>,
     pub value: StatusFn,
+}
+
+impl StatusItemSpec {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(id: Id, title: impl Into<Cow<'static, str>>, value: StatusFn) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            value,
+        }
+    }
 }
 
 impl fmt::Debug for StatusItemSpec {

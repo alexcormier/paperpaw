@@ -62,6 +62,7 @@ const DETAILS: u32 = 4;
 
 /// What the library knows of a book.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Book {
     /// File size when the details were read; another size means another
     /// file.
@@ -84,6 +85,63 @@ pub struct Book {
     /// Fields plugins keep with the book: id (e.g. `myplugin.rating`)
     /// and value.
     pub fields: Vec<(String, String)>,
+}
+
+impl Book {
+    pub fn size(mut self, size: u64) -> Self {
+        self.size = size;
+        self
+    }
+
+    pub fn indexed(mut self, indexed: bool) -> Self {
+        self.indexed = indexed;
+        self
+    }
+
+    pub fn title(mut self, title: impl Into<Option<String>>) -> Self {
+        self.title = title.into();
+        self
+    }
+
+    pub fn author(mut self, author: impl Into<Option<String>>) -> Self {
+        self.author = author.into();
+        self
+    }
+
+    pub fn series(mut self, series: impl Into<Option<String>>) -> Self {
+        self.series = series.into();
+        self
+    }
+
+    pub fn series_index(mut self, series_index: impl Into<Option<String>>) -> Self {
+        self.series_index = series_index.into();
+        self
+    }
+
+    pub fn tags(mut self, tags: Vec<String>) -> Self {
+        self.tags = tags;
+        self
+    }
+
+    pub fn cover(mut self, cover: impl Into<Option<ImageRef>>) -> Self {
+        self.cover = cover.into();
+        self
+    }
+
+    pub fn progress(mut self, progress: impl Into<Option<u8>>) -> Self {
+        self.progress = progress.into();
+        self
+    }
+
+    pub fn added(mut self, added: impl Into<Option<u32>>) -> Self {
+        self.added = added.into();
+        self
+    }
+
+    pub fn fields(mut self, fields: Vec<(String, String)>) -> Self {
+        self.fields = fields;
+        self
+    }
 }
 
 impl Book {
@@ -616,12 +674,40 @@ pub fn indexed(env: &Env<'_>, path: &str) -> Book {
 /// What a source knows of a book it brought, e.g. a catalog or Calibre
 /// ([`provide`]).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Provided {
     pub title: Option<String>,
     pub author: Option<String>,
     pub series: Option<String>,
     pub series_index: Option<String>,
     pub tags: Vec<String>,
+}
+
+impl Provided {
+    pub fn title(mut self, title: impl Into<Option<String>>) -> Self {
+        self.title = title.into();
+        self
+    }
+
+    pub fn author(mut self, author: impl Into<Option<String>>) -> Self {
+        self.author = author.into();
+        self
+    }
+
+    pub fn series(mut self, series: impl Into<Option<String>>) -> Self {
+        self.series = series.into();
+        self
+    }
+
+    pub fn series_index(mut self, series_index: impl Into<Option<String>>) -> Self {
+        self.series_index = series_index.into();
+        self
+    }
+
+    pub fn tags(mut self, tags: Vec<String>) -> Self {
+        self.tags = tags;
+        self
+    }
 }
 
 /// Keeps what a source knows of the book at `path`, for books that name

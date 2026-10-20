@@ -166,10 +166,7 @@ impl Widget for Now {
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        alloc::vec![WidgetTarget {
-            area,
-            command: crate::tap(&self.shown),
-        }]
+        alloc::vec![WidgetTarget::new(area, crate::tap(&self.shown))]
     }
 }
 

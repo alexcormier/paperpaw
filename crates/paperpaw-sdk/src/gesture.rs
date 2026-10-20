@@ -35,6 +35,7 @@ pub enum GestureKind {
 
 /// A gesture recognized by the kernel from raw pointer samples.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub struct Gesture {
     pub kind: GestureKind,
     /// Where the gesture started.
@@ -42,4 +43,16 @@ pub struct Gesture {
     /// Where it ended (equal to `start` for taps).
     pub end: Point,
     pub tool: PointerTool,
+}
+
+impl Gesture {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(kind: GestureKind, start: Point, end: Point, tool: PointerTool) -> Self {
+        Self {
+            kind,
+            start,
+            end,
+            tool,
+        }
+    }
 }

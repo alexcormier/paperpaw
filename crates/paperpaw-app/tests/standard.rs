@@ -7,7 +7,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
 
@@ -59,14 +58,9 @@ struct Probe;
 
 impl Plugin for Probe {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("probe"),
-            name: Cow::Borrowed("Probe"),
-            description: Cow::Borrowed("Knows only the standard ids."),
-            version: SDK_VERSION,
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("probe"), "Probe", SDK_VERSION)
+            .description("Knows only the standard ids.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -79,12 +73,7 @@ impl Plugin for Probe {
         r.on(events::PAGE_TURNED, |_, reading, _| {
             PAGE_AT.store(reading.offset, Ordering::SeqCst);
         })?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::READER_MORE,
-            item: GO,
-            // First, so it is on the menu's first page however many follow.
-            order: 0,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::READER_MORE, GO))?;
         // Every "Alice" on a page, wavy underlined; taps come back.
         decorations::add_role(
             r,

@@ -79,40 +79,34 @@ impl Screen for Other {
 
 impl Plugin for BookPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("book"),
-            name: Cow::Borrowed("Book"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("book"), "Book", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.0.clone();
-        r.add_screen(ScreenSpec {
-            id: READER,
-            title: Cow::Borrowed("reader"),
-            factory: Box::new(move |_, _| Box::new(ReaderScreen { log: log.clone() })),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            READER,
+            "reader",
+            Box::new(move |_, _| Box::new(ReaderScreen { log: log.clone() })),
+        ))?;
         r.bind_slot(slots::HOME, READER, Priority::DEFAULT)?;
         for (id, name, region) in [
             (MENU, "menu", Some(Rect::new(0, 45, 90, 45))),
             (FULL, "full", None),
         ] {
             let log = self.0.clone();
-            r.add_screen(ScreenSpec {
+            r.add_screen(ScreenSpec::new(
                 id,
-                title: Cow::Borrowed("other"),
-                factory: Box::new(move |_, _| {
+                "other",
+                Box::new(move |_, _| {
                     Box::new(Other {
                         name,
                         region,
                         log: log.clone(),
                     })
                 }),
-            })?;
+            ))?;
         }
         Ok(())
     }

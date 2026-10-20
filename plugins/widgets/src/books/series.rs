@@ -453,9 +453,8 @@ impl Widget for Series {
         places
             .into_iter()
             .zip(books)
-            .map(|(place, shelved)| WidgetTarget {
-                area: place.cover.union(&place.label),
-                command: shelved.book.open(),
+            .map(|(place, shelved)| {
+                WidgetTarget::new(place.cover.union(&place.label), shelved.book.open())
             })
             .collect()
     }

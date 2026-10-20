@@ -40,7 +40,7 @@ use paperpaw_sdk::builtin::{events, groups};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Instant, Manifest, Params, Plugin, RegisterError, Registrar,
-    SDK_VERSION, ScreenSpec, SettingSpec, Version,
+    ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("lock");
@@ -147,26 +147,21 @@ static SETTINGS: [SettingSpec; 2] = [
 
 impl Plugin for Lock {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Screen lock"),
-            description: Cow::Borrowed("A PIN, a pattern or a password when the device wakes up."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Screen lock", Version::new(0, 1, 0))
+            .description("A PIN, a pattern or a password when the device wakes up.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(State::default());
         let shared = state.clone();
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("lock.setting.kind"),
-            factory: Box::new(move |env, params| {
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "lock.setting.kind",
+            Box::new(move |env, params| {
                 Box::new(screen::LockScreen::new(env, params, shared.clone()))
             }),
-        })?;
+        ))?;
         r.add_settings(&SETTINGS)?;
         let now = state.clone();
         r.add_action(ActionSpec::new(NOW, "lock.now").handler(
@@ -207,14 +202,14 @@ impl Plugin for Lock {
             }
         })?;
         // The first-run setup: a lock, off unless chosen.
-        r.add_setup_step(paperpaw_sdk::setup::SetupStepSpec {
-            id: Id::new_static("lock.setup"),
-            title: Cow::Borrowed(""),
-            help: Cow::Borrowed(""),
-            order: 70,
-            page: paperpaw_sdk::setup::SetupPage::Setting(KIND.into()),
-            applies: None,
-        })?;
+        r.add_setup_step(
+            paperpaw_sdk::setup::SetupStepSpec::new(
+                Id::new_static("lock.setup"),
+                "",
+                paperpaw_sdk::setup::SetupPage::Setting(KIND.into()),
+            )
+            .order(70),
+        )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

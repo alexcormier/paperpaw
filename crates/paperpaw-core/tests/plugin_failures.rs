@@ -54,11 +54,11 @@ impl Plugin for Faulty {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let id = |name: &str| Id::parse(&format!("bad.{name}")).unwrap();
-        r.add_screen(ScreenSpec {
-            id: id("screen"),
-            title: Cow::Borrowed("x"),
-            factory: Box::new(|_, _| -> Box<dyn Screen> { unreachable!("never opened") }),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            id("screen"),
+            "x",
+            Box::new(|_, _| -> Box<dyn Screen> { unreachable!("never opened") }),
+        ))?;
         r.bind_slot(slots::HOME, id("screen"), Priority(i16::MAX))?;
         r.add_action(ActionSpec::new(id("act"), "x"))?;
         r.add_setting(SettingSpec::number(
@@ -77,11 +77,9 @@ impl Plugin for Faulty {
             common::LATER,
             Box::new(move |_, _, _| log.borrow_mut().push(String::from("faulty heard"))),
         )?;
-        r.add_menu_entry(MenuEntry {
-            menu: paperpaw_core::sdk::builtin::menus::MAIN,
-            item: id("act"),
-            order: 1,
-        })?;
+        r.add_menu_entry(
+            MenuEntry::new(paperpaw_core::sdk::builtin::menus::MAIN, id("act")).order(1),
+        )?;
         r.add_keymap(Cow::Borrowed(
             "[keymap.global]\nbutton.page-forward = bad.act\n",
         ))?;
@@ -200,10 +198,7 @@ struct Named {
 
 impl Plugin for Named {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            sdk: self.sdk,
-            ..common::manifest(self.id)
-        }
+        common::manifest(self.id).sdk(self.sdk)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

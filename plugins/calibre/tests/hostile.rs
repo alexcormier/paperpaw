@@ -16,8 +16,8 @@ use paperpaw_plugin_calibre::protocol::{self, frame, op};
 use paperpaw_sdk::secrets::{FILE, SecretChange, Secrets};
 use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, Manifest, MemoryClass,
-    MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION, SettingSpec,
-    Storage, StorageError, Version,
+    MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SettingSpec, Storage,
+    StorageError, Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -86,14 +86,9 @@ static ROOT: [SettingSpec; 1] = [SettingSpec::fixed_text(
 
 impl Plugin for Library {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("files"),
-            name: std::borrow::Cow::Borrowed("Library"),
-            description: std::borrow::Cow::Borrowed(""),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(Id::new_static("files"), "Library", Version::new(0, 1, 0))
+            .description("")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

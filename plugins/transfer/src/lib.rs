@@ -33,8 +33,8 @@ use paperpaw_sdk::replies::ServerNotice;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, Version,
+    MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec, Version,
 };
 
 use crate::access::Guard;
@@ -63,40 +63,31 @@ pub struct Transfer;
 
 impl Plugin for Transfer {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Transfer"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "Transfer", Version::new(0, 1, 0))
+            .description(
                 "Put books and other files on the device from a browser in the same network.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+            )
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("transfer.title"),
-            factory: Box::new(|env, _| Box::new(TransferScreen::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "transfer.title",
+            Box::new(|env, _| Box::new(TransferScreen::new(env))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "transfer.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::TOOLS,
-            item: OPEN,
-            order: 46,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(46))?;
         r.add_icon(OPEN, Cow::Borrowed("transfer"))?;
-        r.add_screen(ScreenSpec {
-            id: PHONE_SCREEN,
-            title: Cow::Borrowed("transfer.phone.title"),
-            factory: Box::new(|env, params| Box::new(phone::PhoneScreen::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            PHONE_SCREEN,
+            "transfer.phone.title",
+            Box::new(|env, params| Box::new(phone::PhoneScreen::new(env, params))),
+        ))?;
         r.bind_slot(slots::REMOTE_KEYBOARD, PHONE_SCREEN, Priority::DEFAULT)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

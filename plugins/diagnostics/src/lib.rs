@@ -27,8 +27,7 @@ use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Metrics,
-    Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec,
-    SettingSpec,
+    Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("diagnostics");
@@ -54,25 +53,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
 
 impl Plugin for Diagnostics {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Diagnostics"),
-            description: Cow::Borrowed(
-                "A test screen for gray levels, buttons, touch and refresh modes.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Diagnostics", paperpaw_sdk::package_version!())
+            .description("A test screen for gray levels, buttons, touch and refresh modes.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("diagnostics.title"),
-            factory: Box::new(|env, _| Box::new(DiagnosticsScreen::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "diagnostics.title",
+            Box::new(|env, _| Box::new(DiagnosticsScreen::new(env))),
+        ))?;
         r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
         r.add_action(ActionSpec::new(RESET, "diagnostics.action.reset"))?;
         r.add_settings(&SETTINGS)?;

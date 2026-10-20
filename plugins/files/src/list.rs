@@ -86,28 +86,26 @@ const RECENT_AGAIN: u8 = 3;
 
 /// Registers the list's screens and actions.
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_screen(ScreenSpec {
-        id: SHELF,
-        title: Cow::Borrowed("files.title"),
-        factory: Box::new(|env, params| Box::new(shelf::ShelfScreen::new(env, params))),
-    })?;
-    r.add_screen(ScreenSpec {
-        id: SHEET,
-        title: Cow::Borrowed("files.title"),
-        factory: Box::new(|env, params| Box::new(sheet::BookSheet::new(env, params))),
-    })?;
-    r.add_screen(ScreenSpec {
-        id: SHOW,
-        title: Cow::Borrowed("files.list.show"),
-        factory: Box::new(|env, params| {
-            Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))
-        }),
-    })?;
-    r.add_screen(ScreenSpec {
-        id: FIND,
-        title: Cow::Borrowed("files.list.find"),
-        factory: Box::new(|env, params| Box::new(find::FindScreen::new(env, params))),
-    })?;
+    r.add_screen(ScreenSpec::new(
+        SHELF,
+        "files.title",
+        Box::new(|env, params| Box::new(shelf::ShelfScreen::new(env, params))),
+    ))?;
+    r.add_screen(ScreenSpec::new(
+        SHEET,
+        "files.title",
+        Box::new(|env, params| Box::new(sheet::BookSheet::new(env, params))),
+    ))?;
+    r.add_screen(ScreenSpec::new(
+        SHOW,
+        "files.list.show",
+        Box::new(|env, params| Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))),
+    ))?;
+    r.add_screen(ScreenSpec::new(
+        FIND,
+        "files.list.find",
+        Box::new(|env, params| Box::new(find::FindScreen::new(env, params))),
+    ))?;
     r.add_action(
         paperpaw_sdk::ActionSpec::new(FIND, "files.list.find").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {

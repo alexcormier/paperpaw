@@ -59,8 +59,8 @@ use paperpaw_sdk::widgets;
 use paperpaw_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item, What};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, Handled, Hint, Id, Manifest, MenuEntry, Params,
-    Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, Version,
+    Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("home");
@@ -100,60 +100,55 @@ pub struct Home;
 
 impl Plugin for Home {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Home screen"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "Home screen", Version::new(0, 1, 0))
+            .description(
                 "The start page: pages of widgets, such as the book being read and the tools.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+            )
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("home.title"),
-            factory: Box::new(|env, params| Box::new(Dashboard::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: EDIT_SCREEN,
-            title: Cow::Borrowed("home.edit.screen"),
-            factory: Box::new(|env, params| Box::new(edit::EditScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: ADD_SCREEN,
-            title: Cow::Borrowed("home.edit.add"),
-            factory: Box::new(|env, params| Box::new(add::AddScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: LIST_ADD_SCREEN,
-            title: Cow::Borrowed("home.edit.add"),
-            factory: Box::new(|env, params| Box::new(edit::AddScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("home.edit.screen"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "home.title",
+            Box::new(|env, params| Box::new(Dashboard::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            EDIT_SCREEN,
+            "home.edit.screen",
+            Box::new(|env, params| Box::new(edit::EditScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            ADD_SCREEN,
+            "home.edit.add",
+            Box::new(|env, params| Box::new(add::AddScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            LIST_ADD_SCREEN,
+            "home.edit.add",
+            Box::new(|env, params| Box::new(edit::AddScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "home.edit.screen",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
         r.bind_slot(slots::HOME, SCREEN, Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec {
-            id: layouts::SCREEN,
-            title: Cow::Borrowed("home.layouts.title"),
-            factory: Box::new(|env, _| Box::new(Dashboard::chooser(env))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: DRAWER_SCREEN,
-            title: Cow::Borrowed("home.drawer"),
-            factory: Box::new(|env, _| Box::new(drawer::DrawerScreen::new(env))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: TIPS_SCREEN,
-            title: Cow::Borrowed("home.tips.title"),
-            factory: Box::new(|env, _| Box::new(drawer::TipsScreen::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            layouts::SCREEN,
+            "home.layouts.title",
+            Box::new(|env, _| Box::new(Dashboard::chooser(env))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            DRAWER_SCREEN,
+            "home.drawer",
+            Box::new(|env, _| Box::new(drawer::DrawerScreen::new(env))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            TIPS_SCREEN,
+            "home.tips.title",
+            Box::new(|env, _| Box::new(drawer::TipsScreen::new(env))),
+        ))?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(ALL_TOOLS, "home.drawer").handler(
                 |_: &Env<'_>, out: &mut Vec<Command>| {
@@ -173,21 +168,13 @@ impl Plugin for Home {
             ),
         )?;
         r.add_icon(EDIT_PAGES, Cow::Borrowed("pencil"))?;
-        r.add_menu_entry(MenuEntry {
-            menu: paperpaw_sdk::builtin::menus::MAIN,
-            item: EDIT_PAGES,
-            order: 40,
-        })?;
+        r.add_menu_entry(MenuEntry::new(paperpaw_sdk::builtin::menus::MAIN, EDIT_PAGES).order(40))?;
         // As on phones: up on the home screen shows every tool.
         r.add_keymap(Cow::Borrowed(
             "[keymap.core.home]\nswipe.up = home.all-tools\n",
         ))?;
         r.add_settings(&TIPS)?;
-        r.add_menu_entry(MenuEntry {
-            menu: ACTIONS,
-            item: actions::LIBRARY,
-            order: 10,
-        })?;
+        r.add_menu_entry(MenuEntry::new(ACTIONS, actions::LIBRARY).order(10))?;
         pages::register(r)?;
         blocks::register(r)?;
         layouts::register(r)?;

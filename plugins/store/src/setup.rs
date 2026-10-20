@@ -9,7 +9,6 @@
 //! but off (Android), they are switched on. The step is left out where
 //! none of them could be added, and the store has them all later.
 
-use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -31,20 +30,17 @@ const SCREEN: Id = Id::new_static("store.offer");
 const STEP: Id = Id::new_static("store.setup");
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
-    r.add_screen(ScreenSpec {
-        id: SCREEN,
-        title: Cow::Borrowed("store.offer.title"),
-        factory: Box::new(|env, _| Box::new(OfferScreen::new(env))),
-    })?;
-    r.add_setup_step(SetupStepSpec {
-        id: STEP,
-        title: Cow::Borrowed("store.offer.title"),
-        help: Cow::Borrowed("store.offer.help"),
-        // After Wi-Fi (50), before the keyboard (60).
-        order: 55,
-        page: SetupPage::Screen(SCREEN),
-        applies: Some(Box::new(|env| OFFERED.iter().any(|id| can_add(env, id)))),
-    })
+    r.add_screen(ScreenSpec::new(
+        SCREEN,
+        "store.offer.title",
+        Box::new(|env, _| Box::new(OfferScreen::new(env))),
+    ))?;
+    r.add_setup_step(
+        SetupStepSpec::new(STEP, "store.offer.title", SetupPage::Screen(SCREEN))
+            .help("store.offer.help")
+            .order(55)
+            .applies(Box::new(|env| OFFERED.iter().any(|id| can_add(env, id)))),
+    )
 }
 
 /// How plugin `id` can be added here.

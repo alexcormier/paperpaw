@@ -6,7 +6,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
@@ -69,14 +68,9 @@ impl Screen for Notice {
 
 impl Plugin for StandIn {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("stand-in"),
-            name: Cow::Borrowed("Stand-in"),
-            description: Cow::Borrowed("Says where a book is read."),
-            version: SDK_VERSION,
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(Id::new_static("stand-in"), "Stand-in", SDK_VERSION)
+            .description("Says where a book is read.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -93,15 +87,15 @@ impl Plugin for StandIn {
             ))?;
         }
         let notices = self.1.clone();
-        r.add_screen(ScreenSpec {
-            id: NOTICE,
-            title: Cow::Borrowed("stand-in.notice"),
-            factory: Box::new(move |_, params| {
+        r.add_screen(ScreenSpec::new(
+            NOTICE,
+            "stand-in.notice",
+            Box::new(move |_, params| {
                 let text = params.get(builtin::params::TEXT).unwrap_or_default();
                 notices.borrow_mut().push(text.to_string());
                 Box::new(Notice)
             }),
-        })?;
+        ))?;
         r.bind_slot(slots::NOTICE, NOTICE, Priority::DEFAULT)?;
         Ok(())
     }

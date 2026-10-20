@@ -442,12 +442,8 @@ fn previews_and_placements_together() {
 #[test]
 fn groups_are_registered_once_in_their_order() {
     let mut s = Settings::new();
-    let group = |id: &'static str, order| SettingGroupSpec {
-        id: Id::new_static(id),
-        title: Cow::Borrowed(""),
-        order,
-        page: None,
-    };
+    let group =
+        |id: &'static str, order| SettingGroupSpec::new(Id::new_static(id), "").order(order);
     s.add_group(group("b.g", 0)).unwrap();
     s.add_group(group("a.g", 0)).unwrap();
     s.add_group(group("c.g", -10)).unwrap();

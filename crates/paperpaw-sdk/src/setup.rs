@@ -30,6 +30,7 @@ pub enum SetupPage {
 pub type AppliesFn = Box<dyn Fn(&Env<'_>) -> bool>;
 
 /// A step of the first-run setup.
+#[non_exhaustive]
 pub struct SetupStepSpec {
     pub id: Id,
     /// Translation key of what it asks; empty for the setting's title.
@@ -44,6 +45,35 @@ pub struct SetupStepSpec {
     /// Asked only where this says so (e.g. Wi-Fi where PaperPaw runs the
     /// radio); always without it.
     pub applies: Option<AppliesFn>,
+}
+
+impl SetupStepSpec {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(id: Id, title: impl Into<Cow<'static, str>>, page: SetupPage) -> Self {
+        Self {
+            id,
+            title: title.into(),
+            page,
+            help: Cow::Borrowed(""),
+            order: 0,
+            applies: None,
+        }
+    }
+
+    pub fn help(mut self, help: impl Into<Cow<'static, str>>) -> Self {
+        self.help = help.into();
+        self
+    }
+
+    pub fn order(mut self, order: i32) -> Self {
+        self.order = order;
+        self
+    }
+
+    pub fn applies(mut self, applies: AppliesFn) -> Self {
+        self.applies = Some(applies);
+        self
+    }
 }
 
 impl fmt::Debug for SetupStepSpec {

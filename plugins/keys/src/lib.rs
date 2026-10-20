@@ -38,8 +38,7 @@ use paperpaw_sdk::ui::choice::{self, Choice, Picked};
 use paperpaw_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec,
+    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("keys");
@@ -377,50 +376,42 @@ pub struct Keys;
 
 impl Plugin for Keys {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Buttons and gestures"),
-            description: Cow::Borrowed(
-                "What every button, tap zone and swipe does, changed on the device.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            PLUGIN,
+            "Buttons and gestures",
+            paperpaw_sdk::package_version!(),
+        )
+        .description("What every button, tap zone and swipe does, changed on the device.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: LIST_SCREEN,
-            title: Cow::Borrowed("keys.title"),
-            factory: Box::new(|env, _| Box::new(ListScreen::new(env))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: PICK_SCREEN,
-            title: Cow::Borrowed("keys.title"),
-            factory: Box::new(|env, params| Box::new(PickScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: PLACE_SCREEN,
-            title: Cow::Borrowed("keys.place"),
-            factory: Box::new(|env, params| Box::new(PlaceScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("keys.title"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            LIST_SCREEN,
+            "keys.title",
+            Box::new(|env, _| Box::new(ListScreen::new(env))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            PICK_SCREEN,
+            "keys.title",
+            Box::new(|env, params| Box::new(PickScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            PLACE_SCREEN,
+            "keys.place",
+            Box::new(|env, params| Box::new(PlaceScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "keys.title",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "keys.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::SETTINGS,
-            item: OPEN,
-            order: 75,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(75))?;
         r.add_icon(OPEN, Cow::Borrowed("hand-finger"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

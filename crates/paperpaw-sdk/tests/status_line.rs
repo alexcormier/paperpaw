@@ -33,37 +33,37 @@ fn harness() -> Harness {
             context.get(key).map(|v| StatusValue::Text(v.to_string()))
         })
     };
-    h.status_items.add(StatusItemSpec {
-        id: Id::new_static(PAGE),
-        title: Cow::Borrowed("t.page.title"),
-        value: from("page"),
-    });
-    h.status_items.add(StatusItemSpec {
-        id: Id::new_static(CHAPTER),
-        title: Cow::Borrowed("t.chapter.title"),
-        value: from("chapter"),
-    });
-    h.status_items.add(StatusItemSpec {
-        id: Id::new_static(LEVEL),
-        title: Cow::Borrowed("t.battery.title"),
-        value: Box::new(|_, context| {
+    h.status_items.add(StatusItemSpec::new(
+        Id::new_static(PAGE),
+        "t.page.title",
+        from("page"),
+    ));
+    h.status_items.add(StatusItemSpec::new(
+        Id::new_static(CHAPTER),
+        "t.chapter.title",
+        from("chapter"),
+    ));
+    h.status_items.add(StatusItemSpec::new(
+        Id::new_static(LEVEL),
+        "t.battery.title",
+        Box::new(|_, context| {
             let percent = context.get("level")?.parse().ok()?;
             Some(StatusValue::Level {
                 percent,
                 charging: context.get("charging").is_some(),
             })
         }),
-    });
-    h.status_items.add(StatusItemSpec {
-        id: Id::new_static(ICON),
-        title: Cow::Borrowed("t.speaking.title"),
-        value: Box::new(|_, _| Some(StatusValue::Icon(Cow::Borrowed("volume")))),
-    });
-    h.status_items.add(StatusItemSpec {
-        id: Id::new_static(NOTHING),
-        title: Cow::Borrowed("t.nothing.title"),
-        value: Box::new(|_, _| None),
-    });
+    ));
+    h.status_items.add(StatusItemSpec::new(
+        Id::new_static(ICON),
+        "t.speaking.title",
+        Box::new(|_, _| Some(StatusValue::Icon(Cow::Borrowed("volume")))),
+    ));
+    h.status_items.add(StatusItemSpec::new(
+        Id::new_static(NOTHING),
+        "t.nothing.title",
+        Box::new(|_, _| None),
+    ));
     h
 }
 
@@ -212,18 +212,15 @@ fn items_and_lines_are_found_by_their_ids() {
     fn draw(canvas: &mut paperpaw_sdk::Canvas<'_>, _: &Env<'_>, frame: &StatusFrame<'_>) {
         canvas.fill(frame.area, Color::BLACK);
     }
-    h.status_items.add_line(StatusLineSpec {
-        id: Id::new_static("t.bar"),
-        title: Cow::Borrowed("t.bar.title"),
-        draw: Box::new(draw),
-        signature: None,
-    });
-    h.status_items.add_line(StatusLineSpec {
-        id: Id::new_static("t.clock"),
-        title: Cow::Borrowed("t.clock.title"),
-        draw: Box::new(draw),
-        signature: Some(Box::new(|_, _| "10:41".to_string())),
-    });
+    h.status_items.add_line(StatusLineSpec::new(
+        Id::new_static("t.bar"),
+        "t.bar.title",
+        Box::new(draw),
+    ));
+    h.status_items.add_line(
+        StatusLineSpec::new(Id::new_static("t.clock"), "t.clock.title", Box::new(draw))
+            .signature(Box::new(|_, _| "10:41".to_string())),
+    );
     let items = &h.status_items;
     let env = h.env();
     assert_eq!(items.title(PAGE), Some("t.page.title"));
@@ -246,13 +243,7 @@ fn items_and_lines_are_found_by_their_ids() {
         items.line_signature("t.bar", &env, &context),
         items.line_signature("t.bar", &env, &other)
     );
-    let status = StatusFrame {
-        area: Rect::new(0, 0, 100, 20),
-        top: true,
-        size: 20.0,
-        color: Color::BLACK,
-        context: &context,
-    };
+    let status = StatusFrame::new(Rect::new(0, 0, 100, 20), true, 20.0, Color::BLACK, &context);
     let mut frame = frame(100, 40);
     assert!(items.draw_line("t.bar", &mut frame.canvas(), &env, &status));
     assert!(!items.draw_line("t.unknown", &mut frame.canvas(), &env, &status));

@@ -378,7 +378,7 @@ impl Widget for Next {
             .book
             .as_ref()
             .map_or(Command::RunAction(actions::LIBRARY), Book::open);
-        alloc::vec![WidgetTarget { area, command }]
+        alloc::vec![WidgetTarget::new(area, command)]
     }
 }
 

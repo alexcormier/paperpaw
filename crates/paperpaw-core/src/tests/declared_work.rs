@@ -34,22 +34,16 @@ impl Screen for Blank {
 
 impl Plugin for WorkPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("wk"),
-            name: Cow::Borrowed("Work"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(Id::new_static("wk"), "Work", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("wk.home"),
-            title: Cow::Borrowed("home"),
-            factory: Box::new(|_, _| Box::new(Blank)),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("wk.home"),
+            "home",
+            Box::new(|_, _| Box::new(Blank)),
+        ))?;
         r.bind_slot(slots::HOME, Id::new_static("wk.home"), Priority(i16::MAX))?;
         for event in RAN {
             let log = self.log.clone();
@@ -300,23 +294,17 @@ struct Sayer;
 
 impl Plugin for Sayer {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("sy"),
-            name: Cow::Borrowed("Sayer"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("sy"), "Sayer", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // Notices need a screen to show them.
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("sy.notice"),
-            title: Cow::Borrowed("notice"),
-            factory: Box::new(|_, _| Box::new(Blank)),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("sy.notice"),
+            "notice",
+            Box::new(|_, _| Box::new(Blank)),
+        ))?;
         r.bind_slot(
             slots::NOTICE,
             Id::new_static("sy.notice"),

@@ -7,7 +7,6 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -20,8 +19,8 @@ use paperpaw_sdk::secrets::{FILE, SecretChange, Secrets};
 use paperpaw_sdk::wifi::WifiState;
 use paperpaw_sdk::{
     DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, Manifest, MemoryClass,
-    MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION, Storage,
-    StorageError, Version,
+    MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, Storage, StorageError,
+    Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -91,14 +90,12 @@ struct Listener(Rc<RefCell<Vec<String>>>);
 
 impl Plugin for Listener {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("listener"),
-            name: Cow::Borrowed("Listener"),
-            description: Cow::Borrowed(""),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(
+            Id::new_static("listener"),
+            "Listener",
+            Version::new(0, 1, 0),
+        )
+        .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

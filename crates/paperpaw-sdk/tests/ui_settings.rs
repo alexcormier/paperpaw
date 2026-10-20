@@ -232,11 +232,10 @@ fn two_options_switch_at_once_and_more_open_a_list() {
         assert!(ui::opens_screen(&env, &edited));
     }
     // More ways to choose listed with the options: a list after all.
-    h.menus.add(MenuEntry {
-        menu: PAIR.id().clone(),
-        item: paperpaw_sdk::Id::new_static("t.pair-more"),
-        order: 0,
-    });
+    h.menus.add(MenuEntry::new(
+        PAIR.id().clone(),
+        paperpaw_sdk::Id::new_static("t.pair-more"),
+    ));
     h.menus.set_title(
         paperpaw_sdk::Id::new_static("t.pair-more"),
         Cow::Borrowed("t.more"),

@@ -32,8 +32,8 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::web::encode;
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id, Manifest,
-    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingSpec,
+    Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("translate");
@@ -187,24 +187,18 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
 
 impl Plugin for Translate {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Translation"),
-            description: Cow::Borrowed("Translates selected text online, with DeepL."),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(PLUGIN, "Translation", paperpaw_sdk::package_version!())
+            .description("Translates selected text online, with DeepL.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("translate.title"),
-            factory: Box::new(|env, params| Box::new(Panel::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "translate.title",
+            Box::new(|env, params| Box::new(Panel::new(env, params))),
+        ))?;
         r.bind_slot(slots::TRANSLATE, SCREEN, Priority::DEFAULT)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

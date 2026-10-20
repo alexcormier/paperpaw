@@ -276,13 +276,13 @@ impl Book {
         for (area, top) in areas {
             canvas.fill(area, Color::WHITE);
             let id = status::current(env, top, &self.status_lines[usize::from(!top)]);
-            let frame = paperpaw_sdk::StatusFrame {
+            let frame = paperpaw_sdk::StatusFrame::new(
                 area,
                 top,
-                size: status::size(env),
-                color: status::color(env),
-                context: &context,
-            };
+                status::size(env),
+                status::color(env),
+                &context,
+            );
             env.status_items.draw_line(id, canvas, env, &frame);
         }
     }

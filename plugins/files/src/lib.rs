@@ -38,7 +38,7 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect,
-    RegisterError, Registrar, SDK_VERSION, ScreenSpec, SettingSpec, Version,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("files");
@@ -124,47 +124,42 @@ static SETTINGS: [SettingSpec; 4] = [
 
 impl Plugin for Files {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("File browser"),
-            description: Cow::Borrowed("Lists the books and folders on the device and opens them."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "File browser", Version::new(0, 1, 0))
+            .description("Lists the books and folders on the device and opens them.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // When the shelves' catalog was made, for the screens and the
         // handlers below.
         let catalog = shelves::CatalogMade::default();
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("files.title"),
-            factory: Box::new({
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "files.title",
+            Box::new({
                 let catalog = catalog.clone();
                 move |env, params| list::screen(env, params, catalog.clone())
             }),
-        })?;
+        ))?;
         list::register(r)?;
-        r.add_screen(ScreenSpec {
-            id: CHOOSE_FOLDER,
-            title: Cow::Borrowed("files.choose.title"),
-            factory: Box::new(|env, params| Box::new(folders::FolderChooser::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: INFO_SCREEN,
-            title: Cow::Borrowed("files.info"),
-            factory: Box::new(|env, params| Box::new(info::InfoScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: SHELF_SCREEN,
-            title: Cow::Borrowed("files.title"),
-            factory: Box::new({
+        r.add_screen(ScreenSpec::new(
+            CHOOSE_FOLDER,
+            "files.choose.title",
+            Box::new(|env, params| Box::new(folders::FolderChooser::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            INFO_SCREEN,
+            "files.info",
+            Box::new(|env, params| Box::new(info::InfoScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            SHELF_SCREEN,
+            "files.title",
+            Box::new({
                 let catalog = catalog.clone();
                 move |env, params| Box::new(shelves::ShelfScreen::new(env, params, catalog.clone()))
             }),
-        })?;
+        ))?;
         for (action, mode, title, icon) in [
             (BY_AUTHOR, shelves::MODE_AUTHORS, "files.by-author", "user"),
             (
@@ -254,11 +249,7 @@ impl Plugin for Files {
             (BY_SERIES, 20),
             (BY_TAG, 30),
         ] {
-            r.add_menu_entry(MenuEntry {
-                menu: SHELVES_MENU,
-                item,
-                order,
-            })?;
+            r.add_menu_entry(MenuEntry::new(SHELVES_MENU, item).order(order))?;
         }
         // Only what is about the library: night mode and home are the
         // device's (in the main menu and the quick panel).
@@ -271,11 +262,7 @@ impl Plugin for Files {
             (ROOT.into(), 80),
             (core_actions::SETTINGS, 90),
         ] {
-            r.add_menu_entry(MenuEntry {
-                menu: MENU,
-                item,
-                order,
-            })?;
+            r.add_menu_entry(MenuEntry::new(MENU, item).order(order))?;
         }
         // As on phones: down on the home screen searches.
         r.add_keymap(Cow::Borrowed(

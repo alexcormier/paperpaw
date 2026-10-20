@@ -23,7 +23,7 @@ use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::{self, Part, Role};
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MemoryStorage, Plugin, RegisterError, Registrar,
-    SDK_VERSION, Version,
+    Version,
 };
 
 /// An X4 as the emulator's profile has it: buttons, no touch.
@@ -67,14 +67,9 @@ struct Counter(Rc<Cell<u32>>);
 
 impl Plugin for Counter {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("counter"),
-            name: "Counter".into(),
-            description: "Counts.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("counter"), "Counter", Version::new(0, 1, 0))
+            .description("Counts.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

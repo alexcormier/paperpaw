@@ -33,7 +33,7 @@ use core::cell::RefCell;
 use paperpaw_platform::Storage;
 use paperpaw_sdk::FontFace;
 use paperpaw_sdk::presets::Preset;
-use paperpaw_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SDK_VERSION, Version};
+use paperpaw_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, Version};
 
 /// Largest data file read (a translation catalog, a key map).
 const MAX_FILE: usize = 64 * 1024;
@@ -426,14 +426,13 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
         return None;
     }
     Some(DataPlugin {
-        manifest: Manifest {
-            id: Id::new_static("font-folder"),
-            name: Cow::Borrowed("Font folder"),
-            description: Cow::Borrowed("The fonts in the fonts folder, to read with."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        },
+        manifest: Manifest::new(
+            Id::new_static("font-folder"),
+            "Font folder",
+            Version::new(0, 1, 0),
+        )
+        .description("The fonts in the fonts folder, to read with.")
+        .uses(paperpaw_sdk::Uses::NOTHING),
         // Folders the shell names; not removed by PaperPaw.
         folder: String::new(),
         translations: RefCell::new(Vec::new()),
@@ -555,14 +554,10 @@ fn parse_manifest(source: &str, folder: &str) -> Result<Manifest, String> {
         Some(text) => Version::parse(&text).ok_or_else(|| format!("invalid version `{text}`"))?,
         None => Version::new(0, 1, 0),
     };
-    Ok(Manifest {
-        name: Cow::Owned(name.unwrap_or_else(|| id.as_str().to_string())),
-        id,
-        description: Cow::Owned(description.unwrap_or_default()),
-        version,
-        sdk: SDK_VERSION,
-        uses: paperpaw_sdk::Uses::NOTHING,
-    })
+    let name = name.unwrap_or_else(|| id.as_str().to_string());
+    Ok(Manifest::new(id, name, version)
+        .description(description.unwrap_or_default())
+        .uses(paperpaw_sdk::Uses::NOTHING))
 }
 
 #[cfg(test)]

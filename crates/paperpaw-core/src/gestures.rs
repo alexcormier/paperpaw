@@ -198,12 +198,9 @@ impl Kernel {
         } else {
             return;
         };
-        self.recognized(Recognized::Gesture(Gesture {
-            kind,
-            start,
-            end,
-            tool: touch.tool,
-        }));
+        self.recognized(Recognized::Gesture(Gesture::new(
+            kind, start, end, touch.tool,
+        )));
     }
 
     pub(crate) fn recognized(&mut self, recognized: Recognized) {

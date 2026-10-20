@@ -4,7 +4,6 @@
 
 #![allow(dead_code)]
 
-use std::borrow::Cow;
 use std::cell::RefCell;
 use std::rc::Rc;
 
@@ -12,7 +11,7 @@ use paperpaw_core::Kernel;
 use paperpaw_core::sdk::builtin::{actions, slots};
 use paperpaw_core::sdk::{
     ActionSpec, Canvas, Command, Cx, Env, Gesture, Handled, Id, Manifest, Params, Plugin, Priority,
-    RegisterError, Registrar, SDK_VERSION, Screen, ScreenSpec, Version,
+    RegisterError, Registrar, Screen, ScreenSpec, Version,
 };
 use paperpaw_platform::{
     ButtonState, Color, DeviceInfo, DisplayInfo, InputCaps, InputEvent, Instant, PixelFormat,
@@ -172,14 +171,8 @@ pub struct Driver {
 }
 
 pub fn manifest(id: &'static str) -> Manifest {
-    Manifest {
-        id: Id::new_static(id),
-        name: Cow::Borrowed("Test"),
-        description: Cow::Borrowed(""),
-        version: Version::new(1, 0, 0),
-        sdk: SDK_VERSION,
-        uses: paperpaw_sdk::Uses::NETWORK,
-    }
+    Manifest::new(Id::new_static(id), "Test", Version::new(1, 0, 0))
+        .uses(paperpaw_sdk::Uses::NETWORK)
 }
 
 impl Plugin for Driver {
@@ -190,13 +183,11 @@ impl Plugin for Driver {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         for (id, name) in [(BASE, "base"), (FULL, "full"), (OVERLAY, "overlay")] {
             let log = self.log.clone();
-            r.add_screen(ScreenSpec {
+            r.add_screen(ScreenSpec::new(
                 id,
-                title: Cow::Borrowed("drv.screen"),
-                factory: Box::new(move |_, params| {
-                    Box::new(LogScreen::new(name, log.clone(), params))
-                }),
-            })?;
+                "drv.screen",
+                Box::new(move |_, params| Box::new(LogScreen::new(name, log.clone(), params))),
+            ))?;
         }
         r.bind_slot(slots::HOME, BASE, Priority::DEFAULT)?;
         r.bind_slot(slots::MENU, OVERLAY, Priority::DEFAULT)?;

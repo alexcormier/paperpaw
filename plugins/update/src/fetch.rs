@@ -150,11 +150,10 @@ pub(crate) fn from_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Build>
                 continue;
             };
             builds.push(Build {
-                package: Package {
-                    plugin: id.to_string(),
-                    name: parts.next().unwrap_or(id).trim().to_string(),
-                    files: Vec::new(),
-                },
+                package: Package::new(
+                    id.to_string(),
+                    parts.next().unwrap_or(id).trim().to_string(),
+                ),
                 version: version.to_string(),
                 author: if author == "-" {
                     String::new()
@@ -176,12 +175,12 @@ pub(crate) fn from_lines<'a>(lines: impl Iterator<Item = &'a str>) -> Vec<Build>
                 Some((_, hex)) => Digest::Sha1(hex.to_string()),
                 None => continue,
             };
-            build.package.files.push(PackageFile {
-                path: path.to_string(),
-                url: url.trim().to_string(),
-                size: size.parse().unwrap_or(0),
+            build.package.files.push(PackageFile::new(
+                path.to_string(),
+                url.trim().to_string(),
+                size.parse().unwrap_or(0),
                 digest,
-            });
+            ));
         }
     }
     builds.retain(|b| b.package.is_valid());

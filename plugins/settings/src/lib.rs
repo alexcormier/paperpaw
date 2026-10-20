@@ -58,7 +58,7 @@ use paperpaw_sdk::{ActionSpec, MenuEntry};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Level, Manifest,
     Params, Plugin, PointerEvent, PointerPhase, Priority, Rect, RefreshMode, RegisterError,
-    Registrar, SDK_VERSION, Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
+    Registrar, Screen, ScreenSpec, SettingKind, SettingSpec, SettingValue, Version,
 };
 
 use self::chooser::*;
@@ -102,34 +102,26 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
 
 impl Plugin for SettingsPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Settings"),
-            description: Cow::Borrowed(
-                "The settings pages, built from the settings of every plugin.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Settings", Version::new(0, 1, 0))
+            .description("The settings pages, built from the settings of every plugin.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("settings.title"),
-            // With a group, e.g. a widget's own settings: that group.
-            factory: Box::new(|env, params| {
-                match params.get(ID).and_then(|id| Id::parse(id).ok()) {
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "settings.title",
+            Box::new(
+                |env, params| match params.get(ID).and_then(|id| Id::parse(id).ok()) {
                     Some(group) => Box::new(GroupPage::new(env, group)) as Box<dyn Screen>,
                     None => Box::new(GroupList::new(env)),
-                }
-            }),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: GROUP_SCREEN,
-            title: Cow::Borrowed("settings.title"),
-            factory: Box::new(|env, params| {
+                },
+            ),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            GROUP_SCREEN,
+            "settings.title",
+            Box::new(|env, params| {
                 let group = params.get(ID).and_then(|id| Id::parse(id).ok());
                 let mut page = GroupPage::new(env, group.unwrap_or(groups::OTHER));
                 if let Some(focus) = params.get(FOCUS) {
@@ -137,46 +129,42 @@ impl Plugin for SettingsPlugin {
                 }
                 Box::new(page)
             }),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("settings.title"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOOSE_SCREEN,
-            title: Cow::Borrowed("settings.title"),
-            factory: Box::new(|env, params| {
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "settings.title",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOOSE_SCREEN,
+            "settings.title",
+            Box::new(|env, params| {
                 let id = params.get(ID).unwrap_or_default();
                 Box::new(Chooser::new(env, id))
             }),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: search::SCREEN,
-            title: Cow::Borrowed("settings.search"),
-            factory: Box::new(|env, params| Box::new(search::SearchScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: secrets::SCREEN,
-            title: Cow::Borrowed("settings.secrets"),
-            factory: Box::new(|env, _| Box::new(secrets::SecretList::new(env))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: secrets::SECRET_SCREEN,
-            title: Cow::Borrowed("settings.secrets"),
-            factory: Box::new(|env, params| Box::new(secrets::SecretPage::new(env, params))),
-        })?;
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            search::SCREEN,
+            "settings.search",
+            Box::new(|env, params| Box::new(search::SearchScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            secrets::SCREEN,
+            "settings.secrets",
+            Box::new(|env, _| Box::new(secrets::SecretList::new(env))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            secrets::SECRET_SCREEN,
+            "settings.secrets",
+            Box::new(|env, params| Box::new(secrets::SecretPage::new(env, params))),
+        ))?;
         r.add_action(ActionSpec::new(secrets::OPEN, "settings.secrets").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(secrets::SCREEN, Params::new()));
             },
         ))?;
         // In the device's part, after the system.
-        r.add_menu_entry(MenuEntry {
-            menu: menus::SETTINGS,
-            item: secrets::OPEN,
-            order: 95,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, secrets::OPEN).order(95))?;
         r.add_icon(secrets::OPEN, Cow::Borrowed("key"))?;
         r.on(secrets::ENTERED, secrets::entered)?;
         r.bind_slot(slots::SETTINGS, SCREEN, Priority::DEFAULT)?;

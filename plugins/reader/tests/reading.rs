@@ -18,8 +18,8 @@ use paperpaw_sdk::builtin::{
 };
 use paperpaw_sdk::{
     ButtonState, DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, InputEvent, Instant, Manifest,
-    MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SDK_VERSION,
-    Storage, StorageError, Version,
+    MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, Storage,
+    StorageError, Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -124,14 +124,13 @@ struct Listener(Heard);
 
 impl Plugin for Listener {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("listener"),
-            name: "Listener".into(),
-            description: "Hears the reading events.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            Id::new_static("listener"),
+            "Listener",
+            Version::new(0, 1, 0),
+        )
+        .description("Hears the reading events.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -537,28 +536,23 @@ struct Probe(InChapter);
 
 impl Plugin for Probe {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("probe"),
-            name: "Probe".into(),
-            description: "Notes what status items are told.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("probe"), "Probe", Version::new(0, 1, 0))
+            .description("Notes what status items are told.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let heard = self.0.clone();
-        r.add_status_item(paperpaw_sdk::StatusItemSpec {
-            id: Id::new_static("probe.chapter"),
-            title: "probe".into(),
-            value: Box::new(move |_, cx| {
+        r.add_status_item(paperpaw_sdk::StatusItemSpec::new(
+            Id::new_static("probe.chapter"),
+            "probe",
+            Box::new(move |_, cx| {
                 let get = |key| cx.get(key).unwrap_or_default().to_string();
                 *heard.borrow_mut() =
                     Some((get("reader.chapter-page"), get("reader.chapter-pages")));
                 None
             }),
-        })
+        ))
     }
 }
 
@@ -1023,26 +1017,21 @@ struct Counter(Asked);
 
 impl Plugin for Counter {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("counter"),
-            name: "Counter".into(),
-            description: "Counts what status items are asked.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("counter"), "Counter", Version::new(0, 1, 0))
+            .description("Counts what status items are asked.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let asked = self.0.clone();
-        r.add_status_item(paperpaw_sdk::StatusItemSpec {
-            id: Id::new_static("counter.item"),
-            title: "counter".into(),
-            value: Box::new(move |_, _| {
+        r.add_status_item(paperpaw_sdk::StatusItemSpec::new(
+            Id::new_static("counter.item"),
+            "counter",
+            Box::new(move |_, _| {
                 asked.set(asked.get() + 1);
                 None
             }),
-        })
+        ))
     }
 }
 
@@ -1169,14 +1158,9 @@ struct MenuLook(Entries);
 
 impl Plugin for MenuLook {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("looker"),
-            name: "Menus".into(),
-            description: "Looks into menus.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("looker"), "Menus", Version::new(0, 1, 0))
+            .description("Looks into menus.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -1242,27 +1226,22 @@ impl paperpaw_sdk::Screen for Notice {
 
 impl Plugin for NoticeTaker {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("notices"),
-            name: "Notices".into(),
-            description: "Keeps the notices shown.".into(),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("notices"), "Notices", Version::new(0, 1, 0))
+            .description("Keeps the notices shown.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let notices = self.0.clone();
-        r.add_screen(paperpaw_sdk::ScreenSpec {
-            id: Id::new_static("notices.notice"),
-            title: "notice".into(),
-            factory: Box::new(move |_, params| {
+        r.add_screen(paperpaw_sdk::ScreenSpec::new(
+            Id::new_static("notices.notice"),
+            "notice",
+            Box::new(move |_, params| {
                 let text = params.get(params::TEXT).unwrap_or_default();
                 notices.borrow_mut().push(text.to_string());
                 Box::new(Notice)
             }),
-        })?;
+        ))?;
         r.bind_slot(
             slots::NOTICE,
             Id::new_static("notices.notice"),

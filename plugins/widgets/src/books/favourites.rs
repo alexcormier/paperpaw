@@ -213,9 +213,8 @@ impl Widget for Favourites {
         self.places(env, rest)
             .into_iter()
             .zip(&self.books)
-            .map(|(place, shelved)| WidgetTarget {
-                area: place.cover.union(&place.label),
-                command: shelved.book.open(),
+            .map(|(place, shelved)| {
+                WidgetTarget::new(place.cover.union(&place.label), shelved.book.open())
             })
             .collect()
     }

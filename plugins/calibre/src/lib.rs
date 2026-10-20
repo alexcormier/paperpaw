@@ -75,15 +75,16 @@ fn provided(metadata: &str) -> paperpaw_sdk::library::Provided {
             .map(json::string_array)
             .unwrap_or_default()
     };
-    paperpaw_sdk::library::Provided {
-        title: text("title"),
-        author: list("authors").into_iter().next(),
-        series: text("series"),
-        series_index: json::raw_member(metadata, "series_index")
-            .filter(|n| *n != "null")
-            .map(|n| n.trim_end_matches(".0").into()),
-        tags: list("tags"),
-    }
+    paperpaw_sdk::library::Provided::default()
+        .title(text("title"))
+        .author(list("authors").into_iter().next())
+        .series(text("series"))
+        .series_index(
+            json::raw_member(metadata, "series_index")
+                .filter(|n| *n != "null")
+                .map(|n| n.trim_end_matches(".0").into()),
+        )
+        .tags(list("tags"))
 }
 /// The Calibre plugin.
 #[derive(Debug, Default)]
@@ -101,35 +102,23 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
 
 impl Plugin for Calibre {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Calibre"),
-            description: Cow::Borrowed(
-                "Receive books from Calibre over the network, as its wireless device.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(PLUGIN, "Calibre", paperpaw_sdk::package_version!())
+            .description("Receive books from Calibre over the network, as its wireless device.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("calibre.title"),
-            factory: Box::new(|env, _| Box::new(CalibreScreen::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "calibre.title",
+            Box::new(|env, _| Box::new(CalibreScreen::new(env))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "calibre.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::TOOLS,
-            item: OPEN,
-            order: 47,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(47))?;
         r.add_icon(OPEN, Cow::Borrowed("device-desktop"))?;
         r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

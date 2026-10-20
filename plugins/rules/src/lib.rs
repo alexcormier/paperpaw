@@ -47,7 +47,7 @@ use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, SDK_VERSION, ScreenSpec, SettingValue, time,
+    Registrar, ScreenSpec, SettingValue, time,
 };
 
 use crate::rule::{Condition, EVERY_DAY, Effect, Levels, Rule, Store, Trigger, WEEKDAYS, WEEKENDS};
@@ -363,49 +363,35 @@ pub struct Rules;
 
 impl Plugin for Rules {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Rules"),
-            description: Cow::Borrowed(
-                "When something happens, does something: e.g. night mode at 22:00.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "Rules", paperpaw_sdk::package_version!())
+            .description("When something happens, does something: e.g. night mode at 22:00.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(State::default());
         let shared = state.clone();
-        r.add_screen(ScreenSpec {
-            id: LIST_SCREEN,
-            title: Cow::Borrowed("rules.title"),
-            factory: Box::new(move |env, _| {
-                Box::new(screens::RulesScreen::new(env, shared.clone()))
-            }),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: PICK_SCREEN,
-            title: Cow::Borrowed("rules.title"),
-            factory: Box::new(|env, params| Box::new(screens::PickScreen::new(env, params))),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("rules.title"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            LIST_SCREEN,
+            "rules.title",
+            Box::new(move |env, _| Box::new(screens::RulesScreen::new(env, shared.clone()))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            PICK_SCREEN,
+            "rules.title",
+            Box::new(|env, params| Box::new(screens::PickScreen::new(env, params))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "rules.title",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
         r.add_action(ActionSpec::new(OPEN, "rules.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::SETTINGS,
-            item: OPEN,
-            order: 230,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(230))?;
         r.add_icon(OPEN, Cow::Borrowed("automation"))?;
         let started = state.clone();
         r.on(events::STARTED, move |env, _, out| {

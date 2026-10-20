@@ -22,10 +22,8 @@ mod draw_tests;
 #[cfg(test)]
 mod harness;
 
-use alloc::borrow::Cow;
-
 use paperpaw_sdk::widgets;
-use paperpaw_sdk::{Env, Id, Manifest, Plugin, Rect, RegisterError, Registrar, SDK_VERSION};
+use paperpaw_sdk::{Env, Id, Manifest, Plugin, Rect, RegisterError, Registrar};
 
 pub const PLUGIN: Id = Id::new_static("widgets");
 
@@ -35,17 +33,9 @@ pub struct Widgets;
 
 impl Plugin for Widgets {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Widget pack"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "Widget pack", paperpaw_sdk::package_version!()).description(
                 "Many more widgets for the home screen: clocks, a calendar, quotes, books, notes and more.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+            ).uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

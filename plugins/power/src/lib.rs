@@ -24,8 +24,8 @@ use paperpaw_sdk::builtin::{events, menus};
 use paperpaw_sdk::power::{self, PowerLevel, Wear};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{
-    Command, Env, Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar, SDK_VERSION,
-    SettingGroupSpec, SettingSpec, StatusItemSpec, StatusValue, Version,
+    Command, Env, Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar, SettingGroupSpec,
+    SettingSpec, StatusItemSpec, StatusValue, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("power");
@@ -151,37 +151,23 @@ pub struct Power;
 
 impl Plugin for Power {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Power"),
-            description: Cow::Borrowed(
+        Manifest::new(PLUGIN, "Power", Version::new(0, 1, 0))
+            .description(
                 "Chooses the power mode, by hand or by the battery: Normal, Saving, Offline.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+            )
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting_group(SettingGroupSpec {
-            id: GROUP,
-            title: Cow::Borrowed("power.title"),
-            order: 86,
-            page: None,
-        })?;
+        r.add_setting_group(SettingGroupSpec::new(GROUP, "power.title").order(86))?;
         r.add_icon(GROUP, Cow::Borrowed("leaf"))?;
         r.add_settings(&SETTINGS)?;
         // The mode in the quick panel, as segments.
-        r.add_menu_entry(MenuEntry {
-            menu: menus::QUICK,
-            item: MODE.id().clone(),
-            order: 30,
-        })?;
-        r.add_status_item(StatusItemSpec {
-            id: STATUS,
-            title: Cow::Borrowed("power.status.item"),
-            value: Box::new(|env, _| {
+        r.add_menu_entry(MenuEntry::new(menus::QUICK, MODE.id().clone()).order(30))?;
+        r.add_status_item(StatusItemSpec::new(
+            STATUS,
+            "power.status.item",
+            Box::new(|env, _| {
                 let icon = match env.power.level {
                     PowerLevel::Normal => return None,
                     PowerLevel::Saving => "leaf",
@@ -189,7 +175,7 @@ impl Plugin for Power {
                 };
                 Some(StatusValue::Icon(Cow::Borrowed(icon)))
             }),
-        })?;
+        ))?;
         // Silently: the mode changes, only the status mark says so.
         for event in [
             events::STARTED.id(),

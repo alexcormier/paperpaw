@@ -22,20 +22,19 @@ pub(crate) const INSTALLER: Installer = Installer::new(PLUGIN, DOWNLOADED);
 
 /// Starts installing `font` (or a newer version of it).
 pub(crate) fn start(env: &Env<'_>, font: &Font, out: &mut Vec<Command>) {
-    let package = Package {
-        plugin: font.plugin(),
-        name: font.name.clone(),
-        files: font
-            .files
+    let package = Package::new(font.plugin(), font.name.clone()).files(
+        font.files
             .iter()
-            .map(|f| PackageFile {
-                path: f.path.clone(),
-                url: f.url.clone(),
-                size: f.size,
-                digest: Digest::Sha1(f.sha1.clone()),
+            .map(|f| {
+                PackageFile::new(
+                    f.path.clone(),
+                    f.url.clone(),
+                    f.size,
+                    Digest::Sha1(f.sha1.clone()),
+                )
             })
             .collect(),
-    };
+    );
     if !INSTALLER.start(env, &package, out) {
         out.push(failed(env, &font.name));
     }

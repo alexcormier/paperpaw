@@ -9,7 +9,6 @@
 //! ([`Installing`]), which hears an event of its own and asks for the
 //! installation, as the store plugin would.
 
-use std::borrow::Cow;
 use std::sync::Mutex;
 
 use paperpaw_core::{Kernel, KernelBuilder, WarningSource};
@@ -51,16 +50,13 @@ struct Installing;
 
 impl Plugin for Installing {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static(PLUGIN),
-            name: Cow::Borrowed("paperpaw-dev install"),
-            description: Cow::Borrowed(
-                "Installs data plugins as the store does, for paperpaw-dev.",
-            ),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            Id::new_static(PLUGIN),
+            "paperpaw-dev install",
+            Version::new(0, 1, 0),
+        )
+        .description("Installs data plugins as the store does, for paperpaw-dev.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

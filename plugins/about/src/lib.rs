@@ -20,7 +20,7 @@ use paperpaw_sdk::builtin::{menus, params, slots};
 use paperpaw_sdk::logo;
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, SDK_VERSION, Version,
+    Registrar, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("about");
@@ -98,14 +98,9 @@ pub struct About;
 
 impl Plugin for About {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("About"),
-            description: Cow::Borrowed("PaperPaw's version and licences."),
-            version: Version::new(0, 1, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(PLUGIN, "About", Version::new(0, 1, 0))
+            .description("PaperPaw's version and licences.")
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -122,11 +117,7 @@ impl Plugin for About {
             },
         ))?;
         // In the device's part of the settings, last.
-        r.add_menu_entry(MenuEntry {
-            menu: menus::SETTINGS,
-            item: OPEN,
-            order: 99,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(99))?;
         r.add_icon(OPEN, Cow::Borrowed("info-circle"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

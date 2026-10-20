@@ -22,13 +22,12 @@ const PATH: &str = "books/a.epub";
 fn txt_formats() -> Formats {
     let mut formats = Formats::new();
     formats
-        .add(FormatSpec {
-            id: Id::new_static("test.txt"),
-            title: Cow::Borrowed("TXT"),
-            extensions: vec![Cow::Borrowed("txt")],
-            open: Box::new(|_, _, _| Err(DocumentError::UnsupportedFormat)),
-            prepared: None,
-        })
+        .add(FormatSpec::new(
+            Id::new_static("test.txt"),
+            "TXT",
+            vec![Cow::Borrowed("txt")],
+            Box::new(|_, _, _| Err(DocumentError::UnsupportedFormat)),
+        ))
         .unwrap();
     formats
 }
@@ -65,23 +64,22 @@ fn any_book() -> impl Strategy<Value = Book> {
                 (progress, added),
                 fields,
             )| {
-                Book {
-                    size,
-                    indexed,
-                    title,
-                    author,
-                    series,
-                    series_index,
-                    tags,
-                    cover: cover.map(|(path, width, height)| ImageRef {
+                Book::default()
+                    .size(size)
+                    .indexed(indexed)
+                    .title(title)
+                    .author(author)
+                    .series(series)
+                    .series_index(series_index)
+                    .tags(tags)
+                    .cover(cover.map(|(path, width, height)| ImageRef {
                         path,
                         width,
                         height,
-                    }),
-                    progress,
-                    added,
-                    fields: fields.into_iter().collect(),
-                }
+                    }))
+                    .progress(progress)
+                    .added(added)
+                    .fields(fields.into_iter().collect())
             },
         )
 }
@@ -250,14 +248,7 @@ proptest! {
             .iter()
             .enumerate()
             .map(|(i, (name, title, author, tags))| {
-                let book = Book {
-                    title: Some(format!("T{title}T")),
-                    author: Some(format!("A{author}A")),
-                    series: Some("S".into()),
-                    series_index: Some("1".into()),
-                    tags: tags.clone(),
-                    ..Book::default()
-                };
+                let book = Book::default().title(format!("T{title}T")).author(format!("A{author}A")).series(String::from("S")).series_index(String::from("1")).tags(tags.clone());
                 catalog::Record::of(&format!("books/{i}{name}.txt"), &book)
             })
             .collect();
@@ -504,10 +495,7 @@ fn shown_titles_fall_back_to_readable_file_names() {
     assert_eq!(untitled.shown_title("b/2024-01-02.txt"), "2024-01-02");
     assert_eq!(untitled.shown_title("b/--a--.txt"), "A");
     assert_eq!(untitled.shown_title("b/über-straße.txt"), "Über Straße");
-    let empty = Book {
-        title: Some(String::new()),
-        ..Book::default()
-    };
+    let empty = Book::default().title(String::new());
     assert_eq!(empty.shown_title("b/x.txt"), "x");
 }
 
@@ -554,11 +542,11 @@ fn books_are_found_in_folders_but_not_hidden_ones() {
 #[test]
 fn catalog_searches_every_word_without_regard_to_case() {
     let storage = MemoryStorage::new();
-    let book = |title: &str, author: &str, tags: &[&str]| Book {
-        title: Some(title.into()),
-        author: Some(author.into()),
-        tags: tags.iter().map(|t| t.to_string()).collect(),
-        ..Book::default()
+    let book = |title: &str, author: &str, tags: &[&str]| {
+        Book::default()
+            .title(title.to_string())
+            .author(author.to_string())
+            .tags(tags.iter().map(|t| t.to_string()).collect())
     };
     catalog::write(
         &storage,

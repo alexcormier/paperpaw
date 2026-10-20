@@ -39,7 +39,7 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec,
+    Screen, ScreenSpec,
 };
 
 use crate::store::Entry;
@@ -73,44 +73,30 @@ pub struct Browser;
 
 impl Plugin for Browser {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Browser"),
-            description: Cow::Borrowed(
-                "Reads web pages like books and fetches books and fonts from the web.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(PLUGIN, "Browser", paperpaw_sdk::package_version!())
+            .description("Reads web pages like books and fetches books and fonts from the web.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let session = Rc::new(RefCell::new(Session::default()));
-        r.add_screen(ScreenSpec {
-            id: SCREEN,
-            title: Cow::Borrowed("browser.title"),
-            factory: Box::new(move |env, params| {
-                Box::new(BrowserScreen::new(env, params, session.clone()))
-            }),
-        })?;
-        r.add_screen(ScreenSpec {
-            id: CHOICE,
-            title: Cow::Borrowed("browser.title"),
-            factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            SCREEN,
+            "browser.title",
+            Box::new(move |env, params| Box::new(BrowserScreen::new(env, params, session.clone()))),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            CHOICE,
+            "browser.title",
+            Box::new(|env, params| Box::new(Choice::new(env, params))),
+        ))?;
         r.bind_slot(slots::BROWSER, SCREEN, Priority::DEFAULT)?;
         r.add_action(ActionSpec::new(OPEN, "browser.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenSlot(slots::BROWSER, Params::new()));
             },
         ))?;
-        r.add_menu_entry(MenuEntry {
-            menu: menus::TOOLS,
-            item: OPEN,
-            order: 43,
-        })?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(43))?;
         r.add_icon(OPEN, Cow::Borrowed("world"))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

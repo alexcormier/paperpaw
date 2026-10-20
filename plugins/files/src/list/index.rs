@@ -833,13 +833,11 @@ mod tests {
                     "books"
                 };
                 let series = (n % 3 == 0).then(|| String::from("Tales"));
-                let book = library::Book {
-                    title: Some(format!("Book {n:04}")),
-                    author: Some(String::from("Ann")),
-                    series_index: series.as_ref().map(|_| format!("{n}")),
-                    series,
-                    ..library::Book::default()
-                };
+                let book = library::Book::default()
+                    .title(format!("Book {n:04}"))
+                    .author(String::from("Ann"))
+                    .series_index(series.as_ref().map(|_| format!("{n}")))
+                    .series(series);
                 library::catalog::Record::of(&format!("{folder}/Book {n:04}.txt"), &book)
             })
             .collect();

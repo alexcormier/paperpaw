@@ -43,7 +43,7 @@ use paperpaw_sdk::status::item_ids;
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, HttpRequest, Id, Instant, Manifest, Params, Plugin, RegisterError,
-    Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, time,
+    Registrar, ScreenSpec, SettingGroupSpec, SettingSpec, time,
 };
 
 use data::{Temperature, Wind};
@@ -468,35 +468,22 @@ pub struct Weather;
 
 impl Plugin for Weather {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: PLUGIN,
-            name: Cow::Borrowed("Weather"),
-            description: Cow::Borrowed(
-                "The weather now and the next days as widgets, from Open-Meteo.",
-            ),
-            // Released with PaperPaw, also as a file from the store.
-            version: paperpaw_sdk::package_version!(),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(PLUGIN, "Weather", paperpaw_sdk::package_version!())
+            .description("The weather now and the next days as widgets, from Open-Meteo.")
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
-        r.add_setting_group(SettingGroupSpec {
-            id: GROUP,
-            title: Cow::Borrowed("weather.title"),
-            order: 88,
-            page: None,
-        })?;
+        r.add_setting_group(SettingGroupSpec::new(GROUP, "weather.title").order(88))?;
         r.add_icon(GROUP, Cow::Borrowed("sun"))?;
         r.add_settings(&PLACE_SETTING)?;
         r.add_settings(&SETTINGS)?;
-        r.add_screen(ScreenSpec {
-            id: PLACE_SCREEN,
-            title: Cow::Borrowed("weather.setting.place"),
-            factory: Box::new(|env, _| Box::new(place::PlaceScreen::new(env))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            PLACE_SCREEN,
+            "weather.setting.place",
+            Box::new(|env, _| Box::new(place::PlaceScreen::new(env))),
+        ))?;
         r.add_action(
             ActionSpec::new(CHOOSE_PLACE, "weather.setting.place").handler(
                 |_: &Env<'_>, out: &mut Vec<Command>| {

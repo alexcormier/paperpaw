@@ -239,23 +239,17 @@ impl Screen for GestureScreen {
 
 impl Plugin for GesturePlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("g"),
-            name: Cow::Borrowed("Gestures"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("g"), "Gestures", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.0.clone();
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("g.screen"),
-            title: Cow::Borrowed("g"),
-            factory: Box::new(move |_, _| Box::new(GestureScreen(log.clone()))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("g.screen"),
+            "g",
+            Box::new(move |_, _| Box::new(GestureScreen(log.clone()))),
+        ))?;
         r.bind_slot(slots::HOME, Id::new_static("g.screen"), Priority::DEFAULT)?;
         // Every edge swipes in: the strips along them are the kernel's.
         r.add_keymap(Cow::Borrowed(

@@ -106,29 +106,24 @@ impl TestPlugin {
 
 impl Plugin for TestPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::parse(self.id).unwrap(),
-            name: Cow::Borrowed("Test"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: self.sdk,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::parse(self.id).unwrap(), "Test", Version::new(1, 0, 0))
+            .sdk(self.sdk)
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.log.clone();
         let name = self.id;
-        r.add_screen(ScreenSpec {
-            id: self.screen_id(),
-            title: Cow::Borrowed("test.screen"),
-            factory: Box::new(move |_, _| {
+        r.add_screen(ScreenSpec::new(
+            self.screen_id(),
+            "test.screen",
+            Box::new(move |_, _| {
                 Box::new(TestScreen {
                     name,
                     log: log.clone(),
                 })
             }),
-        })?;
+        ))?;
         r.bind_slot(slots::HOME, self.screen_id(), self.priority)?;
         r.add_action(ActionSpec::new(
             Id::parse(&alloc::format!("{}.special", self.id)).unwrap(),
@@ -287,22 +282,16 @@ impl Screen for OpenerScreen {
 
 impl Plugin for Opener {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("opener"),
-            name: Cow::Borrowed("Opener"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("opener"), "Opener", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("opener.screen"),
-            title: Cow::Borrowed("test.screen"),
-            factory: Box::new(|_, _| Box::new(OpenerScreen)),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("opener.screen"),
+            "test.screen",
+            Box::new(|_, _| Box::new(OpenerScreen)),
+        ))?;
         r.bind_slot(
             slots::HOME,
             Id::new_static("opener.screen"),
@@ -640,28 +629,22 @@ struct EdgeHolderPlugin(Log, bool);
 
 impl Plugin for EdgeHolderPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("holder"),
-            name: Cow::Borrowed("Holder"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("holder"), "Holder", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let (log, holds) = (self.0.clone(), self.1);
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("holder.screen"),
-            title: Cow::Borrowed("holder"),
-            factory: Box::new(move |_, _| {
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("holder.screen"),
+            "holder",
+            Box::new(move |_, _| {
                 Box::new(EdgeHolder {
                     log: log.clone(),
                     holds,
                 })
             }),
-        })?;
+        ))?;
         r.bind_slot(
             slots::HOME,
             Id::new_static("holder.screen"),
@@ -774,14 +757,8 @@ struct FontPlugin;
 
 impl Plugin for FontPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("type"),
-            name: Cow::Borrowed("Fonts"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("type"), "Fonts", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -886,22 +863,16 @@ impl Screen for LifecycleScreen {
 
 impl Plugin for LifecyclePlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("life"),
-            name: Cow::Borrowed("Lifecycle"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("life"), "Lifecycle", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.log.clone();
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("life.screen"),
-            title: Cow::Borrowed("life"),
-            factory: Box::new(move |_, params| {
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("life.screen"),
+            "life",
+            Box::new(move |_, params| {
                 log.borrow_mut()
                     .push(alloc::format!("open {}", params.get("path").unwrap_or("-")));
                 Box::new(LifecycleScreen {
@@ -909,7 +880,7 @@ impl Plugin for LifecyclePlugin {
                     ticks: 0,
                 })
             }),
-        })?;
+        ))?;
         r.subscribe(
             paperpaw_sdk::builtin::events::STARTED,
             Box::new(|_, _, out| {
@@ -1060,36 +1031,29 @@ impl Screen for HalfOverlay {
 
 impl Plugin for OverlayPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("ov"),
-            name: Cow::Borrowed("Overlay"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(Id::new_static("ov"), "Overlay", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.log.clone();
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("ov.base"),
-            title: Cow::Borrowed("base"),
-            factory: Box::new(move |_, _| Box::new(BaseScreen { log: log.clone() })),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("ov.base"),
+            "base",
+            Box::new(move |_, _| Box::new(BaseScreen { log: log.clone() })),
+        ))?;
         r.bind_slot(slots::HOME, Id::new_static("ov.base"), Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("ov.half"),
-            title: Cow::Borrowed("half"),
-            factory: Box::new(|_, _| Box::new(HalfOverlay)),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("ov.half"),
+            "half",
+            Box::new(|_, _| Box::new(HalfOverlay)),
+        ))?;
         r.bind_slot(slots::MENU, Id::new_static("ov.half"), Priority::DEFAULT)?;
         for (action, order) in [(actions::TOGGLE_NIGHT_MODE, 20), (actions::HOME, 10)] {
-            r.add_menu_entry(paperpaw_sdk::MenuEntry {
-                menu: paperpaw_sdk::builtin::menus::MAIN,
-                item: action,
-                order,
-            })?;
+            r.add_menu_entry(
+                paperpaw_sdk::MenuEntry::new(paperpaw_sdk::builtin::menus::MAIN, action)
+                    .order(order),
+            )?;
         }
         Ok(())
     }
@@ -1160,29 +1124,23 @@ struct NoticePlugin {
 
 impl Plugin for NoticePlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("nt"),
-            name: Cow::Borrowed("Notice"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("nt"), "Notice", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.log.clone();
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("nt.base"),
-            title: Cow::Borrowed("base"),
-            factory: Box::new(move |_, _| Box::new(BaseScreen { log: log.clone() })),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("nt.base"),
+            "base",
+            Box::new(move |_, _| Box::new(BaseScreen { log: log.clone() })),
+        ))?;
         r.bind_slot(slots::HOME, Id::new_static("nt.base"), Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("nt.notice"),
-            title: Cow::Borrowed("notice"),
-            factory: Box::new(|_, _| Box::new(HalfOverlay)),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("nt.notice"),
+            "notice",
+            Box::new(|_, _| Box::new(HalfOverlay)),
+        ))?;
         r.bind_slot(
             slots::NOTICE,
             Id::new_static("nt.notice"),
@@ -1422,28 +1380,22 @@ impl Screen for GrayScreen {
 
 impl Plugin for GrayPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("gray"),
-            name: Cow::Borrowed("Gray"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("gray"), "Gray", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("gray.page"),
-            title: Cow::Borrowed("page"),
-            factory: Box::new(|_, _| Box::new(GrayScreen)),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("gray.page"),
+            "page",
+            Box::new(|_, _| Box::new(GrayScreen)),
+        ))?;
         r.bind_slot(slots::HOME, Id::new_static("gray.page"), Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("gray.menu"),
-            title: Cow::Borrowed("menu"),
-            factory: Box::new(|_, _| Box::new(HalfOverlay)),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("gray.menu"),
+            "menu",
+            Box::new(|_, _| Box::new(HalfOverlay)),
+        ))?;
         r.bind_slot(slots::MENU, Id::new_static("gray.menu"), Priority::DEFAULT)
     }
 }
@@ -2708,14 +2660,12 @@ struct ServicePlugin {
 
 impl Plugin for ServicePlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::parse(self.id).unwrap(),
-            name: Cow::Borrowed("Services"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(
+            Id::parse(self.id).unwrap(),
+            "Services",
+            Version::new(1, 0, 0),
+        )
+        .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
@@ -2771,22 +2721,16 @@ struct FilterPlugin;
 
 impl Plugin for FilterPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("filter"),
-            name: Cow::Borrowed("Filters"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("filter"), "Filters", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         use paperpaw_sdk::filters::{InputFilterSpec, InputVerdict, RefreshFilterSpec};
-        r.add_input_filter(InputFilterSpec {
-            id: Id::new_static("filter.input"),
-            title: Cow::Borrowed(""),
-            filter: Box::new(|_, event| match event {
+        r.add_input_filter(InputFilterSpec::new(
+            Id::new_static("filter.input"),
+            "",
+            Box::new(|_, event| match event {
                 InputEvent::Button {
                     name: "menu",
                     state: ButtonState::Pressed,
@@ -2797,15 +2741,15 @@ impl Plugin for FilterPlugin {
                 } => InputVerdict::Take,
                 _ => InputVerdict::Pass,
             }),
-        })?;
-        r.add_refresh_filter(RefreshFilterSpec {
-            id: Id::new_static("filter.refresh"),
-            title: Cow::Borrowed(""),
-            filter: Box::new(|_, refresh| {
+        ))?;
+        r.add_refresh_filter(RefreshFilterSpec::new(
+            Id::new_static("filter.refresh"),
+            "",
+            Box::new(|_, refresh| {
                 (refresh.screen.as_ref().map(Id::as_str) == Some("a.screen"))
                     .then_some(RefreshMode::Full)
             }),
-        })
+        ))
     }
 }
 
@@ -2856,28 +2800,22 @@ impl Screen for SizedScreen {
 
 impl Plugin for SizedPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("sized"),
-            name: Cow::Borrowed("Sized"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("sized"), "Sized", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         for (name, slot) in [("home", slots::HOME), ("reader", slots::READER)] {
             let made = self.0.clone();
             let id = Id::parse(&alloc::format!("sized.{name}")).unwrap();
-            r.add_screen(ScreenSpec {
-                id: id.clone(),
-                title: Cow::Borrowed("sized"),
-                factory: Box::new(move |env, _| {
+            r.add_screen(ScreenSpec::new(
+                id.clone(),
+                "sized",
+                Box::new(move |env, _| {
                     made.borrow_mut().push((name, env.device.display.height));
                     Box::new(SizedScreen)
                 }),
-            })?;
+            ))?;
             r.bind_slot(slot, id, Priority::DEFAULT)?;
         }
         r.set_screen_hints(Id::new_static("sized.reader"), paperpaw_sdk::Hints::OnPress)?;
@@ -2978,23 +2916,17 @@ impl Screen for PictureScreen {
 
 impl Plugin for PicturePlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("picture"),
-            name: Cow::Borrowed("Picture"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NOTHING,
-        }
+        Manifest::new(Id::new_static("picture"), "Picture", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let shown = self.0.clone();
-        r.add_screen(ScreenSpec {
-            id: Id::new_static("picture.home"),
-            title: Cow::Borrowed("picture"),
-            factory: Box::new(move |_, _| Box::new(PictureScreen(shown.clone()))),
-        })?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("picture.home"),
+            "picture",
+            Box::new(move |_, _| Box::new(PictureScreen(shown.clone()))),
+        ))?;
         r.bind_slot(
             slots::HOME,
             Id::new_static("picture.home"),
@@ -3034,14 +2966,8 @@ struct NetPlugin(Log);
 
 impl Plugin for NetPlugin {
     fn manifest(&self) -> Manifest {
-        Manifest {
-            id: Id::new_static("net"),
-            name: Cow::Borrowed("Net"),
-            description: Cow::Borrowed(""),
-            version: Version::new(1, 0, 0),
-            sdk: SDK_VERSION,
-            uses: paperpaw_sdk::Uses::NETWORK,
-        }
+        Manifest::new(Id::new_static("net"), "Net", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

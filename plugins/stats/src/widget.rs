@@ -220,10 +220,7 @@ fn captioned(
     let cap = if caption.is_some() { cap } else { 0 };
     let block = middle(look.area, cap + height);
     if let Some(text) = caption {
-        let at = Look {
-            area: block,
-            ..*look
-        };
+        let at = look.within(block);
         widgets::draw_caption(canvas, env, widget, &at, text);
     }
     Rect::new(
@@ -407,10 +404,7 @@ fn initial<'a>(env: &Env<'a>, weekday: u8) -> &'a str {
 
 /// A tap on the whole widget opens the statistics.
 fn open_statistics(area: Rect) -> Vec<WidgetTarget> {
-    alloc::vec![WidgetTarget {
-        area,
-        command: Command::RunAction(OPEN),
-    }]
+    alloc::vec![WidgetTarget::new(area, Command::RunAction(OPEN))]
 }
 
 /// Draws a ring into the square `at`, `thick` pixels wide: a thin track
@@ -536,19 +530,21 @@ mod tests {
 
     #[test]
     fn shades_turn_round_on_a_dark_card() {
-        let light = Look {
-            area: Rect::new(0, 0, 10, 10),
-            ink: Color::BLACK,
-            faint: Color::gray(90),
-            paper: Color::WHITE,
-            frame: Frame::None,
-        };
-        let dark = Look {
-            ink: Color::WHITE,
-            paper: Color::BLACK,
-            frame: Frame::Dark,
-            ..light
-        };
+        let area = Rect::new(0, 0, 10, 10);
+        let light = Look::new(
+            area,
+            Color::BLACK,
+            Color::gray(90),
+            Color::WHITE,
+            Frame::None,
+        );
+        let dark = Look::new(
+            area,
+            Color::WHITE,
+            Color::gray(90),
+            Color::BLACK,
+            Frame::Dark,
+        );
         assert_eq!(shade(&light, 4), Color::BLACK);
         assert_eq!(shade(&dark, 4), Color::WHITE);
         assert!(shade(&light, 1).luma() > shade(&light, 3).luma());

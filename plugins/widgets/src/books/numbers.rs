@@ -254,10 +254,10 @@ impl Widget for Library {
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        alloc::vec![WidgetTarget {
+        alloc::vec![WidgetTarget::new(
             area,
-            command: Command::RunAction(actions::LIBRARY),
-        }]
+            Command::RunAction(actions::LIBRARY)
+        )]
     }
 }
 
