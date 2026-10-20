@@ -267,6 +267,14 @@ impl UiStyle {
         }
     }
 
+    /// The part of a header's `area` its title and signs are centred in:
+    /// all of it, but the line below a light header.
+    fn header_band(&self, area: Rect) -> Rect {
+        let lined = !self.dark_header && !self.plain_header && self.separators != Separators::None;
+        let line = if lined { self.line.max(1) as u16 } else { 0 };
+        Rect::new(area.x, area.y, area.width, area.height.saturating_sub(line))
+    }
+
     /// The UI font.
     pub fn font<'a>(&self, env: &Env<'a>) -> Option<FontHandle<'a>> {
         env.fonts.role(fonts::UI.as_str())
@@ -532,6 +540,43 @@ fn draw_text(
     font.draw(canvas, size, x, baseline, text, color)
 }
 
+/// The baseline that centres the ink of `text` at `size` in `band`,
+/// rather than its line, which leaves more room above the letters than
+/// below them: what headers use, so their words sit in the middle as
+/// their signs do.
+fn ink_baseline(font: &FontHandle<'_>, band: Rect, size: f32, text: &str) -> i32 {
+    let (top, bottom) = font.ink(size, text).unwrap_or_else(|| {
+        // No ink at all: as a line would be.
+        let metrics = font.line_metrics(size);
+        (-(metrics.ascent as i32), -(metrics.descent as i32))
+    });
+    let room = i32::from(band.height) - (bottom - top);
+    // Rounded down: an odd pixel goes below, where the eye expects it.
+    i32::from(band.y) + room.div_euclid(2) - top
+}
+
+/// [`draw_label`] on `baseline` rather than centred in `area`.
+#[allow(clippy::too_many_arguments)]
+fn draw_label_on(
+    canvas: &mut Canvas<'_>,
+    font: &FontHandle<'_>,
+    size: f32,
+    x: f32,
+    area: Rect,
+    baseline: i32,
+    text: &str,
+    color: Color,
+) -> f32 {
+    let room = f32::from(area.x) + f32::from(area.width) - x;
+    let at = Rect::new(x.max(0.0) as u16, area.y, room.max(0.0) as u16, area.height);
+    canvas.describe(Role::Text, text, at, false, None);
+    if room > 0.0 && font.measure(size, text) > room + 1.0 {
+        let text = fit(font, size, text, room);
+        return font.draw(canvas, size, x, baseline, &text, color);
+    }
+    font.draw(canvas, size, x, baseline, text, color)
+}
+
 /// A title and a value side by side in `width` pixels: both as they are
 /// if they fit, else shortened with "…". The title says what the row is,
 /// so it keeps up to 60 % of the width; the value gets the rest. Returns
@@ -573,20 +618,16 @@ pub fn draw_header(
     let mut right = f32::from(area.x) + f32::from(area.width) - margin;
     let note = note.map(|n| fit(&font, style.small, n, f32::from(area.width) / 2.0));
     if let Some(note) = note.as_deref() {
-        right -= font.measure(style.small, note);
-        draw_label(&mut canvas, &font, style.small, right, area, note, ink);
-        right -= margin;
+        right -= font.measure(style.small, note) + margin;
     }
     let title = fit(&font, style.head, title, right - f32::from(area.x) - margin);
-    draw_label(
-        &mut canvas,
-        &font,
-        style.head,
-        f32::from(area.x) + margin,
-        area,
-        &title,
-        ink,
-    );
+    let band = style.header_band(area);
+    if let Some(note) = note.as_deref() {
+        let (x, baseline) = (right + margin, ink_baseline(&font, band, style.small, note));
+        draw_label_on(&mut canvas, &font, style.small, x, area, baseline, note, ink);
+    }
+    let (x, baseline) = (f32::from(area.x) + margin, ink_baseline(&font, band, style.head, &title));
+    draw_label_on(&mut canvas, &font, style.head, x, area, baseline, &title, ink);
 }
 
 /// A screen's header bar for touch screens too: a back arrow on the left
@@ -688,45 +729,50 @@ impl Header {
         let Some(font) = style.font(env) else {
             return;
         };
+        // Everything centred in the band by its ink: the arrows by their
+        // drawing, each text by its letters.
+        let band = style.header_band(self.area);
+        let middle = |area: Rect| Rect::new(area.x, band.y, area.width, band.height);
         let arrow = |canvas: &mut Canvas<'_>, area: Rect, left: bool, color: Color| {
-            let (x, y) = center(area);
+            let (x, y) = center(middle(area));
             draw_chevron(canvas, style, x, y, left, color);
         };
-        if let Some(back) = parts.back {
-            arrow(canvas, back, true, ink);
-        }
-        if let (Some((prev, label, next)), Some(page)) = (parts.pager, page) {
-            if self.arrows {
-                // At the first or last page, the arrow is gray.
-                let color = |end: bool| if end { Color::gray(110) } else { ink };
-                arrow(canvas, prev, true, color(page.0 == 0));
-                arrow(canvas, next, false, color(page.0 + 1 >= page.1));
-            }
-            let text = Self::page_label(page);
-            draw_label(
-                canvas,
-                &font,
-                style.small,
-                f32::from(label.x),
-                label,
-                &text,
-                ink,
-            );
-        }
         let t = parts.title;
         let margin = style.margin as f32;
         let mut right = f32::from(t.x) + f32::from(t.width) - margin;
-        let mut canvas = canvas.clipped(t);
         let note = note.map(|n| fit(&font, style.small, n, f32::from(t.width) / 2.0));
-        if let Some(note) = note.as_deref() {
+        let pad = style.gap as f32 / 2.0;
+        let note_x = note.as_deref().map(|note| {
+            right -= font.measure(style.small, note);
+            let x = right;
+            right -= margin + pad;
+            x
+        });
+        let title = fit(&font, style.head, title, right - f32::from(t.x));
+        let label = page.filter(|_| parts.pager.is_some()).map(Self::page_label);
+        let baseline = |size: f32, text: &str| ink_baseline(&font, band, size, text);
+        if let Some(back) = parts.back {
+            arrow(canvas, back, true, ink);
+        }
+        if let (Some((prev, at, next)), Some(page), Some(text)) = (parts.pager, page, &label) {
+            if self.arrows {
+                // At the first or last page, the arrow is gray.
+                let color = |end: bool| if end { Color::gray(150) } else { ink };
+                arrow(canvas, prev, true, color(page.0 == 0));
+                arrow(canvas, next, false, color(page.0 + 1 >= page.1));
+            }
+            let x = f32::from(at.x);
+            let y = baseline(style.small, text);
+            draw_label_on(canvas, &font, style.small, x, at, y, text, ink);
+        }
+        let mut canvas = canvas.clipped(t);
+        if let (Some(note), Some(x)) = (note.as_deref(), note_x) {
             let width = font.measure(style.small, note);
-            right -= width;
             // Focused: white on black, a little room around it.
-            let pad = style.gap as f32 / 2.0;
             let high = font.line_metrics(style.small).line_height as u16 + style.gap as u16;
             let around = Rect::new(
-                (right - pad) as u16,
-                t.y + t.height.saturating_sub(high) / 2,
+                (x - pad) as u16,
+                band.y + band.height.saturating_sub(high) / 2,
                 (width + 2.0 * pad) as u16,
                 high,
             );
@@ -737,19 +783,12 @@ impl Header {
             } else {
                 ink
             };
-            draw_label(&mut canvas, &font, style.small, right, t, note, note_ink);
-            right -= margin + pad;
+            let y = baseline(style.small, note);
+            draw_label_on(&mut canvas, &font, style.small, x, t, y, note, note_ink);
         }
-        let title = fit(&font, style.head, title, right - f32::from(t.x));
-        draw_label(
-            &mut canvas,
-            &font,
-            style.head,
-            f32::from(t.x),
-            t,
-            &title,
-            ink,
-        );
+        let x = f32::from(t.x);
+        let y = baseline(style.head, &title);
+        draw_label_on(&mut canvas, &font, style.head, x, t, y, &title, ink);
     }
 
     /// The action a tap at `point` stands for: back, or the previous or
@@ -900,7 +939,11 @@ pub fn draw_chevron(
         } else {
             tip - thickness as i32 + 1
         };
-        canvas.fill_rect(start, y + dy, thickness, 1, color);
+        // A tint, so a light (unavailable) arrow shows as gray on panels
+        // of black and white alone too.
+        if let (Ok(x), Ok(y)) = (u16::try_from(start), u16::try_from(y + dy)) {
+            canvas.fill_tint(Rect::new(x, y, thickness as u16, 1), color);
+        }
     }
 }
 

@@ -748,6 +748,33 @@ impl<'a> FontHandle<'a> {
         }
     }
 
+    /// How far the ink of one line of `text` reaches above and below its
+    /// baseline, in pixels (above negative), counting pixels at least half
+    /// covered, as panels of black and white show them: what centres it
+    /// by its ink rather than by its line ([`ui::draw_header`]). `None`
+    /// for text without ink (spaces).
+    ///
+    /// [`ui::draw_header`]: crate::ui::draw_header
+    pub fn ink(&self, size: f32, text: &str) -> Option<(i32, i32)> {
+        let mut cache = self.cache.borrow_mut();
+        let mut ink: Option<(i32, i32)> = None;
+        for ch in text.chars() {
+            let (font, index) = self.pick(ch);
+            let glyph = cache.glyph(index, font, ch, size);
+            let inked = |y: u16| (0..glyph.width).any(|x| glyph.coverage(x, y) >= 128);
+            let (Some(first), Some(last)) = (
+                (0..glyph.height).find(|y| inked(*y)),
+                (0..glyph.height).rev().find(|y| inked(*y)),
+            ) else {
+                continue;
+            };
+            let top = i32::from(glyph.top) + i32::from(first);
+            let bottom = i32::from(glyph.top) + i32::from(last) + 1;
+            ink = Some(ink.map_or((top, bottom), |(t, b)| (t.min(top), b.max(bottom))));
+        }
+        ink
+    }
+
     /// Breaks `text` into lines that fit `max_width`.
     pub fn wrap(&self, size: f32, text: &str, max_width: f32) -> Vec<Range<usize>> {
         paperpaw_text::wrap(text, max_width, |s| self.measure(size, s))
