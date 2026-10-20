@@ -338,32 +338,61 @@ compiler; each PaperPaw release lists the fingerprints in its files
 The site rebuilds each build from the kept source in a container with
 the toolchain the fingerprint names, with the sample's aliases (`cargo
 x4`, `cargo +esp x4pro`, `--locked`), packs it unsigned and compares it
-byte for byte with the uploaded file without its signature. It works in
-the paths of GitHub's runners (the source in
-`/home/runner/work/<repository>/<repository>`, Cargo in
-`/home/runner/.cargo`), and paths end up in a build. So:
+byte for byte with the uploaded file without its signature. Paths end
+up in a build (in its panic messages), so builds and rebuild write them
+as the same everywhere: `build.sh` adds to the flags of
+`.cargo/config.toml`
 
-- **Build with the sample's CI job on GitHub** for files that can be
-  verified. A build made elsewhere still installs and is listed, but
-  may show "Rebuilt, but does not match its source" for its paths alone.
-- **Commit `Cargo.lock`**; the job builds with `--locked`.
+| Path | Written as |
+|---|---|
+| the source's top (the repository, `git rev-parse --show-toplevel`) | `/plugin` |
+| Cargo's home (`$CARGO_HOME`, else `~/.cargo`) | `/cargo` |
+| the X4 Pro's toolchain (`rustc +esp --print sysroot`), whose `core` and `alloc` are built with the plugin | `/rust` |
+
+with `--remap-path-prefix`, given through `cargo --config` so that the
+flags that link the plugin stay. So:
+
+- **Build with `build.sh`** (or the sample's CI job, which runs it), in
+  any folder, on Linux or macOS. On Windows, paths inside the source
+  keep their `\`: such a build matches only builds on Windows, and the
+  rebuild shows "Rebuilt, but does not match its source"; use WSL or
+  the CI job there.
+- **Commit `Cargo.lock`**; `build.sh` builds with `--locked`.
 - **Keep the pinned toolchains**, never `stable` or `nightly`.
-- **Never set `RUSTFLAGS`**: it replaces the flags in
-  `.cargo/config.toml` that link the plugin.
+- **Never set `RUSTFLAGS`** and never build with plain `cargo build`
+  for publishing: `RUSTFLAGS` replaces the flags in `.cargo/config.toml`
+  that link the plugin, and a build without the remapped paths keeps
+  this computer's paths.
 - **Nothing of the moment or the computer in the code**: no build
   script that writes the date, the time, a user name, a random value, a
   git hash, or files from outside the repository.
 - **Dependencies by version or a fixed commit** (`rev = "<40 digits>"`),
-  never a branch.
+  never a branch, and never a `path` outside the repository: such a
+  crate's folder is in no remapped path, and it also changes the hashes
+  Cargo gives every crate, so the code itself comes out different.
 - **Tag the commit built and push the tag**; never build from changes
   not committed. `[source] revision` names that tag.
+
+To see that it holds, build in two folders with two Cargo homes and
+compare (`cmp` prints nothing when the files are the same):
+
+```sh
+git clone <repository> /tmp/one && git clone <repository> /tmp/elsewhere/two
+(cd /tmp/one && ./build.sh) && (cd /tmp/elsewhere/two && CARGO_HOME=/tmp/cargo-two ./build.sh)
+cmp /tmp/one/dist/clock-1.0.0-x4.ppn /tmp/elsewhere/two/dist/clock-1.0.0-x4.ppn
+cmp /tmp/one/dist/clock-1.0.0-x4-pro.ppn /tmp/elsewhere/two/dist/clock-1.0.0-x4-pro.ppn
+```
+
+When they differ, `paperpaw-sign plugin` of both says how: another
+`fingerprint:` means another compiler or SDK; the same fingerprint with
+another `digest:` means something of the computer or the moment got into
+the code.
 
 Builds for the X4 Classic are not rebuilt yet.
 
 ### Build, pack and sign
 
-In CI (for verified builds): commit, then, with the user's yes, tag and
-push:
+In CI: commit, then, with the user's yes, tag and push:
 
 ```sh
 git tag v1.0.0
@@ -382,7 +411,7 @@ dist/SHA256SUMS                  the SHA-256 of each
 dist/catalogue-versions.toml     the [[versions]] block for the catalogue
 ```
 
-On one's own computer (Linux or macOS with both toolchains), to try:
+Or on one's own computer (Linux or macOS with both toolchains), the same:
 
 ```sh
 . ~/export-esp.sh
@@ -648,9 +677,9 @@ rebuild/verify.sh clock 1.0.0 x4
 It prints `MATCHES` or `DIFFERS` with both hashes and ends with 0 when
 they match, 1 when they differ, 2 when it could not tell. "Not rebuilt"
 means waiting, no toolchain known for the fingerprint, or no rebuild
-possible. "Rebuilt, but does not match its source": build with the
-sample's CI job from the tagged commit (section 5b) and publish a new
-version.
+possible. "Rebuilt, but does not match its source": build with
+`build.sh` (or the CI job) from the tagged commit on Linux or macOS,
+check it with two folders (section 5b), and publish a new version.
 
 ## 10. A lost or leaked key
 
@@ -692,7 +721,8 @@ package and builds, its key and its source's revision.
       `check-plugin` says `signature:   holds`.
 - [ ] Code: each fingerprint is the one the reader's *About* shows, or
       the release's `paperpaw-<reader>-<version>-abi.txt`.
-- [ ] Code: built by the sample's CI job from the tag; `Cargo.lock`
+- [ ] Code: built with `build.sh` (or its CI job) from the tag, on Linux
+      or macOS; `Cargo.lock`
       committed; the repository public on `github.com`, `codeberg.org`
       or `gitlab.com`; `[source]` names it and the tag, with `path` and
       `bin` when needed.
@@ -706,9 +736,6 @@ package and builds, its key and its source's revision.
 
 ## 13. Not settled yet
 
-- Builds made outside GitHub's runners do not match the rebuild for
-  their paths alone; whether the rebuild and the sample will remap paths
-  (`--remap-path-prefix`) so that builds made anywhere match is open.
 - Whether the X4 Pro and the X4 Classic share a fingerprint, and
   rebuilds for the X4 Classic, are open.
 - The checks' sentences are not frozen word for word; their codes are.

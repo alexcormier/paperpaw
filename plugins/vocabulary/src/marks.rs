@@ -17,7 +17,7 @@ use paperpaw_sdk::decorations::{Decorated, DecoratorSpec, PageText};
 use paperpaw_sdk::words::{WordSet, fold};
 use paperpaw_sdk::{Command, Env, Id, Params, Storage};
 
-use crate::store;
+use crate::store::{self, Changes};
 use crate::{LEARNING, MARK};
 
 /// The decorator.
@@ -27,19 +27,20 @@ pub(crate) const DECORATOR: Id = Id::new_static("vocabulary.words");
 pub(crate) type Cache = RefCell<Option<(u64, String, WordSet)>>;
 
 /// The decorator, switched by [`MARK`], hearing taps.
-pub(crate) fn decorator() -> DecoratorSpec {
+pub(crate) fn decorator(changes: &Changes) -> DecoratorSpec {
     let cache: Cache = RefCell::new(None);
+    let (marks, signed) = (changes.clone(), changes.clone());
     DecoratorSpec::new(DECORATOR, "vocabulary.decorator", move |env, page| {
-        decorate(&cache, env.storage, page)
+        decorate(&cache, env.storage, page, &marks)
     })
     .switch(&MARK)
     .taps()
-    .signature(|_| signature())
+    .signature(move |_| signature(&signed))
 }
 
 /// What the marks depend on: the changes made to the words.
-pub(crate) fn signature() -> u64 {
-    u64::from(store::changes())
+pub(crate) fn signature(changes: &Changes) -> u64 {
+    u64::from(changes.count())
 }
 
 /// The marks of `page`: the words of the list in its language.
@@ -47,11 +48,12 @@ pub(crate) fn decorate(
     cache: &Cache,
     storage: &dyn Storage,
     page: &PageText<'_>,
+    changes: &Changes,
 ) -> Vec<Decorated> {
     let Ok(mut cache) = cache.try_borrow_mut() else {
         return Vec::new();
     };
-    let signature = signature();
+    let signature = signature(changes);
     let language = primary(page.language);
     let fresh = matches!(
         &*cache,
@@ -167,6 +169,7 @@ mod tests {
     fn marks_the_words_of_the_list() {
         let storage = MemoryStorage::new().with(&store::file(), WORDS);
         let cache = Cache::default();
+        let changes = Changes::default();
         let text = words(&[
             "The",
             "White",
@@ -176,7 +179,7 @@ mod tests {
             "and",
             "(Hatter).",
         ]);
-        let marks = decorate(&cache, &storage, &page("EN", &text));
+        let marks = decorate(&cache, &storage, &page("EN", &text), &changes);
         let ranges: Vec<_> = marks.iter().map(|m| (m.start, m.end)).collect();
         assert_eq!(
             ranges,
@@ -193,29 +196,38 @@ mod tests {
     fn skips_words_of_other_languages() {
         let storage = MemoryStorage::new().with(&store::file(), WORDS);
         let cache = Cache::default();
+        let changes = Changes::default();
         let text = words(&["Der", "Hase", "und", "das", "Rabbit"]);
-        let marks = decorate(&cache, &storage, &page("de", &text));
+        let marks = decorate(&cache, &storage, &page("de", &text), &changes);
         assert_eq!(marks.len(), 1);
         assert_eq!(marks[0].start, text[1].start);
         // A book of no known language marks every word.
-        assert_eq!(decorate(&cache, &storage, &page("", &text)).len(), 2);
+        assert_eq!(
+            decorate(&cache, &storage, &page("", &text), &changes).len(),
+            2
+        );
     }
 
     #[test]
     fn reads_the_list_again_when_it_changed() {
         let storage = MemoryStorage::new().with(&store::file(), WORDS);
         let cache = Cache::default();
+        let changes = Changes::default();
         let text = words(&["a", "quire", "of", "ink"]);
-        assert!(decorate(&cache, &storage, &page("en", &text)).is_empty());
-        let before = signature();
+        assert!(decorate(&cache, &storage, &page("en", &text), &changes).is_empty());
+        let before = signature(&changes);
         let quire = store::Word {
             word: "quire".to_string(),
             language: "en".to_string(),
             ..store::Word::default()
         };
         store::add(&storage, &quire).unwrap();
-        assert_ne!(signature(), before);
-        assert_eq!(decorate(&cache, &storage, &page("en", &text)).len(), 1);
+        changes.changed();
+        assert_ne!(signature(&changes), before);
+        assert_eq!(
+            decorate(&cache, &storage, &page("en", &text), &changes).len(),
+            1
+        );
     }
 
     #[test]

@@ -113,7 +113,7 @@ fn respond(servers: &mut Servers, request: u32, status: u16, body: &[u8]) {
 
 #[test]
 fn port_zero_listens_on_a_free_port() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     assert!(!servers.any());
     let port = start(&mut servers);
     assert_ne!(port, 0);
@@ -125,12 +125,12 @@ fn port_zero_listens_on_a_free_port() {
 
 #[test]
 fn a_taken_port_moves_on_to_a_free_one_near_it() {
-    let taken = TcpListener::bind((Ipv4Addr::UNSPECIFIED, 0)).unwrap();
+    let taken = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).unwrap();
     let port = taken.local_addr().unwrap().port();
     if port > u16::MAX - 20 {
         return; // no room above it to move to
     }
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     servers.apply(ServerCall::Listen { server: 7, port });
     let ServerEvent::Started { server: 7, address } = wait(&servers) else {
         panic!("not started");
@@ -142,11 +142,11 @@ fn a_taken_port_moves_on_to_a_free_one_near_it() {
 
 #[test]
 fn the_highest_port_can_be_listened_on() {
-    match TcpListener::bind((Ipv4Addr::UNSPECIFIED, u16::MAX)) {
+    match TcpListener::bind((Ipv4Addr::LOCALHOST, u16::MAX)) {
         Ok(probe) => drop(probe),
         Err(_) => return, // taken by something else here
     }
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     servers.apply(ServerCall::Listen {
         server: 1,
         port: u16::MAX,
@@ -161,7 +161,7 @@ fn the_highest_port_can_be_listened_on() {
 
 #[test]
 fn a_request_reaches_the_kernel_and_its_answer_the_client() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let client = client(
         port,
@@ -206,7 +206,7 @@ fn a_request_reaches_the_kernel_and_its_answer_the_client() {
 fn targets_reach_the_kernel_as_sent() {
     // Decoding and keeping requests inside a folder is up to the plugin;
     // the server must not decode or "fix" the target on its way.
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     for target in [
         "/%2e%2e/%2e%2e/secret",
@@ -231,7 +231,7 @@ fn targets_reach_the_kernel_as_sent() {
 
 #[test]
 fn bodies_come_in_parts_in_order() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let up: Vec<u8> = (0..200_000u32).map(|i| (i % 251) as u8).collect();
     let mut request = format!(
@@ -273,7 +273,7 @@ fn bodies_come_in_parts_in_order() {
 
 #[test]
 fn chunked_uploads_are_refused_without_the_kernel() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let client = client(
         port,
@@ -287,7 +287,7 @@ fn chunked_uploads_are_refused_without_the_kernel() {
 
 #[test]
 fn a_client_leaving_mid_body_closes_the_request() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let client = client(
         port,
@@ -320,7 +320,7 @@ fn a_client_leaving_mid_body_closes_the_request() {
 
 #[test]
 fn answers_to_unknown_requests_are_ignored() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     servers.apply(ServerCall::Respond {
         request: 12345,
         status: 200,
@@ -338,7 +338,7 @@ fn answers_to_unknown_requests_are_ignored() {
 
 #[test]
 fn request_lines_without_a_target_are_refused_without_the_kernel() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     for bad in [&b"GET\r\n\r\n"[..], b"\r\n\r\n"] {
         let answer = client(port, bad.to_vec()).join().unwrap();
@@ -356,7 +356,7 @@ fn request_lines_without_a_target_are_refused_without_the_kernel() {
 
 #[test]
 fn heads_cut_before_their_end_are_dropped() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let answer = client(port, b"GET / HTTP/1.1\r\nHost: x\r\n".to_vec())
         .join()
@@ -369,7 +369,7 @@ fn heads_cut_before_their_end_are_dropped() {
 fn heads_with_bare_line_feeds_never_reach_the_kernel() {
     // The head is read by `paperpaw_http`'s parser, as on every shell,
     // which takes only CR LF line ends: this head never ends.
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let client = client(port, b"PUT /lf HTTP/1.1\nContent-Length: 2\n\nok".to_vec());
     assert!(client.join().unwrap().is_empty());
@@ -378,7 +378,7 @@ fn heads_with_bare_line_feeds_never_reach_the_kernel() {
 
 #[test]
 fn heads_beyond_the_limit_never_reach_the_kernel() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let mut request = b"GET / HTTP/1.1\r\n".to_vec();
     for i in 0..4000 {
@@ -399,7 +399,7 @@ fn heads_beyond_the_limit_never_reach_the_kernel() {
 
 #[test]
 fn request_lines_count_towards_the_head_limit() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let target = format!("/{}", "a".repeat(256 * 1024));
     let client = client(port, format!("GET {target} HTTP/1.1\r\n\r\n").into_bytes());
@@ -416,7 +416,7 @@ fn request_lines_count_towards_the_head_limit() {
 
 #[test]
 fn content_lengths_that_are_no_numbers_are_refused() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     for bad in ["-5", "abc", "18446744073709551616"] {
         let client = client(
@@ -438,7 +438,7 @@ fn content_lengths_that_are_no_numbers_are_refused() {
 
 #[test]
 fn several_connections_at_once_get_their_own_answers() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let clients: Vec<_> = (0..6)
         .map(|i| client(port, format!("GET /n/{i} HTTP/1.1\r\n\r\n").into_bytes()))
@@ -470,7 +470,7 @@ fn several_connections_at_once_get_their_own_answers() {
 
 #[test]
 fn files_are_sent_in_parts_as_the_shell_reads_them() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let file: Vec<u8> = (0..300_001u32).map(|i| (i * 13 % 256) as u8).collect();
     let client = client(port, b"GET /books/big.epub HTTP/1.1\r\n\r\n".to_vec());
@@ -512,7 +512,7 @@ fn files_are_sent_in_parts_as_the_shell_reads_them() {
 
 #[test]
 fn a_file_gone_while_sending_ends_the_answer_early() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let client = client(port, b"GET /f HTTP/1.1\r\n\r\n".to_vec());
     let ServerEvent::Request { request, .. } = wait(&servers) else {
@@ -552,7 +552,7 @@ fn a_file_gone_while_sending_ends_the_answer_early() {
 
 #[test]
 fn stopping_a_server_ends_the_files_it_sends() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let client = client(port, b"GET /f HTTP/1.1\r\n\r\n".to_vec());
     let ServerEvent::Request { request, .. } = wait(&servers) else {
@@ -582,7 +582,7 @@ fn stopping_a_server_ends_the_files_it_sends() {
 
 #[test]
 fn an_empty_file_is_an_empty_answer() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     let client = client(port, b"GET /empty HTTP/1.1\r\n\r\n".to_vec());
     let ServerEvent::Request { request, .. } = wait(&servers) else {
@@ -608,7 +608,7 @@ fn an_empty_file_is_an_empty_answer() {
 
 #[test]
 fn a_stopped_server_takes_no_more_requests() {
-    let mut servers = Servers::new(|| {});
+    let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
     let port = start(&mut servers);
     servers.apply(ServerCall::Stop { server: 1 });
     // Stopping a server twice, or one never started, is harmless.

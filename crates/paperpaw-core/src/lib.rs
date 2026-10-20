@@ -326,6 +326,18 @@ pub struct Kernel {
     busy_mark: bool,
     /// The work held back while the mark is shown ([`Kernel::proceed`]).
     withheld: Vec<Command>,
+    /// Of `withheld`, the commands of a guarding screen (see `trusted`).
+    withheld_trusted: Vec<usize>,
+    /// The commands in `output.commands` (by their place) that a guarding
+    /// screen ([`Screen::guards`]) or a screen above it gave: those alone
+    /// open screens above it.
+    trusted: Vec<usize>,
+    /// The command being carried out came from a guarding screen or one
+    /// above it.
+    from_guard: bool,
+    /// A notice given while a screen guarded the device, shown once it
+    /// lets go.
+    held_notice: Option<String>,
     /// When the device was last used (input, a page turned), for sleeping
     /// by itself ([`settings::SLEEP_AFTER`](core_settings::SLEEP_AFTER)).
     last_activity: Instant,
@@ -537,8 +549,12 @@ impl Kernel {
             self.invalidate(area);
         }
         let mut commands = mem::take(&mut self.withheld);
+        let mut trusted = mem::take(&mut self.withheld_trusted);
+        let shift = commands.len();
+        trusted.extend(mem::take(&mut self.trusted).into_iter().map(|i| i + shift));
         commands.append(&mut self.output.commands);
         self.output.commands = commands;
+        self.trusted = trusted;
         self.run_commands();
         self.speak_focus();
         self.finish()

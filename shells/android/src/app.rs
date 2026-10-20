@@ -466,6 +466,10 @@ fn start_kernel(
     } else {
         Vec::new()
     };
+    // The plugins the store offers as files are built in here (an app
+    // from Play may load no code from files), switched off for a new
+    // reader until wanted; for one who ran PaperPaw before, as they were.
+    let ran_before = paperpaw_app::ran_before(&storage);
     let mut builder = Kernel::builder(device)
         .clock(micros)
         .random(random)
@@ -497,20 +501,24 @@ fn start_kernel(
     if let Some(language) = app.config().language() {
         builder = builder.setting_default(&settings::LANGUAGE, language.into());
     }
-    let builder =
-        paperpaw_app::install(builder, paperpaw_app::Fonts::Outline).plugin(AndroidPlugin {
-            app: app.clone(),
-            shared_storage,
-            screen: (
-                u32::from(device.display.width),
-                u32::from(device.display.height),
-            ),
-            frontlight: lights.map(|lights| Frontlight {
-                lights,
-                brightness: lights.brightness(app),
-                warmth: lights.warmth(app),
-            }),
-        });
+    let builder = paperpaw_app::install_with(
+        builder,
+        paperpaw_app::Fonts::Outline,
+        paperpaw_app::StorePlugins::Off(&|_| ran_before),
+    )
+    .plugin(AndroidPlugin {
+        app: app.clone(),
+        shared_storage,
+        screen: (
+            u32::from(device.display.width),
+            u32::from(device.display.height),
+        ),
+        frontlight: lights.map(|lights| Frontlight {
+            lights,
+            brightness: lights.brightness(app),
+            warmth: lights.warmth(app),
+        }),
+    });
     let mut kernel = match builder.build() {
         Ok(kernel) => kernel,
         Err(e) => {

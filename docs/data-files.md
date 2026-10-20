@@ -40,7 +40,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/library/opened.txt`, `favourites.txt` | SDK `library` | a path per line | version 1 |
 | `.paperpaw/annotations/<hash>.txt` | SDK `annotations` | a line per bookmark or highlight (tab separated; 8 fields before times were kept, 10 since) | version 1 |
 | `.paperpaw/plugins/reader/state.ini` | reader | ini: the book read last | version 1 |
-| `.paperpaw/plugins/reader/books/<hash>/progress.ini` | reader | ini: the position | version 1 |
+| `.paperpaw/plugins/reader/books/<hash>/progress.ini` | reader | ini: the position (`conversion`, the book's conversion it is in, and `xpointer`, written when the book is closed, added later) | version 1 |
 | `.paperpaw/plugins/reader/status-lines.txt` | reader | the status line chosen last at the top, then at the bottom, a line each | version 1 |
 | `.paperpaw/plugins/reader/books/<hash>/settings.ini` | kernel (a book's own settings) | ini, as `paperpaw.ini` | version 1 |
 | `.paperpaw/plugins/stats/books.ini` | stats | ini: a section per book (title, authors, md5, pages, language, series, `last-open`, path; `finished`, when it was last read to the end, added later) | version 1 |
@@ -62,8 +62,9 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/sleep/next.txt` | sleep | the next picture, counted | version 1 |
 | `.paperpaw/plugins/setup/done` | setup | its presence | version 1 (the app's screen tests) |
 | `.paperpaw/plugins/update/installing.txt`, `offered.txt` | update | a path and a version, a line each (`offered.txt`: `online` and the version for an update the server named) | version 1 |
+| `.paperpaw/plugin-code-fetched.txt` | SDK `native` | a code plugin per line: its id, a tab, the SHA-256 of its file's header fetched for a firmware update (into `plugins/.<id>.next`), which the updated firmware installs at its start | version 1 |
 | `.paperpaw/plugins/weather/weather.txt` | weather | the last forecast (place, coordinates, when, now and the days), first line `weather 1` | version 1 |
-| `.paperpaw/plugins/widgets/todo.txt` | widgets | an item per line, done ones as `x <date> <text>` (as todo.txt has them) | version 1 |
+| `.paperpaw/plugins/widgets/todo.txt` | widgets | an item per line, done ones as `x <date> <text>` (as todo.txt has them); an open item that would read as done (beginning with `x `) kept with the date `1970-01-01` in front, where todo.txt has the day an item was made | version 1 |
 | `.paperpaw/plugins/widgets/quotes.txt` | widgets | the reader's own quotes, a line each: `text \| author` | version 1 |
 | `.paperpaw/plugins/widgets/quote.txt`, `picture.txt` | widgets | the day and the turns of the quote and the picture shown | version 1 |
 | `.paperpaw/plugins/widgets/reading.ini` | widgets | ini: the book read last, its page and pages, the seconds read and the pages turned for the speed; `chapter` and `chapter-left` (the pages left in it) added later | version 1 |
@@ -83,6 +84,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/opds/feed.json`, `news/headlines.txt`, `wallabag/entries.json` | their plugins | fetched again |
 | `.paperpaw/plugins/joplin/info.json`, `locks.txt`, `found.md`, `note.md` | joplin | fetched or written again with each sending, removed after it |
 | `.paperpaw/plugins/update/offer.txt`, `updates/.download` | update | the update server's last answer and a download until it is whole, fetched again; let go once the version is no longer newer |
+| `.paperpaw/plugins/update/fetch.txt`, `fetch-current.txt`, `fetch-failed.txt`, `plugins/.<id>.next/` | update | the code plugins left to fetch for a downloaded update, the one being fetched, those that could not be; the folders fetched, installed by the updated firmware |
 | `.paperpaw/plugins/about/about.md`, `.paperpaw/tmp/` | about, kernel | written when needed |
 
 ## Foreign

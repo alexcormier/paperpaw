@@ -77,7 +77,7 @@ pub(crate) fn of_book(
         mark_read(&mut read, stat.page, stat.pages, pages);
         let day = day_of(stat.start);
         match totals.days.binary_search_by_key(&day, |(d, _)| *d) {
-            Ok(i) => totals.days[i].1 += u32::from(stat.duration),
+            Ok(i) => totals.days[i].1 = totals.days[i].1.saturating_add(u32::from(stat.duration)),
             Err(i) => totals.days.insert(i, (day, u32::from(stat.duration))),
         }
     });

@@ -22,7 +22,7 @@ use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Widget, WidgetSpec, Wid
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec, Storage};
 
 use super::quote::CHANGES;
-use super::{Turns, changed, changes, data, of_the_day, today};
+use super::{Changes, Turns, data, of_the_day, today};
 use crate::showings::Showings;
 
 pub(super) const ID: Id = Id::new_static("widgets.picture");
@@ -97,14 +97,16 @@ static SETTINGS: [SettingSpec; 6] = [
     widgets::padding_spec("widgets.picture.padding", ID, Padding::Auto),
 ];
 
-pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
+pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&ID, "widgets.picture"))?;
     r.add_settings(&FOLDER_SETTING)?;
     r.add_settings(&SETTINGS)?;
-    r.on(NEXT, |env, _, out| {
+    let changed = changes.clone();
+    r.on(NEXT, move |env, _, out| {
         Turns::turn(env.storage, &turns_file(), today(env), daily(env));
-        changed(out, &ID);
+        changed.changed(out, &ID);
     })?;
+    let changes = changes.clone();
     let shown = Rc::new(Showings::default());
     r.add_widget(
         WidgetSpec::new(ID, "widgets.picture", move |env| {
@@ -112,6 +114,7 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             let showing = if daily(env) { 0 } else { shown.show(env.now) };
             Box::new(PictureWidget {
                 showing,
+                changes: changes.clone(),
                 ..PictureWidget::default()
             })
         })
@@ -227,6 +230,7 @@ fn picture(env: &Env<'_>, day: i64, showing: u32) -> Option<Shown> {
 struct PictureWidget {
     /// The showing it was made for, where another shows each time.
     showing: u32,
+    changes: Changes,
     shown: Option<Shown>,
     /// The day and the changes it was read at.
     read: Option<(i64, u32)>,
@@ -237,7 +241,7 @@ impl Widget for PictureWidget {
         // Read each minute, but chosen anew only on another day or after
         // a tap: decoding takes a while.
         let day = today(env);
-        let read = Some((day, changes()));
+        let read = Some((day, self.changes.count()));
         if read == self.read {
             return false;
         }

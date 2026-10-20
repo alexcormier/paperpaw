@@ -100,11 +100,10 @@ fn no_log_at_all_has_no_stays() {
 }
 
 /// A stay appended after a record that was cut off (e.g. by power lost
-/// while writing, or a full card) should still be read as it was
-/// written; the log is read in records of 16 bytes from its start, so
-/// every stay after the cut is read shifted.
+/// while writing, or a full card) is read as it was written: the cut
+/// record goes first, as the log is read in records of 16 bytes from its
+/// start and every stay after it would be read shifted.
 #[test]
-#[ignore = "bug: a record cut off in pages.bin shifts every stay appended after it"]
 fn stays_after_a_record_cut_off_are_read_as_written() {
     let first = stay(1, 1, 1000, 30);
     let storage = log_with_tail(&[first], &stay(1, 2, 1030, 40).encode()[..7]);
@@ -162,10 +161,9 @@ fn the_longest_stays_are_summed_without_loss() {
 
 /// More than 65 537 stays of the longest a record holds on one day sum
 /// to more than a u32 holds; a log merged from a broken or hostile
-/// database can have them. Summing should not overflow (a panic in debug
-/// builds, a wrong total in release builds).
+/// database can have them. Summing saturates instead of overflowing (a
+/// panic in debug builds, a wrong total in release builds).
 #[test]
-#[ignore = "bug: the day totals of days.bin overflow on a log with very many long stays"]
 fn a_day_of_very_many_long_stays_does_not_overflow() {
     let storage = MemoryStorage::new();
     let mut data = Vec::with_capacity(65_540 * RECORD);

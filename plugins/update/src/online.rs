@@ -50,6 +50,7 @@ use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, PluginKind, Storage, files};
 
+use crate::fetch::{self, Build};
 use crate::{OFFERED, PAGE, file, read_pair, write_pair};
 
 /// Where updates are asked for.
@@ -81,6 +82,9 @@ pub(crate) struct Offer {
     pub plugins: Plugins,
     /// Why plugins it lacks are missing: a crate and a word a line.
     pub missing: String,
+    /// The builds for it of the code plugins this device has, and of
+    /// plugins built in now that it has as files ([`fetch`]).
+    pub builds: Vec<Build>,
 }
 
 impl Offer {
@@ -112,12 +116,24 @@ impl Offer {
             size: paperpaw_json::number(&members, "size").map_or(0, |n| n.max(0.0) as u64),
             plugins: Plugins::new(lines("plugins")),
             missing: lines("missing"),
+            builds: fetch::parse(body),
         })
     }
 
-    /// The plugin crates the running firmware has that this update lacks.
-    pub(crate) fn leaves_out<'a>(&'a self, firmware: &'a Firmware) -> Vec<&'a str> {
-        firmware.plugins.missing_from(&self.plugins).collect()
+    /// The plugin crates the running firmware has that this update lacks
+    /// and that do not come back as files: among the builds `wanted`
+    /// (those this device takes, `fetch::wanted`), or fetched already.
+    pub(crate) fn leaves_out<'a>(
+        &'a self,
+        storage: &dyn Storage,
+        firmware: &'a Firmware,
+        wanted: &[Build],
+    ) -> Vec<&'a str> {
+        firmware
+            .plugins
+            .missing_from(&self.plugins)
+            .filter(|c| !fetch::comes_back(storage, wanted, c))
+            .collect()
     }
 
     /// Why the server says `name` is missing, if it says.
@@ -139,6 +155,7 @@ impl Offer {
         for line in self.missing.lines() {
             text.push_str(&format!("missing {line}\n"));
         }
+        text.push_str(&fetch::to_text(&self.builds));
         text
     }
 
@@ -166,6 +183,7 @@ impl Offer {
             size,
             plugins: Plugins::new(plugins),
             missing,
+            builds: fetch::from_lines(text.lines()),
         })
     }
 }
@@ -358,11 +376,17 @@ pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command
     if whole && is_version(version) {
         let _ = storage.remove(&path);
         if storage.rename(PART, &path).is_ok() {
+            // The code plugins for it next; it is ready once they are here.
+            let builds = offer(storage, firmware)
+                .map(|o| fetch::wanted(env, &o.builds))
+                .unwrap_or_default();
             let _ = storage.remove(&file(OFFER));
-            out.push(Command::Notify(
-                env.i18n
-                    .format("update.downloaded", &[("version", Arg::Str(version))]),
-            ));
+            if !fetch::start(env, version, &builds, out) {
+                out.push(Command::Notify(
+                    env.i18n
+                        .format("update.downloaded", &[("version", Arg::Str(version))]),
+                ));
+            }
             return;
         }
     }
@@ -419,7 +443,11 @@ mod tests {
         let offer = Offer::from_answer(body, &firmware).unwrap();
         assert_eq!(offer.version, "0.5.0");
         assert_eq!(offer.size, 6_194_784);
-        assert_eq!(offer.leaves_out(&firmware), ["paperpaw-plugin-chess"]);
+        let storage = paperpaw_sdk::MemoryStorage::new();
+        assert_eq!(
+            offer.leaves_out(&storage, &firmware, &offer.builds),
+            ["paperpaw-plugin-chess"]
+        );
         assert_eq!(
             offer.why_missing("paperpaw-plugin-chess"),
             Some("not-ready")
@@ -448,7 +476,8 @@ mod tests {
             &firmware,
         )
         .unwrap();
-        assert!(all.leaves_out(&firmware).is_empty());
+        let storage = paperpaw_sdk::MemoryStorage::new();
+        assert!(all.leaves_out(&storage, &firmware, &[]).is_empty());
     }
 
     #[test]

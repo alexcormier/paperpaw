@@ -120,8 +120,12 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 }
 
 /// The library screen.
-pub(crate) fn screen(env: &Env<'_>, _params: &Params) -> Box<dyn Screen> {
-    Box::new(ListScreen::new(env))
+pub(crate) fn screen(
+    env: &Env<'_>,
+    _params: &Params,
+    catalog: crate::shelves::CatalogMade,
+) -> Box<dyn Screen> {
+    Box::new(ListScreen::new(env, catalog))
 }
 
 /// The archive folder, as the setting names it: its books are on the
@@ -296,6 +300,8 @@ impl Layout {
 
 /// The library; see the [module documentation](self).
 struct ListScreen {
+    /// When the catalog was made, shared with the shelves.
+    catalog: crate::shelves::CatalogMade,
     layout: Layout,
     root: String,
     /// The archive folder, whose books are on the shelves only.
@@ -345,8 +351,9 @@ struct ListScreen {
 }
 
 impl ListScreen {
-    fn new(env: &Env<'_>) -> Self {
+    fn new(env: &Env<'_>, catalog: crate::shelves::CatalogMade) -> Self {
         let mut screen = Self {
+            catalog,
             layout: Layout::new(env),
             root: library::folder(env).to_string(),
             archive: archive(env),
@@ -840,7 +847,7 @@ impl ListScreen {
         // Gone without a word (deleted on a computer, say): left out, and
         // the catalog made anew.
         self.gone.push(hash(&path));
-        crate::shelves::outdated();
+        self.catalog.outdated();
         self.walk = Some(Walk::start(env.storage, &self.root));
         self.refilter_in_place(&env);
         cx.command(Command::Notify(env.i18n.tr("files.list.gone").to_string()));
@@ -920,7 +927,7 @@ impl ListScreen {
     /// The catalog was made anew: the index from it, the place kept.
     fn walked(&mut self, env: &Env<'_>) {
         self.walk = None;
-        crate::shelves::made(env);
+        self.catalog.made(env);
         let keep = self.focused_book();
         // The old index goes first: never two at once.
         self.index = Index::default();
@@ -1089,13 +1096,11 @@ impl Screen for ListScreen {
                 cx.request_redraw();
             }
         }
-        if self.walk.is_some() && !crate::shelves::is_outdated(&env) && has_catalog(env.storage) {
+        if self.walk.is_some() && !self.catalog.is_outdated(&env) && has_catalog(env.storage) {
             // Another view of the library made the catalog meanwhile.
             self.walked(&env);
             cx.request_redraw();
-        } else if self.walk.is_none()
-            && crate::shelves::is_outdated(&env)
-            && has_catalog(env.storage)
+        } else if self.walk.is_none() && self.catalog.is_outdated(&env) && has_catalog(env.storage)
         {
             // Books came, went or moved since the catalog was made.
             self.walk = Some(Walk::start(env.storage, &self.root));
@@ -1292,7 +1297,7 @@ impl Screen for ListScreen {
         } else if *event == events::SETTING_CHANGED {
             let root = library::folder(&env);
             if root != self.root {
-                *self = Self::new(&env);
+                *self = Self::new(&env, self.catalog.clone());
                 self.fresh = false;
                 self.walk = Some(Walk::start(env.storage, &self.root));
             } else if !self.covered {

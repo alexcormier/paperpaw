@@ -23,6 +23,33 @@ pub const CYRILLIC: &[RangeInclusive<char>] = &['\u{400}'..='\u{4ff}'];
 /// Greek, modern and polytonic (Greek Extended, for older texts).
 pub const GREEK: &[RangeInclusive<char>] = &['\u{370}'..='\u{3ff}', '\u{1f00}'..='\u{1fff}'];
 
+/// A character of nearly the same look, for `ch` where a font lacks it,
+/// tried before the replacement character: a non-breaking hyphen as a
+/// hyphen, the long s as s, rare punctuation as its common cousin.
+/// Followed again where the font lacks that one too (U+2011, U+2010,
+/// `-`).
+pub fn stand_in(ch: char) -> Option<char> {
+    Some(match ch {
+        '\u{2011}' => '\u{2010}', // non-breaking hyphen: hyphen
+        '\u{2010}' => '-',
+        '\u{17f}' => 's',                                   // long s
+        '\u{2016}' => '|',                                  // double vertical line
+        '\u{2017}' => '_',                                  // double low line
+        '\u{201b}' => '\u{2018}',                           // reversed single quote
+        '\u{201f}' => '\u{201c}',                           // reversed double quote
+        '\u{2023}' => '\u{2022}',                           // triangular bullet: bullet
+        '\u{2024}' => '.',                                  // one dot leader
+        '\u{2025}' => '\u{2026}',                           // two dot leader: ellipsis
+        '\u{2027}' => '\u{b7}',                             // hyphenation point: middle dot
+        '\u{2031}' => '\u{2030}',                           // per ten thousand: per mille
+        '\u{2034}' | '\u{2036}' | '\u{2037}' => '\u{2033}', // triple and reversed primes
+        '\u{2035}' => '\u{2032}',                           // reversed prime
+        '\u{2038}' => '^',                                  // caret
+        '\u{fffd}' => '?',                                  // replacement character
+        _ => return None,
+    })
+}
+
 /// A character set by name: `latin`, `cyrillic` or `greek`.
 pub fn named(name: &str) -> Option<&'static [RangeInclusive<char>]> {
     match name {

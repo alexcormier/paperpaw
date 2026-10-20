@@ -960,7 +960,9 @@ impl ReaderScreen {
         let reopen = id == crate::settings::PUBLISHER_STYLES.as_str()
             || id == paperpaw_sdk::builtin::settings::READING_FONT.as_str();
         if changed.is_some() && reopen {
-            // Another conversion of the book: open it again where it was.
+            // Another conversion of the book: open it again where it was,
+            // kept with its XPointer to find it in the other.
+            book.save_position(cx, true);
             let env = *cx.env();
             let path = book.path.clone();
             self.selection = None;
@@ -1040,7 +1042,7 @@ mod tests {
     #[test]
     fn positions_of_version_1_are_read() {
         assert_eq!(
-            super::book::position_in(include_str!("../../testdata/progress.ini.v1")),
+            super::book::kept_in(include_str!("../../testdata/progress.ini.v1")).map(|k| k.at),
             Some(paperpaw_sdk::document::Locator::new(7, 1234))
         );
     }
@@ -1070,6 +1072,23 @@ mod tests {
         let ticks = chapter_ticks(&flat);
         assert_eq!(ticks.len(), 120);
         assert_eq!(ticks.last(), Some(&952));
+    }
+
+    /// A position kept with its conversion and XPointer; without them (as
+    /// version 1 wrote it) the place alone.
+    #[test]
+    fn positions_keep_their_conversion_and_xpointer() {
+        let text = "[progress]\nsection = 2\noffset = 40\nconversion = 00000000000000ff\n\
+                    xpointer = \"/body/DocFragment[3]/body/p[2]/text()[1].5\"\n";
+        let kept = super::book::kept_in(text).unwrap();
+        assert_eq!(kept.at, paperpaw_sdk::document::Locator::new(2, 40));
+        assert_eq!(kept.conversion, Some(255));
+        assert_eq!(
+            kept.xpointer.as_deref(),
+            Some("/body/DocFragment[3]/body/p[2]/text()[1].5")
+        );
+        let old = super::book::kept_in("[progress]\nsection = 2\noffset = 40\n").unwrap();
+        assert_eq!((old.conversion, old.xpointer), (None, None));
     }
 
     #[test]

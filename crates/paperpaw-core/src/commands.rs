@@ -15,6 +15,7 @@ impl Kernel {
         // A screen that set a scope may have closed.
         self.check_scope_owner();
         self.check_preview_owner();
+        self.release_held_notice();
         // Work due now runs before the network is looked at, so that its
         // requests want it in this call; what it brings due runs too.
         for _ in 0..work::MAX_ROUNDS {
@@ -143,9 +144,12 @@ impl Kernel {
                 });
                 continue;
             }
-            for command in mem::take(&mut self.output.commands) {
+            let trusted = mem::take(&mut self.trusted);
+            for (i, command) in mem::take(&mut self.output.commands).into_iter().enumerate() {
+                self.from_guard = trusted.contains(&i);
                 self.apply(command);
             }
+            self.from_guard = false;
         }
         if !self.output.commands.is_empty() {
             self.output.commands.clear();
@@ -162,6 +166,8 @@ impl Kernel {
         match command {
             Command::OpenSlot(slot, params) => self.open_slot_command(slot, params),
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
+            // Not past a screen that guards the device, but from it.
+            Command::Back if self.held_by_guard() => {}
             Command::Back => {
                 if self.stack.len() > 1 {
                     self.close_above(self.stack.len() - 2);
@@ -202,7 +208,14 @@ impl Kernel {
             .stack
             .iter()
             .position(|s| s.slot.as_ref() == Some(&slot));
-        if let Some(index) = open {
+        // Below a screen that guards the device, it stays as it is; one
+        // for something else waits below the guard too.
+        let below_guard = |index: usize| self.held_by_guard() && self.guard() > Some(index);
+        if let Some(index) = open.filter(|&index| below_guard(index)) {
+            if params.is_empty() || self.stack[index].params == params {
+                return;
+            }
+        } else if let Some(index) = open {
             if params.is_empty() || self.stack[index].params == params {
                 if index + 1 < self.stack.len() {
                     self.close_above(index);

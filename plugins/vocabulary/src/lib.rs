@@ -38,7 +38,7 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, SettingExtra, SettingSpec, StorageError, Version,
+    ScreenSpec, SettingExtra, SettingSpec, StorageError,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -106,7 +106,8 @@ impl Plugin for Vocabulary {
             description: Cow::Borrowed(
                 "Keeps the words you look up, with their sentences, to go over later.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
             uses: paperpaw_sdk::Uses::NOTHING,
         }
@@ -116,8 +117,11 @@ impl Plugin for Vocabulary {
         r.add_settings(&SETTINGS)?;
         // A list left half written by a power cut is put right first.
         r.on(events::STARTED, |env, _, _| store::recover(env.storage))?;
-        r.on(events::WORD_LOOKED_UP, |env, looked_up, out| {
-            if record(env, looked_up).is_err() {
+        // The changes to the words, for the marks and the list.
+        let changes = store::Changes::default();
+        let recorded = changes.clone();
+        r.on(events::WORD_LOOKED_UP, move |env, looked_up, out| {
+            if record(env, looked_up, &recorded).is_err() {
                 let message = env.i18n.tr("vocabulary.save-failed").to_string();
                 out.push(Command::Notify(message));
             }
@@ -129,12 +133,12 @@ impl Plugin for Vocabulary {
         })?;
         r.add_icon(&MARK, Cow::Borrowed("vocabulary"))?;
         r.add_settings(&LEARNING_LOOK)?;
-        r.add_decorator(marks::decorator())?;
+        r.add_decorator(marks::decorator(&changes))?;
         r.on(events::DECORATION_TAPPED, marks::tapped)?;
         r.add_screen(ScreenSpec {
             id: SCREEN,
             title: Cow::Borrowed("vocabulary.title"),
-            factory: Box::new(|env, _| Box::new(WordsScreen::new(env))),
+            factory: Box::new(move |env, _| Box::new(WordsScreen::new(env, changes.clone()))),
         })?;
         r.add_screen(ScreenSpec {
             id: CHOICE,
@@ -160,7 +164,11 @@ impl Plugin for Vocabulary {
 }
 
 /// Keeps a word looked up, if wanted; `Err` where it could not be.
-fn record(env: &Env<'_>, looked_up: &events::WordLookedUp) -> Result<(), StorageError> {
+fn record(
+    env: &Env<'_>,
+    looked_up: &events::WordLookedUp,
+    changes: &store::Changes,
+) -> Result<(), StorageError> {
     if !env.settings.read(&COLLECT) {
         return Ok(());
     }
@@ -168,7 +176,7 @@ fn record(env: &Env<'_>, looked_up: &events::WordLookedUp) -> Result<(), Storage
     if word.is_empty() {
         return Ok(());
     }
-    store::add(
+    let result = store::add(
         env.storage,
         &Word {
             word: word.to_string(),
@@ -179,7 +187,9 @@ fn record(env: &Env<'_>, looked_up: &events::WordLookedUp) -> Result<(), Storage
             title: looked_up.title.clone(),
             sentence: looked_up.text.clone(),
         },
-    )
+    );
+    changes.changed();
+    result
 }
 
 /// The folder exports go to: `Notes` beside the library folder.
@@ -202,13 +212,15 @@ struct WordsScreen {
     count: usize,
     /// The words of the visible page: their row and number in the file.
     visible: Vec<(usize, usize, Word)>,
-    /// The changes to the words they were read after ([`store::changes`]):
-    /// words looked up meanwhile show when the list does again.
+    /// The changes to the words they were read after
+    /// ([`store::Changes`]): words looked up meanwhile show when the list
+    /// does again.
     read_after: u32,
+    changes: store::Changes,
 }
 
 impl WordsScreen {
-    fn new(env: &Env<'_>) -> Self {
+    fn new(env: &Env<'_>, changes: store::Changes) -> Self {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
@@ -221,6 +233,7 @@ impl WordsScreen {
             count: 0,
             visible: Vec::new(),
             read_after: 0,
+            changes,
         };
         screen.load(env);
         screen
@@ -228,7 +241,7 @@ impl WordsScreen {
 
     /// Counts the words and reads the visible page.
     fn load(&mut self, env: &Env<'_>) {
-        self.read_after = store::changes();
+        self.read_after = self.changes.count();
         self.count = store::count(env.storage);
         let len = self.len();
         if self.list.focus >= len {
@@ -377,7 +390,7 @@ impl Screen for WordsScreen {
 
     /// Back from a book or a lookup: with the words looked up meanwhile.
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        if store::changes() != self.read_after {
+        if self.changes.count() != self.read_after {
             let env = *cx.env();
             self.load(&env);
             cx.request_redraw();
@@ -456,7 +469,9 @@ impl Screen for WordsScreen {
                 )));
             }
             "delete" => {
-                if store::remove(env.storage, &word).is_err() {
+                let removed = store::remove(env.storage, &word);
+                self.changes.changed();
+                if removed.is_err() {
                     let message = env.i18n.tr("vocabulary.delete-failed").to_string();
                     cx.command(Command::Notify(message));
                 }

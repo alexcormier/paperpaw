@@ -451,7 +451,6 @@ fn back_takes_the_last_digit_and_never_unlocks() {
 /// timer) closes it and the lock opens again at once; but a screen
 /// opened above it is shown and used above the lock, which stays below.
 #[test]
-#[ignore = "bug: a screen opened while locked is shown above the lock screen and can be used"]
 fn a_screen_opened_while_locked_does_not_get_past_the_lock() {
     let storage = Shared::default();
     Device::start(TOUCH, storage.clone()).set_pin("1234");

@@ -8,27 +8,34 @@
 
 use alloc::borrow::Cow;
 use alloc::format;
+use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::cell::Cell;
 use core::ops::ControlFlow;
-use core::sync::atomic::{AtomicU32, Ordering};
 
 use paperpaw_sdk::{Env, Storage, StorageError, files};
 
 use crate::PLUGIN;
 
 /// The changes made to the words since PaperPaw started: what the marks
-/// in books depend on, known without reading the file.
-static CHANGES: AtomicU32 = AtomicU32::new(0);
+/// in books depend on, known without reading the file. Shared by the
+/// plugin's handlers, screen and decorator (on the heap: a plugin file
+/// has no writable data of its own, ADR 0024).
+#[derive(Debug, Clone, Default)]
+pub(crate) struct Changes(Rc<Cell<u32>>);
 
-/// How many times the words changed since PaperPaw started.
-pub(crate) fn changes() -> u32 {
-    CHANGES.load(Ordering::Relaxed)
-}
+impl Changes {
+    /// How many times the words changed since PaperPaw started.
+    pub(crate) fn count(&self) -> u32 {
+        self.0.get()
+    }
 
-fn changed() {
-    // Load and store: the device has no atomic adding, and one thread.
-    CHANGES.store(changes().wrapping_add(1), Ordering::Relaxed);
+    /// The words changed (by [`add`] or [`remove`], whether or not they
+    /// could write all).
+    pub(crate) fn changed(&self) {
+        self.0.set(self.0.get().wrapping_add(1));
+    }
 }
 
 /// Words kept at most; the oldest go.
@@ -230,7 +237,6 @@ fn rewrite(storage: &dyn Storage, mut keep: impl FnMut(&Word) -> bool) -> Result
     if result.is_err() {
         let _ = storage.remove(&temporary);
     }
-    changed();
     result
 }
 
@@ -288,7 +294,6 @@ pub(crate) fn add(storage: &dyn Storage, word: &Word) -> Result<(), StorageError
         line.insert(0, '\n');
     }
     storage.append(&file(), line.as_bytes())?;
-    changed();
     Ok(())
 }
 

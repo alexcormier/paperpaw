@@ -143,6 +143,10 @@ impl UpdatePage {
             FirmwareState::Installed => return View::Installed,
             FirmwareState::Idle | FirmwareState::Failed(_) => {}
         }
+        // Downloaded, its code plugins still coming.
+        if let Some(version) = crate::fetch::fetching(env.storage) {
+            return View::Downloading(version);
+        }
         let card = found::find(env.storage, firmware);
         let offer = online::offer(env.storage, firmware);
         let age = |update: &Update| compare_versions(&update.info.version, &firmware.version);
@@ -154,6 +158,7 @@ impl UpdatePage {
                 let leaves = update
                     .leaves_out(firmware)
                     .into_iter()
+                    .filter(|c| !crate::fetch::comes_back(env.storage, &[], c))
                     .map(String::from)
                     .collect();
                 View::Ready {
@@ -164,8 +169,9 @@ impl UpdatePage {
                 }
             }
             (_, Some(offer)) => {
+                let wanted = crate::fetch::wanted(env, &offer.builds);
                 let leaves = offer
-                    .leaves_out(firmware)
+                    .leaves_out(env.storage, firmware, &wanted)
                     .into_iter()
                     .map(String::from)
                     .collect();
@@ -654,6 +660,10 @@ impl Screen for UpdatePage {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        // Plugins for a downloaded update, cut off by a restart: on.
+        let mut out = Vec::new();
+        crate::fetch::resume(cx.env(), &mut out);
+        out.into_iter().for_each(|command| cx.command(command));
         // Back from Wi-Fi transfer: a file may have come.
         let env = *cx.env();
         if !matches!(self.view, View::Installing { .. } | View::Installed) && !self.waiting() {
@@ -746,7 +756,9 @@ impl Screen for UpdatePage {
             }
             return;
         }
-        if online::DOWNLOADED.read(event, params).is_some() {
+        if online::DOWNLOADED.read(event, params).is_some()
+            || crate::fetch::FETCHED.read(event, params).is_some()
+        {
             if matches!(self.view, View::Downloading(_)) {
                 self.view = self.look(&env);
                 self.focus = 0;

@@ -781,7 +781,11 @@ fn icon_column(scene: &Scene<'_>, rows: &[&Described]) -> Vec<Issue> {
         }
         let mut ink = scene.ink_in(before);
         ink.clear_lines();
-        if let Some(icon) = ink.bounds() {
+        // Ink from the line's top to its bottom is something taller than
+        // an icon cut by the line: a cover or a picture, not an icon.
+        if let Some(icon) = ink.bounds()
+            && icon.height < before.height
+        {
             centres.push((row, quote(&label.label), icon));
         }
     }

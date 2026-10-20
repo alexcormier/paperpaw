@@ -99,7 +99,6 @@ proptest! {
     /// A status line draws inside its area, whatever its items show, at
     /// any size the user sets for status lines.
     #[test]
-    #[ignore = "bug: status lines of a few items (a page number twice, a battery) at 300 px and a size of 19 draw past their end since their gaps narrow (status.rs)"]
     fn a_status_line_draws_inside_its_area(
         lists in (list_strategy(), list_strategy(), list_strategy()),
         chapter in "\\PC{0,80}",

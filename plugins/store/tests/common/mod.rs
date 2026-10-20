@@ -101,7 +101,7 @@ impl Storage for Shared {
 
 /// Loads no code: code plugins installed in a test start after a restart
 /// it never makes.
-struct NoCode;
+pub struct NoCode;
 
 impl CodeLoader for NoCode {
     fn load(

@@ -110,6 +110,9 @@ pub struct Servers {
     next_request: Arc<AtomicU32>,
     /// Called when there is something to do, e.g. to wake an event loop.
     wake: Wake,
+    /// Where servers listen: every interface (the local network) unless
+    /// told otherwise.
+    address: IpAddr,
 }
 
 impl std::fmt::Debug for Servers {
@@ -132,7 +135,16 @@ impl Servers {
             streams: Vec::new(),
             next_request: Arc::new(AtomicU32::new(0)),
             wake: Arc::new(wake),
+            address: Ipv4Addr::UNSPECIFIED.into(),
         }
+    }
+
+    /// Servers that listen on `address` only, e.g. the loopback address
+    /// for tests, which then reach nothing outside the computer (and ask
+    /// no firewall for the network).
+    pub fn listening_on(mut self, address: IpAddr) -> Self {
+        self.address = address;
+        self
     }
 
     /// Does what the kernel asks.
@@ -246,6 +258,7 @@ impl Servers {
     }
 
     fn listen(&mut self, server: u32, port: u16) {
+        let address = self.address;
         let events = self.events.clone();
         let wake = self.wake.clone();
         // The shell is woken once the event is there to take, and before
@@ -264,8 +277,8 @@ impl Servers {
             wake();
         };
         // The port asked for, else the next free ones.
-        let listener = (port..=port.saturating_add(19))
-            .find_map(|p| TcpListener::bind((Ipv4Addr::UNSPECIFIED, p)).ok());
+        let listener =
+            (port..=port.saturating_add(19)).find_map(|p| TcpListener::bind((address, p)).ok());
         let Some(listener) = listener else {
             send(ServerEvent::Failed {
                 server,
@@ -563,7 +576,7 @@ mod tests {
 
     #[test]
     fn serves_a_request_in_parts() {
-        let mut servers = Servers::new(|| {});
+        let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
         servers.apply(ServerCall::Listen {
             server: 1,
             port: 18_765,
@@ -681,7 +694,7 @@ mod tests {
 
     #[test]
     fn long_or_bad_heads_are_refused_at_once() {
-        let mut servers = Servers::new(|| {});
+        let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
         let port = serving(&mut servers, 18_865);
         // A line without end, longer than any head.
         let mut client = connect(port);
@@ -708,7 +721,7 @@ mod tests {
 
     #[test]
     fn a_slow_head_ends_in_time() {
-        let mut servers = Servers::new(|| {});
+        let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
         let port = serving(&mut servers, 18_885);
         let mut client = connect(port);
         let started = Instant::now();
@@ -736,7 +749,7 @@ mod tests {
 
     #[test]
     fn connections_are_limited() {
-        let mut servers = Servers::new(|| {});
+        let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
         let port = serving(&mut servers, 18_905);
         let idle: Vec<TcpStream> = (0..MAX_CONNECTIONS).map(|_| connect(port)).collect();
         let mut one_more = connect(port);
@@ -747,7 +760,7 @@ mod tests {
 
     #[test]
     fn stopping_ends_connections_and_frees_the_port() {
-        let mut servers = Servers::new(|| {});
+        let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
         let port = serving(&mut servers, 18_925);
         let mut client = connect(port);
         client.write_all(b"GET / HTTP/1.1\r\n\r\n").unwrap();
@@ -760,14 +773,14 @@ mod tests {
         // The listener goes once its thread woke.
         let freed = (0..40).any(|_| {
             thread::sleep(Duration::from_millis(50));
-            TcpListener::bind((Ipv4Addr::UNSPECIFIED, port)).is_ok()
+            TcpListener::bind((Ipv4Addr::LOCALHOST, port)).is_ok()
         });
         assert!(freed, "the port is free again");
     }
 
     #[test]
     fn an_early_answer_ends_the_upload() {
-        let mut servers = Servers::new(|| {});
+        let mut servers = Servers::new(|| {}).listening_on(Ipv4Addr::LOCALHOST.into());
         let port = serving(&mut servers, 18_945);
         let mut client = connect(port);
         let head = format!("PUT /up HTTP/1.1\r\nContent-Length: {}\r\n\r\n", 1u64 << 34);

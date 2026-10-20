@@ -456,7 +456,14 @@ fn kernel(
         .fold(builder, |builder, (id, folder)| {
             builder.install_plugin(id, folder)
         });
-    let builder = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs).plugin(device::X4);
+    // The plugins the store offers as files are not built in: the
+    // firmware stays lean, and the reader installs those wanted.
+    let builder = paperpaw_app::install_with(
+        builder,
+        paperpaw_app::Fonts::Packs,
+        paperpaw_app::StorePlugins::Left,
+    )
+    .plugin(device::X4);
     let mut kernel = builder.build().expect("kernel");
     for warning in kernel.take_warnings() {
         warn!("{warning}");

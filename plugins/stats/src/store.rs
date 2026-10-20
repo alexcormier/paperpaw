@@ -292,9 +292,42 @@ pub(crate) fn new_id(storage: &dyn Storage, books: &[Book]) -> Result<u16, Stora
     last.checked_add(1).ok_or(StorageError::Full)
 }
 
-/// Records a stay on a page.
+/// Records a stay on a page. A record left cut off at the log's end (a
+/// power cut or a full card while appending) is dropped first, so that
+/// the stays after it are not read shifted.
 pub(crate) fn append(storage: &dyn Storage, stat: PageStat) -> Result<(), StorageError> {
-    storage.append(&path("pages.bin"), &stat.encode())
+    let log = path("pages.bin");
+    match storage.size(&log) {
+        Ok(size) if size % RECORD as u64 != 0 => drop_cut_record(storage, &log, size)?,
+        _ => {}
+    }
+    storage.append(&log, &stat.encode())
+}
+
+/// Writes the log's whole records again without the cut one at its end
+/// (`size` bytes now), through a new file moved over it.
+fn drop_cut_record(storage: &dyn Storage, log: &str, size: u64) -> Result<(), StorageError> {
+    let whole = size - size % RECORD as u64;
+    let new = path("pages.new");
+    let copied = (|| {
+        storage.write(&new, &[])?;
+        let mut chunk = [0u8; RECORD * 64];
+        let mut at = 0u64;
+        while at < whole {
+            let len = (whole - at).min(chunk.len() as u64) as usize;
+            let n = storage.read_at(log, at, &mut chunk[..len])?;
+            if n == 0 {
+                return Err(StorageError::Io);
+            }
+            storage.append(&new, &chunk[..n])?;
+            at += n as u64;
+        }
+        storage.rename(&new, log)
+    })();
+    if copied.is_err() {
+        let _ = storage.remove(&new);
+    }
+    copied
 }
 
 /// Replaces the log with the stays in `file` (records of book, page,
@@ -455,8 +488,9 @@ pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Da
             let day = day_of(stat.start);
             match days.binary_search_by_key(&day, |d| d.day) {
                 Ok(i) => {
-                    days[i].seconds += u32::from(stat.duration);
-                    days[i].stays += 1;
+                    // Saturating: a hostile merged log cannot overflow it.
+                    days[i].seconds = days[i].seconds.saturating_add(u32::from(stat.duration));
+                    days[i].stays = days[i].stays.saturating_add(1);
                 }
                 Err(i) => days.insert(
                     i,
@@ -588,14 +622,23 @@ pub(crate) fn scan_range(
     let last_start = u64::from(to) + u64::from(u16::MAX) + CLOCK_LEEWAY;
     let mut chunk = [0u8; RECORD * 64];
     let mut at = low * RECORD as u64;
+    // Stays in a row that started too late: one alone (a clock that was
+    // wrong once) does not end the reading, a whole chunk of them does.
+    let mut late = 0;
     while let Ok(n) = storage.read_at(&file, at, &mut chunk) {
         let whole = n - n % RECORD;
         for record in chunk[..whole].as_chunks::<RECORD>().0 {
             let stat = PageStat::decode(record);
             if (from..to).contains(&stat.start) {
                 visit(&stat);
-            } else if u64::from(stat.start) >= last_start {
-                return;
+            }
+            if u64::from(stat.start) >= last_start {
+                late += 1;
+                if late >= 64 {
+                    return;
+                }
+            } else {
+                late = 0;
             }
         }
         if n < chunk.len() || whole == 0 {

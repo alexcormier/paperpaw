@@ -3,9 +3,9 @@
 # Xteink X4 and the X4 Pro with ./build.sh, packs both files and signs
 # them with the author's key, and attaches them, the plugin's folder as
 # ZIPs, their SHA-256 sums and a catalogue snippet to the tag's release
-# for the plugin library. The library rebuilds the files in the paths of
-# GitHub's runners, so files built here can be verified against their
-# source. Nothing here runs in PaperPaw's own repository.
+# for the plugin library. build.sh writes paths as the same in any folder,
+# as the library's rebuild does, so the files can be verified against
+# their source. Nothing here runs in PaperPaw's own repository.
 #
 # The author's key: `paperpaw-sign key author.key` once, outside the
 # repository, then its contents as the repository's secret

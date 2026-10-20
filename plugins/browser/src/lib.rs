@@ -39,7 +39,7 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
     Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
-    SDK_VERSION, Screen, ScreenSpec, Version,
+    SDK_VERSION, Screen, ScreenSpec,
 };
 
 use crate::store::Entry;
@@ -79,7 +79,8 @@ impl Plugin for Browser {
             description: Cow::Borrowed(
                 "Reads web pages like books and fetches books and fonts from the web.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
             uses: paperpaw_sdk::Uses::NETWORK,
         }

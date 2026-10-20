@@ -60,6 +60,51 @@ pub const TOOLCHAIN: &str = env!("PAPERPAW_NATIVE_TOOLCHAIN");
 /// where PaperPaw loads none.
 pub const CODE_FILES: [&str; 2] = ["code.ppn", "code.so"];
 
+/// The folder in the plugins' folder where code plugins fetched for a
+/// firmware update wait for it (`plugins/.stats.next`), which PaperPaw
+/// does not load: the update plugin puts each plugin's new build there,
+/// with its folder's files, before the update is installed (ADR 0024),
+/// and the updated firmware installs those built for it at its first
+/// start, in place of every version before (its settings and data stay,
+/// as they belong to its id). A plugin built in before and a code plugin
+/// now comes back so.
+pub fn fetched_folder(plugin: &str) -> String {
+    alloc::format!("{}/.{plugin}.next", crate::builtin::PLUGIN_DIR)
+}
+
+/// The plugin `name` of the plugins' folder fetched for a firmware
+/// update, if `name` is such a folder's ([`fetched_folder`]).
+pub fn fetched_plugin(name: &str) -> Option<&str> {
+    name.strip_prefix('.')?
+        .strip_suffix(".next")
+        .filter(|id| crate::install::is_plugin_name(id))
+}
+
+/// The plugins fetched for a firmware update that wait for this one
+/// (`native`): their folders ([`fetched_folder`]) hold code built for it
+/// and fetched by the update plugin ([`remember_fetched`]), not put
+/// there otherwise. Their ids and the SHA-256 of their headers, sorted;
+/// the kernel installs them at the start, before plugins are found.
+pub fn fetched_for(storage: &dyn Storage, native: &Native) -> Vec<(String, [u8; 32])> {
+    let mut ids: Vec<String> = Vec::new();
+    let _ = storage.list(crate::builtin::PLUGIN_DIR, &mut |entry| {
+        if entry.is_dir
+            && let Some(id) = fetched_plugin(entry.name)
+        {
+            ids.push(String::from(id));
+        }
+    });
+    ids.sort();
+    ids.into_iter()
+        .filter_map(|id| {
+            let header = read_header(storage, &native.path(&fetched_folder(&id)))?;
+            (header.fingerprint == native.fingerprint.0
+                && fetched_code(storage, &id) == Some(header.sha256))
+            .then_some((id, header.sha256))
+        })
+        .collect()
+}
+
 /// Checks the plugin file at `path` whole, reading it once: its header,
 /// its length, its digest and, if it is signed, its author's signature.
 /// Its header and its author's signature (`None` if it is not signed);
@@ -177,6 +222,25 @@ pub fn installed_code(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
 /// (the file left as it is where it could not be read).
 pub fn remember_code(storage: &dyn Storage, plugin: &str, sha256: &[u8; 32]) -> bool {
     keep_entry(storage, INSTALLED, plugin, sha256)
+}
+
+/// Where the code fetched for a firmware update is named
+/// ([`remember_fetched`]), as [`remember_code`] names the code installed.
+const FETCHED: &str = crate::data_path!("plugin-code-fetched.txt");
+
+/// Names the code of `plugin` fetched for a firmware update (into
+/// [`fetched_folder`]), by its header's SHA-256: the updated firmware
+/// installs it at its start only when its file is that one, so a folder
+/// put there otherwise does not run (see [`installed_code`]). The code
+/// installed now stays named until then. `false` if it could not be kept.
+pub fn remember_fetched(storage: &dyn Storage, plugin: &str, sha256: &[u8; 32]) -> bool {
+    keep_entry(storage, FETCHED, plugin, sha256)
+}
+
+/// The code of `plugin` fetched for a firmware update
+/// ([`remember_fetched`]).
+pub fn fetched_code(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
+    entry(storage, FETCHED, plugin)
 }
 
 /// The 32 bytes kept for `plugin` in `file`, a line `<plugin>\t<hex>` each.
@@ -715,6 +779,27 @@ mod tests {
     use alloc::string::ToString;
 
     use super::*;
+
+    #[test]
+    fn code_fetched_for_an_update_has_a_folder_not_loaded() {
+        assert_eq!(fetched_folder("stats"), "plugins/.stats.next");
+        assert_eq!(fetched_plugin(".stats.next"), Some("stats"));
+        for other in [
+            "stats",
+            ".stats.part",
+            ".stats.old",
+            "..next",
+            ".Stats.next",
+        ] {
+            assert_eq!(fetched_plugin(other), None, "{other}");
+        }
+        let storage = crate::MemoryStorage::new();
+        assert_eq!(fetched_code(&storage, "stats"), None);
+        assert!(remember_fetched(&storage, "stats", &[1; 32]));
+        assert_eq!(fetched_code(&storage, "stats"), Some([1; 32]));
+        // Apart from the code installed.
+        assert_eq!(installed_code(&storage, "stats"), None);
+    }
 
     #[test]
     fn what_cannot_be_read_is_not_written_over() {

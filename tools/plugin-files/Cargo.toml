@@ -1,0 +1,170 @@
+[package]
+name = "paperpaw-plugin-files"
+description = "PaperPaw's own plugins that the store offers, as native plugin files (ADR 0024): built, packed and signed by the release pipeline for every release"
+version = "0.0.0"
+edition = "2024"
+license = "Apache-2.0"
+publish = false
+
+# A workspace of its own, as a plugin's repository is: its files must fit
+# the firmware built in shells/xteink, with the same compiler and SDK.
+[workspace]
+
+[[bin]]
+name = "aids"
+path = "src/bin/aids.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "battery"
+path = "src/bin/battery.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "browser"
+path = "src/bin/browser.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "calibre"
+path = "src/bin/calibre.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "diagnostics"
+path = "src/bin/diagnostics.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "fonts-browser"
+path = "src/bin/fonts-browser.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "joplin"
+path = "src/bin/joplin.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "keys"
+path = "src/bin/keys.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "koreader"
+path = "src/bin/koreader.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "kosync"
+path = "src/bin/kosync.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "menu-editor"
+path = "src/bin/menu-editor.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "news"
+path = "src/bin/news.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "profiles"
+path = "src/bin/profiles.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "readwise"
+path = "src/bin/readwise.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "rules"
+path = "src/bin/rules.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "stats"
+path = "src/bin/stats.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "translate"
+path = "src/bin/translate.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "vocabulary"
+path = "src/bin/vocabulary.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "wallabag"
+path = "src/bin/wallabag.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "weather"
+path = "src/bin/weather.rs"
+test = false
+bench = false
+
+[[bin]]
+name = "widgets"
+path = "src/bin/widgets.rs"
+test = false
+bench = false
+
+[dependencies]
+paperpaw-sdk = { path = "../../crates/paperpaw-sdk" }
+paperpaw-plugin-aids = { path = "../../plugins/aids" }
+paperpaw-plugin-battery = { path = "../../plugins/battery" }
+paperpaw-plugin-browser = { path = "../../plugins/browser" }
+paperpaw-plugin-calibre = { path = "../../plugins/calibre" }
+paperpaw-plugin-diagnostics = { path = "../../plugins/diagnostics" }
+paperpaw-plugin-fonts-browser = { path = "../../plugins/fonts-browser" }
+paperpaw-plugin-joplin = { path = "../../plugins/joplin" }
+paperpaw-plugin-keys = { path = "../../plugins/keys" }
+paperpaw-plugin-koreader = { path = "../../plugins/koreader" }
+paperpaw-plugin-kosync = { path = "../../plugins/kosync" }
+paperpaw-plugin-menu-editor = { path = "../../plugins/menu-editor" }
+paperpaw-plugin-news = { path = "../../plugins/news" }
+paperpaw-plugin-profiles = { path = "../../plugins/profiles" }
+paperpaw-plugin-readwise = { path = "../../plugins/readwise" }
+paperpaw-plugin-rules = { path = "../../plugins/rules" }
+paperpaw-plugin-stats = { path = "../../plugins/stats" }
+paperpaw-plugin-translate = { path = "../../plugins/translate" }
+paperpaw-plugin-vocabulary = { path = "../../plugins/vocabulary" }
+paperpaw-plugin-wallabag = { path = "../../plugins/wallabag" }
+paperpaw-plugin-weather = { path = "../../plugins/weather" }
+paperpaw-plugin-widgets = { path = "../../plugins/widgets" }
+
+# As the firmware is built: small code, one unit, no unwinding.
+[profile.release]
+opt-level = "s"
+lto = "fat"
+codegen-units = 1
+panic = "abort"
+# Lines in the ELF, for naming the functions of a crash's calls.
+debug = "line-tables-only"

@@ -695,6 +695,12 @@ impl Screen for LockScreen {
         true
     }
 
+    /// Locked, no screen shows above it but its own (the keyboard for a
+    /// password): others wait below until it is unlocked.
+    fn guards(&self) -> bool {
+        self.step == Step::Unlock && self.state.locked.get()
+    }
+
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         // Unlocked while something was above it (its keyboard): it goes.
         if self.step == Step::Unlock && !self.state.locked.get() {

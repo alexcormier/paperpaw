@@ -39,7 +39,7 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION, Screen,
-    ScreenSpec, Version,
+    ScreenSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("keys");
@@ -383,7 +383,8 @@ impl Plugin for Keys {
             description: Cow::Borrowed(
                 "What every button, tap zone and swipe does, changed on the device.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
             uses: paperpaw_sdk::Uses::NOTHING,
         }

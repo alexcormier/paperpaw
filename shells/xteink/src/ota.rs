@@ -217,19 +217,20 @@ impl Ota {
     }
 
     /// The running firmware on trial ran long enough, at `now` (ms since
-    /// the start): it is marked as good.
-    pub fn check_trial(&mut self, now: u64) {
+    /// the start): it is marked as good. Whether it was, just now.
+    pub fn check_trial(&mut self, now: u64) -> bool {
         let Some(trial) = &self.trial else {
-            return;
+            return false;
         };
         if trial.before + now.saturating_sub(trial.since) < TRIAL_MS {
-            return;
+            return false;
         }
         self.trial = None;
         match self.mark(State::Valid, 0) {
             Ok(()) => info!("OTA: the update works"),
             Err(_) => warn!("OTA: could not mark the update as good"),
         }
+        true
     }
 
     /// The running firmware goes to sleep or restarts at `now`, ending

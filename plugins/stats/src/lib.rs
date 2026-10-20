@@ -51,7 +51,7 @@ use paperpaw_sdk::builtin::{events, menus, params};
 use paperpaw_sdk::document::Locator;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Instant, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, StorageError, Version, time,
+    Registrar, SDK_VERSION, ScreenSpec, SettingGroupSpec, SettingSpec, StorageError, time,
 };
 
 use paperpaw_sdk::setting::Setting;
@@ -450,7 +450,8 @@ impl Plugin for Stats {
             description: Cow::Borrowed(
                 "Records how long and how much you read, with a calendar and every book's numbers.",
             ),
-            version: Version::new(0, 1, 0),
+            // Released with PaperPaw, also as a file from the store.
+            version: paperpaw_sdk::package_version!(),
             sdk: SDK_VERSION,
             uses: paperpaw_sdk::Uses::NETWORK,
         }

@@ -28,8 +28,9 @@ pub struct Entry {
 }
 
 /// What the firmware gives every plugin: its heap (every allocation is
-/// the kernel's, so what one side boxes the other may drop), its panics
-/// and its clock. It grows only at its end, and says its size.
+/// the kernel's, so what one side boxes the other may drop), its panics,
+/// its clock, and what plugins would otherwise each carry a copy of. It
+/// grows only at its end, and says its size.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub struct Api {
@@ -49,6 +50,11 @@ pub struct Api {
     pub panic: unsafe extern "C" fn(message: *const u8, len: usize) -> !,
     /// Microseconds since the device started.
     pub micros: extern "C" fn() -> u64,
+    /// The character of the icon named `name` (UTF-8, `len` bytes) in the
+    /// icon font, 0 if there is none: the names of all icons (some 125 KB)
+    /// stay in the firmware (the SDK's `icons::char` in a plugin built
+    /// with `--cfg paperpaw_plugin`).
+    pub icon: unsafe extern "C" fn(name: *const u8, len: usize) -> u32,
 }
 
 impl Api {

@@ -833,7 +833,10 @@ plugin boxes, the kernel may drop) and its panic handler. The crate's
 `.cargo/config.toml` links it as a plugin: copy the sample's, which
 links with `paperpaw-plugin.x` (the SDK brings it), keeps the
 relocations, and on the X4 builds with the medium code model and frame
-pointers. Build it for both chips:
+pointers. It also sets `--cfg paperpaw_plugin`, with which the SDK asks
+the firmware for what it has already instead of copying it into the
+file (the names of all icons, some 125 KB in a plugin that draws an icon
+by name). Build it for both chips:
 
 ```sh
 cargo x4                  # riscv32imc-unknown-none-elf, the X4
@@ -1049,6 +1052,10 @@ there in one of two ways, both through the same checks:
 - **A pull request** to the paperpaw.org repository that adds
   `catalogue/<id>.toml`, for developers.
 
+Before either, `paperpaw-dev check` (and `paperpaw-dev package` for a
+data plugin or a `.ppn` file) finds most of what the checks would refuse,
+and what they cannot see: see [Checking your plugin](#checking-your-plugin).
+
 An update is a new version with a higher number, the same way. The
 site's guide for authors, <https://paperpaw.org/authors>, has every
 field, check and limit; the skill's
@@ -1122,27 +1129,36 @@ rebuilds each build in a container with the toolchain its fingerprint
 names, with the sample's aliases (`cargo x4`, `cargo +esp x4pro`,
 `--locked`). It compares the result byte for byte with the build
 without its signature, and the plugin's page says *Verified: matches its
-source*, *Not rebuilt* or *Rebuilt, but does not match its source*. The
-rebuild runs in the paths of GitHub's runners, and paths end up in a
-build, so:
+source*, *Not rebuilt* or *Rebuilt, but does not match its source*.
+Paths end up in a build (in its panic messages), so the sample's
+`build.sh` and the rebuild write them as the same everywhere, with
+`--remap-path-prefix` added to the flags of `.cargo/config.toml`
+(through `cargo --config`): the source's top as `/plugin`, Cargo's home
+as `/cargo`, and the X4 Pro's toolchain, whose `core` and `alloc` are
+built with the plugin, as `/rust`. So:
 
-- build with the sample's CI job
-  (`samples/hello-native/.github/workflows/build.yml`) from a pushed
-  tag;
+- build with `build.sh`, or the sample's CI job
+  (`samples/hello-native/.github/workflows/build.yml`) that runs it, from
+  a pushed tag, in any folder, on Linux or macOS (on Windows, paths
+  inside the source keep their `\`, and such a build matches only builds
+  on Windows);
 - commit `Cargo.lock`;
 - keep the release's compilers pinned (`rust-toolchain.toml`, the job's
   `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`) and its SDK
   (`paperpaw-sdk = "0.5"`);
 - never set `RUSTFLAGS`, which would replace the flags that link the
-  plugin;
+  plugin, and never publish a build made without the remapped paths;
 - put nothing of the moment or the computer into the code (a build
   script writing the time, a user name, a random value);
-- name dependencies by version or a fixed commit, never a branch.
+- name dependencies by version or a fixed commit, never a branch, and
+  never by a `path` outside the repository (its folder is not remapped,
+  and it changes the hashes Cargo gives every crate).
 
 The sample's `build.sh`, which the job runs, builds both readers, packs
 and signs the files, and zips the folder, with and without `store/`; the
 job attaches them to the tag's release with their SHA-256 and the
-catalogue's `[[versions]]` for them.
+catalogue's `[[versions]]` for them. Building twice, in two folders, and
+comparing the files with `cmp` shows that the build holds.
 
 ### By pull request
 

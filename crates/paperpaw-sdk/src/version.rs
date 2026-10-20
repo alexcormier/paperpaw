@@ -28,6 +28,22 @@ impl Version {
         }
     }
 
+    /// The digits of `text` as a number, at compile time (for
+    /// [`package_version!`](crate::package_version)); 0 where it has none.
+    #[doc(hidden)]
+    pub const fn number(text: &str) -> u16 {
+        let bytes = text.as_bytes();
+        let mut value: u16 = 0;
+        let mut i = 0;
+        while i < bytes.len() && bytes[i].is_ascii_digit() {
+            value = value
+                .saturating_mul(10)
+                .saturating_add((bytes[i] - b'0') as u16);
+            i += 1;
+        }
+        value
+    }
+
     /// Parses `1`, `1.2` or `1.2.3`.
     pub fn parse(text: &str) -> Option<Version> {
         let mut parts = text.trim().split('.');
@@ -52,6 +68,26 @@ impl Version {
     }
 }
 
+/// The version of the crate it is written in (its `Cargo.toml`'s, without
+/// a pre-release such as `-dev`), for a plugin's
+/// [`Manifest::version`](crate::Manifest): a plugin released with its crate
+/// says the same version everywhere.
+///
+/// ```
+/// const VERSION: paperpaw_sdk::Version = paperpaw_sdk::package_version!();
+/// assert_eq!(VERSION.to_string(), env!("CARGO_PKG_VERSION").split('-').next().unwrap());
+/// ```
+#[macro_export]
+macro_rules! package_version {
+    () => {
+        $crate::Version::new(
+            $crate::Version::number(env!("CARGO_PKG_VERSION_MAJOR")),
+            $crate::Version::number(env!("CARGO_PKG_VERSION_MINOR")),
+            $crate::Version::number(env!("CARGO_PKG_VERSION_PATCH")),
+        )
+    };
+}
+
 impl fmt::Display for Version {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         write!(f, "{}.{}.{}", self.major, self.minor, self.patch)
@@ -72,6 +108,13 @@ mod tests {
             number(env!("CARGO_PKG_VERSION_PATCH")).unwrap(),
         );
         assert_eq!(crate_version, SDK_VERSION);
+    }
+
+    #[test]
+    fn the_package_version_is_the_crates() {
+        assert_eq!(crate::package_version!(), SDK_VERSION);
+        assert_eq!(Version::number("12"), 12);
+        assert_eq!(Version::number(""), 0);
     }
 
     #[test]

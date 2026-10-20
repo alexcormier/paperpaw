@@ -1,0 +1,111 @@
+//! A screen that guards the device (a lock): nothing shows above it but
+//! what it opens itself.
+
+use super::*;
+use core::cell::Cell;
+use paperpaw_sdk::Params;
+
+const LOCK: Id = Id::new_static("g.lock");
+const CHILD: Id = Id::new_static("g.child");
+const OTHER: Id = Id::new_static("g.other");
+
+/// A lock, locked until *Select*; *Menu* opens its own keyboard.
+struct GuardPlugin(Rc<Cell<bool>>);
+
+struct Lock(Rc<Cell<bool>>);
+
+impl Screen for Lock {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn guards(&self) -> bool {
+        self.0.get()
+    }
+
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        if *action == actions::CONFIRM {
+            self.0.set(false);
+            cx.command(Command::Back);
+        } else if *action == actions::MENU {
+            cx.command(Command::OpenScreen(CHILD, Params::new()));
+        } else {
+            return Handled::No;
+        }
+        Handled::Yes
+    }
+}
+
+struct Plain;
+
+impl Screen for Plain {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+}
+
+impl Plugin for GuardPlugin {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("g"),
+            name: Cow::Borrowed("Guard"),
+            description: Cow::Borrowed(""),
+            version: Version::new(1, 0, 0),
+            sdk: SDK_VERSION,
+            uses: paperpaw_sdk::Uses::NOTHING,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let locked = self.0.clone();
+        r.add_screen(ScreenSpec {
+            id: LOCK,
+            title: Cow::Borrowed("lock"),
+            factory: Box::new(move |_, _| Box::new(Lock(locked.clone()))),
+        })?;
+        for id in [CHILD, OTHER, Id::new_static("g.home")] {
+            r.add_screen(ScreenSpec {
+                id,
+                title: Cow::Borrowed("plain"),
+                factory: Box::new(|_, _| Box::new(Plain)),
+            })?;
+        }
+        r.bind_slot(slots::HOME, Id::new_static("g.home"), Priority::DEFAULT)
+    }
+}
+
+/// Locked, a screen another opens (a rule, a timer, the shell) waits
+/// below the lock, others' *Back* closes nothing and notices wait; what
+/// the lock opens itself shows above it. Unlocked, the screen that waited
+/// is on top and the notice shows.
+#[test]
+fn nothing_shows_above_a_guarding_screen_but_its_own() {
+    let locked = Rc::new(Cell::new(true));
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(GuardPlugin(locked.clone()))
+        .plugin(NoticePlugin { log: log() })
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.open_screen(Instant(1), LOCK, Params::new());
+    assert_eq!(kernel.active_screen(), Some(&LOCK));
+
+    kernel.open_screen(Instant(2), OTHER, Params::new());
+    assert_eq!(kernel.active_screen(), Some(&LOCK), "waits below");
+    kernel.apply(Command::Notify(String::from("A message")));
+    kernel.apply(Command::Back);
+    kernel.finish();
+    assert_eq!(kernel.active_screen(), Some(&LOCK), "not closed by another");
+    assert!(kernel.notice.is_none(), "held");
+
+    // Its own keyboard shows above it, and goes back to it.
+    kernel.run_action(Instant(3), actions::MENU);
+    assert_eq!(kernel.active_screen(), Some(&CHILD));
+    kernel.run_action(Instant(4), actions::BACK);
+    assert_eq!(kernel.active_screen(), Some(&LOCK));
+
+    // Unlocked: what waited is on top, the message shows.
+    kernel.run_action(Instant(5), actions::CONFIRM);
+    assert_eq!(kernel.active_screen(), Some(&OTHER));
+    assert!(kernel.notice.is_some());
+}

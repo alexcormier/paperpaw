@@ -22,6 +22,7 @@ mod page;
 mod queue;
 mod room;
 mod rows;
+mod setup;
 mod shots;
 mod source;
 mod trust;
@@ -144,11 +145,18 @@ impl Plugin for Store {
         // off by a restart is begun anew from the plugin's page.
         r.on(DOWNLOADED, received)?;
         r.on(queue::FETCHED, queue::fetched)?;
-        r.on(events::STARTED, |env, _, _| {
+        // The first-run setup's offer of the plugins most readers add.
+        setup::register(r)?;
+        r.on(events::STARTED, |env, _, out| {
             // A download cut off by the restart is begun anew from its
             // page, or first when the queue goes on.
             queue::interrupted(env);
             INSTALLER.cancel(env.storage);
+            // The setup's plugins go on without the store being opened:
+            // the reader asked for them.
+            if queue::has_quiet(env) {
+                queue::next(env, out);
+            }
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
@@ -160,41 +168,59 @@ impl Plugin for Store {
 /// if it may be (see [`trust`]), and said; then the next update waiting
 /// in the queue ([`queue`]) has its turn.
 fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
-    match INSTALLER.received(env, reply, out) {
-        Received::Complete(done) => finish(env, &done, out),
-        Received::Failed(job) => out.push(failed(env, &job.name)),
+    let mut said = Vec::new();
+    let installed = match INSTALLER.received(env, reply, out) {
+        Received::Complete(done) => (finish(env, &done, &mut said), done.name),
+        Received::Failed(job) => {
+            said.push(failed(env, &job.name));
+            (false, job.name)
+        }
         Received::Next(_) | Received::Other => return,
+    };
+    // A quiet queue (the first-run setup's) says it all once, at its end:
+    // its notices wait, what installs goes on.
+    if queue::quiet(env) {
+        queue::note(env, &installed.1, installed.0);
+        out.extend(
+            said.into_iter()
+                .filter(|c| !matches!(c, Command::Notify(_))),
+        );
+    } else {
+        out.extend(said);
     }
     queue::next(env, out);
 }
 
 /// Installs the plugin all of whose files are here, if it may be, and
-/// says so.
-fn finish(env: &Env<'_>, done: &Progress, out: &mut Vec<Command>) {
+/// says so; whether it was installed.
+fn finish(env: &Env<'_>, done: &Progress, out: &mut Vec<Command>) -> bool {
     let name = [("name", Arg::Str(&done.name))];
     let folder = INSTALLER.folder(env.storage).unwrap_or_default();
-    let key = match trust::verdict(env, &done.plugin, &folder) {
+    let (key, installed) = match trust::verdict(env, &done.plugin, &folder) {
         Verdict::Install { code } => {
             let before = env.plugins.get(&done.plugin).is_some();
             if trust::install(env, code, out).is_none() {
                 INSTALLER.cancel(env.storage);
-                return out.push(failed(env, &done.name));
+                out.push(failed(env, &done.name));
+                return false;
             }
-            match (code.is_some(), before) {
+            let key = match (code.is_some(), before) {
                 (true, true) => "store.updated-code",
                 (true, false) => "store.installed-code",
                 (false, true) => "store.updated",
                 (false, false) => "store.installed",
-            }
+            };
+            (key, true)
         }
         // It waits on its page for the reader's word.
-        Verdict::OtherAuthor { .. } => "store.other-author.notice",
+        Verdict::OtherAuthor { .. } => ("store.other-author.notice", false),
         Verdict::Refused(refusal) => {
             INSTALLER.cancel(env.storage);
-            refusal.key()
+            (refusal.key(), false)
         }
     };
     out.push(Command::Notify(env.i18n.format(key, &name)));
+    installed
 }
 
 fn failed(env: &Env<'_>, name: &str) -> Command {
