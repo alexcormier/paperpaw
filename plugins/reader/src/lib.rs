@@ -668,13 +668,15 @@ impl Plugin for Reader {
             (MORE_MENU, actions::AUTO_TURN, 17),
             (MORE_MENU, actions::SELECT, 20),
             (MORE_MENU, actions::LINKS, 25),
+            (MORE_MENU, actions::NEXT_STATUS_LINE, 30),
             (MORE_MENU, core_actions::SETTINGS, 50),
         ];
         for (menu, item, order) in entries {
             r.add_menu_entry(paperpaw_sdk::MenuEntry { menu, item, order })?;
         }
         // Short menus: reading aloud where the device speaks; choosing
-        // text and links with the buttons where there is no touch screen.
+        // text and links and switching status lines (a tap on one by
+        // touch) with the buttons where there is no touch screen.
         for item in [
             actions::READ_ALOUD,
             actions::READ_FROM,
@@ -685,7 +687,7 @@ impl Plugin for Reader {
         ] {
             r.set_menu_need(item, paperpaw_sdk::MenuNeed::Speech)?;
         }
-        for item in [actions::SELECT, actions::LINKS] {
+        for item in [actions::SELECT, actions::LINKS, actions::NEXT_STATUS_LINE] {
             r.set_menu_need(item, paperpaw_sdk::MenuNeed::NoTouch)?;
         }
         r.set_menu_need(settings::SMOOTH_TEXT, paperpaw_sdk::MenuNeed::BlackAndWhite)?;
@@ -703,6 +705,7 @@ impl Plugin for Reader {
             (actions::READ_ALOUD, "volume"),
             (actions::AUTO_TURN, "clock-play"),
             (actions::SKIM_BOOK, "arrows-horizontal"),
+            (actions::NEXT_STATUS_LINE, "layout-bottombar"),
         ] {
             r.add_icon(item, Cow::Borrowed(icon))?;
         }

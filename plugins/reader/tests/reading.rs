@@ -1094,3 +1094,92 @@ fn small_devices_count_pages_with_rests_between() {
     // A page and a rest as long, not a page every two milliseconds.
     assert!((1..=8).contains(&pages), "{pages} pages counted");
 }
+
+#[test]
+fn where_i_was_chosen_with_the_buttons_returns() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    reading.run(core_actions::NEXT_PAGE);
+    let before = reading.kept();
+    reading.run(actions::SKIM_BOOK);
+    reading.run(core_actions::NEXT_PAGE);
+    assert_ne!(reading.kept(), before);
+    // The buttons below the bar: Chapter back, Where I was, Chapter on,
+    // Page number; down moves to the first, then the next.
+    reading.run(core_actions::DOWN);
+    reading.run(core_actions::DOWN);
+    reading.run(core_actions::CONFIRM);
+    assert_eq!(
+        reading.kernel.active_screen().map(Id::as_str),
+        Some("reader.screen")
+    );
+    assert_eq!(reading.kept(), before);
+}
+
+#[test]
+fn select_in_the_skimming_bar_stays_where_it_went() {
+    let mut reading = Reading::new(Shared::default());
+    reading.open();
+    reading.run(actions::SKIM_BOOK);
+    reading.run(core_actions::NEXT_PAGE);
+    let skimmed = reading.kept();
+    reading.run(core_actions::CONFIRM);
+    assert_eq!(
+        reading.kernel.active_screen().map(Id::as_str),
+        Some("reader.screen")
+    );
+    assert_eq!(reading.kept(), skimmed);
+}
+
+/// The entries of a menu as a plugin's action finds them.
+type Entries = Rc<RefCell<Vec<String>>>;
+
+/// A plugin whose action `menus.look` notes the reader's More menu.
+struct MenuLook(Entries);
+
+impl Plugin for MenuLook {
+    fn manifest(&self) -> Manifest {
+        Manifest {
+            id: Id::new_static("menus"),
+            name: "Menus".into(),
+            description: "Looks into menus.".into(),
+            version: Version::new(0, 1, 0),
+            sdk: SDK_VERSION,
+        }
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let entries = self.0.clone();
+        r.add_action(
+            paperpaw_sdk::ActionSpec::new(Id::new_static("menus.look"), "look").handler(
+                move |env: &paperpaw_sdk::Env<'_>, _: &mut Vec<paperpaw_sdk::Command>| {
+                    *entries.borrow_mut() = env
+                        .menus
+                        .items(paperpaw_plugin_reader::MORE_MENU.as_str())
+                        .iter()
+                        .map(|item| item.id.as_str().to_string())
+                        .collect();
+                },
+            ),
+        )
+    }
+}
+
+#[test]
+fn status_lines_switch_from_the_menu_without_a_touch_screen() {
+    let entries = Entries::default();
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(Shared::default())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Reader)
+        .plugin(MenuLook(entries.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.run_action(Instant(10), Id::new_static("menus.look"));
+    let entries = entries.borrow();
+    assert!(
+        entries.iter().any(|e| e == "reader.next-status-line"),
+        "{entries:?}"
+    );
+}
