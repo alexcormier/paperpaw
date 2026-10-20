@@ -4,7 +4,7 @@
 //!
 //! | Part | Connection |
 //! |---|---|
-//! | 4.3" panel, 800 × 480, UC8179 controller | SPI: clock GPIO 12, data out GPIO 11, select GPIO 13; data/command GPIO 18, reset GPIO 14, busy GPIO 6 (low while busy) |
+//! | 4.3" panel, 800 × 480, UC8179, UC8279 or SSD1677 controller (by batch, found at start) | SPI: clock GPIO 12, data out GPIO 11, select GPIO 13; data/command GPIO 18, reset GPIO 14, busy GPIO 6 (low while busy) |
 //! | microSD card | SDMMC, one data line: clock GPIO 41, command GPIO 42, data GPIO 40; its power GPIO 5, on while low |
 //! | Touch (GT911), fuel gauge (CW2017), clock (BM8563) | I²C: data GPIO 39, clock GPIO 38; the touch's interrupt GPIO 10, reset GPIO 4, power GPIO 2 (on while low) |
 //! | Side buttons (up, down) | GPIO 0 and GPIO 7, low while pressed |
@@ -28,10 +28,12 @@ use esp_hal::time::Rate;
 use esp_hal::timer::timg::TimerGroup;
 use paperpaw_x4::buttons::State;
 use paperpaw_x4::gt911::{self, Transform};
-use paperpaw_x4::uc8179::Display;
+use paperpaw_x4::panel::Device;
+use paperpaw_x4::probe::{Controller, Probe};
 use paperpaw_x4::{bm8563, cw2017};
 
 use crate::input::Touch;
+pub use crate::usb_power::UsbPower;
 
 /// The panel's SPI speed.
 const PANEL_MHZ: u32 = 20;
@@ -39,7 +41,7 @@ const PANEL_MHZ: u32 = 20;
 const I2C_KHZ: u32 = 100;
 
 /// The panel, on its own SPI bus.
-pub type Panel = Display<
+pub type Panel = paperpaw_x4::panel::Panel<
     ExclusiveDevice<Spi<'static, Blocking>, Output<'static>, Delay>,
     Output<'static>,
     Output<'static>,
@@ -161,75 +163,14 @@ impl Keys {
     }
 }
 
-/// Whether the X4 Pro is on outer power. It has no pin that says so: it
-/// counts as on USB while it charges (the charging pin low) or while a
-/// computer talks to it (the USB frames' number moves on, a frame a
-/// millisecond), so it stays awake and in reach of the computer then.
-pub struct UsbPower {
-    charging: Input<'static>,
-    /// When the frames were last looked at (ms), and whether they moved.
-    seen: core::cell::Cell<(u64, bool)>,
-}
-
-/// The frames are looked at once in so many milliseconds.
-const LOOK_MS: u64 = 1000;
-/// After starting, the X4 Pro counts as on USB this long: a computer
-/// takes a moment to find it and send frames, and in a light sleep it
-/// could not (the USB unit sleeps too).
-const START_MS: u64 = 8000;
-
-impl UsbPower {
-    pub fn new(charging: Input<'static>) -> Self {
-        Self {
-            charging,
-            seen: core::cell::Cell::new((0, false)),
-        }
-    }
-
-    pub fn is_high(&self) -> bool {
-        if self.charging.is_low() {
-            return true;
-        }
-        let now = esp_hal::time::Instant::now()
-            .duration_since_epoch()
-            .as_millis();
-        if now < START_MS {
-            return true;
-        }
-        let (at, talking) = self.seen.get();
-        if at != 0 && now - at < LOOK_MS {
-            return talking;
-        }
-        let talking = computer();
-        self.seen.set((now, talking));
-        talking
-    }
-
-    pub fn is_low(&self) -> bool {
-        !self.is_high()
-    }
-}
-
-/// Whether a computer sends USB frames: their number moves on within 3 ms.
-fn computer() -> bool {
-    let frame = || {
-        esp_hal::peripherals::USB_DEVICE::regs()
-            .fram_num()
-            .read()
-            .sof_frame_index()
-            .bits()
-    };
-    let first = frame();
-    Delay::new().delay_millis(3);
-    frame() != first
-}
-
 /// The X4 Pro's parts, each once.
 pub struct Board {
     /// Holds the battery's power on; low, it is cut.
     pub power_latch: Output<'static>,
     /// The panel, still to be started.
     pub panel: Panel,
+    /// What its controller answered at start.
+    pub display: Probe,
     pub card: CardParts,
     pub keys: Keys,
     pub power_button: Input<'static>,
@@ -260,7 +201,7 @@ impl Board {
         clippy::expect_used,
         reason = "without its buses the X4 Pro can do nothing; a panic shows why"
     )]
-    pub fn take(p: Peripherals) -> Self {
+    pub fn take(mut p: Peripherals) -> Self {
         let mut power_latch = Output::new(p.GPIO1, Level::High, OutputConfig::default());
         // Held through resets: flashing restarts the chip into its boot
         // loader, which would let the power go; held, the X4 Pro stays on
@@ -268,6 +209,18 @@ impl Board {
         power_latch.set_pad_hold(true);
         let delay = Delay::new();
 
+        // Which controller the panel has, asked on its lines before the
+        // bus takes them; without a sure answer, the UC8179 the X4 Pro was
+        // first driven with.
+        let display = crate::probe::ask(
+            p.GPIO12.reborrow(),
+            p.GPIO11.reborrow(),
+            p.GPIO13.reborrow(),
+            p.GPIO18.reborrow(),
+            p.GPIO14.reborrow(),
+            p.GPIO6.reborrow(),
+            delay,
+        );
         let spi = Spi::new(
             p.SPI2,
             SpiConfig::default()
@@ -278,7 +231,9 @@ impl Board {
         .with_sck(p.GPIO12)
         .with_mosi(p.GPIO11);
         let select = Output::new(p.GPIO13, Level::High, OutputConfig::default());
-        let panel = Display::new(
+        let panel = Panel::new(
+            Device::X4Pro,
+            display.controller().unwrap_or(Controller::Uc8179),
             ExclusiveDevice::new(spi, select, delay).expect("display SPI"),
             Output::new(p.GPIO18, Level::High, OutputConfig::default()),
             Output::new(p.GPIO14, Level::High, OutputConfig::default()),
@@ -317,6 +272,7 @@ impl Board {
         Self {
             power_latch,
             panel,
+            display,
             card: CardParts {
                 host: p.SDHOST,
                 clock: p.GPIO41,

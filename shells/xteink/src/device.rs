@@ -1,5 +1,6 @@
-//! The device's own plugin: what only the X4 or the X4 Pro has to set.
-//! Both sleep lightly between readings of their buttons (for developers,
+//! The device's own plugin: what only the X4, the X4 Pro or the X4
+//! Classic has to set.
+//! All sleep lightly between readings of their buttons (for developers,
 //! in their group of settings); the X4 Pro's front light has its
 //! brightness and warmth, in the quick panel and the reader's panel too.
 
@@ -15,10 +16,16 @@ pub const PLUGIN: Id = Id::new_static("x4");
 /// The processor sleeps lightly while idle on battery (see `power`).
 pub const LIGHT_SLEEP: Setting<bool> = Setting::new("x4.light-sleep");
 /// The X4 Pro's front light: how bright, in percent (0 off).
-#[cfg_attr(feature = "x4", expect(dead_code, reason = "the X4 has no light"))]
+#[cfg_attr(
+    not(feature = "x4-pro"),
+    expect(dead_code, reason = "only the X4 Pro has a light")
+)]
 pub const FRONTLIGHT: Setting<i64> = Setting::new("x4.frontlight");
 /// How much of the light is warm, in percent.
-#[cfg_attr(feature = "x4", expect(dead_code, reason = "the X4 has no light"))]
+#[cfg_attr(
+    not(feature = "x4-pro"),
+    expect(dead_code, reason = "only the X4 Pro has a light")
+)]
 pub const WARMTH: Setting<i64> = Setting::new("x4.warmth");
 
 #[derive(Debug, Default)]
@@ -73,6 +80,11 @@ impl Plugin for X4 {
         let (name, description) = (
             "Xteink X4 Pro",
             "What only the Xteink X4 Pro has to set: its front light.",
+        );
+        #[cfg(feature = "x4-classic")]
+        let (name, description) = (
+            "Xteink X4 Classic",
+            "What only the Xteink X4 Classic has to set.",
         );
         Manifest {
             id: PLUGIN,

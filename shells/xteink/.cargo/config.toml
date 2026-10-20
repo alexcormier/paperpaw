@@ -6,7 +6,8 @@
 # The X4 Pro's: an ESP32-S3 (Xtensa), with the `esp` toolchain (espup):
 # `cargo +esp x4pro` builds it, `cargo +esp x4pro-run` flashes it (over
 # the stock firmware, hold its power button meanwhile: its boot loader
-# does not keep it on; PaperPaw does).
+# does not keep it on; PaperPaw does). The X4 Classic's alike:
+# `cargo +esp x4classic`, `cargo +esp x4classic-run`.
 [build]
 target = "riscv32imc-unknown-none-elf"
 
@@ -14,6 +15,9 @@ target = "riscv32imc-unknown-none-elf"
 x4pro = "build --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-pro,remote -Zbuild-std=core,alloc"
 x4pro-run = "run --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-pro,remote -Zbuild-std=core,alloc"
 x4pro-clippy = "clippy --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-pro,remote -Zbuild-std=core,alloc"
+x4classic = "build --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-classic,remote -Zbuild-std=core,alloc"
+x4classic-run = "run --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-classic,remote -Zbuild-std=core,alloc"
+x4classic-clippy = "clippy --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-classic,remote -Zbuild-std=core,alloc"
 
 [target.xtensa-esp32s3-none-elf]
 runner = "espflash flash --monitor --chip esp32s3 --erase-parts otadata"

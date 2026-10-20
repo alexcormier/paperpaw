@@ -1,9 +1,11 @@
-//! PaperPaw on the Xteink X4 (ESP32-C3) and the X4 Pro (ESP32-S3, with a
-//! touch screen): the kernel with the standard app, its screen, buttons,
-//! battery and SD card. The feature `x4` or `x4-pro` says which.
+//! PaperPaw on the Xteink X4 (ESP32-C3), the X4 Pro (ESP32-S3, with a
+//! touch screen) and the X4 Classic (ESP32-S3, the X4's buttons): the
+//! kernel with the standard app, its screen, buttons, battery and SD card.
+//! The feature `x4`, `x4-pro` or `x4-classic` says which.
 //!
 //! - **Board**: which pin does what, in one place (`board`, for the X4 Pro
-//!   `board_pro`; its card `card_pro`).
+//!   `board_pro`, for the X4 Classic `board_classic`; the card of both
+//!   `card_pro`).
 //! - **Screen**: the kernel draws in bands of [`FRAME_ROWS`] rows; each
 //!   goes straight into the display controller's memory, which keeps the
 //!   frame (see `paperpaw_x4::display`).
@@ -27,9 +29,12 @@ mod board;
 #[cfg(feature = "x4-pro")]
 #[path = "board_pro.rs"]
 mod board;
+#[cfg(feature = "x4-classic")]
+#[path = "board_classic.rs"]
+mod board;
 #[cfg(feature = "x4")]
 mod card;
-#[cfg(feature = "x4-pro")]
+#[cfg(feature = "esp32s3")]
 #[path = "card_pro.rs"]
 mod card;
 mod clock;
@@ -47,6 +52,7 @@ mod net;
 mod network;
 mod ota;
 mod power;
+mod probe;
 #[cfg(feature = "remote")]
 mod remote;
 mod roots;
@@ -56,11 +62,20 @@ mod stack;
 mod tls;
 #[cfg(feature = "remote")]
 mod traced;
+#[cfg(feature = "esp32s3")]
+mod usb_power;
 mod volume;
 mod wifi;
 
-#[cfg(all(feature = "x4", feature = "x4-pro"))]
-compile_error!("build for one device: the feature `x4` or `x4-pro`");
+#[cfg(any(
+    all(feature = "x4", feature = "esp32s3"),
+    all(feature = "x4-pro", feature = "x4-classic"),
+    all(
+        feature = "esp32s3",
+        not(any(feature = "x4-pro", feature = "x4-classic"))
+    ),
+))]
+compile_error!("build for one device: the feature `x4`, `x4-pro` or `x4-classic`");
 
 use alloc::boxed::Box;
 
@@ -77,11 +92,11 @@ use paperpaw_platform::{
     DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation, Storage,
 };
 use paperpaw_sdk::builtin::settings;
-#[cfg(feature = "x4")]
+#[cfg(not(feature = "x4-pro"))]
 use paperpaw_x4::buttons;
 #[cfg(feature = "x4")]
 use paperpaw_x4::display;
-#[cfg(feature = "x4-pro")]
+#[cfg(feature = "esp32s3")]
 use paperpaw_x4::uc8179 as display;
 
 use crate::board::Board;
@@ -164,6 +179,28 @@ const DEVICE: DeviceInfo = DeviceInfo {
     memory: MemoryClass::Large,
 };
 
+/// The X4 Classic: the X4's buttons, the X4 Pro's screen and memory.
+#[cfg(feature = "x4-classic")]
+const DEVICE: DeviceInfo = DeviceInfo {
+    id: "xteink-x4-classic",
+    name: "Xteink X4 Classic",
+    display: DisplayInfo {
+        width: display::WIDTH,
+        height: display::HEIGHT,
+        dpi: 217,
+        format: PixelFormat::Mono1,
+        rotation: Rotation::Deg90,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: true,
+        touch: false,
+        pen: false,
+        keys: &buttons::ALL,
+    },
+    memory: MemoryClass::Large,
+};
+
 /// Microseconds since start, for measuring what plugins take.
 pub fn micros() -> u64 {
     esp_hal::time::Instant::now()
@@ -183,9 +220,10 @@ fn now() -> Instant {
 fn main() -> ! {
     stack::paint();
     let p = esp_hal::init(esp_hal::Config::default().with_cpu_clock(CpuClock::max()));
-    // The X4 Pro's PSRAM first, so PaperPaw's memory comes from there and
-    // the chip's own stays for the radio and DMA, which need it.
-    #[cfg(feature = "x4-pro")]
+    // The PSRAM of the ESP32-S3 devices first, so PaperPaw's memory comes
+    // from there and the chip's own stays for the radio and DMA, which
+    // need it.
+    #[cfg(feature = "esp32s3")]
     // SAFETY: only taken here; the board does not use it.
     esp_alloc::psram_allocator!(
         unsafe { esp_hal::peripherals::PSRAM::steal() },
@@ -215,6 +253,12 @@ fn main() -> ! {
     #[cfg(feature = "remote")]
     remote::note_panic(panicked);
     let mut panel = board.panel;
+    // For reports from devices with other controllers: what it answered.
+    info!(
+        "display: {}, driven as {}",
+        board.display,
+        panel.controller()
+    );
     if let Err(e) = panel.init() {
         warn!("display: {e:?}");
     }
@@ -234,8 +278,9 @@ fn main() -> ! {
         board.keys,
         board.power_button,
     ));
-    // The X4 Pro's clock chip kept the time while it was off.
-    #[cfg(feature = "x4-pro")]
+    // The clock chip of the ESP32-S3 devices kept the time while it was
+    // off.
+    #[cfg(feature = "esp32s3")]
     if let Some(unix_ms) = board.clock_ms {
         clock::set(now(), unix_ms);
     }
@@ -282,11 +327,16 @@ fn kernel(storage: Box<dyn Storage>, ota: Option<&ota::Ota>) -> Kernel {
         // The panel takes bands turned any way (`display`).
         .rotation(true)
         .sleep(true);
-    // The X4's row of hints under the screen; the X4 Pro is touched.
+    // The X4's row of hints under the screen (the X4 Classic has its
+    // buttons); the X4 Pro is touched.
     #[cfg(feature = "x4")]
     let builder = builder.button_row(&buttons::ROW).catalog_device("x4");
     #[cfg(feature = "x4-pro")]
     let builder = builder.catalog_device("x4-pro");
+    #[cfg(feature = "x4-classic")]
+    let builder = builder
+        .button_row(&buttons::ROW)
+        .catalog_device("x4-classic");
     let builder = builder
         // A full refresh takes 3.5 s on its panel: screens change fast.
         .setting_default(&settings::FLASH_SCREENS, false)

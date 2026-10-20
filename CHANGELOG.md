@@ -97,6 +97,30 @@ change the plugin SDK.
   storage, band by band, how long it took and what was asked before it;
   scripts open any screen with its parameters (`open:`) and draw the
   screen again (`redraw`).
+- The Xteink X4 Classic ("X4 v2", an ESP32-S3 board with other pins than
+  the X4's): the firmware builds for it with the feature `x4-classic`
+  (`cargo +esp x4classic`; ADR 0013). Its panel's controller (SSD1677,
+  UC8179 or UC8279) is found at start and keeps a frame in its 8 MB of
+  PSRAM, as on the X4 Pro; its seven buttons are the X4's (with the row
+  of hints below the screen), each on a pin of its own; SD card, fuel
+  gauge and clock chip as on the X4 Pro. Its pins come from the FreeInk
+  SDK's and Papyrix's notes; not yet tried on one. Device id
+  `xteink-x4-classic`, `x4-classic` for plugin libraries.
+  `paperpaw-x4`: `buttons::State::keys`, the buttons from a pin each.
+- X4 and X4 Pro: the display controller is found at start, so devices
+  from other batches show something: the first X4 Pros have an SSD1677,
+  later ones a UC8179 or a UC8279 (ADR 0013). The firmware asks the panel
+  on its lines before the SPI bus takes them, logs what it answered
+  (`display: UC8179 (FLG 13, REV 00 00 01 FF FF, BUSY high at rest),
+  driven as UC8179`) and drives it with its controller's driver; without
+  a sure answer, with the one the device always had. Not yet tried on a
+  device with another controller; on a UC8279, and on an X4 with an
+  UltraChip, grays are shown in black and white for now.
+  `paperpaw-x4`: `probe` (the controller asked), `panel` (`Panel`, the
+  driver for the controller found, `Device`), `uc8179::Display` for the
+  UC8279 too (`Chip`) and without a frame of its own (`Frame`, the bands
+  written through windows of the controller's memory); its `new` takes
+  the chip and where the frame is kept.
 - X4: downloads into a file (updates, books, fonts) no longer run out of
   memory half way: pieces of an answer gathered before writing them to
   the card grew without bound when the connection handed over a lot at
