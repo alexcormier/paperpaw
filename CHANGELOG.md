@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Library: a folder whose name ends inside a character, such as one
+  named with two or three Chinese characters, no longer stops the
+  library (the X4 restarted whenever the folder's parent or a catalog
+  shelf was shown).
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
