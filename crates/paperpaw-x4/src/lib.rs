@@ -10,8 +10,7 @@
 //! `shells/xteink/src/board.rs`). Also what any X4 firmware does alike
 //! and can be tested here: remote control over USB ([`remote`]), the
 //! frame kept for the panel ([`sent`]), the clock set over the network
-//! ([`sntp`]) and the entries choosing the firmware started
-//! ([`ota_data`]).
+//! ([`sntp`]) and updates over the air ([`ota`]).
 //!
 //! PaperPaw draws the screen upright, 480 × 800, in bands of rows; the
 //! display writes them turned into the controller's memory, which keeps
@@ -29,7 +28,7 @@ pub mod card;
 pub mod cw2017;
 pub mod display;
 pub mod gt911;
-pub mod ota_data;
+pub mod ota;
 pub mod panel;
 pub mod probe;
 pub mod remote;

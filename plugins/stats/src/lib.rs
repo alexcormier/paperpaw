@@ -516,10 +516,12 @@ impl Plugin for Stats {
                 mark_finished(env, &reading.path, now);
             }
         })?;
-        let s = state.clone();
-        r.on(events::SUSPEND, move |env, _, _| {
-            s.borrow_mut().finish_page(env);
-        })?;
+        for event in [events::SUSPEND, events::STOPPING] {
+            let s = state.clone();
+            r.on(event, move |env, _, _| {
+                s.borrow_mut().finish_page(env);
+            })?;
+        }
         // Only a book still open goes on being read.
         let s = state.clone();
         r.on(events::RESUME, move |env, _, _| {

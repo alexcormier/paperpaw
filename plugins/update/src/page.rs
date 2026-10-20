@@ -248,8 +248,11 @@ impl UpdatePage {
                 }
                 buttons
             }
-            // Before going back, the way to search for a newer one.
-            View::Ready { age, .. } if !age.is_gt() && env.caps.network => {
+            // Before going back, the way to search for a newer one; not
+            // beside one's own build, whose key needs the room to be said.
+            View::Ready { age, signer, .. }
+                if !age.is_gt() && *signer == Signer::PaperPaw && env.caps.network =>
+            {
                 alloc::vec![Button::Install, Button::Check, Button::Close]
             }
             View::Ready { .. } => alloc::vec![Button::Install, Button::Close],
@@ -270,7 +273,7 @@ impl UpdatePage {
                     signer: Signer::Unknown,
                     ..
                 },
-            ) => "update.trust-install",
+            ) => "update.install-with-key",
             (
                 Button::Install,
                 View::Ready {
