@@ -99,6 +99,7 @@ impl Font {
     }
 
     pub fn advance(&self, ch: char, size: f32) -> f32 {
+        let ch = self.shown(ch);
         match self {
             Font::Bitmap(font) => font.advance(ch, size),
             Font::Stored(font) => font.advance(ch, size),
@@ -114,5 +115,24 @@ impl Font {
             #[cfg(feature = "outline")]
             Font::Outline(font) => font.has_char(ch),
         }
+    }
+
+    /// The character drawn for `ch`: itself, or where the font lacks it,
+    /// a stand-in of nearly the same look it has
+    /// ([`charset::stand_in`](crate::charset::stand_in)); else `ch`, for
+    /// the font's own replacement. Looked up only for characters that
+    /// have a stand-in, so others cost nothing more.
+    pub fn shown(&self, ch: char) -> char {
+        if crate::charset::stand_in(ch).is_none() {
+            return ch;
+        }
+        let mut shown = ch;
+        while let Some(next) = crate::charset::stand_in(shown) {
+            if self.has_char(shown) {
+                return shown;
+            }
+            shown = next;
+        }
+        if self.has_char(shown) { shown } else { ch }
     }
 }

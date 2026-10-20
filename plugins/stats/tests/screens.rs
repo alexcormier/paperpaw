@@ -156,11 +156,10 @@ fn stays_at_the_edges_of_time_do_not_count_today() {
 }
 
 /// The calendar reads a day's stays from the part of the log around it
-/// (`store::scan_range`), taking the log to be in the order of time: it
-/// stops at the stay dated 2106, so today's stays after it are not found
-/// and the day shows its minutes (from `days.bin`) with no pages or books.
+/// (`store::scan_range`), taking the log to be in the order of time; one
+/// stay dated far ahead (2106, a clock wrong once) does not end that
+/// reading, so the day's stays after it are found with their pages.
 #[test]
-#[ignore = "bug: after a stay dated far ahead the calendar finds no stays of the day (0 pages, no books)"]
 fn the_calendar_finds_the_days_stays_after_one_at_the_edge_of_time() {
     for device in [X4, TOUCH] {
         let mut app = app(device, stays_at_the_edges_of_time());

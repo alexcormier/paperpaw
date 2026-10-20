@@ -92,32 +92,19 @@ const TEXT_FACES: [&Id; 5] = [
 /// The characters of the packs' Latin set each text face lacks.
 fn missing_latin(contributions: &[Contribution], id: &Id) -> String {
     let face = &font(contributions, id).font;
-    chars(LATIN).filter(|&c| !face.has_char(c)).collect()
+    // Drawn as itself or as a stand-in of nearly the same look.
+    chars(LATIN)
+        .filter(|&c| !face.has_char(face.shown(c)))
+        .collect()
 }
 
-/// Characters of the Latin set the fonts lack today: the long s, the
-/// non-breaking hyphen, rare punctuation and the replacement character
-/// (see `text_faces_hold_all_of_the_latin_set`).
-const KNOWN_GAPS: &str = "ſ\u{2011}‖‗‛‟‣․‥‧‱‴‵‶‷‸\u{fffd}";
-
+/// Packs are made of `charset::LATIN`: every character of it is drawn
+/// by every text face, as itself or, where the face lacks it, as a
+/// stand-in of nearly the same look (`charset::stand_in`): Literata has
+/// no non-breaking hyphen (U+2011, common in EPUBs), long s (U+017F, in
+/// older German texts), replacement character or some rare punctuation,
+/// which would show as `?` on the X4.
 #[test]
-fn text_faces_hold_the_letters_and_punctuation_of_the_packs() {
-    let contributions = registered();
-    for id in TEXT_FACES {
-        let missing: String = missing_latin(&contributions, id)
-            .chars()
-            .filter(|c| !KNOWN_GAPS.contains(*c))
-            .collect();
-        assert!(missing.is_empty(), "{id} lacks {missing:?}");
-    }
-}
-
-/// Packs are made of `charset::LATIN`, and what a face lacks is skipped:
-/// on the X4 a book's non-breaking hyphen (U+2011, common in EPUBs) or
-/// long s (U+017F, in older German texts) shows as `?`, and Literata
-/// has no U+FFFD for unknown characters either.
-#[test]
-#[ignore = "bug: Literata lacks U+2011, U+017F, U+FFFD and rare punctuation of the Latin set"]
 fn text_faces_hold_all_of_the_latin_set() {
     let contributions = registered();
     for id in TEXT_FACES {
@@ -250,7 +237,8 @@ fn packs_hold_the_latin_set_at_every_size() {
     DefaultFontPacks.register(&mut registrar).unwrap();
     let contributions = registrar.into_contributions();
     for id in TEXT_FACES {
-        let Font::Bitmap(pack) = &font(&contributions, id).font else {
+        let face = &font(&contributions, id).font;
+        let Font::Bitmap(pack) = face else {
             panic!("{id} is a pack");
         };
         if std::env::var_os("PAPERPAW_FONT_SIZES").is_none() {
@@ -258,11 +246,13 @@ fn packs_hold_the_latin_set_at_every_size() {
             assert_eq!(sizes, [20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 48.0], "{id}");
         }
         for size in pack.sizes().collect::<Vec<_>>() {
-            // A character a strike lacks is drawn as its '?'.
+            // A character a strike lacks is drawn as its '?' (the
+            // replacement character on purpose); others as themselves or
+            // their stand-ins.
             let question = pack.glyph('?', size);
             let missing: String = chars(LATIN)
-                .filter(|&c| !KNOWN_GAPS.contains(c) && c != '?')
-                .filter(|&c| pack.glyph(c, size) == question)
+                .filter(|&c| face.shown(c) != '?')
+                .filter(|&c| pack.glyph(face.shown(c), size) == question)
                 .collect();
             assert!(missing.is_empty(), "{id} at {size} lacks {missing:?}");
         }

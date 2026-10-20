@@ -62,6 +62,7 @@ impl GlyphCache {
         ch: char,
         size: f32,
     ) -> GlyphRef<'a> {
+        let ch = font.shown(ch);
         match font {
             Font::Bitmap(font) => font.glyph(ch, size),
             Font::Stored(font) => self.cached(font_index, ch, size, |s| font.render(ch, s)),
