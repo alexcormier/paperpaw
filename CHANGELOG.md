@@ -6,6 +6,37 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The update's progress bar fills inside its rounded track at every
+  value; its fill stuck out past the track's rounded ends. SDK:
+  `ui::draw_progress`, a progress bar for any plugin.
+- SDK, before 1.0: what plugins build or match can grow without breaking
+  them. Structs plugins hand over (`ScreenSpec`, `MenuEntry`,
+  `MenuSection`, `StatusItemSpec`, `StatusLineSpec`, `StatusFrame`,
+  `WidgetTarget`, `Gesture`, `FormatSpec`, `SetupStepSpec`,
+  `SettingGroupSpec`, `SlotSpec`, `Manifest`, the filter specs,
+  `HyphenationSpec`, `install::{Package, PackageFile}`, `widgets::Look`,
+  `library::{Book, Provided}`, `document::{Block, Metadata}`,
+  `layout::{Style, Page, LayoutContext}`, `UiStyle`, `Speech`, `FontSpec`,
+  `Cells`, `Output`, `filters::Refresh`) are `#[non_exhaustive]`, made
+  with `new` from what they need and the rest set with a method of its
+  name (`MenuEntry::new(menu, item).order(90)`); `UiStyle::PLAIN` is a
+  style of fixed sizes, `Look::within` the same look elsewhere. Events of
+  `event_data!` are made with `new`, optional fields in an `optional { }`
+  block set by name; `Goto::new(path, at)` is `Goto::to`. Enums that will
+  grow (`StatusValue`, `Hint`, `Handled`, `SettingValue`, `Role`,
+  `RefreshMode`, `MemoryClass`, the firmware, Wi-Fi and install states
+  and more) are `#[non_exhaustive]`; so are the struct variants of
+  `Contribution` and six of `Command`, made with `Command::bind`,
+  `serve`, `connect`, `socket_send`, `socket_read` and `broadcast`.
+  Fields whose rule a constructor keeps are private: `ListView`'s,
+  `Rows`' and `Sections`' area and focus (`set_focus` says what changed),
+  `Slider`'s range and step. Lists that may grow are slices; the
+  built-in settings are all typed (`Setting<T>`). `ui` is split into
+  modules by theme, every path as before.
+- SDK: the crates it passes on are named lists, not `*`, each with its
+  own `api.txt` checked in CI; `layout` and `zip` need the feature
+  `unstable` until 1.0; `json` and `digest` are passed on too.
+
 - Reader: switching a book's own styles ("Publisher's formatting") keeps
   the place on the same text, with the book open or closed; before, the
   place moved, as the book converted without its styles has its text
