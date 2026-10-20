@@ -1454,9 +1454,14 @@ dependencies = [
 name = "paperpaw-plugin-browser"
 version = "0.4.0-dev"
 dependencies = [
+ "paperpaw-core",
  "paperpaw-digest",
  "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-format-epub",
  "paperpaw-sdk",
+ "proptest",
 ]
 
 [[package]]
