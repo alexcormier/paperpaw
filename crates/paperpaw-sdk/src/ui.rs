@@ -1308,7 +1308,9 @@ pub fn draw_empty(
     let room = f32::from(area.height);
     let text_height = |n: usize| line * n as f32;
     let words = if title.is_empty() { 0.0 } else { title_line };
-    let with_icon = icon_width(env, icon, icon_size) > 0.0
+    let icon_w = icon_width(env, icon, icon_size);
+    let with_icon = icon_w > 0.0
+        && icon_w <= f32::from(area.width)
         && icon_size + gap * 2.0 + words + gap + text_height(lines.len()) <= room;
     let icon_room = if with_icon {
         icon_size + gap * 2.0
@@ -1325,7 +1327,7 @@ pub fn draw_empty(
     let mut y = f32::from(area.y) + ((room - total) * 0.42).max(0.0);
     let centre = |w: f32| f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
     if with_icon {
-        let w = icon_width(env, icon, icon_size);
+        let w = icon_w;
         let at = Rect::new(area.x, y as u16, area.width, icon_size as u16);
         draw_icon(
             canvas,
@@ -1346,7 +1348,11 @@ pub fn draw_empty(
             size as u16,
         );
         let x = centre(w) + w + gap / 2.0;
-        draw_icon(canvas, env, PAW_ICON, size, x, below, style.faint(120));
+        // Only where it fits beside the icon (not in a narrow area).
+        let right = f32::from(area.x) + f32::from(area.width);
+        if x + icon_width(env, PAW_ICON, size) <= right {
+            draw_icon(canvas, env, PAW_ICON, size, x, below, style.faint(120));
+        }
         y += icon_room;
     }
     if !title.is_empty() {
