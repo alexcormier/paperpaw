@@ -214,6 +214,32 @@ impl AndroidPlugin {
                 },
             ),
         )?;
+        // A level shown before it is kept, as a slider moves: the light
+        // follows it at once, and goes back to the level kept if it is not
+        // kept. Other values shown (the text size) leave it alone, so as
+        // not to undo what the system's own controls set meanwhile.
+        let app = self.app.clone();
+        let following = std::cell::Cell::new(false);
+        r.subscribe(
+            events::PREVIEW_CHANGED,
+            Box::new(move |env: &Env<'_>, _: &Params, _: &mut Vec<Command>| {
+                let shown = |id: &Setting<i64>| {
+                    env.settings.get(id.as_str()) != env.settings.global(id.as_str())
+                };
+                let light = shown(&FRONTLIGHT) || shown(&WARMTH);
+                if !following.replace(light) && !light {
+                    return;
+                }
+                let level = env.settings.read(&FRONTLIGHT) as i32;
+                if lights.brightness(&app) != level {
+                    lights.set_brightness(&app, level);
+                }
+                let warmth = env.settings.read(&WARMTH) as i32;
+                if lights.has_warmth() && lights.warmth(&app) != warmth {
+                    lights.set_warmth(&app, warmth);
+                }
+            }),
+        )?;
         // The device's levels are the truth (they also change through
         // the system's own controls): take them over on start.
         let app = self.app.clone();

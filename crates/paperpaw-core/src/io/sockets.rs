@@ -1,7 +1,8 @@
 //! Plugins' sockets (see [ADR 0014](../../../docs/adr/0014-sockets-for-plugins.md)):
 //! TCP connections and UDP broadcasts the shell makes, numbered for it,
 //! and what it reports turned into the plugins' events. A file read goes
-//! to storage in parts as they come.
+//! to storage in parts as they come; text keeps its characters whole
+//! where a read ends inside one.
 
 use alloc::format;
 use alloc::string::String;
@@ -77,12 +78,10 @@ pub enum SocketEvent {
 /// What a socket is reading.
 #[derive(Debug)]
 enum Reading {
-    Text,
+    /// Text, up to `max` bytes a read.
+    Text { max: u32 },
     /// Into `path`, `left` bytes still to come.
-    File {
-        path: String,
-        left: u64,
-    },
+    File { path: String, left: u64 },
 }
 
 #[derive(Debug)]
@@ -93,6 +92,9 @@ struct Socket {
     /// Screens open when it was opened; it closes once fewer are.
     screens: usize,
     reading: Option<Reading>,
+    /// The start of a character a text read ended in (at most 3 bytes),
+    /// kept for the next one.
+    partial: Vec<u8>,
 }
 
 /// The sockets and broadcasts of all plugins.
@@ -182,6 +184,7 @@ impl Sockets {
                     events,
                     screens,
                     reading: None,
+                    partial: Vec::new(),
                 });
                 self.calls.push(SocketCall::Connect {
                     socket: number,
@@ -210,8 +213,9 @@ impl Sockets {
                 }
                 let max = match read {
                     SocketRead::Text { max } => {
-                        s.reading = Some(Reading::Text);
-                        max.clamp(1, SOCKET_PART)
+                        let max = max.clamp(1, SOCKET_PART);
+                        s.reading = Some(Reading::Text { max });
+                        max
                     }
                     SocketRead::File { path, len } => {
                         if let Err(e) = storage.write(&path, &[]) {
@@ -341,8 +345,27 @@ impl Sockets {
     ) {
         let s = &mut self.sockets[at];
         match s.reading.take() {
-            Some(Reading::Text) => {
-                let text = String::from_utf8_lossy(&data).into_owned();
+            // The other side closed; half a character is no text.
+            Some(Reading::Text { .. }) if data.is_empty() => {
+                s.partial.clear();
+                let text = String::new();
+                out.push(s.notice(|socket| SocketNotice::Received { socket, text }));
+            }
+            Some(Reading::Text { max }) => {
+                let mut bytes = core::mem::take(&mut s.partial);
+                bytes.extend_from_slice(&data);
+                let whole = bytes.len() - incomplete_end(&bytes);
+                s.partial = bytes.split_off(whole);
+                if bytes.is_empty() {
+                    // Only the start of a character came: read on, as
+                    // empty text would say the other side closed.
+                    s.reading = Some(Reading::Text { max });
+                    let socket = s.number;
+                    self.calls.push(SocketCall::Read { socket, max });
+                    return;
+                }
+                let text = String::from_utf8(bytes)
+                    .unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned());
                 out.push(s.notice(|socket| SocketNotice::Received { socket, text }));
             }
             Some(Reading::File { path, left }) => {
@@ -370,6 +393,28 @@ impl Sockets {
             None => {}
         }
     }
+}
+
+/// How many bytes at the end of `bytes` begin a UTF-8 character that is
+/// not complete yet (0 to 3).
+fn incomplete_end(bytes: &[u8]) -> usize {
+    let start = bytes.len().saturating_sub(3);
+    for at in (start..bytes.len()).rev() {
+        let byte = bytes[at];
+        if byte & 0xC0 == 0x80 {
+            // A continuation byte: its character starts before.
+            continue;
+        }
+        let length = match byte {
+            0xC0..=0xDF => 2,
+            0xE0..=0xEF => 3,
+            0xF0..=0xF7 => 4,
+            _ => 1,
+        };
+        let present = bytes.len() - at;
+        return if present < length { present } else { 0 };
+    }
+    0
 }
 
 impl Socket {
@@ -449,6 +494,54 @@ mod tests {
         };
         assert_eq!(params.get(p::TEXT), Some("12[0,{}]"));
         assert_eq!(params.get(params::ID), Some(SOCKET.as_str()));
+    }
+
+    #[test]
+    fn characters_split_between_reads_stay_whole() {
+        let storage = MemoryStorage::new();
+        let (mut sockets, mut out) = connected(&storage);
+        let mut texts = Vec::new();
+        // "Grüße 🐾" with each read ending inside a character, one read
+        // bringing only the start of one.
+        let reads: [&[u8]; 5] = [b"Gr\xc3", b"\xbc\xc3", b"\x9fe \xf0", b"\x9f\x90", b"\xbe"];
+        for data in reads {
+            out.clear();
+            let read = Command::SocketRead {
+                socket: SOCKET,
+                read: SocketRead::Text { max: 4 },
+            };
+            if sockets.calls.is_empty() {
+                sockets.command(read, true, 2, &storage, &mut out);
+            }
+            assert_eq!(
+                sockets.calls.pop(),
+                Some(SocketCall::Read { socket: 1, max: 4 })
+            );
+            let data = SocketEvent::Data {
+                socket: 1,
+                data: data.to_vec(),
+            };
+            sockets.event(data, &storage, &mut out);
+            if let Some(Command::Emit(_, params)) = out.last() {
+                texts.push(String::from(params.get(p::TEXT).unwrap()));
+            }
+        }
+        assert_eq!(texts, ["Gr", "ü", "ße ", "🐾"]);
+        // An invalid byte is replaced, as before.
+        let read = Command::SocketRead {
+            socket: SOCKET,
+            read: SocketRead::Text { max: 4 },
+        };
+        sockets.command(read, true, 2, &storage, &mut out);
+        let data = SocketEvent::Data {
+            socket: 1,
+            data: b"a\xffb".to_vec(),
+        };
+        sockets.event(data, &storage, &mut out);
+        let Some(Command::Emit(_, params)) = out.last() else {
+            panic!("no event");
+        };
+        assert_eq!(params.get(p::TEXT), Some("a\u{fffd}b"));
     }
 
     #[test]

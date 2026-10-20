@@ -29,6 +29,7 @@ use paperpaw_sdk::{
 use crate::catalogs::{self, Catalog};
 use crate::feed::{self, Feed, Search};
 use crate::sync::book_name;
+use crate::temp::{self, TempFiles};
 use crate::{CHOICE, ID, OPTION_LABELS, PLUGIN, URL, request};
 
 use self::covers::*;
@@ -49,12 +50,8 @@ fn cover_width(style: &UiStyle) -> u16 {
     (style.noted_row() * 2 / 3) as u16
 }
 
-fn feed_path() -> String {
-    format!(
-        "{}/browse.xml",
-        paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str())
-    )
-}
+/// What handles an answer: the file it was written to goes after.
+type Answer = fn(&mut BrowseScreen, &HttpReply, &str, &mut Cx<'_, '_>);
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Row {
@@ -87,10 +84,12 @@ pub(crate) struct BrowseScreen {
     fetching: Option<usize>,
     /// Entries whose cover failed, not tried again.
     failed: Vec<usize>,
+    /// The files the answers are written to.
+    temp: TempFiles,
 }
 
 impl BrowseScreen {
-    pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
+    pub(crate) fn new(env: &Env<'_>, params: &Params, temp: TempFiles) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
@@ -106,7 +105,7 @@ impl BrowseScreen {
         let catalog = params
             .get(ID)
             .and_then(|i| i.parse::<usize>().ok())
-            .and_then(|i| catalogs::load(env).get(i).cloned())
+            .and_then(|i| catalogs::load(env).ok()?.get(i).cloned())
             .unwrap_or_default();
         Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
@@ -121,6 +120,7 @@ impl BrowseScreen {
                 && env.settings.read(&crate::COVERS),
             fetching: None,
             failed: Vec::new(),
+            temp,
             catalog,
             style,
             header,
@@ -165,7 +165,7 @@ impl BrowseScreen {
         cx.command(Command::Http(crate::list_request(
             &self.catalog,
             url,
-            feed_path(),
+            self.temp.next("xml"),
             &LOADED,
             params,
         )));
@@ -190,7 +190,7 @@ impl BrowseScreen {
         false
     }
 
-    fn loaded(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
+    fn loaded(&mut self, reply: &HttpReply, file: &str, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let requested = reply.context.get(URL).unwrap_or_default().to_string();
         let Some((url, back)) = self.loading.clone().filter(|(url, _)| *url == requested) else {
@@ -198,12 +198,10 @@ impl BrowseScreen {
         };
         self.loading = None;
         if !self.answered(reply, &url, cx) {
-            let _ = env.storage.remove(&feed_path());
             return;
         }
         let base = reply.final_url.as_deref().unwrap_or(&url).to_string();
-        let feed = crate::read_list(&self.catalog, env.storage, &feed_path(), &base);
-        let _ = env.storage.remove(&feed_path());
+        let feed = crate::read_list(&self.catalog, env.storage, file, &base);
         if feed.entries.is_empty() && feed.title.is_empty() {
             let message = env.i18n.tr("opds.not-a-catalog").to_string();
             return self.say(message, cx);
@@ -237,7 +235,7 @@ impl BrowseScreen {
                 cx.command(Command::Http(request(
                     &self.catalog,
                     &url,
-                    feed_path(),
+                    self.temp.next("xml"),
                     &DESCRIBED,
                     Params::new().with(URL, url.clone()),
                 )));
@@ -252,16 +250,14 @@ impl BrowseScreen {
         cx.command(ask::text(env.i18n.tr("opds.search"), &TERMS).command());
     }
 
-    fn described(&mut self, reply: &HttpReply, cx: &mut Cx<'_, '_>) {
+    fn described(&mut self, reply: &HttpReply, file: &str, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let url = reply.context.get(URL).unwrap_or_default().to_string();
         if !self.answered(reply, &url, cx) {
-            let _ = env.storage.remove(&feed_path());
             return;
         }
         let base = reply.final_url.as_deref().unwrap_or(&url).to_string();
-        let template = feed::search_template(env.storage, &feed_path(), &base);
-        let _ = env.storage.remove(&feed_path());
+        let template = feed::search_template(env.storage, file, &base);
         match template {
             Some(template) => {
                 self.template = Some(template);
@@ -446,15 +442,23 @@ impl Screen for BrowseScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if let Some(reply) = LOADED.read(event, params) {
-            self.loaded(&reply, cx);
-        } else if let Some(reply) = COVER.read(event, params) {
-            self.cover_loaded(&reply, cx);
-        } else if let Some(reply) = DESCRIBED.read(event, params) {
-            self.described(&reply, cx);
-        } else if let Some(reply) = DOWNLOADED.read(event, params) {
-            self.downloaded(&reply, cx);
-        } else if let Some(typed) = TERMS.read(event, params) {
+        let answers: [(&Event<HttpReply>, Answer); 4] = [
+            (&LOADED, Self::loaded),
+            (&COVER, Self::cover_loaded),
+            (&DESCRIBED, Self::described),
+            (&DOWNLOADED, Self::downloaded),
+        ];
+        for (kind, answer) in answers {
+            if let Some(reply) = kind.read(event, params) {
+                // Answers come with the file they were written to.
+                if let Some(file) = temp::file(&reply) {
+                    answer(self, &reply, file, cx);
+                    temp::discard(cx.env().storage, &reply);
+                }
+                return;
+            }
+        }
+        if let Some(typed) = TERMS.read(event, params) {
             let terms = typed.text.trim();
             if let (false, Some(template)) = (terms.is_empty(), &self.template) {
                 let url = feed::search_url(template, terms);

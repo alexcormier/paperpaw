@@ -6,12 +6,14 @@
 //! [`access`](crate::access)). Paths are relative to the top of the
 //! storage and found part by part in the folders' listings ([`find`]):
 //! hidden ones (e.g. PaperPaw's own data) are out of reach, by any
-//! spelling.
+//! spelling. The settings file can be fetched but not changed
+//! ([`read_only`]).
 
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
+use paperpaw_sdk::builtin::CONFIG_FILE;
 use paperpaw_sdk::files;
 use paperpaw_sdk::{Instant, ServerResponse, Storage, StorageError};
 
@@ -88,6 +90,7 @@ pub fn answer(
         };
         text(status, &format!("{e:?}"))
     };
+    let read_only_answer = || text(403, "PaperPaw's settings cannot be changed from here.");
     let ok = |done: Option<Done>| {
         (
             ServerResponse::new(number, 200, "application/json", b"{\"ok\":true}".to_vec()),
@@ -113,26 +116,12 @@ pub fn answer(
                 Ok(_) => return text(404, "not found"),
                 Err(e) => return refused(e),
             };
-            match files::list(storage, &dir, false) {
-                Ok(entries) => {
-                    let mut json = String::from("[");
-                    for (i, entry) in entries.iter().enumerate() {
-                        if i > 0 {
-                            json.push(',');
-                        }
-                        json.push_str(&format!(
-                            "{{\"name\":{},\"dir\":{},\"size\":{}}}",
-                            json_string(&entry.name),
-                            entry.is_dir,
-                            entry.size
-                        ));
-                    }
-                    json.push(']');
-                    (
-                        ServerResponse::new(number, 200, "application/json", json.into_bytes()),
-                        None,
-                    )
-                }
+            let from = param(query, "from").and_then(|from| from.parse().ok());
+            match listing(storage, &dir, from.unwrap_or(0)) {
+                Ok(json) => (
+                    ServerResponse::new(number, 200, "application/json", json.into_bytes()),
+                    None,
+                ),
                 Err(e) => failed(e),
             }
         }
@@ -164,6 +153,9 @@ pub fn answer(
                 Err(e) => return not_received(refused(e)),
             };
             let at = files::free_path(storage, files::parent(&target), files::name(&target));
+            if read_only(&at) {
+                return not_received(read_only_answer());
+            }
             let result = match request.body_file {
                 Some(body) => files::move_to(storage, body, &at),
                 None => storage.write(&at, &[]),
@@ -180,6 +172,9 @@ pub fn answer(
                 Err(e) => return refused(e),
             };
             let at = files::free_path(storage, files::parent(&target), files::name(&target));
+            if read_only(&at) {
+                return read_only_answer();
+            }
             match storage.create_dir(&at) {
                 Ok(()) => ok(Some(Done::Folder(files::name(&at).to_string()))),
                 Err(e) => failed(e),
@@ -189,6 +184,7 @@ pub fn answer(
             let target = match find(storage, &wanted, false) {
                 // Not everything at once.
                 Ok(found) if found.path.is_empty() => return text(404, "not found"),
+                Ok(found) if read_only(&found.path) => return read_only_answer(),
                 Ok(found) => found.path,
                 Err(e) => return refused(e),
             };
@@ -199,6 +195,61 @@ pub fn answer(
         }
         _ => text(404, "not found"),
     }
+}
+
+/// Whether the file at `path` (as found) may be fetched but not changed:
+/// PaperPaw's settings (`paperpaw.ini`, in any case, as the card takes
+/// it), which name the servers that get passwords and keys. Anyone given
+/// the address could otherwise delete it and put a changed one in its
+/// place.
+pub fn read_only(path: &str) -> bool {
+    path.eq_ignore_ascii_case(CONFIG_FILE)
+}
+
+/// Bytes of a folder's listing in one answer, about: a folder with more
+/// entries is listed in parts, so even a folder of thousands of books
+/// takes little memory.
+pub const LIST_PART: usize = 8 * 1024;
+
+/// The entries of folder `dir` (hidden ones left out) from the `from`th
+/// on, as JSON: `{"entries":[{"name":…,"dir":…,"size":…},…]}` with
+/// `"next":n` where more follow from the `n`th. In the storage's order;
+/// the page sorts them.
+fn listing(storage: &dyn Storage, dir: &str, from: usize) -> Result<String, StorageError> {
+    let mut json = String::from("{\"entries\":[");
+    let mut index = 0;
+    let mut taken = 0;
+    let mut next = None;
+    storage.list(dir, &mut |entry| {
+        if entry.name.starts_with('.') {
+            return;
+        }
+        let at = index;
+        index += 1;
+        if at < from || next.is_some() {
+            return;
+        }
+        if json.len() >= LIST_PART {
+            next = Some(at);
+            return;
+        }
+        if taken > 0 {
+            json.push(',');
+        }
+        taken += 1;
+        json.push_str(&format!(
+            "{{\"name\":{},\"dir\":{},\"size\":{}}}",
+            json_string(entry.name),
+            entry.is_dir,
+            entry.size
+        ));
+    })?;
+    json.push(']');
+    if let Some(next) = next {
+        json.push_str(&format!(",\"next\":{next}"));
+    }
+    json.push('}');
+    Ok(json)
 }
 
 /// Where a request's path leads.

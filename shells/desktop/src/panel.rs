@@ -1,6 +1,7 @@
 //! Simulates how an e-ink panel shows the kernel's framebuffer.
 //!
-//! - Gray levels are mapped between "ink" and "paper" colours.
+//! - Gray levels are mapped between "ink" and "paper" colours, after the
+//!   colours of the settings where the device shows them.
 //! - Colour panels lose saturation and colour resolution (the colour filter
 //!   covers several pixels), while gray detail stays sharp.
 //! - Fast refreshes show only black and white, like A2/DU waveforms.
@@ -56,8 +57,16 @@ impl Panel {
         self.height
     }
 
-    /// Applies a refresh of `region` with the content of `frame`.
-    pub fn refresh(&mut self, frame: FrameView<'_>, region: Rect, mode: RefreshMode) {
+    /// Applies a refresh of `region` with the content of `frame`; grays
+    /// are shown between `colors` (text, paper) where given (see
+    /// `Kernel::colors`).
+    pub fn refresh(
+        &mut self,
+        frame: FrameView<'_>,
+        region: Rect,
+        mode: RefreshMode,
+        colors: Option<[[u8; 3]; 2]>,
+    ) {
         let Some(region) = region.intersection(&Rect::from_size(self.width, self.height)) else {
             return;
         };
@@ -74,6 +83,12 @@ impl Panel {
                 if mode == RefreshMode::Fast {
                     let luma = c.luma();
                     value = if luma >= 128 { [255; 3] } else { [0; 3] };
+                }
+                if let Some(colors) = colors
+                    && value[0] == value[1]
+                    && value[1] == value[2]
+                {
+                    value = tinted(value[0], colors);
                 }
                 self.pixels[usize::from(y) * usize::from(self.width) + usize::from(x)] =
                     on_paper(value);
@@ -152,6 +167,14 @@ impl Panel {
             self.fill(out, edge, value);
         }
     }
+}
+
+/// A gray between the text colour (0) and the paper colour (255).
+fn tinted(gray: u8, [ink, paper]: [[u8; 3]; 2]) -> [u8; 3] {
+    core::array::from_fn(|i| {
+        let (from, to) = (i32::from(ink[i]), i32::from(paper[i]));
+        (from + (to - from) * i32::from(gray) / 255) as u8
+    })
 }
 
 fn rgb([r, g, b]: [u8; 3]) -> u32 {

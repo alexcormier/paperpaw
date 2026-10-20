@@ -58,7 +58,9 @@ struct Coefficients {
 impl Coefficients {
     fn new(blocks: usize, n: usize) -> Result<Self, ImageError> {
         let kept = n * n;
-        let bytes = blocks * (kept * 2 + if n > 1 { 8 } else { 0 });
+        let bytes = blocks
+            .checked_mul(kept * 2 + if n > 1 { 8 } else { 0 })
+            .ok_or(ImageError::OutOfMemory)?;
         if bytes > MAX_COEFFICIENT_BYTES {
             return Err(ImageError::OutOfMemory);
         }
@@ -198,6 +200,8 @@ pub(crate) fn decode(
     // The first scan's header is next (its length already read).
     let mut marker = 0xda;
     let mut first = true;
+    // Blocks gone through by all scans.
+    let mut work = 0u64;
     loop {
         match marker {
             0xd9 => break,
@@ -206,7 +210,7 @@ pub(crate) fn decode(
                     reader.u16_be()?;
                 }
                 first = false;
-                let next = scan(reader, &mut frame, &layout, &mut coefficients)?;
+                let next = scan(reader, &mut frame, &layout, &mut coefficients, &mut work)?;
                 marker = next;
                 continue;
             }
@@ -250,6 +254,17 @@ fn keep(
     Ok(kept)
 }
 
+/// What to do with the next blocks of a scan.
+enum Go {
+    Decode,
+    /// Nothing to decode up to the next restart.
+    Skip,
+    /// The scan's data ended.
+    Stop,
+    /// The image ends here: more blocks than its data may ask for.
+    End,
+}
+
 /// The kinds of scans.
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum Kind {
@@ -259,13 +274,19 @@ enum Kind {
     AcRefine,
 }
 
+/// The marker [`scan`] returns for the image to end there: its scans
+/// went through more blocks than the data read may ask for.
+const END: u8 = 0xd9;
+
 /// Decodes one scan (its header next) into `coefficients` (of the first
-/// components, those kept); the marker after it.
+/// components, those kept), counting the blocks it goes through in
+/// `work`; the marker after it.
 fn scan(
     reader: &mut Reader<'_>,
     frame: &mut Frame,
     layout: &Layout,
     coefficients: &mut [Coefficients],
+    work: &mut u64,
 ) -> Result<u8, ImageError> {
     let count = usize::from(reader.byte()?);
     if count == 0 || count > 4 {
@@ -318,12 +339,7 @@ fn scan(
         frame.components[c].prediction = 0;
     }
 
-    let mut bits = Bits {
-        reader,
-        bits: 0,
-        count: 0,
-        marker: None,
-    };
+    let mut bits = Bits::new(reader);
     let restart = frame.restart_interval;
     let mut until_restart = restart;
     let mut eob_run = 0u32;
@@ -345,6 +361,23 @@ fn scan(
         }
         Ok(())
     };
+    // After each restart: whether to decode the next `blocks` (a block,
+    // or an MCU of them), stop the scan where its data ended, or stop
+    // decoding the image where its scans went through more blocks than
+    // its data may ask for.
+    let go = |bits: &Bits<'_, '_>, work: &mut u64, blocks: usize| {
+        *work += blocks as u64;
+        if !bits.affords(*work) {
+            Go::End
+        } else if !bits.exhausted() {
+            Go::Decode
+        } else if bits.resumes(restart) {
+            // No data up to the next restart: nothing to add.
+            Go::Skip
+        } else {
+            Go::Stop
+        }
+    };
 
     if count == 1 {
         // Not interleaved: the component's own blocks, row by row.
@@ -352,9 +385,15 @@ fn scan(
         let component = frame.components[c];
         let blocks_x = (width_of(frame, layout, c)).div_ceil(8);
         let blocks_y = (height_of(frame, layout, c)).div_ceil(8);
-        for by in 0..blocks_y {
+        'blocks: for by in 0..blocks_y {
             for bx in 0..blocks_x {
                 before_mcu(&mut bits, &mut frame.components, &mut eob_run)?;
+                match go(&bits, work, 1) {
+                    Go::Decode => {}
+                    Go::Skip => continue,
+                    Go::Stop => break 'blocks,
+                    Go::End => return Ok(END),
+                }
                 let block = by * layout.stride(&component) + bx;
                 let dc = frame.dc_tables[component.dc].as_ref();
                 let ac = frame.ac_tables[component.ac].as_ref();
@@ -371,9 +410,19 @@ fn scan(
         }
     } else {
         // Interleaved (DC only): MCU by MCU.
-        for my in 0..layout.mcus_y {
+        let mcu_blocks: usize = members
+            .iter()
+            .map(|&c| frame.components[c].h * frame.components[c].v)
+            .sum();
+        'mcus: for my in 0..layout.mcus_y {
             for mx in 0..layout.mcus_x {
                 before_mcu(&mut bits, &mut frame.components, &mut eob_run)?;
+                match go(&bits, work, mcu_blocks) {
+                    Go::Decode => {}
+                    Go::Skip => continue,
+                    Go::Stop => break 'mcus,
+                    Go::End => return Ok(END),
+                }
                 for &c in &members {
                     let component = frame.components[c];
                     for by in 0..component.v {

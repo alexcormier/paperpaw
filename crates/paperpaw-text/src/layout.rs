@@ -87,7 +87,8 @@ pub fn wrap_lines_hyphenated(
             let before = line_width - measure(word_start..i);
             let hyphenated = hyphenate.and_then(|hyphenate| {
                 hyphen_break(
-                    text, word_start, line_start, before, available, &measure, &advance, hyphenate,
+                    text, word_start, line_start, i, before, available, &measure, &advance,
+                    hyphenate,
                 )
             });
             if let Some((cut, cut_width)) = hyphenated {
@@ -158,15 +159,17 @@ pub fn wrap_lines_hyphenated(
 }
 
 /// The last hyphenation point of the word at `word_start` that fits on the
-/// line: `(byte offset, line width with the hyphen)`. The letters the word
-/// starts with are hyphenated (with at least one lowercase letter among
-/// them); punctuation before them and whatever follows them, such as
-/// "(s)" or "'s", stays attached.
+/// line before `overflow`, the character that does not: `(byte offset,
+/// line width with the hyphen)`. The letters the word starts with are
+/// hyphenated (with at least one lowercase letter among them); punctuation
+/// before them and whatever follows them, such as "(s)" or "'s", stays
+/// attached.
 #[allow(clippy::too_many_arguments)]
 fn hyphen_break(
     text: &str,
     word_start: usize,
     line_start: usize,
+    overflow: usize,
     before: f32,
     available: f32,
     measure: &dyn Fn(Range<usize>) -> f32,
@@ -189,8 +192,14 @@ fn hyphen_break(
     }
     let mut best = None;
     hyphenate(core, &mut |at| {
+        // Points between characters of the word only; none past the
+        // character that overflows, which a negative width behind it
+        // could make seem to fit.
+        if !core.is_char_boundary(at) {
+            return;
+        }
         let cut = word_start + first + at;
-        if cut <= line_start {
+        if cut <= line_start || cut > overflow {
             return;
         }
         // The hyphen is set like the letter before it.
@@ -325,6 +334,27 @@ mod tests {
         assert!(caps.iter().all(|l| !l.hyphen));
         // Without hyphenation the word moves to the next line.
         assert_eq!(lines(text, 9.0), vec!["ab", "abcdefghi", ", xy"]);
+    }
+
+    #[test]
+    fn hyphenation_points_past_the_overflow_are_ignored() {
+        // A character after the one that overflows has a negative width,
+        // so the line up to a cut behind it would seem to fit.
+        let hyphenate = |word: &str, out: &mut dyn FnMut(usize)| out(word.len() - 1);
+        let advance = |_, c| if c == 'z' { -10.0 } else { 1.0 };
+        let text = "abcdefgzk";
+        let result = wrap_lines_hyphenated(text, |_| 4.0, advance, Some(&hyphenate));
+        assert!(result.iter().all(|l| l.range.start <= l.range.end));
+        assert_eq!(&text[result[0].range.clone()], "abcd");
+        // Points inside a character or past the word are ignored too.
+        let wild = |_: &str, out: &mut dyn FnMut(usize)| {
+            out(1);
+            out(2);
+            out(99);
+        };
+        let result = wrap_lines_hyphenated("ağbcdef", |_| 4.0, |_, _| 1.0, Some(&wild));
+        assert_eq!(result[0].range, 0..1);
+        assert!(result[0].hyphen);
     }
 
     #[test]

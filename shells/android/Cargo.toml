@@ -19,6 +19,7 @@ crate-type = ["cdylib", "rlib"]
 paperpaw-digest.workspace = true
 paperpaw-app = { workspace = true, features = ["outline"] }
 paperpaw-core = { workspace = true, features = ["color", "outline"] }
+paperpaw-http.workspace = true
 paperpaw-serve.workspace = true
 paperpaw-fs.workspace = true
 paperpaw-graphics = { workspace = true, features = ["color"] }
@@ -28,13 +29,16 @@ paperpaw-sdk.workspace = true
 getrandom = "0.4"
 # Its setting's id, for the shared dictionaries folder.
 paperpaw-plugin-dictionary.workspace = true
+log = "0.4"
 
 [target.'cfg(target_os = "android")'.dependencies]
 android-activity = { version = "0.6", features = ["native-activity"] }
 android_logger = { version = "0.15", default-features = false }
 jni = "0.21"
-log = "0.4"
 ndk = "0.9"
+
+[dev-dependencies]
+paperpaw-i18n.workspace = true
 
 [lints]
 workspace = true

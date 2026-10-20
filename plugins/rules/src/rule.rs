@@ -6,8 +6,9 @@
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
+use core::cell::RefCell;
 
-use paperpaw_sdk::{Env, Id, Storage};
+use paperpaw_sdk::{Env, Id, Storage, StorageError};
 
 use crate::PLUGIN;
 
@@ -265,10 +266,19 @@ fn path() -> String {
     format!("{}/rules.txt", Env::plugin_dir(PLUGIN.as_str()))
 }
 
-pub(crate) fn load(storage: &dyn Storage) -> Vec<Rule> {
-    let data = paperpaw_sdk::read_file(storage, &path(), 64 * 1024).unwrap_or_default();
-    String::from_utf8_lossy(&data)
-        .lines()
+/// The rules the card keeps: none where there is no file yet, an error
+/// where it cannot be read (then nothing may be saved over it).
+pub(crate) fn load(storage: &dyn Storage) -> Result<Vec<Rule>, StorageError> {
+    let data = match paperpaw_sdk::read_file(storage, &path(), 64 * 1024) {
+        Ok(data) => data,
+        Err(StorageError::NotFound) => return Ok(Vec::new()),
+        Err(error) => return Err(error),
+    };
+    Ok(parse(&String::from_utf8_lossy(&data)))
+}
+
+fn parse(text: &str) -> Vec<Rule> {
+    text.lines()
         .filter_map(|line| {
             let mut fields = line.split('\t');
             let trigger = Trigger::parse(fields.next()?)?;
@@ -298,7 +308,7 @@ pub(crate) fn load(storage: &dyn Storage) -> Vec<Rule> {
         .collect()
 }
 
-pub(crate) fn save(storage: &dyn Storage, rules: &[Rule]) {
+pub(crate) fn save(storage: &dyn Storage, rules: &[Rule]) -> Result<(), StorageError> {
     let mut text = String::new();
     for rule in rules {
         let (kind, target) = match &rule.effect {
@@ -321,7 +331,41 @@ pub(crate) fn save(storage: &dyn Storage, rules: &[Rule]) {
         text.push_str(&line);
         text.push('\n');
     }
-    let _ = storage.write(&path(), text.as_bytes());
+    storage.write(&path(), text.as_bytes())
+}
+
+/// The rules, read once and kept: every event looks at them, and only
+/// the list of rules changes them.
+#[derive(Debug, Default)]
+pub(crate) struct Store {
+    rules: RefCell<Option<Vec<Rule>>>,
+}
+
+impl Store {
+    /// Runs `f` with the rules; none while they cannot be read (they are
+    /// tried again next time).
+    pub(crate) fn with<R>(&self, storage: &dyn Storage, f: impl FnOnce(&[Rule]) -> R) -> R {
+        if self.rules.borrow().is_none()
+            && let Ok(rules) = load(storage)
+        {
+            *self.rules.borrow_mut() = Some(rules);
+        }
+        f(self.rules.borrow().as_deref().unwrap_or_default())
+    }
+
+    /// The rules to change, if they can be read.
+    pub(crate) fn get(&self, storage: &dyn Storage) -> Option<Vec<Rule>> {
+        self.with(storage, |_| ());
+        self.rules.borrow().clone()
+    }
+
+    /// Keeps `rules`, on the card and here.
+    pub(crate) fn save(&self, storage: &dyn Storage, rules: Vec<Rule>) -> Result<(), StorageError> {
+        let saved = save(storage, &rules);
+        // Not saved, what the card has is read again next time.
+        *self.rules.borrow_mut() = saved.is_ok().then_some(rules);
+        saved
+    }
 }
 
 /// Minutes from `now` (minute of the day) until `at`: the next time the
@@ -339,7 +383,7 @@ mod tests {
     #[test]
     fn rules_are_kept() {
         let storage = MemoryStorage::new();
-        assert!(load(&storage).is_empty());
+        assert!(load(&storage).unwrap().is_empty());
         let night = Id::new_static("core.night-mode");
         let rules: Vec<Rule> = [
             Trigger::Time {
@@ -389,8 +433,8 @@ mod tests {
             },
         })
         .collect();
-        save(&storage, &rules);
-        assert_eq!(load(&storage), rules);
+        save(&storage, &rules).unwrap();
+        assert_eq!(load(&storage).unwrap(), rules);
         // Written before days existed: every day.
         assert_eq!(
             Trigger::parse("time 22:00"),
@@ -417,9 +461,10 @@ mod tests {
                 on: true,
                 condition: Condition::SwitchOn(night.clone()),
             }],
-        );
+        )
+        .unwrap();
         assert_eq!(
-            load(&storage)[0].effect,
+            load(&storage).unwrap()[0].effect,
             Effect::Message(String::from("a b"))
         );
         assert_eq!(Condition::parse(""), Some(Condition::Always));
@@ -473,7 +518,7 @@ mod tests {
     #[test]
     fn rules_of_version_1_are_read() {
         let storage = MemoryStorage::new().with(&path(), include_str!("../testdata/rules.txt.v1"));
-        let rules = load(&storage);
+        let rules = load(&storage).unwrap();
         let night = Id::new_static("core.night-mode");
         assert_eq!(rules.len(), 5);
         assert_eq!(

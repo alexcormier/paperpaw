@@ -10,6 +10,7 @@
 
 use alloc::format;
 use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 use paperpaw_qr::QrCode;
 use paperpaw_sdk::builtin::{actions, params};
@@ -18,7 +19,7 @@ use paperpaw_sdk::replies::{ServerNotice, Typed};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Instant, Params, Rect,
-    RefreshMode, Screen, ServerResponse,
+    RefreshMode, Screen, ServerResponse, Storage,
 };
 
 use crate::access::{self, Access, Guard};
@@ -27,7 +28,7 @@ use crate::{PORT, no_random, web};
 const SERVER: Id = Id::new_static("transfer.phone-server");
 const SERVER_EVENT: Event<ServerNotice> = Event::new("transfer.phone-server-event");
 /// Longest text taken, in bytes.
-const MAX_TEXT: usize = 4096;
+pub(crate) const MAX_TEXT: usize = 4096;
 
 /// The web page; its texts come from the translations.
 const PAGE: &str = include_str!("phone.html");
@@ -109,12 +110,10 @@ impl PhoneScreen {
                 let request = Request {
                     method: &method,
                     target: &target,
-                    body: body_file.and_then(|file| {
-                        paperpaw_sdk::read_file(env.storage, &file, MAX_TEXT).ok()
-                    }),
+                    body_file: body_file.as_deref(),
                     at: env.now,
                 };
-                let (response, text) = answer(number, guard, &self.page, &request);
+                let (response, text) = answer(number, guard, &self.page, env.storage, &request);
                 cx.command(Command::Respond(response));
                 // The text to the keyboard, and done.
                 if let Some(text) = text
@@ -143,17 +142,21 @@ impl PhoneScreen {
 pub(crate) struct Request<'a> {
     pub method: &'a str,
     pub target: &'a str,
-    pub body: Option<alloc::vec::Vec<u8>>,
+    /// Where its body was saved, if it had one.
+    pub body_file: Option<&'a str>,
     /// When it came.
     pub at: Instant,
 }
 
 /// The answer to `request`, if `guard` lets it in, and the text sent, if
-/// that is what it did.
+/// that is what it did. A text longer than [`MAX_TEXT`] is refused
+/// (*413*), so the page keeps it and says so, and the field it was typed
+/// for is left as it is.
 pub(crate) fn answer(
     number: u32,
     guard: &mut Guard,
     page: &str,
+    storage: &dyn Storage,
     request: &Request<'_>,
 ) -> (ServerResponse, Option<String>) {
     let (path, query) = request
@@ -174,15 +177,22 @@ pub(crate) fn answer(
         }
     }
     if request.method == "POST" && path == "/send" {
-        let text = request
-            .body
-            .as_deref()
-            .map(|data| String::from_utf8_lossy(data).into_owned())
-            .unwrap_or_default();
-        return (
-            response(200, "application/json", b"{\"ok\":true}"),
-            Some(text),
-        );
+        let plain = "text/plain; charset=utf-8";
+        let data = match request.body_file {
+            None => Ok(Vec::new()),
+            Some(file) if storage.size(file).is_ok_and(|size| size > MAX_TEXT as u64) => {
+                let text = b"The text is too long for the device: send a shorter one.";
+                return (response(413, plain, text), None);
+            }
+            Some(file) => paperpaw_sdk::read_file(storage, file, MAX_TEXT),
+        };
+        return match data {
+            Ok(data) => (
+                response(200, "application/json", b"{\"ok\":true}"),
+                Some(String::from_utf8_lossy(&data).into_owned()),
+            ),
+            Err(_) => (response(500, plain, b"The text could not be read."), None),
+        };
     }
     if path == "/" {
         (

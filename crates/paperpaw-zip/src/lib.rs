@@ -77,6 +77,8 @@ pub struct Entry {
     pub method: Method,
     pub compressed_size: u32,
     pub size: u32,
+    /// CRC-32 of the content, checked when it is read to its end.
+    crc: u32,
     /// Offset of the local file header.
     header_offset: u32,
     /// Offset of the central directory record.
@@ -99,11 +101,45 @@ pub struct ZipArchive {
     index: Vec<(u32, u32)>,
 }
 
-/// FNV-1a, to find entries without keeping their names in memory.
+/// FNV-1a, to find entries without keeping their names in memory. ASCII
+/// letters count as lowercase, so names that differ only in case share a
+/// hash and can be found by either.
 fn hash(name: &[u8]) -> u32 {
     name.iter().fold(0x811c_9dc5, |hash, &b| {
-        (hash ^ u32::from(b)).wrapping_mul(0x0100_0193)
+        (hash ^ u32::from(b.to_ascii_lowercase())).wrapping_mul(0x0100_0193)
     })
+}
+
+/// The CRC-32 of ZIP entries, over `data` continuing `crc`. Half a byte
+/// at a time: its table takes 64 bytes, a quarter of the work of going
+/// bit by bit.
+fn crc32(crc: u32, data: &[u8]) -> u32 {
+    const TABLE: [u32; 16] = {
+        let mut table = [0; 16];
+        let mut i = 0;
+        while i < 16 {
+            let mut crc = i as u32;
+            let mut bit = 0;
+            while bit < 4 {
+                crc = if crc & 1 == 1 {
+                    (crc >> 1) ^ 0xedb8_8320
+                } else {
+                    crc >> 1
+                };
+                bit += 1;
+            }
+            table[i] = crc;
+            i += 1;
+        }
+        table
+    };
+    let mut crc = !crc;
+    for &byte in data {
+        crc ^= u32::from(byte);
+        crc = (crc >> 4) ^ TABLE[(crc & 0x0f) as usize];
+        crc = (crc >> 4) ^ TABLE[(crc & 0x0f) as usize];
+    }
+    !crc
 }
 
 /// Size of a central directory record without name, extra and comment.
@@ -148,31 +184,51 @@ fn zeroed(len: usize) -> Result<Vec<u8>, ZipError> {
     Ok(buffer)
 }
 
-/// Finds the end-of-central-directory record, searching backwards from
-/// the end of the file in small steps: it usually is the last 22 bytes,
-/// but an archive comment may follow it.
-fn find_end_record(storage: &dyn Storage, path: &str, size: u64) -> Result<u64, ZipError> {
+/// Finds the end-of-central-directory record and returns it, searching
+/// backwards from the end of the file in small steps: it usually is the
+/// last 22 bytes, but an archive comment may follow it.
+///
+/// The record taken is the one whose comment ends with the file. Only if
+/// there is none (data after the archive, a damaged comment) is the last
+/// one taken whose central directory lies before it, so that a signature
+/// inside a comment is not mistaken for the record.
+fn find_end_record(storage: &dyn Storage, path: &str, size: u64) -> Result<Vec<u8>, ZipError> {
     const STEP: u64 = 1024;
     if size < EOCD_SIZE {
         return Err(ZipError::Invalid("too small"));
     }
     let lowest = size.saturating_sub(EOCD_SIZE + MAX_COMMENT);
+    let mut fallback = None;
     let mut end = size;
     while end > lowest {
         let start = end.saturating_sub(STEP).max(lowest);
-        // Overlap by three bytes so a signature across steps is found.
-        let len = ((end + 3).min(size) - start) as usize;
+        // Overlap by a record less one byte, so every record that starts
+        // in this step is read whole.
+        let len = ((end + EOCD_SIZE - 1).min(size) - start) as usize;
         let window = read_exact(storage, path, start, len)?;
-        let found =
-            window.windows(4).enumerate().rev().find(|(i, w)| {
-                *w == [0x50, 0x4b, 0x05, 0x06] && start + *i as u64 + EOCD_SIZE <= size
-            });
-        if let Some((i, _)) = found {
-            return Ok(start + i as u64);
+        for i in (0..(end - start) as usize).rev() {
+            let Some(record) = window.get(i..i + EOCD_SIZE as usize) else {
+                continue;
+            };
+            if record[..4] != [0x50, 0x4b, 0x05, 0x06] {
+                continue;
+            }
+            let at = start + i as u64;
+            let comment_end = at + EOCD_SIZE + u64::from(u16_at(record, 20).unwrap_or(0));
+            if comment_end == size {
+                return Ok(record.to_vec());
+            }
+            let cd_offset = u32_at(record, 16).unwrap_or(0);
+            let cd_end = u64::from(cd_offset) + u64::from(u32_at(record, 12).unwrap_or(0));
+            // ZIP64 keeps the central directory's place elsewhere.
+            let before = cd_offset == u32::MAX || cd_end <= at;
+            if before && fallback.is_none() {
+                fallback = Some(record.to_vec());
+            }
         }
         end = start;
     }
-    Err(ZipError::Invalid("no end of central directory"))
+    fallback.ok_or(ZipError::Invalid("no end of central directory"))
 }
 
 impl ZipArchive {
@@ -180,8 +236,7 @@ impl ZipArchive {
     /// entry, so even large directories need little memory.
     pub fn open(storage: &dyn Storage, path: &str) -> Result<ZipArchive, ZipError> {
         let size = storage.size(path)?;
-        let eocd = find_end_record(storage, path, size)?;
-        let record = read_exact(storage, path, eocd, EOCD_SIZE as usize)?;
+        let record = find_end_record(storage, path, size)?;
         let truncated = ZipError::Invalid("truncated");
         let count = u16_at(&record, 10).ok_or(truncated.clone())?;
         let cd_size = u32_at(&record, 12).ok_or(truncated.clone())?;
@@ -211,7 +266,8 @@ impl ZipArchive {
             }
             let name_len = field(28)?;
             let name = read_exact(storage, path, at + RECORD as u64, name_len as usize)?;
-            index.push((hash(&name), at as u32));
+            // Hashed as the entry is named (see `ZipArchive::record`).
+            index.push((hash(String::from_utf8_lossy(&name).as_bytes()), at as u32));
             at += RECORD as u64 + name_len + field(30)? + field(32)?;
         }
         index.sort_unstable();
@@ -241,52 +297,57 @@ impl ZipArchive {
             .map(move |&(_, offset)| self.entry_by_record(storage, offset))
     }
 
-    /// The entry named `name` (exact, case-sensitive path inside the
-    /// archive), read from the central directory.
+    /// The entry named `name` (the path inside the archive), read from the
+    /// central directory. Without an entry of exactly that name, one whose
+    /// name differs only in the case of ASCII letters is taken, as links in
+    /// books made on systems that ignore case may not match their files.
     pub fn entry(&self, storage: &dyn Storage, name: &str) -> Result<Option<Entry>, ZipError> {
         let wanted = hash(name.as_bytes());
         let first = self.index.partition_point(|&(h, _)| h < wanted);
+        let mut folded = None;
         for &(h, offset) in &self.index[first..] {
             if h != wanted {
                 break;
             }
-            let entry = self.entry_by_record(storage, offset)?;
-            if entry.name == name {
-                return Ok(Some(entry));
+            let (head, found) = self.record(storage, offset)?;
+            if found == name {
+                return entry(&head, found, offset).map(Some);
+            }
+            if folded.is_none() && found.eq_ignore_ascii_case(name) {
+                folded = Some((head, found, offset));
             }
         }
-        Ok(None)
+        folded
+            .map(|(head, found, offset)| entry(&head, found, offset))
+            .transpose()
     }
 
     /// The entry whose [`Entry::record`] is `offset`, a compact way to
     /// remember entries without their names.
     pub fn entry_by_record(&self, storage: &dyn Storage, offset: u32) -> Result<Entry, ZipError> {
-        let bad = ZipError::Invalid("bad central directory entry");
+        let (head, name) = self.record(storage, offset)?;
+        entry(&head, name, offset)
+    }
+
+    /// The central directory record at `offset`: its fixed part and the
+    /// entry's name (invalid UTF-8 replaced).
+    fn record(&self, storage: &dyn Storage, offset: u32) -> Result<(Vec<u8>, String), ZipError> {
         let head = read_exact(storage, &self.path, u64::from(offset), RECORD)?;
-        let flags = u16_at(&head, 8).ok_or(bad.clone())?;
-        let method = match u16_at(&head, 10).ok_or(bad.clone())? {
-            0 => Method::Stored,
-            8 => Method::Deflate,
-            _ => return Err(ZipError::Unsupported("compression method")),
-        };
-        if flags & 1 != 0 {
-            return Err(ZipError::Unsupported("encrypted entries"));
+        if u32_at(&head, 0) != Some(0x0201_4b50) {
+            return Err(ZipError::Invalid("bad central directory entry"));
         }
-        let name_len = usize::from(u16_at(&head, 28).ok_or(bad.clone())?);
+        let name_len = usize::from(u16_at(&head, 28).unwrap_or(0));
         let name = read_exact(
             storage,
             &self.path,
             u64::from(offset) + RECORD as u64,
             name_len,
         )?;
-        Ok(Entry {
-            name: String::from_utf8_lossy(&name).into_owned(),
-            method,
-            compressed_size: u32_at(&head, 20).ok_or(bad.clone())?,
-            size: u32_at(&head, 24).ok_or(bad.clone())?,
-            header_offset: u32_at(&head, 42).ok_or(bad)?,
-            record: offset,
-        })
+        let name = match String::from_utf8(name) {
+            Ok(name) => name,
+            Err(e) => String::from_utf8_lossy(e.as_bytes()).into_owned(),
+        };
+        Ok((head, name))
     }
 
     /// Where a stored (uncompressed) entry's bytes are in the archive file,
@@ -326,6 +387,11 @@ impl ZipArchive {
     /// Inflating needs about 10 KiB of decoder state plus a window that
     /// holds the entry, at most 32 KiB (the deflate history); small entries
     /// such as package documents therefore need very little memory.
+    ///
+    /// Content that turns out longer than the entry's size is an error as
+    /// soon as it does, so the window always holds what it refers back to;
+    /// content that is shorter, or whose checksum is wrong, is an error at
+    /// its end, where the stream would end.
     pub fn stream(
         &self,
         storage: &dyn Storage,
@@ -363,7 +429,9 @@ impl ZipArchive {
                 decoder.resize_with(1, DecompressorOxide::default);
                 // A power of two (required for a wrapping window) that holds
                 // the whole entry, or the full deflate history.
-                let window_len = (entry.size as usize).next_power_of_two().clamp(64, WINDOW);
+                let window_len = (entry.size.min(WINDOW as u32) as usize)
+                    .next_power_of_two()
+                    .max(64);
                 Some((decoder, zeroed(window_len)?))
             }
         };
@@ -379,6 +447,10 @@ impl ZipArchive {
             ready: 0,
             left: 0,
             done: false,
+            size: u64::from(entry.size),
+            crc: entry.crc,
+            made: 0,
+            made_crc: 0,
         })
     }
 
@@ -431,6 +503,11 @@ pub struct EntryReader<'a> {
     ready: usize,
     left: usize,
     done: bool,
+    /// The entry's size and checksum, and those of the content so far.
+    size: u64,
+    crc: u32,
+    made: u64,
+    made_crc: u32,
 }
 
 impl fmt::Debug for EntryReader<'_> {
@@ -466,6 +543,8 @@ impl EntryReader<'_> {
                 } else {
                     self.fill(storage)?;
                     (self.ready, self.left) = (0, self.end);
+                    self.made += self.end as u64;
+                    self.made_crc = crc32(self.made_crc, &self.input[..self.end]);
                 }
                 continue;
             }
@@ -489,6 +568,14 @@ impl EntryReader<'_> {
             );
             self.start += consumed;
             (self.ready, self.left) = (self.position, written);
+            self.made += written as u64;
+            if self.made > self.size {
+                return Err(ZipError::Invalid("entry longer than its size"));
+            }
+            self.made_crc = crc32(
+                self.made_crc,
+                &window[self.position..self.position + written],
+            );
             self.position = (self.position + written) & (window.len() - 1);
             match status {
                 TINFLStatus::Done => self.done = true,
@@ -498,6 +585,14 @@ impl EntryReader<'_> {
                     return Err(ZipError::Invalid("truncated deflate data"));
                 }
                 _ => return Err(ZipError::Invalid("corrupt deflate data")),
+            }
+        }
+        if self.left == 0 && self.done {
+            if self.made != self.size {
+                return Err(ZipError::Invalid("entry shorter than its size"));
+            }
+            if self.made_crc != self.crc {
+                return Err(ZipError::Invalid("checksum mismatch"));
             }
         }
         Ok(())
@@ -529,6 +624,36 @@ impl EntryReader<'_> {
         self.left -= n;
         Ok(n)
     }
+}
+
+/// The entry described by the central directory record `head` (see
+/// [`ZipArchive::record`]).
+fn entry(head: &[u8], name: String, record: u32) -> Result<Entry, ZipError> {
+    let bad = ZipError::Invalid("bad central directory entry");
+    let field = |at| u32_at(head, at).ok_or(bad.clone());
+    let flags = u16_at(head, 8).ok_or(bad.clone())?;
+    let method = match u16_at(head, 10).ok_or(bad.clone())? {
+        0 => Method::Stored,
+        8 => Method::Deflate,
+        _ => return Err(ZipError::Unsupported("compression method")),
+    };
+    if flags & 1 != 0 {
+        return Err(ZipError::Unsupported("encrypted entries"));
+    }
+    let (compressed_size, size) = (field(20)?, field(24)?);
+    // Stored content is read by either size.
+    if method == Method::Stored && compressed_size != size {
+        return Err(bad);
+    }
+    Ok(Entry {
+        name,
+        method,
+        compressed_size,
+        size,
+        crc: field(16)?,
+        header_offset: field(42)?,
+        record,
+    })
 }
 
 /// Builds ZIP archives in memory, for tests of ZIP-based formats.
@@ -569,13 +694,15 @@ pub mod testing {
                     data.clone()
                 };
                 let method: u16 = if *deflate { 8 } else { 0 };
+                let crc = super::crc32(0, data).to_le_bytes();
                 let offset = out.len() as u32;
                 let mut header = Vec::new();
                 header.extend_from_slice(&0x0403_4b50u32.to_le_bytes());
                 header.extend_from_slice(&20u16.to_le_bytes());
                 header.extend_from_slice(&0u16.to_le_bytes());
                 header.extend_from_slice(&method.to_le_bytes());
-                header.extend_from_slice(&[0; 8]); // time, date, crc (unchecked)
+                header.extend_from_slice(&[0; 4]); // time, date
+                header.extend_from_slice(&crc);
                 header.extend_from_slice(&(payload.len() as u32).to_le_bytes());
                 header.extend_from_slice(&(data.len() as u32).to_le_bytes());
                 header.extend_from_slice(&(name.len() as u16).to_le_bytes());
@@ -589,7 +716,8 @@ pub mod testing {
                 central.extend_from_slice(&20u16.to_le_bytes());
                 central.extend_from_slice(&0u16.to_le_bytes());
                 central.extend_from_slice(&method.to_le_bytes());
-                central.extend_from_slice(&[0; 8]);
+                central.extend_from_slice(&[0; 4]); // time, date
+                central.extend_from_slice(&crc);
                 central.extend_from_slice(&(payload.len() as u32).to_le_bytes());
                 central.extend_from_slice(&(data.len() as u32).to_le_bytes());
                 central.extend_from_slice(&(name.len() as u16).to_le_bytes());
@@ -713,6 +841,167 @@ mod tests {
             assert_eq!(out, big, "{name}");
             assert_eq!(reader.read(&storage, &mut [0; 8]).unwrap(), 0);
         }
+    }
+
+    /// Where the central directory records of `zip` start.
+    fn records(zip: &[u8]) -> Vec<usize> {
+        zip.windows(4)
+            .enumerate()
+            .filter(|(_, w)| *w == [0x50, 0x4b, 0x01, 0x02])
+            .map(|(i, _)| i)
+            .collect()
+    }
+
+    /// Adds `delta` to the little-endian `u32` at `at`.
+    fn shift_u32(zip: &mut [u8], at: usize, delta: i64) {
+        let value = u32::from_le_bytes(zip[at..at + 4].try_into().unwrap());
+        let value = (i64::from(value) + delta) as u32;
+        zip[at..at + 4].copy_from_slice(&value.to_le_bytes());
+    }
+
+    fn text(len: u32) -> Vec<u8> {
+        (0..len).map(|i| b'a' + (i % 26) as u8).collect()
+    }
+
+    #[test]
+    fn checksums_are_checked_at_the_end() {
+        let zip = ZipBuilder::new()
+            .stored("s.txt", text(5000))
+            .deflated("d.txt", text(5000))
+            .build();
+        let storage = OneFile(zip.clone());
+        let archive = ZipArchive::open(&storage, "x.zip").unwrap();
+        for name in ["s.txt", "d.txt"] {
+            let entry = archive.entry(&storage, name).unwrap().unwrap();
+            assert_eq!(archive.read(&storage, &entry, 1 << 20).unwrap(), text(5000));
+        }
+
+        // A changed byte in the stored entry; the checksum of the deflated one.
+        let mut damaged = zip;
+        damaged[30 + 5 + 100] ^= 1;
+        let deflated = records(&damaged)[1];
+        damaged[deflated + 16] ^= 1;
+        let storage = OneFile(damaged);
+        let archive = ZipArchive::open(&storage, "x.zip").unwrap();
+        for name in ["s.txt", "d.txt"] {
+            let entry = archive.entry(&storage, name).unwrap().unwrap();
+            assert_eq!(
+                archive.read(&storage, &entry, 1 << 20),
+                Err(ZipError::Invalid("checksum mismatch")),
+                "{name}"
+            );
+            // Readers that stop before the end do not check.
+            archive.stream(&storage, &entry, &mut |_| false).unwrap();
+        }
+    }
+
+    #[test]
+    fn sizes_are_checked() {
+        let zip = ZipBuilder::new()
+            .stored("s.txt", text(5000))
+            .deflated("d.txt", text(5000))
+            .build();
+        // The deflated entry claims to be longer, then shorter (so that it
+        // would outgrow a window sized by its claim) than it is.
+        for delta in [1, -1, -4900] {
+            let mut zip = zip.clone();
+            let deflated = records(&zip)[1];
+            shift_u32(&mut zip, deflated + 24, delta);
+            let storage = OneFile(zip);
+            let archive = ZipArchive::open(&storage, "x.zip").unwrap();
+            let entry = archive.entry(&storage, "d.txt").unwrap().unwrap();
+            assert!(
+                matches!(
+                    archive.read(&storage, &entry, 1 << 20),
+                    Err(ZipError::Invalid(_))
+                ),
+                "{delta}"
+            );
+        }
+        // A stored entry whose two sizes differ.
+        let mut zip = zip.clone();
+        let stored = records(&zip)[0];
+        shift_u32(&mut zip, stored + 24, -10);
+        let storage = OneFile(zip);
+        let archive = ZipArchive::open(&storage, "x.zip").unwrap();
+        assert!(matches!(
+            archive.entry(&storage, "s.txt"),
+            Err(ZipError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn names_differing_in_case_are_found() {
+        let zip = ZipBuilder::new()
+            .stored("OEBPS/Text/Chapter1.xhtml", "one")
+            .stored("a.txt", "small")
+            .stored("A.txt", "capital")
+            .build();
+        let storage = OneFile(zip);
+        let archive = ZipArchive::open(&storage, "x.zip").unwrap();
+        let found = |name| {
+            archive
+                .entry(&storage, name)
+                .unwrap()
+                .map(|entry| entry.name)
+        };
+        assert_eq!(
+            found("oebps/text/chapter1.XHTML").as_deref(),
+            Some("OEBPS/Text/Chapter1.xhtml")
+        );
+        // The exact name first.
+        assert_eq!(found("a.txt").as_deref(), Some("a.txt"));
+        assert_eq!(found("A.txt").as_deref(), Some("A.txt"));
+        assert_eq!(found("b.txt"), None);
+    }
+
+    #[test]
+    fn names_that_are_not_utf8_are_found_as_listed() {
+        let mut zip = ZipBuilder::new().stored("x?.txt", "data").build();
+        for at in 0..zip.len() - 5 {
+            if &zip[at..at + 6] == b"x?.txt" {
+                zip[at + 1] = 0xff;
+            }
+        }
+        let storage = OneFile(zip);
+        let archive = ZipArchive::open(&storage, "x.zip").unwrap();
+        let listed = archive.entries(&storage).next().unwrap().unwrap();
+        assert_eq!(listed.name, "x\u{fffd}.txt");
+        let found = archive.entry(&storage, &listed.name).unwrap();
+        assert_eq!(found, Some(listed));
+    }
+
+    #[test]
+    fn records_are_checked() {
+        let storage = OneFile(ZipBuilder::new().stored("a.txt", "a").build());
+        let archive = ZipArchive::open(&storage, "x.zip").unwrap();
+        // Offset 0 holds a local header, not a central directory record.
+        assert!(matches!(
+            archive.entry_by_record(&storage, 0),
+            Err(ZipError::Invalid(_))
+        ));
+    }
+
+    #[test]
+    fn end_record_inside_the_comment_is_not_taken() {
+        let mut zip = ZipBuilder::new().stored("a.txt", "a").build();
+        // A comment that holds what looks like an empty archive's record.
+        let mut comment = b"see ".to_vec();
+        comment.extend_from_slice(&[0x50, 0x4b, 0x05, 0x06]);
+        comment.extend_from_slice(&[0; 18]);
+        comment.extend_from_slice(b" end");
+        let len = zip.len();
+        zip[len - 2..].copy_from_slice(&(comment.len() as u16).to_le_bytes());
+        zip.extend_from_slice(&comment);
+        let storage = OneFile(zip);
+        let archive = ZipArchive::open(&storage, "x.zip").unwrap();
+        assert_eq!(archive.len(), 1);
+    }
+
+    #[test]
+    fn crc32_matches_zip() {
+        assert_eq!(crc32(0, b"123456789"), 0xcbf4_3926);
+        assert_eq!(crc32(crc32(0, b"1234"), b"56789"), 0xcbf4_3926);
     }
 
     #[test]

@@ -28,9 +28,13 @@ pub fn compile(patterns: &str, exceptions: &str, left_min: u8, right_min: u8) ->
             for c in pattern.chars() {
                 match c.to_digit(10) {
                     Some(d) => *points.last_mut().unwrap_or(&mut 0) = d as u8,
+                    // One gap per character of the key, also where a
+                    // letter lowercases to several (`İ`).
                     None => {
-                        key.extend(c.to_lowercase());
-                        points.push(0);
+                        for lower in c.to_lowercase() {
+                            key.push(lower);
+                            points.push(0);
+                        }
                     }
                 }
             }
@@ -61,10 +65,14 @@ pub fn compile(patterns: &str, exceptions: &str, left_min: u8, right_min: u8) ->
         }
     }
 
+    // Hyphens only between letters, one per break: `-ta--ble-` is `ta-ble`.
     let exceptions: Vec<String> = words(exceptions)
-        .into_iter()
-        .map(|w| w.to_lowercase())
-        .filter(|w| w.len() < 256)
+        .iter()
+        .map(|w| {
+            let parts: Vec<&str> = w.split('-').filter(|part| !part.is_empty()).collect();
+            parts.join("-").to_lowercase()
+        })
+        .filter(|w| !w.is_empty() && w.len() < 256)
         .collect();
     let exceptions_at = HEADER + index.len() + body.len();
 

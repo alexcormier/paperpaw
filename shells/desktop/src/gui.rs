@@ -239,7 +239,10 @@ impl ApplicationHandler for App {
 
     fn window_event(&mut self, event_loop: &ActiveEventLoop, _: WindowId, event: WindowEvent) {
         match event {
-            WindowEvent::CloseRequested => event_loop.exit(),
+            WindowEvent::CloseRequested => {
+                self.device.shut_down();
+                event_loop.exit();
+            }
             WindowEvent::Resized(_) => self.after_input(),
             WindowEvent::RedrawRequested => {
                 if let Err(error) = self.redraw() {

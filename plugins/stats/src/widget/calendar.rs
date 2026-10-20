@@ -16,7 +16,8 @@ use paperpaw_sdk::{
 };
 
 use super::{caption_room, chosen, frame_height, goal, line, shade};
-use crate::{fmt, totals};
+use crate::fmt::{self, month_start};
+use crate::totals;
 
 pub(super) const CALENDAR: Id = Id::new_static(NAME);
 /// Its id, as text.
@@ -44,21 +45,24 @@ static SETTINGS: [SettingSpec; 10] = [
         &STYLES,
         STYLES[0],
         CALENDAR,
-    ),
+    )
+    .described("stats.setting.calendar.help"),
     SettingSpec::fixed_choice(
         "stats.widget.calendar.weeks",
         "stats.setting.weeks",
         &WEEKS,
         WEEKS[1],
         CALENDAR,
-    ),
+    )
+    .described("stats.setting.weeks.help"),
     SettingSpec::fixed_choice(
         "stats.widget.calendar.cells",
         "stats.setting.cells",
         &CELLS,
         CELLS[0],
         CALENDAR,
-    ),
+    )
+    .described("stats.setting.cells.help"),
     widgets::part_spec(
         "stats.widget.calendar.caption",
         CALENDAR,
@@ -123,11 +127,6 @@ fn week_start(env: &Env<'_>, day: i32) -> i32 {
     day - (weekday - i32::from(fmt::week_start(env))).rem_euclid(7)
 }
 
-/// The first day of the month of `day`.
-fn month_start(day: i32) -> i32 {
-    day - i32::from(fmt::date_of(day).day) + 1
-}
-
 /// The last day of the month of `day`.
 fn month_end(day: i32) -> i32 {
     let next = month_start(month_start(day) + 31);
@@ -149,7 +148,7 @@ pub(super) fn levels(
     let mut total = 0;
     let levels = (first..=last)
         .map(|day| {
-            let seconds = super::seconds_on(days, day);
+            let seconds = fmt::seconds_on(days, day);
             total += u64::from(seconds);
             super::level(seconds, goal)
         })
@@ -172,7 +171,7 @@ fn shown(env: &Env<'_>) -> Option<Shown> {
     // The total of the month itself, or of the weeks shown.
     let counted = if heat { first } else { month_start(today) };
     let total = (counted..=today.min(last))
-        .map(|day| u64::from(super::seconds_on(&days, day)))
+        .map(|day| u64::from(fmt::seconds_on(&days, day)))
         .sum();
     Some(Shown {
         first,

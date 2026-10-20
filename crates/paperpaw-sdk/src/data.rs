@@ -120,19 +120,22 @@ impl Format {
         Ok(body)
     }
 
-    /// The file at `path` in this version (see [`Format::read`]);
-    /// `Ok(None)` if there is none. Files larger than `limit` are refused.
+    /// The file at `path` in this version (see [`Format::read`]), a
+    /// UTF-8 byte order mark left out; `Ok(None)` if there is none. Files
+    /// larger than `limit` are refused. An error means the file is there
+    /// but could not be read: it is not to be written over.
     pub fn load(
         &self,
         storage: &dyn Storage,
         path: &str,
         limit: usize,
     ) -> Result<Option<String>, Error> {
-        if !storage.exists(path) {
-            return Ok(None);
-        }
-        let data = crate::read_file(storage, path, limit).map_err(Error::Storage)?;
-        let text = String::from_utf8(data).map_err(|_| Error::Unreadable)?;
+        let text = match crate::files::load_text_for_update(storage, path, limit) {
+            Ok(Some(text)) => text,
+            Ok(None) => return Ok(None),
+            Err(StorageError::InvalidData) => return Err(Error::Unreadable),
+            Err(e) => return Err(Error::Storage(e)),
+        };
         Ok(Some(self.read(&text)?.into_owned()))
     }
 
@@ -228,6 +231,19 @@ mod tests {
         assert_eq!(FORMAT.save(&storage, "new.ini", "x"), Err(Error::Newer(9)));
         assert_eq!(FORMAT.load(&storage, "new.ini", 1024), Err(Error::Newer(9)));
         assert_eq!(FORMAT.load(&storage, "none.ini", 1024), Ok(None));
+        // There but not readable: not taken for missing.
+        let failing = crate::memory_storage::Unreadable(MemoryStorage::new().with("a.ini", "x"));
+        assert_eq!(
+            FORMAT.load(&failing, "a.ini", 1024),
+            Err(Error::Storage(StorageError::Io))
+        );
+        let ansi = MemoryStorage::new().with("c.ini", b"colour = r\xF6d\n".to_vec());
+        assert_eq!(FORMAT.load(&ansi, "c.ini", 1024), Err(Error::Unreadable));
+        let bom = MemoryStorage::new().with("d.ini", "\u{feff}# format 3\n[look]\n");
+        assert_eq!(
+            FORMAT.load(&bom, "d.ini", 1024).unwrap().unwrap(),
+            "[look]\n"
+        );
         // Version 1 is written as before versions came.
         let v1 = Format::new(1, &[]);
         v1.save(&storage, "b.txt", "a\nb\n").unwrap();
