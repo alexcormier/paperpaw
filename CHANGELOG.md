@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `time::iso8601` and `time::parse_iso8601` write and read
+  ISO 8601 times (UTC with milliseconds; offsets and dates alone read
+  too), `time::duration_text` writes a length of time as `1 h 05 min`,
+  `42 min` or `< 1 min` in the language's words. Joplin uses them.
 - SDK: `menus::BOOK` (`core.book-menu`), what can be done with a book
   in any view of the library, with `events::BOOK_CHOSEN` (`BookChosen`:
   the action and the book) sent before the action runs; `menus::APPS`

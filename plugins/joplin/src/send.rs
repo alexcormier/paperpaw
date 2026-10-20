@@ -400,7 +400,7 @@ impl Run {
         let old = kept::notebook(env.storage).map(|(_, id)| id);
         let id = item::new_id(&format!("paperpaw notebook {name} {now}"), old.as_deref());
         let mut request = self.put(env, &item::file_name(&id), &NOTEBOOK_MADE);
-        request.body = Some(item::notebook(&id, name, &item::time(now)));
+        request.body = Some(item::notebook(&id, name, &paperpaw_sdk::time::iso8601(now)));
         request.params = Params::new().with(ID, id);
         out.push(Command::Http(request));
     }
@@ -491,7 +491,8 @@ impl Run {
         let now = now_ms(env).unwrap_or_default();
         // Later than the note found, or Joplin keeps that one (also if
         // this device's clock is behind).
-        let updated = item::time(found.as_ref().map_or(now, |p| now.max(p.updated + 1)));
+        let updated =
+            paperpaw_sdk::time::iso8601(found.as_ref().map_or(now, |p| now.max(p.updated + 1)));
         let old = book.last().map(|n| n.id.as_str());
         let id = match (&found, old) {
             (Some(_), Some(old)) => old.to_string(),

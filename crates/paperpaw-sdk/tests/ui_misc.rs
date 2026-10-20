@@ -499,3 +499,16 @@ fn fills_share_what_is_left_and_never_overflow() {
         }
     }
 }
+
+/// Lengths of time read as people say them, in the language's words.
+#[test]
+fn durations_read_in_hours_and_minutes() {
+    let h = support::Harness::new(support::Device::BUTTONS);
+    let env = h.env();
+    let text = |s| paperpaw_sdk::time::duration_text(&env, s);
+    assert_eq!(text(0), "< 1 min");
+    assert_eq!(text(59), "< 1 min");
+    assert_eq!(text(60 * 42), "42 min");
+    assert_eq!(text(3600 + 5 * 60 + 30), "1 h 05 min");
+    assert_eq!(text(10 * 3600), "10 h 00 min");
+}

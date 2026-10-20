@@ -29,10 +29,13 @@ language = en
 name = English
 plural = one-other
 
-     [messages]
+[messages]
 core.on = On
 core.off = Off
 core.page-of = {page} / {pages}
+core.duration.under-a-minute = < 1 min
+core.duration.minutes = {m} min
+core.duration.hours = {h} h {m} min
 ";
 
 /// A device: its size, and whether it has a touch screen.

@@ -1790,11 +1790,14 @@ pub fn paperpaw_sdk::time::day_of_year(i32, u8, u8) -> u16
 pub fn paperpaw_sdk::time::days_from_civil(i32, u8, u8) -> i64
 pub fn paperpaw_sdk::time::days_in_month(i32, u8) -> u8
 pub fn paperpaw_sdk::time::days_in_year(i32) -> u16
+pub fn paperpaw_sdk::time::duration_text(&paperpaw_sdk::Env<'_>, u64) -> alloc::string::String
 pub fn paperpaw_sdk::time::is_leap(i32) -> bool
+pub fn paperpaw_sdk::time::iso8601(i64) -> alloc::string::String
 pub fn paperpaw_sdk::time::iso_week(i32, u8, u8) -> u8
 pub fn paperpaw_sdk::time::local_seconds(&paperpaw_sdk::Env<'_>, i64) -> i64
 pub fn paperpaw_sdk::time::local_time(&paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_sdk::time::LocalTime>
 pub fn paperpaw_sdk::time::next_minute(&paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::input::Instant>
+pub fn paperpaw_sdk::time::parse_iso8601(&str) -> core::option::Option<i64>
 pub fn paperpaw_sdk::time::short_date_text(&paperpaw_sdk::Env<'_>) -> core::option::Option<alloc::string::String>
 pub fn paperpaw_sdk::time::twelve_hours(&paperpaw_sdk::Env<'_>) -> bool
 pub fn paperpaw_sdk::time::unix_seconds(&paperpaw_sdk::Env<'_>) -> core::option::Option<i64>
