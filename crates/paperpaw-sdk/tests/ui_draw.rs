@@ -284,6 +284,57 @@ fn a_long_heading_ends_at_the_right_margin() {
     }
 }
 
+/// A progress bar's fill keeps inside its rounded track at every value,
+/// from a sliver to full, on the densities of the X4, the X4 Pro and the
+/// Boox, with square, slightly rounded and pill corners: no pixel of it
+/// lies where the track's own shape does not.
+#[test]
+fn a_progress_bar_fills_inside_its_track() {
+    for dpi in [220, 254, 300] {
+        let mut h = Harness::new(Device::TOUCH);
+        h.device.display.dpi = dpi;
+        let env = h.env();
+        let base = UiStyle::new(&env);
+        for (corner, pill) in [(0, false), (env.metrics.tenth_mm(8), false), (0, true)] {
+            let mut style = base;
+            style.corner = corner;
+            style.pill = pill;
+            for (width, height) in [(300u16, 24u16), (120, 12), (400, 40), (60, 9)] {
+                let area = Rect::new(20, 30, width, height);
+                // The track's shape: what a filled track would cover.
+                let mut shape = frame(480, 200);
+                let radius = style.radius(u32::from(height));
+                shape
+                    .canvas()
+                    .fill_round(area, radius, paperpaw_sdk::Color::BLACK);
+                let shape = shape.view();
+                for permille in (0..=1000).step_by(7).chain([1, 2, 999, 1000]) {
+                    let mut bar = frame(480, 200);
+                    ui::draw_progress(
+                        &mut bar.canvas(),
+                        &style,
+                        area,
+                        permille,
+                        paperpaw_sdk::Color::BLACK,
+                    );
+                    let bar = bar.view();
+                    for y in 0..200 {
+                        for x in 0..480 {
+                            if bar.pixel(x, y) != support::PAPER {
+                                assert_ne!(
+                                    shape.pixel(x, y),
+                                    support::PAPER,
+                                    "{dpi} dpi, corner {corner}, pill {pill}, {width}x{height},                                      {permille}: ({x}, {y}) outside the track"
+                                );
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 // ---- Header and pager --------------------------------------------------
 
 /// Points across the whole header, every 4 pixels.

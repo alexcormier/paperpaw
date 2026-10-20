@@ -514,26 +514,8 @@ impl UpdatePage {
     ) {
         let style = &self.style;
         let percent = (done * 100).checked_div(total).unwrap_or(0).min(100);
-        let border = ui::button_border(style);
-        let (x, y, w, h) = (
-            i32::from(area.x),
-            i32::from(area.y),
-            u32::from(area.width),
-            u32::from(area.height),
-        );
-        canvas.stroke_round_rect(x, y, w, h, border, style.corner, Color::BLACK);
-        let inset = border * 2;
-        let inner = w.saturating_sub(2 * inset);
-        let filled = (u64::from(inner) * percent / 100) as u32;
-        if filled > 0 {
-            canvas.fill_rect(
-                x + inset as i32,
-                y + inset as i32,
-                filled,
-                h.saturating_sub(2 * inset),
-                Color::BLACK,
-            );
-        }
+        let permille = (done * 1000).checked_div(total).unwrap_or(0).min(1000) as u16;
+        ui::draw_progress(canvas, style, area, permille, Color::BLACK);
         let text = alloc::format!("{percent} %");
         canvas.describe(Role::Text, &text, area, false, None);
         if let Some(font) = style.font(env) {
