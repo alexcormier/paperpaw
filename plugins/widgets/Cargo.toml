@@ -18,7 +18,7 @@ paperpaw-i18n.workspace = true
 paperpaw-core.workspace = true
 paperpaw-graphics.workspace = true
 paperpaw-platform.workspace = true
-paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
+paperpaw-plugin-fonts-default = { workspace = true, features = ["packs", "outline"] }
 paperpaw-plugin-home.workspace = true
 proptest.workspace = true
 

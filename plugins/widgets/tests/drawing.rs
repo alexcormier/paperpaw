@@ -6,6 +6,10 @@
 //! in its settings and hostile files where it keeps its own. Whatever it
 //! draws stays inside its place (the canvas round it is untouched), the
 //! places a tap acts on lie inside it, and nothing panics.
+//!
+//! The widgets draw with the default fonts as bitmap packs, the same
+//! whichever features the fonts plugin is built with; problems that show
+//! only with its scalable fonts have tests of their own.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -153,6 +157,13 @@ struct Harness {
 
 impl Harness {
     fn new(device: &'static DeviceInfo, storage: MemoryStorage) -> Self {
+        Self::with_fonts(device, storage, false)
+    }
+
+    /// The harness with the default fonts as bitmap packs (the same
+    /// pixels whichever features the fonts plugin is built with), or
+    /// with its scalable fonts (`scalable`).
+    fn with_fonts(device: &'static DeviceInfo, storage: MemoryStorage, scalable: bool) -> Self {
         let mut h = Harness {
             device,
             settings: Settings::new(),
@@ -214,9 +225,12 @@ impl Harness {
             Catalog::parse(include_str!("../../../crates/paperpaw-core/i18n/de.ini")).unwrap(),
         );
         let mut r = Registrar::new(Id::new_static("fonts-default"));
-        paperpaw_plugin_fonts_default::DefaultFonts
-            .register(&mut r)
-            .unwrap();
+        if scalable {
+            paperpaw_plugin_fonts_default::DefaultFonts.register(&mut r)
+        } else {
+            paperpaw_plugin_fonts_default::DefaultFontPacks.register(&mut r)
+        }
+        .unwrap();
         h.apply(r);
         let mut r = Registrar::new(paperpaw_plugin_widgets::PLUGIN);
         WidgetPack.register(&mut r).unwrap();
@@ -1297,5 +1311,46 @@ fn widgets_stay_in_the_smallest_cell() {
             problems.check(&h, &id, &[SMALLEST], "defaults", false);
         }
     }
+    problems.assert_all();
+}
+
+/// With scalable fonts, words are measured as nothing at the tiniest
+/// sizes: in a place just wide enough to put the moon beside its text
+/// (half again as wide as high) but narrower than the moon and the gap
+/// after it, the text "fits" in no width at all, and the room left for
+/// it is reckoned as `area.width - side - gap`.
+#[test]
+#[ignore = "bug: the moon panics in a place wider than high but narrower than its height and gap (moon.rs: width - side - gap underflows)"]
+fn the_moon_beside_its_text_in_a_small_place_does_not_panic() {
+    let h = Harness::with_fonts(&GRAY, MemoryStorage::new(), true);
+    let mut problems = Problems::default();
+    let sizes = [(24, 16), (30, 20), (45, 30)];
+    problems.check_as(&h, "widgets.moon", &sizes, "scalable fonts", false, false);
+    problems.assert_all();
+}
+
+#[test]
+#[ignore = "bug: with scalable fonts the year so far draws 6 px below a 2x2 place"]
+fn the_year_with_scalable_fonts_stays_in_its_place() {
+    let h = Harness::with_fonts(&GRAY, MemoryStorage::new(), true);
+    let mut problems = Problems::default();
+    let sizes = [(230, 200)];
+    problems.check(&h, "widgets.year-progress", &sizes, "scalable fonts", true);
+    problems.assert_all();
+}
+
+#[test]
+#[ignore = "bug: with scalable fonts the word clock in a large set size draws far outside a 2x2 place"]
+fn the_word_clock_in_a_large_size_with_scalable_fonts_stays_in_its_place() {
+    let mut h = Harness::with_fonts(&GRAY, MemoryStorage::new(), true);
+    h.set("widgets.word-clock.size", "core.size.large");
+    let mut problems = Problems::default();
+    problems.check(
+        &h,
+        "widgets.word-clock",
+        &[(230, 200)],
+        "scalable fonts",
+        true,
+    );
     problems.assert_all();
 }
