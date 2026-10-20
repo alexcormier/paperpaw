@@ -7,7 +7,7 @@ use alloc::vec::Vec;
 use core::ops::Range;
 
 use crate::ui::{ListChange, UiStyle};
-use crate::{Canvas, Color, Point, Rect};
+use crate::{Canvas, Point, Rect};
 
 #[derive(Debug)]
 pub struct Rows {
@@ -130,13 +130,7 @@ impl Rows {
                     .get(n + 1)
                     .is_some_and(|&(next, _)| !self.is_heading(next))
             {
-                let line = Rect::new(
-                    rect.x + style.margin as u16,
-                    rect.y + rect.height - style.line as u16,
-                    rect.width.saturating_sub(2 * style.margin as u16),
-                    style.line as u16,
-                );
-                canvas.fill_tint(line, Color::gray(190));
+                crate::ui::draw_separator(canvas, style, rect, 0);
             }
             draw_row(canvas, index, rect, focused);
         }

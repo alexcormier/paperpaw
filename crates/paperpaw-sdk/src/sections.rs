@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 use core::ops::Range;
 
 use crate::ui::{ListChange, UiStyle};
-use crate::{Canvas, Color, Point, Rect};
+use crate::{Canvas, Point, Rect};
 
 /// A section: whether it has a heading, and how many entries.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -223,13 +223,7 @@ impl Sections {
             } else if matches!(item, Item::Entry(_))
                 && matches!(visible.get(n + 1), Some((Item::Entry(_), _)))
             {
-                let line = Rect::new(
-                    rect.x + style.margin as u16,
-                    rect.y + rect.height - style.line as u16,
-                    rect.width.saturating_sub(2 * style.margin as u16),
-                    style.line as u16,
-                );
-                canvas.fill_tint(line, Color::gray(190));
+                crate::ui::draw_separator(canvas, style, rect, 0);
             }
             draw_row(canvas, item, rect, focused);
         }

@@ -570,7 +570,7 @@ fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// How the interface looks: its size, header, corners, contrast and
 /// room.
-static LOOK: [SettingSpec; 8] = [
+static LOOK: [SettingSpec; 14] = [
     SettingSpec::fixed_number(
         settings::UI_SIZE.static_str(),
         "core.setting.ui-size",
@@ -584,7 +584,11 @@ static LOOK: [SettingSpec; 8] = [
     SettingSpec::fixed_choice(
         settings::UI_HEADER.static_str(),
         "core.setting.ui-header",
-        &[settings::HEADER_DARK, settings::HEADER_LIGHT],
+        &[
+            settings::HEADER_DARK,
+            settings::HEADER_LIGHT,
+            settings::HEADER_PLAIN,
+        ],
         settings::HEADER_LIGHT,
         groups::LOOK,
     )
@@ -597,6 +601,64 @@ static LOOK: [SettingSpec; 8] = [
         groups::LOOK,
     )
     .described("core.setting.ui-corners.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_SHAPE.static_str(),
+        "core.setting.ui-shape",
+        &[settings::SHAPE_BOX, settings::SHAPE_PILL],
+        settings::SHAPE_BOX,
+        groups::LOOK,
+    )
+    .described("core.setting.ui-shape.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_FOCUS.static_str(),
+        "core.setting.ui-focus",
+        &[
+            settings::FOCUS_FILL,
+            settings::FOCUS_RING,
+            settings::FOCUS_SOFT,
+            settings::FOCUS_MARKER,
+        ],
+        settings::FOCUS_FILL,
+        groups::LOOK,
+    )
+    .described("core.setting.ui-focus.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_SEPARATORS.static_str(),
+        "core.setting.ui-separators",
+        &[
+            settings::SEPARATORS_LINE,
+            settings::SEPARATORS_INSET,
+            settings::SEPARATORS_NONE,
+        ],
+        settings::SEPARATORS_LINE,
+        groups::LOOK,
+    )
+    .described("core.setting.ui-separators.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_GROUPS.static_str(),
+        "core.setting.ui-groups",
+        &[settings::GROUPS_PLAIN, settings::GROUPS_CARDS],
+        settings::GROUPS_PLAIN,
+        groups::LOOK,
+    )
+    .described("core.setting.ui-groups.help"),
+    SettingSpec::fixed_choice(
+        settings::UI_MOTIF.static_str(),
+        "core.setting.ui-motif",
+        &[settings::MOTIF_NONE, settings::MOTIF_PAW],
+        settings::MOTIF_NONE,
+        groups::LOOK,
+    )
+    .described("core.setting.ui-motif.help"),
+    SettingSpec::fixed_number(
+        settings::UI_TITLE.static_str(),
+        "core.setting.ui-title",
+        100,
+        200,
+        115,
+        groups::LOOK,
+    )
+    .described("core.setting.ui-title.help"),
     SettingSpec::fixed_choice(
         settings::UI_CONTRAST.static_str(),
         "core.setting.ui-contrast",

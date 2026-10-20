@@ -473,6 +473,13 @@ mod tests {
         dark_header: false,
         corner: 0,
         strong: false,
+        pill: false,
+        focus: crate::ui::Focus::Fill,
+        separators: crate::ui::Separators::Line,
+        plain_header: false,
+        cards: false,
+        paw: false,
+        grays: 2,
     };
 
     fn pointer(phase: PointerPhase, x: i32, y: i32) -> PointerEvent {
