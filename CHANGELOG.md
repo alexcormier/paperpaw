@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `menus::BOOK` (`core.book-menu`), what can be done with a book
+  in any view of the library, with `events::BOOK_CHOSEN` (`BookChosen`:
+  the action and the book) sent before the action runs; `menus::APPS`
+  (`core.apps`), what a launcher lists.
 - A row's title and value keep a margin between them, not two: on a
   screen as narrow as the X4's both stay whole where they fit (Joplin's
   "Synchronised with, Joplin Cloud" lost the end of both).

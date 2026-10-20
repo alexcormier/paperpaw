@@ -186,6 +186,16 @@ pub mod menus {
     /// reader sends [`events::TEXT_CHOSEN`](super::events::TEXT_CHOSEN),
     /// then runs it.
     pub const SELECTION: Id = Id::new_static("core.selection-menu");
+    /// What can be done with a book in any view of the library (mark it
+    /// as a favourite or finished, show its details, delete it): plugins
+    /// add their actions; when one is chosen, the view sends
+    /// [`events::BOOK_CHOSEN`](super::events::BOOK_CHOSEN) with the book,
+    /// then runs it.
+    pub const BOOK: Id = Id::new_static("core.book-menu");
+    /// What can be started from a launcher (a drawer, a palette, the home
+    /// screen's tools): the tools ([`TOOLS`]) and what plugins add here
+    /// as an app of their own.
+    pub const APPS: Id = Id::new_static("core.apps");
 }
 
 /// The roles of decorations every reader draws (see
@@ -297,6 +307,17 @@ pub mod events {
         /// Which setting changed ([`SETTING_CHANGED`]).
         pub struct SettingChanged {
             pub id: Id,
+        }
+    }
+
+    crate::event_data! {
+        /// An action was chosen for a book in the library
+        /// ([`BOOK_CHOSEN`], [`menus::BOOK`](super::menus::BOOK)).
+        pub struct BookChosen {
+            /// The action chosen.
+            pub action: Id,
+            /// The book's path.
+            pub path: String,
         }
     }
 
@@ -527,6 +548,11 @@ pub mod events {
     /// "Share" action needs no more than a menu entry in
     /// [`menus::SELECTION`](super::menus::SELECTION) and this event).
     pub const TEXT_CHOSEN: Event<TextChosen> = Event::new("core.text-chosen");
+    /// An action was chosen for a book in a view of the library
+    /// ([`BookChosen`]), just before it runs: the plugin whose action it
+    /// is acts on the book (an entry in [`menus::BOOK`](super::menus::BOOK)
+    /// and this event are all a "Send to …" needs).
+    pub const BOOK_CHOSEN: Event<BookChosen> = Event::new("core.book-chosen");
     /// A word a decorator marked was tapped, or chosen with the buttons
     /// ([`DecorationTapped`]); sent for decorators that take taps (see
     /// [`decorations`](crate::decorations)), whose plugin answers.
