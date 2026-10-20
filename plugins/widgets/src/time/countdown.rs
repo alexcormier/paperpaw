@@ -12,7 +12,7 @@ use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size};
 use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::word_clock::{balanced, largest};
-use super::{chosen, dates, frame_height, line, ui};
+use super::{chosen_name, dates, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.countdown");
 /// The date counted to: `YYYY-MM-DD` once, `MM-DD` each year (also
@@ -269,7 +269,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let align = widgets::align(env, ID.as_str());
     let small = line(&font, style.small);
     let notes_h = if notes.is_empty() { 0.0 } else { small };
-    if chosen(env, ID.as_str(), "style") == "sentence" {
+    if chosen_name(env, ID.as_str(), "style") == "sentence" {
         let room = Rect::new(
             area.x,
             area.y,

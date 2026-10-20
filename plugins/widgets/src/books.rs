@@ -42,6 +42,8 @@ use paperpaw_sdk::{
     Registrar, SettingSpec, Storage,
 };
 
+pub(crate) use crate::{frame_height, today};
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/books.en.ini")))?;
     r.add_translations(Cow::Borrowed(include_str!("../i18n/books.de.ini")))?;
@@ -205,13 +207,6 @@ pub(crate) fn series_rank(number: &str) -> u64 {
 
 // ---- Days and chance -----------------------------------------------------------
 
-/// The day it is (days since 1970, local), 0 where the time is not known.
-pub(crate) fn today(env: &Env<'_>) -> i64 {
-    paperpaw_sdk::time::unix_seconds(env)
-        .map_or(0, |unix| paperpaw_sdk::time::local_seconds(env, unix))
-        .div_euclid(86_400)
-}
-
 /// A number that looks random, the same for the same `seed`.
 pub(crate) fn mix(seed: u64) -> u64 {
     let mut z = seed.wrapping_add(0x9e37_79b9_7f4a_7c15);
@@ -271,12 +266,6 @@ pub(crate) fn thickness(env: &Env<'_>, id: &str, size: u16) -> u32 {
 }
 
 // ---- Drawing -----------------------------------------------------------------
-
-/// The height widget `id`'s frame takes around its content.
-pub(crate) fn frame_height(env: &Env<'_>, id: &str) -> u16 {
-    let probe = Rect::new(0, 0, 100, 100);
-    100 - widgets::look::look(env, id, probe).area.height
-}
 
 /// The text size widget `id`'s size setting says (for "as large as
 /// fits": the large one, where the widget works out nothing better).

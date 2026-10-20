@@ -14,7 +14,7 @@ use paperpaw_sdk::{
 
 use paperpaw_sdk::SettingSpec;
 
-use super::{chosen, dates, frame_height, line, ui};
+use super::{chosen_name, dates, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.year-progress");
 
@@ -174,7 +174,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     if widgets::shows(env, ID.as_str(), "year") {
         area = widgets::draw_caption(canvas, env, ID.as_str(), &look, &format!("{}", now.year));
     }
-    match chosen(env, ID.as_str(), "style") {
+    match chosen_name(env, ID.as_str(), "style") {
         "ring" => draw_ring(canvas, env, &font, &look, area, &p),
         "months" => draw_bar(canvas, env, &font, &look, area, &p, Some(&now)),
         _ => draw_bar(canvas, env, &font, &look, area, &p, None),

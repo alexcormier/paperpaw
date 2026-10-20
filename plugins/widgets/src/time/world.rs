@@ -13,7 +13,7 @@ use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Regist
 
 use paperpaw_sdk::SettingSpec;
 
-use super::{chosen, dates, frame_height, line, ui};
+use super::{chosen_name, dates, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.world-clock");
 
@@ -246,7 +246,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     }
     let area = look.area;
     let gap = style.gap as u16;
-    let columns = match chosen(env, ID.as_str(), "layout") {
+    let columns = match chosen_name(env, ID.as_str(), "layout") {
         "rows" => false,
         "columns" => true,
         _ => area.width / places.len() as u16 > area.height * 9 / 10 && places.len() > 1,

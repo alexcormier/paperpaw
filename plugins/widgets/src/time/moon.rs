@@ -18,7 +18,7 @@ use paperpaw_sdk::{Arg, Canvas, Color, Env, Id, Point, Rect, RegisterError, Regi
 
 use paperpaw_sdk::SettingSpec;
 
-use super::{chosen, dates, frame_height, line, ui};
+use super::{chosen_name, dates, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.moon");
 
@@ -342,8 +342,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         i32::from(moon_x) + i32::from(side / 2),
         i32::from(top) + i32::from(side / 2),
     );
-    let south = chosen(env, ID.as_str(), "hemisphere") == "south";
-    let light = chosen(env, ID.as_str(), "shadow") == "light";
+    let south = chosen_name(env, ID.as_str(), "hemisphere") == "south";
+    let light = chosen_name(env, ID.as_str(), "shadow") == "light";
     draw_moon(canvas, &look, center, radius, moon.degrees, south, light);
 
     let Some(font) = font else {

@@ -23,8 +23,10 @@ use alloc::vec::Vec;
 use core::sync::atomic::{AtomicU32, Ordering};
 
 use paperpaw_sdk::ui::UiStyle;
+
+use crate::{frame_height, today};
 use paperpaw_sdk::widgets;
-use paperpaw_sdk::{Canvas, Command, Env, Id, Rect, RegisterError, Registrar, Storage, time};
+use paperpaw_sdk::{Canvas, Command, Env, Id, RegisterError, Registrar, Storage};
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/words.en.ini")))?;
@@ -61,18 +63,6 @@ fn changed(out: &mut Vec<Command>, id: &Id) {
     // Load and store: the device has no atomic adding, and one thread.
     CHANGES.store(changes().wrapping_add(1), Ordering::Relaxed);
     out.push(widgets::changed(id));
-}
-
-/// Today as days since 1970 in the local time zone; 0 where the device
-/// does not know the date.
-fn today(env: &Env<'_>) -> i64 {
-    time::unix_seconds(env).map_or(0, |unix| time::local_seconds(env, unix).div_euclid(86_400))
-}
-
-/// The height `widget`'s frame takes above and below its content.
-fn frame_height(env: &Env<'_>, widget: &str) -> u16 {
-    let probe = Rect::new(0, 0, 100, 100);
-    100 - widgets::look::look(env, widget, probe).area.height
 }
 
 /// The one of `count` things shown on `day`: each of them once before

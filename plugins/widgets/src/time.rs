@@ -41,6 +41,8 @@ use paperpaw_sdk::{
     SettingSpec,
 };
 
+use crate::frame_height;
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/time.en.ini")))?;
     r.add_translations(Cow::Borrowed(include_str!("../i18n/time.de.ini")))?;
@@ -122,15 +124,9 @@ impl Widget for Settable {
     }
 }
 
-/// The height `widget`'s frame takes above and below its content.
-fn frame_height(env: &Env<'_>, widget: &str) -> u16 {
-    let probe = Rect::new(0, 0, 100, 100);
-    100 - widgets::look::look(env, widget, probe).area.height
-}
-
-/// The value of `widget`'s choice `key`, the part after the last dot
-/// (e.g. `circle` of `widgets.mark.circle`).
-fn chosen<'a>(env: &'a Env<'_>, widget: &str, key: &str) -> &'a str {
+/// The name of the value of `widget`'s choice `key`: the part after the
+/// last dot (e.g. `circle` of `widgets.mark.circle`).
+fn chosen_name<'a>(env: &'a Env<'_>, widget: &str, key: &str) -> &'a str {
     let value = env.settings.text(&format!("{widget}.{key}"));
     value.rsplit('.').next().unwrap_or(value)
 }
@@ -218,7 +214,7 @@ fn date_text(
         ("year", Arg::Int(i64::from(year))),
         ("weekday", Arg::Str(weekday)),
     ];
-    match chosen(env, widget, "date-format") {
+    match chosen_name(env, widget, "date-format") {
         "iso" => format!("{year:04}-{month:02}-{day:02}"),
         "numeric" => env.i18n.format(
             "widgets.date.numeric",

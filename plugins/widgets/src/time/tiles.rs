@@ -13,7 +13,7 @@ use paperpaw_sdk::{Canvas, Color, Env, Id, Point, Rect, RegisterError, Registrar
 
 use paperpaw_sdk::SettingSpec;
 
-use super::{chosen, frame_height, line, ui};
+use super::{chosen_name, frame_height, line, ui};
 
 const ID: Id = Id::new_static("widgets.tile-clock");
 
@@ -117,7 +117,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     };
     let area = look.area;
     let twelve = super::twelve_hours(env);
-    let pairs = chosen(env, ID.as_str(), "group") == "pairs";
+    let pairs = chosen_name(env, ID.as_str(), "group") == "pairs";
     let (hours, minutes) = tiles(&now, twelve, pairs);
     let colon = widgets::shows(env, ID.as_str(), "colon");
     let small = line(&font, style.small);
@@ -164,7 +164,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let top = f32::from(area.y) + (f32::from(area.height) - h - below).max(0.0) / 2.0;
     let size = h * 0.66;
     let radius = (w * 0.14) as u32;
-    let kind = chosen(env, ID.as_str(), "tiles");
+    let kind = chosen_name(env, ID.as_str(), "tiles");
     let hinge = widgets::shows(env, ID.as_str(), "hinge");
     let (light, dark) = super::light_and_dark(&look);
     let on_dark = look.paper.luma() < 128;

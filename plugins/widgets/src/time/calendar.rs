@@ -12,7 +12,7 @@ use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterErro
 use paperpaw_sdk::SettingSpec;
 
 use super::dates::MonthGrid;
-use super::{chosen, frame_height, ui};
+use super::{chosen_name, frame_height, ui};
 
 const ID: Id = Id::new_static("widgets.calendar");
 
@@ -111,7 +111,7 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The first day of the week, 0 (Sunday) or 1 (Monday), as `widget`'s
 /// setting `week-start` says, or as set for the device.
 pub(super) fn week_start(env: &Env<'_>, widget: &str) -> u8 {
-    match chosen(env, widget, "week-start") {
+    match chosen_name(env, widget, "week-start") {
         "sunday" => 0,
         "monday" => 1,
         _ => paperpaw_sdk::time::week_start(env),
@@ -266,7 +266,7 @@ fn draw_month(
         top += cell_h * 1.3;
     }
     if initials {
-        let two = chosen(env, id, "initials") == "two";
+        let two = chosen_name(env, id, "initials") == "two";
         for column in 0..7u8 {
             let name = super::weekday_name(env, month.weekday_of(column));
             let initial: String = name.chars().take(if two { 2 } else { 1 }).collect();
@@ -278,7 +278,7 @@ fn draw_month(
     }
     let others = widgets::shows(env, id, "others");
     let weekends = widgets::shows(env, id, "weekends");
-    let mark = chosen(env, id, "mark");
+    let mark = chosen_name(env, id, "mark");
     let first = super::dates::days_from_civil(month.year, month.month, 1);
     for week in 0..month.weeks {
         let y = top + cell_h * (f32::from(week) + 0.5);
