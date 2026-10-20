@@ -158,8 +158,11 @@ pub struct XtcDocument {
     pages: u32,
     index: u64,
     metadata: Metadata,
-    /// Chapters: title and first page.
-    chapters: Vec<(String, u32)>,
+    /// Where the chapter records start.
+    chapters_at: u64,
+    /// Chapters: their record and first page. Titles are read from the
+    /// file when they are wanted, so a long table takes little memory.
+    chapters: Vec<(u16, u16)>,
     cover: u32,
     cache: String,
 }
@@ -212,16 +215,19 @@ impl XtcDocument {
         }
         let mut chapters = Vec::new();
         if has_chapters {
-            let at = chapters_at;
             // The chapters lie before the page index.
-            let room = index.saturating_sub(at) / CHAPTER;
+            let room = index.saturating_sub(chapters_at) / CHAPTER;
             let count = chapter_count.unwrap_or(room).min(room).min(MAX_CHAPTERS);
-            let mut c = [0u8; CHAPTER as usize];
-            for i in 0..count {
-                read_exact(storage, path, at + i * CHAPTER, &mut c)?;
-                let start = u32::from(u16_at(&c, 80));
-                if start < pages {
-                    chapters.push((text(&c[..80]), start));
+            chapters
+                .try_reserve_exact(count as usize)
+                .map_err(|_| DocumentError::OutOfMemory)?;
+            // Through a window: the first pages of many records in a read.
+            let mut window = Window::new(storage, path)?;
+            for record in 0..count as u16 {
+                let at = chapters_at + u64::from(record) * CHAPTER + 80;
+                let start = u16::from_le_bytes([window.byte(at)?, window.byte(at + 1)?]);
+                if u32::from(start) < pages {
+                    chapters.push((record, start));
                 }
             }
         }
@@ -250,6 +256,7 @@ impl XtcDocument {
             pages,
             index,
             metadata,
+            chapters_at,
             chapters,
             cover,
             cache,
@@ -323,7 +330,10 @@ fn decode_page(
     } else {
         return Err(malformed("page format"));
     };
-    if data.checked_add(pixel_bytes).is_none_or(|end| end > file_size) {
+    if data
+        .checked_add(pixel_bytes)
+        .is_none_or(|end| end > file_size)
+    {
         return Err(malformed("page data past the end"));
     }
     let mut window = Window::new(storage, path)?;
@@ -418,12 +428,15 @@ impl Document for XtcDocument {
         self.chapters.len() as u32
     }
 
-    fn toc_entry(&self, _: &dyn Storage, index: u32) -> Option<TocEntry> {
-        let (title, page) = self.chapters.get(index as usize)?;
+    fn toc_entry(&self, storage: &dyn Storage, index: u32) -> Option<TocEntry> {
+        let &(record, page) = self.chapters.get(index as usize)?;
+        let mut title = [0u8; 80];
+        let at = self.chapters_at + u64::from(record) * CHAPTER;
+        read_exact(storage, &self.path, at, &mut title).ok()?;
         Some(TocEntry {
-            title: title.clone(),
+            title: text(&title),
             level: 0,
-            at: Locator::new(*page, 0),
+            at: Locator::new(u32::from(page), 0),
         })
     }
 
@@ -470,8 +483,9 @@ impl Plugin for XtcFormat {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use core::cell::Cell;
     use paperpaw_i18n::{Catalog, check};
-    use paperpaw_sdk::MemoryStorage;
+    use paperpaw_sdk::{DirEntry, MemoryStorage, StorageError};
 
     #[test]
     fn translations_are_complete() {
@@ -535,6 +549,68 @@ mod tests {
         out
     }
 
+    /// A storage that counts the reads of its books (files ending in
+    /// `.xtc`) and the bytes they return.
+    struct Counting {
+        inner: MemoryStorage,
+        reads: Cell<usize>,
+        bytes: Cell<usize>,
+    }
+
+    impl Counting {
+        fn new(inner: MemoryStorage) -> Self {
+            Self {
+                inner,
+                reads: Cell::new(0),
+                bytes: Cell::new(0),
+            }
+        }
+
+        /// Reads and bytes read since the last call.
+        fn take(&self) -> (usize, usize) {
+            (self.reads.take(), self.bytes.take())
+        }
+    }
+
+    impl Storage for Counting {
+        fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+            let n = self.inner.read_at(path, offset, buf)?;
+            if path.ends_with(".xtc") {
+                self.reads.set(self.reads.get() + 1);
+                self.bytes.set(self.bytes.get() + n);
+            }
+            Ok(n)
+        }
+
+        fn size(&self, path: &str) -> Result<u64, StorageError> {
+            self.inner.size(path)
+        }
+
+        fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.inner.write(path, data)
+        }
+
+        fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+            self.inner.append(path, data)
+        }
+
+        fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+            self.inner.list(dir, visit)
+        }
+
+        fn remove(&self, path: &str) -> Result<(), StorageError> {
+            self.inner.remove(path)
+        }
+
+        fn create_dir(&self, path: &str) -> Result<(), StorageError> {
+            self.inner.create_dir(path)
+        }
+
+        fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
+            self.inner.remove_dir_all(path)
+        }
+    }
+
     fn rows(storage: &dyn Storage, image: &ImageRef) -> Vec<Vec<u8>> {
         let file = GrayFile::open(storage, &image.path).unwrap();
         (0..file.height)
@@ -586,6 +662,20 @@ mod tests {
                 .unwrap()
                 .is_none()
         );
+    }
+
+    #[test]
+    fn chapters_are_read_in_few_reads() {
+        let pages: Vec<Vec<u8>> = (0..MAX_CHAPTERS).map(|_| page(XTG, 8, 1, &[0])).collect();
+        let storage = Counting::new(MemoryStorage::new().with("b/t.xtc", book(&pages)));
+        let doc = XtcDocument::open(&storage, "b/t.xtc").unwrap();
+        let (reads, _) = storage.take();
+        assert!(reads < 100, "{reads} reads");
+        assert_eq!(doc.toc_len(&storage), 1000);
+        let last = doc.toc_entry(&storage, 999).unwrap();
+        assert_eq!(last.title, "Chapter 1000");
+        assert_eq!(last.at, Locator::new(999, 0));
+        assert!(doc.toc_entry(&storage, 1000).is_none());
     }
 
     #[test]
