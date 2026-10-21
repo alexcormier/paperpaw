@@ -93,11 +93,14 @@ impl Plugin for Probe {
                 "probe.status",
                 Box::new(|_, _| Some(paperpaw_sdk::StatusValue::Text("Probe".into()))),
             )
-            .tap(|_, _| {
-                Some(paperpaw_sdk::Command::SetSetting(
+            .tap(Id::new_static("probe.switch")),
+        )?;
+        r.add_action(
+            ActionSpec::new(Id::new_static("probe.switch"), "probe.switch").handler(|_, out| {
+                out.push(paperpaw_sdk::Command::SetSetting(
                     Id::new_static("probe.other"),
                     paperpaw_sdk::SettingValue::Bool(true),
-                ))
+                ));
             }),
         )?;
         r.add_translations(

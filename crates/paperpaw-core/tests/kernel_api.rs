@@ -778,7 +778,7 @@ fn input_filters_see_no_key_of_a_secret() {
     }
 }
 
-static VAULT_SETTINGS: [paperpaw_core::sdk::SettingSpec; 2] = [
+static VAULT_SETTINGS: [paperpaw_core::sdk::SettingSpec; 3] = [
     paperpaw_core::sdk::SettingSpec::fixed_text(
         "vault.key",
         "vault.key",
@@ -792,6 +792,15 @@ static VAULT_SETTINGS: [paperpaw_core::sdk::SettingSpec; 2] = [
         "",
         paperpaw_core::sdk::builtin::groups::OTHER,
     ),
+    // Keeps the device safe: only its plugin and the settings editor
+    // change it.
+    paperpaw_core::sdk::SettingSpec::fixed_text(
+        "vault.pin",
+        "vault.pin",
+        "",
+        paperpaw_core::sdk::builtin::groups::OTHER,
+    )
+    .guarded(),
 ];
 static KEPT_SECRET: paperpaw_core::sdk::SettingExtra =
     paperpaw_core::sdk::SettingExtra::new().secret();
@@ -823,6 +832,10 @@ impl Plugin for Vault {
                     ));
                 }),
             )?;
+            r.subscribe(
+                paperpaw_core::sdk::Id::new_static("vault.ask"),
+                Box::new(|_, _, out| out.push(ask_keyboard("vault.key"))),
+            )?;
         }
         if self.name == "spy" {
             // Tries to overwrite the vault's secret: set, typed for, reset.
@@ -845,6 +858,24 @@ impl Plugin for Vault {
                         typed.to_params(),
                     ));
                     out.push(paperpaw_core::sdk::Command::ResetSetting(key));
+                    // Asked of the keyboard, read from the clipboard, for
+                    // the secret and for the guarded setting.
+                    for id in ["vault.key", "vault.pin"] {
+                        out.push(ask_keyboard(id));
+                        out.push(paperpaw_core::sdk::Command::SetClipboard("spy-clip".into()));
+                        out.push(paperpaw_core::sdk::Command::ReadClipboard(
+                            events::SETTING_TYPED.id().clone(),
+                            Params::new().with(params::ID, id),
+                        ));
+                    }
+                    let typed = paperpaw_core::sdk::Typed::new(
+                        "spy-typed",
+                        Params::new().with(params::ID, "vault.pin"),
+                    );
+                    out.push(paperpaw_core::sdk::Command::Emit(
+                        events::SETTING_TYPED.id().clone(),
+                        typed.to_params(),
+                    ));
                 }),
             )?;
         }
@@ -853,6 +884,75 @@ impl Plugin for Vault {
             events::SETTING_CHANGED.id().clone(),
             Box::new(move |_, params, _| heard.borrow_mut().push(format!("{name} {params:?}"))),
         )
+    }
+}
+
+/// Asks the keyboard for text for setting `id`, answered to the kernel.
+fn ask_keyboard(id: &str) -> paperpaw_core::sdk::Command {
+    use paperpaw_core::sdk::builtin::{params, slots};
+    paperpaw_core::sdk::Command::OpenSlot(
+        slots::KEYBOARD,
+        Params::new()
+            .with(params::ID, id)
+            .with(params::REPLY, events::SETTING_TYPED.as_str()),
+    )
+}
+
+/// A keyboard that answers at once what it is asked, with `keyed`.
+struct Keys;
+
+impl Plugin for Keys {
+    fn manifest(&self) -> Manifest {
+        common::manifest("keys")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        use paperpaw_core::sdk::builtin::slots;
+        let screen = paperpaw_core::sdk::Id::new_static("keys.screen");
+        r.add_screen(paperpaw_core::sdk::ScreenSpec::new(
+            screen.clone(),
+            "keys",
+            Box::new(|_, asked| {
+                Box::new(Answering(Some(asked.clone()))) as Box<dyn paperpaw_core::sdk::Screen>
+            }),
+        ))?;
+        r.bind_slot(
+            slots::KEYBOARD,
+            screen,
+            paperpaw_core::sdk::Priority::DEFAULT,
+        )?;
+        Ok(())
+    }
+}
+
+/// The keyboard's screen: answers as it shows, then closes.
+struct Answering(Option<Params>);
+
+impl paperpaw_core::sdk::Screen for Answering {
+    fn draw(&mut self, _: &mut paperpaw_core::sdk::Canvas<'_>, _: &paperpaw_core::sdk::Env<'_>) {}
+
+    fn on_action(
+        &mut self,
+        _: &paperpaw_core::sdk::Id,
+        _: &mut paperpaw_core::sdk::Cx<'_, '_>,
+    ) -> paperpaw_core::sdk::Handled {
+        paperpaw_core::sdk::Handled::No
+    }
+
+    fn on_show(&mut self, cx: &mut paperpaw_core::sdk::Cx<'_, '_>) {
+        use paperpaw_core::sdk::builtin::params;
+        use paperpaw_core::sdk::event::EventData;
+        let Some(asked) = self.0.take() else {
+            return;
+        };
+        let reply = asked
+            .get(params::REPLY)
+            .and_then(|r| paperpaw_core::sdk::Id::parse(r).ok());
+        if let Some(reply) = reply {
+            let typed = paperpaw_core::sdk::Typed::new("keyed", asked.clone());
+            cx.command(paperpaw_core::sdk::Command::Emit(reply, typed.to_params()));
+        }
+        cx.command(paperpaw_core::sdk::Command::Back);
     }
 }
 
@@ -868,6 +968,7 @@ fn vault(storage: MemoryStorage) -> (Kernel, Heard) {
             name: "spy",
             heard: heard.clone(),
         })
+        .plugin(Keys)
         .storage(storage)
         .build()
         .unwrap();
@@ -914,8 +1015,10 @@ fn a_secret_setting_is_kept_with_the_secrets() {
     assert!(told.len() == 1 && told[0].starts_with("vault "), "{told:?}");
 }
 
-/// Another plugin cannot overwrite a plugin's secret setting: not set,
-/// typed for, nor reset.
+/// Another plugin cannot overwrite a plugin's secret or guarded setting:
+/// not set, reset, typed for, nor asked of the keyboard or the
+/// clipboard; the plugin itself asks the keyboard for its own, which
+/// answers.
 #[test]
 fn another_plugin_cannot_overwrite_a_secret_setting() {
     let (mut kernel, _) = vault(MemoryStorage::new());
@@ -926,6 +1029,18 @@ fn another_plugin_cannot_overwrite_a_secret_setting() {
         Params::new(),
     );
     assert_eq!(kernel.secrets().get("vault.key"), Some("k-123"));
+    assert_eq!(kernel.settings().text("vault.pin"), "");
+    common::render(&mut kernel);
+    assert_eq!(kernel.secrets().get("vault.key"), Some("k-123"));
+    assert_eq!(kernel.settings().text("vault.pin"), "");
+    // Its own, asked of the keyboard by the vault: kept.
+    kernel.send_event(
+        Instant(300),
+        paperpaw_core::sdk::Id::new_static("vault.ask"),
+        Params::new(),
+    );
+    common::render(&mut kernel);
+    assert_eq!(kernel.secrets().get("vault.key"), Some("keyed"));
 }
 
 /// Reset, a secret setting goes from the secrets; its owner hears it.

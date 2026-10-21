@@ -210,10 +210,6 @@ pub enum StatusValue {
 /// Computes an item's value; `None` hides it (e.g. no battery).
 pub type StatusFn = Box<dyn Fn(&Env<'_>, &Params) -> Option<StatusValue>>;
 
-/// What a tap on an item does, with the context its line was drawn with
-/// (see [`context`]): a command, or `None` for nothing now.
-pub type StatusTapFn = fn(&Env<'_>, &Params) -> Option<crate::Command>;
-
 /// How much an item matters where none says ([`StatusItemSpec::priority`]).
 pub const PRIORITY: u8 = 128;
 
@@ -224,9 +220,13 @@ pub struct StatusItemSpec {
     /// Translation key of its name in settings, e.g. "Battery".
     pub title: Cow<'static, str>,
     pub value: StatusFn,
-    /// What a tap on it does; without it a tap does what the screen does
+    /// The action a tap on it runs, one of its own plugin's, with the
+    /// context its line was drawn with (see [`context`];
+    /// [`Command::RunActionWith`](crate::Command::RunActionWith)): it
+    /// runs as that plugin, whichever screen shows the line, and can be
+    /// bound to buttons too. Without it a tap does what the screen does
     /// with the line.
-    pub tap: Option<StatusTapFn>,
+    pub tap: Option<Id>,
     /// How much it matters: where a line has no room for all its items,
     /// those of the lowest priority are left out first ([`PRIORITY`] by
     /// default).
@@ -250,8 +250,8 @@ impl StatusItemSpec {
         }
     }
 
-    /// What a tap on it does.
-    pub fn tap(self, tap: StatusTapFn) -> Self {
+    /// The action a tap on it runs, one of its own plugin's.
+    pub fn tap(self, tap: Id) -> Self {
         Self {
             tap: Some(tap),
             ..self
@@ -314,11 +314,12 @@ impl Place {
 
 /// What the items of `lists` show now, with `context`, as text.
 pub fn signature(env: &Env<'_>, lists: &[&str], context: &Params) -> String {
+    use core::fmt::Write;
     let mut out = String::new();
     for list in lists {
         for id in item_ids(list) {
             if let Some(value) = env.status_items.value(id, env, context) {
-                out.push_str(&alloc::format!("{value:?}|"));
+                let _ = write!(out, "{value:?}|");
             }
         }
         out.push('/');
@@ -453,9 +454,14 @@ impl StatusItems {
         (self.item(id)?.value)(env, context)
     }
 
-    /// What a tap on item `id` does now, if anything.
-    pub fn tap(&self, id: &str, env: &Env<'_>, context: &Params) -> Option<crate::Command> {
-        (self.item(id)?.tap?)(env, context)
+    /// What a tap on item `id`, drawn with `context`, runs: its action
+    /// ([`StatusItemSpec::tap`]) with the context, where the action is
+    /// its own plugin's.
+    pub fn tap(&self, id: &str, context: &Params) -> Option<crate::Command> {
+        let item = self.item(id)?;
+        let action = item.tap.as_ref()?;
+        (action.namespace() == item.id.namespace())
+            .then(|| crate::Command::RunActionWith(action.clone(), context.clone()))
     }
 
     /// How much item `id` matters ([`StatusItemSpec::priority`]).
@@ -463,12 +469,7 @@ impl StatusItems {
         self.item(id).map_or(PRIORITY, |i| i.priority)
     }
 
-    /// The least width of item `id`, in times the text's size.
-    pub fn min_width(&self, id: &str) -> f32 {
-        self.item(id).map_or(0.0, |i| i.min_width)
-    }
-
-    fn item(&self, id: &str) -> Option<&StatusItemSpec> {
+    pub(crate) fn item(&self, id: &str) -> Option<&StatusItemSpec> {
         self.items.iter().find(|i| i.id.as_str() == id)
     }
 }
@@ -503,8 +504,27 @@ struct Laid<'a> {
     percent: bool,
 }
 
-/// An item listed in a part of a line, with its value now.
-type Listed<'a> = (&'a str, StatusValue);
+/// An item listed in a part of a line: its value now, measured once.
+struct Listed<'a> {
+    id: &'a str,
+    value: StatusValue,
+    priority: u8,
+    /// Its width with a level's percentage and without it, at least its
+    /// least width.
+    widths: [f32; 2],
+    /// Its least width, in pixels.
+    least: f32,
+}
+
+impl Listed<'_> {
+    fn width(&self, percent: bool) -> f32 {
+        self.widths[usize::from(!percent)]
+    }
+
+    fn text(&self) -> bool {
+        matches!(self.value, StatusValue::Text(_))
+    }
+}
 
 impl<'a> StatusLine<'a> {
     /// The items of `lists` in `area`, with text of `size` in `color`;
@@ -571,7 +591,7 @@ impl<'a> StatusLine<'a> {
         laid.sort_by(|a, b| a.x.total_cmp(&b.x));
         laid.iter()
             .filter_map(|item| {
-                let command = env.status_items.tap(item.id, env, context)?;
+                let command = env.status_items.tap(item.id, context)?;
                 let x0 = (item.x - reach).max(f32::from(area.x));
                 let x1 =
                     (item.x + item.width + reach).min(f32::from(area.x) + f32::from(area.width));
@@ -586,19 +606,12 @@ impl<'a> StatusLine<'a> {
         let (area, size) = (self.area, self.size);
         let mut parts: [Vec<Listed<'a>>; 3] = self.lists.map(|list| {
             item_ids(list)
-                .filter_map(|id| Some((id, env.status_items.value(id, env, context)?)))
+                .filter_map(|id| listed(env, font, size, id, context))
                 .collect()
         });
-        let percent = fit(
-            env,
-            font,
-            size,
-            f32::from(area.width),
-            &mut parts,
-            self.percent,
-        );
+        let percent = fit(size, f32::from(area.width), &mut parts, self.percent);
         let [left, center, right] = parts;
-        let measure = |item: &Listed<'_>| value_width(env, font, size, item, percent);
+        let measure = |item: &Listed<'_>| item.width(percent);
         // A gap as wide as the text is high; narrower, down to 40 %, where
         // the items would not fit whole with it (wide margins, large text).
         let all = [&left, &center, &right];
@@ -639,7 +652,7 @@ impl<'a> StatusLine<'a> {
         let left_end = if center.is_empty() { right_x } else { center_x } - gap;
         let mut laid = Vec::new();
         let mut place = |items: Vec<Listed<'a>>, x: f32, end: f32| {
-            place(&mut laid, env, font, (size, gap, percent), items, (x, end));
+            place(&mut laid, font, (size, gap, percent), items, (x, end));
         };
         place(center, center_x, right_x - gap);
         place(right, right_x, x1);
@@ -648,55 +661,71 @@ impl<'a> StatusLine<'a> {
     }
 }
 
-/// Leaves out of `parts` what does not fit `room` whole: the battery's
-/// percentage first (the result says whether it stays), then the items
-/// of the lowest priority, of equal ones the centre's, then the left's,
-/// then the right's, each part's from its end. The left counts with a
-/// few letters where it has text, which is shortened to its room.
-fn fit(
+/// Item `id` with its value now (`None` where it shows nothing), measured
+/// at `size`.
+fn listed<'a>(
     env: &Env<'_>,
     font: &FontHandle<'_>,
     size: f32,
-    room: f32,
-    parts: &mut [Vec<Listed<'_>>; 3],
-    mut percent: bool,
-) -> bool {
+    id: &'a str,
+    context: &Params,
+) -> Option<Listed<'a>> {
+    let item = env.status_items.item(id)?;
+    let value = (item.value)(env, context)?;
+    let least = item.min_width * size;
+    let width = |percent| value_width(env, font, size, &value, percent).max(least);
+    Some(Listed {
+        id,
+        widths: [width(true), width(false)],
+        value,
+        priority: item.priority,
+        least,
+    })
+}
+
+/// Leaves out of `parts` what does not fit `room` whole, and says whether
+/// levels show their percentage (where `percent` wants it): the
+/// percentage goes first, then the items of the lowest priority, of
+/// equal ones the centre's, then the left's, then the right's, each
+/// part's from its end; after each, the percentage is tried again. Texts
+/// count with a few letters, as they are shortened to their room.
+fn fit(size: f32, room: f32, parts: &mut [Vec<Listed<'_>>; 3], percent: bool) -> bool {
     loop {
-        let measure = |item: &Listed<'_>| value_width(env, font, size, item, percent);
-        let count: usize = parts.iter().map(Vec::len).sum();
-        let mut need = size * 0.4 * count.saturating_sub(1) as f32;
-        for (at, part) in parts.iter().enumerate() {
-            let width: f32 = part.iter().map(measure).sum();
-            let shortened = at == 0 && part.iter().any(|(_, v)| matches!(v, StatusValue::Text(_)));
-            need += if shortened {
-                width.min(size * 3.0)
-            } else {
-                width
-            };
-        }
-        // A pixel of slack for rounding, as when the parts are placed.
-        if need <= room + 1.0 {
-            return percent;
-        }
         let levels = parts
             .iter()
             .flatten()
-            .any(|(_, v)| matches!(v, StatusValue::Level { .. }));
-        if percent && levels {
-            percent = false;
-            continue;
+            .any(|item| matches!(item.value, StatusValue::Level { .. }));
+        let tries: &[bool] = if percent && levels {
+            &[true, false]
+        } else {
+            &[false]
+        };
+        for &with in tries {
+            let count: usize = parts.iter().map(Vec::len).sum();
+            let mut need = size * 0.4 * count.saturating_sub(1) as f32;
+            for item in parts.iter().flatten() {
+                let width = item.width(with);
+                need += if item.text() {
+                    width.min(size * 3.0)
+                } else {
+                    width
+                };
+            }
+            // A pixel of slack for rounding, as when the parts are placed.
+            if need <= room + 1.0 {
+                return with && percent;
+            }
         }
         let mut least: Option<(u8, usize, usize)> = None;
         for (rank, at) in [1, 0, 2].into_iter().enumerate() {
-            for (index, (id, _)) in parts[at].iter().enumerate().rev() {
-                let priority = env.status_items.priority(id);
-                if least.is_none_or(|(p, r, _)| (priority, rank) < (p, r)) {
-                    least = Some((priority, rank, index));
+            for (index, item) in parts[at].iter().enumerate().rev() {
+                if least.is_none_or(|(p, r, _)| (item.priority, rank) < (p, r)) {
+                    least = Some((item.priority, rank, index));
                 }
             }
         }
         let Some((_, rank, index)) = least else {
-            return percent;
+            return false;
         };
         parts[[1, 0, 2][rank]].remove(index);
     }
@@ -706,10 +735,10 @@ fn value_width(
     env: &Env<'_>,
     font: &FontHandle<'_>,
     size: f32,
-    (id, value): &Listed<'_>,
+    value: &StatusValue,
     with_percent: bool,
 ) -> f32 {
-    let own = match value {
+    match value {
         StatusValue::Icon(name) => crate::ui::icon_width(env, name, size),
         StatusValue::Text(text) => font.measure(size, text),
         StatusValue::Level { percent, .. } if with_percent => {
@@ -720,8 +749,7 @@ fn value_width(
         StatusValue::Labelled { icon, text } => {
             crate::ui::icon_width(env, icon, size) + label_gap(size) + font.measure(size, text)
         }
-    };
-    own.max(env.status_items.min_width(id) * size)
+    }
 }
 
 /// A bar's length: about as long as a short word.
@@ -748,43 +776,35 @@ fn battery_width(size: f32) -> f32 {
 /// where they do not all fit.
 fn place<'a>(
     out: &mut Vec<Laid<'a>>,
-    env: &Env<'_>,
     font: &FontHandle<'_>,
     (size, gap, with_percent): (f32, f32, bool),
     items: Vec<Listed<'a>>,
     (mut x, end): (f32, f32),
 ) {
-    let widths: Vec<f32> = items
-        .iter()
-        .map(|item| value_width(env, font, size, item, with_percent))
-        .collect();
-    let texts: Vec<bool> = items
-        .iter()
-        .map(|(_, v)| matches!(v, StatusValue::Text(_)))
-        .collect();
+    let widths: Vec<f32> = items.iter().map(|item| item.width(with_percent)).collect();
+    let texts: Vec<bool> = items.iter().map(Listed::text).collect();
     let shrunk = shrink(&widths, &texts, gap, end - x);
     let budget = |i: usize| match shrunk {
         Some((at, width)) if at == i => width,
         _ => f32::MAX,
     };
-    for (i, (id, value)) in items.into_iter().enumerate() {
+    for (i, item) in items.into_iter().enumerate() {
         if x >= end {
             break;
         }
         // A pixel of slack for rounding, as for texts.
         let fits = |width: f32| x + width <= end + 1.0;
         let percent = with_percent && fits(widths[i]);
-        let least = env.status_items.min_width(id) * size;
-        let (value, width) = match value {
+        let (value, width) = match item.value {
             StatusValue::Text(text) => {
                 // A pixel of slack for rounding: the parts were measured to fit.
                 let room = (end - x + 1.0).min(budget(i));
                 let text = crate::ui::fit(font, size, &text, room);
-                let width = font.measure(size, &text).max(least.min(room));
+                let width = font.measure(size, &text).max(item.least.min(room));
                 (StatusValue::Text(text), width)
             }
             value => {
-                let width = value_width(env, font, size, &(id, value.clone()), percent);
+                let width = item.widths[usize::from(!percent)];
                 if !fits(width) {
                     break;
                 }
@@ -792,7 +812,7 @@ fn place<'a>(
             }
         };
         out.push(Laid {
-            id,
+            id: item.id,
             value,
             x,
             width,

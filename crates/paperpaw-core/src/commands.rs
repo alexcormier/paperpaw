@@ -808,6 +808,9 @@ pub(crate) struct Reserved<'a> {
     /// The plugin of the settings editor (the screen of the settings
     /// slot): the reader's own editor.
     editor: Option<&'a str>,
+    /// The plugin of the keyboard (the screen of the keyboard slot),
+    /// which answers what it was asked to, and sees what is typed anyway.
+    keyboard: Option<&'a str>,
 }
 
 impl<'a> Reserved<'a> {
@@ -818,16 +821,61 @@ impl<'a> Reserved<'a> {
         let editor = registry
             .resolve_slot(slots::SETTINGS.as_str())
             .map(Id::namespace);
-        Self { settings, editor }
+        let keyboard = registry
+            .resolve_slot(slots::KEYBOARD.as_str())
+            .map(Id::namespace);
+        Self {
+            settings,
+            editor,
+            keyboard,
+        }
+    }
+}
+
+/// Whether `command` sends text typed for a setting, or asks for it
+/// ([`events::SETTING_TYPED`] as the event it emits or is answered
+/// with), with the parameters that name the setting; `Some(None)` where
+/// what comes from outside could name any (a server's, a socket's).
+fn typed_for(command: &Command) -> Option<Option<&Params>> {
+    let reply = |params: &Params| {
+        params.get(paperpaw_sdk::builtin::params::REPLY) == Some(events::SETTING_TYPED.as_str())
+    };
+    let typed = |event: &Id| *event == events::SETTING_TYPED;
+    match command {
+        Command::Emit(event, params) | Command::ReadClipboard(event, params) if typed(event) => {
+            Some(Some(params))
+        }
+        Command::OpenSlot(_, params)
+        | Command::OpenScreen(_, params)
+        | Command::Replace(_, params)
+        | Command::OpenInSlot(_, _, params)
+        | Command::RunActionWith(_, params)
+        | Command::RunOriginal(_, params)
+            if reply(params) =>
+        {
+            Some(Some(params))
+        }
+        Command::Http(request) if typed(&request.reply) => Some(Some(&request.params)),
+        Command::Speak(speech) if typed(&speech.reply) => Some(Some(&speech.params)),
+        Command::Serve { events, .. }
+        | Command::Connect { events, .. }
+        | Command::Broadcast { events, .. }
+            if typed(events) =>
+        {
+            Some(None)
+        }
+        _ => None,
     }
 }
 
 /// Drops from `out[from..]` what `owner` may not ask, and tells whether
-/// it did: another plugin's secret or secret setting (set, reset or
-/// typed for), a setting that keeps the device safe
-/// (`SettingSpec::guarded`) of another plugin, the sleep slot. The
+/// it did: another plugin's secret, another plugin's secret setting or
+/// setting that keeps the device safe (`SettingSpec::guarded`) set, reset
+/// or typed for (text sent for it, or asked for from the keyboard, the
+/// clipboard or anywhere else, see [`typed_for`]), the sleep slot. The
 /// settings editor may: it is how the reader changes them. So may the
-/// kernel's own handlers, which set what was typed once it was vetted.
+/// kernel's own handlers, which set what was typed once it was vetted,
+/// and the keyboard answer what it was asked.
 pub(crate) fn vet_reserved(
     out: &mut Vec<Command>,
     from: usize,
@@ -838,7 +886,9 @@ pub(crate) fn vet_reserved(
     let foreign = |id: &str, kept: fn(&paperpaw_sdk::SettingSpec) -> bool| {
         id.split('.').next() != Some(owner) && reserved.settings.spec(id).is_some_and(kept)
     };
-    let guarded = |id: &Id| foreign(id.as_str(), |spec| spec.guarded || spec.extra().secret);
+    let kept = |spec: &paperpaw_sdk::SettingSpec| spec.guarded || spec.extra().secret;
+    let guarded = |id: &Id| foreign(id.as_str(), kept);
+    let keyboard = reserved.keyboard == Some(owner);
     let before = out.len();
     let mut index = 0;
     out.retain(|command| {
@@ -847,11 +897,15 @@ pub(crate) fn vet_reserved(
             && match command {
                 Command::SetSecret(change) => change.id.split('.').next() != Some(owner),
                 Command::SetSetting(id, _) | Command::ResetSetting(id) => guarded(id),
-                // Text typed for another plugin's secret setting: the
-                // kernel would set it.
-                Command::Emit(event, params) if *event == events::SETTING_TYPED => params
-                    .get(paperpaw_sdk::builtin::params::ID)
-                    .is_some_and(|id| foreign(id, |spec| spec.extra().secret)),
+                // Text typed for another plugin's secret or guarded
+                // setting, or asked for: the kernel would set it.
+                command if !keyboard && typed_for(command).is_some() => {
+                    typed_for(command).flatten().is_none_or(|params| {
+                        params
+                            .get(paperpaw_sdk::builtin::params::ID)
+                            .is_some_and(|id| foreign(id, kept))
+                    })
+                }
                 // The sleep screen shows over the lock; the settings
                 // editor has these rights.
                 Command::BindSlot(slot, _) => *slot == slots::SLEEP || *slot == slots::SETTINGS,
