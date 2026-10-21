@@ -13,7 +13,8 @@
 //! fingerprint, at each install. An older version installs only when the
 //! reader chooses it, told it is older. An update without some of the
 //! plugins built in now says which, and the reader chooses to update
-//! without them or to wait.
+//! without them or to wait. An update whose plugins have no builds for it
+//! yet waits for them ([`waiting`]).
 
 #![no_std]
 
@@ -23,6 +24,7 @@ mod fetch;
 mod found;
 pub mod online;
 mod page;
+mod waiting;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -45,7 +47,8 @@ pub const OPEN: Id = Id::new_static("update.open");
 pub const CHECK: Id = Id::new_static("update.check");
 const PAGE: Id = Id::new_static("update.page");
 /// Declared work: a check no reader waits for (a rule's).
-const CHECK_DUE: paperpaw_sdk::event::Event = paperpaw_sdk::event::Event::new("update.check-due");
+pub(crate) const CHECK_DUE: paperpaw_sdk::event::Event =
+    paperpaw_sdk::event::Event::new("update.check-due");
 /// The update being installed (its path and version), kept through the
 /// restart to say how it went.
 const INSTALLING: &str = "installing.txt";
@@ -101,6 +104,14 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
             "update.undone",
             &[("version", Arg::Str(&firmware.version))],
         )));
+        return;
+    }
+    // An update waiting for plugins: gone once installed or no longer
+    // newer; a week unseen, the page opens once.
+    if online::offer(storage, firmware).is_none_or(|offer| !offer.waits()) {
+        waiting::clear(storage);
+    } else if waiting::at_start(storage, paperpaw_sdk::time::unix_seconds(env), out) {
+        out.push(Command::OpenScreen(PAGE, Params::new()));
         return;
     }
     // A newer update on the card, not offered before.

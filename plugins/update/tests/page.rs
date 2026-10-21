@@ -115,6 +115,12 @@ impl Device {
     /// Running PaperPaw 0.4.0 with [`RUNNING`], the card as `storage` has
     /// it.
     fn new(storage: Shared) -> Self {
+        Self::at(storage, None)
+    }
+
+    /// As [`Device::new`], started at `unix` seconds since 1970 where the
+    /// clock is known.
+    fn at(storage: Shared, unix: Option<i64>) -> Self {
         let firmware = Firmware {
             version: "0.4.0".into(),
             project: PROJECT.into(),
@@ -132,6 +138,18 @@ impl Device {
             .plugin(Update)
             .build()
             .unwrap();
+        if let Some(unix) = unix {
+            let clock = paperpaw_platform::WallClock {
+                at: Instant(0),
+                unix_millis: unix * 1000,
+                utc_offset_minutes: None,
+            };
+            let status = paperpaw_platform::SystemStatus {
+                clock: Some(clock),
+                battery: None,
+            };
+            kernel.set_status(Instant(0), status);
+        }
         kernel.start(Instant(0));
         Self {
             kernel,
@@ -199,13 +217,90 @@ impl Device {
 }
 
 /// The server's answer naming PaperPaw 0.5.0 without the reader's own
-/// plugin.
+/// plugin, which is not in the plugin library.
 fn offer(size: usize) -> String {
     format!(
         r#"{{"version": "0.5.0", "url": "/api/v1/updates/paperpaw-x4-0.5.0-update.bin",
             "size": {size}, "plugins": ["paperpaw-plugin-stats 0.5.0"],
-            "missing": ["chess-for-paperpaw not-ready"]}}"#
+            "missing": ["chess-for-paperpaw unknown"]}}"#
     )
+}
+
+/// The server's answer naming PaperPaw 0.5.0, which waits for a code
+/// plugin of this device with no build for it yet and for the reader's
+/// own plugin built in, not built for it yet.
+fn offer_waiting(size: usize) -> String {
+    format!(
+        r#"{{"version": "0.5.0", "url": "/api/v1/updates/paperpaw-x4-0.5.0-update.bin",
+            "size": {size}, "plugins": ["paperpaw-plugin-stats 0.5.0"],
+            "missing": ["chess-for-paperpaw not-ready"], "waiting": ["dict-xl 0.3.1"]}}"#
+    )
+}
+
+const WAITING: &str = ".paperpaw/plugins/update/waiting.txt";
+
+#[test]
+fn an_update_waiting_for_plugins_says_which_and_waits() {
+    let mut device = Device::new(Shared::default());
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    device.answer(&call, 200, offer_waiting(5000).as_bytes());
+    let shown = device.shown();
+    assert!(
+        shown.contains("PaperPaw 0.5.0 waits for plugins"),
+        "{shown}"
+    );
+    assert!(
+        shown.contains("yet: dict-xl, chess-for-paperpaw."),
+        "{shown}"
+    );
+    assert!(shown.contains("Keep waiting"), "{shown}");
+    assert!(shown.contains("Update anyway"), "{shown}");
+    // Looked at: it does not open by itself later.
+    let waiting = device.storage.0.get(WAITING).unwrap();
+    assert!(String::from_utf8_lossy(&waiting).contains("seen"));
+    // Updated anyway: downloaded.
+    device.run(actions::DOWN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    assert_eq!(call.method, "GET");
+    assert!(device.shown().contains("Downloading PaperPaw 0.5.0"));
+}
+
+#[test]
+fn a_waiting_update_found_in_the_background_opens_once_after_a_week() {
+    let (start, day) = (1_760_000_000, 24 * 3600);
+    // Found by a search in the background: kept, not offered.
+    let storage = Shared(Rc::new(
+        MemoryStorage::new()
+            .with(
+                ".paperpaw/plugins/update/offer.txt",
+                "0.5.0\n/api/v1/updates/paperpaw-x4-0.5.0-update.bin\n5000\n\
+                 plugin paperpaw-plugin-stats 0.5.0\nmissing chess-for-paperpaw not-ready\n\
+                 waiting dict-xl 0.3.1\n",
+            )
+            .with(WAITING, format!("0.5.0\nsince {start}\nchecked {start}\n")),
+    ));
+    // Started again (on the X4 at each wake). Six days on: asked again by
+    // itself (a day passed), still waiting, nothing shown.
+    let mut device = Device::at(storage.clone(), Some(start + 6 * day));
+    let call = device.request();
+    device.answer(&call, 200, offer_waiting(5000).as_bytes());
+    assert!(!device.shown().contains("waits for plugins"));
+    // A week: the page, once.
+    let mut device = Device::at(storage.clone(), Some(start + 7 * day));
+    assert!(device.shown().contains("waits for plugins"));
+    let mut device = Device::at(storage.clone(), Some(start + 8 * day));
+    assert!(!device.shown().contains("waits for plugins"));
+    // Asked again, the plugins ready: it waits no more, offered on the
+    // page.
+    let call = device.request();
+    device.answer(&call, 200, offer(5000).as_bytes());
+    assert!(device.storage.0.get(WAITING).is_none());
+    device.run(OPEN);
+    let shown = device.shown();
+    assert!(shown.contains("PaperPaw 0.5.0 is available"), "{shown}");
 }
 
 #[test]
@@ -386,7 +481,7 @@ fn an_update_from_the_server_is_downloaded_and_offered() {
     let shown = device.shown();
     assert!(shown.contains("PaperPaw 0.5.0 is available"), "{shown}");
     assert!(
-        shown.contains("chess-for-paperpaw (not ready yet)"),
+        shown.contains("chess-for-paperpaw (not in the plugin library)"),
         "{shown}"
     );
     assert!(shown.contains("Download without them"), "{shown}");

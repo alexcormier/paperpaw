@@ -8,7 +8,10 @@
 //! installed only as going back (or installing again), and gives way to
 //! a newer update the server named. An update that leaves out plugins
 //! built in now says which; one not signed by PaperPaw shows its key,
-//! which the reader accepts at each install.
+//! which the reader accepts at each install. An update the server named
+//! that waits for plugins (see [`waiting`](crate::waiting)) says which,
+//! and offers to keep waiting or to update anyway; the page shown counts
+//! as the reader having looked.
 //!
 //! Buttons: up and down (or left and right) move between the buttons,
 //! *Select* chooses, *Back* closes (not while installing). Touch: tap.
@@ -68,6 +71,12 @@ enum View {
         offer: Offer,
         leaves: Vec<String>,
     },
+    /// An update the server named that waits for plugins, and their
+    /// names.
+    Waiting {
+        offer: Offer,
+        names: String,
+    },
     /// Downloading the update of this version.
     Downloading(String),
     Installing {
@@ -125,8 +134,47 @@ impl UpdatePage {
             focus: 0,
             shown: !env.device.input.touch,
         };
-        page.view = page.look(env);
+        page.view = page.look_noted(env);
         page
+    }
+
+    /// What there is now ([`Self::look`]); an update that waits for
+    /// plugins, shown, counts as seen.
+    fn look_noted(&self, env: &Env<'_>) -> View {
+        let view = self.look(env);
+        if matches!(view, View::Waiting { .. }) {
+            crate::waiting::seen(env.storage);
+        }
+        view
+    }
+
+    /// The names of the plugins `offer` waits for: the code plugins with
+    /// no build for it, and the crates built in now not built for it yet.
+    fn waiting_names(env: &Env<'_>, offer: &Offer) -> String {
+        let code = offer.waiting_ids().map(|id| {
+            env.plugins
+                .iter()
+                .find(|p| p.manifest.id.as_str() == id)
+                .map_or_else(|| String::from(id), |p| String::from(p.name(env.i18n)))
+        });
+        let crates = offer.missing.lines().filter_map(|line| {
+            let (name, why) = line.split_once(' ')?;
+            (why.trim() == "not-ready").then(|| Self::crate_name(env, name))
+        });
+        code.chain(crates).collect::<Vec<_>>().join(", ")
+    }
+
+    /// A plugin crate's name: first-party crates are named after their
+    /// plugin.
+    fn crate_name(env: &Env<'_>, name: &str) -> String {
+        let key = name
+            .strip_prefix("paperpaw-plugin-")
+            .map(|id| alloc::format!("{id}.plugin.name"));
+        String::from(
+            key.as_deref()
+                .and_then(|key| env.i18n.get(key))
+                .unwrap_or(name),
+        )
     }
 
     /// What there is now: an install going on, or the files on the card.
@@ -170,6 +218,10 @@ impl UpdatePage {
                     leaves,
                 }
             }
+            (_, Some(offer)) if offer.waits() => View::Waiting {
+                names: Self::waiting_names(env, &offer),
+                offer,
+            },
             (_, Some(offer)) => {
                 let wanted = crate::fetch::wanted(env, &offer.builds);
                 let leaves = offer
@@ -200,20 +252,13 @@ impl UpdatePage {
         let names: Vec<String> = crates
             .iter()
             .map(|name| {
-                // First-party crates are named after their plugin.
-                let key = name
-                    .strip_prefix("paperpaw-plugin-")
-                    .map(|id| alloc::format!("{id}.plugin.name"));
-                let shown = key
-                    .as_deref()
-                    .and_then(|key| env.i18n.get(key))
-                    .unwrap_or(name);
+                let shown = Self::crate_name(env, name);
                 match offer.and_then(|o| o.why_missing(name)) {
                     Some(why @ ("unknown" | "not-ready")) => alloc::format!(
                         "{shown} ({})",
                         env.i18n.tr(&alloc::format!("update.missing.{why}"))
                     ),
-                    _ => String::from(shown),
+                    _ => shown,
                 }
             })
             .collect();
@@ -259,6 +304,8 @@ impl UpdatePage {
             }
             View::Ready { .. } => alloc::vec![Button::Install, Button::Close],
             View::Offer { .. } => alloc::vec![Button::Download, Button::Close],
+            // Waiting is the way on; updating anyway the other.
+            View::Waiting { .. } => alloc::vec![Button::Close, Button::Download],
             View::Unreachable { .. } => alloc::vec![Button::Check, Button::Close],
             View::Unfit(_) | View::Failed(_) | View::UpToDate => alloc::vec![Button::Close],
             View::Installing { .. } | View::Installed | View::Checking | View::Downloading(_) => {
@@ -297,10 +344,12 @@ impl UpdatePage {
             (Button::Download, View::Offer { leaves, .. }) if !leaves.is_empty() => {
                 "update.download-without"
             }
+            (Button::Download, View::Waiting { .. }) => "update.anyway",
             (Button::Download, _) => "update.download",
             (Button::Check, View::Unreachable { .. }) => "update.retry",
             (Button::Check, _) => "update.check",
             (Button::Transfer, _) => "update.transfer",
+            (Button::Close, View::Waiting { .. }) => "update.keep-waiting",
             (Button::Close, View::Ready { .. } | View::Offer { .. }) => "update.later",
             (Button::Close, _) => "update.ok",
         })
@@ -393,6 +442,13 @@ impl UpdatePage {
                     self.with_leaves(env, help, leaves),
                 )
             }
+            View::Waiting { offer, names } => (
+                with(
+                    "update.waiting.title",
+                    &[("version", Arg::Str(&offer.version))],
+                ),
+                with("update.waiting.help", &[("plugins", Arg::Str(names))]),
+            ),
             View::Downloading(version) => (
                 with(
                     "update.downloading.title",
@@ -456,7 +512,7 @@ impl UpdatePage {
                 self.redraw(cx, RefreshMode::Partial);
             }
             Button::Download => {
-                let View::Offer { offer, .. } = &self.view else {
+                let (View::Offer { offer, .. } | View::Waiting { offer, .. }) = &self.view else {
                     return;
                 };
                 let mut out = Vec::new();
@@ -660,7 +716,7 @@ impl Screen for UpdatePage {
         // Back from Wi-Fi transfer: a file may have come.
         let env = *cx.env();
         if !matches!(self.view, View::Installing { .. } | View::Installed) && !self.waiting() {
-            self.view = self.look(&env);
+            self.view = self.look_noted(&env);
             self.focus = 0;
         }
         self.redraw(cx, RefreshMode::Partial);
@@ -738,7 +794,7 @@ impl Screen for UpdatePage {
                         },
                     }
                 } else {
-                    match self.look(&env) {
+                    match self.look_noted(&env) {
                         View::Ready { age, .. } if !age.is_gt() => View::UpToDate,
                         View::Nothing | View::Unfit(_) => View::UpToDate,
                         view => view,

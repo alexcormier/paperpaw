@@ -28,6 +28,10 @@
 //! ```
 //!
 //! `url` may be a path on the server (`/api/v1/updates/…`).
+//! `waiting` may name code plugins of the question (`id version`) that
+//! have no build for the update yet: with them, or with a crate `missing`
+//! as `not-ready`, the update waits for its plugins ([`waiting`]): a
+//! search in the background does not offer it, the update page says so.
 //! `plugins` are those the update has built in; what the device has and
 //! they lack cannot come along, and `missing` may say why (`unknown`: not
 //! in the plugin library; `not-ready`: not built for that version yet).
@@ -51,7 +55,7 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, PluginKind, Storage, files};
 
 use crate::fetch::{self, Build};
-use crate::{OFFERED, PAGE, file, read_pair, write_pair};
+use crate::{OFFERED, PAGE, file, read_pair, waiting, write_pair};
 
 /// Where updates are asked for.
 pub const SERVER: Setting<Text> = Setting::new("update.server");
@@ -82,6 +86,9 @@ pub(crate) struct Offer {
     pub plugins: Plugins,
     /// Why plugins it lacks are missing: a crate and a word a line.
     pub missing: String,
+    /// The code plugins of this device with no build for it yet: an id
+    /// and a version a line.
+    pub waiting: String,
     /// The builds for it of the code plugins this device has, and of
     /// plugins built in now that it has as files ([`fetch`]).
     pub builds: Vec<Build>,
@@ -120,8 +127,26 @@ impl Offer {
             size: paperpaw_sdk::json::number(&members, "size").map_or(0, |n| n.max(0.0) as u64),
             plugins: Plugins::new(lines("plugins")),
             missing: lines("missing"),
+            waiting: lines("waiting"),
             builds: fetch::parse(body),
         })
+    }
+
+    /// Whether it waits for plugins: code plugins with no build for it,
+    /// or plugins built in now not built for it yet.
+    pub(crate) fn waits(&self) -> bool {
+        self.waiting.lines().any(|line| !line.trim().is_empty())
+            || self
+                .missing
+                .lines()
+                .any(|line| line.split_whitespace().nth(1) == Some("not-ready"))
+    }
+
+    /// The ids of the code plugins it waits for.
+    pub(crate) fn waiting_ids(&self) -> impl Iterator<Item = &str> {
+        self.waiting
+            .lines()
+            .filter_map(|line| line.split_whitespace().next())
     }
 
     /// The plugin crates the running firmware has that this update lacks
@@ -159,6 +184,9 @@ impl Offer {
         for line in self.missing.lines() {
             text.push_str(&format!("missing {line}\n"));
         }
+        for line in self.waiting.lines() {
+            text.push_str(&format!("waiting {line}\n"));
+        }
         text.push_str(&fetch::to_text(&self.builds));
         text
     }
@@ -171,15 +199,19 @@ impl Offer {
         if !is_version(&version) {
             return None;
         }
-        let (mut plugins, mut missing) = (String::new(), String::new());
+        let (mut plugins, mut missing, mut waiting) = (String::new(), String::new(), String::new());
         for line in lines {
-            if let Some(rest) = line.strip_prefix("plugin ") {
-                plugins.push_str(rest.trim());
-                plugins.push('\n');
+            let (list, rest) = if let Some(rest) = line.strip_prefix("plugin ") {
+                (&mut plugins, rest)
             } else if let Some(rest) = line.strip_prefix("missing ") {
-                missing.push_str(rest.trim());
-                missing.push('\n');
-            }
+                (&mut missing, rest)
+            } else if let Some(rest) = line.strip_prefix("waiting ") {
+                (&mut waiting, rest)
+            } else {
+                continue;
+            };
+            list.push_str(rest.trim());
+            list.push('\n');
         }
         Some(Self {
             version,
@@ -187,6 +219,7 @@ impl Offer {
             size,
             plugins: Plugins::new(plugins),
             missing,
+            waiting,
             builds: fetch::from_lines(text.lines()),
         })
     }
@@ -315,10 +348,26 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) 
     let storage = env.storage;
     let Some(offer) = Offer::from_answer(&reply.body, firmware) else {
         let _ = storage.remove(&file(OFFER));
+        waiting::clear(storage);
         return;
     };
     let _ = storage.create_dir(&Env::plugin_dir(crate::PLUGIN.as_str()));
     let _ = storage.write(&file(OFFER), offer.to_text().as_bytes());
+    // Waiting for plugins: kept and asked for again, offered once ready.
+    if offer.waits() {
+        waiting::answered(
+            storage,
+            &offer.version,
+            paperpaw_sdk::time::unix_seconds(env),
+        );
+        waiting::later(out);
+        // Asked for by the reader (the action): shown where it waits.
+        if reply.context.get(QUIET).is_some() && env.reader {
+            out.push(Command::OpenScreen(PAGE, Params::new()));
+        }
+        return;
+    }
+    waiting::clear(storage);
     let quiet = reply.context.get(QUIET).is_some();
     let key = (String::from("online"), offer.version.clone());
     if quiet && read_pair(storage, OFFERED) != Some(key.clone()) {

@@ -69,6 +69,16 @@ version yet) must say so before anything changes, never fail half way.
   the file into `updates` (as `updates/.download` until it is whole),
   and installs it as one copied there: its own list, its signature and
   its device are checked again then.
+- **An update waits for its plugins** (2026-10-21). The answer may
+  name code plugins of the question with no build for the update yet,
+  `"waiting": ["chess 1.2.0"]`. With them, or with a crate `missing` as
+  `not-ready`, a search in the background does not offer the update: it
+  is kept, shown on the update page (*PaperPaw 0.5.0 waits for
+  plugins*, which ones, *Keep waiting* or *Update anyway*), and asked
+  for again once a day at a cheap moment until it waits no more. If the
+  reader has not opened the page a week after it began to wait, the page
+  opens once at a start, never again for that version. Data plugins
+  never wait: a newer PaperPaw reads those made for an older SDK.
 - **The web flasher** reads which app partition runs (the OTA data),
   then the list at 0x120 of that partition, and offers the same plugins
   for the image it writes.
