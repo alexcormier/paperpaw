@@ -219,7 +219,17 @@ pub type Files = Vec<(String, Vec<u8>)>;
 /// at (some plugins are there only on some devices, such as a front
 /// light's).
 pub fn plugin(context: &Context) -> Result<Files, String> {
-    let mut key: Vec<String> = context.target.data.iter().map(|d| d.place()).collect();
+    // A folder's place, or what is handed in by its content: changed and
+    // checked again in the same run (the browser's), it is made anew.
+    let mut key: Vec<String> = context
+        .target
+        .data
+        .iter()
+        .map(|d| match &d.folder {
+            Some(_) => d.place(),
+            None => format!("{}#{:016x}", d.id, d.digest()),
+        })
+        .collect();
     key.extend(context.profiles.iter().map(|p| p.device.id.to_string()));
     if let Ok(made) = MADE.lock()
         && let Some((_, files)) = made.iter().find(|(k, _)| *k == key)
