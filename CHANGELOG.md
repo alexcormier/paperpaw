@@ -46,6 +46,16 @@ change the plugin SDK.
   (`SettingExtra::keeps_unknown`, `SettingSpec::accepts`, `parse`).
   Shells open books with `Kernel::open_book`, the X4's remote control
   too.
+- Book menu: *Open with …* (`actions::OPEN_WITH`), where there is
+  something to choose, lists the reading apps that read the book, the
+  other ways to open it plugins add (`menus::OPEN_WITH`, run after
+  `events::BOOK_CHOSEN` as the book menu's are) and *Always open it with
+  …*; the others open it this time only (`readers::ask_once`). The file
+  manager's *Open with* is the same list. The library's sheet shows the
+  book menu as its entries say they are now (`Menus::shown_items`, their
+  label and badge). Lists of reading apps are asked on `slots::CHOICE`
+  (`ask::choice`); `screens::READING_APPS` is gone, and a choice whose
+  option is an action shows the action's title.
 - SDK: buttons on touch screens are at least a fingertip (7 mm) high.
   Breaking: `ui::button_height(style, row)` takes the style. Rows and
   bars that hold buttons are made with `UiStyle::touch_row`, which grows them

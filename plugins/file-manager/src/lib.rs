@@ -408,9 +408,8 @@ impl Browser {
         let name = ops::name(path).to_string();
         match option {
             "open" => cx.command(paperpaw_sdk::readers::open(path)),
-            "open-with" => cx.command(paperpaw_sdk::readers::ask(
-                paperpaw_sdk::readers::Choice::Book(path),
-            )),
+            // This time; *Always open it with …* in the list keeps one.
+            "open-with" => cx.command(paperpaw_sdk::readers::ask_once(path)),
             "reading-app" => cx.command(paperpaw_sdk::readers::ask(
                 paperpaw_sdk::readers::Choice::Folder(path),
             )),
