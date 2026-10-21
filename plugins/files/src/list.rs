@@ -161,10 +161,7 @@ fn offer(path: &str, cx: &mut Cx<'_, '_>) {
 
 /// Opens the book at `path` in the reader.
 fn read(path: &str, cx: &mut Cx<'_, '_>) {
-    cx.command(Command::OpenSlot(
-        slots::READER,
-        Params::new().with(params::PATH, path.to_string()),
-    ));
+    cx.command(paperpaw_sdk::readers::open(path));
 }
 
 /// A shelf of the shelves, with its words made ready.

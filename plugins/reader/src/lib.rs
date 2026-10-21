@@ -52,6 +52,9 @@ use paperpaw_sdk::{
 
 pub const PLUGIN: Id = Id::new_static("reader");
 pub const SCREEN: Id = Id::new_static("reader.screen");
+/// The reader as a reading app (see `paperpaw_sdk::readers`); its name is
+/// the translation of its id.
+pub const APP: Id = Id::new_static("reader.app");
 /// The table of contents screen; parameters `path`, `section`, `offset`.
 pub const TOC_SCREEN: Id = Id::new_static("reader.toc");
 /// The bookmarks and highlights of a book; parameter `path`.
@@ -324,6 +327,7 @@ impl Plugin for Reader {
             Box::new(|env, params| Box::new(screen::ReaderScreen::open(env, params))),
         ))?;
         r.bind_slot(slots::READER, SCREEN, Priority::DEFAULT)?;
+        r.add_reader(paperpaw_sdk::readers::ReaderSpec::new(APP, SCREEN))?;
         r.add_screen(ScreenSpec::new(
             TOC_SCREEN,
             "reader.toc",
@@ -597,10 +601,8 @@ fn reopen_last_book(env: &Env<'_>, out: &mut Vec<Command>) {
     if let Some(path) = last_book(env)
         && env.storage.size(&path).is_ok()
     {
-        out.push(Command::OpenSlot(
-            slots::READER,
-            Params::new().with(params::PATH, path),
-        ));
+        // In the reading app chosen for it.
+        out.push(paperpaw_sdk::readers::open(path));
     }
 }
 

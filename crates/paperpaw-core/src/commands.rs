@@ -236,6 +236,32 @@ impl Kernel {
             Command::OpenInSlot(slot, screen, params) => {
                 self.open_slot_command(slot, Some(screen), params);
             }
+            Command::OpenBook(params) => {
+                let env = self.shared.env(self.now);
+                match paperpaw_sdk::readers::resolve(&env, &params) {
+                    // The slot's own screen, by name: in place of another
+                    // reading app the slot may show now. Not where it could
+                    // not open the book either (it is a reader too): it
+                    // says why itself.
+                    Command::OpenSlot(slot, params) => {
+                        let screen = self.shared.registry.resolve_slot(slot.as_str()).cloned();
+                        let failed = screen.as_ref().is_some_and(|screen| {
+                            paperpaw_sdk::readers::past(&params).any(|past| {
+                                self.shared
+                                    .readers
+                                    .get(past)
+                                    .is_some_and(|r| r.screen == *screen)
+                            })
+                        });
+                        if failed {
+                            self.warn_runtime("no reading app could open the book");
+                        } else {
+                            self.open_slot_command(slot, screen, params);
+                        }
+                    }
+                    command => self.apply(command),
+                }
+            }
             Command::Close(key) => self.close_screen(key),
             Command::Replace(screen, params) => self.replace(screen, &params),
             Command::BackTo(id) => self.back_to(&id),
@@ -301,12 +327,40 @@ impl Kernel {
     /// ([`Command::OpenInSlot`]), or shows it again where the slot is open
     /// with it and the same params (closing what is above it).
     pub(crate) fn open_slot_command(&mut self, slot: Id, screen: Option<Id>, params: Params) {
-        let open = self.stack.iter().position(|s| {
-            s.slot.as_ref() == Some(&slot) && screen.as_ref().is_none_or(|screen| s.id == *screen)
+        let in_slot = self
+            .stack
+            .iter()
+            .position(|s| s.slot.as_ref() == Some(&slot));
+        let open = in_slot.filter(|&index| {
+            screen
+                .as_ref()
+                .is_none_or(|screen| self.stack[index].id == *screen)
         });
         // Below a screen that guards the device, it stays as it is; one
         // for something else waits below the guard too.
-        let below_guard = |index: usize| self.held_by_guard() && self.guard() > Some(index);
+        let guard = if self.held_by_guard() {
+            self.guard()
+        } else {
+            None
+        };
+        let below_guard = move |index: usize| guard > Some(index);
+        // Another screen for the slot (another reading app): it goes, so
+        // that the slot holds one (one book open, not two).
+        if open.is_none()
+            && let Some(index) = in_slot.filter(|&index| !below_guard(index))
+        {
+            if !self.may_close_from(index, paperpaw_sdk::CloseCause::Slot) {
+                return;
+            }
+            let closed = (index..self.stack.len())
+                .map(|i| self.changed_region(i))
+                .reduce(|a, b| a.union(&b));
+            self.close_from(index);
+            self.stop_for_closed_screens();
+            if let Some(region) = closed {
+                self.invalidate(region);
+            }
+        }
         if let Some(index) = open.filter(|&index| below_guard(index)) {
             if params.is_empty() || self.stack[index].params == params {
                 return;

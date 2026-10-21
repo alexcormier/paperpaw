@@ -759,11 +759,9 @@ impl Firmware {
                 }
             }
             Command::Open(path) => {
+                // With the reading app chosen for it.
                 let at = self.kernel_now();
-                let params =
-                    paperpaw_sdk::Params::new().with(paperpaw_sdk::builtin::params::PATH, path);
-                let reader = paperpaw_sdk::builtin::slots::READER;
-                let effects = self.kernel.open_slot(at, reader, params);
+                let effects = self.kernel.open_book(at, &path);
                 self.apply(effects);
                 remote::ok();
             }

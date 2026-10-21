@@ -462,6 +462,7 @@ artifact, also when a check failed.
 | Key maps | `add_keymap`, `add_keymap_preset`, `add_keymap_when` | What buttons, taps and swipes do; bindings that apply while a switch is on |
 | Formats | `add_format` | Open a kind of file as a document to read; big pictures may be decoded when their page shows (`Document::prepare_image`); files without a known extension told by their first bytes (`FormatSpec::sniff`); the format's own settings in `OpenOptions::setting`; a document still coming says `DocumentError::NotReady`, then `events::DOCUMENT_READY` |
 | Lookup providers | `add_lookup_provider` | Where words are looked up (a glossary, a translator, Wikipedia): the dictionary's panel lists every provider's entries, those that go online when asked; an entry may open a screen with more of it (`LookupEntry::more`) |
+| Reading apps | `add_reader` | A screen of the plugin that reads books of some formats (a comics reader), offered where books open and chosen per format, folder or book |
 | Voices | `add_voice` | Speak text aloud in place of the system's voice, for the languages it speaks, chosen with `settings::VOICE` |
 | Fonts | `add_font`, `add_font_file`, `bind_font` | Fonts and the roles they fill |
 | Hyphenation | `add_hyphenation` | Patterns for a language |
@@ -491,7 +492,19 @@ Slots are how a plugin replaces another: bind your screen to
 
 A plugin that works with books never names the reader plugin: it uses
 what `builtin` defines for every reader, so a reader of one's own (bound
-to `core.reader`) replaces the shipped one in full.
+to `core.reader`) replaces the shipped one in full. A reader of some
+formats only registers as a reading app instead (`readers::ReaderSpec`,
+`Registrar::add_reader`): books open in the app chosen for them, and
+whatever opens a book opens it with `readers::open(path)` (never by
+opening `slots::READER` itself). The reader chooses with
+`readers::ask` (*Open with*, a folder's reading app) and in the reading
+settings (`settings::READING_APP`, and one per format that more than one
+app reads). A reading app's screen is its own; one that cannot open a
+book after all answers `readers::cannot_open` instead of an error of
+its own, and the next app in that order opens it. One reading app is
+open at a time. What moves folders calls `readers::folder_moved`, so
+that their choices go along; a shell opens a book with
+`Kernel::open_book`.
 
 | What | Standard | |
 |---|---|---|

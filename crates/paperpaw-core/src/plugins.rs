@@ -392,6 +392,9 @@ impl Kernel {
         for voice in staging.voices.drain(..) {
             self.shared.voices.add(voice);
         }
+        for reader in staging.readers.drain(..) {
+            self.shared.readers.add(reader);
+        }
         for filter in staging.input_filters.drain(..) {
             self.shared.input_filters.add(filter);
         }
@@ -908,6 +911,7 @@ impl Kernel {
         shared.page_layers.shrink_to_fit();
         shared.lookup.shrink_to_fit();
         shared.voices.shrink_to_fit();
+        shared.readers.shrink_to_fit();
         shared.input_filters.shrink_to_fit();
         shared.inputs.shrink_to_fit();
         shared.refresh_filters.shrink_to_fit();

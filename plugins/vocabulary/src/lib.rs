@@ -443,10 +443,7 @@ impl Screen for WordsScreen {
             )),
             "go-to" => {
                 // The book, then the word's place in it.
-                cx.command(Command::OpenSlot(
-                    slots::READER,
-                    Params::new().with(params::PATH, word.path.clone()),
-                ));
+                cx.command(paperpaw_sdk::readers::open(word.path.clone()));
                 cx.command(events::GOTO.emit(events::Goto::to(
                     word.path.clone(),
                     paperpaw_sdk::document::Locator::new(word.section, word.offset),

@@ -6,6 +6,23 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `readers`, reading apps. Any plugin registers a screen as a
+  reader of some formats (`Registrar::add_reader`, `ReaderSpec`); books
+  open through one call (`readers::open`, `Command::OpenBook`) in the
+  app chosen for the book, else its folder, else its format, else the
+  default one, else the screen of `slots::READER`. The library, the
+  file manager, the browser, OPDS, the home screen, widgets and the
+  other plugins open books so. The reading settings offer the default
+  app and one for each format (`settings::READING_APP`), where more than
+  one app reads it; the file manager offers *Open with* for a book and
+  *Reading app* for a folder (`readers::ask`), kept with the book or
+  the folder (`readers::folder_moved`: they follow a folder moved or
+  renamed). One reading app is open at a time; one that cannot open a
+  book passes it to the next (`readers::cannot_open`); a choice of an
+  app no longer installed is passed over without a word
+  (`SettingExtra::keeps_unknown`, `SettingSpec::accepts`, `parse`).
+  Shells open books with `Kernel::open_book`, the X4's remote control
+  too.
 - Library: the kernel keeps the catalog of books, the only one writing
   it, one change at a time, in the background and never while a book is
   open. It walks the library folder once the library first shows after

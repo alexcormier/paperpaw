@@ -275,6 +275,14 @@ pub fn paperpaw_sdk::builtin::events::Reading::xpointer(self, impl core::convert
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Reading
 pub fn paperpaw_sdk::builtin::events::Reading::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Reading::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::builtin::events::ReadingAppWanted
+pub paperpaw_sdk::builtin::events::ReadingAppWanted::folder: bool
+pub paperpaw_sdk::builtin::events::ReadingAppWanted::path: alloc::string::String
+impl paperpaw_sdk::builtin::events::ReadingAppWanted
+pub fn paperpaw_sdk::builtin::events::ReadingAppWanted::new(alloc::string::String, bool) -> Self
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::ReadingAppWanted
+pub fn paperpaw_sdk::builtin::events::ReadingAppWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::ReadingAppWanted::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::builtin::events::ScreenShown
 pub paperpaw_sdk::builtin::events::ScreenShown::screen: paperpaw_sdk::Id
 pub paperpaw_sdk::builtin::events::ScreenShown::slot: core::option::Option<paperpaw_sdk::Id>
@@ -387,6 +395,7 @@ pub const paperpaw_sdk::builtin::events::PAGE_WORDS_WANTED: paperpaw_sdk::event:
 pub const paperpaw_sdk::builtin::events::PLUGINS_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::POWER_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::PREVIEW_CHANGED: paperpaw_sdk::event::Event<()>
+pub const paperpaw_sdk::builtin::events::READING_APP_WANTED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::ReadingAppWanted>
 pub const paperpaw_sdk::builtin::events::RESUME: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::SCREEN_SHOWN: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::ScreenShown>
 pub const paperpaw_sdk::builtin::events::SETTING_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::SettingChanged>
@@ -468,6 +477,7 @@ pub const paperpaw_sdk::builtin::roles::SEARCH_HIT: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::screens
 pub const paperpaw_sdk::builtin::screens::FOLDER_EDITOR: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::PLACEHOLDER: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::screens::READING_APPS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::STATUS_ITEMS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::STATUS_LINES: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::sections
@@ -534,6 +544,8 @@ pub const paperpaw_sdk::builtin::settings::PAPER_COLORS: &[&str]
 pub const paperpaw_sdk::builtin::settings::PAPER_COLOR_OWN: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::PARAGRAPH_SPACING: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::PUBLISHER_STYLES: paperpaw_sdk::setting::Setting<bool>
+pub const paperpaw_sdk::builtin::settings::READING_APP: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub const paperpaw_sdk::builtin::settings::READING_APP_DEFAULT: &str
 pub const paperpaw_sdk::builtin::settings::READING_FONT: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::ROTATION: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::ROTATIONS: &[&str]
@@ -734,6 +746,7 @@ pub paperpaw_sdk::contribution::Contribution::Preset(alloc::boxed::Box<paperpaw_
 #[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::Published
 pub paperpaw_sdk::contribution::Contribution::Published::id: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::Published::service: paperpaw_sdk::services::Service
+pub paperpaw_sdk::contribution::Contribution::Reader(paperpaw_sdk::readers::ReaderSpec)
 pub paperpaw_sdk::contribution::Contribution::RefreshFilter(paperpaw_sdk::filters::RefreshFilterSpec)
 pub paperpaw_sdk::contribution::Contribution::Screen(paperpaw_sdk::ScreenSpec)
 #[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::ScreenHints
@@ -802,6 +815,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_page_layer(&mut self, paperpaw
 pub fn paperpaw_sdk::contribution::Registrar::add_point(&mut self, paperpaw_sdk::services::PointSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_preset(&mut self, paperpaw_sdk::presets::Preset) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_presets(&mut self, &'static [paperpaw_sdk::presets::Preset]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_reader(&mut self, paperpaw_sdk::readers::ReaderSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_refresh_filter(&mut self, paperpaw_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_screen(&mut self, paperpaw_sdk::ScreenSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_service(&mut self, paperpaw_sdk::Id, alloc::boxed::Box<dyn core::any::Any>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -1086,6 +1100,9 @@ pub fn paperpaw_sdk::builtin::events::PageWordsWanted::to_params(&self) -> paper
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Reading
 pub fn paperpaw_sdk::builtin::events::Reading::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Reading::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::ReadingAppWanted
+pub fn paperpaw_sdk::builtin::events::ReadingAppWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::ReadingAppWanted::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::ScreenShown
 pub fn paperpaw_sdk::builtin::events::ScreenShown::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::ScreenShown::to_params(&self) -> paperpaw_sdk::Params
@@ -2236,6 +2253,42 @@ pub const fn paperpaw_sdk::random::Random::new(fn(&mut [u8]) -> bool) -> Self
 pub fn paperpaw_sdk::random::Random::token(&self, usize) -> core::option::Option<alloc::string::String>
 impl core::fmt::Debug for paperpaw_sdk::random::Random
 pub fn paperpaw_sdk::random::Random::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub mod paperpaw_sdk::readers
+#[non_exhaustive] pub enum paperpaw_sdk::readers::Choice<'a>
+pub paperpaw_sdk::readers::Choice::Book(&'a str)
+pub paperpaw_sdk::readers::Choice::Folder(&'a str)
+#[non_exhaustive] pub struct paperpaw_sdk::readers::ReaderSpec
+pub paperpaw_sdk::readers::ReaderSpec::formats: alloc::vec::Vec<paperpaw_sdk::Id>
+pub paperpaw_sdk::readers::ReaderSpec::id: paperpaw_sdk::Id
+pub paperpaw_sdk::readers::ReaderSpec::screen: paperpaw_sdk::Id
+impl paperpaw_sdk::readers::ReaderSpec
+pub fn paperpaw_sdk::readers::ReaderSpec::formats(self, &[paperpaw_sdk::Id]) -> Self
+pub fn paperpaw_sdk::readers::ReaderSpec::new(paperpaw_sdk::Id, paperpaw_sdk::Id) -> Self
+pub fn paperpaw_sdk::readers::ReaderSpec::reads(&self, core::option::Option<&paperpaw_sdk::Id>) -> bool
+pub struct paperpaw_sdk::readers::Readers
+impl paperpaw_sdk::readers::Readers
+pub fn paperpaw_sdk::readers::Readers::for_book<'s>(&'s self, &'s paperpaw_sdk::Env<'_>, &str) -> alloc::vec::Vec<&'s paperpaw_sdk::readers::ReaderSpec>
+pub fn paperpaw_sdk::readers::Readers::get(&self, &str) -> core::option::Option<&paperpaw_sdk::readers::ReaderSpec>
+pub fn paperpaw_sdk::readers::Readers::is_empty(&self) -> bool
+pub fn paperpaw_sdk::readers::Readers::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::readers::ReaderSpec>
+pub fn paperpaw_sdk::readers::Readers::len(&self) -> usize
+pub fn paperpaw_sdk::readers::Readers::new() -> Self
+pub fn paperpaw_sdk::readers::Readers::reading<'s>(&'s self, core::option::Option<&'s paperpaw_sdk::Id>) -> impl core::iter::traits::iterator::Iterator<Item = &'s paperpaw_sdk::readers::ReaderSpec>
+pub const paperpaw_sdk::readers::DEFAULT: &str
+pub const paperpaw_sdk::readers::DIR: &str
+pub const paperpaw_sdk::readers::FOLDERS: &str
+pub fn paperpaw_sdk::readers::ask(paperpaw_sdk::readers::Choice<'_>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::readers::cannot_open(&paperpaw_sdk::Params, &paperpaw_sdk::Id) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::readers::chosen<'e>(&'e paperpaw_sdk::Env<'_>, &str) -> core::option::Option<&'e paperpaw_sdk::readers::ReaderSpec>
+pub fn paperpaw_sdk::readers::folder_moved(&dyn paperpaw_platform::storage::Storage, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_sdk::readers::format_setting(&paperpaw_sdk::Id) -> alloc::string::String
+pub fn paperpaw_sdk::readers::name<'e>(&'e paperpaw_sdk::Env<'_>, &'e paperpaw_sdk::readers::ReaderSpec) -> alloc::borrow::Cow<'e, str>
+pub fn paperpaw_sdk::readers::open(impl core::convert::Into<alloc::string::String>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::readers::open_with(&str, &paperpaw_sdk::readers::ReaderSpec) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::readers::past(&paperpaw_sdk::Params) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn paperpaw_sdk::readers::remember(&dyn paperpaw_platform::storage::Storage, paperpaw_sdk::readers::Choice<'_>, core::option::Option<&paperpaw_sdk::Id>) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_sdk::readers::remembered(&dyn paperpaw_platform::storage::Storage, paperpaw_sdk::readers::Choice<'_>) -> core::option::Option<alloc::string::String>
+pub fn paperpaw_sdk::readers::resolve(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> paperpaw_sdk::Command
 pub mod paperpaw_sdk::reading
 pub struct paperpaw_sdk::reading::DroppedRuns
 impl paperpaw_sdk::reading::DroppedRuns
@@ -3701,6 +3754,7 @@ pub paperpaw_sdk::Command::InstallPlugin(paperpaw_sdk::Id, alloc::string::String
 pub paperpaw_sdk::Command::LoadPlugin(alloc::string::String)
 pub paperpaw_sdk::Command::NoNetwork
 pub paperpaw_sdk::Command::Notify(alloc::string::String)
+pub paperpaw_sdk::Command::OpenBook(paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::OpenInSlot(paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::OpenScreen(paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::OpenSlot(paperpaw_sdk::Id, paperpaw_sdk::Params)
@@ -3815,6 +3869,7 @@ pub paperpaw_sdk::Contribution::Preset(alloc::boxed::Box<paperpaw_sdk::presets::
 #[non_exhaustive] pub paperpaw_sdk::Contribution::Published
 pub paperpaw_sdk::Contribution::Published::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::Published::service: paperpaw_sdk::services::Service
+pub paperpaw_sdk::Contribution::Reader(paperpaw_sdk::readers::ReaderSpec)
 pub paperpaw_sdk::Contribution::RefreshFilter(paperpaw_sdk::filters::RefreshFilterSpec)
 pub paperpaw_sdk::Contribution::Screen(paperpaw_sdk::ScreenSpec)
 #[non_exhaustive] pub paperpaw_sdk::Contribution::ScreenHints
@@ -4135,6 +4190,7 @@ pub paperpaw_sdk::Env::plugins: &'a paperpaw_sdk::Plugins
 pub paperpaw_sdk::Env::power: &'a paperpaw_sdk::power::Power
 pub paperpaw_sdk::Env::random: paperpaw_sdk::random::Random
 pub paperpaw_sdk::Env::reader: bool
+pub paperpaw_sdk::Env::readers: &'a paperpaw_sdk::readers::Readers
 pub paperpaw_sdk::Env::screens: &'a [(paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>)]
 pub paperpaw_sdk::Env::secrets: &'a paperpaw_sdk::secrets::Secrets
 pub paperpaw_sdk::Env::services: &'a paperpaw_sdk::services::Services
@@ -4568,6 +4624,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_page_layer(&mut self, paperpaw
 pub fn paperpaw_sdk::contribution::Registrar::add_point(&mut self, paperpaw_sdk::services::PointSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_preset(&mut self, paperpaw_sdk::presets::Preset) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_presets(&mut self, &'static [paperpaw_sdk::presets::Preset]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_reader(&mut self, paperpaw_sdk::readers::ReaderSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_refresh_filter(&mut self, paperpaw_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_screen(&mut self, paperpaw_sdk::ScreenSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_service(&mut self, paperpaw_sdk::Id, alloc::boxed::Box<dyn core::any::Any>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -4661,6 +4718,7 @@ pub fn paperpaw_sdk::setting::Setting<T>::fmt(&self, &mut core::fmt::Formatter<'
 #[non_exhaustive] pub struct paperpaw_sdk::SettingExtra
 pub paperpaw_sdk::SettingExtra::editor: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::SettingExtra::follows: core::option::Option<&'static str>
+pub paperpaw_sdk::SettingExtra::keeps_unknown: bool
 pub paperpaw_sdk::SettingExtra::secret: bool
 pub paperpaw_sdk::SettingExtra::section: core::option::Option<alloc::borrow::Cow<'static, str>>
 pub paperpaw_sdk::SettingExtra::slider: bool
@@ -4669,6 +4727,7 @@ pub paperpaw_sdk::SettingExtra::unit: core::option::Option<alloc::borrow::Cow<'s
 impl paperpaw_sdk::SettingExtra
 pub const fn paperpaw_sdk::SettingExtra::editor(self, paperpaw_sdk::Id) -> Self
 pub const fn paperpaw_sdk::SettingExtra::follows(self, &'static str) -> Self
+pub const fn paperpaw_sdk::SettingExtra::keeps_unknown(self) -> Self
 pub const fn paperpaw_sdk::SettingExtra::new() -> Self
 pub const fn paperpaw_sdk::SettingExtra::secret(self) -> Self
 pub const fn paperpaw_sdk::SettingExtra::section(self, &'static str) -> Self
@@ -4697,6 +4756,7 @@ pub paperpaw_sdk::SettingSpec::level: paperpaw_sdk::Level
 pub paperpaw_sdk::SettingSpec::scoped: bool
 pub paperpaw_sdk::SettingSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::SettingSpec
+pub fn paperpaw_sdk::SettingSpec::accepts(&self, &paperpaw_sdk::SettingValue) -> bool
 pub const fn paperpaw_sdk::SettingSpec::advanced(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::choice(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::Choices, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub const fn paperpaw_sdk::SettingSpec::described(self, &'static str) -> Self
@@ -4711,10 +4771,12 @@ pub const fn paperpaw_sdk::SettingSpec::fixed_text(&'static str, &'static str, &
 pub const fn paperpaw_sdk::SettingSpec::for_advanced(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::group(self, paperpaw_sdk::Id) -> Self
 pub const fn paperpaw_sdk::SettingSpec::guarded(self) -> Self
+pub fn paperpaw_sdk::SettingSpec::keeps_unknown(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::language(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::SettingSpec::list(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::SettingSpec::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::SettingKind, paperpaw_sdk::SettingValue) -> Self
 pub fn paperpaw_sdk::SettingSpec::number(&paperpaw_sdk::setting::Setting<i64>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, i64, i64, i64) -> Self
+pub fn paperpaw_sdk::SettingSpec::parse(&self, &str) -> core::option::Option<paperpaw_sdk::SettingValue>
 pub const fn paperpaw_sdk::SettingSpec::scoped(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::secret(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::section(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
@@ -4901,6 +4963,9 @@ pub fn paperpaw_sdk::builtin::events::PageWordsWanted::to_params(&self) -> paper
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Reading
 pub fn paperpaw_sdk::builtin::events::Reading::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Reading::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::ReadingAppWanted
+pub fn paperpaw_sdk::builtin::events::ReadingAppWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::ReadingAppWanted::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::ScreenShown
 pub fn paperpaw_sdk::builtin::events::ScreenShown::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::ScreenShown::to_params(&self) -> paperpaw_sdk::Params
