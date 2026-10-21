@@ -19,7 +19,9 @@ use paperpaw_sdk::{Instant, ServerResponse, Storage, StorageError};
 
 use crate::access::{Access, Guard};
 
-/// What a request changed, to tell on the device.
+/// What a request changed, to tell on the device: the name of what was
+/// sent or made, the path of what was received or deleted (for the
+/// library to follow).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Done {
     Received(String),
@@ -161,7 +163,7 @@ pub fn answer(
                 None => storage.write(&at, &[]),
             };
             match result {
-                Ok(()) => ok(Some(Done::Received(files::name(&at).to_string()))),
+                Ok(()) => ok(Some(Done::Received(at))),
                 Err(e) => not_received(failed(e)),
             }
         }
@@ -189,7 +191,7 @@ pub fn answer(
                 Err(e) => return refused(e),
             };
             match files::delete(storage, &target) {
-                Ok(()) => ok(Some(Done::Deleted(files::name(&target).to_string()))),
+                Ok(()) => ok(Some(Done::Deleted(target))),
                 Err(e) => failed(e),
             }
         }

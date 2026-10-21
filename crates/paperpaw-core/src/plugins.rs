@@ -6,7 +6,15 @@ use super::*;
 
 /// Sections of `paperpaw.ini` that are no plugin's settings: no plugin
 /// may take their name as its id (its settings would be read as these).
-pub(crate) const RESERVED_IDS: [&str; 4] = ["plugins", "fonts", "menus", "slots"];
+pub(crate) const RESERVED_IDS: [&str; 5] = ["plugins", "fonts", "menus", KNOWN, "slots"];
+
+/// After a menu's id in `[menus]`: the entries plugins contributed when
+/// the user redefined it.
+/// The config section with what plugins contributed to menus the user
+/// redefined, and the user left out (see [`Menus::set_known`]).
+///
+/// [`Menus::set_known`]: paperpaw_sdk::Menus::set_known
+pub(crate) const KNOWN: &str = "menus-known";
 
 /// The key maps the kernel's is built from.
 #[derive(Debug, Default)]
@@ -310,17 +318,20 @@ impl Kernel {
         for section in staging.menu_sections.drain(..) {
             self.shared.menus.add_section(section);
         }
-        for (menu, item, after) in staging.menu_placements.drain(..) {
-            self.shared.menus.place(menu, item, after);
-        }
-        for (menu, item) in staging.menu_hidden.drain(..) {
-            self.shared.menus.take_out(menu, item);
-        }
         for (item, icon) in staging.icons.drain(..) {
             self.shared.menus.set_icon(item, icon);
         }
         for (item, need) in staging.menu_needs.drain(..) {
             self.shared.menus.set_need(item, need);
+        }
+        for (menu, item, by) in staging.hidden_entries.drain(..) {
+            self.shared.menus.hide(menu, item, by);
+        }
+        for (item, state) in staging.item_states.drain(..) {
+            self.shared.menus.set_state(item, state);
+        }
+        for (item, key) in staging.item_descriptions.drain(..) {
+            self.shared.menus.set_description(item, key);
         }
         for (screen, hints) in staging.screen_hints.drain(..) {
             self.shared.registry.hints.insert(screen, hints);
@@ -347,6 +358,8 @@ impl Kernel {
             .extend(staging.stylesheets.iter().map(|_| plugin.clone()));
         self.shared.stylesheets.append(&mut staging.stylesheets);
         self.shared.book_data.append(&mut staging.book_data);
+        self.shared.book_fields.append(&mut staging.book_fields);
+        self.shared.book_badges.append(&mut staging.book_badges);
         for (id, service) in staging.services.drain(..) {
             self.shared.services.insert(id, service);
         }
@@ -372,6 +385,12 @@ impl Kernel {
         }
         for frame in staging.page_frames.drain(..) {
             self.shared.page_layers.add_frame(frame);
+        }
+        for provider in staging.lookup_providers.drain(..) {
+            self.shared.lookup.add(provider);
+        }
+        for voice in staging.voices.drain(..) {
+            self.shared.voices.add(voice);
         }
         for filter in staging.input_filters.drain(..) {
             self.shared.input_filters.add(filter);
@@ -453,20 +472,40 @@ impl Kernel {
         self.shared.keymap = keymap;
     }
 
-    /// Redefines or resets a menu (see [`Command::SetMenu`]) and saves it.
+    /// Redefines or resets a menu (see [`Command::SetMenu`]) and saves it,
+    /// with the entries plugins contribute to it now that the user left
+    /// out: those added later show in the user's list too (`[menus-known]`).
     pub(crate) fn set_menu(&mut self, menu: Id, entries: Option<Vec<Id>>) {
-        let value = entries
-            .as_ref()
-            .map(|ids| ids.iter().map(Id::as_str).collect::<Vec<_>>().join(", "));
+        let join = |ids: &[Id]| ids.iter().map(Id::as_str).collect::<Vec<_>>().join(", ");
+        let value = entries.as_deref().map(join);
+        let listed = entries.as_deref().unwrap_or_default();
+        let known: Vec<Id> = self
+            .shared
+            .menus
+            .contributed_ids(menu.as_str())
+            .into_iter()
+            .filter(|id| !listed.contains(id))
+            .cloned()
+            .collect();
+        let known_value = join(&known);
         match entries {
-            Some(ids) => self.shared.menus.customize(menu.clone(), ids),
+            Some(ids) => {
+                self.shared.menus.customize(menu.clone(), ids);
+                self.shared.menus.set_known(menu.clone(), known);
+            }
             None => self.shared.menus.reset(menu.as_str()),
         }
         // New entries need their labels.
         self.set_menu_titles();
         self.update_config(&format_args!("menu `{menu}`"), |source| match &value {
-            Some(value) => paperpaw_config::set(source, "menus", menu.as_str(), value),
-            None => paperpaw_config::remove(source, "menus", menu.as_str()),
+            Some(value) => {
+                let source = paperpaw_config::set(source, "menus", menu.as_str(), value);
+                paperpaw_config::set(&source, KNOWN, menu.as_str(), &known_value)
+            }
+            None => {
+                let source = paperpaw_config::remove(source, "menus", menu.as_str());
+                paperpaw_config::remove(&source, KNOWN, menu.as_str())
+            }
         });
         self.output
             .commands
@@ -867,6 +906,8 @@ impl Kernel {
         shared.text_filters.shrink_to_fit();
         shared.decorators.shrink_to_fit();
         shared.page_layers.shrink_to_fit();
+        shared.lookup.shrink_to_fit();
+        shared.voices.shrink_to_fit();
         shared.input_filters.shrink_to_fit();
         shared.inputs.shrink_to_fit();
         shared.refresh_filters.shrink_to_fit();

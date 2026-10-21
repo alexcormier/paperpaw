@@ -145,7 +145,7 @@ fn absolute_paths_are_taken_from_the_top() {
     let storage = library();
     let (status, done) = upload(&storage, "/Books/b.epub", b"new");
     assert_eq!(status, 200);
-    assert_eq!(done, Some(Done::Received("b.epub".into())));
+    assert_eq!(done, Some(Done::Received("Books/b.epub".into())));
     assert_eq!(storage.get("Books/b.epub").unwrap(), b"new");
     // A folder that is not there, as on another system.
     assert_eq!(upload(&storage, "/etc/passwd", b"x").0, 400);
@@ -159,21 +159,21 @@ fn a_name_taken_gets_a_number_and_nothing_is_written_over() {
         let data = format!("upload {n}");
         let (status, done) = upload(&storage, "Books/a.epub", data.as_bytes());
         assert_eq!(status, 200);
-        assert_eq!(done, Some(Done::Received(expected.into())));
         let path = format!("Books/{expected}");
+        assert_eq!(done, Some(Done::Received(path.clone())));
         assert_eq!(storage.get(&path).unwrap(), data.as_bytes());
     }
     assert_eq!(storage.get("Books/a.epub").unwrap(), b"old");
     // Without an extension, and named like a folder.
     let (_, done) = upload(&storage, "Books/README", b"2");
-    assert_eq!(done, Some(Done::Received("README (2)".into())));
+    assert_eq!(done, Some(Done::Received("Books/README (2)".into())));
     let (_, done) = upload(&storage, "Books", b"file");
     assert_eq!(done, Some(Done::Received("Books (2)".into())));
     assert!(files::is_dir(&storage, "Books"));
     // A name beginning with its dot stays whole.
     storage.write("Books/x.tar.gz", b"1").unwrap();
     let (_, done) = upload(&storage, "Books/x.tar.gz", b"2");
-    assert_eq!(done, Some(Done::Received("x.tar (2).gz".into())));
+    assert_eq!(done, Some(Done::Received("Books/x.tar (2).gz".into())));
 }
 
 #[test]
@@ -181,7 +181,7 @@ fn unicode_and_encoded_names_are_received() {
     let storage = library().with("Bücher/keep", b"".to_vec());
     let (status, done) = upload(&storage, "B%C3%BCcher/%E6%9C%AC+1.epub", b"book");
     assert_eq!(status, 200);
-    assert_eq!(done, Some(Done::Received("本 1.epub".into())));
+    assert_eq!(done, Some(Done::Received("Bücher/本 1.epub".into())));
     assert_eq!(storage.get("Bücher/本 1.epub").unwrap(), b"book");
     // Encoded once only: what looks encoded after decoding is a name.
     let (status, _) = upload(&storage, "Books/%252E%252E", b"x");

@@ -386,10 +386,22 @@ impl Kernel {
         } else {
             return None;
         };
+        // Bound as the other side where the screen is mirrored.
         let bound = self
-            .resolve(&InputKey::Edge(side))
+            .resolve(&InputKey::Edge(self.mirrored_side(side)))
             .is_some_and(|action| *action != paperpaw_sdk::builtin::actions::NOTHING);
         bound.then_some(side)
+    }
+
+    /// `side` the other way, left for right, where the screen on top is
+    /// mirrored ([`Screen::mirrored`](paperpaw_sdk::Screen::mirrored)).
+    fn mirrored_side(&self, side: Direction) -> Direction {
+        let mirrored = self.stack.last().is_some_and(|top| top.screen.mirrored());
+        match (mirrored, side) {
+            (true, Direction::Left) => Direction::Right,
+            (true, Direction::Right) => Direction::Left,
+            _ => side,
+        }
     }
 
     /// A finger that came down at an edge was lifted at `end`: a swipe in
@@ -419,7 +431,7 @@ impl Kernel {
                     return;
                 }
             }
-            return self.route_key(InputKey::Edge(touch.side));
+            return self.route_key(InputKey::Edge(self.mirrored_side(touch.side)));
         }
         let moved = input::distance(start, end);
         let kind = if moved <= thresholds.tap_slop {
@@ -509,7 +521,12 @@ impl Kernel {
                     return;
                 }
                 let display = self.shared.device.display;
-                let zone = Zone::of(gesture.start, display.width, display.height);
+                let mut zone = Zone::of(gesture.start, display.width, display.height);
+                // A screen whose pages go right to left: sides and swipes
+                // the other way.
+                if self.stack.last().is_some_and(|top| top.screen.mirrored()) {
+                    zone = zone.mirrored();
+                }
                 let long = gesture.kind == GestureKind::LongPress;
                 let tapped = matches!(gesture.kind, GestureKind::Tap | GestureKind::DoubleTap);
                 if (tapped || long)
@@ -528,7 +545,7 @@ impl Kernel {
                         return self.route_key_on(InputKey::LongTap(zone), on);
                     }
                     GestureKind::TwoFingerTap => InputKey::Tap2,
-                    GestureKind::Swipe(direction) => InputKey::Swipe(direction),
+                    GestureKind::Swipe(direction) => InputKey::Swipe(self.mirrored_side(direction)),
                     GestureKind::Pinch { out } => InputKey::Pinch(out),
                     _ => return,
                 };

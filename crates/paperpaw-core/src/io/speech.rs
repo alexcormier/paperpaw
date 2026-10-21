@@ -41,6 +41,10 @@ struct Speaking {
 /// What is spoken, and what the shell is to do for it.
 #[derive(Debug, Default)]
 pub(crate) struct Speech {
+    /// The shell speaks.
+    pub system: bool,
+    /// A plugin's voice speaking, and the screens open when it started.
+    pub voice: Option<(Id, usize)>,
     calls: Vec<SpeechCall>,
     speaking: Vec<Speaking>,
     next: u32,
@@ -49,6 +53,14 @@ pub(crate) struct Speech {
 }
 
 impl Speech {
+    /// Speech where the shell speaks (`system`).
+    pub fn new(system: bool) -> Self {
+        Self {
+            system,
+            ..Self::default()
+        }
+    }
+
     /// Starts speaking for a plugin, or tells it that the device cannot.
     pub fn speak(
         &mut self,

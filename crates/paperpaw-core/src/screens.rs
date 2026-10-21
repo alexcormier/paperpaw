@@ -632,6 +632,15 @@ impl Kernel {
         self.io.servers.stop_for_closed_screens(screens, out);
         self.io.sockets.close_for_closed_screens(screens, out);
         self.io.speech.stop_for_closed_screens(screens);
+        if self
+            .io
+            .speech
+            .voice
+            .as_ref()
+            .is_some_and(|(_, s)| *s > screens)
+        {
+            self.stop_speaking();
+        }
     }
 }
 

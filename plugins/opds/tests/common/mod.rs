@@ -117,6 +117,8 @@ impl Device {
     pub fn start(storage: Shared) -> Self {
         let mut kernel = Kernel::builder(DEVICE)
             .storage(storage.clone())
+            // The library at the storage's top.
+            .user_config("[core]\nlibrary-folder =\n")
             .network(true)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(paperpaw_plugin_format_epub::EpubFormat)

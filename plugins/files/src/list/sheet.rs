@@ -1,21 +1,23 @@
 //! What can be done with a book: a sheet from the bottom with its cover,
 //! title, author and how far it is read, then the actions (go on reading
-//! or open, its series, finished or unread, favourite, information).
+//! or open, its series, finished or unread, favourite, information), and
+//! those plugins add to the book menu ([`menus::BOOK`]).
 //!
 //! The book's details and small cover are read when the sheet opens.
+//! What changes goes through the library service, which tells every view
+//! ([`library::service`]).
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, params};
-use paperpaw_sdk::library;
+use paperpaw_sdk::builtin::{actions, events, menus, params, slots};
+use paperpaw_sdk::library::{self, catalog};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
     RefreshMode, Screen,
 };
 
-use super::index::{Line, hash};
 use super::rows::{self, Loaded, Sizes};
 use super::shelf::{self, Kind};
 
@@ -30,6 +32,8 @@ enum Action {
     Unfavourite,
     Info,
     Archive,
+    /// Plugins' action `n` of the book menu.
+    Plugin(usize),
     Menu,
 }
 
@@ -42,6 +46,8 @@ pub(crate) struct BookSheet {
     list: ListView,
     book: Loaded,
     actions: Vec<(Action, String)>,
+    /// Plugins' actions of the book menu ([`Action::Plugin`]).
+    plugins: Vec<Id>,
 }
 
 impl BookSheet {
@@ -50,23 +56,15 @@ impl BookSheet {
         let sizes = Sizes::new(env, &style);
         let path = params.get(params::PATH).unwrap_or_default().to_string();
         let storage = env.storage;
-        let details = library::book(storage, &path).unwrap_or_default();
-        let opened = library::opened_books(storage)
-            .iter()
-            .any(|p| hash(p) == hash(&path));
-        let line = Line {
-            title: details.shown_title(&path).into_owned(),
-            author: details.author.clone().unwrap_or_default(),
-            series: details.series.clone().unwrap_or_default(),
-            number: details.series_index.clone().unwrap_or_default(),
-            tags: String::new(),
-            path: path.clone(),
-        };
-        let mut book = Loaded::load(env, line, opened, sizes.cover, false);
+        let details = library::service(env).book(env, &path).unwrap_or_default();
+        let opened = library::opened_books(storage).contains(&path);
+        let favourite = library::favourites(storage).contains(&path);
+        let status = catalog::Status::new(details.progress, favourite, opened);
+        let record = catalog::Record::of(&path, &details).with_status(status);
+        let mut book = Loaded::load(env, record, sizes.cover, "");
         let note = book.author.clone();
         let width = env.device.display.width;
         rows::prepare_row(env, &style, &sizes, width, &mut book, note, false);
-        let favourite = library::favourites(storage).contains(&path);
         let tr = |key: &str| env.i18n.tr(key).to_string();
         let mut actions = Vec::new();
         let open = match book.progress {
@@ -95,6 +93,14 @@ impl BookSheet {
         if crate::can_archive(env, &path) {
             actions.push((Action::Archive, tr("files.option.archive")));
         }
+        let mut plugins = Vec::new();
+        for item in env.menus.items(menus::BOOK.as_str()) {
+            if item.section {
+                continue;
+            }
+            actions.push((Action::Plugin(plugins.len()), tr(item.title)));
+            plugins.push(item.id.clone());
+        }
         if !env.device.input.touch {
             actions.push((Action::Menu, tr("files.option.menu")));
         }
@@ -120,6 +126,7 @@ impl BookSheet {
             list,
             book,
             actions,
+            plugins,
         }
     }
 
@@ -134,13 +141,12 @@ impl BookSheet {
             Action::Open => super::read(path, cx),
             Action::Series => cx.command(shelf::open(Kind::Series, &self.book.series)),
             Action::Finished | Action::Unfinished => {
-                library::set_finished(env.storage, path, *action == Action::Finished);
-                cx.command(super::touched(path));
+                let finished = *action == Action::Finished;
+                cx.command(library::service(&env).set_finished(&env, path, finished));
             }
             Action::Favourite | Action::Unfavourite => {
                 let favourite = *action == Action::Favourite;
-                library::set_favourite(env.storage, path, favourite);
-                cx.command(super::touched(path));
+                cx.command(library::service(&env).set_favourite(&env, path, favourite));
                 let key = if favourite {
                     "files.favourite-added"
                 } else {
@@ -148,11 +154,20 @@ impl BookSheet {
                 };
                 cx.command(Command::Notify(env.i18n.tr(key).to_string()));
             }
-            Action::Info => cx.command(Command::OpenScreen(
-                crate::INFO_SCREEN,
+            Action::Info => cx.command(Command::OpenSlot(
+                slots::BOOK_INFO,
                 Params::new().with(params::PATH, path.to_string()),
             )),
             Action::Archive => crate::archive(&env, path, cx),
+            Action::Plugin(n) => {
+                let Some(id) = self.plugins.get(*n) else {
+                    return;
+                };
+                // Which book, then the action as usual.
+                let chosen = events::BookChosen::new(id.clone(), path.to_string());
+                cx.command(events::BOOK_CHOSEN.emit(chosen));
+                cx.command(Command::RunAction(id.clone()));
+            }
             Action::Menu => super::open_menu(cx),
         }
     }

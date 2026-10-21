@@ -422,12 +422,30 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
         let ch = crate::icons::char(name)?;
         font.has_char(ch).then_some((font, ch))
     });
+    // As its plugin shows it now: a label, a badge, faint, a switch on.
+    let state = env.menus.state(env, action.as_str());
+    let on = state.checked == Some(true);
+    let ink = match (on, state.enabled) {
+        (true, _) => Color::WHITE,
+        (false, true) => Color::BLACK,
+        (false, false) => style.faint(60),
+    };
+    if on {
+        let back = if state.enabled {
+            Color::BLACK
+        } else {
+            style.faint(60)
+        };
+        canvas.fill_round(area, style.corner, back);
+    }
     let name = label.then(|| {
         let title = env.menus.title(action.as_str()).unwrap_or_default();
         let name = env
             .i18n
             .get(&format!("{title}.short"))
             .unwrap_or(env.i18n.tr(title));
+        let name = state.text(name);
+        let name = name.as_str();
         // A little smaller where it does not fit whole, then on two
         // lines where the tool is high enough, then shortened.
         let width = area.width.saturating_sub(4);
@@ -488,7 +506,7 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
         let ch = ch.encode_utf8(&mut text);
         let w = icon_font.measure(size, ch);
         let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
-        icon_font.draw(canvas, size, x, y - top, ch, Color::BLACK);
+        icon_font.draw(canvas, size, x, y - top, ch, ink);
     }
     let Some((size, lines, name)) = name else {
         return;
@@ -509,14 +527,7 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
     for (n, line) in lines.iter().enumerate() {
         let width = font.measure(size, line);
         let x = f32::from(area.x) + (f32::from(area.width) - width) / 2.0;
-        font.draw(
-            canvas,
-            size,
-            x,
-            baseline + n as i32 * step,
-            line,
-            Color::BLACK,
-        );
+        font.draw(canvas, size, x, baseline + n as i32 * step, line, ink);
     }
 }
 

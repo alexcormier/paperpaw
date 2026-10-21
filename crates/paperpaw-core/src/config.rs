@@ -10,9 +10,9 @@ const MAX_CONFIG: usize = 64 * 1024;
 const MAX_SCOPE: usize = 16 * 1024;
 
 /// Settings that moved to the kernel, by the ids they had (the reader's
-/// type, October 2026): read under those where the new ones are not set,
-/// so nothing chosen is lost.
-const MOVED: [(&str, &str); 11] = [
+/// type and the library folder, October 2026): read under those where
+/// the new ones are not set, so nothing chosen is lost.
+const MOVED: [(&str, &str); 12] = [
     ("reader.font-weight", "core.font-weight"),
     ("reader.word-spacing", "core.word-spacing"),
     ("reader.line-spacing", "core.line-spacing"),
@@ -24,6 +24,7 @@ const MOVED: [(&str, &str); 11] = [
     ("reader.paragraph-spacing", "core.paragraph-spacing"),
     ("reader.publisher-styles", "core.publisher-styles"),
     ("reader.footnotes", "core.footnotes"),
+    ("files.root", "core.library-folder"),
 ];
 
 /// Of setting `id` with `value` as kept in a file, the id and value it
@@ -455,14 +456,18 @@ impl Kernel {
                         "invalid font binding".into(),
                     ),
                 },
-                "menus" => {
+                "menus" | crate::plugins::KNOWN => {
                     let actions: Result<Vec<Id>, _> = value
                         .split(',')
                         .map(str::trim)
                         .filter(|a| !a.is_empty())
                         .map(Id::parse)
                         .collect();
+                    let known = entry.section == crate::plugins::KNOWN;
                     match (Id::parse(entry.key), actions) {
+                        (Ok(menu), Ok(actions)) if known => {
+                            self.shared.menus.set_known(menu, actions);
+                        }
                         (Ok(menu), Ok(actions)) => self.shared.menus.customize(menu, actions),
                         _ => self.warn(WarningSource::UserConfig, line, "invalid menu".into()),
                     }

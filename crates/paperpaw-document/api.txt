@@ -18,6 +18,7 @@ pub paperpaw_document::BlockKind::Paragraph
 pub paperpaw_document::BlockKind::Preformatted
 #[non_exhaustive] pub enum paperpaw_document::DocumentError
 pub paperpaw_document::DocumentError::Malformed(alloc::borrow::Cow<'static, str>)
+pub paperpaw_document::DocumentError::NotReady
 pub paperpaw_document::DocumentError::OutOfMemory
 pub paperpaw_document::DocumentError::Storage(paperpaw_platform::storage::StorageError)
 pub paperpaw_document::DocumentError::UnsupportedFormat
@@ -26,6 +27,9 @@ pub fn paperpaw_document::DocumentError::from(paperpaw_platform::storage::Storag
 impl core::error::Error for paperpaw_document::DocumentError
 impl core::fmt::Display for paperpaw_document::DocumentError
 pub fn paperpaw_document::DocumentError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum paperpaw_document::PageProgression
+pub paperpaw_document::PageProgression::LeftToRight
+pub paperpaw_document::PageProgression::RightToLeft
 #[non_exhaustive] pub struct paperpaw_document::Block
 pub paperpaw_document::Block::align: paperpaw_document::Align
 pub paperpaw_document::Block::continues: bool
@@ -75,6 +79,7 @@ pub const fn paperpaw_document::Locator::new(u32, u32) -> Self
 #[non_exhaustive] pub struct paperpaw_document::Metadata
 pub paperpaw_document::Metadata::authors: alloc::vec::Vec<alloc::string::String>
 pub paperpaw_document::Metadata::description: core::option::Option<alloc::string::String>
+pub paperpaw_document::Metadata::direction: paperpaw_document::PageProgression
 pub paperpaw_document::Metadata::language: core::option::Option<alloc::string::String>
 pub paperpaw_document::Metadata::series: core::option::Option<alloc::string::String>
 pub paperpaw_document::Metadata::series_index: core::option::Option<alloc::string::String>
@@ -83,6 +88,7 @@ pub paperpaw_document::Metadata::title: core::option::Option<alloc::string::Stri
 impl paperpaw_document::Metadata
 pub fn paperpaw_document::Metadata::authors(self, alloc::vec::Vec<alloc::string::String>) -> Self
 pub fn paperpaw_document::Metadata::description(self, impl core::convert::Into<core::option::Option<alloc::string::String>>) -> Self
+pub fn paperpaw_document::Metadata::direction(self, paperpaw_document::PageProgression) -> Self
 pub fn paperpaw_document::Metadata::language(self, impl core::convert::Into<core::option::Option<alloc::string::String>>) -> Self
 pub fn paperpaw_document::Metadata::series(self, impl core::convert::Into<core::option::Option<alloc::string::String>>) -> Self
 pub fn paperpaw_document::Metadata::series_index(self, impl core::convert::Into<core::option::Option<alloc::string::String>>) -> Self

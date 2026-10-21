@@ -749,10 +749,7 @@ impl Kernel {
             let speech =
                 paperpaw_sdk::Speech::new(text.clone(), Id::new_static("core.focus-spoken"))
                     .language(language);
-            let (available, screens) = (self.shared.caps.speech, self.stack.len());
-            self.io
-                .speech
-                .speak(speech, available, screens, &mut self.output.commands);
+            self.speak(speech);
             self.io.focus_spoken = true;
         }
         self.io.speech.focus = said;
@@ -1168,6 +1165,11 @@ struct Shared {
     decorators: paperpaw_sdk::decorations::Decorators,
     /// Layers on book pages and frames of their text, from every plugin.
     page_layers: paperpaw_sdk::layers::PageLayers,
+    /// Where words are looked up, from every plugin.
+    lookup: paperpaw_sdk::lookup::LookupProviders,
+    /// Plugins' voices (the kernel's alone: plugins speak with
+    /// `Command::Speak`).
+    voices: paperpaw_sdk::voices::Voices,
     /// Filters of every input and of every refresh, from every plugin.
     input_filters: paperpaw_sdk::filters::InputFilters,
     refresh_filters: paperpaw_sdk::filters::RefreshFilters,
@@ -1175,6 +1177,9 @@ struct Shared {
     stylesheets: Vec<Cow<'static, str>>,
     /// Folders of what plugins keep for each book.
     book_data: Vec<paperpaw_sdk::library::BookData>,
+    /// Fields kept with books, badges on their rows, from every plugin.
+    book_fields: Vec<paperpaw_sdk::library::BookField>,
+    book_badges: Vec<paperpaw_sdk::library::BookBadge>,
     /// What the device and its shell can do.
     caps: Capabilities,
     /// Wi-Fi, where PaperPaw manages it (see [`KernelBuilder::wifi`]).
@@ -1263,8 +1268,11 @@ impl Shared {
             text_filters: &self.text_filters,
             decorators: &self.decorators,
             page_layers: &self.page_layers,
+            lookup: &self.lookup,
             stylesheets: &self.stylesheets,
             book_data: &self.book_data,
+            book_fields: &self.book_fields,
+            book_badges: &self.book_badges,
             caps: self.caps,
             wifi: self.wifi.as_ref(),
             firmware: self.firmware.as_ref(),

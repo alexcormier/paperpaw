@@ -30,7 +30,8 @@ pub struct Capabilities {
     /// PaperPaw is the device's firmware and updates it
     /// ([`Env::firmware`]).
     pub firmware: bool,
-    /// Text is spoken aloud ([`Command::Speak`](crate::Command::Speak)).
+    /// Text is spoken aloud ([`Command::Speak`](crate::Command::Speak)):
+    /// by the system, or a plugin's voice (see [`voices`](crate::voices)).
     pub speech: bool,
     /// PaperPaw shows a screen while the device sleeps
     /// ([`actions::SLEEP`](crate::builtin::actions::SLEEP)); where the
@@ -95,12 +96,21 @@ pub struct Env<'a> {
     /// Layers on book pages and frames of their text, from every plugin
     /// (see [`layers`](crate::layers)).
     pub page_layers: &'a crate::layers::PageLayers,
+    /// Where words are looked up, from every plugin (see
+    /// [`lookup`](crate::lookup)).
+    pub lookup: &'a crate::lookup::LookupProviders,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
     /// Folders of what plugins keep for each book
     /// ([`Registrar::add_book_data`](crate::Registrar::add_book_data)).
     pub book_data: &'a [crate::library::BookData],
+    /// Fields plugins keep with books
+    /// ([`Registrar::add_book_field`](crate::Registrar::add_book_field)).
+    pub book_fields: &'a [crate::library::BookField],
+    /// Badges plugins put on books' rows
+    /// ([`Registrar::add_book_badge`](crate::Registrar::add_book_badge)).
+    pub book_badges: &'a [crate::library::BookBadge],
     /// Widgets for screens that show them, from every plugin.
     pub widgets: &'a crate::widgets::Widgets,
     /// The steps of the first-run setup, from every plugin (see
@@ -221,12 +231,21 @@ pub struct EnvParts<'a> {
     /// Layers on book pages and frames of their text, from every plugin
     /// (see [`layers`](crate::layers)).
     pub page_layers: &'a crate::layers::PageLayers,
+    /// Where words are looked up, from every plugin (see
+    /// [`lookup`](crate::lookup)).
+    pub lookup: &'a crate::lookup::LookupProviders,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
     /// Folders of what plugins keep for each book
     /// ([`Registrar::add_book_data`](crate::Registrar::add_book_data)).
     pub book_data: &'a [crate::library::BookData],
+    /// Fields plugins keep with books
+    /// ([`Registrar::add_book_field`](crate::Registrar::add_book_field)).
+    pub book_fields: &'a [crate::library::BookField],
+    /// Badges plugins put on books' rows
+    /// ([`Registrar::add_book_badge`](crate::Registrar::add_book_badge)).
+    pub book_badges: &'a [crate::library::BookBadge],
     /// Widgets for screens that show them, from every plugin.
     pub widgets: &'a crate::widgets::Widgets,
     /// The steps of the first-run setup, from every plugin (see
@@ -325,8 +344,11 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             text_filters: p.text_filters,
             decorators: p.decorators,
             page_layers: p.page_layers,
+            lookup: p.lookup,
             stylesheets: p.stylesheets,
             book_data: p.book_data,
+            book_fields: p.book_fields,
+            book_badges: p.book_badges,
             widgets: p.widgets,
             setup: p.setup,
             services: p.services,
