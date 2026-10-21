@@ -30,7 +30,7 @@ use paperpaw_sdk::{
 
 pub const PLUGIN: Id = Id::new_static("power");
 const GROUP: Id = Id::new_static("power.group");
-/// Which mode: one of [`MODES`].
+/// Which mode: one of `MODES`.
 pub const MODE: Setting<Text> = Setting::new("power.mode");
 /// Automatic: Saving below this percentage of charge.
 pub const SAVING_BELOW: Setting<i64> = Setting::new("power.saving-below");

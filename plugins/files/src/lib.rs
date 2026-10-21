@@ -6,7 +6,7 @@
 //! unread or finished ones, the shelves) is chosen above the books: from
 //! one row on small screens, from pills on larger ones. Series, folders
 //! (collections), favourites, authors and tags open as lists of their
-//! own; "Find" picks a book by a letter without a keyboard. See [`list`].
+//! own; "Find" picks a book by a letter without a keyboard. See `list`.
 //!
 //! The library folder is a setting; its editor (`files.choose-folder`)
 //! browses the device's folders, so no path has to be typed.

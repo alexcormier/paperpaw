@@ -138,6 +138,13 @@ change the plugin SDK.
   the screen (`Env::content`), not of the panel; without bars that is the
   same. `EnvParts` has no `screen_maker`: the kernel sets it with
   `Env::with_screen_maker` (feature `kernel`, as `ScreenMaker`).
+- Code plugins fit the firmware again: the SDK's fingerprint no longer
+  counts features that add functions and modules only (`kernel`,
+  `unstable`), with which the firmware is built and plugins are not, so
+  no plugin built by an author fitted any firmware. A code plugin built
+  as a library for a computer (`plugin!`) loads on Linux: it defines the
+  unwinder's name that `core` and `alloc` leave open, never called where
+  a plugin cannot unwind.
 - Android: the app is now `org.paperpaw.app` (was
   `io.github.hthoene.paperpaw`), named after the project's own domain
   before the first release in a store. It installs as a new app beside

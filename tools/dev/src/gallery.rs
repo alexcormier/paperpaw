@@ -15,12 +15,12 @@
 //!   out) in `<plugin>/widgets/<widget>/<variant>/<columns>x<rows>.png`, and
 //!   the whole home screen with it in one size for context in `screen.png`.
 //! - `<plugin>/<profile>.png`: one contact sheet per plugin and profile (see
-//!   [`pages`] for its fixed layout; a large one goes on in
+//!   `pages` for its fixed layout; a large one goes on in
 //!   `<profile>-2.png` and so on).
 //!
 //! Widgets are shown in every size in the first variant of each profile
 //! and language, in a few sizes (`cases::some_sizes`) in the others, and
-//! in a few sizes only with `--quick`; see [`every_size`].
+//! in a few sizes only with `--quick`; see `every_size`.
 //!
 //! A picture the same as one written before (a widget that looks the same
 //! in two looks, say) is written once; the pages link to the first.
@@ -67,7 +67,7 @@ pub struct Pic {
 /// A screen in the variants.
 #[derive(Debug, Default)]
 pub struct ScreenCase {
-    /// The parameters it was opened with (an index into [`PARAMS`]),
+    /// The parameters it was opened with (an index into `PARAMS`),
     /// `None` if it opened with none of them.
     pub params: Option<usize>,
     /// Per variant (by index), the picture if it opened.
