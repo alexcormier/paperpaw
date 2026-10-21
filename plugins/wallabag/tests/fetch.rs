@@ -69,7 +69,8 @@ impl Storage for Shared {
     }
 }
 
-const CONFIG: &str = "[wallabag]\nserver = wb.example\nuser = me\nclient-id = cid\n\n\
+/// The library at the storage's top.
+const CONFIG: &str = "[core]\nlibrary-folder =\n[wallabag]\nserver = wb.example\nuser = me\nclient-id = cid\n\n\
     [keymap.global]\nbutton.fetch = wallabag.fetch\n";
 
 const LIST: &str = r#"{"_embedded": {"items": [

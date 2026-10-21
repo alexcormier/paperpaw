@@ -59,6 +59,15 @@ pub const TOUCH: DeviceInfo = DeviceInfo {
     ..X4
 };
 
+/// A touch screen of much memory (as the Boox's): the catalog's work
+/// runs beside the library.
+pub const LARGE: DeviceInfo = DeviceInfo {
+    id: "test-large",
+    name: "Test large",
+    memory: MemoryClass::Large,
+    ..TOUCH
+};
+
 /// Both devices, for tests that go the same way on each.
 pub const DEVICES: [DeviceInfo; 2] = [X4, TOUCH];
 
@@ -238,6 +247,19 @@ impl Screen for Keyboard {
     }
 }
 
+/// A plugin a test adds, as the builder takes it.
+struct Boxed(Box<dyn Plugin>);
+
+impl Plugin for Boxed {
+    fn manifest(&self) -> Manifest {
+        self.0.manifest()
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        self.0.register(r)
+    }
+}
+
 /// The standard app with the test keyboard, over a storage the test keeps.
 pub struct App {
     pub kernel: Kernel,
@@ -250,17 +272,24 @@ pub struct App {
 impl App {
     /// The app on `device` over `storage`, started.
     pub fn new(device: DeviceInfo, storage: Shared) -> Self {
-        Self::at(device, storage, 0)
+        Self::at(device, storage, 0, None)
     }
 
-    fn at(device: DeviceInfo, storage: Shared, now: u64) -> Self {
+    /// The app with `plugin` too.
+    pub fn with(device: DeviceInfo, storage: Shared, plugin: impl Plugin + 'static) -> Self {
+        Self::at(device, storage, 0, Some(Box::new(plugin)))
+    }
+
+    fn at(device: DeviceInfo, storage: Shared, now: u64, plugin: Option<Box<dyn Plugin>>) -> Self {
         TYPED.with(|typed| typed.borrow_mut().clear());
         ASKED.with(|asked| asked.borrow_mut().clear());
         let builder = Kernel::builder(device).storage(storage.clone());
-        let mut kernel = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs)
-            .plugin(TestKeyboard)
-            .build()
-            .unwrap();
+        let mut builder =
+            paperpaw_app::install(builder, paperpaw_app::Fonts::Packs).plugin(TestKeyboard);
+        if let Some(plugin) = plugin {
+            builder = builder.plugin(Boxed(plugin));
+        }
+        let mut kernel = builder.build().unwrap();
         let effects = kernel.start(Instant(now));
         let display = device.display;
         let mut app = Self {
@@ -279,7 +308,7 @@ impl App {
         let storage = self.storage.clone();
         let now = self.now + 1000;
         drop(self);
-        Self::at(device, storage, now)
+        Self::at(device, storage, now, None)
     }
 
     /// Lets timers run until nothing is due within a second.
@@ -294,6 +323,13 @@ impl App {
             self.now = self.now.max(at.0);
             effects = self.kernel.tick(Instant(self.now));
         }
+    }
+
+    /// Lets `ms` go by without input, then what is due.
+    pub fn wait(&mut self, ms: u64) {
+        self.now += ms;
+        let effects = self.kernel.tick(Instant(self.now));
+        self.settle(effects);
     }
 
     /// Runs `action` as a button bound to it would.
@@ -547,6 +583,17 @@ impl App {
     /// What the keyboard was opened with, question by question.
     pub fn asked(&self) -> Vec<Params> {
         ASKED.with(|asked| asked.borrow().clone())
+    }
+
+    /// Lets the kernel's walk of the library run: on a device of little
+    /// memory it waits while the library is open (its index takes the
+    /// memory), so the library is left for the home screen and opened
+    /// again.
+    pub fn let_catalog_work(&mut self) {
+        if self.kernel.device().memory == MemoryClass::Small && self.screen() == "files.browser" {
+            self.home();
+            self.run(actions::LIBRARY);
+        }
     }
 
     /// Back until the home screen shows (at most ten times).

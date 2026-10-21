@@ -50,7 +50,9 @@ fn a_book_moved_elsewhere_is_listed_where_it_went() {
         app.storage.rename(from, to).unwrap();
         let moved = events::BookMoved::new(from.into(), to.into());
         app.send(events::BOOK_MOVED.id().clone(), moved.to_params());
-        // Listed again where it is now, and it opens from there.
+        // Listed again where it is now (on the X4 once the catalog caught
+        // up, away from the list), and it opens from there.
+        app.let_catalog_work();
         assert_eq!(rows(&mut app), ["Book 01", "Book 02", "Book 03"]);
         if device.input.touch {
             app.tap_on("Book 02");

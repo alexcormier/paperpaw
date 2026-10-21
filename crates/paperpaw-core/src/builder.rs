@@ -420,6 +420,8 @@ impl KernelBuilder {
                 refresh_filters: paperpaw_sdk::filters::RefreshFilters::new(),
                 stylesheets: Vec::new(),
                 book_data: Vec::new(),
+                book_fields: Vec::new(),
+                book_badges: Vec::new(),
                 caps,
                 wifi: caps.wifi.then(paperpaw_sdk::wifi::Wifi::default),
                 firmware: self.firmware.take(),

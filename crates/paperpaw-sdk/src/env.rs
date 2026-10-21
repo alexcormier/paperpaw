@@ -101,6 +101,12 @@ pub struct Env<'a> {
     /// Folders of what plugins keep for each book
     /// ([`Registrar::add_book_data`](crate::Registrar::add_book_data)).
     pub book_data: &'a [crate::library::BookData],
+    /// Fields plugins keep with books
+    /// ([`Registrar::add_book_field`](crate::Registrar::add_book_field)).
+    pub book_fields: &'a [crate::library::BookField],
+    /// Badges plugins put on books' rows
+    /// ([`Registrar::add_book_badge`](crate::Registrar::add_book_badge)).
+    pub book_badges: &'a [crate::library::BookBadge],
     /// Widgets for screens that show them, from every plugin.
     pub widgets: &'a crate::widgets::Widgets,
     /// The steps of the first-run setup, from every plugin (see
@@ -227,6 +233,12 @@ pub struct EnvParts<'a> {
     /// Folders of what plugins keep for each book
     /// ([`Registrar::add_book_data`](crate::Registrar::add_book_data)).
     pub book_data: &'a [crate::library::BookData],
+    /// Fields plugins keep with books
+    /// ([`Registrar::add_book_field`](crate::Registrar::add_book_field)).
+    pub book_fields: &'a [crate::library::BookField],
+    /// Badges plugins put on books' rows
+    /// ([`Registrar::add_book_badge`](crate::Registrar::add_book_badge)).
+    pub book_badges: &'a [crate::library::BookBadge],
     /// Widgets for screens that show them, from every plugin.
     pub widgets: &'a crate::widgets::Widgets,
     /// The steps of the first-run setup, from every plugin (see
@@ -327,6 +339,8 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             page_layers: p.page_layers,
             stylesheets: p.stylesheets,
             book_data: p.book_data,
+            book_fields: p.book_fields,
+            book_badges: p.book_badges,
             widgets: p.widgets,
             setup: p.setup,
             services: p.services,

@@ -1,11 +1,10 @@
 //! The library as a service: what is known about books beyond their
 //! files, for every plugin that shows or uses them (the library, the home
 //! screen, the sleep screen, syncs). Data and the screens that show it
-//! are apart: any plugin may offer another view of the
-//! same books.
+//! are apart: any plugin may offer another view of the same books.
 //!
 //! - A book's details: title, author, series, tags and cover, read from
-//!   the book once ([`index`]), its reading progress, and fields that
+//!   the book once ([`index`](fn@index)), its reading progress, and fields that
 //!   plugins add (e.g. a rating or where a book came from), in
 //!   `.paperpaw/library/books/<hash>.ini`.
 //! - The books opened last, most recent first (`opened.txt`), and the
@@ -19,7 +18,28 @@
 //! read a book at a time.
 
 pub mod catalog;
+pub mod index;
 pub mod listing;
+pub mod service;
+
+pub use service::{Badge, BookBadge, BookField, Library, service};
+
+/// What changed of a book ([`events::BookChanged::what`](crate::builtin::events::BookChanged)):
+/// bits, any together.
+pub mod what {
+    /// Its title, author, series, tags (read from the book, or provided).
+    pub const DETAILS: u32 = 1;
+    /// How far it is read.
+    pub const PROGRESS: u32 = 1 << 1;
+    /// Its cover.
+    pub const COVER: u32 = 1 << 2;
+    /// Whether it is a favourite.
+    pub const FAVOURITE: u32 = 1 << 3;
+    /// Marked finished or unread.
+    pub const STATUS: u32 = 1 << 4;
+    /// A plugin's field.
+    pub const FIELDS: u32 = 1 << 5;
+}
 
 use alloc::borrow::Cow;
 use alloc::format;
@@ -34,11 +54,11 @@ use paperpaw_digest::fnv1a64;
 /// Where the library keeps what it knows.
 pub const DIR: &str = crate::data_path!("library");
 
-/// The library folder, where books are kept (e.g. `books`): the `files`
-/// plugin offers it in its settings, and every plugin that puts books
-/// somewhere reads it ([`folder`]).
+/// The library folder, where books are kept (e.g. `books`): the kernel's
+/// setting [`settings::LIBRARY_FOLDER`](crate::builtin::settings::LIBRARY_FOLDER),
+/// which every plugin that puts books somewhere reads ([`folder`]).
 pub const FOLDER: crate::setting::Setting<crate::setting::Text> =
-    crate::setting::Setting::new("files.root");
+    crate::builtin::settings::LIBRARY_FOLDER;
 
 /// The library folder ([`FOLDER`]) as a path in the storage, without
 /// slashes around it (`""` for the storage's top).
@@ -79,7 +99,7 @@ pub struct Book {
     pub cover: Option<ImageRef>,
     /// Reading progress in percent, once opened.
     pub progress: Option<u8>,
-    /// The day the library first read the book ([`index`]), in days since
+    /// The day the library first read the book ([`index`](fn@index)), in days since
     /// 1970 (UTC); none where the device did not know the date then.
     pub added: Option<u32>,
     /// Fields plugins keep with the book: id (e.g. `myplugin.rating`)
@@ -411,6 +431,13 @@ fn cover_file(path: &str) -> String {
     format!("{DIR}/covers/{}.thumb", key(path))
 }
 
+fn cover_variant_file(path: &str, variant: &str) -> String {
+    if variant.is_empty() {
+        return cover_file(path);
+    }
+    format!("{DIR}/covers/{}.{variant}.thumb", key(path))
+}
+
 /// The cover of `book` (the one at `path`) made small to fit `width` ×
 /// `height`, as a panel of `format` shows it: kept in the library
 /// (`covers/<hash>.thumb`), so views of many books (a list, a grid) read a
@@ -424,13 +451,28 @@ pub fn cover(
     height: u16,
     format: paperpaw_platform::PixelFormat,
 ) -> Option<crate::ui::Thumbnail> {
+    cover_variant(storage, path, book, width, height, format, "")
+}
+
+/// [`cover`] kept apart for each `variant` (e.g. `row`, `card`, `grid`):
+/// a view that shows a book's cover at several sizes keeps each, instead
+/// of one size made anew over the other. Moved and removed with the book.
+pub fn cover_variant(
+    storage: &dyn Storage,
+    path: &str,
+    book: &Book,
+    width: u16,
+    height: u16,
+    format: paperpaw_platform::PixelFormat,
+    variant: &str,
+) -> Option<crate::ui::Thumbnail> {
     let image = book.cover.as_ref()?;
     let (w, h) = crate::ui::fit_image(image, width, height);
     let stamp = fnv1a64(format!(
         "{} {} {}x{} {w}x{h} {format:?}",
         book.size, image.path, image.width, image.height
     ));
-    let file = cover_file(path);
+    let file = cover_variant_file(path, variant);
     if let Some(thumb) = crate::ui::Thumbnail::kept(storage, &file, stamp, (w, h)) {
         return Some(thumb);
     }
@@ -439,11 +481,11 @@ pub fn cover(
     Some(thumb)
 }
 
-fn opened_file() -> String {
+pub(crate) fn opened_file() -> String {
     format!("{DIR}/opened.txt")
 }
 
-fn favourites_file() -> String {
+pub(crate) fn favourites_file() -> String {
     format!("{DIR}/favourites.txt")
 }
 
@@ -663,7 +705,7 @@ pub fn is_new_on(book: &Book, opened: bool, today: Option<u32>) -> bool {
 }
 
 /// What the library knows of the book at `path`, read from the book
-/// first if it is not yet ([`index`]).
+/// first if it is not yet ([`index`](fn@index)).
 pub fn indexed(env: &Env<'_>, path: &str) -> Book {
     match book(env.storage, path) {
         Some(book) if book.indexed => book,
@@ -712,7 +754,7 @@ impl Provided {
 
 /// Keeps what a source knows of the book at `path`, for books that name
 /// nothing themselves (text files, PDFs): what the book names wins when
-/// it is read ([`index`]).
+/// it is read ([`index`](fn@index)).
 pub fn provide(storage: &dyn Storage, path: &str, provided: Provided) {
     let Ok(mut book) = book_for_update(storage, path) else {
         return;
@@ -773,6 +815,44 @@ pub fn record(env: &Env<'_>, reading: &crate::builtin::events::Reading, opened: 
     if changed {
         save(storage, path, &book);
     }
+    // Opened: the catalog knows it at once (a page turned does not write
+    // there; the book's closing does, [`note_status`]).
+    if opened {
+        noted_status(storage, path);
+    }
+}
+
+/// Notes the status of the book at `path` (how far it is read, whether it
+/// is a favourite, whether it was opened) beside the catalog
+/// (the catalog's log), so views of the library show it without reading
+/// each book's details. The kernel calls it when a book is opened,
+/// closed or finished; [`set_finished`] and [`set_favourite`] call it.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub fn note_status(storage: &dyn Storage, path: &str) {
+    noted_status(storage, path);
+}
+
+pub(crate) fn noted_status(storage: &dyn Storage, path: &str) {
+    // What could not be read is not noted: a status of nothing would
+    // stand for the book until the catalog is made anew.
+    if let Ok(status) = status_of(storage, path) {
+        let _ = catalog::noted(storage, path, status);
+    }
+}
+
+/// The status of the book at `path` as its details and the lists say;
+/// an error where one of them cannot be read, or the book is gone.
+fn status_of(storage: &dyn Storage, path: &str) -> Result<catalog::Status, StorageError> {
+    let size = storage.size(path)?;
+    let progress = crate::data::Format::FIRST
+        .load(storage, &book_file(path), MAX_DETAILS)?
+        .map(|source| parse_details(&source))
+        .filter(|book| book.size == size)
+        .and_then(|book| book.progress);
+    let favourite = read_favourites(storage)?.iter().any(|p| p == path);
+    let opened = read_opened(storage)?.iter().any(|p| p == path);
+    Ok(catalog::Status::new(progress, favourite, opened))
 }
 
 /// Moves what the library knows of a book from `from` to `to`: its
@@ -815,17 +895,28 @@ pub fn set_finished(storage: &dyn Storage, path: &str, finished: bool) {
     };
     book.progress = finished.then_some(100);
     save(storage, path, &book);
+    noted_status(storage, path);
 }
 
 /// Paths of the books opened last, most recent first (also of books no
 /// longer there).
 pub fn opened_books(storage: &dyn Storage) -> Vec<String> {
-    read_list(storage, &opened_file(), MAX_OPENED).unwrap_or_default()
+    read_opened(storage).unwrap_or_default()
+}
+
+/// [`opened_books`], or the error reading them.
+pub(crate) fn read_opened(storage: &dyn Storage) -> Result<Vec<String>, StorageError> {
+    read_list(storage, &opened_file(), MAX_OPENED)
+}
+
+/// [`favourites`], or the error reading them.
+pub(crate) fn read_favourites(storage: &dyn Storage) -> Result<Vec<String>, StorageError> {
+    read_list(storage, &favourites_file(), MAX_FAVOURITES)
 }
 
 /// The paths of the favourite books, the newest first.
 pub fn favourites(storage: &dyn Storage) -> Vec<String> {
-    read_list(storage, &favourites_file(), MAX_FAVOURITES).unwrap_or_default()
+    read_favourites(storage).unwrap_or_default()
 }
 
 /// Makes the book at `path` a favourite, or no longer one.
@@ -836,6 +927,7 @@ pub fn set_favourite(storage: &dyn Storage, path: &str, favourite: bool) {
             list.insert(0, path.to_string());
         }
     });
+    noted_status(storage, path);
 }
 
 /// Takes over what the library plugin kept before the library was a
@@ -857,6 +949,44 @@ pub fn take_over_old(storage: &dyn Storage) {
 /// it ([`events::LIBRARY_CHANGED`](crate::builtin::events::LIBRARY_CHANGED)).
 pub fn changed() -> crate::Command {
     crate::builtin::events::LIBRARY_CHANGED.emit(())
+}
+
+/// The command that tells everyone something of the book at `path`
+/// changed: `what`, bits of [`what`]
+/// ([`events::BOOK_CHANGED`](crate::builtin::events::BOOK_CHANGED)).
+pub fn changed_book(path: &str, what: u32) -> crate::Command {
+    crate::builtin::events::BOOK_CHANGED.emit(crate::builtin::events::BookChanged {
+        path: path.to_string(),
+        what,
+    })
+}
+
+/// The command that tells everyone the book at `path` came into the
+/// library, brought by the plugin `source`
+/// ([`events::BOOK_ADDED`](crate::builtin::events::BOOK_ADDED)).
+pub fn added(path: &str, source: &str) -> crate::Command {
+    crate::builtin::events::BOOK_ADDED.emit(crate::builtin::events::BookAdded {
+        path: path.to_string(),
+        source: source.to_string(),
+    })
+}
+
+/// The command a view of the library sends as it shows: the kernel makes
+/// the catalog anew in the background where it was not made since
+/// PaperPaw started (books may have been copied meanwhile) or is not
+/// there ([`events::CATALOG_WANTED`](crate::builtin::events::CATALOG_WANTED));
+/// [`events::CATALOG_CHANGED`](crate::builtin::events::CATALOG_CHANGED)
+/// follows where it was.
+pub fn request_catalog() -> crate::Command {
+    let wanted = crate::builtin::events::CatalogWanted::new(false);
+    crate::builtin::events::CATALOG_WANTED.emit(wanted)
+}
+
+/// The command that has the kernel make the catalog anew in any case,
+/// e.g. where a book it lists is gone without a word.
+pub fn request_catalog_anew() -> crate::Command {
+    let wanted = crate::builtin::events::CatalogWanted::new(true);
+    crate::builtin::events::CATALOG_WANTED.emit(wanted)
 }
 
 #[cfg(test)]

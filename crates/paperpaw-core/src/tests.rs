@@ -3251,6 +3251,7 @@ mod hosting;
 mod input;
 mod input_kinds;
 mod kernel_calls;
+mod library_catalog;
 mod plugins_loaded;
 mod refreshes;
 mod screen_life;

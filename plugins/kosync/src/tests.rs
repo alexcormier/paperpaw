@@ -259,6 +259,8 @@ impl Harness {
             page_layers: &self.page_layers,
             stylesheets: &[],
             book_data: &[],
+            book_fields: &[],
+            book_badges: &[],
             widgets: &self.widgets,
             setup: &self.setup,
             services: &self.services,

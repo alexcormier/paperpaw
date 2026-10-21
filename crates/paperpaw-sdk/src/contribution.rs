@@ -82,6 +82,10 @@ pub enum Contribution {
     },
     Stylesheet(Cow<'static, str>),
     BookData(crate::library::BookData),
+    /// A field kept with books ([`Registrar::add_book_field`]).
+    BookField(Box<crate::library::BookField>),
+    /// A badge on books' rows ([`Registrar::add_book_badge`]).
+    BookBadge(Box<crate::library::BookBadge>),
     Font(Box<FontSpec>),
     #[non_exhaustive]
     FontFile {
@@ -212,6 +216,8 @@ impl Contribution {
             Contribution::KeymapWhen { .. } => "keymap-when",
             Contribution::Stylesheet(_) => "stylesheet",
             Contribution::BookData(_) => "book data",
+            Contribution::BookField(_) => "book field",
+            Contribution::BookBadge(_) => "book badge",
             Contribution::Font(_) => "font",
             Contribution::FontFile { .. } => "font-file",
             Contribution::FontExtension { .. } => "font-extension",
@@ -285,6 +291,8 @@ impl Contribution {
             Contribution::ActionObserver(o) | Contribution::EventObserver(o) => &o.id,
             Contribution::Gesture(g) => &g.id,
             Contribution::Work(w) => &w.id,
+            Contribution::BookField(f) => &f.id,
+            Contribution::BookBadge(b) => &b.id,
             Contribution::Widget(w) => &w.id,
             Contribution::SetupStep(s) => &s.id,
             Contribution::Preset(p) => &p.id,
@@ -375,7 +383,11 @@ impl Registrar {
             }
         }
         if let Some(id) = contribution.id() {
-            if !id.is_owned_by(&self.plugin) {
+            // The kernel's services a plugin may stand in for (the
+            // library) are published under the kernel's ids.
+            let stands_in = matches!(contribution, Contribution::Published { .. })
+                && crate::services::REPLACEABLE.contains(&id.as_str());
+            if !id.is_owned_by(&self.plugin) && !stands_in {
                 return Err(RegisterError::Namespace { id: id.clone() });
             }
             let kind = contribution.id_kind();
@@ -504,6 +516,25 @@ impl Registrar {
             folder: folder.into(),
             prefix: prefix.into(),
         }))
+    }
+
+    /// Adds a field plugins keep with books ([`library::set_field`](crate::library::set_field)):
+    /// shown on a book's information page, kept in the catalog where
+    /// [`in_catalog`](crate::library::BookField::in_catalog).
+    pub fn add_book_field(
+        &mut self,
+        field: crate::library::BookField,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::BookField(Box::new(field)))
+    }
+
+    /// Adds a badge to books' rows in every view of the library (see
+    /// [`library::service`](fn@crate::library::service)).
+    pub fn add_book_badge(
+        &mut self,
+        badge: crate::library::BookBadge,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::BookBadge(Box::new(badge)))
     }
 
     /// Adds a key map preset (same format as [`Registrar::add_keymap`]) that

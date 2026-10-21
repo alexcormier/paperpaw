@@ -27,7 +27,7 @@ fn entry() -> impl Strategy<Value = &'static str> {
         "my.menu",
         "no.such-thing",
         "files.sort",
-        "files.root",
+        "core.library-folder",
         "home.edit-pages",
         "settings.advanced",
     ])

@@ -10,9 +10,9 @@ const MAX_CONFIG: usize = 64 * 1024;
 const MAX_SCOPE: usize = 16 * 1024;
 
 /// Settings that moved to the kernel, by the ids they had (the reader's
-/// type, October 2026): read under those where the new ones are not set,
-/// so nothing chosen is lost.
-const MOVED: [(&str, &str); 11] = [
+/// type and the library folder, October 2026): read under those where
+/// the new ones are not set, so nothing chosen is lost.
+const MOVED: [(&str, &str); 12] = [
     ("reader.font-weight", "core.font-weight"),
     ("reader.word-spacing", "core.word-spacing"),
     ("reader.line-spacing", "core.line-spacing"),
@@ -24,6 +24,7 @@ const MOVED: [(&str, &str); 11] = [
     ("reader.paragraph-spacing", "core.paragraph-spacing"),
     ("reader.publisher-styles", "core.publisher-styles"),
     ("reader.footnotes", "core.footnotes"),
+    ("files.root", "core.library-folder"),
 ];
 
 /// Of setting `id` with `value` as kept in a file, the id and value it

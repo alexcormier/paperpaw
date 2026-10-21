@@ -214,6 +214,12 @@ pub mod menus {
     /// reader sends [`events::TEXT_CHOSEN`](super::events::TEXT_CHOSEN),
     /// then runs it.
     pub const SELECTION: Id = Id::new_static("core.selection-menu");
+    /// What can be done with a book, wherever a library lists it (its
+    /// sheet: open, finished, favourite, information, …): plugins add
+    /// their actions (send it, sync it now, delete it); when one is
+    /// chosen, the library sends [`events::BOOK_CHOSEN`](super::events::BOOK_CHOSEN)
+    /// with the book, then runs it.
+    pub const BOOK: Id = Id::new_static("core.book-menu");
 }
 
 /// The roles of decorations every reader draws (see
@@ -365,6 +371,43 @@ pub mod events {
             /// Its old path.
             pub from: String,
             /// Its new one.
+            pub path: String,
+        }
+    }
+
+    crate::event_data! {
+        /// A book that came into the library ([`BOOK_ADDED`]).
+        pub struct BookAdded {
+            pub path: String,
+            /// Where it came from: the plugin that brought it (`transfer`,
+            /// `calibre`, `opds`), empty where it is not known.
+            pub source: String,
+        }
+    }
+
+    crate::event_data! {
+        /// What changed of a book ([`BOOK_CHANGED`]).
+        pub struct BookChanged {
+            pub path: String,
+            /// What changed: bits of [`library::what`](crate::library::what).
+            pub what: u32,
+        }
+    }
+
+    crate::event_data! {
+        /// The catalog wanted ([`CATALOG_WANTED`]).
+        pub struct CatalogWanted {
+            /// Made anew in any case, not only where it was not made since
+            /// PaperPaw started.
+            pub anew: bool,
+        }
+    }
+
+    crate::event_data! {
+        /// An action of the book menu chosen for a book ([`BOOK_CHOSEN`]).
+        pub struct BookChosen {
+            /// The action, from [`menus::BOOK`](super::menus::BOOK).
+            pub action: Id,
             pub path: String,
         }
     }
@@ -631,6 +674,29 @@ pub mod events {
     /// change the library emit it ([`library::changed`](crate::library::changed));
     /// a move is [`BOOK_MOVED`].
     pub const LIBRARY_CHANGED: Event<()> = Event::new("core.library-changed");
+    /// A book came into the library ([`BookAdded`]): received, downloaded,
+    /// copied by a plugin. Whoever brings a book emits it
+    /// ([`library::added`](crate::library::added)); views may show it at
+    /// once, the catalog is made anew.
+    pub const BOOK_ADDED: Event<BookAdded> = Event::new("core.book-added");
+    /// Something of a book changed ([`BookChanged`]): its details, how far
+    /// it is read, its cover, whether it is a favourite, a plugin's field.
+    /// Sent by the kernel for the reading events and by plugins that change
+    /// a book ([`library::changed_book`](crate::library::changed_book));
+    /// views show the book anew.
+    pub const BOOK_CHANGED: Event<BookChanged> = Event::new("core.book-changed");
+    /// An action of the book menu ([`menus::BOOK`](super::menus::BOOK)) was
+    /// chosen for a book ([`BookChosen`]), sent just before it runs: the
+    /// plugin whose action it is does it for that book.
+    pub const BOOK_CHOSEN: Event<BookChosen> = Event::new("core.book-chosen");
+    /// The catalog of the library was made anew
+    /// ([`library::catalog`](crate::library::catalog)): views of it read it
+    /// again.
+    pub const CATALOG_CHANGED: Event<()> = Event::new("core.catalog-changed");
+    /// The catalog is wanted ([`CatalogWanted`],
+    /// [`library::request_catalog`](crate::library::request_catalog)):
+    /// the kernel walks the library in the background where needed.
+    pub const CATALOG_WANTED: Event<CatalogWanted> = Event::new("core.catalog-wanted");
     /// The values shown without being kept changed, or ended (see
     /// [`Command::PreviewSettings`](crate::Command::PreviewSettings)).
     pub const PREVIEW_CHANGED: Event<()> = Event::new("core.preview-changed");
@@ -777,6 +843,10 @@ pub mod screens {
     pub const STATUS_ITEMS: Id = Id::new_static("core.status-items");
     /// Chooses the status lines a setting lists.
     pub const STATUS_LINES: Id = Id::new_static("core.status-lines");
+    /// Chooses a folder for a setting with the folder chooser
+    /// ([`slots::CHOOSE_FOLDER`](super::slots::CHOOSE_FOLDER)), whichever
+    /// plugin fills it: name it as a text setting's editor.
+    pub const FOLDER_EDITOR: Id = Id::new_static("core.folder-editor");
 }
 
 /// Global settings.
@@ -789,6 +859,11 @@ pub mod settings {
     /// [`groups::DEVELOPER`](super::groups::DEVELOPER) show, and plugins may
     /// show what only developers need (e.g. what each plugin took).
     pub const DEVELOPER: Setting<bool> = Setting::new("core.developer");
+    /// The library folder, where books are kept (`books`; empty for the
+    /// storage's top): the kernel's, so that any library and every plugin
+    /// that puts books somewhere reads the same
+    /// ([`library::folder`](crate::library::folder)).
+    pub const LIBRARY_FOLDER: Setting<Text> = Setting::new("core.library-folder");
     /// Draw everything inverted.
     pub const NIGHT_MODE: Setting<bool> = Setting::new("core.night-mode");
     /// In night mode, pictures inverted too (else as they are, not as
