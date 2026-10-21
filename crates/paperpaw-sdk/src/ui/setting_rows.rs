@@ -386,6 +386,40 @@ pub fn two_options(env: &Env<'_>, spec: &SettingSpec) -> bool {
     }
 }
 
+/// What choosing a setting (confirm or a tap) opens, the same on every
+/// screen that lists settings: its editor ([`SettingExtra::editor`](crate::SettingExtra::editor)),
+/// the keyboard for text (a secret entered afresh), the values of a
+/// choice of more than two on the screen of slot
+/// [`CHOOSE_VALUE`](crate::builtin::slots::CHOOSE_VALUE). `None` where
+/// the screen changes it itself: a switch, a number, a choice of two
+/// (see [`next_value`]), or a choice where no screen fills that slot.
+pub fn setting_opens(env: &Env<'_>, spec: &SettingSpec) -> Option<crate::Command> {
+    if let Some(editor) = &spec.extra().editor {
+        return Some(editor.open(&spec.id));
+    }
+    match spec.kind {
+        SettingKind::Text => {
+            let question = crate::ask::text(
+                env.i18n.tr(&spec.title),
+                &crate::builtin::events::SETTING_TYPED,
+            )
+            .with(crate::builtin::params::ID, spec.id.as_str().to_string());
+            let question = if spec.extra().secret {
+                question.password()
+            } else {
+                question.initial(setting_value(env, spec))
+            };
+            Some(question.command())
+        }
+        SettingKind::Choice(_) | SettingKind::Language
+            if !two_options(env, spec) && env.has_slot(&crate::builtin::slots::CHOOSE_VALUE) =>
+        {
+            Some(crate::Editor::Slot(crate::builtin::slots::CHOOSE_VALUE).open(&spec.id))
+        }
+        _ => None,
+    }
+}
+
 /// Whether choosing the setting opens another screen (its own editor, or
 /// a list to choose from): its row shows a `›`.
 pub fn opens_screen(env: &Env<'_>, spec: &SettingSpec) -> bool {

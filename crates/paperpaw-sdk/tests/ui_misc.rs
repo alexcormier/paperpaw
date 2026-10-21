@@ -539,3 +539,34 @@ fn entries_contributed_after_a_menu_was_made_show_in_it() {
     let ids: Vec<&str> = menus.ids("t.menu").iter().map(|i| i.as_str()).collect();
     assert_eq!(ids, ["t.c", "t.a"]);
 }
+
+/// What choosing a setting opens is the same on every screen: text on the
+/// keyboard, answered to the kernel; an editor; a switch nothing.
+#[test]
+fn a_text_setting_opens_the_keyboard_on_every_screen() {
+    use paperpaw_sdk::builtin::{events, params, slots};
+    use paperpaw_sdk::{Command, SettingSpec, Text};
+    const NAME: paperpaw_sdk::Setting<Text> = paperpaw_sdk::Setting::new("t.name");
+    const ON: paperpaw_sdk::Setting<bool> = paperpaw_sdk::Setting::new("t.on");
+    let h = support::Harness::new(support::Device::TOUCH);
+    let env = h.env();
+    let name = SettingSpec::text(&NAME, "t.name", "Ann");
+    let Some(Command::OpenSlot(slot, asked)) = ui::setting_opens(&env, &name) else {
+        panic!("the keyboard");
+    };
+    assert_eq!(slot, slots::KEYBOARD);
+    assert_eq!(
+        asked.get(params::REPLY),
+        Some(events::SETTING_TYPED.as_str())
+    );
+    assert_eq!(asked.get(params::ID), Some("t.name"));
+    let edited = SettingSpec::text(&NAME, "t.name", "").editor(Id::new_static("t.edit"));
+    assert!(matches!(
+        ui::setting_opens(&env, &edited),
+        Some(Command::OpenScreen(screen, _)) if screen == Id::new_static("t.edit")
+    ));
+    assert_eq!(
+        ui::setting_opens(&env, &SettingSpec::switch(&ON, "t.on", true)),
+        None
+    );
+}

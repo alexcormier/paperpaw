@@ -464,3 +464,94 @@ fn questions_are_asked_where_the_choice_slot_says() {
         assert_eq!(kernel.active_screen().map(|s| s.as_str()), Some(expected));
     }
 }
+
+/// A name typed for a setting, and a number whose check refuses large
+/// values.
+struct Checked;
+
+fn at_most_five(
+    _: &paperpaw_core::sdk::Settings,
+    value: &paperpaw_core::sdk::SettingValue,
+) -> Result<(), &'static str> {
+    match value {
+        paperpaw_core::sdk::SettingValue::Int(n) if *n > 5 => Err("checked.too-large"),
+        _ => Ok(()),
+    }
+}
+
+static AT_MOST_FIVE: paperpaw_core::sdk::SettingExtra =
+    paperpaw_core::sdk::SettingExtra::new().check(at_most_five);
+static CHECKED_SETTINGS: [paperpaw_core::sdk::SettingSpec; 2] = [
+    paperpaw_core::sdk::SettingSpec::fixed_text(
+        "checked.name",
+        "checked.name",
+        "",
+        paperpaw_core::sdk::builtin::groups::OTHER,
+    ),
+    paperpaw_core::sdk::SettingSpec::fixed_number(
+        "checked.count",
+        "checked.count",
+        1,
+        9,
+        3,
+        paperpaw_core::sdk::builtin::groups::OTHER,
+    )
+    .with_extra(&AT_MOST_FIVE),
+];
+
+impl Plugin for Checked {
+    fn manifest(&self) -> Manifest {
+        common::manifest("checked")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_settings(&CHECKED_SETTINGS)
+    }
+}
+
+/// Text typed for a setting is set by the kernel, whichever screen asked;
+/// a value the setting's check refuses is not set, and the reader is told.
+#[test]
+fn typed_settings_are_set_and_refused_values_told() {
+    use paperpaw_core::sdk::builtin::{events, params};
+    use paperpaw_core::sdk::event::EventData;
+    let harness = Harness::default();
+    let mut kernel = kernel_with(&harness, Checked);
+    let typed = paperpaw_core::sdk::Typed {
+        text: "  Ann ".into(),
+        typing: false,
+        context: Params::new().with(params::ID, "checked.name"),
+    };
+    kernel.send_event(
+        Instant(100),
+        events::SETTING_TYPED.id().clone(),
+        typed.to_params(),
+    );
+    common::render(&mut kernel);
+    assert_eq!(kernel.settings().text("checked.name"), "Ann");
+    // Refused: a notice shows, until its time is up.
+    let effects = kernel
+        .set_setting(Instant(200), "checked.count", "7")
+        .unwrap();
+    assert_eq!(kernel.settings().int("checked.count"), 3);
+    assert_eq!(effects.wake_at(), Some(Instant(4_200)));
+    common::render(&mut kernel);
+    let effects = kernel
+        .set_setting(Instant(300), "checked.count", "4")
+        .unwrap();
+    assert_eq!(kernel.settings().int("checked.count"), 4);
+    assert_eq!(effects.wake_at(), Some(Instant(4_200)), "no new notice");
+}
+
+fn kernel_with(harness: &Harness, plugin: impl Plugin + 'static) -> Kernel {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(harness.plugin())
+        .plugin(plugin)
+        .storage(MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    common::render(&mut kernel);
+    harness.take();
+    kernel
+}

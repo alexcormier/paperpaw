@@ -285,6 +285,11 @@ impl Kernel {
                         events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())),
                     );
                 }
+                // Its check says why: the reader is told.
+                Err(paperpaw_sdk::SettingError::Refused(why)) => {
+                    let text = String::from(self.shared.translator.tr(why));
+                    self.output.commands.push(Command::Notify(text));
+                }
                 Err(error) => {
                     self.warn_runtime(format!("`{id}`: {error}"));
                 }

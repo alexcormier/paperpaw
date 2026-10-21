@@ -281,6 +281,7 @@ pub const paperpaw_sdk::builtin::events::POWER_CHANGED: paperpaw_sdk::event::Eve
 pub const paperpaw_sdk::builtin::events::PREVIEW_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::RESUME: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::SETTING_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::SettingChanged>
+pub const paperpaw_sdk::builtin::events::SETTING_TYPED: paperpaw_sdk::event::Event<paperpaw_sdk::replies::Typed>
 pub const paperpaw_sdk::builtin::events::STARTED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::STATUS_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::STOPPING: paperpaw_sdk::event::Event<()>
@@ -2319,6 +2320,7 @@ pub fn paperpaw_sdk::ui::next_value(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Setti
 pub fn paperpaw_sdk::ui::number_room<'a>(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, impl core::iter::traits::collect::IntoIterator<Item = &'a paperpaw_sdk::SettingSpec>) -> alloc::string::String
 pub fn paperpaw_sdk::ui::opens_screen(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> bool
 pub fn paperpaw_sdk::ui::option_name(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, &str) -> alloc::string::String
+pub fn paperpaw_sdk::ui::setting_opens(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> core::option::Option<paperpaw_sdk::Command>
 pub fn paperpaw_sdk::ui::setting_value(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> alloc::string::String
 pub fn paperpaw_sdk::ui::step_focus(usize, isize, usize) -> usize
 pub fn paperpaw_sdk::ui::stepper(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str) -> core::option::Option<(paperpaw_platform::geometry::Rect, paperpaw_platform::geometry::Rect)>
@@ -3147,6 +3149,7 @@ pub fn paperpaw_sdk::replies::ServerNotice::to_params(&self) -> paperpaw_sdk::Pa
 #[non_exhaustive] pub enum paperpaw_sdk::SettingError
 pub paperpaw_sdk::SettingError::Full
 pub paperpaw_sdk::SettingError::InvalidValue
+pub paperpaw_sdk::SettingError::Refused(&'static str)
 pub paperpaw_sdk::SettingError::Unknown
 impl core::error::Error for paperpaw_sdk::SettingError
 impl core::fmt::Display for paperpaw_sdk::SettingError
@@ -3734,21 +3737,31 @@ impl<T: paperpaw_sdk::setting::SettingType> core::fmt::Debug for paperpaw_sdk::s
 pub fn paperpaw_sdk::setting::Setting<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl<T: paperpaw_sdk::setting::SettingType> core::fmt::Display for paperpaw_sdk::setting::Setting<T>
 pub fn paperpaw_sdk::setting::Setting<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_sdk::SettingCheck(pub fn(&paperpaw_sdk::Settings, &paperpaw_sdk::SettingValue) -> core::result::Result<(), &'static str>)
+impl core::cmp::Eq for paperpaw_sdk::SettingCheck
+impl core::cmp::PartialEq for paperpaw_sdk::SettingCheck
+pub fn paperpaw_sdk::SettingCheck::eq(&self, &Self) -> bool
+impl core::fmt::Debug for paperpaw_sdk::SettingCheck
+pub fn paperpaw_sdk::SettingCheck::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::SettingExtra
+pub paperpaw_sdk::SettingExtra::check: core::option::Option<paperpaw_sdk::SettingCheck>
 pub paperpaw_sdk::SettingExtra::editor: core::option::Option<paperpaw_sdk::Editor>
 pub paperpaw_sdk::SettingExtra::follows: core::option::Option<&'static str>
 pub paperpaw_sdk::SettingExtra::secret: bool
 pub paperpaw_sdk::SettingExtra::section: core::option::Option<alloc::borrow::Cow<'static, str>>
+pub paperpaw_sdk::SettingExtra::shown_if: core::option::Option<(&'static str, &'static str)>
 pub paperpaw_sdk::SettingExtra::slider: bool
 pub paperpaw_sdk::SettingExtra::step: i64
 pub paperpaw_sdk::SettingExtra::unit: core::option::Option<alloc::borrow::Cow<'static, str>>
 impl paperpaw_sdk::SettingExtra
+pub const fn paperpaw_sdk::SettingExtra::check(self, fn(&paperpaw_sdk::Settings, &paperpaw_sdk::SettingValue) -> core::result::Result<(), &'static str>) -> Self
 pub const fn paperpaw_sdk::SettingExtra::editor(self, paperpaw_sdk::Id) -> Self
 pub const fn paperpaw_sdk::SettingExtra::editor_slot(self, paperpaw_sdk::Id) -> Self
 pub const fn paperpaw_sdk::SettingExtra::follows(self, &'static str) -> Self
 pub const fn paperpaw_sdk::SettingExtra::new() -> Self
 pub const fn paperpaw_sdk::SettingExtra::secret(self) -> Self
 pub const fn paperpaw_sdk::SettingExtra::section(self, &'static str) -> Self
+pub const fn paperpaw_sdk::SettingExtra::shown_if(self, &'static str, &'static str) -> Self
 pub const fn paperpaw_sdk::SettingExtra::slider(self) -> Self
 pub const fn paperpaw_sdk::SettingExtra::step(self, i64) -> Self
 pub const fn paperpaw_sdk::SettingExtra::unit(self, &'static str) -> Self
@@ -3820,6 +3833,7 @@ pub fn paperpaw_sdk::Settings::read<T: paperpaw_sdk::setting::SettingType>(&self
 pub fn paperpaw_sdk::Settings::released(&self) -> &[paperpaw_sdk::Id]
 pub fn paperpaw_sdk::Settings::scope(&self) -> core::option::Option<&paperpaw_sdk::collections::VecMap<paperpaw_sdk::Id, paperpaw_sdk::SettingValue>>
 pub fn paperpaw_sdk::Settings::scoped_value(&self, &str) -> core::option::Option<&paperpaw_sdk::SettingValue>
+pub fn paperpaw_sdk::Settings::shows(&self, &paperpaw_sdk::SettingSpec) -> bool
 pub fn paperpaw_sdk::Settings::spec(&self, &str) -> core::option::Option<&paperpaw_sdk::SettingSpec>
 pub fn paperpaw_sdk::Settings::specs(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::SettingSpec>
 pub fn paperpaw_sdk::Settings::text(&self, &str) -> &str

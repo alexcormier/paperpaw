@@ -555,8 +555,8 @@ impl PanelScreen {
                 let Some(setting) = spec(&env, id) else {
                     return;
                 };
-                match &setting.extra().editor {
-                    Some(editor) => cx.command(editor.open(id)),
+                match ui::setting_opens(&env, setting) {
+                    Some(command) => cx.command(command),
                     None => choose(&env, setting, cx),
                 }
             }

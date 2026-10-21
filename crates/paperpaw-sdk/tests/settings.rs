@@ -642,3 +642,36 @@ fn a_full_store_says_so_when_a_fixed_setting_is_changed() {
     let spec = s.spec("a.look").unwrap();
     assert_eq!(spec.default, SettingValue::Text(Cow::Borrowed("a.plain")));
 }
+
+/// A setting shown only while another has a value, and one whose values
+/// are checked before they are set.
+#[test]
+fn settings_show_on_a_condition_and_refuse_what_their_check_refuses() {
+    fn small(_: &Settings, value: &SettingValue) -> Result<(), &'static str> {
+        match value {
+            SettingValue::Int(n) if *n > 5 => Err("a.too-large"),
+            _ => Ok(()),
+        }
+    }
+    static WHILE_ON: SettingExtra = SettingExtra::new().shown_if("a.on", "true");
+    static CHECKED: SettingExtra = SettingExtra::new().check(small);
+    let mut s = Settings::new();
+    s.define(SettingSpec::switch(&ON, "a.on", false)).unwrap();
+    s.define(SettingSpec::text(&NAME, "a.name", "").with_extra(&WHILE_ON))
+        .unwrap();
+    s.define(SettingSpec::number(&SIZE, "a.size", 1, 9, 3).with_extra(&CHECKED))
+        .unwrap();
+    let name = s.spec("a.name").unwrap().clone();
+    assert!(!s.shows(&name));
+    s.set("a.on", SettingValue::Bool(true)).unwrap();
+    assert!(s.shows(&name));
+    // Settings without a condition always show.
+    assert!(s.shows(&s.spec("a.on").unwrap().clone()));
+    assert_eq!(
+        s.set("a.size", SettingValue::Int(7)),
+        Err(SettingError::Refused("a.too-large"))
+    );
+    assert_eq!(s.int("a.size"), 3);
+    s.set("a.size", SettingValue::Int(4)).unwrap();
+    assert_eq!(s.int("a.size"), 4);
+}

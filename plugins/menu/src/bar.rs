@@ -27,7 +27,7 @@ use paperpaw_sdk::{
     Screen, SettingKind, SettingValue,
 };
 
-use crate::{DEPTH, SCREEN, choose, is_menu};
+use crate::{DEPTH, SCREEN, is_menu};
 
 /// The bar's font: the reading status lines' (it opens over a book), as
 /// `core.status-font` chooses.
@@ -224,9 +224,10 @@ impl BarScreen {
             cx.command(Command::RunAction(id));
             return;
         };
-        // Its own page, e.g. the lock's, which asks for the code.
-        if let Some(editor) = &spec.extra().editor {
-            cx.command(editor.open(&id));
+        // Its own page (e.g. the lock's, which asks for the code), the
+        // keyboard for text, the list of its values.
+        if let Some(command) = ui::setting_opens(&env, spec) {
+            cx.command(command);
             return;
         }
         match &spec.kind {
@@ -236,15 +237,14 @@ impl BarScreen {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
-            SettingKind::Choice(_) | SettingKind::Language if ui::two_options(&env, spec) => {
+            SettingKind::Choice(_) | SettingKind::Language => {
                 if let Some(value) = ui::next_value(&env, spec, 1) {
                     cx.command(Command::SetSetting(id, value));
                     cx.request_redraw();
                     cx.request_refresh(RefreshMode::Fast);
                 }
             }
-            SettingKind::Choice(_) | SettingKind::Language => choose(&env, spec, cx),
-            // Numbers and text have no room here: their settings page.
+            // Numbers have no room here: their settings page.
             _ => {
                 let group = env.settings.group_of(spec);
                 cx.command(Command::OpenSlot(

@@ -281,7 +281,14 @@ pub(super) fn draw_cards<T: Copy>(
         let width = u32::from(width);
         let mut canvas = canvas.clipped(shown);
         if style.grays >= 16 {
-            canvas.fill_round_rect(x, y, width, height, style.corner, style.ink(super::Ink::Section));
+            canvas.fill_round_rect(
+                x,
+                y,
+                width,
+                height,
+                style.corner,
+                style.ink(super::Ink::Section),
+            );
         } else {
             let line = (style.line / 2).max(1);
             canvas.stroke_round_rect(x, y, width, height, line, style.corner, Color::BLACK);

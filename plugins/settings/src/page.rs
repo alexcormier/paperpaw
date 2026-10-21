@@ -402,37 +402,18 @@ impl GroupPage {
         let Some(spec) = self.focused() else {
             return;
         };
-        if let Some(editor) = &spec.extra().editor {
-            cx.command(editor.open(&spec.id));
+        // Its editor, the keyboard, the list of its values.
+        if let Some(command) = ui::setting_opens(env, spec) {
+            cx.command(command);
             return;
         }
         match spec.kind {
-            SettingKind::Bool => self.change(env, 1, cx),
             SettingKind::Int { .. } => {
                 self.editing = env.settings.get(spec.id.as_str()).cloned();
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
-            SettingKind::Choice(_) | SettingKind::Language if ui::two_options(env, spec) => {
-                self.change(env, 1, cx);
-            }
-            SettingKind::Choice(_) | SettingKind::Language => {
-                cx.command(Command::OpenScreen(
-                    CHOOSE_SCREEN,
-                    Params::new().with(ID, spec.id.as_str().to_string()),
-                ));
-            }
-            SettingKind::Text => {
-                let question = ask::text(env.i18n.tr(&spec.title), &TEXT_ENTERED)
-                    .with(ID, spec.id.as_str().to_string());
-                let question = if spec.extra().secret {
-                    question.password()
-                } else {
-                    question.initial(ui::setting_value(env, spec))
-                };
-                cx.command(question.command());
-            }
-            _ => {}
+            _ => self.change(env, 1, cx),
         }
     }
 }
@@ -743,8 +724,19 @@ impl Screen for GroupPage {
             return;
         }
         if *event == events::SETTING_CHANGED {
-            if self.covered.changed(cx) {
-                let env = *cx.env();
+            let covered = self.covered.changed(cx);
+            let env = *cx.env();
+            // A setting shown only while this one has a value.
+            let shows_others = events::SETTING_CHANGED
+                .read(event, params)
+                .is_some_and(|changed| {
+                    env.settings.specs().any(|spec| {
+                        spec.extra()
+                            .shown_if
+                            .is_some_and(|(id, _)| id == changed.id.as_str())
+                    })
+                });
+            if covered || shows_others {
                 self.rebuild(&env);
                 cx.request_redraw();
             }

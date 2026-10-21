@@ -524,6 +524,10 @@ pub mod events {
     pub const STARTED: Event<()> = Event::new("core.started");
     /// After a setting changed: which ([`SettingChanged`]).
     pub const SETTING_CHANGED: Event<SettingChanged> = Event::new("core.setting-changed");
+    /// Text typed for a setting, asked with its parameter
+    /// [`ID`](super::params::ID) (as [`ui::setting_opens`](crate::ui::setting_opens)
+    /// asks): the kernel sets the setting to it, trimmed.
+    pub const SETTING_TYPED: Event<crate::replies::Typed> = Event::new("core.setting-typed");
     /// A book was opened for reading ([`Reading`]). Every reader plugin
     /// emits it, so home screens, statistics or sync plugins work with any
     /// reader. Not for documents in hidden folders

@@ -16,7 +16,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, slots};
+use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setup::SetupPage;
@@ -383,17 +383,12 @@ impl Guide {
                 let Some(spec) = self.setting(&env) else {
                     return;
                 };
-                if let Some(editor) = &spec.extra().editor {
-                    cx.command(editor.open(&spec.id));
-                } else if matches!(spec.kind, SettingKind::Bool) || ui::two_options(&env, spec) {
-                    self.change(1, cx);
-                } else if matches!(spec.kind, SettingKind::Choice(_) | SettingKind::Language) {
-                    // The settings plugin's list; without it, the next.
-                    if env.has_slot(&slots::CHOOSE_VALUE) {
-                        cx.command(paperpaw_sdk::Editor::Slot(slots::CHOOSE_VALUE).open(&spec.id));
-                    } else {
-                        self.change(1, cx);
-                    }
+                // Its editor, the keyboard, the list of its values; else
+                // the next value.
+                match ui::setting_opens(&env, spec) {
+                    Some(command) => cx.command(command),
+                    None if !matches!(spec.kind, SettingKind::Int { .. }) => self.change(1, cx),
+                    None => {}
                 }
             }
         }

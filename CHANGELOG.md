@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `ui::setting_opens` says what choosing a setting opens (its
+  editor, the keyboard for text, the list of a choice's values), the
+  same on the settings pages, in menus, the quick panel and the setup;
+  text typed comes back as `events::SETTING_TYPED`, which the kernel
+  sets. A text setting in a menu did nothing before.
+  `SettingExtra::shown_if(setting, value)` shows a setting only while
+  another has a value (`Settings::shows`); `SettingExtra::check(fn)`
+  refuses values (`SettingError::Refused`), and the kernel tells the
+  reader why.
 - SDK: one choice dialog for every plugin: `ask::choice(title, &reply)`
   with `.about(context)` and `.options(labels, &[..])` asks on the
   screen of the new slot `core.choice` (the kernel's

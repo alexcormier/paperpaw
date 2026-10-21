@@ -177,13 +177,10 @@ struct MenuScreen {
 /// Parameter: the depth of a submenu.
 pub(crate) const DEPTH: &str = "depth";
 
-/// Chooses a value of choice or language setting `spec`: on the screen
-/// of slot `core.choose-value`, or the next value at once where none
-/// fills it.
+/// The next value of choice or language setting `spec`, where no screen
+/// lists its values (see `ui::setting_opens`).
 pub(crate) fn choose(env: &Env<'_>, spec: &SettingSpec, cx: &mut Cx<'_, '_>) {
-    if env.has_slot(&slots::CHOOSE_VALUE) {
-        cx.command(paperpaw_sdk::Editor::Slot(slots::CHOOSE_VALUE).open(&spec.id));
-    } else if let Some(value) = ui::next_value(env, spec, 1) {
+    if let Some(value) = ui::next_value(env, spec, 1) {
         cx.command(Command::SetSetting(spec.id.clone(), value));
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);
@@ -311,8 +308,9 @@ impl MenuScreen {
             cx.command(Command::RunAction(id.clone()));
             return;
         };
-        if let Some(editor) = &spec.extra().editor {
-            cx.command(editor.open(&spec.id));
+        // Its editor, the keyboard for text, the list of its values.
+        if let Some(command) = ui::setting_opens(&env, spec) {
+            cx.command(command);
             return;
         }
         match spec.kind {
@@ -320,11 +318,6 @@ impl MenuScreen {
                 self.editing = !self.editing;
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
-            }
-            // The list of the standard settings plugin (a choice of two
-            // switches at once, below).
-            SettingKind::Choice(_) | SettingKind::Language if !ui::two_options(&env, spec) => {
-                choose(&env, spec, cx);
             }
             _ => self.step(&env, spec, 1, cx),
         }

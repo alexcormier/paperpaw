@@ -236,7 +236,33 @@ pub struct SettingExtra {
     /// is set itself, e.g. the margins at the top and bottom those at the
     /// sides (one step only: what that one follows is not followed).
     pub follows: Option<&'static str>,
+    /// Shown only while another setting has a value, e.g. the server's
+    /// address while syncing is on (see [`Settings::shows`]): the
+    /// setting's id and the value, as written in `paperpaw.ini`.
+    pub shown_if: Option<(&'static str, &'static str)>,
+    /// What a value must be: a value it refuses is not set, and the
+    /// reader is told why (see [`SettingCheck`]).
+    pub check: Option<SettingCheck>,
 }
+
+/// Checks a value before it is set: `Err` with the translation key of
+/// why it is refused (see [`SettingExtra::check`]).
+#[derive(Clone, Copy)]
+pub struct SettingCheck(pub fn(&Settings, &SettingValue) -> Result<(), &'static str>);
+
+impl fmt::Debug for SettingCheck {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SettingCheck")
+    }
+}
+
+impl PartialEq for SettingCheck {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 as usize == other.0 as usize
+    }
+}
+
+impl Eq for SettingCheck {}
 
 /// The extra of settings without one.
 static NO_EXTRA: SettingExtra = SettingExtra::new();
@@ -264,6 +290,8 @@ impl SettingExtra {
             section: None,
             secret: false,
             follows: None,
+            shown_if: None,
+            check: None,
         }
     }
 
@@ -315,6 +343,22 @@ impl SettingExtra {
     /// ([`SettingExtra::follows`]).
     pub const fn follows(mut self, id: &'static str) -> Self {
         self.follows = Some(id);
+        self
+    }
+
+    /// Shown only while setting `id` has `value` ([`SettingExtra::shown_if`]).
+    pub const fn shown_if(mut self, id: &'static str, value: &'static str) -> Self {
+        self.shown_if = Some((id, value));
+        self
+    }
+
+    /// Values are checked with `check` before they are set
+    /// ([`SettingExtra::check`]).
+    pub const fn check(
+        mut self,
+        check: fn(&Settings, &SettingValue) -> Result<(), &'static str>,
+    ) -> Self {
+        self.check = Some(SettingCheck(check));
         self
     }
 }
@@ -715,6 +759,9 @@ pub enum SettingError {
     /// No place is left to keep a changed spec (more than 32,768
     /// settings of a kind).
     Full,
+    /// The setting's check refused the value: the translation key of why
+    /// (see [`SettingExtra::check`]).
+    Refused(&'static str),
 }
 
 impl fmt::Display for SettingError {
@@ -723,6 +770,7 @@ impl fmt::Display for SettingError {
             SettingError::Unknown => "unknown setting",
             SettingError::InvalidValue => "invalid value for this setting",
             SettingError::Full => "no place left to change this setting",
+            SettingError::Refused(why) => why,
         })
     }
 }
@@ -1126,6 +1174,23 @@ impl Settings {
         }
     }
 
+    /// Whether `spec` shows now: not while the setting its
+    /// [`SettingExtra::shown_if`] names has another value.
+    pub fn shows(&self, spec: &SettingSpec) -> bool {
+        let Some((id, value)) = spec.extra().shown_if else {
+            return true;
+        };
+        // The value read as that setting reads it (`on`, `true` …); a
+        // setting not there does not hide this one.
+        let Some(condition) = self.spec(id) else {
+            return true;
+        };
+        condition
+            .kind
+            .parse(value)
+            .is_some_and(|value| self.get(id) == Some(&value))
+    }
+
     /// Sets a value after validating it.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
@@ -1133,6 +1198,9 @@ impl Settings {
         let spec = self.spec(id).ok_or(SettingError::Unknown)?;
         if !spec.kind.accepts(&value) {
             return Err(SettingError::InvalidValue);
+        }
+        if let Some(SettingCheck(check)) = spec.extra().check {
+            check(self, &value).map_err(SettingError::Refused)?;
         }
         let id = self.value_id(id)?;
         // The reader's change wins over a mode's value until the next mode.

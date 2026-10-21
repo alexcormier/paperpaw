@@ -50,6 +50,21 @@ impl Plugin for CorePlugin {
         register_time_and_battery(r)?;
         register_keymaps_and_setup(r)?;
         r.add_presets(&POWER_MODES)?;
+        // Text typed for a setting (`ui::setting_opens`), whichever screen
+        // asked.
+        r.on(events::SETTING_TYPED, |env, typed, out| {
+            let id = typed
+                .context
+                .get(params::ID)
+                .and_then(|id| Id::parse(id).ok());
+            if let Some(id) = id.filter(|id| env.settings.spec(id.as_str()).is_some()) {
+                let text = String::from(typed.text.trim());
+                out.push(Command::SetSetting(
+                    id,
+                    paperpaw_sdk::SettingValue::Text(Cow::Owned(text)),
+                ));
+            }
+        })?;
         // Each plugin's network (its settings made by the kernel).
         r.add_setting_group(
             SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network").order(87),
