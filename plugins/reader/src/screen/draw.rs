@@ -107,17 +107,18 @@ impl Book {
 
     /// Where *Back* is offered on the page a link led to: a small button
     /// in the top margin, on the left.
-    /// On web pages it is always there: back to the page before.
+    /// On a plugin's pages (web pages) it is always there: back to the
+    /// page before.
     pub(super) fn back_area(&self, env: &Env<'_>) -> Option<Rect> {
         let landed = !self.returns.is_empty() && self.landed == Some(self.page.start);
-        if !landed && !self.web() {
+        if !landed && !self.page_back {
             return None;
         }
         let style = UiStyle::new(env);
         let font = style.font(env)?;
         let label = env.i18n.tr("reader.link-back");
         let pad = style.gap as f32;
-        let width = font.measure(style.small, label) + 2.0 * pad;
+        let width = ui::button_width(&style, font.measure(style.small, label));
         // Within the top margin where it is wide enough, so it covers no
         // text.
         let line = font.line_metrics(style.small).line_height;
@@ -136,28 +137,10 @@ impl Book {
         let Some(area) = self.back_area(env) else {
             return;
         };
+        // A button as the interface's others.
         let style = UiStyle::new(env);
-        let Some(font) = style.font(env) else {
-            return;
-        };
-        let (x, y, w, h) = (
-            i32::from(area.x),
-            i32::from(area.y),
-            u32::from(area.width),
-            u32::from(area.height),
-        );
-        canvas.fill_rect(x, y, w, h, Color::WHITE);
-        canvas.stroke_rect(x, y, w, h, 1, Color::BLACK);
         let label = env.i18n.tr("reader.link-back");
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            f32::from(area.x) + style.gap as f32,
-            area,
-            label,
-            Color::BLACK,
-        );
+        ui::draw_button(canvas, env, &style, area, label, false, false);
     }
 
     /// Where a tap sets or removes a bookmark: the top right corner.
