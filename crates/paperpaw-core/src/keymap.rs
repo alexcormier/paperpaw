@@ -29,6 +29,19 @@ pub(crate) enum Zone {
 }
 
 impl Zone {
+    /// The zone on the other side, left for right.
+    pub(crate) fn mirrored(self) -> Zone {
+        match self {
+            Zone::TopLeft => Zone::TopRight,
+            Zone::TopRight => Zone::TopLeft,
+            Zone::Left => Zone::Right,
+            Zone::Right => Zone::Left,
+            Zone::BottomLeft => Zone::BottomRight,
+            Zone::BottomRight => Zone::BottomLeft,
+            other => other,
+        }
+    }
+
     const ALL: [Zone; 9] = [
         Zone::TopLeft,
         Zone::Top,

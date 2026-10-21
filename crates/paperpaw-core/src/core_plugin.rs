@@ -520,7 +520,7 @@ static IN_PAGE: SettingExtra = SettingExtra::new().section(setting_sections::PAG
 static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(setting_sections::BEHAVIOUR);
 
 /// The language, night mode, speech and the edges for swipes.
-static GENERAL: [SettingSpec; 8] = [
+static GENERAL: [SettingSpec; 9] = [
     SettingSpec::fixed_switch(
         settings::DEVELOPER.static_str(),
         "core.setting.developer",
@@ -566,6 +566,14 @@ static GENERAL: [SettingSpec; 8] = [
         groups::SYSTEM,
     )
     .described("core.setting.speak-focus.help"),
+    SettingSpec::fixed_choice(
+        settings::VOICE.static_str(),
+        "core.setting.voice",
+        &[settings::VOICE_SYSTEM],
+        settings::VOICE_SYSTEM,
+        groups::SYSTEM,
+    )
+    .described("core.setting.voice.help"),
     SettingSpec::fixed_number(
         settings::EDGE_ENDS.static_str(),
         "core.setting.edge-ends",
@@ -594,6 +602,7 @@ fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&GENERAL)?;
     r.set_menu_need(settings::MONO_TEXT, paperpaw_sdk::MenuNeed::BlackAndWhite)?;
     r.set_menu_need(settings::SPEAK_FOCUS, paperpaw_sdk::MenuNeed::Speech)?;
+    r.set_menu_need(settings::VOICE, paperpaw_sdk::MenuNeed::Speech)?;
     Ok(())
 }
 

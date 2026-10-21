@@ -115,7 +115,10 @@ impl Book {
         let path = params
             .get(params::PATH)
             .ok_or_else(|| env.i18n.tr("reader.no-book").to_string())?;
-        let error = |e: DocumentError| format!("{}\n{e}", env.i18n.tr("reader.error"));
+        let error = |e: DocumentError| match e {
+            DocumentError::NotReady => env.i18n.tr("reader.not-ready").to_string(),
+            e => format!("{}\n{e}", env.i18n.tr("reader.error")),
+        };
         let options = paperpaw_sdk::reading::open_options(env);
         let document = env
             .formats

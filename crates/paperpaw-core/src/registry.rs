@@ -158,6 +158,8 @@ pub(crate) struct Staging {
     pub(crate) decorators: Vec<paperpaw_sdk::decorations::DecoratorSpec>,
     pub(crate) page_layers: Vec<paperpaw_sdk::layers::PageLayerSpec>,
     pub(crate) page_frames: Vec<paperpaw_sdk::layers::PageFrameSpec>,
+    pub(crate) lookup_providers: Vec<paperpaw_sdk::lookup::LookupProviderSpec>,
+    pub(crate) voices: Vec<paperpaw_sdk::voices::VoiceSpec>,
     pub(crate) input_filters: Vec<paperpaw_sdk::filters::InputFilterSpec>,
     pub(crate) refresh_filters: Vec<paperpaw_sdk::filters::RefreshFilterSpec>,
     /// Jobs: the steps of declared work (see [`paperpaw_sdk::work`]).
@@ -295,6 +297,8 @@ pub(crate) fn stage(
             Contribution::Decorator(decorator) => staging.decorators.push(*decorator),
             Contribution::PageLayer(layer) => staging.page_layers.push(*layer),
             Contribution::PageFrame(frame) => staging.page_frames.push(*frame),
+            Contribution::LookupProvider(p) => staging.lookup_providers.push(*p),
+            Contribution::Voice(voice) => staging.voices.push(*voice),
             Contribution::InputFilter(filter) => staging.input_filters.push(filter),
             Contribution::RefreshFilter(filter) => staging.refresh_filters.push(filter),
             Contribution::Work(spec) => staging.works.push(*spec),

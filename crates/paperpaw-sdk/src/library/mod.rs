@@ -1060,6 +1060,7 @@ mod tests {
                     Err(crate::document::DocumentError::UnsupportedFormat)
                 }),
                 prepared: None,
+                sniff: None,
             })
             .unwrap();
         let books = book_keys(&storage, &formats);

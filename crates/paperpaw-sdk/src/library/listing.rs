@@ -253,6 +253,7 @@ mod tests {
                     Err(crate::document::DocumentError::UnsupportedFormat)
                 }),
                 prepared: None,
+                sniff: None,
             })
             .unwrap();
         formats

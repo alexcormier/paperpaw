@@ -127,6 +127,9 @@ pub(crate) struct ReaderScreen {
     /// The book to open once the screen says it is being prepared (the
     /// first opening takes a while).
     preparing: Option<Params>,
+    /// The book not there yet (`DocumentError::NotReady`), opened when
+    /// its format says it is (`events::DOCUMENT_READY`).
+    waiting: Option<Params>,
     /// Pages with smooth letters (in grays, where the panel can).
     smooth: bool,
 }
@@ -142,10 +145,12 @@ impl ReaderScreen {
             let message = env.i18n.tr("reader.preparing").to_string();
             (Err(message), Some(params.clone()))
         };
+        let waiting = not_ready(env, &book).then(|| params.clone());
         Self {
             smooth: env.settings.read(&crate::settings::SMOOTH_TEXT),
             book,
             preparing,
+            waiting,
             selection: None,
             selected_on: Locator::START,
             linking: None,
@@ -166,6 +171,7 @@ impl ReaderScreen {
         };
         let env = *cx.env();
         self.book = Book::open(&env, &params);
+        self.waiting = not_ready(&env, &self.book).then_some(params);
         // Shown as a screen opening is: the book replaces the notice.
         cx.request_redraw();
         let flash = env
@@ -364,6 +370,14 @@ impl Screen for ReaderScreen {
             let reading = book.reading(&env).xpointer(book.xpointer.clone());
             cx.command(events::BOOK_CLOSED.emit(reading));
         }
+    }
+
+    /// A book whose pages go right to left: taps and swipes the other way.
+    fn mirrored(&self) -> bool {
+        self.book.as_ref().is_ok_and(|book| {
+            book.document.metadata().direction
+                == paperpaw_sdk::document::PageProgression::RightToLeft
+        })
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
@@ -833,6 +847,17 @@ impl ReaderScreen {
     }
 
     fn event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        // The book waited for is there now: opened.
+        if let Some(ready) = events::DOCUMENT_READY.read(event, params)
+            && self
+                .waiting
+                .as_ref()
+                .is_some_and(|w| w.get(params::PATH) == Some(ready.path.as_str()))
+        {
+            self.preparing = self.waiting.take();
+            self.prepare(cx);
+            return;
+        }
         let Ok(book) = &mut self.book else {
             return;
         };
@@ -1113,6 +1138,12 @@ pub(super) fn page_text(lines: &[PageLine]) -> String {
 pub(super) fn marks_not_saved(cx: &mut Cx<'_, '_>) {
     let text = cx.env().i18n.tr("reader.marks-not-saved").to_string();
     cx.command(Command::Notify(text));
+}
+
+/// Whether opening the book failed because it is not there yet: the
+/// message it says so with.
+fn not_ready(env: &Env<'_>, book: &Result<Book, String>) -> bool {
+    matches!(book, Err(message) if message.as_str() == env.i18n.tr("reader.not-ready"))
 }
 
 /// The page turn an arrow stands for in a book: left and up back, right

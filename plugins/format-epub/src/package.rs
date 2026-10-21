@@ -25,7 +25,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::Storage;
 use paperpaw_sdk::digest::fnv1a64;
-use paperpaw_sdk::document::{DocumentError, Metadata};
+use paperpaw_sdk::document::{DocumentError, Metadata, PageProgression};
 use paperpaw_sdk::xml::{Token, Tokenizer, decode, local_name};
 use paperpaw_sdk::zip::ZipArchive;
 use paperpaw_sdk::{config, web};
@@ -258,6 +258,9 @@ pub(crate) fn load(storage: &dyn Storage, cache: &str, book: &str) -> Option<Pac
             }
             ("book", "description") => {
                 metadata.description = Some(entry.value.as_str().into_owned());
+            }
+            ("book", "direction") if entry.value.as_str() == "rtl" => {
+                metadata.direction = PageProgression::RightToLeft;
             }
             ("book", "sections") => sections = entry.value.as_u32(),
             ("book", "toc") => toc_len = entry.value.as_u32(),
@@ -625,7 +628,12 @@ fn read_metadata(
                 };
                 text.clear();
             }
-            "spine" => ncx_id = attrs.get("toc").map(|v| fnv1a64(v.as_bytes())),
+            "spine" => {
+                ncx_id = attrs.get("toc").map(|v| fnv1a64(v.as_bytes()));
+                if attrs.get("page-progression-direction").as_deref() == Some("rtl") {
+                    metadata.direction = PageProgression::RightToLeft;
+                }
+            }
             "meta" if attrs.get("name").as_deref() == Some("cover") => {
                 cover_id = attrs.get("content").map(|v| fnv1a64(v.as_bytes()));
             }
@@ -1008,6 +1016,9 @@ fn write_ini(
     }
     if let Some(description) = &metadata.description {
         set("book", "description", description);
+    }
+    if metadata.direction == PageProgression::RightToLeft {
+        set("book", "direction", "rtl");
     }
     if let Some(cover) = cover {
         set("book", "cover", cover);

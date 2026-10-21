@@ -30,7 +30,8 @@ pub struct Capabilities {
     /// PaperPaw is the device's firmware and updates it
     /// ([`Env::firmware`]).
     pub firmware: bool,
-    /// Text is spoken aloud ([`Command::Speak`](crate::Command::Speak)).
+    /// Text is spoken aloud ([`Command::Speak`](crate::Command::Speak)):
+    /// by the system, or a plugin's voice (see [`voices`](crate::voices)).
     pub speech: bool,
     /// PaperPaw shows a screen while the device sleeps
     /// ([`actions::SLEEP`](crate::builtin::actions::SLEEP)); where the
@@ -92,6 +93,9 @@ pub struct Env<'a> {
     /// Layers on book pages and frames of their text, from every plugin
     /// (see [`layers`](crate::layers)).
     pub page_layers: &'a crate::layers::PageLayers,
+    /// Where words are looked up, from every plugin (see
+    /// [`lookup`](crate::lookup)).
+    pub lookup: &'a crate::lookup::LookupProviders,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
@@ -201,6 +205,9 @@ pub struct EnvParts<'a> {
     /// Layers on book pages and frames of their text, from every plugin
     /// (see [`layers`](crate::layers)).
     pub page_layers: &'a crate::layers::PageLayers,
+    /// Where words are looked up, from every plugin (see
+    /// [`lookup`](crate::lookup)).
+    pub lookup: &'a crate::lookup::LookupProviders,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
@@ -292,6 +299,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             text_filters: p.text_filters,
             decorators: p.decorators,
             page_layers: p.page_layers,
+            lookup: p.lookup,
             stylesheets: p.stylesheets,
             book_data: p.book_data,
             widgets: p.widgets,

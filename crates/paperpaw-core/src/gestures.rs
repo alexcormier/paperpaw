@@ -259,10 +259,21 @@ impl Kernel {
                     return;
                 }
                 let display = self.shared.device.display;
-                let zone = Zone::of(gesture.start, display.width, display.height);
+                let mut zone = Zone::of(gesture.start, display.width, display.height);
+                // A screen whose pages go right to left: sides and swipes
+                // the other way.
+                let mirrored = self.stack.last().is_some_and(|top| top.screen.mirrored());
+                if mirrored {
+                    zone = zone.mirrored();
+                }
                 let key = match gesture.kind {
                     GestureKind::Tap => InputKey::Tap(zone),
                     GestureKind::LongPress => InputKey::LongTap(zone),
+                    GestureKind::Swipe(direction) if mirrored => InputKey::Swipe(match direction {
+                        paperpaw_sdk::Direction::Left => paperpaw_sdk::Direction::Right,
+                        paperpaw_sdk::Direction::Right => paperpaw_sdk::Direction::Left,
+                        other => other,
+                    }),
                     GestureKind::Swipe(direction) => InputKey::Swipe(direction),
                     GestureKind::Pinch { out } => InputKey::Pinch(out),
                     _ => return,

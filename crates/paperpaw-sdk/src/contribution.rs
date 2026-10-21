@@ -132,6 +132,8 @@ pub enum Contribution {
     Decorator(Box<crate::decorations::DecoratorSpec>),
     PageLayer(Box<crate::layers::PageLayerSpec>),
     PageFrame(Box<crate::layers::PageFrameSpec>),
+    LookupProvider(Box<crate::lookup::LookupProviderSpec>),
+    Voice(Box<crate::voices::VoiceSpec>),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
     /// A job: work done in steps (see [`work`](crate::work)).
@@ -201,6 +203,8 @@ impl Contribution {
             Contribution::Decorator(_) => "decorator",
             Contribution::PageLayer(_) => "page-layer",
             Contribution::PageFrame(_) => "page-frame",
+            Contribution::LookupProvider(_) => "lookup-provider",
+            Contribution::Voice(_) => "voice",
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
             Contribution::Work(_) => "work",
@@ -238,6 +242,8 @@ impl Contribution {
             Contribution::Decorator(d) => &d.id,
             Contribution::PageLayer(l) => &l.id,
             Contribution::PageFrame(f) => &f.id,
+            Contribution::LookupProvider(p) => &p.id,
+            Contribution::Voice(v) => &v.id,
             Contribution::InputFilter(f) => &f.id,
             Contribution::RefreshFilter(f) => &f.id,
             Contribution::Work(w) => &w.id,
@@ -628,6 +634,22 @@ impl Registrar {
         frame: crate::layers::PageFrameSpec,
     ) -> Result<(), RegisterError> {
         self.add(Contribution::PageFrame(Box::new(frame)))
+    }
+
+    /// Adds a lookup provider: where words are looked up, listed by the
+    /// screen that shows a word's entries (see [`lookup`](crate::lookup)).
+    pub fn add_lookup_provider(
+        &mut self,
+        provider: crate::lookup::LookupProviderSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::LookupProvider(Box::new(provider)))
+    }
+
+    /// Adds a voice: speaks text aloud in place of the system's while the
+    /// setting [`VOICE`](crate::builtin::settings::VOICE) chooses it (see
+    /// [`voices`](crate::voices)).
+    pub fn add_voice(&mut self, voice: crate::voices::VoiceSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Voice(Box::new(voice)))
     }
 
     /// Adds a filter of every input, before screens and key maps see it

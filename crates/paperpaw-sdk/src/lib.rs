@@ -58,6 +58,7 @@ pub mod keys;
 pub mod layers;
 pub mod library;
 pub mod logo;
+pub mod lookup;
 mod memory_storage;
 mod menus;
 pub mod native;
@@ -84,6 +85,7 @@ pub mod time;
 pub mod ui;
 pub mod usage;
 mod version;
+pub mod voices;
 pub mod web;
 pub mod widgets;
 pub mod wifi;
@@ -156,7 +158,7 @@ pub mod qr {
 pub mod document {
     pub use paperpaw_document::{
         Align, Block, BlockKind, Document, DocumentError, EmbeddedFont, ImageRef, Link, Locator,
-        MAX_FAMILIES, Metadata, OffsetMap, Run, TextStyle, TocEntry, is_external,
+        MAX_FAMILIES, Metadata, OffsetMap, PageProgression, Run, TextStyle, TocEntry, is_external,
     };
 }
 

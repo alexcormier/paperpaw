@@ -259,6 +259,16 @@ pub trait Screen {
         false
     }
 
+    /// Whether its taps and swipes go the other way: what the key map
+    /// binds to the left side and to a swipe to the left happens on the
+    /// right and for a swipe to the right, and the other way round, e.g.
+    /// a book whose pages go right to left
+    /// ([`PageProgression`](crate::document::PageProgression)). Buttons
+    /// stay as they are.
+    fn mirrored(&self) -> bool {
+        false
+    }
+
     /// When it shows the row of hints, where it knows better than the
     /// plugin said for all its openings
     /// ([`Registrar::set_screen_hints`](crate::Registrar::set_screen_hints)):

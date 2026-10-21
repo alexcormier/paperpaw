@@ -298,6 +298,16 @@ impl Speech {
         self.queue = queue;
         self
     }
+
+    /// Its reply: it was `spoken`, or could not be (a plugin's voice
+    /// answers so, see [`voices`](crate::voices)).
+    pub fn answer(&self, spoken: bool) -> Command {
+        let params = match spoken {
+            true => self.params.clone(),
+            false => self.params.clone().with(speech_params::FAILED, "1"),
+        };
+        Command::Emit(self.reply.clone(), params)
+    }
 }
 
 /// Parameters of the reply to [`Command::Speak`].

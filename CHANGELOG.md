@@ -6,6 +6,25 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `lookup`, lookup providers (`Registrar::add_lookup_provider`):
+  where words are looked up, at once or later
+  (`events::LOOKUP_ANSWERED`). The dictionary's panel lists every
+  provider's entries; those that go online only when *Online* is
+  chosen. The StarDict dictionaries are a provider too.
+- SDK: `voices`, a plugin's voice (`Registrar::add_voice`) speaks text
+  aloud in place of the system's for the languages it speaks, chosen
+  with `settings::VOICE`; it answers as the system does
+  (`Speech::answer`). A device without a voice of its own has speech
+  with one.
+- SDK: formats tell files without a known extension by their first
+  bytes (`FormatSpec::sniff`, `Formats::for_file`), read their own
+  settings (`OpenOptions::setting`, filled by `reading::open_options`),
+  and say a document still coming is not ready
+  (`DocumentError::NotReady`; the reader waits for
+  `events::DOCUMENT_READY`).
+- Documents: `Metadata::direction` (`PageProgression`): an EPUB whose
+  pages go right to left says so, and the reader mirrors taps and
+  swipes (`Screen::mirrored`, kept by the kernel's key map).
 - Android: the app is now `org.paperpaw.app` (was
   `io.github.hthoene.paperpaw`), named after the project's own domain
   before the first release in a store. It installs as a new app beside

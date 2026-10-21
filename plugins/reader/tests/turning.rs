@@ -425,3 +425,31 @@ fn larger_then_smaller_text_comes_back_to_the_same_place() {
     reading.press(actions::NEXT_PAGE);
     assert!(reading.shown().at() > before);
 }
+
+#[test]
+fn pages_that_go_right_to_left_turn_on_with_a_tap_on_the_left() {
+    let book = epub_with(
+        &[("c1.xhtml", filler("manga", 6))],
+        &[],
+        r#" page-progression-direction="rtl""#,
+    );
+    let mut reading = Reading::new(TOUCH, Shared::default(), "books/manga.epub", &book, "");
+    reading.open();
+    let first = reading.shown().offset;
+    // The left side turns on, the right side back.
+    reading.tap(paperpaw_sdk::Point::new(30, 400));
+    assert_eq!(reading.turned(), 1);
+    assert!(reading.shown().offset > first);
+    reading.tap(paperpaw_sdk::Point::new(450, 400));
+    assert_eq!(reading.shown().offset, first);
+}
+
+#[test]
+fn pages_that_go_left_to_right_turn_on_with_a_tap_on_the_right() {
+    let book = epub(&[("c1.xhtml", filler("novel", 6))], &[]);
+    let mut reading = Reading::new(TOUCH, Shared::default(), "books/novel.epub", &book, "");
+    reading.open();
+    let first = reading.shown().offset;
+    reading.tap(paperpaw_sdk::Point::new(450, 400));
+    assert!(reading.shown().offset > first);
+}

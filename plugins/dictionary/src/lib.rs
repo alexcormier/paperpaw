@@ -10,6 +10,12 @@
 //! dictionary in the background; lookups then take a few milliseconds and
 //! little memory (see `paperpaw-stardict`).
 //!
+//! The panel also lists what other plugins' lookup providers find (see
+//! `paperpaw_sdk::lookup`): those that work offline with every word,
+//! those that go online when *Online* is chosen. The StarDict
+//! dictionaries are a provider too, for a lookup screen of another
+//! plugin.
+//!
 //! Buttons: next/previous page or up/down scroll long definitions, confirm
 //! or back closes. Touch: tap the right part to scroll, the left part to go
 //! back, outside to close.
@@ -24,8 +30,9 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, groups, params, slots};
+use paperpaw_sdk::builtin::{actions, events, groups, params, slots};
 use paperpaw_sdk::digest::fnv1a64;
+use paperpaw_sdk::lookup::{LookupAnswer, LookupEntry, LookupProviderSpec, LookupQuery};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
@@ -40,6 +47,8 @@ pub const PLUGIN: Id = Id::new_static("dictionary");
 pub const POPUP: Id = Id::new_static("dictionary.popup");
 /// The folder searched for dictionaries.
 pub const FOLDER: Setting<Text> = Setting::new("dictionary.folder");
+/// The StarDict dictionaries as a lookup provider.
+pub const PROVIDER: Id = Id::new_static("dictionary.stardict");
 /// The folder chooser of the `files` plugin, if installed.
 const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 
@@ -81,11 +90,43 @@ impl Plugin for DictionaryPlugin {
             Box::new(|env, params| Box::new(Popup::new(env, params))),
         ))?;
         r.bind_slot(slots::LOOKUP, POPUP, Priority::DEFAULT)?;
+        r.add_lookup_provider(LookupProviderSpec::new(
+            PROVIDER,
+            "dictionary.title",
+            |env, query| LookupAnswer::Ready(look_up_ready(env, &query.word)),
+        ))?;
         r.add_settings(&SETTINGS)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
     }
+}
+
+/// The entries for `word` in the dictionaries whose indexes are ready
+/// (preparing them is the panel's: a provider answers at once).
+fn look_up_ready(env: &Env<'_>, word: &str) -> Vec<LookupEntry> {
+    let folder = env.settings.read(&FOLDER);
+    let found = find_dictionaries(env.storage, folder.trim_matches('/')).unwrap_or_default();
+    let mut entries = Vec::new();
+    for ifo in found {
+        let Ok(dictionary) = Dictionary::open(env.storage, &ifo, &cache_of(&ifo)) else {
+            continue;
+        };
+        if dictionary.builders(env.storage).is_empty() {
+            entries.extend(entries_of(env, &dictionary, word));
+        }
+    }
+    entries
+}
+
+/// The definitions of `word` in `dictionary`, one entry each.
+fn entries_of(env: &Env<'_>, dictionary: &Dictionary, word: &str) -> Vec<LookupEntry> {
+    dictionary
+        .lookup(env.storage, word)
+        .unwrap_or_default()
+        .into_iter()
+        .map(|definition| LookupEntry::new(dictionary.info.name.clone(), definition.text))
+        .collect()
 }
 
 /// The `.ifo` files below `folder`, sorted; `Err` where `folder` itself
@@ -184,6 +225,12 @@ struct Popup {
     language: Option<String>,
     dictionaries: Vec<Dictionary>,
     state: State,
+    /// What was found, from the dictionaries and the providers.
+    entries: Vec<LookupEntry>,
+    /// Online providers asked that have not answered yet, and whether
+    /// they were asked (once a word).
+    pending: Vec<Id>,
+    asked_online: bool,
     /// The definitions (or a message), and its lines as byte ranges.
     text: String,
     lines: Vec<(usize, usize)>,
@@ -211,6 +258,9 @@ impl Popup {
             language: params.get(params::LANGUAGE).map(ToString::to_string),
             dictionaries: Vec::new(),
             state: State::Ready,
+            entries: Vec::new(),
+            pending: Vec::new(),
+            asked_online: false,
             text: String::new(),
             lines: Vec::new(),
             top: 0,
@@ -242,7 +292,8 @@ impl Popup {
                 popup.dictionaries.push(dictionary);
             }
         }
-        if popup.dictionaries.is_empty() {
+        let others = env.lookup.fitting(env, &popup.query(), false).count() > 1;
+        if popup.dictionaries.is_empty() && !others {
             let message = env
                 .i18n
                 .format("dictionary.none", &[("folder", Arg::Str(folder))]);
@@ -258,37 +309,55 @@ impl Popup {
         popup
     }
 
-    /// Looks the word up in every dictionary.
+    fn query(&self) -> LookupQuery {
+        LookupQuery::new(self.word.clone(), self.language.clone())
+    }
+
+    /// Looks the word up in every dictionary, and asks the providers that
+    /// work offline.
     fn look_up(&mut self, env: &Env<'_>) {
-        let several = self.dictionaries.len() > 1;
+        self.entries = self
+            .dictionaries
+            .iter()
+            .flat_map(|dictionary| entries_of(env, dictionary, &self.word))
+            .collect();
+        // Their own commands are none: offline providers answer at once.
+        let asked = env.lookup.ask(env, &self.query(), false, &[PROVIDER]);
+        self.entries.extend(asked.entries);
+        self.pending = asked.pending;
+        self.state = State::Ready;
+        self.show_entries(env);
+    }
+
+    /// Shows the entries, each source named where there are several.
+    fn show_entries(&mut self, env: &Env<'_>) {
+        let several = self
+            .entries
+            .first()
+            .is_some_and(|first| self.entries.iter().any(|e| e.source != first.source));
         let mut text = String::new();
-        for dictionary in &self.dictionaries {
-            let Ok(found) = dictionary.lookup(env.storage, &self.word) else {
-                continue;
-            };
-            if found.is_empty() {
-                continue;
-            }
-            if several {
+        let mut last: Option<&str> = None;
+        for entry in &self.entries {
+            if several && last != Some(entry.source.as_str()) {
                 if !text.is_empty() {
                     text.push_str("\n\n");
                 }
-                text.push_str(&format!("({})", dictionary.info.name));
+                text.push_str(&format!("({})", entry.source));
+                last = Some(&entry.source);
             }
-            for definition in found {
-                if !text.is_empty() {
-                    text.push_str("\n\n");
-                }
-                text.push_str(&definition.text);
+            if !text.is_empty() {
+                text.push_str("\n\n");
             }
+            text.push_str(entry.text.trim_end());
         }
-        if text.is_empty() {
+        if text.is_empty() && self.pending.is_empty() {
             text = env
                 .i18n
                 .format("dictionary.not-found", &[("word", Arg::Str(&self.word))]);
         }
-        self.state = State::Ready;
+        let top = self.top;
         self.set_text(env, text);
+        self.top = top.min(self.lines.len().saturating_sub(1));
     }
 
     /// Takes `text` and wraps it into lines.
@@ -314,7 +383,7 @@ impl Popup {
     /// Where *Online* is in the header, if the word can be looked up
     /// online: left of the page note.
     fn online_area(&self, env: &Env<'_>, note: &str) -> Option<Rect> {
-        if !env.has_slot(&slots::LOOKUP_ONLINE) || !env.caps.network {
+        if !self.can_go_online(env) {
             return None;
         }
         let font = self.style.font(env)?;
@@ -333,8 +402,35 @@ impl Popup {
         ))
     }
 
-    /// Opens the online lookup instead.
-    fn online(&self, cx: &mut Cx<'_, '_>) {
+    /// Whether the word can be looked up online: providers that go
+    /// online, or a screen bound for it; with a network, not yet asked.
+    fn can_go_online(&self, env: &Env<'_>) -> bool {
+        let providers = env
+            .lookup
+            .fitting(env, &self.query(), true)
+            .next()
+            .is_some();
+        env.caps.network && !self.asked_online && (providers || env.has_slot(&slots::LOOKUP_ONLINE))
+    }
+
+    /// Asks the providers that go online, their entries shown here as
+    /// they come; without any, opens the online lookup instead.
+    fn online(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let query = self.query();
+        if env.lookup.fitting(&env, &query, true).next().is_some() {
+            let asked = env.lookup.ask(&env, &query, true, &[]);
+            self.asked_online = true;
+            self.entries.extend(asked.entries);
+            self.pending = asked.pending;
+            for command in asked.commands {
+                cx.command(command);
+            }
+            self.show_entries(&env);
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Partial);
+            return;
+        }
         let mut params = Params::new().with(params::WORD, self.word.clone());
         if let Some(language) = &self.language {
             params = params.with(params::LANGUAGE, language.clone());
@@ -343,10 +439,14 @@ impl Popup {
         cx.command(Command::OpenSlot(slots::LOOKUP_ONLINE, params));
     }
 
-    /// The note in the header: preparing, or the page.
+    /// The note in the header: preparing, waiting for answers, or the
+    /// page.
     fn note(&self, env: &Env<'_>) -> String {
         let rows = self.rows(env);
         match &self.state {
+            State::Ready if !self.pending.is_empty() => {
+                env.i18n.tr("dictionary.asking").to_string()
+            }
             State::Preparing(_, done, total) => env.i18n.format(
                 "dictionary.preparing",
                 &[("percent", Arg::Int((done * 100 / (*total).max(1)) as i64))],
@@ -576,6 +676,28 @@ impl Screen for Popup {
             return Handled::No;
         }
         Handled::Yes
+    }
+
+    /// An online provider's answer: shown with the others.
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        let Some(answer) = events::LOOKUP_ANSWERED.read(event, params) else {
+            return;
+        };
+        let Some(at) = self.pending.iter().position(|p| *p == answer.provider) else {
+            return;
+        };
+        if answer.word != self.word {
+            return;
+        }
+        self.pending.remove(at);
+        if !answer.text.trim().is_empty() {
+            self.entries
+                .push(LookupEntry::new(answer.source, answer.text));
+        }
+        let env = *cx.env();
+        self.show_entries(&env);
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Partial);
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {

@@ -338,6 +338,12 @@ impl Kernel {
         for frame in staging.page_frames.drain(..) {
             self.shared.page_layers.add_frame(frame);
         }
+        for provider in staging.lookup_providers.drain(..) {
+            self.shared.lookup.add(provider);
+        }
+        for voice in staging.voices.drain(..) {
+            self.shared.voices.add(voice);
+        }
         for filter in staging.input_filters.drain(..) {
             self.shared.input_filters.add(filter);
         }
@@ -799,6 +805,8 @@ impl Kernel {
         shared.text_filters.shrink_to_fit();
         shared.decorators.shrink_to_fit();
         shared.page_layers.shrink_to_fit();
+        shared.lookup.shrink_to_fit();
+        shared.voices.shrink_to_fit();
         shared.input_filters.shrink_to_fit();
         shared.refresh_filters.shrink_to_fit();
         shared.stylesheets.shrink_to_fit();

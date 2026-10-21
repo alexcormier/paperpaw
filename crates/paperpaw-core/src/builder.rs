@@ -406,6 +406,8 @@ impl KernelBuilder {
                 text_filters: paperpaw_sdk::filters::TextFilters::new(),
                 decorators: paperpaw_sdk::decorations::Decorators::new(),
                 page_layers: paperpaw_sdk::layers::PageLayers::new(),
+                lookup: paperpaw_sdk::lookup::LookupProviders::new(),
+                voices: paperpaw_sdk::voices::Voices::new(),
                 input_filters: paperpaw_sdk::filters::InputFilters::new(),
                 refresh_filters: paperpaw_sdk::filters::RefreshFilters::new(),
                 stylesheets: Vec::new(),
@@ -461,7 +463,7 @@ impl KernelBuilder {
                 http: io::http::Http::for_memory(self.device.memory),
                 servers: io::servers::Servers::default(),
                 sockets: io::sockets::Sockets::default(),
-                speech: io::speech::Speech::default(),
+                speech: io::speech::Speech::new(caps.speech),
                 clipboard: io::clipboard::Clipboard::new(caps.system_clipboard),
                 wifi_calls: Vec::new(),
                 firmware_calls: Vec::new(),
@@ -647,7 +649,8 @@ impl Kernel {
     }
 
     /// The choices of settings that plugins add to: key map presets,
-    /// reading fonts and page frames.
+    /// reading fonts, page frames and voices; speech where the system or
+    /// a plugin speaks.
     pub(crate) fn offer_choices(&mut self) {
         let mut presets: Vec<Cow<'static, str>> =
             alloc::vec![Cow::Borrowed(keymap_presets::STANDARD_NAME)];
@@ -691,6 +694,19 @@ impl Kernel {
         self.shared
             .settings
             .set_choices(core_settings::PAGE_FRAME.as_str(), frames);
+        let mut voices: Vec<Cow<'static, str>> =
+            alloc::vec![Cow::Borrowed(core_settings::VOICE_SYSTEM)];
+        voices.extend(
+            self.shared
+                .voices
+                .ids()
+                .map(|id| Cow::Owned(id.as_str().to_string())),
+        );
+        self.shared
+            .settings
+            .set_choices(core_settings::VOICE.as_str(), voices);
+        self.shared.caps.speech = self.io.speech.system || !self.shared.voices.is_empty();
+        self.shared.menus.set_capabilities(self.shared.caps);
     }
 
     /// The device's defaults, then the plugins' (e.g. themes), which win:

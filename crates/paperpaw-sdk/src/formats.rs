@@ -15,6 +15,13 @@ use crate::plugin::RegisterError;
 pub type FormatOpener =
     Box<dyn Fn(&dyn Storage, &str, &OpenOptions) -> Result<Box<dyn Document>, DocumentError>>;
 
+/// Whether a file's first bytes are of a format (see
+/// [`FormatSpec::sniff`]).
+pub type FormatSniff = Box<dyn Fn(&[u8]) -> bool>;
+
+/// Bytes of a file a format's [`FormatSpec::sniff`] gets at most.
+pub const SNIFF_BYTES: usize = 512;
+
 /// Whether a document opens at once as `options` say (see
 /// [`FormatSpec::prepared`]).
 pub type FormatPrepared = Box<dyn Fn(&dyn Storage, &str, &OpenOptions) -> bool>;
@@ -38,6 +45,11 @@ pub struct OpenOptions {
     /// The size covers are decoded to at most ([`Document::cover`](crate::document::Document::cover)):
     /// as large as lists and the home screen show them.
     pub cover_fit: Fit,
+    /// The values of the format plugins' own settings, as configuration
+    /// files write them (a text file's encoding, a comic's direction),
+    /// each book's own where it has them: a format reads its own with
+    /// [`OpenOptions::setting`].
+    pub settings: Vec<(String, String)>,
 }
 
 /// The size of pictures where the screen does not say otherwise.
@@ -61,6 +73,7 @@ impl Default for OpenOptions {
             color: false,
             image_fit: IMAGE_FIT,
             cover_fit: COVER_FIT,
+            settings: Vec::new(),
         }
     }
 }
@@ -94,6 +107,21 @@ impl OpenOptions {
         self.cover_fit = fit;
         self
     }
+
+    /// With these values of format settings (`id`, value).
+    pub fn settings(mut self, settings: Vec<(String, String)>) -> Self {
+        self.settings = settings;
+        self
+    }
+
+    /// The value of format setting `id`, as configuration files write it,
+    /// if given.
+    pub fn setting(&self, id: &str) -> Option<&str> {
+        self.settings
+            .iter()
+            .find(|(setting, _)| setting == id)
+            .map(|(_, value)| value.as_str())
+    }
 }
 
 /// A file format contribution (TXT, EPUB, FB2, …).
@@ -111,6 +139,10 @@ pub struct FormatSpec {
     /// converted into a cache), which takes a while the first time: a
     /// reader says so meanwhile. `None`: always at once.
     pub prepared: Option<FormatPrepared>,
+    /// Whether a file whose extension no format has is of this format,
+    /// from its first bytes (at most [`SNIFF_BYTES`]), e.g. a book
+    /// downloaded without one.
+    pub sniff: Option<FormatSniff>,
 }
 
 impl FormatSpec {
@@ -127,11 +159,19 @@ impl FormatSpec {
             extensions,
             open,
             prepared: None,
+            sniff: None,
         }
     }
 
     pub fn prepared(mut self, prepared: FormatPrepared) -> Self {
         self.prepared = Some(prepared);
+        self
+    }
+
+    /// Tells files of this format by their first bytes where their
+    /// extension does not.
+    pub fn sniff(mut self, sniff: impl Fn(&[u8]) -> bool + 'static) -> Self {
+        self.sniff = Some(Box::new(sniff));
         self
     }
 }
@@ -230,9 +270,27 @@ impl Formats {
         best.map(|(spec, _)| spec)
     }
 
-    /// Whether any format can open `path`.
+    /// Whether any format can open `path`, by its extension.
     pub fn supports(&self, path: &str) -> bool {
         self.for_path(path).is_some()
+    }
+
+    /// The format of the file at `path`: by its extension, else by its
+    /// first bytes ([`FormatSpec::sniff`]).
+    pub fn for_file(&self, storage: &dyn Storage, path: &str) -> Option<&FormatSpec> {
+        if let Some(spec) = self.for_path(path) {
+            return Some(spec);
+        }
+        if !self.specs.iter().any(|s| s.sniff.is_some()) {
+            return None;
+        }
+        let mut head = [0u8; SNIFF_BYTES];
+        let read = storage.read_at(path, 0, &mut head).ok()?;
+        let head = &head[..read.min(SNIFF_BYTES)];
+        self.specs
+            .iter()
+            .rev()
+            .find(|s| s.sniff.as_ref().is_some_and(|sniff| sniff(head)))
     }
 
     /// Opens `path` with the matching format, as the book intends (see
@@ -248,12 +306,13 @@ impl Formats {
     /// Whether `path` opens at once with `options`, or is prepared first,
     /// which takes a while (see [`FormatSpec::prepared`]).
     pub fn prepared(&self, storage: &dyn Storage, path: &str, options: &OpenOptions) -> bool {
-        self.for_path(path)
+        self.for_file(storage, path)
             .and_then(|spec| spec.prepared.as_ref())
             .is_none_or(|prepared| prepared(storage, path, options))
     }
 
-    /// Opens `path` with the matching format and `options`.
+    /// Opens `path` with the matching format (see [`Formats::for_file`])
+    /// and `options`.
     pub fn open_with(
         &self,
         storage: &dyn Storage,
@@ -261,7 +320,7 @@ impl Formats {
         options: &OpenOptions,
     ) -> Result<Box<dyn Document>, DocumentError> {
         let spec = self
-            .for_path(path)
+            .for_file(storage, path)
             .ok_or(DocumentError::UnsupportedFormat)?;
         (spec.open)(storage, path, options)
     }
@@ -283,6 +342,7 @@ mod tests {
             extensions: vec![Cow::Borrowed(ext)],
             open: Box::new(|_, _, _| Err(DocumentError::UnsupportedFormat)),
             prepared: None,
+            sniff: None,
         }
     }
 
@@ -298,5 +358,33 @@ mod tests {
         assert!(!formats.supports("books/alice"));
         assert!(!formats.supports("books.d/alice"));
         assert!(formats.add(spec("a.txt", "md")).is_err());
+    }
+
+    #[test]
+    fn files_without_a_known_extension_are_told_by_their_first_bytes() {
+        let mut formats = Formats::new();
+        formats.add(spec("a.txt", "txt")).unwrap();
+        formats
+            .add(spec("b.zip", "zip").sniff(|head| head.starts_with(b"PK")))
+            .unwrap();
+        let storage = crate::MemoryStorage::new()
+            .with("books/download", "PK and more")
+            .with("books/notes", "plain text");
+        let found = |path| formats.for_file(&storage, path).map(|s| s.id.as_str());
+        assert_eq!(found("books/download"), Some("b.zip"));
+        assert_eq!(found("books/notes"), None);
+        assert_eq!(found("books/missing"), None);
+        // The extension first.
+        assert_eq!(found("books/x.txt"), Some("a.txt"));
+    }
+
+    #[test]
+    fn a_format_reads_its_own_settings() {
+        let options = OpenOptions::default().settings(vec![(
+            String::from("format-txt.encoding"),
+            String::from("latin1"),
+        )]);
+        assert_eq!(options.setting("format-txt.encoding"), Some("latin1"));
+        assert_eq!(options.setting("format-txt.other"), None);
     }
 }
