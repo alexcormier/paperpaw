@@ -484,7 +484,7 @@ artifact, also when a check failed.
 | Page layers and frames | `add_page_layer`, `add_page_frame` | Draw on book pages beside the words, with room of one's own; set pages in columns |
 | Input filters | `add_input_filter` | See every button and finger first: pass it, take it, or run an action instead |
 | Refresh filters | `add_refresh_filter` | Change how the panel is refreshed, e.g. in full on a screen of your own |
-| Status items and lines | `add_status_item`, `add_status_line` | What status lines show |
+| Status items, lines and places | `add_status_item`, `add_status_line`, `add_status_place` | What status lines show, what a tap on an item does, how much it matters where a line is full; places where items show (`status::Place`) |
 | A look | `set_ui_look` | Another look for switches, the focus, separators, buttons, headers, button hints, progress bars and sliders on every screen (`ui::look`) |
 | Widgets | `add_widget` | Blocks for the home screen and the sleep screen |
 | Setup steps | `add_setup_step` | A page of the first-run setup: a setting to choose or a screen of the plugin's, where the device needs it |
@@ -554,14 +554,20 @@ r.add_format(FormatSpec::new(
 ))?;
 ```
 
-A status item: what a status line shows, `None` to hide it.
+A status item: what a status line shows, `None` to hide it; tapped, it
+opens the notes. Where a line is full, items of a low priority give way
+first.
 
 ```rust
-r.add_status_item(StatusItemSpec::new(
-    Id::new_static("notes.count"),
-    "notes.count",
-    Box::new(|env, _| Some(StatusValue::Text(count(env).to_string()))),
-))?;
+r.add_status_item(
+    StatusItemSpec::new(
+        Id::new_static("notes.count"),
+        "notes.count",
+        Box::new(|env, _| Some(StatusValue::Text(count(env).to_string()))),
+    )
+    .tap(|_, _| Some(Command::OpenScreen(Id::new_static("notes.list"), Params::new())))
+    .priority(96),
+)?;
 ```
 
 An input filter: it sees every button and finger first.

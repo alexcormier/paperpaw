@@ -187,6 +187,7 @@ pub(crate) struct Staging {
     pub(crate) setting_defaults: Vec<(Id, Cow<'static, str>)>,
     pub(crate) status_items: Vec<StatusItemSpec>,
     pub(crate) status_lines: Vec<StatusLineSpec>,
+    pub(crate) status_places: Vec<paperpaw_sdk::status::Place>,
     pub(crate) widgets: Vec<paperpaw_sdk::widgets::WidgetSpec>,
     pub(crate) setup_steps: Vec<paperpaw_sdk::setup::SetupStepSpec>,
     pub(crate) presets: Vec<paperpaw_sdk::presets::Preset>,
@@ -343,8 +344,9 @@ pub(crate) fn stage(
             Contribution::Subscription { event, handler, .. } => {
                 staging.subscriptions.push((event, plugin.clone(), handler));
             }
-            Contribution::StatusItem(item) => staging.status_items.push(item),
-            Contribution::StatusLine(line) => staging.status_lines.push(line),
+            Contribution::StatusItem(item) => staging.status_items.push(*item),
+            Contribution::StatusLine(line) => staging.status_lines.push(*line),
+            Contribution::StatusPlace(place) => staging.status_places.push(*place),
             Contribution::TextFilter(filter) => staging.text_filters.push(filter),
             Contribution::Decorator(decorator) => staging.decorators.push(*decorator),
             Contribution::PageLayer(layer) => staging.page_layers.push(*layer),

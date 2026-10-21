@@ -167,6 +167,18 @@ impl Plugin for Recorder {
             ))?;
             r.bind_slot(slot, screen, Priority::DEFAULT)?;
         }
+        // A status item that opens the book's information when tapped.
+        r.add_status_item(
+            paperpaw_sdk::StatusItemSpec::new(
+                Id::new_static("recorder.status"),
+                "recorder",
+                Box::new(|_, _| Some(paperpaw_sdk::StatusValue::Text("Tapped item".into()))),
+            )
+            .tap(|_, _| {
+                let from = Params::new().with("from", "status");
+                Some(paperpaw_sdk::Command::OpenSlot(slots::BOOK_INFO, from))
+            }),
+        )?;
         Ok(())
     }
 }

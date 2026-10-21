@@ -164,18 +164,29 @@ impl Plugin for Power {
         r.add_settings(&SETTINGS)?;
         // The mode in the quick panel, as segments.
         r.add_menu_entry(MenuEntry::new(menus::QUICK, MODE.id().clone()).order(30))?;
-        r.add_status_item(StatusItemSpec::new(
-            STATUS,
-            "power.status.item",
-            Box::new(|env, _| {
-                let icon = match env.power.level {
-                    PowerLevel::Normal => return None,
-                    PowerLevel::Saving => "leaf",
-                    PowerLevel::Offline => "wifi-off",
-                };
-                Some(StatusValue::Icon(Cow::Borrowed(icon)))
+        // Tapped, the power settings.
+        r.add_status_item(
+            StatusItemSpec::new(
+                STATUS,
+                "power.status.item",
+                Box::new(|env, _| {
+                    let icon = match env.power.level {
+                        PowerLevel::Normal => return None,
+                        PowerLevel::Saving => "leaf",
+                        PowerLevel::Offline => "wifi-off",
+                    };
+                    Some(StatusValue::Icon(Cow::Borrowed(icon)))
+                }),
+            )
+            .tap(|_, _| {
+                let page = paperpaw_sdk::Params::new()
+                    .with(paperpaw_sdk::builtin::params::ID, GROUP.as_str());
+                Some(Command::OpenSlot(
+                    paperpaw_sdk::builtin::slots::SETTINGS,
+                    page,
+                ))
             }),
-        ))?;
+        )?;
         // Silently: the mode changes, only the status mark says so.
         for event in [
             events::STARTED.id(),

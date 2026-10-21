@@ -38,7 +38,7 @@ use crate::presets::Preset;
 use crate::screen::{Hints, ScreenSpec};
 use crate::settings::{SettingGroupSpec, SettingSpec};
 use crate::setup::SetupStepSpec;
-use crate::status::{StatusItemSpec, StatusLineSpec};
+use crate::status::{Place as StatusPlace, StatusItemSpec, StatusLineSpec};
 use crate::widgets::WidgetSpec;
 
 /// One thing a plugin adds. New kinds come in minor versions. The large
@@ -145,8 +145,10 @@ pub enum Contribution {
         event: Id,
         handler: EventHandler,
     },
-    StatusItem(StatusItemSpec),
-    StatusLine(StatusLineSpec),
+    StatusItem(Box<StatusItemSpec>),
+    StatusLine(Box<StatusLineSpec>),
+    /// Boxed: four ids, larger than the other contributions.
+    StatusPlace(Box<StatusPlace>),
     TextFilter(TextFilterSpec),
     Decorator(Box<crate::decorations::DecoratorSpec>),
     PageLayer(Box<crate::layers::PageLayerSpec>),
@@ -247,6 +249,7 @@ impl Contribution {
             Contribution::Subscription { .. } => "subscription",
             Contribution::StatusItem(_) => "status-item",
             Contribution::StatusLine(_) => "status-line",
+            Contribution::StatusPlace(_) => "status-place",
             Contribution::TextFilter(_) => "text-filter",
             Contribution::Decorator(_) => "decorator",
             Contribution::PageLayer(_) => "page-layer",
@@ -296,6 +299,7 @@ impl Contribution {
             Contribution::MenuSection(s) => &s.id,
             Contribution::StatusItem(i) => &i.id,
             Contribution::StatusLine(l) => &l.id,
+            Contribution::StatusPlace(p) => &p.id,
             Contribution::TextFilter(f) => &f.id,
             Contribution::Decorator(d) => &d.id,
             Contribution::PageLayer(l) => &l.id,
@@ -785,7 +789,7 @@ impl Registrar {
     /// Adds an item that status lines can show, e.g. a clock or the
     /// reading time left.
     pub fn add_status_item(&mut self, item: StatusItemSpec) -> Result<(), RegisterError> {
-        self.add(Contribution::StatusItem(item))
+        self.add(Contribution::StatusItem(Box::new(item)))
     }
 
     /// Adds a filter of book text before it is laid out (see
@@ -987,7 +991,14 @@ impl Registrar {
     /// Adds a whole status line, drawn by the plugin (see
     /// [`status`](crate::status)).
     pub fn add_status_line(&mut self, line: StatusLineSpec) -> Result<(), RegisterError> {
-        self.add(Contribution::StatusLine(line))
+        self.add(Contribution::StatusLine(Box::new(line)))
+    }
+
+    /// Adds a place where status items show: a line's left, centre and
+    /// right as settings of the items listed there (see
+    /// [`status::Place`](crate::status::Place)).
+    pub fn add_status_place(&mut self, place: StatusPlace) -> Result<(), RegisterError> {
+        self.add(Contribution::StatusPlace(Box::new(place)))
     }
 
     /// Publishes a service for other plugins as `id`, found by its type

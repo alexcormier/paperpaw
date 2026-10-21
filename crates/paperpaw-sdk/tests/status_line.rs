@@ -115,13 +115,8 @@ proptest! {
         let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
         let height = (size * 1.6) as u16;
         let area = Rect::new(475 - width, if top { 0 } else { 800 - height }, width, height);
-        let line = StatusLine {
-            area,
-            lists: [&lists.0, &lists.1, &lists.2],
-            size,
-            color: Color::BLACK,
-            percent,
-        };
+        let line = StatusLine::new(area, [&lists.0, &lists.1, &lists.2], size, Color::BLACK)
+            .percent(percent);
         let mut context = Params::new()
             .with("chapter", chapter)
             .with("page", page)
@@ -154,13 +149,7 @@ fn the_page_stays_whole_beside_a_long_chapter_title() {
         .with("page", "123 / 456");
     let draw = |left: &str| {
         let mut frame = frame(480, 800);
-        let line = StatusLine {
-            area,
-            lists: [left, "", PAGE],
-            size: 22.0,
-            color: Color::BLACK,
-            percent: true,
-        };
+        let line = StatusLine::new(area, [left, "", PAGE], 22.0, Color::BLACK);
         line.draw(&mut frame.canvas(), &env, &font, &context);
         frame
     };
@@ -186,18 +175,9 @@ fn an_empty_line_and_items_that_show_nothing_draw_nothing() {
     let env = h.env();
     let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
     let area = Rect::new(0, 0, 480, 40);
-    let empty = StatusLine {
-        area,
-        lists: [" , ", "", ","],
-        size: 20.0,
-        color: Color::BLACK,
-        percent: false,
-    };
+    let empty = StatusLine::new(area, [" , ", "", ","], 20.0, Color::BLACK).percent(false);
     assert!(empty.is_empty());
-    let nothing = StatusLine {
-        lists: [NOTHING, "t.unknown", NOTHING],
-        ..empty
-    };
+    let nothing = StatusLine::new(area, [NOTHING, "t.unknown", NOTHING], 20.0, Color::BLACK);
     assert!(!nothing.is_empty());
     for line in [empty, nothing] {
         let mut frame = frame(480, 100);
@@ -262,13 +242,7 @@ fn a_narrow_line_leaves_out_what_does_not_fit() {
     for width in [20u16, 30, 45, 60, 90] {
         let area = Rect::new(200, 100, width, 32);
         let right = format!("{LEVEL}, {ICON}, {PAGE}");
-        let line = StatusLine {
-            area,
-            lists: ["", "", &right],
-            size: 20.0,
-            color: Color::BLACK,
-            percent: true,
-        };
+        let line = StatusLine::new(area, ["", "", &right], 20.0, Color::BLACK);
         let mut frame = frame(480, 800);
         line.draw(&mut frame.canvas(), &env, &font, &context);
         assert_eq!(drawn_outside(&mut frame, area), None, "{width} wide");
@@ -293,13 +267,7 @@ fn a_crowded_line_keeps_its_right_part_whole_at_the_edge() {
     let right = format!("{PAGE}, {ICON}, {LEVEL}");
     for width in (300u16..=460).step_by(20) {
         let area = Rect::new(10, 700, width, 32);
-        let line = StatusLine {
-            area,
-            lists: [CHAPTER, "", &right],
-            size: 20.0,
-            color: Color::BLACK,
-            percent: true,
-        };
+        let line = StatusLine::new(area, [CHAPTER, "", &right], 20.0, Color::BLACK);
         let mut frame = frame(480, 800);
         line.draw(&mut frame.canvas(), &env, &font, &context);
         assert_eq!(drawn_outside(&mut frame, area), None, "{width} wide");
@@ -314,4 +282,120 @@ fn a_crowded_line_keeps_its_right_part_whole_at_the_edge() {
             "{width} wide: ends at {last}, the edge is {edge}"
         );
     }
+}
+
+/// Items that do something when tapped, of priorities high and low, one
+/// labelled and one with a least width: their taps tell which is which.
+fn tapping() -> Harness {
+    let mut h = harness();
+    h.status_items.add(
+        StatusItemSpec::new(
+            Id::new_static("t.high"),
+            "t.high.title",
+            Box::new(|_, _| Some(StatusValue::Text("Important".into()))),
+        )
+        .priority(200)
+        .tap(|_, _| Some(paperpaw_sdk::Command::Notify("high".into()))),
+    );
+    h.status_items.add(
+        StatusItemSpec::new(
+            Id::new_static("t.low"),
+            "t.low.title",
+            Box::new(|_, _| Some(StatusValue::Text("Unimportant".into()))),
+        )
+        .priority(10)
+        .tap(|_, _| Some(paperpaw_sdk::Command::Notify("low".into()))),
+    );
+    h.status_items.add(
+        StatusItemSpec::new(
+            Id::new_static("t.labelled"),
+            "t.labelled.title",
+            Box::new(|_, _| {
+                Some(StatusValue::Labelled {
+                    icon: Cow::Borrowed("wifi"),
+                    text: "Home network".into(),
+                })
+            }),
+        )
+        .tap(|_, _| Some(paperpaw_sdk::Command::Notify("labelled".into()))),
+    );
+    h.status_items.add(
+        StatusItemSpec::new(
+            Id::new_static("t.clock"),
+            "t.clock.title",
+            Box::new(|_, _| Some(StatusValue::Text("9:59".into()))),
+        )
+        .min_width(4.0)
+        .tap(|_, _| Some(paperpaw_sdk::Command::Notify("clock".into()))),
+    );
+    h
+}
+
+/// What the taps of a line's targets say, in reading order.
+fn told(line: &StatusLine<'_>, env: &Env<'_>) -> Vec<String> {
+    let font = paperpaw_sdk::ui::UiStyle::new(env).font(env).unwrap();
+    line.targets(env, &font, &Params::new())
+        .into_iter()
+        .map(|t| match t.command {
+            paperpaw_sdk::Command::Notify(what) => what,
+            other => format!("{other:?}"),
+        })
+        .collect()
+}
+
+/// Where a line has no room for all its items, those that matter least
+/// give way first, wherever they are, and nothing is cut or drawn
+/// outside; with room, every item is there, in reading order.
+#[test]
+fn items_that_matter_least_give_way_first() {
+    let h = tapping();
+    let env = h.env();
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let wide = StatusLine::new(
+        Rect::new(0, 0, 480, 40),
+        ["t.low", "", "t.high"],
+        20.0,
+        Color::BLACK,
+    );
+    assert_eq!(told(&wide, &env), ["low", "high"]);
+    // The low one at the right, the high one at the left: the low goes.
+    let area = Rect::new(0, 0, 150, 40);
+    let narrow = StatusLine::new(area, ["t.high", "", "t.low"], 20.0, Color::BLACK);
+    assert_eq!(told(&narrow, &env), ["high"]);
+    let mut frame = frame(480, 100);
+    narrow.draw(&mut frame.canvas(), &env, &font, &Params::new());
+    assert_eq!(drawn_outside(&mut frame, area), None);
+}
+
+/// A labelled item shows whole or not at all; a tap on any item with a
+/// tap does what it says, its target as wide as it is drawn, the least
+/// width of one that keeps its place included.
+#[test]
+fn labelled_items_show_whole_and_targets_keep_their_width() {
+    let h = tapping();
+    let env = h.env();
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let line = |width| {
+        StatusLine::new(
+            Rect::new(0, 0, width, 40),
+            ["", "", "t.labelled"],
+            20.0,
+            Color::BLACK,
+        )
+    };
+    assert_eq!(told(&line(480), &env), ["labelled"]);
+    assert!(told(&line(60), &env).is_empty());
+    let mut frame = frame(480, 100);
+    line(60).draw(&mut frame.canvas(), &env, &font, &Params::new());
+    assert_eq!(frame.take_dirty(), None, "nothing of it drawn");
+    // The clock keeps four times its size, however short its time.
+    let clock = StatusLine::new(
+        Rect::new(0, 0, 480, 40),
+        ["t.clock", "", ""],
+        20.0,
+        Color::BLACK,
+    );
+    let targets = clock.targets(&env, &font, &Params::new());
+    assert_eq!(targets.len(), 1);
+    assert!(targets[0].area.width >= 80, "{targets:?}");
 }

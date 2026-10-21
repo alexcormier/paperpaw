@@ -586,3 +586,15 @@ fn a_tap_at_the_bottom_of_a_page_opens_the_panel_directly() {
     app.tap(Point::new(240, 650));
     assert_eq!(app.screen(), PANEL, "{}", app.described());
 }
+
+/// An item at the quick panel's head that does something when tapped:
+/// the power mode's mark opens the power settings.
+#[test]
+fn a_tapped_item_at_the_quick_panels_head_does_what_it_says() {
+    let config = "[power]\nmode = power.mode.saving\n[menu]\nquick.left = power.status\nquick.center =\nquick.right =\n";
+    let mut app = App::new(TOUCH, storage(config));
+    app.run(actions::QUICK_PANEL);
+    assert_eq!(app.screen(), PANEL, "{}", app.described());
+    app.tap(Point::new(36, 20));
+    assert!(app.screen().starts_with("settings"), "{}", app.described());
+}

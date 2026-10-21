@@ -138,6 +138,7 @@ impl Plugin for Menu {
         ))?;
         r.bind_slot(slots::NOTICE, NOTICE, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
+        r.add_status_place(panel::QUICK_PLACE)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

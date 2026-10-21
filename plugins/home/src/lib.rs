@@ -472,13 +472,12 @@ impl Dashboard {
             if let Some(font) = font {
                 let margin = style.margin as u16;
                 let width = (f.width / 2).saturating_sub(margin + style.gap as u16 * 3);
-                let line = paperpaw_sdk::status::StatusLine {
-                    area: Rect::new(margin, f.y, width, f.height),
-                    lists: [env.settings.read(&pages::FOOTER_ITEMS), "", ""],
-                    size: style.small,
-                    color: style.faint(60),
-                    percent: true,
-                };
+                let line = paperpaw_sdk::status::StatusLine::new(
+                    Rect::new(margin, f.y, width, f.height),
+                    [env.settings.read(&pages::FOOTER_ITEMS), "", ""],
+                    style.small,
+                    style.faint(60),
+                );
                 line.draw(canvas, env, &font, &Params::new());
             }
         }
@@ -690,6 +689,17 @@ impl Screen for Dashboard {
                 None if gesture.kind == paperpaw_sdk::GestureKind::Tap && !on_sheet => Handled::Yes,
                 None => Handled::No,
             };
+        }
+        // An item of the status line above the grid that does something.
+        if let (Some(status), paperpaw_sdk::GestureKind::Tap) = (self.status, gesture.kind) {
+            let env = *cx.env();
+            let target = blocks::status_bar_targets(&env, status)
+                .into_iter()
+                .find(|t| t.area.contains(gesture.start));
+            if let Some(target) = target {
+                cx.command(target.command);
+                return Handled::Yes;
+            }
         }
         let response = self.grid.on_gesture(gesture, cx);
         self.respond(response, cx)
