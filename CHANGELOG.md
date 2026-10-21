@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4 Pro: dragging and sizing a widget by touch keeps up with the finger.
+  The firmware queues touch readings while it refreshes the panel; a
+  finger's moves while the last one still waits now take its place
+  (`paperpaw_x4::changes::Queue`). Before, every reading was handled
+  with a refresh of its own and a drag overflowed the queue, so the lift
+  was lost: a 0.6 s drag kept the device busy for 7 s and the widget
+  stayed where it was; now it is done 2.7 s after the finger came down,
+  the widget where the finger left it. The remote control's `drag`
+  plays a finger as the touch controller reads it.
+
 - SDK: pictures with transparency, drawn over what is drawn. PNG and
   GIF decoding keeps a picture's transparency (alpha, a palette's, a
   colour key of gray and RGB images) for sinks that want it

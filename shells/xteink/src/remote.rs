@@ -327,6 +327,7 @@ impl Remote {
             | Command::Network(_)
             | Command::Emit { .. }
             | Command::Touch { .. }
+            | Command::Drag { .. }
             | Command::SetTime(_)
             | Command::Restart) => return Some(command),
         }
