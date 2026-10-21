@@ -691,7 +691,17 @@ fn changes(shown: &[Color], page: &[Color]) -> Vec<(usize, usize)> {
 /// whether its widget shows (to fetch what it shows) is told so.
 #[test]
 fn a_widget_over_the_page_counts_as_shown() {
-    for (settings, shown) in [("overlay-widget = owls.moon", true), ("", false)] {
+    // Shown only while the sleep screen shows the page with it: another
+    // mode set later wins (`show` comes first in the settings).
+    for (settings, shown) in [
+        ("overlay-widget = owls.moon", true),
+        ("", false),
+        (
+            "overlay-widget = owls.moon
+show = sleep.show.cover",
+            false,
+        ),
+    ] {
         let mut device = Device::new(settings, false);
         device.now += 100;
         let effects = device.kernel.open_screen(

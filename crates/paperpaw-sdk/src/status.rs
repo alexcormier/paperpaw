@@ -461,6 +461,12 @@ impl StatusItems {
         self.lines.iter().map(|l| (&l.id, l.title.as_ref()))
     }
 
+    /// The id of status line `id` now: its own where `id` is one it had
+    /// before ([`StatusLineSpec::also`]), else `id` as it is.
+    pub fn canonical<'a>(&'a self, id: &'a str) -> &'a str {
+        self.line(id).map_or(id, |line| line.id.as_str())
+    }
+
     /// Status line `id`, also by an id it had before
     /// ([`StatusLineSpec::also`]).
     fn line(&self, id: &str) -> Option<&StatusLineSpec> {

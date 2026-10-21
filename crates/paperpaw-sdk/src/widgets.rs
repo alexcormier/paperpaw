@@ -216,8 +216,14 @@ pub trait Widget {
     /// Input on it beside taps on its targets: a swipe that started on it
     /// (a list turning its page), the buttons' focus coming to one of its
     /// targets or leaving it. `true` if it took it, the commands it asks
-    /// for in `out`: the screen draws it again. Widgets that take none
-    /// keep the default.
+    /// for in `out`: the screen draws it again, and asks its
+    /// [`targets`](Self::targets) anew. Widgets that take none keep the
+    /// default.
+    ///
+    /// The buttons send swipes too: Left and Right move the focus among
+    /// its targets, and at its first or last one they are a swipe to it
+    /// (Right as a swipe to the left). A widget refuses a swipe it cannot
+    /// do (at its last page): the focus then goes on to the next item.
     fn on_input(
         &mut self,
         env: &Env<'_>,
@@ -275,7 +281,8 @@ impl<'a> WidgetContext<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum WidgetInput {
-    /// A swipe that started on it, this way.
+    /// A swipe that started on it, this way; also Left or Right of the
+    /// buttons at its first or last target (see [`Widget::on_input`]).
     Swipe(crate::gesture::Direction),
     /// The buttons' focus came to its target in this area, or (`None`)
     /// left it.
@@ -621,6 +628,9 @@ pub struct WidgetPlace {
     /// The settings that list its widgets (a grid's pages each one).
     pub settings: Cow<'static, [Id]>,
     pub kind: PlaceKind,
+    /// It shows only while this setting has this value (a mode of a
+    /// screen), see [`WidgetPlace::shown_if`].
+    pub shown_if: Option<(Id, &'static str)>,
 }
 
 impl WidgetPlace {
@@ -636,7 +646,24 @@ impl WidgetPlace {
             title: Cow::Borrowed(title),
             settings: Cow::Borrowed(settings),
             kind,
+            shown_if: None,
         }
+    }
+
+    /// It shows only while setting `setting` has the value `value`, e.g.
+    /// the sleep screen's widgets only while it shows widgets: a plugin
+    /// asking [`Widgets::shown`] is told so only then.
+    pub const fn shown_if(mut self, setting: Id, value: &'static str) -> Self {
+        // Nothing to drop: made without one (`new`), in a const.
+        core::mem::forget(self.shown_if.replace((setting, value)));
+        self
+    }
+
+    /// Whether it shows now (see [`WidgetPlace::shown_if`]).
+    pub fn shows(&self, env: &Env<'_>) -> bool {
+        self.shown_if
+            .as_ref()
+            .is_none_or(|(setting, value)| env.settings.text(setting.as_str()) == *value)
     }
 
     /// The widgets it shows now: their ids, a placement's (`home.clock@2`)
@@ -791,13 +818,16 @@ impl Widgets {
     /// Whether any place shows widget `id` now, or a placement of it:
     /// e.g. to fetch what it shows only then.
     pub fn shown(&self, env: &Env<'_>, id: &str) -> bool {
-        self.places.iter().any(|place| {
-            place
-                .settings
-                .iter()
-                .flat_map(|setting| listed(env.settings.text(setting.as_str())))
-                .any(|listed| base(listed) == id)
-        })
+        self.places
+            .iter()
+            .filter(|place| place.shows(env))
+            .any(|place| {
+                place
+                    .settings
+                    .iter()
+                    .flat_map(|setting| listed(env.settings.text(setting.as_str())))
+                    .any(|listed| base(listed) == id)
+            })
     }
 
     /// Widget `id`, also of a placement of it (`widgets.clock@2`).

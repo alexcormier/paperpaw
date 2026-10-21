@@ -91,6 +91,7 @@ pub const paperpaw_sdk::builtin::actions::DOWN: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::HOME: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::LEFT: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::LIBRARY: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::actions::LONG_CONFIRM: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::MENU: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::NEXT: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::NEXT_PAGE: paperpaw_sdk::Id
@@ -2777,6 +2778,7 @@ impl core::fmt::Debug for paperpaw_sdk::status::StatusItemSpec
 pub fn paperpaw_sdk::status::StatusItemSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::status::StatusItems
 impl paperpaw_sdk::status::StatusItems
+pub fn paperpaw_sdk::status::StatusItems::canonical<'a>(&'a self, &'a str) -> &'a str
 pub fn paperpaw_sdk::status::StatusItems::draw_line(&self, &str, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>) -> bool
 pub fn paperpaw_sdk::status::StatusItems::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
 pub fn paperpaw_sdk::status::StatusItems::line_signature(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> alloc::string::String
@@ -3796,9 +3798,12 @@ pub fn paperpaw_sdk::widgets::WidgetContext<'a>::placement(self, core::option::O
 pub paperpaw_sdk::widgets::WidgetPlace::id: paperpaw_sdk::Id
 pub paperpaw_sdk::widgets::WidgetPlace::kind: paperpaw_sdk::widgets::PlaceKind
 pub paperpaw_sdk::widgets::WidgetPlace::settings: alloc::borrow::Cow<'static, [paperpaw_sdk::Id]>
+pub paperpaw_sdk::widgets::WidgetPlace::shown_if: core::option::Option<(paperpaw_sdk::Id, &'static str)>
 pub paperpaw_sdk::widgets::WidgetPlace::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::widgets::WidgetPlace
 pub const fn paperpaw_sdk::widgets::WidgetPlace::new(paperpaw_sdk::Id, &'static str, &'static [paperpaw_sdk::Id], paperpaw_sdk::widgets::PlaceKind) -> Self
+pub const fn paperpaw_sdk::widgets::WidgetPlace::shown_if(self, paperpaw_sdk::Id, &'static str) -> Self
+pub fn paperpaw_sdk::widgets::WidgetPlace::shows(&self, &paperpaw_sdk::Env<'_>) -> bool
 pub fn paperpaw_sdk::widgets::WidgetPlace::widgets<'e>(&self, &paperpaw_sdk::Env<'e>) -> alloc::vec::Vec<&'e str>
 #[non_exhaustive] pub struct paperpaw_sdk::widgets::WidgetSpec
 pub paperpaw_sdk::widgets::WidgetSpec::category: alloc::borrow::Cow<'static, str>
@@ -5330,6 +5335,7 @@ impl core::fmt::Debug for paperpaw_sdk::status::StatusItemSpec
 pub fn paperpaw_sdk::status::StatusItemSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::StatusItems
 impl paperpaw_sdk::status::StatusItems
+pub fn paperpaw_sdk::status::StatusItems::canonical<'a>(&'a self, &'a str) -> &'a str
 pub fn paperpaw_sdk::status::StatusItems::draw_line(&self, &str, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>) -> bool
 pub fn paperpaw_sdk::status::StatusItems::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
 pub fn paperpaw_sdk::status::StatusItems::line_signature(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> alloc::string::String

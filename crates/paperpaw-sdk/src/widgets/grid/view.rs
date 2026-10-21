@@ -526,7 +526,23 @@ impl GridView {
         if *action == actions::BACK && self.edit.is_some() {
             return Hint::Text(env.i18n.tr("core.grid.done").to_string());
         }
+        // Holding Select does what the focused target holds.
+        if *action == actions::LONG_CONFIRM && self.focused_hold().is_some() {
+            return Hint::Text(env.i18n.tr("core.grid.hold").to_string());
+        }
         Hint::Default
+    }
+
+    /// What holding Select runs on the focused target, where it has a
+    /// long press of its own and the focus shows.
+    fn focused_hold(&self) -> Option<Command> {
+        if !self.focus_shown || self.edit.is_some() {
+            return None;
+        }
+        match self.targets.get(self.focus) {
+            Some((_, Target::Run(_, Some(hold)))) => Some((**hold).clone()),
+            _ => None,
+        }
     }
 
     /// The area around a target that its focus frame takes.
@@ -596,6 +612,27 @@ impl GridView {
             cx.command(command);
         }
         taken
+    }
+
+    /// The targets anew after item `index`'s widget took a swipe (its
+    /// page turned): the focus on its first target (`first`) or its last,
+    /// so that what Select runs is what shows.
+    fn retarget(&mut self, index: usize, first: bool, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        self.target(&env);
+        let mut own = self
+            .owners
+            .iter()
+            .enumerate()
+            .filter(|(_, owner)| **owner == Some(index))
+            .map(|(at, _)| at);
+        let at = if first { own.next() } else { own.next_back() };
+        if let Some(at) = at {
+            self.focus = at;
+        }
+        if let Some(shown) = self.items.get(index) {
+            cx.request_redraw_area(self.around(shown.area));
+        }
     }
 
     /// Says which screen shows the grid, for its widgets
@@ -865,15 +902,13 @@ impl GridView {
             self.set_editing(false);
             return GridResponse::Editing(false);
         }
-        // With the buttons as by touch: a long press of Select (the menu,
-        // as the key map binds it) runs the focused target's own long
-        // press where it has one.
-        if *a == actions::MENU
-            && self.focus_shown
-            && self.edit.is_none()
-            && let Some((_, Target::Run(_, Some(hold)))) = self.targets.get(self.focus)
+        // With the buttons as by touch: holding Select runs the focused
+        // target's own long press where it has one (elsewhere it opens
+        // the menu, the action's own).
+        if *a == actions::LONG_CONFIRM
+            && let Some(hold) = self.focused_hold()
         {
-            cx.command((**hold).clone());
+            cx.command(hold);
             return GridResponse::Handled;
         }
         let moves = [
@@ -894,21 +929,37 @@ impl GridView {
             self.focus_on(self.focus, cx);
             return GridResponse::Handled;
         }
-        // Left and right are a swipe to the focused widget first (a list
-        // turning its page): the next as by a swipe to the left. Where it
-        // takes none, they move the focus.
-        let swipe = if *a == actions::RIGHT {
-            Some(crate::gesture::Direction::Left)
+        // Left and right in a widget: to its next target; at its edge a
+        // swipe to it (a list turning its page; the next as by a swipe to
+        // the left); where it takes none, on out of it.
+        let step = if *a == actions::RIGHT {
+            1
         } else if *a == actions::LEFT {
-            Some(crate::gesture::Direction::Right)
+            -1
         } else {
-            None
+            0
         };
-        if let (Some(direction), None) = (swipe, &self.edit)
+        if step != 0
+            && self.edit.is_none()
             && let Some(item) = self.owners.get(self.focus).copied().flatten()
-            && self.tell(item, WidgetInput::Swipe(direction), cx)
         {
-            return GridResponse::Handled;
+            let next = self.focus as isize + step;
+            let inside = usize::try_from(next)
+                .ok()
+                .filter(|&n| self.owners.get(n).copied().flatten() == Some(item));
+            if let Some(next) = inside {
+                self.focus_on(next, cx);
+                return GridResponse::Handled;
+            }
+            let direction = if step > 0 {
+                crate::gesture::Direction::Left
+            } else {
+                crate::gesture::Direction::Right
+            };
+            if self.tell(item, WidgetInput::Swipe(direction), cx) {
+                self.retarget(item, step > 0, cx);
+                return GridResponse::Handled;
+            }
         }
         let len = self.targets.len();
         let to = if *a == actions::CONFIRM {
@@ -918,8 +969,20 @@ impl GridView {
         } else if *a == actions::LEFT || *a == actions::PREVIOUS {
             ui::step_focus(self.focus, -1, len)
         } else {
-            match self.vertical(*a == actions::DOWN) {
+            // Nothing above or below: it stays, but in a widget the one
+            // before or after, so that the focus always leaves a widget
+            // (one taking every swipe would keep it).
+            let down = *a == actions::DOWN;
+            let in_widget = self
+                .owners
+                .get(self.focus)
+                .copied()
+                .flatten()
+                .and_then(|item| self.items.get(item))
+                .is_some_and(|shown| shown.widget.is_some());
+            match self.vertical(down) {
                 Some(to) => to,
+                None if in_widget => ui::step_focus(self.focus, if down { 1 } else { -1 }, len),
                 None => return GridResponse::Handled,
             }
         };
@@ -1042,7 +1105,10 @@ impl GridView {
                 } else {
                     to
                 };
-                if to != drag.to || !drag.moved {
+                // Drawn again only where it goes to other cells (or other
+                // sizes): a finger trembling in a cell asks for nothing, as
+                // a refresh takes most of a second on some panels.
+                if to != drag.to {
                     cx.request_redraw_area(self.around(self.geometry.rect(drag.to)));
                     drag.to = to;
                     drag.moved |= to != from;
@@ -1141,6 +1207,7 @@ impl GridView {
                     .position(|s| s.widget.is_some() && s.area.contains(gesture.start));
                 match index {
                     Some(index) if self.tell(index, WidgetInput::Swipe(direction), cx) => {
+                        self.retarget(index, true, cx);
                         GridResponse::Handled
                     }
                     _ => GridResponse::Ignored,

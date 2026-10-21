@@ -1114,9 +1114,14 @@ impl Settings {
     /// set by the placement whose values are active
     /// ([`Settings::with_placement`]). Not its default alone.
     pub fn is_chosen(&self, id: &str) -> bool {
-        self.placed_value(id).is_some()
-            || self.preview.get(id).is_some_and(Option::is_some)
-            || self.values.contains_key(id)
+        if self.placed_value(id).is_some() {
+            return true;
+        }
+        // Shown while one is chosen: that decides, also a default shown.
+        match self.preview.get(id) {
+            Some(shown) => shown.is_some(),
+            None => self.values.contains_key(id),
+        }
     }
 
     /// Registers a group of settings.

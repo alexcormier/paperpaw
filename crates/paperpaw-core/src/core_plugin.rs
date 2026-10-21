@@ -294,7 +294,7 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
             out.push(Command::RunAction(target.clone()));
         })
     };
-    let handled: [(Id, &'static str, ActionHandler); 10] = [
+    let handled: [(Id, &'static str, ActionHandler); 11] = [
         (
             actions::REFRESH_SCREEN,
             "core.action.refresh-screen",
@@ -333,6 +333,15 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
                     slots::MENU,
                     Params::new().with(params::MENU, menus::MAIN.as_str()),
                 ));
+            }),
+        ),
+        // Select held: the menu, where no screen takes it for a long
+        // press of its own.
+        (
+            actions::LONG_CONFIRM,
+            "core.action.long-confirm",
+            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+                out.push(Command::RunAction(actions::MENU));
             }),
         ),
         (

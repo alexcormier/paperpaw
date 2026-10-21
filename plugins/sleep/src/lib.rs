@@ -95,7 +95,8 @@ const PLACE: WidgetPlace = WidgetPlace::new(
     "sleep.title",
     PLACE_SETTINGS,
     PlaceKind::Stack,
-);
+)
+.shown_if(Id::new_static(SHOW.static_str()), WIDGETS);
 const PLACE_SETTINGS: &[Id] = &[Id::new_static(WIDGET_LIST.static_str())];
 /// The widget shown over the page, where one is (see [`overlay`]).
 const OVERLAY_PLACE: WidgetPlace = WidgetPlace::new(
@@ -103,7 +104,8 @@ const OVERLAY_PLACE: WidgetPlace = WidgetPlace::new(
     "sleep.title",
     OVERLAY_SETTINGS,
     PlaceKind::Stack,
-);
+)
+.shown_if(Id::new_static(SHOW.static_str()), OVERLAY);
 const OVERLAY_SETTINGS: &[Id] = &[Id::new_static(overlay::WIDGET.static_str())];
 static PICKED_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section(SECTION)

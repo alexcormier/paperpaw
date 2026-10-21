@@ -29,6 +29,11 @@ pub mod actions {
     pub const LEFT: Id = Id::new_static("core.left");
     pub const RIGHT: Id = Id::new_static("core.right");
     pub const CONFIRM: Id = Id::new_static("core.confirm");
+    /// Select held: what a long press does where the focus is, where a
+    /// screen takes it (a widget's own, see
+    /// [`WidgetTarget::hold`](crate::widgets::WidgetTarget::hold)); else
+    /// the menu, as before.
+    pub const LONG_CONFIRM: Id = Id::new_static("core.long-confirm");
     pub const MENU: Id = Id::new_static("core.menu");
     pub const BACK: Id = Id::new_static("core.back");
     pub const HOME: Id = Id::new_static("core.home");

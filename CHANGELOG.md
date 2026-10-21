@@ -6,11 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Dragging an item of a grid (moving or sizing it on the home screen)
+  draws it again only when it goes to other cells: a finger trembling in
+  a cell asked for a refresh each time, most of a second each on the
+  X4 Pro, so the item fell seconds behind the finger.
 - SDK: any place of status items shows a whole status line of the
   reader's choice. The line of a place's items is the kernel's
   (`status_lines::ITEMS`); it answers to the reader's
   `reader.status-line.items` too (`StatusLineSpec::also`) and is listed
-  once, the reader's choice of the battery's percentage kept;
+  once, the reader's choice of the battery's percentage kept, and the
+  editor of status lines keeps it by its own id (`StatusItems::canonical`);
   `Place::with_line` names the setting that chooses the line, and
   `Place::draw`, `Place::targets` and `Place::signature` draw it, tap it
   and tell when it changed. The home screen's status line
@@ -59,8 +64,12 @@ change the plugin SDK.
   `Widget::context` tells it where it shows (`widgets::WidgetContext`:
   its placement, so a widget placed twice tells its taps apart, the
   screen showing it, `GridView::set_host`, and its `SizeClass`). With the
-  buttons, Left and Right are a swipe to the focused widget first, and
-  holding Select (the menu) runs its long press.
+  buttons, Left and Right go to a widget's next target, at its first or
+  last one they are a swipe to it, and where it takes none the focus
+  goes on; Up and Down always leave a widget; after a swipe it took, its
+  targets are asked anew. Holding Select is an action of its own
+  (`actions::LONG_CONFIRM`, the menu where no screen takes it): on a
+  target with a long press of its own it runs that, its hint saying so.
 - SDK: a widget says how many cells of a grid it takes
   (`WidgetSpec::cells`, `widgets::CellsHint`: its size, its least, square
   or not): added, it gets them without being made to be measured;
@@ -73,7 +82,9 @@ change the plugin SDK.
   the settings that list a place's widgets: the home screen's pages and
   the sleep screen's list register theirs, and `Widgets::shown` tells a
   plugin whether any place shows its widget (the weather fetches only
-  then, without reading every setting). `widgets::Stack` shows widgets
+  then, without reading every setting); a place that shows only in a
+  mode of its screen says so (`WidgetPlace::shown_if`), as the sleep
+  screen's two do. `widgets::Stack` shows widgets
   above each other, as the sleep screen does; `widgets::refresh` says
   what an event means for the widgets a screen shows (make anew, read
   anew, read one, the live ones), `widgets::next_minute` when to read

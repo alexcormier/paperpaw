@@ -263,6 +263,14 @@ fn one_frame_for_all_widgets_unless_one_has_its_own() {
         Some(SettingValue::Text(FRAMES[3].into())),
     )]);
     assert_eq!(frame(&h, "t.one"), Frame::Dark, "shown while chosen");
+    // Its own kept, but shown reset while one is chosen: the frame of all,
+    // as it would be.
+    h.settings
+        .set("t.three.frame", SettingValue::Text(FRAMES[1].into()))
+        .unwrap();
+    h.settings
+        .set_preview(vec![(Id::new_static("t.three.frame"), None)]);
+    assert_eq!(frame(&h, "t.three"), Frame::Card, "shown reset");
     h.settings.set_preview(Vec::new());
     h.settings
         .set("t.one@2.frame", SettingValue::Text(FRAMES[1].into()))

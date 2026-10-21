@@ -895,7 +895,12 @@ fn widgets_take_swipes_holds_and_the_focus() {
     // focus to the tool, and back: told each time; drawn its own way.
     press(&mut view, &env, &actions::RIGHT);
     assert_eq!(told(), ["swipe Left"]);
-    let (_, output) = with_cx(&env, |cx| view.on_action(&actions::MENU, cx));
+    assert_eq!(
+        view.hint(&actions::LONG_CONFIRM, &env),
+        paperpaw_sdk::Hint::Text("core.grid.hold".into()),
+        "the hint says it"
+    );
+    let (_, output) = with_cx(&env, |cx| view.on_action(&actions::LONG_CONFIRM, cx));
     assert_eq!(
         output.commands,
         [Command::RunAction(Id::new_static("t.hold"))]
@@ -989,4 +994,130 @@ fn a_touch_target_keeps_its_long_press() {
         [Command::RunAction(Id::new_static("t.hold"))]
     );
     assert!(!view.editing());
+}
+
+/// Two pages of two targets side by side, turned by swipes.
+#[derive(Default)]
+struct Paged {
+    page: usize,
+}
+
+impl Widget for Paged {
+    fn height(&self, _: &Env<'_>, _: u16) -> u16 {
+        90
+    }
+
+    fn draw(&self, _: &mut Canvas<'_>, _: &Env<'_>, _: Rect) {}
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        let half = area.width / 2;
+        (0..2)
+            .map(|i| {
+                let at = Rect::new(area.x + i * half, area.y, half, area.height);
+                let action = Id::parse(&format!("t.p{}-{i}", self.page)).unwrap();
+                WidgetTarget::new(at, Command::RunAction(action))
+            })
+            .collect()
+    }
+
+    fn on_input(
+        &mut self,
+        _: &Env<'_>,
+        input: paperpaw_sdk::widgets::WidgetInput,
+        _: Rect,
+        _: &mut Vec<Command>,
+    ) -> bool {
+        use paperpaw_sdk::widgets::WidgetInput;
+        match input {
+            WidgetInput::Swipe(paperpaw_sdk::Direction::Left) if self.page == 0 => self.page = 1,
+            WidgetInput::Swipe(paperpaw_sdk::Direction::Right) if self.page == 1 => self.page = 0,
+            _ => return false,
+        }
+        true
+    }
+}
+
+/// With the buttons a widget's targets come first, then at its edge a
+/// swipe, and where it takes none the next item; after a swipe it took,
+/// Select runs what shows; Up leaves it with nothing above.
+#[test]
+fn buttons_go_through_a_widget_then_page_it_then_leave_it() {
+    let mut h = harness(Device::BUTTONS);
+    h.widgets.add(WidgetSpec::new(
+        Id::new_static("t.paged"),
+        "t.paged",
+        |_| Box::new(Paged::default()),
+    ));
+    let env = h.env();
+    let items = [
+        Item::placed(widget("t.paged"), Cells::new(0, 0, 4, 1)),
+        Item::placed(tool("t.a"), Cells::new(0, 1, 1, 1)),
+    ];
+    let mut view = GridView::asking(&env, CHOSEN);
+    view.layout(&env, geometry(), &items, &[]);
+    let confirm = |view: &mut GridView| {
+        let (_, output) = with_cx(&env, |cx| view.on_action(&actions::CONFIRM, cx));
+        output.commands.first().cloned()
+    };
+    let ran = |id: &'static str| Some(Command::RunAction(Id::new_static(id)));
+    assert_eq!(confirm(&mut view), ran("t.p0-0"));
+    press(&mut view, &env, &actions::RIGHT);
+    assert_eq!(confirm(&mut view), ran("t.p0-1"), "its next target first");
+    press(&mut view, &env, &actions::RIGHT);
+    assert_eq!(
+        confirm(&mut view),
+        ran("t.p1-0"),
+        "then its next page, what shows"
+    );
+    press(&mut view, &env, &actions::RIGHT);
+    press(&mut view, &env, &actions::RIGHT);
+    assert_eq!(
+        confirm(&mut view),
+        ran("t.a"),
+        "at its last page, out of it"
+    );
+    // Back into it, and up with nothing above: out again.
+    press(&mut view, &env, &actions::UP);
+    assert_eq!(confirm(&mut view), ran("t.p1-0"));
+    press(&mut view, &env, &actions::UP);
+    assert_eq!(confirm(&mut view), ran("t.a"), "Up leaves it");
+}
+
+/// Dragging an item, by its middle to move it or by its corner to size
+/// it: a finger trembling in its cells asks for no refresh (each takes
+/// most of a second on some panels), a move into another cell (or size)
+/// for one.
+#[test]
+fn a_drag_refreshes_only_where_the_cells_change() {
+    let h = harness(Device::TOUCH);
+    let env = h.env();
+    let items = [Item::placed(tool("t.a"), Cells::new(0, 0, 1, 1))];
+    for resize in [false, true] {
+        let mut view = GridView::asking(&env, CHOSEN);
+        view.set_editing(true);
+        view.layout(&env, geometry(), &items, &[]);
+        let area = geometry().rect(Cells::new(0, 0, 1, 1));
+        let start = if resize { corner(area) } else { middle(area) };
+        let refreshes = |view: &mut GridView, phase, at: Point| {
+            let (_, output) = with_cx(&env, |cx| view.on_pointer(&pointer(phase, at.x, at.y), cx));
+            usize::from(output.refresh.is_some())
+        };
+        let mut asked = refreshes(&mut view, PointerPhase::Down, start);
+        for n in 1..=10 {
+            let trembling = Point::new(start.x - n % 3, start.y - n % 2);
+            asked += refreshes(&mut view, PointerPhase::Move, trembling);
+        }
+        assert_eq!(asked, 0, "resize {resize}");
+        let next = Point::new(start.x + 120, start.y);
+        assert_eq!(
+            refreshes(&mut view, PointerPhase::Move, next),
+            1,
+            "resize {resize}"
+        );
+        assert_eq!(
+            refreshes(&mut view, PointerPhase::Move, next),
+            0,
+            "resize {resize}"
+        );
+    }
 }

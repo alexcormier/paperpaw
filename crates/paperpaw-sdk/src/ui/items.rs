@@ -71,16 +71,20 @@ impl ItemsScreen {
         }
     }
 
-    /// The items shown, in their order (only those there are).
+    /// The items shown, in their order (only those there are), a line
+    /// named by an id it had before by its own, once.
     fn chosen<'e>(&self, env: &Env<'e>) -> Vec<&'e str> {
-        self.setting
-            .as_ref()
-            .map(|s| {
-                item_ids(env.settings.text(s.as_str()))
-                    .filter(|c| self.items.iter().any(|(id, _)| id.as_str() == *c))
-                    .collect()
-            })
-            .unwrap_or_default()
+        let mut chosen: Vec<&'e str> = Vec::new();
+        let Some(setting) = &self.setting else {
+            return chosen;
+        };
+        for c in item_ids(env.settings.text(setting.as_str())) {
+            let c = env.status_items.canonical(c);
+            if self.items.iter().any(|(id, _)| id.as_str() == c) && !chosen.contains(&c) {
+                chosen.push(c);
+            }
+        }
+        chosen
     }
 
     /// The rows: indexes into the items, the shown ones first.
@@ -100,7 +104,11 @@ impl ItemsScreen {
     /// places among them.
     fn keep(&self, env: &Env<'_>, chosen: &[&str], cx: &mut Cx<'_, '_>) {
         if let Some(setting) = &self.setting {
-            let known = |c: &str| self.items.iter().any(|(id, _)| id.as_str() == c);
+            // A line by an id it had before is this one, kept by its own.
+            let known = |c: &str| {
+                let c = env.status_items.canonical(c);
+                self.items.iter().any(|(id, _)| id.as_str() == c)
+            };
             let mut chosen_left = chosen.iter();
             let mut all: Vec<&str> = item_ids(env.settings.text(setting.as_str()))
                 .filter_map(|c| {
