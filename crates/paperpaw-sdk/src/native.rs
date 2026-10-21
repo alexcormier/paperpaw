@@ -653,6 +653,15 @@ macro_rules! plugin {
             $crate::native::support::panic(paperpaw_api(), info)
         }
 
+        /// A library a system loads takes `core` and `alloc` as the
+        /// toolchain built them, for unwinding: their code names the
+        /// unwinder's personality, which a plugin that never unwinds
+        /// (`panic = "abort"`) does not have, and Linux loads no library
+        /// with a name left open. Never called.
+        #[cfg(all(not(target_os = "none"), panic = "abort"))]
+        #[unsafe(no_mangle)]
+        extern "C" fn rust_eh_personality() {}
+
         unsafe extern "C" fn paperpaw_make() -> *mut ::core::ffi::c_void {
             $crate::native::support::make($plugin)
         }

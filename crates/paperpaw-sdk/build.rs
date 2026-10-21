@@ -11,7 +11,9 @@
 //! - the compiler: its release, commit and LLVM (not the computer it runs
 //!   on: a plugin built on Linux fits a firmware built on Windows);
 //! - the target;
-//! - the SDK's version and its features;
+//! - the SDK's version and its features, but those that only add
+//!   functions and modules (`ADDING_ONLY`): a firmware built with them
+//!   (the kernel's, the reader's) takes plugins built without;
 //! - for a version still in work (`0.5.0-dev`, many states of the source
 //!   share it), the source of the SDK and of the PaperPaw crates it is
 //!   built from, line ends ignored.
@@ -21,6 +23,12 @@
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
+
+/// Features of the SDK that add functions and modules, and change no type
+/// and no layout: `kernel`, what the kernel and the shells call (ADR
+/// 0020), and `unstable`, the building blocks before 1.0 (`layout`, `zip`,
+/// the reader's typesetting). Others are hashed, also those to come.
+const ADDING_ONLY: &[&str] = &["kernel", "unstable"];
 
 fn main() {
     let rustc = std::env::var("RUSTC").expect("RUSTC");
@@ -37,6 +45,7 @@ fn main() {
     let version = std::env::var("CARGO_PKG_VERSION").expect("CARGO_PKG_VERSION");
     let mut features: Vec<String> = std::env::vars()
         .filter_map(|(key, _)| key.strip_prefix("CARGO_FEATURE_").map(str::to_lowercase))
+        .filter(|feature| !ADDING_ONLY.contains(&feature.as_str()))
         .collect();
     features.sort();
 
