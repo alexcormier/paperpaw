@@ -114,11 +114,14 @@ pub struct LookupEntry {
     /// The text; lines are kept.
     pub text: String,
     /// The screen that shows more of it (a whole article, say), opened
-    /// with the word and its language ([`params::WORD`],
-    /// [`params::LANGUAGE`]) when the reader asks for more.
+    /// with the word, its language and the entry's text
+    /// ([`params::WORD`], [`params::LANGUAGE`], [`params::TEXT`]: what
+    /// was fetched need not be fetched again) when the reader asks for
+    /// more.
     ///
     /// [`params::WORD`]: crate::builtin::params::WORD
     /// [`params::LANGUAGE`]: crate::builtin::params::LANGUAGE
+    /// [`params::TEXT`]: crate::builtin::params::TEXT
     pub more: Option<Id>,
 }
 
@@ -162,7 +165,9 @@ pub struct LookupProviderSpec {
     /// The languages of the words it knows (`de`, `en` …); any where
     /// empty.
     pub languages: Vec<Cow<'static, str>>,
-    /// It goes online: asked only on request, with a network.
+    /// It goes online: asked only on request, with a network. The
+    /// shipped panel waits 20 seconds for answers that come later: a
+    /// request should time out sooner (`HttpRequest::timeout`).
     pub online: bool,
     pub lookup: LookupFn,
 }

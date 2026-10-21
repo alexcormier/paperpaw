@@ -199,9 +199,10 @@ pub struct Formats {
     /// The files told by their first bytes lately, with their sizes and
     /// formats (by index): asked again (a list turning pages, a book
     /// prepared then opened), they are not read again. At most
-    /// [`SNIFFED`]; the storage gives no time a file changed, so one
-    /// replaced by another of the same size is told as before.
-    sniffed: core::cell::RefCell<Vec<(String, u64, Option<usize>)>>,
+    /// [`SNIFFED`], by a hash of their path (little memory); the storage
+    /// gives no time a file changed, so one replaced by another of the
+    /// same size is told as before.
+    sniffed: core::cell::RefCell<Vec<(u64, u64, Option<usize>)>>,
 }
 
 impl Formats {
@@ -295,11 +296,12 @@ impl Formats {
             return None;
         }
         let size = storage.size(path).ok()?;
+        let hash = crate::digest::fnv1a64(path);
         let known = self
             .sniffed
             .borrow()
             .iter()
-            .find(|(known, known_size, _)| known == path && *known_size == size)
+            .find(|(known, known_size, _)| *known == hash && *known_size == size)
             .map(|(_, _, at)| *at);
         if let Some(at) = known {
             return at.and_then(|at| self.specs.get(at));
@@ -312,11 +314,11 @@ impl Formats {
             .iter()
             .rposition(|s| s.sniff.as_ref().is_some_and(|sniff| sniff(head)));
         let mut sniffed = self.sniffed.borrow_mut();
-        sniffed.retain(|(known, _, _)| known != path);
+        sniffed.retain(|(known, _, _)| *known != hash);
         if sniffed.len() == SNIFFED {
             sniffed.remove(0);
         }
-        sniffed.push((String::from(path), size, at));
+        sniffed.push((hash, size, at));
         at.and_then(|at| self.specs.get(at))
     }
 

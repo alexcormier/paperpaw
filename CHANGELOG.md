@@ -24,11 +24,12 @@ change the plugin SDK.
 - Wikipedia: a lookup provider that goes online. Once *Online* is
   chosen in the dictionary's panel, its summary shows there as an entry
   beside the dictionaries', and its line *Open Wikipedia* (or confirm,
-  where the entry shows) opens the whole summary on its own screen, which
-  stays bound to `slots::LOOKUP_ONLINE`. SDK: `LookupEntry::more`, the
-  screen showing more of an entry (`LookupQuery::answer_entry`,
-  `LookupAnswered::more`). The panel names each source right above its
-  entries.
+  where the entry shows) opens the whole summary on its own screen
+  without fetching it again; that screen stays bound to
+  `slots::LOOKUP_ONLINE`. *Online* is offered once a word. SDK:
+  `LookupEntry::more`, the screen showing more of an entry, opened with
+  the entry's text (`LookupQuery::answer_entry`, `LookupAnswered::more`).
+  The panel names each source right above its entries.
 - SDK: menu entries placed beside others (`MenuPlace`,
   `Registrar::place_menu_entry`; several in one place keep the order
   they were registered in) or taken out by a plugin (`hide_menu_entry`;
@@ -59,7 +60,8 @@ change the plugin SDK.
   or another voice speaking in its place stops it.
 - SDK: formats tell files without an extension by their first bytes
   (`FormatSpec::sniff`, `Formats::for_file`, `supports_file`; the last 32
-  files told are kept by name and size): the
+  files told are kept by a hash of their path and their size, and
+  however many a folder has, none is left out): the
   library, the file manager and the browser find such books; EPUB (its
   stored `mimetype` entry) and XTC say so. Formats read their own
   settings (`OpenOptions::setting`, filled by `reading::open_options`),

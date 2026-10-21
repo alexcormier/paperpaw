@@ -226,6 +226,17 @@ enum State {
     Ready,
 }
 
+/// An entry that has more to show (see `LookupEntry::more`).
+struct More {
+    /// Where it starts in the panel's text (its source's name, if shown).
+    begins: usize,
+    /// Its line that opens more (byte range).
+    line: core::ops::Range<usize>,
+    /// The screen that shows more, and the entry's text, passed on.
+    screen: Id,
+    text: String,
+}
+
 struct Popup {
     word: String,
     /// The book's language, passed on to an online lookup.
@@ -250,10 +261,8 @@ struct Popup {
     /// The definitions (or a message), and its lines as byte ranges.
     text: String,
     lines: Vec<(usize, usize)>,
-    /// The entries that have more to show: where each starts in the text,
-    /// where its line that opens more starts and ends, and the screen it
-    /// opens.
-    mores: Vec<(usize, usize, usize, Id)>,
+    /// The entries that have more to show.
+    mores: Vec<More>,
     /// The names of sources above their entries (byte ranges), drawn
     /// faint.
     headings: Vec<(usize, usize)>,
@@ -407,7 +416,12 @@ impl Popup {
                 let start = text.len();
                 let source = Arg::Str(&entry.source);
                 text.push_str(&env.i18n.format("dictionary.more", &[("source", source)]));
-                mores.push((begins, start, text.len(), more.clone()));
+                mores.push(More {
+                    begins,
+                    line: start..text.len(),
+                    screen: more.clone(),
+                    text: entry.text.clone(),
+                });
             }
         }
         if text.is_empty() && self.pending.is_empty() {
@@ -422,25 +436,21 @@ impl Popup {
         self.top = top.min(self.lines.len().saturating_sub(1));
     }
 
-    /// The screen line `index` opens more on, if it is such a line.
-    fn more_at(&self, index: usize) -> Option<&Id> {
+    /// The entry whose line opens more is line `index`, if it is one.
+    fn more_at(&self, index: usize) -> Option<&More> {
         let &(start, _) = self.lines.get(index)?;
-        self.mores
-            .iter()
-            .find(|(_, from, to, _)| (*from..*to).contains(&start))
-            .map(|(_, _, _, more)| more)
+        self.mores.iter().find(|more| more.line.contains(&start))
     }
 
-    /// The first entry on the page that has more to show: the text of
-    /// its line that opens it, and the screen.
-    fn more_shown(&self, env: &Env<'_>) -> Option<(&str, &Id)> {
+    /// The first entry on the page that has more to show: what confirm
+    /// opens.
+    fn more_shown(&self, env: &Env<'_>) -> Option<&More> {
         let rows = self.rows(env);
         (self.top..(self.top + rows).min(self.lines.len())).find_map(|i| {
             let (start, _) = self.lines[i];
             self.mores
                 .iter()
-                .find(|(begins, _, to, _)| (*begins..*to).contains(&start))
-                .map(|(_, from, to, more)| (&self.text[*from..*to], more))
+                .find(|more| (more.begins..more.line.end).contains(&start))
         })
     }
 
@@ -459,14 +469,17 @@ impl Popup {
         ))
     }
 
-    /// Opens `more` for the word, in place of the panel.
-    fn open_more(&self, more: Id, cx: &mut Cx<'_, '_>) {
-        let mut params = Params::new().with(params::WORD, self.word.clone());
+    /// Opens `more` for the word, in place of the panel, with the
+    /// entry's text (not fetched again).
+    fn open_more(&self, more: &More, cx: &mut Cx<'_, '_>) {
+        let mut params = Params::new()
+            .with(params::WORD, self.word.clone())
+            .with(params::TEXT, more.text.clone());
         if let Some(language) = &self.language {
             params = params.with(params::LANGUAGE, language.clone());
         }
         cx.command(Command::Back);
-        cx.command(Command::OpenScreen(more, params));
+        cx.command(Command::OpenScreen(more.screen.clone(), params));
     }
 
     /// Takes `text` and wraps it into lines.
@@ -524,12 +537,13 @@ impl Popup {
     }
 
     /// Whether the word can be looked up online, with a network: the
-    /// providers that go online first, then a screen bound for it, unless
-    /// an entry opens more already (Wikipedia's).
+    /// providers that go online, else a screen bound for it. Once the
+    /// providers were asked, not again (also while they answer, or after
+    /// one failed): their entries open more.
     fn can_go_online(&self, env: &Env<'_>) -> bool {
         env.caps.network
-            && (self.providers_online(env)
-                || (env.has_slot(&slots::LOOKUP_ONLINE) && self.mores.is_empty()))
+            && !self.asked_online
+            && (self.providers_online(env) || env.has_slot(&slots::LOOKUP_ONLINE))
     }
 
     /// Asks the providers that go online, their entries shown here as
@@ -634,8 +648,9 @@ impl Screen for Popup {
     /// the arrows scroll.
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if *action == actions::CONFIRM
-            && let Some((line, _)) = self.more_shown(env)
+            && let Some(more) = self.more_shown(env)
         {
+            let line = &self.text[more.line.clone()];
             paperpaw_sdk::Hint::Text(line.trim_end_matches(" ›").to_string())
         } else if *action == actions::CONFIRM {
             paperpaw_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
@@ -730,7 +745,10 @@ impl Screen for Popup {
                 .more_at(self.top + n)
                 .and(self.line_area(env, self.top + n))
             {
-                let focused = !env.device.input.touch;
+                // With the buttons, the one confirm opens.
+                let focused = !env.device.input.touch
+                    && self.more_shown(env).map(|m| m.begins)
+                        == self.more_at(self.top + n).map(|m| m.begins);
                 canvas.describe(
                     paperpaw_sdk::semantics::Role::Button,
                     text,
@@ -826,7 +844,7 @@ impl Screen for Popup {
             self.scroll(&env, false, cx);
         } else if *a == actions::CONFIRM {
             match self.more_shown(&env) {
-                Some((_, more)) => self.open_more(more.clone(), cx),
+                Some(more) => self.open_more(more, cx),
                 None => cx.command(Command::Back),
             }
         } else if *a == actions::MENU && self.online_area(&env, "").is_some() {
@@ -886,7 +904,7 @@ impl Screen for Popup {
             self.more_at(i).filter(|_| area.contains(gesture.start))
         });
         if let Some(more) = more {
-            self.open_more(more.clone(), cx);
+            self.open_more(more, cx);
             return Handled::Yes;
         }
         let forward = gesture.start.x > i32::from(self.region.width) / 3;

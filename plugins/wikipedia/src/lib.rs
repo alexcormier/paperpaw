@@ -7,8 +7,9 @@
 //! opens it on a screen of its own. Other online sources (Wiktionary,
 //! a translator) join the same way, as plugins.
 //!
-//! That screen is bound to the slot `core.lookup-online` too, for lookup
-//! screens without providers; another plugin can take its place. The
+//! That screen shows the summary given to it (`text`), else fetches it;
+//! it is bound to the slot `core.lookup-online` too, for lookup screens
+//! without providers, and another plugin can take its place. The
 //! summary shows over the page like a dictionary entry: the page buttons
 //! or taps scroll it, confirm or a tap at its end closes it.
 
@@ -47,6 +48,12 @@ const ANSWERED: Event<HttpReply> = Event::new("wikipedia.answered");
 const PROVIDED: Event<HttpReply> = Event::new("wikipedia.provided");
 /// The event the query is answered with.
 const REPLY: &str = "reply";
+/// The longest summary read (they are a paragraph or two).
+const MAX_BODY: usize = 16 * 1024;
+/// How long the provider's request may take: less than the dictionary's
+/// panel waits for answers (20 s), so that an answer is never thrown away
+/// after the radio did the work.
+const PROVIDER_TIMEOUT_S: u64 = 15;
 
 /// The wiki's language for `language` (`en-GB` → `en`).
 fn wiki(language: &str) -> String {
@@ -80,6 +87,7 @@ fn summary_request(language: &str, word: &str, reply: Id) -> HttpRequest {
     HttpRequest::get(&summary_url(language, word), reply)
         .header("User-Agent", "PaperPaw/0.1 (e-reader)")
         .header("Accept", "application/json")
+        .max_body(MAX_BODY)
 }
 
 /// The summary in `reply`, with the article's title; else why there is
@@ -113,7 +121,9 @@ fn provide(env: &Env<'_>, query: &LookupQuery) -> LookupAnswer {
         .with(params::WORD, query.word.clone())
         .with(params::LANGUAGE, language.clone())
         .with(REPLY, query.reply.as_str().to_string());
-    let request = summary_request(&language, &query.word, PROVIDED.id().clone()).with(context);
+    let request = summary_request(&language, &query.word, PROVIDED.id().clone())
+        .with(context)
+        .timeout(core::time::Duration::from_secs(PROVIDER_TIMEOUT_S));
     LookupAnswer::Pending(alloc::vec![Command::Http(request)])
 }
 
@@ -195,8 +205,18 @@ impl Summary {
             top: 0,
             asked: false,
         };
-        let loading = env.i18n.tr("wikipedia.loading").to_string();
-        summary.set_text(env, loading);
+        // The summary given (by the dictionary's panel, which has it):
+        // not fetched again.
+        match params.get(params::TEXT).filter(|t| !t.trim().is_empty()) {
+            Some(text) => {
+                summary.asked = true;
+                summary.set_text(env, text.to_string());
+            }
+            None => {
+                let loading = env.i18n.tr("wikipedia.loading").to_string();
+                summary.set_text(env, loading);
+            }
+        }
         summary
     }
 
