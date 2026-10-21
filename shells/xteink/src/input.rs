@@ -25,7 +25,7 @@ use esp_hal::handler;
 use esp_hal::time::Duration;
 use esp_hal::timer::PeriodicTimer;
 use paperpaw_x4::buttons::Debouncer;
-use paperpaw_x4::changes::Queue;
+use paperpaw_x4::changes::{Finger, Queue, Reading};
 
 use crate::board::Keys;
 
@@ -34,7 +34,7 @@ const SAMPLE_MS: u64 = 5;
 /// How often the battery is read at most.
 const BATTERY_MS: u64 = 1000;
 /// Presses and releases waiting; more are dropped. A finger's moves
-/// while the last one waits take its place ([`Queue::push`]).
+/// while the last one waits take its place (see [`Queue::push`]).
 const QUEUE: usize = 32;
 
 /// A finger on the touch screen, on the upright screen: down (with where
@@ -140,7 +140,7 @@ impl Sampler {
         LEVELS.store(levels, Ordering::Relaxed);
         let queue = &mut self.queue;
         let mut push = |change: Change| {
-            queue.push(change, moved_again);
+            queue.push(change);
         };
         self.debouncer.update(reading, now, &mut |name, down| {
             push(Change::Button(name, down, now));
@@ -153,16 +153,15 @@ impl Sampler {
     }
 }
 
-/// Whether `change` is the finger moved again after `last`, which still
-/// waits: it takes its place.
-fn moved_again(last: &Change, change: &Change) -> bool {
-    matches!(
-        (last, change),
-        (
-            Change::Touch(Touch::Move(..), _),
-            Change::Touch(Touch::Move(..), _)
-        )
-    )
+impl Reading for Change {
+    fn finger(&self) -> Option<Finger> {
+        match self {
+            Change::Touch(Touch::Down(x, y, _), _) => Some(Finger::Down(*x, *y)),
+            Change::Touch(Touch::Move(x, y), _) => Some(Finger::Move(*x, *y)),
+            Change::Touch(Touch::Up(..), _) => Some(Finger::Up),
+            Change::Touch(Touch::Home(_), _) | Change::Button(..) => None,
+        }
+    }
 }
 
 /// A finger moved by the remote control (`drag`), read as the touch
@@ -173,9 +172,9 @@ fn moved_again(last: &Change, change: &Change) -> bool {
 struct Drag {
     from: (u16, u16),
     to: (u16, u16),
-    steps: u16,
+    steps: u32,
     ms: u16,
-    step: u16,
+    step: u32,
     due: u64,
 }
 
@@ -189,7 +188,7 @@ pub fn drag(from: (u16, u16), to: (u16, u16), steps: u16, ms: u16) {
     let drag = Drag {
         from,
         to,
-        steps,
+        steps: u32::from(steps),
         ms,
         step: 0,
         due: millis(),
@@ -204,12 +203,15 @@ fn dragged(now: u64) -> Option<Touch> {
         let cell = DRAG.borrow(cs);
         let mut drag = cell.get().filter(|d| d.due <= now)?;
         let along = |a: u16, b: u16| {
-            let (a, b, n, i) = (i32::from(a), i32::from(b), i32::from(drag.steps), i32::from(drag.step));
+            let (a, b) = (i64::from(a), i64::from(b));
+            let (n, i) = (i64::from(drag.steps), i64::from(drag.step));
             (a + (b - a) * i / n) as u16
         };
         let touch = match drag.step {
             0 => Touch::Down(drag.from.0, drag.from.1, drag.from),
-            step if step <= drag.steps => Touch::Move(along(drag.from.0, drag.to.0), along(drag.from.1, drag.to.1)),
+            step if step <= drag.steps => {
+                Touch::Move(along(drag.from.0, drag.to.0), along(drag.from.1, drag.to.1))
+            }
             _ => Touch::Up(drag.to.0, drag.to.1),
         };
         drag.step += 1;

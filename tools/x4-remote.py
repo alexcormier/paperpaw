@@ -504,7 +504,10 @@ def run(x4, step):
             x4.swipe(int(x1), int(y1), int(x2), int(y2), int(ms[0]) if ms else 300)
         case ["drag", x1, y1, x2, y2, steps, ms]:
             x4.ask(f"drag {x1} {y1} {x2} {y2} {steps} {ms}", "OK")
-            time.sleep(int(steps) * int(ms) / 1000)
+            # Down, the moves and the lift, each read on the interrupt's
+            # beat (5 ms) once due, and a little more.
+            beat = -(-int(ms) // 5) * 5
+            time.sleep(((int(steps) + 1) * beat + 100) / 1000)
         case ["tap-label", *_]:
             found = [p for p in x4.parts() if rest in p[6]]
             if not found:

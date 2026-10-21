@@ -5,6 +5,25 @@
 //! its place (see [`Queue::push`]), so the loop goes on from where the
 //! finger is, not through every place it was, and the ring does not fill
 //! up and drop the lift that ends it.
+//!
+//! Where the finger went farthest from where it came down stays: a move
+//! back towards that place does not take the place of the farthest one
+//! waiting, so that a finger that went past the distance a tap allows
+//! and came back is not taken for a tap (or, held, a long press).
+
+/// What a finger does, as far as merging its moves goes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Finger {
+    Down(u16, u16),
+    Move(u16, u16),
+    Up,
+}
+
+/// A change waiting: a press or release, or what a finger does.
+pub trait Reading: Copy {
+    /// What a finger does, `None` for anything else (a button).
+    fn finger(&self) -> Option<Finger>;
+}
 
 /// Changes waiting, oldest first, at most `N`.
 #[derive(Debug)]
@@ -13,35 +32,58 @@ pub struct Queue<T, const N: usize> {
     /// Where the oldest waits, and how many do.
     head: usize,
     len: usize,
+    /// Where the finger came down, and how far from there it went (the
+    /// square of the distance), of the changes pushed.
+    down: Option<(u16, u16)>,
+    farthest: u32,
 }
 
-impl<T: Copy, const N: usize> Default for Queue<T, N> {
+impl<T: Reading, const N: usize> Default for Queue<T, N> {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl<T: Copy, const N: usize> Queue<T, N> {
+impl<T: Reading, const N: usize> Queue<T, N> {
     pub const fn new() -> Self {
         Self {
             items: [None; N],
             head: 0,
             len: 0,
+            down: None,
+            farthest: 0,
         }
     }
 
-    /// Adds `change`, or puts it in the place of the last one waiting
-    /// where `replaces(last, change)` says it stands for it (a finger
-    /// moved again). `false` where it was dropped, all places taken.
-    pub fn push(&mut self, change: T, replaces: impl Fn(&T, &T) -> bool) -> bool {
-        if self.len > 0 {
-            let last = (self.head + self.len - 1) % N;
-            if let Some(waiting) = &mut self.items[last]
-                && replaces(waiting, &change)
-            {
-                *waiting = change;
-                return true;
+    /// Adds `change`; a finger's move takes the place of the move that
+    /// waits last, unless that one is where the finger went farthest
+    /// and this one comes back. `false` where it was dropped, all places
+    /// taken.
+    pub fn push(&mut self, change: T) -> bool {
+        let finger = change.finger();
+        match finger {
+            Some(Finger::Down(x, y)) => {
+                self.down = Some((x, y));
+                self.farthest = 0;
             }
+            Some(Finger::Up) => self.down = None,
+            _ => {}
+        }
+        if let Some(Finger::Move(x, y)) = finger {
+            let away = self.away(x, y);
+            let last = (self.head + self.len + N - 1) % N;
+            let waiting = (self.len > 0)
+                .then(|| self.items[last].and_then(|c| c.finger()))
+                .flatten();
+            if let Some(Finger::Move(wx, wy)) = waiting {
+                let theirs = self.away(wx, wy);
+                if !(theirs == self.farthest && away < theirs) {
+                    self.items[last] = Some(change);
+                    self.farthest = self.farthest.max(away);
+                    return true;
+                }
+            }
+            self.farthest = self.farthest.max(away);
         }
         if self.len == N {
             return false;
@@ -49,6 +91,15 @@ impl<T: Copy, const N: usize> Queue<T, N> {
         self.items[(self.head + self.len) % N] = Some(change);
         self.len += 1;
         true
+    }
+
+    /// How far `(x, y)` is from where the finger came down (squared).
+    fn away(&self, x: u16, y: u16) -> u32 {
+        let Some((dx, dy)) = self.down else {
+            return 0;
+        };
+        let (a, b) = (u32::from(x.abs_diff(dx)), u32::from(y.abs_diff(dy)));
+        a * a + b * b
     }
 
     /// The oldest change waiting.
@@ -79,61 +130,107 @@ impl<T: Copy, const N: usize> Queue<T, N> {
 
 #[cfg(test)]
 mod tests {
+    use alloc::vec::Vec;
+
     use super::*;
 
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-    enum Finger {
-        Down(u16),
-        Move(u16),
-        Up(u16),
+    enum Change {
+        Button(bool),
+        Finger(Finger),
     }
 
-    fn moved_again(last: &Finger, change: &Finger) -> bool {
-        matches!((last, change), (Finger::Move(_), Finger::Move(_)))
+    impl Reading for Change {
+        fn finger(&self) -> Option<Finger> {
+            match self {
+                Change::Finger(f) => Some(*f),
+                Change::Button(_) => None,
+            }
+        }
     }
 
-    fn drained<const N: usize>(queue: &mut Queue<Finger, N>) -> alloc::vec::Vec<Finger> {
+    use Change::Finger as F;
+    use Finger::{Down, Move, Up};
+
+    fn drained<const N: usize>(queue: &mut Queue<Change, N>) -> Vec<Change> {
         core::iter::from_fn(|| queue.pop()).collect()
     }
 
     #[test]
     fn moves_waiting_are_one_where_the_finger_is() {
-        let mut queue = Queue::<Finger, 4>::new();
-        assert!(queue.push(Finger::Down(0), moved_again));
+        let mut queue = Queue::<Change, 4>::new();
+        assert!(queue.push(F(Down(0, 0))));
         for at in 1..=40 {
-            assert!(queue.push(Finger::Move(at), moved_again));
+            assert!(queue.push(F(Move(at, 0))));
         }
-        assert!(queue.push(Finger::Up(40), moved_again));
+        assert!(queue.push(F(Up)));
+        assert_eq!(drained(&mut queue), [F(Down(0, 0)), F(Move(40, 0)), F(Up)]);
+    }
+
+    #[test]
+    fn where_the_finger_went_farthest_stays() {
+        let mut queue = Queue::<Change, 8>::new();
+        queue.push(F(Down(100, 100)));
+        // Out past a tap's distance and back while the loop was busy.
+        for at in [104, 110, 130, 120, 104, 101] {
+            queue.push(F(Move(at, 100)));
+        }
+        queue.push(F(Up));
         assert_eq!(
             drained(&mut queue),
-            [Finger::Down(0), Finger::Move(40), Finger::Up(40)]
+            [
+                F(Down(100, 100)),
+                F(Move(130, 100)),
+                F(Move(101, 100)),
+                F(Up)
+            ]
+        );
+    }
+
+    #[test]
+    fn farther_again_the_moves_are_one_again() {
+        let mut queue = Queue::<Change, 8>::new();
+        queue.push(F(Down(0, 0)));
+        for at in [10, 5, 20, 30, 25, 40] {
+            queue.push(F(Move(at, 0)));
+        }
+        // 10 farthest, then 5 back; 20 farther (takes 5's place) and
+        // 30; 25 back from 30; 40 farther than all, in 25's place.
+        assert_eq!(
+            drained(&mut queue),
+            [
+                F(Down(0, 0)),
+                F(Move(10, 0)),
+                F(Move(30, 0)),
+                F(Move(40, 0))
+            ]
         );
     }
 
     #[test]
     fn a_move_taken_already_is_not_replaced() {
-        let mut queue = Queue::<Finger, 4>::new();
-        queue.push(Finger::Down(0), moved_again);
-        queue.push(Finger::Move(1), moved_again);
-        assert_eq!(queue.pop(), Some(Finger::Down(0)));
-        assert_eq!(queue.pop(), Some(Finger::Move(1)));
-        queue.push(Finger::Move(2), moved_again);
-        queue.push(Finger::Move(3), moved_again);
-        assert_eq!(drained(&mut queue), [Finger::Move(3)]);
+        let mut queue = Queue::<Change, 4>::new();
+        queue.push(F(Down(0, 0)));
+        queue.push(F(Move(1, 0)));
+        assert_eq!(queue.pop(), Some(F(Down(0, 0))));
+        assert_eq!(queue.pop(), Some(F(Move(1, 0))));
+        queue.push(F(Move(2, 0)));
+        queue.push(F(Move(3, 0)));
+        assert_eq!(drained(&mut queue), [F(Move(3, 0))]);
     }
 
     #[test]
     fn full_it_drops_what_comes_and_keeps_its_order() {
-        let mut queue = Queue::<Finger, 2>::new();
-        assert!(queue.push(Finger::Down(1), moved_again));
-        assert!(queue.push(Finger::Up(1), moved_again));
-        assert!(!queue.push(Finger::Down(2), moved_again));
+        let mut queue = Queue::<Change, 2>::new();
+        assert!(queue.push(Change::Button(true)));
+        assert!(queue.push(Change::Button(false)));
+        assert!(!queue.push(F(Down(1, 1))));
         assert_eq!(queue.len(), 2);
-        assert_eq!(queue.pop(), Some(Finger::Down(1)));
+        assert_eq!(queue.pop(), Some(Change::Button(true)));
         // Around the ring's end.
-        assert!(queue.push(Finger::Down(3), moved_again));
-        assert!(!queue.push(Finger::Move(3), moved_again), "full");
-        assert_eq!(drained(&mut queue), [Finger::Up(1), Finger::Down(3)]);
+        assert!(queue.push(F(Down(3, 3))));
+        assert!(!queue.push(F(Move(3, 4))), "full");
+        assert_eq!(drained(&mut queue), [Change::Button(false), F(Down(3, 3))]);
         assert!(queue.is_empty());
     }
 }

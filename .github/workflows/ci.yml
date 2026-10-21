@@ -23,6 +23,8 @@ jobs:
           components: rustfmt, clippy
       - uses: Swatinem/rust-cache@v2
       - run: cargo fmt --all --check
+      # The firmware is a crate of its own, outside the workspace.
+      - run: rustfmt --edition 2024 --check shells/xteink/src/main.rs
       - run: cargo clippy --workspace --all-targets
       - run: cargo test --workspace
       - name: API documentation without broken links
