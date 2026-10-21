@@ -20,11 +20,11 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{menus, params, slots};
+use paperpaw_sdk::builtin::menus;
 use paperpaw_sdk::logo;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, Version,
+    ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar,
+    Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("about");
@@ -133,10 +133,7 @@ impl Plugin for About {
                 let path = page_path();
                 let _ = env.storage.create_dir(&Env::plugin_dir(PLUGIN.as_str()));
                 if env.storage.write(&path, page(env).as_bytes()).is_ok() {
-                    out.push(Command::OpenSlot(
-                        slots::READER,
-                        Params::new().with(params::PATH, path),
-                    ));
+                    out.push(paperpaw_sdk::readers::open(path));
                 }
             },
         ))?;

@@ -1035,6 +1035,8 @@ struct Shared {
     /// Plugins' voices (the kernel's alone: plugins speak with
     /// `Command::Speak`).
     voices: paperpaw_sdk::voices::Voices,
+    /// The reading apps, from every plugin.
+    readers: paperpaw_sdk::readers::Readers,
     /// Filters of every input and of every refresh, from every plugin.
     input_filters: paperpaw_sdk::filters::InputFilters,
     refresh_filters: paperpaw_sdk::filters::RefreshFilters,
@@ -1120,6 +1122,7 @@ impl Shared {
             decorators: &self.decorators,
             page_layers: &self.page_layers,
             lookup: &self.lookup,
+            readers: &self.readers,
             stylesheets: &self.stylesheets,
             book_data: &self.book_data,
             caps: self.caps,

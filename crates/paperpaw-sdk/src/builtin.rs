@@ -580,6 +580,16 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// The reading app of a book or a folder is to be chosen
+        /// ([`READING_APP_WANTED`], see
+        /// [`readers::ask`](crate::readers::ask)).
+        pub struct ReadingAppWanted {
+            pub path: String,
+            pub folder: bool,
+        }
+    }
+
+    crate::event_data! {
         /// A document that was not ready is now ([`DOCUMENT_READY`]).
         pub struct DocumentReady {
             pub path: String,
@@ -689,6 +699,9 @@ pub mod events {
     /// still coming in) is there now ([`DocumentReady`]): its format's
     /// plugin says so, readers waiting for it open it.
     pub const DOCUMENT_READY: Event<DocumentReady> = Event::new("core.document-ready");
+    /// The reading app of a book or a folder is to be chosen
+    /// ([`ReadingAppWanted`]): the kernel lists the readers that fit.
+    pub const READING_APP_WANTED: Event<ReadingAppWanted> = Event::new("core.reading-app-wanted");
     /// Skimming asks the reader to go somewhere in the book ([`Skim`]).
     pub const SKIM: Event<Skim> = Event::new("core.skim");
     /// Where the book being skimmed is now ([`Skimmed`]): the reader tells
@@ -806,6 +819,9 @@ pub mod screens {
     pub const STATUS_ITEMS: Id = Id::new_static("core.status-items");
     /// Chooses the status lines a setting lists.
     pub const STATUS_LINES: Id = Id::new_static("core.status-lines");
+    /// The list of reading apps to choose from (see
+    /// [`readers::ask`](crate::readers::ask)).
+    pub const READING_APPS: Id = Id::new_static("core.reading-apps");
 }
 
 /// Global settings.
@@ -841,6 +857,14 @@ pub mod settings {
     /// Say what the buttons move to (a row, a button), where the device
     /// speaks: for using PaperPaw without seeing the screen.
     pub const SPEAK_FOCUS: Setting<bool> = Setting::new("core.speak-focus");
+    /// The reading app books open with where nothing else is chosen
+    /// (see [`readers`](crate::readers)): [`READING_APP_DEFAULT`] (the
+    /// screen bound to [`slots::READER`](super::slots::READER)) or a
+    /// reader's id. Each format has one of its own too
+    /// ([`readers::format_setting`](crate::readers::format_setting)).
+    pub const READING_APP: Setting<Text> = Setting::new("core.reading-app");
+    /// [`READING_APP`] and a format's: as the defaults give.
+    pub const READING_APP_DEFAULT: &str = "core.reading-app.default";
     /// The voice that speaks text aloud: [`VOICE_SYSTEM`] or a plugin's
     /// (see [`voices`](crate::voices)).
     pub const VOICE: Setting<Text> = Setting::new("core.voice");

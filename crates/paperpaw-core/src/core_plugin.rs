@@ -38,6 +38,7 @@ impl Plugin for CorePlugin {
         register_moving(r)?;
         register_device_actions(r)?;
         register_library(r)?;
+        register_reading_apps(r)?;
         register_screens(r)?;
         register_menus(r)?;
         register_general_settings(r)?;
@@ -85,6 +86,75 @@ static POWER_MODES: [paperpaw_sdk::presets::Preset; 3] = [
         "power.level = offline\npower.stretch = 4\ncore.sleep-after <= 5\nx4.frontlight <= 30",
     ),
 ];
+
+/// The reading app chosen from the list: for a book (`b:` and its path)
+/// or a folder (`f:`).
+const READING_APP_PICKED: paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked> =
+    paperpaw_sdk::event::Event::new("core.reading-app-picked");
+
+/// Choosing the reading app of a book or a folder (see
+/// `paperpaw_sdk::readers::ask`): the readers that fit are listed; the
+/// one chosen is kept, and a book opens with it; *Standard* forgets the
+/// choice.
+fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
+    use paperpaw_sdk::readers::{self, Choice};
+    r.add_screen(ScreenSpec::new(
+        screens::READING_APPS,
+        "core.setting.reading-app",
+        Box::new(|env, params| Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))),
+    ))?;
+    r.on(events::READING_APP_WANTED, |env, wanted, out| {
+        let path = wanted.path.trim_matches('/');
+        let name = paperpaw_sdk::files::name(path);
+        let (mut options, key, kind) = match wanted.folder {
+            true => (
+                env.readers
+                    .iter()
+                    .map(|r| r.id.as_str())
+                    .collect::<Vec<_>>(),
+                "core.reading-app.for-folder",
+                "f",
+            ),
+            false => (
+                env.readers
+                    .for_book(env, path)
+                    .into_iter()
+                    .map(|r| r.id.as_str())
+                    .collect(),
+                "core.reading-app.open-with",
+                "b",
+            ),
+        };
+        options.push(settings::READING_APP_DEFAULT);
+        let title = env
+            .i18n
+            .format(key, &[("name", paperpaw_sdk::Arg::Str(name))]);
+        out.push(paperpaw_sdk::ui::choice::open(
+            screens::READING_APPS,
+            &READING_APP_PICKED,
+            &title,
+            &alloc::format!("{kind}:{path}"),
+            "",
+            &options,
+        ));
+    })?;
+    r.on(READING_APP_PICKED, |env, picked, out| {
+        let Some((kind, path)) = picked.path.split_once(':') else {
+            return;
+        };
+        let reader = Id::parse(&picked.option)
+            .ok()
+            .filter(|id| env.readers.get(id.as_str()).is_some());
+        let choice = match kind {
+            "f" => Choice::Folder(path),
+            _ => Choice::Book(path),
+        };
+        let _ = readers::remember(env.storage, choice, reader.as_ref());
+        if kind == "b" {
+            out.push(readers::open(path));
+        }
+    })
+}
 
 /// The actions screens give a meaning of their own (with their hints in
 /// the row), and how a screen takes gestures.
@@ -329,6 +399,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     // The notes of books are the kernel's.
     r.add_book_data(paperpaw_sdk::data_path!("annotations"), "")?;
     r.add_book_data(paperpaw_sdk::positions::DIR, "")?;
+    r.add_book_data(paperpaw_sdk::readers::DIR, "")?;
     r.add_book_data(alloc::format!("{}/books", library::DIR), "")?;
     r.add_book_data(alloc::format!("{}/covers", library::DIR), "")?;
     // In the device's part of the settings, before *About*.
@@ -517,6 +588,9 @@ static MARGINS_ENDS: SettingExtra = SettingExtra::new()
     .slider()
     .follows(settings::MARGIN.static_str());
 static IN_PAGE: SettingExtra = SettingExtra::new().section(setting_sections::PAGE);
+/// The reading apps' part of the reading settings: the default one and
+/// one for each format (registered once the formats are known).
+static IN_APPS: SettingExtra = SettingExtra::new().section("core.section.reading-apps");
 static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(setting_sections::BEHAVIOUR);
 
 /// The language, night mode, speech and the edges for swipes.
@@ -898,7 +972,7 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The reading font, and whether a book's settings are its own. The
 /// status lines' font: the menus', the book's or one of its own (the
 /// families are offered once all fonts are known).
-static READING: [SettingSpec; 18] = [
+static READING: [SettingSpec; 19] = [
     SettingSpec::fixed_choice(
         settings::STATUS_FONT.static_str(),
         "core.setting.status-font",
@@ -1053,6 +1127,15 @@ static READING: [SettingSpec; 18] = [
     .scoped()
     .with_extra(&LINES_KEPT)
     .described("core.setting.orphans.help"),
+    SettingSpec::fixed_choice(
+        settings::READING_APP.static_str(),
+        "core.setting.reading-app",
+        &[settings::READING_APP_DEFAULT],
+        settings::READING_APP_DEFAULT,
+        groups::READING,
+    )
+    .with_extra(&IN_APPS)
+    .described("core.setting.reading-app.help"),
     SettingSpec::fixed_choice(
         settings::FOOTNOTES.static_str(),
         "core.setting.footnotes",

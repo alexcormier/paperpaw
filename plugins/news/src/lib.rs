@@ -23,7 +23,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ask;
-use paperpaw_sdk::builtin::{actions, groups, menus, params, slots};
+use paperpaw_sdk::builtin::{actions, groups, menus};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::setting::Setting;
@@ -502,10 +502,7 @@ impl FeedsScreen {
             return;
         };
         if let Some(book) = feed.found_book(env.storage, &folder(&env)) {
-            cx.command(Command::OpenSlot(
-                slots::READER,
-                Params::new().with(params::PATH, book),
-            ));
+            cx.command(paperpaw_sdk::readers::open(book));
         } else {
             fetch_into(&env, index, false, cx);
         }

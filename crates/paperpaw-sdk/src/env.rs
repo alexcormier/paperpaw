@@ -96,6 +96,9 @@ pub struct Env<'a> {
     /// Where words are looked up, from every plugin (see
     /// [`lookup`](crate::lookup)).
     pub lookup: &'a crate::lookup::LookupProviders,
+    /// The reading apps, from every plugin (see
+    /// [`readers`](crate::readers)).
+    pub readers: &'a crate::readers::Readers,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
@@ -208,6 +211,9 @@ pub struct EnvParts<'a> {
     /// Where words are looked up, from every plugin (see
     /// [`lookup`](crate::lookup)).
     pub lookup: &'a crate::lookup::LookupProviders,
+    /// The reading apps, from every plugin (see
+    /// [`readers`](crate::readers)).
+    pub readers: &'a crate::readers::Readers,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
@@ -300,6 +306,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             decorators: p.decorators,
             page_layers: p.page_layers,
             lookup: p.lookup,
+            readers: p.readers,
             stylesheets: p.stylesheets,
             book_data: p.book_data,
             widgets: p.widgets,

@@ -169,6 +169,18 @@ impl Kernel {
             Command::OpenInSlot(slot, screen, params) => {
                 self.open_slot_command(slot, Some(screen), params);
             }
+            Command::OpenBook(path) => {
+                let env = self.shared.env(self.now);
+                match paperpaw_sdk::readers::resolve(&env, &path) {
+                    // The slot's own screen, by name: in place of another
+                    // reading app the slot may show now.
+                    Command::OpenSlot(slot, params) => {
+                        let screen = self.registry.resolve_slot(slot.as_str()).cloned();
+                        self.open_slot_command(slot, screen, params);
+                    }
+                    command => self.apply(command),
+                }
+            }
             Command::Close(key) => self.close_screen(key),
             Command::Replace(screen, params) => self.replace(screen, &params),
             Command::BackTo(id) => self.back_to(&id),

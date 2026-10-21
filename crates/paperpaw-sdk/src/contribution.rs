@@ -149,6 +149,7 @@ pub enum Contribution {
     PageFrame(Box<crate::layers::PageFrameSpec>),
     LookupProvider(Box<crate::lookup::LookupProviderSpec>),
     Voice(Box<crate::voices::VoiceSpec>),
+    Reader(crate::readers::ReaderSpec),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
     /// A job: work done in steps (see [`work`](crate::work)).
@@ -223,6 +224,7 @@ impl Contribution {
             Contribution::PageFrame(_) => "page-frame",
             Contribution::LookupProvider(_) => "lookup-provider",
             Contribution::Voice(_) => "voice",
+            Contribution::Reader(_) => "reader",
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
             Contribution::Work(_) => "work",
@@ -262,6 +264,7 @@ impl Contribution {
             Contribution::PageFrame(f) => &f.id,
             Contribution::LookupProvider(p) => &p.id,
             Contribution::Voice(v) => &v.id,
+            Contribution::Reader(r) => &r.id,
             Contribution::InputFilter(f) => &f.id,
             Contribution::RefreshFilter(f) => &f.id,
             Contribution::Work(w) => &w.id,
@@ -712,6 +715,13 @@ impl Registrar {
     /// [`voices`](crate::voices)).
     pub fn add_voice(&mut self, voice: crate::voices::VoiceSpec) -> Result<(), RegisterError> {
         self.add(Contribution::Voice(Box::new(voice)))
+    }
+
+    /// Adds a reading app: a screen of the plugin that shows books of
+    /// some formats, offered where books open (see
+    /// [`readers`](crate::readers)).
+    pub fn add_reader(&mut self, reader: crate::readers::ReaderSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Reader(reader))
     }
 
     /// Adds a filter of every input, before screens and key maps see it

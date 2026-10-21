@@ -343,6 +343,12 @@ pub enum Command {
     /// screen of slot `.0`: back to it in one step. Nothing where none is
     /// open.
     BackTo(Id),
+    /// Opens the book at `.0` with the reading app chosen for it, in
+    /// [`slots::READER`](crate::builtin::slots::READER): see
+    /// [`readers::open`](crate::readers::open), which makes it, and
+    /// [`readers::resolve`](crate::readers::resolve), which says what it
+    /// does.
+    OpenBook(String),
     /// Opens screen `.1` for slot `.0` with `.2` as [`Command::OpenSlot`]
     /// opens the slot's own: shown again where the slot is open with it
     /// and these params, else in place of what the slot shows (one

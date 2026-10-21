@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `readers`, reading apps. Any plugin registers a screen as a
+  reader of some formats (`Registrar::add_reader`, `ReaderSpec`); books
+  open through one call (`readers::open`, `Command::OpenBook`) in the
+  app chosen for the book, else its folder, else its format, else the
+  default one, else the screen of `slots::READER`. The library, the
+  file manager, the browser, OPDS, the home screen, widgets and the
+  other plugins open books so. The reading settings offer the default
+  app and one for each format (`settings::READING_APP`), where more than
+  one app reads it; the file manager offers *Open with* for a book and
+  *Reading app* for a folder (`readers::ask`), kept with the book or
+  the folder.
 - SDK: `menus::APPS` (`core.apps`), what there is to open besides the
   tools; the home screen's grid of tools shows it too.
 - Keyboard: other plugins add layouts through the point

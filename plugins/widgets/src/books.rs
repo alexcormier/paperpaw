@@ -32,14 +32,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use paperpaw_sdk::builtin::{events, params, slots};
+use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::library::{self, catalog};
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::widgets::{self, Align, Look, line_height};
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Env, FontHandle, Id, Params, Point, Rect, RegisterError,
-    Registrar, SettingSpec, Storage,
+    Arg, Canvas, Color, Command, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
+    SettingSpec, Storage,
 };
 
 pub(crate) use crate::{frame_height, today};
@@ -144,7 +144,7 @@ impl Book {
 
 /// Opens the book at `path` for reading.
 pub(crate) fn open(path: &str) -> Command {
-    Command::OpenSlot(slots::READER, Params::new().with(params::PATH, path))
+    paperpaw_sdk::readers::open(path)
 }
 
 /// The book being read: the one opened last that is still there.

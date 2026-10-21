@@ -344,6 +344,13 @@ impl Browser {
         let mut options = Vec::new();
         if !entry.is_dir && env.formats.supports_file(env.storage, &path) {
             options.push("open");
+            // Where more than one reading app reads it.
+            if env.readers.for_book(&env, &path).len() > 1 {
+                options.push("open-with");
+            }
+        }
+        if entry.is_dir && env.readers.len() > 1 {
+            options.push("reading-app");
         }
         options.extend(["rename", "move", "copy", "delete"]);
         cx.command(choice::open(
@@ -406,9 +413,12 @@ impl Browser {
         let env = *cx.env();
         let name = ops::name(path).to_string();
         match option {
-            "open" => cx.command(Command::OpenSlot(
-                slots::READER,
-                Params::new().with(params::PATH, path.to_string()),
+            "open" => cx.command(paperpaw_sdk::readers::open(path)),
+            "open-with" => cx.command(paperpaw_sdk::readers::ask(
+                paperpaw_sdk::readers::Choice::Book(path),
+            )),
+            "reading-app" => cx.command(paperpaw_sdk::readers::ask(
+                paperpaw_sdk::readers::Choice::Folder(path),
             )),
             "rename" => cx.command(
                 ask::text(env.i18n.tr("file-manager.rename"), &RENAMED)
