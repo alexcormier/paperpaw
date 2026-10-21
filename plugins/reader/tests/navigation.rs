@@ -514,7 +514,7 @@ fn the_status_lines_switch_and_the_choice_is_kept() {
         [
             "reader.status-line.progress",
             "reader.status-line.empty",
-            "reader.status-line.items"
+            "core.status-line.items"
         ]
     );
     // The page stays as it is: the lines take the same room.

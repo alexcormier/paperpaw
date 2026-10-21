@@ -11,7 +11,7 @@ use crate::builtin::{actions, params, slots};
 use crate::event::Event;
 use crate::ui::choice::Picked;
 use crate::ui::{self, UiStyle};
-use crate::widgets::Widget;
+use crate::widgets::{SizeClass, Widget, WidgetContext, WidgetInput};
 use crate::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Params, Point,
     PointerEvent, PointerPhase, Rect, RefreshMode,
@@ -19,9 +19,6 @@ use crate::{
 
 /// Translation keys of an item's options: this, then the option.
 const OPTIONS: &str = "core.grid.";
-/// Placements of a widget tried at most for one of its own: more than a
-/// grid has cells, on many pages.
-const PLACEMENTS: u32 = 256;
 
 /// What a [`GridView`] did with an input, for its screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -39,7 +36,16 @@ pub enum GridResponse {
     /// One of the screen's own buttons was chosen (see
     /// [`GridView::layout`]).
     Button(u16),
+    /// One of the screen's own options for an item was chosen (see
+    /// [`GridView::set_options`]): the item, and the option's translation
+    /// key.
+    Option { item: Item, option: String },
 }
+
+/// Whether an item may go to the cells it is dropped on, among the items
+/// as they are (see [`GridView::set_drop_check`]); `false` keeps it where
+/// it was.
+pub type DropCheck = fn(&Env<'_>, &[Item], &Item, Cells) -> bool;
 
 impl GridResponse {
     /// Whether the input was used.
@@ -104,7 +110,8 @@ struct Edit {
 /// What a target does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Target {
-    Run(Command),
+    /// What a tap runs, and a long press where it says (boxed: rare).
+    Run(Command, Option<Box<Command>>),
     /// An item, when editing: its index.
     Item(usize),
     /// One of the screen's own buttons.
@@ -130,8 +137,19 @@ pub struct GridView {
     buttons: Vec<(Rect, u16)>,
     /// Where taps and the buttons' focus go, in order.
     targets: Vec<(Rect, Target)>,
-    /// Where taps alone go ([`WidgetTarget::touch`](crate::widgets::WidgetTarget::touch)).
-    touch: Vec<(Rect, Command)>,
+    /// Where taps alone go
+    /// ([`WidgetTarget::touch`](crate::widgets::WidgetTarget::touch)), and
+    /// what a long press there runs, where it says.
+    touch: Vec<(Rect, Command, Option<Box<Command>>)>,
+    /// The item each target is of (none for the screen's own buttons).
+    owners: Vec<Option<usize>>,
+    /// The screen showing it, told to its widgets
+    /// ([`WidgetContext::host`](crate::widgets::WidgetContext::host)).
+    host: Option<Id>,
+    /// The screen's own options for items, as translation keys.
+    extra: Vec<alloc::borrow::Cow<'static, str>>,
+    /// Whether an item may go where it is dropped.
+    drop_check: Option<DropCheck>,
     /// What each target is called, as told to screen readers while it
     /// has the focus: its item's name; empty for the screen's own
     /// buttons, which tell theirs.
@@ -169,6 +187,10 @@ impl GridView {
             buttons: Vec::new(),
             targets: Vec::new(),
             touch: Vec::new(),
+            owners: Vec::new(),
+            host: None,
+            extra: Vec::new(),
+            drop_check: None,
             names: Vec::new(),
             focus: 0,
             focus_shown: !env.device.input.touch,
@@ -208,9 +230,12 @@ impl GridView {
             .map(|(index, cells)| {
                 let item = items[index].clone();
                 let area = geometry.rect(cells);
+                let host = self.host.as_ref().map(Id::as_str);
                 let widget = match &item.what {
                     What::Widget(id) => env.widgets.make(id, env).map(|mut widget| {
                         widget.place(env, area);
+                        let context = WidgetContext::new(SizeClass::of(env, area)).host(host);
+                        widget.context(env, &context);
                         widget
                     }),
                     What::Tool(_) => None,
@@ -232,6 +257,7 @@ impl GridView {
     fn target(&mut self, env: &Env<'_>) {
         self.targets.clear();
         self.touch.clear();
+        self.owners.clear();
         self.names.clear();
         let editing = self.edit.is_some();
         for (index, shown) in self.items.iter().enumerate() {
@@ -243,26 +269,32 @@ impl GridView {
                     (What::Widget(_), Some(widget)) => {
                         for target in widget.targets(env, shown.area) {
                             if target.touch {
-                                self.touch.push((target.area, target.command));
+                                let hold = target.hold.map(Box::new);
+                                self.touch.push((target.area, target.command, hold));
                             } else {
-                                self.targets
-                                    .push((target.area, Target::Run(target.command)));
+                                self.targets.push((
+                                    target.area,
+                                    Target::Run(target.command, target.hold.map(Box::new)),
+                                ));
                             }
                         }
                     }
                     (What::Widget(_), None) => {}
-                    (What::Tool(action), _) => self
-                        .targets
-                        .push((shown.area, Target::Run(Command::RunAction(action.clone())))),
+                    (What::Tool(action), _) => self.targets.push((
+                        shown.area,
+                        Target::Run(Command::RunAction(action.clone()), None),
+                    )),
                 }
             }
             let name = shown.item.what.title(env);
             let added = self.targets.len() - before;
             self.names.extend(core::iter::repeat_n(name, added));
+            self.owners.extend(core::iter::repeat_n(Some(index), added));
         }
         for (area, button) in &self.buttons {
             self.targets.push((*area, Target::Button(*button)));
             self.names.push(String::new());
+            self.owners.push(None);
         }
         self.focus = self.focus.min(self.targets.len().saturating_sub(1));
     }
@@ -389,7 +421,7 @@ impl GridView {
         let focused_tool = self
             .targets
             .get(self.focus)
-            .filter(|(_, target)| self.focus_shown && matches!(target, Target::Run(_)))
+            .filter(|(_, target)| self.focus_shown && matches!(target, Target::Run(..)))
             .map(|(area, _)| *area)
             .filter(|area| {
                 self.items
@@ -436,7 +468,8 @@ impl GridView {
         }) = &self.edit
             && drag.moved
         {
-            let width = if self.free(drag.index, drag.to) {
+            let width = if self.free(drag.index, drag.to) && self.allowed(env, drag.index, drag.to)
+            {
                 self.style.line * 4
             } else {
                 self.style.line
@@ -454,7 +487,19 @@ impl GridView {
             let name = self.names.get(self.focus).map_or("", String::as_str);
             canvas.describe(crate::semantics::Role::Button, name, *area, true, None);
         }
+        // The widget's own focus where it draws one.
+        let own = self.focus_shown
+            && self
+                .owners
+                .get(self.focus)
+                .copied()
+                .flatten()
+                .and_then(|item| self.items.get(item))
+                .and_then(|shown| shown.widget.as_ref())
+                .zip(self.targets.get(self.focus))
+                .is_some_and(|(widget, (area, _))| widget.draw_focus(canvas, env, *area));
         if self.focus_shown
+            && !own
             && let Some((area, _)) = self.targets.get(self.focus)
         {
             // Round as the style's corners, a little rounder outside.
@@ -484,21 +529,164 @@ impl GridView {
         Hint::Default
     }
 
+    /// What holding Select runs on the focused target, where it has a
+    /// long press of its own and the focus shows.
+    fn focused_hold(&self) -> Option<Command> {
+        if !self.focus_shown || self.edit.is_some() {
+            return None;
+        }
+        match self.targets.get(self.focus) {
+            Some((_, Target::Run(_, Some(hold)))) => Some((**hold).clone()),
+            _ => None,
+        }
+    }
+
     /// The area around a target that its focus frame takes.
     fn around(&self, area: Rect) -> Rect {
         area.grow((self.style.line * 4) as u16)
     }
 
-    /// Moves the focus to `to`, redrawing both targets.
+    /// Moves the focus to `to`, redrawing both targets; their widgets are
+    /// told ([`WidgetInput::Focus`]).
     fn focus_on(&mut self, to: usize, cx: &mut Cx<'_, '_>) {
         if let Some((area, _)) = self.targets.get(self.focus) {
             cx.request_redraw_area(self.around(*area));
         }
+        let from = self.focus;
         self.focus = to;
         if let Some((area, _)) = self.targets.get(to) {
             cx.request_redraw_area(self.around(*area));
         }
+        let owner = |at: usize| self.owners.get(at).copied().flatten();
+        let (left, came) = (owner(from), owner(to));
+        if from != to {
+            if let Some(item) = left {
+                self.tell(item, WidgetInput::Focus(None), cx);
+            }
+            if let Some(item) = came {
+                let area = self.targets.get(to).map(|(area, _)| *area);
+                self.tell(item, WidgetInput::Focus(area), cx);
+            }
+        }
         cx.request_refresh(RefreshMode::Fast);
+    }
+
+    /// `cells` for item `index` as its widget's hint keeps them
+    /// ([`CellsHint::keep`](crate::widgets::CellsHint::keep)), the side
+    /// that changed `wide` or high.
+    fn kept(&self, index: usize, cells: Cells, wide: bool, env: &Env<'_>) -> Cells {
+        let hint = self
+            .items
+            .get(index)
+            .and_then(|shown| match &shown.item.what {
+                What::Widget(id) => env.widgets.cells(id),
+                What::Tool(_) => None,
+            });
+        match hint {
+            Some(hint) => hint.keep(cells, wide),
+            None => cells,
+        }
+    }
+
+    /// Tells item `index`'s widget of `input`: `true` if it took it, then
+    /// drawn again, with what it asks.
+    fn tell(&mut self, index: usize, input: WidgetInput, cx: &mut Cx<'_, '_>) -> bool {
+        let env = *cx.env();
+        let Some(shown) = self.items.get_mut(index) else {
+            return false;
+        };
+        let Some(widget) = &mut shown.widget else {
+            return false;
+        };
+        let mut out = Vec::new();
+        let taken = widget.on_input(&env, input, shown.area, &mut out);
+        if taken {
+            cx.request_redraw_area(shown.area);
+            cx.request_refresh(RefreshMode::Fast);
+        }
+        for command in out {
+            cx.command(command);
+        }
+        taken
+    }
+
+    /// The targets anew after item `index`'s widget took a swipe (its
+    /// page turned). Where the focus was on it, it goes to its first
+    /// target, so that what Select runs is what shows (the widget told);
+    /// elsewhere it stays on the target it was on.
+    fn retarget(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let owner = |grid: &Self, at: usize| grid.owners.get(at).copied().flatten();
+        let start = |grid: &Self, item: usize| grid.owners.iter().position(|o| *o == Some(item));
+        let was = owner(self, self.focus);
+        let had = was == Some(index);
+        let before = (self.focus, self.targets.get(self.focus).map(|(area, _)| *area));
+        // Where it was among its item's targets, or a button's place from
+        // the end: the widget's own count of targets may change.
+        let place = match was {
+            Some(item) => Ok((item, self.focus - start(self, item).unwrap_or(self.focus))),
+            None => Err(self.targets.len() - self.focus),
+        };
+        self.target(&env);
+        let len = self.targets.len();
+        if len == 0 {
+            return;
+        }
+        let to = match place {
+            _ if had => start(self, index).unwrap_or(self.focus),
+            Ok((item, at)) => {
+                let first = start(self, item).unwrap_or(self.focus);
+                let count = self.owners.iter().filter(|o| **o == Some(item)).count();
+                first + at.min(count.saturating_sub(1))
+            }
+            Err(from_end) => len.saturating_sub(from_end),
+        };
+        self.focus = to.min(len - 1);
+        if let Some(shown) = self.items.get(index) {
+            cx.request_redraw_area(self.around(shown.area));
+        }
+        let area = self.targets.get(self.focus).map(|(area, _)| *area);
+        if had && self.focus_shown && before != (self.focus, area) {
+            match owner(self, self.focus) {
+                Some(item) if item == index => {
+                    self.tell(index, WidgetInput::Focus(area), cx);
+                }
+                came => {
+                    // None of its own left: the focus went on.
+                    self.tell(index, WidgetInput::Focus(None), cx);
+                    if let Some(item) = came {
+                        self.tell(item, WidgetInput::Focus(area), cx);
+                    }
+                    if let Some(area) = area {
+                        cx.request_redraw_area(self.around(area));
+                    }
+                }
+            }
+        }
+    }
+
+    /// Says which screen shows the grid, for its widgets
+    /// ([`WidgetContext::host`](crate::widgets::WidgetContext::host)).
+    pub fn set_host(&mut self, host: Id) {
+        self.host = Some(host);
+    }
+
+    /// The screen's own options for items while editing, after the grid's
+    /// (move, size, settings, remove), as translation keys of their names
+    /// (no commas): chosen, the grid answers
+    /// [`GridResponse::Option`].
+    pub fn set_options(&mut self, options: &[&'static str]) {
+        self.extra = options
+            .iter()
+            .map(|o| alloc::borrow::Cow::Borrowed(*o))
+            .collect();
+    }
+
+    /// Asks `check` before an item goes where it is dragged or moved by
+    /// the buttons: `false` keeps it where it was, as where another item
+    /// is in the way.
+    pub fn set_drop_check(&mut self, check: DropCheck) {
+        self.drop_check = Some(check);
     }
 
     /// The target nearest below (or above) the focused one.
@@ -529,9 +717,9 @@ impl GridView {
         };
         match target {
             // A tool shown faint by its plugin: nothing to do now.
-            Target::Run(Command::RunAction(action))
+            Target::Run(Command::RunAction(action), _)
                 if !cx.env().menus.state(cx.env(), action.as_str()).enabled => {}
-            Target::Run(command) => cx.command(command),
+            Target::Run(command, _) => cx.command(command),
             Target::Item(item) => self.options(item, cx),
             Target::Button(button) => return GridResponse::Button(button),
         }
@@ -541,17 +729,11 @@ impl GridView {
     /// A placement of widget `id` (`id@n`) no item here and no values set
     /// so far use; `id` itself where the first [`PLACEMENTS`] all are.
     fn place(&self, env: &Env<'_>, id: &str) -> alloc::string::String {
-        let base = Id::parse(id).unwrap_or_else(|_| Id::new_static("core"));
-        (1..=PLACEMENTS)
-            .map(|n| base.placement(n))
-            .find(|placed| {
-                let used = self
-                    .items
-                    .iter()
-                    .any(|i| matches!(&i.item.what, What::Widget(w) if w == placed.as_str()));
-                !used && env.settings.placement_values(placed.as_str()).is_empty()
-            })
-            .map_or_else(|| id.into(), |placed| placed.as_str().into())
+        crate::widgets::free_placement(env, id, |placed| {
+            self.items
+                .iter()
+                .any(|i| matches!(&i.item.what, What::Widget(w) if w == placed))
+        })
     }
 
     /// Offers what can be done with item `index`.
@@ -560,17 +742,20 @@ impl GridView {
         let Some(shown) = self.items.get(index) else {
             return;
         };
-        let mut options = alloc::vec!["move", "resize"];
+        let mut options: Vec<String> =
+            alloc::vec![format!("{OPTIONS}move"), format!("{OPTIONS}resize")];
         if let What::Widget(id) = &shown.item.what
             && crate::widgets::has_settings(&env, id)
         {
-            options.push("settings");
+            options.push(format!("{OPTIONS}settings"));
         }
-        options.push("remove");
+        options.push(format!("{OPTIONS}remove"));
+        options.extend(self.extra.iter().map(|o| String::from(o.as_ref())));
+        let options: Vec<&str> = options.iter().map(String::as_str).collect();
         cx.command(
             crate::ask::choice(shown.item.what.title(&env), &self.chosen)
                 .about(format!("{index}"))
-                .options(OPTIONS, &options)
+                .options("", &options)
                 .command(),
         );
     }
@@ -585,9 +770,21 @@ impl GridView {
                 .any(|(i, s)| i != index && s.cells.overlaps(&to))
     }
 
+    /// Whether the screen lets item `index` go to `to` (see
+    /// [`GridView::set_drop_check`]).
+    fn allowed(&self, env: &Env<'_>, index: usize, to: Cells) -> bool {
+        let Some(check) = self.drop_check else {
+            return true;
+        };
+        let Some(shown) = self.items.get(index) else {
+            return false;
+        };
+        check(env, &self.items(), &shown.item, to)
+    }
+
     /// Puts item `index` at `to` if it may go there; `true` if it did.
     fn set_cells(&mut self, index: usize, to: Cells, cx: &mut Cx<'_, '_>) -> bool {
-        if !self.free(index, to) {
+        if !self.free(index, to) || !self.allowed(cx.env(), index, to) {
             return false;
         }
         let Some(shown) = self.items.get(index) else {
@@ -602,6 +799,9 @@ impl GridView {
         if let Some(widget) = &mut shown.widget {
             let env = *cx.env();
             widget.place(&env, area);
+            let host = self.host.as_ref().map(Id::as_str);
+            let context = WidgetContext::new(SizeClass::of(&env, area)).host(host);
+            widget.context(&env, &context);
         }
         if let Some(target) = self.targets.get_mut(index) {
             target.0 = area;
@@ -647,7 +847,15 @@ impl GridView {
             return GridResponse::Handled;
         };
         let env = *cx.env();
-        match picked.option.as_str() {
+        // The screen's own: its answer.
+        if self.extra.iter().any(|o| *o == picked.option.as_str()) {
+            return GridResponse::Option {
+                item: self.items[index].item.clone(),
+                option: picked.option,
+            };
+        }
+        let option = picked.option.strip_prefix(OPTIONS).unwrap_or_default();
+        match option {
             option @ ("move" | "resize") => {
                 if let Some(edit) = &mut self.edit {
                     edit.mode = if option == "move" {
@@ -724,6 +932,35 @@ impl GridView {
             self.set_editing(false);
             return GridResponse::Editing(false);
         }
+        // With the buttons as by touch: holding Select runs the focused
+        // target's own long press where it has one (elsewhere it opens
+        // the menu, the action's own).
+        if *a == actions::LONG_CONFIRM
+            && let Some(hold) = self.focused_hold()
+        {
+            cx.command(hold);
+            return GridResponse::Handled;
+        }
+        // The page buttons turn the focused widget's pages (a list, a
+        // calendar) where it takes them, as a swipe on it would; else the
+        // screen's. Left and Right always go on through the targets, so a
+        // widget that pages without end keeps the focus nowhere.
+        let next = *a == actions::NEXT_PAGE;
+        if (next || *a == actions::PREV_PAGE)
+            && self.focus_shown
+            && self.edit.is_none()
+            && let Some(item) = self.owners.get(self.focus).copied().flatten()
+        {
+            let direction = if next {
+                crate::gesture::Direction::Left
+            } else {
+                crate::gesture::Direction::Right
+            };
+            if self.tell(item, WidgetInput::Swipe(direction), cx) {
+                self.retarget(item, cx);
+                return GridResponse::Handled;
+            }
+        }
         let moves = [
             actions::UP,
             actions::DOWN,
@@ -750,6 +987,8 @@ impl GridView {
         } else if *a == actions::LEFT || *a == actions::PREVIOUS {
             ui::step_focus(self.focus, -1, len)
         } else {
+            // The nearest above or below (in a widget too); nothing there,
+            // it stays.
             match self.vertical(*a == actions::DOWN) {
                 Some(to) => to,
                 None => return GridResponse::Handled,
@@ -789,14 +1028,24 @@ impl GridView {
                 row: step(c.row, down),
                 ..c
             },
-            Mode::Resize if left || right => Cells {
-                w: step(c.w, right).max(1),
-                ..c
-            },
-            Mode::Resize if up || down => Cells {
-                h: step(c.h, down).max(1),
-                ..c
-            },
+            Mode::Resize if left || right => self.kept(
+                index,
+                Cells {
+                    w: step(c.w, right).max(1),
+                    ..c
+                },
+                true,
+                cx.env(),
+            ),
+            Mode::Resize if up || down => self.kept(
+                index,
+                Cells {
+                    h: step(c.h, down).max(1),
+                    ..c
+                },
+                false,
+                cx.env(),
+            ),
             _ => return GridResponse::Ignored,
         };
         if to != c {
@@ -858,7 +1107,16 @@ impl GridView {
                 else {
                     return GridResponse::Handled;
                 };
-                if to != drag.to || !drag.moved {
+                let to = if drag.resize {
+                    let wide = to.w != from.w;
+                    self.kept(drag.index, to, wide, cx.env())
+                } else {
+                    to
+                };
+                // Drawn again only where it goes to other cells (or other
+                // sizes): a finger trembling in a cell asks for nothing, as
+                // a refresh takes most of a second on some panels.
+                if to != drag.to {
                     cx.request_redraw_area(self.around(self.geometry.rect(drag.to)));
                     drag.to = to;
                     drag.moved |= to != from;
@@ -918,17 +1176,50 @@ impl GridView {
                     self.focus = index;
                     self.run(index, cx)
                 }
-                None => match self.touch.iter().find(|(r, _)| r.contains(gesture.start)) {
-                    Some((_, command)) => {
+                None => match self.touch.iter().find(|(r, ..)| r.contains(gesture.start)) {
+                    Some((_, command, _)) => {
                         cx.command(command.clone());
                         GridResponse::Handled
                     }
                     None => GridResponse::Ignored,
                 },
             },
+            // A target's own long press, else editing.
             GestureKind::LongPress if self.edit.is_none() => {
+                let on = |r: &Rect| r.contains(gesture.start);
+                let hold = self
+                    .targets
+                    .iter()
+                    .find_map(|(r, target)| match target {
+                        Target::Run(_, Some(hold)) if on(r) => Some((**hold).clone()),
+                        _ => None,
+                    })
+                    .or_else(|| {
+                        self.touch
+                            .iter()
+                            .find(|(r, _, hold)| on(r) && hold.is_some())
+                            .and_then(|(_, _, hold)| hold.as_deref().cloned())
+                    });
+                if let Some(hold) = hold {
+                    cx.command(hold);
+                    return GridResponse::Handled;
+                }
                 self.set_editing(true);
                 GridResponse::Editing(true)
+            }
+            // A swipe that starts on a widget that takes it.
+            GestureKind::Swipe(direction) if self.edit.is_none() => {
+                let index = self
+                    .items
+                    .iter()
+                    .position(|s| s.widget.is_some() && s.area.contains(gesture.start));
+                match index {
+                    Some(index) if self.tell(index, WidgetInput::Swipe(direction), cx) => {
+                        self.retarget(index, cx);
+                        GridResponse::Handled
+                    }
+                    _ => GridResponse::Ignored,
+                }
             }
             _ => GridResponse::Ignored,
         }
@@ -1157,7 +1448,7 @@ mod tests {
     fn pick(grid: &mut GridView, env: &Env<'_>, index: usize, option: &str) -> GridResponse {
         let picked = Picked {
             path: format!("{index}"),
-            option: option.into(),
+            option: format!("{OPTIONS}{option}"),
         };
         let Command::Emit(event, params) = CHOSEN.emit(picked) else {
             unreachable!("an event is emitted");
@@ -1587,7 +1878,7 @@ mod tests {
         let grid = laid_out(&env, &[at(widget, 0, 0, 1, 1)], &[]);
         assert_eq!(grid.place(&env, "test.w"), "test.w@3");
         // Every placement tried is used: the widget's own id.
-        let many = kit(PLACEMENTS);
+        let many = kit(256);
         let env = many.env();
         let grid = laid_out(&env, &[], &[]);
         assert_eq!(grid.place(&env, "test.w"), "test.w");

@@ -177,6 +177,18 @@ impl Typing {
         );
     }
 
+    /// Holds the button `name` down as long as a long press takes.
+    fn hold_button(&mut self, name: &'static str) {
+        use paperpaw_platform::{ButtonState, InputEvent};
+        for (state, wait) in [(ButtonState::Pressed, 0), (ButtonState::Released, 1500)] {
+            self.now += 100 + wait;
+            let effects = self
+                .kernel
+                .handle(Instant(self.now), InputEvent::Button { name, state });
+            self.settle(effects);
+        }
+    }
+
     fn run(&mut self, action: Id) {
         self.now += 100;
         let effects = self.kernel.run_action(Instant(self.now), action);
@@ -463,15 +475,20 @@ fn variants_by_touch_and_by_buttons() {
         buttons.run(actions::RIGHT);
     }
     assert_eq!(buttons.focused().as_deref(), Some("e"));
-    buttons.run(actions::MENU);
+    buttons.hold_button("confirm");
     assert_eq!(buttons.focused().as_deref(), Some("è"));
     buttons.run(actions::RIGHT);
     assert_eq!(buttons.focused().as_deref(), Some("é"));
     buttons.run(actions::CONFIRM);
     // Back to the keys: the focus is on the `e` again.
     assert_eq!(buttons.focused().as_deref(), Some("e"));
-    // Back closes the variants only.
-    buttons.run(actions::MENU);
+    // Holding again opens them, and once more closes them; Back closes
+    // the variants only.
+    buttons.hold_button("confirm");
+    assert_eq!(buttons.focused().as_deref(), Some("è"));
+    buttons.hold_button("confirm");
+    assert_eq!(buttons.focused().as_deref(), Some("e"));
+    buttons.hold_button("confirm");
     buttons.run(actions::BACK);
     assert_eq!(
         buttons.kernel.active_screen().map(Id::as_str),
@@ -504,7 +521,42 @@ fn a_long_press_on_confirm_without_variants_finishes() {
     typing.open(&[(params::TEXT, "abc")]);
     // On `q`, which has no variants.
     assert_eq!(typing.focused().as_deref(), Some("q"));
-    typing.run(actions::MENU);
+    typing.hold_button("confirm");
+    assert_eq!(typing.answer(), "abc");
+}
+
+/// Typing a password (as for Wi-Fi on the X4), holding Select still
+/// shows a letter's variants and, without any, ends the entry.
+#[test]
+fn holding_select_works_while_typing_a_password() {
+    let mut typing = Typing::new(BUTTONS);
+    typing.open(&[(params::MODE, "password")]);
+    for _ in 0..2 {
+        typing.run(actions::RIGHT);
+    }
+    assert_eq!(typing.focused().as_deref(), Some("e"));
+    typing.hold_button("confirm");
+    assert_eq!(typing.focused().as_deref(), Some("è"));
+    typing.run(actions::CONFIRM);
+    typing.run(actions::LEFT);
+    typing.run(actions::LEFT);
+    assert_eq!(typing.focused().as_deref(), Some("q"));
+    typing.hold_button("confirm");
+    // Done: the keyboard is gone (a password goes to the one who asked).
+    assert_ne!(
+        typing.kernel.active_screen().map(Id::as_str),
+        Some("keyboard.screen")
+    );
+}
+
+/// Holding Select before any key has the focus ends the entry at once,
+/// as it does on a key without variants (it does not only show the focus).
+#[test]
+fn holding_select_without_a_focus_finishes() {
+    let mut typing = Typing::new(TOUCH);
+    typing.open(&[(params::TEXT, "abc")]);
+    assert_eq!(typing.focused(), None);
+    typing.hold_button("confirm");
     assert_eq!(typing.answer(), "abc");
 }
 

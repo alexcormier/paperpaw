@@ -29,6 +29,11 @@ pub mod actions {
     pub const LEFT: Id = Id::new_static("core.left");
     pub const RIGHT: Id = Id::new_static("core.right");
     pub const CONFIRM: Id = Id::new_static("core.confirm");
+    /// Select held: what a long press does where the focus is, where a
+    /// screen takes it (a widget's own, see
+    /// [`WidgetTarget::hold`](crate::widgets::WidgetTarget::hold)); else
+    /// the menu, as before.
+    pub const LONG_CONFIRM: Id = Id::new_static("core.long-confirm");
     pub const MENU: Id = Id::new_static("core.menu");
     pub const BACK: Id = Id::new_static("core.back");
     pub const HOME: Id = Id::new_static("core.home");
@@ -133,6 +138,14 @@ pub mod slots {
     /// emitted with all of the parameters and [`PATH`](super::params::PATH)
     /// set to the folder; [`TEXT`](super::params::TEXT), where to start.
     pub const CHOOSE_FOLDER: Id = Id::new_static("core.choose-folder");
+    /// Edits a list of widgets shown above each other (a
+    /// [`WidgetPlace`](crate::widgets::WidgetPlace) of kind
+    /// [`Stack`](crate::widgets::PlaceKind::Stack), e.g. the sleep
+    /// screen's): parameter [`ID`](super::params::ID), the setting that
+    /// lists them. The kernel's [`screens::WIDGET_LIST`](super::screens::WIDGET_LIST)
+    /// unless a plugin binds another; name it as the setting's editor
+    /// ([`SettingExtra::editor_slot`](crate::SettingExtra::editor_slot)).
+    pub const EDIT_WIDGETS: Id = Id::new_static("core.edit-widgets");
     /// Picks one of the values of a choice or language setting, on a page
     /// of its own: parameter [`ID`](super::params::ID), the setting. The
     /// settings plugin binds here; menus and the setup open it for a
@@ -936,6 +949,15 @@ pub mod events {
     pub const WORK_CHANGED: Event<()> = Event::new("core.work-changed");
 }
 
+/// The kernel's status lines (see [`status`](crate::status)).
+pub mod status_lines {
+    use crate::Id;
+
+    /// The items of the place it is drawn in, at its left, centre and
+    /// right ([`status::Place`](crate::status::Place)).
+    pub const ITEMS: Id = Id::new_static("core.status-line.items");
+}
+
 /// Status items of the kernel (see [`status`](crate::status)).
 pub mod status_items {
     use crate::Id;
@@ -967,6 +989,13 @@ pub mod screens {
     pub const STATUS_ITEMS: Id = Id::new_static("core.status-items");
     /// Chooses the status lines a setting lists.
     pub const STATUS_LINES: Id = Id::new_static("core.status-lines");
+    /// Edits a list of widgets a setting holds (see
+    /// [`ui::widget_list`](crate::ui::widget_list)), bound to slot
+    /// [`EDIT_WIDGETS`](super::slots::EDIT_WIDGETS) unless another screen
+    /// is.
+    pub const WIDGET_LIST: Id = Id::new_static("core.widget-list");
+    /// Adds a widget to a list of widgets a setting holds.
+    pub const ADD_WIDGET: Id = Id::new_static("core.add-widget");
     /// The kernel's choice of a few options
     /// ([`ui::choice::Choice`](crate::ui::choice::Choice)), bound to slot
     /// [`CHOICE`](super::slots::CHOICE) unless another screen is.
@@ -1155,6 +1184,10 @@ pub mod settings {
     pub const HEADER_DARK: &str = "core.header.dark";
     pub const HEADER_LIGHT: &str = "core.header.light";
     pub const HEADER_PLAIN: &str = "core.header.plain";
+    /// The frame of every widget whose own the reader did not choose: one
+    /// of [`widgets::look::ALL_FRAMES`](crate::widgets::look::ALL_FRAMES)
+    /// (each widget its own at first).
+    pub const WIDGET_FRAME: Setting<Text> = Setting::new("core.widgets.frame");
     /// Corners of highlights, buttons and boxes: one of [`CORNERS`].
     pub const UI_CORNERS: Setting<Text> = Setting::new("core.ui-corners");
     /// The values of [`UI_CORNERS`]: square, slightly rounded, round,

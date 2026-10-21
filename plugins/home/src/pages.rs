@@ -1,5 +1,5 @@
 //! The home screen's pages: each a grid of items in a setting of its own,
-//! `home.page-1` to `home.page-4`, their layout as
+//! `home.page-1` to `home.page-8`, their layout as
 //! `paperpaw_sdk::widgets::grid` writes it. The first page always
 //! shows; the others where they have items. A page added and not filled
 //! yet, or emptied, keeps a space ([`widgets::SPACE`], which the grid
@@ -25,7 +25,7 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::widgets::grid::{self, Item, What};
 
 /// Pages at most.
-pub(crate) const MAX_PAGES: usize = 4;
+pub(crate) const MAX_PAGES: usize = 8;
 const SECTION: &str = "home.section";
 
 /// Columns of the grid.
@@ -77,6 +77,10 @@ pub(crate) const DEFAULTS: [&str; MAX_PAGES] = [
     "home.tools",
     "",
     "",
+    "",
+    "",
+    "",
+    "",
 ];
 
 /// The setting of page `index` (0 the first).
@@ -102,11 +106,15 @@ const fn page(id: &'static str, title: &'static str, default: &'static str) -> S
 }
 
 /// The pages, the grid, and what shows above and below it.
-static SETTINGS: [SettingSpec; 12] = [
+static SETTINGS: [SettingSpec; 16] = [
     page("home.page-1", "home.setting.page-1", DEFAULTS[0]),
     page("home.page-2", "home.setting.page-2", DEFAULTS[1]),
     page("home.page-3", "home.setting.page-3", DEFAULTS[2]),
     page("home.page-4", "home.setting.page-4", DEFAULTS[3]),
+    page("home.page-5", "home.setting.page-5", DEFAULTS[4]),
+    page("home.page-6", "home.setting.page-6", DEFAULTS[5]),
+    page("home.page-7", "home.setting.page-7", DEFAULTS[6]),
+    page("home.page-8", "home.setting.page-8", DEFAULTS[7]),
     SettingSpec::fixed_number(
         COLUMNS.static_str(),
         "home.setting.columns",
@@ -178,8 +186,27 @@ static SETTINGS: [SettingSpec; 12] = [
     .described("home.setting.footer-items.help"),
 ];
 
+/// The pages as a place of widgets in a grid.
+const PLACE: widgets::WidgetPlace = widgets::WidgetPlace::new(
+    Id::new_static("home.pages"),
+    "home.title",
+    PAGE_SETTINGS,
+    widgets::PlaceKind::Grid,
+);
+const PAGE_SETTINGS: &[Id] = &[
+    Id::new_static("home.page-1"),
+    Id::new_static("home.page-2"),
+    Id::new_static("home.page-3"),
+    Id::new_static("home.page-4"),
+    Id::new_static("home.page-5"),
+    Id::new_static("home.page-6"),
+    Id::new_static("home.page-7"),
+    Id::new_static("home.page-8"),
+];
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
+    r.add_widget_place(PLACE)?;
     r.set_menu_need(
         crate::blocks::FOCUS_AT_ONCE,
         paperpaw_sdk::MenuNeed::NoTouch,

@@ -225,3 +225,18 @@ fn screens_of_the_same_name_are_each_a_place() {
     );
     assert!(!labels.iter().any(|l| l.contains("(keys.")), "{labels:?}");
 }
+
+/// Holding Select is listed by what it does, the menu or a target's more.
+#[test]
+fn holding_select_reads_as_what_it_does() {
+    let mut test = Test::new(false);
+    let mut row = None;
+    for _ in 0..10 {
+        row = test.labels().into_iter().find(|l| l.starts_with("Hold: Select"));
+        if row.is_some() {
+            break;
+        }
+        test.press("page-forward");
+    }
+    assert_eq!(row.as_deref(), Some("Hold: Select, Menu or more"));
+}

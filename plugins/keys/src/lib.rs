@@ -887,7 +887,7 @@ const GROUPS: [&str; 5] = [
 ];
 
 /// Moving around and turning pages: the steps buttons and gestures take.
-const NAVIGATION: [&str; 12] = [
+const NAVIGATION: [&str; 13] = [
     "core.next-page",
     "core.prev-page",
     "core.next",
@@ -900,6 +900,7 @@ const NAVIGATION: [&str; 12] = [
     "core.back",
     "core.home",
     "core.menu",
+    "core.long-confirm",
 ];
 
 /// The group of action `id` (an index into [`GROUPS`]): navigation, what

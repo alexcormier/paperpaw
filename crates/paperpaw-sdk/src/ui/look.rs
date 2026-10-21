@@ -72,6 +72,23 @@ pub struct SeparatorPart {
     pub indent: u16,
 }
 
+/// A widget's frame ([`widgets::draw_frame`](crate::widgets::draw_frame)):
+/// where it goes and which the widget's settings chose. A painter draws
+/// the line, card or dark card its own way (or `false`: as usual).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct FramePart {
+    pub area: Rect,
+    pub frame: crate::widgets::Frame,
+}
+
+impl FramePart {
+    /// Frame `frame` round `area`.
+    pub fn new(area: Rect, frame: crate::widgets::Frame) -> Self {
+        Self { area, frame }
+    }
+}
+
 /// A button's frame ([`draw_button`](super::draw_button),
 /// [`draw_icon_button`](super::draw_icon_button)); its label or drawing
 /// comes after, in the ink the painter returns.
@@ -139,6 +156,7 @@ pub struct Painters {
     hints: Option<Painter<HintsPart>>,
     progress: Option<Painter<ProgressPart>>,
     slider: Option<Painter<SliderPart>>,
+    frame: Option<Painter<FramePart>>,
 }
 
 impl fmt::Debug for Painters {
@@ -152,6 +170,7 @@ impl fmt::Debug for Painters {
             .field("hints", &self.hints.is_some())
             .field("progress", &self.progress.is_some())
             .field("slider", &self.slider.is_some())
+            .field("frame", &self.frame.is_some())
             .finish()
     }
 }
@@ -174,6 +193,7 @@ impl Painters {
             hints: None,
             progress: None,
             slider: None,
+            frame: None,
         }
     }
 
@@ -216,6 +236,12 @@ impl Painters {
         self.slider = Some(painter);
         self
     }
+
+    /// Widgets' frames (lines, cards) on every screen.
+    pub const fn frame(mut self, painter: Painter<FramePart>) -> Self {
+        self.frame = Some(painter);
+        self
+    }
 }
 
 /// The look a [`UiStyle`] draws with: the one set, or none.
@@ -246,6 +272,12 @@ impl Look {
     ) -> bool {
         self.0
             .and_then(|p| p.switch)
+            .is_some_and(|paint| paint(canvas, style, &part))
+    }
+
+    pub(crate) fn frame(&self, canvas: &mut Canvas<'_>, style: &UiStyle, part: FramePart) -> bool {
+        self.0
+            .and_then(|p| p.frame)
             .is_some_and(|paint| paint(canvas, style, &part))
     }
 

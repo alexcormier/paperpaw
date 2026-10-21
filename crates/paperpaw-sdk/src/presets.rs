@@ -145,14 +145,16 @@ pub const THEME: &str = "core.theme";
 
 /// The settings a theme covers: those of the appearance group
 /// ([`groups::LOOK`](crate::builtin::groups::LOOK)) but what the reader
-/// needs to read the interface at all, which a theme never changes: the
-/// size of its text, its contrast, the logo.
+/// needs to read the interface at all, which a theme never changes (the
+/// size of its text, its contrast, the logo), and the frame of all
+/// widgets, which a widget look covers ([`widget_look_settings`]).
 pub fn theme_settings(settings: &Settings) -> Vec<Id> {
-    use crate::builtin::settings::{UI_CONTRAST, UI_SIZE};
+    use crate::builtin::settings::{UI_CONTRAST, UI_SIZE, WIDGET_FRAME};
     let kept = [
         UI_SIZE.static_str(),
         UI_CONTRAST.static_str(),
         crate::logo::LOGO.static_str(),
+        WIDGET_FRAME.static_str(),
     ];
     settings
         .specs()
@@ -168,6 +170,45 @@ pub fn theme_settings(settings: &Settings) -> Vec<Id> {
 pub fn theme_changes(settings: &Settings, theme: &Preset) -> Vec<(Id, Option<SettingValue>)> {
     let covered = theme_settings(settings);
     let mut changes = theme.changes(settings, &covered);
+    changes.retain(|(id, _)| covered.contains(id));
+    changes
+}
+
+/// The kind of presets that give widgets a look as a whole: their
+/// frames, room, text sizes and alignment, and the frame of all
+/// ([`widget_look_settings`]). The settings plugin offers them at the top
+/// of the appearance settings, as themes.
+pub const WIDGET_LOOK: &str = "core.widget-look";
+
+/// The settings a widget look covers: each registered widget's frame,
+/// padding, size and alignment (`<widget>.frame` …, of `widgets`), and
+/// the frame of all
+/// ([`WIDGET_FRAME`](crate::builtin::settings::WIDGET_FRAME)); not the
+/// settings of other things that end so (the status lines' size).
+pub fn widget_look_settings(settings: &Settings, widgets: &crate::widgets::Widgets) -> Vec<Id> {
+    const PARTS: [&str; 4] = [".frame", ".padding", ".size", ".align"];
+    let all = crate::builtin::settings::WIDGET_FRAME.static_str();
+    let of_widget = |id: &str| {
+        PARTS.iter().any(|part| {
+            id.strip_suffix(part)
+                .is_some_and(|widget| widgets.has(widget))
+        })
+    };
+    settings
+        .specs()
+        .filter(|spec| spec.id.as_str() == all || of_widget(spec.id.as_str()))
+        .map(|spec| spec.id.clone())
+        .collect()
+}
+
+/// What `look` changes among [`widget_look_settings`].
+pub fn widget_look_changes(
+    settings: &Settings,
+    widgets: &crate::widgets::Widgets,
+    look: &Preset,
+) -> Vec<(Id, Option<SettingValue>)> {
+    let covered = widget_look_settings(settings, widgets);
+    let mut changes = look.changes(settings, &covered);
     changes.retain(|(id, _)| covered.contains(id));
     changes
 }
@@ -197,12 +238,19 @@ pub fn applied(settings: &Settings, changes: &[(Id, Option<SettingValue>)]) -> b
 /// Whether setting `id` has `value` (`None`: is not set) as kept.
 fn has(settings: &Settings, id: &Id, value: Option<&SettingValue>) -> bool {
     match kept(settings, id, value) {
+        // A frame kept only where it is written down (see `kept`).
+        Some(value) if widget_frame(id) => {
+            settings.is_set(id.as_str()) && settings.global(id.as_str()) == Some(value)
+        }
         Some(value) => settings.global(id.as_str()) == Some(value),
         None => !settings.is_set(id.as_str()),
     }
 }
 
-/// `value` as kept for setting `id`: `None` (not set) for its default.
+/// `value` as kept for setting `id`: `None` (not set) for its default,
+/// but a widget's frame named, its default too: a frame chosen is the
+/// widget's own, over the frame of all
+/// ([`WIDGET_FRAME`](crate::builtin::settings::WIDGET_FRAME)).
 fn kept<'a>(
     settings: &Settings,
     id: &Id,
@@ -212,7 +260,13 @@ fn kept<'a>(
         .spec(id.as_str())
         .filter(|spec| spec.id == *id)
         .map(|spec| &spec.default);
-    value.filter(|value| Some(*value) != default)
+    value.filter(|value| widget_frame(id) || Some(*value) != default)
+}
+
+/// Whether setting `id` is a frame of its own (`<widget>.frame`).
+fn widget_frame(id: &Id) -> bool {
+    id.as_str().ends_with(".frame")
+        && id.as_str() != crate::builtin::settings::WIDGET_FRAME.static_str()
 }
 
 /// Every preset added, those kept in the program first, each in the order

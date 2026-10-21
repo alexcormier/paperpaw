@@ -483,3 +483,40 @@ fn a_least_width_keeps_the_items_after_it_in_place() {
     assert_eq!(targets.len(), 2);
     assert!(targets[1].area.x >= 80, "{targets:?}");
 }
+
+/// A line that answers to an id it had before is listed once, and found
+/// by either id.
+#[test]
+fn a_line_answers_to_its_old_id_and_is_listed_once() {
+    let mut h = harness();
+    h.status_items.add_line(
+        StatusLineSpec::new(
+            Id::new_static("t.line"),
+            "t.line.title",
+            Box::new(|_, _, _| {}),
+        )
+        .also(Id::new_static("t.old-line")),
+    );
+    let env = h.env();
+    let listed: Vec<&str> = env
+        .status_items
+        .lines()
+        .map(|(id, _)| id.as_str())
+        .filter(|id| id.starts_with("t."))
+        .collect();
+    assert_eq!(listed, ["t.line"]);
+    assert_eq!(env.status_items.title("t.old-line"), Some("t.line.title"));
+    let context = Params::new();
+    let frame = StatusFrame::new(
+        Rect::new(0, 0, 480, 40),
+        false,
+        20.0,
+        Color::BLACK,
+        &context,
+    );
+    let mut canvas = support::frame(480, 100);
+    assert!(
+        env.status_items
+            .draw_line("t.old-line", &mut canvas.canvas(), &env, &frame)
+    );
+}

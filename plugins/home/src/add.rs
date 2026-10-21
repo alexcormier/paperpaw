@@ -42,19 +42,12 @@ enum Row {
     RemovePage,
 }
 
-/// The icon of a kind of widgets.
-fn kind_icon(kind: &str) -> &'static str {
-    match kind {
-        categories::TIME => "clock",
-        categories::BOOKS => "books",
-        categories::READING => "chart-bar",
-        categories::WORDS => "letter-case",
-        categories::PERSONAL => "note",
-        categories::WORLD => "world",
-        categories::DEVICE => "device-tablet",
-        categories::LAYOUT => "layout",
-        TOOLS_KIND => "apps",
-        _ => "puzzle",
+/// The icon of a kind of widgets (any plugin's), or of the tools.
+fn kind_icon<'e>(env: &Env<'e>, kind: &str) -> &'e str {
+    if kind == TOOLS_KIND {
+        "apps"
+    } else {
+        env.widgets.category_icon(kind)
     }
 }
 
@@ -102,23 +95,18 @@ fn addable(env: &Env<'_>, page: usize) -> Vec<(String, What, String)> {
 /// no values set: each widget added gets one, so that its settings are
 /// its own.
 fn placement(env: &Env<'_>, pages: &[pages::Page], id: &str) -> String {
-    let base = Id::parse(id).unwrap_or(Id::new_static("home"));
-    let used = |placed: &str| {
+    widgets::free_placement(env, id, |placed| {
         pages
             .iter()
             .flat_map(|p| &p.items)
             .any(|i| matches!(&i.what, What::Widget(w) if w == placed))
-            || !env.settings.placement_values(placed).is_empty()
-    };
-    (1..)
-        .map(|n| base.placement(n))
-        .find(|placed| !used(placed.as_str()))
-        .map_or_else(|| id.to_string(), |placed| placed.as_str().to_string())
+    })
 }
 
 /// The kinds that have something to add, in the order of
-/// `categories::ALL` (plugins' own kinds after them), the tools last.
-fn kinds(found: &[(String, What, String)]) -> Vec<(String, usize)> {
+/// `Widgets::kinds` (plugins' own kinds after the kernel's), the tools
+/// last.
+fn kinds(order: &[&str], found: &[(String, What, String)]) -> Vec<(String, usize)> {
     let mut kinds: Vec<(String, usize)> = Vec::new();
     for (kind, _, _) in found {
         match kinds.iter_mut().find(|(k, _)| k == kind) {
@@ -128,12 +116,9 @@ fn kinds(found: &[(String, What, String)]) -> Vec<(String, usize)> {
     }
     let rank = |kind: &str| {
         if kind == TOOLS_KIND {
-            categories::ALL.len() + 1
+            order.len() + 1
         } else {
-            categories::ALL
-                .iter()
-                .position(|k| *k == kind)
-                .unwrap_or(categories::ALL.len())
+            order.iter().position(|k| *k == kind).unwrap_or(order.len())
         }
     };
     kinds.sort_by_key(|(kind, _)| rank(kind));
@@ -184,7 +169,7 @@ impl AddScreen {
             None => {
                 let mut rows: Vec<Row> = alloc::vec![Row::Layouts];
                 rows.extend(
-                    kinds(&found)
+                    kinds(&env.widgets.kinds().collect::<Vec<_>>(), &found)
                         .into_iter()
                         .map(|(kind, count)| Row::Kind(kind, count)),
                 );
@@ -384,7 +369,7 @@ impl AddScreen {
                 let ink = style.focus_ink(focused);
                 let (icon, title, value) = match &rows[index] {
                     Row::Kind(kind, count) => (
-                        Some(kind_icon(kind)),
+                        Some(kind_icon(env, kind)),
                         env.i18n.tr(kind).to_string(),
                         count.to_string(),
                     ),
@@ -577,7 +562,7 @@ mod tests {
             item(categories::TIME),
             item(categories::BOOKS),
         ];
-        let kinds = kinds(&found);
+        let kinds = kinds(categories::ALL, &found);
         let names: Vec<&str> = kinds.iter().map(|(k, _)| k.as_str()).collect();
         assert_eq!(
             names,

@@ -147,10 +147,9 @@ fn chosen<'e>(env: &Env<'e>, widget: &str, key: &str) -> &'e str {
     env.settings.text(&alloc::format!("{widget}.{key}"))
 }
 
-/// The height `widget`'s frame takes around its content.
+/// The height `widget`'s frame takes (the SDK's).
 fn frame_height(env: &Env<'_>, widget: &str) -> u16 {
-    let probe = Rect::new(0, 0, 1000, 1000);
-    1000 - widgets::look::look(env, widget, probe).area.height
+    paperpaw_sdk::widgets::frame_height(env, widget)
 }
 
 /// `height` pixels placed in the middle of `area`, top to bottom.

@@ -28,6 +28,18 @@
 //!
 //! Screens that show widgets in a grid, as the home screen does, use
 //! [`grid`]: its layout as data, and a view that edits it in place.
+//! Screens that show them above each other, as the sleep screen does, use
+//! a [`Stack`]. Either way the screen asks [`refresh`] what an event means
+//! for the widgets it shows, and reads the live ones anew each minute
+//! ([`next_minute`]).
+//!
+//! The places where widgets show are [`WidgetPlace`]s
+//! ([`Registrar::add_widget_place`](crate::Registrar::add_widget_place)):
+//! the settings that list them, and whether they show in a grid or above
+//! each other. A plugin asks whether any place shows its widget
+//! ([`Widgets::shown`]), e.g. to fetch the weather only then; the slot
+//! [`EDIT_WIDGETS`](crate::builtin::slots::EDIT_WIDGETS) edits a place's
+//! list.
 //!
 //! Widgets share a look the reader shapes for each ([`Frame`], [`Size`],
 //! [`draw_caption`], see [`look`]), and say which kind they are
@@ -51,16 +63,20 @@ use paperpaw_platform::Rect;
 
 use crate::env::Env;
 use crate::id::Id;
+use crate::params::Params;
 use crate::settings::{SettingGroupSpec, SettingKind, SettingSpec, SettingValue};
 
 pub mod grid;
 pub mod look;
+mod stack;
+
+pub use stack::Stack;
 
 pub use look::{
     Frame, Look, Padding, Size, Wrapped, caption_height, choice, draw_caption, draw_frame,
-    draw_line, draw_message, draw_wrapped, fit_line, frame, frame_setting, frame_spec,
-    ink_baseline, largest_size, line_height, padding, padding_setting, padding_spec, part_setting,
-    part_spec, setting_id, shows, size, size_setting, size_spec,
+    draw_line, draw_message, draw_wrapped, fit_line, frame, frame_height, frame_setting,
+    frame_spec, ink_baseline, largest_size, line_height, padding, padding_setting, padding_spec,
+    part_setting, part_spec, setting_id, shows, size, size_setting, size_spec,
 };
 
 /// The kinds of widgets ([`WidgetSpec::category`]), each the translation
@@ -89,6 +105,44 @@ pub mod categories {
     pub const ALL: &[&str] = &[
         TIME, BOOKS, READING, WORDS, PERSONAL, WORLD, DEVICE, LAYOUT, OTHER,
     ];
+
+    /// The icon of kind `kind` among these, if it is one.
+    pub fn icon(kind: &str) -> Option<&'static str> {
+        Some(match kind {
+            TIME => "clock",
+            BOOKS => "books",
+            READING => "chart-bar",
+            WORDS => "letter-case",
+            PERSONAL => "note",
+            WORLD => "world",
+            DEVICE => "device-tablet",
+            LAYOUT => "layout",
+            OTHER => "puzzle",
+            _ => return None,
+        })
+    }
+}
+
+/// A kind of widgets of a plugin's own
+/// ([`Registrar::add_widget_category`](crate::Registrar::add_widget_category)),
+/// beside [`categories`]: its id, the translation key of its name, and
+/// its icon. Screens offering widgets list such kinds after the
+/// kernel's.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct WidgetCategory {
+    pub id: Id,
+    pub icon: Cow<'static, str>,
+}
+
+impl WidgetCategory {
+    /// Kind `id` (its name's translation key), shown with `icon`.
+    pub fn new(id: Id, icon: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            id,
+            icon: icon.into(),
+        }
+    }
 }
 
 /// A widget as a screen shows it: made for that screen by its spec
@@ -150,6 +204,91 @@ pub trait Widget {
         let _ = (env, area);
         Vec::new()
     }
+
+    /// Where it is shown, told once it is placed (after
+    /// [`place`](Self::place)): its placement (a to-do list's `@2`, to
+    /// tell its own taps from another's), the screen showing it, how
+    /// large it is drawn.
+    fn context(&mut self, env: &Env<'_>, context: &WidgetContext<'_>) {
+        let _ = (env, context);
+    }
+
+    /// Input on it beside taps on its targets: a swipe that started on it
+    /// (a list turning its page), the buttons' focus coming to one of its
+    /// targets or leaving it. `true` if it took it, the commands it asks
+    /// for in `out`: the screen draws it again; after a swipe it took, it
+    /// also asks its [`targets`](Self::targets) anew (its page turned).
+    /// Widgets that take none keep the default.
+    ///
+    /// The buttons send swipes too: the page buttons, while one of its
+    /// targets has the focus (the next page as a swipe to the left). A
+    /// widget refuses a swipe it cannot do (at its last page): the screen
+    /// then turns its own page. Left and Right always move the focus on,
+    /// out of the widget after its last target, so a widget that pages
+    /// without end never keeps it.
+    fn on_input(
+        &mut self,
+        env: &Env<'_>,
+        input: WidgetInput,
+        area: Rect,
+        out: &mut Vec<crate::Command>,
+    ) -> bool {
+        let _ = (env, input, area, out);
+        false
+    }
+
+    /// Draws the focus on its target `target` its own way; `false` (the
+    /// default) for the screen's frame round it.
+    fn draw_focus(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, target: Rect) -> bool {
+        let _ = (canvas, env, target);
+        false
+    }
+}
+
+/// Where a widget is shown ([`Widget::context`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct WidgetContext<'a> {
+    /// Its placement, e.g. `notes.todo@2`, where it is one; `None` for
+    /// the widget itself.
+    pub placement: Option<&'a str>,
+    /// The screen showing it, where the screen says.
+    pub host: Option<&'a str>,
+    /// How large it is drawn.
+    pub size: SizeClass,
+}
+
+impl<'a> WidgetContext<'a> {
+    /// Drawn `size` large; the rest as set with its methods.
+    pub fn new(size: SizeClass) -> Self {
+        Self {
+            placement: None,
+            host: None,
+            size,
+        }
+    }
+
+    /// Shown by screen `host`.
+    pub fn host(self, host: Option<&'a str>) -> Self {
+        Self { host, ..self }
+    }
+
+    /// As placement `placement`.
+    pub fn placement(self, placement: Option<&'a str>) -> Self {
+        Self { placement, ..self }
+    }
+}
+
+/// Input a widget may take beside taps ([`Widget::on_input`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum WidgetInput {
+    /// A swipe that started on it, this way; also a page button while one
+    /// of its targets has the focus (see [`Widget::on_input`]).
+    Swipe(crate::gesture::Direction),
+    /// The buttons' focus came to its target in this area, or (`None`)
+    /// left it.
+    Focus(Option<Rect>),
 }
 
 /// Makes a widget for a screen that shows it.
@@ -166,6 +305,9 @@ pub struct WidgetTarget {
     /// Tapped only: the buttons' focus does not stop there (what it does
     /// is reached otherwise, e.g. by an action bound to a button).
     pub touch: bool,
+    /// What a long press on it runs, if anything (else a long press does
+    /// what it does on the screen, e.g. editing the page).
+    pub hold: Option<crate::Command>,
 }
 
 impl WidgetTarget {
@@ -175,6 +317,15 @@ impl WidgetTarget {
             area,
             command,
             touch: false,
+            hold: None,
+        }
+    }
+
+    /// A long press on it runs `command`.
+    pub fn hold(self, command: crate::Command) -> Self {
+        Self {
+            hold: Some(command),
+            ..self
         }
     }
 
@@ -201,6 +352,9 @@ pub struct WidgetSpec {
     /// The group of settings it previews, if it is made for that (see
     /// [`WidgetSpec::previews`]).
     pub previews: Option<Id>,
+    /// The cells it takes in a grid ([`WidgetSpec::cells`]); without it,
+    /// the grid's width and the rows it needs.
+    pub cells: Option<CellsHint>,
 }
 
 impl WidgetSpec {
@@ -216,6 +370,16 @@ impl WidgetSpec {
             factory: Box::new(factory),
             category: Cow::Borrowed(categories::OTHER),
             previews: None,
+            cells: None,
+        }
+    }
+
+    /// Takes `cells` in a grid: added, that many; resized, no fewer than
+    /// its least.
+    pub fn cells(self, cells: CellsHint) -> Self {
+        Self {
+            cells: Some(cells),
+            ..self
         }
     }
 
@@ -354,10 +518,239 @@ pub fn changed(id: &Id) -> crate::Command {
     events::WIDGET_CHANGED.emit(events::WidgetChanged { id: id.clone() })
 }
 
+/// How many cells of a grid a widget takes ([`WidgetSpec::cells`]):
+/// added, it gets `w` by `h` (no more than the grid has), and resized
+/// never less than `min_w` by `min_h`; a `square` one stays as wide as
+/// it is high, in cells (a round clock, an icon).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CellsHint {
+    pub w: u8,
+    pub h: u8,
+    pub min_w: u8,
+    pub min_h: u8,
+    pub square: bool,
+}
+
+impl CellsHint {
+    /// `w` by `h` cells, at least one by one.
+    pub const fn new(w: u8, h: u8) -> Self {
+        Self {
+            w,
+            h,
+            min_w: 1,
+            min_h: 1,
+            square: false,
+        }
+    }
+
+    /// Never less than `w` by `h` cells.
+    pub const fn min(self, w: u8, h: u8) -> Self {
+        Self {
+            min_w: w,
+            min_h: h,
+            ..self
+        }
+    }
+
+    /// As wide as it is high, in cells.
+    pub const fn square(self) -> Self {
+        Self {
+            square: true,
+            ..self
+        }
+    }
+
+    /// `cells` as the hint keeps them: no less than its least, square
+    /// where it is (the side `wide` changed, the other following it).
+    pub fn keep(&self, cells: grid::Cells, wide: bool) -> grid::Cells {
+        let mut w = cells.w.max(self.min_w).max(1);
+        let mut h = cells.h.max(self.min_h).max(1);
+        if self.square {
+            if wide {
+                h = w;
+            } else {
+                w = h;
+            }
+        }
+        grid::Cells { w, h, ..cells }
+    }
+}
+
+/// How large a widget is drawn, for widgets that show more where they
+/// have the room (a day's forecast small, the week's large): by the
+/// shorter side of its area, in millimetres.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum SizeClass {
+    /// Less than 20 mm on its shorter side: a figure, an icon.
+    Small,
+    /// Up to 45 mm.
+    Medium,
+    /// More.
+    Large,
+}
+
+impl SizeClass {
+    /// The class of `area` on this screen.
+    pub fn of(env: &Env<'_>, area: Rect) -> Self {
+        let short = u32::from(area.width.min(area.height));
+        if short < env.metrics.mm(20) {
+            Self::Small
+        } else if short <= env.metrics.mm(45) {
+            Self::Medium
+        } else {
+            Self::Large
+        }
+    }
+}
+
+/// How a place holds its widgets ([`WidgetPlace::kind`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PlaceKind {
+    /// Above each other ([`Stack`]): a setting of widget ids separated by
+    /// commas, [`FILL`] and [`SPACE`] among them.
+    Stack,
+    /// In a grid of cells ([`grid`]): settings of items with their cells,
+    /// one a page.
+    Grid,
+}
+
+/// A place where widgets show: the settings that list them, and how it
+/// holds them. Screens of any plugin register theirs, so that plugins
+/// can ask whether their widget shows anywhere ([`Widgets::shown`]) and
+/// editors know them.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct WidgetPlace {
+    pub id: Id,
+    /// Translation key of its name, e.g. "Sleep screen".
+    pub title: Cow<'static, str>,
+    /// The settings that list its widgets (a grid's pages each one).
+    pub settings: Cow<'static, [Id]>,
+    pub kind: PlaceKind,
+    /// It shows only while this setting has this value (a mode of a
+    /// screen), see [`WidgetPlace::shown_if`].
+    pub shown_if: Option<(Id, &'static str)>,
+}
+
+impl WidgetPlace {
+    /// Made of what it needs; the rest as set with its methods.
+    pub const fn new(
+        id: Id,
+        title: &'static str,
+        settings: &'static [Id],
+        kind: PlaceKind,
+    ) -> Self {
+        Self {
+            id,
+            title: Cow::Borrowed(title),
+            settings: Cow::Borrowed(settings),
+            kind,
+            shown_if: None,
+        }
+    }
+
+    /// It shows only while setting `setting` has the value `value`, e.g.
+    /// the sleep screen's widgets only while it shows widgets: a plugin
+    /// asking [`Widgets::shown`] is told so only then.
+    pub const fn shown_if(mut self, setting: Id, value: &'static str) -> Self {
+        // Nothing to drop: made without one (`new`), in a const.
+        core::mem::forget(self.shown_if.replace((setting, value)));
+        self
+    }
+
+    /// Whether it shows now (see [`WidgetPlace::shown_if`]).
+    pub fn shows(&self, env: &Env<'_>) -> bool {
+        self.shown_if
+            .as_ref()
+            .is_none_or(|(setting, value)| env.settings.text(setting.as_str()) == *value)
+    }
+
+    /// The widgets it shows now: their ids, a placement's (`home.clock@2`)
+    /// as it is, in the order of its settings.
+    pub fn widgets<'e>(&self, env: &Env<'e>) -> Vec<&'e str> {
+        self.settings
+            .iter()
+            .flat_map(|setting| listed(env.settings.text(setting.as_str())))
+            .filter(|id| env.widgets.has(id))
+            .collect()
+    }
+}
+
+/// The ids a setting listing widgets names: each item's first word, the
+/// cells of a grid's items after it left out.
+fn listed(text: &str) -> impl Iterator<Item = &str> {
+    text.split(',')
+        .filter_map(|item| item.split_whitespace().next())
+}
+
+/// What a screen showing widgets does after an event ([`refresh`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Refresh {
+    /// Nothing: the event is not about them.
+    Nothing,
+    /// Makes them anew: how they are made changed (a setting of the
+    /// screen, of the look, or of a widget shown).
+    Remake,
+    /// Reads what they show anew (a setting, the library changed).
+    Read,
+    /// Reads what this one shows anew ([`changed`]).
+    ReadOne(Id),
+    /// Reads the live ones anew ([`Widget::live`]): the device's status
+    /// changed (the battery).
+    Live,
+}
+
+/// What a screen that shows the widgets `shown` (their ids, a
+/// placement's too), with settings of its own under `own` (e.g. `home`),
+/// does after `event` with `params`: makes them anew after a setting of
+/// its own, of the look (`core.`) or of a widget shown changed, reads
+/// them anew after any other setting or the library changed, reads the
+/// one that says so ([`changed`]), and the live ones after the device's
+/// status changed.
+pub fn refresh(event: &Id, params: &Params, own: &str, shown: &[String]) -> Refresh {
+    use crate::builtin::events;
+    if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
+        let id = changed.id.as_str();
+        let of = |prefix: &str| {
+            id.strip_prefix(prefix)
+                .is_some_and(|rest| rest.starts_with('.'))
+        };
+        let remakes =
+            of(own) || of("core") || shown.iter().any(|widget| of(widget) || of(base(widget)));
+        return if remakes {
+            Refresh::Remake
+        } else {
+            Refresh::Read
+        };
+    }
+    if *event == events::LIBRARY_CHANGED || *event == events::BOOK_MOVED {
+        return Refresh::Read;
+    }
+    if let Some(changed) = events::WIDGET_CHANGED.read(event, params) {
+        return Refresh::ReadOne(changed.id);
+    }
+    if *event == events::STATUS_CHANGED {
+        return Refresh::Live;
+    }
+    Refresh::Nothing
+}
+
+/// When live widgets are read anew next: at the next full minute, when a
+/// clock shows another time (a minute from now without a clock).
+pub fn next_minute(env: &Env<'_>) -> crate::Instant {
+    crate::time::next_minute(env).unwrap_or(env.now.add_millis(60_000))
+}
+
 /// The registered widgets.
 #[derive(Debug, Default)]
 pub struct Widgets {
     widgets: Vec<WidgetSpec>,
+    places: Vec<WidgetPlace>,
+    categories: Vec<WidgetCategory>,
 }
 
 impl Widgets {
@@ -375,6 +768,68 @@ impl Widgets {
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.widgets.shrink_to_fit();
+        self.places.shrink_to_fit();
+        self.categories.shrink_to_fit();
+    }
+
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn add_category(&mut self, category: WidgetCategory) {
+        self.categories.push(category);
+    }
+
+    /// Every kind of widgets, in the order screens show them: the
+    /// kernel's ([`categories::ALL`]), then plugins' own in the order they
+    /// were added.
+    pub fn kinds(&self) -> impl Iterator<Item = &str> {
+        categories::ALL
+            .iter()
+            .copied()
+            .chain(self.categories.iter().map(|c| c.id.as_str()))
+    }
+
+    /// The icon of kind `kind`: the kernel's, a plugin's own, or a puzzle
+    /// piece for a kind nobody added.
+    pub fn category_icon(&self, kind: &str) -> &str {
+        categories::icon(kind)
+            .or_else(|| {
+                self.categories
+                    .iter()
+                    .find(|c| c.id.as_str() == kind)
+                    .map(|c| c.icon.as_ref())
+            })
+            .unwrap_or("puzzle")
+    }
+
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn add_place(&mut self, place: WidgetPlace) {
+        self.places.push(place);
+    }
+
+    /// Every place where widgets show.
+    pub fn places(&self) -> impl Iterator<Item = &WidgetPlace> {
+        self.places.iter()
+    }
+
+    /// Place `id`, if there is one.
+    pub fn place(&self, id: &str) -> Option<&WidgetPlace> {
+        self.places.iter().find(|p| p.id.as_str() == id)
+    }
+
+    /// Whether any place shows widget `id` now, or a placement of it:
+    /// e.g. to fetch what it shows only then.
+    pub fn shown(&self, env: &Env<'_>, id: &str) -> bool {
+        self.places
+            .iter()
+            .filter(|place| place.shows(env))
+            .any(|place| {
+                place
+                    .settings
+                    .iter()
+                    .flat_map(|setting| listed(env.settings.text(setting.as_str())))
+                    .any(|listed| base(listed) == id)
+            })
     }
 
     /// Widget `id`, also of a placement of it (`widgets.clock@2`).
@@ -405,6 +860,12 @@ impl Widgets {
     /// The kind of widget `id`, one of [`categories`] (or a plugin's own).
     pub fn category(&self, id: &str) -> Option<&str> {
         self.get(id).map(|w| w.category.as_ref())
+    }
+
+    /// The cells widget `id` takes in a grid, where it says
+    /// ([`WidgetSpec::cells`]).
+    pub fn cells(&self, id: &str) -> Option<CellsHint> {
+        self.get(id)?.cells
     }
 
     /// The translation key of the name of widget `id`.
@@ -496,6 +957,33 @@ impl Widget for Placed {
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         self.with(env, || self.inner.targets(env, area))
     }
+
+    fn context(&mut self, env: &Env<'_>, context: &WidgetContext<'_>) {
+        let placement = core::mem::take(&mut self.placement);
+        let own = context.placement(Some(&placement));
+        env.settings
+            .with_placement(Some(&placement), || self.inner.context(env, &own));
+        self.placement = placement;
+    }
+
+    fn on_input(
+        &mut self,
+        env: &Env<'_>,
+        input: WidgetInput,
+        area: Rect,
+        out: &mut Vec<crate::Command>,
+    ) -> bool {
+        let placement = core::mem::take(&mut self.placement);
+        let taken = env.settings.with_placement(Some(&placement), || {
+            self.inner.on_input(env, input, area, out)
+        });
+        self.placement = placement;
+        taken
+    }
+
+    fn draw_focus(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, target: Rect) -> bool {
+        self.with(env, || self.inner.draw_focus(canvas, env, target))
+    }
 }
 
 /// A gap of the height [`SPACE_SIZE`] says.
@@ -508,6 +996,22 @@ pub const SPACE_SIZE: crate::setting::Setting<crate::setting::Text> =
     crate::setting::Setting::new("core.space.size");
 /// The values of [`SPACE_SIZE`]: small, medium, large.
 pub const SPACE_SIZES: &[&str] = &["core.space.small", "core.space.medium", "core.space.large"];
+
+/// A placement of widget `id` (`id@n`, see [`Id::placement`]) that
+/// `used` does not name and that has no values set, for a widget added
+/// again with settings of its own; `id` itself where the first 256 all
+/// are.
+pub fn free_placement(env: &Env<'_>, id: &str, used: impl Fn(&str) -> bool) -> String {
+    let Ok(plain) = Id::parse(base(id)) else {
+        return String::from(id);
+    };
+    (1..=256)
+        .map(|n| plain.placement(n))
+        .find(|placed| {
+            !used(placed.as_str()) && env.settings.placement_values(placed.as_str()).is_empty()
+        })
+        .map_or_else(|| String::from(id), |placed| String::from(placed.as_str()))
+}
 
 /// Whether a list of widgets may hold `id` more than once.
 pub fn repeatable(id: &str) -> bool {

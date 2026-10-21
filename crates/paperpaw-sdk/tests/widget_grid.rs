@@ -152,7 +152,7 @@ fn with_cx<R>(env: &Env<'_>, f: impl FnOnce(&mut Cx<'_, '_>) -> R) -> (R, Output
 
 /// Chooses `option` for item `index`, as the choice screen answers.
 fn choose(view: &mut GridView, env: &Env<'_>, index: usize, option: &str) -> GridResponse {
-    let picked = Picked::new(index.to_string(), option.to_string());
+    let picked = Picked::new(index.to_string(), format!("core.grid.{option}"));
     let event = Id::parse(CHOSEN.as_str()).unwrap();
     with_cx(env, |cx| view.on_event(&event, &picked.to_params(), cx)).0
 }
@@ -773,4 +773,417 @@ fn the_grid_draws_inside_its_area_while_edited() {
     let reach = (paperpaw_sdk::ui::UiStyle::new(&env).line * 5) as u16;
     let bound = Rect::new(0, g.area.y - reach, g.area.width, g.area.height + 2 * reach);
     assert_eq!(drawn_outside(&mut frame, bound), None);
+}
+
+thread_local! {
+    /// What the lively widget was told.
+    static TOLD: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+fn told() -> Vec<String> {
+    TOLD.with(|t| t.borrow_mut().drain(..).collect())
+}
+
+fn tell(what: String) {
+    TOLD.with(|t| t.borrow_mut().push(what));
+}
+
+/// A widget that takes swipes, runs something of its own on a long
+/// press, draws its own focus and notes where it is shown.
+struct Lively;
+
+impl Widget for Lively {
+    fn height(&self, _: &Env<'_>, _: u16) -> u16 {
+        90
+    }
+
+    fn draw(&self, _: &mut Canvas<'_>, _: &Env<'_>, _: Rect) {}
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        vec![
+            WidgetTarget::new(area, Command::RunAction(OPEN))
+                .hold(Command::RunAction(Id::new_static("t.hold"))),
+        ]
+    }
+
+    fn context(&mut self, _: &Env<'_>, context: &paperpaw_sdk::widgets::WidgetContext<'_>) {
+        tell(format!(
+            "context {} {}",
+            context.placement.unwrap_or("-"),
+            context.host.unwrap_or("-")
+        ));
+    }
+
+    fn on_input(
+        &mut self,
+        _: &Env<'_>,
+        input: paperpaw_sdk::widgets::WidgetInput,
+        _: Rect,
+        _: &mut Vec<Command>,
+    ) -> bool {
+        use paperpaw_sdk::widgets::WidgetInput;
+        match input {
+            // Its pages go one way only.
+            WidgetInput::Swipe(paperpaw_sdk::Direction::Left) => {
+                tell("swipe Left".into());
+                true
+            }
+            WidgetInput::Focus(at) => {
+                tell(format!("focus {}", at.is_some()));
+                false
+            }
+            _ => false,
+        }
+    }
+
+    fn draw_focus(&self, _: &mut Canvas<'_>, _: &Env<'_>, _: Rect) -> bool {
+        tell("own focus".into());
+        true
+    }
+}
+
+/// A widget is told where it shows, takes swipes that start on it, runs
+/// its own long press, hears the focus come and go, and draws its own.
+#[test]
+fn widgets_take_swipes_holds_and_the_focus() {
+    let mut h = harness(Device::BUTTONS);
+    h.widgets.add(WidgetSpec::new(
+        Id::new_static("t.lively"),
+        "t.lively",
+        |_| Box::new(Lively),
+    ));
+    let env = h.env();
+    let items = [
+        Item::placed(widget("t.lively@2"), Cells::new(0, 0, 2, 2)),
+        Item::placed(tool("t.a"), Cells::new(2, 0, 1, 1)),
+    ];
+    let mut view = GridView::asking(&env, CHOSEN);
+    view.set_host(Id::new_static("t.screen"));
+    view.layout(&env, geometry(), &items, &[]);
+    assert_eq!(told(), ["context t.lively@2 t.screen"]);
+    let area = geometry().rect(Cells::new(0, 0, 2, 2));
+    let m = middle(area);
+    let gesture = |kind| {
+        paperpaw_sdk::Gesture::new(
+            kind,
+            m,
+            Point::new(m.x - 100, m.y),
+            paperpaw_platform::PointerTool::Finger,
+        )
+    };
+    let (response, _) = with_cx(&env, |cx| {
+        view.on_gesture(
+            gesture(paperpaw_sdk::GestureKind::Swipe(
+                paperpaw_sdk::Direction::Left,
+            )),
+            cx,
+        )
+    });
+    assert_eq!(response, GridResponse::Handled);
+    assert_eq!(told(), ["swipe Left"]);
+    let (response, output) = with_cx(&env, |cx| {
+        view.on_gesture(gesture(paperpaw_sdk::GestureKind::LongPress), cx)
+    });
+    assert_eq!(response, GridResponse::Handled);
+    assert_eq!(
+        output.commands,
+        [Command::RunAction(Id::new_static("t.hold"))]
+    );
+    assert!(!view.editing());
+    // By the buttons: the next page swipes it (it takes that), its long
+    // press is Select held; Right moves the focus to the tool, Left back:
+    // told each time; drawn its own way.
+    press(&mut view, &env, &actions::NEXT_PAGE);
+    assert_eq!(told(), ["swipe Left"]);
+    let (_, output) = with_cx(&env, |cx| view.on_action(&actions::LONG_CONFIRM, cx));
+    assert_eq!(
+        output.commands,
+        [Command::RunAction(Id::new_static("t.hold"))]
+    );
+    press(&mut view, &env, &actions::RIGHT);
+    assert_eq!(told(), ["focus false"]);
+    press(&mut view, &env, &actions::LEFT);
+    assert_eq!(told(), ["focus true"]);
+    let mut frame = support::frame(480, 800);
+    view.draw(&mut frame.canvas(), &env);
+    assert_eq!(told(), ["own focus"]);
+}
+
+/// Never onto the top row: the screen's veto.
+fn not_on_top(_: &Env<'_>, _: &[Item], _: &Item, to: Cells) -> bool {
+    to.row > 0
+}
+
+/// The screen's own options come after the grid's and are answered to
+/// it; the screen's check keeps an item from going where it says no.
+#[test]
+fn the_screen_adds_options_and_vetoes_drops() {
+    let h = harness(Device::BUTTONS);
+    let env = h.env();
+    let items = [Item::placed(tool("t.a"), Cells::new(0, 1, 1, 1))];
+    let mut view = GridView::asking(&env, CHOSEN);
+    view.set_options(&["t.duplicate"]);
+    view.set_drop_check(not_on_top);
+    view.set_editing(true);
+    view.layout(&env, geometry(), &items, &[]);
+    // Its own option, answered with the item.
+    let picked = Picked::new("0".to_string(), "t.duplicate".to_string());
+    let event = Id::parse(CHOSEN.as_str()).unwrap();
+    let (response, _) = with_cx(&env, |cx| view.on_event(&event, &picked.to_params(), cx));
+    assert_eq!(
+        response,
+        GridResponse::Option {
+            item: Item::placed(tool("t.a"), Cells::new(0, 1, 1, 1)),
+            option: "t.duplicate".to_string()
+        }
+    );
+    // Moved up by the buttons: vetoed, it stays; down it goes.
+    choose(&mut view, &env, 0, "move");
+    press(&mut view, &env, &actions::UP);
+    assert_eq!(placed(&env, &view)[0].1, Cells::new(0, 1, 1, 1));
+    press(&mut view, &env, &actions::DOWN);
+    assert_eq!(placed(&env, &view)[0].1, Cells::new(0, 2, 1, 1));
+}
+
+/// A target tapped only keeps its long press.
+struct Touchy;
+
+impl Widget for Touchy {
+    fn height(&self, _: &Env<'_>, _: u16) -> u16 {
+        90
+    }
+
+    fn draw(&self, _: &mut Canvas<'_>, _: &Env<'_>, _: Rect) {}
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        vec![
+            WidgetTarget::touch(area, Command::RunAction(OPEN))
+                .hold(Command::RunAction(Id::new_static("t.hold"))),
+        ]
+    }
+}
+
+#[test]
+fn a_touch_target_keeps_its_long_press() {
+    let mut h = harness(Device::TOUCH);
+    h.widgets.add(WidgetSpec::new(
+        Id::new_static("t.touchy"),
+        "t.touchy",
+        |_| Box::new(Touchy),
+    ));
+    let env = h.env();
+    let items = [Item::placed(widget("t.touchy"), Cells::new(0, 0, 2, 2))];
+    let view = &mut GridView::asking(&env, CHOSEN);
+    view.layout(&env, geometry(), &items, &[]);
+    let m = middle(geometry().rect(Cells::new(0, 0, 2, 2)));
+    let hold = paperpaw_sdk::Gesture::new(
+        paperpaw_sdk::GestureKind::LongPress,
+        m,
+        m,
+        paperpaw_platform::PointerTool::Finger,
+    );
+    let (response, output) = with_cx(&env, |cx| view.on_gesture(hold, cx));
+    assert_eq!(response, GridResponse::Handled);
+    assert_eq!(
+        output.commands,
+        [Command::RunAction(Id::new_static("t.hold"))]
+    );
+    assert!(!view.editing());
+}
+
+/// Two pages of two targets side by side, turned by swipes; `endless`
+/// takes every swipe (a calendar going on and on).
+#[derive(Default)]
+struct Paged {
+    page: usize,
+    endless: bool,
+}
+
+impl Widget for Paged {
+    fn height(&self, _: &Env<'_>, _: u16) -> u16 {
+        90
+    }
+
+    fn draw(&self, _: &mut Canvas<'_>, _: &Env<'_>, _: Rect) {}
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        let half = area.width / 2;
+        (0..2)
+            .map(|i| {
+                let at = Rect::new(area.x + i * half, area.y, half, area.height);
+                let action = Id::parse(&format!("t.p{}-{i}", self.page)).unwrap();
+                WidgetTarget::new(at, Command::RunAction(action))
+            })
+            .collect()
+    }
+
+    fn on_input(
+        &mut self,
+        _: &Env<'_>,
+        input: paperpaw_sdk::widgets::WidgetInput,
+        _: Rect,
+        _: &mut Vec<Command>,
+    ) -> bool {
+        use paperpaw_sdk::widgets::WidgetInput;
+        match input {
+            WidgetInput::Swipe(_) if self.endless => self.page = (self.page + 1) % 2,
+            WidgetInput::Swipe(paperpaw_sdk::Direction::Left) if self.page == 0 => self.page = 1,
+            WidgetInput::Swipe(paperpaw_sdk::Direction::Right) if self.page == 1 => self.page = 0,
+            _ => return false,
+        }
+        true
+    }
+}
+
+/// A grid of a paged widget (`endless` or not) above a tool.
+fn paged(h: &mut Harness, endless: bool) {
+    h.widgets.add(WidgetSpec::new(
+        Id::new_static("t.paged"),
+        "t.paged",
+        move |_| Box::new(Paged { page: 0, endless }),
+    ));
+}
+
+fn paged_items() -> [Item; 2] {
+    [
+        Item::placed(widget("t.paged"), Cells::new(0, 0, 4, 1)),
+        Item::placed(tool("t.a"), Cells::new(0, 1, 1, 1)),
+    ]
+}
+
+fn confirmed(view: &mut GridView, env: &Env<'_>) -> Option<Command> {
+    let (_, output) = with_cx(env, |cx| view.on_action(&actions::CONFIRM, cx));
+    output.commands.first().cloned()
+}
+
+fn ran(id: &'static str) -> Option<Command> {
+    Some(Command::RunAction(Id::new_static(id)))
+}
+
+/// With the buttons Left and Right go through a widget's targets and on
+/// out of it; the page buttons turn its pages while it has the focus
+/// (Select then runs what shows), the screen's where it takes none.
+#[test]
+fn buttons_go_through_a_widget_and_page_it_with_the_page_buttons() {
+    let mut h = harness(Device::BUTTONS);
+    paged(&mut h, false);
+    let env = h.env();
+    let mut view = GridView::asking(&env, CHOSEN);
+    view.layout(&env, geometry(), &paged_items(), &[]);
+    assert_eq!(confirmed(&mut view, &env), ran("t.p0-0"));
+    press(&mut view, &env, &actions::RIGHT);
+    assert_eq!(confirmed(&mut view, &env), ran("t.p0-1"), "its next target");
+    press(&mut view, &env, &actions::RIGHT);
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"), "then out of it");
+    press(&mut view, &env, &actions::LEFT);
+    assert_eq!(
+        press(&mut view, &env, &actions::NEXT_PAGE),
+        GridResponse::Handled
+    );
+    assert_eq!(
+        confirmed(&mut view, &env),
+        ran("t.p1-0"),
+        "its next page, what shows"
+    );
+    assert_eq!(
+        press(&mut view, &env, &actions::NEXT_PAGE),
+        GridResponse::Ignored,
+        "at its last page the screen's"
+    );
+    press(&mut view, &env, &actions::PREV_PAGE);
+    assert_eq!(confirmed(&mut view, &env), ran("t.p0-0"));
+}
+
+/// A widget that takes every swipe never keeps the focus: Left and Right
+/// leave it after its last target, on a device with no Up and Down (the
+/// X4) and a single page.
+#[test]
+fn a_widget_paging_without_end_never_keeps_the_focus() {
+    let mut h = harness(Device::BUTTONS);
+    paged(&mut h, true);
+    let env = h.env();
+    let mut view = GridView::asking(&env, CHOSEN);
+    view.layout(&env, geometry(), &paged_items(), &[]);
+    for _ in 0..2 {
+        press(&mut view, &env, &actions::RIGHT);
+    }
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"));
+    for _ in 0..3 {
+        press(&mut view, &env, &actions::RIGHT);
+    }
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"), "round and out again");
+    press(&mut view, &env, &actions::LEFT);
+    press(&mut view, &env, &actions::NEXT_PAGE);
+    for _ in 0..2 {
+        press(&mut view, &env, &actions::RIGHT);
+    }
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"), "paged, still out");
+}
+
+/// A swipe on a widget while the focus is elsewhere turns its page and
+/// leaves the focus where it was; with the focus on it, the focus goes to
+/// its first target and it is told.
+#[test]
+fn a_swipe_on_a_widget_leaves_the_focus_where_it_was() {
+    let mut h = harness(Device::BUTTONS);
+    paged(&mut h, false);
+    let env = h.env();
+    let mut view = GridView::asking(&env, CHOSEN);
+    view.layout(&env, geometry(), &paged_items(), &[]);
+    for _ in 0..2 {
+        press(&mut view, &env, &actions::RIGHT);
+    }
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"));
+    let m = middle(geometry().rect(Cells::new(0, 0, 4, 1)));
+    let swipe = paperpaw_sdk::Gesture::new(
+        paperpaw_sdk::GestureKind::Swipe(paperpaw_sdk::Direction::Left),
+        m,
+        Point::new(m.x - 100, m.y),
+        paperpaw_platform::PointerTool::Finger,
+    );
+    let (response, output) = with_cx(&env, |cx| view.on_gesture(swipe, cx));
+    assert_eq!(response, GridResponse::Handled);
+    assert!(output.commands.is_empty());
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"), "the focus stays");
+    press(&mut view, &env, &actions::LEFT);
+    assert_eq!(confirmed(&mut view, &env), ran("t.p1-1"), "its page turned");
+}
+
+/// Dragging an item, by its middle to move it or by its corner to size
+/// it: a finger trembling in its cells asks for no refresh (each takes
+/// most of a second on some panels), a move into another cell (or size)
+/// for one.
+#[test]
+fn a_drag_refreshes_only_where_the_cells_change() {
+    let h = harness(Device::TOUCH);
+    let env = h.env();
+    let items = [Item::placed(tool("t.a"), Cells::new(0, 0, 1, 1))];
+    for resize in [false, true] {
+        let mut view = GridView::asking(&env, CHOSEN);
+        view.set_editing(true);
+        view.layout(&env, geometry(), &items, &[]);
+        let area = geometry().rect(Cells::new(0, 0, 1, 1));
+        let start = if resize { corner(area) } else { middle(area) };
+        let refreshes = |view: &mut GridView, phase, at: Point| {
+            let (_, output) = with_cx(&env, |cx| view.on_pointer(&pointer(phase, at.x, at.y), cx));
+            usize::from(output.refresh.is_some())
+        };
+        let mut asked = refreshes(&mut view, PointerPhase::Down, start);
+        for n in 1..=10 {
+            let trembling = Point::new(start.x - n % 3, start.y - n % 2);
+            asked += refreshes(&mut view, PointerPhase::Move, trembling);
+        }
+        assert_eq!(asked, 0, "resize {resize}");
+        let next = Point::new(start.x + 120, start.y);
+        assert_eq!(
+            refreshes(&mut view, PointerPhase::Move, next),
+            1,
+            "resize {resize}"
+        );
+        assert_eq!(
+            refreshes(&mut view, PointerPhase::Move, next),
+            0,
+            "resize {resize}"
+        );
+    }
 }

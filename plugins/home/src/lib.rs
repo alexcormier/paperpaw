@@ -40,7 +40,6 @@ mod add;
 mod blocks;
 mod covers;
 mod drawer;
-mod edit;
 mod layouts;
 mod pages;
 mod recent;
@@ -67,12 +66,11 @@ pub const PLUGIN: Id = Id::new_static("home");
 pub const SCREEN: Id = Id::new_static("home.dashboard");
 /// Shortcuts at the head of the home screen's grid of tools.
 pub const ACTIONS: Id = Id::new_static("home.actions");
-/// Editing a list of widgets (e.g. the sleep screen's).
-pub(crate) const EDIT_SCREEN: Id = Id::new_static("home.edit");
+/// Actions below the page, as icons left of the pencil: any plugin adds
+/// its own (`Registrar::add_menu_entry`); none at first.
+pub const FOOTER: Id = Id::new_static("home.footer");
 /// Adding a widget or tool to a page.
 pub(crate) const ADD_SCREEN: Id = Id::new_static("home.add-widget");
-/// Adding a widget to a list of widgets.
-pub(crate) const LIST_ADD_SCREEN: Id = Id::new_static("home.add-to-list");
 /// Every tool at once (swipe up on the home screen).
 pub const ALL_TOOLS: Id = Id::new_static("home.all-tools");
 /// Edits the home screen's pages: in the main menu, so that buttons alone
@@ -113,19 +111,9 @@ impl Plugin for Home {
             Box::new(|env, params| Box::new(Dashboard::new(env, params))),
         ))?;
         r.add_screen(ScreenSpec::new(
-            EDIT_SCREEN,
-            "home.edit.screen",
-            Box::new(|env, params| Box::new(edit::EditScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
             ADD_SCREEN,
             "home.edit.add",
             Box::new(|env, params| Box::new(add::AddScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            LIST_ADD_SCREEN,
-            "home.edit.add",
-            Box::new(|env, params| Box::new(edit::AddScreen::new(env, params))),
         ))?;
         r.bind_slot(slots::HOME, SCREEN, Priority::DEFAULT)?;
         r.add_screen(ScreenSpec::new(
@@ -178,9 +166,11 @@ impl Plugin for Home {
     }
 }
 
-/// The home screen's own buttons below the grid.
+/// The home screen's own buttons below the grid; the footer's actions
+/// from [`FOOTER_BASE`] on.
 const PENCIL: u16 = 0;
 const ADD: u16 = 1;
+const FOOTER_BASE: u16 = 16;
 
 #[derive(Debug)]
 struct Dashboard {
@@ -194,6 +184,8 @@ struct Dashboard {
     footer: Rect,
     pencil: Rect,
     plus: Rect,
+    /// The footer's actions ([`FOOTER`]), each where its icon is.
+    actions: Vec<(Rect, Id)>,
     /// Recent books whose covers are to be looked up, one a tick.
     missing: Vec<String>,
     /// How many of the recent books the page's widgets show.
@@ -207,10 +199,7 @@ struct Dashboard {
     stale: bool,
 }
 
-/// The next full minute, when the clock shows another time.
-fn next_minute(env: &Env<'_>) -> paperpaw_sdk::Instant {
-    paperpaw_sdk::time::next_minute(env).unwrap_or(env.now.add_millis(60_000))
-}
+use widgets::next_minute;
 
 /// Where the parts of the home screen go: the status line, the grid, the
 /// footer; with `sheet`, a footer that high, the grid's cells as many as
@@ -285,6 +274,7 @@ impl Dashboard {
         // Opened by *Edit home screen*.
         let editing = page_set.or_else(|| (params.get(params::MODE) == Some("edit")).then_some(0));
         let mut grid = GridView::asking(env, CHOSEN);
+        grid.set_host(SCREEN);
         grid.set_editing(editing.is_some());
         let (status, _, footer) = frame(env, None);
         Self {
@@ -296,6 +286,7 @@ impl Dashboard {
             footer,
             pencil: Rect::default(),
             plus: Rect::default(),
+            actions: Vec::new(),
             missing: Vec::new(),
             books: 0,
             shown: Vec::new(),
@@ -345,6 +336,29 @@ impl Dashboard {
         self.plus = Rect::new(margin, footer.y, side, side);
         let editing = self.grid.editing();
         let mut buttons = Vec::new();
+        // The footer's actions left of the pencil, from the right, as many
+        // as leave the dots of the pages their room in the middle.
+        self.actions.clear();
+        if self.chooser.is_none() && !editing {
+            let pencil = env.settings.read(&pages::FOOTER_PENCIL);
+            let mut right = if pencil {
+                self.pencil.x
+            } else {
+                self.pencil.x + side
+            };
+            let least = display.width / 2 + side;
+            for item in env.menus.shown_items(env, FOOTER.as_str()) {
+                if item.section || right < least + side {
+                    continue;
+                }
+                right -= side;
+                self.actions
+                    .push((Rect::new(right, footer.y, side, side), item.id.clone()));
+            }
+            for (at, (area, _)) in self.actions.iter().enumerate().rev() {
+                buttons.push((*area, FOOTER_BASE + at as u16));
+            }
+        }
         if let Some(chooser) = &mut self.chooser {
             // Shown, not used: no focus, nothing to tap but the sheet.
             self.page = 0;
@@ -413,6 +427,11 @@ impl Dashboard {
                 ADD_SCREEN,
                 Params::new().with(add::PAGE, format!("{}", self.page)),
             )),
+            GridResponse::Button(n) if n >= FOOTER_BASE => {
+                if let Some((_, action)) = self.actions.get(usize::from(n - FOOTER_BASE)) {
+                    cx.command(Command::RunAction(action.clone()));
+                }
+            }
             _ => {}
         }
         handled
@@ -443,23 +462,6 @@ impl Dashboard {
         if let Some(page) = pages::pages(&env).get(self.page) {
             cx.command(pages::store(page.slot, items));
         }
-    }
-
-    /// Whether a change of setting `id` changes how the page is made: the
-    /// home screen's own settings, the look of all (`core.`), and those
-    /// of the widgets on the page. What other settings change, the
-    /// widgets read anew without being made anew.
-    fn remakes(&self, id: &str) -> bool {
-        let of = |widget: &str| {
-            id.strip_prefix(widget)
-                .is_some_and(|rest| rest.starts_with('.'))
-        };
-        of("home")
-            || of("core")
-            || self
-                .shown
-                .iter()
-                .any(|widget| of(widget) || of(widgets::base(widget)))
     }
 
     fn draw_footer(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
@@ -504,6 +506,25 @@ impl Dashboard {
             icon("check", self.pencil, Color::BLACK);
         } else if env.settings.read(&pages::FOOTER_PENCIL) {
             icon("pencil", self.pencil, style.faint(60));
+        }
+        if !editing {
+            for (area, action) in &self.actions {
+                let name = env.menus.icon(action.as_str()).unwrap_or("puzzle");
+                let w = ui::icon_width(env, name, size);
+                let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
+                ui::draw_icon(canvas, env, name, size, x, *area, style.faint(60));
+                let title = env
+                    .menus
+                    .title(action.as_str())
+                    .map_or(action.as_str(), |t| env.i18n.tr(t));
+                canvas.describe(
+                    paperpaw_sdk::semantics::Role::Button,
+                    title,
+                    *area,
+                    false,
+                    None,
+                );
+            }
         }
     }
 }
@@ -592,38 +613,46 @@ impl Screen for Dashboard {
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let response = self.grid.on_event(event, params, cx);
         let env = *cx.env();
-        let setting = events::SETTING_CHANGED.read(event, params);
         if response != GridResponse::Ignored {
             self.respond(response, cx);
-        } else if (self.chooser.is_some() && (layouts::shows_anew(event) || setting.is_some()))
-            || setting
-                .as_ref()
-                .is_some_and(|changed| self.remakes(changed.id.as_str()))
-        {
-            // The widgets made anew, what they show read again.
-            self.mark_stale(cx);
-            if self.chooser.is_some() {
-                cx.request_refresh(RefreshMode::Partial);
+            return;
+        }
+        let setting = events::SETTING_CHANGED.read(event, params).is_some();
+        let refresh = match widgets::refresh(event, params, PLUGIN.as_str(), &self.shown) {
+            // Choosing a layout, the page shown anew for what it shows.
+            _ if self.chooser.is_some() && (layouts::shows_anew(event) || setting) => {
+                widgets::Refresh::Remake
             }
-        } else if setting.is_some()
-            || *event == events::LIBRARY_CHANGED
-            || *event == events::BOOK_MOVED
-        {
+            refresh => refresh,
+        };
+        match refresh {
+            widgets::Refresh::Remake => {
+                // The widgets made anew, what they show read again.
+                self.mark_stale(cx);
+                if self.chooser.is_some() {
+                    cx.request_refresh(RefreshMode::Partial);
+                }
+            }
             // What the widgets show read again, where they are made (when
             // hidden, they are made anew as it shows).
-            if !self.stale && self.grid.update_widgets(&env, cx) {
+            widgets::Refresh::Read => {
+                if !self.stale && self.grid.update_widgets(&env, cx) {
+                    cx.request_refresh(RefreshMode::Fast);
+                }
+            }
+            widgets::Refresh::ReadOne(id) => {
+                if self.grid.update_widget(id.as_str(), &env, cx) {
+                    cx.request_refresh(RefreshMode::Fast);
+                }
+            }
+            widgets::Refresh::Live => {
+                if let Some(status) = self.status {
+                    cx.request_redraw_area(status);
+                }
+                self.grid.update_live(&env, cx);
                 cx.request_refresh(RefreshMode::Fast);
             }
-        } else if let Some(changed) = events::WIDGET_CHANGED.read(event, params) {
-            if self.grid.update_widget(changed.id.as_str(), &env, cx) {
-                cx.request_refresh(RefreshMode::Fast);
-            }
-        } else if *event == events::STATUS_CHANGED {
-            if let Some(status) = self.status {
-                cx.request_redraw_area(status);
-            }
-            self.grid.update_live(&env, cx);
-            cx.request_refresh(RefreshMode::Fast);
+            _ => {}
         }
     }
 

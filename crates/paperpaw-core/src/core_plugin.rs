@@ -294,7 +294,7 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
             out.push(Command::RunAction(target.clone()));
         })
     };
-    let handled: [(Id, &'static str, ActionHandler); 10] = [
+    let handled: [(Id, &'static str, ActionHandler); 11] = [
         (
             actions::REFRESH_SCREEN,
             "core.action.refresh-screen",
@@ -333,6 +333,15 @@ fn register_moving(r: &mut Registrar) -> Result<(), RegisterError> {
                     slots::MENU,
                     Params::new().with(params::MENU, menus::MAIN.as_str()),
                 ));
+            }),
+        ),
+        // Select held: the menu, where no screen takes it for a long
+        // press of its own.
+        (
+            actions::LONG_CONFIRM,
+            "core.action.long-confirm",
+            Box::new(|_: &Env<'_>, out: &mut Vec<Command>| {
+                out.push(Command::RunAction(actions::MENU));
             }),
         ),
         (
@@ -807,6 +816,23 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
             Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, &params))
         }),
     ))?;
+    // Lists of widgets above each other (the sleep screen's) edited,
+    // unless a plugin fills the slot.
+    r.add_screen(ScreenSpec::new(
+        screens::WIDGET_LIST,
+        "core.widgets.edit.screen",
+        Box::new(|env, params| {
+            Box::new(paperpaw_sdk::ui::widget_list::ListScreen::open(env, params))
+        }),
+    ))?;
+    r.add_screen(ScreenSpec::new(
+        screens::ADD_WIDGET,
+        "core.widgets.edit.add",
+        Box::new(|env, params| {
+            Box::new(paperpaw_sdk::ui::widget_list::AddScreen::open(env, params))
+        }),
+    ))?;
+    r.bind_slot(slots::EDIT_WIDGETS, screens::WIDGET_LIST, Priority::DEFAULT)?;
     // The choice every plugin asks (`ask::choice`), unless another
     // screen fills the slot.
     r.add_screen(ScreenSpec::new(
@@ -1123,7 +1149,7 @@ fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 /// advanced settings its header, corners, highlight, lines, groups,
 /// titles and room. The defaults are PaperPaw's look (soft corners,
 /// pills, plain headers, faint lines); themes (data plugins) set others.
-static LOOK: [SettingSpec; 13] = [
+static LOOK: [SettingSpec; 14] = [
     SettingSpec::fixed_number(
         settings::UI_SIZE.static_str(),
         "core.setting.ui-size",
@@ -1155,6 +1181,15 @@ static LOOK: [SettingSpec; 13] = [
     )
     .for_advanced()
     .described("core.setting.ui-header.help"),
+    SettingSpec::fixed_choice(
+        settings::WIDGET_FRAME.static_str(),
+        "core.setting.widget-frame",
+        paperpaw_sdk::widgets::look::ALL_FRAMES,
+        paperpaw_sdk::widgets::look::OWN_FRAME,
+        groups::LOOK,
+    )
+    .for_advanced()
+    .described("core.setting.widget-frame.help"),
     SettingSpec::fixed_choice(
         settings::UI_CORNERS.static_str(),
         "core.setting.ui-corners",
@@ -1785,9 +1820,49 @@ static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::fixed_number(
 .advanced()
 .described("core.setting.battery-low.help")];
 
-/// The time of day and the battery, for status lines.
+/// The line of the items of the place it is drawn in.
+fn items_line<'e>(
+    env: &Env<'e>,
+    frame: &paperpaw_sdk::StatusFrame<'_>,
+) -> Option<paperpaw_sdk::status::StatusLine<'e>> {
+    let place = env.status_items.place(frame.place?)?;
+    let line = place.line(env, frame.area, frame.size, frame.color);
+    Some(line.percent(frame.percent))
+}
+
+/// The time of day and the battery, for status lines; the line of a
+/// place's items.
 fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&TIME)?;
+    r.add_status_line(
+        paperpaw_sdk::StatusLineSpec::new(
+            paperpaw_sdk::builtin::status_lines::ITEMS,
+            "core.status.line.items",
+            Box::new(|canvas, env, frame| {
+                let (Some(line), Some(font)) = (items_line(env, frame), env.fonts.role(frame.font))
+                else {
+                    return;
+                };
+                line.draw(canvas, env, &font, frame.context);
+            }),
+        )
+        .signature(Box::new(|env, context| {
+            let lists: Vec<&str> = env
+                .status_items
+                .places()
+                .flat_map(|p| p.lists(env))
+                .collect();
+            paperpaw_sdk::status::signature(env, &lists, context)
+        }))
+        // The reader's line of items before it was the kernel's.
+        .also(Id::new_static("reader.status-line.items"))
+        .targets(Box::new(|env, frame| {
+            match (items_line(env, frame), env.fonts.role(frame.font)) {
+                (Some(line), Some(font)) => line.targets(env, &font, frame.context),
+                _ => Vec::new(),
+            }
+        })),
+    )?;
     // The time and the battery give way after most others.
     r.add_status_item(
         StatusItemSpec::new(

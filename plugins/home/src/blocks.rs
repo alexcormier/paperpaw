@@ -63,6 +63,8 @@ pub(crate) const FOCUS_AT_ONCE: Setting<bool> = Setting::new("home.focus-at-once
 const STATUS_LEFT: Setting<Text> = Setting::new("home.status.left");
 const STATUS_CENTER: Setting<Text> = Setting::new("home.status.center");
 const STATUS_RIGHT: Setting<Text> = Setting::new("home.status.right");
+/// The status line shown: its items unless another is chosen.
+const STATUS_LINE: Setting<Text> = Setting::new("home.status.line");
 /// Where the status line's items show, above the grid and as a widget.
 const PLACE: Place = Place::new(
     Id::new_static("home.status-line"),
@@ -72,11 +74,22 @@ const PLACE: Place = Place::new(
         Id::new_static(STATUS_CENTER.static_str()),
         Id::new_static(STATUS_RIGHT.static_str()),
     ],
-);
+)
+.with_line(Id::new_static(STATUS_LINE.static_str()));
 /// The status line's parts, each a list of status items chosen on their
 /// picker: the time on the left; Wi-Fi and the battery on the right.
 static STATUS_ITEMS: SettingExtra = SettingExtra::new().editor(screens::STATUS_ITEMS);
-static STATUS_SETTINGS: [SettingSpec; 3] = [
+static STATUS_LINES: SettingExtra = SettingExtra::new().editor(screens::STATUS_LINES);
+static STATUS_SETTINGS: [SettingSpec; 4] = [
+    SettingSpec::fixed(
+        STATUS_LINE.static_str(),
+        "home.status.line",
+        SettingKind::List,
+        SettingValue::Text(Cow::Borrowed("")),
+        Id::new_static(STATUS),
+    )
+    .with_extra(&STATUS_LINES)
+    .described("home.status.line.help"),
     status_part(
         STATUS_LEFT.static_str(),
         "home.status.left",
@@ -230,10 +243,9 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     Ok(())
 }
 
-/// The height `widget`'s frame takes above and below its content.
+/// The height `widget`'s frame takes (the SDK's).
 fn frame_height(env: &Env<'_>, widget: &str) -> u16 {
-    let probe = Rect::new(0, 0, 100, 100);
-    100 - widgets::look::look(env, widget, probe).area.height
+    paperpaw_sdk::widgets::frame_height(env, widget)
 }
 
 /// `height` pixels placed in the middle of `area`, top to bottom.
@@ -285,17 +297,25 @@ fn draw_status_widget(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 /// cut or drawn outside.
 fn draw_status_line(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, area: Rect) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return;
-    };
     let color = if look.frame == Frame::Dark {
         look.faint
     } else {
         style.faint(60)
     };
-    PLACE
-        .line(env, area, style.small, color)
-        .draw(canvas, env, &font, &Params::new());
+    let context = Params::new();
+    PLACE.draw(canvas, env, &status_frame(env, area, color, &context));
+}
+
+/// The frame of the status line in `area`, in the interface's font.
+fn status_frame<'a>(
+    env: &Env<'_>,
+    area: Rect,
+    color: Color,
+    context: &'a Params,
+) -> paperpaw_sdk::StatusFrame<'a> {
+    let style = UiStyle::new(env);
+    paperpaw_sdk::StatusFrame::new(area, true, style.small, color, context)
+        .font(paperpaw_sdk::builtin::fonts::UI.static_str())
 }
 
 /// Where a tap on the status line in `area` does something (the items
@@ -303,13 +323,9 @@ fn draw_status_line(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look
 /// what they do by the actions bound to them, so that the focus never
 /// stops on an item that comes and goes (Wi-Fi).
 fn status_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-    let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
-        return Vec::new();
-    };
+    let context = Params::new();
     PLACE
-        .line(env, area, style.small, Color::BLACK)
-        .targets(env, &font, &Params::new())
+        .targets(env, &status_frame(env, area, Color::BLACK, &context))
         .into_iter()
         .map(|t| WidgetTarget::touch(t.area, t.command))
         .collect()

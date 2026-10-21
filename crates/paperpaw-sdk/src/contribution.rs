@@ -156,6 +156,8 @@ pub enum Contribution {
     StatusLine(Box<StatusLineSpec>),
     /// Boxed: four ids, larger than the other contributions.
     StatusPlace(Box<StatusPlace>),
+    WidgetPlace(Box<crate::widgets::WidgetPlace>),
+    WidgetCategory(Box<crate::widgets::WidgetCategory>),
     TextFilter(TextFilterSpec),
     Decorator(Box<crate::decorations::DecoratorSpec>),
     PageLayer(Box<crate::layers::PageLayerSpec>),
@@ -258,6 +260,8 @@ impl Contribution {
             Contribution::StatusItem(_) => "status-item",
             Contribution::StatusLine(_) => "status-line",
             Contribution::StatusPlace(_) => "status-place",
+            Contribution::WidgetPlace(_) => "widget-place",
+            Contribution::WidgetCategory(_) => "widget-category",
             Contribution::TextFilter(_) => "text-filter",
             Contribution::Decorator(_) => "decorator",
             Contribution::PageLayer(_) => "page-layer",
@@ -308,6 +312,8 @@ impl Contribution {
             Contribution::StatusItem(i) => &i.id,
             Contribution::StatusLine(l) => &l.id,
             Contribution::StatusPlace(p) => &p.id,
+            Contribution::WidgetPlace(p) => &p.id,
+            Contribution::WidgetCategory(c) => &c.id,
             Contribution::TextFilter(f) => &f.id,
             Contribution::Decorator(d) => &d.id,
             Contribution::PageLayer(l) => &l.id,
@@ -1007,6 +1013,26 @@ impl Registrar {
     /// [`status::Place`](crate::status::Place)).
     pub fn add_status_place(&mut self, place: StatusPlace) -> Result<(), RegisterError> {
         self.add(Contribution::StatusPlace(Box::new(place)))
+    }
+
+    /// Adds a place where widgets show: the settings that list them, in a
+    /// grid or above each other (see
+    /// [`widgets::WidgetPlace`](crate::widgets::WidgetPlace)).
+    pub fn add_widget_place(
+        &mut self,
+        place: crate::widgets::WidgetPlace,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::WidgetPlace(Box::new(place)))
+    }
+
+    /// Adds a kind of widgets of the plugin's own, with its icon, for
+    /// widgets that fit none of the kernel's
+    /// ([`widgets::categories`](crate::widgets::categories)).
+    pub fn add_widget_category(
+        &mut self,
+        category: crate::widgets::WidgetCategory,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::WidgetCategory(Box::new(category)))
     }
 
     /// Publishes a service for other plugins as `id`, found by its type
