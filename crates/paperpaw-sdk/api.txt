@@ -173,11 +173,13 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Goto
 pub fn paperpaw_sdk::builtin::events::Goto::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Goto::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::builtin::events::LookupAnswered
+pub paperpaw_sdk::builtin::events::LookupAnswered::more: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::builtin::events::LookupAnswered::provider: paperpaw_sdk::Id
 pub paperpaw_sdk::builtin::events::LookupAnswered::source: alloc::string::String
 pub paperpaw_sdk::builtin::events::LookupAnswered::text: alloc::string::String
 pub paperpaw_sdk::builtin::events::LookupAnswered::word: alloc::string::String
 impl paperpaw_sdk::builtin::events::LookupAnswered
+pub fn paperpaw_sdk::builtin::events::LookupAnswered::more(self, impl core::convert::Into<core::option::Option<paperpaw_sdk::Id>>) -> Self
 pub fn paperpaw_sdk::builtin::events::LookupAnswered::new(paperpaw_sdk::Id, alloc::string::String, alloc::string::String, alloc::string::String) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::LookupAnswered
 pub fn paperpaw_sdk::builtin::events::LookupAnswered::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
@@ -1570,9 +1572,11 @@ pub paperpaw_sdk::lookup::Asked::commands: alloc::vec::Vec<paperpaw_sdk::Command
 pub paperpaw_sdk::lookup::Asked::entries: alloc::vec::Vec<paperpaw_sdk::lookup::LookupEntry>
 pub paperpaw_sdk::lookup::Asked::pending: alloc::vec::Vec<paperpaw_sdk::Id>
 #[non_exhaustive] pub struct paperpaw_sdk::lookup::LookupEntry
+pub paperpaw_sdk::lookup::LookupEntry::more: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::lookup::LookupEntry::source: alloc::string::String
 pub paperpaw_sdk::lookup::LookupEntry::text: alloc::string::String
 impl paperpaw_sdk::lookup::LookupEntry
+pub fn paperpaw_sdk::lookup::LookupEntry::more(self, paperpaw_sdk::Id) -> Self
 pub fn paperpaw_sdk::lookup::LookupEntry::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::lookup::LookupProviderSpec
 pub paperpaw_sdk::lookup::LookupProviderSpec::id: paperpaw_sdk::Id
@@ -1599,6 +1603,7 @@ pub paperpaw_sdk::lookup::LookupQuery::reply: paperpaw_sdk::Id
 pub paperpaw_sdk::lookup::LookupQuery::word: alloc::string::String
 impl paperpaw_sdk::lookup::LookupQuery
 pub fn paperpaw_sdk::lookup::LookupQuery::answer(&self, &paperpaw_sdk::Id, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::lookup::LookupQuery::answer_entry(&self, &paperpaw_sdk::Id, paperpaw_sdk::lookup::LookupEntry) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::lookup::LookupQuery::new(impl core::convert::Into<alloc::string::String>, core::option::Option<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::lookup::LookupQuery::reply(self, paperpaw_sdk::Id) -> Self
 pub type paperpaw_sdk::lookup::LookupFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::lookup::LookupQuery) -> paperpaw_sdk::lookup::LookupAnswer>

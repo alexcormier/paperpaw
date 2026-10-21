@@ -577,6 +577,11 @@ pub mod events {
             pub source: String,
             pub text: String,
         }
+        optional {
+            /// The screen that shows more of it
+            /// ([`LookupEntry::more`](crate::lookup::LookupEntry::more)).
+            pub more: Id,
+        }
     }
 
     crate::event_data! {

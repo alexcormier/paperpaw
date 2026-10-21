@@ -21,6 +21,14 @@ change the plugin SDK.
   after the plugin that added it.
 - Docs: what the slots besides the reader's promise (home, menu, panel,
   settings, keyboard, lookup) and the shipped plugins' points.
+- Wikipedia: a lookup provider that goes online. Once *Online* is
+  chosen in the dictionary's panel, its summary shows there as an entry
+  beside the dictionaries', and its line *Open Wikipedia* (or confirm,
+  where the entry shows) opens the whole summary on its own screen, which
+  stays bound to `slots::LOOKUP_ONLINE`. SDK: `LookupEntry::more`, the
+  screen showing more of an entry (`LookupQuery::answer_entry`,
+  `LookupAnswered::more`). The panel names each source right above its
+  entries.
 - SDK: menu entries placed beside others (`MenuPlace`,
   `Registrar::place_menu_entry`; several in one place keep the order
   they were registered in) or taken out by a plugin (`hide_menu_entry`;
