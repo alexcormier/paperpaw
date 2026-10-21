@@ -34,7 +34,7 @@ pub(crate) fn entered(env: &Env<'_>, typed: &Typed, out: &mut Vec<Command>) {
         return;
     };
     let text = typed.text.trim();
-    if !text.is_empty() && env.secrets.get(id).is_some() {
+    if !text.is_empty() && env.secrets.has(id) {
         out.push(Command::SetSecret(SecretChange::keep(id, "", text)));
     }
 }
@@ -57,7 +57,12 @@ impl SecretList {
     }
 
     fn open(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
-        let id = cx.env().secrets.iter().nth(index).map(|s| s.id.clone());
+        let id = cx
+            .env()
+            .secrets
+            .listed()
+            .nth(index)
+            .map(|s| s.id.to_string());
         if let Some(id) = id {
             cx.command(Command::OpenScreen(
                 SECRET_SCREEN,
@@ -70,7 +75,7 @@ impl SecretList {
 impl Screen for SecretList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let len = env.secrets.iter().count();
+        let len = env.secrets.listed().count();
         let title = env.i18n.tr("settings.secrets");
         self.header
             .draw(canvas, env, &style, title, None, self.list.paging(len));
@@ -85,16 +90,16 @@ impl Screen for SecretList {
             );
             return;
         }
-        let secrets: Vec<_> = env.secrets.iter().collect();
+        let secrets: Vec<_> = env.secrets.listed().collect();
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let label = env.i18n.tr(&secrets[index].label);
+                let label = env.i18n.tr(secrets[index].label);
                 ui::draw_value_row(canvas, env, &style, rect, focused, label, HIDDEN);
             });
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        let len = cx.env().secrets.iter().count();
+        let len = cx.env().secrets.listed().count();
         if let Some(change) = self.list.navigate(action, len) {
             change.request(cx);
             return Handled::Yes;
@@ -110,7 +115,7 @@ impl Screen for SecretList {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        let len = cx.env().secrets.iter().count();
+        let len = cx.env().secrets.listed().count();
         let paging = self.list.paging(len);
         let tapped = self
             .header
@@ -151,8 +156,8 @@ impl SecretPage {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let (style, header, area) = page(env);
         let id = params.get(ID).unwrap_or_default().to_string();
-        let secret = env.secrets.iter().find(|s| s.id == id);
-        let title = secret.map_or_else(String::new, |s| env.i18n.tr(&s.label).to_string());
+        let secret = env.secrets.listed().find(|s| s.id == id);
+        let title = secret.map_or_else(String::new, |s| env.i18n.tr(s.label).to_string());
         let mut choices = Vec::new();
         if secret.is_some_and(|s| s.changeable) {
             choices.push(Choice::Change);

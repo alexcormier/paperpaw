@@ -1048,6 +1048,7 @@ mod tests {
                 font_dirs: &[],
                 catalog_device: None,
                 secrets: &self.secrets,
+                running: &crate::secrets::Anyone,
                 random: crate::random::Random::default(),
                 storage: &self.storage,
             })

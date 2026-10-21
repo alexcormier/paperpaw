@@ -225,6 +225,20 @@ impl Storage for Metered {
     }
 }
 
+/// The plugin whose code runs now is the innermost entered: whose
+/// secrets [`Env::secrets`](paperpaw_sdk::Env) hands out.
+impl paperpaw_sdk::secrets::Running for Meter {
+    fn runs(&self, plugin: &str) -> bool {
+        let Some(&(index, _)) = self.running.borrow().last() else {
+            return false;
+        };
+        self.table
+            .borrow()
+            .get(index)
+            .is_some_and(|p| p.plugin.as_str() == plugin)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

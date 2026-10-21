@@ -151,7 +151,7 @@ pub struct Env<'a> {
     pub catalog_device: Option<&'a str>,
     /// Passwords and keys, kept for every plugin in one place (see
     /// [`secrets`](crate::secrets)).
-    pub secrets: &'a crate::secrets::Secrets,
+    pub secrets: crate::secrets::Visible<'a>,
     /// Random bytes from the platform's source, for keys and tokens (see
     /// [`random`](crate::random)).
     pub random: crate::random::Random,
@@ -259,6 +259,9 @@ pub struct EnvParts<'a> {
     /// Passwords and keys, kept for every plugin in one place (see
     /// [`secrets`](crate::secrets)).
     pub secrets: &'a crate::secrets::Secrets,
+    /// Which plugin's code runs, for [`Env::secrets`] (see
+    /// [`secrets::Running`](crate::secrets::Running)).
+    pub running: &'a dyn crate::secrets::Running,
     /// Random bytes from the platform's source, for keys and tokens (see
     /// [`random`](crate::random)).
     pub random: crate::random::Random,
@@ -306,7 +309,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             screens: p.screens,
             font_dirs: p.font_dirs,
             catalog_device: p.catalog_device,
-            secrets: p.secrets,
+            secrets: crate::secrets::Visible::new(p.secrets, p.running),
             random: p.random,
             storage: p.storage,
         }

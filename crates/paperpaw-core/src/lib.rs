@@ -1185,6 +1185,7 @@ impl Shared {
             font_dirs: &self.font_dirs,
             catalog_device: self.catalog_device,
             secrets: &self.secrets,
+            running: &*self.meter,
             random: self.random,
             storage: self.storage.as_ref(),
             keys: &self.keymap,

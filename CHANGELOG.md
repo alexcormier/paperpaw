@@ -22,7 +22,13 @@ change the plugin SDK.
   that plugin's input filters see the keys (`InputFilters::apply_of`).
   A secret setting (`SettingExtra::secret`) is kept with the secrets,
   never in the settings: read it with `env.secrets.get(id)`; the USB
-  remote sends no secret setting's value. On a blind framebuffer, and
+  remote sends no secret setting's value. Breaking: a plugin sees its
+  own secrets alone, those in its namespace: `env.secrets` is a
+  `secrets::Visible` view (`get`, `iter`, `is_empty` of the running
+  plugin's, `listed` and `has` of every secret without its value, as
+  the settings' list shows); the kernel tells it which plugin runs
+  (`secrets::Running`, `EnvParts::running`). `wifi::known` takes the
+  secrets to look at. On a blind framebuffer, and
   while the focus is worked out, no glyph or picture is made.
 - SDK: `ui::setting_opens` says what choosing a setting opens (its
   editor, the keyboard for text, the list of a choice's values), the

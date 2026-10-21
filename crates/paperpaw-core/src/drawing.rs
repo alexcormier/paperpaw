@@ -396,6 +396,8 @@ impl Kernel {
             let content = Rect::new(0, 0, env.device.display.width, env.device.display.height);
             for (active, own) in self.stack[base..].iter_mut().zip(&regions[base..]) {
                 let area = own.unwrap_or(content);
+                // As its plugin, as when drawn: it sees its own secrets.
+                let _running = self.shared.meter.enter(active.id.namespace());
                 active.screen.draw(&mut canvas.clipped(area), &env);
             }
             if content.height < bounds.height {
@@ -438,6 +440,7 @@ impl Kernel {
         let content = Rect::new(0, 0, env.device.display.width, env.device.display.height);
         let area = active.screen.region(&env).unwrap_or(content);
         let mut described = Vec::new();
+        let _running = self.shared.meter.enter(active.id.namespace());
         active.screen.draw(
             &mut aside.canvas().describing(&mut described).clipped(area),
             &env,

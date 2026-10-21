@@ -1599,6 +1599,13 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Typed
 pub fn paperpaw_sdk::replies::Typed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Typed::to_params(&self) -> paperpaw_sdk::Params
 pub mod paperpaw_sdk::secrets
+pub struct paperpaw_sdk::secrets::Anyone
+impl paperpaw_sdk::secrets::Running for paperpaw_sdk::secrets::Anyone
+pub fn paperpaw_sdk::secrets::Anyone::runs(&self, &str) -> bool
+pub struct paperpaw_sdk::secrets::Listed<'a>
+pub paperpaw_sdk::secrets::Listed::changeable: bool
+pub paperpaw_sdk::secrets::Listed::id: &'a str
+pub paperpaw_sdk::secrets::Listed::label: &'a str
 pub struct paperpaw_sdk::secrets::Secret
 pub paperpaw_sdk::secrets::Secret::changeable: bool
 pub paperpaw_sdk::secrets::Secret::id: alloc::string::String
@@ -1623,7 +1630,21 @@ pub fn paperpaw_sdk::secrets::Secrets::encode(&self) -> alloc::string::String
 pub fn paperpaw_sdk::secrets::Secrets::get(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::secrets::Secrets::is_empty(&self) -> bool
 pub fn paperpaw_sdk::secrets::Secrets::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::secrets::Secret>
+pub struct paperpaw_sdk::secrets::Visible<'a>
+impl<'a> paperpaw_sdk::secrets::Visible<'a>
+pub fn paperpaw_sdk::secrets::Visible<'a>::get(&self, &str) -> core::option::Option<&'a str>
+pub fn paperpaw_sdk::secrets::Visible<'a>::has(&self, &str) -> bool
+pub fn paperpaw_sdk::secrets::Visible<'a>::is_empty(&self) -> bool
+pub fn paperpaw_sdk::secrets::Visible<'a>::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &'a paperpaw_sdk::secrets::Secret> + '_
+pub fn paperpaw_sdk::secrets::Visible<'a>::listed(&self) -> impl core::iter::traits::iterator::Iterator<Item = paperpaw_sdk::secrets::Listed<'a>> + 'a
+pub fn paperpaw_sdk::secrets::Visible<'a>::new(&'a paperpaw_sdk::secrets::Secrets, &'a dyn paperpaw_sdk::secrets::Running) -> Self
+impl core::fmt::Debug for paperpaw_sdk::secrets::Visible<'_>
+pub fn paperpaw_sdk::secrets::Visible<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const paperpaw_sdk::secrets::FILE: &str
+pub trait paperpaw_sdk::secrets::Running
+pub fn paperpaw_sdk::secrets::Running::runs(&self, &str) -> bool
+impl paperpaw_sdk::secrets::Running for paperpaw_sdk::secrets::Anyone
+pub fn paperpaw_sdk::secrets::Anyone::runs(&self, &str) -> bool
 pub mod paperpaw_sdk::semantics
 pub use paperpaw_sdk::semantics::Described
 pub use paperpaw_sdk::semantics::Role
@@ -2741,7 +2762,7 @@ pub const paperpaw_sdk::wifi::NETWORK_WAIT_MS: u64
 pub const paperpaw_sdk::wifi::SECRET_PREFIX: &str
 pub fn paperpaw_sdk::wifi::forget(&str) -> paperpaw_sdk::secrets::SecretChange
 pub fn paperpaw_sdk::wifi::keep(&str, &str) -> paperpaw_sdk::secrets::SecretChange
-pub fn paperpaw_sdk::wifi::known(&paperpaw_sdk::secrets::Secrets) -> alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub fn paperpaw_sdk::wifi::known<'a>(impl core::iter::traits::collect::IntoIterator<Item = &'a paperpaw_sdk::secrets::Secret>) -> alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
 pub fn paperpaw_sdk::wifi::secret_id(&str) -> alloc::string::String
 pub mod paperpaw_sdk::words
 pub struct paperpaw_sdk::words::WordSet
@@ -3317,7 +3338,7 @@ pub paperpaw_sdk::Env::power: &'a paperpaw_sdk::power::Power
 pub paperpaw_sdk::Env::random: paperpaw_sdk::random::Random
 pub paperpaw_sdk::Env::reader: bool
 pub paperpaw_sdk::Env::screens: &'a [(paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>)]
-pub paperpaw_sdk::Env::secrets: &'a paperpaw_sdk::secrets::Secrets
+pub paperpaw_sdk::Env::secrets: paperpaw_sdk::secrets::Visible<'a>
 pub paperpaw_sdk::Env::services: &'a paperpaw_sdk::services::Services
 pub paperpaw_sdk::Env::settings: &'a paperpaw_sdk::Settings
 pub paperpaw_sdk::Env::setup: &'a paperpaw_sdk::setup::SetupSteps
