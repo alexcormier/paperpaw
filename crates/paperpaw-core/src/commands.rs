@@ -358,11 +358,18 @@ impl Kernel {
         self.shared.slots = self.shared.registry.bound_slots();
     }
 
-    /// An event to its subscribers, then to every open screen.
+    /// An event to its subscribers, then to every open screen. One that a
+    /// screen guarding the device gave, or one it opened (the password
+    /// typed on the keyboard), goes to those screens and their plugins
+    /// alone.
     pub(crate) fn emit(&mut self, event: &Id, params: &Params) {
         // A page turned, also by itself, is use.
         if *event == events::PAGE_TURNED {
             self.last_activity = self.now;
+        }
+        let guarded = self.guarded_screens();
+        if let Some(screens) = guarded {
+            return self.emit_to_guard(event, params, &screens);
         }
         // Moments for declared work, and jobs waiting for this event.
         self.works.saw(event, params);
@@ -407,6 +414,50 @@ impl Kernel {
                 screen.on_event(event, params, cx);
                 Handled::Yes
             });
+        }
+    }
+
+    /// Where the event being given goes when a screen guarding the device
+    /// or one it opened gave it: the places of the guard and of the
+    /// screens it opened. `None` for any other event.
+    fn guarded_screens(&self) -> Option<Vec<usize>> {
+        let guard = self.guard().filter(|_| self.from_guard_own)?;
+        Some(
+            (guard..self.stack.len())
+                .filter(|&i| i == guard || self.stack[i].by_guard)
+                .collect(),
+        )
+    }
+
+    /// [`Self::emit`] for an event of a screen guarding the device: to the
+    /// plugins of `screens` that subscribed to it, then to `screens`. No
+    /// other plugin, screen, bar or rule hears it.
+    fn emit_to_guard(&mut self, event: &Id, params: &Params, screens: &[usize]) {
+        let owners: Vec<String> = screens
+            .iter()
+            .map(|&i| self.stack[i].id.namespace().to_string())
+            .collect();
+        let env = self.shared.env(self.now);
+        for (_, plugin, handler) in self
+            .subscriptions
+            .iter()
+            .filter(|(id, plugin, _)| id == event && owners.iter().any(|o| o == plugin.as_str()))
+        {
+            let _running = self.shared.meter.enter(plugin.as_str());
+            let from = self.output.commands.len();
+            handler(&env, params, &mut self.output.commands);
+            let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
+            vet_reserved(&mut self.output.commands, from, plugin.as_str(), &reserved);
+        }
+        let keys: Vec<_> = screens.iter().map(|&i| self.stack[i].serial).collect();
+        for key in keys {
+            // Each where it is now: one may have closed meanwhile.
+            if let Some(index) = self.stack.iter().position(|s| s.serial == key) {
+                self.with_screen(index, |screen, cx| {
+                    screen.on_event(event, params, cx);
+                    Handled::Yes
+                });
+            }
         }
     }
 

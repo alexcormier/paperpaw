@@ -910,7 +910,7 @@ fn load(shared: &Rc<dyn Storage>, path: &str, folder: &str) -> Result<DataPlugin
             continue;
         }
         if let Some(text) = read(storage, &path, MAX_FILE) {
-            translations_left -= text.len();
+            translations_left = translations_left.saturating_sub(text.len());
             translations.push(text);
         }
     }

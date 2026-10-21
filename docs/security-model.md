@@ -54,6 +54,36 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   key maps, defaults of settings, fonts and stylesheets. They can change
   what PaperPaw shows and does through those, not reach past them.
 
+## The screen lock
+
+The lock (a PIN, a pattern or a password, asked for at start and on
+waking) keeps a person who picks up the device from using it: from
+reading what is open, changing settings or seeing passwords on screen.
+It is a convenience, not encryption: the card is as readable as without
+it, and whoever takes the card out or flashes firmware gets past it. The
+code is kept as a salted hash, never as it is.
+
+Plugins are trusted (above), so the lock does not guard against them.
+What the SDK makes sure, for plugins used honestly:
+
+- **Codes are the lock's alone.** While the lock guards the device, what
+  its screen or the keyboard it opened gives (the password typed) goes
+  to the lock and that keyboard only: no other plugin's subscription,
+  screen, bar or rule hears it. The kept code is a secret no other
+  plugin is given.
+- **Its settings are its own.** Settings marked guarded (the lock's kind
+  and when it locks) are changed only by their plugin and the settings
+  editor: not by presets, power modes, data plugins' defaults or other
+  plugins' commands.
+- **Nothing gets past it.** Screens opened while it guards go below it;
+  the actions, notices and bars of other plugins wait; only the lock's
+  own input filters see input. A screen of another plugin left above it
+  (a sleep screen) gets no input and closes at the next input or as the
+  device wakes, so the reader is never locked out.
+
+The slots stay replaceable: a keyboard or a settings app put in place of
+PaperPaw's is a trusted customisation and sees what the original would.
+
 ## What is not protected
 
 - A lost or stolen device with its card: the passwords are only veiled.

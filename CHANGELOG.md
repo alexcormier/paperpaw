@@ -65,11 +65,14 @@ change the plugin SDK.
   plugins, menus, key bindings or slots; what a handler asks shows above
   the guard only where the guard itself let the action pass; screens
   above it that it did not open (a sleep screen) get no input and close
-  as the device wakes. A plugin changes its own secrets; another's, a
+  at the next input or as the device wakes. The events the guard or a
+  screen it opened gives (the password typed) go to them and their
+  plugins alone. A plugin changes its own secrets; another's, a
   setting that keeps the device safe (`SettingSpec::guarded`, the
   lock's) and the sleep and settings slots only the settings editor does
   (the plugin of the settings slot), never another on the reader's
-  behalf; no other plugin's default or preset changes such a setting,
+  behalf; no other plugin's default, preset or power mode changes such
+  a setting,
   and plugins are not loaded or installed under the guard. What an
   action or an observer asks that runs the same action again with the
   same params is dropped with a warning. `ActionSpec::describe` and `keywords` give lists
