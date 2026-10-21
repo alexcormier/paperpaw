@@ -127,6 +127,9 @@ pub(crate) struct ReaderScreen {
     /// The book to open once the screen says it is being prepared (the
     /// first opening takes a while).
     preparing: Option<Params>,
+    /// The book not there yet (`DocumentError::NotReady`), opened when
+    /// its format says it is (`events::DOCUMENT_READY`).
+    waiting: Option<Params>,
     /// Pages with smooth letters (in grays, where the panel can).
     smooth: bool,
 }
@@ -136,16 +139,18 @@ impl ReaderScreen {
         let prepared = params
             .get(params::PATH)
             .is_none_or(|path| env.formats.prepared(env.storage, path, &open_options(env)));
-        let (book, preparing) = if prepared {
-            (Book::open(env, params), None)
+        let (book, preparing, waiting) = if prepared {
+            let (book, not_ready) = open_book(env, params);
+            (book, None, not_ready.then(|| params.clone()))
         } else {
             let message = env.i18n.tr("reader.preparing").to_string();
-            (Err(message), Some(params.clone()))
+            (Err(message), Some(params.clone()), None)
         };
         Self {
             smooth: env.settings.read(&crate::settings::SMOOTH_TEXT),
             book,
             preparing,
+            waiting,
             selection: None,
             selected_on: Locator::START,
             linking: None,
@@ -165,7 +170,9 @@ impl ReaderScreen {
             return false;
         };
         let env = *cx.env();
-        self.book = Book::open(&env, &params);
+        let (book, not_ready) = open_book(&env, &params);
+        self.book = book;
+        self.waiting = not_ready.then_some(params);
         // Shown as a screen opening is: the book replaces the notice.
         cx.request_redraw();
         let flash = env
@@ -364,6 +371,14 @@ impl Screen for ReaderScreen {
             let reading = book.reading(&env).xpointer(book.xpointer.clone());
             cx.command(events::BOOK_CLOSED.emit(reading));
         }
+    }
+
+    /// A book whose pages go right to left: taps and swipes the other way.
+    fn mirrored(&self) -> bool {
+        self.book.as_ref().is_ok_and(|book| {
+            book.document.metadata().direction
+                == paperpaw_sdk::document::PageProgression::RightToLeft
+        })
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
@@ -833,6 +848,17 @@ impl ReaderScreen {
     }
 
     fn event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        // The book waited for is there now: opened.
+        if let Some(ready) = events::DOCUMENT_READY.read(event, params)
+            && self
+                .waiting
+                .as_ref()
+                .is_some_and(|w| w.get(params::PATH) == Some(ready.path.as_str()))
+        {
+            self.preparing = self.waiting.take();
+            self.prepare(cx);
+            return;
+        }
         let Ok(book) = &mut self.book else {
             return;
         };
@@ -1029,7 +1055,7 @@ impl ReaderScreen {
             let env = *cx.env();
             let path = book.path.clone();
             self.selection = None;
-            self.book = Book::open(&env, &Params::new().with(params::PATH, path));
+            self.book = open_book(&env, &Params::new().with(params::PATH, path)).0;
             cx.request_redraw();
             cx.wake_at(env.now);
             return;
@@ -1113,6 +1139,18 @@ pub(super) fn page_text(lines: &[PageLine]) -> String {
 pub(super) fn marks_not_saved(cx: &mut Cx<'_, '_>) {
     let text = cx.env().i18n.tr("reader.marks-not-saved").to_string();
     cx.command(Command::Notify(text));
+}
+
+/// The book of `params` opened, or what to show instead; and whether it
+/// is only not there yet.
+fn open_book(env: &Env<'_>, params: &Params) -> (Result<Book, String>, bool) {
+    match Book::open(env, params) {
+        Ok(book) => (Ok(book), false),
+        Err(unopened) => {
+            let not_ready = unopened.not_ready();
+            (Err(unopened.message()), not_ready)
+        }
+    }
 }
 
 /// The page turn an arrow stands for in a book: left and up back, right

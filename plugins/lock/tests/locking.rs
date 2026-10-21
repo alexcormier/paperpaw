@@ -9,18 +9,22 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use std::cell::RefCell;
 use std::rc::Rc;
 
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::{
-    DeviceInfo, DisplayInfo, InputCaps, InputEvent, Instant, MemoryClass, PixelFormat, Point,
-    PointerEvent, PointerPhase, PointerTool, Rotation,
+    ButtonState, DeviceInfo, DisplayInfo, InputCaps, InputEvent, Instant, MemoryClass, PixelFormat,
+    Point, PointerEvent, PointerPhase, PointerTool, Rotation,
 };
 use paperpaw_plugin_keyboard::Keyboard;
 use paperpaw_plugin_lock::Lock;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::{self, Part, Role};
-use paperpaw_sdk::{DirEntry, Id, MemoryStorage, Params, Storage, StorageError};
+use paperpaw_sdk::{
+    Canvas, Cx, DirEntry, Env, Handled, Id, Manifest, MemoryStorage, Params, Plugin, RegisterError,
+    Registrar, Screen, ScreenSpec, Storage, StorageError, Version,
+};
 use proptest::prelude::*;
 
 /// An X4 as the emulator's profile has it: buttons, no touch.
@@ -132,10 +136,56 @@ impl Shared {
     }
 }
 
+/// What another plugin heard: the events it subscribed to and those its
+/// screen was told of, with what they carried.
+type Heard = Rc<RefCell<Vec<String>>>;
+
+/// Another plugin, honest but curious: it subscribes to the lock's
+/// events and keeps a screen open.
+struct Spy(Heard);
+
+const SPY_SCREEN: Id = Id::new_static("spy.screen");
+
+struct SpyScreen(Heard);
+
+impl Screen for SpyScreen {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+
+    fn on_event(&mut self, event: &Id, params: &Params, _: &mut Cx<'_, '_>) {
+        self.0.borrow_mut().push(format!("{event} {params:?}"));
+    }
+}
+
+impl Plugin for Spy {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("spy"), "Spy", Version::new(0, 1, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let heard = self.0.clone();
+        r.subscribe(
+            Id::new_static("lock.typed"),
+            Box::new(move |_, params, _| heard.borrow_mut().push(format!("{params:?}"))),
+        )?;
+        let heard = self.0.clone();
+        r.add_screen(ScreenSpec::new(
+            SPY_SCREEN,
+            "Spy",
+            Box::new(move |_, _| Box::new(SpyScreen(heard.clone()))),
+        ))
+    }
+}
+
 struct Device {
     kernel: Kernel,
     storage: Shared,
     now: u64,
+    heard: Heard,
 }
 
 impl Device {
@@ -145,18 +195,21 @@ impl Device {
     }
 
     fn start_with(device: DeviceInfo, storage: Shared, config: &str) -> Self {
+        let heard = Heard::default();
         let kernel = Kernel::builder(device)
             .storage(storage.clone())
             .user_config(format!("[core]\nlanguage = en\n{config}"))
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(Keyboard)
             .plugin(Lock)
+            .plugin(Spy(heard.clone()))
             .build()
             .unwrap();
         let mut device = Self {
             kernel,
             storage,
             now: 1_000,
+            heard,
         };
         let effects = device.kernel.start(Instant(device.now));
         device.settle(effects);
@@ -701,6 +754,107 @@ fn a_password_typed_on_the_keyboard_is_never_kept_in_clear() {
     assert!(!device.locked());
 }
 
+/// While the lock guards the device, what is typed to unlock it goes to
+/// the lock and its keyboard alone: no other plugin's subscription, nor
+/// a screen below the lock, hears it.
+#[test]
+fn a_password_typed_to_unlock_reaches_no_other_plugin() {
+    let storage = Shared::default();
+    let mut device = Device::start(TOUCH, storage.clone());
+    device.open_setup();
+    device.choose("Password");
+    device.type_text("Secretpass");
+    device.type_text("Secretpass");
+
+    let mut device = Device::start(TOUCH, storage);
+    assert!(device.locked());
+    device.now += 100;
+    let effects = device
+        .kernel
+        .open_screen(Instant(device.now), SPY_SCREEN, Params::new());
+    device.settle(effects);
+    assert!(device.kernel.screens().any(|id| *id == SPY_SCREEN));
+    device.heard.borrow_mut().clear();
+    device.type_text("wrongpass");
+    device.tap("Type the password");
+    device.type_text("Secretpass");
+    assert!(!device.locked());
+    let heard = device.heard.borrow();
+    assert!(
+        !heard
+            .iter()
+            .any(|h| h.contains("pass") || h.contains("lock.typed")),
+        "{heard:?}"
+    );
+}
+
+/// A plugin whose power mode would switch the lock off, and that wears
+/// it at start.
+struct Thrifty;
+
+static THRIFTY: [paperpaw_sdk::presets::Preset; 1] = [paperpaw_sdk::presets::Preset::fixed(
+    "thrifty.mode",
+    "core.power-mode",
+    "Thrifty",
+    "",
+    "lock.kind = lock.kind.off
+lock.on-wake = off
+core.sleep-after = 3",
+)];
+
+impl Plugin for Thrifty {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("thrifty"), "Thrifty", Version::new(0, 1, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_presets(&THRIFTY)?;
+        r.subscribe(
+            paperpaw_sdk::builtin::events::STARTED.id().clone(),
+            Box::new(|_, _, out| {
+                out.push(paperpaw_sdk::Command::Wear(paperpaw_sdk::power::Wear::new(
+                    Id::new_static("thrifty.mode"),
+                )));
+            }),
+        )
+    }
+}
+
+/// A power mode wears its values over the reader's own, but not the
+/// lock's settings.
+#[test]
+fn a_power_mode_leaves_the_lock_as_it_is() {
+    let storage = Shared::default();
+    Device::start(BUTTONS, storage.clone()).set_pin("1234");
+    let kernel = Kernel::builder(BUTTONS)
+        .storage(storage.clone())
+        .user_config(String::from(
+            "[core]
+language = en
+",
+        ))
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Keyboard)
+        .plugin(Lock)
+        .plugin(Thrifty)
+        .build()
+        .unwrap();
+    let mut device = Device {
+        kernel,
+        storage,
+        now: 1_000,
+        heard: Heard::default(),
+    };
+    let effects = device.kernel.start(Instant(device.now));
+    device.settle(effects);
+    assert_eq!(device.kernel.power().mode.as_str(), "thrifty.mode");
+    assert_eq!(device.kernel.settings().int("core.sleep-after"), 3);
+    assert_eq!(device.kind(), "lock.kind.pin");
+    assert!(device.kernel.settings().bool("lock.on-wake"));
+    assert!(device.locked());
+}
+
 /// A PIN lock whose kept code is `value`, PaperPaw started over it.
 fn with_kept_code(value: &str) -> Device {
     const PIN: &str = "[lock]\nkind = lock.kind.pin\n";
@@ -810,6 +964,7 @@ mod setup_under_the_lock {
             kernel,
             storage,
             now: 1_000,
+            heard: Heard::default(),
         };
         let effects = device.kernel.start(Instant(device.now));
         device.settle(effects);
@@ -895,6 +1050,7 @@ mod sleep_screen_over_the_lock {
             kernel,
             storage,
             now: 1_000,
+            heard: Heard::default(),
         };
         let effects = device.kernel.start(Instant(device.now));
         device.settle(effects);
@@ -910,6 +1066,53 @@ mod sleep_screen_over_the_lock {
         assert_eq!(device.on_top(), Some(LOCK_SCREEN));
         device.enter_pin("1234");
         assert!(seen.borrow().is_empty(), "{:?}", seen.borrow());
+        assert!(!device.locked());
+    }
+
+    /// A shell that shows the sleep screen and never says the device woke
+    /// does not lock the reader out: a button closes the sleep screen and
+    /// the lock takes input again.
+    #[test]
+    fn a_button_closes_a_sleep_screen_left_over_the_lock() {
+        let storage = Shared::default();
+        Device::start(BUTTONS, storage.clone()).set_pin("1234");
+        let seen = Seen::default();
+        let kernel = Kernel::builder(BUTTONS)
+            .storage(storage.clone())
+            .sleep(true)
+            .user_config(String::from(
+                "[core]
+language = en
+",
+            ))
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(Keyboard)
+            .plugin(Lock)
+            .plugin(Sleepy(seen.clone()))
+            .build()
+            .unwrap();
+        let mut device = Device {
+            kernel,
+            storage,
+            now: 1_000,
+            heard: Heard::default(),
+        };
+        let effects = device.kernel.start(Instant(device.now));
+        device.settle(effects);
+        device.run(actions::SLEEP);
+        assert_eq!(device.on_top(), Some("sleepy.screen"));
+        for state in [ButtonState::Pressed, ButtonState::Released] {
+            device.now += 50;
+            let event = InputEvent::Button {
+                name: "confirm",
+                state,
+            };
+            let effects = device.kernel.handle(Instant(device.now), event);
+            device.settle(effects);
+        }
+        assert_eq!(device.on_top(), Some(LOCK_SCREEN));
+        assert!(seen.borrow().is_empty(), "{:?}", seen.borrow());
+        device.enter_pin("1234");
         assert!(!device.locked());
     }
 }

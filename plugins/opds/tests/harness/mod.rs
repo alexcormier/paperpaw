@@ -128,7 +128,8 @@ impl Harness {
     pub fn build(storage: Shared, memory: MemoryClass, config: &str) -> Self {
         let mut kernel = Kernel::builder(device(memory))
             .storage(storage.clone())
-            .user_config(config)
+            // The library at the storage's top.
+            .user_config(format!("[core]\nlibrary-folder =\n{config}"))
             .network(true)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(paperpaw_plugin_format_epub::EpubFormat)

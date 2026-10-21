@@ -101,7 +101,8 @@ impl Plugin for EpubFormat {
                         .map(|d| Box::new(d) as Box<dyn Document>)
                 }),
             )
-            .prepared(Box::new(EpubDocument::prepared)),
+            .prepared(Box::new(EpubDocument::prepared))
+            .sniff(is_epub),
         )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
@@ -286,6 +287,25 @@ pub(crate) fn head(
     let n = storage.read_at(path, 0, &mut head)?;
     head.truncate(n);
     Ok(head)
+}
+
+/// Whether a file's first bytes are an EPUB's: a ZIP whose first entry
+/// is `mimetype`, stored, saying `application/epub+zip` (as the format
+/// asks), not any ZIP.
+fn is_epub(head: &[u8]) -> bool {
+    const MIME: &[u8] = b"application/epub+zip";
+    let field = |at: usize| {
+        head.get(at..at + 2)
+            .map(|b| usize::from(u16::from_le_bytes([b[0], b[1]])))
+    };
+    let (Some(method), Some(name), Some(extra)) = (field(8), field(26), field(28)) else {
+        return false;
+    };
+    let data = 30 + name + extra;
+    head.starts_with(b"PK\x03\x04")
+        && method == 0
+        && head.get(30..30 + name) == Some(&b"mimetype"[..])
+        && head.get(data..data + MIME.len()) == Some(MIME)
 }
 
 #[cfg(test)]
@@ -1028,5 +1048,28 @@ mod tests {
         // A second open uses the cached conversion.
         let doc = EpubDocument::open(&storage, "books/test.epub").unwrap();
         assert_eq!(blocks(&storage, &doc, 1).len(), ch2.len());
+    }
+
+    #[test]
+    fn an_epub_is_told_by_its_mimetype_entry_not_any_zip() {
+        let epub = ZipBuilder::new()
+            .stored("mimetype", "application/epub+zip")
+            .deflated("META-INF/container.xml", "<container/>")
+            .build();
+        assert!(super::is_epub(&epub[..epub.len().min(512)]));
+        // A ZIP of something else, or the mimetype compressed or later.
+        let other = ZipBuilder::new().stored("page.png", "png").build();
+        let packed = ZipBuilder::new()
+            .deflated("mimetype", "application/epub+zip")
+            .build();
+        let later = ZipBuilder::new()
+            .stored("a.txt", "a")
+            .stored("mimetype", "application/epub+zip")
+            .build();
+        for zip in [other, packed, later] {
+            assert!(!super::is_epub(&zip));
+        }
+        assert!(!super::is_epub(b"PK"));
+        assert!(!super::is_epub(b""));
     }
 }

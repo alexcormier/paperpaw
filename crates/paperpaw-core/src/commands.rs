@@ -367,11 +367,18 @@ impl Kernel {
         self.shared.slots = self.shared.registry.bound_slots();
     }
 
-    /// An event to its subscribers, then to every open screen.
+    /// An event to its subscribers, then to every open screen. One that a
+    /// screen guarding the device gave, or one it opened (the password
+    /// typed on the keyboard), goes to those screens and their plugins
+    /// alone.
     pub(crate) fn emit(&mut self, event: &Id, params: &Params) {
         // A page turned, also by itself, is use.
         if *event == events::PAGE_TURNED {
             self.last_activity = self.now;
+        }
+        let guarded = self.guarded_screens();
+        if let Some(screens) = guarded {
+            return self.emit_to_guard(event, params, &screens);
         }
         // Moments for declared work, and jobs waiting for this event.
         self.works.saw(event, params);
@@ -416,6 +423,50 @@ impl Kernel {
                 screen.on_event(event, params, cx);
                 Handled::Yes
             });
+        }
+    }
+
+    /// Where the event being given goes when a screen guarding the device
+    /// or one it opened gave it: the places of the guard and of the
+    /// screens it opened. `None` for any other event.
+    fn guarded_screens(&self) -> Option<Vec<usize>> {
+        let guard = self.guard().filter(|_| self.from_guard_own)?;
+        Some(
+            (guard..self.stack.len())
+                .filter(|&i| i == guard || self.stack[i].by_guard)
+                .collect(),
+        )
+    }
+
+    /// [`Self::emit`] for an event of a screen guarding the device: to the
+    /// plugins of `screens` that subscribed to it, then to `screens`. No
+    /// other plugin, screen, bar or rule hears it.
+    fn emit_to_guard(&mut self, event: &Id, params: &Params, screens: &[usize]) {
+        let owners: Vec<String> = screens
+            .iter()
+            .map(|&i| self.stack[i].id.namespace().to_string())
+            .collect();
+        let env = self.shared.env(self.now);
+        for (_, plugin, handler) in self
+            .subscriptions
+            .iter()
+            .filter(|(id, plugin, _)| id == event && owners.iter().any(|o| o == plugin.as_str()))
+        {
+            let _running = self.shared.meter.enter(plugin.as_str());
+            let from = self.output.commands.len();
+            handler(&env, params, &mut self.output.commands);
+            let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
+            vet_reserved(&mut self.output.commands, from, plugin.as_str(), &reserved);
+        }
+        let keys: Vec<_> = screens.iter().map(|&i| self.stack[i].serial).collect();
+        for key in keys {
+            // Each where it is now: one may have closed meanwhile.
+            if let Some(index) = self.stack.iter().position(|s| s.serial == key) {
+                self.with_screen(index, |screen, cx| {
+                    screen.on_event(event, params, cx);
+                    Handled::Yes
+                });
+            }
         }
     }
 
@@ -483,6 +534,59 @@ impl Kernel {
 
     /// What the shell does for the kernel: firmware, Wi-Fi, the clipboard,
     /// speech, servers, sockets and HTTP.
+    /// Speaks `speech` with the voice the settings choose where it speaks
+    /// the language (see `paperpaw_sdk::voices`), else with the system's.
+    pub(crate) fn speak(&mut self, speech: paperpaw_sdk::Speech) {
+        let screens = self.stack.len();
+        let env = self.shared.env(self.now);
+        let system = self.io.speech.system;
+        if let Some(voice) = self.shared.voices.chosen(&env, &speech.language, system) {
+            // In place of what the system or another voice says now,
+            // unless after it.
+            if !speech.queue {
+                self.io.speech.stop();
+                let other = self
+                    .io
+                    .speech
+                    .voice
+                    .as_ref()
+                    .is_some_and(|(id, _)| *id != voice.id);
+                if other
+                    && let Some((id, _)) = self.io.speech.voice.take()
+                    && let Some(old) = self.shared.voices.get(id.as_str())
+                {
+                    (old.stop)(&env, &mut self.output.commands);
+                }
+            }
+            (voice.speak)(&env, &speech, &mut self.output.commands);
+            self.io.speech.voice = Some((voice.id.clone(), screens));
+            return;
+        }
+        // In place of what a plugin's voice says, unless after it.
+        if !speech.queue {
+            self.stop_voice();
+        }
+        self.io
+            .speech
+            .speak(speech, system, screens, &mut self.output.commands);
+    }
+
+    /// Stops a plugin's voice, if one speaks.
+    fn stop_voice(&mut self) {
+        if let Some((id, _)) = self.io.speech.voice.take() {
+            let env = self.shared.env(self.now);
+            if let Some(voice) = self.shared.voices.get(id.as_str()) {
+                (voice.stop)(&env, &mut self.output.commands);
+            }
+        }
+    }
+
+    /// Stops speaking: the system's voice and a plugin's.
+    pub(crate) fn stop_speaking(&mut self) {
+        self.io.speech.stop();
+        self.stop_voice();
+    }
+
     fn apply_io(&mut self, command: Command) {
         let (network, screens) = (self.shared.caps.network, self.stack.len());
         let out = &mut self.output.commands;
@@ -519,12 +623,11 @@ impl Kernel {
             }
             Command::ReadClipboard(reply, params) => self.reply_clipboard(reply, params),
             Command::Speak(speech) => {
-                let available = self.shared.caps.speech;
-                self.io.speech.speak(speech, available, screens, out);
+                self.speak(speech);
                 self.io.focus_spoken = false;
             }
             Command::StopSpeaking => {
-                self.io.speech.stop();
+                self.stop_speaking();
                 self.io.focus_spoken = false;
             }
             Command::Serve {

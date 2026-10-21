@@ -82,19 +82,13 @@ const SHELF_SCREEN: Id = Id::new_static("files.shelf");
 #[derive(Debug, Default)]
 pub struct Files;
 
-/// Folders chosen on the folder chooser.
-static FOLDER: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
+/// Folders chosen with the folder chooser, whichever plugin fills it.
+static FOLDER: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().editor(paperpaw_sdk::builtin::screens::FOLDER_EDITOR);
 
-/// Where the books and the archive are, and how the library shows them.
-static SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_text(
-        ROOT.static_str(),
-        "files.setting.root",
-        "books",
-        groups::LIBRARY,
-    )
-    .with_extra(&FOLDER)
-    .described("files.setting.root.help"),
+/// Where the archive is, and how the library shows the books (the
+/// library folder is the kernel's, [`ROOT`]).
+static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::fixed_text(
         ARCHIVE.static_str(),
         "files.setting.archive",
@@ -130,16 +124,10 @@ impl Plugin for Files {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        // When the shelves' catalog was made, for the screens and the
-        // handlers below.
-        let catalog = shelves::CatalogMade::default();
         r.add_screen(ScreenSpec::new(
             SCREEN,
             "files.title",
-            Box::new({
-                let catalog = catalog.clone();
-                move |env, params| list::screen(env, params, catalog.clone())
-            }),
+            Box::new(list::screen),
         ))?;
         list::register(r)?;
         r.add_screen(ScreenSpec::new(
@@ -155,10 +143,7 @@ impl Plugin for Files {
         r.add_screen(ScreenSpec::new(
             SHELF_SCREEN,
             "files.title",
-            Box::new({
-                let catalog = catalog.clone();
-                move |env, params| Box::new(shelves::ShelfScreen::new(env, params, catalog.clone()))
-            }),
+            Box::new(|env, params| Box::new(shelves::ShelfScreen::new(env, params))),
         ))?;
         for (action, mode, title, icon) in [
             (BY_AUTHOR, shelves::MODE_AUTHORS, "files.by-author", "user"),
@@ -213,18 +198,6 @@ impl Plugin for Files {
         ] {
             r.add_icon(setting, Cow::Borrowed(icon))?;
         }
-        // The catalog of the shelves is made anew when they show next.
-        let made = catalog.clone();
-        r.on(events::LIBRARY_CHANGED, move |_, _, _| made.outdated())?;
-        let made = catalog.clone();
-        r.on(events::BOOK_MOVED, move |_, _, _| made.outdated())?;
-        let made = catalog.clone();
-        r.on(events::BOOK_REMOVED, move |_, _, _| made.outdated())?;
-        r.on(events::SETTING_CHANGED, move |_, changed, _| {
-            if changed.id == *ROOT.id() {
-                catalog.outdated();
-            }
-        })?;
         r.on(SEARCH_ENTERED, |_, typed, out| {
             let text = typed.text.trim();
             if !text.is_empty() {

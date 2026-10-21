@@ -39,6 +39,148 @@ change the plugin SDK.
   the last one did not show. Other plugins add sleep modes of their
   own: a screen offered among the choices of `sleep.show`.
 
+- Library: the kernel keeps the catalog of books, the only one writing
+  it, one change at a time, in the background and never while a book is
+  open. It walks the library folder once the library first shows after
+  a start (never at every start: on the X4 every wake is one), for
+  another library folder and when books came or went without saying
+  which, taking each book whose file did not change from the old
+  catalog, read along with the walk, instead of reading its details, and
+  listing large folders a piece a step: a walk takes a few kilobytes
+  whatever the library's size, and one paused goes on where it was. On a
+  device of little memory (the X4) it waits while the library is open,
+  whose index of the books takes the room (catching up, which takes less,
+  goes on beside it); with 2400 books the X4's heap peaks at 153 KiB
+  while it walks. Books that came, moved or changed are caught up without
+  a walk, at a calm moment when many come one after the other (a Calibre
+  or catalog sync); books removed are left out at once. Views of the
+  library no longer make it themselves, and show at once what changed (a
+  book finished, a favourite, a book removed) without reading each book.
+  What could not be read is never written: an error leaves the old
+  catalog whole, and a status that cannot be read is not noted. Books
+  Calibre, the transfer page or Wallabag delete are removed from the
+  library with what plugins keep for them; books they and catalogs bring
+  are announced. Book information is read out (its rows were drawn
+  only).
+- Library: badges plugins add show on the books' rows, the fields they
+  keep show on a book's information, and actions they add to the book
+  menu show on its sheet. Each size of cover (row, card, covers) is kept
+  apart, so switching views no longer makes covers anew.
+- SDK: the library as a service (`library::service`, `trait Library`):
+  every view of the library, its shelves, its letters and the book
+  widgets read the books through it (`each`, `records`, `version`,
+  `index`, `is_current`, `refresh`, `kept_index`, `keep_index`), so a
+  library of one's own, published as `library::service::SERVICE` (the
+  kernel's services a plugin may stand in for are
+  `services::REPLACEABLE`), feeds them all with its own books. With the
+  catalog's state (`catalog::state`, `catalog::generation`), what was
+  noted beside it (`catalog::Changes`), queries (`catalog::Query`,
+  `query`, `found`, and `query_in`, `found_in` over any library's
+  `catalog::Books`), a page's books with the log read once
+  (`catalog::read_page`), and the index of every book the calm list uses
+  (`library::index::Index`, 24 bytes a book, made from any library with
+  `Index::collect`, its items with `Item::new`, of a `version`, kept in
+  a file while a book is open). New: `events::BOOK_ADDED`,
+  `BOOK_CHANGED` (bits of `library::what`), `BOOK_CHOSEN`,
+  `CATALOG_CHANGED`, `CATALOG_WANTED` (`CatalogWanted`);
+  `library::{added, changed_book, request_catalog, request_catalog_anew,
+  cover_variant}`; `menus::BOOK`; `Registrar::add_book_field`
+  (`library::BookField`) and `add_book_badge` (`library::BookBadge`,
+  `Badge`), listed in `Env::book_fields` and `Env::book_badges`;
+  `catalog::series_order` reads `2,5` as `2.5`; `Formats::is_empty`.
+- SDK, breaking: the catalog is of format 2 (status, added, fields, the
+  file's size; a header with its generation; format 1 is still read)
+  and `Record` has `status`, `added`, `size` and fields; status changes
+  and removals are noted beside it and folded in by the kernel. Making
+  it is the kernel's (`catalog::Walk`, `catalog::Rewrite`,
+  `catalog::note`, `catalog::forget`, `catalog::log_is_long`,
+  `library::note_status`, with the SDK's `kernel` feature): views listen
+  to `CATALOG_CHANGED` and ask with `library::request_catalog` instead of
+  walking. `catalog::changes` gives `Changes`; `Index::load` takes the
+  version it is to be of. `Env` and `EnvParts` have `book_fields` and
+  `book_badges`.
+- The library folder is the kernel's setting, `core.library-folder`
+  (it was the library plugin's `files.root`), so a library of one's own
+  and every plugin that puts books somewhere read the same; a folder set
+  before is read under its old id. SDK: `builtin::settings::LIBRARY_FOLDER`
+  (`library::FOLDER` names it) and `builtin::screens::FOLDER_EDITOR`, a
+  text setting's editor that opens the folder chooser of whichever
+  plugin fills its slot.
+- Emulator: scripts measure the heap's peak of one step (`reset-peak`)
+  and send an event as a plugin would (`emit:core.library-changed`).
+- SDK: `menus::APPS` (`core.apps`), what there is to open besides the
+  tools; the home screen's grid of tools shows it too, after the tools,
+  and the tools' menu has it as a submenu (*Apps*) where there is
+  something in it, so that it is reached with the buttons alone.
+- Keyboard: other plugins add layouts through the point
+  `keyboard.layouts` (`id; code; letter rows; variants`), chosen as the
+  built-in ones, with variants of letters of their own besides the
+  built-in ones. A layout has at most 6 rows of 16 keys, a code of 4
+  characters and 16 variants a letter; invisible characters and ids
+  named as other layouts are left out.
+- About: other plugins add lines to the page through the point
+  `about.lines`: plain text, up to 512 bytes a plugin, each line named
+  after the plugin that added it.
+- Docs: what the slots besides the reader's promise (home, menu, panel,
+  settings, keyboard, lookup) and the shipped plugins' points.
+- Wikipedia: a lookup provider that goes online. Once *Online* is
+  chosen in the dictionary's panel, its summary shows there as an entry
+  beside the dictionaries', and its line *Open Wikipedia* (or confirm,
+  where the entry shows) opens the whole summary on its own screen
+  without fetching it again; that screen stays bound to
+  `slots::LOOKUP_ONLINE`. *Online* is offered once a word. SDK:
+  `LookupEntry::more`, the screen showing more of an entry, opened with
+  the entry's text (`LookupQuery::answer_entry`, `LookupAnswered::more`).
+  The panel names each source right above its entries.
+- SDK: menu entries placed beside others (`MenuPlace`,
+  `Registrar::place_menu_entry`; several in one place keep the order
+  they were registered in) or taken out by a plugin (`hide_menu_entry`;
+  the menu editor tells which, `Menus::hidden_by`); what a plugin's own
+  entry shows now (`set_item_state`, `ItemState`: a label, a switch,
+  faint, hidden, a badge; `ItemState::text`) and a line under it
+  (`describe_item`), shown by the shipped list, bar, panel and home
+  screen tools alike. A faint entry is passed by the focus and does
+  nothing (`ui::Rows::set_passed`, `ui::draw_faint_button`).
+- Menus: a menu the user redefined shows the entries of plugins
+  installed since, after the entry before them (`[menus-known]` keeps
+  what plugins put there that the user left out; lists kept before stay
+  as they are).
+- SDK: `lookup`, lookup providers (`Registrar::add_lookup_provider`):
+  where words are looked up, at once or later, answering the asker's
+  reply event (`LookupQuery::answer`, by default
+  `events::LOOKUP_ANSWERED`). The dictionary's panel lists every
+  provider's entries, naming each dictionary or provider only where
+  entries come from more than one; it asks those that go online only
+  when *Online* is chosen, and offers the online lookup screen
+  (Wikipedia) after them, waiting 20 seconds at most for those that
+  answer later. The StarDict dictionaries are a provider too.
+- SDK: `voices`, a plugin's voice (`Registrar::add_voice`) speaks text
+  aloud in place of the system's for the languages it speaks, chosen
+  with `settings::VOICE`; it answers as the system does
+  (`Speech::answer`). A device without a voice of its own has speech
+  with one, which speaks unchosen (the choice *Automatic*); the system
+  or another voice speaking in its place stops it.
+- SDK: formats tell files without an extension by their first bytes
+  (`FormatSpec::sniff`, `Formats::for_file`, `supports_file`; the last 32
+  files told are kept by a hash of their path and their size, and
+  however many a folder has, none is left out): the
+  library, the file manager and the browser find such books; EPUB (its
+  stored `mimetype` entry) and XTC say so. Formats read their own
+  settings (`OpenOptions::setting`, filled by `reading::open_options`),
+  and say a document still coming is not ready
+  (`DocumentError::NotReady`; the reader waits for
+  `events::DOCUMENT_READY`).
+- Documents: `Metadata::direction` (`PageProgression`): an EPUB whose
+  pages go right to left says so, and the reader mirrors taps, swipes
+  and swipes in from the edges (`Screen::mirrored`, kept by the
+  kernel's key map). EPUBs are converted anew once (cache version 25).
+- Code plugins fit the firmware again: the SDK's fingerprint no longer
+  counts features that add functions and modules only (`kernel`,
+  `unstable`), with which the firmware is built and plugins are not, so
+  no plugin built by an author fitted any firmware. A code plugin built
+  as a library for a computer (`plugin!`) loads on Linux: it defines the
+  unwinder's name that `core` and `alloc` leave open, never called where
+  a plugin cannot unwind.
 - SDK: services and introspection. A service type names its
   contract in a key (`services::ServiceType`, `"weather.forecast/1"`),
   published with a version (`Registrar::provide`) and found by it, its
@@ -61,9 +203,9 @@ change the plugin SDK.
   files take at most 96 KiB together besides its translations (512 KiB
   of their own), 24 KiB of it of formats 3 and 64 lines for points; the
   files it parses are read one at a time as it registers. An action
-  emits only its own events and sets no guarded setting. SDK:
-  `Registrar::place_menu_entry` and `hide_menu_entry`, for code plugins
-  too.
+  emits only its own events and sets no guarded setting. Its menu
+  entries are placed and taken out as code plugins' are
+  (`Registrar::place_menu_entry`, `hide_menu_entry`).
 - SDK: refreshes. A refresh filter sees why the panel is
   refreshed (`filters::RefreshCause`: a page turned, screens, a notice,
   a status line; told with `Cx::refresh_cause`), the slot, how many
@@ -98,11 +240,14 @@ change the plugin SDK.
   plugins, menus, key bindings or slots; what a handler asks shows above
   the guard only where the guard itself let the action pass; screens
   above it that it did not open (a sleep screen) get no input and close
-  as the device wakes. A plugin changes its own secrets; another's, a
+  at the next input or as the device wakes. The events the guard or a
+  screen it opened gives (the password typed) go to them and their
+  plugins alone. A plugin changes its own secrets; another's, a
   setting that keeps the device safe (`SettingSpec::guarded`, the
   lock's) and the sleep and settings slots only the settings editor does
   (the plugin of the settings slot), never another on the reader's
-  behalf; no other plugin's default or preset changes such a setting,
+  behalf; no other plugin's default, preset or power mode changes such
+  a setting,
   and plugins are not loaded or installed under the guard. What an
   action or an observer asks that runs the same action again with the
   same params is dropped with a warning. `ActionSpec::describe` and `keywords` give lists
@@ -171,13 +316,6 @@ change the plugin SDK.
   the screen (`Env::content`), not of the panel; without bars that is the
   same. `EnvParts` has no `screen_maker`: the kernel sets it with
   `Env::with_screen_maker` (feature `kernel`, as `ScreenMaker`).
-- Code plugins fit the firmware again: the SDK's fingerprint no longer
-  counts features that add functions and modules only (`kernel`,
-  `unstable`), with which the firmware is built and plugins are not, so
-  no plugin built by an author fitted any firmware. A code plugin built
-  as a library for a computer (`plugin!`) loads on Linux: it defines the
-  unwinder's name that `core` and `alloc` leave open, never called where
-  a plugin cannot unwind.
 - Android: the app is now `org.paperpaw.app` (was
   `io.github.hthoene.paperpaw`), named after the project's own domain
   before the first release in a store. It installs as a new app beside

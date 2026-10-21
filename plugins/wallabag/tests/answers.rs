@@ -186,7 +186,8 @@ impl Harness {
         let notices = Rc::new(RefCell::new(Vec::new()));
         let mut kernel = Kernel::builder(DEVICE)
             .storage(storage.clone())
-            .user_config(config)
+            // The library at the storage's top.
+            .user_config(format!("[core]\nlibrary-folder =\n{config}"))
             .network(network)
             .plugin(Wallabag)
             .plugin(Notices(notices.clone()))

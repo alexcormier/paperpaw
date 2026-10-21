@@ -27,7 +27,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_qr::QrCode;
-use paperpaw_sdk::builtin::{actions, menus, slots};
+use paperpaw_sdk::builtin::{actions, events, menus, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::ServerNotice;
 use paperpaw_sdk::ui::{self, UiStyle};
@@ -200,15 +200,30 @@ impl TransferScreen {
                 let (response, done) = web::answer(env.storage, guard, &self.page, request);
                 cx.command(Command::Respond(response));
                 if let Some(done) = done {
-                    if !matches!(done, web::Done::Sent(_) | web::Done::NotReceived(_)) {
-                        cx.command(paperpaw_sdk::library::changed());
+                    // The library follows: a book added, a book removed (what
+                    // plugins keep for it goes too; a folder removed, its
+                    // books with it).
+                    match &done {
+                        web::Done::Received(path) => {
+                            cx.command(paperpaw_sdk::library::added(path, "transfer"));
+                        }
+                        web::Done::Deleted(path) => {
+                            let removed = events::BookRemoved::new(path.clone());
+                            cx.command(events::BOOK_REMOVED.emit(removed));
+                            cx.command(paperpaw_sdk::library::changed());
+                        }
+                        web::Done::Folder(_) | web::Done::Sent(_) | web::Done::NotReceived(_) => {}
                     }
                     let (key, name) = match &done {
-                        web::Done::Received(name) => ("transfer.received", name),
-                        web::Done::Sent(name) => ("transfer.sent", name),
-                        web::Done::Folder(name) => ("transfer.folder", name),
-                        web::Done::Deleted(name) => ("transfer.deleted", name),
-                        web::Done::NotReceived(name) => ("transfer.not-received", name),
+                        web::Done::Received(path) => {
+                            ("transfer.received", paperpaw_sdk::files::name(path))
+                        }
+                        web::Done::Sent(name) => ("transfer.sent", name.as_str()),
+                        web::Done::Folder(name) => ("transfer.folder", name.as_str()),
+                        web::Done::Deleted(path) => {
+                            ("transfer.deleted", paperpaw_sdk::files::name(path))
+                        }
+                        web::Done::NotReceived(name) => ("transfer.not-received", name.as_str()),
                     };
                     self.last = Some(env.i18n.format(key, &[("name", Arg::Str(name))]));
                     let area = self.content(&env);

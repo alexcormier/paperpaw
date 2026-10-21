@@ -2,23 +2,21 @@
 //! two lines, author and series below and how far it is read; the
 //! "Continue reading" card; the filter pills; a progress bar.
 //!
-//! Everything drawn here was read before: a book's line of the catalog,
-//! its details and its cover made small ([`Loaded`]) are read when its
-//! page is shown, never while drawing.
+//! Everything drawn here was read before: a book's record of the catalog,
+//! its details, its cover made small and the badges plugins put on it
+//! ([`Loaded`]) are read when its page is shown, never while drawing.
 
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::library;
+use paperpaw_sdk::library::{self, Badge, catalog::Record};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
-use paperpaw_sdk::{Arg, Canvas, Color, Env, Rect};
+use paperpaw_sdk::{Arg, Canvas, Color, Env, FontHandle, Rect};
 
-use super::index::{Line, hash};
-
-/// Where the cover of the "Continue reading" card is kept, made small.
-const CARD_COVER: &str = ".paperpaw/plugins/files/card.thumb";
+/// Badges shown on a book's row at most ([`library::service::badges`]).
+const BADGES: usize = 2;
 
 /// The sizes of the calm list, worked out once when a screen opens.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -135,69 +133,109 @@ pub(crate) struct Loaded {
     pub(crate) percent: String,
     /// For a series as a stack of covers: how many books it holds.
     pub(crate) stack: String,
+    /// The badges plugins put on it: those of words (joined), and icons,
+    /// shown after its details.
+    pub(crate) badges: String,
+    pub(crate) badge_icons: Vec<&'static str>,
     /// What it says when read out (spoken focus, taps by name): its
     /// title first, then its details and how far it is read.
     pub(crate) spoken: String,
 }
 
 impl Loaded {
-    /// Reads the book of `line`: its details and its cover made small to
-    /// `cover`; for the card (`card`), kept in a file of its own, so that
-    /// the rows' small covers are not made anew.
-    pub(crate) fn load(
-        env: &Env<'_>,
-        line: Line,
-        opened: bool,
-        cover: (u16, u16),
-        card: bool,
-    ) -> Loaded {
+    /// Reads the book of `record`: its details, its badges and its cover
+    /// made small to `cover`, kept as `variant` (each size its own, so
+    /// that the rows' small covers are not made anew for the card's).
+    pub(crate) fn load(env: &Env<'_>, record: Record, cover: (u16, u16), variant: &str) -> Loaded {
         let storage = env.storage;
         let format = env.device.display.format;
-        let book = library::book(storage, &line.path);
+        let book = library::service(env).book(env, &record.path);
         let thumb = book.as_ref().and_then(|book| {
-            if !card {
-                return library::cover(storage, &line.path, book, cover.0, cover.1, format);
-            }
-            let image = book.cover.as_ref()?;
-            let (w, h) = ui::fit_image(image, cover.0, cover.1);
-            let stamp = (u64::from(hash(&line.path)) << 32)
-                ^ (u64::from(w) << 16 | u64::from(h))
-                ^ book.size;
-            if let Some(kept) = Thumbnail::kept(storage, CARD_COVER, stamp, (w, h)) {
-                return Some(kept);
-            }
-            let thumb = Thumbnail::new(storage, image, w, h, format)?;
-            let _ = storage.create_dir(".paperpaw/plugins/files");
-            thumb.keep(storage, CARD_COVER, stamp);
-            Some(thumb)
+            library::cover_variant(
+                storage,
+                &record.path,
+                book,
+                cover.0,
+                cover.1,
+                format,
+                variant,
+            )
         });
-        let progress = book.as_ref().and_then(|b| b.progress).unwrap_or(0);
+        // How far it is read as the catalog has it (noted when the book
+        // closed), else as its details do.
+        let progress = record
+            .status
+            .progress
+            .or_else(|| book.as_ref().and_then(|b| b.progress))
+            .unwrap_or(0);
         let new = book
             .as_ref()
-            .is_some_and(|b| library::is_new(env, b, opened));
-        let title = if line.title.is_empty() {
-            library::readable_name(paperpaw_sdk::files::name(&line.path)).into_owned()
+            .is_some_and(|b| library::is_new(env, b, record.status.opened));
+        let mut badges = String::new();
+        let mut badge_icons = Vec::new();
+        for badge in library::service::badges(env, &record, BADGES) {
+            match badge {
+                Badge::Text(text) if badges.is_empty() => badges = text,
+                Badge::Text(text) => {
+                    badges.push_str(" · ");
+                    badges.push_str(&text);
+                }
+                Badge::Icon(icon) => badge_icons.push(icon),
+                _ => {}
+            }
+        }
+        let Record {
+            path,
+            author,
+            title,
+            series,
+            number,
+            ..
+        } = record;
+        let title = if title.is_empty() {
+            library::readable_name(paperpaw_sdk::files::name(&path)).into_owned()
         } else {
-            line.title
+            title
         };
-        let tail = match (line.series.is_empty(), line.number.is_empty()) {
+        let tail = match (series.is_empty(), number.is_empty()) {
             (true, _) => String::new(),
-            (false, true) => line.series.clone(),
-            (false, false) => format!("{} {}", line.series, line.number),
+            (false, true) => series.clone(),
+            (false, false) => format!("{series} {number}"),
         };
         Loaded {
-            path: line.path,
+            path,
             title,
-            author: line.author,
-            series: line.series,
-            number: line.number,
+            author,
+            series,
+            number,
             progress,
             new,
             thumb,
             tail,
             percent: format!("{progress} %"),
+            badges,
+            badge_icons,
             ..Loaded::default()
         }
+    }
+
+    /// `note` with its badges of words after it.
+    fn with_badges(&self, note: String) -> String {
+        match (note.is_empty(), self.badges.is_empty()) {
+            (_, true) => note,
+            (true, false) => self.badges.clone(),
+            (false, false) => format!("{note} · {}", self.badges),
+        }
+    }
+
+    /// How wide its badges' icons are drawn, the gaps before them
+    /// included.
+    fn icons_width(&self, env: &Env<'_>, style: &UiStyle) -> u16 {
+        let gap = style.gap as f32 / 3.0;
+        self.badge_icons
+            .iter()
+            .map(|icon| gap + ui::icon_width(env, icon, style.small))
+            .sum::<f32>() as u16
     }
 
     /// The note in a series' list: the book's number and the author.
@@ -454,6 +492,7 @@ pub(crate) fn prepare_row(
 ) {
     let (x, room) = text_room(style, sizes.cover.0, width);
     book.lines = wrap_lines(env, style, style.text, &book.title, f32::from(room), 2);
+    let note = book.with_badges(note);
     let next_word = if next {
         env.i18n.tr("files.list.next")
     } else {
@@ -483,8 +522,40 @@ pub(crate) fn prepare_row(
         end = end.saturating_sub(w + if state > 0 { gap / 2 } else { 0 });
     }
     let room = end.saturating_sub(x + if end < right { gap } else { 0 });
+    let room = room.saturating_sub(book.icons_width(env, style));
     if let Some(font) = style.font(env) {
         book.note = ui::fit(&font, style.small, &book.note, f32::from(room));
+    }
+}
+
+/// Draws a book's note in `area` from `x`, its badges' icons after it.
+#[allow(clippy::too_many_arguments)]
+fn draw_note(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    font: &FontHandle<'_>,
+    x: u16,
+    area: Rect,
+    book: &Loaded,
+    ink: Color,
+) {
+    ui::draw_label(
+        canvas,
+        font,
+        style.small,
+        f32::from(x),
+        area,
+        &book.note,
+        ink,
+    );
+    if book.badge_icons.is_empty() {
+        return;
+    }
+    let mut at = f32::from(x) + font.measure(style.small, &book.note);
+    for icon in &book.badge_icons {
+        at += style.gap as f32 / 3.0;
+        at += ui::draw_icon(canvas, env, icon, style.small, at, area, ink);
     }
 }
 
@@ -547,10 +618,10 @@ pub(crate) fn draw_book_row(
         ui::draw_label(canvas, &font, style.text, f32::from(x), area, text, ink);
         y += sizes.text_line;
     }
-    if !note.is_empty() {
+    if !note.is_empty() || !book.badge_icons.is_empty() {
         let area = Rect::new(x, y, width, sizes.small_line);
         let faint = style.focus_faint(focused, 80);
-        ui::draw_label(canvas, &font, style.small, f32::from(x), area, note, faint);
+        draw_note(canvas, env, style, &font, x, area, book, faint);
         y += sizes.small_line;
     }
     if state {
@@ -623,9 +694,8 @@ fn draw_compact_row(
         let paper = style.focus_paper(focused);
         draw_tag(canvas, env, style, at, line, label, true, ink, paper);
     }
-    if !book.note.is_empty() {
-        let note = &book.note;
-        ui::draw_label(canvas, &font, style.small, f32::from(x), line, note, faint);
+    if !book.note.is_empty() || !book.badge_icons.is_empty() {
+        draw_note(canvas, env, style, &font, x, line, book, faint);
     }
 }
 

@@ -1,9 +1,7 @@
-//! The shelves (by author, series, tag) with the real kernel: their
-//! catalog is made once and again only after the library changed, and
-//! making it goes on where another screen came on top meanwhile.
-//!
-//! One test only: the catalog's freshness is known for the whole program,
-//! as on a device, so tests of it run one after the other.
+//! The shelves (by author, series, tag) with the real kernel, which makes
+//! the library's catalog: walked once a view shows after a start,
+//! caught up after single books came or went, and shelves shown follow
+//! it.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -13,9 +11,9 @@ use std::rc::Rc;
 
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::Rotation;
-use paperpaw_sdk::builtin::{actions, events, params};
+use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::{
-    DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage, Params,
+    Command, DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage,
     PixelFormat, Storage, StorageError,
 };
 
@@ -72,12 +70,14 @@ impl Storage for Counted {
     }
 }
 
-/// Runs the timers asked for, `ticks` of them at most.
-fn run(kernel: &mut Kernel, mut effects: Effects, ticks: usize) {
-    let mut now = 0;
+/// Runs the timers asked for from `now`, `ticks` of them at most, and
+/// the work due within a minute (the catalog made when it is cheap);
+/// where it got to.
+fn run(kernel: &mut Kernel, now: u64, mut effects: Effects, ticks: usize) -> u64 {
+    let mut now = now;
     for _ in 0..ticks {
         match effects.wake_at() {
-            Some(at) if at.0 <= now + 10_000 => {
+            Some(at) if at.0 <= now + 61_000 => {
                 now = now.max(at.0);
                 effects = kernel.tick(Instant(now));
             }
@@ -85,6 +85,15 @@ fn run(kernel: &mut Kernel, mut effects: Effects, ticks: usize) {
         }
     }
     kernel.render(&mut |_, _| {});
+    now
+}
+
+/// Sends the event `command` emits.
+fn emit(kernel: &mut Kernel, now: u64, command: Command) -> Effects {
+    let Command::Emit(event, params) = command else {
+        panic!("not an event: {command:?}");
+    };
+    kernel.send_event(Instant(now), event, params)
 }
 
 fn shown(kernel: &mut Kernel) -> String {
@@ -93,20 +102,8 @@ fn shown(kernel: &mut Kernel) -> String {
     labels.join("\n")
 }
 
-/// The tests' turns with the library: when its catalog was made is kept
-/// for the whole program, as on a device, so tests that make or read it
-/// take turns rather than run beside each other.
-static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
-
-/// Waits for this test's turn with the library.
-fn turn() -> std::sync::MutexGuard<'static, ()> {
-    TURN.lock()
-        .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
 #[test]
-fn the_catalog_is_made_once_and_after_changes() {
-    let _turn = turn();
+fn the_kernel_makes_the_catalog_once_and_after_changes() {
     let storage = Rc::new((0..40).fold(MemoryStorage::new(), |card, i| {
         card.with(&format!("books/book {i:02}.txt"), "Some text.")
     }));
@@ -123,67 +120,54 @@ fn the_catalog_is_made_once_and_after_changes() {
         .build()
         .unwrap();
     let effects = kernel.start(Instant(0));
-    run(&mut kernel, effects, 100);
+    let mut now = run(&mut kernel, 0, effects, 1000);
     let by_author = paperpaw_plugin_files::BY_AUTHOR;
 
-    // The library (the home screen here) made the catalog; by author
-    // shows it.
-    let effects = kernel.run_action(Instant(0), by_author.clone());
-    run(&mut kernel, effects, 1000);
+    // Made after the start; by author shows it.
+    assert!(storage.exists(".paperpaw/library/catalog.txt"));
+    let effects = kernel.run_action(Instant(now), by_author.clone());
+    now = run(&mut kernel, now, effects, 1000);
     let text = shown(&mut kernel);
     assert!(text.contains("40 books"), "{text}");
-    let effects = kernel.run_action(Instant(0), actions::BACK);
-    run(&mut kernel, effects, 100);
-
-    // Without a catalog, the library covered: by author makes it. Its
-    // first steps, then a full screen on top; back, it goes on to the end.
-    let info = Params::new().with(params::PATH, "books/book 02.txt");
-    let effects = kernel.open_screen(Instant(0), paperpaw_plugin_files::INFO_SCREEN, info);
-    run(&mut kernel, effects, 100);
-    storage.remove(".paperpaw/library/catalog.txt").unwrap();
-    let effects = kernel.send_event(
-        Instant(0),
-        events::LIBRARY_CHANGED.id().clone(),
-        Params::new(),
-    );
-    run(&mut kernel, effects, 100);
-    let effects = kernel.run_action(Instant(0), by_author.clone());
-    run(&mut kernel, effects, 2);
-    assert!(
-        shown(&mut kernel).contains("Collecting"),
-        "{}",
-        shown(&mut kernel)
-    );
-    let info = Params::new().with(params::PATH, "books/book 01.txt");
-    let effects = kernel.open_screen(Instant(0), paperpaw_plugin_files::INFO_SCREEN, info);
-    run(&mut kernel, effects, 100);
-    let effects = kernel.run_action(Instant(0), actions::BACK);
-    run(&mut kernel, effects, 1000);
-    let text = shown(&mut kernel);
-    assert!(text.contains("40 books"), "{text}");
-    // Back to the library, past the information.
-    let effects = kernel.run_action(Instant(0), actions::BACK);
-    run(&mut kernel, effects, 100);
 
     // Shown again: the catalog made is taken as it is.
-    let effects = kernel.run_action(Instant(0), actions::BACK);
-    run(&mut kernel, effects, 100);
+    let effects = kernel.run_action(Instant(now), actions::BACK);
+    now = run(&mut kernel, now, effects, 100);
     listings.set(0);
-    let effects = kernel.run_action(Instant(0), by_author.clone());
-    run(&mut kernel, effects, 1000);
+    let effects = kernel.run_action(Instant(now), by_author.clone());
+    now = run(&mut kernel, now, effects, 1000);
     assert!(shown(&mut kernel).contains("40 books"));
     assert_eq!(listings.get(), 0, "made anew without a change");
 
-    // After a change it is made anew.
-    let effects = kernel.run_action(Instant(0), actions::BACK);
-    run(&mut kernel, effects, 100);
-    let effects = kernel.send_event(
-        Instant(0),
-        events::LIBRARY_CHANGED.id().clone(),
-        Params::new(),
-    );
-    run(&mut kernel, effects, 100);
-    let effects = kernel.run_action(Instant(0), Id::new_static("files.by-series"));
-    run(&mut kernel, effects, 1000);
-    assert!(listings.get() > 0, "not made anew after a change");
+    // A book came: caught up without walking the library (no folder
+    // listed), and the shelf shown follows.
+    storage.write("books/book 40.txt", b"More text.").unwrap();
+    let book = paperpaw_sdk::library::added("books/book 40.txt", "test");
+    let effects = emit(&mut kernel, now, book);
+    now = run(&mut kernel, now, effects, 1000);
+    assert_eq!(listings.get(), 0, "walked for one book");
+    let text = shown(&mut kernel);
+    assert!(text.contains("41 books"), "{text}");
+
+    // One went: the same.
+    storage.remove("books/book 00.txt").unwrap();
+    let removed = events::BookRemoved::new(String::from("books/book 00.txt"));
+    let effects = emit(&mut kernel, now, events::BOOK_REMOVED.emit(removed));
+    now = run(&mut kernel, now, effects, 1000);
+    let text = shown(&mut kernel);
+    assert!(text.contains("40 books"), "{text}");
+
+    // No catalog at all (removed on a computer): a shelf asks for it and
+    // says the books are being collected until it is made.
+    let effects = kernel.run_action(Instant(now), actions::BACK);
+    now = run(&mut kernel, now, effects, 100);
+    storage.remove(".paperpaw/library/catalog.txt").unwrap();
+    let effects = kernel.run_action(Instant(now), Id::new_static("files.by-series"));
+    kernel.render(&mut |_, _| {});
+    let text = shown(&mut kernel);
+    assert!(text.contains("Collecting"), "{text}");
+    run(&mut kernel, now, effects, 1000);
+    assert!(storage.exists(".paperpaw/library/catalog.txt"));
+    let text = shown(&mut kernel);
+    assert!(!text.contains("Collecting"), "{text}");
 }

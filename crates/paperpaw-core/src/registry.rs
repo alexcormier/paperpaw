@@ -173,12 +173,14 @@ pub(crate) struct Staging {
     pub(crate) event_observers: Vec<paperpaw_sdk::ObserverSpec>,
     pub(crate) menu_entries: Vec<MenuEntry>,
     pub(crate) menu_sections: Vec<paperpaw_sdk::MenuSection>,
-    pub(crate) menu_placements: Vec<(Id, Id, Id)>,
     pub(crate) points: Vec<paperpaw_sdk::services::PointSpec>,
     pub(crate) events: Vec<paperpaw_sdk::services::EventSpec>,
-    pub(crate) menu_hidden: Vec<(Id, Id)>,
     pub(crate) icons: Vec<(Id, Cow<'static, str>)>,
     pub(crate) menu_needs: Vec<(Id, paperpaw_sdk::MenuNeed)>,
+    /// (menu, item, the plugin hiding it).
+    pub(crate) hidden_entries: Vec<(Id, Id, Id)>,
+    pub(crate) item_states: Vec<(Id, paperpaw_sdk::ItemStateFn)>,
+    pub(crate) item_descriptions: Vec<(Id, Cow<'static, str>)>,
     pub(crate) screen_hints: Vec<(Id, paperpaw_sdk::Hints)>,
     pub(crate) keymap_presets: Vec<(Id, Cow<'static, str>)>,
     pub(crate) setting_defaults: Vec<(Id, Cow<'static, str>)>,
@@ -193,6 +195,8 @@ pub(crate) struct Staging {
     pub(crate) decorators: Vec<paperpaw_sdk::decorations::DecoratorSpec>,
     pub(crate) page_layers: Vec<paperpaw_sdk::layers::PageLayerSpec>,
     pub(crate) page_frames: Vec<paperpaw_sdk::layers::PageFrameSpec>,
+    pub(crate) lookup_providers: Vec<paperpaw_sdk::lookup::LookupProviderSpec>,
+    pub(crate) voices: Vec<paperpaw_sdk::voices::VoiceSpec>,
     pub(crate) input_filters: Vec<paperpaw_sdk::filters::InputFilterSpec>,
     pub(crate) refresh_filters: Vec<paperpaw_sdk::filters::RefreshFilterSpec>,
     pub(crate) chromes: Vec<paperpaw_sdk::chrome::ChromeSpec>,
@@ -202,6 +206,8 @@ pub(crate) struct Staging {
     pub(crate) works: Vec<paperpaw_sdk::work::WorkSpec>,
     pub(crate) stylesheets: Vec<Cow<'static, str>>,
     pub(crate) book_data: Vec<paperpaw_sdk::library::BookData>,
+    pub(crate) book_fields: Vec<paperpaw_sdk::library::BookField>,
+    pub(crate) book_badges: Vec<paperpaw_sdk::library::BookBadge>,
     pub(crate) services: Vec<(Id, paperpaw_sdk::services::Service)>,
     pub(crate) contributions: Vec<(Id, Cow<'static, str>)>,
 }
@@ -297,6 +303,8 @@ pub(crate) fn stage(
             }
             Contribution::Stylesheet(css) => staging.stylesheets.push(css),
             Contribution::BookData(data) => staging.book_data.push(data),
+            Contribution::BookField(field) => staging.book_fields.push(*field),
+            Contribution::BookBadge(badge) => staging.book_badges.push(*badge),
             Contribution::Font(font) => staging.fonts.push(*font),
             Contribution::FontFile { id, path, .. } => staging.font_files.push((id, path)),
             Contribution::FontExtension {
@@ -322,12 +330,15 @@ pub(crate) fn stage(
             }
             Contribution::MenuEntry(entry) => staging.menu_entries.push(entry),
             Contribution::MenuSection(section) => staging.menu_sections.push(section),
-            Contribution::MenuPlacement {
-                menu, item, after, ..
-            } => staging.menu_placements.push((menu, item, after)),
-            Contribution::MenuHidden { menu, item, .. } => staging.menu_hidden.push((menu, item)),
             Contribution::Icon { item, icon, .. } => staging.icons.push((item, icon)),
             Contribution::MenuNeed { item, need, .. } => staging.menu_needs.push((item, need)),
+            Contribution::HideMenuEntry { menu, item, .. } => {
+                staging.hidden_entries.push((menu, item, plugin.clone()));
+            }
+            Contribution::ItemState { item, state, .. } => staging.item_states.push((item, state)),
+            Contribution::ItemDescription { item, key, .. } => {
+                staging.item_descriptions.push((item, key));
+            }
             Contribution::ScreenHints { screen, hints, .. } => {
                 staging.screen_hints.push((screen, hints));
             }
@@ -340,6 +351,8 @@ pub(crate) fn stage(
             Contribution::Decorator(decorator) => staging.decorators.push(*decorator),
             Contribution::PageLayer(layer) => staging.page_layers.push(*layer),
             Contribution::PageFrame(frame) => staging.page_frames.push(*frame),
+            Contribution::LookupProvider(p) => staging.lookup_providers.push(*p),
+            Contribution::Voice(voice) => staging.voices.push(*voice),
             Contribution::InputFilter(filter) => staging.input_filters.push(filter),
             Contribution::RefreshFilter(filter) => staging.refresh_filters.push(filter),
             Contribution::Chrome(chrome) => staging.chromes.push(*chrome),

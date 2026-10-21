@@ -37,6 +37,25 @@ pub fn draw_button(
     button_label(canvas, style, &font, rect, label, ink);
 }
 
+/// A button that cannot be used now (e.g. a menu entry shown faint): its
+/// border and label faint; `focused` as [`draw_button`].
+pub fn draw_faint_button(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    label: &str,
+    focused: bool,
+) {
+    canvas.describe(Role::Button, label, rect, focused, None);
+    let faint = style.faint(60);
+    framed(canvas, style, rect, (Color::WHITE, faint), focused);
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    button_label(canvas, style, &font, rect, label, faint);
+}
+
 /// A button with a drawing of its own instead of a word (an arrow, a
 /// sign), drawn empty for the caller to draw on with the ink it returns;
 /// `name` says what it does, for screen readers and remote control.
@@ -66,6 +85,18 @@ pub(super) fn button_frame(
     } else {
         (Color::WHITE, Color::BLACK)
     };
+    framed(canvas, style, rect, (back, Color::BLACK), focused);
+    Some(ink)
+}
+
+/// A button's background and border in `colors`, and its focus frame.
+fn framed(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    (back, line): (Color, Color),
+    focused: bool,
+) {
     let border = button_border(style);
     let r = style.radius(u32::from(rect.height.min(rect.width)));
     let (x, y, w, h) = (
@@ -80,7 +111,7 @@ pub(super) fn button_frame(
     } else {
         canvas.fill(rect, back);
     }
-    canvas.stroke_round_rect(x, y, w, h, border, r, Color::BLACK);
+    canvas.stroke_round_rect(x, y, w, h, border, r, line);
     if focused {
         let out = (border * 2) as i32;
         canvas.stroke_round_rect(
@@ -93,7 +124,6 @@ pub(super) fn button_frame(
             Color::BLACK,
         );
     }
-    Some(ink)
 }
 
 /// A button's word, centred and shortened to fit.
