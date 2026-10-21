@@ -6,7 +6,7 @@
 //!   ([`ReaderSpec`], `Registrar::add_reader`): the formats it reads
 //!   (all, where it names none), its name the translation of its id. It
 //!   is opened as the screen bound to
-//!   [`slots::READER`](crate::builtin::slots::READER) is, with the
+//!   [`slots::READER`] is, with the
 //!   parameter [`PATH`](crate::builtin::params::PATH), in that slot (its
 //!   key map layer applies), and keeps that slot's promises.
 //! - Whatever opens a book (the library, the file manager, the browser, a
@@ -14,7 +14,7 @@
 //!   kernel turns into opening the reader chosen when it runs it
 //!   ([`resolve`]): the reader chosen for the book, else
 //!   for its folder, else for its format
-//!   ([`settings::READING_APP`](crate::builtin::settings::READING_APP) per format,
+//!   ([`settings::READING_APP`] per format,
 //!   see [`format_setting`]), else the default one (`settings::READING_APP`),
 //!   else the screen bound to `slots::READER`. [`open_with`] opens it with
 //!   a reader named.
