@@ -1,14 +1,17 @@
-"""Builds the web emulator: the WebAssembly module from shells/web, put
-next to the page's files in shells/web/www, and with --serve shows them
-on http://localhost:8000 (frame.html for a device alone, index.html with a
-page around it).
+"""Builds the web emulator: the WebAssembly module from shells/web (the
+`web` profile: optimised, function names stripped), put next to the
+page's files in shells/web/www, and with --serve shows them on
+http://localhost:8000 (frame.html for a device alone, index.html with a
+page around it). It prints the module's size, also gzipped as a server
+sends it; --limit-mb N fails where it is larger, for CI.
 
 Usage:
-    python shells/web/build.py [--debug] [--serve]
+    python shells/web/build.py [--debug] [--limit-mb N] [--serve]
 
 Needs the target: rustup target add wasm32-unknown-unknown
 """
 
+import gzip
 import json
 import shutil
 import subprocess
@@ -22,9 +25,9 @@ WWW = HERE / "www"
 def main():
     args = sys.argv[1:]
     debug = "--debug" in args
-    command = ["cargo", "build", "-p", "paperpaw-web", "--target", "wasm32-unknown-unknown"]
-    if not debug:
-        command.append("--release")
+    profile = "dev" if debug else "web"
+    command = ["cargo", "build", "-p", "paperpaw-web", "--target", "wasm32-unknown-unknown",
+               "--profile", profile]
     subprocess.run(command, cwd=HERE, check=True)
     metadata = json.loads(
         subprocess.run(
@@ -38,12 +41,19 @@ def main():
     built = (
         Path(metadata["target_directory"])
         / "wasm32-unknown-unknown"
-        / ("debug" if debug else "release")
+        / ("debug" if debug else profile)
         / "paperpaw_web.wasm"
     )
-    shutil.copyfile(built, WWW / "paperpaw-web.wasm")
-    size = (WWW / "paperpaw-web.wasm").stat().st_size
-    print(f"www/paperpaw-web.wasm: {size / 1024 / 1024:.1f} MB")
+    module = WWW / "paperpaw-web.wasm"
+    shutil.copyfile(built, module)
+    data = module.read_bytes()
+    size = len(data) / 1024 / 1024
+    zipped = len(gzip.compress(data, 9)) / 1024 / 1024
+    print(f"www/paperpaw-web.wasm: {size:.1f} MB, {zipped:.1f} MB gzipped")
+    if "--limit-mb" in args:
+        limit = float(args[args.index("--limit-mb") + 1])
+        if size > limit:
+            sys.exit(f"the module is larger than {limit} MB")
     if "--serve" in args:
         # Python serves .wasm as application/wasm, as streaming needs.
         subprocess.run([sys.executable, "-m", "http.server", "8000", "--directory", str(WWW)])

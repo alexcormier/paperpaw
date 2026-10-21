@@ -79,11 +79,18 @@ impl Session {
         if variant.language == crate::lint::PSEUDO {
             files.extend(crate::lint::pseudo_plugin(context)?);
         }
-        for plugin in &context.target.data {
-            for (path, bytes) in &plugin.files {
-                files.push((format!("plugins/{}/{path}", plugin.id), bytes.clone()));
-            }
-        }
+        // The data plugins' files, written from where they are kept.
+        let plugin_files = context.target.data.iter().flat_map(|plugin| {
+            plugin
+                .files
+                .iter()
+                .map(|(path, bytes)| (format!("plugins/{}/{path}", plugin.id), &**bytes))
+        });
+        let written: Vec<(String, &[u8])> = files
+            .iter()
+            .map(|(path, bytes)| (path.clone(), bytes.as_slice()))
+            .chain(plugin_files)
+            .collect();
         let mut settings: Vec<(&str, &str)> = variant.settings();
         settings.extend(start.settings.iter().map(|(k, v)| (k.as_str(), v.as_str())));
         let config = variant::config(settings);
@@ -98,7 +105,7 @@ impl Session {
         let add = Some(crate::probe::add as paperpaw_emulator::device::AddPlugins);
         let (device, root) = if context.in_memory {
             let library = paperpaw_core::sdk::MemoryStorage::new();
-            for (path, bytes) in &files {
+            for (path, bytes) in &written {
                 library
                     .write(path, bytes)
                     .map_err(|e| format!("{path}: {e:?}"))?;
@@ -112,7 +119,7 @@ impl Session {
                 .join("work")
                 .join(format!("{n:04}-{}", variant.slug()));
             let _ = std::fs::remove_dir_all(&root);
-            for (path, bytes) in &files {
+            for (path, bytes) in &written {
                 let file = root.join(path);
                 if let Some(parent) = file.parent() {
                     std::fs::create_dir_all(parent)

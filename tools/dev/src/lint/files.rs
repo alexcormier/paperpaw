@@ -82,7 +82,7 @@ pub fn data_ini_files(plugin: &DataPlugin) -> Vec<IniFile> {
         let file = IniFile {
             place: path.clone(),
             catalog: dir == "i18n",
-            text: String::from_utf8(bytes.clone()).ok(),
+            text: std::str::from_utf8(bytes).ok().map(str::to_string),
         };
         if file.catalog {
             catalogs.push(file);
@@ -212,10 +212,10 @@ mod tests {
         let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lint/data-plugin");
         let mut plugin = DataPlugin::read(&from).unwrap();
         let mut dash = |file: &str, from: &str, to: &str| {
-            let text = String::from_utf8(plugin.files[file].clone()).unwrap();
+            let text = String::from_utf8(plugin.files[file].to_vec()).unwrap();
             plugin
                 .files
-                .insert(file.to_string(), text.replace(from, to).into_bytes());
+                .insert(file.to_string(), text.replace(from, to).into_bytes().into());
         };
         dash("plugin.ini", "wanting;", "wanting \u{2014}");
         dash("i18n/en.ini", "1 to 2", "1\u{2013}2");

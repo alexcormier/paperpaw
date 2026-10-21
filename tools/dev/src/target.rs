@@ -4,6 +4,9 @@
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
+
+use paperpaw_sdk::install::is_plugin_name;
 
 use crate::AddPlugins;
 
@@ -15,12 +18,15 @@ pub struct DataPlugin {
     pub id: String,
     /// The folder it was read from; `None` for one handed in.
     pub folder: Option<PathBuf>,
-    /// Its files by their path in it (with `/`), hidden ones too.
-    pub files: BTreeMap<String, Vec<u8>>,
+    /// Its files by their path in it (with `/`), hidden ones too, shared
+    /// by everything that looks at them.
+    pub files: BTreeMap<String, Rc<[u8]>>,
 }
 
 impl DataPlugin {
-    /// The plugin in `folder`, every file read.
+    /// The plugin in `folder`, every file read but those of hidden
+    /// folders (`.git`); hidden files are read (the installer and the
+    /// plugin library see them).
     pub fn read(folder: &Path) -> Result<DataPlugin, String> {
         let mut files = BTreeMap::new();
         read_dir(folder, folder, &mut files)?;
@@ -37,7 +43,11 @@ impl DataPlugin {
 
     /// A plugin of `files` (path in it, bytes), its id `plugin.ini`'s or
     /// else `id`.
-    pub fn new(id: &str, files: BTreeMap<String, Vec<u8>>) -> DataPlugin {
+    pub fn new<B: Into<Rc<[u8]>>>(
+        id: &str,
+        files: impl IntoIterator<Item = (String, B)>,
+    ) -> DataPlugin {
+        let files = files.into_iter().map(|(p, b)| (p, b.into())).collect();
         DataPlugin {
             id: data_plugin_id(&files).unwrap_or_else(|| id.to_string()),
             folder: None,
@@ -47,7 +57,7 @@ impl DataPlugin {
 
     /// The file at `path` in it.
     pub fn file(&self, path: &str) -> Option<&[u8]> {
-        self.files.get(path).map(Vec::as_slice)
+        self.files.get(path).map(|bytes| &**bytes)
     }
 
     /// Where it is, for messages: its folder, else its id.
@@ -59,8 +69,9 @@ impl DataPlugin {
     }
 }
 
-/// Every file under `dir` into `out`, by its path from `root`.
-fn read_dir(root: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) -> Result<(), String> {
+/// Every file under `dir` into `out`, by its path from `root`, but those
+/// of hidden folders.
+fn read_dir(root: &Path, dir: &Path, out: &mut BTreeMap<String, Rc<[u8]>>) -> Result<(), String> {
     let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     for entry in entries {
         let entry = entry.map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -68,12 +79,13 @@ fn read_dir(root: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) -> Res
         let meta = entry
             .metadata()
             .map_err(|e| format!("{}: {e}", full.display()))?;
-        if meta.is_dir() {
+        let hidden = entry.file_name().to_string_lossy().starts_with('.');
+        if meta.is_dir() && !hidden {
             read_dir(root, &full, out)?;
         } else if meta.is_file() {
             let relative = full.strip_prefix(root).unwrap_or(&full);
             let bytes = std::fs::read(&full).map_err(|e| format!("{}: {e}", full.display()))?;
-            out.insert(relative.to_string_lossy().replace('\\', "/"), bytes);
+            out.insert(relative.to_string_lossy().replace('\\', "/"), bytes.into());
         }
     }
     Ok(())
@@ -157,13 +169,15 @@ impl Target {
     }
 }
 
-/// The id a data plugin's `plugin.ini` gives, if any.
-pub fn data_plugin_id(files: &BTreeMap<String, Vec<u8>>) -> Option<String> {
+/// The id a data plugin's `plugin.ini` gives, if any and a plugin's name
+/// (it names the plugin's folder on the device).
+pub fn data_plugin_id(files: &BTreeMap<String, Rc<[u8]>>) -> Option<String> {
     let text = std::str::from_utf8(files.get("plugin.ini")?).ok()?;
     paperpaw_config::parse(text)
         .filter_map(Result::ok)
         .find(|entry| entry.section == "plugin" && entry.key == "id")
         .map(|entry| entry.value.as_str().into_owned())
+        .filter(|id| is_plugin_name(id))
 }
 
 #[cfg(test)]
@@ -195,14 +209,54 @@ mod tests {
     }
 
     #[test]
+    fn hidden_folders_are_not_read_hidden_files_are() {
+        let root = std::env::temp_dir().join(format!("paperpaw-dev-hidden-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&root);
+        for (path, text) in [
+            (
+                "plugin.ini",
+                "[plugin]
+id = dusk
+",
+            ),
+            (
+                ".git/config",
+                "[core]
+",
+            ),
+            (".DS_Store", "x"),
+            (
+                "i18n/en.ini",
+                "a = b
+",
+            ),
+        ] {
+            let file = root.join(path);
+            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+            std::fs::write(file, text).unwrap();
+        }
+        let plugin = DataPlugin::read(&root).unwrap();
+        let paths: Vec<&str> = plugin.files.keys().map(String::as_str).collect();
+        assert_eq!(paths, [".DS_Store", "i18n/en.ini", "plugin.ini"]);
+        let _ = std::fs::remove_dir_all(&root);
+    }
+
+    #[test]
     fn a_data_plugin_handed_in_is_named_by_its_manifest() {
-        let files = BTreeMap::from([(
+        let files = [(
             "plugin.ini".to_string(),
             b"[plugin]\nid = dusk\nname = Dusk\n".to_vec(),
-        )]);
+        )];
         let plugin = DataPlugin::new("given", files);
         assert_eq!(plugin.id, "dusk");
         assert_eq!(plugin.place(), "dusk");
-        assert_eq!(DataPlugin::new("given", BTreeMap::new()).id, "given");
+        let none: [(String, Vec<u8>); 0] = [];
+        assert_eq!(DataPlugin::new("given", none).id, "given");
+        // An id that would leave the plugins folder is not taken.
+        let files = [(
+            "plugin.ini".to_string(),
+            b"[plugin]\nid = ../../x\n".to_vec(),
+        )];
+        assert_eq!(DataPlugin::new("given", files).id, "given");
     }
 }

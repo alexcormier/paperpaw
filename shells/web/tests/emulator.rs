@@ -22,7 +22,7 @@ fn started(profile: &str) -> Emulator {
 }
 
 /// The sample data plugin `name`'s files, as the page would hand them in.
-fn sample(name: &str) -> Vec<(String, Vec<u8>)> {
+fn sample(name: &str) -> Vec<(String, std::rc::Rc<[u8]>)> {
     let folder = Path::new(env!("CARGO_MANIFEST_DIR"))
         .join("../../samples/plugins")
         .join(name);
@@ -106,7 +106,7 @@ fn a_data_plugin_shows_after_a_restart() {
     let mut emulator = started("xteink-x4");
     let before = emulator.shown();
     for (path, bytes) in sample("large-print") {
-        emulator.put_file("large-print", &path, bytes).unwrap();
+        emulator.put_file("large-print", &path, &bytes).unwrap();
     }
     emulator.restart();
     emulator.advance(10_000);
@@ -118,8 +118,8 @@ fn a_data_plugin_shows_after_a_restart() {
     emulator.advance(15_000);
     assert!(emulator.shown() == before, "not as before");
     // Names and paths that would leave the plugin's folder are refused.
-    assert!(emulator.put_file("../x", "plugin.ini", Vec::new()).is_err());
-    assert!(emulator.put_file("x", "../plugin.ini", Vec::new()).is_err());
+    assert!(emulator.put_file("../x", "plugin.ini", &[]).is_err());
+    assert!(emulator.put_file("x", "../plugin.ini", &[]).is_err());
 }
 
 #[test]
@@ -128,7 +128,7 @@ fn the_plugin_is_checked_and_the_device_keeps_going() {
     let mut emulator = started("xteink-x4");
     assert!(emulator.check(&[]).is_err(), "nothing to check");
     for (path, bytes) in sample("theme-paw") {
-        emulator.put_file("theme-paw", &path, bytes).unwrap();
+        emulator.put_file("theme-paw", &path, &bytes).unwrap();
     }
     emulator.restart();
     let json = emulator.check(&["package", "lint"]).unwrap();

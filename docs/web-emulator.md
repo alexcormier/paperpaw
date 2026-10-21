@@ -14,10 +14,12 @@ shells/web/
   src/exports.rs    the module's functions (wasm32 only)
   www/              paperpaw-web.js (loader), frame.html and frame.js
                     (the emulator frame), index.html (a page to try it)
-  build.py          builds the module into www/ (--serve shows it)
+  build.py          builds the module into www/ (--serve shows it,
+                    --limit-mb fails where it grew too large)
 ```
 
-`python shells/web/build.py --serve` builds the module and serves `www/`
+`python shells/web/build.py --serve` builds the module (the `web`
+profile: as release, function names stripped) and serves `www/`
 on `http://localhost:8000`: `frame.html` is a device alone
 (`frame.html?profile=boox-go-7&language=de&dark`), `index.html` a page
 around it that loads a data plugin's folder and checks it.
@@ -43,12 +45,15 @@ The frame runs in an iframe, best of an origin of its own, and speaks
 `postMessage` with the window that embeds it, and with no other. Every
 message may carry a `request` (any value); the answer has the same
 `type` and `request`, and `error` (a text) where it failed. Once its module is loaded the frame
-sends `{ type: "ready" }`.
+sends `{ type: "ready" }`. A panic stops a WebAssembly module for good:
+the frame then makes a fresh instance, starts the device as it was last
+started with the data plugins it had, and sends
+`{ type: "restarted", reason }`.
 
 | Message to the frame | Effect | Answer |
 |---|---|---|
 | `{ type: "start", profile, language, dark, plugins: [{ id, files: { path: bytes } }] }` | Starts a device (`xteink-x4`, `xteink-x4-pro`, `boox-go-7`); each plugin's files go into its storage under `plugins/<id>/`, as a card would have them | `{ device: { id, name, width, height, dpi, grays, color, touch, buttons, row } }` |
-| `{ type: "files", id, files }` | Replaces a data plugin's files and starts the device again (a few milliseconds) | `{}` |
+| `{ type: "files", id, files }` | Replaces a data plugin's files (whatever of it was on the card goes) and starts the device again (a few milliseconds); `files: {}` takes it off | `{}` |
 | `{ type: "input", event }` | `event`: `{ kind: "button", name, pressed }`, `{ kind: "key", key, pressed }` (the keyboard's keys as the desktop emulator maps them), `{ kind: "pointer", phase: "down" \| "move" \| "up" \| "cancel", x, y }` (the screen's pixels) | `{}` |
 | `{ type: "screenshot" }` | The panel as it shows, at the device's resolution | `{ png }` (bytes) |
 | `{ type: "check", commands? }` | `paperpaw-dev`'s checks of the data plugins on the card, on this device: `package`, `lint`, `visual`, `reach` (all if none named), the libraries in memory | `{ report }` (as `report.json`) |

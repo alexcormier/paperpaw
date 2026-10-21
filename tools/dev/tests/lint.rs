@@ -68,9 +68,11 @@ fn the_settings_list_in_the_pseudo_language() {
 fn wanting() -> DataPlugin {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lint/data-plugin");
     let mut plugin = DataPlugin::read(&from).unwrap();
-    let text = String::from_utf8(plugin.files["plugin.ini"].clone()).unwrap();
+    let text = String::from_utf8(plugin.files["plugin.ini"].to_vec()).unwrap();
     let text = text.replace("wanting;", "wanting \u{2014}");
-    plugin.files.insert("plugin.ini".into(), text.into_bytes());
+    plugin
+        .files
+        .insert("plugin.ini".into(), text.into_bytes().into());
     // Handed in, as a community plugin is: not one of this repository's.
     plugin.folder = None;
     plugin

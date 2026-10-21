@@ -30,6 +30,11 @@ export const KEYS = {
 export class PaperPawDevice {
   /// Loads the module from `url` (`paperpaw-web.wasm`).
   static async load(url) {
+    return PaperPawDevice.from(await WebAssembly.compileStreaming(fetch(url)));
+  }
+
+  /// A device of the compiled `module`: a fresh instance, its own memory.
+  static async from(module) {
     const device = new PaperPawDevice();
     const imports = {
       paperpaw: {
@@ -42,10 +47,17 @@ export class PaperPawDevice {
         },
       },
     };
-    const { instance } = await WebAssembly.instantiateStreaming(fetch(url), imports);
+    const instance = await WebAssembly.instantiate(module, imports);
+    device.module = module;
     device.exports = instance.exports;
     device.memory = instance.exports.memory;
     return device;
+  }
+
+  /// A fresh instance of the same module: after a panic, which leaves
+  /// this one stopped for good (a trap, `WebAssembly.RuntimeError`).
+  fresh() {
+    return PaperPawDevice.from(this.module);
   }
 
   /// Calls `f` with `values` (strings or bytes) copied into the module's

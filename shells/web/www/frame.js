@@ -2,6 +2,10 @@
 // touch where it has a touch screen, driven by the page around it through
 // postMessage (see docs/web-emulator.md). Runs in an iframe of its own
 // origin; it answers the window that embeds it only.
+//
+// A panic in the module stops it for good (a trap): the frame then makes
+// a fresh instance, starts the device again as it was last started, with
+// the data plugins it had, and tells the page ({ type: "restarted" }).
 
 import { KEYS, PaperPawDevice } from "./paperpaw-web.js";
 
@@ -12,28 +16,65 @@ const started = performance.now();
 
 let device = null;
 let info = null;
-/// The data plugins on the card, by id: their files.
+/// How the device was last started, and the data plugins on its card by
+/// id (their files): what a restart after a trap starts again.
+let last = null;
 let plugins = {};
 let timer = null;
 let drawing = false;
 
-const module = PaperPawDevice.load(new URL("paperpaw-web.wasm", import.meta.url));
+const loading = PaperPawDevice.load(new URL("paperpaw-web.wasm", import.meta.url));
 
 function now() {
   return performance.now() - started;
+}
+
+/// Runs `f` on the device; a trap restarts it (see above).
+function guarded(f) {
+  try {
+    return f();
+  } catch (error) {
+    if (error instanceof WebAssembly.RuntimeError) {
+      restart(String(error.message ?? error));
+    }
+    throw error;
+  }
+}
+
+/// A fresh instance, started again as last time.
+async function restart(reason) {
+  console.error("paperpaw: the device stopped and starts again:", reason);
+  clearTimeout(timer);
+  const broken = device;
+  device = null;
+  if (!broken || !last) return;
+  try {
+    device = await broken.fresh();
+    boot(last, plugins);
+    tell({ type: "restarted", reason });
+  } catch (error) {
+    console.error("paperpaw:", error);
+  }
+}
+
+/// Tells the page around the frame.
+function tell(message) {
+  if (window.parent !== window) window.parent.postMessage(message, "*");
 }
 
 /// Draws what the panel shows, and keeps drawing while it changes.
 function draw() {
   drawing = false;
   if (!device) return;
-  const [width, height] = device.size();
-  if (canvas.width !== width || canvas.height !== height) {
-    canvas.width = width;
-    canvas.height = height;
-  }
-  context.putImageData(device.frame(), 0, 0);
-  if (device.animating()) requestDraw();
+  guarded(() => {
+    const [width, height] = device.size();
+    if (canvas.width !== width || canvas.height !== height) {
+      canvas.width = width;
+      canvas.height = height;
+    }
+    context.putImageData(device.frame(), 0, 0);
+    if (device.animating()) requestDraw();
+  });
 }
 
 function requestDraw() {
@@ -47,7 +88,7 @@ function requestDraw() {
 function step() {
   clearTimeout(timer);
   if (!device) return;
-  const next = device.advance(now());
+  const next = guarded(() => device.advance(now()));
   requestDraw();
   if (next !== null) timer = setTimeout(step, Math.max(next, 1));
 }
@@ -69,7 +110,7 @@ function buttons() {
 }
 
 function press(name, pressed) {
-  if (device && device.button(name, pressed)) step();
+  if (device && guarded(() => device.button(name, pressed))) step();
 }
 
 /// Where a pointer event is on the device's screen, in its pixels.
@@ -87,7 +128,7 @@ for (const [type, phase] of [
   canvas.addEventListener(type, (event) => {
     if (!device || !info.touch || (phase === "move" && !event.buttons)) return;
     if (phase === "down") canvas.setPointerCapture(event.pointerId);
-    device.pointer(phase, ...at(event));
+    guarded(() => device.pointer(phase, ...at(event)));
     step();
   });
 }
@@ -101,17 +142,23 @@ for (const type of ["keydown", "keyup"]) {
   });
 }
 
-/// Starts a device: the files go to `plugins/<id>/` on its card.
-async function start({ profile, language, dark, plugins: given = [] }) {
-  const loaded = await module;
-  loaded.create({ profile, language, dark });
-  device = loaded;
+/// Makes the device of `how` on `device`, puts `given` (files by plugin
+/// id) on its card and starts it.
+function boot(how, given) {
+  device.create(how);
   plugins = {};
-  for (const plugin of given) put(plugin.id, plugin.files);
+  for (const [id, files] of Object.entries(given)) put(id, files);
   device.start();
   info = device.device();
   buttons();
   step();
+}
+
+/// Starts a device: the files go to `plugins/<id>/` on its card.
+async function start({ profile, language, dark, plugins: given = [] }) {
+  device = await loading;
+  last = { profile, language, dark };
+  boot(last, Object.fromEntries(given.map((plugin) => [plugin.id, plugin.files])));
   return { device: info };
 }
 
@@ -120,9 +167,11 @@ function put(id, files) {
   plugins[id] = files;
 }
 
-/// Replaces a data plugin's files and starts the device again.
+/// Replaces a data plugin's files, whatever of it was on the card, and
+/// starts the device again.
 function files({ id, files: given }) {
-  if (plugins[id]) device.removePlugin(id);
+  device.removePlugin(id);
+  delete plugins[id];
   put(id, given);
   device.start();
   step();
@@ -168,13 +217,14 @@ window.addEventListener("message", async (event) => {
   try {
     reply(await handler(message));
   } catch (error) {
+    if (error instanceof WebAssembly.RuntimeError) restart(String(error.message ?? error));
     reply({ error: String(error.message ?? error) });
   }
 });
 
 // Ready for messages once the module is loaded.
-module.then(
-  () => window.parent !== window && window.parent.postMessage({ type: "ready" }, "*"),
+loading.then(
+  () => tell({ type: "ready" }),
   (error) => console.error("paperpaw:", error),
 );
 

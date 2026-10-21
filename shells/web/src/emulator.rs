@@ -4,7 +4,7 @@
 //! them. Nothing here knows the browser: the exports ([`crate::exports`])
 //! pass its calls on, and the tests drive it directly.
 
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
 use paperpaw_core::sdk::install::{is_plugin_name, is_safe_path};
@@ -45,8 +45,9 @@ pub struct Emulator {
     dark: bool,
     /// The device's storage: the books, the data plugins.
     files: Rc<MemoryStorage>,
-    /// The data plugins given, by id: their files by path.
-    plugins: BTreeMap<String, BTreeMap<String, Vec<u8>>>,
+    /// The ids of the data plugins given (their files are on the card
+    /// alone).
+    plugins: BTreeSet<String>,
     device: Option<Device>,
     /// What the panel shows, four bytes a pixel (RGBA), for a canvas.
     frame: Vec<u8>,
@@ -81,7 +82,7 @@ impl Emulator {
             language: language.to_string(),
             dark,
             files: Rc::new(files),
-            plugins: BTreeMap::new(),
+            plugins: BTreeSet::new(),
             device: None,
             frame: Vec::new(),
         })
@@ -94,7 +95,7 @@ impl Emulator {
     /// Puts a file of the data plugin `plugin` on the card, as
     /// `plugins/<plugin>/<path>`; seen by the app at the next start
     /// ([`Emulator::restart`]).
-    pub fn put_file(&mut self, plugin: &str, path: &str, bytes: Vec<u8>) -> Result<(), String> {
+    pub fn put_file(&mut self, plugin: &str, path: &str, bytes: &[u8]) -> Result<(), String> {
         if !is_plugin_name(plugin) {
             return Err(format!("`{plugin}` is no plugin's name"));
         }
@@ -103,21 +104,18 @@ impl Emulator {
         }
         let at = format!("plugins/{plugin}/{path}");
         self.files
-            .write(&at, &bytes)
+            .write(&at, bytes)
             .map_err(|e| format!("{at}: {e:?}"))?;
-        self.plugins
-            .entry(plugin.to_string())
-            .or_default()
-            .insert(path.to_string(), bytes);
+        self.plugins.insert(plugin.to_string());
         Ok(())
     }
 
-    /// Takes the data plugin `plugin` off the card, every file of it.
+    /// Takes the data plugin `plugin` off the card, every file of it
+    /// (also those a page put there some other way).
     pub fn remove_plugin(&mut self, plugin: &str) {
-        if let Some(files) = self.plugins.remove(plugin) {
-            for path in files.keys() {
-                let _ = self.files.remove(&format!("plugins/{plugin}/{path}"));
-            }
+        self.plugins.remove(plugin);
+        if is_plugin_name(plugin) {
+            let _ = self.files.remove_dir_all(&format!("plugins/{plugin}"));
         }
     }
 
@@ -261,10 +259,11 @@ impl Emulator {
         if self.plugins.is_empty() {
             return Err("no data plugin on the card to check".to_string());
         }
+        // Read from the card, held while checked.
         let plugins = self
             .plugins
             .iter()
-            .map(|(id, files)| DataPlugin::new(id, files.clone()))
+            .map(|id| DataPlugin::new(id, files_under(&*self.files, &format!("plugins/{id}"))))
             .collect();
         let report = paperpaw_dev::data::check(plugins, vec![self.profile], commands);
         // The checks measure their own devices; this one keeps its budget
@@ -304,4 +303,36 @@ impl Emulator {
             list(self.profile.button_row),
         )
     }
+}
+
+/// Every file under `dir` of `storage`, by its path from `dir`.
+fn files_under(storage: &dyn Storage, dir: &str) -> BTreeMap<String, Vec<u8>> {
+    let mut out = BTreeMap::new();
+    let mut folders = vec![String::new()];
+    while let Some(folder) = folders.pop() {
+        let at = if folder.is_empty() {
+            dir.to_string()
+        } else {
+            format!("{dir}/{folder}")
+        };
+        let mut entries = Vec::new();
+        let _ = storage.list(&at, &mut |entry| {
+            entries.push((entry.name.to_string(), entry.is_dir));
+        });
+        for (name, is_dir) in entries {
+            let path = if folder.is_empty() {
+                name
+            } else {
+                format!("{folder}/{name}")
+            };
+            if is_dir {
+                folders.push(path);
+            } else if let Ok(bytes) =
+                paperpaw_core::sdk::read_file(storage, &format!("{dir}/{path}"), usize::MAX)
+            {
+                out.insert(path, bytes);
+            }
+        }
+    }
+    out
 }

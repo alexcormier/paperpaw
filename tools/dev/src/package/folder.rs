@@ -51,7 +51,7 @@ pub struct File {
     /// Its path in the folder, with `/`.
     pub path: String,
     pub size: u64,
-    pub bytes: Vec<u8>,
+    pub bytes: std::rc::Rc<[u8]>,
 }
 
 /// A line of an ini file: section, key, value and line number.
@@ -159,8 +159,8 @@ fn text(folder: &Folder, path: &str, max: u64, add: &mut dyn FnMut(Finding)) -> 
         ));
         return None;
     }
-    match String::from_utf8(file.bytes.clone()) {
-        Ok(text) => Some(text),
+    match std::str::from_utf8(&file.bytes) {
+        Ok(text) => Some(text.to_string()),
         Err(_) => {
             add(Finding::error(
                 "package.files",
@@ -739,8 +739,7 @@ mod tests {
     fn folder(name: &str, files: &[(&str, &[u8])]) -> DataPlugin {
         let files = files
             .iter()
-            .map(|(path, bytes)| (path.to_string(), bytes.to_vec()))
-            .collect();
+            .map(|(path, bytes)| (path.to_string(), bytes.to_vec()));
         let mut plugin = DataPlugin::new(name, files);
         plugin.folder = Some(std::path::PathBuf::from("plugins").join(name));
         plugin

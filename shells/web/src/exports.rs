@@ -198,7 +198,7 @@ pub unsafe extern "C" fn pp_put_file(
             bytes(data_ptr, data_len),
         )
     };
-    with(|emulator| emulator.put_file(plugin, path, data.to_vec()))
+    with(|emulator| emulator.put_file(plugin, path, data))
 }
 
 /// Takes a data plugin off the card.
