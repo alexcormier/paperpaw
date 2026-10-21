@@ -71,7 +71,7 @@ const AGAIN: usize = 5;
 /// Bytes more after every close that make a leak.
 const LEAK_BYTES: i64 = 64;
 
-/// Frames measured on an X4 (docs/PLANNING.md, B3): the home screen and
+/// Frames measured on an X4: the home screen and
 /// the settings, drawn with the firmware as it is now.
 const X4_HOME_MS: f64 = 330.0;
 const X4_SETTINGS_MS: f64 = 160.0;
@@ -318,7 +318,7 @@ fn fastest(session: &mut Session, times: usize) -> f64 {
 /// Measures the factor from frames here to frames on an X4: the home
 /// screen (a book read a little, as on a device in use) and the settings
 /// drawn again here, the fastest of a few times, against their times
-/// measured on an X4 (330 ms and 160 ms, PLANNING B3), the geometric mean
+/// measured on an X4 (330 ms and 160 ms), the geometric mean
 /// of the two ratios. Measured in the same run, it follows this computer
 /// and how the tool was built; the home screen is drawn again before each
 /// case too, and a case's frames are scaled by how much faster or slower

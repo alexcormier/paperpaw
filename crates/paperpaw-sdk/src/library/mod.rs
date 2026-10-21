@@ -1,7 +1,7 @@
 //! The library as a service: what is known about books beyond their
 //! files, for every plugin that shows or uses them (the library, the home
 //! screen, the sleep screen, syncs). Data and the screens that show it
-//! are apart (PLANNING §6.3): any plugin may offer another view of the
+//! are apart: any plugin may offer another view of the
 //! same books.
 //!
 //! - A book's details: title, author, series, tags and cover, read from
