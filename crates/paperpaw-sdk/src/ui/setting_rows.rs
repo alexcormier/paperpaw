@@ -166,6 +166,331 @@ pub fn setting_row(style: &UiStyle, spec: &SettingSpec, row: u32, noted: bool) -
     }
 }
 
+/// Where a setting's row puts its title and its control (a value, a
+/// switch or `−` value `+`): side by side, or, where the title would be
+/// cut, the control on a line of its own below the title, at the right. A
+/// title is never cut for a control. Decided once, when the row is laid
+/// out ([`row_lines`]), for every value it may show (a choice's widest
+/// option), and moved to where the row is drawn ([`RowLines::at`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct RowLines {
+    /// The line of the title.
+    pub title: Rect,
+    /// The line of the control: the title's where both fit side by side.
+    pub control: Rect,
+    /// The whole row's height, its note included.
+    pub height: u16,
+}
+
+impl RowLines {
+    /// Title and control side by side in `line`, a row as high.
+    pub const fn one(line: Rect) -> Self {
+        Self {
+            title: line,
+            control: line,
+            height: line.height,
+        }
+    }
+
+    /// The control on a line of its own, below the title.
+    pub fn stacked(&self) -> bool {
+        self.title != self.control
+    }
+
+    /// Where a note below them begins.
+    pub fn bottom(&self) -> u16 {
+        self.control.bottom() as u16
+    }
+
+    /// The lines of a row laid out at the top left moved to the row's
+    /// place `rect`.
+    pub fn at(self, rect: Rect) -> Self {
+        let moved = |r: Rect| Rect::new(r.x + rect.x, r.y + rect.y, r.width, r.height);
+        Self {
+            title: moved(self.title),
+            control: moved(self.control),
+            height: self.height,
+        }
+    }
+}
+
+/// The line of a row in `rect` that holds its title and its control side
+/// by side, as they are drawn: a number's as high as its − and + need, a
+/// switch's the whole row where it has no note (as [`draw_switch_row`]
+/// draws it).
+fn first_line(style: &UiStyle, spec: &SettingSpec, rect: Rect, noted: bool) -> Rect {
+    let number = matches!(spec.kind, SettingKind::Int { .. });
+    let line = match (number, noted) {
+        (true, true) => return number_title_area(style, rect),
+        (false, true) => return title_area(style, rect),
+        (true, false) => style.touch_row(style.row),
+        (false, false) => style.row,
+    };
+    Rect::new(rect.x, rect.y, rect.width, (line as u16).min(rect.height))
+}
+
+/// Whether setting `spec` shows a switch (else a value or a number).
+fn is_switch(spec: &SettingSpec) -> bool {
+    matches!(spec.kind, SettingKind::Bool) && spec.extra().editor.is_none()
+}
+
+/// The widest a setting's value at the right of its row is drawn, of
+/// all it may show in place: a choice's widest option, the widest
+/// language, the wider of on and off; else (a text, a list, changed on a
+/// screen of their own) the value it has. With the mark of a value set
+/// for a scope where it may have one, and "›" where a tap opens a screen
+/// for it.
+fn widest_value(env: &Env<'_>, style: &UiStyle, font: &FontHandle<'_>, spec: &SettingSpec) -> f32 {
+    let size = style.text;
+    let widest = |names: &mut dyn Iterator<Item = &str>| {
+        names.map(|name| font.measure(size, name)).fold(0.0, f32::max)
+    };
+    let value = match &spec.kind {
+        SettingKind::Choice(choices) => widest(&mut choices.iter().map(|o| env.i18n.tr(o))),
+        SettingKind::Language => widest(&mut env.i18n.languages().into_iter().map(|(_, n)| n)),
+        SettingKind::Bool => widest(&mut ["core.on", "core.off"].into_iter().map(|k| env.i18n.tr(k))),
+        _ => font.measure(size, &plain_setting_value(env, spec)),
+    };
+    let scoped = if spec.scoped {
+        font.measure(size, "• ")
+    } else {
+        0.0
+    };
+    let opens = if opens_screen(env, spec) {
+        font.measure(size, " ›")
+    } else {
+        0.0
+    };
+    value + scoped + opens
+}
+
+/// Whether setting `spec`'s title fits beside its control on `line`
+/// (`room` for a number's value, see [`number_room`]): `−` value `+`, a
+/// switch or a value.
+fn fits_beside(env: &Env<'_>, style: &UiStyle, spec: &SettingSpec, line: Rect, room: &str) -> bool {
+    let Some(font) = style.font(env) else {
+        return true;
+    };
+    let title = env.i18n.tr(&spec.title);
+    let margin = style.margin as f32;
+    let room_for_title = match spec.kind {
+        SettingKind::Int { .. } => {
+            // Its least and greatest: the − and + stay where they are
+            // while it changes.
+            let own = number_room(env, style, core::iter::once(spec));
+            let room = wider(&font, style.text, room, &own);
+            let Some((minus, _)) = stepper(env, style, line, room) else {
+                return true;
+            };
+            f32::from(minus.x) - f32::from(line.x) - 2.0 * margin
+        }
+        _ if is_switch(spec) => {
+            // The title ends a gap before the switch.
+            let switch = switch_rect(style, line);
+            f32::from(switch.x) - f32::from(line.x) - margin - style.gap as f32
+        }
+        _ => f32::from(line.width) - 3.0 * margin - widest_value(env, style, &font, spec),
+    };
+    // A pixel of slack for rounding, as in [`draw_label`].
+    font.measure(style.text, title) <= room_for_title + 1.0
+}
+
+/// The most lines a title takes on a line of its own (see [`RowLines`]).
+const TITLE_LINES: usize = 2;
+
+/// How high the line of `title` is where it stands on its own, `width`
+/// wide: a title's band, and a line more where it wraps (at most
+/// [`TITLE_LINES`]).
+fn own_title_height(env: &Env<'_>, style: &UiStyle, width: u16, title: &str) -> u16 {
+    let band = style.title_band() as u16;
+    let Some(font) = style.font(env) else {
+        return band;
+    };
+    let room = f32::from(width) - 2.0 * style.margin as f32;
+    if font.measure(style.text, title) <= room + 1.0 {
+        return band;
+    }
+    let lines = font.wrap(style.text, title, room).len().clamp(1, TITLE_LINES);
+    let line = font.line_metrics(style.text).line_height as u16;
+    band + line * (lines as u16 - 1)
+}
+
+/// Draws `title` on its own `line` (see [`RowLines`]): wrapped where it
+/// is too wide for one, the last line shortened with "…" past
+/// [`TITLE_LINES`].
+fn draw_own_title(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    font: &FontHandle<'_>,
+    line: Rect,
+    title: &str,
+    ink: Color,
+) {
+    let margin = style.margin as f32;
+    let room = f32::from(line.width) - 2.0 * margin;
+    let left = f32::from(line.x) + margin;
+    // One line, as most are: nothing to wrap.
+    if font.measure(style.text, title) <= room + 1.0 {
+        draw_label(canvas, font, style.text, left, line, title, ink);
+        return;
+    }
+    let wrapped = font.wrap(style.text, title, room);
+    canvas.describe(Role::Text, title, line, false, None);
+    let metrics = font.line_metrics(style.text);
+    let count = wrapped.len().clamp(1, TITLE_LINES);
+    // The lines centred in the line's height, as one line is.
+    let total = metrics.line_height * count as f32;
+    let top = f32::from(line.y) + (f32::from(line.height) - total) / 2.0;
+    for (n, range) in wrapped.iter().take(TITLE_LINES).enumerate() {
+        let text = if n + 1 == TITLE_LINES && wrapped.len() > TITLE_LINES {
+            fit(font, style.text, title[range.start..].trim_end(), room)
+        } else {
+            String::from(title[range.clone()].trim_end())
+        };
+        let baseline = top + metrics.line_height * n as f32 + metrics.ascent;
+        font.draw(canvas, style.text, left, baseline as i32, &text, ink);
+    }
+}
+
+/// How setting `spec`'s row `width` wide is laid out in a list of rows
+/// `row` high (`room` for a number's value, see [`number_room`]; `noted`
+/// rows or not): its title and its control side by side, or the control
+/// below the title where they do not fit, for every value it may show,
+/// and how high it is. At the top left: drawn at its place with
+/// [`RowLines::at`]. Made once with the list (it measures, and wraps a
+/// long title), not each time the row is drawn.
+#[allow(clippy::too_many_arguments)]
+pub fn row_lines(
+    env: &Env<'_>,
+    style: &UiStyle,
+    spec: &SettingSpec,
+    width: u16,
+    room: &str,
+    row: u32,
+    noted: bool,
+) -> RowLines {
+    let height = setting_row(style, spec, row, noted) as u16;
+    let rect = Rect::new(0, 0, width, height);
+    let line = first_line(style, spec, rect, noted);
+    // A switch without a note takes the whole row, as it is drawn.
+    let beside = if is_switch(spec) && !(noted && spec.description.is_some()) {
+        rect
+    } else {
+        line
+    };
+    if fits_beside(env, style, spec, beside, room) {
+        return RowLines {
+            height,
+            ..RowLines::one(line)
+        };
+    }
+    let high = own_title_height(env, style, width, env.i18n.tr(&spec.title));
+    let title = Rect::new(line.x, line.y, line.width, high);
+    let control = Rect::new(line.x, title.bottom() as u16, line.width, line.height);
+    RowLines {
+        title,
+        control,
+        height: height + high,
+    }
+}
+
+/// The height of the row of setting `spec` `width` pixels wide in a list
+/// of rows `row` high: as [`setting_row`], and a title's line more where
+/// the title does not fit beside its control (see [`row_lines`], which
+/// tells both).
+#[allow(clippy::too_many_arguments)]
+pub fn setting_height(
+    env: &Env<'_>,
+    style: &UiStyle,
+    spec: &SettingSpec,
+    width: u16,
+    room: &str,
+    row: u32,
+    noted: bool,
+) -> u32 {
+    u32::from(row_lines(env, style, spec, width, room, row, noted).height)
+}
+
+/// A setting's row with a value: `title` and `value` on [`RowLines`]
+/// (side by side, or the value below at the right), `note` below them.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_setting_row(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    lines: RowLines,
+    focused: bool,
+    title: &str,
+    value: &str,
+    note: &str,
+) {
+    if !lines.stacked() {
+        return draw_noted_row(canvas, env, style, rect, focused, title, value, note);
+    }
+    if let Some(font) = style.font(env) {
+        draw_own_title(canvas, style, &font, lines.title, title, style.focus_ink(focused));
+    }
+    draw_value_row(canvas, env, style, lines.control, focused, "", value);
+    if !note.is_empty() {
+        draw_note_below(canvas, env, style, rect, lines.bottom(), focused, note);
+    }
+}
+
+/// A setting's row with a switch: as [`draw_switch_row`], on
+/// [`RowLines`] (the switch below the title, at the right, where the
+/// title would not fit beside it).
+#[allow(clippy::too_many_arguments)]
+pub fn draw_switch_lines(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    lines: RowLines,
+    focused: bool,
+    title: &str,
+    note: &str,
+    on: bool,
+) {
+    if !lines.stacked() {
+        return draw_switch_row(canvas, env, style, rect, focused, title, note, on);
+    }
+    if let Some(font) = style.font(env) {
+        draw_own_title(canvas, style, &font, lines.title, title, style.focus_ink(focused));
+    }
+    if !note.is_empty() {
+        draw_note_below(canvas, env, style, rect, lines.bottom(), focused, note);
+    }
+    draw_switch(canvas, style, lines.control, on, focused && style.dark_focus());
+}
+
+/// The note of a number's row below its [`RowLines`].
+pub fn draw_lines_note(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    lines: RowLines,
+    focused: bool,
+    note: &str,
+) {
+    draw_note_below(canvas, env, style, rect, lines.bottom(), focused, note);
+}
+
+/// The − and + of a number row showing `value`, exactly where
+/// [`draw_number`] and [`draw_stepper`] (and their `_lines` forms) draw
+/// them with `room`: for the hit areas of a screen of its own.
+pub fn value_stepper(
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    room: &str,
+    value: &str,
+) -> Option<(Rect, Rect)> {
+    let font = style.font(env)?;
+    stepper(env, style, rect, wider(&font, style.text, room, value))
+}
+
 /// The − and + buttons of a number row, with room for `room` between
 /// them (at least for "000 %"): the value, or the widest of the
 /// numbers in rows above each other (see [`number_room`]), so their
@@ -235,28 +560,35 @@ pub fn draw_number(
     room: &str,
     focus: Option<bool>,
 ) {
+    let lines = RowLines::one(rect);
+    draw_number_lines(canvas, env, style, lines, title, value, room, focus);
+}
+
+/// [`draw_number`] on [`RowLines`]: the `−` value `+` below the title
+/// where they are stacked.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_number_lines(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    lines: RowLines,
+    title: &str,
+    value: &str,
+    room: &str,
+    focus: Option<bool>,
+) {
     let Some(font) = style.font(env) else {
         return;
     };
     let room = wider(&font, style.text, room, value);
-    let Some((minus, plus)) = stepper(env, style, rect, room) else {
+    let Some((minus, plus)) = stepper(env, style, lines.control, room) else {
         return;
     };
-    let margin = style.margin as f32;
-    // From the row's own start, e.g. right of an icon.
-    let left = f32::from(rect.x) + margin;
-    let title = fit(&font, style.text, title, f32::from(minus.x) - left - margin);
-    draw_label(canvas, &font, style.text, left, rect, &title, Color::BLACK);
+    let ink = Color::BLACK;
+    draw_number_title(canvas, style, &font, lines, minus, title, ink);
     let value_x = centred(&font, style.text, value, minus, plus);
-    draw_label(
-        canvas,
-        &font,
-        style.text,
-        value_x,
-        rect,
-        value,
-        Color::BLACK,
-    );
+    let row = lines.control;
+    draw_label(canvas, &font, style.text, value_x, row, value, ink);
     draw_button(canvas, env, style, minus, "−", false, focus == Some(false));
     draw_button(canvas, env, style, plus, "+", false, focus == Some(true));
 }
@@ -305,22 +637,58 @@ pub fn draw_stepper(
     room: &str,
     editing: bool,
 ) {
+    let lines = RowLines::one(rect);
+    draw_stepper_lines(canvas, env, style, lines, title, value, room, editing);
+}
+
+/// [`draw_stepper`] on [`RowLines`]: the `−` value `+` below the title
+/// where they are stacked.
+#[allow(clippy::too_many_arguments)]
+pub fn draw_stepper_lines(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    lines: RowLines,
+    title: &str,
+    value: &str,
+    room: &str,
+    editing: bool,
+) {
     let Some(font) = style.font(env) else {
         return;
     };
     let room = wider(&font, style.text, room, value);
-    let Some((minus, plus)) = stepper(env, style, rect, room) else {
+    let Some((minus, plus)) = stepper(env, style, lines.control, room) else {
         return;
     };
-    let margin = style.margin as f32;
-    // From the row's own start, e.g. right of an icon.
-    let left = f32::from(rect.x) + margin;
-    let title = fit(&font, style.text, title, f32::from(minus.x) - left - margin);
     let ink = style.focus_ink(true);
-    draw_label(canvas, &font, style.text, left, rect, &title, ink);
+    draw_number_title(canvas, style, &font, lines, minus, title, ink);
     let value_x = centred(&font, style.text, value, minus, plus);
-    draw_label(canvas, &font, style.text, value_x, rect, value, ink);
-    draw_focused_steps(canvas, style, &font, rect, (minus, plus), editing);
+    draw_label(canvas, &font, style.text, value_x, lines.control, value, ink);
+    let steps = (minus, plus);
+    draw_focused_steps(canvas, style, &font, lines.control, steps, editing);
+}
+
+/// A number's title on its line: left of its `−` (`minus`), or the
+/// line's whole width where the buttons are below it.
+fn draw_number_title(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    font: &FontHandle<'_>,
+    lines: RowLines,
+    minus: Rect,
+    title: &str,
+    ink: Color,
+) {
+    if lines.stacked() {
+        return draw_own_title(canvas, style, font, lines.title, title, ink);
+    }
+    let margin = style.margin as f32;
+    let line = lines.title;
+    // From the row's own start, e.g. right of an icon.
+    let left = f32::from(line.x) + margin;
+    let title = fit(font, style.text, title, f32::from(minus.x) - margin - left);
+    draw_label(canvas, font, style.text, left, line, &title, ink);
 }
 
 /// The `−` and `+` of a focused number, on the focus bar in `row`:

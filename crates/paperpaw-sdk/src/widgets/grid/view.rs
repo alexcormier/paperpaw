@@ -689,6 +689,12 @@ impl GridView {
         self.drop_check = Some(check);
     }
 
+    /// Whether every target belongs to item `index` (no other, no
+    /// button of the screen).
+    fn alone(&self, index: usize) -> bool {
+        self.owners.iter().all(|owner| *owner == Some(index))
+    }
+
     /// The target nearest below (or above) the focused one.
     fn vertical(&self, down: bool) -> Option<usize> {
         let (from, _) = self.targets.get(self.focus)?;
@@ -944,12 +950,16 @@ impl GridView {
         // The page buttons turn the focused widget's pages (a list, a
         // calendar) where it takes them, as a swipe on it would; else the
         // screen's. Left and Right always go on through the targets, so a
-        // widget that pages without end keeps the focus nowhere.
+        // widget that pages without end keeps the focus nowhere. Where its
+        // targets are the only ones, the page buttons are the screen's
+        // (its other pages always in reach) and Left and Right page it at
+        // its first and last target.
         let next = *a == actions::NEXT_PAGE;
         if (next || *a == actions::PREV_PAGE)
             && self.focus_shown
             && self.edit.is_none()
             && let Some(item) = self.owners.get(self.focus).copied().flatten()
+            && !self.alone(item)
         {
             let direction = if next {
                 crate::gesture::Direction::Left
@@ -980,6 +990,29 @@ impl GridView {
             return GridResponse::Handled;
         }
         let len = self.targets.len();
+        let step = if *a == actions::RIGHT {
+            1
+        } else if *a == actions::LEFT {
+            -1
+        } else {
+            0
+        };
+        if step != 0
+            && self.edit.is_none()
+            && let Some(item) = self.owners.get(self.focus).copied().flatten()
+            && self.alone(item)
+            && (step > 0 && self.focus + 1 == len || step < 0 && self.focus == 0)
+        {
+            let direction = if step > 0 {
+                crate::gesture::Direction::Left
+            } else {
+                crate::gesture::Direction::Right
+            };
+            if self.tell(item, WidgetInput::Swipe(direction), cx) {
+                self.retarget(item, cx);
+                return GridResponse::Handled;
+            }
+        }
         let to = if *a == actions::CONFIRM {
             return self.run(self.focus, cx);
         } else if *a == actions::RIGHT || *a == actions::NEXT {

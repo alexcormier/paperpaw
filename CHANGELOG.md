@@ -6,6 +6,29 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: a setting's title is never cut for its control. Where it does not
+  fit beside its `−` value `+`, its switch or its value, the control goes
+  on a line of its own below the title, at the right, and a title too
+  wide for a line wraps onto a second (`ui::RowLines`, `ui::row_lines`,
+  `ui::setting_height`; drawn with `ui::draw_number_lines`,
+  `ui::draw_stepper_lines`, `ui::draw_switch_lines`,
+  `ui::draw_setting_row`, `ui::draw_lines_note`). It is decided once,
+  when the list is made, for every value a row may show in place (a
+  choice's widest option, the widest language, the wider of on and off,
+  a number's least and greatest), so a value changed in place never
+  makes a row overlap the next; `RowLines::at` moves it to the row's
+  place, `ui::value_stepper` tells where its − and + are drawn (for the
+  hit areas). The settings use it:
+  on the X4 Pro *Saving below (%)* and *Offline below (%)* showed as
+  *Saving bel…*, as their buttons are a fingertip wide. Touch targets
+  and the focus by the buttons stay as they were.
+- Headers centre their titles by the capitals (the baseline to the top
+  of an *H*) rather than by each title's own ink: a title with a *g* or
+  *y* stood higher than one without and above the back arrow, by up to
+  6 pixels on the Boox. Notes and page numbers in headers stand the same
+  way. Titles of headers are 115 % of the text by default (was 130 %),
+  as titles of dialogs are; `core.ui-title` still sets them, in steps of
+  5 %.
 - X4 Pro: dragging and sizing a widget by touch keeps up with the finger.
   The firmware queues touch readings while it refreshes the panel; a
   finger's moves while the last one still waits now take its place
@@ -86,7 +109,9 @@ change the plugin SDK.
   buttons, the page buttons are a swipe to the widget that has the focus
   (the screen's own page where it takes none); Left and Right always go
   on through the targets, out of a widget after its last, so one that
-  pages without end never keeps the focus (the X4 has no Up and Down);
+  pages without end never keeps the focus (the X4 has no Up and Down).
+  Where its targets are the only ones on the page, the page buttons are
+  the screen's and Left and Right page it at its first and last target;
   Up and Down go to the target above or below. After a swipe it took,
   its targets are asked anew: where it had the focus, the focus goes to
   its first target and it is told; elsewhere the focus stays where it

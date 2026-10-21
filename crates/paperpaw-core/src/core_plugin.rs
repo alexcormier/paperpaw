@@ -1004,6 +1004,10 @@ static PERCENT_10_SLIDER: SettingExtra = SettingExtra::new()
     .unit("core.unit.percent")
     .step(10)
     .slider();
+static PERCENT_5_SLIDER: SettingExtra = SettingExtra::new()
+    .unit("core.unit.percent")
+    .step(5)
+    .slider();
 static PERCENT_5: SettingExtra = SettingExtra::new().unit("core.unit.percent").step(5);
 static MINUTES_5: SettingExtra = SettingExtra::new().unit("core.unit.minutes").step(5);
 static COLORS: SettingExtra = SettingExtra::new().section("core.section.colors");
@@ -1239,10 +1243,10 @@ static LOOK: [SettingSpec; 14] = [
         "core.setting.ui-title",
         100,
         200,
-        130,
+        115,
         groups::LOOK,
     )
-    .with_extra(&PERCENT_10_SLIDER)
+    .with_extra(&PERCENT_5_SLIDER)
     .for_advanced()
     .described("core.setting.ui-title.help"),
     SettingSpec::fixed_number(

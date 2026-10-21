@@ -1120,6 +1120,29 @@ fn a_widget_paging_without_end_never_keeps_the_focus() {
     assert_eq!(confirmed(&mut view, &env), ran("t.a"), "paged, still out");
 }
 
+/// A widget alone on a page (its targets the only ones) leaves the page
+/// buttons to the screen, so its other pages stay in reach; Left and
+/// Right page it at its first and last target.
+#[test]
+fn a_widget_alone_leaves_the_page_buttons_to_the_screen() {
+    let mut h = harness(Device::BUTTONS);
+    paged(&mut h, true);
+    let env = h.env();
+    let mut view = GridView::asking(&env, CHOSEN);
+    let items = [Item::placed(widget("t.paged"), Cells::new(0, 0, 4, 1))];
+    view.layout(&env, geometry(), &items, &[]);
+    assert_eq!(confirmed(&mut view, &env), ran("t.p0-0"));
+    for page in [actions::NEXT_PAGE, actions::PREV_PAGE] {
+        assert_eq!(press(&mut view, &env, &page), GridResponse::Ignored);
+    }
+    press(&mut view, &env, &actions::RIGHT);
+    assert_eq!(confirmed(&mut view, &env), ran("t.p0-1"));
+    press(&mut view, &env, &actions::RIGHT);
+    assert_eq!(confirmed(&mut view, &env), ran("t.p1-0"), "paged at its last");
+    press(&mut view, &env, &actions::LEFT);
+    assert_eq!(confirmed(&mut view, &env), ran("t.p0-0"), "paged back at its first");
+}
+
 /// A swipe on a widget while the focus is elsewhere turns its page and
 /// leaves the focus where it was; with the focus on it, the focus goes to
 /// its first target and it is told.

@@ -3268,6 +3268,15 @@ pub fn paperpaw_sdk::ui::reorder::Reorder::draw(&self, &mut paperpaw_graphics::c
 pub fn paperpaw_sdk::ui::reorder::Reorder::draw_grip(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool)
 pub fn paperpaw_sdk::ui::reorder::Reorder::grip(paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::reorder::Reorder::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::ListView, usize) -> core::option::Option<paperpaw_sdk::ui::reorder::ReorderStep>
+pub struct paperpaw_sdk::ui::RowLines
+pub paperpaw_sdk::ui::RowLines::control: paperpaw_platform::geometry::Rect
+pub paperpaw_sdk::ui::RowLines::height: u16
+pub paperpaw_sdk::ui::RowLines::title: paperpaw_platform::geometry::Rect
+impl paperpaw_sdk::ui::RowLines
+pub fn paperpaw_sdk::ui::RowLines::at(self, paperpaw_platform::geometry::Rect) -> Self
+pub fn paperpaw_sdk::ui::RowLines::bottom(&self) -> u16
+pub const fn paperpaw_sdk::ui::RowLines::one(paperpaw_platform::geometry::Rect) -> Self
+pub fn paperpaw_sdk::ui::RowLines::stacked(&self) -> bool
 pub struct paperpaw_sdk::ui::Rows
 impl paperpaw_sdk::ui::Rows
 pub fn paperpaw_sdk::ui::Rows::area(&self) -> paperpaw_platform::geometry::Rect
@@ -3412,18 +3421,23 @@ pub fn paperpaw_sdk::ui::draw_icon_button(&mut paperpaw_graphics::canvas::Canvas
 pub fn paperpaw_sdk::ui::draw_image(&mut paperpaw_graphics::canvas::Canvas<'_>, &dyn paperpaw_platform::storage::Storage, &paperpaw_document::ImageRef, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::ui::draw_image_over(&mut paperpaw_graphics::canvas::Canvas<'_>, &dyn paperpaw_platform::storage::Storage, &paperpaw_document::ImageRef, paperpaw_platform::geometry::Rect, u8)
 pub fn paperpaw_sdk::ui::draw_label(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::FontHandle<'_>, f32, f32, paperpaw_platform::geometry::Rect, &str, paperpaw_platform::pixel::Color) -> f32
+pub fn paperpaw_sdk::ui::draw_lines_note(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::ui::RowLines, bool, &str)
 pub fn paperpaw_sdk::ui::draw_message(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str)
 pub fn paperpaw_sdk::ui::draw_note(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str)
 pub fn paperpaw_sdk::ui::draw_note_line(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str)
 pub fn paperpaw_sdk::ui::draw_noted_row(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str, &str, &str)
 pub fn paperpaw_sdk::ui::draw_number(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, &str, &str, core::option::Option<bool>)
+pub fn paperpaw_sdk::ui::draw_number_lines(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::ui::RowLines, &str, &str, &str, core::option::Option<bool>)
 pub fn paperpaw_sdk::ui::draw_number_note(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str)
 pub fn paperpaw_sdk::ui::draw_progress(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, u16, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::draw_qr(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_qr::QrCode, paperpaw_platform::geometry::Rect) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::draw_row_icon(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, u16, core::option::Option<&str>, paperpaw_platform::pixel::Color) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::draw_separator(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, u16)
+pub fn paperpaw_sdk::ui::draw_setting_row(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::ui::RowLines, bool, &str, &str, &str)
 pub fn paperpaw_sdk::ui::draw_stepper(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, &str, &str, bool)
+pub fn paperpaw_sdk::ui::draw_stepper_lines(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::ui::RowLines, &str, &str, &str, bool)
 pub fn paperpaw_sdk::ui::draw_switch(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, bool)
+pub fn paperpaw_sdk::ui::draw_switch_lines(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::ui::RowLines, bool, &str, &str, bool)
 pub fn paperpaw_sdk::ui::draw_switch_row(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str, &str, bool)
 pub fn paperpaw_sdk::ui::draw_value_row(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str, &str)
 pub fn paperpaw_sdk::ui::edge_bar_band(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool) -> paperpaw_platform::geometry::Rect
@@ -3447,6 +3461,8 @@ pub fn paperpaw_sdk::ui::number_room<'a>(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::
 pub fn paperpaw_sdk::ui::number_title_area(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::opens_screen(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> bool
 pub fn paperpaw_sdk::ui::option_name(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, &str) -> alloc::string::String
+pub fn paperpaw_sdk::ui::row_lines(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::SettingSpec, u16, &str, u32, bool) -> paperpaw_sdk::ui::RowLines
+pub fn paperpaw_sdk::ui::setting_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::SettingSpec, u16, &str, u32, bool) -> u32
 pub fn paperpaw_sdk::ui::setting_opens(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> core::option::Option<paperpaw_sdk::Command>
 pub fn paperpaw_sdk::ui::setting_row(&paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::SettingSpec, u32, bool) -> u32
 pub fn paperpaw_sdk::ui::setting_value(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> alloc::string::String
@@ -3457,6 +3473,7 @@ pub fn paperpaw_sdk::ui::switch_rect(&paperpaw_sdk::ui::UiStyle, paperpaw_platfo
 pub fn paperpaw_sdk::ui::title_area(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::tr_input<'a>(&paperpaw_sdk::Env<'a>, &'a str) -> &'a str
 pub fn paperpaw_sdk::ui::two_options(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> bool
+pub fn paperpaw_sdk::ui::value_stepper(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, &str) -> core::option::Option<(paperpaw_platform::geometry::Rect, paperpaw_platform::geometry::Rect)>
 pub mod paperpaw_sdk::usage
 pub struct paperpaw_sdk::usage::PluginUsage
 pub paperpaw_sdk::usage::PluginUsage::busy_us: u64
