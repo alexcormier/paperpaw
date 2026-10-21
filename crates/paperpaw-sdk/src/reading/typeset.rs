@@ -189,12 +189,15 @@ impl PageType {
         let spaced = s.read(&settings::PARAGRAPH_SPACING);
         let justify = s.read(&settings::JUSTIFY);
         let ascent = metrics.ascent + (line_height - natural) / 2.0;
+        let widows = s.read(&settings::WIDOWS).clamp(1, 4) as u8;
+        let orphans = s.read(&settings::ORPHANS).clamp(1, 4) as u8;
         let style = Style::new(
             if spaced { line_height * 0.6 } else { 0.0 },
             if indent { size * 1.5 } else { 0.0 },
             size,
             justify,
-        );
+        )
+        .lines_kept(widows, orphans);
 
         let display = env.device.display;
         let millimetres = |setting: &crate::setting::Setting<i64>| match whole_pages {
@@ -242,7 +245,7 @@ impl PageType {
         let key = format!(
             "{:016x}",
             paperpaw_digest::fnv1a64(format!(
-                "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}|{stylesheets:x}",
+                "{}|{}|{}|{}|{}|{size}|{line_height}|{}|{}|{justify}|{width}x{height}|{}|{}|{}|{word_spacing}|{}|{whole_pages}|{stylesheets:x}|{widows}:{orphans}",
                 crate::layout::VERSION,
                 font.id(),
                 face_id(env, &fonts::READING_BOLD),
