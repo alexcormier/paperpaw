@@ -40,11 +40,14 @@ paperpaw-text = { workspace = true, features = ["outline"] }
 [features]
 default = []
 # Building blocks still changing before 1.0 (`layout`, `zip`): a plugin
-# that uses them names this feature and follows their changes.
+# that uses them names this feature and follows their changes. Adds only
+# modules and functions, never a field or variant: a plugin's fingerprint
+# leaves it out (`ADDING_ONLY` in build.rs).
 unstable = []
 # What only the kernel and the shells do: registering, setting, binding
 # (ADR 0020). Off for plugins, which get these only to read through
-# `Env`.
+# `Env`. Adds only functions, never a field or variant: a plugin's
+# fingerprint leaves it out (`ADDING_ONLY` in build.rs).
 kernel = []
 # Scalable OpenType/TrueType fonts (see paperpaw-text).
 outline = ["paperpaw-text/outline"]

@@ -98,7 +98,8 @@ the kernel like any other. A small C table from the firmware gives the
 plugin the kernel's heap, panics and the clock (`Api`, which grows only
 at its end and says its size). A **fingerprint** of compiler, target and
 SDK (version and features: Android builds the SDK with `outline` and
-`color`, the X4 without) is in the firmware and in every plugin file;
+`color`, the X4 without; `kernel` and `unstable`, which only add
+functions and modules, are left out) is in the firmware and in every plugin file;
 only files with the firmware's own are loaded. Every release breaks
 every code plugin until it is rebuilt, which is accepted before 1.0.
 

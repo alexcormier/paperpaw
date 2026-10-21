@@ -11,7 +11,8 @@
 //! ```
 //!
 //! A plugin file fits a PaperPaw only when both were built by the same
-//! compiler for the same chip from the same SDK with the same features
+//! compiler for the same chip from the same SDK with the same features,
+//! but `kernel` and `unstable`, which only add functions and modules
 //! (until PaperPaw 1.0, the SDK's types cross between them as they are):
 //! [`FINGERPRINT`] says which, and a device loads only files with its own
 //! ([`Native::fingerprint`]). `docs/plugins.md` says how a plugin is
@@ -657,10 +658,14 @@ macro_rules! plugin {
         /// toolchain built them, for unwinding: their code names the
         /// unwinder's personality, which a plugin that never unwinds
         /// (`panic = "abort"`) does not have, and Linux loads no library
-        /// with a name left open. Never called.
+        /// with a name left open. Never called; should an unwind from a
+        /// shell built to unwind ever reach the plugin, it panics, and the
+        /// plugin's panics abort.
         #[cfg(all(not(target_os = "none"), panic = "abort"))]
         #[unsafe(no_mangle)]
-        extern "C" fn rust_eh_personality() {}
+        extern "C" fn rust_eh_personality() -> ! {
+            ::core::panic!("unwinding into a plugin")
+        }
 
         unsafe extern "C" fn paperpaw_make() -> *mut ::core::ffi::c_void {
             $crate::native::support::make($plugin)
