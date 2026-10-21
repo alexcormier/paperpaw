@@ -14,14 +14,16 @@
 //! Supported: baseline and progressive JPEG (1 or 3 components, any
 //! sampling; progressive ones keep their coefficients until the last
 //! scan, as few as the output size needs), non-interlaced PNG (all
-//! colour types and depths, transparency over white) and GIF (the first
-//! picture of the file, transparency over white). Interlaced PNG and
-//! other formats return [`ImageError::Unsupported`].
+//! colour types and depths; transparency over white, or kept for a sink
+//! that wants it, [`ImageSink::wants_alpha`], e.g. [`AlphaFile`]) and GIF
+//! (the first picture of the file, transparency over white). Interlaced
+//! PNG and other formats return [`ImageError::Unsupported`].
 
 #![no_std]
 
 extern crate alloc;
 
+mod alpha;
 mod color;
 mod gif;
 mod gray;
@@ -32,6 +34,7 @@ mod progressive;
 
 use core::fmt;
 
+pub use alpha::{AlphaFile, AlphaWriter};
 pub use color::{ColorFile, ColorWriter};
 pub use gray::{GrayFile, GrayWriter};
 pub use png_write::PngWriter;
@@ -103,6 +106,32 @@ pub trait ImageSink {
             .collect();
         self.row(&gray)
     }
+
+    /// Whether rows are wanted with transparency
+    /// ([`ImageSink::row_alpha`]), where the image has it (PNG); over
+    /// white otherwise. It goes before colour: such rows are gray.
+    fn wants_alpha(&self) -> bool {
+        false
+    }
+
+    /// The next row with transparency, `width` pixels of two bytes: gray,
+    /// and how opaque it is (0 transparent, 255 opaque). Only for sinks
+    /// that want it; otherwise it is passed on over white.
+    fn row_alpha(&mut self, gray_alpha: &[u8]) -> Result<(), ImageError> {
+        let gray: alloc::vec::Vec<u8> = gray_alpha
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .map(|p| over_white(p[0], p[1]))
+            .collect();
+        self.row(&gray)
+    }
+}
+
+/// Gray `gray` with opacity `alpha` over white.
+pub fn over_white(gray: u8, alpha: u8) -> u8 {
+    let (g, a) = (u32::from(gray), u32::from(alpha));
+    ((g * a + 255 * (255 - a) + 127) / 255) as u8
 }
 
 /// The gray of a colour, as e-ink shows it (ITU-R 601).
@@ -372,7 +401,9 @@ pub(crate) fn zeroed<T: Clone + Default>(len: usize) -> Result<alloc::vec::Vec<T
 }
 
 /// Makes rows smaller, to a size no larger than theirs: each pixel the
-/// mean of the pixels it covers, of gray or (with three channels) RGB.
+/// mean of the pixels it covers, of gray, gray with transparency (two
+/// channels, the gray weighted by how opaque each pixel is) or (three)
+/// RGB.
 #[derive(Debug)]
 pub struct Downscaler {
     width: u32,
@@ -393,7 +424,8 @@ pub struct Downscaler {
 
 impl Downscaler {
     /// For `width` × `height` made `size` (at most as large), in rows of
-    /// `channels` bytes a pixel: 1 (gray) or 3 (RGB).
+    /// `channels` bytes a pixel: 1 (gray), 2 (gray and opacity) or 3
+    /// (RGB).
     pub fn new(
         width: u32,
         height: u32,
@@ -405,14 +437,16 @@ impl Downscaler {
         if out_width > u32::from(u16::MAX) {
             return Err(ImageError::Unsupported("image this large"));
         }
-        if !matches!(channels, 1 | 3) {
+        if !matches!(channels, 1..=3) {
             return Err(ImageError::Unsupported("channels"));
         }
-        // Each smaller pixel sums all it covers in 32 bits, and counts
-        // the columns it covers in 16.
+        // Each smaller pixel sums all it covers in 32 bits (gray times
+        // opacity, with transparency), and counts the columns it covers
+        // in 16.
         let across = u64::from(width.div_ceil(out_width));
         let down = u64::from(height.div_ceil(out_height));
-        if across > u64::from(u16::MAX) || across * down * 255 > u64::from(u32::MAX) {
+        let most = if channels == 2 { 255 * 255 } else { 255 };
+        if across > u64::from(u16::MAX) || across * down * most > u64::from(u32::MAX) {
             return Err(ImageError::Unsupported("image this large made this small"));
         }
         let mut columns = alloc::vec::Vec::new();
@@ -459,10 +493,10 @@ impl Downscaler {
     }
 
     fn emit(&self, row: &[u8], sink: &mut dyn ImageSink) -> Result<(), ImageError> {
-        if self.channels == 3 {
-            sink.row_rgb(row)
-        } else {
-            sink.row(row)
+        match self.channels {
+            3 => sink.row_rgb(row),
+            2 => sink.row_alpha(row),
+            _ => sink.row(row),
         }
     }
 
@@ -528,7 +562,20 @@ impl Downscaler {
     #[inline]
     fn add(&mut self, pixels: &[u8], times: u32) {
         let ch = self.channels;
-        if self.columns.is_empty() {
+        if ch == 2 {
+            // The gray weighted by how opaque it is: a transparent pixel
+            // lends the mean no gray of its own.
+            for (x, pixel) in pixels.as_chunks::<2>().0.iter().enumerate() {
+                let to = if self.columns.is_empty() {
+                    x
+                } else {
+                    usize::from(self.columns[x])
+                };
+                let (g, a) = (u32::from(pixel[0]), u32::from(pixel[1]));
+                self.sums[to * 2] += g * a * times;
+                self.sums[to * 2 + 1] += a * times;
+            }
+        } else if self.columns.is_empty() {
             for (sum, &v) in self.sums.iter_mut().zip(pixels) {
                 *sum += u32::from(v) * times;
             }
@@ -557,9 +604,18 @@ impl Downscaler {
 
     fn flush(&mut self, sink: &mut dyn ImageSink) -> Result<(), ImageError> {
         let ch = self.channels;
-        for (i, out) in self.out.iter_mut().enumerate() {
-            let covered = u32::from(self.counts[i / ch]).max(1) * self.rows;
-            *out = (self.sums[i] / covered) as u8;
+        if ch == 2 {
+            for (i, out) in self.out.as_chunks_mut::<2>().0.iter_mut().enumerate() {
+                let covered = u32::from(self.counts[i]).max(1) * self.rows;
+                let (weighted, opacity) = (self.sums[i * 2], self.sums[i * 2 + 1]);
+                out[0] = weighted.checked_div(opacity).map_or(255, |g| g as u8);
+                out[1] = (opacity / covered) as u8;
+            }
+        } else {
+            for (i, out) in self.out.iter_mut().enumerate() {
+                let covered = u32::from(self.counts[i / ch]).max(1) * self.rows;
+                *out = (self.sums[i] / covered) as u8;
+            }
         }
         self.sums.fill(0);
         self.rows = 0;
@@ -578,6 +634,8 @@ pub struct ImageFile {
     pub width: u32,
     pub height: u32,
     pub color: bool,
+    /// Gray with transparency ([`AlphaFile`]).
+    pub alpha: bool,
 }
 
 impl ImageFile {
@@ -589,6 +647,16 @@ impl ImageFile {
                 width: gray.width,
                 height: gray.height,
                 color: false,
+                alpha: false,
+            });
+        }
+        if let Some(file) = AlphaFile::open(storage, path) {
+            return Some(ImageFile {
+                path: file.path,
+                width: file.width,
+                height: file.height,
+                color: false,
+                alpha: true,
             });
         }
         ColorFile::open(storage, path).map(|file| ImageFile {
@@ -596,6 +664,7 @@ impl ImageFile {
             width: file.width,
             height: file.height,
             color: true,
+            alpha: false,
         })
     }
 }

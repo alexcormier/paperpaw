@@ -191,8 +191,9 @@ pub mod xml {
 /// `paperpaw-image`).
 pub mod image {
     pub use paperpaw_image::{
-        ColorFile, ColorWriter, Downscaler, Fit, Format, GrayFile, GrayWriter, ImageError,
-        ImageFile, ImageSink, PngWriter, Source, decode, dimensions, luma,
+        AlphaFile, AlphaWriter, ColorFile, ColorWriter, Downscaler, Fit, Format, GrayFile,
+        GrayWriter, ImageError, ImageFile, ImageSink, PngWriter, Source, decode, dimensions, luma,
+        over_white,
     };
 
     use crate::document::ImageRef;
@@ -214,6 +215,37 @@ pub mod image {
             self.offset += n as u64;
             Ok(n)
         }
+    }
+
+    /// Decodes the JPEG, PNG or GIF file `from` into the file `to`, no
+    /// larger than `fit` allows, keeping a PNG's transparency
+    /// ([`AlphaFile`]; others are opaque), for
+    /// [`ui::draw_image_over`](crate::ui::draw_image_over): a picture over
+    /// what is drawn (a page under a sleep picture, a sticker on a
+    /// widget). `None` if it is no image PaperPaw reads.
+    pub fn picture_with_alpha(
+        storage: &dyn Storage,
+        from: &str,
+        to: &str,
+        fit: Fit,
+    ) -> Option<ImageRef> {
+        let mut head = [0u8; 8];
+        let n = storage.read_at(from, 0, &mut head).ok()?;
+        let format = Format::detect(&head[..n])?;
+        let mut source = FileSource {
+            storage,
+            path: from,
+            offset: 0,
+        };
+        let mut writer = AlphaWriter::new(storage, to);
+        decode(format, &mut source, fit, &mut writer)
+            .and_then(|()| writer.finish())
+            .ok()?;
+        AlphaFile::open(storage, to).map(|file| ImageRef {
+            path: file.path,
+            width: file.width,
+            height: file.height,
+        })
     }
 
     /// Decodes the JPEG or PNG file `from` into the gray file `to`, no

@@ -673,6 +673,30 @@ translation of the id:
 r.add_page_frame(PageFrameSpec::columns(Id::new_static("columns.two"), 2, 24))?;
 ```
 
+### Pictures over what is drawn
+
+Any screen, widget, theme or overlay draws a picture over what is drawn
+already: a PNG keeps its transparency when decoded with
+`image::picture_with_alpha` (others come out opaque), and
+`ui::draw_image_over` blends it in, its clear parts showing what is
+below, its edges mixed with it, and all of it as see-through as its
+`opacity` (0 to 255) says. The mix is dithered as pictures are, so it
+keeps its lightness on panels of two or four grays; rows are read and
+blended one at a time, so a picture takes no memory of its size.
+
+```rust
+let image = image::picture_with_alpha(env.storage, "plugins/owls/owl.png", &cache, Fit::side(200));
+if let Some(image) = &image {
+    ui::draw_image_over(canvas, env.storage, image, area, 192); // a quarter see-through
+}
+```
+
+An overlay that draws only part of its region, or blends over it, says
+so (`Screen::see_through`): the screens below are drawn first under all
+of it. The sleep screen's *The page with a picture* is one, a picture
+over the page being read; pictures for it are offered as presets
+(below).
+
 ### Widgets
 
 A widget is a [`Widget`] a screen makes and keeps
@@ -1179,7 +1203,22 @@ home.rows = 6
 ```
 
 So anyone can make a home screen layout and share it: it is offered
-with the home screen's own. [`samples/plugins`](../samples/plugins) has
+with the home screen's own. Pictures over the page for the sleep screen
+are presets of `sleep.overlay` the same way: the picture, and where it
+goes and how large it is if the preset likes (what it leaves out stays
+as the reader set it).
+
+```ini
+[owl]
+kind = sleep.overlay
+name = Owl
+sleep.overlay-picture = plugins/owls/owl.png
+sleep.overlay-position = sleep.position.bottom-right
+sleep.overlay-size = 40
+```
+
+The picture's clear parts show the page, so a PNG with transparency
+looks best. [`samples/plugins`](../samples/plugins) has
 five: large print, three themes (airy, paw, calm ink) and a layout
 (reading nook).
 

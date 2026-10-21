@@ -6,6 +6,26 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: pictures with transparency, drawn over what is drawn. PNG
+  decoding keeps a picture's transparency for sinks that want it
+  (`ImageSink::wants_alpha`, `row_alpha`; `Downscaler` with two
+  channels weights the gray by opacity), kept in files of gray and
+  opacity (`image::AlphaFile`, `AlphaWriter`, `ImageFile::alpha`;
+  `image::picture_with_alpha`). `ui::draw_image_over` blends any
+  decoded picture over what is below, through its clear parts and as
+  see-through as asked, dithered on panels of few grays and read a row
+  at a time; `Canvas::draw_gray_alpha_row` does it for a row. An
+  overlay that lets what is below show (`Screen::see_through`) has the
+  screens below drawn under all of its region. Breaking: `ImageFile`
+  has the field `alpha`.
+- Sleep screen: *The page with a picture*. The page being read stays
+  and a picture goes over it, its clear parts showing the page: from the
+  pictures folder or offered by any plugin as a preset of kind
+  `sleep.overlay` (also in a data plugin's `presets.ini`). Where it
+  goes, how large it is, how much of the page shows through it and when
+  it is used (always, while reading, or elsewhere; the cover otherwise)
+  are settings.
+
 - SDK: services and introspection. A service type names its
   contract in a key (`services::ServiceType`, `"weather.forecast/1"`),
   published with a version (`Registrar::provide`) and found by it, its

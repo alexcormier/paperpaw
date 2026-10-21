@@ -44,18 +44,162 @@ pub fn draw_qr(canvas: &mut Canvas<'_>, qr: &crate::qr::QrCode, area: Rect) -> O
 /// rows inside the canvas clip are read. Grays are dithered on two-level
 /// panels; colour shows as colour on colour screens, as gray elsewhere.
 pub fn draw_image(canvas: &mut Canvas<'_>, storage: &dyn Storage, image: &ImageRef, area: Rect) {
+    draw_image_over(canvas, storage, image, area, 255);
+}
+
+/// Draws a decoded image over what is drawn in `area`, as
+/// [`draw_image`]: a picture with transparency
+/// ([`image::picture_with_alpha`](crate::image::picture_with_alpha))
+/// shows what is below through its clear parts, blended at its edges and
+/// dithered as pictures are; `opacity` (0 to 255) lets what is below show
+/// through all of it, e.g. a picture over the page read. Any screen,
+/// widget or overlay may draw so; rows are read and blended one at a
+/// time, so little memory is taken.
+pub fn draw_image_over(
+    canvas: &mut Canvas<'_>,
+    storage: &dyn Storage,
+    image: &ImageRef,
+    area: Rect,
+    opacity: u8,
+) {
     // Frames are drawn in bands: nothing read for those it is not in.
-    if area.intersection(&canvas.clip()).is_none() {
+    if area.intersection(&canvas.clip()).is_none() || opacity == 0 {
         return;
     }
+    if let Some(file) = crate::image::AlphaFile::open(storage, &image.path) {
+        return draw_alpha_image(canvas, storage, &file, area, opacity);
+    }
     if let Some(file) = crate::image::ColorFile::open(storage, &image.path) {
-        return draw_color_image(canvas, storage, &file, area);
+        if opacity == 255 {
+            return draw_color_image(canvas, storage, &file, area);
+        }
+        return draw_gray_image(canvas, storage, &gray_of_color(file), area, opacity);
     }
     let file = GrayFile {
         path: image.path.clone(),
         width: image.width,
         height: image.height,
     };
+    draw_gray_image(canvas, storage, &ImageSource::Gray(file), area, opacity);
+}
+
+/// Where the rows of a picture drawn over others come from.
+enum ImageSource {
+    Gray(GrayFile),
+    /// A colour picture drawn as gray (to be seen through).
+    Color(crate::image::ColorFile),
+}
+
+fn gray_of_color(file: crate::image::ColorFile) -> ImageSource {
+    ImageSource::Color(file)
+}
+
+impl ImageSource {
+    fn width(&self) -> u32 {
+        match self {
+            ImageSource::Gray(f) => f.width,
+            ImageSource::Color(f) => f.width,
+        }
+    }
+
+    fn height(&self) -> u32 {
+        match self {
+            ImageSource::Gray(f) => f.height,
+            ImageSource::Color(f) => f.height,
+        }
+    }
+
+    /// Bytes a pixel in its rows.
+    fn bytes(&self) -> usize {
+        match self {
+            ImageSource::Gray(_) => 1,
+            ImageSource::Color(_) => 3,
+        }
+    }
+
+    fn read_rows(&self, storage: &dyn Storage, y: u32, out: &mut [u8]) -> u32 {
+        match self {
+            ImageSource::Gray(f) => f.read_rows(storage, y, out),
+            ImageSource::Color(f) => f.read_rows(storage, y, out),
+        }
+    }
+}
+
+/// [`draw_image_over`] for a gray picture (or a colour one as gray):
+/// opaque, as see-through as `opacity` says.
+fn draw_gray_image(
+    canvas: &mut Canvas<'_>,
+    storage: &dyn Storage,
+    file: &ImageSource,
+    area: Rect,
+    opacity: u8,
+) {
+    let (left, top) = (i32::from(area.x), i32::from(area.y));
+    let (w, h) = (i32::from(area.width), i32::from(area.height));
+    let (sw, sh) = (file.width(), file.height());
+    if w <= 0 || h <= 0 || sw == 0 || sh == 0 {
+        return;
+    }
+    let clip = canvas.clip();
+    let first = top.max(i32::from(clip.y));
+    let last = (top + h).min(clip.bottom() as i32);
+    if first >= last {
+        return;
+    }
+    let bytes = file.bytes();
+    let mut rows = RowChunk::new(sw as usize * bytes);
+    // Gray, or gray and opacity where it is to be seen through.
+    let blended = opacity < 255;
+    let mut row = alloc::vec![0u8; w as usize * if blended { 2 } else { 1 }];
+    let mut loaded = None;
+    for y in first..last {
+        let sy = ((y - top) as u64 * u64::from(sh) / h as u64) as u32;
+        if loaded != Some(sy) {
+            let Some(source) = rows.get(sy, |y, out| file.read_rows(storage, y, out)) else {
+                return;
+            };
+            loaded = Some(sy);
+            let sw = sw as usize;
+            for x in 0..w as usize {
+                let from = x * sw / w as usize;
+                let to = ((x + 1) * sw / w as usize).max(from + 1).min(sw);
+                let sum: u32 = (from..to)
+                    .map(|i| match bytes {
+                        3 => u32::from(crate::image::luma(
+                            u32::from(source[i * 3]),
+                            u32::from(source[i * 3 + 1]),
+                            u32::from(source[i * 3 + 2]),
+                        )),
+                        _ => u32::from(source[i]),
+                    })
+                    .sum();
+                let gray = (sum / (to - from) as u32) as u8;
+                if blended {
+                    row[x * 2] = gray;
+                    row[x * 2 + 1] = 255;
+                } else {
+                    row[x] = gray;
+                }
+            }
+        }
+        if blended {
+            canvas.draw_gray_alpha_row(left, y, &row, opacity);
+        } else {
+            canvas.draw_gray_row(left, y, &row);
+        }
+    }
+}
+
+/// [`draw_image_over`] for a picture with transparency: each smaller
+/// pixel the mean of those it covers, its gray weighted by how opaque
+/// each is.
+fn draw_alpha_image(
+    canvas: &mut Canvas<'_>,
+    storage: &dyn Storage,
+    file: &crate::image::AlphaFile,
+    area: Rect,
+    opacity: u8,
+) {
     let (left, top) = (i32::from(area.x), i32::from(area.y));
     let (w, h) = (i32::from(area.width), i32::from(area.height));
     if w <= 0 || h <= 0 || file.width == 0 || file.height == 0 {
@@ -67,8 +211,9 @@ pub fn draw_image(canvas: &mut Canvas<'_>, storage: &dyn Storage, image: &ImageR
     if first >= last {
         return;
     }
-    let mut rows = RowChunk::new(file.width as usize);
-    let mut row = alloc::vec![0u8; w as usize];
+    let sw = file.width as usize;
+    let mut rows = RowChunk::new(sw * 2);
+    let mut row = alloc::vec![0u8; w as usize * 2];
     let mut loaded = None;
     for y in first..last {
         let sy = ((y - top) as u64 * u64::from(file.height) / h as u64) as u32;
@@ -77,15 +222,20 @@ pub fn draw_image(canvas: &mut Canvas<'_>, storage: &dyn Storage, image: &ImageR
                 return;
             };
             loaded = Some(sy);
-            let sw = file.width as usize;
-            for (x, out) in row.iter_mut().enumerate() {
+            for x in 0..w as usize {
                 let from = x * sw / w as usize;
                 let to = ((x + 1) * sw / w as usize).max(from + 1).min(sw);
-                let sum: u32 = source[from..to].iter().map(|&v| u32::from(v)).sum();
-                *out = (sum / (to - from) as u32) as u8;
+                let (mut weighted, mut opaque) = (0u32, 0u32);
+                for i in from..to {
+                    let (g, a) = (u32::from(source[i * 2]), u32::from(source[i * 2 + 1]));
+                    weighted += g * a;
+                    opaque += a;
+                }
+                row[x * 2] = weighted.checked_div(opaque).map_or(255, |g| g as u8);
+                row[x * 2 + 1] = (opaque / (to - from) as u32) as u8;
             }
         }
-        canvas.draw_gray_row(left, y, &row);
+        canvas.draw_gray_alpha_row(left, y, &row, opacity);
     }
 }
 

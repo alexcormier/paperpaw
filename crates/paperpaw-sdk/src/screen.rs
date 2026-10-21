@@ -251,6 +251,16 @@ pub trait Screen {
         false
     }
 
+    /// For an overlay: whether what lies below it shows through it, as
+    /// it draws only parts of its region or blends over it (a picture with
+    /// transparency over the page read, see
+    /// [`ui::draw_image_over`](crate::ui::draw_image_over)). The screens
+    /// below are drawn first, under all of its region. By default an
+    /// overlay paints all of its region, and what lies below is not drawn.
+    fn see_through(&self) -> bool {
+        false
+    }
+
     /// Reacts to an action. Unhandled actions go to the action's global
     /// handler, if it has one.
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled;

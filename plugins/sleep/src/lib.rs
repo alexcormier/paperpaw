@@ -11,7 +11,9 @@
 //! - *Widgets*: widgets as on the home screen (setting `sleep.widgets`,
 //!   edited with the home screen's editor), e.g. the book being read and
 //!   today's reading, in the middle of the screen;
-//! - *Page*: the screen stays as it is.
+//! - *Page*: the screen stays as it is;
+//! - *Page with a picture*: the page stays, a picture over it, its clear
+//!   parts showing the page (see [`overlay`]).
 //!
 //! Without a cover or a picture the message shows. Where the device is
 //! off while it sleeps (the X4), this is also what shows as it starts.
@@ -24,6 +26,8 @@
 #![no_std]
 
 extern crate alloc;
+
+pub mod overlay;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -52,6 +56,8 @@ pub const PICTURE: &str = "sleep.show.picture";
 pub const MESSAGE: &str = "sleep.show.message";
 pub const PAGE: &str = "sleep.show.page";
 pub const WIDGETS: &str = "sleep.show.widgets";
+/// The page, a picture over it (see [`overlay`]).
+pub const OVERLAY: &str = "sleep.show.overlay";
 /// The widgets shown with [`WIDGETS`], ids separated by commas.
 pub const WIDGET_LIST: Setting<Text> = Setting::new("sleep.widgets");
 /// The home screen's editor of lists of widgets, if installed.
@@ -80,14 +86,22 @@ static FOLDER_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::ne
 static WIDGETS_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section(SECTION)
     .editor(EDIT_WIDGETS);
+static PICKED_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
+    .section(SECTION)
+    .editor(overlay::PICK);
+static PERCENT: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
+    .section(SECTION)
+    .unit("core.unit.percent")
+    .step(5)
+    .slider();
 
-/// What the sleep screen shows, the folder of its pictures and its
-/// widgets.
-static SETTINGS: [SettingSpec; 3] = [
+/// What the sleep screen shows, the folder of its pictures, its widgets
+/// and its picture over the page.
+static SETTINGS: [SettingSpec; 8] = [
     SettingSpec::fixed_choice(
         SHOW.static_str(),
         "sleep.setting.show",
-        &[COVER, PICTURE, WIDGETS, MESSAGE, PAGE],
+        &[COVER, PICTURE, OVERLAY, WIDGETS, MESSAGE, PAGE],
         COVER,
         groups::DISPLAY,
     )
@@ -112,6 +126,52 @@ static SETTINGS: [SettingSpec; 3] = [
     )
     .with_extra(&WIDGETS_EXTRA)
     .described("sleep.setting.widgets.help"),
+    SettingSpec::fixed_text(
+        overlay::PICTURE.static_str(),
+        "sleep.setting.overlay-picture",
+        "",
+        groups::DISPLAY,
+    )
+    .with_extra(&PICKED_EXTRA)
+    .described("sleep.setting.overlay-picture.help"),
+    SettingSpec::fixed_choice(
+        overlay::POSITION.static_str(),
+        "sleep.setting.overlay-position",
+        &overlay::POSITIONS,
+        overlay::POSITIONS[0],
+        groups::DISPLAY,
+    )
+    .with_extra(&IN_SLEEP)
+    .described("sleep.setting.overlay-position.help"),
+    SettingSpec::fixed_number(
+        overlay::SIZE.static_str(),
+        "sleep.setting.overlay-size",
+        10,
+        100,
+        50,
+        groups::DISPLAY,
+    )
+    .with_extra(&PERCENT)
+    .described("sleep.setting.overlay-size.help"),
+    SettingSpec::fixed_number(
+        overlay::SEE_THROUGH.static_str(),
+        "sleep.setting.overlay-see-through",
+        0,
+        90,
+        0,
+        groups::DISPLAY,
+    )
+    .with_extra(&PERCENT)
+    .described("sleep.setting.overlay-see-through.help"),
+    SettingSpec::fixed_choice(
+        overlay::USED.static_str(),
+        "sleep.setting.overlay-when",
+        &overlay::WHEN,
+        overlay::WHEN[0],
+        groups::DISPLAY,
+    )
+    .with_extra(&IN_SLEEP)
+    .described("sleep.setting.overlay-when.help"),
 ];
 
 impl Plugin for Sleep {
@@ -125,9 +185,24 @@ impl Plugin for Sleep {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        for item in [SHOW, FOLDER, WIDGET_LIST] {
+        for item in [
+            SHOW,
+            FOLDER,
+            WIDGET_LIST,
+            overlay::PICTURE,
+            overlay::POSITION,
+            overlay::USED,
+        ] {
             r.set_menu_need(item, MenuNeed::Sleep)?;
         }
+        for item in [overlay::SIZE, overlay::SEE_THROUGH] {
+            r.set_menu_need(item, MenuNeed::Sleep)?;
+        }
+        r.add_screen(ScreenSpec::new(
+            overlay::PICK,
+            "sleep.setting.overlay-picture",
+            Box::new(|env, params| Box::new(overlay::Picker::new(env, params))),
+        ))?;
         // Asleep, the buttons do nothing but wake the device.
         r.set_screen_hints(SCREEN, paperpaw_sdk::Hints::Hidden)?;
         r.add_screen(ScreenSpec::new(
@@ -153,6 +228,22 @@ fn cover(env: &Env<'_>) -> Option<ImageRef> {
 
 /// The next picture of the folder, decoded to fit the screen.
 fn picture(env: &Env<'_>) -> Option<ImageRef> {
+    let path = next_from_folder(env)?;
+    let display = env.device.display;
+    let fit = paperpaw_sdk::image::Fit::screen(display.width.into(), display.height.into());
+    // In colour on colour screens (ADR 0015).
+    paperpaw_sdk::image::picture_from_file(
+        env.storage,
+        &path,
+        &data("picture.gray"),
+        fit,
+        env.device.display.format.is_color(),
+    )
+}
+
+/// The path of the next picture of the pictures folder, one after the
+/// other from where the last sleep left off.
+pub(crate) fn next_from_folder(env: &Env<'_>) -> Option<String> {
     let folder = env
         .settings
         .text(FOLDER.as_str())
@@ -181,16 +272,7 @@ fn picture(env: &Env<'_>) -> Option<ImageRef> {
         &data("next.txt"),
         format!("{}", next.wrapping_add(1)).as_bytes(),
     );
-    let display = env.device.display;
-    let fit = paperpaw_sdk::image::Fit::screen(display.width.into(), display.height.into());
-    // In colour on colour screens (ADR 0015).
-    paperpaw_sdk::image::picture_from_file(
-        env.storage,
-        &format!("{folder}/{name}"),
-        &data("picture.gray"),
-        fit,
-        env.device.display.format.is_color(),
-    )
+    Some(format!("{folder}/{name}"))
 }
 
 /// The widgets of [`WIDGET_LIST`] between the margins, together in the
@@ -258,6 +340,8 @@ fn place_widgets(env: &Env<'_>) -> Vec<(Box<dyn Widget>, Rect)> {
 struct SleepScreen {
     show: String,
     image: Option<ImageRef>,
+    /// Where the picture over the page goes, how opaque it is.
+    over_page: Option<(Rect, u8)>,
     /// The widgets shown, where they go.
     widgets: Vec<(Box<dyn Widget>, Rect)>,
     /// The logo above the message, when the message shows.
@@ -268,8 +352,24 @@ struct SleepScreen {
 
 impl SleepScreen {
     fn new(env: &Env<'_>) -> Self {
-        let show = env.settings.read(&SHOW).to_string();
+        let mut show = env.settings.read(&SHOW).to_string();
+        // The picture over the page where it is used now, and there is
+        // one; else the cover.
+        let mut over_page = None;
+        let mut image = None;
+        if show == OVERLAY {
+            image = overlay::used(env)
+                .then(|| overlay::picture(env, &data("overlay.gray")))
+                .flatten();
+            match &image {
+                Some(picture) => {
+                    over_page = Some((overlay::place(env, picture), overlay::opacity(env)));
+                }
+                None => show = COVER.to_string(),
+            }
+        }
         let image = match show.as_str() {
+            OVERLAY => image,
             PICTURE => picture(env),
             MESSAGE | PAGE | WIDGETS => None,
             _ => cover(env),
@@ -287,6 +387,7 @@ impl SleepScreen {
         Self {
             show,
             image,
+            over_page,
             widgets,
             logo,
             woke: false,
@@ -295,13 +396,27 @@ impl SleepScreen {
 }
 
 impl Screen for SleepScreen {
-    fn region(&self, _: &Env<'_>) -> Option<Rect> {
-        // The page stays: nothing is drawn over it.
-        (self.show == PAGE).then_some(Rect::new(0, 0, 0, 0))
+    fn region(&self, env: &Env<'_>) -> Option<Rect> {
+        // The page stays: nothing is drawn over it, or the picture over
+        // all of it, the page drawn below (`see_through`).
+        let display = env.device.display;
+        match self.show.as_str() {
+            PAGE => Some(Rect::new(0, 0, 0, 0)),
+            OVERLAY => Some(Rect::new(0, 0, display.width, display.height)),
+            _ => None,
+        }
+    }
+
+    fn see_through(&self) -> bool {
+        self.over_page.is_some()
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         if self.show == PAGE {
+            return;
+        }
+        if let (Some((area, opacity)), Some(image)) = (self.over_page, &self.image) {
+            ui::draw_image_over(canvas, env.storage, image, area, opacity);
             return;
         }
         let display = env.device.display;

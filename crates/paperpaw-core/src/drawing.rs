@@ -310,6 +310,13 @@ impl Kernel {
     /// it, each clipped to the region.
     pub(crate) fn redraw(&mut self, region: Rect) {
         let regions: Vec<Option<Rect>> = (0..self.stack.len()).map(|i| self.overlay(i)).collect();
+        // What overlays cover, less those seen through.
+        let covers: Vec<Option<Rect>> = self
+            .stack
+            .iter()
+            .zip(&regions)
+            .map(|(s, own)| own.filter(|_| !s.screen.see_through()))
+            .collect();
         let env = self.shared.env(self.now);
         // Overlays that wash out what lies below them.
         let dims: Vec<bool> = self
@@ -335,7 +342,7 @@ impl Kernel {
             // of their region, so what lies below would not show (e.g.
             // the home screen under a menu whose focus moved: only the
             // rows above the menu, as frames are drawn in whole rows).
-            let mut above = regions[base + index + 1..].iter().flatten();
+            let mut above = covers[base + index + 1..].iter().flatten();
             let Some(shown) = above.try_fold(area, |area, cover| uncovered(area, *cover)) else {
                 continue;
             };
