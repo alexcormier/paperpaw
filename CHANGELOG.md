@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Data plugins (gap I1, formats 3, `DATA_FORMATS` is 3): `menus.ini`
+  adds entries to any menu, places one after another and takes entries
+  out, and makes menus of one's own (`title`, `entries`); `actions.ini`
+  makes actions of up to 16 steps (setting values, `open:<slot>`,
+  `notify:<text>`, `emit:<event>`, other actions); `icons.ini` gives
+  items icons; `points/<point>.txt` contributes lines to a point;
+  `setup.ini` adds steps to the first-run setup; `[fonts]` in
+  `plugin.ini` binds fonts to roles. SDK: `Registrar::place_menu_entry`
+  and `hide_menu_entry`, for code plugins too.
 - SDK: refreshes (gap F1). A refresh filter sees why the panel is
   refreshed (`filters::RefreshCause`: a page turned, screens, a notice,
   a status line; told with `Cx::refresh_cause`), the slot, how many

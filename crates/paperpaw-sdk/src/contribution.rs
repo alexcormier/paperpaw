@@ -106,6 +106,19 @@ pub enum Contribution {
     Hyphenation(HyphenationSpec),
     MenuEntry(MenuEntry),
     MenuSection(MenuSection),
+    /// An entry placed right after another ([`Registrar::place_menu_entry`]).
+    #[non_exhaustive]
+    MenuPlacement {
+        menu: Id,
+        item: Id,
+        after: Id,
+    },
+    /// An entry taken out of a menu ([`Registrar::hide_menu_entry`]).
+    #[non_exhaustive]
+    MenuHidden {
+        menu: Id,
+        item: Id,
+    },
     #[non_exhaustive]
     Icon {
         item: Id,
@@ -202,6 +215,8 @@ impl Contribution {
             Contribution::Hyphenation(_) => "hyphenation",
             Contribution::MenuEntry(_) => "menu-entry",
             Contribution::MenuSection(_) => "menu-section",
+            Contribution::MenuPlacement { .. } => "menu-placement",
+            Contribution::MenuHidden { .. } => "menu-hidden",
             Contribution::Icon { .. } => "icon",
             Contribution::MenuNeed { .. } => "menu-need",
             Contribution::ScreenHints { .. } => "screen-hints",
@@ -524,6 +539,36 @@ impl Registrar {
     /// heading, belong to it.
     pub fn add_menu_section(&mut self, section: MenuSection) -> Result<(), RegisterError> {
         self.add(Contribution::MenuSection(section))
+    }
+
+    /// Places entry `item` of `menu` right after `after` there (also in
+    /// another plugin's menu), in place of its order; where `after` is
+    /// not in the menu, by its order.
+    pub fn place_menu_entry(
+        &mut self,
+        menu: impl Into<Id>,
+        item: impl Into<Id>,
+        after: impl Into<Id>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::MenuPlacement {
+            menu: menu.into(),
+            item: item.into(),
+            after: after.into(),
+        })
+    }
+
+    /// Takes entry `item` out of `menu` as plugins contribute it (also
+    /// another plugin's); a menu the user defined shows what the user
+    /// listed.
+    pub fn hide_menu_entry(
+        &mut self,
+        menu: impl Into<Id>,
+        item: impl Into<Id>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::MenuHidden {
+            menu: menu.into(),
+            item: item.into(),
+        })
     }
 
     /// Gives an action or setting an icon by name (see

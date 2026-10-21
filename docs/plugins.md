@@ -996,10 +996,53 @@ plugins/large-print/
   styles.css     a stylesheet for books, after a book's own (EPUB)
   presets.ini    ready-made sets of settings, e.g. home screen layouts
   marks.ini      words marked on book pages by patterns (formats 2)
+  menus.ini      entries of menus, a menu of one's own (formats 3)
+  actions.ini    actions made of steps (formats 3)
+  icons.ini      icons of actions and settings: item = icon-name (formats 3)
+  points/*.txt   lines for a point, one a line, e.g. core.about.txt (formats 3)
+  setup.ini      steps of the first-run setup (formats 3)
+```
+
+`plugin.ini` may also bind fonts to roles (formats 3):
+
+```ini
+[fonts]
+core.font-ui-strong = my.semibold
+```
+
+An action of `actions.ini` runs its steps in order, at most 16:
+`<setting>=<value>` sets a setting (a value not of its kind is passed
+over), `open:<slot>` opens a slot, `notify:<text>` says something,
+`emit:<event>` emits an event, and an action's id runs that action (not
+one of the same file). `menus.ini` adds to any menu, places an entry
+after another and takes entries out; `title` and `entries` make a menu
+of one's own, which other menus list by its id:
+
+```ini
+# actions.ini
+[night]
+title = Night reading
+icon = moon
+run = core.night-mode=on, core.font-size=14, notify:Good night
+
+# menus.ini
+[core.reader-menu]
+add = my.night after reader.toc
+hide = stats.open
+
+[my.tools]
+title = My tools
+entries = my.night, core.library
+
+# setup.ini
+[size]
+setting = core.font-size
+order = 35
 ```
 
 `formats` says which version of these files' formats the plugin is made
-for (2 now: `marks.ini` came with it; 1 if it is left out); a PaperPaw
+for (3 now: menus, actions, icons, points, setup steps and font roles
+came with it, `marks.ini` with 2; 1 if it is left out); a PaperPaw
 that reads an older one leaves the plugin out and says why, rather than
 reading it wrongly.
 

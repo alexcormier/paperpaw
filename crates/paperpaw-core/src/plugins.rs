@@ -295,6 +295,12 @@ impl Kernel {
         for section in staging.menu_sections.drain(..) {
             self.shared.menus.add_section(section);
         }
+        for (menu, item, after) in staging.menu_placements.drain(..) {
+            self.shared.menus.place(menu, item, after);
+        }
+        for (menu, item) in staging.menu_hidden.drain(..) {
+            self.shared.menus.take_out(menu, item);
+        }
         for (item, icon) in staging.icons.drain(..) {
             self.shared.menus.set_icon(item, icon);
         }

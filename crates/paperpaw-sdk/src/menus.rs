@@ -157,6 +157,12 @@ pub struct Menus {
     icons: VecMap<Id, Cow<'static, str>>,
     sections: Vec<Id>,
     needs: VecMap<Id, MenuNeed>,
+    /// Entries placed right after another of their menu: the menu, the
+    /// entry, the one it follows ([`Registrar::place_menu_entry`](crate::Registrar::place_menu_entry)).
+    placed: Vec<(Id, Id, Id)>,
+    /// Entries a plugin takes out of a menu: the menu, the entry
+    /// ([`Registrar::hide_menu_entry`](crate::Registrar::hide_menu_entry)).
+    taken_out: Vec<(Id, Id)>,
     /// The device has a touch screen; it cannot speak; PaperPaw shows
     /// its sleep screen.
     /// What the device can do, for entries with a [`MenuNeed`].
@@ -181,6 +187,22 @@ impl Menus {
         self.icons.shrink_to_fit();
         self.sections.shrink_to_fit();
         self.needs.shrink_to_fit();
+        self.placed.shrink_to_fit();
+        self.taken_out.shrink_to_fit();
+    }
+
+    /// Places `item` of `menu` right after `after` (where that is in it).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn place(&mut self, menu: Id, item: Id, after: Id) {
+        self.placed.push((menu, item, after));
+    }
+
+    /// Takes `item` out of `menu` as plugins contribute it.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn take_out(&mut self, menu: Id, item: Id) {
+        self.taken_out.push((menu, item));
     }
 
     /// What the device can do, for entries with a [`MenuNeed`].
@@ -264,13 +286,33 @@ impl Menus {
     /// The ids of `menu`'s entries as plugins contribute them, ignoring
     /// the user's definition.
     pub fn default_ids(&self, menu: &str) -> Vec<&Id> {
+        let taken_out = |item: &Id| {
+            self.taken_out
+                .iter()
+                .any(|(m, i)| m.as_str() == menu && i == item)
+        };
         let mut entries: Vec<&MenuEntry> = self
             .entries
             .iter()
             .filter(|e| e.menu.as_str() == menu && self.offered(e.item.as_str(), false))
+            .filter(|e| !taken_out(&e.item))
             .collect();
         entries.sort_by_key(|e| e.order);
-        entries.into_iter().map(|e| &e.item).collect()
+        let mut ids: Vec<&Id> = entries.into_iter().map(|e| &e.item).collect();
+        // Placed after another, in the order they were placed.
+        for (_, item, after) in self.placed.iter().filter(|(m, ..)| m.as_str() == menu) {
+            let (Some(from), true) = (ids.iter().position(|i| *i == item), ids.contains(&after))
+            else {
+                continue;
+            };
+            let moved = ids.remove(from);
+            let to = ids
+                .iter()
+                .position(|i| *i == after)
+                .map_or(ids.len(), |at| at + 1);
+            ids.insert(to, moved);
+        }
+        ids
     }
 
     /// The ids of `menu`'s entries as shown, including entries without a

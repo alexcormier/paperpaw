@@ -158,6 +158,8 @@ pub(crate) struct Staging {
     pub(crate) event_observers: Vec<paperpaw_sdk::ObserverSpec>,
     pub(crate) menu_entries: Vec<MenuEntry>,
     pub(crate) menu_sections: Vec<paperpaw_sdk::MenuSection>,
+    pub(crate) menu_placements: Vec<(Id, Id, Id)>,
+    pub(crate) menu_hidden: Vec<(Id, Id)>,
     pub(crate) icons: Vec<(Id, Cow<'static, str>)>,
     pub(crate) menu_needs: Vec<(Id, paperpaw_sdk::MenuNeed)>,
     pub(crate) screen_hints: Vec<(Id, paperpaw_sdk::Hints)>,
@@ -297,6 +299,10 @@ pub(crate) fn stage(
             }
             Contribution::MenuEntry(entry) => staging.menu_entries.push(entry),
             Contribution::MenuSection(section) => staging.menu_sections.push(section),
+            Contribution::MenuPlacement {
+                menu, item, after, ..
+            } => staging.menu_placements.push((menu, item, after)),
+            Contribution::MenuHidden { menu, item, .. } => staging.menu_hidden.push((menu, item)),
             Contribution::Icon { item, icon, .. } => staging.icons.push((item, icon)),
             Contribution::MenuNeed { item, need, .. } => staging.menu_needs.push((item, need)),
             Contribution::ScreenHints { screen, hints, .. } => {
