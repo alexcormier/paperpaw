@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Android: the app is now `org.paperpaw.app` (was
+  `io.github.hthoene.paperpaw`), named after the project's own domain
+  before the first release in a store. It installs as a new app beside
+  the old one; books and settings of the old one stay in its own
+  folder.
+
 - SDK: block filters (`TextFilterSpec::block`) know where a block is
   (`FilterContext`: the book, its language, the place) and may leave it
   out (`Verdict::Drop`): the reader lays out, searches and shows notes
