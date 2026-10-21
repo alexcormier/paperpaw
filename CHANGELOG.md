@@ -6,6 +6,38 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: a setting's title is never cut for its control. Where it does not
+  fit beside its `−` value `+`, its switch or its value, the control goes
+  on a line of its own below the title, at the right, and a title too
+  wide for a line wraps onto a second (`ui::RowLines`, `ui::row_lines`,
+  `ui::setting_height`; drawn with `ui::draw_number_lines`,
+  `ui::draw_stepper_lines`, `ui::draw_switch_lines`,
+  `ui::draw_setting_row`, `ui::draw_lines_note`). It is decided once,
+  when the list is made, for every value a row may show in place (a
+  choice's widest option, the widest language, the wider of on and off,
+  a number's least and greatest), so a value changed in place never
+  makes a row overlap the next; `RowLines::at` moves it to the row's
+  place, `ui::value_stepper` tells where its − and + are drawn (for the
+  hit areas). The settings use it:
+  on the X4 Pro *Saving below (%)* and *Offline below (%)* showed as
+  *Saving bel…*, as their buttons are a fingertip wide. Touch targets
+  and the focus by the buttons stay as they were.
+- Headers centre their titles by the capitals (the baseline to the top
+  of an *H*) rather than by each title's own ink: a title with a *g* or
+  *y* stood higher than one without and above the back arrow, by up to
+  6 pixels on the Boox. Notes and page numbers in headers stand the same
+  way. Titles of headers are 115 % of the text by default (was 130 %),
+  as titles of dialogs are; `core.ui-title` still sets them, in steps of
+  5 %.
+- Updates wait for their plugins: when the update server says that code
+  plugins in use have no build for a new PaperPaw yet (`waiting`), or
+  plugins built in are not built for it yet, a search in the background
+  does not offer it. The update page says *PaperPaw 0.5.0 waits for
+  plugins* and which, with *Keep waiting*, *Update anyway* (the offer
+  then, which says what stops working) and *Check again*; PaperPaw asks
+  again once a day at a cheap moment and offers the update once it waits
+  no more. Unseen for a week, the page opens once at a start.
+
 - X4 Pro: dragging and sizing a widget by touch keeps up with the finger.
   The firmware queues touch readings while it refreshes the panel; a
   finger's moves while the last one still waits now take its place
@@ -16,6 +48,113 @@ change the plugin SDK.
   the widget where the finger left it. The remote control's `drag`
   plays a finger as the touch controller reads it.
 
+- Dragging an item of a grid (moving or sizing it on the home screen)
+  draws it again only when it goes to other cells: a finger trembling in
+  a cell asked for a refresh each time, most of a second each on the
+  X4 Pro, so the item fell seconds behind the finger.
+- SDK: a header's note is a button only where the screen says it does
+  something (`ui::Header::note_button`, or while it has the focus): then
+  it is told as a button as high as the bar. Breaking: a plugin whose
+  note opens something sets `note_button`; one that only tells
+  something (*3 hits*) is said with the title and is no button.
+- The library's pills are at least as wide as they are high, so *All*
+  is a fingertip wide on the Boox. The kernel's screen that adds a
+  widget to a list is called *Add a widget to a list*, so the places of
+  the buttons tell it from the home screen's.
+- SDK: any place of status items shows a whole status line of the
+  reader's choice. The line of a place's items is the kernel's
+  (`status_lines::ITEMS`); it answers to the reader's
+  `reader.status-line.items` too (`StatusLineSpec::also`) and is listed
+  once, the reader's choice of the battery's percentage kept, and the
+  editor of status lines keeps it by its own id (`StatusItems::canonical`);
+  `Place::with_line` names the setting that chooses the line, and
+  `Place::draw`, `Place::targets` and `Place::signature` draw it, tap it
+  and tell when it changed. The home screen's status line
+  (`home.status.line`) and the quick panel's head (`menu.quick.line`)
+  show the line chosen, their items by default. `StatusFrame::percent`
+  says whether levels show their percentage.
+- SDK: widgets' frames. A look restyles every widget's frame
+  (`ui::look::Painters::frame`, `FramePart`, through `set_ui_look`);
+  *Frames of widgets* (`core.widgets.frame`, `settings::WIDGET_FRAME`)
+  gives every widget whose own frame is not chosen one of the line, card
+  or dark card (each its own at first), where a widget has none of its
+  own (kept, shown while chosen, or its placement's; `Settings::is_chosen`);
+  presets of the kind
+  `core.widget-look` (`presets::WIDGET_LOOK`, `widget_look_settings`,
+  `widget_look_changes`) give widgets a look as a whole, chosen under
+  *Widget look* at the top of the appearance settings, as themes are.
+  `widgets::frame_height` and `widgets::free_placement` are the SDK's
+  (five and two plugins had their own). An empty state (`ui::draw_empty`,
+  e.g. the home screen's card before a book is read) gets smaller before
+  its title or text is cut, and keeps less margin in a small area: on
+  the X4 with wide margins the card said *Start readi…*.
+- SDK: screens with a grid of widgets say more about it.
+  `GridView::set_options` adds options of their own to an item's, after
+  move, size, settings and remove, answered as `GridResponse::Option`
+  (Breaking: the item options asked are their translation keys whole);
+  `GridView::set_drop_check` refuses where an item is dragged or moved
+  by the buttons (`grid::DropCheck`). The home screen has eight pages
+  (four before), and actions any plugin adds to the menu `home.footer`
+  show as icons beside the pencil, tapped or reached by the buttons.
+- SDK: the editor of lists of widgets is the kernel's
+  (`ui::widget_list`, screens `core.widget-list` and `core.add-widget`,
+  `screens::WIDGET_LIST`, `screens::ADD_WIDGET`), bound to slot
+  `core.edit-widgets`: the sleep screen's widgets are edited without the
+  home screen, which no longer brings its own copy. Breaking: the home
+  screen's screens `home.edit` and `home.add-to-list` are gone; open the
+  slot `core.edit-widgets` instead. Plugins add kinds of widgets of their
+  own with their icon (`Registrar::add_widget_category`,
+  `widgets::WidgetCategory`); `Widgets::kinds` and
+  `Widgets::category_icon` list them after the kernel's, as the home
+  screen's gallery shows them.
+- SDK: widgets take more than taps. `Widget::on_input` hears a swipe
+  that started on it and the buttons' focus coming to its targets and
+  leaving them (`widgets::WidgetInput`); `WidgetTarget::hold` runs
+  something of its own on a long press (else the page is edited, as
+  before); `Widget::draw_focus` draws the focus its own way; and
+  `Widget::context` tells it where it shows (`widgets::WidgetContext`:
+  its placement, so a widget placed twice tells its taps apart, the
+  screen showing it, `GridView::set_host`, and its `SizeClass`). With the
+  buttons, the page buttons are a swipe to the widget that has the focus
+  (the screen's own page where it takes none); Left and Right always go
+  on through the targets, out of a widget after its last, so one that
+  pages without end never keeps the focus (the X4 has no Up and Down).
+  Where its targets are the only ones on the page, the page buttons are
+  the screen's and Left and Right page it at its first and last target;
+  Up and Down go to the target above or below. After a swipe it took,
+  its targets are asked anew: where it had the focus, the focus goes to
+  its first target and it is told; elsewhere the focus stays where it
+  was. Holding Select is an action of its own (`actions::LONG_CONFIRM`,
+  *Menu or more*, the menu where no screen takes it): on a target with a
+  long press of its own it runs that.
+- SDK: holding Select sends `actions::LONG_CONFIRM` to the screen first
+  (the key map's `long.confirm`); the menu opens only where the screen
+  does not take it. A screen that took every action it does not know
+  (such as the keyboard typing a password) no longer gets
+  `actions::MENU` when Select is held: it takes `LONG_CONFIRM` as it
+  took the menu. The keyboard does, for a letter's variants and to end
+  the entry.
+- SDK: a widget says how many cells of a grid it takes
+  (`WidgetSpec::cells`, `widgets::CellsHint`: its size, its least, square
+  or not): added, it gets them without being made to be measured;
+  resized by touch or buttons, it keeps its least and stays square where
+  it says. `widgets::SizeClass::of` tells a widget how large it is drawn
+  (small, medium, large by its shorter side), to show more where it has
+  the room.
+- SDK: places of widgets. `widgets::WidgetPlace`
+  (`Registrar::add_widget_place`; `PlaceKind::Stack` or `Grid`) names
+  the settings that list a place's widgets: the home screen's pages and
+  the sleep screen's list register theirs, and `Widgets::shown` tells a
+  plugin whether any place shows its widget (the weather fetches only
+  then, without reading every setting); a place that shows only in a
+  mode of its screen says so (`WidgetPlace::shown_if`), as the sleep
+  screen's two do. `widgets::Stack` shows widgets
+  above each other, as the sleep screen does; `widgets::refresh` says
+  what an event means for the widgets a screen shows (make anew, read
+  anew, read one, the live ones), `widgets::next_minute` when to read
+  the live ones. New slot `core.edit-widgets` (`slots::EDIT_WIDGETS`)
+  edits a list of widgets; the home screen binds it, and the sleep
+  screen's list opens it instead of a screen of the home screen's.
 - SDK: pictures with transparency, drawn over what is drawn. PNG and
   GIF decoding keeps a picture's transparency (alpha, a palette's, a
   colour key of gray and RGB images) for sinks that want it

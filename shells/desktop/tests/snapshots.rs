@@ -760,13 +760,14 @@ fn screens_say_what_they_show() {
     );
 }
 
-/// The ink of headers is in their middle: their title, notes, arrows and
-/// page numbers together leave as much room above them as below (a pixel
-/// apart at most), not as their lines of text would, with more room
-/// above the letters. On the X4, the X4 Pro and the Boox, on screens with
-/// a back arrow, page arrows, a note and an empty list.
+/// The titles of headers stand in their middle by their capitals: the
+/// first letter of each (a capital) leaves as much room above it as below
+/// (a pixel apart at most), whatever the letters after it (a *g* or a *y*
+/// hangs below), not as their lines of text would, with more room above
+/// the letters. On the X4, the X4 Pro and the Boox, on screens with a back
+/// arrow, page arrows, a note and an empty list.
 #[test]
-fn headers_are_centred_by_their_ink() {
+fn headers_are_centred_by_their_capitals() {
     let screens = [
         "run:core.library,wait:300",
         "run:core.settings,wait:300",
@@ -823,16 +824,35 @@ fn headers_are_centred_by_their_ink() {
             let end = (y..y + h)
                 .find(|row| dark(*row) >= w * 9 / 10)
                 .unwrap_or(y + h);
-            let inked: Vec<u32> = (y..end).filter(|row| dark(*row) > 0).collect();
-            let (Some(first), Some(last)) = (inked.first(), inked.last()) else {
-                failures.push(format!("{profile} screen {n}: no ink in the header"));
+            // The title's first letter: the first columns with ink up to
+            // one without, after the back arrow where touch shows one.
+            let inked = |col: u32| (y..end).any(|row| gray[(row * width + col) as usize] < 128);
+            let run = |from: u32| {
+                let start = (from..x + w).find(|col| inked(*col))?;
+                Some((
+                    start,
+                    (start..x + w).find(|col| !inked(*col)).unwrap_or(x + w),
+                ))
+            };
+            let first_run = run(x);
+            let letter = if profile == "xteink-x4" {
+                first_run
+            } else {
+                first_run.and_then(|(_, stop)| run(stop))
+            };
+            let Some((start, stop)) = letter else {
+                failures.push(format!("{profile} screen {n}: no ink in the title"));
                 continue;
             };
+            let rows: Vec<u32> = (y..end)
+                .filter(|row| (start..stop).any(|col| gray[(row * width + col) as usize] < 128))
+                .collect();
+            let (first, last) = (rows[0], rows[rows.len() - 1]);
             let above = first - y;
             let below = end - last - 1;
             if above.abs_diff(below) > 1 {
                 failures.push(format!(
-                    "{profile} screen {n} ({script}): {above} px above the ink, {below} below"
+                    "{profile} screen {n} ({script}): {above} px above the capital, {below} below"
                 ));
             }
         }

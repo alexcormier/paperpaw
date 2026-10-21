@@ -229,7 +229,14 @@ reader is told the translation of the key it returns. Screens of your
 own that list settings open them as the settings pages do with
 `ui::setting_opens` (its editor, the keyboard for text, the list of a
 choice's values); text typed there comes back to the kernel as
-`events::SETTING_TYPED`, which sets it.
+`events::SETTING_TYPED`, which sets it. They lay their rows out as the
+settings pages do, so that no title is cut for its control:
+`ui::row_lines` tells once, when the list is made, whether a row's
+control goes beside its title or below it and how high the row is
+(`ui::setting_height` the height alone), and `ui::draw_number_lines`,
+`ui::draw_stepper_lines`, `ui::draw_switch_lines` and
+`ui::draw_setting_row` draw it there (`RowLines::at` moves it to the
+row's place).
 
 ### Events
 
@@ -485,8 +492,8 @@ artifact, also when a check failed.
 | Input filters | `add_input_filter` | See every button and finger first: pass it, take it, or run an action instead |
 | Refresh filters | `add_refresh_filter` | Change how the panel is refreshed, e.g. in full on a screen of your own |
 | Status items, lines and places | `add_status_item`, `add_status_line`, `add_status_place` | What status lines show, what a tap on an item does, how much it matters where a line is full; places where items show (`status::Place`) |
-| A look | `set_ui_look` | Another look for switches, the focus, separators, buttons, headers, button hints, progress bars and sliders on every screen (`ui::look`) |
-| Widgets | `add_widget` | Blocks for the home screen and the sleep screen |
+| A look | `set_ui_look` | Another look for switches, the focus, separators, buttons, headers, button hints, progress bars, sliders and widgets' frames on every screen (`ui::look`) |
+| Widgets and their places | `add_widget`, `add_widget_place`, `add_widget_category` | Blocks for the home screen and the sleep screen; places that show widgets (`widgets::WidgetPlace`), in a grid or above each other (`widgets::Stack`), which plugins ask whether they show theirs (`Widgets::shown`); kinds of widgets of one's own, with their icon |
 | Setup steps | `add_setup_step` | A page of the first-run setup: a setting to choose or a screen of the plugin's, where the device needs it |
 | Services | `publish` | Anything one plugin offers others, found with `env.services.get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |
@@ -1015,7 +1022,7 @@ home.rows = 6",
 r.add_presets(&LAYOUTS)?;
 ```
 
-A layout sets the pages (`home.page-1` to `home.page-4`, as
+A layout sets the pages (`home.page-1` to `home.page-8`, as
 `widgets::grid` writes them) and whatever of the home screen's look it
 wants (`home.columns`, `home.rows`, `home.status-bar`,
 `home.footer.dots` ...); what it leaves out goes back to its default.

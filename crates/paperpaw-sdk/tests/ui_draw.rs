@@ -541,6 +541,50 @@ fn the_header_keeps_to_the_content_margins() {
     }
 }
 
+/// The first and last rows with ink in `columns`, against the paper at
+/// the left edge.
+fn ink_rows(frame: &paperpaw_graphics::Framebuffer, columns: std::ops::Range<u16>) -> (u16, u16) {
+    let view = frame.view();
+    let inked = |y: u16| {
+        columns
+            .clone()
+            .any(|x| view.pixel(x, y) != view.pixel(0, y))
+    };
+    let first = (0..frame.height()).find(|&y| inked(y)).expect("ink");
+    let last = (0..frame.height()).rev().find(|&y| inked(y)).expect("ink");
+    (first, last)
+}
+
+/// Every title stands on one line, its capitals in the middle of the bar
+/// (as the arrows are): one with a descender as one without, on every
+/// density.
+#[test]
+fn header_titles_are_centred_by_their_capitals() {
+    for dpi in [150, 220, 300] {
+        let mut h = Harness::new(Device::BUTTONS);
+        h.device.display.dpi = dpi;
+        let env = h.env();
+        let style = UiStyle::new(&env);
+        let header = Header::new(&env, &style, false);
+        let height = header.area.height;
+        let title = |text: &str| {
+            let mut shot = frame(480, 800);
+            header.draw(&mut shot.canvas(), &env, &style, text, None, None);
+            ink_rows(&shot, 0..240)
+        };
+        let (caps, base) = title("HELL");
+        let (top, _) = title("Hey");
+        assert_eq!(top, caps, "the same capitals' top at {dpi} dpi");
+        // A line below the bar may take a pixel or two of it, the edges
+        // of the letters (gray) one more.
+        let (above, below) = (caps, height - 1 - base);
+        assert!(
+            above.abs_diff(below) <= style.line as u16 + 2,
+            "capitals {caps}..{base} in {height} at {dpi} dpi"
+        );
+    }
+}
+
 #[test]
 fn a_focused_header_note_is_told_as_a_focused_button() {
     let h = Harness::new(Device::BUTTONS);
@@ -554,6 +598,39 @@ fn a_focused_header_note_is_told_as_a_focused_button() {
     let note = described.iter().find(|d| d.role == Role::Button).unwrap();
     assert_eq!(note.label, "by author");
     assert!(note.focused);
+}
+
+/// A note that only tells something ("3 hits") is a text; one that
+/// does something is a button as high as the bar, a fingertip by touch.
+#[test]
+fn a_header_note_is_a_button_only_where_it_does_something() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let mut header = Header::new(&env, &style, true);
+    let note = |header: &Header| {
+        let (described, _) = describe(480, 800, |c| {
+            header.draw(c, &env, &style, "Search", Some("3 hits"), None);
+        });
+        described
+    };
+    // Said with the title, no button.
+    let told = note(&header);
+    assert!(
+        told.iter()
+            .any(|d| d.role == Role::Heading && d.label == "Search, 3 hits")
+    );
+    assert!(
+        !told
+            .iter()
+            .any(|d| d.role == Role::Button && d.label == "3 hits")
+    );
+    header.note_button = true;
+    let button = note(&header)
+        .into_iter()
+        .find(|d| d.role == Role::Button && d.label == "3 hits")
+        .unwrap();
+    assert!(u32::from(button.area.height) >= style.finger, "{button:?}");
 }
 
 #[test]
@@ -870,4 +947,189 @@ fn a_theme_gives_the_arrows_and_marks_icons_of_its_own() {
     let icon = arrow(&h);
     assert!(!icon.is_empty());
     assert_ne!(icon, chevron);
+}
+
+/// A setting's title is never cut for its control: where it does not fit
+/// beside `−` value `+` (or a switch), it gets a line of its own with the
+/// control below it at the right, the row a line higher; a short one
+/// stays beside it. By touch (buttons a fingertip wide) and with buttons.
+#[test]
+fn setting_titles_are_never_cut_for_their_control() {
+    use paperpaw_sdk::SettingSpec;
+    use paperpaw_sdk::builtin::groups;
+    const NUMBER: &str = "Offline below (%)";
+    const SWITCH: &str = "Pictures in night mode too";
+    let specs = [
+        SettingSpec::fixed_number("t.long", NUMBER, 0, 100, 20, groups::OTHER),
+        SettingSpec::fixed_switch("t.switch", SWITCH, false, groups::OTHER),
+    ];
+    let short = SettingSpec::fixed_number("t.short", "Size", 0, 100, 20, groups::OTHER);
+    for device in [Device::TOUCH, Device::BUTTONS] {
+        let h = Harness::new(device);
+        let env = h.env();
+        let style = UiStyle::new(&env);
+        for noted in [false, true] {
+            let row = if noted { style.noted_row() } else { style.row };
+            for spec in &specs {
+                let side = ui::setting_row(&style, spec, row, noted);
+                let height = ui::setting_height(&env, &style, spec, 480, "", row, noted);
+                assert!(height > side, "{} noted {noted}", spec.id);
+                let rect = Rect::new(0, 100, 480, height as u16);
+                let lines = ui::row_lines(&env, &style, spec, 480, "", row, noted).at(rect);
+                assert!(lines.stacked(), "{} noted {noted}", spec.id);
+                assert_eq!(u32::from(lines.height), height);
+                assert!(lines.title.y >= rect.y && lines.title.bottom() <= lines.control.y.into());
+                assert!(lines.control.bottom() <= rect.bottom());
+                let title = spec.title.as_ref();
+                let (described, _) = describe(480, 800, |c| match spec.kind {
+                    paperpaw_sdk::SettingKind::Int { .. } => {
+                        ui::draw_number_lines(c, &env, &style, lines, title, "20", "", None);
+                    }
+                    _ => {
+                        ui::draw_switch_lines(c, &env, &style, rect, lines, false, title, "", true)
+                    }
+                });
+                assert!(
+                    described.iter().any(|d| d.label == title),
+                    "{} noted {noted}: {described:?}",
+                    spec.id
+                );
+            }
+            let side = ui::setting_row(&style, &short, row, noted);
+            assert_eq!(
+                ui::setting_height(&env, &style, &short, 480, "", row, noted),
+                side
+            );
+            assert!(!ui::row_lines(&env, &style, &short, 480, "", row, noted).stacked());
+        }
+    }
+}
+
+/// A row is laid out for every value it may show: a choice of two that
+/// switches in place stacks (or not) whichever of them is set, so the
+/// row never grows past its place nor leaves a line empty.
+#[test]
+fn a_rows_lines_hold_for_every_value_it_may_show() {
+    use paperpaw_sdk::builtin::groups;
+    use paperpaw_sdk::{Choices, SettingSpec, SettingValue};
+    const OPTIONS: [&str; 2] = ["Off", "Only while the device is charging"];
+    let mut h = Harness::new(Device::TOUCH);
+    let spec = SettingSpec::fixed_choice("t.when", "Sync", &OPTIONS, "Off", groups::OTHER);
+    assert!(matches!(
+        spec.kind,
+        paperpaw_sdk::SettingKind::Choice(Choices::Fixed(_))
+    ));
+    h.settings.define(spec.clone()).unwrap();
+    let mut seen = Vec::new();
+    for value in OPTIONS {
+        h.settings
+            .set("t.when", SettingValue::Text(value.into()))
+            .unwrap();
+        let env = h.env();
+        let style = UiStyle::new(&env);
+        seen.push(ui::row_lines(
+            &env, &style, &spec, 480, "", style.row, false,
+        ));
+    }
+    assert_eq!(seen[0], seen[1]);
+    assert!(
+        seen[0].stacked(),
+        "the long option does not fit beside the title"
+    );
+    // On and off shown as a value (a switch with an editor of its own).
+    static EDITED: paperpaw_sdk::SettingExtra =
+        paperpaw_sdk::SettingExtra::new().editor(paperpaw_sdk::Id::new_static("t.editor"));
+    let spec = SettingSpec::fixed_switch("t.on", "Sync", false, groups::OTHER).with_extra(&EDITED);
+    h.settings.define(spec.clone()).unwrap();
+    // At every width, where one of them fits beside the title and the
+    // other not as well.
+    for width in (100..=480).step_by(2) {
+        let mut seen = Vec::new();
+        for on in [false, true] {
+            h.settings.set("t.on", SettingValue::Bool(on)).unwrap();
+            let env = h.env();
+            let style = UiStyle::new(&env);
+            seen.push(ui::row_lines(
+                &env, &style, &spec, width, "", style.row, false,
+            ));
+        }
+        assert_eq!(seen[0], seen[1], "{width} px");
+    }
+}
+
+/// The hit areas of a number's − and + are where they are drawn, also
+/// with a value wider than the room in bytes but not as drawn (the mark
+/// of a scope, "•", takes three bytes).
+#[test]
+fn a_numbers_steps_are_hit_where_they_are_drawn() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let rect = Rect::new(0, 100, 480, style.touch_row(style.row) as u16);
+    for (room, value) in [("000 %", "• 20 %"), ("100 %", "• 9"), ("", "12345 px")] {
+        let (described, _) = describe(480, 800, |c| {
+            ui::draw_number(c, &env, &style, rect, "Size", value, room, None);
+        });
+        let drawn: Vec<Rect> = described
+            .iter()
+            .filter(|d| d.role == Role::Button)
+            .map(|d| d.area)
+            .collect();
+        let (minus, plus) = ui::value_stepper(&env, &style, rect, room, value).unwrap();
+        assert_eq!(drawn, [minus, plus], "{room:?} {value:?}");
+    }
+}
+
+/// A switch without a note on a page of noted rows is measured where it
+/// is drawn (the whole row, a larger switch): its title is not cut.
+#[test]
+fn a_switch_without_a_note_is_measured_as_drawn() {
+    use paperpaw_sdk::SettingSpec;
+    use paperpaw_sdk::builtin::groups;
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let row = style.noted_row();
+    // Titles from short to long: whichever the row keeps side by side,
+    // drawn there it is whole.
+    for title in [
+        "Night",
+        "Night mode",
+        "Pictures in night",
+        "Pictures in night mode",
+    ] {
+        let spec = SettingSpec::fixed_switch("t.switch", title, false, groups::OTHER);
+        assert!(spec.description.is_none());
+        let lines = ui::row_lines(&env, &style, &spec, 480, "", row, true);
+        let rect = Rect::new(0, 100, 480, lines.height);
+        let lines = lines.at(rect);
+        let (described, _) = describe(480, 800, |c| {
+            ui::draw_switch_lines(c, &env, &style, rect, lines, false, title, "", true);
+        });
+        assert!(
+            described.iter().any(|d| d.label == title),
+            "{title}: {described:?}"
+        );
+    }
+}
+
+/// An empty screen in an area too small for its margins keeps its ink
+/// inside: a letter reaching past its start (an accent) too.
+#[test]
+fn an_empty_screen_in_a_small_area_draws_inside_it() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let area = Rect::new(1, 0, 149, 60);
+    let mut frame = frame(480, 800);
+    ui::draw_empty(
+        &mut frame.canvas(),
+        &env,
+        &style,
+        area,
+        "books",
+        "Ὕ\u{dd6}#🀰a\"",
+        "",
+    );
+    assert_eq!(drawn_outside(&mut frame, area), None);
 }

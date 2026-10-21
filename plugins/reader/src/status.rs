@@ -5,10 +5,11 @@
 //! the choice is kept. Lines come from any plugin
 //! (`Registrar::add_status_line`); the reader brings three:
 //!
-//! - *Text and symbols* ([`lines::ITEMS`]): a left, centre and right part,
-//!   each with the status items chosen for it (`core.status-items`: the
-//!   kernel's time and battery, the reader's title, chapter, page and
-//!   progress, and whatever other plugins add);
+//! - *Text and symbols* (the kernel's `core.status-line.items`, which
+//!   answers to the reader's `reader.status-line.items` too): a left,
+//!   centre and right part, each with the status items chosen for it
+//!   (`core.status-items`: the kernel's time and battery, the reader's
+//!   title, chapter, page and progress, and whatever other plugins add);
 //! - *Progress bar* ([`lines::PROGRESS`]): the book as a bar, with a mark
 //!   where each chapter begins, and the page;
 //! - *Empty* ([`lines::EMPTY`]): nothing, until the next tap.
@@ -24,9 +25,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{fonts, params, screens};
-use paperpaw_sdk::status::{
-    Place, StatusFrame, StatusLine, StatusTarget, StatusValue, context, item_ids,
-};
+use paperpaw_sdk::status::{Place, StatusFrame, StatusTarget, StatusValue, context, item_ids};
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::{
     Arg, Canvas, Env, Id, Params, RegisterError, Registrar, SettingExtra, SettingKind, SettingSpec,
@@ -74,20 +73,10 @@ pub const PLACES: [Place; 2] = [
 pub mod lines {
     use paperpaw_sdk::Id;
 
-    pub const ITEMS: Id = Id::new_static("reader.status-line.items");
     pub const PROGRESS: Id = Id::new_static("reader.status-line.progress");
     pub const EMPTY: Id = Id::new_static("reader.status-line.empty");
 }
 
-/// The parts: top left, centre, right, then bottom left, centre, right.
-pub const PARTS: [Id; 6] = [
-    TOP_LEFT,
-    TOP_CENTER,
-    TOP_RIGHT,
-    BOTTOM_LEFT,
-    BOTTOM_CENTER,
-    BOTTOM_RIGHT,
-];
 const TOP_LEFT: Id = Id::new_static("reader.status.top-left");
 const TOP_CENTER: Id = Id::new_static("reader.status.top-center");
 const TOP_RIGHT: Id = Id::new_static("reader.status.top-right");
@@ -191,7 +180,7 @@ static SETTINGS: [SettingSpec; 11] = [
     list(
         BOTTOM_LINES,
         "reader.status.bottom-lines",
-        "reader.status-line.items, reader.status-line.progress, reader.status-line.empty",
+        "core.status-line.items, reader.status-line.progress, reader.status-line.empty",
         &BOTTOM_LINES_EXTRA,
     )
     .described("reader.status.lines.help"),
@@ -230,24 +219,6 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     for place in PLACES {
         r.add_status_place(place)?;
     }
-    r.add_status_line(
-        StatusLineSpec::new(
-            lines::ITEMS,
-            "reader.status.line.items",
-            Box::new(|canvas, env, frame| {
-                let Some(font) = env.fonts.role(frame.font) else {
-                    return;
-                };
-                items_line(env, frame).draw(canvas, env, &font, frame.context);
-            }),
-        )
-        .signature(Box::new(items_signature))
-        .targets(Box::new(|env, frame| {
-            env.fonts.role(frame.font).map_or_else(Vec::new, |font| {
-                items_line(env, frame).targets(env, &font, frame.context)
-            })
-        })),
-    )?;
     r.add_status_line(
         StatusLineSpec::new(
             lines::PROGRESS,
@@ -373,17 +344,6 @@ fn chapter_pages(cx: &Params) -> Option<(i64, i64)> {
     ))
 }
 
-/// The line of items drawn in `frame`: its place's items (the reader's
-/// above or below the text where it names none).
-fn items_line<'e>(env: &Env<'e>, frame: &StatusFrame<'_>) -> StatusLine<'e> {
-    let place = frame.place.and_then(|id| env.status_items.place(id));
-    let lists = match place {
-        Some(place) => place.lists(env),
-        None => lists(env, frame.top),
-    };
-    StatusLine::new(frame.area, lists, frame.size, frame.color).percent(env.settings.read(&PERCENT))
-}
-
 /// The frame of the line at the top (or bottom) in `area`, in its place.
 pub(crate) fn frame<'a>(
     env: &Env<'_>,
@@ -392,19 +352,15 @@ pub(crate) fn frame<'a>(
     context: &'a Params,
 ) -> StatusFrame<'a> {
     let place = if top { TOP_PLACE } else { BOTTOM_PLACE };
-    StatusFrame::new(area, top, size(env), color(env), context).place(place)
+    StatusFrame::new(area, top, size(env), color(env), context)
+        .place(place)
+        .percent(env.settings.read(&PERCENT))
 }
 
 /// Where a tap on the line shown at the top (or bottom) in `frame` does
 /// something.
 pub(crate) fn targets(env: &Env<'_>, id: &str, frame: &StatusFrame<'_>) -> Vec<StatusTarget> {
     env.status_items.line_targets(id, env, frame)
-}
-
-/// The item lists of a line's parts: `top` or bottom.
-pub(crate) fn lists<'e>(env: &Env<'e>, top: bool) -> [&'e str; 3] {
-    let offset = if top { 0 } else { 3 };
-    core::array::from_fn(|i| env.settings.text(PARTS[offset + i].as_str()))
 }
 
 /// The text size of status lines in pixels.
@@ -544,12 +500,6 @@ pub(crate) fn signature(env: &Env<'_>, context: &Params, chosen: &[String; 2]) -
         out.push('|');
     }
     out
-}
-
-/// What the items of both lines show now.
-fn items_signature(env: &Env<'_>, context: &Params) -> String {
-    let both = [lists(env, true), lists(env, false)].concat();
-    paperpaw_sdk::status::signature(env, &both, context)
 }
 
 #[cfg(test)]

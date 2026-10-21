@@ -546,6 +546,7 @@ so all of it can be tried without hardware.
 | `stats` | sync: expected after reading, at `SLEEP`, `ONLINE`, within a day | at the next sleep | the same, within four days | held |
 | `readwise`, `joplin` | an export: expected, within 30 min | at the next moment | within 2 h | held until online |
 | `opds`, `update` | syncs and checks started by rules: expected, within an hour | at the next connection | within four hours | held |
+| `update` | while an update waits for its plugins, the question again once a day: expected, not before a day, within two days | at the next connection | within eight days | held |
 | `calibre`, `transfer`, `browser`, `store`, `opds` (browsing) | nothing: the reader is there | at once | at once | the inline offer on opening |
 | `reader` | page counting: needs nothing, at `IDLE`, `CHARGING` | when idle | when idle | when idle |
 | `home`, `widgets` | nothing; redraw only what changed | | clocks in whole minutes | as Saving |

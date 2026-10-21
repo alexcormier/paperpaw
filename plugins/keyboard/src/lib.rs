@@ -78,6 +78,12 @@ const PASSING: [Id; 3] = [
     actions::TOGGLE_NIGHT_MODE,
 ];
 
+/// Holding Select (as the key map binds it), or the menu where a key
+/// map binds that instead: the variants of a letter, else done.
+fn held(action: &Id) -> bool {
+    *action == actions::LONG_CONFIRM || *action == actions::MENU
+}
+
 /// The rows of the symbol layer (the last one also gets *Delete*).
 const SYMBOLS: [&str; 3] = ["1234567890", "@#&_-+()/%", "*\"':;!?"];
 
@@ -635,6 +641,9 @@ impl KeyboardScreen {
 
     /// Moves the button focus.
     fn move_focus(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> bool {
+        if held(action) {
+            return false;
+        }
         let Some((row, index)) = self.focus else {
             self.focus = Some((0, 0));
             self.redraw(cx, self.key_area(0, 0));
@@ -720,7 +729,7 @@ impl KeyboardScreen {
             let mut buffer = [0u8; 4];
             self.insert(c.encode_utf8(&mut buffer), cx);
             return Handled::Yes;
-        } else if *a == actions::BACK || *a == actions::MENU {
+        } else if *a == actions::BACK || held(a) {
             self.close_variants(cx);
             return Handled::Yes;
         } else {
@@ -967,7 +976,7 @@ impl Screen for KeyboardScreen {
             }
             return Handled::Yes;
         }
-        if *action == actions::MENU {
+        if held(action) {
             // A long press on confirm: the variants of a letter, else done.
             let opened = self
                 .focus

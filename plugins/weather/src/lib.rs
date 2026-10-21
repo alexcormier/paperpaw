@@ -39,7 +39,6 @@ use paperpaw_sdk::builtin::{events, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::status::item_ids;
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, HttpRequest, Id, Instant, Manifest, Params, Plugin, RegisterError,
@@ -331,18 +330,10 @@ fn online(env: &Env<'_>) -> bool {
     }
 }
 
-/// Whether a weather widget is placed on a screen's page (a setting that
-/// lists widgets, such as the home screen's pages, names it).
+/// Whether a weather widget shows in any place of widgets (the home
+/// screen's pages, the sleep screen).
 fn placed(env: &Env<'_>) -> bool {
-    env.settings
-        .specs()
-        .filter(|spec| !spec.id.as_str().starts_with("weather."))
-        .any(|spec| {
-            let text = env.settings.text(spec.id.as_str());
-            text.contains("weather.")
-                && item_ids(text)
-                    .any(|item| WIDGETS.contains(&item.split_whitespace().next().unwrap_or("")))
-        })
+    WIDGETS.iter().any(|widget| env.widgets.shown(env, widget))
 }
 
 /// Why the weather is looked at.

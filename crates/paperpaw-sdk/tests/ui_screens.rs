@@ -477,3 +477,37 @@ fn a_status_line_setting_without_an_id_writes_nothing() {
     let style = UiStyle::new(&h.env());
     assert!(style.row > 0);
 }
+
+/// A line kept under an id it had before shows as chosen, by its own; a
+/// press keeps it once, under its own id, and off it goes.
+#[test]
+fn a_line_kept_by_its_old_id_is_chosen_once_and_kept_by_its_own() {
+    let mut h = status_harness(Device::BUTTONS, "t.old-line, t.line");
+    for id in ["t.line", "t.other-line"] {
+        h.status_items.add_line(
+            paperpaw_sdk::StatusLineSpec::new(Id::new_static(id), id, Box::new(|_, _, _| {})).also(
+                Id::new_static(if id == "t.line" {
+                    "t.old-line"
+                } else {
+                    "t.older"
+                }),
+            ),
+        );
+    }
+    let params = Params::new()
+        .with(params::ID, "t.status")
+        .with(params::MODE, paperpaw_sdk::ui::items::LINES);
+    let mut screen = ItemsScreen::open(&h.env(), &params);
+    // The first row is the line chosen, once: confirm switches it off.
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(written(&commands).as_deref(), Some(""));
+    // Down to the other and on: the first kept by its own id, once.
+    let mut h = h;
+    h.settings
+        .set("t.status", SettingValue::Text("t.old-line".into()))
+        .unwrap();
+    let mut screen = ItemsScreen::open(&h.env(), &params);
+    run(&h, |cx| screen.on_action(&actions::DOWN, cx));
+    let (_, commands) = run(&h, |cx| screen.on_action(&actions::CONFIRM, cx));
+    assert_eq!(written(&commands).as_deref(), Some("t.line, t.other-line"));
+}

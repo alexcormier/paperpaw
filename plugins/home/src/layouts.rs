@@ -111,11 +111,15 @@ home.continue@1.frame = core.frame.none",
 
 /// The settings of the home screen's look a layout sets, or puts back to
 /// their defaults where it leaves them out.
-const LOOK: [&str; 11] = [
+const LOOK: [&str; 15] = [
     "home.page-1",
     "home.page-2",
     "home.page-3",
     "home.page-4",
+    "home.page-5",
+    "home.page-6",
+    "home.page-7",
+    "home.page-8",
     "home.columns",
     "home.rows",
     "home.status-bar",
@@ -538,6 +542,16 @@ mod tests {
             assert_eq!(PRESETS[0].value(id.as_str()).unwrap_or(""), *default);
         }
         assert_eq!(PRESETS[0].values().count(), 2);
+    }
+
+    /// A layout sets every page, the later ones empty where it leaves
+    /// them out: none of an older layout stays behind.
+    #[test]
+    fn layouts_cover_every_page() {
+        for page in 0..MAX_PAGES {
+            let id = pages::setting(page);
+            assert!(LOOK.contains(&id.as_str()), "{id}");
+        }
     }
 
     #[test]

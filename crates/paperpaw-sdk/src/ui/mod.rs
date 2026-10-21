@@ -21,6 +21,7 @@ pub mod slider;
 mod style;
 mod text;
 mod thumbnail;
+pub mod widget_list;
 
 pub use button::*;
 pub use header::*;

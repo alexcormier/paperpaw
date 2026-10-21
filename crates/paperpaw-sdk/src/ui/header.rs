@@ -33,7 +33,7 @@ pub fn draw_header(
     let title = fit(&font, style.head, title, right - f32::from(area.x) - margin);
     let band = style.header_band(area);
     if let Some(note) = note.as_deref() {
-        let (x, baseline) = (right + margin, ink_baseline(&font, band, style.small, note));
+        let (x, baseline) = (right + margin, cap_baseline(&font, band, style.small));
         draw_label_on(
             &mut canvas,
             &font,
@@ -47,7 +47,7 @@ pub fn draw_header(
     }
     let (x, baseline) = (
         f32::from(area.x) + margin,
-        ink_baseline(&font, band, style.head, &title),
+        cap_baseline(&font, band, style.head),
     );
     draw_label_on(
         &mut canvas,
@@ -76,6 +76,10 @@ pub struct Header {
     /// for screens where buttons move the focus to it, e.g. a sort order
     /// that opens a menu as a tap on it does.
     pub note_focused: bool,
+    /// The note does something when tapped or confirmed (the screen
+    /// handles it): told as a button, the header's height high, a
+    /// fingertip for touch. Otherwise it is a text, e.g. "3 hits".
+    pub note_button: bool,
     /// Shows the back arrow.
     back: bool,
     /// Shows arrows for paging.
@@ -102,6 +106,7 @@ impl Header {
         Self {
             area: Rect::new(0, 0, env.device.display.width, style.header as u16),
             note_focused: false,
+            note_button: false,
             back: back && touch,
             arrows: touch,
         }
@@ -183,14 +188,22 @@ impl Header {
         page: Option<(usize, usize)>,
     ) {
         let parts = self.layout(env, style, page);
-        canvas.describe(Role::Heading, title, self.area, false, None);
+        // A note that only tells something is said with the title ("„word“,
+        // 3 hits"); one that does something is a button of its own.
+        let told = match note {
+            Some(note) if !(self.note_button || self.note_focused) => {
+                alloc::format!("{title}, {note}")
+            }
+            _ => String::from(title),
+        };
+        canvas.describe(Role::Heading, &told, self.area, false, None);
         style.header_background(canvas, self.area);
         let ink = style.header_colors().1;
         let Some(font) = style.font(env) else {
             return;
         };
         // Everything centred in the band by its ink: the arrows by their
-        // drawing, each text by its letters.
+        // drawing, each text by its capitals.
         let band = style.header_band(self.area);
         let arrow = |canvas: &mut Canvas<'_>, x: i32, icon: &str, left: bool, color: Color| {
             let (_, y) = center(band);
@@ -211,7 +224,7 @@ impl Header {
         let label = page
             .filter(|_| parts.pager.is_some())
             .map(|page| Self::page_label(env, page));
-        let baseline = |size: f32, text: &str| ink_baseline(&font, band, size, text);
+        let baseline = |size: f32| cap_baseline(&font, band, size);
         let (back_x, prev_x, next_x) = parts.arrows;
         if parts.back.is_some() {
             arrow(canvas, back_x, crate::icons::BACK, true, ink);
@@ -230,7 +243,7 @@ impl Header {
                 );
             }
             let x = f32::from(at.x);
-            let y = baseline(style.small, text);
+            let y = baseline(style.small);
             draw_label_on(canvas, &font, style.small, x, at, y, text, ink);
         }
         let mut canvas = canvas.clipped(t);
@@ -244,18 +257,22 @@ impl Header {
                 (width + 2.0 * pad) as u16,
                 high,
             );
-            canvas.describe(Role::Button, note, around, self.note_focused, None);
+            if self.note_button || self.note_focused {
+                // As high as the bar, where a tap on it is taken.
+                let target = Rect::new(around.x, band.y, around.width, band.height);
+                canvas.describe(Role::Button, note, target, self.note_focused, None);
+            }
             let note_ink = if self.note_focused {
                 canvas.fill_round(around, style.radius(u32::from(around.height)), ink);
                 style.header_colors().0
             } else {
                 ink
             };
-            let y = baseline(style.small, note);
+            let y = baseline(style.small);
             draw_label_on(&mut canvas, &font, style.small, x, t, y, note, note_ink);
         }
         let x = f32::from(t.x);
-        let y = baseline(style.head, &title);
+        let y = baseline(style.head);
         draw_label_on(&mut canvas, &font, style.head, x, t, y, &title, ink);
     }
 

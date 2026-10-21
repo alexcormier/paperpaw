@@ -804,7 +804,7 @@ impl Screen for PanelScreen {
             return;
         };
         if self.top && self.head.height > 0 {
-            draw_head(canvas, env, &style, &font, self.head);
+            draw_head(canvas, env, self.head);
         }
         if self.rows.is_empty() {
             ui::draw_message(canvas, env, &style, r, env.i18n.tr("menu.empty"));
@@ -946,15 +946,14 @@ impl Screen for PanelScreen {
         // An item of the head that does something when tapped.
         if gesture.kind == GestureKind::Tap && self.top && self.head.contains(gesture.start) {
             let env = *cx.env();
-            if let Some(font) = UiStyle::new(&env).font(&env) {
-                let target = head_line(&env, self.head)
-                    .targets(&env, &font, &Params::new())
-                    .into_iter()
-                    .find(|t| t.area.contains(gesture.start));
-                if let Some(target) = target {
-                    cx.command(target.command);
-                    return Handled::Yes;
-                }
+            let context = Params::new();
+            let target = QUICK_PLACE
+                .targets(&env, &head_frame(&env, self.head, &context))
+                .into_iter()
+                .find(|t| t.area.contains(gesture.start));
+            if let Some(target) = target {
+                cx.command(target.command);
+                return Handled::Yes;
             }
         }
         if gesture.kind == GestureKind::Tap {
@@ -1074,32 +1073,34 @@ impl Screen for PanelScreen {
     }
 }
 
-/// The quick panel's head: a status line of the items chosen for its
-/// left, centre and right ([`QUICK_PARTS`]), as large as set.
-fn draw_head(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    _: &UiStyle,
-    font: &paperpaw_sdk::FontHandle<'_>,
-    area: Rect,
-) {
-    head_line(env, area).draw(canvas, env, font, &Params::new());
+/// The quick panel's head: the status line chosen for it, else a line of
+/// the items chosen for its left, centre and right ([`QUICK_PARTS`]), as
+/// large as set.
+fn draw_head(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+    let context = Params::new();
+    QUICK_PLACE.draw(canvas, env, &head_frame(env, area, &context));
 }
 
-/// The quick panel's head as a status line in `area`.
-fn head_line<'e>(env: &Env<'e>, area: Rect) -> paperpaw_sdk::status::StatusLine<'e> {
+/// The frame of the quick panel's head in `area`, as large as set.
+fn head_frame<'a>(env: &Env<'_>, area: Rect, context: &'a Params) -> paperpaw_sdk::StatusFrame<'a> {
     let size = env
         .metrics
         .pt(env.settings.read(&QUICK_SIZE).clamp(6, 24) as f32);
-    QUICK_PLACE.line(env, area, size, Color::BLACK)
+    paperpaw_sdk::StatusFrame::new(area, true, size, Color::BLACK, context)
+        .font(paperpaw_sdk::builtin::fonts::UI.static_str())
 }
 
-/// Where the quick panel's head shows status items.
+/// Where the quick panel's head shows status items, or the status line
+/// chosen for it ([`QUICK_LINE`]).
 pub(crate) const QUICK_PLACE: paperpaw_sdk::status::Place = paperpaw_sdk::status::Place::new(
     Id::new_static("menu.quick"),
     "menu.quick.section",
     QUICK_PARTS,
-);
+)
+.with_line(QUICK_LINE);
+/// The status line of the quick panel's head: its items unless another
+/// is chosen.
+pub(crate) const QUICK_LINE: Id = Id::new_static("menu.quick.line");
 
 /// What the quick panel's head shows at its left, centre and right.
 pub(crate) const QUICK_PARTS: [Id; 3] = [QUICK_LEFT, QUICK_CENTER, QUICK_RIGHT];

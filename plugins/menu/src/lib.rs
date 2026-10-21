@@ -73,7 +73,19 @@ const fn quick_part(id: Id, title: &'static str, default: &'static str) -> Setti
 
 /// How menus look, and the quick panel's head: what it shows, and how
 /// large.
-static SETTINGS: [SettingSpec; 5] = [
+static QUICK_LINES: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
+    .section("menu.quick.section")
+    .editor(paperpaw_sdk::builtin::screens::STATUS_LINES);
+static SETTINGS: [SettingSpec; 6] = [
+    SettingSpec::fixed(
+        panel::QUICK_LINE.static_str(),
+        "menu.quick.line",
+        SettingKind::List,
+        paperpaw_sdk::SettingValue::Text(Cow::Borrowed("")),
+        paperpaw_sdk::builtin::groups::LOOK,
+    )
+    .with_extra(&QUICK_LINES)
+    .described("menu.quick.line.help"),
     SettingSpec::fixed_choice(
         STYLE.static_str(),
         "menu.setting.style",

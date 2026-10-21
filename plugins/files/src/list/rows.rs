@@ -915,7 +915,9 @@ pub(crate) fn pill_places(
                 } else {
                     font.measure(style.small, label)
                 };
-                text as u16 + 2 * pad
+                // At least as wide as high: a short word's pill ("All")
+                // a fingertip wide too.
+                (text as u16 + 2 * pad).max(sizes.pill)
             })
             .collect()
     };

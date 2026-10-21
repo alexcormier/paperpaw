@@ -138,7 +138,7 @@ impl Plugin for SettingsPlugin {
         r.add_screen(ScreenSpec::new(
             themes::SCREEN,
             "settings.theme",
-            Box::new(|env, _| Box::new(themes::Themes::new(env))),
+            Box::new(|env, params| Box::new(themes::Themes::new(env, params))),
         ))?;
         r.add_screen(ScreenSpec::new(
             CHOOSE_SCREEN,

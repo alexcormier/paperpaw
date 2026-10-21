@@ -311,8 +311,31 @@ pub const fn part_spec(
 
 /// What `widget` is drawn in, by its [`frame_setting`]; none without one.
 pub fn frame(env: &Env<'_>, widget: &str) -> Frame {
-    Frame::of(env.settings.text(&format!("{widget}.frame")))
+    let own = format!("{widget}.frame");
+    // Every widget's, where the reader chose one for all and not one for
+    // this widget.
+    let all = env
+        .settings
+        .text(crate::builtin::settings::WIDGET_FRAME.static_str());
+    if all != OWN_FRAME && FRAMES.contains(&all) && !env.settings.is_chosen(&own) {
+        return Frame::of(all);
+    }
+    Frame::of(env.settings.text(&own))
 }
+
+/// The value of [`WIDGET_FRAME`](crate::builtin::settings::WIDGET_FRAME)
+/// for each widget its own frame.
+pub const OWN_FRAME: &str = "core.frame.own";
+
+/// The values of [`WIDGET_FRAME`](crate::builtin::settings::WIDGET_FRAME):
+/// each widget its own, or one of [`FRAMES`] for all.
+pub const ALL_FRAMES: &[&str] = &[
+    OWN_FRAME,
+    "core.frame.none",
+    "core.frame.line",
+    "core.frame.card",
+    "core.frame.dark",
+];
 
 /// The setting of how large `widget`'s text is, `<widget>.size`, in the
 /// widget's settings group; with `fit`, also "as large as fits". [`size`]
@@ -417,6 +440,11 @@ pub fn look(env: &Env<'_>, widget: &str, area: Rect) -> Look {
 pub fn draw_frame(canvas: &mut Canvas<'_>, env: &Env<'_>, widget: &str, area: Rect) -> Look {
     let style = UiStyle::new(env);
     let look = look(env, widget, area);
+    // A look of a plugin's own draws it (`ui::look::Painters::frame`).
+    let part = crate::ui::look::FramePart::new(area, look.frame);
+    if look.frame != Frame::None && style.look.frame(canvas, &style, part) {
+        return look;
+    }
     match look.frame {
         Frame::None => {}
         Frame::Line => ui::stroke_round(
@@ -437,6 +465,14 @@ pub fn draw_frame(canvas: &mut Canvas<'_>, env: &Env<'_>, widget: &str, area: Re
         Frame::Dark => ui::fill_round(canvas, &style, area, Color::BLACK),
     }
     look
+}
+
+/// The height `widget`'s frame takes above and below its content, as its
+/// settings make it ([`look`]): what a widget adds to the height of what
+/// it shows.
+pub fn frame_height(env: &Env<'_>, widget: &str) -> u16 {
+    let probe = Rect::new(0, 0, 1000, 1000);
+    1000 - look(env, widget, probe).area.height
 }
 
 /// The height of a line of text `size` pixels large in the UI font.

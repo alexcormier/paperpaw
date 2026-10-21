@@ -245,10 +245,9 @@ impl Widget for Headlines {
     }
 }
 
-/// The height `widget`'s frame takes around its content.
+/// The height the widget's frame takes around its content.
 fn frame_height(env: &Env<'_>) -> u16 {
-    let probe = Rect::new(0, 0, 1000, 1000);
-    1000 - widgets::look::look(env, NAME, probe).area.height
+    widgets::frame_height(env, NAME)
 }
 
 /// The caption's height, if it shows.

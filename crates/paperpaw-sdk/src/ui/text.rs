@@ -331,12 +331,14 @@ pub(super) fn draw_text(
     font.draw(canvas, size, x, baseline, text, color)
 }
 
-/// The baseline that centres the ink of `text` at `size` in `band`,
-/// rather than its line, which leaves more room above the letters than
-/// below them: what headers use, so their words sit in the middle as
-/// their signs do.
-pub(super) fn ink_baseline(font: &FontHandle<'_>, band: Rect, size: f32, text: &str) -> i32 {
-    let (top, bottom) = font.ink(size, text).unwrap_or_else(|| {
+/// The baseline that centres the capitals of `size` in `band` (from the
+/// baseline to the top of an *H*), rather than the line, which leaves
+/// more room above the letters than below them, or the ink of the text
+/// itself, which puts a word with a *g* higher than one without: what
+/// headers use, so every title stands on one line, its capitals in the
+/// middle as the arrows beside them are.
+pub(super) fn cap_baseline(font: &FontHandle<'_>, band: Rect, size: f32) -> i32 {
+    let (top, bottom) = font.ink(size, "H").unwrap_or_else(|| {
         // No ink at all: as a line would be.
         let metrics = font.line_metrics(size);
         (-(metrics.ascent as i32), -(metrics.descent as i32))
@@ -519,20 +521,40 @@ pub fn draw_empty(
     let Some(font) = style.font(env) else {
         return;
     };
-    let margin = style.margin as f32 * 2.0;
+    // Twice the margin at the sides, less in a small area (a card on a
+    // page with wide margins), so that the text keeps room for a few
+    // words a line; at least half a gap, where letters reaching past
+    // their start (an accent) stay inside.
+    let least = style.text * 8.0;
+    let pad = style.gap as f32 / 2.0;
+    let margin = (style.margin as f32 * 2.0).min(((f32::from(area.width) - least) / 2.0).max(pad));
     let width = (f32::from(area.width) - 2.0 * margin).max(1.0);
     let icon_size = style.title * 2.4;
     let gap = style.gap as f32;
-    let title_line = font.line_metrics(style.title).line_height;
-    let line = font.line_metrics(style.text).line_height;
+    // The title as large as fits, down to the text's size; only then
+    // shortened.
+    let title_size = crate::widgets::largest_size(style.title, style.text, |size| {
+        font.measure(size, title) <= width
+    })
+    .unwrap_or(style.text);
+    let title_line = font.line_metrics(title_size).line_height;
+    let room = f32::from(area.height);
+    let words = if title.is_empty() { 0.0 } else { title_line };
+    // The text as large as all its lines fit below the title, down to
+    // the small size; only then its last line shortened.
+    let below = room - words - gap;
+    let text_size = crate::widgets::largest_size(style.text, style.small, |size| {
+        let lines = font.wrap(size, text, width).len() as f32;
+        lines * font.line_metrics(size).line_height <= below
+    })
+    .unwrap_or(style.small);
+    let line = font.line_metrics(text_size).line_height;
     let mut lines = if text.is_empty() {
         Vec::new()
     } else {
-        font.wrap(style.text, text, width)
+        font.wrap(text_size, text, width)
     };
-    let room = f32::from(area.height);
     let text_height = |n: usize| line * n as f32;
-    let words = if title.is_empty() { 0.0 } else { title_line };
     let icon_w = icon_width(env, icon, icon_size);
     let with_icon = icon_w > 0.0
         && icon_w <= f32::from(area.width)
@@ -581,13 +603,13 @@ pub fn draw_empty(
         y += icon_room;
     }
     if !title.is_empty() {
-        let shown = fit(&font, style.title, title, width);
+        let shown = fit(&font, title_size, title, width);
         let at = Rect::new(area.x, y as u16, area.width, title_line as u16);
         draw_label(
             canvas,
             &font,
-            style.title,
-            centre(font.measure(style.title, &shown)),
+            title_size,
+            centre(font.measure(title_size, &shown)),
             at,
             &shown,
             Color::BLACK,
@@ -604,23 +626,23 @@ pub fn draw_empty(
         text_height(lines.len()) as u16,
     );
     canvas.describe(Role::Text, text, block, false, None);
-    let ascent = font.line_metrics(style.text).ascent;
+    let ascent = font.line_metrics(text_size).ascent;
     let count = lines.len();
     for (n, range) in lines.into_iter().enumerate() {
         let shown = if cut && n + 1 == count {
             fit(
                 &font,
-                style.text,
+                text_size,
                 &format!("{} …", text[range.start..].trim_end()),
                 width,
             )
         } else {
             text[range].trim().to_string()
         };
-        let x = centre(font.measure(style.text, &shown));
+        let x = centre(font.measure(text_size, &shown));
         font.draw(
             canvas,
-            style.text,
+            text_size,
             x,
             (y + ascent) as i32,
             &shown,
