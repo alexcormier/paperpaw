@@ -88,6 +88,12 @@ impl ReaderScreen {
                     book.tap_mark(words, i, cx);
                     None
                 }
+                Some(Target::Layer(i)) => {
+                    if let Some((layer, _)) = book.typography.rooms.get(i) {
+                        book.tap_layer(layer, None, cx);
+                    }
+                    None
+                }
                 None => None,
             };
             let link = link.map(|l| (l.href.clone(), link_label(book, words, &l)));
@@ -193,8 +199,21 @@ pub(super) fn draw_linking(
     let target = linking
         .focus
         .and_then(|i| book.targets(env).get(i).copied());
+    let line = env.metrics.tenth_mm(4).max(2);
+    // A layer's room, framed whole.
+    if let Some(Target::Layer(i)) = target
+        && let Some((_, room)) = book.typography.rooms.get(i)
+    {
+        canvas.stroke_rect(
+            i32::from(room.x),
+            i32::from(room.y),
+            u32::from(room.width),
+            u32::from(room.height),
+            line,
+            Color::BLACK,
+        );
+    }
     if let Some((start, end)) = target.and_then(|t| book.target_range(t)) {
-        let line = env.metrics.tenth_mm(4).max(2);
         let inside = |i: usize| words[i].end > start && words[i].start < end;
         for b in selection::line_boxes(words, inside) {
             canvas.stroke_rect(
@@ -237,6 +256,15 @@ pub(super) fn draw_linking(
                 .get(i)
                 .and_then(|m| env.decorators.get(&m.decorator))
                 .map_or("", |d| env.i18n.tr(&d.title));
+            format!("{name} · {}", env.i18n.tr("reader.link.hint"))
+        }
+        Some(Target::Layer(i)) => {
+            let name = book
+                .typography
+                .rooms
+                .get(i)
+                .and_then(|(id, _)| env.page_layers.get(id))
+                .map_or("", |l| env.i18n.tr(&l.title));
             format!("{name} · {}", env.i18n.tr("reader.link.hint"))
         }
         None => env.i18n.tr("reader.link.none").to_string(),

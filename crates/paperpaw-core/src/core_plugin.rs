@@ -821,6 +821,9 @@ static FONT_PT: SettingExtra = SettingExtra::new()
     .section(setting_sections::FONT)
     .unit("core.unit.pt")
     .slider();
+static LINES_KEPT: SettingExtra = SettingExtra::new()
+    .unit("core.unit.lines")
+    .section(setting_sections::PAGE);
 static WEIGHT: SettingExtra = SettingExtra::new()
     .unit("core.unit.weight")
     .section(setting_sections::FONT);
@@ -1078,7 +1081,7 @@ fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// Buttons, the panel's refresh, sleep, rotation, notices and long
 /// presses.
-static DEVICE: [SettingSpec; 9] = [
+static DEVICE: [SettingSpec; 14] = [
     SettingSpec::fixed_choice(
         settings::KEYMAP_PRESET.static_str(),
         "core.setting.keymap-preset",
@@ -1161,6 +1164,59 @@ static DEVICE: [SettingSpec; 9] = [
     .advanced()
     .with_extra(&MS)
     .described("core.setting.long-press-ms.help"),
+    SettingSpec::fixed_number(
+        settings::DOUBLE_TAP_MS.static_str(),
+        "core.setting.double-tap-ms",
+        150,
+        1000,
+        300,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .with_extra(&MS)
+    .described("core.setting.double-tap-ms.help"),
+    SettingSpec::fixed_number(
+        settings::TAP_SLOP.static_str(),
+        "core.setting.tap-slop",
+        1,
+        20,
+        3,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .with_extra(&MM)
+    .described("core.setting.tap-slop.help"),
+    SettingSpec::fixed_number(
+        settings::SWIPE_DISTANCE.static_str(),
+        "core.setting.swipe-distance",
+        2,
+        50,
+        8,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .with_extra(&MM)
+    .described("core.setting.swipe-distance.help"),
+    SettingSpec::fixed_number(
+        settings::FRONTLIGHT.static_str(),
+        "core.setting.frontlight",
+        0,
+        100,
+        0,
+        groups::DISPLAY,
+    )
+    .with_extra(&PERCENT_5)
+    .described("core.setting.frontlight.help"),
+    SettingSpec::fixed_number(
+        settings::FRONTLIGHT_WARMTH.static_str(),
+        "core.setting.frontlight-warmth",
+        0,
+        100,
+        50,
+        groups::DISPLAY,
+    )
+    .with_extra(&PERCENT_5)
+    .described("core.setting.frontlight-warmth.help"),
 ];
 
 fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -1168,8 +1224,17 @@ fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.set_menu_need(settings::SLEEP_AFTER, paperpaw_sdk::MenuNeed::Sleep)?;
     r.set_menu_need(settings::ROTATION, paperpaw_sdk::MenuNeed::Rotation)?;
     r.set_menu_need(settings::BUTTON_HINTS, paperpaw_sdk::MenuNeed::ButtonRow)?;
-    for edge in [settings::EDGE_ENDS, settings::EDGE_SIDES] {
-        r.set_menu_need(edge, paperpaw_sdk::MenuNeed::Touch)?;
+    let touch = [
+        settings::EDGE_ENDS,
+        settings::EDGE_SIDES,
+        settings::TAP_SLOP,
+        settings::SWIPE_DISTANCE,
+    ];
+    for setting in touch {
+        r.set_menu_need(setting, paperpaw_sdk::MenuNeed::Touch)?;
+    }
+    for light in [settings::FRONTLIGHT, settings::FRONTLIGHT_WARMTH] {
+        r.set_menu_need(light, paperpaw_sdk::MenuNeed::Frontlight)?;
     }
     Ok(())
 }
@@ -1228,7 +1293,7 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The reading font, and whether a book's settings are its own. The
 /// status lines' font: the menus', the book's or one of its own (the
 /// families are offered once all fonts are known).
-static READING: [SettingSpec; 15] = [
+static READING: [SettingSpec; 18] = [
     SettingSpec::fixed_choice(
         settings::STATUS_FONT.static_str(),
         "core.setting.status-font",
@@ -1359,6 +1424,30 @@ static READING: [SettingSpec; 15] = [
     .scoped()
     .with_extra(&IN_PAGE)
     .described("core.setting.paragraph-spacing.help"),
+    SettingSpec::fixed_number(
+        settings::WIDOWS.static_str(),
+        "core.setting.widows",
+        1,
+        4,
+        1,
+        groups::READING,
+    )
+    .advanced()
+    .scoped()
+    .with_extra(&LINES_KEPT)
+    .described("core.setting.widows.help"),
+    SettingSpec::fixed_number(
+        settings::ORPHANS.static_str(),
+        "core.setting.orphans",
+        1,
+        4,
+        1,
+        groups::READING,
+    )
+    .advanced()
+    .scoped()
+    .with_extra(&LINES_KEPT)
+    .described("core.setting.orphans.help"),
     SettingSpec::fixed_choice(
         settings::FOOTNOTES.static_str(),
         "core.setting.footnotes",
@@ -1369,6 +1458,16 @@ static READING: [SettingSpec; 15] = [
     .advanced()
     .with_extra(&IN_BEHAVIOUR)
     .described("core.setting.footnotes.help"),
+    SettingSpec::fixed_choice(
+        settings::PAGE_FRAME.static_str(),
+        "core.setting.page-frame",
+        &[settings::PAGE_FRAME_SINGLE],
+        settings::PAGE_FRAME_SINGLE,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.page-frame.help"),
     SettingSpec::fixed_switch(
         settings::SCOPE_ONLY.static_str(),
         "core.setting.scope-only",

@@ -1,0 +1,135 @@
+//! Services and introspection: services by contract and
+//! version, points and events declared, the screens of slots, the
+//! bindings of a layer with their origin.
+
+use super::*;
+use paperpaw_sdk::keys::{BindingOrigin, KeyBindings};
+use paperpaw_sdk::services::{EventSpec, PointSpec, ServiceType};
+
+/// A service with a contract.
+struct Forecast(&'static str);
+
+impl ServiceType for Forecast {
+    const KEY: &'static str = "weather.forecast/1";
+}
+
+/// Another type that claims the same contract, of another size.
+struct Pretender(u64, u64, u64);
+
+impl ServiceType for Pretender {
+    const KEY: &'static str = "weather.forecast/1";
+}
+
+struct Weather;
+
+impl Plugin for Weather {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("weather"), "Weather", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.provide(
+            Id::new_static("weather.today"),
+            Forecast("sunny"),
+            Version::new(1, 2, 0),
+        )?;
+        r.add_point(
+            PointSpec::new(Id::new_static("weather.sources"), "weather.sources")
+                .doc("A line each: name = url"),
+        )?;
+        r.declare_event(
+            EventSpec::new(Id::new_static("weather.changed"), "weather.changed").params(&["sky"]),
+        )?;
+        r.add_keymap(Cow::Borrowed(
+            "[keymap.weather.screen]\nbutton.menu = core.home\n",
+        ))
+    }
+}
+
+/// A service with a contract is found by it and by the version needed;
+/// another type claiming the contract is not; points and events declared
+/// are listed.
+#[test]
+fn services_by_contract_and_version() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin::new("a", &log))
+        .plugin(Weather)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let services = &kernel.shared.services;
+    let today = services.get_typed::<Forecast>("weather.today");
+    assert_eq!(today.map(|f| f.0), Some("sunny"));
+    let fits = services.get_versioned::<Forecast>("weather.today", Version::new(1, 1, 0));
+    assert!(fits.is_some());
+    assert!(
+        services
+            .get_versioned::<Forecast>("weather.today", Version::new(1, 3, 0))
+            .is_none()
+    );
+    assert!(
+        services
+            .get_versioned::<Forecast>("weather.today", Version::new(2, 0, 0))
+            .is_none()
+    );
+    assert!(services.get_typed::<Pretender>("weather.today").is_none());
+    let pretender = Pretender(0, 0, 0);
+    assert_eq!(pretender.0 + pretender.1 + pretender.2, 0);
+    assert!(services.ids().any(|id| id.as_str() == "weather.today"));
+    assert_eq!(services.points()[0].doc, "A line each: name = url");
+    assert_eq!(services.events()[0].params, ["sky"]);
+}
+
+/// The screen a slot shows and every screen offered for it; the bindings
+/// of a layer, each with where it comes from.
+#[test]
+fn slots_and_bindings_are_readable() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin::new("a", &log))
+        .plugin(TestPlugin {
+            priority: Priority(10),
+            ..TestPlugin::new("b", &log)
+        })
+        .plugin(Weather)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.apply(Command::bind(
+        "weather.screen",
+        "long.menu",
+        Some(actions::BACK),
+    ));
+    kernel.finish();
+    let env = kernel.shared.env(Instant(0));
+    assert_eq!(
+        env.slot_screen(slots::HOME.as_str()).map(Id::as_str),
+        Some("b.screen")
+    );
+    let offered: Vec<&str> = env
+        .slot_screens(slots::HOME.as_str())
+        .into_iter()
+        .map(Id::as_str)
+        .collect();
+    // The kernel's own placeholder first, then the plugins' in order.
+    assert_eq!(offered, ["core.placeholder", "a.screen", "b.screen"]);
+    let mut bindings = kernel.shared.keymap.bindings("weather.screen");
+    bindings.sort_by(|a, b| a.0.cmp(&b.0));
+    assert_eq!(
+        bindings,
+        [
+            (
+                String::from("button.menu"),
+                Some(actions::HOME),
+                BindingOrigin::Plugin
+            ),
+            (
+                String::from("long.menu"),
+                Some(actions::BACK),
+                BindingOrigin::User
+            ),
+        ]
+    );
+}

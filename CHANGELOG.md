@@ -75,6 +75,184 @@ change the plugin SDK.
   plugin fills its slot.
 - Emulator: scripts measure the heap's peak of one step (`reset-peak`)
   and send an event as a plugin would (`emit:core.library-changed`).
+- Code plugins fit the firmware again: the SDK's fingerprint no longer
+  counts features that add functions and modules only (`kernel`,
+  `unstable`), with which the firmware is built and plugins are not, so
+  no plugin built by an author fitted any firmware. A code plugin built
+  as a library for a computer (`plugin!`) loads on Linux: it defines the
+  unwinder's name that `core` and `alloc` leave open, never called where
+  a plugin cannot unwind.
+- SDK: services and introspection. A service type names its
+  contract in a key (`services::ServiceType`, `"weather.forecast/1"`),
+  published with a version (`Registrar::provide`) and found by it, its
+  size and alignment checked (`Services::get_typed`,
+  `get_versioned`), so native plugins built apart find it safely.
+  `Registrar::add_point` and `declare_event` declare points and events
+  (`Services::points`, `events`, `ids`) for editors and authors.
+  `Env::slot_screen` and `slot_screens` say which screen a slot shows
+  and which are offered; `KeyBindings::bindings` lists a layer's
+  bindings with their origin (`keys::BindingOrigin`).
+- Data plugins (formats 3, `DATA_FORMATS` is 3): `menus.ini`
+  adds entries to any menu, places one after another and takes entries
+  out, and makes menus of one's own (`title`, `entries`); `actions.ini`
+  makes actions of up to 16 steps (setting values, `open:<slot>`,
+  `notify:<text>`, `emit:<event>`, other actions); `icons.ini` gives
+  items icons; `points/<point>.txt` contributes lines to a point;
+  `setup.ini` adds steps to the first-run setup; `[fonts]` in
+  `plugin.ini` binds fonts to roles. They are read for plugins made for
+  formats 3 alone (others are told what is left out). A data plugin's
+  files take at most 96 KiB together besides its translations (512 KiB
+  of their own), 24 KiB of it of formats 3 and 64 lines for points; the
+  files it parses are read one at a time as it registers. An action
+  emits only its own events and sets no guarded setting. SDK:
+  `Registrar::place_menu_entry` and `hide_menu_entry`, for code plugins
+  too.
+- SDK: refreshes. A refresh filter sees why the panel is
+  refreshed (`filters::RefreshCause`: a page turned, screens, a notice,
+  a status line; told with `Cx::refresh_cause`), the slot, how many
+  partial refreshes were made since the panel was cleaned
+  (`since_full`), whether the kernel made it full for that (`periodic`,
+  so a filter keeping its own count replaces the policy), grays and
+  pictures. Breaking: filters answer with `RefreshVerdict` (`Keep`,
+  `Mode`, `Grays`, `Defer`: refreshed with the next one, but never a
+  screen opened or closed, nothing while a screen guards the device and
+  not more than three times in a row) and `RefreshFilters::apply` gives
+  `None` for a refresh deferred.
+  `Cx::set_refresh` sets the mode exactly, over the event's requests;
+  `ScreenSpec::refresh_on_open` sets it for a screen opening.
+  `RefreshMode` has `Mono`, `Gray` and `Clear` (a transition through
+  white), mapped by the shells; `RefreshMode::cleans` says whether a mode
+  removes ghosting.
+- SDK: actions with params, overrides and observers.
+  `Command::RunActionWith(id, params)` runs an action with params, which
+  a handler made with `ActionSpec::handler_with` gets (a rule applying
+  the profile it names). `Registrar::override_action(action, handler,
+  priority)` puts a handler in place of any action's own; the one of the
+  highest priority runs, as for slots, and `Command::RunOriginal` runs
+  the action's own from it (from nowhere else). `ActionSpec::sealed`
+  keeps others' handlers out (the lock's `lock.now`; overriding one is
+  an error). `Registrar::observe_actions` and
+  `observe_events` (`ObserverSpec`) see every action run and every event
+  emitted (a macro recorder, rules on any event); nothing runs for them
+  where there are none. While a screen guards the device, only its
+  plugin's handlers in place of others, its observers, its input and
+  refresh filters run, presses are not counted, `Command::Input` from
+  others is ignored, and nobody else changes settings, secrets,
+  plugins, menus, key bindings or slots; what a handler asks shows above
+  the guard only where the guard itself let the action pass; screens
+  above it that it did not open (a sleep screen) get no input and close
+  at the next input or as the device wakes. The events the guard or a
+  screen it opened gives (the password typed) go to them and their
+  plugins alone. A plugin changes its own secrets; another's, a
+  setting that keeps the device safe (`SettingSpec::guarded`, the
+  lock's) and the sleep and settings slots only the settings editor does
+  (the plugin of the settings slot), never another on the reader's
+  behalf; no other plugin's default, preset or power mode changes such
+  a setting,
+  and plugins are not loaded or installed under the guard. What an
+  action or an observer asks that runs the same action again with the
+  same params is dropped with a warning. `ActionSpec::describe` and `keywords` give lists
+  and searches of actions their words; `Actions::runnable` tells actions
+  that run by themselves from screen actions. `SettingChanged` carries
+  the value before (`old`) where the kernel changed it and a plugin
+  hears the event. Breaking:
+  `Contribution::Action` holds a `Box<ActionSpec>`.
+- SDK: inputs of more kinds. Key maps bind `double.<button>`
+  (pressed twice), `double-tap.<zone>`, `tap2` (two fingers),
+  `pinch.<out|in>`, a layer's own zones (`[zones.<layer>] <name> =
+  <left> <top> <width> <height>` in percent, tapped as `tap.<name>`),
+  plugins' `input.<id>` (`Registrar::add_input`, `keys::InputSpec`,
+  listed in `Env::inputs` where the device can make them, with the
+  gestures, `keys::InputKind`) and `gesture.<id>`
+  (`Registrar::add_gesture`, a `keys::GestureRecognizer` that sees the
+  fingers where gestures are the key map's, never under another
+  plugin's guard, and may claim them with `keys::PointerVerdict`). The
+  keys plugin lists them all to bind. A press or tap waits for a second only where
+  something is bound to the double one, so pages still turn as fast as
+  they are tapped. Screens get `GestureKind::DoubleTap` (as a tap where
+  they decline it; only to screens that say `Screen::takes_double_taps`)
+  and `GestureKind::TwoFingerTap`. `Command::Input`
+  raises an input by its name; `Command::SetKeyLayer` (sent with
+  `Cx::set_key_layer`) puts a layer in front of the slot's for the
+  screen that sent it, while it is on top (a book's own bindings); none
+  below a screen that guards the device, and none sent from anywhere
+  but the screen itself. What is held is resolved for
+  the screen it began on. Input filters may
+  `InputVerdict::Cancel` an input (what began with it is forgotten) or
+  `InputVerdict::Replace` it (`InputFilters::filter` says the input
+  a verdict was made for); `InputVerdict` is now non-exhaustive.
+  `Env::last_input` says whether buttons, a finger or a pen came last.
+  `keys::inputs` lists every input a device makes, with `keys::ZONES`,
+  `SWIPES`, `EDGES`, `PINCHES` and `POLICIES`. New settings
+  `core.double-tap-ms`, `core.tap-slop`, `core.swipe-distance`, and
+  `core.frontlight` with `core.frontlight-warmth` where the shell sets
+  the light (`KernelBuilder::frontlight`, `Capabilities::frontlight`,
+  `MenuNeed::Frontlight`).
+- SDK: screens hosted in a screen of one's own, tasks with their own way
+  back. `Env::make_screen` makes any screen plugins
+  added, to host it in a part of a screen (tabs, a split view);
+  `host::ScreenHost` holds it there and passes drawing, input in its
+  part (in its coordinates), events, timers and its showing and closing
+  on to it. `Command::SwitchTask` shows another task, a tab of tabs:
+  the screens open are kept by their ids and params (not in memory)
+  and each task keeps its own way back.
+- SDK: bars that stay across the screens shown.
+  `Registrar::add_chrome(ChromeSpec::new(id, Edge::Bottom, factory))`
+  adds a bar along an edge (`size`, `shown` over which screens, `need`
+  such as a touch screen, `priority` among bars on one edge): an
+  ordinary screen drawn into its strip, which takes the gestures that
+  begin in it, hears every event and stays as screens open and close;
+  the screens get the rest of the screen. No bar shows while a screen
+  guards the device. `Env::content` says the part of the screen a
+  screen is made for, with its place; screens draw and get input from
+  its corner (`Env::within`, `Env::device_within` make the environment
+  for a part). `Canvas::offset` moves what a canvas draws, for a screen
+  drawn into part of the screen. `MenuNeed::met` says whether a device
+  has what a need asks for. Bars live as screens do (`on_show`,
+  `on_timer`, `on_close`, made anew for another size); an overlay shares
+  the bars of the full screen below it, a screen that guards the device
+  has none. Breaking: what a screen asks to redraw
+  (`Cx::request_redraw_area`, `Output::redraw_area`) and an overlay's
+  `Screen::region` are now from the corner of the screen's own part of
+  the screen (`Env::content`), not of the panel; without bars that is the
+  same. `EnvParts` has no `screen_maker`: the kernel sets it with
+  `Env::with_screen_maker` (feature `kernel`, as `ScreenMaker`).
+- Android: the app is now `org.paperpaw.app` (was
+  `io.github.hthoene.paperpaw`), named after the project's own domain
+  before the first release in a store. It installs as a new app beside
+  the old one; books and settings of the old one stay in its own
+  folder.
+- SDK: `layers`, page layers and frames. A layer
+  (`Registrar::add_page_layer`) draws on every page a reader shows,
+  behind the text or over it, with the page's lines and columns
+  (`PageView`); it may reserve room beside the text and hear taps on it
+  (`events::PAGE_LAYER_TAPPED`, also with the buttons). A frame
+  (`Registrar::add_page_frame`) sets pages in columns, chosen with
+  `settings::PAGE_FRAME` (each book may have its own); a screen in
+  columns is one page of the page index. `reading::PageType` has the
+  layers' `rooms` and the frame's `columns`, and lays a page out in them
+  (`PageType::lay_out`), also the settings' preview.
+- Settings: a choice with nothing to choose from (one value) is not
+  listed.
+- SDK: block filters (`TextFilterSpec::block`) know where a block is
+  (`FilterContext`: the book, its language, where the block starts) and
+  may leave it out (`Verdict::Drop`): the reader lays out, searches and
+  shows notes without it. `reading::DroppedRuns` keeps where runs left
+  out end, so they are read once; too many left out in a row are an
+  error, not the end of the section. `FilteredDocument::kept_block_at`
+  gives a block only where it is kept, and `reading::note_text` takes
+  the filtered book: a note whose block is left out shows nothing.
+- SDK: `reading::note_text`, the text a footnote shows;
+  `layout::{Line, wrap_lines, wrap_lines_hyphenated}` (feature
+  `unstable`).
+- Layout: `Style::widows` and `Style::orphans` (`Style::lines_kept`):
+  the fewest lines of a paragraph left alone at the top or bottom of a
+  page; 1 by default, as before. A paragraph that goes on whole takes
+  the heading before it along, also with 1 where its first line does
+  not fit (`layout::VERSION` 6: page indexes are made anew). Standard
+  reading settings `settings::WIDOWS` and `ORPHANS` (advanced, each
+  book may have its own) set them for every reader.
+- Text: `Line` is `#[non_exhaustive]`, made with `Line::new`.
 - SDK: `reading` holds the reader's building blocks for readers of
   one's own: `FilteredDocument`, `PageIndex`, and with the feature
   `unstable` `PageType`, `ReadingFaces`, `EmbeddedFonts`, `StatusRoom`,
@@ -114,7 +292,7 @@ change the plugin SDK.
 - SDK: any plugin reads the words of the page shown
   (`reading::ask_page_words`, answered with `reading::PageWords` by the
   reader while a book is open), not only decorators.
-- SDK: the screen stack, readable and steerable (gap A2).
+- SDK: the screen stack, readable and steerable.
   `Env::stack` lists the open screens (`StackEntry`: screen, slot,
   overlay, key) and `Env::top` the one shown; plugins subscribed to
   `events::SCREEN_SHOWN` hear which comes on top. A screen's `Cx` knows
@@ -734,7 +912,7 @@ change the plugin SDK.
 - Battery: hostile logs no longer overflow, a damaged line loses only
   itself, 3999 mV shows as 4.00 V, and the hours left fit on the X4.
 - Joplin: its menu entries show icons again.
-- Native code plugins as files (ADR 0024, PLANNING P5): a code plugin
+- Native code plugins as files (ADR 0024): a code plugin
   can be a file in its folder on the card (`plugins/<id>/code.ppn`),
   which the Xteink X4 and X4 Pro load at their start, without a new
   firmware: the X4 Pro runs it from PSRAM, the X4 writes it once into
@@ -856,7 +1034,7 @@ change the plugin SDK.
   as bright as the first); 1 % is dimmer than the least light before,
   100 % as bright. `−` and `+` change it a
   percent, a slider moves it further; its colour stays in fives.
-- Reading (PLANNING T1 to T12), after a comparison with CrossPoint,
+- Reading, after a comparison with CrossPoint,
   CrossInk and KOReader:
   - Holding a page button goes a chapter on or back (*Hold a page
     button for the next chapter* under Controls, advanced, turns it off,
@@ -1311,8 +1489,8 @@ change the plugin SDK.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
-  when to unplug, for devices that cannot stop charging by themselves
-  (PLANNING D8). On the X4 the level comes from the battery's voltage,
+  when to unplug, for devices that cannot stop charging by themselves.
+  On the X4 the level comes from the battery's voltage,
   which reads high while charging, and the choice of level says so; the
   X4 Pro's fuel gauge reports it directly. In the rules file the
   trigger is `battery-at 80`.
@@ -1368,7 +1546,7 @@ change the plugin SDK.
   `KernelBuilder::random` (the system's on Android and desktops, the
   chip's on the X4); `files::is_plain_name` and `files::plain_path`
   check names and paths that come from outside.
-- Joplin (PLANNING C15, S1): a book's highlights and notes, once
+- Joplin: a book's highlights and notes, once
   exported, become a note in Joplin, one per book, in a notebook named
   in the settings. Exporting again updates the note, also where it was
   moved to in Joplin; a note whose text was edited in Joplin stays, and
@@ -1392,7 +1570,7 @@ change the plugin SDK.
   `LocalTime::to_seconds` is the way back from
   `LocalTime::from_seconds`; `web::http_date` reads the dates servers
   send (`Last-Modified`, WebDAV's `getlastmodified`).
-- Settings: a live preview above the reading settings (PLANNING §6.7):
+- Settings: a live preview above the reading settings:
   two short paragraphs set exactly as book pages are (the same layout
   engine, type, margins at the sides, justification, indents and
   hyphenation, in the interface's language), following each value at
@@ -1407,7 +1585,7 @@ change the plugin SDK.
   pages show it above the group, and `Widgets::iter` leaves such
   widgets out.
 - Settings: on touch screens, numbers better set by eye are sliders on
-  the settings pages (PLANNING §6.7): the text size, word and line
+  the settings pages: the text size, word and line
   spacing, the margins, the speed of reading aloud, the interface's
   size, row height and margins, the frontlight; with buttons alone they
   keep their compact rows with `−` and `+`. A number changed with the buttons now
@@ -1429,7 +1607,7 @@ change the plugin SDK.
   hear it as `semantics::Role::Slider`. The help texts
   of the margins and the word spacing say more plainly what they do, and
   a test checks that every slider shows its unit.
-- Screens draw without reading the card (PLANNING §12.3, B3). The X4
+- Screens draw without reading the card. The X4
   draws a frame in five bands, and what a screen read or worked out as it
   drew, it did five times over, and again for every frame. Covers on the
   home screen, in the book widgets, on the book information and in OPDS
@@ -1508,7 +1686,7 @@ change the plugin SDK.
   start). Kernel: `Kernel::describe` also tells the notice shown over
   the screens.
 - A plugin store on the device (*More plugins*, in the tools and in the
-  plugin manager, PLANNING O6, ADR 0023): the data plugins of
+  plugin manager, ADR 0023): the data plugins of
   paperpaw.org's plugin library made for this device, PaperPaw version
   and data format, by group as on the website, named and described in
   the language shown, with *Search* (by name and what a plugin does)
@@ -2658,7 +2836,7 @@ change the plugin SDK.
 - *Say what is chosen* (System, where the device speaks): says the row
   or button the buttons move to, with a switch's state, for using
   PaperPaw without looking at the screen.
-- Screens say what they show (PLANNING G11): rows with their text and
+- Screens say what they show: rows with their text and
   focus, buttons, switches and headings, told by the drawing helpers as
   they draw (`Canvas::describe`, `semantics::parts`,
   `Kernel::describe`). The emulator's scripts tap by name

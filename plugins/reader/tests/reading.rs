@@ -743,6 +743,14 @@ fn sixth_page(sets: &[(&str, &str)]) -> (u32, u32) {
 }
 
 #[test]
+fn paragraphs_keep_lines_together_as_set() {
+    // Lines kept together: pages end earlier, where paragraphs break.
+    let standard = sixth_page(&[]);
+    let kept = sixth_page(&[("core.widows", "3"), ("core.orphans", "3")]);
+    assert!(kept < standard, "{kept:?} {standard:?}");
+}
+
+#[test]
 fn the_page_holds_what_its_type_and_margins_leave_room_for() {
     let standard = sixth_page(&[]);
     // Margins at the top and bottom of their own: more lines, or fewer.
@@ -1599,4 +1607,76 @@ fn the_contents_are_a_slot_another_plugin_fills() {
     let params = opened.borrow().clone().expect("opened");
     assert_eq!(params.get(params::PATH), Some(BOOK));
     assert_eq!(params.get(params::OFFSET), Some(at.1.to_string().as_str()));
+}
+
+/// The books a block filter was told of.
+type Told = Rc<RefCell<Vec<String>>>;
+
+/// A plugin that leaves out every paragraph naming the Rabbit.
+struct NoRabbit(Told);
+
+impl Plugin for NoRabbit {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(
+            Id::new_static("norabbit"),
+            "No rabbit",
+            Version::new(0, 1, 0),
+        )
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        use paperpaw_sdk::filters::{TextFilterSpec, Verdict};
+        let told = self.0.clone();
+        r.add_text_filter(TextFilterSpec::block(
+            Id::new_static("norabbit.filter"),
+            "no rabbit",
+            Box::new(move |_, cx, block| {
+                let mut told = told.borrow_mut();
+                if !told.iter().any(|t| t == cx.path) {
+                    told.push(cx.path.to_string());
+                }
+                match block.text.contains("Rabbit") {
+                    true => Verdict::Drop,
+                    false => Verdict::Keep,
+                }
+            }),
+            Box::new(|_| String::from("on")),
+        ))
+    }
+}
+
+#[test]
+fn a_block_filter_leaves_paragraphs_out() {
+    let storage = Shared::default();
+    storage.create_dir("books").unwrap();
+    let text = include_str!("../../../samples/library/books/alice-in-wonderland.txt");
+    storage.write(BOOK, text.as_bytes()).unwrap();
+    let told = Told::default();
+    let asked = WordsAsked::default();
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage.clone())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(paperpaw_plugin_format_txt::TxtFormat)
+        .plugin(Reader)
+        .plugin(NoRabbit(told.clone()))
+        .plugin(Asker(asked.clone()))
+        .build()
+        .unwrap();
+    let effects = kernel.start(Instant(0));
+    let mut reading = Reading {
+        kernel,
+        storage,
+        heard: Heard::default(),
+        now: 0,
+        book: BOOK,
+    };
+    reading.settle(effects);
+    reading.open();
+    for _ in 0..8 {
+        reading.run(core_actions::NEXT_PAGE);
+        reading.run(Id::new_static("asker.ask"));
+        let words = asked.borrow().clone().expect("the reader answered");
+        assert!(!words.text().contains("Rabbit"), "{}", words.text());
+    }
+    assert_eq!(*told.borrow(), [BOOK.to_string()]);
 }

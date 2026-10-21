@@ -102,6 +102,33 @@ impl Registry {
     }
 }
 
+impl paperpaw_sdk::ScreenMaker for Registry {
+    fn make(
+        &self,
+        id: &Id,
+        env: &paperpaw_sdk::Env<'_>,
+        params: &paperpaw_sdk::Params,
+    ) -> Option<alloc::boxed::Box<dyn paperpaw_sdk::Screen>> {
+        let spec = self.screens.get(id)?;
+        Some((spec.factory)(env, params))
+    }
+
+    fn slot_screen(&self, slot: &str) -> Option<&Id> {
+        self.resolve_slot(slot)
+    }
+
+    fn slot_screens(&self, slot: &str) -> Vec<&Id> {
+        let mut screens: Vec<&Id> = Vec::new();
+        for candidate in self.candidates.iter().filter(|c| c.slot.as_str() == slot) {
+            if self.screens.contains_key(&candidate.screen) && !screens.contains(&&candidate.screen)
+            {
+                screens.push(&candidate.screen);
+            }
+        }
+        screens
+    }
+}
+
 /// A plugin's setting before it is defined: built at start, or kept in
 /// the program ([`SettingSpec::fixed`]).
 pub(crate) enum Staged {
@@ -141,8 +168,15 @@ pub(crate) struct Staging {
     pub(crate) setting_groups: Vec<SettingGroupSpec>,
     /// Events, the plugins that hear them, and their handlers.
     pub(crate) subscriptions: Vec<(Id, Id, EventHandler)>,
+    pub(crate) overrides: Vec<(Id, Priority, paperpaw_sdk::ActionParamsHandler)>,
+    pub(crate) action_observers: Vec<paperpaw_sdk::ObserverSpec>,
+    pub(crate) event_observers: Vec<paperpaw_sdk::ObserverSpec>,
     pub(crate) menu_entries: Vec<MenuEntry>,
     pub(crate) menu_sections: Vec<paperpaw_sdk::MenuSection>,
+    pub(crate) menu_placements: Vec<(Id, Id, Id)>,
+    pub(crate) points: Vec<paperpaw_sdk::services::PointSpec>,
+    pub(crate) events: Vec<paperpaw_sdk::services::EventSpec>,
+    pub(crate) menu_hidden: Vec<(Id, Id)>,
     pub(crate) icons: Vec<(Id, Cow<'static, str>)>,
     pub(crate) menu_needs: Vec<(Id, paperpaw_sdk::MenuNeed)>,
     pub(crate) screen_hints: Vec<(Id, paperpaw_sdk::Hints)>,
@@ -156,8 +190,13 @@ pub(crate) struct Staging {
     pub(crate) fixed_presets: Vec<&'static [paperpaw_sdk::presets::Preset]>,
     pub(crate) text_filters: Vec<paperpaw_sdk::filters::TextFilterSpec>,
     pub(crate) decorators: Vec<paperpaw_sdk::decorations::DecoratorSpec>,
+    pub(crate) page_layers: Vec<paperpaw_sdk::layers::PageLayerSpec>,
+    pub(crate) page_frames: Vec<paperpaw_sdk::layers::PageFrameSpec>,
     pub(crate) input_filters: Vec<paperpaw_sdk::filters::InputFilterSpec>,
     pub(crate) refresh_filters: Vec<paperpaw_sdk::filters::RefreshFilterSpec>,
+    pub(crate) chromes: Vec<paperpaw_sdk::chrome::ChromeSpec>,
+    pub(crate) inputs: Vec<paperpaw_sdk::keys::InputSpec>,
+    pub(crate) gestures: Vec<paperpaw_sdk::keys::GestureSpec>,
     /// Jobs: the steps of declared work (see [`paperpaw_sdk::work`]).
     pub(crate) works: Vec<paperpaw_sdk::work::WorkSpec>,
     pub(crate) stylesheets: Vec<Cow<'static, str>>,
@@ -219,7 +258,7 @@ pub(crate) fn stage(
 ) -> Result<(), RegisterError> {
     for contribution in contributions {
         match contribution {
-            Contribution::Action(action) => staging.actions.push(action),
+            Contribution::Action(action) => staging.actions.push(*action),
             Contribution::Screen(screen) => staging.screens.push(screen),
             Contribution::Slot(slot) => staging.slots.push(slot),
             Contribution::SlotBinding {
@@ -283,6 +322,10 @@ pub(crate) fn stage(
             }
             Contribution::MenuEntry(entry) => staging.menu_entries.push(entry),
             Contribution::MenuSection(section) => staging.menu_sections.push(section),
+            Contribution::MenuPlacement {
+                menu, item, after, ..
+            } => staging.menu_placements.push((menu, item, after)),
+            Contribution::MenuHidden { menu, item, .. } => staging.menu_hidden.push((menu, item)),
             Contribution::Icon { item, icon, .. } => staging.icons.push((item, icon)),
             Contribution::MenuNeed { item, need, .. } => staging.menu_needs.push((item, need)),
             Contribution::ScreenHints { screen, hints, .. } => {
@@ -295,8 +338,21 @@ pub(crate) fn stage(
             Contribution::StatusLine(line) => staging.status_lines.push(line),
             Contribution::TextFilter(filter) => staging.text_filters.push(filter),
             Contribution::Decorator(decorator) => staging.decorators.push(*decorator),
+            Contribution::PageLayer(layer) => staging.page_layers.push(*layer),
+            Contribution::PageFrame(frame) => staging.page_frames.push(*frame),
             Contribution::InputFilter(filter) => staging.input_filters.push(filter),
             Contribution::RefreshFilter(filter) => staging.refresh_filters.push(filter),
+            Contribution::Chrome(chrome) => staging.chromes.push(*chrome),
+            Contribution::Input(input) => staging.inputs.push(input),
+            Contribution::ActionOverride(over) => {
+                let over = *over;
+                staging
+                    .overrides
+                    .push((over.action, over.priority, over.handler));
+            }
+            Contribution::ActionObserver(observer) => staging.action_observers.push(*observer),
+            Contribution::EventObserver(observer) => staging.event_observers.push(*observer),
+            Contribution::Gesture(gesture) => staging.gestures.push(*gesture),
             Contribution::Work(spec) => staging.works.push(*spec),
             Contribution::Widget(widget) => staging.widgets.push(*widget),
             Contribution::SetupStep(step) => staging.setup_steps.push(*step),
@@ -307,6 +363,8 @@ pub(crate) fn stage(
                 .push((id, paperpaw_sdk::services::Service::any(service))),
             Contribution::Published { id, service, .. } => staging.services.push((id, service)),
             Contribution::ToPoint { point, text, .. } => staging.contributions.push((point, text)),
+            Contribution::Point(point) => staging.points.push(*point),
+            Contribution::EventDeclared(event) => staging.events.push(*event),
             Contribution::Translations(source) => staging.catalogs.push(catalog(source)?),
             // A kind of a newer SDK than this kernel knows: said, not lost.
             other => {

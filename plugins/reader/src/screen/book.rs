@@ -17,6 +17,9 @@ pub(super) struct Book {
     pub(super) page: Page,
     /// The words of the page, once measured (see [`Book::words`]).
     pub(super) words: core::cell::OnceCell<Vec<WordBox>>,
+    /// Its lines as page layers see them, while there are layers (see
+    /// `Book::lines`).
+    pub(super) lines: core::cell::OnceCell<Vec<paperpaw_sdk::layers::LineBox>>,
     /// The starts of the pages turned forward to this one, one after
     /// another (none before a jump).
     pub(super) history: Vec<Locator>,
@@ -74,6 +77,8 @@ pub(super) struct Book {
     /// asked for: the page's start and their signature.
     pub(super) decorated: Vec<paperpaw_sdk::decorations::Mark>,
     pub(super) decorated_for: Option<(Locator, u64)>,
+    /// Where runs of blocks the text filters leave out end, read once.
+    pub(super) dropped: paperpaw_sdk::reading::DroppedRuns,
 }
 
 /// What the buttons choose on a page, as links are chosen: a link, or a
@@ -84,6 +89,8 @@ pub(super) enum Target {
     Link(usize),
     /// Of [`Book::decorated`].
     Mark(usize),
+    /// The room of a page layer that hears taps, of the type's `rooms`.
+    Layer(usize),
 }
 
 /// Remembers `path` as the book read last (reopened at start-up).
@@ -147,6 +154,7 @@ impl Book {
             index_stopped: false,
             page: Page::default(),
             words: core::cell::OnceCell::new(),
+            lines: core::cell::OnceCell::new(),
             history: Vec::new(),
             saved_at: None,
             unsaved: false,
@@ -174,6 +182,7 @@ impl Book {
             finished: false,
             decorated: Vec::new(),
             decorated_for: None,
+            dropped: paperpaw_sdk::reading::DroppedRuns::new(),
         };
         book.chapter_marks = book.chapter_marks(env);
         book.embedded = Embedded::load(env, book.document.as_ref());
@@ -308,7 +317,10 @@ impl Book {
             return;
         };
         self.typography = typography(env, &font, &self.language, self.document.whole_pages());
+        // The filters may leave out other blocks now.
+        self.dropped.clear();
         self.words = core::cell::OnceCell::new();
+        self.lines = core::cell::OnceCell::new();
         self.xpointer = None;
         let start = self.line_start(env, self.page.start);
         if let Ok(page) = self.layout(env, start) {
@@ -323,6 +335,17 @@ impl Book {
         self.chapter_first.set(None);
         self.indexing = None;
         self.index_stopped = false;
+    }
+
+    /// Whether the page's type is another now than the pages were laid
+    /// out in (a frame chosen, a layer's room); asked only where there
+    /// are layers or frames.
+    pub(super) fn retyped(&self, env: &Env<'_>) -> bool {
+        !env.page_layers.is_idle()
+            && self.font(env).is_some_and(|font| {
+                let whole = self.document.whole_pages();
+                typography(env, &font, &self.language, whole).key != self.typography.key
+            })
     }
 
     /// Decodes the pictures of the page shown that are not yet: books
@@ -348,23 +371,33 @@ impl Book {
     }
 
     /// The start of the line `at` is in, as this book is laid out now
-    /// (see `layout::line_start`).
+    /// (see `layout::line_start`); in columns as the first one breaks
+    /// lines.
     pub(super) fn line_start(&self, env: &Env<'_>, at: Locator) -> Locator {
-        self.laid_out(env, |cx| line_start(cx, at).unwrap_or(at))
+        let width = self.typography.line_width();
+        self.laid_out(env, width, |cx| line_start(cx, at).unwrap_or(at))
             .unwrap_or(at)
     }
 
-    /// The page that starts at `at`, as this book is laid out now.
+    /// The page that starts at `at`, as this book is laid out now: in
+    /// columns where a plugin's frame sets them (see
+    /// `paperpaw_sdk::layers`), one page of the page index for all.
     pub(super) fn layout(&self, env: &Env<'_>, at: Locator) -> Result<Page, DocumentError> {
-        let height = self.typography.height;
-        self.laid_out(env, |cx| layout_page(cx, at, height))
-            .unwrap_or_else(|| Ok(Page::default()))
+        self.typography.lay_out(at, |width, height, at| {
+            self.laid_out(env, width, |cx| layout_page(cx, at, height))
+                .unwrap_or_else(|| Ok(Page::default()))
+        })
     }
 
-    /// `f` with the context this book is laid out in now: its type, its
-    /// faces and hyphenation, the text through the plugins' filters;
-    /// `None` without the reading font.
-    fn laid_out<R>(&self, env: &Env<'_>, f: impl FnOnce(&LayoutContext<'_>) -> R) -> Option<R> {
+    /// `f` with the context this book is laid out in now, its lines
+    /// `width` wide: its type, its faces and hyphenation, the text through
+    /// the plugins' filters; `None` without the reading font.
+    fn laid_out<R>(
+        &self,
+        env: &Env<'_>,
+        width: f32,
+        f: impl FnOnce(&LayoutContext<'_>) -> R,
+    ) -> Option<R> {
         let t = &self.typography;
         let faces = Faces::new(env, t, self.embedded.as_ref())?;
         let patterns = t
@@ -376,8 +409,10 @@ impl Book {
                 patterns.hyphenate(word, out);
             }
         };
-        let filtered = FilteredDocument::new(self.document.as_ref(), env);
-        let cx = LayoutContext::new(&filtered, env.storage, t.width, &t.style, &faces)
+        let filtered = FilteredDocument::new(self.document.as_ref(), env)
+            .in_book(&self.path, &self.language)
+            .remembering(&self.dropped);
+        let cx = LayoutContext::new(&filtered, env.storage, width, &t.style, &faces)
             .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
         Some(f(&cx))
     }
@@ -553,6 +588,7 @@ impl Book {
         }
         self.page = page;
         self.words = core::cell::OnceCell::new();
+        self.lines = core::cell::OnceCell::new();
         self.xpointer = None;
         self.prepare_images(&env);
         self.update_chapter(&env);
@@ -688,7 +724,17 @@ impl Book {
                 .map(|(i, m)| (m.start, Target::Mark(i))),
         );
         order.sort_by_key(|(at, _)| *at);
-        order.into_iter().map(|(_, target)| target).collect()
+        let mut targets: Vec<Target> = order.into_iter().map(|(_, target)| target).collect();
+        // Then the rooms of layers that hear taps.
+        targets.extend(
+            self.typography
+                .rooms
+                .iter()
+                .enumerate()
+                .filter(|(_, (id, _))| env.page_layers.on(env).any(|l| l.taps && l.id == *id))
+                .map(|(i, _)| Target::Layer(i)),
+        );
+        targets
     }
 
     /// Where target `target` is on the page.
@@ -700,6 +746,7 @@ impl Book {
                 .get(i)
                 .map(|l| (Locator::new(section, l.start), Locator::new(section, l.end))),
             Target::Mark(i) => self.decorated.get(i).map(|m| (m.start, m.end)),
+            Target::Layer(_) => None,
         }
     }
 
@@ -707,34 +754,10 @@ impl Book {
     /// block there and the ones after it, up to a heading or a few hundred
     /// characters.
     pub(super) fn note_text(&self, env: &Env<'_>, href: &str) -> Option<String> {
-        let mut at = self.document.link_target(env.storage, href)?;
-        let mut text = String::new();
         // As the page shows it.
-        let filtered = FilteredDocument::new(self.document.as_ref(), env);
-        for _ in 0..4 {
-            let Ok(Some(block)) = filtered.block_at(env.storage, at) else {
-                break;
-            };
-            if matches!(block.kind, paperpaw_sdk::document::BlockKind::Heading(_))
-                && !text.is_empty()
-            {
-                break;
-            }
-            let part = block.text.trim();
-            if !part.is_empty() {
-                if !text.is_empty() {
-                    text.push(' ');
-                }
-                text.push_str(part);
-            }
-            // A note that is only its number goes on in the next block.
-            if text.chars().count() > 300 || text.chars().count() > 12 && block.end > block.start {
-                break;
-            }
-            at = Locator::new(at.section, block.end);
-        }
-        let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
-        (!text.is_empty()).then_some(text)
+        let filtered =
+            FilteredDocument::new(self.document.as_ref(), env).in_book(&self.path, &self.language);
+        paperpaw_sdk::reading::note_text(&filtered, env.storage, href)
     }
 
     /// The link `word` is part of, if any.

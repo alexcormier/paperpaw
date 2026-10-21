@@ -5,6 +5,7 @@ use core::ops::Range;
 
 /// A line produced by [`wrap_lines`].
 #[derive(Debug, Clone, PartialEq)]
+#[non_exhaustive]
 pub struct Line {
     /// Byte range of the line's text, without the whitespace it broke at.
     pub range: Range<usize>,
@@ -17,6 +18,19 @@ pub struct Line {
     /// Whether the line ends inside a hyphenated word: draw a hyphen
     /// after the text.
     pub hyphen: bool,
+}
+
+impl Line {
+    /// Made of what it holds.
+    pub fn new(range: Range<usize>, width: f32, spaces: usize, last: bool, hyphen: bool) -> Self {
+        Self {
+            range,
+            width,
+            spaces,
+            last,
+            hyphen,
+        }
+    }
 }
 
 /// Finds hyphenation points: calls the second argument with the byte

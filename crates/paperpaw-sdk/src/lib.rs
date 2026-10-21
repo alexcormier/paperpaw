@@ -37,6 +37,7 @@ mod action;
 pub mod annotations;
 pub mod ask;
 pub mod builtin;
+pub mod chrome;
 pub mod collections;
 mod command;
 pub mod contribution;
@@ -50,11 +51,16 @@ pub mod firmware;
 mod fonts;
 mod formats;
 mod gesture;
+pub mod host;
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use screen::ScreenMaker;
 mod hyphenation;
 pub mod icons;
 mod id;
 pub mod install;
 pub mod keys;
+pub mod layers;
 pub mod library;
 pub mod logo;
 mod memory_storage;
@@ -89,7 +95,10 @@ pub mod wifi;
 pub mod words;
 pub mod work;
 
-pub use action::{ActionHandler, ActionHint, ActionSpec, Actions};
+pub use action::{
+    ActionHandler, ActionHint, ActionOverride, ActionParamsHandler, ActionSpec, Actions, Observer,
+    ObserverSpec,
+};
 pub use command::{
     Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,
     http_params, server_params, socket_params, speech_params,
@@ -168,6 +177,9 @@ pub mod layout {
         Face, Hyphenate, LayoutContext, LineRun, Page, PageImage, PageLine, Style, Typesetter,
         VERSION, layout_page, line_start,
     };
+    /// Lines broken as the layout breaks them (see `paperpaw-text`): for
+    /// laying out text of one's own the way pages are, e.g. a note.
+    pub use paperpaw_text::{Line, wrap_lines, wrap_lines_hyphenated};
 }
 
 /// Streaming XML/XHTML tokenizer (see `paperpaw-xml`) for format plugins.

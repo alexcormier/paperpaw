@@ -2,7 +2,7 @@
 
 - Status: Accepted; implemented in the kernel, the SDK, the power plugin
   and the first-party plugins; the shells' part and the base fixes on
-  the devices still to come (PLANNING W6)
+  the devices still to come
 - Date: 2026-10-20; jobs, timers by key, HTTP and servers (G2 of
   the SDK gaps) folded in the same day
 

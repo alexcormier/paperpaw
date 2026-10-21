@@ -17,7 +17,7 @@ mod index;
 #[cfg(feature = "unstable")]
 mod typeset;
 
-pub use filtered::FilteredDocument;
+pub use filtered::{DroppedRuns, FilteredDocument};
 pub use index::PageIndex;
 #[cfg(feature = "unstable")]
 pub use typeset::{
@@ -158,6 +158,42 @@ impl EventData for PageWords {
             .words(words),
         )
     }
+}
+
+/// The text at the target of link `href` of `document` (the book as the
+/// reader shows it, through the filters), as a footnote shows it: the
+/// block there and the ones after it, up to a heading, a block left out
+/// or a few hundred characters, on one line; `None` where the link leads
+/// nowhere in the book, to a block left out or to no text.
+pub fn note_text(
+    document: &FilteredDocument<'_, '_>,
+    storage: &dyn crate::Storage,
+    href: &str,
+) -> Option<String> {
+    let mut at = document.document.link_target(storage, href)?;
+    let mut text = String::new();
+    for _ in 0..4 {
+        let Ok(Some(block)) = document.kept_block_at(storage, at) else {
+            break;
+        };
+        if matches!(block.kind, crate::document::BlockKind::Heading(_)) && !text.is_empty() {
+            break;
+        }
+        let part = block.text.trim();
+        if !part.is_empty() {
+            if !text.is_empty() {
+                text.push(' ');
+            }
+            text.push_str(part);
+        }
+        // A note that is only its number goes on in the next block.
+        if text.chars().count() > 300 || text.chars().count() > 12 && block.end > block.start {
+            break;
+        }
+        at = Locator::new(at.section, block.end);
+    }
+    let text = text.split_whitespace().collect::<Vec<_>>().join(" ");
+    (!text.is_empty()).then_some(text)
 }
 
 /// How books are opened for reading: with their own styles as

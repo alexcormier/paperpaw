@@ -49,8 +49,11 @@ pub paperpaw_layout::PageLine::x: f32
 pub paperpaw_layout::Style::em: f32
 pub paperpaw_layout::Style::indent: f32
 pub paperpaw_layout::Style::justify: bool
+pub paperpaw_layout::Style::orphans: u8
 pub paperpaw_layout::Style::paragraph_spacing: f32
+pub paperpaw_layout::Style::widows: u8
 impl paperpaw_layout::Style
+pub const fn paperpaw_layout::Style::lines_kept(self, u8, u8) -> Self
 pub const fn paperpaw_layout::Style::new(f32, f32, f32, bool) -> Self
 pub const paperpaw_layout::VERSION: u32
 pub trait paperpaw_layout::Typesetter

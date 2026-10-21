@@ -82,9 +82,14 @@ impl Widget for Sample {
         };
         // Through the text filters, as books are.
         let filtered = FilteredDocument::new(&document, env);
-        let cx = LayoutContext::new(&filtered, env.storage, t.width, &t.style, &faces)
-            .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
-        let page = layout_page(&cx, Locator::new(0, 0), t.height).unwrap_or_default();
+        // In the frame chosen, as book pages are.
+        let page = t
+            .lay_out(Locator::new(0, 0), |width, height, at| {
+                let cx = LayoutContext::new(&filtered, env.storage, width, &t.style, &faces)
+                    .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
+                layout_page(&cx, at, height)
+            })
+            .unwrap_or_default();
         self.lines = page.lines;
         self.typography = Some(t);
         self.shown = shown;

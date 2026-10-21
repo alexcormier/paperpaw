@@ -349,6 +349,12 @@ pub mod events {
         pub struct SettingChanged {
             pub id: Id,
         }
+        optional {
+            /// Its value before, as written in `paperpaw.ini`, where the
+            /// kernel changed it and a plugin subscribes to the event or
+            /// observes events (it is not made for nobody).
+            pub old: String,
+        }
     }
 
     crate::event_data! {
@@ -578,6 +584,33 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// The room of a page layer that was tapped, or chosen with the
+        /// buttons ([`PAGE_LAYER_TAPPED`]).
+        pub struct PageLayerTapped {
+            pub layer: Id,
+            /// The book.
+            pub path: String,
+            /// Where: the point tapped, the room's middle when chosen with
+            /// the buttons.
+            pub x: i32,
+            pub y: i32,
+        }
+        optional {
+            /// The start of the line beside it, if any (see
+            /// [`PageView::line_at`](crate::layers::PageView::line_at)).
+            pub section: u32,
+            pub offset: u32,
+        }
+    }
+
+    impl PageLayerTapped {
+        /// The start of the line beside it, if any.
+        pub fn line(&self) -> Option<Locator> {
+            Some(Locator::new(self.section?, self.offset?))
+        }
+    }
+
+    crate::event_data! {
         /// A book's notes, exported ([`NOTES_EXPORTED`]).
         pub struct NotesExported {
             /// The file written (Markdown).
@@ -689,6 +722,10 @@ pub mod events {
     /// ([`DecorationTapped`]); sent for decorators that take taps (see
     /// [`decorations`](crate::decorations)), whose plugin answers.
     pub const DECORATION_TAPPED: Event<DecorationTapped> = Event::new("core.decoration-tapped");
+    /// The room of a page layer was tapped, or chosen with the buttons
+    /// ([`PageLayerTapped`]); sent for layers that take taps (see
+    /// [`layers`](crate::layers)), whose plugin answers.
+    pub const PAGE_LAYER_TAPPED: Event<PageLayerTapped> = Event::new("core.page-layer-tapped");
     /// Skimming asks the reader to go somewhere in the book ([`Skim`]).
     pub const SKIM: Event<Skim> = Event::new("core.skim");
     /// Where the book being skimmed is now ([`Skimmed`]): the reader tells
@@ -1014,6 +1051,18 @@ pub mod settings {
     pub const NOTICE_SECONDS: Setting<i64> = Setting::new("core.notice-seconds");
     /// Milliseconds a button or finger must be held for a long press.
     pub const LONG_PRESS_MS: Setting<i64> = Setting::new("core.long-press-ms");
+    /// Milliseconds within which a second tap or press makes a double tap
+    /// or press, where something is bound to one.
+    pub const DOUBLE_TAP_MS: Setting<i64> = Setting::new("core.double-tap-ms");
+    /// How far, in millimetres, a finger may move and still tap.
+    pub const TAP_SLOP: Setting<i64> = Setting::new("core.tap-slop");
+    /// How far, in millimetres, a finger must move to swipe.
+    pub const SWIPE_DISTANCE: Setting<i64> = Setting::new("core.swipe-distance");
+    /// How bright the front light is, in percent, where the device has one
+    /// it lets PaperPaw set ([`Capabilities::frontlight`](crate::Capabilities)).
+    pub const FRONTLIGHT: Setting<i64> = Setting::new("core.frontlight");
+    /// How warm the front light is, in percent (0 cold, 100 warm).
+    pub const FRONTLIGHT_WARMTH: Setting<i64> = Setting::new("core.frontlight-warmth");
     /// Base size of user interface text in points; UI metrics scale with it.
     pub const UI_SIZE: Setting<i64> = Setting::new("core.ui-size");
     /// The active key map preset (see [`keymap_presets`](super::keymap_presets)).
@@ -1054,6 +1103,12 @@ pub mod settings {
     pub const INDENT: Setting<bool> = Setting::new("core.indent");
     /// Space between paragraphs.
     pub const PARAGRAPH_SPACING: Setting<bool> = Setting::new("core.paragraph-spacing");
+    /// The fewest lines of a paragraph left alone at the top of a page
+    /// (1 to 4; 1: as they fall), see
+    /// [`layout::Style::widows`](crate::layout::Style).
+    pub const WIDOWS: Setting<i64> = Setting::new("core.widows");
+    /// The same at the bottom of a page.
+    pub const ORPHANS: Setting<i64> = Setting::new("core.orphans");
     /// The book's own styles (an EPUB's CSS), see
     /// [`OpenOptions::publisher_styles`](crate::OpenOptions).
     pub const PUBLISHER_STYLES: Setting<bool> = Setting::new("core.publisher-styles");
@@ -1062,6 +1117,12 @@ pub mod settings {
     pub const FOOTNOTES: Setting<Text> = Setting::new("core.footnotes");
     pub const FOOTNOTES_POPUP: &str = "core.footnotes.popup";
     pub const FOOTNOTES_JUMP: &str = "core.footnotes.jump";
+    /// The frame that sets book pages in columns (see
+    /// [`layers`](crate::layers)): [`PAGE_FRAME_SINGLE`] or the id of a
+    /// plugin's frame; each book may have its own ([`SCOPE_ONLY`]).
+    pub const PAGE_FRAME: Setting<Text> = Setting::new("core.page-frame");
+    /// [`PAGE_FRAME`]: the text in one column.
+    pub const PAGE_FRAME_SINGLE: &str = "core.page-frame.single";
     /// The font of the status lines while reading
     /// ([`fonts::STATUS`](super::fonts::STATUS)): [`STATUS_FONT_UI`],
     /// [`STATUS_FONT_BOOK`] or a font family's name.

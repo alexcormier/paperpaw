@@ -160,6 +160,15 @@ impl KernelBuilder {
         self
     }
 
+    /// The shell sets the device's front light as the settings
+    /// [`settings::FRONTLIGHT`](core_settings::FRONTLIGHT) and
+    /// [`settings::FRONTLIGHT_WARMTH`](core_settings::FRONTLIGHT_WARMTH)
+    /// say; without, they are not offered.
+    pub fn frontlight(mut self, settable: bool) -> Self {
+        self.caps.frontlight = settable;
+        self
+    }
+
     /// PaperPaw loads native code plugins (see
     /// [`paperpaw_sdk::native`]): `loader` loads the code of each switched
     /// on at the start, files fit for `native` (which plugins see as
@@ -387,6 +396,7 @@ impl KernelBuilder {
         caps.button_row = !self.button_row.is_empty();
         Ok(Kernel {
             shared: Shared {
+                registry: Registry::default(),
                 meter,
                 device: self.device,
                 settings: Settings::new(),
@@ -405,6 +415,7 @@ impl KernelBuilder {
                 services: paperpaw_sdk::services::Services::new(),
                 text_filters: paperpaw_sdk::filters::TextFilters::new(),
                 decorators: paperpaw_sdk::decorations::Decorators::new(),
+                page_layers: paperpaw_sdk::layers::PageLayers::new(),
                 input_filters: paperpaw_sdk::filters::InputFilters::new(),
                 refresh_filters: paperpaw_sdk::filters::RefreshFilters::new(),
                 stylesheets: Vec::new(),
@@ -420,7 +431,10 @@ impl KernelBuilder {
                 reader: false,
                 clipboard: String::new(),
                 system_clipboard: false,
+                last_input: paperpaw_sdk::keys::InputMode::default(),
+                inputs: Vec::new(),
                 stack: Vec::new(),
+                content: Rect::new(0, 0, display.width, display.height),
                 slots: Vec::new(),
                 screens: Vec::new(),
                 font_dirs: Vec::new(),
@@ -445,6 +459,8 @@ impl KernelBuilder {
                 screenshot: None,
                 mark: None,
                 refresh: RefreshPolicy::default(),
+                deferred: None,
+                defers: 0,
             },
             input: gestures::InputState {
                 recognizer: Recognizer::default(),
@@ -457,6 +473,11 @@ impl KernelBuilder {
                 dropped_buttons: Vec::new(),
                 dropped_pointers: Vec::new(),
                 swapped: Vec::new(),
+                pending: None,
+                last_tap: None,
+                recognizers: Vec::new(),
+                pressed_on: None,
+                thresholds: core::cell::Cell::new(None),
             },
             io: network::IoState {
                 http: io::http::Http::for_memory(self.device.memory),
@@ -471,11 +492,15 @@ impl KernelBuilder {
                 focus_spoken: false,
             },
             keys: plugins::KeySources::default(),
+            chromes: Vec::new(),
+            chrome_strips: Vec::new(),
             stylesheet_owners: Vec::new(),
             timing: drawing::Timing::default(),
             framebuffer,
-            registry: Registry::default(),
             subscriptions: Vec::new(),
+            offered_down_to: 0,
+            action_observers: Vec::new(),
+            event_observers: Vec::new(),
             show_pending: false,
             notice: None,
             works: work::Queue::new(match self.device.memory {
@@ -491,8 +516,11 @@ impl KernelBuilder {
             busy_mark: self.busy_mark,
             withheld: Vec::new(),
             withheld_trusted: Vec::new(),
+            withheld_own: Vec::new(),
             trusted: Vec::new(),
             from_guard: false,
+            from_guard_own: false,
+            own_trusted: Vec::new(),
             held_notice: None,
             last_activity: Instant(0),
             shown_since: Instant(0),
@@ -500,6 +528,8 @@ impl KernelBuilder {
             screens_changed: false,
             preview_owner: None,
             next_serial: 0,
+            task: None,
+            tasks: Vec::new(),
             config_unreadable: false,
             secrets_unreadable: false,
             plugin_defaults: Vec::new(),
@@ -598,13 +628,16 @@ impl Kernel {
             }
             // One at a time: loaded, registered, its files let go.
             for folder in folders {
-                let plugin = match data_plugin::load_folder(storage.as_ref(), &folder) {
+                let plugin = match data_plugin::load_folder(&storage, &folder) {
                     Ok(plugin) => plugin,
                     Err(problem) => {
                         self.warn_runtime(problem);
                         continue;
                     }
                 };
+                for problem in plugin.take_problems() {
+                    self.warn_runtime(problem);
+                }
                 if disabled
                     .iter()
                     .any(|id| id == plugin.manifest().id.as_str())
@@ -647,8 +680,8 @@ impl Kernel {
         self.keys.device = source;
     }
 
-    /// The choices of settings that plugins add to: key map presets and
-    /// reading fonts.
+    /// The choices of settings that plugins add to: key map presets,
+    /// reading fonts and page frames.
     pub(crate) fn offer_choices(&mut self) {
         let mut presets: Vec<Cow<'static, str>> =
             alloc::vec![Cow::Borrowed(keymap_presets::STANDARD_NAME)];
@@ -681,6 +714,17 @@ impl Kernel {
         self.shared
             .settings
             .set_choices(core_settings::STATUS_FONT.as_str(), status);
+        let mut frames: Vec<Cow<'static, str>> =
+            alloc::vec![Cow::Borrowed(core_settings::PAGE_FRAME_SINGLE)];
+        frames.extend(
+            self.shared
+                .page_layers
+                .frames()
+                .map(|id| Cow::Owned(id.as_str().to_string())),
+        );
+        self.shared
+            .settings
+            .set_choices(core_settings::PAGE_FRAME.as_str(), frames);
     }
 
     /// The device's defaults, then the plugins' (e.g. themes), which win:
@@ -693,6 +737,21 @@ impl Kernel {
             }
         }
         for (plugin, id, value) in mem::take(&mut self.plugin_defaults) {
+            // A setting that keeps the device safe takes no other plugin's
+            // default.
+            let guarded = self
+                .shared
+                .settings
+                .spec(id.as_str())
+                .is_some_and(|spec| spec.guarded);
+            if guarded && id.namespace() != plugin.as_str() {
+                self.warn(
+                    WarningSource::Plugin(plugin),
+                    None,
+                    format!("default for `{id}`: it keeps the device safe; not taken"),
+                );
+                continue;
+            }
             if let Err(error) = self
                 .shared
                 .settings
@@ -728,8 +787,9 @@ impl Kernel {
     /// the row of hints as tall as the first screen is made for.
     fn settle(&mut self) {
         self.shrink_to_fit();
-        self.shared.slots = self.registry.bound_slots();
+        self.shared.slots = self.shared.registry.bound_slots();
         self.shared.screens = self
+            .shared
             .registry
             .screens
             .iter()
