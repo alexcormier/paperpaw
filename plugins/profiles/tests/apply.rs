@@ -333,7 +333,7 @@ fn renaming_cleans_the_name_and_a_name_in_use_is_refused() {
     device.open();
     device.add();
     device.hold("Profile 1");
-    assert_eq!(device.on_top(), Some("profiles.choice"));
+    assert_eq!(device.on_top(), Some("core.choice-dialog"));
     device.tap("Rename");
     assert_eq!(device.on_top(), Some("keyboard.screen"));
     device.run(actions::BACK);

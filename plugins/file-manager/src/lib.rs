@@ -27,7 +27,7 @@ use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, events, groups, menus, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
-use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::choice::{self};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
@@ -46,7 +46,6 @@ pub const OPEN: Id = Id::new_static("file-manager.open");
 /// Shows files and folders starting with `.`.
 pub const HIDDEN: Setting<bool> = Setting::new("file-manager.hidden");
 const SCREEN: Id = Id::new_static("file-manager.browser");
-const CHOICE: Id = Id::new_static("file-manager.choice");
 /// Replies of the choice overlay and the keyboard.
 const CHOSEN: Event<choice::Picked> = Event::new("file-manager.chosen");
 const RENAMED: Event<Typed> = Event::new("file-manager.renamed");
@@ -104,11 +103,6 @@ impl Plugin for FileManager {
             SCREEN,
             "file-manager.title",
             Box::new(|env, params| Box::new(Browser::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "file-manager.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "file-manager.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
@@ -346,14 +340,12 @@ impl Browser {
             options.push("open");
         }
         options.extend(["rename", "move", "copy", "delete"]);
-        cx.command(choice::open(
-            CHOICE,
-            &CHOSEN,
-            &entry.name,
-            &path,
-            OPTION_LABELS,
-            &options,
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(&entry.name, &CHOSEN)
+                .about(&path)
+                .options(OPTION_LABELS, &options)
+                .command(),
+        );
     }
 
     fn press(&mut self, button: Button, cx: &mut Cx<'_, '_>) {
@@ -434,14 +426,12 @@ impl Browser {
                 let title = env
                     .i18n
                     .format("file-manager.delete-question", &[("name", Arg::Str(&name))]);
-                cx.command(choice::open(
-                    CHOICE,
-                    &CHOSEN,
-                    &title,
-                    path,
-                    OPTION_LABELS,
-                    &["delete-yes", "cancel"],
-                ));
+                cx.command(
+                    paperpaw_sdk::ask::choice(&title, &CHOSEN)
+                        .about(path)
+                        .options(OPTION_LABELS, &["delete-yes", "cancel"])
+                        .command(),
+                );
             }
             "delete-yes" => {
                 // The books in it, said gone once it is: what is kept

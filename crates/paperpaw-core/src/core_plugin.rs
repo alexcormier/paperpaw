@@ -366,6 +366,14 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
             Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, &params))
         }),
     ))?;
+    // The choice every plugin asks (`ask::choice`), unless another
+    // screen fills the slot.
+    r.add_screen(ScreenSpec::new(
+        screens::CHOICE,
+        "core.choice",
+        Box::new(|env, params| Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))),
+    ))?;
+    r.bind_slot(slots::CHOICE, screens::CHOICE, Priority::FALLBACK)?;
     r.add_screen(ScreenSpec::new(
         screens::PLACEHOLDER,
         "core.screen.placeholder",

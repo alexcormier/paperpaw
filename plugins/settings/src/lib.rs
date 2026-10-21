@@ -52,7 +52,7 @@ use paperpaw_sdk::builtin::{actions, events, groups, menus, params, setting_sect
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::Setting;
-use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::choice::{self};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::widgets::Widget;
 use paperpaw_sdk::{ActionSpec, MenuEntry};
@@ -79,8 +79,6 @@ pub const ADVANCED: Setting<bool> = Setting::new("settings.advanced");
 /// `id` and `text`).
 const TEXT_ENTERED: Event<Typed> = Event::new("settings.text-entered");
 
-/// Asks before settings are reset.
-const CHOICE: Id = Id::new_static("settings.choice");
 /// The answer: the group reset (its id; empty for all) and the option.
 const CHOSEN: Event<choice::Picked> = Event::new("settings.chosen");
 
@@ -148,11 +146,6 @@ impl Plugin for SettingsPlugin {
             Box::new(|env, _| Box::new(themes::Themes::new(env))),
         ))?;
         r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "settings.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
             CHOOSE_SCREEN,
             "settings.title",
             Box::new(|env, params| {
@@ -215,14 +208,10 @@ fn ask_reset(env: &Env<'_>, group: Option<(&Id, &str)>) -> Command {
         None => env.i18n.tr("settings.reset-all.question").to_string(),
     };
     let context = group.map_or("", |(id, _)| id.as_str());
-    choice::open(
-        CHOICE,
-        &CHOSEN,
-        &question,
-        context,
-        "settings.option.",
-        &["reset", "cancel"],
-    )
+    paperpaw_sdk::ask::choice(&question, &CHOSEN)
+        .about(context)
+        .options("settings.option.", &["reset", "cancel"])
+        .command()
 }
 
 /// Resets the settings `reset` chose: of its group, or all but the

@@ -244,7 +244,7 @@ sort = files.sort.name
     action(&mut kernel, "core.confirm");
     assert_eq!(
         kernel.active_screen().map(|id| id.as_str()),
-        Some("files.list.show")
+        Some("core.choice-dialog")
     );
     // Unread: no book was opened.
     action(&mut kernel, "core.down");

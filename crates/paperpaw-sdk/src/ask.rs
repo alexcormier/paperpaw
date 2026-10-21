@@ -31,6 +31,7 @@ use crate::command::Command;
 use crate::event::Event;
 use crate::params::Params;
 use crate::replies::{Chosen, Typed};
+use crate::ui::choice::Picked;
 
 /// A question for text (see [`text`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -132,5 +133,62 @@ impl FolderQuestion {
     /// The command that asks.
     pub fn command(self) -> Command {
         Command::OpenSlot(slots::CHOOSE_FOLDER, self.params)
+    }
+}
+
+/// A question with a few options (see [`choice`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use = "a question is asked with its command()"]
+pub struct ChoiceQuestion {
+    params: Params,
+}
+
+/// Asks to choose one of a few options, under `title` (already
+/// translated); the option chosen comes as `reply`, nothing when the
+/// reader goes back. Asked on the screen of slot
+/// [`CHOICE`](crate::builtin::slots::CHOICE):
+///
+/// ```
+/// use paperpaw_sdk::ask;
+/// use paperpaw_sdk::event::Event;
+/// use paperpaw_sdk::ui::choice::Picked;
+///
+/// const CHOSEN: Event<Picked> = Event::new("demo.chosen");
+/// let command = ask::choice("Delete “a.epub”?", &CHOSEN)
+///     .about("books/a.epub")
+///     .options("demo.option.", &["delete", "cancel"])
+///     .command();
+/// // r.on(CHOSEN, |env, picked, out| { picked.path, picked.option … })
+/// # let _ = command;
+/// ```
+pub fn choice(title: impl Into<String>, reply: &Event<Picked>) -> ChoiceQuestion {
+    ChoiceQuestion {
+        params: Params::new()
+            .with(params::TITLE, title)
+            .with(params::REPLY, reply.as_str()),
+    }
+}
+
+impl ChoiceQuestion {
+    /// What it is about, e.g. a file's path: it comes back as
+    /// [`Picked::path`].
+    pub fn about(mut self, context: impl Into<String>) -> Self {
+        self.params.set(params::PATH, context);
+        self
+    }
+
+    /// The options, each shown as the translation of `labels` followed
+    /// by the option (e.g. `my.option.` and `delete`).
+    pub fn options(mut self, labels: &str, options: &[&str]) -> Self {
+        self.params
+            .set(crate::ui::choice::LABELS, String::from(labels));
+        self.params
+            .set(crate::ui::choice::OPTIONS, options.join(","));
+        self
+    }
+
+    /// The command that asks.
+    pub fn command(self) -> Command {
+        Command::OpenSlot(slots::CHOICE, self.params)
     }
 }

@@ -1,19 +1,10 @@
 //! An overlay at the bottom with a title and a few choices, e.g. what to
-//! do with a file or whether to delete it.
-//!
-//! A plugin registers it as a screen of its own and opens it with
-//! [`open`]; the choice comes back as the plugin's reply event, a
-//! [`Picked`] with the context it was opened for and the option chosen.
-//! Tapping outside, or *Back*, chooses nothing.
-//!
-//! ```ignore
-//! r.add_screen(ScreenSpec {
-//!     id: CHOICE,
-//!     title: Cow::Borrowed("my.title"),
-//!     factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-//! })?;
-//! cx.command(choice::open(CHOICE, CHOSEN, "Delete “a.epub”?", "books/a.epub", "my.option.", &["delete", "cancel"]));
-//! ```
+//! do with a file or whether to delete it: the screen of slot
+//! [`CHOICE`](crate::builtin::slots::CHOICE), which
+//! [`ask::choice`](crate::ask::choice) asks. The choice comes back as
+//! the plugin's reply event, a [`Picked`] with the context it was asked
+//! for and the option chosen. Tapping outside, or *Back*, chooses
+//! nothing.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -37,34 +28,12 @@ crate::event_data! {
         pub option: alloc::string::String,
     }
 }
-const OPTIONS: &str = "options";
+/// The options, separated by commas.
+pub(crate) const OPTIONS: &str = "options";
 /// Translation keys of the options: this, then the option.
-const LABELS: &str = "labels";
+pub(crate) const LABELS: &str = "labels";
 /// Lines of the title, at most.
 const TITLE_LINES: usize = 3;
-
-/// Opens the choice overlay `screen` with `title` and `options`, each
-/// shown as the translation of `labels` followed by the option (e.g.
-/// `file-manager.option.` and `delete`). The choice comes back as the
-/// event `reply` ([`Picked`]).
-pub fn open(
-    screen: Id,
-    reply: &crate::event::Event<Picked>,
-    title: &str,
-    context: &str,
-    labels: &str,
-    options: &[&str],
-) -> Command {
-    Command::OpenScreen(
-        screen,
-        Params::new()
-            .with(params::TITLE, title.to_string())
-            .with(params::PATH, context.to_string())
-            .with(params::REPLY, reply.as_str())
-            .with(LABELS, labels.to_string())
-            .with(OPTIONS, options.join(",")),
-    )
-}
 
 /// The choice overlay; see the [module documentation](self).
 #[derive(Debug)]

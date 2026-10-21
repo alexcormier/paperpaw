@@ -20,7 +20,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::install::{self, Progress};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::semantics::Role;
-use paperpaw_sdk::ui::choice::{self, Picked};
+use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
@@ -30,7 +30,7 @@ use paperpaw_sdk::{
 use crate::catalog::{self, Device, Entry, Index, More, Plugin};
 use crate::list::ENTRY;
 use crate::room::Room;
-use crate::{CATALOG, CHOICE, DOWNLOADED, INSTALLER, failed, queue, trust};
+use crate::{CATALOG, DOWNLOADED, INSTALLER, failed, queue, trust};
 
 /// The answer to *Remove?*.
 const REMOVE: Event<Picked> = Event::new("store.remove");
@@ -415,14 +415,12 @@ impl PageScreen {
                 let title = env
                     .i18n
                     .format("store.remove-question", &[("name", Arg::Str(&plugin.name))]);
-                cx.command(choice::open(
-                    CHOICE,
-                    &REMOVE,
-                    &title,
-                    &plugin.id,
-                    "store.option.",
-                    &["remove", "keep"],
-                ));
+                cx.command(
+                    paperpaw_sdk::ask::choice(&title, &REMOVE)
+                        .about(&plugin.id)
+                        .options("store.option.", &["remove", "keep"])
+                        .command(),
+                );
             }
             None => {}
         }

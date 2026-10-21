@@ -412,3 +412,55 @@ fn the_look_of_the_highest_priority_is_used_of_equal_ones_the_later() {
     common::render(&mut kernel);
     assert_eq!(*seen.borrow(), format!("{:?}", FOCUS));
 }
+
+/// Fills the choice slot with a screen of its own.
+struct Asker {
+    bind: bool,
+}
+
+impl Plugin for Asker {
+    fn manifest(&self) -> Manifest {
+        common::manifest("asker")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        if self.bind {
+            let screen = paperpaw_core::sdk::Id::new_static("asker.choice");
+            let seen = Rc::new(std::cell::RefCell::new(String::new()));
+            r.add_screen(paperpaw_core::sdk::ScreenSpec::new(
+                screen.clone(),
+                "asker.choice",
+                Box::new(move |_, _| Box::new(LookScreen(seen.clone()))),
+            ))?;
+            r.bind_slot(slots::CHOICE, screen, paperpaw_core::sdk::Priority::DEFAULT)?;
+        }
+        Ok(())
+    }
+}
+
+/// Every plugin's questions go to slot `core.choice`: the kernel's
+/// dialog, or the screen another plugin binds there.
+#[test]
+fn questions_are_asked_where_the_choice_slot_says() {
+    use paperpaw_core::sdk::event::Event;
+    use paperpaw_core::sdk::ui::choice::Picked;
+    const CHOSEN: Event<Picked> = Event::new("asker.chosen");
+    for (bind, expected) in [(false, "core.choice-dialog"), (true, "asker.choice")] {
+        let mut kernel = Kernel::builder(DEVICE)
+            .plugin(Asker { bind })
+            .storage(MemoryStorage::new())
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        let paperpaw_core::sdk::Command::OpenSlot(slot, params) =
+            paperpaw_core::sdk::ask::choice("Delete?", &CHOSEN)
+                .options("asker.option.", &["delete", "cancel"])
+                .command()
+        else {
+            panic!("a slot");
+        };
+        kernel.open_slot(Instant(100), slot, params);
+        common::render(&mut kernel);
+        assert_eq!(kernel.active_screen().map(|s| s.as_str()), Some(expected));
+    }
+}

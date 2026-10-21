@@ -61,9 +61,9 @@ const SHELF: Id = Id::new_static("files.list.shelf");
 /// What can be done with a book ([`sheet`]).
 const SHEET: Id = Id::new_static("files.list.sheet");
 /// What the library shows, chosen from the filter's row.
-const SHOW: Id = Id::new_static("files.list.show");
 const SHOWN: Event<paperpaw_sdk::ui::choice::Picked> = Event::new("files.list.shown");
-/// The choices of [`SHOW`]: the filters' names, then "Find".
+/// The choices of what the library shows: the filters' names, then
+/// "Find".
 const SHOW_OPTIONS: [&str; 7] = [
     "all", "reading", "unread", "finished", "next", "shelves", "find",
 ];
@@ -95,11 +95,6 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         SHEET,
         "files.title",
         Box::new(|env, params| Box::new(sheet::BookSheet::new(env, params))),
-    ))?;
-    r.add_screen(ScreenSpec::new(
-        SHOW,
-        "files.list.show",
-        Box::new(|env, params| Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))),
     ))?;
     r.add_screen(ScreenSpec::new(
         FIND,
@@ -912,14 +907,11 @@ impl ListScreen {
     fn choose_shown(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let title = env.i18n.tr("files.list.show");
-        cx.command(paperpaw_sdk::ui::choice::open(
-            SHOW,
-            &SHOWN,
-            title,
-            "",
-            "files.list.show.",
-            &SHOW_OPTIONS,
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(title, &SHOWN)
+                .options("files.list.show.", &SHOW_OPTIONS)
+                .command(),
+        );
     }
 
     /// The catalog was made anew: the index from it, the place kept.

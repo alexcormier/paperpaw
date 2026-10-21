@@ -9,7 +9,7 @@ use core::fmt;
 use super::{Cells, Geometry, Item, What, dragged, draw_tool};
 use crate::builtin::{actions, params, slots};
 use crate::event::Event;
-use crate::ui::choice::{self, Picked};
+use crate::ui::choice::Picked;
 use crate::ui::{self, UiStyle};
 use crate::widgets::Widget;
 use crate::{
@@ -117,9 +117,9 @@ enum Target {
 /// Its targets are the items' (the places in widgets that do something,
 /// the tools; while editing, the items themselves), then the screen's
 /// own buttons: taps and the buttons' focus reach them in that order.
-/// An item's options are offered by a [`Choice`](crate::ui::choice::Choice)
-/// screen the plugin registers; they come back as its event, which the
-/// screen hands to [`on_event`](Self::on_event).
+/// An item's options are asked with [`ask::choice`](crate::ask::choice);
+/// they come back as the plugin's event, which the screen hands to
+/// [`on_event`](Self::on_event).
 #[derive(Debug)]
 pub struct GridView {
     style: UiStyle,
@@ -139,16 +139,14 @@ pub struct GridView {
     focus_shown: bool,
     edit: Option<Edit>,
     labels: bool,
-    choice: Id,
     chosen: Event<Picked>,
 }
 
 impl GridView {
-    /// An empty grid, not edited; `choice` is the plugin's
-    /// [`Choice`](crate::ui::choice::Choice) screen, `chosen` the event
-    /// the options of an item come back with. Lay it out with
-    /// [`layout`](Self::layout).
-    pub fn new(env: &Env<'_>, choice: Id, chosen: Event<Picked>) -> Self {
+    /// An empty grid, not edited; `chosen` is the event the options of an
+    /// item come back with (asked with [`ask::choice`](crate::ask::choice)).
+    /// Lay it out with [`layout`](Self::layout).
+    pub fn new(env: &Env<'_>, chosen: Event<Picked>) -> Self {
         Self {
             style: UiStyle::new(env),
             geometry: Geometry::default(),
@@ -161,7 +159,6 @@ impl GridView {
             focus_shown: !env.device.input.touch,
             edit: None,
             labels: true,
-            choice,
             chosen,
         }
     }
@@ -527,14 +524,12 @@ impl GridView {
             options.push("settings");
         }
         options.push("remove");
-        cx.command(choice::open(
-            self.choice.clone(),
-            &self.chosen,
-            &shown.item.what.title(&env),
-            &format!("{index}"),
-            OPTIONS,
-            &options,
-        ));
+        cx.command(
+            crate::ask::choice(shown.item.what.title(&env), &self.chosen)
+                .about(format!("{index}"))
+                .options(OPTIONS, &options)
+                .command(),
+        );
     }
 
     /// Whether item `index` may take the cells `to`.
@@ -924,7 +919,6 @@ mod tests {
     };
 
     const CHOSEN: Event<Picked> = Event::new("test.chosen");
-    const CHOICE: Id = Id::new_static("test.choice");
 
     struct NoKeys;
 
@@ -1075,7 +1069,7 @@ mod tests {
     const BUTTON: (Rect, u16) = (Rect::new(0, 310, 100, 40), 7);
 
     fn laid_out(env: &Env<'_>, items: &[Item], buttons: &[(Rect, u16)]) -> GridView {
-        let mut grid = GridView::new(env, CHOICE, CHOSEN);
+        let mut grid = GridView::new(env, CHOSEN);
         grid.layout(env, geometry(), items, buttons);
         grid
     }
@@ -1164,8 +1158,8 @@ mod tests {
     fn offered(out: &Output, index: usize) -> bool {
         let path = format!("{index}");
         out.commands.iter().any(|c| {
-            matches!(c, Command::OpenScreen(screen, p)
-                if *screen == CHOICE && p.get(params::PATH) == Some(path.as_str()))
+            matches!(c, Command::OpenSlot(slot, p)
+                if *slot == crate::builtin::slots::CHOICE && p.get(params::PATH) == Some(path.as_str()))
         })
     }
 
@@ -1196,7 +1190,7 @@ mod tests {
         let grid = laid_out(&env, &items, &[]);
         assert_eq!(grid.items(), items);
         // So with places to come, in a grid of one cell.
-        let mut one = GridView::new(&env, CHOICE, CHOSEN);
+        let mut one = GridView::new(&env, CHOSEN);
         let items = [Item::new(tool("t.a")), Item::new(tool("t.a"))];
         let small = Geometry::of(Rect::new(0, 0, 100, 100), 1, 1, 0);
         one.layout(&env, small, &items, &[]);

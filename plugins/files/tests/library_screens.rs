@@ -119,7 +119,7 @@ fn show(app: &mut App, option: &str) {
         }
         app.run(actions::CONFIRM);
     }
-    assert_eq!(app.screen(), "files.list.show", "{}", app.described());
+    assert_eq!(app.screen(), "core.choice-dialog", "{}", app.described());
     choose(app, option);
     assert_eq!(app.screen(), "files.browser", "{}", app.described());
 }
@@ -372,7 +372,7 @@ fn the_row_above_the_books_chooses_what_shows_and_the_title_opens_the_menu() {
     app.run(actions::UP);
     assert_eq!(app.focused().as_deref(), Some(ALL_BOOKS));
     app.run(actions::CONFIRM);
-    assert_eq!(app.screen(), "files.list.show");
+    assert_eq!(app.screen(), "core.choice-dialog");
     app.run(actions::BACK);
     assert_eq!(app.screen(), "files.browser");
     // Down from it, the first book again.
@@ -389,7 +389,7 @@ fn the_row_above_the_books_chooses_what_shows_and_the_title_opens_the_menu() {
     assert_eq!(app.screen(), "menu.list");
     app.run(actions::BACK);
     app.tap_on(ALL_BOOKS);
-    assert_eq!(app.screen(), "files.list.show");
+    assert_eq!(app.screen(), "core.choice-dialog");
 }
 
 #[test]

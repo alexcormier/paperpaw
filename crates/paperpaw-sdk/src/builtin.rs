@@ -134,6 +134,12 @@ pub mod slots {
     /// settings plugin binds here; menus and the setup open it for a
     /// setting with more values than two.
     pub const CHOOSE_VALUE: Id = Id::new_static("core.choose-value");
+    /// Asks to choose one of a few options, e.g. what to do with a file
+    /// or whether to delete it (an overlay at the bottom): asked with
+    /// [`ask::choice`](crate::ask::choice), answered with a
+    /// [`Picked`](crate::ui::choice::Picked). Every plugin's questions
+    /// come here, so a screen bound here asks them all another way.
+    pub const CHOICE: Id = Id::new_static("core.choice");
     /// Shows what is known of a book: parameter [`PATH`](super::params::PATH).
     pub const BOOK_INFO: Id = Id::new_static("core.book-info");
     /// Shows a short message ([`Command::Notify`](crate::Command::Notify))
@@ -673,6 +679,10 @@ pub mod screens {
     pub const STATUS_ITEMS: Id = Id::new_static("core.status-items");
     /// Chooses the status lines a setting lists.
     pub const STATUS_LINES: Id = Id::new_static("core.status-lines");
+    /// The kernel's choice of a few options
+    /// ([`ui::choice::Choice`](crate::ui::choice::Choice)), bound to slot
+    /// [`CHOICE`](super::slots::CHOICE) unless another screen is.
+    pub const CHOICE: Id = Id::new_static("core.choice-dialog");
 }
 
 /// Global settings.

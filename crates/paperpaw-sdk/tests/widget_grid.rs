@@ -24,7 +24,6 @@ use proptest::prelude::*;
 
 use support::{Device, Harness, drawn_outside, frame, middle, pointer, tap};
 
-const CHOICE: Id = Id::new_static("t.choice");
 const CHOSEN: Event<Picked> = Event::new("t.chosen");
 /// What a tap on the book widget runs.
 const OPEN: Id = Id::new_static("t.open");
@@ -82,7 +81,7 @@ fn geometry() -> Geometry {
 }
 
 fn view(env: &Env<'_>, items: &[Item]) -> GridView {
-    let mut view = GridView::new(env, CHOICE, CHOSEN);
+    let mut view = GridView::new(env, CHOSEN);
     view.layout(env, geometry(), items, &[]);
     view
 }
@@ -571,7 +570,7 @@ fn every_item_is_reached_by_buttons_as_by_touch_while_editing() {
     let shown = placed(&env, &view);
     let opened = |output: &Output| -> Option<String> {
         output.commands.iter().find_map(|c| match c {
-            Command::OpenScreen(screen, params) if *screen == CHOICE => {
+            Command::OpenSlot(slot, params) if *slot == paperpaw_sdk::builtin::slots::CHOICE => {
                 params.get(params::PATH).map(str::to_string)
             }
             _ => None,

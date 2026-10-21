@@ -33,7 +33,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, events, groups, menus, params, slots};
 use paperpaw_sdk::decorations::{Decoration, LineKind};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::choice::{self};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
@@ -54,7 +54,6 @@ pub const MARK: Setting<bool> = Setting::new("vocabulary.mark");
 /// The role of the words marked in books.
 pub const LEARNING: Id = Id::new_static("vocabulary.learning");
 const SCREEN: Id = Id::new_static("vocabulary.list");
-const CHOICE: Id = Id::new_static("vocabulary.choice");
 const CHOSEN: Event<choice::Picked> = Event::new("vocabulary.chosen");
 const OPTION_LABELS: &str = "vocabulary.option.";
 /// The dictionary's settings (see the `dictionary` plugin).
@@ -127,11 +126,6 @@ impl Plugin for Vocabulary {
             SCREEN,
             "vocabulary.title",
             Box::new(move |env, _| Box::new(WordsScreen::new(env, changes.clone()))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "vocabulary.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "vocabulary.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
@@ -285,14 +279,12 @@ impl WordsScreen {
             options.push("go-to");
         }
         options.push("delete");
-        cx.command(choice::open(
-            CHOICE,
-            &CHOSEN,
-            &word.word,
-            &format!("{n}"),
-            OPTION_LABELS,
-            &options,
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(&word.word, &CHOSEN)
+                .about(format!("{n}"))
+                .options(OPTION_LABELS, &options)
+                .command(),
+        );
     }
 
     fn export(&self, cx: &mut Cx<'_, '_>) {

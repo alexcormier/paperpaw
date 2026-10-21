@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: one choice dialog for every plugin: `ask::choice(title, &reply)`
+  with `.about(context)` and `.options(labels, &[..])` asks on the
+  screen of the new slot `core.choice` (the kernel's
+  `screens::CHOICE` unless a plugin binds another), so a theme restyles
+  all questions. `ui::choice::open` is gone, and with it the fifteen
+  plugins' own choice screens; `GridView::new` no longer takes one.
 - SDK: themes are presets of the kind `core.theme` (`presets::THEME`,
   covering `presets::theme_settings`, the appearance group): the
   settings plugin lists them under *Theme* at the top of the appearance

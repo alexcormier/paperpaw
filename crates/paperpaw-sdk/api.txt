@@ -59,6 +59,11 @@ pub fn paperpaw_sdk::annotations::save(&dyn paperpaw_platform::storage::Storage,
 pub fn paperpaw_sdk::annotations::set_note(&dyn paperpaw_platform::storage::Storage, &str, paperpaw_document::Locator, &str, i64) -> bool
 pub fn paperpaw_sdk::annotations::snippet(&str) -> alloc::string::String
 pub mod paperpaw_sdk::ask
+pub struct paperpaw_sdk::ask::ChoiceQuestion
+impl paperpaw_sdk::ask::ChoiceQuestion
+pub fn paperpaw_sdk::ask::ChoiceQuestion::about(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::ask::ChoiceQuestion::command(self) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::ask::ChoiceQuestion::options(self, &str, &[&str]) -> Self
 pub struct paperpaw_sdk::ask::FolderQuestion
 impl paperpaw_sdk::ask::FolderQuestion
 pub fn paperpaw_sdk::ask::FolderQuestion::command(self) -> paperpaw_sdk::Command
@@ -74,6 +79,7 @@ pub fn paperpaw_sdk::ask::TextQuestion::number(self) -> Self
 pub fn paperpaw_sdk::ask::TextQuestion::password(self) -> Self
 pub fn paperpaw_sdk::ask::TextQuestion::remote_command(self) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::ask::TextQuestion::with(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::ask::choice(impl core::convert::Into<alloc::string::String>, &paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked>) -> paperpaw_sdk::ask::ChoiceQuestion
 pub fn paperpaw_sdk::ask::folder(&paperpaw_sdk::event::Event<paperpaw_sdk::replies::Chosen>) -> paperpaw_sdk::ask::FolderQuestion
 pub fn paperpaw_sdk::ask::text(impl core::convert::Into<alloc::string::String>, &paperpaw_sdk::event::Event<paperpaw_sdk::replies::Typed>) -> paperpaw_sdk::ask::TextQuestion
 pub mod paperpaw_sdk::builtin
@@ -352,6 +358,7 @@ pub const paperpaw_sdk::builtin::roles::HIGHLIGHT: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::roles::LINK: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::roles::SEARCH_HIT: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::screens
+pub const paperpaw_sdk::builtin::screens::CHOICE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::PLACEHOLDER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::STATUS_ITEMS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::STATUS_LINES: paperpaw_sdk::Id
@@ -440,6 +447,7 @@ pub const paperpaw_sdk::builtin::settings_sections::READING: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::slots
 pub const paperpaw_sdk::builtin::slots::BOOK_INFO: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::BROWSER: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::slots::CHOICE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::CHOOSE_FOLDER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::CHOOSE_VALUE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::HOME: paperpaw_sdk::Id
@@ -1858,7 +1866,6 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::ui::choice::Picked
 pub fn paperpaw_sdk::ui::choice::Picked::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::choice::Picked::to_params(&self) -> paperpaw_sdk::Params
 pub const paperpaw_sdk::ui::choice::OPTION: &str
-pub fn paperpaw_sdk::ui::choice::open(paperpaw_sdk::Id, &paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked>, &str, &str, &str, &[&str]) -> paperpaw_sdk::Command
 pub mod paperpaw_sdk::ui::items
 pub struct paperpaw_sdk::ui::items::ItemsScreen
 impl paperpaw_sdk::ui::items::ItemsScreen
@@ -2414,7 +2421,7 @@ pub fn paperpaw_sdk::widgets::grid::GridView::hint(&self, &paperpaw_sdk::Id, &pa
 pub fn paperpaw_sdk::widgets::grid::GridView::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::widgets::grid::GridView::items(&self) -> alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>
 pub fn paperpaw_sdk::widgets::grid::GridView::layout(&mut self, &paperpaw_sdk::Env<'_>, paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item], &[(paperpaw_platform::geometry::Rect, u16)])
-pub fn paperpaw_sdk::widgets::grid::GridView::new(&paperpaw_sdk::Env<'_>, paperpaw_sdk::Id, paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked>) -> Self
+pub fn paperpaw_sdk::widgets::grid::GridView::new(&paperpaw_sdk::Env<'_>, paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked>) -> Self
 pub fn paperpaw_sdk::widgets::grid::GridView::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::widgets::grid::GridResponse
 pub fn paperpaw_sdk::widgets::grid::GridView::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::widgets::grid::GridResponse
 pub fn paperpaw_sdk::widgets::grid::GridView::on_gesture(&mut self, paperpaw_sdk::Gesture, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::widgets::grid::GridResponse

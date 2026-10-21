@@ -20,14 +20,14 @@ use paperpaw_sdk::builtin::{actions, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setup::SetupPage;
-use paperpaw_sdk::ui::choice::{self, Picked};
+use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Point, Rect,
     RefreshMode, Screen, SettingKind, SettingSpec, SettingValue,
 };
 
-use crate::{CHOICE, mark_done};
+use crate::mark_done;
 
 /// Whether to skip the setup, asked by *Back* on the first page.
 const SKIP_CHOSEN: Event<Picked> = Event::new("setup.skip-chosen");
@@ -347,14 +347,11 @@ impl Guide {
     /// Asks whether to skip the setup: going on comes first.
     fn ask_skip(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        cx.command(choice::open(
-            CHOICE,
-            &SKIP_CHOSEN,
-            env.i18n.tr("setup.skip-question"),
-            "",
-            "setup.option.",
-            &["stay", "skip"],
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(env.i18n.tr("setup.skip-question"), &SKIP_CHOSEN)
+                .options("setup.option.", &["stay", "skip"])
+                .command(),
+        );
     }
 
     /// Changes the number by `step`.

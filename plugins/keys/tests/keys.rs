@@ -191,12 +191,12 @@ fn screens_of_the_same_name_are_each_a_place() {
     let mut test = Test::new(false);
     // *Applies*: the places, then every screen.
     test.press("confirm");
-    // The list, its picker and its question share the name; each shows,
-    // told apart by its id (cut short where it does not fit).
+    // The list and its picker share the name; each shows, told apart by
+    // its id (cut short where it does not fit).
     let labels = test.labels();
     let alike = labels
         .iter()
         .filter(|l| l.starts_with("Buttons and gestures ("))
         .count();
-    assert_eq!(alike, 3, "{labels:?}");
+    assert_eq!(alike, 2, "{labels:?}");
 }
