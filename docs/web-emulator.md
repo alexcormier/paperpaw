@@ -41,8 +41,8 @@ false`, no `winit`) and for `wasm32`:
 
 The frame runs in an iframe, best of an origin of its own, and speaks
 `postMessage` with the window that embeds it, and with no other. Every
-message may carry an `id`; the answer has the same `type` and `id`, and
-`error` (a text) where it failed. Once its module is loaded the frame
+message may carry a `request` (any value); the answer has the same
+`type` and `request`, and `error` (a text) where it failed. Once its module is loaded the frame
 sends `{ type: "ready" }`.
 
 | Message to the frame | Effect | Answer |

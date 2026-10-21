@@ -161,7 +161,8 @@ window.addEventListener("message", async (event) => {
   if (event.source !== window.parent || event.source === window) return;
   const message = event.data ?? {};
   const handler = HANDLERS[message.type];
-  const reply = (answer) => event.source.postMessage({ type: message.type, id: message.id, ...answer }, event.origin);
+  // `request` pairs the answer with the message (`id` names a plugin).
+  const reply = (answer) => event.source.postMessage({ type: message.type, request: message.request, ...answer }, event.origin);
   if (!handler) return reply({ error: `unknown message type ${message.type}` });
   if (message.type !== "start" && !device) return reply({ error: "no device started yet" });
   try {

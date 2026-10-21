@@ -59,7 +59,10 @@ impl Emulator {
     pub fn new(profile: &str, language: &str, dark: bool) -> Result<Self, String> {
         let profile =
             profiles::find(profile).ok_or_else(|| format!("no device profile `{profile}`"))?;
-        if language.is_empty() || !language.chars().all(|c| c.is_ascii_alphanumeric() || c == '-')
+        if language.is_empty()
+            || !language
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '-')
         {
             return Err(format!("no language `{language}`"));
         }
@@ -125,13 +128,12 @@ impl Emulator {
             self.restart();
             return Ok(());
         }
-        let config = format!(
-            "[core]\nlanguage = {}\nnight-mode = {}\n",
-            self.language,
-            if self.dark { "on" } else { "off" }
-        );
-        let mut device = Device::in_memory(self.profile, Some(config), self.files.clone(), true, None)
-            .map_err(|e| e.to_string())?;
+        // Dark as asked; else as the defaults have it (a theme's too).
+        let night = if self.dark { "night-mode = on\n" } else { "" };
+        let config = format!("[core]\nlanguage = {}\n{night}", self.language);
+        let mut device =
+            Device::in_memory(self.profile, Some(config), self.files.clone(), true, None)
+                .map_err(|e| e.to_string())?;
         device.start();
         self.device = Some(device);
         Ok(())
@@ -221,8 +223,12 @@ impl Emulator {
         self.frame.clear();
         if let Some(device) = &self.device {
             for pixel in device.panel.compose() {
-                self.frame
-                    .extend_from_slice(&[(pixel >> 16) as u8, (pixel >> 8) as u8, pixel as u8, 255]);
+                self.frame.extend_from_slice(&[
+                    (pixel >> 16) as u8,
+                    (pixel >> 8) as u8,
+                    pixel as u8,
+                    255,
+                ]);
             }
         }
         &self.frame
@@ -252,6 +258,9 @@ impl Emulator {
     /// profile with `commands` (none: package, lint, visual and reach);
     /// its report as JSON (`report.json`).
     pub fn check(&mut self, commands: &[&str]) -> Result<String, String> {
+        if self.plugins.is_empty() {
+            return Err("no data plugin on the card to check".to_string());
+        }
         let plugins = self
             .plugins
             .iter()

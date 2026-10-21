@@ -39,13 +39,19 @@ fn every_device_shows_the_app() {
     for profile in PROFILES {
         let mut emulator = started(profile);
         let (width, height) = emulator.size();
-        assert_eq!(emulator.frame().len(), usize::from(width) * usize::from(height) * 4);
+        assert_eq!(
+            emulator.frame().len(),
+            usize::from(width) * usize::from(height) * 4
+        );
         let frame = emulator.shown();
         assert_eq!(frame.len(), usize::from(width) * usize::from(height) * 4);
         // Something drawn: not one colour all over.
         assert!(frame.chunks(4).any(|p| p != &frame[..4]), "{profile}");
         let device = emulator.device_json();
-        assert!(device.contains(&format!("\"id\":\"{profile}\"")), "{device}");
+        assert!(
+            device.contains(&format!("\"id\":\"{profile}\"")),
+            "{device}"
+        );
     }
 }
 
@@ -83,7 +89,10 @@ fn buttons_and_touch_are_taken() {
     let before = boox.shown();
     let (width, height) = boox.size();
     // A tap on the first tool of the home screen (the library) opens it.
-    let (x, y) = (i32::from(width) * 145 / 1000, i32::from(height) * 105 / 1000);
+    let (x, y) = (
+        i32::from(width) * 145 / 1000,
+        i32::from(height) * 105 / 1000,
+    );
     boox.pointer(PointerPhase::Down, x, y);
     boox.advance(5_050);
     boox.pointer(PointerPhase::Up, x, y);
@@ -117,6 +126,7 @@ fn a_data_plugin_shows_after_a_restart() {
 fn the_plugin_is_checked_and_the_device_keeps_going() {
     let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let mut emulator = started("xteink-x4");
+    assert!(emulator.check(&[]).is_err(), "nothing to check");
     for (path, bytes) in sample("theme-paw") {
         emulator.put_file("theme-paw", &path, bytes).unwrap();
     }
