@@ -9,6 +9,47 @@ const MAX_CONFIG: usize = 64 * 1024;
 /// Largest settings file of a book read (see [`Command::SetScope`]).
 const MAX_SCOPE: usize = 16 * 1024;
 
+/// Settings that moved to the kernel, by the ids they had (the reader's
+/// type and the library folder, October 2026): read under those where
+/// the new ones are not set, so nothing chosen is lost.
+const MOVED: [(&str, &str); 12] = [
+    ("reader.font-weight", "core.font-weight"),
+    ("reader.word-spacing", "core.word-spacing"),
+    ("reader.line-spacing", "core.line-spacing"),
+    ("reader.margin", "core.margin"),
+    ("reader.margin-ends", "core.margin-ends"),
+    ("reader.justify", "core.justify"),
+    ("reader.hyphenate", "core.hyphenate"),
+    ("reader.indent", "core.indent"),
+    ("reader.paragraph-spacing", "core.paragraph-spacing"),
+    ("reader.publisher-styles", "core.publisher-styles"),
+    ("reader.footnotes", "core.footnotes"),
+    ("files.root", "core.library-folder"),
+];
+
+/// Of setting `id` with `value` as kept in a file, the id and value it
+/// has now where it moved (a moved choice's values too); `None` where it
+/// did not, or where `entries` (the ids the file sets) has the new one.
+fn moved(id: &str, value: &str, entries: &[String]) -> Option<(&'static str, String)> {
+    let (_, now) = MOVED.iter().find(|(old, _)| *old == id)?;
+    if entries.iter().any(|entry| entry == now) {
+        return None;
+    }
+    let value = match value.strip_prefix("reader.footnotes.") {
+        Some(choice) => format!("core.footnotes.{choice}"),
+        None => value.to_string(),
+    };
+    Some((now, value))
+}
+
+/// The ids of the settings `source` (a settings file) sets.
+fn entries(source: &str) -> Vec<String> {
+    paperpaw_config::parse(source)
+        .filter_map(Result::ok)
+        .map(|entry| format!("{}.{}", entry.section, entry.key))
+        .collect()
+}
+
 /// The active settings scope: a book's own settings.
 #[derive(Debug)]
 pub(crate) struct Scope {
@@ -21,6 +62,19 @@ pub(crate) struct Scope {
 }
 
 impl Kernel {
+    /// Setting `id`'s value now, as written in `paperpaw.ini`, where a
+    /// plugin hears [`events::SETTING_CHANGED`] (it is not made for
+    /// nobody).
+    pub(crate) fn setting_text_if_heard(&self, id: &Id) -> Option<String> {
+        let heard = !self.event_observers.is_empty()
+            || self
+                .subscriptions
+                .iter()
+                .any(|(event, ..)| *event == events::SETTING_CHANGED);
+        let value = self.shared.settings.get(id.as_str()).filter(|_| heard)?;
+        Some(value.to_config_text())
+    }
+
     /// Forgets a setting's value (see [`Command::ResetSetting`]): from the
     /// active scope, or from the configuration file.
     pub(crate) fn reset_setting(&mut self, id: &Id) {
@@ -37,6 +91,7 @@ impl Kernel {
         }
         let scoped = self.shared.settings.goes_to_scope(id.as_str());
         let before = self.scoped_values();
+        let old = self.setting_text_if_heard(id);
         if let Err(error) = self.shared.settings.reset(id.as_str()) {
             return self.warn_runtime(format!("`{id}`: {error}"));
         }
@@ -51,9 +106,10 @@ impl Kernel {
             });
         }
         self.setting_changed(id);
+        let changed = events::SettingChanged::new(id.clone()).old(old);
         self.output
             .commands
-            .push(events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())));
+            .push(events::SETTING_CHANGED.emit(changed));
     }
 
     /// Writes a changed setting to the configuration file on the device,
@@ -88,9 +144,11 @@ impl Kernel {
         for (id, old) in before {
             if self.shared.settings.get(id.as_str()) != old.as_ref() {
                 self.setting_changed(&id);
+                let old = old.map(|value| value.to_config_text());
+                let changed = events::SettingChanged::new(id.clone()).old(old);
                 self.output
                     .commands
-                    .push(events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())));
+                    .push(events::SETTING_CHANGED.emit(changed));
             }
         }
     }
@@ -123,16 +181,19 @@ impl Kernel {
         let values = read.map(|text| {
             let text = text.ok().flatten().unwrap_or_default();
             let mut values = paperpaw_sdk::collections::VecMap::new();
+            let ids = entries(&text);
             for entry in paperpaw_config::parse(&text).filter_map(Result::ok) {
-                let id = format!("{}.{}", entry.section, entry.key);
+                let mut id = format!("{}.{}", entry.section, entry.key);
+                let mut value = entry.value.as_str().into_owned();
+                if let Some((now, was)) = moved(&id, &value, &ids) {
+                    (id, value) = (now.to_string(), was);
+                }
                 let parsed = self
                     .shared
                     .settings
                     .specs()
                     .find(|spec| spec.id.as_str() == id)
-                    .and_then(|spec| {
-                        Some((spec.id.clone(), spec.kind.parse(&entry.value.as_str())?))
-                    });
+                    .and_then(|spec| Some((spec.id.clone(), spec.kind.parse(&value)?)));
                 if let Some((id, value)) = parsed {
                     values.insert(id, value);
                 }
@@ -373,8 +434,9 @@ impl Kernel {
     }
 
     pub(crate) fn apply_user_config(&mut self, source: &str) {
+        let ids = entries(source);
         // Secret settings kept in the file before: moved to the secrets.
-        let mut moved: Vec<(String, String)> = Vec::new();
+        let mut secrets_moved: Vec<(String, String)> = Vec::new();
         for entry in paperpaw_config::parse(source) {
             let entry = match entry {
                 Ok(entry) => entry,
@@ -391,7 +453,7 @@ impl Kernel {
             let value = entry.value.as_str();
             match entry.section {
                 "plugins" => {}
-                section if section.starts_with("keymap.") => {}
+                section if section.starts_with("keymap.") || section.starts_with("zones.") => {}
                 "fonts" => match (Id::parse(entry.key), Id::parse(&value)) {
                     (Ok(role), Ok(font)) if self.shared.fonts.contains(font.as_str()) => {
                         self.shared.fonts.bind_user(role, font);
@@ -407,20 +469,24 @@ impl Kernel {
                         "invalid font binding".into(),
                     ),
                 },
-                "menus" => {
+                "menus" | crate::plugins::KNOWN => {
                     let actions: Result<Vec<Id>, _> = value
                         .split(',')
                         .map(str::trim)
                         .filter(|a| !a.is_empty())
                         .map(Id::parse)
                         .collect();
+                    let known = entry.section == crate::plugins::KNOWN;
                     match (Id::parse(entry.key), actions) {
-                        (Ok(menu), Ok(actions)) => self.shared.menus.customize(menu, actions, None),
+                        (Ok(menu), Ok(actions)) if known => {
+                            self.shared.menus.set_known(menu, actions);
+                        }
+                        (Ok(menu), Ok(actions)) => self.shared.menus.customize(menu, actions),
                         _ => self.warn(WarningSource::UserConfig, line, "invalid menu".into()),
                     }
                 }
                 "slots" => match (Id::parse(entry.key), Id::parse(&value)) {
-                    (Ok(slot), Ok(screen)) => self.registry.bind_user(slot, screen),
+                    (Ok(slot), Ok(screen)) => self.shared.registry.bind_user(slot, screen),
                     _ => self.warn(
                         WarningSource::UserConfig,
                         line,
@@ -434,13 +500,19 @@ impl Kernel {
                 ),
                 section => {
                     let id = format!("{section}.{}", entry.key);
+                    let (id, value) = match moved(&id, &value, &ids) {
+                        Some((now, value)) => (now.to_string(), Cow::Owned(value)),
+                        // Moved, and set under its new id as well.
+                        None if MOVED.iter().any(|(old, _)| *old == id) => continue,
+                        None => (id, value),
+                    };
                     let secret = self
                         .shared
                         .settings
                         .spec(&id)
                         .is_some_and(|spec| spec.extra().secret);
                     if secret {
-                        moved.push((id, value.to_string()));
+                        secrets_moved.push((id, value.to_string()));
                         continue;
                     }
                     if let Err(error) = self.shared.settings.set_from_text(&id, &value) {
@@ -449,7 +521,7 @@ impl Kernel {
                 }
             }
         }
-        for (id, value) in moved {
+        for (id, value) in secrets_moved {
             let label = self
                 .shared
                 .settings
@@ -478,10 +550,10 @@ impl Kernel {
     /// Reports references to contributions that do not exist.
     pub(crate) fn validate(&mut self) {
         let mut messages = Vec::new();
-        for (slot, screen) in self.registry.user_bindings() {
-            if !self.registry.slots.contains_key(slot) {
+        for (slot, screen) in self.shared.registry.user_bindings() {
+            if !self.shared.registry.slots.contains_key(slot) {
                 messages.push(format!("unknown slot `{slot}`"));
-            } else if !self.registry.screens.contains_key(screen) {
+            } else if !self.shared.registry.screens.contains_key(screen) {
                 messages.push(format!("unknown screen `{screen}` for slot `{slot}`"));
             }
         }

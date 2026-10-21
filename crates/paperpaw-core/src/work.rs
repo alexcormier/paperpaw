@@ -502,7 +502,19 @@ impl Kernel {
         }
     }
 
+    /// Whether setting `id` is guarded ([`SettingSpec::guarded`]): no
+    /// power mode sets it (the lock's settings).
+    ///
+    /// [`SettingSpec::guarded`]: paperpaw_sdk::SettingSpec::guarded
+    fn guarded(&self, id: &Id) -> bool {
+        self.shared
+            .settings
+            .spec(id.as_str())
+            .is_some_and(|spec| spec.guarded)
+    }
+
     /// Wears `wear`'s mode; `tell` plugins of it (not before they start).
+    /// Guarded settings stay as they are: a mode is any plugin's preset.
     fn wear_mode(&mut self, wear: Wear, tell: bool) {
         let Some(preset) = self
             .shared
@@ -525,10 +537,13 @@ impl Kernel {
                 stretch = text.parse().unwrap_or(1);
             } else if let Some(id) = id.strip_suffix('<') {
                 // `id <= number`: a limit.
-                if let (Ok(id), Ok(most)) = (Id::parse(id.trim()), text.parse()) {
+                if let (Ok(id), Ok(most)) = (Id::parse(id.trim()), text.parse())
+                    && !self.guarded(&id)
+                {
                     limits.push((id, most));
                 }
             } else if let (Ok(id), Some(spec)) = (Id::parse(id), self.shared.settings.spec(id))
+                && !spec.guarded
                 && let Some(value) = spec.kind.parse(text)
             {
                 values.push((id, value));

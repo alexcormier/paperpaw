@@ -142,6 +142,34 @@ pub mod slots {
     pub const CHOICE: Id = Id::new_static("core.choice");
     /// Shows what is known of a book: parameter [`PATH`](super::params::PATH).
     pub const BOOK_INFO: Id = Id::new_static("core.book-info");
+    /// The contents of the book being read: parameters
+    /// [`PATH`](super::params::PATH) and, where it is read,
+    /// [`SECTION`](super::params::SECTION) and
+    /// [`OFFSET`](super::params::OFFSET). Choosing an entry closes it and
+    /// sends [`events::GOTO`](super::events::GOTO). The reader opens it;
+    /// bind another screen here for contents that look different.
+    pub const TOC: Id = Id::new_static("core.toc");
+    /// Where a text is found in a book: parameters
+    /// [`PATH`](super::params::PATH) and [`TEXT`](super::params::TEXT),
+    /// what to find. Choosing a place closes it and sends
+    /// [`events::GOTO`](super::events::GOTO) with the text found marked.
+    pub const SEARCH: Id = Id::new_static("core.search");
+    /// A book's bookmarks, highlights and notes: parameter
+    /// [`PATH`](super::params::PATH). Choosing one closes it and sends
+    /// [`events::GOTO`](super::events::GOTO).
+    pub const ANNOTATIONS: Id = Id::new_static("core.annotations");
+    /// A note shown over the page (an overlay), from a note mark followed:
+    /// parameters [`TEXT`](super::params::TEXT), the note,
+    /// [`PATH`](super::params::PATH), the book, and
+    /// [`URL`](super::params::URL), the link; going to the note sends
+    /// [`events::FOLLOW_LINK`](super::events::FOLLOW_LINK).
+    pub const FOOTNOTE: Id = Id::new_static("core.footnote");
+    /// Skimming through the book being read (an overlay): opened with the
+    /// parameters of [`events::Skimmed`](super::events::Skimmed) (where the
+    /// book is, where its chapters begin). It asks the reader to move with
+    /// [`events::SKIM`](super::events::SKIM) and hears where the book is
+    /// then with [`events::SKIMMED`](super::events::SKIMMED).
+    pub const SKIM: Id = Id::new_static("core.skim");
     /// Shows a short message ([`Command::Notify`](crate::Command::Notify))
     /// over whatever is open, for a few seconds: parameter
     /// [`TEXT`](super::params::TEXT). It gets no input and is closed by
@@ -180,6 +208,11 @@ pub mod menus {
     /// main menu stays short however many there are. Also the home
     /// screen's grid of tools.
     pub const TOOLS: Id = Id::new_static("core.tools");
+    /// What there is to open besides the tools: a plugin's own app (a
+    /// game, a notebook). What a launcher, a drawer or a palette lists:
+    /// these and the [`TOOLS`]; the shipped home screen's grid of tools
+    /// shows both.
+    pub const APPS: Id = Id::new_static("core.apps");
     /// Extra pages on the main settings page, below the setting groups
     /// (e.g. the plugin manager). Entries are actions.
     pub const SETTINGS: Id = Id::new_static("core.settings-pages");
@@ -201,16 +234,12 @@ pub mod menus {
     /// reader sends [`events::TEXT_CHOSEN`](super::events::TEXT_CHOSEN),
     /// then runs it.
     pub const SELECTION: Id = Id::new_static("core.selection-menu");
-    /// What can be done with a book in any view of the library (mark it
-    /// as a favourite or finished, show its details, delete it): plugins
-    /// add their actions; when one is chosen, the view sends
-    /// [`events::BOOK_CHOSEN`](super::events::BOOK_CHOSEN) with the book,
-    /// then runs it.
+    /// What can be done with a book, wherever a library lists it (its
+    /// sheet: open, finished, favourite, information, …): plugins add
+    /// their actions (send it, sync it now, delete it); when one is
+    /// chosen, the library sends [`events::BOOK_CHOSEN`](super::events::BOOK_CHOSEN)
+    /// with the book, then runs it.
     pub const BOOK: Id = Id::new_static("core.book-menu");
-    /// What can be started from a launcher (a drawer, a palette, the home
-    /// screen's tools): the tools ([`TOOLS`]) and what plugins add here
-    /// as an app of their own.
-    pub const APPS: Id = Id::new_static("core.apps");
 }
 
 /// The roles of decorations every reader draws (see
@@ -317,6 +346,12 @@ pub mod events {
             /// page), once the reader counted the pages and where the
             /// chapter is known.
             pub chapter_left: u32,
+            /// The page's start as an XPointer (see
+            /// [`Document::xpointer`](crate::document::Document::xpointer)),
+            /// where the reader found it: with [`BOOK_CLOSED`], for a
+            /// sync that sends it on (finding it takes a while on small
+            /// devices, so not with every page).
+            pub xpointer: String,
         }
     }
 
@@ -349,9 +384,26 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// The screen now on top ([`SCREEN_SHOWN`]).
+        pub struct ScreenShown {
+            pub screen: Id,
+        }
+        optional {
+            /// The slot it was opened for.
+            pub slot: Id,
+        }
+    }
+
+    crate::event_data! {
         /// Which setting changed ([`SETTING_CHANGED`]).
         pub struct SettingChanged {
             pub id: Id,
+        }
+        optional {
+            /// Its value before, as written in `paperpaw.ini`, where the
+            /// kernel changed it and a plugin subscribes to the event or
+            /// observes events (it is not made for nobody).
+            pub old: String,
         }
     }
 
@@ -381,6 +433,34 @@ pub mod events {
             pub from: String,
             /// Its new one.
             pub path: String,
+        }
+    }
+
+    crate::event_data! {
+        /// A book that came into the library ([`BOOK_ADDED`]).
+        pub struct BookAdded {
+            pub path: String,
+            /// Where it came from: the plugin that brought it (`transfer`,
+            /// `calibre`, `opds`), empty where it is not known.
+            pub source: String,
+        }
+    }
+
+    crate::event_data! {
+        /// What changed of a book ([`BOOK_CHANGED`]).
+        pub struct BookChanged {
+            pub path: String,
+            /// What changed: bits of [`library::what`](crate::library::what).
+            pub what: u32,
+        }
+    }
+
+    crate::event_data! {
+        /// The catalog wanted ([`CATALOG_WANTED`]).
+        pub struct CatalogWanted {
+            /// Made anew in any case, not only where it was not made since
+            /// PaperPaw started.
+            pub anew: bool,
         }
     }
 
@@ -479,6 +559,53 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// Where skimming asks the reader to go ([`SKIM`]), in the book
+        /// at `path`: `page:+10` (pages on, or back with `-`), `permille:250`
+        /// (that far into the book, in thousandths), `chapter:+1` (the
+        /// chapter after, or before with `-1`), or `back` (where skimming
+        /// began).
+        pub struct Skim {
+            pub path: String,
+            pub to: String,
+        }
+    }
+
+    crate::event_data! {
+        /// Where the book being skimmed is ([`SKIMMED`], and the parameters
+        /// the skimming overlay is opened with): its page as shown
+        /// (`12 / 340`, or a percentage), the chapter's title, how far in
+        /// it is (in thousandths).
+        pub struct Skimmed {
+            pub path: String,
+            pub page: String,
+            pub chapter: String,
+            pub permille: u32,
+        }
+        optional {
+            /// Where its chapters begin, in thousandths, comma-separated.
+            pub marks: String,
+        }
+    }
+
+    crate::event_data! {
+        /// A link of a book to follow ([`FOLLOW_LINK`]): its target as the
+        /// book has it (`notes.xhtml#n3`, a web address).
+        pub struct FollowLink {
+            pub path: String,
+            pub href: String,
+        }
+    }
+
+    crate::event_data! {
+        /// The words of the page shown are wanted ([`PAGE_WORDS_WANTED`],
+        /// see [`reading::ask_page_words`](crate::reading::ask_page_words)):
+        /// the reader answers with the event `reply`.
+        pub struct PageWordsWanted {
+            pub reply: Id,
+        }
+    }
+
+    crate::event_data! {
         /// A decorated word that was tapped, or chosen with the buttons
         /// ([`DECORATION_TAPPED`]): the decorator's mark it is in.
         pub struct DecorationTapped {
@@ -505,6 +632,58 @@ pub mod events {
         /// Just after its end.
         pub fn end(&self) -> Locator {
             Locator::new(self.end_section, self.end_offset)
+        }
+    }
+
+    crate::event_data! {
+        /// The room of a page layer that was tapped, or chosen with the
+        /// buttons ([`PAGE_LAYER_TAPPED`]).
+        pub struct PageLayerTapped {
+            pub layer: Id,
+            /// The book.
+            pub path: String,
+            /// Where: the point tapped, the room's middle when chosen with
+            /// the buttons.
+            pub x: i32,
+            pub y: i32,
+        }
+        optional {
+            /// The start of the line beside it, if any (see
+            /// [`PageView::line_at`](crate::layers::PageView::line_at)).
+            pub section: u32,
+            pub offset: u32,
+        }
+    }
+
+    impl PageLayerTapped {
+        /// The start of the line beside it, if any.
+        pub fn line(&self) -> Option<Locator> {
+            Some(Locator::new(self.section?, self.offset?))
+        }
+    }
+
+    crate::event_data! {
+        /// A lookup provider's answer that came later
+        /// ([`LOOKUP_ANSWERED`], see [`lookup`](crate::lookup)): its
+        /// entry for the word, none where `text` is empty.
+        pub struct LookupAnswered {
+            pub provider: Id,
+            pub word: String,
+            /// Where it is from, shown above it.
+            pub source: String,
+            pub text: String,
+        }
+        optional {
+            /// The screen that shows more of it
+            /// ([`LookupEntry::more`](crate::lookup::LookupEntry::more)).
+            pub more: Id,
+        }
+    }
+
+    crate::event_data! {
+        /// A document that was not ready is now ([`DOCUMENT_READY`]).
+        pub struct DocumentReady {
+            pub path: String,
         }
     }
 
@@ -580,6 +759,29 @@ pub mod events {
     /// change the library emit it ([`library::changed`](crate::library::changed));
     /// a move is [`BOOK_MOVED`].
     pub const LIBRARY_CHANGED: Event<()> = Event::new("core.library-changed");
+    /// A book came into the library ([`BookAdded`]): received, downloaded,
+    /// copied by a plugin. Whoever brings a book emits it
+    /// ([`library::added`](crate::library::added)); views may show it at
+    /// once, the catalog is made anew.
+    pub const BOOK_ADDED: Event<BookAdded> = Event::new("core.book-added");
+    /// Something of a book changed ([`BookChanged`]): its details, how far
+    /// it is read, its cover, whether it is a favourite, a plugin's field.
+    /// Sent by the kernel for the reading events and by plugins that change
+    /// a book ([`library::changed_book`](crate::library::changed_book));
+    /// views show the book anew.
+    pub const BOOK_CHANGED: Event<BookChanged> = Event::new("core.book-changed");
+    /// An action of the book menu ([`menus::BOOK`](super::menus::BOOK)) was
+    /// chosen for a book ([`BookChosen`]), sent just before it runs: the
+    /// plugin whose action it is does it for that book.
+    pub const BOOK_CHOSEN: Event<BookChosen> = Event::new("core.book-chosen");
+    /// The catalog of the library was made anew
+    /// ([`library::catalog`](crate::library::catalog)): views of it read it
+    /// again.
+    pub const CATALOG_CHANGED: Event<()> = Event::new("core.catalog-changed");
+    /// The catalog is wanted ([`CatalogWanted`],
+    /// [`library::request_catalog`](crate::library::request_catalog)):
+    /// the kernel walks the library in the background where needed.
+    pub const CATALOG_WANTED: Event<CatalogWanted> = Event::new("core.catalog-wanted");
     /// The values shown without being kept changed, or ended (see
     /// [`Command::PreviewSettings`](crate::Command::PreviewSettings)).
     pub const PREVIEW_CHANGED: Event<()> = Event::new("core.preview-changed");
@@ -601,15 +803,38 @@ pub mod events {
     /// "Share" action needs no more than a menu entry in
     /// [`menus::SELECTION`](super::menus::SELECTION) and this event).
     pub const TEXT_CHOSEN: Event<TextChosen> = Event::new("core.text-chosen");
-    /// An action was chosen for a book in a view of the library
-    /// ([`BookChosen`]), just before it runs: the plugin whose action it
-    /// is acts on the book (an entry in [`menus::BOOK`](super::menus::BOOK)
-    /// and this event are all a "Send to …" needs).
-    pub const BOOK_CHOSEN: Event<BookChosen> = Event::new("core.book-chosen");
     /// A word a decorator marked was tapped, or chosen with the buttons
     /// ([`DecorationTapped`]); sent for decorators that take taps (see
     /// [`decorations`](crate::decorations)), whose plugin answers.
     pub const DECORATION_TAPPED: Event<DecorationTapped> = Event::new("core.decoration-tapped");
+    /// The room of a page layer was tapped, or chosen with the buttons
+    /// ([`PageLayerTapped`]); sent for layers that take taps (see
+    /// [`layers`](crate::layers)), whose plugin answers.
+    pub const PAGE_LAYER_TAPPED: Event<PageLayerTapped> = Event::new("core.page-layer-tapped");
+    /// A lookup provider that answered later ([`LookupAnswered`], see
+    /// [`lookup`](crate::lookup)) has its entry, for a query that names
+    /// no reply of its own (`LookupQuery::reply`): the screen that asked
+    /// shows it.
+    pub const LOOKUP_ANSWERED: Event<LookupAnswered> = Event::new("core.lookup-answered");
+    /// A document that a format could not open yet
+    /// ([`DocumentError::NotReady`](crate::document::DocumentError), e.g.
+    /// still coming in) is there now ([`DocumentReady`]): its format's
+    /// plugin says so, readers waiting for it open it.
+    pub const DOCUMENT_READY: Event<DocumentReady> = Event::new("core.document-ready");
+    /// Skimming asks the reader to go somewhere in the book ([`Skim`]).
+    pub const SKIM: Event<Skim> = Event::new("core.skim");
+    /// Where the book being skimmed is now ([`Skimmed`]): the reader tells
+    /// the skimming overlay after each move.
+    pub const SKIMMED: Event<Skimmed> = Event::new("core.skimmed");
+    /// A link of the open book is to be followed ([`FollowLink`]), as a
+    /// tap on it would: the reader goes there (or opens a web address in
+    /// the browser). A footnote shown over the page sends it to go to the
+    /// note.
+    pub const FOLLOW_LINK: Event<FollowLink> = Event::new("core.follow-link");
+    /// The words of the page shown are wanted ([`PageWordsWanted`]):
+    /// a reader with a book open answers with
+    /// [`reading::PageWords`](crate::reading::PageWords).
+    pub const PAGE_WORDS_WANTED: Event<PageWordsWanted> = Event::new("core.page-words-wanted");
     /// A word of a book was looked up ([`WordLookedUp`]).
     pub const WORD_LOOKED_UP: Event<WordLookedUp> = Event::new("core.word-looked-up");
     /// What a widget shows changed by other means than the events screens
@@ -623,6 +848,11 @@ pub mod events {
     /// [`Command::RemovePlugin`](crate::Command::RemovePlugin)): lists of
     /// plugins, fonts and presets read them anew.
     pub const PLUGINS_CHANGED: Event<()> = Event::new("core.plugins-changed");
+    /// Another screen is shown on top ([`ScreenShown`]): one opened, or
+    /// the one below a screen closed. The whole stack is in
+    /// [`Env::stack`](crate::Env::stack). For plugins that subscribe:
+    /// screens learn that they show from [`Screen::on_show`](crate::Screen::on_show).
+    pub const SCREEN_SHOWN: Event<ScreenShown> = Event::new("core.screen-shown");
     /// A menu was redefined or reset ([`MenuChanged`]).
     pub const MENU_CHANGED: Event<MenuChanged> = Event::new("core.menu-changed");
     /// The device goes to sleep or the app to the background: a moment to
@@ -712,6 +942,10 @@ pub mod screens {
     /// ([`ui::choice::Choice`](crate::ui::choice::Choice)), bound to slot
     /// [`CHOICE`](super::slots::CHOICE) unless another screen is.
     pub const CHOICE: Id = Id::new_static("core.choice-dialog");
+    /// Chooses a folder for a setting with the folder chooser
+    /// ([`slots::CHOOSE_FOLDER`](super::slots::CHOOSE_FOLDER)), whichever
+    /// plugin fills it: name it as a text setting's editor.
+    pub const FOLDER_EDITOR: Id = Id::new_static("core.folder-editor");
 }
 
 /// Global settings.
@@ -724,6 +958,11 @@ pub mod settings {
     /// [`groups::DEVELOPER`](super::groups::DEVELOPER) show, and plugins may
     /// show what only developers need (e.g. what each plugin took).
     pub const DEVELOPER: Setting<bool> = Setting::new("core.developer");
+    /// The library folder, where books are kept (`books`; empty for the
+    /// storage's top): the kernel's, so that any library and every plugin
+    /// that puts books somewhere reads the same
+    /// ([`library::folder`](crate::library::folder)).
+    pub const LIBRARY_FOLDER: Setting<Text> = Setting::new("core.library-folder");
     /// Draw everything inverted.
     pub const NIGHT_MODE: Setting<bool> = Setting::new("core.night-mode");
     /// In night mode, pictures inverted too (else as they are, not as
@@ -747,6 +986,11 @@ pub mod settings {
     /// Say what the buttons move to (a row, a button), where the device
     /// speaks: for using PaperPaw without seeing the screen.
     pub const SPEAK_FOCUS: Setting<bool> = Setting::new("core.speak-focus");
+    /// The voice that speaks text aloud: [`VOICE_SYSTEM`] or a plugin's
+    /// (see [`voices`](crate::voices)).
+    pub const VOICE: Setting<Text> = Setting::new("core.voice");
+    /// [`VOICE`]: the system's.
+    pub const VOICE_SYSTEM: &str = "core.voice.system";
     /// Partial refreshes between two full refreshes; `0` disables full
     /// refreshes for ghosting removal.
     pub const FULL_REFRESH_INTERVAL: Setting<i64> = Setting::new("core.full-refresh-interval");
@@ -914,6 +1158,18 @@ pub mod settings {
     pub const NOTICE_SECONDS: Setting<i64> = Setting::new("core.notice-seconds");
     /// Milliseconds a button or finger must be held for a long press.
     pub const LONG_PRESS_MS: Setting<i64> = Setting::new("core.long-press-ms");
+    /// Milliseconds within which a second tap or press makes a double tap
+    /// or press, where something is bound to one.
+    pub const DOUBLE_TAP_MS: Setting<i64> = Setting::new("core.double-tap-ms");
+    /// How far, in millimetres, a finger may move and still tap.
+    pub const TAP_SLOP: Setting<i64> = Setting::new("core.tap-slop");
+    /// How far, in millimetres, a finger must move to swipe.
+    pub const SWIPE_DISTANCE: Setting<i64> = Setting::new("core.swipe-distance");
+    /// How bright the front light is, in percent, where the device has one
+    /// it lets PaperPaw set ([`Capabilities::frontlight`](crate::Capabilities)).
+    pub const FRONTLIGHT: Setting<i64> = Setting::new("core.frontlight");
+    /// How warm the front light is, in percent (0 cold, 100 warm).
+    pub const FRONTLIGHT_WARMTH: Setting<i64> = Setting::new("core.frontlight-warmth");
     /// Base size of user interface text in points; UI metrics scale with it.
     pub const UI_SIZE: Setting<i64> = Setting::new("core.ui-size");
     /// The active key map preset (see [`keymap_presets`](super::keymap_presets)).
@@ -930,6 +1186,50 @@ pub mod settings {
     pub const FONT_SIZE: Setting<i64> = Setting::new("core.font-size");
     /// The value of [`READING_FONT`] for the plugins' choice.
     pub const DEFAULT_FONT: &str = "core.font.default";
+    /// Darker text: glyphs widened by up to this many steps (0 to 4). The
+    /// standard type of book pages, as [`FONT_SIZE`]: the kernel
+    /// registers them, each book may have its own ([`SCOPE_ONLY`]), every
+    /// reader reads them.
+    pub const FONT_WEIGHT: Setting<i64> = Setting::new("core.font-weight");
+    /// Space between words in percent of the font's (50 to 200).
+    pub const WORD_SPACING: Setting<i64> = Setting::new("core.word-spacing");
+    /// Distance between baselines in percent of the font size, at least
+    /// the font's own; below 100 that much of the font's own (80 to 250).
+    pub const LINE_SPACING: Setting<i64> = Setting::new("core.line-spacing");
+    /// Page margins in millimetres, at the sides (and at the top and
+    /// bottom while [`MARGIN_ENDS`] follows them).
+    pub const MARGIN: Setting<i64> = Setting::new("core.margin");
+    /// Margins at the top and bottom in millimetres; as [`MARGIN`] until
+    /// set.
+    pub const MARGIN_ENDS: Setting<i64> = Setting::new("core.margin-ends");
+    /// Lines of paragraphs as wide as the page.
+    pub const JUSTIFY: Setting<bool> = Setting::new("core.justify");
+    /// Words broken at line ends, in the book's language.
+    pub const HYPHENATE: Setting<bool> = Setting::new("core.hyphenate");
+    /// The first lines of paragraphs indented.
+    pub const INDENT: Setting<bool> = Setting::new("core.indent");
+    /// Space between paragraphs.
+    pub const PARAGRAPH_SPACING: Setting<bool> = Setting::new("core.paragraph-spacing");
+    /// The fewest lines of a paragraph left alone at the top of a page
+    /// (1 to 4; 1: as they fall), see
+    /// [`layout::Style::widows`](crate::layout::Style).
+    pub const WIDOWS: Setting<i64> = Setting::new("core.widows");
+    /// The same at the bottom of a page.
+    pub const ORPHANS: Setting<i64> = Setting::new("core.orphans");
+    /// The book's own styles (an EPUB's CSS), see
+    /// [`OpenOptions::publisher_styles`](crate::OpenOptions).
+    pub const PUBLISHER_STYLES: Setting<bool> = Setting::new("core.publisher-styles");
+    /// Notes shown over the page ([`FOOTNOTES_POPUP`]) or gone to
+    /// ([`FOOTNOTES_JUMP`]) when their mark is followed.
+    pub const FOOTNOTES: Setting<Text> = Setting::new("core.footnotes");
+    pub const FOOTNOTES_POPUP: &str = "core.footnotes.popup";
+    pub const FOOTNOTES_JUMP: &str = "core.footnotes.jump";
+    /// The frame that sets book pages in columns (see
+    /// [`layers`](crate::layers)): [`PAGE_FRAME_SINGLE`] or the id of a
+    /// plugin's frame; each book may have its own ([`SCOPE_ONLY`]).
+    pub const PAGE_FRAME: Setting<Text> = Setting::new("core.page-frame");
+    /// [`PAGE_FRAME`]: the text in one column.
+    pub const PAGE_FRAME_SINGLE: &str = "core.page-frame.single";
     /// The font of the status lines while reading
     /// ([`fonts::STATUS`](super::fonts::STATUS)): [`STATUS_FONT_UI`],
     /// [`STATUS_FONT_BOOK`] or a font family's name.
@@ -1117,6 +1417,22 @@ mod tests {
     }
 
     #[test]
+    fn skimming_says_where_the_book_is() {
+        use super::events::{SKIMMED, Skimmed};
+        let skimmed = Skimmed::new(
+            "books/a.epub".into(),
+            "12 / 340".into(),
+            "Chapter 2".into(),
+            35,
+        )
+        .marks(alloc::string::String::from("0,120,480"));
+        let crate::Command::Emit(event, params) = SKIMMED.emit(skimmed.clone()) else {
+            panic!("an event");
+        };
+        assert_eq!(SKIMMED.read(&event, &params), Some(skimmed));
+    }
+
+    #[test]
     fn reading_carries_the_chapter() {
         use super::events::Reading;
         let reading = Reading {
@@ -1129,9 +1445,14 @@ mod tests {
             pages: Some(300),
             chapter: "Down the Rabbit-Hole".into(),
             chapter_left: Some(7),
+            xpointer: Some("/body/DocFragment[4]/body/p[2]".into()),
         };
         let params = reading.to_params();
         assert_eq!(params.get("chapter_left"), Some("7"));
+        assert_eq!(
+            params.get("xpointer"),
+            Some("/body/DocFragment[4]/body/p[2]")
+        );
         assert_eq!(Reading::from_params(&params).unwrap(), reading);
         assert_eq!(reading.at(), Locator::new(3, 120));
         // A book without a table of contents, its pages not counted.

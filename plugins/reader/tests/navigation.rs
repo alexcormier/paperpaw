@@ -350,7 +350,7 @@ fn notes_can_be_jumped_to_at_once() {
         Shared::default(),
         "books/noted.epub",
         &noted(),
-        "[reader]\nfootnotes = reader.footnotes.jump\n",
+        "[reader]\nfootnotes = core.footnotes.jump\n",
     );
     reading.open();
     reading.press(reader::LINKS);
@@ -629,7 +629,7 @@ fn the_place_stays_on_its_text_when_the_books_styles_switch() {
             .kernel
             .set_setting(
                 paperpaw_sdk::Instant(reading.now),
-                "reader.publisher-styles",
+                "core.publisher-styles",
                 styles,
             )
             .unwrap();

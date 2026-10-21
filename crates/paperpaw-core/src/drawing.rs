@@ -27,7 +27,16 @@ pub(crate) struct FrameState {
     /// The mark shown while slow work waits, and the hint cell it is.
     pub(crate) mark: Option<(Rect, Option<usize>)>,
     pub(crate) refresh: RefreshPolicy,
+    /// What a refresh filter deferred ([`RefreshVerdict::Defer`]): it goes
+    /// with the next refresh.
+    pub(crate) deferred: Option<Rect>,
+    /// Refreshes deferred in a row (see [`MAX_DEFERS`]).
+    pub(crate) defers: u8,
 }
+
+/// Refreshes deferred in a row at most: the next is made whatever the
+/// filters say.
+pub(crate) const MAX_DEFERS: u8 = 3;
 
 /// How long what a call opened, closed or ran takes (for the busy mark).
 #[derive(Debug, Default)]
@@ -300,8 +309,8 @@ impl Kernel {
     /// Redraws `region`: the topmost full screen and every overlay above
     /// it, each clipped to the region.
     pub(crate) fn redraw(&mut self, region: Rect) {
+        let regions: Vec<Option<Rect>> = (0..self.stack.len()).map(|i| self.overlay(i)).collect();
         let env = self.shared.env(self.now);
-        let regions: Vec<Option<Rect>> = self.stack.iter().map(|s| s.screen.region(&env)).collect();
         // Overlays that wash out what lies below them.
         let dims: Vec<bool> = self
             .stack
@@ -310,7 +319,6 @@ impl Kernel {
             .map(|(s, own)| own.is_some() && s.screen.dims_below())
             .collect();
         let base = regions.iter().rposition(Option::is_none).unwrap_or(0);
-        let bounds = self.content();
         let row = self.hint_row();
         let mut canvas = self.framebuffer.canvas();
         let mut canvas = canvas.clipped(region);
@@ -320,7 +328,7 @@ impl Kernel {
             .zip(&regions[base..])
             .enumerate()
         {
-            let Some(mut area) = own.unwrap_or(bounds).intersection(&region) else {
+            let Some(mut area) = own.unwrap_or(active.area).intersection(&region) else {
                 continue;
             };
             // Less what the overlays above it cover: overlays paint all
@@ -332,11 +340,30 @@ impl Kernel {
                 continue;
             };
             area = shown;
+            // In its own part of the screen, from its corner.
+            let device = env.device_within(active.area);
+            let own_env = env.within(&device, active.area);
+            let (x, y) = (i32::from(active.area.x), i32::from(active.area.y));
             let _running = self.shared.meter.enter(active.id.namespace());
-            active.screen.draw(&mut canvas.clipped(area), &env);
+            active
+                .screen
+                .draw(&mut canvas.clipped(area).offset(x, y), &own_env);
             if dims[base + index + 1..].iter().any(|d| *d) {
                 canvas.wash(area);
             }
+        }
+        // The bars, each in its strip.
+        for &(index, strip) in &self.chrome_strips {
+            let chrome = &mut self.chromes[index];
+            let (Some(screen), Some(area)) = (chrome.screen.as_mut(), strip.intersection(&region))
+            else {
+                continue;
+            };
+            let device = env.device_within(strip);
+            let own_env = env.within(&device, strip);
+            let (x, y) = (i32::from(strip.x), i32::from(strip.y));
+            let _running = self.shared.meter.enter(chrome.spec.id.namespace());
+            screen.draw(&mut canvas.clipped(area).offset(x, y), &own_env);
         }
         if let Some(row) = row
             && let Some(area) = row.intersection(&region)
@@ -366,9 +393,10 @@ impl Kernel {
         }
         // A message over everything.
         if let Some((notice, _)) = &mut self.notice
-            && let Some(area) = notice.region(&env).unwrap_or(bounds).intersection(&region)
+            && let Some(area) = screens::notice_area(notice.as_ref(), &env).intersection(&region)
         {
-            notice.draw(&mut canvas.clipped(area), &env);
+            let corner = (i32::from(env.content.x), i32::from(env.content.y));
+            notice.draw(&mut canvas.clipped(area).offset(corner.0, corner.1), &env);
         }
     }
 
@@ -387,26 +415,33 @@ impl Kernel {
         let bounds = self.framebuffer.bounds();
         // Described, not drawn: no pixels kept.
         let mut aside = Framebuffer::blind(bounds.width, bounds.height);
+        let regions: Vec<Option<Rect>> = (0..self.stack.len()).map(|i| self.overlay(i)).collect();
+        let row = self.hint_row();
         let env = self.shared.env(self.now);
-        let regions: Vec<Option<Rect>> = self.stack.iter().map(|s| s.screen.region(&env)).collect();
         let base = regions.iter().rposition(Option::is_none).unwrap_or(0);
         let mut described = Vec::new();
         {
             let mut canvas = aside.canvas().describing(&mut described);
-            let content = Rect::new(0, 0, env.device.display.width, env.device.display.height);
             for (active, own) in self.stack[base..].iter_mut().zip(&regions[base..]) {
-                let area = own.unwrap_or(content);
+                let area = own.unwrap_or(active.area);
+                let device = env.device_within(active.area);
+                let own_env = env.within(&device, active.area);
+                let (x, y) = (i32::from(active.area.x), i32::from(active.area.y));
                 // As its plugin, as when drawn: it sees its own secrets.
                 let _running = self.shared.meter.enter(active.id.namespace());
-                active.screen.draw(&mut canvas.clipped(area), &env);
+                active
+                    .screen
+                    .draw(&mut canvas.clipped(area).offset(x, y), &own_env);
             }
-            if content.height < bounds.height {
-                let row = Rect::new(
-                    0,
-                    content.height,
-                    bounds.width,
-                    bounds.height - content.height,
-                );
+            for &(index, strip) in &self.chrome_strips {
+                if let Some(screen) = self.chromes[index].screen.as_mut() {
+                    let device = env.device_within(strip);
+                    let own_env = env.within(&device, strip);
+                    let (x, y) = (i32::from(strip.x), i32::from(strip.y));
+                    screen.draw(&mut canvas.clipped(strip).offset(x, y), &own_env);
+                }
+            }
+            if let Some(row) = row {
                 paperpaw_sdk::ui::draw_button_hints(
                     &mut canvas.clipped(row),
                     &env,
@@ -418,8 +453,9 @@ impl Kernel {
             }
             // A message over everything, last.
             if let Some((notice, _)) = &mut self.notice {
-                let area = notice.region(&env).unwrap_or(bounds);
-                notice.draw(&mut canvas.clipped(area), &env);
+                let area = screens::notice_area(notice.as_ref(), &env);
+                let corner = (i32::from(env.content.x), i32::from(env.content.y));
+                notice.draw(&mut canvas.clipped(area).offset(corner.0, corner.1), &env);
             }
         }
         described
@@ -433,17 +469,24 @@ impl Kernel {
         let bounds = self.framebuffer.bounds();
         // Described, not drawn: no pixels kept.
         let mut aside = Framebuffer::blind(bounds.width, bounds.height);
-        let env = self.shared.env(self.now);
-        let Some(active) = self.stack.last_mut() else {
+        let Some(top) = self.stack.len().checked_sub(1) else {
             return Vec::new();
         };
-        let content = Rect::new(0, 0, env.device.display.width, env.device.display.height);
-        let area = active.screen.region(&env).unwrap_or(content);
+        let area = self.region_of(top);
+        let env = self.shared.env(self.now);
+        let active = &mut self.stack[top];
+        let device = env.device_within(active.area);
+        let own_env = env.within(&device, active.area);
+        let (x, y) = (i32::from(active.area.x), i32::from(active.area.y));
         let mut described = Vec::new();
         let _running = self.shared.meter.enter(active.id.namespace());
         active.screen.draw(
-            &mut aside.canvas().describing(&mut described).clipped(area),
-            &env,
+            &mut aside
+                .canvas()
+                .describing(&mut described)
+                .clipped(area)
+                .offset(x, y),
+            &own_env,
         );
         described
     }
@@ -473,6 +516,7 @@ impl Kernel {
         self.frame.mark = Some(mark);
         self.withheld = mem::take(&mut self.output.commands);
         self.withheld_trusted = mem::take(&mut self.trusted);
+        self.withheld_own = mem::take(&mut self.own_trusted);
         self.output.request_refresh(RefreshMode::Fast);
         let mut effects = self.finish();
         effects.proceed = true;

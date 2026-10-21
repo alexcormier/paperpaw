@@ -270,3 +270,43 @@ fn passwords_that_cannot_be_read_are_left_as_they_are() {
     assert_eq!(saved.get("wifi.home"), Some("secret"));
     assert_eq!(saved.get("b.key"), Some("swordfish"));
 }
+
+/// The library folder set as `files.root` (before it was the kernel's)
+/// is read as `core.library-folder`, without a warning.
+#[test]
+fn the_library_folder_set_before_is_taken_over() {
+    let config = "[core]\nlanguage = en\n\n[files]\nroot = Novels\nsort = files.sort.name\n";
+    let mut kernel = kernel_with(MemoryStorage::new().with(CONFIG_FILE, config));
+    assert_eq!(kernel.settings().text("core.library-folder"), "Novels");
+    let warnings = kernel.take_warnings();
+    assert!(
+        !warnings.iter().any(|w| w.message.contains("files.root")),
+        "{warnings:?}"
+    );
+    // Where both are set, the new one stays.
+    let config = "[core]\nlibrary-folder = Books\n[files]\nroot = Novels\n";
+    let kernel = kernel_with(MemoryStorage::new().with(CONFIG_FILE, config));
+    assert_eq!(kernel.settings().text("core.library-folder"), "Books");
+}
+
+/// The reader's type settings moved to the kernel: what was set under
+/// their old ids is read, unless the new id is set as well.
+#[test]
+fn settings_set_under_their_old_ids_are_kept() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .user_config(
+            "[core]\nline-spacing = 150\n\n[reader]\nmargin = 9\nline-spacing = 200\n\
+             footnotes = reader.footnotes.jump\n",
+        )
+        .build()
+        .unwrap();
+    let settings = kernel.settings();
+    assert_eq!(settings.int("core.margin"), 9);
+    assert_eq!(settings.int("core.line-spacing"), 150);
+    assert_eq!(settings.text("core.footnotes"), "core.footnotes.jump");
+    let warnings = kernel.take_warnings();
+    assert!(
+        !warnings.iter().any(|w| w.message.contains("reader.")),
+        "{warnings:?}"
+    );
+}

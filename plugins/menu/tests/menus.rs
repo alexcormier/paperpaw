@@ -529,9 +529,9 @@ fn the_panel_at_the_bottom_is_worked_by_buttons() {
         }
         app.run(actions::RIGHT);
     }
-    let justify = app.kernel.settings().bool("reader.justify");
+    let justify = app.kernel.settings().bool("core.justify");
     app.run(actions::CONFIRM);
-    assert_eq!(app.kernel.settings().bool("reader.justify"), !justify);
+    assert_eq!(app.kernel.settings().bool("core.justify"), !justify);
     // Back closes the panel, back to the book.
     app.run(actions::BACK);
     assert_eq!(app.screen(), "reader.screen");
@@ -571,9 +571,9 @@ fn the_panel_at_the_bottom_is_worked_by_touch() {
             y,
         ));
     }
-    let justify = app.kernel.settings().bool("reader.justify");
+    let justify = app.kernel.settings().bool("core.justify");
     app.tap_on("Justify text");
-    assert_eq!(app.kernel.settings().bool("reader.justify"), !justify);
+    assert_eq!(app.kernel.settings().bool("core.justify"), !justify);
     // A tap above the panel closes it.
     app.tap(Point::new(240, 60));
     assert_eq!(app.screen(), "reader.screen");

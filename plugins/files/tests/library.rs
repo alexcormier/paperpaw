@@ -37,14 +37,18 @@ const DEVICE: DeviceInfo = DeviceInfo {
     memory: MemoryClass::Small,
 };
 
-/// A card that counts how often the library folder is listed.
+/// A card that counts how often the library's catalog (or the log
+/// beside it) is read.
 struct Counted {
     inner: MemoryStorage,
-    listings: Rc<Cell<usize>>,
+    reads: Rc<Cell<usize>>,
 }
 
 impl Storage for Counted {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        if path.starts_with(".paperpaw/library/catalog") || path.ends_with("status.log") {
+            self.reads.set(self.reads.get() + 1);
+        }
         self.inner.read_at(path, offset, buf)
     }
     fn size(&self, path: &str) -> Result<u64, StorageError> {
@@ -57,9 +61,6 @@ impl Storage for Counted {
         self.inner.append(path, data)
     }
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
-        if dir == "books" {
-            self.listings.set(self.listings.get() + 1);
-        }
         self.inner.list(dir, visit)
     }
     fn remove(&self, path: &str) -> Result<(), StorageError> {
@@ -84,14 +85,14 @@ fn card(n: usize) -> MemoryStorage {
 }
 
 /// The library on `storage`, shown, with nothing left to do; and the
-/// count of listings of its folder.
+/// count of reads of its catalog.
 fn library(storage: MemoryStorage, config: &str) -> (Kernel, Rc<Cell<usize>>) {
-    let listings = Rc::new(Cell::new(0));
+    let reads = Rc::new(Cell::new(0));
     let user = format!("[core]\nlanguage = en\n{config}\n");
     let mut kernel = Kernel::builder(DEVICE)
         .storage(Counted {
             inner: storage,
-            listings: Rc::clone(&listings),
+            reads: Rc::clone(&reads),
         })
         .user_config(user)
         .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
@@ -103,7 +104,7 @@ fn library(storage: MemoryStorage, config: &str) -> (Kernel, Rc<Cell<usize>>) {
     settle(&mut kernel, effects);
     let effects = kernel.open_slot(Instant(0), slots::LIBRARY, Params::new());
     settle(&mut kernel, effects);
-    (kernel, listings)
+    (kernel, reads)
 }
 
 /// Runs the timers asked for until there are none.
@@ -138,8 +139,39 @@ fn action(kernel: &mut Kernel, id: &'static str) {
 }
 
 /// Covered by a book (here its information, also a full screen), the
-/// library reads nothing when books come or settings change: once, when
-/// it shows again.
+/// library reads nothing when the catalog or a book changes or settings
+/// do: once, when it shows again.
+#[test]
+fn hidden_it_reads_nothing_until_it_shows() {
+    let _turn = turn();
+    let (mut kernel, reads) = library(card(5), "");
+    let info = Params::new().with(params::PATH, "books/book 01.txt");
+    let effects = kernel.open_screen(Instant(0), paperpaw_plugin_files::INFO_SCREEN, info);
+    settle(&mut kernel, effects);
+    reads.set(0);
+    let changed = paperpaw_sdk::library::changed_book("books/book 02.txt", 2);
+    let paperpaw_sdk::Command::Emit(book, book_params) = changed else {
+        panic!("not an event");
+    };
+    for _ in 0..3 {
+        for (event, params) in [
+            (events::CATALOG_CHANGED.id().clone(), Params::new()),
+            (book.clone(), book_params.clone()),
+        ] {
+            let effects = kernel.send_event(Instant(0), event, params);
+            settle(&mut kernel, effects);
+        }
+        let effects = kernel
+            .set_setting(Instant(0), "files.sort", "files.sort.name")
+            .unwrap();
+        settle(&mut kernel, effects);
+    }
+    assert_eq!(reads.get(), 0, "read while hidden");
+    action(&mut kernel, "core.back");
+    assert!(reads.get() > 0, "not read when shown again");
+    assert!(focused(&mut kernel).contains("book 00"));
+}
+
 /// The tests' turns with the library: when its catalog was made is kept
 /// for the whole program, as on a device, so tests that make or read it
 /// take turns rather than run beside each other.
@@ -149,32 +181,6 @@ static TURN: std::sync::Mutex<()> = std::sync::Mutex::new(());
 fn turn() -> std::sync::MutexGuard<'static, ()> {
     TURN.lock()
         .unwrap_or_else(std::sync::PoisonError::into_inner)
-}
-
-#[test]
-fn hidden_it_reads_nothing_until_it_shows() {
-    let _turn = turn();
-    let (mut kernel, listings) = library(card(5), "");
-    let info = Params::new().with(params::PATH, "books/book 01.txt");
-    let effects = kernel.open_screen(Instant(0), paperpaw_plugin_files::INFO_SCREEN, info);
-    settle(&mut kernel, effects);
-    listings.set(0);
-    for _ in 0..3 {
-        let effects = kernel.send_event(
-            Instant(0),
-            events::LIBRARY_CHANGED.id().clone(),
-            Params::new(),
-        );
-        settle(&mut kernel, effects);
-        let effects = kernel
-            .set_setting(Instant(0), "files.sort", "files.sort.name")
-            .unwrap();
-        settle(&mut kernel, effects);
-    }
-    assert_eq!(listings.get(), 0, "read while hidden");
-    action(&mut kernel, "core.back");
-    assert!(listings.get() > 0, "not read when shown again");
-    assert!(focused(&mut kernel).contains("book 00"));
 }
 
 /// Coming back, the focus is on the book it was on, on its page, and

@@ -13,7 +13,9 @@
 //! Its text is in the status lines' font, as the lines it opens over.
 //!
 //! Switches show their state (an icon on black is on) and change in
-//! place; choices open their list; settings with a page of their own
+//! place, as do entries their plugin shows as switches; an entry's label
+//! and badge are as its plugin says now, and a faint one is passed by the
+//! focus and does nothing; choices open their list; settings with a page of their own
 //! open it, numbers and text their group's settings page; submenus open
 //! as a list below; actions close the bar and run.
 
@@ -47,8 +49,21 @@ const ICON_SCALE: f32 = 1.6;
 #[derive(Debug)]
 struct Entry {
     id: Id,
-    label: String,
+    /// Its short title, translated (its plugin may show another label).
+    title: String,
     icon: Option<String>,
+}
+
+impl Entry {
+    /// What it shows now: its label and badge.
+    fn label(&self, env: &Env<'_>) -> String {
+        env.menus.state(env, self.id.as_str()).text(&self.title)
+    }
+
+    /// It can be chosen now.
+    fn enabled(&self, env: &Env<'_>) -> bool {
+        env.menus.state(env, self.id.as_str()).enabled
+    }
 }
 
 #[derive(Debug)]
@@ -81,7 +96,7 @@ impl BarScreen {
         let menu = params.get(params::MENU).unwrap_or_default();
         let entries: Vec<Entry> = env
             .menus
-            .items(menu)
+            .shown_items(env, menu)
             .into_iter()
             .filter(|item| !item.section && !paperpaw_sdk::Menus::hidden(params, item.id.as_str()))
             // A setting shown only while another has a value.
@@ -92,7 +107,7 @@ impl BarScreen {
             })
             .map(|item| Entry {
                 id: item.id.clone(),
-                label: env
+                title: env
                     .i18n
                     .get(&alloc::format!("{}.short", item.title))
                     .unwrap_or(env.i18n.tr(item.title))
@@ -125,7 +140,7 @@ impl BarScreen {
         let widths: Vec<f32> = entries
             .iter()
             .map(|e| {
-                let label = bar_font(env).map_or(0.0, |f| f.measure(style.small, &e.label));
+                let label = bar_font(env).map_or(0.0, |f| f.measure(style.small, &e.label(env)));
                 let icon = e
                     .icon
                     .as_deref()
@@ -189,6 +204,8 @@ impl BarScreen {
             .collect();
         let border = (style.line * 2) as u16;
         let height = top + rows as u16 * cell_height + gap + border;
+        // The first entry that can be chosen.
+        let focus = entries.iter().position(|e| e.enabled(env)).unwrap_or(0);
         Self {
             entries,
             region: Rect::new(0, 0, display.width, height.min(display.height)),
@@ -199,15 +216,19 @@ impl BarScreen {
             info_action: params.get(params::ACTION).and_then(|a| Id::parse(a).ok()),
             cells,
             targets,
-            focus: 0,
+            focus,
             keys: !env.device.input.touch,
             style,
             params: params.clone(),
         }
     }
 
-    /// Whether entry `index` is a switch that is on.
+    /// Whether entry `index` is a switch that is on: a setting, or an
+    /// entry its plugin shows as one.
     fn on(env: &Env<'_>, id: &Id) -> bool {
+        if let Some(on) = env.menus.state(env, id.as_str()).checked {
+            return on;
+        }
         env.settings
             .specs()
             .find(|spec| spec.id == *id)
@@ -216,7 +237,8 @@ impl BarScreen {
 
     fn run(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some(entry) = self.entries.get(index) else {
+        // Shown faint by its plugin: nothing to do now.
+        let Some(entry) = self.entries.get(index).filter(|e| e.enabled(&env)) else {
             return;
         };
         let id = entry.id.clone();
@@ -270,7 +292,19 @@ impl BarScreen {
             // The first button press shows where the focus is.
             self.keys = true;
         } else {
-            self.focus = ui::step_focus(self.focus, delta, self.entries.len());
+            // Past entries shown faint, unless all are.
+            let env = *cx.env();
+            let len = self.entries.len();
+            let mut focus = ui::step_focus(self.focus, delta, len);
+            for _ in 0..len {
+                if self.entries.get(focus).is_none_or(|e| e.enabled(&env)) {
+                    break;
+                }
+                focus = ui::step_focus(focus, delta, len);
+            }
+            if self.entries.get(focus).is_some_and(|e| e.enabled(&env)) {
+                self.focus = focus;
+            }
         }
         cx.request_redraw_area(self.region);
         cx.request_refresh(RefreshMode::Fast);
@@ -320,6 +354,7 @@ impl Screen for BarScreen {
         let small_line = font.line_metrics(style.small).line_height as u16;
         for (i, (entry, cell)) in self.entries.iter().zip(&self.cells).enumerate() {
             let on = Self::on(env, &entry.id);
+            let enabled = entry.enabled(env);
             let inner = *cell;
             // Switched on or focused: a frame a little around the entry.
             let pad = style.gap as u16 / 2;
@@ -333,13 +368,18 @@ impl Screen for BarScreen {
             let focused = self.keys && i == self.focus;
             canvas.describe(
                 Role::Button,
-                &entry.label,
+                &entry.label(env),
                 frame,
                 focused,
                 on.then_some(true),
             );
             if on {
-                ui::fill_round(canvas, &style, frame, Color::BLACK);
+                let back = if enabled {
+                    Color::BLACK
+                } else {
+                    style.faint(60)
+                };
+                ui::fill_round(canvas, &style, frame, back);
             }
             if focused {
                 ui::stroke_round(
@@ -350,7 +390,11 @@ impl Screen for BarScreen {
                     Color::BLACK,
                 );
             }
-            let ink = if on { Color::WHITE } else { Color::BLACK };
+            let ink = match (on, enabled) {
+                (true, _) => Color::WHITE,
+                (false, true) => Color::BLACK,
+                (false, false) => style.faint(60),
+            };
             let icon_area = Rect::new(
                 inner.x,
                 inner.y + style.gap as u16,
@@ -369,7 +413,7 @@ impl Screen for BarScreen {
                 small_line,
             );
             let room = f32::from(inner.width) + 1.0;
-            let label = ui::fit(&font, style.small, &entry.label, room);
+            let label = ui::fit(&font, style.small, &entry.label(env), room);
             let x = f32::from(inner.x)
                 + (f32::from(inner.width) - font.measure(style.small, &label)) / 2.0;
             ui::draw_label(canvas, &font, style.small, x, label_area, &label, ink);

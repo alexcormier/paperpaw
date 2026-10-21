@@ -219,7 +219,7 @@ proptest! {
         // which the user may list anywhere.
         let mut all = ids.clone();
         all.push(plain.clone());
-        menus.customize(menu.clone(), all, None);
+        menus.customize(menu.clone(), all);
         let mut expected: Vec<&Id> = ids
             .iter()
             .zip(has)
@@ -258,7 +258,6 @@ fn entries_come_in_their_order_headings_among_them() {
     menus.customize(
         menu.clone(),
         vec![Id::new_static("t.gone"), Id::new_static("t.c")],
-        None,
     );
     let ids: Vec<&str> = menus
         .items("t.menu")
@@ -512,32 +511,6 @@ fn durations_read_in_hours_and_minutes() {
     assert_eq!(text(60 * 42), "42 min");
     assert_eq!(text(3600 + 5 * 60 + 30), "1 h 05 min");
     assert_eq!(text(10 * 3600), "10 h 00 min");
-}
-
-#[test]
-fn entries_contributed_after_a_menu_was_made_show_in_it() {
-    let mut menus = Menus::new();
-    let menu = Id::new_static("t.menu");
-    let add = |menus: &mut Menus, item: &'static str, order: i16| {
-        menus.add(MenuEntry::new(menu.clone(), Id::new_static(item)).order(order));
-    };
-    add(&mut menus, "t.a", 10);
-    add(&mut menus, "t.b", 20);
-    add(&mut menus, "t.c", 30);
-    let known: Vec<Id> = menus.known_ids("t.menu").into_iter().cloned().collect();
-    // The user puts c first and leaves b out.
-    let mine = vec![Id::new_static("t.c"), Id::new_static("t.a")];
-    menus.customize(menu.clone(), mine.clone(), Some(known.clone()));
-    // Plugins installed since: one after a, one before everything.
-    add(&mut menus, "t.after-a", 15);
-    add(&mut menus, "t.first", 5);
-    let ids: Vec<&str> = menus.ids("t.menu").iter().map(|i| i.as_str()).collect();
-    assert_eq!(ids, ["t.c", "t.first", "t.a", "t.after-a"]);
-    // b, which the user left out, stays out; without a known list (a
-    // definition saved before they were kept) only the user's list shows.
-    menus.customize(menu.clone(), mine, None);
-    let ids: Vec<&str> = menus.ids("t.menu").iter().map(|i| i.as_str()).collect();
-    assert_eq!(ids, ["t.c", "t.a"]);
 }
 
 /// What choosing a setting opens is the same on every screen: text on the

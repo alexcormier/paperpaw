@@ -372,7 +372,8 @@ fn an_action_that_runs_itself_for_ever_is_cut_off() {
     }
     let warnings = kernel.take_warnings();
     assert_eq!(warnings.len(), 3, "{warnings:?}");
-    assert!(warnings[0].message.contains("too many chained commands"));
+    // Cut off at once, as it runs itself: nothing else is dropped.
+    assert!(warnings[0].message.contains("runs itself"), "{warnings:?}");
     // The kernel goes on.
     tap(&mut kernel, 2000, 60, 80);
     assert_eq!(kernel.active_screen(), Some(&OVERLAY));

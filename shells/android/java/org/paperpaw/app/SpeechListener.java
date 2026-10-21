@@ -1,4 +1,4 @@
-package io.github.hthoene.paperpaw;
+package org.paperpaw.app;
 
 import android.speech.tts.UtteranceProgressListener;
 

@@ -63,6 +63,8 @@ pub struct Harness {
     pub status_items: StatusItems,
     pub text_filters: TextFilters,
     pub decorators: Decorators,
+    pub page_layers: paperpaw_sdk::layers::PageLayers,
+    pub lookup: paperpaw_sdk::lookup::LookupProviders,
     pub widgets: Widgets,
     pub setup: SetupSteps,
     pub services: Services,
@@ -89,6 +91,8 @@ impl Harness {
             status_items: StatusItems::new(),
             text_filters: TextFilters::default(),
             decorators: Decorators::default(),
+            page_layers: Default::default(),
+            lookup: Default::default(),
             widgets: Widgets::new(),
             setup: SetupSteps::default(),
             services: Services::default(),
@@ -110,6 +114,11 @@ impl Harness {
     }
 
     pub fn env(&self) -> Env<'_> {
+        self.env_on(&self.storage)
+    }
+
+    /// [`Harness::env`] over another storage (one that fails, say).
+    pub fn env_on<'a>(&'a self, storage: &'a dyn paperpaw_sdk::Storage) -> Env<'a> {
         Env::from(EnvParts {
             device: &DEVICE,
             now: self.now,
@@ -129,8 +138,12 @@ impl Harness {
             status_items: &self.status_items,
             text_filters: &self.text_filters,
             decorators: &self.decorators,
+            page_layers: &self.page_layers,
+            lookup: &self.lookup,
             stylesheets: &[],
             book_data: &[],
+            book_fields: &[],
+            book_badges: &[],
             widgets: &self.widgets,
             setup: &self.setup,
             services: &self.services,
@@ -144,13 +157,17 @@ impl Harness {
             work: paperpaw_sdk::work::WorkStates::none(),
             reader: true,
             clipboard: false,
+            last_input: Default::default(),
+            inputs: &[],
+            content: paperpaw_platform::Rect::default(),
+            stack: &[],
             slots: &[],
             screens: &[],
             font_dirs: &[],
             catalog_device: None,
             secrets: &self.secrets,
             running: &paperpaw_sdk::secrets::Anyone,
-            storage: &self.storage,
+            storage,
         })
     }
 }

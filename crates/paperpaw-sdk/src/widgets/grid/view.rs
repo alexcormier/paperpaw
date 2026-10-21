@@ -500,6 +500,9 @@ impl GridView {
             return GridResponse::Handled;
         };
         match target {
+            // A tool shown faint by its plugin: nothing to do now.
+            Target::Run(Command::RunAction(action))
+                if !cx.env().menus.state(cx.env(), action.as_str()).enabled => {}
             Target::Run(command) => cx.command(command),
             Target::Item(item) => self.options(item, cx),
             Target::Button(button) => return GridResponse::Button(button),
@@ -957,6 +960,8 @@ mod tests {
         status_items: StatusItems,
         text_filters: TextFilters,
         decorators: Decorators,
+        page_layers: crate::layers::PageLayers,
+        lookup: crate::lookup::LookupProviders,
         widgets: Widgets,
         setup: SetupSteps,
         services: Services,
@@ -1001,6 +1006,8 @@ mod tests {
                 status_items: StatusItems::new(),
                 text_filters: TextFilters::new(),
                 decorators: Decorators::new(),
+                page_layers: Default::default(),
+                lookup: Default::default(),
                 widgets: Widgets::new(),
                 setup: SetupSteps::new(),
                 services: Services::new(),
@@ -1028,8 +1035,12 @@ mod tests {
                 status_items: &self.status_items,
                 text_filters: &self.text_filters,
                 decorators: &self.decorators,
+                page_layers: &self.page_layers,
+                lookup: &self.lookup,
                 stylesheets: &[],
                 book_data: &[],
+                book_fields: &[],
+                book_badges: &[],
                 widgets: &self.widgets,
                 setup: &self.setup,
                 services: &self.services,
@@ -1043,6 +1054,10 @@ mod tests {
                 work: crate::work::WorkStates::none(),
                 reader: true,
                 clipboard: false,
+                last_input: Default::default(),
+                inputs: &[],
+                content: paperpaw_platform::Rect::default(),
+                stack: &[],
                 slots: &[],
                 screens: &[],
                 font_dirs: &[],

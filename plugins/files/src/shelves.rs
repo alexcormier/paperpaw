@@ -1,34 +1,31 @@
 //! The library's authors, series and tags.
 //!
-//! A catalog of every book under the library folder (`catalog.txt`, one
-//! book a line: path, author, title, series, number, tags) is made anew in
-//! the background when one of these views (or the library) opens: the
-//! first time after PaperPaw starts, after books came, went or moved or
-//! the library folder changed, and once it is half an hour old. It is made
-//! from the details the library keeps of each book, opening only books
-//! not seen before, a few entries at a time. The view shows the catalog
-//! there was until the new one is complete.
+//! They are read from the library's catalog
+//! ([`paperpaw_sdk::library::catalog`]), which the kernel makes anew in
+//! the background (after PaperPaw starts, after books came, went or moved
+//! or the library folder changed); a view shows the catalog there was
+//! until the new one is complete, then reads it again
+//! ([`events::CATALOG_CHANGED`]).
 //!
 //! A view lists the authors (or series, or tags) with how many books each
 //! has; choosing one lists those books with their covers and states
 //! ([`crate::list::shelf`]), a series by its numbers. Only the names are
 //! held in memory, never the whole catalog.
 
-use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
-use core::cell::Cell;
 
-use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
-    Storage,
 };
 
-use crate::ROOT;
 use crate::list::shelf::{self as books, Kind};
-use paperpaw_sdk::library::catalog::{self, Record, Walk};
+use paperpaw_sdk::library::{
+    self,
+    catalog::{self, Record, State},
+};
 
 /// The view of authors (`mode` = `authors`), series (`series`) or tags
 /// (`tags`).
@@ -64,46 +61,6 @@ impl Shelf {
 }
 /// Names held at most.
 const MAX_NAMES: usize = 2000;
-/// Pause between steps of making the catalog, so the screen stays
-/// responsive.
-const STEP_DELAY_MS: u64 = 30;
-/// How long a catalog made is taken as it is, in seconds, unless books
-/// came, went or moved meanwhile: changes made outside PaperPaw (a phone's
-/// own file manager, a computer) are found after that.
-const CATALOG_AGE: u64 = 30 * 60;
-
-/// When the catalog was made last, in seconds since PaperPaw started,
-/// plus one; 0 where it is to be made (anew) when a view shows. Shared
-/// by the plugin's handlers and its screens (on the heap: a plugin file
-/// has no writable data of its own, ADR 0024).
-#[derive(Debug, Clone, Default)]
-pub(crate) struct CatalogMade(Rc<Cell<u32>>);
-
-impl CatalogMade {
-    /// The catalog is to be made anew: books came, went or moved, or the
-    /// library folder changed.
-    pub(crate) fn outdated(&self) {
-        self.0.set(0);
-    }
-
-    /// The catalog was just made (by any view of the library).
-    pub(crate) fn made(&self, env: &Env<'_>) {
-        self.0.set(seconds(env).saturating_add(1));
-    }
-
-    /// Whether the catalog is to be made anew before a view shows it.
-    pub(crate) fn is_outdated(&self, env: &Env<'_>) -> bool {
-        match self.0.get() {
-            0 => true,
-            made => u64::from(seconds(env).saturating_sub(made - 1)) >= CATALOG_AGE,
-        }
-    }
-}
-
-fn seconds(env: &Env<'_>) -> u32 {
-    u32::try_from(env.now.millis() / 1000).unwrap_or(u32::MAX - 1)
-}
-
 /// What a book is listed under in a view: its author, its series, or
 /// each of its tags.
 fn keys(record: &Record, shelf: Shelf) -> Vec<&str> {
@@ -116,9 +73,9 @@ fn keys(record: &Record, shelf: Shelf) -> Vec<&str> {
 
 /// The names of the authors, series or tags and how many books each
 /// has, alphabetically.
-fn names(storage: &dyn Storage, shelf: Shelf) -> Vec<(String, usize)> {
+fn names(books: catalog::Books<'_>, shelf: Shelf) -> Vec<(String, usize)> {
     let mut names: Vec<(String, usize)> = Vec::new();
-    catalog::each(storage, &mut |line| {
+    books(&mut |_, line| {
         for key in keys(&line, shelf) {
             // Books without series are no series; those without author
             // are listed under "Unknown author".
@@ -142,14 +99,12 @@ pub(crate) struct ShelfScreen {
     list: ListView,
     shelf: Shelf,
     names: Vec<(String, usize)>,
-    /// The catalog being made anew, until it is complete.
-    walk: Option<Walk>,
-    walked: bool,
-    catalog: CatalogMade,
+    /// No catalog yet: the kernel is making the first.
+    collecting: bool,
 }
 
 impl ShelfScreen {
-    pub(crate) fn new(env: &Env<'_>, params: &Params, catalog: CatalogMade) -> Self {
+    pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
@@ -158,10 +113,8 @@ impl ShelfScreen {
         let shelf = Shelf::of(params.get(params::MODE));
         Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
-            names: names(env.storage, shelf),
-            walk: None,
-            walked: false,
-            catalog,
+            names: names(&mut |f| library::service(env).each(env, f), shelf),
+            collecting: false,
             shelf,
             style,
             header,
@@ -199,17 +152,15 @@ impl Screen for ShelfScreen {
         if len == 0 {
             let area = self.list.area();
             // An empty view says what would be in it.
-            let (icon, text) = match &self.walk {
-                Some(walk) => {
-                    let message = env
-                        .i18n
-                        .plural("files.collecting", walk.found() as i64, &[]);
-                    ui::draw_message(canvas, env, &style, area, &message);
+            let (icon, text) = match self.shelf {
+                _ if self.collecting => {
+                    let message = env.i18n.tr("files.list.collecting");
+                    ui::draw_message(canvas, env, &style, area, message);
                     return;
                 }
-                None if self.shelf == Shelf::Series => ("books", "files.no-series"),
-                None if self.shelf == Shelf::Tags => ("tag", "files.no-tags"),
-                None => ("books", "files.no-books"),
+                Shelf::Series => ("books", "files.no-series"),
+                Shelf::Tags => ("tag", "files.no-tags"),
+                Shelf::Authors => ("books", "files.no-books"),
             };
             let text = ui::tr_input(env, text);
             ui::draw_empty(canvas, env, &style, area, icon, "", text);
@@ -231,36 +182,30 @@ impl Screen for ShelfScreen {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if self.walk.is_none() && !self.walked && self.catalog.is_outdated(&env) {
-            self.walk = Some(Walk::start(env.storage, env.settings.read(&ROOT)));
-        }
-        // Also where it was on its way when another screen came on top:
-        // the timer asked for went with it.
-        if self.walk.is_some() {
-            cx.wake_at(env.now);
+        let state = library::service(&env).catalog_state(&env);
+        self.collecting = matches!(state, State::Missing | State::Building);
+        if state == State::Missing {
+            // No catalog yet: the kernel makes it, then it shows.
+            cx.command(library::request_catalog());
         }
     }
 
-    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
-        let env = *cx.env();
-        let Some(walk) = &mut self.walk else {
-            return;
-        };
-        if !walk.step(&env) {
-            if self.names.is_empty() {
-                // "Collecting …" counts up.
-                self.redraw(cx);
-            }
-            cx.wake_at(env.now.add_millis(STEP_DELAY_MS));
-            return;
+    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
+        // The new catalog, or a book gone (noted beside it): the names
+        // again, keeping the place.
+        if [
+            events::CATALOG_CHANGED.id(),
+            events::BOOK_REMOVED.id(),
+            events::BOOK_MOVED.id(),
+        ]
+        .contains(&event)
+        {
+            let env = *cx.env();
+            self.collecting = false;
+            self.names = names(&mut |f| library::service(&env).each(&env, f), self.shelf);
+            self.list.set_len(self.names.len());
+            self.redraw(cx);
         }
-        // The new catalog: the names again, keeping the place.
-        self.walk = None;
-        self.walked = true;
-        self.catalog.made(&env);
-        self.names = names(env.storage, self.shelf);
-        self.list.set_len(self.names.len());
-        self.redraw(cx);
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -339,7 +284,7 @@ mod tests {
             })
             .collect();
         catalog::write(&storage, &records);
-        let authors = names(&storage, Shelf::Authors);
+        let authors = names(&mut |f| catalog::each_at(&storage, f), Shelf::Authors);
         assert_eq!(
             authors,
             [
@@ -348,9 +293,12 @@ mod tests {
                 (String::from("bob"), 1)
             ]
         );
-        assert_eq!(names(&storage, Shelf::Series), [(String::from("Tales"), 2)]);
         assert_eq!(
-            names(&storage, Shelf::Tags),
+            names(&mut |f| catalog::each_at(&storage, f), Shelf::Series),
+            [(String::from("Tales"), 2)]
+        );
+        assert_eq!(
+            names(&mut |f| catalog::each_at(&storage, f), Shelf::Tags),
             [(String::from("Fantasy"), 2), (String::from("Kids"), 1)]
         );
         // Searching: every word, anywhere, in any case.

@@ -490,14 +490,17 @@ impl Plugin for XtcFormat {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is decoded of each book, moved and removed with it.
         r.add_book_data(Env::plugin_dir(PLUGIN.as_str()), "")?;
-        r.add_format(FormatSpec::new(
-            FORMAT,
-            "format-xtc.title",
-            vec![Cow::Borrowed("xtc"), Cow::Borrowed("xtch")],
-            Box::new(|storage, path, _| {
-                XtcDocument::open(storage, path).map(|d| Box::new(d) as Box<dyn Document>)
-            }),
-        ))?;
+        r.add_format(
+            FormatSpec::new(
+                FORMAT,
+                "format-xtc.title",
+                vec![Cow::Borrowed("xtc"), Cow::Borrowed("xtch")],
+                Box::new(|storage, path, _| {
+                    XtcDocument::open(storage, path).map(|d| Box::new(d) as Box<dyn Document>)
+                }),
+            )
+            .sniff(|head| head.starts_with(XTC) || head.starts_with(XTCH)),
+        )?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

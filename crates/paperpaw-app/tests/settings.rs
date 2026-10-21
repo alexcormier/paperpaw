@@ -1,5 +1,5 @@
 //! Every setting of the settings pages says what it does: a help text
-//! below its name, in every language shipped (E2 in docs/PLANNING.md);
+//! below its name, in every language shipped;
 //! sliders show their value with its unit.
 
 // Tests panic on purpose when something is wrong.

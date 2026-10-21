@@ -20,12 +20,28 @@ pub enum Rotation {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
 #[non_exhaustive]
 pub enum RefreshMode {
+    /// Black and white only, the fastest (A2-like): pen strokes, a
+    /// slider dragged. Ordered from the lightest to the strongest.
+    Mono,
     /// Fast, low quality (A2/DU-like): menus, highlights, pen strokes.
     Fast,
     /// Normal partial update without flashing: page turns.
     Partial,
+    /// Every gray the panel shows, without flashing (GC16-like): a page
+    /// with pictures.
+    Gray,
     /// Flashing full update that removes ghosting.
     Full,
+    /// The panel cleared to white before the frame shows, as an e-ink
+    /// transition (to a cover, a sleep screen).
+    Clear,
+}
+
+impl RefreshMode {
+    /// Whether it flashes the panel and so removes ghosting.
+    pub fn cleans(self) -> bool {
+        matches!(self, RefreshMode::Full | RefreshMode::Clear)
+    }
 }
 
 /// Properties of a colour filter panel (Kaleido, Gallery, …).

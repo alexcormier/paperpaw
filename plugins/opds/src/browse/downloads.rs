@@ -64,7 +64,7 @@ impl BrowseScreen {
             let message = env.i18n.tr("opds.cannot-save").to_string();
             return self.say(message, cx);
         };
-        cx.command(paperpaw_sdk::library::changed());
+        cx.command(paperpaw_sdk::library::added(&target, "opds"));
         // What the catalog says of it, for books that say nothing.
         let first = |authors: &str| authors.split(" & ").next().map(String::from);
         paperpaw_sdk::library::provide(

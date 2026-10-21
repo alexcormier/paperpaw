@@ -17,7 +17,9 @@ use paperpaw_sdk::{
     Screen,
 };
 
-use super::index::{self, letter, sort_key, surname};
+use paperpaw_sdk::library;
+
+use super::index::{letter, sort_key, surname};
 use super::shelf::{self, Kind};
 
 /// The letters, `#` for titles starting otherwise.
@@ -50,7 +52,7 @@ impl FindScreen {
         let search = Rect::new(0, header.area.height + gap, display.width, row);
         // Which letters have books: by title (without "The") or surname.
         let mut has = [false; 27];
-        index::scan(env.storage, &mut |_, line| {
+        library::service(env).each(env, &mut |_, line| {
             let by_title = match sort_key(&line.title)[0] {
                 b @ b'a'..=b'z' => b.to_ascii_uppercase(),
                 _ => b'#',

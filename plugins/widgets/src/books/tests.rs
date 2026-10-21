@@ -929,3 +929,36 @@ fn titles_break_between_words_only() {
         }
     }
 }
+
+/// A library of one's own gives the widgets its books, none of them on
+/// the card.
+#[test]
+fn a_library_of_ones_own_gives_the_widgets_its_books() {
+    struct Remote;
+
+    impl library::Library for Remote {
+        fn catalog_state(&self, _: &paperpaw_sdk::Env<'_>) -> catalog::State {
+            catalog::State::Ready { stamp: 1 }
+        }
+
+        fn each(&self, _: &paperpaw_sdk::Env<'_>, f: &mut dyn FnMut(u64, catalog::Record)) {
+            for (key, path) in ["remote/a.epub", "remote/b.epub"].iter().enumerate() {
+                f(
+                    key as u64,
+                    catalog::Record::of(path, &library::Book::default()),
+                );
+            }
+        }
+    }
+
+    let mut h = Harness::new(MemoryStorage::new());
+    let remote: alloc::boxed::Box<dyn library::Library> = alloc::boxed::Box::new(Remote);
+    h.services.insert(
+        Id::new_static(library::service::SERVICE),
+        paperpaw_sdk::services::Service::new(remote),
+    );
+    let env = h.env();
+    let mut paths = Vec::new();
+    super::each_book(&env, &mut |record| paths.push(record.path));
+    assert_eq!(paths, ["remote/a.epub", "remote/b.epub"]);
+}

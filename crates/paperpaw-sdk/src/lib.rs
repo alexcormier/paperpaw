@@ -37,6 +37,7 @@ mod action;
 pub mod annotations;
 pub mod ask;
 pub mod builtin;
+pub mod chrome;
 pub mod collections;
 mod command;
 pub mod contribution;
@@ -50,23 +51,32 @@ pub mod firmware;
 mod fonts;
 mod formats;
 mod gesture;
+pub mod host;
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use screen::ScreenMaker;
 mod hyphenation;
 pub mod icons;
 mod id;
 pub mod install;
 pub mod keys;
+pub mod layers;
 pub mod library;
 pub mod logo;
+pub mod lookup;
 mod memory_storage;
 mod menus;
 pub mod native;
 pub mod numbers;
 mod params;
+pub mod pattern;
 mod plugin;
 mod plugins;
+pub mod positions;
 pub mod power;
 pub mod presets;
 pub mod random;
+pub mod reading;
 pub mod replies;
 mod screen;
 pub mod secrets;
@@ -80,13 +90,17 @@ pub mod time;
 pub mod ui;
 pub mod usage;
 mod version;
+pub mod voices;
 pub mod web;
 pub mod widgets;
 pub mod wifi;
 pub mod words;
 pub mod work;
 
-pub use action::{ActionHandler, ActionHint, ActionSpec, Actions};
+pub use action::{
+    ActionHandler, ActionHint, ActionOverride, ActionParamsHandler, ActionSpec, Actions, Observer,
+    ObserverSpec,
+};
 pub use command::{
     Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,
     http_params, server_params, socket_params, speech_params,
@@ -102,12 +116,17 @@ pub use gesture::{Direction, Gesture, GestureKind};
 pub use hyphenation::{Hyphenation, HyphenationSpec};
 pub use id::{Id, InvalidId};
 pub use memory_storage::{MemoryStorage, read_file};
-pub use menus::{MenuEntry, MenuItem, MenuNeed, MenuSection, Menus};
+pub use menus::{
+    ItemState, ItemStateFn, MenuEntry, MenuItem, MenuNeed, MenuPlace, MenuSection, Menus,
+};
 pub use params::Params;
 pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec, Uses};
 pub use plugins::{PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, RequiredFor};
 pub use replies::{Chosen, HttpReply, ServerNotice, SocketNotice, Typed};
-pub use screen::{Cx, Handled, Hint, Hints, Output, Screen, ScreenFactory, ScreenSpec};
+pub use screen::{
+    CloseCause, Cx, Handled, Hint, Hints, Output, Outside, Screen, ScreenFactory, ScreenKey,
+    ScreenSpec, StackEntry,
+};
 pub use setting::{Setting, Text};
 pub use settings::{
     Choices, Editor, Level, SettingCheck, SettingError, SettingExtra, SettingGroupSpec,
@@ -149,7 +168,7 @@ pub mod qr {
 pub mod document {
     pub use paperpaw_document::{
         Align, Block, BlockKind, Document, DocumentError, EmbeddedFont, ImageRef, Link, Locator,
-        MAX_FAMILIES, Metadata, OffsetMap, Run, TextStyle, TocEntry, is_external,
+        MAX_FAMILIES, Metadata, OffsetMap, PageProgression, Run, TextStyle, TocEntry, is_external,
     };
 }
 
@@ -162,6 +181,9 @@ pub mod layout {
         Face, Hyphenate, LayoutContext, LineRun, Page, PageImage, PageLine, Style, Typesetter,
         VERSION, layout_page, line_start,
     };
+    /// Lines broken as the layout breaks them (see `paperpaw-text`): for
+    /// laying out text of one's own the way pages are, e.g. a note.
+    pub use paperpaw_text::{Line, wrap_lines, wrap_lines_hyphenated};
 }
 
 /// Streaming XML/XHTML tokenizer (see `paperpaw-xml`) for format plugins.

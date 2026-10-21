@@ -135,7 +135,7 @@ impl Harness {
     fn build(storage: Shared, fonts: Option<&str>, network: bool) -> Self {
         let mut builder = Kernel::builder(DEVICE)
             .storage(storage.clone())
-            .user_config("[core]\nlanguage = en\n")
+            .user_config("[core]\nlanguage = en\nlibrary-folder =\n")
             .network(network)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(paperpaw_plugin_format_epub::EpubFormat)

@@ -17,6 +17,28 @@ use crate::params::Params;
 /// command that opened it (e.g. the path of a book).
 pub type ScreenFactory = Box<dyn Fn(&Env<'_>, &Params) -> Box<dyn Screen>>;
 
+/// Makes the screens plugins added: what [`Env::make_screen`] asks (the
+/// kernel's, for screens that host others). Present without the `kernel`
+/// feature too: [`Env`] holds one, and a plugin built without the feature
+/// must see `Env` as the kernel built it.
+pub trait ScreenMaker {
+    /// Screen `id` made with `params` for `env`, `None` where no plugin
+    /// added it.
+    fn make(&self, id: &Id, env: &Env<'_>, params: &Params) -> Option<Box<dyn Screen>>;
+
+    /// The screen slot `slot` shows, as the user or the plugins bound it.
+    fn slot_screen(&self, slot: &str) -> Option<&Id> {
+        let _ = slot;
+        None
+    }
+
+    /// Every screen offered for slot `slot`, in the order offered.
+    fn slot_screens(&self, slot: &str) -> Vec<&Id> {
+        let _ = slot;
+        Vec::new()
+    }
+}
+
 /// A screen contribution.
 #[non_exhaustive]
 pub struct ScreenSpec {
@@ -24,6 +46,10 @@ pub struct ScreenSpec {
     /// Translation key of the screen's display name.
     pub title: Cow<'static, str>,
     pub factory: ScreenFactory,
+    /// How the panel is refreshed when it opens, in place of the kernel's
+    /// choice (a full refresh, or a partial one where the user turned
+    /// flashing off): e.g. [`RefreshMode::Fast`] for a quick sheet.
+    pub refresh_on_open: Option<RefreshMode>,
 }
 
 impl ScreenSpec {
@@ -33,7 +59,14 @@ impl ScreenSpec {
             id,
             title: title.into(),
             factory,
+            refresh_on_open: None,
         }
+    }
+
+    /// How the panel is refreshed when it opens.
+    pub fn refresh_on_open(mut self, mode: RefreshMode) -> Self {
+        self.refresh_on_open = Some(mode);
+        self
     }
 }
 
@@ -91,6 +124,79 @@ impl Hint {
     }
 }
 
+/// Tells one opened screen from every other, also from another opening
+/// of the same screen: as long as it is open, through being made anew
+/// (see [`StackEntry::key`], [`Cx::close`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub struct ScreenKey(u32);
+
+impl ScreenKey {
+    /// The key numbered `serial`; the kernel numbers the screens it opens.
+    pub const fn new(serial: u32) -> Self {
+        Self(serial)
+    }
+}
+
+/// An open screen, as [`Env::stack`](crate::Env::stack) lists them.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct StackEntry {
+    /// Which screen it is.
+    pub screen: Id,
+    /// The slot it was opened for, if any (e.g. the reader's).
+    pub slot: Option<Id>,
+    /// Shown over part of the screen below it (a menu, a dialog), as its
+    /// [`Screen::region`] was when the stack last changed.
+    pub overlay: bool,
+    /// This opening of it.
+    pub key: ScreenKey,
+}
+
+impl StackEntry {
+    /// Made of its fields, e.g. by the kernel or a test.
+    pub fn new(screen: Id, slot: Option<Id>, overlay: bool, key: ScreenKey) -> Self {
+        Self {
+            screen,
+            slot,
+            overlay,
+            key,
+        }
+    }
+
+    /// Whether it is screen `id`, or the screen of slot `id`.
+    pub fn is(&self, id: &Id) -> bool {
+        self.screen == *id || self.slot.as_ref() == Some(id)
+    }
+}
+
+/// Why the kernel is about to close a screen (see
+/// [`Screen::on_close_request`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum CloseCause {
+    /// *Back* ([`Command::Back`], the back button or gesture).
+    Back,
+    /// A tap outside an overlay (see [`Screen::outside`]).
+    TapOutside,
+    /// Its slot, or a screen below it, shown again: the screens above it
+    /// go ([`Command::OpenSlot`], [`Command::BackTo`]).
+    Slot,
+}
+
+/// What a tap outside an overlay does (see [`Screen::outside`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum Outside {
+    /// It closes the overlay, as *Back* does.
+    #[default]
+    Close,
+    /// Nothing: the overlay stays, the tap is taken.
+    Ignore,
+    /// It goes to the screen below, as if the overlay were not there (a
+    /// bar for skimming that leaves the page usable).
+    PassThrough,
+}
+
 /// Whether an event was consumed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -118,8 +224,10 @@ pub trait Screen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>);
 
     /// `None` for a full screen; `Some(region)` makes the screen an
-    /// overlay (menu, dialog, popup) drawn above the screens below it.
-    /// Tapping outside an overlay closes it.
+    /// overlay (menu, dialog, popup) drawn above the screens below it,
+    /// `region` from the corner of the part of the screen it has
+    /// ([`Env::content`], that of the full screen below it). Tapping
+    /// outside an overlay closes it.
     fn region(&self, env: &Env<'_>) -> Option<Rect> {
         let _ = env;
         None
@@ -162,6 +270,17 @@ pub trait Screen {
         false
     }
 
+    /// Whether the screen takes double taps: a second tap close to the
+    /// first in time and place comes as [`GestureKind::DoubleTap`]
+    /// (as a tap where it answers [`Handled::No`]). By default it comes
+    /// as a tap, so that screens that take any gesture on a button do not
+    /// lose quick taps.
+    ///
+    /// [`GestureKind::DoubleTap`]: crate::GestureKind::DoubleTap
+    fn takes_double_taps(&self) -> bool {
+        false
+    }
+
     /// Whether the screen guards the device now, as a lock screen does
     /// while it is locked. Until it no longer does, nothing shows above
     /// it but the screens it opens itself (its keyboard) and those they
@@ -179,6 +298,49 @@ pub trait Screen {
     /// too, and so do the screens above them.
     fn secret(&self) -> bool {
         false
+    }
+
+    /// What a tap outside it does, for an overlay: by default it closes
+    /// it.
+    fn outside(&self) -> Outside {
+        Outside::Close
+    }
+
+    /// For an overlay: whether input it does not take (an action or a
+    /// gesture it answers [`Handled::No`]) goes on to the screen below it,
+    /// as for a bar or a panel that leaves the page usable. By default it
+    /// goes to the action's handler and the key map, as on top.
+    fn passes_through(&self) -> bool {
+        false
+    }
+
+    /// Whether its taps and swipes go the other way: what the key map
+    /// binds to the left side and to a swipe to the left happens on the
+    /// right and for a swipe to the right, and the other way round, e.g.
+    /// a book whose pages go right to left
+    /// ([`PageProgression`](crate::document::PageProgression)). Buttons
+    /// stay as they are.
+    fn mirrored(&self) -> bool {
+        false
+    }
+
+    /// When it shows the row of hints, where it knows better than the
+    /// plugin said for all its openings
+    /// ([`Registrar::set_screen_hints`](crate::Registrar::set_screen_hints)):
+    /// read when it is opened, for the part of the screen it is made for,
+    /// and whenever the row would come for a while ([`Hints::OnPress`]).
+    fn hints(&self) -> Option<Hints> {
+        None
+    }
+
+    /// Asked before the kernel closes it for `why` (*Back*, a tap
+    /// outside, its slot shown again): [`Handled::Yes`] keeps it open,
+    /// e.g. to ask first whether text typed is to be thrown away. Not
+    /// asked where it closes itself ([`Cx::close`]) or its plugin is
+    /// removed.
+    fn on_close_request(&mut self, why: CloseCause, cx: &mut Cx<'_, '_>) -> Handled {
+        let _ = (why, cx);
+        Handled::No
     }
 
     /// Raw pointer samples, offered before gesture recognition and before
@@ -250,9 +412,14 @@ pub struct Output {
     pub commands: Vec<Command>,
     /// Requested refresh mode for the region drawn during the event.
     pub refresh: Option<RefreshMode>,
+    /// The mode set exactly ([`Cx::set_refresh`]): it wins over requests.
+    pub refresh_set: Option<RefreshMode>,
+    /// Why the panel is refreshed ([`Cx::refresh_cause`]).
+    pub refresh_cause: Option<crate::filters::RefreshCause>,
     /// Whether the whole screen should be redrawn.
     pub redraw: bool,
-    /// Part of the screen to redraw, in screen coordinates.
+    /// Part of the screen to redraw, from the corner of the part of the
+    /// screen the screen has ([`Env::content`]).
     pub redraw_area: Option<Rect>,
     /// When the screen wants [`Screen::on_timer`] to be called (see
     /// [`Cx::wake_at`]).
@@ -271,12 +438,55 @@ impl Output {
 pub struct Cx<'a, 'e> {
     env: &'a Env<'e>,
     output: &'a mut Output,
+    /// The screen whose handler runs, if it is one of the stack's.
+    key: Option<ScreenKey>,
 }
 
 impl<'a, 'e> Cx<'a, 'e> {
     /// Used by the kernel and by tests.
     pub fn new(env: &'a Env<'e>, output: &'a mut Output) -> Self {
-        Self { env, output }
+        Self {
+            env,
+            output,
+            key: None,
+        }
+    }
+
+    /// For the handler of the open screen `key` (the kernel's, or a test
+    /// that plays it).
+    pub fn for_screen(mut self, key: ScreenKey) -> Self {
+        self.key = Some(key);
+        self
+    }
+
+    /// Which opening of a screen this handler runs for: `None` outside
+    /// the stack (a screen made aside, a notice).
+    pub fn key(&self) -> Option<ScreenKey> {
+        self.key
+    }
+
+    /// This screen as the stack lists it ([`Env::stack`](crate::Env::stack)).
+    pub fn entry(&self) -> Option<&StackEntry> {
+        let key = self.key?;
+        self.env.stack.iter().find(|entry| entry.key == key)
+    }
+
+    /// Which screen this is.
+    pub fn screen_id(&self) -> Option<&Id> {
+        self.entry().map(|entry| &entry.screen)
+    }
+
+    /// The slot this screen was opened for, if any.
+    pub fn slot(&self) -> Option<&Id> {
+        self.entry().and_then(|entry| entry.slot.as_ref())
+    }
+
+    /// Closes this screen, wherever it is in the stack ([`Command::Close`]):
+    /// the screens above it stay. Nothing outside the stack.
+    pub fn close(&mut self) {
+        if let Some(key) = self.key {
+            self.output.commands.push(Command::Close(key));
+        }
     }
 
     pub fn env(&self) -> &Env<'e> {
@@ -294,13 +504,37 @@ impl<'a, 'e> Cx<'a, 'e> {
         self.output.request_refresh(mode);
     }
 
+    /// Sets the refresh mode for what was drawn exactly, over the requests
+    /// of the event (the last one set wins): e.g. [`RefreshMode::Fast`]
+    /// for an overlay opening, where the kernel would choose more. Refresh
+    /// filters still see it.
+    pub fn set_refresh(&mut self, mode: RefreshMode) {
+        self.output.refresh_set = Some(mode);
+    }
+
+    /// Puts key map layer `layer` in front of the slot's for this screen
+    /// while it is on top (see [`Command::SetKeyLayer`]); `None` takes it
+    /// away. Nothing for a screen not of the stack.
+    pub fn set_key_layer(&mut self, layer: Option<Id>) {
+        if let Some(key) = self.key {
+            self.output.commands.push(Command::SetKeyLayer(key, layer));
+        }
+    }
+
+    /// Says why the panel is refreshed, for refresh filters (the reader
+    /// tells [`RefreshCause::PageTurn`](crate::filters::RefreshCause::PageTurn)).
+    pub fn refresh_cause(&mut self, cause: crate::filters::RefreshCause) {
+        self.output.refresh_cause = Some(cause);
+    }
+
     /// Requests a complete redraw via [`Screen::draw`].
     pub fn request_redraw(&mut self) {
         self.output.redraw = true;
     }
 
-    /// Requests a redraw of `area` (screen coordinates) only, e.g. a status
-    /// line or a focused item: [`Screen::draw`] runs clipped to it.
+    /// Requests a redraw of `area` only, from the corner of the part of
+    /// the screen the screen has ([`Env::content`]), as it draws; e.g. a
+    /// status line or a focused item: [`Screen::draw`] runs clipped to it.
     pub fn request_redraw_area(&mut self, area: Rect) {
         self.output.redraw_area = Some(self.output.redraw_area.map_or(area, |a| a.union(&area)));
     }

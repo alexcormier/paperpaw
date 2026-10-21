@@ -10,6 +10,9 @@
 # `cargo +esp x4classic`, `cargo +esp x4classic-run`.
 [build]
 target = "riscv32imc-unknown-none-elf"
+# No compiler wrapper such as sccache, even if one is set for all builds:
+# the firmware's link-time optimisation fails through it, without a message.
+rustc-wrapper = ""
 
 [alias]
 x4pro = "build --release --target xtensa-esp32s3-none-elf --no-default-features --features x4-pro,remote -Zbuild-std=core,alloc"

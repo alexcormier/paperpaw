@@ -1,5 +1,5 @@
-//! No screen of the standard app reads the storage while it draws
-//! (PLANNING §12.3, B3). The X4 draws a frame in bands, a screen's `draw`
+//! No screen of the standard app reads the storage while it draws.
+//! The X4 draws a frame in bands, a screen's `draw`
 //! once for each, so what `draw` reads is read again for every band: the
 //! home screen once took 1.9 s to draw instead of 0.33 s for it. Each
 //! screen is opened here as on an X4 on which a book was read, and what

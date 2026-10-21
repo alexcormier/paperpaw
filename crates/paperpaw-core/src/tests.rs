@@ -1520,7 +1520,7 @@ ui-size = 12
             .collect()
     };
     let file = |kernel: &Kernel| -> String {
-        let mut buf = [0u8; 256];
+        let mut buf = [0u8; 4096];
         let n = kernel
             .shared
             .storage
@@ -1538,14 +1538,23 @@ ui-size = 12
     );
     assert_eq!(items(&kernel), ["core.settings", "core.home"]);
     assert!(kernel.shared.menus.is_customized("core.main"));
-    assert_eq!(
-        file(&kernel),
-        "[core]
+    // With what plugins put there when it was redefined: entries added
+    // later show too.
+    let saved = file(&kernel);
+    let start = "[core]
 ui-size = 12
 
 [menus]
 core.main = core.settings, core.home
-"
+
+[menus-known]
+core.main = ";
+    assert!(saved.starts_with(start), "{saved}");
+    // Only what the user left out.
+    let known = &saved[start.len()..];
+    assert!(
+        !known.contains("core.home") && !known.contains("core.settings"),
+        "{saved}"
     );
     kernel.set_menu(Id::new_static("core.main"), None);
     assert_eq!(items(&kernel), defaults);
@@ -1555,6 +1564,8 @@ core.main = core.settings, core.home
 ui-size = 12
 
 [menus]
+
+[menus-known]
 "
     );
 }
@@ -2733,7 +2744,9 @@ impl Plugin for FilterPlugin {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        use paperpaw_sdk::filters::{InputFilterSpec, InputVerdict, RefreshFilterSpec};
+        use paperpaw_sdk::filters::{
+            InputFilterSpec, InputVerdict, RefreshFilterSpec, RefreshVerdict,
+        };
         r.add_input_filter(InputFilterSpec::new(
             Id::new_static("filter.input"),
             "",
@@ -2753,8 +2766,11 @@ impl Plugin for FilterPlugin {
             Id::new_static("filter.refresh"),
             "",
             Box::new(|_, refresh| {
-                (refresh.screen.as_ref().map(Id::as_str) == Some("a.screen"))
-                    .then_some(RefreshMode::Full)
+                if refresh.screen.as_ref().map(Id::as_str) == Some("a.screen") {
+                    RefreshVerdict::Mode(RefreshMode::Full)
+                } else {
+                    RefreshVerdict::Keep
+                }
             }),
         ))
     }
@@ -3243,13 +3259,21 @@ fn overlays_leave_the_rows_they_do_not_cover() {
     assert_eq!(uncovered(part, Rect::new(40, 200, 400, 600)), Some(part));
 }
 
+mod action_runs;
+mod chrome;
 mod clean_up;
 mod declared_work;
 mod frames;
 mod guard;
+mod hosting;
 mod input;
+mod input_kinds;
 mod kernel_calls;
+mod library_catalog;
 mod plugins_loaded;
+mod refreshes;
 mod screen_life;
+mod services_declared;
 mod settings_files;
+mod stack;
 mod storage;

@@ -802,6 +802,183 @@ impl DecoratorSpec {
     }
 }
 
+/// Marks words by [patterns](crate::pattern): each found on the page's
+/// text (its words with a space between), the words it touches marked in
+/// its role. A word broken over two lines counts once, whole.
+///
+/// ```
+/// # use paperpaw_sdk::{Id, decorations::PatternDecorator, pattern::Pattern};
+/// let names = PatternDecorator::new()
+///     .rule(Pattern::new(r"\b[A-Z][a-z]+ (?:of|von) [A-Z][a-z]+\b").unwrap(), Id::new_static("my.name"))
+///     .into_spec(Id::new_static("my.names"), "my.names");
+/// ```
+#[derive(Debug, Clone, Default)]
+pub struct PatternDecorator {
+    rules: Vec<(crate::pattern::Pattern, Id)>,
+}
+
+impl PatternDecorator {
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// Marks what `pattern` finds in `role`; rules are tried in order.
+    pub fn rule(mut self, pattern: crate::pattern::Pattern, role: Id) -> Self {
+        self.rules.push((pattern, role));
+        self
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.rules.is_empty()
+    }
+
+    /// The marks of its rules on `page`.
+    pub fn decorate(&self, page: &PageText<'_>) -> Vec<Decorated> {
+        if self.rules.is_empty() {
+            return Vec::new();
+        }
+        // The page's text, and the words each byte range of it is: a word
+        // broken over two lines is its two page words.
+        let mut text = alloc::string::String::new();
+        let mut spans: Vec<(usize, usize, usize, usize)> = Vec::new();
+        for (i, word) in page.words.iter().enumerate() {
+            if let Some(last) = spans.last_mut() {
+                let before = &page.words[last.3];
+                if before.text == word.text && before.end == word.start {
+                    last.3 = i;
+                    continue;
+                }
+                text.push(' ');
+            }
+            let start = text.len();
+            text.push_str(word.text);
+            spans.push((start, text.len(), i, i));
+        }
+        let mut marks = Vec::new();
+        for (pattern, role) in &self.rules {
+            for (start, end) in pattern.find_iter(&text) {
+                let touched = spans.iter().filter(|s| s.0 < end && start < s.1);
+                let (first, last) = touched.fold((usize::MAX, 0), |(first, last), s| {
+                    (first.min(s.2), last.max(s.3))
+                });
+                if let Some(mark) = page
+                    .words
+                    .get(first..=last)
+                    .and_then(|words| Decorated::words(words, role))
+                {
+                    marks.push(mark);
+                }
+            }
+        }
+        marks
+    }
+
+    /// A decorator `id`, named `title`, marking by these rules.
+    pub fn into_spec(self, id: Id, title: impl Into<Cow<'static, str>>) -> DecoratorSpec {
+        DecoratorSpec::new(id, title, move |_, page| self.decorate(page))
+    }
+}
+
+/// The marks a plugin without code describes in its `marks.ini`: a
+/// section each, which becomes the role `<plugin>.<section>` (its look
+/// settings under its title in Settings, Marks in the text) and rules of
+/// a [`PatternDecorator`]:
+///
+/// ```ini
+/// [names]
+/// title = Names                 ; a translation key, or the text itself
+/// pattern = \b(?:Mr|Mrs|Miss)\. [A-Z]\w+
+/// pattern = \bthe White Rabbit\b
+/// background = yellow           ; light-gray, gray, dark-gray, black, white,
+/// ink = as-is                   ; yellow, green, blue, pink, orange, red,
+/// line = wavy                   ; none, or as-is (ink); solid, dotted,
+/// line-tone = red               ; dashed, wavy, double
+/// thickness = 6                 ; in tenths of a millimetre, 1 to 20
+/// frame = off
+/// struck = off
+/// ```
+#[derive(Debug, Clone, Default)]
+#[non_exhaustive]
+pub struct MarkRules {
+    /// The roles: their ids, titles and default looks.
+    pub roles: Vec<(Id, alloc::string::String, Decoration)>,
+    /// Their patterns.
+    pub decorator: PatternDecorator,
+}
+
+impl MarkRules {
+    /// The marks of plugin `plugin` in `source` (a `marks.ini`).
+    pub fn parse(plugin: &Id, source: &str) -> Result<MarkRules, RegisterError> {
+        use alloc::string::ToString;
+        let mut rules = MarkRules::default();
+        for entry in paperpaw_config::parse(source) {
+            let entry = entry.map_err(|error| RegisterError::Parse {
+                line: error.line,
+                message: Cow::Owned(error.to_string()),
+            })?;
+            let line = entry.line;
+            let error = |message: alloc::string::String| RegisterError::Parse {
+                line,
+                message: Cow::Owned(message),
+            };
+            let value = entry.value.as_str();
+            let role = Id::parse(&format!("{plugin}.{}", entry.section))
+                .map_err(|_| error(format!("`[{}]` names no role", entry.section)))?;
+            if rules.roles.last().is_none_or(|(id, ..)| *id != role) {
+                if rules.roles.iter().any(|(id, ..)| *id == role) {
+                    return Err(error(format!("`[{}]` twice", entry.section)));
+                }
+                rules
+                    .roles
+                    .push((role.clone(), entry.section.to_string(), Decoration::NONE));
+            }
+            let Some((_, title, look)) = rules.roles.last_mut() else {
+                continue;
+            };
+            let tone = |value: &str| {
+                let id = format!("core.tone.{value}");
+                Tone::from_id(&id).ok_or_else(|| error(format!("no tone `{value}`")))
+            };
+            let switch = || {
+                entry
+                    .value
+                    .as_bool()
+                    .ok_or_else(|| error(format!("`{}` is on or off", entry.key)))
+            };
+            match (entry.key, &*value) {
+                ("title", _) => *title = value.to_string(),
+                ("pattern", _) => {
+                    let pattern = crate::pattern::Pattern::new(&value)
+                        .map_err(|e| error(format!("pattern: {e}")))?;
+                    rules.decorator = core::mem::take(&mut rules.decorator).rule(pattern, role);
+                }
+                ("background" | "ink" | "line-tone", "none" | "as-is") => {}
+                ("background", _) => look.background = Some(tone(&value)?),
+                ("ink", _) => look.ink = Some(tone(&value)?),
+                ("line-tone", _) => look.line_tone = Some(tone(&value)?),
+                ("line", "none") => look.line = None,
+                ("line", _) => {
+                    let kind = LineKind::from_id(&format!("core.line.{value}"))
+                        .ok_or_else(|| error(format!("no line `{value}`")))?;
+                    look.line = Some(kind);
+                }
+                ("thickness", _) => {
+                    let tenths = entry
+                        .value
+                        .as_u32()
+                        .filter(|t| (1..=20).contains(t))
+                        .ok_or_else(|| error("thickness is 1 to 20".to_string()))?;
+                    look.thickness = tenths as u8;
+                }
+                ("frame", _) => look.frame = switch()?,
+                ("struck", _) => look.struck = switch()?,
+                (key, _) => return Err(error(format!("no `{key}` in a mark"))),
+            }
+        }
+        Ok(rules)
+    }
+}
+
 impl fmt::Debug for DecoratorSpec {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("DecoratorSpec")
@@ -928,6 +1105,103 @@ impl Decorators {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn patterns_mark_the_words_they_touch() {
+        use crate::pattern::Pattern;
+        let at = |n: u32| Locator::new(0, n);
+        let word = |text, start, end| PageWord {
+            text,
+            start: at(start),
+            end: at(end),
+        };
+        // "The White Rabbit ran to Kaninchen-" / "-bau": the last word broken.
+        let words = [
+            word("The", 0, 3),
+            word("White", 4, 9),
+            word("Rabbit", 10, 16),
+            word("ran", 17, 20),
+            word("Kaninchenbau", 21, 30),
+            word("Kaninchenbau", 30, 33),
+        ];
+        let page = PageText {
+            path: "b.epub",
+            language: "en",
+            words: &words,
+        };
+        let name = Id::new_static("my.name");
+        let burrow = Id::new_static("my.burrow");
+        let marks = PatternDecorator::new()
+            .rule(Pattern::new(r"White Rabbit").unwrap(), name.clone())
+            .rule(Pattern::new(r"(?i)bit\b").unwrap(), name.clone())
+            .rule(Pattern::new(r"\bkaninchen").unwrap(), burrow.clone())
+            .rule(Pattern::new(r"(?i)\bkaninchen").unwrap(), burrow.clone())
+            .decorate(&page);
+        let range = |m: &Decorated| (m.start.offset, m.end.offset, m.role.clone());
+        assert_eq!(
+            marks.iter().map(range).collect::<Vec<_>>(),
+            [
+                (4, 16, name.clone()),
+                // Part of a word marks it whole.
+                (10, 16, name),
+                // The broken word once, both its parts.
+                (21, 33, burrow),
+            ]
+        );
+        assert!(PatternDecorator::new().decorate(&page).is_empty());
+    }
+
+    #[test]
+    fn marks_of_a_plugin_without_code_are_read() {
+        let source = "[names]\ntitle = Names\npattern = (?i)\\bwhite rabbit\\b\n\
+                      pattern = \\bAlice\\b\nbackground = yellow\nline = wavy\n\
+                      line-tone = red\nthickness = 6\n\n[places]\npattern = Wonderland\n\
+                      frame = on\n";
+        let plugin = Id::new_static("tale");
+        let rules = MarkRules::parse(&plugin, source).unwrap();
+        let names = Decoration::NONE
+            .background(Tone::Yellow)
+            .line(LineKind::Wavy)
+            .line_tone(Tone::Red)
+            .thickness(6);
+        assert_eq!(
+            rules.roles,
+            [
+                (Id::new_static("tale.names"), "Names".into(), names),
+                (
+                    Id::new_static("tale.places"),
+                    "places".into(),
+                    Decoration::NONE.frame()
+                ),
+            ]
+        );
+        let words = [PageWord {
+            text: "Alice",
+            start: Locator::new(0, 0),
+            end: Locator::new(0, 5),
+        }];
+        let page = PageText {
+            path: "b.epub",
+            language: "en",
+            words: &words,
+        };
+        let marks = rules.decorator.decorate(&page);
+        assert_eq!(marks.len(), 1);
+        assert_eq!(marks[0].role, Id::new_static("tale.names"));
+        for (bad, line) in [
+            ("[a]\npattern = (\n", 2),
+            ("[a]\nbackground = mauve\n", 2),
+            ("[a]\ncolour = red\n", 2),
+            ("[a]\nthickness = 99\n", 2),
+            ("[a]\nframe = maybe\n", 2),
+            ("[a]\npattern = x\n[b]\npattern = z\n[a]\npattern = y\n", 6),
+        ] {
+            match MarkRules::parse(&plugin, bad) {
+                Err(RegisterError::Parse { line: at, .. }) => assert_eq!(at, line, "{bad}"),
+                other => panic!("{bad}: {other:?}"),
+            }
+        }
+    }
 
     #[test]
     fn backgrounds_keep_their_padding_at_the_edges() {

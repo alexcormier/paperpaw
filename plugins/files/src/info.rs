@@ -1,12 +1,16 @@
 //! Book information: cover, title and author, the series and tags, the
-//! language, how far it is read, the file, and what the book is about.
+//! language, how far it is read, the fields plugins keep with books
+//! ([`paperpaw_sdk::library::BookField`]), the file, and what the book is
+//! about.
 
+use alloc::borrow::Cow;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::document::ImageRef;
+use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, Screen,
@@ -22,7 +26,7 @@ struct Details {
     author: String,
     cover: Option<ImageRef>,
     /// Label key and value, in order.
-    rows: Vec<(&'static str, String)>,
+    rows: Vec<(Cow<'static, str>, String)>,
 }
 
 pub(crate) struct InfoScreen {
@@ -116,7 +120,7 @@ impl Layout {
         let label_width = d
             .rows
             .iter()
-            .map(|(key, _)| font.measure(style.small, env.i18n.tr(key)))
+            .map(|(key, _)| font.measure(style.small, env.i18n.tr(key.as_ref())))
             .fold(0.0, f32::max)
             + f32::from(gap) * 2.0;
         let rows = y;
@@ -155,7 +159,7 @@ impl Layout {
 fn details(env: &Env<'_>, path: &str) -> (Details, String) {
     let storage = env.storage;
     let name = files::name(path);
-    let cached = library::book(storage, path);
+    let cached = library::service(env).book(env, path);
     let mut details = Details {
         title: library::readable_name(name.rsplit_once('.').map_or(name, |(n, _)| n)).into_owned(),
         ..Details::default()
@@ -178,23 +182,40 @@ fn details(env: &Env<'_>, path: &str) -> (Details, String) {
                 ),
                 None => series,
             };
-            rows.push(("files.info.series", value));
+            rows.push((Cow::Borrowed("files.info.series"), value));
         }
         if !metadata.subjects.is_empty() {
-            rows.push(("files.info.tags", metadata.subjects.join(", ")));
+            rows.push((
+                Cow::Borrowed("files.info.tags"),
+                metadata.subjects.join(", "),
+            ));
         }
         if let Some(language) = metadata.language {
-            rows.push(("files.info.language", language));
+            rows.push((Cow::Borrowed("files.info.language"), language));
         }
         description = metadata.description.unwrap_or_default();
     }
-    if let Some(progress) = cached.and_then(|b| b.progress) {
-        rows.push(("files.info.progress", format!("{progress} %")));
+    if let Some(progress) = cached.as_ref().and_then(|b| b.progress) {
+        rows.push((
+            Cow::Borrowed("files.info.progress"),
+            format!("{progress} %"),
+        ));
+    }
+    // The fields plugins keep with books, where this one has a value.
+    if let Some(book) = &cached {
+        for field in env.book_fields {
+            if let Some(value) = book.field(field.id.as_str()) {
+                rows.push((field.title.clone(), value.to_string()));
+            }
+        }
     }
     let size = storage.size(path).unwrap_or_default();
     let file = file_row(name, size, env.i18n.tr("files.decimal"));
-    rows.push(("files.info.file", file));
-    rows.push(("files.info.folder", files::parent(path).to_string()));
+    rows.push((Cow::Borrowed("files.info.file"), file));
+    rows.push((
+        Cow::Borrowed("files.info.folder"),
+        files::parent(path).to_string(),
+    ));
     details.rows = rows;
     (details, description)
 }
@@ -269,7 +290,10 @@ impl Screen for InfoScreen {
         let mut y = layout.rows;
         for (key, value) in &d.rows {
             let baseline = i32::from(y) + ascent as i32;
-            let label = env.i18n.tr(key);
+            let label = env.i18n.tr(key.as_ref());
+            let row = Rect::new(margin, y, width, line(style.text));
+            canvas.describe(Role::Text, label, row, false, None);
+            canvas.describe(Role::Text, value, row, false, None);
             font.draw(canvas, style.small, x, baseline, label, style.faint(80));
             let room = f32::from(width) - layout.label_width;
             let value = ui::fit(&font, style.text, value, room);

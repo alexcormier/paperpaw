@@ -1,5 +1,5 @@
-//! What was read from storage, remembered for the rest of one kernel call
-//! (see PLANNING §12.3, B3): sizes, and small files whole. Devices that
+//! What was read from storage, remembered for the rest of one kernel call:
+//! sizes, and small files whole. Devices that
 //! draw a screen in bands (the X4) call a screen's `draw` once per band,
 //! and what it reads, e.g. the recently read books on the home screen,
 //! would come from the card again for every band.
