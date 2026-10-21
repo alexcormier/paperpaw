@@ -9,7 +9,7 @@
 //! (`Installing`), which hears an event of its own and asks for the
 //! installation, as the store plugin would.
 
-use std::sync::Mutex;
+use std::cell::Cell;
 
 use paperpaw_core::{Kernel, KernelBuilder, WarningSource};
 use paperpaw_sdk::PluginState;
@@ -33,13 +33,16 @@ const PLUGIN: &str = "paperpaw-dev-install";
 /// Asks it to install: `plugin` (the id) from `folder`.
 const INSTALL: Event<Params> = Event::new("paperpaw-dev-install.install");
 
-/// What the target adds besides the installing plugin.
-static TARGET: Mutex<Option<AddPlugins>> = Mutex::new(None);
+thread_local! {
+    /// What the target adds besides the installing plugin: the thread's,
+    /// as the probe's (see [`crate::probe`]).
+    static TARGET: Cell<Option<AddPlugins>> = const { Cell::new(None) };
+}
 
 /// The installing plugin and the target's plugins.
 fn add(builder: KernelBuilder) -> KernelBuilder {
     let builder = builder.plugin(Installing);
-    match TARGET.lock().ok().and_then(|t| *t) {
+    match TARGET.get() {
         Some(add) => add(builder),
         None => builder,
     }
@@ -73,9 +76,7 @@ impl Plugin for Installing {
 /// A context for sessions without the data plugins looked at (they are
 /// installed while running instead), with the installing plugin.
 fn context_for(context: &Context) -> Context {
-    if let Ok(mut target) = TARGET.lock() {
-        *target = context.target.add;
-    }
+    TARGET.set(context.target.add);
     let mut own = Context::new(
         Target {
             add: Some(add),

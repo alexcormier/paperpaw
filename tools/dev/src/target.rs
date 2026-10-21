@@ -60,6 +60,23 @@ impl DataPlugin {
         self.files.get(path).map(|bytes| &**bytes)
     }
 
+    /// A digest of its files, paths and contents (FNV-1a): whether what
+    /// is handed in changed.
+    pub fn digest(&self) -> u64 {
+        let mut hash: u64 = 0xcbf2_9ce4_8422_2325;
+        for (path, bytes) in &self.files {
+            for &b in path
+                .as_bytes()
+                .iter()
+                .chain([0u8].iter())
+                .chain(bytes.iter())
+            {
+                hash = (hash ^ u64::from(b)).wrapping_mul(0x0000_0100_0000_01b3);
+            }
+        }
+        hash
+    }
+
     /// Where it is, for messages: its folder, else its id.
     pub fn place(&self) -> String {
         match &self.folder {
@@ -250,6 +267,16 @@ id = dusk
         let plugin = DataPlugin::new("given", files);
         assert_eq!(plugin.id, "dusk");
         assert_eq!(plugin.place(), "dusk");
+        // Changed, it is told apart.
+        let changed = DataPlugin::new(
+            "given",
+            [(
+                "plugin.ini".to_string(),
+                b"[plugin]\nid = dusk\nname = Dusky\n".to_vec(),
+            )],
+        );
+        assert_ne!(plugin.digest(), changed.digest());
+        assert_eq!(plugin.digest(), plugin.clone().digest());
         let none: [(String, Vec<u8>); 0] = [];
         assert_eq!(DataPlugin::new("given", none).id, "given");
         // An id that would leave the plugins folder is not taken.

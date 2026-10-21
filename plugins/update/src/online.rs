@@ -235,6 +235,11 @@ pub(crate) fn is_version(version: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b"-+.".contains(&b))
 }
 
+/// Lets go of the update the server named.
+pub(crate) fn clear_offer(storage: &dyn Storage) {
+    let _ = storage.remove(&file(OFFER));
+}
+
 /// Whether an update the server named is kept.
 pub(crate) fn has_offer(storage: &dyn Storage) -> bool {
     storage.exists(&file(OFFER))
