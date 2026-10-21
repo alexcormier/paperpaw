@@ -63,7 +63,7 @@ stops the device too), the frame says so before it starts again:
 | `{ type: "screenshot", profile?, dark?, asleep? }` | The panel as it shows, at the device's resolution; with `profile`, `dark` or `asleep`, what that device, night mode or the sleep screen would show with the same card, made apart (what is shown stays) | `{ png }` (bytes) |
 | `{ type: "check", commands?, plugins? }` | `paperpaw-dev`'s checks of the data plugins on the card, on this device: `package`, `lint`, `visual`, `reach` (all if none named), the libraries in memory; with `plugins`, the ids of plugins with code the module adds (see below), checked too, `perf` among the commands | `{ report }` (as `report.json`) |
 | `{ type: "command", line }` | The remote control's command, as `tools/x4-remote.py` sends it to an X4 (see below), e.g. `run calibre.open` | `{ answer }` (the command's JSON) |
-| `{ type: "describe" }` | What the screen shows, part by part | `{ screen, parts: [{ role, x, y, width, height, state, label }] }` |
+| `{ type: "describe" }` | What the screen shows, part by part | `{ screen, parts: [{ role, x, y, width, height, state, focused, on, label }] }` |
 | `{ type: "run", action }` | Runs an action, as a button bound to it would | `{ answer: {} }` |
 | `{ type: "slot", slot, params? }` | Opens a slot (`core.settings`, `core.home`, `core.library` …) with parameters (`{ id: "reader" }`) | `{ answer: {} }` |
 | `{ type: "show", screen, params? }` | Opens a screen by its id, with parameters | `{ answer: {} }` |
@@ -73,27 +73,39 @@ stops the device too), the frame says so before it starts again:
 | `{ type: "until", text, timeout? }` | Waits until the screen is `text` (its id) or shows it in a part's label, the device running meanwhile; at most `timeout` ms (30000) | `{}`, or `error` (`not shown in … ms`) |
 | `{ type: "expect", text }` | The same, now | `{}`, or `error` (`not shown`) |
 | `{ type: "fixtures", fixtures: [{ method?, url, status?, headers?, body?, delay? }] }` | Recorded answers for plugins' requests, in place of those before; kept for every device started after (also before `start`) | `{}` |
-| `{ type: "network", mode }` | `"fixtures"` (the default): requests no recorded answer answers fail as without a network; `"real"`: the frame fetches them itself (a local setup) | `{}` |
+| `{ type: "network", mode }` | `"fixtures"` (the default): requests no recorded answer answers fail as without a network; `"real"`: the frame fetches them itself, only where it is served on this computer (`localhost`, `127.0.0.1`, `[::1]`, `*.localhost`) | `{}`, or `error` elsewhere |
 
 **Plugins' requests.** By default nothing leaves the browser: a request
 gets the first recorded answer whose `method` (any where none is named)
-and `url` match, `url` a pattern where `*` stands for any text
-(`https://api.example.com/v1/*`); `status` is 200 unless said, `headers`
-an object (`content-type`, `etag` and the headers a plugin asks for come
-from it), `body` text, bytes or an object (sent as JSON), `delay` in ms
-of the device's time. Answers are cut to what a request takes, as a
-device does. A request no recorded answer answers fails as without a
-network (status 0). In `"real"` mode the frame fetches it instead
-(`fetch()`, within the page's own rules: servers without CORS, and
-addresses the frame's Content-Security-Policy leaves out, fail with
-status 0 and the reason), so a local setup (the workshop's own compose,
-a page served on the computer) can let plugins reach the internet;
-paperpaw.org forwards nothing. Every request is told to the page as it
-is made:
+and `url` match. `url` is a pattern for the whole address, its query
+too, `*` standing for any text: `https://api.example.com/v1/feed*`
+matches `…/v1/feed?page=2`, `…/v1/feed` does not. Scheme and host are
+compared in any case, path and query as written. `status` is 200 unless
+said, `headers` an object (`content-type`, `etag` and the headers a
+plugin asks for come from it), `body` text, bytes (an `ArrayBuffer` or
+a typed array; read a `Blob` first) or an object (sent as JSON), `delay`
+in ms of the device's time (longer than the request waits: it fails as
+timed out then). A redirect (a 3xx with `location`) is followed through
+the table, at most ten, as the desktop's `curl -L` does: the plugin gets
+the last answer, with the address it came from. Answers are cut to what
+a request takes, as a device does. A request no recorded answer answers
+fails as without a network (status 0). In `"real"` mode, only where the
+frame is served on this computer, the frame fetches it instead
+(`fetch()` without the page's cookies, within the browser's rules:
+servers without CORS, and addresses the frame's Content-Security-Policy
+leaves out, fail with status 0 and the reason), so a local setup can let
+plugins reach the internet; paperpaw.org forwards nothing. Every request
+is told to the page as it is made:
 
 `{ type: "request", id, method, url, source, status }`: `source` is
 `"fixture"` (with its `status`), `"none"` (failed, `status` 0) or
 `"fetch"` (fetched by the frame, `status` null).
+
+The frame serves the page that wrote to it first: messages from other
+origins are passed over, and what it tells (plugins' addresses among
+it) goes to that page's origin alone; only `ready` goes to any. A server
+that hosts the frame should also say which pages may embed it
+(`Content-Security-Policy: frame-ancestors …`).
 
 On an X4 profile PaperPaw manages the radio as on the device: a plugin
 that waits for Wi-Fi asks for it to be joined first (the pretend radio's
@@ -111,7 +123,7 @@ They answer in JSON:
 | `run <action>`, `slot <slot> [<key>=<hex> …]`, `show <screen> [<key>=<hex> …]`, `open <hex path>`, `set <setting> <hex value>`, `emit <event> [<key>=<hex> …]`, `press <button>`, `hold <button> <ms>`, `touch <down\|move\|up> <x> <y>`, `time set <unix ms>`, `mkdir <path>`, `rm <path>`, `mv <hex> <hex>` | `{}` |
 | `screen` | `{ "screen": id }` |
 | `screens` | `{ "screens": [ids, the one shown last] }` |
-| `describe` | `{ "screen": id, "parts": [{ "role", "x", "y", "width", "height", "state", "label" }] }`; `state` is `focused`, `on`, `off` joined by `+`, or `-` |
+| `describe` | `{ "screen": id, "parts": [{ "role", "x", "y", "width", "height", "state", "focused", "on", "label" }] }`; `state` is `focused`, `on`, `off` joined by `+`, or `-`, the same as `focused` (true, false) and `on` (true, false, null: no switch) |
 | `setting <id>` | `{ "value": text }` |
 | `settings [<prefix>]` | `{ "values": { id: text } }` |
 | `actions [<prefix>]` | `{ "actions": [ids] }` |

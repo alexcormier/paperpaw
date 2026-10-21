@@ -479,7 +479,7 @@ pub unsafe extern "C" fn pp_fixture_add(
             .filter_map(|line| line.split_once(':'))
             .map(|(n, v)| (n.trim().to_string(), v.trim().to_string()))
             .collect(),
-        body: body.to_vec(),
+        body: std::rc::Rc::from(body),
         delay_ms: delay_ms.max(0.0) as u64,
     };
     with(|emulator| {
@@ -529,12 +529,13 @@ pub extern "C" fn pp_outbox() -> u32 {
 }
 
 /// The page's answer to the request `id` it fetched: its status (0:
-/// failed, the reason as the body), headers (`name: value` lines) and
-/// body, at `now_ms` (as [`pp_advance`]).
+/// failed, the reason as the body), headers (`name: value` lines), body
+/// and the address it came from after redirects (empty: the one asked),
+/// at `now_ms` (as [`pp_advance`]).
 ///
 /// # Safety
 ///
-/// The headers and the body are memory the script wrote ([`pp_alloc`]).
+/// The texts and the body are memory the script wrote ([`pp_alloc`]).
 #[unsafe(no_mangle)]
 pub unsafe extern "C" fn pp_fetched(
     id: u32,
@@ -543,12 +544,21 @@ pub unsafe extern "C" fn pp_fetched(
     headers_len: usize,
     body_ptr: *const u8,
     body_len: usize,
+    url_ptr: *const u8,
+    url_len: usize,
     now_ms: f64,
 ) -> u32 {
     // SAFETY: as the caller promises.
-    let (headers, body) = unsafe { (text(headers_ptr, headers_len), bytes(body_ptr, body_len)) };
+    let (headers, body, url) = unsafe {
+        (
+            text(headers_ptr, headers_len),
+            bytes(body_ptr, body_len),
+            text(url_ptr, url_len),
+        )
+    };
     let status = u16::try_from(status).unwrap_or(0);
-    with(|emulator| emulator.fetched(id, status, headers, body.to_vec(), now_ms.max(0.0) as u64))
+    let now = now_ms.max(0.0) as u64;
+    with(|emulator| emulator.fetched(id, status, headers, body.to_vec(), url, now))
 }
 
 /// Carries out the remote control's command (an x4-remote line, see

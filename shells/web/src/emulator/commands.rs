@@ -28,8 +28,9 @@ impl Emulator {
     ///   `rm <path>`, `mkdir <path>`, `mv <hex> <hex>`: `{}`;
     /// - `screen`: `{"screen": id}`; `screens`: `{"screens": [ids]}`;
     /// - `describe`: `{"screen": id, "parts": [{"role", "x", "y",
-    ///   "width", "height", "state", "label"}]}` (state as the remote's:
-    ///   `focused`, `on`, `off`, joined by `+`, or `-`);
+    ///   "width", "height", "state", "focused", "on", "label"}]}` (state as
+    ///   the remote's: `focused`, `on`, `off`, joined by `+`, or `-`; the
+    ///   same as `focused` true or false and `on` true, false or null);
     /// - `setting <id>`: `{"value": text}`; `settings [<prefix>]`:
     ///   `{"values": {id: text}}`; `actions [<prefix>]`: `{"actions":
     ///   [ids]}`; `plugins`: `{"plugins": [{"id", "on", "version",
@@ -141,20 +142,8 @@ impl Emulator {
             }
             Command::Describe => describe(&mut device.kernel),
             Command::Setting(setting) => {
-                let kernel = &device.kernel;
-                let value = kernel
-                    .settings()
-                    .get(&setting)
+                let text = said(device.kernel.settings(), &setting)
                     .ok_or_else(|| format!("no setting `{setting}`"))?;
-                let secret = kernel
-                    .settings()
-                    .spec(&setting)
-                    .is_some_and(|s| s.extra().secret);
-                let text = if secret {
-                    String::from("•")
-                } else {
-                    value.to_config_text()
-                };
                 format!("{{\"value\":{}}}", json_string(&text))
             }
             Command::Settings(prefix) => {
@@ -163,12 +152,7 @@ impl Emulator {
                     .specs()
                     .filter(|spec| spec.id.as_str().starts_with(prefix.as_str()))
                     .filter_map(|spec| {
-                        let value = settings.get(spec.id.as_str())?;
-                        let text = if spec.extra().secret {
-                            String::from("•")
-                        } else {
-                            value.to_config_text()
-                        };
+                        let text = said(settings, spec.id.as_str())?;
                         Some(format!(
                             "{}:{}",
                             json_string(spec.id.as_str()),
@@ -311,6 +295,18 @@ impl Emulator {
     }
 }
 
+/// A setting's value as the remote says it: as configuration files write
+/// it, a secret never (`•`); `None` for no such setting.
+fn said(settings: &paperpaw_core::sdk::Settings, id: &str) -> Option<String> {
+    let value = settings.get(id)?;
+    let secret = settings.spec(id).is_some_and(|spec| spec.extra().secret);
+    Some(if secret {
+        String::from("•")
+    } else {
+        value.to_config_text()
+    })
+}
+
 /// What the screen shows, part by part (as the remote's `describe`).
 fn describe(kernel: &mut paperpaw_core::Kernel) -> String {
     // A PIN or a password being entered: where the parts are, not what
@@ -327,14 +323,16 @@ fn describe(kernel: &mut paperpaw_core::Kernel) -> String {
             let state = remote::part_state(part.focused, part.on);
             let label = if secret { String::from("•") } else { part.label.replace('\n', " ") };
             let a = part.area;
+            let on = part.on.map_or(String::from("null"), |on| on.to_string());
             format!(
-                "{{\"role\":\"{:?}\",\"x\":{},\"y\":{},\"width\":{},\"height\":{},\"state\":{},\"label\":{}}}",
+                "{{\"role\":\"{:?}\",\"x\":{},\"y\":{},\"width\":{},\"height\":{},\"state\":{},\"focused\":{},\"on\":{on},\"label\":{}}}",
                 part.role,
                 a.x,
                 a.y,
                 a.width,
                 a.height,
                 json_string(&state),
+                part.focused,
                 json_string(&label)
             )
         })

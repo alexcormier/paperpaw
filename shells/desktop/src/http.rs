@@ -5,7 +5,6 @@
 //! recorded answers, or has the page fetch them.
 
 use std::cell::RefCell;
-use std::collections::VecDeque;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Duration;
 // `curl` on a thread, where there are processes and threads.
@@ -21,26 +20,23 @@ use paperpaw_core::{HttpCall, HttpResponse};
 /// Where requests go instead of the system's network ([`set_route`]).
 pub trait Route {
     /// Takes a request: its answer now, or `None` where it comes later
-    /// ([`answer_later`]).
+    /// ([`Route::later`]).
     fn start(&mut self, call: HttpCall) -> Option<HttpResponse>;
+    /// An answer that came later than its request (a delayed or fetched
+    /// one), if one is ready: the route's own, so that answers reach the
+    /// device that asked.
+    fn later(&mut self) -> Option<HttpResponse>;
 }
 
 thread_local! {
     /// The route set, the thread's (a device runs on one thread).
     static ROUTE: RefCell<Option<Box<dyn Route>>> = const { RefCell::new(None) };
-    /// Answers that came later, for the device of this thread.
-    static LATER: RefCell<VecDeque<HttpResponse>> = const { RefCell::new(VecDeque::new()) };
 }
 
 /// Sends this thread's requests to `route` (`None`: the system's network
 /// again, where there is one).
 pub fn set_route(route: Option<Box<dyn Route>>) {
     ROUTE.with_borrow_mut(|set| *set = route);
-}
-
-/// An answer that comes later than its request was taken (a route's).
-pub fn answer_later(response: HttpResponse) {
-    LATER.with_borrow_mut(|later| later.push_back(response));
 }
 
 /// Requests in flight and their answers.
@@ -106,7 +102,7 @@ impl Http {
         // by, and answers come at once (see `start`).
         #[cfg(target_arch = "wasm32")]
         let wait: Option<Duration> = wait.and(None);
-        let later = LATER.with_borrow_mut(VecDeque::pop_front);
+        let later = ROUTE.with_borrow_mut(|route| route.as_mut()?.later());
         let response = later.or_else(|| match wait {
             Some(wait) => self.receiver.recv_timeout(wait).ok(),
             None => self.receiver.try_recv().ok(),

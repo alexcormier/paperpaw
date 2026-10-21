@@ -65,8 +65,21 @@ async function restart(reason) {
 }
 
 /// Tells the page around the frame.
+/// The origin of the page that embeds the frame: the first that wrote to
+/// it. Messages from others are passed over, and what the frame tells
+/// (plugins' requests among it) goes to it alone.
+let embedder = null;
+
+/// Served on this computer: only then may plugins reach the network
+/// through the frame (a local setup; see docs/web-emulator.md).
+const LOCAL =
+  ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) || location.hostname.endsWith(".localhost");
+
 function tell(message) {
-  if (window.parent !== window) window.parent.postMessage(message, "*");
+  if (window.parent === window) return;
+  // Before any page wrote: only that the module is ready, nothing else.
+  if (embedder) window.parent.postMessage(message, embedder);
+  else if (message.type === "ready") window.parent.postMessage(message, "*");
 }
 
 /// Sizes the canvas on the page: each of the device's pixels as a whole
@@ -142,15 +155,19 @@ async function fetchFor(call) {
   let body = new Uint8Array();
   const stop = new AbortController();
   const timeout = setTimeout(() => stop.abort(), call.timeout_ms);
+  let url = "";
   try {
     const answer = await fetch(call.url, {
       method: call.method,
       headers: call.headers,
       body: call.body === null ? undefined : bytesOf(call.body),
       signal: stop.signal,
+      // The page's own cookies and logins are not the plugin's.
+      credentials: "omit",
     });
     status = answer.status;
     headers = [...answer.headers].map(([name, value]) => `${name}: ${value}`).join("\n");
+    url = answer.url;
     body = new Uint8Array(await answer.arrayBuffer());
   } catch (error) {
     body = new TextEncoder().encode(String(error.message ?? error));
@@ -158,7 +175,14 @@ async function fetchFor(call) {
     clearTimeout(timeout);
   }
   if (!device) return;
-  guarded(() => device.fetched(call.id, status, headers, body, now()));
+  try {
+    guarded(() => device.fetched(call.id, status, headers, body, url, now()));
+  } catch (error) {
+    // The device made anew meanwhile (a start, a restart): its request
+    // is gone with it.
+    if (error instanceof WebAssembly.RuntimeError) throw error;
+    return;
+  }
   step();
 }
 
@@ -340,6 +364,9 @@ function fixtures({ fixtures: given = [] }) {
 /// Whether the page fetches what no recorded answer answers.
 function networkMode({ mode }) {
   if (mode !== "fixtures" && mode !== "real") throw new Error(`no network mode ${mode}`);
+  if (mode === "real" && !LOCAL) {
+    throw new Error("the real network only where the frame is served on this computer (localhost)");
+  }
   network.mode = mode;
   device?.setNetwork(mode);
   return {};
@@ -349,6 +376,9 @@ const HANDLERS = { start, files, input, screenshot, check, fixtures, network: ne
 
 window.addEventListener("message", async (event) => {
   if (event.source !== window.parent || event.source === window) return;
+  // The page that wrote first is the one the frame serves.
+  embedder ??= event.origin;
+  if (event.origin !== embedder) return;
   const message = event.data ?? {};
   const handler = HANDLERS[message.type];
   // `request` pairs the answer with the message (`id` names a plugin).

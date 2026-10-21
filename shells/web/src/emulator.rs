@@ -160,11 +160,16 @@ impl Emulator {
             added(),
         )
         .map_err(|e| e.to_string())?;
-        // Its requests to the network of the page's making.
-        http::set_route(Some(Box::new(Routed(self.network.clone()))));
+        self.route();
         device.start();
         self.device = Some(device);
         Ok(())
+    }
+
+    /// Sends the thread's requests to this device's network, of the page's
+    /// making.
+    fn route(&self) {
+        http::set_route(Some(Box::new(Routed(self.network.clone()))));
     }
 
     /// The recorded answers plugins' requests get (see
@@ -197,16 +202,22 @@ impl Emulator {
     }
 
     /// The page's answer to request `id` it fetched (status 0: failed,
-    /// the reason in `body`), at `now_ms`: given to the device.
+    /// the reason in `body`), from the address `url` (after redirects;
+    /// empty: the one asked), at `now_ms`: given to the device.
     pub fn fetched(
         &mut self,
         id: u32,
         status: u16,
         headers: &str,
         body: Vec<u8>,
+        url: &str,
         now_ms: u64,
     ) -> Result<(), String> {
-        if !self.network.borrow_mut().fetched(id, status, headers, body) {
+        if !self
+            .network
+            .borrow_mut()
+            .fetched(id, status, headers, body, url)
+        {
             return Err(format!("no request {id} waits for an answer"));
         }
         self.advance(now_ms);
@@ -282,7 +293,14 @@ impl Emulator {
             }
         }
         let now = device.now().millis();
-        device.next_wake().map(|at| at.millis().saturating_sub(now))
+        let wake = device.next_wake().map(|at| at.millis());
+        // A recorded answer coming later is something due too.
+        let answer = self.network.borrow().next_due();
+        let next = match (wake, answer) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        next.map(|at| at.saturating_sub(now))
     }
 
     /// The id of the screen shown, `None` before the device started.
@@ -389,8 +407,9 @@ impl Emulator {
     ) -> Result<(u16, u16, Vec<u8>), String> {
         let profile = profile.unwrap_or(self.profile.device.id);
         let mut other = Emulator::new(profile, &self.language, dark.unwrap_or(self.dark))?;
-        // The same recorded answers; its requests told to the page too.
-        other.network = Rc::clone(&self.network);
+        // The same recorded answers, in a network of its own: its answers
+        // reach it alone, and the page fetches nothing for it.
+        other.set_fixtures(self.network.borrow().fixtures());
         // The same card, copied: what the other device writes stays its.
         for (path, bytes) in files_under(&*self.files, "") {
             other
@@ -417,6 +436,10 @@ impl Emulator {
             (width, height, other.shown())
         });
         drop(other);
+        // This device's requests to its own network again.
+        if self.device.is_some() {
+            self.route();
+        }
         budget::end_override(self.profile.heap_budget);
         made
     }

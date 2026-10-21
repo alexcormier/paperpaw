@@ -36,7 +36,7 @@ fn requests_get_recorded_answers_or_fail_or_go_to_the_page() {
             String::from("content-type"),
             String::from("application/json"),
         )],
-        body: LIST.as_bytes().to_vec(),
+        body: std::rc::Rc::from(LIST.as_bytes()),
         delay_ms: 300,
     }]);
     boox.command("run store.open", 6_000).unwrap();
@@ -50,11 +50,15 @@ fn requests_get_recorded_answers_or_fail_or_go_to_the_page() {
         told.contains(r#""source":"fixture","status":200"#),
         "{told}"
     );
-    // Its delay passed (the device's time): the list shows the theme.
-    for at in [6_500, 7_000, 8_000] {
-        boox.advance(at);
-    }
-    let shown = boox.command("describe", 9_000).unwrap();
+    // The answer due in its delay is something to wake for: the page
+    // comes back then, nothing else needed.
+    let next = boox.advance(6_150).unwrap();
+    assert!(next <= 150, "{next} ms");
+    // A snapshot meanwhile has its own network: it takes no answer of
+    // this device's.
+    boox.snapshot(None, Some(true), false).unwrap();
+    boox.advance(6_150 + next);
+    let shown = boox.command("describe", 6_400).unwrap();
     assert!(shown.contains("Look"), "{shown}");
     assert!(boox.requests() == "[]" || !boox.requests().contains("plugins.json?"));
     drop(boox);
@@ -90,11 +94,12 @@ fn requests_get_recorded_answers_or_fail_or_go_to_the_page() {
         200,
         "content-type: application/json",
         LIST.as_bytes().to_vec(),
+        "",
         6_500,
     )
     .unwrap();
     assert!(
-        boox.fetched(id, 200, "", Vec::new(), 6_600).is_err(),
+        boox.fetched(id, 200, "", Vec::new(), "", 6_600).is_err(),
         "answered once"
     );
     boox.advance(8_000);

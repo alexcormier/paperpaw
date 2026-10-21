@@ -155,8 +155,8 @@ pub struct Device {
     pub wake_at: Option<Instant>,
     clock: Clock,
     /// The wall clock set (`set_time`): at this time it was so many
-    /// milliseconds since 1970.
-    wall: Option<(Instant, i64)>,
+    /// milliseconds since 1970, in the time zone it had.
+    wall: Option<(Instant, i64, Option<i32>)>,
     /// HTTP requests in flight.
     pub http: crate::http::Http,
     /// Plugins' servers.
@@ -307,10 +307,10 @@ impl Device {
     /// battery at 80 %.
     fn status(&self, now: Instant) -> SystemStatus {
         let clock = match self.clock {
-            _ if let Some((at, unix_millis)) = self.wall => WallClock {
+            _ if let Some((at, unix_millis, utc_offset_minutes)) = self.wall => WallClock {
                 at,
                 unix_millis,
-                utc_offset_minutes: Some(120),
+                utc_offset_minutes,
             },
             #[cfg(not(target_arch = "wasm32"))]
             Clock::Real(_) => {
@@ -343,7 +343,9 @@ impl Device {
     /// now (the remote's `time set`); kept over restarts.
     pub fn set_time(&mut self, unix_millis: i64) {
         let now = self.now();
-        self.wall = Some((now, unix_millis));
+        // The time zone stays as it was.
+        let offset = self.status(now).clock.and_then(|c| c.utc_offset_minutes);
+        self.wall = Some((now, unix_millis, offset));
         let status = self.status(now);
         let effects = budget::track(|| self.kernel.set_status(now, status));
         self.execute(effects);
