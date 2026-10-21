@@ -377,6 +377,16 @@ pub fn resolve(env: &Env<'_>, params: &Params) -> Command {
     }
 }
 
+/// Asks which reading app opens the book at `path` this time (*Open
+/// with…*), nothing kept: the readers that read it, the other ways to
+/// open it plugins add ([`menus::OPEN_WITH`](crate::builtin::menus::OPEN_WITH)),
+/// and *Always open it with…*, which asks as [`ask`] does and keeps the
+/// choice.
+pub fn ask_once(path: &str) -> Command {
+    crate::builtin::events::READING_APP_WANTED
+        .emit(crate::builtin::events::ReadingAppWanted::new(path.to_string(), false).once(true))
+}
+
 /// Asks which reader `choice` gets, kept once chosen (a book is opened
 /// with it); *Standard* forgets the choice.
 pub fn ask(choice: Choice<'_>) -> Command {
