@@ -20,6 +20,201 @@ change the plugin SDK.
   `data::check`), its libraries kept in memory where asked
   (`Context::in_memory`).
 
+- SDK: status items run an action of their own plugin when tapped
+  (`StatusItemSpec::tap`, with the line's context; bindable to buttons
+  too), say how much they matter (`StatusItemSpec::priority`,
+  `status::PRIORITY`) and keep a least width
+  (`StatusItemSpec::min_width`). Where a line has no room for all its
+  items, the battery's percentage goes first, then the items that
+  matter least (texts are shortened first), never cut.
+  `StatusValue::Labelled` shows an icon with a text.
+  `StatusLine::targets` and `StatusLineSpec::targets` say where a tap
+  does something; the reader, the home screen's status line and the
+  quick panel's head run it (Wi-Fi opens its page, `wifi.open`, the
+  power mode its settings, `power.open`). Places where items show are
+  `status::Place`s (`Registrar::add_status_place`; the reader's above
+  and below the text, the home screen's, the quick panel's), and
+  `StatusFrame::place` and `StatusFrame::font` tell a line where it is
+  drawn. `Drawn::targets` gives a drawn widget places that do
+  something, and `WidgetTarget::touch` one tapped only, which the
+  buttons' focus leaves out. Breaking: `StatusLine` and
+  `widgets::Drawn` are made with `new` (`StatusLine::percent`,
+  `Drawn::shows`, `Drawn::targets`).
+- Kernel: a plugin cannot overwrite another plugin's secret or guarded
+  setting: not set, reset, nor typed for, nor ask for text for it from
+  the keyboard, the clipboard or anywhere else; only the settings
+  editor and the plugin itself can, and the keyboard answers them.
+- Emulator: folders are listed by name on every system (Linux gave the
+  order they are stored in), so books of the same title show in the
+  same order on Linux, macOS and Windows, and the screenshots with them.
+- Buttons alone: skimming shows where the focus is. The bar has it at
+  first (left and right go along it, Confirm stays), shown as the style
+  shows a focus, and up and down go from it to the buttons below and
+  back to it. Every tool on the home screen and in the drawer is told
+  as a button by its name, its name shown or not, the focus on one.
+- Pictures over the whole screen (a cover while sleeping) are drawn in
+  half the time: a row's dither worked out once rather than for every
+  pixel, and a picture's columns once rather than for every row.
+- Texts: the statistics' tiles fit their values at one size (the week's
+  time was cut on the X4), the update page's explanation gets smaller
+  before it is cut and then ends in "…", the picture widget says in
+  fewer words where pictures go, the menu above the plugins' list has a
+  name (*Plugins: above the list*), and screens of the same name are
+  told apart by the kind of screen each is in the buttons' places
+  (*Buttons and gestures (list)*) rather than by their id.
+- Adding to a menu takes 17 KiB of heap on the X4 (it took 94 KiB): a
+  few bytes a candidate, its name among all the others' in one text.
+- The sample plugin *Large print* sets `core.font-size` and
+  `core.line-spacing` (the reader's settings it named no longer exist,
+  so its larger text never applied).
+- SDK: `readers`, reading apps. Any plugin registers a screen as a
+  reader of some formats (`Registrar::add_reader`, `ReaderSpec`); books
+  open through one call (`readers::open`, `Command::OpenBook`) in the
+  app chosen for the book, else its folder, else its format, else the
+  default one, else the screen of `slots::READER`. The library, the
+  file manager, the browser, OPDS, the home screen, widgets and the
+  other plugins open books so. The reading settings offer the default
+  app and one for each format (`settings::READING_APP`), where more than
+  one app reads it; the file manager offers *Open with* for a book and
+  *Reading app* for a folder (`readers::ask`), kept with the book or
+  the folder (`readers::folder_moved`: they follow a folder moved or
+  renamed). One reading app is open at a time; one that cannot open a
+  book passes it to the next (`readers::cannot_open`); a choice of an
+  app no longer installed is passed over without a word
+  (`SettingExtra::keeps_unknown`, `SettingSpec::accepts`, `parse`).
+  Shells open books with `Kernel::open_book`, the X4's remote control
+  too.
+- Book menu: *Open with …* (`actions::OPEN_WITH`), where there is
+  something to choose, lists the reading apps that read the book, the
+  other ways to open it plugins add (`menus::OPEN_WITH`, run after
+  `events::BOOK_CHOSEN` as the book menu's are) and *Always open it with
+  …*; the others open it this time only (`readers::ask_once`). The file
+  manager's *Open with* is the same list. The library's sheet shows the
+  book menu as its entries say they are now (`Menus::shown_items`, their
+  label and badge). Lists of reading apps are asked on `slots::CHOICE`
+  (`ask::choice`); `screens::READING_APPS` is gone, and a choice whose
+  option is an action shows the action's title.
+- SDK: buttons on touch screens are at least a fingertip (7 mm) high.
+  Breaking: `ui::button_height(style, row)` takes the style. Rows and
+  bars that hold buttons are made with `UiStyle::touch_row`, which grows them
+  by as much as their buttons grow, so the room above and below them,
+  the margin to the screen's sides and the gaps between them stay as
+  they were. A bar of buttons along the top or bottom edge keeps the
+  side margin from that edge too (`ui::edge_bar_height`,
+  `ui::edge_bar_band`, `ui::edge_room`): the file manager's, the
+  store's and the plugin manager's bars, the sync question, the
+  reader's footnote, selection and skim bars, the keyboard and the home
+  screen's layouts. `ui::setting_row(style, spec, row, noted)` gives a
+  number's row its height, in a noted row its first line
+  (`ui::number_title_area`). `ui::button_width(style, label)` says how
+  wide a button must be for its word to stay whole, for buttons laid
+  out as wide as their words (the reader's selection bar). The shipped
+  screens with buttons follow; `paperpaw-dev` finds buttons without
+  their room (`visual.button-room`), the tiles of a grid edge to edge
+  left alone, a last row of one tile too.
+- SDK: accessibility. `events::FOCUS_CHANGED` (`FocusChanged`: role,
+  label, area, on) tells plugins where the focus of the buttons went,
+  worked out only while one listens or the focus is spoken. The kernel
+  describes screens on a framebuffer that keeps no pixels
+  (`Framebuffer::blind`; 48 KB less on the X4). New roles `Check`,
+  `Radio`, `Field`, `Image`, `Link`, `Dialog` and `Progress`
+  (`semantics::role_name` names them); progress bars and the keyboard's
+  field describe themselves so, the reader's menu bar its entries (the
+  focused one too). `Screen::secret` (a PIN, a password being
+  typed) keeps its focus from being told, as do screens that guard the
+  device; `Kernel::is_secret` says so to the USB remote and the dev
+  tools, which then leave out what the parts say. A password typed (an
+  answer to a question asked with `password()`) reaches the plugin that
+  asked alone, whichever keyboard took it, and while it is typed only
+  that plugin's input filters see the keys (`InputFilters::filter_of`).
+  A secret setting (`SettingExtra::secret`) is kept with the secrets,
+  never in the settings: read it with `env.secrets.get(id)`; set or
+  reset, its owner alone hears `SETTING_CHANGED` (with its id, not its
+  value), and one kept in `paperpaw.ini` before moves to the secrets at
+  the start. The USB remote sends no secret setting's value. Text typed
+  for a widget's placement sets the placement's own value. Breaking: a
+  plugin sees its own secrets alone, those in its namespace: `env.secrets` is a
+  `secrets::Visible` view (`get`, `iter`, `is_empty` of the running
+  plugin's, `listed` and `has` of every secret without its value, as
+  the settings' list shows); the kernel tells it which plugin runs
+  (`secrets::Running`, `EnvParts::running`). `wifi::known` takes the
+  secrets to look at. On a blind framebuffer, and
+  while the focus is worked out, no glyph or picture is made.
+- SDK: `ui::setting_opens` says what choosing a setting opens (its
+  editor, the keyboard for text, the list of a choice's values), the
+  same on the settings pages, in menus, the quick panel and the setup;
+  text typed comes back as `events::SETTING_TYPED`, which the kernel
+  sets. A text setting in a menu did nothing before.
+  `SettingExtra::shown_if(setting, value)` shows a setting only while
+  another has a value (`Settings::shows`; screens listing settings make
+  themselves anew when such a setting changes, `Settings::governs`);
+  `SettingExtra::check(fn)`
+  refuses values (`SettingError::Refused`), and the kernel tells the
+  reader why.
+- SDK: one choice dialog for every plugin: `ask::choice(title, &reply)`
+  with `.about(context)` and `.options(labels, &[..])` asks on the
+  screen of the new slot `core.choice` (the kernel's
+  `screens::CHOICE` unless a plugin binds another), so a theme restyles
+  all questions. The fifteen plugins' own choice screens are gone.
+  `ui::choice::open` (a plugin's own choice screen) and
+  `GridView::new(env, choice, chosen)` are deprecated:
+  `GridView::asking(env, chosen)` needs no choice screen.
+- SDK: themes are presets of the kind `core.theme` (`presets::THEME`,
+  covering `presets::theme_settings`, the appearance group): the
+  settings plugin lists them under *Theme* at the top of the appearance
+  settings where any is installed, so two themes no longer fight; *None*
+  gives the appearance settings their defaults again. No theme changes
+  the size of the interface's text, its contrast or the logo, even where
+  it names them (`presets::theme_changes`).
+- SDK: semantic icons (`icons::BACK`, `PREV`, `NEXT`, `HOLD`, `BUSY`,
+  `SHIFT`, `DELETE`, `SPACE`) take the icon a plugin names for them with
+  `add_icon`, so a theme changes the headers' arrows, the hints' marks
+  and the keyboard's keys; without one they look as before.
+  `ui::draw_arrow`, `ui::draw_icon_at` and `ui::has_icon` draw and ask
+  for them. An icon named `U+F8000` is that code point, for icons of
+  one's own. `ui::HOLD_ICON` is deprecated (`icons::HOLD`).
+- SDK: the interface's grays have roles (`ui::Ink`: text, notes,
+  muted, faint, disabled, rules, lines, cards, …), `UiStyle::ink` gives
+  each, from the palette a theme sets in `core.ui-palette` (e.g.
+  `muted=60 line=170`; `ui::Palette`). `UiStyle::size(TextRole)` gives
+  the sizes of text by kind (caption to numeral). The SDK's parts draw
+  in them; two grays became one each (an empty screen's explanation is
+  drawn as notes, the pager's last arrow as what cannot be used).
+- SDK: a plugin gives the parts of every screen a look of its own:
+  `Registrar::set_ui_look(&'static Painters, Priority)` with painters
+  for switches, the focus, separators, buttons, headers, the row of
+  button hints, progress bars and sliders (`ui::look`). The SDK still
+  places the parts and describes them; `UiStyle::look` and `Env::look`
+  carry the look in use (the highest priority, of equal ones the later).
+- SDK: a setting's editor may be a slot (`SettingExtra::editor_slot`,
+  `SettingSpec::editor_slot`), so a plugin filling it edits the setting
+  too. Breaking: `SettingExtra::editor` is now an `Editor` (`Screen` or
+  `Slot`), opened with `Editor::open`. New slot `core.choose-value`
+  (`slots::CHOOSE_VALUE`) picks a choice setting's value; the settings
+  plugin binds it, menus and the setup open it. The dictionary, sleep
+  and picture widget choose their folders with `core.choose-folder`.
+- SDK: `ask::text(..).live()` asks for answers on each change too (a
+  list that filters as one types), each with `Typed::typing` set; the
+  keyboard gives them. `params::FOCUS` opens slot `core.settings` on a
+  setting's page with the focus on it. New: `params::LIVE`,
+  `params::TYPING`. Breaking: `Typed` has the field `typing` and is
+  `#[non_exhaustive]`, made with `Typed::new(text, context)` (and
+  `while_typing`). The kernel sets a setting from `SETTING_TYPED` only
+  once the reader is done typing.
+- SDK: `Services::contributed_points` lists the points contributed to,
+  declared or not. Breaking: `Services::add`,
+  deprecated since 0.4.0, is gone.
+- SDK: `time::iso8601` and `time::parse_iso8601` write and read
+  ISO 8601 times (UTC with milliseconds; offsets and dates alone read
+  too; years too far out and offsets past a day read as none),
+  `time::duration_text` writes a length of time as `1 h 05 min`,
+  `42 min` or `< 1 min` in the language's words. Joplin uses them.
+- SDK: `menus::BOOK` (`core.book-menu`), what can be done with a book
+  in any view of the library, with `events::BOOK_CHOSEN` (`BookChosen`:
+  the action and the book) sent before the action runs: the library's
+  book sheet lists it (on pages, where more come than the sheet holds),
+  its book details are its first entry (`files.book-info`). `menus::APPS` (`core.apps`), what a launcher
+  lists: the home screen's tools list it beside the tools.
 - Library: the kernel keeps the catalog of books, the only one writing
   it, one change at a time, in the background and never while a book is
   open. It walks the library folder once the library first shows after

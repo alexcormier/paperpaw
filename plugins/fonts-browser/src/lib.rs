@@ -23,7 +23,6 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, groups, settings};
 use paperpaw_sdk::setting::Setting;
-use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError, Registrar,
     ScreenSpec, SettingSpec,
@@ -34,7 +33,6 @@ pub const PLUGIN: Id = Id::new_static("fonts-browser");
 pub const OPEN: Id = Id::new_static("fonts-browser.open");
 const LIST_SCREEN: Id = Id::new_static("fonts-browser.list");
 const FONT_SCREEN: Id = Id::new_static("fonts-browser.font");
-const CHOICE: Id = Id::new_static("fonts-browser.choice");
 
 /// Where the catalog of fonts comes from.
 pub const CATALOG: Setting<paperpaw_sdk::setting::Text> = Setting::new("fonts-browser.catalog");
@@ -70,11 +68,6 @@ impl Plugin for FontsBrowser {
             FONT_SCREEN,
             "fonts-browser.title",
             Box::new(|env, params| Box::new(font::FontScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "fonts-browser.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "fonts-browser.more").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {

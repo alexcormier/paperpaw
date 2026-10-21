@@ -439,6 +439,33 @@ fn skimming_moves_by_chapters_and_pages_and_back() {
 }
 
 #[test]
+fn skimming_with_buttons_shows_where_the_focus_is() {
+    let mut reading = Reading::new(BUTTONS, Shared::default(), "books/alice.epub", ALICE, "");
+    reading.open();
+    reading.press(reader::SKIM_BOOK);
+    // At first the bar: left and right move along it, confirm stays.
+    let bar = focused(&mut reading);
+    assert!(!bar.is_empty() && !bar.contains("Chapter"), "{bar}");
+    // Down to the buttons, up again to the bar.
+    reading.press(actions::DOWN);
+    let first = focused(&mut reading);
+    assert!(first.contains("Chapter"), "{first}");
+    reading.press(actions::UP);
+    assert_eq!(focused(&mut reading), bar);
+    // Up from the bar: the last button, down from it the bar.
+    reading.press(actions::UP);
+    let last = focused(&mut reading);
+    assert!(last.contains("Page number"), "{last}");
+    reading.press(actions::DOWN);
+    reading.press(actions::RIGHT);
+    // On the bar, confirm ends skimming where it is.
+    let here = reading.shown();
+    reading.press(actions::CONFIRM);
+    assert_eq!(reading.screen(), "reader.screen");
+    assert_eq!(reading.shown().at(), here.at());
+}
+
+#[test]
 fn skimming_ended_where_it_is_keeps_the_way_back() {
     let mut reading = Reading::new(BUTTONS, Shared::default(), "books/alice.epub", ALICE, "");
     reading.open();
@@ -447,8 +474,9 @@ fn skimming_ended_where_it_is_keeps_the_way_back() {
     reading.press(actions::RIGHT);
     reading.press(actions::RIGHT);
     let there = reading.shown().at();
-    // No button has the focus at first: Confirm stays here.
-    assert_eq!(focused(&mut reading), "");
+    // The bar has the focus at first (where one is): Confirm stays here.
+    let bar = focused(&mut reading);
+    assert!(bar.contains(" / ") && !bar.contains("Chapter"), "{bar}");
     reading.press(actions::CONFIRM);
     assert_eq!(reading.screen(), "reader.screen");
     assert_eq!(reading.shown().at(), there);

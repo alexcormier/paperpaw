@@ -115,6 +115,9 @@ pub(super) enum Row {
     Setting(Box<SettingSpec>),
     /// Resets the page's settings to their defaults, at its end.
     Reset,
+    /// The theme in use, at the top of the appearance settings where
+    /// there are themes (see [`themes`](super::themes)).
+    Theme,
 }
 
 #[derive(Debug)]
@@ -188,6 +191,9 @@ impl GroupPage {
         // Headings only where there is more than one part.
         let headed = sections.len() > 1;
         let mut entries = Vec::new();
+        if *of == groups::LOOK && own.is_none() && super::themes::themes(env).next().is_some() {
+            entries.push(Row::Theme);
+        }
         for section in &sections {
             if let Some(key) = section.filter(|_| headed) {
                 entries.push(Row::Heading(env.i18n.tr(key).to_string()));
@@ -218,8 +224,8 @@ impl GroupPage {
             .map(|e| match e {
                 Row::Heading(_) => heading,
                 Row::Setting(spec) if ui::slider::shows(env, spec) => slider_row,
-                Row::Setting(_) => row,
-                Row::Reset => style.row as u16,
+                Row::Setting(spec) => ui::setting_row(&style, spec, u32::from(row), noted) as u16,
+                Row::Reset | Row::Theme => style.row as u16,
             })
             .collect();
         let headings = entries
@@ -231,7 +237,7 @@ impl GroupPage {
             &style,
             entries.iter().filter_map(|e| match e {
                 Row::Setting(spec) => Some(&**spec),
-                Row::Heading(_) | Row::Reset => None,
+                Row::Heading(_) | Row::Reset | Row::Theme => None,
             }),
         );
         Self {
@@ -275,15 +281,6 @@ impl GroupPage {
         if let Some(at) = at {
             self.rows.set_focus(at);
             self.keys = true;
-        }
-    }
-
-    /// Where a row's title and value (or stepper) are drawn.
-    pub(super) fn title_area(&self, rect: Rect) -> Rect {
-        if self.noted {
-            ui::title_area(&self.style, rect)
-        } else {
-            rect
         }
     }
 
@@ -369,7 +366,13 @@ impl GroupPage {
         } else {
             &self.number_room
         };
-        ui::stepper(env, &self.style, self.title_area(rect), room)
+        // Its first line, as high as − and + need.
+        let area = if self.noted {
+            ui::number_title_area(&self.style, rect)
+        } else {
+            rect
+        };
+        ui::stepper(env, &self.style, area, room)
     }
 
     /// Redraws row `index` where it is (a value shown that changed).
@@ -382,47 +385,32 @@ impl GroupPage {
 
     /// What confirming (or tapping) the focused setting does.
     pub(super) fn activate(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
-        if matches!(self.entries.get(self.rows.focus()), Some(Row::Reset)) {
-            cx.command(ask_reset(env, Some((&self.group, &self.title))));
-            return;
+        match self.entries.get(self.rows.focus()) {
+            Some(Row::Reset) => {
+                cx.command(ask_reset(env, Some((&self.group, &self.title))));
+                return;
+            }
+            Some(Row::Theme) => {
+                cx.command(Command::OpenScreen(super::themes::SCREEN, Params::new()));
+                return;
+            }
+            _ => {}
         }
         let Some(spec) = self.focused() else {
             return;
         };
-        if let Some(editor) = &spec.extra().editor {
-            cx.command(Command::OpenScreen(
-                editor.clone(),
-                Params::new().with(ID, spec.id.as_str().to_string()),
-            ));
+        // Its editor, the keyboard, the list of its values.
+        if let Some(command) = ui::setting_opens(env, spec) {
+            cx.command(command);
             return;
         }
         match spec.kind {
-            SettingKind::Bool => self.change(env, 1, cx),
             SettingKind::Int { .. } => {
                 self.editing = env.settings.get(spec.id.as_str()).cloned();
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
-            SettingKind::Choice(_) | SettingKind::Language if ui::two_options(env, spec) => {
-                self.change(env, 1, cx);
-            }
-            SettingKind::Choice(_) | SettingKind::Language => {
-                cx.command(Command::OpenScreen(
-                    CHOOSE_SCREEN,
-                    Params::new().with(ID, spec.id.as_str().to_string()),
-                ));
-            }
-            SettingKind::Text => {
-                let question = ask::text(env.i18n.tr(&spec.title), &TEXT_ENTERED)
-                    .with(ID, spec.id.as_str().to_string());
-                let question = if spec.extra().secret {
-                    question.password()
-                } else {
-                    question.initial(ui::setting_value(env, spec))
-                };
-                cx.command(question.command());
-            }
-            _ => {}
+            _ => self.change(env, 1, cx),
         }
     }
 }
@@ -453,6 +441,13 @@ impl Screen for GroupPage {
                         ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
                         return;
                     }
+                    Row::Theme => {
+                        let title = env.i18n.tr("settings.theme");
+                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
+                        let name = super::themes::applied_name(env);
+                        ui::draw_value_row(canvas, env, &style, rect, focused, title, &name);
+                        return;
+                    }
                     Row::Setting(spec) => spec,
                 };
                 let title = env.i18n.tr(&spec.title);
@@ -477,26 +472,26 @@ impl Screen for GroupPage {
                 match spec.kind {
                     SettingKind::Int { .. } if focused => {
                         let area = if noted {
-                            ui::title_area(&style, rect)
+                            ui::number_title_area(&style, rect)
                         } else {
                             rect
                         };
                         ui::draw_stepper(canvas, env, &style, area, title, &value, room, editing);
                         if !note.is_empty() {
-                            ui::draw_note(canvas, env, &style, rect, true, note);
+                            ui::draw_number_note(canvas, env, &style, rect, true, note);
                         }
                         return;
                     }
                     // On touch screens − and + are always there.
                     SettingKind::Int { .. } if touch => {
                         let area = if noted {
-                            ui::title_area(&style, rect)
+                            ui::number_title_area(&style, rect)
                         } else {
                             rect
                         };
                         ui::draw_number(canvas, env, &style, area, title, &value, room, None);
                         if !note.is_empty() {
-                            ui::draw_note(canvas, env, &style, rect, false, note);
+                            ui::draw_number_note(canvas, env, &style, rect, false, note);
                         }
                         return;
                     }
@@ -726,8 +721,13 @@ impl Screen for GroupPage {
             return;
         }
         if *event == events::SETTING_CHANGED {
-            if self.covered.changed(cx) {
-                let env = *cx.env();
+            let covered = self.covered.changed(cx);
+            let env = *cx.env();
+            // A setting shown only while this one has a value.
+            let shows_others = events::SETTING_CHANGED
+                .read(event, params)
+                .is_some_and(|changed| env.settings.governs(changed.id.as_str()));
+            if covered || shows_others {
                 self.rebuild(&env);
                 cx.request_redraw();
             }

@@ -211,10 +211,7 @@ fn without_a_key_it_is_asked_for_and_kept_veiled() {
     }
     panel.send(
         "translate.key-entered",
-        Typed {
-            text: String::from("  secret-key:fx  "),
-            context: Params::new(),
-        },
+        Typed::new(String::from("  secret-key:fx  "), Params::new()),
     );
     assert_eq!(
         panel.kernel.secrets().get(KEY.as_str()),
@@ -243,10 +240,7 @@ fn an_empty_key_is_not_kept() {
     let mut panel = Panel::open("x", None, "", true);
     panel.send(
         "translate.key-entered",
-        Typed {
-            text: String::from("   "),
-            context: Params::new(),
-        },
+        Typed::new(String::from("   "), Params::new()),
     );
     assert!(panel.requests().is_empty());
     assert_eq!(panel.kernel.secrets().get(KEY.as_str()), None);

@@ -4,9 +4,47 @@
 use super::*;
 
 /// The height of buttons in a row of height `row.height`: the `−` and `+`
-/// of numbers, the buttons of panels. One size everywhere.
-pub fn button_height(row: Rect) -> u16 {
-    (u32::from(row.height) * 7 / 10) as u16
+/// of numbers, the buttons of panels. One size everywhere: seven tenths
+/// of the row, and on touch screens at least as large as a fingertip
+/// ([`UiStyle::finger`]), no higher than the row (rows made with
+/// [`UiStyle::touch_row`] keep room around them).
+pub fn button_height(style: &UiStyle, row: Rect) -> u16 {
+    let height = u32::from(row.height);
+    (height * 7 / 10).max(style.finger).min(height) as u16
+}
+
+/// The height of a bar of buttons along the top or bottom edge of the
+/// screen: its buttons as in a row made with [`UiStyle::touch_row`], the
+/// room of such a row toward the content, and toward the edge the margin
+/// the screen's sides have, so the buttons keep it from every edge.
+pub fn edge_bar_height(style: &UiStyle) -> u16 {
+    let row = style.touch_row(style.row) as u16;
+    let button = button_height(style, Rect::new(0, 0, 0, row));
+    let room = (row - button) / 2;
+    button + room + style.margin as u16
+}
+
+/// Where the buttons of `bar`, a bar along the screen's bottom edge (or
+/// its top, `at_top`) made [`edge_bar_height`] high, go: a band as high as
+/// they are, the side margin from the edge (see [`edge_bar_height`]).
+pub fn edge_bar_band(style: &UiStyle, bar: Rect, at_top: bool) -> Rect {
+    let row = style.touch_row(style.row) as u16;
+    let button = button_height(style, Rect::new(0, 0, 0, row));
+    let margin = style.margin as u16;
+    let y = if at_top {
+        bar.y + margin
+    } else {
+        (bar.y + bar.height).saturating_sub(margin + button)
+    };
+    Rect::new(bar.x, y, bar.width, button)
+}
+
+/// The room to leave between a row of buttons `row` high and the edge of
+/// the screen it lies along, so that its buttons, centred in it, keep the
+/// side margin from that edge as well.
+pub fn edge_room(style: &UiStyle, row: u16) -> u16 {
+    let button = button_height(style, Rect::new(0, 0, 0, row));
+    (style.margin as u16).saturating_sub((row - button) / 2)
 }
 
 /// The width of buttons' and boxes' borders.
@@ -80,6 +118,10 @@ pub(super) fn button_frame(
     on: bool,
     focused: bool,
 ) -> Option<Color> {
+    let part = super::look::ButtonPart { rect, on, focused };
+    if let Some(ink) = style.look.button(canvas, style, part) {
+        return Some(ink);
+    }
     let (back, ink) = if on {
         (Color::BLACK, Color::WHITE)
     } else {
@@ -126,6 +168,25 @@ fn framed(
     }
 }
 
+/// The room a button `width` wide keeps at each side of its word: a gap;
+/// narrow buttons (a keyboard's keys) keep less, so short words fit.
+fn label_pad(style: &UiStyle, width: f32) -> f32 {
+    (style.gap as f32).min(width / 12.0)
+}
+
+/// How wide a button must be for its word, `label` wide, not to be
+/// shortened ([`draw_button`] keeps room at its sides): for laying out
+/// buttons as wide as their words.
+pub fn button_width(style: &UiStyle, label: f32) -> f32 {
+    // A gap at each side, or a twelfth of the width where that is less.
+    let gap = style.gap as f32;
+    if label >= 10.0 * gap {
+        label + 2.0 * gap
+    } else {
+        label * 1.2
+    }
+}
+
 /// A button's word, centred and shortened to fit.
 pub(super) fn button_label(
     canvas: &mut Canvas<'_>,
@@ -146,9 +207,8 @@ pub(super) fn button_label(
             size *= room / width;
         }
     }
-    // A single character (− or +) is never shortened; narrow buttons (a
-    // keyboard's keys) keep less room at their sides, so short words fit.
-    let pad = (style.gap as f32).min(f32::from(rect.width) / 12.0);
+    // A single character (− or +) is never shortened.
+    let pad = label_pad(style, f32::from(rect.width));
     let room = if single {
         f32::from(rect.width)
     } else {
@@ -157,4 +217,28 @@ pub(super) fn button_label(
     let label = fit(font, size, label, room);
     let label_x = f32::from(rect.x) + (f32::from(rect.width) - font.measure(size, &label)) / 2.0;
     draw_label(canvas, font, size, label_x, rect, &label, ink);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A button as wide as `button_width` says keeps the room its word
+    /// needs, at every gap and for words short and long.
+    #[test]
+    fn a_button_as_wide_as_its_word_needs_keeps_it_whole() {
+        for gap in [0, 8, 19, 30] {
+            let style = UiStyle {
+                gap,
+                ..UiStyle::PLAIN
+            };
+            for label in [0.0f32, 5.0, 40.0, 190.0, 300.0, 600.0] {
+                let width = button_width(&style, label);
+                let room = width - 2.0 * label_pad(&style, width);
+                assert!(room + 0.01 >= label, "gap {gap}, {label}: {room}");
+                // Not much wider than that.
+                assert!(width <= label * 1.2 + 2.0 * gap as f32 + 0.01);
+            }
+        }
+    }
 }

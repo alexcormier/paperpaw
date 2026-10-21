@@ -76,6 +76,7 @@ pub mod positions;
 pub mod power;
 pub mod presets;
 pub mod random;
+pub mod readers;
 pub mod reading;
 pub mod replies;
 mod screen;
@@ -129,8 +130,8 @@ pub use screen::{
 };
 pub use setting::{Setting, Text};
 pub use settings::{
-    Choices, Level, SettingError, SettingExtra, SettingGroupSpec, SettingKind, SettingSpec,
-    SettingValue, Settings,
+    Choices, Editor, Level, SettingCheck, SettingError, SettingExtra, SettingGroupSpec,
+    SettingKind, SettingSpec, SettingValue, Settings,
 };
 pub use version::{DATA_FORMATS, SDK_VERSION, Version};
 

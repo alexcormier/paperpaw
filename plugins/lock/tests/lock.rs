@@ -265,10 +265,7 @@ impl Test {
     /// Answers the keyboard for the lock, as typing there would.
     fn typed(&mut self, text: &str) {
         let at = self.at();
-        let typed = Typed {
-            text: text.to_string(),
-            context: Params::new(),
-        };
+        let typed = Typed::new(text.to_string(), Params::new());
         self.kernel
             .send_event(at, Id::new_static("lock.typed"), typed.to_params());
         self.render();

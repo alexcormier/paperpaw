@@ -282,13 +282,17 @@ fn a_choice_of_more_opens_its_list_and_the_value_chosen_is_kept() {
 /// Every row of the menu shown, page by page: turned with the page
 /// buttons, or on touch screens by the pager's arrow at the bottom right.
 fn paged(app: &mut App) -> Vec<String> {
+    // Page by page until one comes again (the last stays, or the first
+    // follows it): entries of the same name each count.
     let mut seen: Vec<String> = Vec::new();
+    let mut pages: Vec<Vec<String>> = Vec::new();
     for _ in 0..20 {
-        for row in rows(app) {
-            if !seen.contains(&row) {
-                seen.push(row);
-            }
+        let page = rows(app);
+        if pages.contains(&page) {
+            break;
         }
+        seen.extend(page.iter().cloned());
+        pages.push(page);
         if touch(app) {
             app.tap(Point::new(450, 785));
         } else {
@@ -468,6 +472,20 @@ fn the_bar_wraps_round_with_the_buttons() {
     assert_eq!(app.screen(), "home.dashboard");
 }
 
+/// The bar tells which of its entries has the focus, as a button, as the
+/// focus moves along it by buttons.
+#[test]
+fn the_bar_tells_its_focus() {
+    let mut app = reading(X4);
+    reader_menu(&mut app);
+    for entry in BAR.iter().take(3) {
+        let parts = app.parts();
+        let focus = paperpaw_sdk::semantics::focused(&parts).unwrap();
+        assert_eq!((focus.role, focus.label.as_str()), (Role::Button, *entry));
+        app.run(actions::RIGHT);
+    }
+}
+
 /// The control focused in the panel, and the setting row it belongs to
 /// (the nearest text before it that names one).
 fn focused_control(app: &mut App) -> Option<(String, String)> {
@@ -567,4 +585,16 @@ fn a_tap_at_the_bottom_of_a_page_opens_the_panel_directly() {
     // The lower third, in the middle.
     app.tap(Point::new(240, 650));
     assert_eq!(app.screen(), PANEL, "{}", app.described());
+}
+
+/// An item at the quick panel's head that does something when tapped:
+/// the power mode's mark opens the power settings.
+#[test]
+fn a_tapped_item_at_the_quick_panels_head_does_what_it_says() {
+    let config = "[power]\nmode = power.mode.saving\n[menu]\nquick.left = power.status\nquick.center =\nquick.right =\n";
+    let mut app = App::new(TOUCH, storage(config));
+    app.run(actions::QUICK_PANEL);
+    assert_eq!(app.screen(), PANEL, "{}", app.described());
+    app.tap(Point::new(36, 20));
+    assert!(app.screen().starts_with("settings"), "{}", app.described());
 }

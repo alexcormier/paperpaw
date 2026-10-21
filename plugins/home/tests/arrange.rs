@@ -106,7 +106,7 @@ fn options_of(app: &mut App, label: &str) {
         app.run(actions::RIGHT);
         for _ in 0..12 {
             app.run(actions::CONFIRM);
-            if app.screen() == "home.choice" && choice_title(app).as_deref() == Some(label) {
+            if app.screen() == "core.choice-dialog" && choice_title(app).as_deref() == Some(label) {
                 break;
             }
             if app.screen() != HOME {
@@ -116,7 +116,7 @@ fn options_of(app: &mut App, label: &str) {
             app.run(actions::RIGHT);
         }
     }
-    assert_eq!(app.screen(), "home.choice", "{}", app.described());
+    assert_eq!(app.screen(), "core.choice-dialog", "{}", app.described());
     assert_eq!(choice_title(app).as_deref(), Some(label));
 }
 
@@ -517,7 +517,7 @@ fn edit_home_screen_in_the_main_menu_opens_editing_from_elsewhere() {
         // Editing: a tap on a tool offers its options instead of running it.
         if device.input.touch {
             app.tap_on("Library");
-            assert_eq!(app.screen(), "home.choice", "{}", app.described());
+            assert_eq!(app.screen(), "core.choice-dialog", "{}", app.described());
         } else {
             options_of(&mut app, "Library");
         }

@@ -14,7 +14,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ask;
-use paperpaw_sdk::builtin::{actions, params, slots};
+use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{HttpReply, Typed};
@@ -30,7 +30,7 @@ use crate::catalogs::{self, Catalog};
 use crate::feed::{self, Feed, Search};
 use crate::sync::book_name;
 use crate::temp::{self, TempFiles};
-use crate::{CHOICE, ID, OPTION_LABELS, PLUGIN, URL, request};
+use crate::{ID, OPTION_LABELS, PLUGIN, URL, request};
 
 use self::covers::*;
 use self::downloads::*;
@@ -469,10 +469,7 @@ impl Screen for BrowseScreen {
             && picked.option == "read"
         {
             let path = picked.path;
-            cx.command(Command::OpenSlot(
-                slots::READER,
-                Params::new().with(params::PATH, path.to_string()),
-            ));
+            cx.command(paperpaw_sdk::readers::open(path));
         }
     }
 }

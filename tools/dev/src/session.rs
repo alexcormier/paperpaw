@@ -238,14 +238,30 @@ impl Session {
         )
     }
 
-    /// What the screen shows, part by part.
+    /// What the screen shows, part by part; while it is secret (a PIN or
+    /// a password being entered) without what the parts say.
     pub fn parts(&mut self) -> Vec<Part> {
-        self.device.kernel.describe()
+        let secret = self.device.kernel.is_secret();
+        let mut parts = self.device.kernel.describe();
+        if secret {
+            for part in &mut parts {
+                part.label = String::from("•");
+            }
+        }
+        parts
     }
 
-    /// Everything the drawing helpers told as they drew, with clips.
+    /// Everything the drawing helpers told as they drew, with clips;
+    /// while it is secret without what they say.
     pub fn described(&mut self) -> Vec<Described> {
-        self.device.kernel.described()
+        let secret = self.device.kernel.is_secret();
+        let mut described = self.device.kernel.described();
+        if secret {
+            for d in &mut described {
+                d.label = String::from("•");
+            }
+        }
+        described
     }
 
     /// The frames drawn since the last call (time, storage calls by band).

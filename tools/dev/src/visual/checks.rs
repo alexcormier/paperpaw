@@ -18,6 +18,7 @@ pub const MARGIN: &str = "visual.margin";
 pub const ALIGN: &str = "visual.align";
 pub const INK_CENTRE: &str = "visual.ink-centre";
 pub const TOUCH_TARGET: &str = "visual.touch-target";
+pub const BUTTON_ROOM: &str = "visual.button-room";
 pub const FOCUS: &str = "visual.focus";
 pub const CONTRAST: &str = "visual.contrast";
 
@@ -38,6 +39,9 @@ pub fn all(scene: &Scene<'_>) -> Vec<Issue> {
     }
     issues.extend(ink_centre(scene));
     issues.extend(touch_targets(scene));
+    if scene.cell.is_none() {
+        issues.extend(button_room(scene));
+    }
     issues.extend(contrast(scene));
     issues
 }
@@ -50,6 +54,13 @@ fn role_name(role: Role) -> &'static str {
         Role::Switch => "switch",
         Role::Slider => "slider",
         Role::Text => "text",
+        Role::Check => "check box",
+        Role::Radio => "option",
+        Role::Field => "field",
+        Role::Image => "picture",
+        Role::Link => "link",
+        Role::Dialog => "dialog",
+        Role::Progress => "progress bar",
         _ => "part",
     }
 }
@@ -988,6 +999,139 @@ pub fn touch_targets(scene: &Scene<'_>) -> Vec<Issue> {
     )]
 }
 
+// ---- Room around buttons ------------------------------------------------
+
+/// Buttons keep their room as they grow: the margin of the screen's
+/// sides from every edge of the screen (a bar of buttons along its top
+/// or bottom keeps it too, `ui::edge_bar_height`), and half a gap (the
+/// room a button has in its row) from the edges of the row they are in
+/// and from each other. A button grown into the room around it (a bar
+/// that did not grow with it, `UiStyle::touch_row`) is found.
+pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
+    let ui = scene.ui;
+    let tolerance = i32::from(ui.tolerance());
+    let half = i32::from(ui.gap / 2);
+    let margin = i32::from(ui.margin);
+    let screen = scene.screen;
+    let buttons: Vec<&Described> = scene
+        .parts(&[Role::Button])
+        .filter(|b| b.area.width > 0 && b.area.height > 0)
+        .collect();
+    let rows: Vec<Rect> = scene.parts(&[Role::Row]).map(|r| r.area).collect();
+    // A header's note or arrows follow the header's own layout.
+    let headers: Vec<Rect> = scene.parts(&[Role::Heading]).map(|h| h.area).collect();
+    let buttons: Vec<&Described> = buttons
+        .into_iter()
+        .filter(|b| !headers.iter().any(|h| inside(b.area, *h)))
+        .collect();
+    let mut found: Vec<(String, Rect, String)> = Vec::new();
+    let (left, right) = (i32::from(screen.x), screen.right() as i32);
+    let (top, bottom) = (i32::from(screen.y), screen.bottom() as i32);
+    for b in &buttons {
+        let a = b.area;
+        let (x0, x1) = (i32::from(a.x), a.right() as i32);
+        let (y0, y1) = (i32::from(a.y), a.bottom() as i32);
+        let side = (x0 - left).min(right - x1);
+        if side < margin - tolerance {
+            found.push((
+                named(b),
+                a,
+                format!("{side} px from the side (margin {margin} px)"),
+            ));
+        }
+        let edge = (y0 - top).min(bottom - y1);
+        if edge < margin - tolerance {
+            found.push((
+                named(b),
+                a,
+                format!("{edge} px from the screen's top or bottom (margin {margin} px)"),
+            ));
+        }
+        // Its row: room above and below it.
+        if let Some(row) = rows.iter().find(|r| inside(a, **r) && **r != a) {
+            let room = (y0 - i32::from(row.y)).min(row.bottom() as i32 - y1);
+            if room < half - tolerance {
+                found.push((named(b), a, format!("{room} px from its row's edge")));
+            }
+        }
+    }
+    // Tiles of a grid, each cell the target, lie edge to edge: a button
+    // is one where buttons of its size lie on its grid's lines (its x
+    // and y a whole number of cells from theirs), in two columns and two
+    // rows or more. A last row of one tile is the grid's too.
+    let tile = |d: &Described| {
+        let (w, h) = (i32::from(d.area.width), i32::from(d.area.height));
+        let mut columns: Vec<u16> = Vec::new();
+        let mut lines: Vec<u16> = Vec::new();
+        for o in &buttons {
+            let (dx, dy) = (
+                i32::from(o.area.x) - i32::from(d.area.x),
+                i32::from(o.area.y) - i32::from(d.area.y),
+            );
+            if o.area.width == d.area.width
+                && o.area.height == d.area.height
+                && dx % w == 0
+                && dy % h == 0
+            {
+                columns.push(o.area.x);
+                lines.push(o.area.y);
+            }
+        }
+        for v in [&mut columns, &mut lines] {
+            v.sort_unstable();
+            v.dedup();
+        }
+        columns.len() >= 2 && lines.len() >= 2
+    };
+    // Neighbours side by side, and above each other.
+    for (i, a) in buttons.iter().enumerate() {
+        for b in &buttons[i + 1..] {
+            let (p, q) = (a.area, b.area);
+            let across = i32::from(p.y) < q.bottom() as i32 && i32::from(q.y) < p.bottom() as i32;
+            let down = i32::from(p.x) < q.right() as i32 && i32::from(q.x) < p.right() as i32;
+            let gap = if across {
+                (i32::from(q.x) - p.right() as i32).max(i32::from(p.x) - q.right() as i32)
+            } else if down {
+                (i32::from(q.y) - p.bottom() as i32).max(i32::from(p.y) - q.bottom() as i32)
+            } else {
+                continue;
+            };
+            // Tiles of a grid lie edge to edge; overlapping ones are the
+            // overlap check's.
+            let tiles = gap == 0 && tile(a) && tile(b);
+            if !tiles && (0..half - tolerance).contains(&gap) {
+                found.push((
+                    format!("{} and {}", named(a), named(b)),
+                    p.union(&q),
+                    format!("{gap} px apart"),
+                ));
+            }
+        }
+    }
+    if found.is_empty() {
+        return Vec::new();
+    }
+    let area = found
+        .iter()
+        .fold(Rect::default(), |s, (_, a, _)| s.union(a));
+    let mut names: Vec<String> = found
+        .iter()
+        .take(4)
+        .map(|(name, _, what)| format!("{name} {what}"))
+        .collect();
+    if found.len() > 4 {
+        names.push(format!("{} more", found.len() - 4));
+    }
+    vec![Issue::warning(
+        BUTTON_ROOM,
+        area,
+        format!(
+            "buttons without their room (the margin from every edge of the screen, half a gap, {half} px, in rows and between them; rows and bars grow with their buttons, UiStyle::touch_row, ui::edge_bar_height): {}",
+            names.join(", ")
+        ),
+    )]
+}
+
 // ---- Focus --------------------------------------------------------------
 
 /// Whether moving the focus changed the picture where the focus is now:
@@ -1138,6 +1282,7 @@ mod tests {
             margin: 26,
             finger: 0,
             line: 2,
+            gap: 19,
         }
     }
 
@@ -1271,6 +1416,28 @@ mod tests {
             d(Role::Switch, "", switch),
         ];
         assert_eq!(checks(&overlap(&scene(&image, long))), [OVERLAP]);
+    }
+
+    #[test]
+    fn tiles_of_a_grid_lie_edge_to_edge() {
+        let image = paper();
+        // Seven tiles in three columns: the last row has one.
+        let tiles = |at: &[(u16, u16)]| {
+            at.iter()
+                .map(|(c, r)| {
+                    d(
+                        Role::Button,
+                        "",
+                        Rect::new(30 + c * 140, 100 + r * 140, 140, 140),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let grid = [(0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (2, 1), (0, 2)];
+        assert!(button_room(&scene(&image, tiles(&grid))).is_empty());
+        // Buttons of a size in one row, edge to edge, are no grid.
+        let issues = button_room(&scene(&image, tiles(&[(0, 0), (1, 0), (2, 0)])));
+        assert_eq!(checks(&issues), [BUTTON_ROOM]);
     }
 
     #[test]

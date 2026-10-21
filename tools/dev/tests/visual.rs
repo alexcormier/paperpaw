@@ -72,3 +72,45 @@ fn good_screens_pass_and_a_margin_off_is_found() {
     }
     let _ = std::fs::remove_dir_all(&context.out);
 }
+
+/// Buttons grown to a fingertip keep their room: on touch screens the
+/// bars and rows that hold them grow with them (`UiStyle::touch_row`), so
+/// the margin to the sides and the gaps to the edges and to each other
+/// stay as before.
+#[test]
+fn buttons_keep_their_room_on_touch_screens() {
+    let out = std::env::temp_dir().join(format!("paperpaw-dev-room-{}", std::process::id()));
+    let context = Context::new(
+        Target {
+            plugins: vec!["file-manager".into(), "keyboard".into(), "menu".into()],
+            ..Target::default()
+        },
+        out,
+    );
+    for profile in ["boox-go-7", "xteink-x4-pro"] {
+        let variant = Variant::of(profiles::find(profile).unwrap());
+        let mut session = visual::start(&context, &variant).unwrap();
+        let mut looker = Looker::new(&mut session);
+        for screen in ["file-manager.browser", "keyboard.screen", "menu.list"] {
+            let looked = looker.screen(&mut session, screen).unwrap().unwrap();
+            let cramped: Vec<_> = looked
+                .issues
+                .iter()
+                .filter(|i| i.check == checks::BUTTON_ROOM)
+                .collect();
+            assert!(cramped.is_empty(), "{profile} {screen}: {cramped:?}");
+        }
+        // Asked for more room than the keyboard's keys have: found.
+        looker.ui.gap *= 4;
+        let looked = looker
+            .screen(&mut session, "keyboard.screen")
+            .unwrap()
+            .unwrap();
+        assert!(
+            looked.issues.iter().any(|i| i.check == checks::BUTTON_ROOM),
+            "{profile}: {:?}",
+            looked.issues
+        );
+    }
+    let _ = std::fs::remove_dir_all(&context.out);
+}

@@ -41,6 +41,9 @@ pub struct Framebuffer {
     /// Pictures drawn now count there (not small ones, see
     /// [`Canvas::small_pictures`](crate::Canvas::small_pictures)).
     counting: bool,
+    /// Holds no pixels: what is drawn is only described (see
+    /// [`Framebuffer::blind`]).
+    blind: bool,
 }
 
 impl Framebuffer {
@@ -83,11 +86,42 @@ impl Framebuffer {
             saturation: 100,
             pictured: 0,
             counting: true,
+            blind: false,
         })
+    }
+
+    /// A framebuffer for a `width`×`height` screen that holds no pixels:
+    /// drawing on it costs no memory and draws nothing, but a canvas of
+    /// it describes what is drawn ([`Canvas::describing`]) as on the
+    /// screen, e.g. to say what a screen shows (48 KB less on a
+    /// 800×480 screen in black and white).
+    pub fn blind(width: u16, height: u16) -> Self {
+        Self {
+            width,
+            height,
+            format: PixelFormat::Mono1,
+            stride: 0,
+            top: 0,
+            rows: height.max(1),
+            data: Vec::new(),
+            dirty: None,
+            inverted: false,
+            pictures_kept: false,
+            mono_coverage: MONO_COVERAGE,
+            saturation: 100,
+            pictured: 0,
+            counting: true,
+            blind: true,
+        }
     }
 
     pub fn width(&self) -> u16 {
         self.width
+    }
+
+    /// Whether it holds no pixels ([`Framebuffer::blind`]).
+    pub fn is_blind(&self) -> bool {
+        self.blind
     }
 
     pub fn height(&self) -> u16 {
@@ -128,6 +162,9 @@ impl Framebuffer {
     /// screen row `top`) into this framebuffer, e.g. to keep a copy of the
     /// whole screen from bands. Rows outside the current band are skipped.
     pub fn write_rows(&mut self, top: u16, rows: FrameView<'_>) {
+        if self.blind {
+            return;
+        }
         if rows.format != self.format || rows.width != self.width {
             return;
         }
@@ -159,6 +196,15 @@ impl Framebuffer {
     /// The held rows that `region` covers, as full-width rows starting at
     /// screen row `region.y` (clamped to the band).
     pub fn view_rows(&self, region: Rect) -> FrameView<'_> {
+        if self.blind {
+            return FrameView {
+                width: self.width,
+                height: 0,
+                format: self.format,
+                stride: self.stride,
+                data: &[],
+            };
+        }
         let band = self.band();
         let first = region.y.clamp(band.y, band.bottom() as u16);
         let last = region.bottom().clamp(u32::from(first), band.bottom()) as u16;
@@ -237,6 +283,9 @@ impl Framebuffer {
 
     /// Fills `rect`, which must lie inside the framebuffer.
     pub(crate) fn fill_clipped(&mut self, rect: Rect, color: Color) {
+        if self.blind {
+            return;
+        }
         if rect.is_empty() {
             return;
         }
@@ -290,6 +339,9 @@ impl Framebuffer {
     /// than [`Canvas::fill_tint`](crate::Canvas::fill_tint)'s, so tinted
     /// lines stay).
     pub(crate) fn wash_clipped(&mut self, rect: Rect) {
+        if self.blind {
+            return;
+        }
         if rect.is_empty() {
             return;
         }
@@ -341,6 +393,9 @@ impl Framebuffer {
     /// `(x, y)`, which must lie inside the framebuffer. Does not mark the
     /// pixel dirty; callers mark whole areas.
     pub(crate) fn blend_pixel(&mut self, x: u16, y: u16, color: Color, alpha: u8) {
+        if self.blind {
+            return;
+        }
         // In black and white, a pixel at an edge takes the colour from a
         // part covered (somewhat less than half at first): thin strokes
         // of small text keep their weight instead of breaking up.
@@ -406,6 +461,9 @@ impl Framebuffer {
     /// dithered for formats with few gray levels, so photos and
     /// illustrations keep their tones.
     pub(crate) fn put_gray(&mut self, x: u16, y: u16, gray: u8) {
+        if self.blind {
+            return;
+        }
         self.pictured = self.pictured.saturating_add(u32::from(self.counting));
         let gray = self.dithered(x, y, gray);
         // Inverted once more to stay as it is, where pictures are kept.
@@ -418,10 +476,38 @@ impl Framebuffer {
         self.store(x, y, value);
     }
 
+    /// A row of grays from `(x, y)` on, as [`Framebuffer::put_gray`] puts
+    /// each, the dither's offsets worked out once for the row rather than
+    /// for every pixel (a division each, slow on chips without one: a
+    /// picture over the whole screen is some 400,000 pixels).
+    pub(crate) fn put_gray_row(&mut self, x: u16, y: u16, grays: &[u8]) {
+        if self.blind {
+            return;
+        }
+        let count = u32::try_from(grays.len()).unwrap_or(u32::MAX);
+        self.pictured = self
+            .pictured
+            .saturating_add(count * u32::from(self.counting));
+        let offsets: [i32; 4] = core::array::from_fn(|column| self.offset(column as u16, y));
+        let keep = self.inverted && self.pictures_kept;
+        for (px, &gray) in (x..).zip(grays) {
+            let gray = (i32::from(gray) + offsets[usize::from(px % 4)]).clamp(0, 255) as u8;
+            let gray = if keep { 255 - gray } else { gray };
+            let value = self.encode(Color::gray(gray));
+            self.store(px, y, value);
+        }
+    }
+
     /// `gray` at `(x, y)` with the offset of an ordered dither where the
     /// format has few gray levels (as is elsewhere), so areas of a gray
     /// between them show as a pattern of the levels around it.
     fn dithered(&self, x: u16, y: u16, gray: u8) -> u8 {
+        (i32::from(gray) + self.offset(x, y)).clamp(0, 255) as u8
+    }
+
+    /// The ordered dither's offset at `(x, y)`: none where the format has
+    /// many grays (or colours).
+    fn offset(&self, x: u16, y: u16) -> i32 {
         /// 4×4 Bayer matrix.
         const BAYER: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
         match self.format.gray_levels() {
@@ -430,10 +516,9 @@ impl Framebuffer {
             // floating point reckon it for every pixel of a picture.
             Some(levels @ 2..=16) => {
                 let threshold = i32::from(BAYER[usize::from(y % 4)][usize::from(x % 4)]);
-                let offset = (2 * threshold - 15) * 255 / (32 * i32::from(levels - 1));
-                (i32::from(gray) + offset).clamp(0, 255) as u8
+                (2 * threshold - 15) * 255 / (32 * i32::from(levels - 1))
             }
-            _ => gray,
+            _ => 0,
         }
     }
 
@@ -442,6 +527,9 @@ impl Framebuffer {
     /// pattern rather than turning white); colour formats get the colour.
     /// It is no picture (see [`Framebuffer::take_pictured`]).
     pub(crate) fn shade_clipped(&mut self, rect: Rect, color: Color) {
+        if self.blind {
+            return;
+        }
         if !matches!(self.format.gray_levels(), Some(2..=16)) {
             return self.fill_clipped(rect, color);
         }
@@ -461,6 +549,9 @@ impl Framebuffer {
     /// Sets the pixel at `(x, y)` (inside the band) to `rgb` on colour
     /// formats; on gray ones to its gray, as [`Framebuffer::put_gray`].
     pub(crate) fn put_rgb(&mut self, x: u16, y: u16, rgb: [u8; 3]) {
+        if self.blind {
+            return;
+        }
         if self.format.is_color() {
             self.pictured = self.pictured.saturating_add(u32::from(self.counting));
             let rgb = saturate(rgb, self.saturation);
@@ -661,6 +752,35 @@ mod tests {
         fb.fill_clipped(Rect::new(1, 0, 1, 1), Color::WHITE);
         fb.blend_pixel(1, 0, Color::BLACK, 255);
         assert_eq!(fb.view().pixel(1, 0), Color::WHITE);
+    }
+
+    #[test]
+    fn a_row_of_grays_is_put_as_each_of_its_pixels() {
+        let grays: Vec<u8> = (0..=255u8).step_by(3).collect();
+        let width = grays.len() as u16 + 5;
+        for format in [
+            PixelFormat::Mono1,
+            PixelFormat::Gray2,
+            PixelFormat::Gray4,
+            PixelFormat::Gray8,
+        ] {
+            for (inverted, kept) in [(false, false), (true, false), (true, true)] {
+                let mut each = Framebuffer::new(width, 5, format).unwrap();
+                let mut row = Framebuffer::new(width, 5, format).unwrap();
+                for fb in [&mut each, &mut row] {
+                    fb.set_inverted(inverted);
+                    fb.set_pictures_kept(kept);
+                }
+                for y in 0..5 {
+                    for (i, &gray) in grays.iter().enumerate() {
+                        each.put_gray(3 + i as u16, y, gray);
+                    }
+                    row.put_gray_row(3, y, &grays);
+                }
+                assert_eq!(each.data, row.data, "{format:?} {inverted} {kept}");
+                assert_eq!(each.take_pictured(), row.take_pictured());
+            }
+        }
     }
 
     #[test]

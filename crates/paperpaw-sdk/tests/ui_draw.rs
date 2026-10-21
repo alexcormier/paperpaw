@@ -724,3 +724,150 @@ fn a_qr_code_is_drawn_whole_or_not_at_all() {
     );
     assert!(!drawn_in(&small, Rect::new(0, 0, 480, 800)));
 }
+
+/// A look one plugin gives the parts: the SDK places them and tells
+/// screen readers what they are, the look paints them.
+#[test]
+fn a_look_paints_the_parts_and_keeps_what_they_say() {
+    use paperpaw_sdk::Color;
+    use paperpaw_sdk::ui::look::{ButtonPart, FocusPart, Look, Painters, SwitchPart};
+    const SWITCH: Color = Color::gray(100);
+    const FOCUS: Color = Color::gray(60);
+    const BUTTON: Color = Color::gray(140);
+    fn switch(canvas: &mut paperpaw_sdk::Canvas<'_>, _: &UiStyle, part: &SwitchPart) -> bool {
+        canvas.fill(part.rect, SWITCH);
+        true
+    }
+    fn focus(canvas: &mut paperpaw_sdk::Canvas<'_>, _: &UiStyle, part: &FocusPart) -> bool {
+        canvas.fill(part.rect, FOCUS);
+        true
+    }
+    fn button(
+        canvas: &mut paperpaw_sdk::Canvas<'_>,
+        _: &UiStyle,
+        part: &ButtonPart,
+    ) -> Option<Color> {
+        canvas.fill(part.rect, BUTTON);
+        Some(Color::WHITE)
+    }
+    static SQUARE: Painters = Painters::new().switch(switch).focus(focus).button(button);
+
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let row = Rect::new(0, 100, 480, 80);
+    let at = |style: &UiStyle| {
+        let (described, frame) = describe(480, 300, |canvas| {
+            ui::draw_switch(canvas, style, row, true, false);
+            ui::draw_focus(canvas, style, Rect::new(0, 200, 480, 60));
+            ui::draw_button(
+                canvas,
+                &env,
+                style,
+                Rect::new(20, 20, 100, 50),
+                "OK",
+                false,
+                false,
+            );
+        });
+        let view = frame.view();
+        let switch = ui::switch_rect(style, row);
+        let focus = ui::focus_rect(style, Rect::new(0, 200, 480, 60));
+        let shown = (
+            view.pixel(switch.x + 1, switch.y + switch.height / 2),
+            view.pixel(focus.x + 1, focus.y + focus.height / 2),
+            view.pixel(22, 22),
+        );
+        let said: Vec<(Role, Option<bool>)> = described.iter().map(|d| (d.role, d.on)).collect();
+        (shown, said)
+    };
+    let plain = UiStyle::new(&env);
+    let mut looked = plain;
+    looked.look = Look::of(&SQUARE);
+    let (before, said_before) = at(&plain);
+    let (after, said_after) = at(&looked);
+    assert_eq!(after, (SWITCH, FOCUS, BUTTON));
+    assert_ne!(before.0, SWITCH);
+    assert_ne!(before.1, FOCUS);
+    assert_ne!(before.2, BUTTON);
+    // What they are is told the same with any look.
+    assert_eq!(said_after, said_before);
+    assert!(said_after.contains(&(Role::Switch, Some(true))));
+}
+
+/// A theme's grays: the palette names them by what they are for, and
+/// the parts draw in them.
+#[test]
+fn the_palette_sets_the_grays_the_parts_draw_in() {
+    use paperpaw_sdk::Color;
+    use paperpaw_sdk::ui::{Ink, Palette, TextRole};
+    let palette = Palette::parse("muted=60 line=100 bad nope=3 faint=x note=300");
+    assert_eq!(palette.gray(Ink::Muted), 60);
+    assert_eq!(palette.gray(Ink::Line), 100);
+    // What it does not set, or sets wrongly, keeps its default.
+    for ink in [Ink::Faint, Ink::Note, Ink::Rule, Ink::Text, Ink::Paper] {
+        assert_eq!(palette.gray(ink), Palette::DEFAULT.gray(ink), "{ink:?}");
+    }
+    assert_eq!(Palette::parse(""), Palette::DEFAULT);
+
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let mut style = UiStyle::new(&env);
+    style.separators = ui::Separators::Line;
+    style.palette = palette;
+    let row = Rect::new(0, 0, 480, 80);
+    let mut lined = frame(480, 100);
+    ui::draw_separator(&mut lined.canvas(), &style, row, 0);
+    let y = row.height - style.line as u16;
+    assert_eq!(lined.view().pixel(240, y), Color::gray(100));
+    assert_eq!(style.ink(Ink::Muted), Color::gray(60));
+    // Strong contrast draws gray text black, not the lines.
+    style.strong = true;
+    assert_eq!(style.ink(Ink::Muted), Color::BLACK);
+    assert_eq!(style.ink(Ink::Line), Color::gray(100));
+    // Text of one kind is as large everywhere.
+    assert_eq!(style.size(TextRole::Body), style.text);
+    assert_eq!(style.size(TextRole::Headline), style.title * 1.6);
+}
+
+/// Semantic icons: what they say has the drawing a theme names for it,
+/// else its default, else the arrow drawn here.
+#[test]
+fn a_theme_gives_the_arrows_and_marks_icons_of_its_own() {
+    use paperpaw_sdk::{Color, Id, icons};
+    let mut h = Harness::new(Device::TOUCH);
+    {
+        let env = h.env();
+        // Holding has its hand by default; the arrows are drawn.
+        assert!(ui::has_icon(&env, icons::HOLD));
+        assert!(!ui::has_icon(&env, icons::NEXT));
+    }
+    let arrow = |h: &Harness| {
+        let env = h.env();
+        let style = UiStyle::new(&env);
+        let mut drawn = frame(200, 200);
+        ui::draw_arrow(
+            &mut drawn.canvas(),
+            &env,
+            &style,
+            (100, 100),
+            icons::NEXT,
+            false,
+            Color::BLACK,
+        );
+        let view = drawn.view();
+        (0..200u16)
+            .flat_map(|y| (0..200u16).map(move |x| (x, y)))
+            .filter(|&(x, y)| view.pixel(x, y) != support::PAPER)
+            .collect::<Vec<_>>()
+    };
+    let chevron = arrow(&h);
+    assert!(!chevron.is_empty());
+    h.menus.set_icon(
+        Id::new_static(icons::NEXT),
+        std::borrow::Cow::Borrowed("search"),
+    );
+    assert!(ui::has_icon(&h.env(), icons::NEXT));
+    let icon = arrow(&h);
+    assert!(!icon.is_empty());
+    assert_ne!(icon, chevron);
+}

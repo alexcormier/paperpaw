@@ -133,7 +133,7 @@ pub(crate) fn items(env: &Env<'_>, highlight: Option<bool>) -> Vec<Item> {
         .into_iter()
         .collect();
     let style = UiStyle::new(env);
-    let width = f32::from(bar_area(env, &style).width);
+    let width = f32::from(items_area(env, &style).width);
     let fits = |items: &[Item]| natural_widths(env, &style, items).iter().sum::<f32>() <= width;
     if fits(&[all.as_slice(), &cancel].concat()) {
         all.extend(cancel);
@@ -168,8 +168,23 @@ pub(crate) fn translates(env: &Env<'_>) -> bool {
 /// Where the bar is: over the status line at the bottom.
 pub(crate) fn bar_area(env: &Env<'_>, style: &UiStyle) -> Rect {
     let display = env.device.display;
-    let height = style.row as u16;
+    // Its buttons grow on touch screens, and keep the side margin from
+    // the bottom edge too.
+    let height = ui::edge_bar_height(style);
     Rect::new(0, display.height - height, display.width, height)
+}
+
+/// Where the bar's items go: between the margins, the buttons' own room
+/// in their parts included, so that what fits here is drawn whole.
+fn items_area(env: &Env<'_>, style: &UiStyle) -> Rect {
+    let full = bar_area(env, style);
+    let side = (style.margin as u16).saturating_sub(button_pad(style));
+    Rect::new(
+        full.x + side,
+        full.y,
+        full.width.saturating_sub(2 * side),
+        full.height,
+    )
 }
 
 /// Space around a button in its part of the bar.
@@ -181,14 +196,16 @@ fn button_pad(style: &UiStyle) -> u16 {
 /// keeps around them (see [`ui::draw_button`]), so none is shortened.
 fn natural_widths(env: &Env<'_>, style: &UiStyle, items: &[Item]) -> Vec<f32> {
     let font = style.font(env);
-    let around = 2.0 * style.gap as f32 + 2.0 * f32::from(button_pad(style));
+    // The button's room at each side of its label, and the part's own
+    // room around the button: the spare width is shared out after.
+    let around = 2.0 * f32::from(button_pad(style));
     items
         .iter()
         .map(|item| {
             let label = font
                 .as_ref()
                 .map_or(0.0, |f| f.measure(style.small, env.i18n.tr(&item.title)));
-            label + around
+            ui::button_width(style, label) + around
         })
         .collect()
 }
@@ -196,7 +213,7 @@ fn natural_widths(env: &Env<'_>, style: &UiStyle, items: &[Item]) -> Vec<f32> {
 /// The rectangles of the bar's items: each as wide as its label needs,
 /// the rest of the bar shared equally.
 fn item_areas(env: &Env<'_>, style: &UiStyle, items: &[Item]) -> Vec<Rect> {
-    let bar = bar_area(env, style);
+    let bar = items_area(env, style);
     let natural = natural_widths(env, style, items);
     let spare =
         (f32::from(bar.width) - natural.iter().sum::<f32>()).max(0.0) / items.len().max(1) as f32;
@@ -235,13 +252,13 @@ pub(crate) fn draw_bar(
     let areas = item_areas(env, &style, items);
     for (index, (item, &area)) in items.iter().zip(&areas).enumerate() {
         // Buttons as everywhere; the whole part stays the target of taps.
-        let h = ui::button_height(area);
+        let band = ui::edge_bar_band(&style, bar, false);
         let pad = button_pad(&style);
         let button = Rect::new(
             area.x + pad,
-            area.y + (area.height - h) / 2,
+            band.y,
             area.width.saturating_sub(2 * pad),
-            h,
+            band.height,
         );
         let label = env.i18n.tr(&item.title);
         ui::draw_button(
@@ -262,7 +279,18 @@ pub(crate) fn item_at(env: &Env<'_>, items: &[Item], point: Point) -> Option<Ite
     if !bar_area(env, &style).contains(point) {
         return None;
     }
-    let areas = item_areas(env, &style, items);
+    let bar = bar_area(env, &style);
+    let mut areas = item_areas(env, &style, items);
+    // The first and last parts reach to the bar's ends: a tap beside
+    // the margins is theirs.
+    if let Some(first) = areas.first_mut() {
+        let right = first.right();
+        first.x = bar.x;
+        first.width = (right - u32::from(bar.x)) as u16;
+    }
+    if let Some(last) = areas.last_mut() {
+        last.width = (bar.right() - u32::from(last.x)) as u16;
+    }
     let index = areas.iter().position(|area| area.contains(point))?;
     items.get(index).cloned()
 }

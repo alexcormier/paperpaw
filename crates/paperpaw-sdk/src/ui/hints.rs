@@ -13,18 +13,22 @@ pub fn button_hints_height(env: &Env<'_>) -> u16 {
     ((line * 1.5) as u32 + style.line).max(env.metrics.mm(4)) as u16
 }
 
-/// The row of hints below the screen: a line above it, then what each
-/// button under it does, centred in an equal share of the width, as the
-/// buttons lie. The hint of the button `pressed` is drawn inverted, as a
-/// sign that its press is being worked on.
-/// The mark beside a button's label in the row of hints where holding
-/// the button does something too ([`draw_button_hints`]).
-pub const HOLD_ICON: &str = "hand-click";
-
 /// PaperPaw's paw: on empty screens ([`draw_empty`]) and as the busy
 /// mark, also in the hint of a button whose press is being worked on.
 pub const PAW_ICON: &str = "paw";
 
+/// The mark beside a button's label in the row of hints where holding
+/// the button does something too.
+#[deprecated(
+    since = "0.4.0",
+    note = "use `icons::HOLD`, which a theme may draw another way"
+)]
+pub const HOLD_ICON: &str = "hand-click";
+
+/// The row of hints below the screen: a line above it, then what each
+/// button under it does, centred in an equal share of the width, as the
+/// buttons lie. The hint of the button `pressed` is drawn inverted, as a
+/// sign that its press is being worked on.
 pub fn draw_button_hints(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -34,9 +38,15 @@ pub fn draw_button_hints(
     pressed: Option<usize>,
 ) {
     let style = UiStyle::new(env);
-    canvas.fill(area, Color::WHITE);
     let line = style.line.min(u32::from(area.height));
+    let painted = style
+        .look
+        .hints(canvas, &style, super::look::HintsPart { area });
+    if !painted {
+        canvas.fill(area, Color::WHITE);
+    }
     match style.separators {
+        _ if painted => {}
         Separators::Line => canvas.fill_rect(
             i32::from(area.x),
             i32::from(area.y),
@@ -51,7 +61,7 @@ pub fn draw_button_hints(
                 area.width.saturating_sub(2 * style.margin as u16),
                 line as u16,
             ),
-            Color::gray(150),
+            style.ink(Ink::Rule),
         ),
         Separators::None => {}
     }
@@ -86,7 +96,11 @@ pub fn draw_button_hints(
         let busy = pressed == Some(i as usize);
         let hold = (busy || held.get(i as usize).copied().unwrap_or(false))
             && matches!(hint, Hint::Text(_) | Hint::Icon(_));
-        let sign = if busy { PAW_ICON } else { HOLD_ICON };
+        let sign = if busy {
+            crate::icons::BUSY
+        } else {
+            crate::icons::HOLD
+        };
         // Smaller than the label, close to it, the cell's margins halved:
         // the label keeps its room (German words are long).
         let mark_size = style.small * 0.8;

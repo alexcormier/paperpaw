@@ -12,7 +12,7 @@ use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::install::Progress;
 use paperpaw_sdk::replies::Typed;
-use paperpaw_sdk::ui::choice::{self, Picked};
+use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
@@ -22,7 +22,7 @@ use paperpaw_sdk::{
 use crate::catalog::{self, Entry, Index, Order};
 use crate::list::{group_name, open_page};
 use crate::room::Room;
-use crate::{CHOICE, DOWNLOADED, INSTALLER, queue, rows};
+use crate::{DOWNLOADED, INSTALLER, queue, rows};
 
 /// Parameters: which list, its order.
 const VIEW: &str = "view";
@@ -246,14 +246,11 @@ impl ViewScreen {
                 Top::Fonts => cx.command(Command::RunAction(crate::FONTS)),
                 Top::Sort => {
                     let options: Vec<&str> = Order::ALL.iter().map(|o| o.key()).collect();
-                    cx.command(choice::open(
-                        CHOICE,
-                        &SORTED,
-                        env.i18n.tr("store.sort"),
-                        "",
-                        "store.order.",
-                        &options,
-                    ));
+                    cx.command(
+                        paperpaw_sdk::ask::choice(env.i18n.tr("store.sort"), &SORTED)
+                            .options("store.order.", &options)
+                            .command(),
+                    );
                 }
                 Top::UpdateAll => {
                     let mut out = Vec::new();

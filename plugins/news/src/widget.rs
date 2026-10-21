@@ -12,14 +12,12 @@ use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
     self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{
-    Canvas, Color, Command, Env, FontHandle, Id, Params, Rect, RegisterError, Registrar,
-    SettingSpec,
+    Canvas, Color, Command, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
 };
 
 use crate::{OPEN, headlines};
@@ -241,13 +239,7 @@ impl Widget for Headlines {
             .into_iter()
             .zip(&self.shown)
             .map(|(row, (_, book))| {
-                WidgetTarget::new(
-                    row,
-                    Command::OpenSlot(
-                        slots::READER,
-                        Params::new().with(params::PATH, book.to_string()),
-                    ),
-                )
+                WidgetTarget::new(row, paperpaw_sdk::readers::open(book.to_string()))
             })
             .collect()
     }

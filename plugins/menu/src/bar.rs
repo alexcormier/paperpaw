@@ -23,13 +23,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params, slots};
+use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
     Screen, SettingKind, SettingValue,
 };
 
-use crate::{DEPTH, SCREEN, choose, is_menu};
+use crate::{DEPTH, SCREEN, is_menu};
 
 /// The bar's font: the reading status lines' (it opens over a book), as
 /// `core.status-font` chooses.
@@ -84,6 +85,8 @@ pub(crate) struct BarScreen {
     focus: usize,
     /// The focus is shown (buttons used, or no touch screen).
     keys: bool,
+    /// What it was opened with, to make it anew (see `on_event`).
+    params: Params,
 }
 
 impl BarScreen {
@@ -96,6 +99,12 @@ impl BarScreen {
             .shown_items(env, menu)
             .into_iter()
             .filter(|item| !item.section && !paperpaw_sdk::Menus::hidden(params, item.id.as_str()))
+            // A setting shown only while another has a value.
+            .filter(|item| {
+                env.settings
+                    .spec(item.id.as_str())
+                    .is_none_or(|s| env.settings.shows(s))
+            })
             .map(|item| Entry {
                 id: item.id.clone(),
                 title: env
@@ -210,6 +219,7 @@ impl BarScreen {
             focus,
             keys: !env.device.input.touch,
             style,
+            params: params.clone(),
         }
     }
 
@@ -246,12 +256,10 @@ impl BarScreen {
             cx.command(Command::RunAction(id));
             return;
         };
-        // Its own page, e.g. the lock's, which asks for the code.
-        if let Some(editor) = &spec.extra().editor {
-            cx.command(Command::OpenScreen(
-                editor.clone(),
-                Params::new().with(params::ID, id.as_str().to_string()),
-            ));
+        // Its own page (e.g. the lock's, which asks for the code), the
+        // keyboard for text, the list of its values.
+        if let Some(command) = ui::setting_opens(&env, spec) {
+            cx.command(command);
             return;
         }
         match &spec.kind {
@@ -261,15 +269,14 @@ impl BarScreen {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
-            SettingKind::Choice(_) | SettingKind::Language if ui::two_options(&env, spec) => {
+            SettingKind::Choice(_) | SettingKind::Language => {
                 if let Some(value) = ui::next_value(&env, spec, 1) {
                     cx.command(Command::SetSetting(id, value));
                     cx.request_redraw();
                     cx.request_refresh(RefreshMode::Fast);
                 }
             }
-            SettingKind::Choice(_) | SettingKind::Language => choose(&env, spec, cx),
-            // Numbers and text have no room here: their settings page.
+            // Numbers have no room here: their settings page.
             _ => {
                 let group = env.settings.group_of(spec);
                 cx.command(Command::OpenSlot(
@@ -357,6 +364,15 @@ impl Screen for BarScreen {
                 inner.width + 2 * pad,
                 inner.height,
             );
+            // Told as a button: what it is, which has the focus, which is on.
+            let focused = self.keys && i == self.focus;
+            canvas.describe(
+                Role::Button,
+                &entry.label(env),
+                frame,
+                focused,
+                on.then_some(true),
+            );
             if on {
                 let back = if enabled {
                     Color::BLACK
@@ -365,7 +381,7 @@ impl Screen for BarScreen {
                 };
                 ui::fill_round(canvas, &style, frame, back);
             }
-            if self.keys && i == self.focus {
+            if focused {
                 ui::stroke_round(
                     canvas,
                     &style,
@@ -455,10 +471,27 @@ impl Screen for BarScreen {
         Handled::Yes
     }
 
-    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
-        // A switch shown here may have changed.
-        if *event == events::SETTING_CHANGED {
-            cx.request_redraw_area(self.region);
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        // A switch shown here may have changed; entries shown only while a
+        // setting has a value come or go with it.
+        if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
+            let env = *cx.env();
+            let before = self.region;
+            if env.settings.governs(changed.id.as_str()) {
+                // Anew, the focus on the entry it was on (where it stays).
+                let focused = self.entries.get(self.focus).map(|e| e.id.clone());
+                let keys = self.keys;
+                let opened = self.params.clone();
+                *self = BarScreen::new(&env, &opened);
+                if let Some(at) =
+                    focused.and_then(|id| self.entries.iter().position(|e| e.id == id))
+                {
+                    self.focus = at;
+                }
+                self.keys = keys;
+            }
+            // What it covered before too, should it have shrunk.
+            cx.request_redraw_area(before.union(&self.region));
         }
     }
 }

@@ -199,8 +199,7 @@ impl Typing {
     fn field(&mut self) -> String {
         self.parts()
             .into_iter()
-            .filter(|p| p.role == Role::Text)
-            .nth(1)
+            .find(|p| p.role == Role::Field)
             .map(|p| p.label)
             .unwrap_or_default()
     }
@@ -290,10 +289,7 @@ impl Typing {
     /// Text arriving as if typed on a phone.
     fn typed_on_phone(&mut self, text: &str) {
         self.now += 100;
-        let typed = Typed {
-            text: text.to_string(),
-            context: Params::new(),
-        };
+        let typed = Typed::new(text.to_string(), Params::new());
         let effects = self.kernel.send_event(
             Instant(self.now),
             Id::new_static(REMOTE_TEXT),
@@ -809,6 +805,32 @@ fn layouts_are_chosen_in_order_and_automatic_stands_alone() {
     let saved = paperpaw_sdk::read_file(typing.kernel.storage(), "paperpaw.ini", 1 << 16).unwrap();
     let saved = String::from_utf8(saved).unwrap();
     assert!(saved.contains("keyboard.layout.auto"), "{saved}");
+}
+
+#[test]
+fn a_live_question_is_answered_on_each_change() {
+    let mut typing = Typing::new(TOUCH);
+    typing.open(&[(params::LIVE, "1")]);
+    typing.tap("a");
+    typing.tap("b");
+    typing.tap("Delete");
+    typing.tap("OK");
+    let answers = typing.answers.borrow();
+    let seen: Vec<(&str, bool)> = answers
+        .iter()
+        .map(|t| (t.text.as_str(), t.typing))
+        .collect();
+    assert_eq!(seen, [("a", true), ("ab", true), ("a", true), ("a", false)]);
+}
+
+#[test]
+fn a_question_not_live_is_answered_once() {
+    let mut typing = Typing::new(TOUCH);
+    typing.open(&[]);
+    typing.tap("a");
+    typing.tap("OK");
+    assert_eq!(typing.answers.borrow().len(), 1);
+    assert!(!typing.answers.borrow()[0].typing);
 }
 
 #[test]

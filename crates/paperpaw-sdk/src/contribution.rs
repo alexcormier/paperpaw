@@ -38,7 +38,7 @@ use crate::presets::Preset;
 use crate::screen::{Hints, ScreenSpec};
 use crate::settings::{SettingGroupSpec, SettingSpec};
 use crate::setup::SetupStepSpec;
-use crate::status::{StatusItemSpec, StatusLineSpec};
+use crate::status::{Place as StatusPlace, StatusItemSpec, StatusLineSpec};
 use crate::widgets::WidgetSpec;
 
 /// One thing a plugin adds. New kinds come in minor versions. The large
@@ -145,14 +145,17 @@ pub enum Contribution {
         event: Id,
         handler: EventHandler,
     },
-    StatusItem(StatusItemSpec),
-    StatusLine(StatusLineSpec),
+    StatusItem(Box<StatusItemSpec>),
+    StatusLine(Box<StatusLineSpec>),
+    /// Boxed: four ids, larger than the other contributions.
+    StatusPlace(Box<StatusPlace>),
     TextFilter(TextFilterSpec),
     Decorator(Box<crate::decorations::DecoratorSpec>),
     PageLayer(Box<crate::layers::PageLayerSpec>),
     PageFrame(Box<crate::layers::PageFrameSpec>),
     LookupProvider(Box<crate::lookup::LookupProviderSpec>),
     Voice(Box<crate::voices::VoiceSpec>),
+    Reader(crate::readers::ReaderSpec),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
     /// A bar along an edge of the screen (see [`chrome`](crate::chrome)).
@@ -202,6 +205,12 @@ pub enum Contribution {
     },
     /// A translation catalog (see `paperpaw-i18n`).
     Translations(Cow<'static, str>),
+    /// A look for the parts of screens (see [`Registrar::set_ui_look`]).
+    #[non_exhaustive]
+    UiLook {
+        painters: &'static crate::ui::look::Painters,
+        priority: Priority,
+    },
 }
 
 impl Contribution {
@@ -240,12 +249,14 @@ impl Contribution {
             Contribution::Subscription { .. } => "subscription",
             Contribution::StatusItem(_) => "status-item",
             Contribution::StatusLine(_) => "status-line",
+            Contribution::StatusPlace(_) => "status-place",
             Contribution::TextFilter(_) => "text-filter",
             Contribution::Decorator(_) => "decorator",
             Contribution::PageLayer(_) => "page-layer",
             Contribution::PageFrame(_) => "page-frame",
             Contribution::LookupProvider(_) => "lookup-provider",
             Contribution::Voice(_) => "voice",
+            Contribution::Reader(_) => "reader",
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
             Contribution::Chrome(_) => "chrome",
@@ -263,6 +274,7 @@ impl Contribution {
             Contribution::Point(_) => "point",
             Contribution::EventDeclared(_) => "event",
             Contribution::Translations(_) => "translations",
+            Contribution::UiLook { .. } => "ui-look",
         }
     }
 
@@ -287,12 +299,14 @@ impl Contribution {
             Contribution::MenuSection(s) => &s.id,
             Contribution::StatusItem(i) => &i.id,
             Contribution::StatusLine(l) => &l.id,
+            Contribution::StatusPlace(p) => &p.id,
             Contribution::TextFilter(f) => &f.id,
             Contribution::Decorator(d) => &d.id,
             Contribution::PageLayer(l) => &l.id,
             Contribution::PageFrame(f) => &f.id,
             Contribution::LookupProvider(p) => &p.id,
             Contribution::Voice(v) => &v.id,
+            Contribution::Reader(r) => &r.id,
             Contribution::InputFilter(f) => &f.id,
             Contribution::RefreshFilter(f) => &f.id,
             Contribution::Chrome(c) => &c.id,
@@ -429,6 +443,18 @@ impl Registrar {
 
     pub fn add_slot(&mut self, slot: SlotSpec) -> Result<(), RegisterError> {
         self.add(Contribution::Slot(slot))
+    }
+
+    /// Gives the parts of every screen (switches, the focus, buttons,
+    /// headers, …) the look `painters` paint (see
+    /// [`ui::look`](crate::ui::look)). Of several looks the one with the
+    /// highest priority is used, of equal ones the later.
+    pub fn set_ui_look(
+        &mut self,
+        painters: &'static crate::ui::look::Painters,
+        priority: Priority,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::UiLook { painters, priority })
     }
 
     /// Proposes `screen` for `slot`. The binding with the highest priority
@@ -763,7 +789,7 @@ impl Registrar {
     /// Adds an item that status lines can show, e.g. a clock or the
     /// reading time left.
     pub fn add_status_item(&mut self, item: StatusItemSpec) -> Result<(), RegisterError> {
-        self.add(Contribution::StatusItem(item))
+        self.add(Contribution::StatusItem(Box::new(item)))
     }
 
     /// Adds a filter of book text before it is laid out (see
@@ -815,6 +841,30 @@ impl Registrar {
     /// [`voices`](crate::voices)).
     pub fn add_voice(&mut self, voice: crate::voices::VoiceSpec) -> Result<(), RegisterError> {
         self.add(Contribution::Voice(Box::new(voice)))
+    }
+
+    /// Adds a reading app: a screen of the plugin that shows books of
+    /// some formats, offered where books open (see
+    /// [`readers`](crate::readers)).
+    /// Its screen is one the plugin added before.
+    pub fn add_reader(&mut self, reader: crate::readers::ReaderSpec) -> Result<(), RegisterError> {
+        if !reader.screen.is_owned_by(&self.plugin) {
+            return Err(RegisterError::Namespace { id: reader.screen });
+        }
+        let added = self
+            .contributions
+            .iter()
+            .any(|c| matches!(c, Contribution::Screen(s) if s.id == reader.screen));
+        if !added {
+            return Err(RegisterError::Invalid {
+                message: Cow::Owned(alloc::format!(
+                    "`{}` reads in `{}`, a screen not added",
+                    reader.id,
+                    reader.screen
+                )),
+            });
+        }
+        self.add(Contribution::Reader(reader))
     }
 
     /// Adds a filter of every input, before screens and key maps see it
@@ -941,7 +991,14 @@ impl Registrar {
     /// Adds a whole status line, drawn by the plugin (see
     /// [`status`](crate::status)).
     pub fn add_status_line(&mut self, line: StatusLineSpec) -> Result<(), RegisterError> {
-        self.add(Contribution::StatusLine(line))
+        self.add(Contribution::StatusLine(Box::new(line)))
+    }
+
+    /// Adds a place where status items show: a line's left, centre and
+    /// right as settings of the items listed there (see
+    /// [`status::Place`](crate::status::Place)).
+    pub fn add_status_place(&mut self, place: StatusPlace) -> Result<(), RegisterError> {
+        self.add(Contribution::StatusPlace(Box::new(place)))
     }
 
     /// Publishes a service for other plugins as `id`, found by its type

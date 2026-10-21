@@ -82,14 +82,12 @@ impl BrowseScreen {
                 ("folder", Arg::Str(&dir)),
             ],
         );
-        cx.command(choice::open(
-            CHOICE,
-            &CHOSEN,
-            &text,
-            &target,
-            OPTION_LABELS,
-            &["read", "ok"],
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(&text, &CHOSEN)
+                .about(&target)
+                .options(OPTION_LABELS, &["read", "ok"])
+                .command(),
+        );
         self.redraw(cx);
     }
 }

@@ -99,6 +99,9 @@ pub struct Env<'a> {
     /// Where words are looked up, from every plugin (see
     /// [`lookup`](crate::lookup)).
     pub lookup: &'a crate::lookup::LookupProviders,
+    /// The reading apps, from every plugin (see
+    /// [`readers`](crate::readers)).
+    pub readers: &'a crate::readers::Readers,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
@@ -120,6 +123,10 @@ pub struct Env<'a> {
     pub services: &'a crate::services::Services,
     /// What buttons, taps and swipes do (see [`keys`](crate::keys)).
     pub keys: &'a dyn crate::keys::KeyBindings,
+    /// The look a plugin gave the parts of screens, set with
+    /// [`Registrar::set_ui_look`](crate::Registrar::set_ui_look) (see
+    /// [`ui::look`](crate::ui::look)).
+    pub look: crate::ui::look::Look,
     /// What the device and its shell can do (network, speech, the sleep
     /// screen …).
     pub caps: Capabilities,
@@ -183,7 +190,7 @@ pub struct Env<'a> {
     pub catalog_device: Option<&'a str>,
     /// Passwords and keys, kept for every plugin in one place (see
     /// [`secrets`](crate::secrets)).
-    pub secrets: &'a crate::secrets::Secrets,
+    pub secrets: crate::secrets::Visible<'a>,
     /// Random bytes from the platform's source, for keys and tokens (see
     /// [`random`](crate::random)).
     pub random: crate::random::Random,
@@ -234,6 +241,9 @@ pub struct EnvParts<'a> {
     /// Where words are looked up, from every plugin (see
     /// [`lookup`](crate::lookup)).
     pub lookup: &'a crate::lookup::LookupProviders,
+    /// The reading apps, from every plugin (see
+    /// [`readers`](crate::readers)).
+    pub readers: &'a crate::readers::Readers,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
@@ -255,6 +265,10 @@ pub struct EnvParts<'a> {
     pub services: &'a crate::services::Services,
     /// What buttons, taps and swipes do (see [`keys`](crate::keys)).
     pub keys: &'a dyn crate::keys::KeyBindings,
+    /// The look a plugin gave the parts of screens, set with
+    /// [`Registrar::set_ui_look`](crate::Registrar::set_ui_look) (see
+    /// [`ui::look`](crate::ui::look)).
+    pub look: crate::ui::look::Look,
     /// What the device and its shell can do (network, speech, the sleep
     /// screen …).
     pub caps: Capabilities,
@@ -315,6 +329,9 @@ pub struct EnvParts<'a> {
     /// Passwords and keys, kept for every plugin in one place (see
     /// [`secrets`](crate::secrets)).
     pub secrets: &'a crate::secrets::Secrets,
+    /// Which plugin's code runs, for [`Env::secrets`] (see
+    /// [`secrets::Running`](crate::secrets::Running)).
+    pub running: &'a dyn crate::secrets::Running,
     /// Random bytes from the platform's source, for keys and tokens (see
     /// [`random`](crate::random)).
     pub random: crate::random::Random,
@@ -345,6 +362,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             decorators: p.decorators,
             page_layers: p.page_layers,
             lookup: p.lookup,
+            readers: p.readers,
             stylesheets: p.stylesheets,
             book_data: p.book_data,
             book_fields: p.book_fields,
@@ -353,6 +371,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             setup: p.setup,
             services: p.services,
             keys: p.keys,
+            look: p.look,
             caps: p.caps,
             wifi: p.wifi,
             firmware: p.firmware,
@@ -370,7 +389,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             screens: p.screens,
             font_dirs: p.font_dirs,
             catalog_device: p.catalog_device,
-            secrets: p.secrets,
+            secrets: crate::secrets::Visible::new(p.secrets, p.running),
             random: p.random,
             storage: p.storage,
         }

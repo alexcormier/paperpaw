@@ -38,6 +38,7 @@ impl Plugin for CorePlugin {
         register_moving(r)?;
         register_device_actions(r)?;
         register_library(r)?;
+        register_reading_apps(r)?;
         register_screens(r)?;
         register_menus(r)?;
         register_general_settings(r)?;
@@ -50,6 +51,33 @@ impl Plugin for CorePlugin {
         register_time_and_battery(r)?;
         register_keymaps_and_setup(r)?;
         r.add_presets(&POWER_MODES)?;
+        // Text typed for a setting (`ui::setting_opens`), whichever screen
+        // asked.
+        r.on(events::SETTING_TYPED, |env, typed, out| {
+            // Only once the reader is done typing, not at each key.
+            if typed.typing {
+                return;
+            }
+            let id = typed
+                .context
+                .get(params::ID)
+                .and_then(|id| Id::parse(id).ok());
+            // The id typed for, a placement's too (`widgets.countdown@2.title`):
+            // its spec is the plain setting's.
+            let Some(id) = id else {
+                return;
+            };
+            if env.settings.spec(id.as_str()).is_none() {
+                return;
+            }
+            // A secret setting's text is kept with the secrets, never in
+            // the settings (see `Kernel::apply_setting`).
+            let text = typed.text.trim();
+            out.push(Command::SetSetting(
+                id,
+                paperpaw_sdk::SettingValue::Text(Cow::Owned(String::from(text))),
+            ));
+        })?;
         // Each plugin's network (its settings made by the kernel).
         r.add_setting_group(
             SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network").order(87),
@@ -85,6 +113,118 @@ static POWER_MODES: [paperpaw_sdk::presets::Preset; 3] = [
         "power.level = offline\npower.stretch = 4\ncore.sleep-after <= 5\nx4.frontlight <= 30",
     ),
 ];
+
+/// The reading app chosen from the list: for a book (`b:` and its path),
+/// a folder (`f:`), or to open a book this time (`o:`).
+const READING_APP_PICKED: paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked> =
+    paperpaw_sdk::event::Event::new("core.reading-app-picked");
+
+/// In the list to open a book this time: asks for the reading app kept
+/// for it.
+const ALWAYS: &str = "core.reading-app.always";
+
+/// Choosing the reading app of a book or a folder (see
+/// `paperpaw_sdk::readers::ask`): the readers that fit are listed; the
+/// one chosen is kept, and a book opens with it; *Standard* forgets the
+/// choice. *Open with…* in the book menu (`readers::ask_once`) lists the
+/// readers of the book, the other ways to open it plugins add
+/// (`menus::OPEN_WITH`) and *Always open it with…*: the one chosen opens
+/// it this time.
+fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
+    use paperpaw_sdk::readers::{self, Choice};
+    // What it does is asked once the book is known (`BOOK_CHOSEN` below).
+    r.add_action(
+        ActionSpec::new(actions::OPEN_WITH, "core.action.open-with")
+            .handler(|_: &Env<'_>, _: &mut Vec<Command>| {}),
+    )?;
+    r.add_menu_entry(MenuEntry::new(menus::BOOK, actions::OPEN_WITH))?;
+    r.add_icon(actions::OPEN_WITH, Cow::Borrowed("apps"))?;
+    // Where there is something to choose: another reading app, or another
+    // way to open books.
+    r.set_item_state(actions::OPEN_WITH, |env| {
+        let more = env.readers.len() > 1 || !env.menus.items(menus::OPEN_WITH.as_str()).is_empty();
+        paperpaw_sdk::ItemState::new().shown(more)
+    })?;
+    r.on(events::BOOK_CHOSEN, |_, chosen, out| {
+        if chosen.action == actions::OPEN_WITH {
+            out.push(readers::ask_once(&chosen.path));
+        }
+    })?;
+    r.on(events::READING_APP_WANTED, |env, wanted, out| {
+        let path = wanted.path.trim_matches('/');
+        let name = paperpaw_sdk::files::name(path);
+        let once = wanted.once == Some(true) && !wanted.folder;
+        let readers_of_book = || {
+            env.readers
+                .for_book(env, path)
+                .into_iter()
+                .map(|r| r.id.as_str())
+                .collect::<Vec<_>>()
+        };
+        let (options, key, kind) = if once {
+            let mut options = readers_of_book();
+            options.extend(
+                env.menus
+                    .items(menus::OPEN_WITH.as_str())
+                    .into_iter()
+                    .filter(|item| !item.section)
+                    .map(|item| item.id.as_str()),
+            );
+            options.push(ALWAYS);
+            (options, "core.reading-app.open-with", "o")
+        } else if wanted.folder {
+            let mut options: Vec<&str> = env.readers.iter().map(|r| r.id.as_str()).collect();
+            options.push(settings::READING_APP_DEFAULT);
+            (options, "core.reading-app.for-folder", "f")
+        } else {
+            let mut options = readers_of_book();
+            options.push(settings::READING_APP_DEFAULT);
+            (options, "core.reading-app.always-with", "b")
+        };
+        let title = env
+            .i18n
+            .format(key, &[("name", paperpaw_sdk::Arg::Str(name))]);
+        out.push(
+            paperpaw_sdk::ask::choice(title, &READING_APP_PICKED)
+                .about(alloc::format!("{kind}:{path}"))
+                .options("", &options)
+                .command(),
+        );
+    })?;
+    r.on(READING_APP_PICKED, |env, picked, out| {
+        let Some((kind, path)) = picked.path.split_once(':') else {
+            return;
+        };
+        let option = picked.option.as_str();
+        if kind == "o" {
+            if option == ALWAYS {
+                out.push(readers::ask(Choice::Book(path)));
+            } else if let Some(reader) = env.readers.get(option) {
+                out.push(readers::open_with(path, reader));
+            } else if let Ok(action) = Id::parse(option) {
+                // Another way to open it, as an action of the book menu.
+                let chosen = events::BookChosen::new(action.clone(), String::from(path));
+                out.push(events::BOOK_CHOSEN.emit(chosen));
+                out.push(Command::RunAction(action));
+            }
+            return;
+        }
+        let reader = Id::parse(option)
+            .ok()
+            .filter(|id| env.readers.get(id.as_str()).is_some());
+        let choice = match kind {
+            "f" => Choice::Folder(path),
+            _ => Choice::Book(path),
+        };
+        if readers::remember(env.storage, choice, reader.as_ref()).is_err() {
+            let text = env.i18n.tr("core.reading-app.not-kept");
+            out.push(Command::Notify(String::from(text)));
+        }
+        if kind == "b" {
+            out.push(readers::open(path));
+        }
+    })
+}
 
 /// The actions screens give a meaning of their own (with their hints in
 /// the row), and how a screen takes gestures.
@@ -628,6 +768,7 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     // The notes of books are the kernel's.
     r.add_book_data(paperpaw_sdk::data_path!("annotations"), "")?;
     r.add_book_data(paperpaw_sdk::positions::DIR, "")?;
+    r.add_book_data(paperpaw_sdk::readers::DIR, "")?;
     r.add_book_data(alloc::format!("{}/books", library::DIR), "")?;
     r.add_book_data(alloc::format!("{}/covers", library::DIR), "")?;
     // In the device's part of the settings, before *About*.
@@ -666,6 +807,14 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
             Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, &params))
         }),
     ))?;
+    // The choice every plugin asks (`ask::choice`), unless another
+    // screen fills the slot.
+    r.add_screen(ScreenSpec::new(
+        screens::CHOICE,
+        "core.choice",
+        Box::new(|env, params| Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))),
+    ))?;
+    r.bind_slot(slots::CHOICE, screens::CHOICE, Priority::FALLBACK)?;
     r.add_screen(ScreenSpec::new(
         screens::PLACEHOLDER,
         "core.screen.placeholder",
@@ -863,6 +1012,12 @@ static MARGINS_ENDS: SettingExtra = SettingExtra::new()
     .slider()
     .follows(settings::MARGIN.static_str());
 static IN_PAGE: SettingExtra = SettingExtra::new().section(setting_sections::PAGE);
+/// The reading apps' part of the reading settings: the default one and
+/// one for each format (registered once the formats are known).
+/// A reading app chosen whose plugin is gone is kept, and passed over.
+static IN_APPS: SettingExtra = SettingExtra::new()
+    .section("core.section.reading-apps")
+    .keeps_unknown();
 static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(setting_sections::BEHAVIOUR);
 
 /// The language, night mode, speech and the edges for swipes.
@@ -968,7 +1123,7 @@ fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 /// advanced settings its header, corners, highlight, lines, groups,
 /// titles and room. The defaults are PaperPaw's look (soft corners,
 /// pills, plain headers, faint lines); themes (data plugins) set others.
-static LOOK: [SettingSpec; 12] = [
+static LOOK: [SettingSpec; 13] = [
     SettingSpec::fixed_number(
         settings::UI_SIZE.static_str(),
         "core.setting.ui-size",
@@ -1098,6 +1253,16 @@ static LOOK: [SettingSpec; 12] = [
     )
     .for_advanced()
     .described("core.setting.logo.help"),
+    // The interface's grays by what they are for: for themes, which set
+    // it in their settings.ini.
+    SettingSpec::fixed_text(
+        settings::UI_PALETTE.static_str(),
+        "core.setting.ui-palette",
+        "",
+        groups::LOOK,
+    )
+    .for_advanced()
+    .described("core.setting.ui-palette.help"),
 ];
 
 fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -1318,7 +1483,7 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The reading font, and whether a book's settings are its own. The
 /// status lines' font: the menus', the book's or one of its own (the
 /// families are offered once all fonts are known).
-static READING: [SettingSpec; 18] = [
+static READING: [SettingSpec; 19] = [
     SettingSpec::fixed_choice(
         settings::STATUS_FONT.static_str(),
         "core.setting.status-font",
@@ -1474,6 +1639,15 @@ static READING: [SettingSpec; 18] = [
     .with_extra(&LINES_KEPT)
     .described("core.setting.orphans.help"),
     SettingSpec::fixed_choice(
+        settings::READING_APP.static_str(),
+        "core.setting.reading-app",
+        &[settings::READING_APP_DEFAULT],
+        settings::READING_APP_DEFAULT,
+        groups::READING,
+    )
+    .with_extra(&IN_APPS)
+    .described("core.setting.reading-app.help"),
+    SettingSpec::fixed_choice(
         settings::FOOTNOTES.static_str(),
         "core.setting.footnotes",
         &[settings::FOOTNOTES_POPUP, settings::FOOTNOTES_JUMP],
@@ -1614,11 +1788,15 @@ static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::fixed_number(
 /// The time of day and the battery, for status lines.
 fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&TIME)?;
-    r.add_status_item(StatusItemSpec::new(
-        status_items::CLOCK,
-        "core.status.clock",
-        Box::new(|env, _| time::clock_text(env).map(StatusValue::Text)),
-    ))?;
+    // The time and the battery give way after most others.
+    r.add_status_item(
+        StatusItemSpec::new(
+            status_items::CLOCK,
+            "core.status.clock",
+            Box::new(|env, _| time::clock_text(env).map(StatusValue::Text)),
+        )
+        .priority(160),
+    )?;
     r.add_status_item(StatusItemSpec::new(
         status_items::DATE,
         "core.status.date",
@@ -1629,16 +1807,19 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         "core.status.date-short",
         Box::new(|env, _| time::short_date_text(env).map(StatusValue::Text)),
     ))?;
-    r.add_status_item(StatusItemSpec::new(
-        status_items::BATTERY,
-        "core.status.battery",
-        Box::new(|env, _| {
-            env.status.battery.map(|b| StatusValue::Level {
-                percent: b.percent,
-                charging: b.charging,
-            })
-        }),
-    ))?;
+    r.add_status_item(
+        StatusItemSpec::new(
+            status_items::BATTERY,
+            "core.status.battery",
+            Box::new(|env, _| {
+                env.status.battery.map(|b| StatusValue::Level {
+                    percent: b.percent,
+                    charging: b.charging,
+                })
+            }),
+        )
+        .priority(192),
+    )?;
     r.add_status_item(StatusItemSpec::new(
         status_items::BATTERY_LOW,
         "core.status.battery-low",

@@ -163,6 +163,7 @@ pub(crate) struct Staging {
     pub(crate) font_extensions: Vec<(Id, alloc::string::String, Id)>,
     pub(crate) font_faces: Vec<paperpaw_sdk::FontFace>,
     pub(crate) font_roles: Vec<(Id, Id, Priority)>,
+    pub(crate) ui_looks: Vec<(&'static paperpaw_sdk::ui::look::Painters, Priority)>,
     pub(crate) formats: Vec<FormatSpec>,
     pub(crate) hyphenation: Vec<HyphenationSpec>,
     pub(crate) setting_groups: Vec<SettingGroupSpec>,
@@ -186,6 +187,7 @@ pub(crate) struct Staging {
     pub(crate) setting_defaults: Vec<(Id, Cow<'static, str>)>,
     pub(crate) status_items: Vec<StatusItemSpec>,
     pub(crate) status_lines: Vec<StatusLineSpec>,
+    pub(crate) status_places: Vec<paperpaw_sdk::status::Place>,
     pub(crate) widgets: Vec<paperpaw_sdk::widgets::WidgetSpec>,
     pub(crate) setup_steps: Vec<paperpaw_sdk::setup::SetupStepSpec>,
     pub(crate) presets: Vec<paperpaw_sdk::presets::Preset>,
@@ -196,6 +198,7 @@ pub(crate) struct Staging {
     pub(crate) page_frames: Vec<paperpaw_sdk::layers::PageFrameSpec>,
     pub(crate) lookup_providers: Vec<paperpaw_sdk::lookup::LookupProviderSpec>,
     pub(crate) voices: Vec<paperpaw_sdk::voices::VoiceSpec>,
+    pub(crate) readers: Vec<paperpaw_sdk::readers::ReaderSpec>,
     pub(crate) input_filters: Vec<paperpaw_sdk::filters::InputFilterSpec>,
     pub(crate) refresh_filters: Vec<paperpaw_sdk::filters::RefreshFilterSpec>,
     pub(crate) chromes: Vec<paperpaw_sdk::chrome::ChromeSpec>,
@@ -341,14 +344,16 @@ pub(crate) fn stage(
             Contribution::Subscription { event, handler, .. } => {
                 staging.subscriptions.push((event, plugin.clone(), handler));
             }
-            Contribution::StatusItem(item) => staging.status_items.push(item),
-            Contribution::StatusLine(line) => staging.status_lines.push(line),
+            Contribution::StatusItem(item) => staging.status_items.push(*item),
+            Contribution::StatusLine(line) => staging.status_lines.push(*line),
+            Contribution::StatusPlace(place) => staging.status_places.push(*place),
             Contribution::TextFilter(filter) => staging.text_filters.push(filter),
             Contribution::Decorator(decorator) => staging.decorators.push(*decorator),
             Contribution::PageLayer(layer) => staging.page_layers.push(*layer),
             Contribution::PageFrame(frame) => staging.page_frames.push(*frame),
             Contribution::LookupProvider(p) => staging.lookup_providers.push(*p),
             Contribution::Voice(voice) => staging.voices.push(*voice),
+            Contribution::Reader(reader) => staging.readers.push(reader),
             Contribution::InputFilter(filter) => staging.input_filters.push(filter),
             Contribution::RefreshFilter(filter) => staging.refresh_filters.push(filter),
             Contribution::Chrome(chrome) => staging.chromes.push(*chrome),
@@ -375,6 +380,9 @@ pub(crate) fn stage(
             Contribution::Point(point) => staging.points.push(*point),
             Contribution::EventDeclared(event) => staging.events.push(*event),
             Contribution::Translations(source) => staging.catalogs.push(catalog(source)?),
+            Contribution::UiLook {
+                painters, priority, ..
+            } => staging.ui_looks.push((painters, priority)),
             // A kind of a newer SDK than this kernel knows: said, not lost.
             other => {
                 return Err(RegisterError::Invalid {

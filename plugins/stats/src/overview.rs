@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
     RefreshMode, Screen,
@@ -40,6 +41,9 @@ pub(crate) struct Overview {
     books: usize,
     /// Distinct pages read today.
     today_pages: u32,
+    /// The size the tiles' values are drawn at (the largest at which each
+    /// fits), found once.
+    value_size: f32,
 }
 
 impl Overview {
@@ -75,7 +79,7 @@ impl Overview {
         let today = fmt::today(env);
         let days = store::days(env.storage, |unix| fmt::day_of(env, unix));
         let today_pages = today.map_or(0, |day| distinct_pages(env, day));
-        Self {
+        let mut overview = Self {
             list: ListView::new(
                 Rect::new(0, list_top, display.width, list_height),
                 style.row,
@@ -91,7 +95,64 @@ impl Overview {
             days,
             books: store::books(env.storage).len(),
             today_pages,
-        }
+            value_size: style.title,
+        };
+        overview.value_size = overview.value_size(env);
+        overview
+    }
+
+    /// The tiles: their names, values and notes; none without the time.
+    fn tiles(&self, env: &Env<'_>) -> Option<[(&'static str, String, String); 3]> {
+        let today = self.today?;
+        let week: u32 = (0..7).map(|d| self.seconds_on(today - d)).sum();
+        let streak = totals::streak(&self.days, today);
+        let pages = env
+            .i18n
+            .plural("stats.pages", i64::from(self.today_pages), &[]);
+        Some([
+            (
+                "stats.today",
+                fmt::duration(env, u64::from(self.seconds_on(today))),
+                pages,
+            ),
+            (
+                "stats.week",
+                fmt::duration(env, u64::from(week)),
+                env.i18n.tr("stats.last-seven-days").into(),
+            ),
+            (
+                "stats.streak",
+                env.i18n.plural("stats.days", i64::from(streak), &[]),
+                env.i18n.tr("stats.in-a-row").into(),
+            ),
+        ])
+    }
+
+    /// The room for the text of the tile `i`: up to the next tile's line,
+    /// a gap before it; the last up to the margin.
+    fn tile_room(&self, i: usize) -> f32 {
+        let style = self.style;
+        let right = if i + 1 < 3 { style.gap } else { style.margin };
+        (f32::from(self.tiles.width / 3) - style.margin as f32 - right as f32).max(0.0)
+    }
+
+    /// The largest size at which each tile's value fits, down to the small
+    /// one.
+    fn value_size(&self, env: &Env<'_>) -> f32 {
+        let style = self.style;
+        let (Some(font), Some(tiles)) = (style.font(env), self.tiles(env)) else {
+            return style.title;
+        };
+        tiles
+            .iter()
+            .enumerate()
+            .map(|(i, (_, value, _))| {
+                widgets::largest_size(style.title, style.small, |size| {
+                    font.measure(size, value) <= self.tile_room(i)
+                })
+                .unwrap_or(style.small)
+            })
+            .fold(style.title, f32::min)
     }
 
     fn seconds_on(&self, day: i32) -> u32 {
@@ -111,76 +172,31 @@ impl Overview {
 
     fn draw_tiles(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let Some(font) = style.font(env) else {
+        let (Some(font), Some(tiles)) = (style.font(env), self.tiles(env)) else {
             return;
         };
-        let Some(today) = self.today else {
-            return;
-        };
-        let week: u32 = (0..7).map(|d| self.seconds_on(today - d)).sum();
-        let streak = totals::streak(&self.days, today);
-        let pages = env
-            .i18n
-            .plural("stats.pages", i64::from(self.today_pages), &[]);
-        let tiles = [
-            (
-                "stats.today",
-                fmt::duration(env, u64::from(self.seconds_on(today))),
-                pages,
-            ),
-            (
-                "stats.week",
-                fmt::duration(env, u64::from(week)),
-                env.i18n.tr("stats.last-seven-days").into(),
-            ),
-            (
-                "stats.streak",
-                env.i18n.plural("stats.days", i64::from(streak), &[]),
-                env.i18n.tr("stats.in-a-row").into(),
-            ),
-        ];
         let t = self.tiles;
         let width = t.width / 3;
         let third = t.height / 3;
+        let pad = style.margin as f32;
+        let value_size = self.value_size;
         for (i, (label, value, note)) in tiles.iter().enumerate() {
             let x = t.x + width * i as u16;
-            let pad = style.margin as f32;
             let left = f32::from(x) + pad;
-            let cell = |row: u16, rows: u16| {
-                Rect::new(
-                    x,
-                    t.y + third * row,
-                    width - style.margin as u16,
-                    third * rows,
-                )
-            };
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                left,
-                cell(0, 1),
-                env.i18n.tr(label),
-                style.faint(90),
-            );
-            ui::draw_label(
-                canvas,
-                &font,
-                style.title,
-                left,
-                cell(1, 1),
-                value,
-                Color::BLACK,
-            );
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                left,
-                cell(2, 1),
-                note,
-                style.faint(90),
-            );
+            let room = self.tile_room(i);
+            let cell = |row: u16| Rect::new(x, t.y + third * row, (pad + room) as u16, third);
+            // A little smaller where a text does not fit whole (a longer
+            // language), only then shortened.
+            let least = style.small * 0.85;
+            let lines = [
+                (env.i18n.tr(label), style.small, least, style.faint(90)),
+                (value.as_str(), value_size, value_size, Color::BLACK),
+                (note.as_str(), style.small, least, style.faint(90)),
+            ];
+            for (row, (text, size, least, color)) in lines.into_iter().enumerate() {
+                let (size, line) = widgets::fit_line(&font, size, least, text, room);
+                ui::draw_label(canvas, &font, size, left, cell(row as u16), &line, color);
+            }
             if i > 0 {
                 canvas.fill_tint(
                     Rect::new(x, t.y, style.line.max(1) as u16, t.height),

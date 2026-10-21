@@ -274,6 +274,12 @@ impl Kernel {
         for (role, font, priority) in staging.font_roles.drain(..) {
             self.shared.fonts.propose(role, font, priority);
         }
+        // The highest priority, of equal ones the later.
+        for (painters, priority) in staging.ui_looks.drain(..) {
+            if self.shared.look.1.is_none_or(|p| priority >= p) {
+                self.shared.look = (paperpaw_sdk::ui::look::Look::of(painters), Some(priority));
+            }
+        }
         for format in staging.formats.drain(..) {
             // Cannot fail: checked above.
             let _ = self.shared.formats.add(format);
@@ -342,6 +348,9 @@ impl Kernel {
         for line in staging.status_lines.drain(..) {
             self.shared.status_items.add_line(line);
         }
+        for place in staging.status_places.drain(..) {
+            self.shared.status_items.add_place(place);
+        }
         for step in staging.setup_steps.drain(..) {
             self.shared.setup.add(step);
         }
@@ -391,6 +400,9 @@ impl Kernel {
         }
         for voice in staging.voices.drain(..) {
             self.shared.voices.add(voice);
+        }
+        for reader in staging.readers.drain(..) {
+            self.shared.readers.add(reader);
         }
         for filter in staging.input_filters.drain(..) {
             self.shared.input_filters.add(filter);
@@ -908,6 +920,7 @@ impl Kernel {
         shared.page_layers.shrink_to_fit();
         shared.lookup.shrink_to_fit();
         shared.voices.shrink_to_fit();
+        shared.readers.shrink_to_fit();
         shared.input_filters.shrink_to_fit();
         shared.inputs.shrink_to_fit();
         shared.refresh_filters.shrink_to_fit();

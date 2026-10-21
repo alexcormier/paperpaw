@@ -43,7 +43,6 @@ use alloc::vec::Vec;
 use core::cell::{Cell, RefCell};
 
 use paperpaw_sdk::builtin::{events, menus, settings};
-use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::work::Work;
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
@@ -57,7 +56,6 @@ pub const PLUGIN: Id = Id::new_static("rules");
 pub const OPEN: Id = Id::new_static("rules.open");
 const LIST_SCREEN: Id = Id::new_static("rules.list");
 const PICK_SCREEN: Id = Id::new_static("rules.pick");
-const CHOICE: Id = Id::new_static("rules.choice");
 /// The timer of the rules with a time of day; parameter [`MINUTE`].
 const TIME: Id = Id::new_static("rules.time");
 const MINUTE: &str = "minute";
@@ -380,11 +378,6 @@ impl Plugin for Rules {
             PICK_SCREEN,
             "rules.title",
             Box::new(|env, params| Box::new(screens::PickScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "rules.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "rules.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
