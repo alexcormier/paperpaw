@@ -19,7 +19,7 @@ use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
-    RefreshMode, Screen,
+    RefreshMode, Screen, StorageError,
 };
 
 use super::rows::{self, Loaded, Sizes};
@@ -173,9 +173,11 @@ impl BookSheet {
     /// answers in their last two rows, the focus on keeping it.
     fn ask(&mut self, cx: &mut Cx<'_, '_>) {
         let area = self.list.area();
-        // As high as the actions' rows.
+        // As high as the actions' rows, at the sheet's bottom edge (where
+        // the actions end, or their pager, which is not shown meanwhile).
         let row = self.style.touch_row(self.style.row) as u16;
-        let bottom = area.y + area.height;
+        let r = self.region;
+        let bottom = (r.y + r.height).saturating_sub(self.style.gap as u16 / 2);
         let rows = Rect::new(area.x, bottom.saturating_sub(2 * row), area.width, 2 * row);
         let mut answers = ListView::new(rows, u32::from(row)).focus_on_keys(cx.env());
         answers.set_focus(1);
@@ -198,10 +200,12 @@ impl BookSheet {
         let env = *cx.env();
         cx.command(Command::Back);
         let deleted = library::service(&env).delete(&env, &[self.book.path.as_str()]);
-        let key = if deleted.failed.is_empty() {
-            "files.deleted"
-        } else {
-            "files.delete-failed"
+        // Why not, where it failed.
+        let key = match deleted.failed.first().map(|(_, error)| error) {
+            None => "files.deleted",
+            Some(StorageError::InvalidPath) => "files.delete-failed.not-book",
+            Some(StorageError::Unsupported) => "files.delete-failed.read-only",
+            Some(_) => "files.delete-failed",
         };
         for command in deleted.commands {
             cx.command(command);

@@ -388,6 +388,24 @@ impl Kernel {
         self.screen_changed(bounds, false);
     }
 
+    /// Tasks kept follow their books: one with a screen of a book deleted
+    /// (`BOOK_REMOVED`) is let go, so switching back never opens a file
+    /// that is gone; the screens of a book moved (`BOOK_MOVED`) open it
+    /// where it is now.
+    pub(crate) fn tasks_follow_books(&mut self, event: &Id, params: &Params) {
+        let path = builtin_params::PATH;
+        if let Some(removed) = events::BOOK_REMOVED.read(event, params) {
+            let gone = Some(removed.path.as_str());
+            self.tasks
+                .retain(|(_, screens)| !screens.iter().any(|(_, _, p)| p.get(path) == gone));
+        } else if let Some(moved) = events::BOOK_MOVED.read(event, params) {
+            let screens = self.tasks.iter_mut().flat_map(|(_, screens)| screens);
+            for (_, _, p) in screens.filter(|(_, _, p)| p.get(path) == Some(moved.from.as_str())) {
+                p.set(path, moved.path.clone());
+            }
+        }
+    }
+
     /// Closes all screens above `index`.
     pub(crate) fn close_above(&mut self, index: usize) {
         let mut region: Option<Rect> = None;

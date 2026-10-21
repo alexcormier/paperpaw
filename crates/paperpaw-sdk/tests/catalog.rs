@@ -437,3 +437,67 @@ fn the_kernels_library_deletes_books_and_says_which_are_gone() {
         .collect();
     assert_eq!(removed, ["books/a.txt", "books/gone.txt", "books/b.txt"]);
 }
+
+/// A card that cannot be written: what is there reads, nothing goes.
+struct ReadOnly(MemoryStorage);
+
+impl Storage for ReadOnly {
+    fn read_at(&self, path: &str, at: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.0.read_at(path, at, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.0.size(path)
+    }
+    fn write(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+        Err(StorageError::Unsupported)
+    }
+    fn append(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+        Err(StorageError::Unsupported)
+    }
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.0.list(dir, visit)
+    }
+    fn remove(&self, _: &str) -> Result<(), StorageError> {
+        Err(StorageError::Unsupported)
+    }
+}
+
+#[test]
+fn only_books_are_deleted_and_what_fails_says_why() {
+    let storage = MemoryStorage::new()
+        .with("books/a.txt", "a")
+        .with("books/notes.md", "not of a format known")
+        .with("paperpaw.ini", "[core]")
+        .with(".paperpaw/library/x.txt", "kept");
+    let h = harness(MemoryStorage::new());
+    let env = h.env_on(&storage);
+    let library = library::service(&env);
+    // Not a book: of no format known, in PaperPaw's own folder (also by
+    // another spelling, or climbing up to it).
+    for path in [
+        "books/notes.md",
+        "paperpaw.ini",
+        ".paperpaw/library/x.txt",
+        ".PaperPaw/library/x.txt",
+        "books/../.paperpaw/library/x.txt",
+    ] {
+        assert!(!library.can_delete(&env, path), "{path}");
+        let deleted = library.delete(&env, &[path]);
+        assert!(deleted.commands.is_empty(), "{path}");
+        assert_eq!(
+            deleted.failed,
+            [(path.to_string(), StorageError::InvalidPath)]
+        );
+    }
+    assert!(storage.exists("books/notes.md") && storage.exists(".paperpaw/library/x.txt"));
+    // A card that cannot be written: the book stays, and why is said.
+    let locked = ReadOnly(MemoryStorage::new().with("books/a.txt", "a"));
+    let env = h.env_on(&locked);
+    let deleted = library::service(&env).delete(&env, &["books/a.txt"]);
+    assert!(deleted.commands.is_empty());
+    assert_eq!(
+        deleted.failed,
+        [("books/a.txt".to_string(), StorageError::Unsupported)]
+    );
+    assert!(locked.exists("books/a.txt"));
+}

@@ -1889,7 +1889,7 @@ pub fn paperpaw_sdk::library::service::BookField::in_catalog(self) -> Self
 pub fn paperpaw_sdk::library::service::BookField::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::library::service::Deleted
 pub paperpaw_sdk::library::service::Deleted::commands: alloc::vec::Vec<paperpaw_sdk::Command>
-pub paperpaw_sdk::library::service::Deleted::failed: alloc::vec::Vec<alloc::string::String>
+pub paperpaw_sdk::library::service::Deleted::failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>
 pub struct paperpaw_sdk::library::service::Kept
 impl paperpaw_sdk::library::service::Library for paperpaw_sdk::library::service::Kept
 pub fn paperpaw_sdk::library::service::Kept::book(&self, &paperpaw_sdk::Env<'_>, &str) -> core::option::Option<paperpaw_sdk::library::Book>
@@ -1947,6 +1947,7 @@ pub fn paperpaw_sdk::library::service::Kept::set_favourite(&self, &paperpaw_sdk:
 pub fn paperpaw_sdk::library::service::Kept::set_finished(&self, &paperpaw_sdk::Env<'_>, &str, bool) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::library::service::Kept::version(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<u64>
 pub fn paperpaw_sdk::library::service::badges(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::catalog::Record, usize) -> alloc::vec::Vec<paperpaw_sdk::library::service::Badge>
+pub fn paperpaw_sdk::library::service::is_book_path(&paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::library::service::service<'e>(&paperpaw_sdk::Env<'e>) -> &'e dyn paperpaw_sdk::library::service::Library
 pub type paperpaw_sdk::library::service::BadgeFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::catalog::Record) -> core::option::Option<paperpaw_sdk::library::service::Badge>>
 pub mod paperpaw_sdk::library::what
@@ -2009,7 +2010,7 @@ pub fn paperpaw_sdk::library::service::BookField::in_catalog(self) -> Self
 pub fn paperpaw_sdk::library::service::BookField::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::library::Deleted
 pub paperpaw_sdk::library::Deleted::commands: alloc::vec::Vec<paperpaw_sdk::Command>
-pub paperpaw_sdk::library::Deleted::failed: alloc::vec::Vec<alloc::string::String>
+pub paperpaw_sdk::library::Deleted::failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>
 #[non_exhaustive] pub struct paperpaw_sdk::library::Provided
 pub paperpaw_sdk::library::Provided::author: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::library::Provided::series: core::option::Option<alloc::string::String>
@@ -2076,6 +2077,7 @@ pub fn paperpaw_sdk::library::favourites(&dyn paperpaw_platform::storage::Storag
 pub fn paperpaw_sdk::library::folder<'e>(&paperpaw_sdk::Env<'e>) -> &'e str
 pub fn paperpaw_sdk::library::index(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::library::Book
 pub fn paperpaw_sdk::library::indexed(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::library::Book
+pub fn paperpaw_sdk::library::is_book_path(&paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::library::is_new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::Book, bool) -> bool
 pub fn paperpaw_sdk::library::is_new_on(&paperpaw_sdk::library::Book, bool, core::option::Option<u32>) -> bool
 pub fn paperpaw_sdk::library::key(&str) -> alloc::string::String

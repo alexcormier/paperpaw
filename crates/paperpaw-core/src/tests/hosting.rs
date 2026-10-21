@@ -2,6 +2,8 @@
 //! way back.
 
 use super::*;
+use paperpaw_sdk::builtin::events;
+use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::host::ScreenHost;
 use paperpaw_sdk::{Gesture, Params};
 
@@ -172,4 +174,49 @@ fn tasks_keep_their_own_way_back() {
     kernel.apply(Command::SwitchTask(slots::LIBRARY));
     kernel.finish();
     assert_eq!(ids(&kernel), ["host.list", "host.page"]);
+}
+
+/// A task kept follows its book: moved, its screen opens the book where
+/// it is now; deleted, the task is let go, so switching back opens no
+/// file that is gone.
+#[test]
+fn tasks_kept_follow_their_books() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(HostPlugin(log.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let path = paperpaw_sdk::builtin::params::PATH;
+    kernel.open_screen(Instant(1), PAGE, Params::new().with(path, "books/a.epub"));
+    let ids = |kernel: &Kernel| -> Vec<String> {
+        kernel.screens().map(|id| id.as_str().into()).collect()
+    };
+    kernel.apply(Command::SwitchTask(slots::LIBRARY));
+    kernel.finish();
+    let moved = events::BookMoved::new("books/a.epub".into(), "books/b.epub".into());
+    kernel.send_event(
+        Instant(2),
+        events::BOOK_MOVED.id().clone(),
+        moved.to_params(),
+    );
+    kernel.apply(Command::SwitchTask(slots::HOME));
+    kernel.finish();
+    assert_eq!(ids(&kernel), ["host.tabs", "host.page"]);
+    assert_eq!(kernel.stack[1].params.get(path), Some("books/b.epub"));
+    kernel.apply(Command::SwitchTask(slots::LIBRARY));
+    kernel.finish();
+    let removed = events::BookRemoved::new("books/b.epub".into());
+    kernel.send_event(
+        Instant(3),
+        events::BOOK_REMOVED.id().clone(),
+        removed.to_params(),
+    );
+    kernel.apply(Command::SwitchTask(slots::HOME));
+    kernel.finish();
+    assert_eq!(
+        ids(&kernel),
+        ["host.tabs"],
+        "the deleted book's screen again"
+    );
 }

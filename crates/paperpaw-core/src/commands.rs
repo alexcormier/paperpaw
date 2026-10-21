@@ -436,6 +436,7 @@ impl Kernel {
         if *event == events::PAGE_TURNED {
             self.last_activity = self.now;
         }
+        self.tasks_follow_books(event, params);
         let guarded = self.guarded_screens();
         if let Some(screens) = guarded {
             return self.emit_to_guard(event, params, &screens);

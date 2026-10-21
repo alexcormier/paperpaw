@@ -778,3 +778,63 @@ fn a_book_asked_about_is_kept_by_the_answer_or_back() {
         assert_eq!(rows(&mut app), ["Book 01", "Book 02"], "{}", device.id);
     }
 }
+
+/// The sheet opened for `path`, as the library opens it.
+fn sheet_for(app: &mut App, path: &str) {
+    app.now += 100;
+    let params = Params::new().with("path", path);
+    let effects = app.kernel.open_screen(
+        paperpaw_sdk::Instant(app.now),
+        Id::new_static("files.list.sheet"),
+        params,
+    );
+    app.settle(effects);
+    assert_eq!(app.screen(), "files.list.sheet", "{}", app.described());
+}
+
+#[test]
+fn what_is_not_a_book_is_never_offered_to_be_deleted() {
+    let _turn = turn();
+    let mut app = library(TOUCH, "", &many(1));
+    app.storage.write(".paperpaw/kept.txt", b"kept").unwrap();
+    for path in [
+        "paperpaw.ini",
+        ".paperpaw/kept.txt",
+        "books/../paperpaw.ini",
+    ] {
+        sheet_for(&mut app, path);
+        assert!(!app.shows("Delete …"), "{path}: {}", app.described());
+        app.run(actions::BACK);
+    }
+    assert!(app.storage.exists(".paperpaw/kept.txt"));
+}
+
+/// A screen too short for all of the sheet's actions: they go on pages.
+const SHORT: DeviceInfo = DeviceInfo {
+    display: paperpaw_platform::DisplayInfo {
+        height: 520,
+        ..X4.display
+    },
+    ..X4
+};
+
+#[test]
+fn on_a_sheet_of_pages_the_answers_sit_at_its_bottom_edge() {
+    let _turn = turn();
+    let mut app = library(SHORT, "", &many(1));
+    sheet_of(&mut app, "Book 01");
+    // To *Delete …*, on the sheet's second page.
+    choose(&mut app, "Delete …");
+    assert!(app.shows("cannot be undone"), "{}", app.described());
+    let parts = app.parts();
+    let keep = parts
+        .iter()
+        .find(|p| p.label == "Keep it")
+        .expect("Keep it");
+    let delete = parts.iter().find(|p| p.label == "Delete").expect("Delete");
+    let bottom = u32::from(keep.area.y) + u32::from(keep.area.height);
+    // At the sheet's bottom edge (half a gap above the screen's), no
+    // pager's strip left empty below them.
+    assert!(bottom + 12 >= 520, "{:?}", keep.area);
+    assert!(delete.area.y < keep.area.y);
+}
