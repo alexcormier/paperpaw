@@ -18,22 +18,41 @@ change the plugin SDK.
   *Reading app* for a folder (`readers::ask`), kept with the book or
   the folder.
 - SDK: `menus::APPS` (`core.apps`), what there is to open besides the
-  tools; the home screen's grid of tools shows it too.
+  tools; the home screen's grid of tools shows it too, after the tools,
+  and the tools' menu has it as a submenu (*Apps*) where there is
+  something in it, so that it is reached with the buttons alone.
 - Keyboard: other plugins add layouts through the point
   `keyboard.layouts` (`id; code; letter rows; variants`), chosen as the
-  built-in ones, with variants of letters of their own.
+  built-in ones, with variants of letters of their own besides the
+  built-in ones. A layout has at most 6 rows of 16 keys, a code of 4
+  characters and 16 variants a letter; invisible characters and ids
+  named as other layouts are left out.
 - About: other plugins add lines to the page through the point
-  `about.lines`.
+  `about.lines`: plain text, up to 512 bytes a plugin, each line named
+  after the plugin that added it.
 - Docs: what the slots besides the reader's promise (home, menu, panel,
   settings, keyboard, lookup) and the shipped plugins' points.
+- Wikipedia: a lookup provider that goes online. Once *Online* is
+  chosen in the dictionary's panel, its summary shows there as an entry
+  beside the dictionaries', and its line *Open Wikipedia* (or confirm,
+  where the entry shows) opens the whole summary on its own screen, which
+  stays bound to `slots::LOOKUP_ONLINE`. SDK: `LookupEntry::more`, the
+  screen showing more of an entry (`LookupQuery::answer_entry`,
+  `LookupAnswered::more`). The panel names each source right above its
+  entries.
 - SDK: menu entries placed beside others (`MenuPlace`,
-  `Registrar::place_menu_entry`) or taken out by a plugin
-  (`hide_menu_entry`); what an entry shows now (`set_item_state`,
-  `ItemState`: a label, a switch, faint, hidden, a badge) and a line
-  under it (`describe_item`), shown by the shipped menus.
+  `Registrar::place_menu_entry`; several in one place keep the order
+  they were registered in) or taken out by a plugin (`hide_menu_entry`;
+  the menu editor tells which, `Menus::hidden_by`); what a plugin's own
+  entry shows now (`set_item_state`, `ItemState`: a label, a switch,
+  faint, hidden, a badge; `ItemState::text`) and a line under it
+  (`describe_item`), shown by the shipped list, bar, panel and home
+  screen tools alike. A faint entry is passed by the focus and does
+  nothing (`ui::Rows::set_passed`, `ui::draw_faint_button`).
 - Menus: a menu the user redefined shows the entries of plugins
-  installed since, after the entry before them (`[menus] <menu>.known`
-  keeps what was there; lists kept before stay as they are).
+  installed since, after the entry before them (`[menus-known]` keeps
+  what plugins put there that the user left out; lists kept before stay
+  as they are).
 - SDK: `lookup`, lookup providers (`Registrar::add_lookup_provider`):
   where words are looked up, at once or later, answering the asker's
   reply event (`LookupQuery::answer`, by default
@@ -41,15 +60,17 @@ change the plugin SDK.
   provider's entries, naming each dictionary or provider only where
   entries come from more than one; it asks those that go online only
   when *Online* is chosen, and offers the online lookup screen
-  (Wikipedia) after them. The StarDict dictionaries are a provider too.
+  (Wikipedia) after them, waiting 20 seconds at most for those that
+  answer later. The StarDict dictionaries are a provider too.
 - SDK: `voices`, a plugin's voice (`Registrar::add_voice`) speaks text
   aloud in place of the system's for the languages it speaks, chosen
   with `settings::VOICE`; it answers as the system does
   (`Speech::answer`). A device without a voice of its own has speech
-  with one, which speaks unchosen; the system speaking in its place stops
-  it.
+  with one, which speaks unchosen (the choice *Automatic*); the system
+  or another voice speaking in its place stops it.
 - SDK: formats tell files without an extension by their first bytes
-  (`FormatSpec::sniff`, `Formats::for_file`, `supports_file`): the
+  (`FormatSpec::sniff`, `Formats::for_file`, `supports_file`; the last 32
+  files told are kept by name and size): the
   library, the file manager and the browser find such books; EPUB (its
   stored `mimetype` entry) and XTC say so. Formats read their own
   settings (`OpenOptions::setting`, filled by `reading::open_options`),

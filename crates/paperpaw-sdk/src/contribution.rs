@@ -333,6 +333,13 @@ impl Registrar {
 
     /// Adds `contribution`; every method below is a shorthand for one.
     pub fn add(&mut self, contribution: Contribution) -> Result<(), RegisterError> {
+        // What an entry shows is said by the plugin it belongs to.
+        if let Contribution::ItemState { item, .. } | Contribution::ItemDescription { item, .. } =
+            &contribution
+            && !item.is_owned_by(&self.plugin)
+        {
+            return Err(RegisterError::Namespace { id: item.clone() });
+        }
         if let Some(id) = contribution.id() {
             if !id.is_owned_by(&self.plugin) {
                 return Err(RegisterError::Namespace { id: id.clone() });
@@ -550,7 +557,8 @@ impl Registrar {
     /// What menus show of `item` now, where it changes: another label, a
     /// switch, faint, hidden, a badge (see
     /// [`ItemState`](crate::ItemState)). Asked whenever a menu
-    /// shows it: it says it from memory.
+    /// shows it: it says it from memory. Only for the plugin's own
+    /// actions and settings ([`RegisterError::Namespace`] otherwise).
     pub fn set_item_state(
         &mut self,
         item: impl Into<Id>,
@@ -562,7 +570,8 @@ impl Registrar {
         })
     }
 
-    /// A line under `item` in menus, by its translation key.
+    /// A line under `item` in menus, by its translation key; only for the
+    /// plugin's own actions and settings.
     pub fn describe_item(
         &mut self,
         item: impl Into<Id>,

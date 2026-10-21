@@ -44,10 +44,32 @@ impl Plugin for Echo {
     }
 }
 
+/// A voice for German, telling `heard` too.
+struct Deutsch(Heard);
+
+impl Plugin for Deutsch {
+    fn manifest(&self) -> Manifest {
+        common::manifest("deutsch")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let (said, stopped) = (self.0.clone(), self.0.clone());
+        r.add_voice(
+            VoiceSpec::new(
+                Id::new_static("deutsch.voice"),
+                move |_, speech, _| said.borrow_mut().push(format!("sage {}", speech.text)),
+                move |_, _| stopped.borrow_mut().push(String::from("halt")),
+            )
+            .languages(&["de"]),
+        )
+    }
+}
+
 fn kernel(harness: &Harness, heard: &Heard, config: &str, system: bool) -> Kernel {
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(harness.plugin())
         .plugin(Echo(heard.clone()))
+        .plugin(Deutsch(heard.clone()))
         .speech(system)
         .user_config(config.to_string())
         .build()
@@ -111,9 +133,9 @@ fn the_systems_voice_speaks_until_another_is_chosen() {
 fn a_plugins_voice_gives_a_device_speech() {
     let (harness, heard) = (Harness::new(), Heard::default());
     let mut kernel = kernel(&harness, &heard, "[core]\nvoice = echo.voice\n", false);
-    harness.run(&mut kernel, 10, [say("Hello", "en"), say("Hallo", "de")]);
+    harness.run(&mut kernel, 10, [say("Hello", "en"), say("Hallo", "fr")]);
     assert_eq!(*heard.borrow(), ["say Hello", "stop"]);
-    // German has no voice here: it fails at once, as without speech.
+    // French has no voice here: it fails at once, as without speech.
     let replies = harness.lines("event drv.reply");
     assert_eq!(replies.len(), 2, "{replies:?}");
     assert!(
@@ -141,4 +163,17 @@ fn the_systems_voice_speaking_in_its_place_stops_the_plugins() {
     harness.run(&mut kernel, 20, [say("Bonjour", "fr")]);
     assert_eq!(*heard.borrow(), ["say Hello", "stop"]);
     assert_eq!(system_said(&mut kernel), ["Bonjour"]);
+}
+
+#[test]
+fn one_voice_speaking_in_place_of_another_stops_it() {
+    let (harness, heard) = (Harness::new(), Heard::default());
+    // No system voice: each language its plugin's.
+    let mut kernel = kernel(&harness, &heard, "", false);
+    harness.run(&mut kernel, 10, [say("Hello", "en")]);
+    harness.run(&mut kernel, 20, [say("Hallo", "de")]);
+    assert_eq!(*heard.borrow(), ["say Hello", "stop", "sage Hallo"]);
+    // Stopping reaches the one speaking now.
+    harness.run(&mut kernel, 30, [Command::StopSpeaking]);
+    assert_eq!(heard.borrow().last().map(String::as_str), Some("halt"));
 }

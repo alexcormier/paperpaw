@@ -512,6 +512,12 @@ impl paperpaw_sdk::Plugin for Providers {
         r.add_lookup_provider(LookupProviderSpec::new(SLOW, "providers.slow", |_, q| {
             LookupAnswer::Pending(vec![q.answer(&SLOW, "Slow", long("Slow"))])
         }))?;
+        // One that never answers.
+        r.add_lookup_provider(LookupProviderSpec::new(
+            paperpaw_sdk::Id::new_static("providers.never"),
+            "providers.never",
+            |_, _| LookupAnswer::Pending(Vec::new()),
+        ))?;
         r.add_screen(paperpaw_sdk::ScreenSpec::new(
             ONLINE_SCREEN,
             "providers.online",
@@ -547,6 +553,14 @@ impl Lookup {
         lookup
     }
 
+    /// Lets `ms` pass: providers that did not answer are waited for no
+    /// more.
+    fn pass(&mut self, ms: u64) {
+        self.now += ms;
+        let effects = self.kernel.tick(Instant(self.now));
+        self.settle(effects);
+    }
+
     /// Opens the panel for `word`, without letting time pass.
     fn open(&mut self, word: &str) -> paperpaw_core::Effects {
         self.now += 100;
@@ -562,13 +576,16 @@ impl Lookup {
 fn a_provider_answering_later_is_shown_and_not_waited_for_forever() {
     let mut lookup = Lookup::with_providers(card());
     lookup.look_up("apple");
+    // Waiting for the one that never answers, then no more.
+    assert!(lookup.described().iter().any(|l| l.contains("Looking up")));
+    lookup.pass(21_000);
+    assert!(!lookup.described().iter().any(|l| l.contains("Looking up")));
     // The dictionary's entry and the slow one's: more pages than one
     // entry has.
     let (_, pages) = lookup.page().unwrap();
     let mut alone = Lookup::new(DEVICE, card(), "");
     alone.look_up("apple");
     assert!(pages > alone.page().unwrap().1, "{pages}");
-    assert!(!lookup.described().iter().any(|l| l.contains("Asking")));
 }
 
 #[test]
@@ -579,9 +596,11 @@ fn online_answers_given_while_the_dictionaries_are_prepared_stay() {
     let effects = asked.open("apple");
     asked.press(actions::MENU);
     asked.settle(effects);
+    asked.pass(21_000);
     let with_online = asked.page().unwrap().1;
     let mut offline = Lookup::with_providers(card());
     offline.look_up("apple");
+    offline.pass(21_000);
     assert!(with_online > offline.page().unwrap().1, "{with_online}");
 }
 

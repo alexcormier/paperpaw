@@ -13,7 +13,9 @@
 //! The screen in the lookup slot asks the providers
 //! ([`LookupProviders::ask`]) and shows every entry with the name of its
 //! provider. Those that go online it asks only when the reader chooses
-//! to (the shipped panel's *Online*), never with every word.
+//! to (the shipped panel's *Online*), never with every word. An entry may
+//! name a screen that shows more of it ([`LookupEntry::more`], e.g. a
+//! whole article), which the reader opens from it.
 //!
 //! Privacy: that rule is the asking screen's, not the kernel's, and a
 //! provider that goes online sends the word where it asks. The answer
@@ -68,12 +70,19 @@ impl LookupQuery {
         source: impl Into<String>,
         text: impl Into<String>,
     ) -> Command {
+        self.answer_entry(provider, LookupEntry::new(source, text))
+    }
+
+    /// A later answer of `provider` to the query: `entry`, with the
+    /// screen showing more of it where it names one.
+    pub fn answer_entry(&self, provider: &Id, entry: LookupEntry) -> Command {
         let answer = crate::builtin::events::LookupAnswered::new(
             provider.clone(),
             self.word.clone(),
-            source.into(),
-            text.into(),
-        );
+            entry.source,
+            entry.text,
+        )
+        .more(entry.more);
         Command::Emit(
             self.reply.clone(),
             crate::event::EventData::to_params(&answer),
@@ -104,6 +113,13 @@ pub struct LookupEntry {
     pub source: String,
     /// The text; lines are kept.
     pub text: String,
+    /// The screen that shows more of it (a whole article, say), opened
+    /// with the word and its language ([`params::WORD`],
+    /// [`params::LANGUAGE`]) when the reader asks for more.
+    ///
+    /// [`params::WORD`]: crate::builtin::params::WORD
+    /// [`params::LANGUAGE`]: crate::builtin::params::LANGUAGE
+    pub more: Option<Id>,
 }
 
 impl LookupEntry {
@@ -111,7 +127,14 @@ impl LookupEntry {
         Self {
             source: source.into(),
             text: text.into(),
+            more: None,
         }
+    }
+
+    /// Shows more of it on `screen` (see [`LookupEntry::more`]).
+    pub fn more(mut self, screen: Id) -> Self {
+        self.more = Some(screen);
+        self
     }
 }
 

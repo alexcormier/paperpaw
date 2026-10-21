@@ -302,7 +302,7 @@ fn is_epub(head: &[u8]) -> bool {
         return false;
     };
     let data = 30 + name + extra;
-    head.starts_with(b"PK")
+    head.starts_with(b"PK\x03\x04")
         && method == 0
         && head.get(30..30 + name) == Some(&b"mimetype"[..])
         && head.get(data..data + MIME.len()) == Some(MIME)

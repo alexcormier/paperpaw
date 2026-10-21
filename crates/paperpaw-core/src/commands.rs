@@ -384,9 +384,22 @@ impl Kernel {
         let env = self.shared.env(self.now);
         let system = self.io.speech.system;
         if let Some(voice) = self.shared.voices.chosen(&env, &speech.language, system) {
-            // In place of what the system says now, unless after it.
+            // In place of what the system or another voice says now,
+            // unless after it.
             if !speech.queue {
                 self.io.speech.stop();
+                let other = self
+                    .io
+                    .speech
+                    .voice
+                    .as_ref()
+                    .is_some_and(|(id, _)| *id != voice.id);
+                if other
+                    && let Some((id, _)) = self.io.speech.voice.take()
+                    && let Some(old) = self.shared.voices.get(id.as_str())
+                {
+                    (old.stop)(&env, &mut self.output.commands);
+                }
             }
             (voice.speak)(&env, &speech, &mut self.output.commands);
             self.io.speech.voice = Some((voice.id.clone(), screens));

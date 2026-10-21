@@ -85,6 +85,17 @@ impl ItemState {
         self.badge = Some(badge.into());
         self
     }
+
+    /// What a place with room for one short line (a bar, a panel's
+    /// button, a tile) shows: the label in place of `title` where there
+    /// is one, the badge after it.
+    pub fn text(&self, title: &str) -> String {
+        let label = self.label.as_deref().unwrap_or(title);
+        match &self.badge {
+            Some(badge) => alloc::format!("{label} · {badge}"),
+            None => String::from(label),
+        }
+    }
 }
 
 /// What an entry shows now.
@@ -244,11 +255,11 @@ pub struct Menus {
     /// Menus redefined by the user (`[menus] reader.menu = a, b, c`).
     custom: VecMap<Id, Vec<Id>>,
     /// The entries plugins contributed to a menu when the user redefined
-    /// it (`[menus] reader.menu.known = …`): those come later are added
-    /// to the user's list.
+    /// it, and the user left out (`[menus-known] reader.menu = …`): those
+    /// that come later are added to the user's list.
     known: VecMap<Id, Vec<Id>>,
-    /// Entries plugins took out of menus: (menu, item).
-    hidden: Vec<(Id, Id)>,
+    /// Entries plugins took out of menus: (menu, item, the plugin).
+    hidden: Vec<(Id, Id, Id)>,
     /// What entries show now, where it changes.
     states: VecMap<Id, StateFn>,
     /// A line under an entry (translation keys).
@@ -278,6 +289,9 @@ impl Menus {
             menu.shrink_to_fit();
         }
         self.known.shrink_to_fit();
+        for known in self.known.values_mut() {
+            known.shrink_to_fit();
+        }
         self.hidden.shrink_to_fit();
         self.states.shrink_to_fit();
         self.descriptions.shrink_to_fit();
@@ -348,14 +362,17 @@ impl Menus {
     }
 
     /// The entries plugins contributed to `menu` when the user redefined
-    /// it: entries added later are shown in the user's list too.
+    /// it and the user left out: entries added later (neither these nor
+    /// listed) are shown in the user's list too.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn set_known(&mut self, menu: Id, known: Vec<Id>) {
+    pub fn set_known(&mut self, menu: Id, mut known: Vec<Id>) {
+        known.shrink_to_fit();
         self.known.insert(menu, known);
     }
 
-    /// The entries `menu` was redefined with knowing, if kept.
+    /// The entries the user left out of `menu` when redefining it, if
+    /// kept.
     pub fn known(&self, menu: &str) -> Option<&[Id]> {
         self.known.get(menu).map(Vec::as_slice)
     }
@@ -369,11 +386,20 @@ impl Menus {
     }
 
     /// Takes `item` out of `menu` as plugins contribute it (another
-    /// plugin's entry, say); a user who lists it keeps it.
+    /// plugin's entry, say), for plugin `by`; a user who lists it keeps it.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn hide(&mut self, menu: Id, item: Id) {
-        self.hidden.push((menu, item));
+    pub fn hide(&mut self, menu: Id, item: Id, by: Id) {
+        self.hidden.push((menu, item, by));
+    }
+
+    /// The plugin that took `item` out of `menu`, if one did (for menu
+    /// editors to tell).
+    pub fn hidden_by(&self, menu: &str, item: &str) -> Option<&Id> {
+        self.hidden
+            .iter()
+            .find(|(m, i, _)| m.as_str() == menu && i.as_str() == item)
+            .map(|(_, _, by)| by)
     }
 
     /// What `item` shows now, where it changes.
@@ -441,7 +467,7 @@ impl Menus {
                 !self
                     .hidden
                     .iter()
-                    .any(|(m, i)| m.as_str() == menu && *i == e.item)
+                    .any(|(m, i, _)| m.as_str() == menu && *i == e.item)
             })
             .collect();
         let mut ordered: Vec<&MenuEntry> = entries
@@ -455,11 +481,15 @@ impl Menus {
             .into_iter()
             .filter(|e| e.by_order().is_none())
             .collect();
+        // Those put first or after an entry, and where: several in one
+        // place keep the order they were registered in.
+        let mut put: Vec<(&Id, &MenuPlace)> = Vec::new();
         // Anchors placed themselves come first: as long as one finds its
         // anchor.
         loop {
             let before = placed.len();
             placed.retain(|e| {
+                let e: &MenuEntry = e;
                 let at = match e.place.as_ref() {
                     Some(MenuPlace::First) => Some(0),
                     Some(MenuPlace::After(anchor)) => {
@@ -476,12 +506,21 @@ impl Menus {
                     }
                     _ => None,
                 };
-                match at {
-                    Some(at) => {
+                match (at, e.place.as_ref()) {
+                    (Some(mut at), Some(place)) => {
+                        if matches!(place, MenuPlace::First | MenuPlace::After(_)) {
+                            while ids
+                                .get(at)
+                                .is_some_and(|id| put.iter().any(|(p, pl)| p == id && *pl == place))
+                            {
+                                at += 1;
+                            }
+                            put.push((&e.item, place));
+                        }
                         ids.insert(at, &e.item);
                         false
                     }
-                    None => true,
+                    _ => true,
                 }
             });
             if placed.len() == before {
@@ -668,9 +707,42 @@ mod tests {
                 "m.lost"
             ]
         );
-        // Taken out by a plugin.
-        menus.hide(Id::new_static("m.menu"), Id::new_static("m.a"));
+        // Taken out by a plugin, which menu editors can tell.
+        menus.hide(
+            Id::new_static("m.menu"),
+            Id::new_static("m.a"),
+            Id::new_static("p"),
+        );
         assert!(!ids(&menus).contains(&"m.a"));
+        let by = menus.hidden_by("m.menu", "m.a");
+        assert_eq!(by.map(Id::as_str), Some("p"));
+        assert_eq!(menus.hidden_by("m.menu", "m.b"), None);
+    }
+
+    #[test]
+    fn several_in_one_place_keep_their_order() {
+        let mut menus = Menus::new();
+        menus.add(entry("m.a", 10));
+        menus.add(entry("m.b", 20));
+        let at = |item: &'static str, place: MenuPlace| {
+            MenuEntry::new(Id::new_static("m.menu"), Id::new_static(item)).place(place)
+        };
+        let after_a = || MenuPlace::After(Id::new_static("m.a"));
+        menus.add(at("m.first-1", MenuPlace::First));
+        menus.add(at("m.after-1", after_a()));
+        menus.add(at("m.first-2", MenuPlace::First));
+        menus.add(at("m.after-2", after_a()));
+        assert_eq!(
+            ids(&menus),
+            [
+                "m.first-1",
+                "m.first-2",
+                "m.a",
+                "m.after-1",
+                "m.after-2",
+                "m.b"
+            ]
+        );
     }
 
     #[test]
@@ -685,8 +757,8 @@ mod tests {
             menu.clone(),
             vec![Id::new_static("m.c"), Id::new_static("m.a")],
         );
-        let known = menus.default_ids("m.menu").into_iter().cloned().collect();
-        menus.set_known(menu.clone(), known);
+        // Known: what was there and left out (b).
+        menus.set_known(menu.clone(), vec![Id::new_static("m.b")]);
         // A plugin installed later adds two: after a, and first.
         menus.add(entry("m.new", 15));
         menus.add(entry("m.top", 1));

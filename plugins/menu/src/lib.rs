@@ -198,6 +198,14 @@ pub(crate) fn choose(env: &Env<'_>, spec: &SettingSpec, cx: &mut Cx<'_, '_>) {
     }
 }
 
+/// Which of `items` the focus passes over: those shown faint now.
+fn passed(env: &Env<'_>, items: &[Item]) -> Vec<bool> {
+    items
+        .iter()
+        .map(|item| !item.heading && !env.menus.state(env, item.id.as_str()).enabled)
+        .collect()
+}
+
 impl MenuScreen {
     fn new(env: &Env<'_>, params: &Params) -> Self {
         let main = menus::MAIN;
@@ -269,10 +277,16 @@ impl MenuScreen {
             items.iter().any(|i| i.icon.is_some() && !i.heading),
         );
         let headings = items.iter().map(|i| i.heading).collect();
+        let mut rows = ui::Rows::new(list_area, heights, headings);
+        rows.set_passed(passed(env, &items));
+        // With buttons, on the first entry that can be chosen.
+        if passed(env, &items).get(rows.focus()) == Some(&true) {
+            rows.step(true);
+        }
         Self {
             items,
             region,
-            rows: ui::Rows::new(list_area, heights, headings),
+            rows,
             pager,
             editing: false,
             keys: !env.device.input.touch,
@@ -569,6 +583,8 @@ impl Screen for MenuScreen {
             cx.request_refresh(RefreshMode::Fast);
             return Handled::Yes;
         }
+        // Entries faint now are passed.
+        self.rows.set_passed(passed(cx.env(), &self.items));
         // The focus changes nothing but its rows: only they are drawn.
         if *a == actions::UP || *a == actions::LEFT || *a == actions::PREVIOUS {
             let change = self.rows.step(false);

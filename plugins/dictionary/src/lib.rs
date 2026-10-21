@@ -12,13 +12,15 @@
 //!
 //! The panel also lists what other plugins' lookup providers find (see
 //! `paperpaw_sdk::lookup`): those that work offline with every word,
-//! those that go online when *Online* is chosen. The StarDict
-//! dictionaries are a provider too, for a lookup screen of another
-//! plugin.
+//! those that go online (Wikipedia's) when *Online* is chosen. An entry
+//! that has more to show ends with a line that opens it (*Open
+//! Wikipedia ›*). The StarDict dictionaries are a provider too, for a
+//! lookup screen of another plugin.
 //!
 //! Buttons: next/previous page or up/down scroll long definitions, confirm
-//! or back closes. Touch: tap the right part to scroll, the left part to go
-//! back, outside to close.
+//! opens the first entry's more on the page, else closes, as back does.
+//! Touch: tap a line that opens more, else the right part to scroll, the
+//! left part to go back, outside to close.
 
 #![no_std]
 
@@ -52,6 +54,8 @@ pub const FOLDER: Setting<Text> = Setting::new("dictionary.folder");
 pub const PROVIDER: Id = Id::new_static("dictionary.stardict");
 /// What providers answering later answer the panel with.
 const ANSWERED: Id = Id::new_static("dictionary.answered");
+/// How long providers answering later are waited for.
+const ANSWER_MS: u64 = 20_000;
 /// The folder chooser of the `files` plugin, if installed.
 const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 
@@ -240,9 +244,19 @@ struct Popup {
     /// What providers that answer later need run (their requests), until
     /// the panel can.
     commands: Vec<Command>,
+    /// Until when providers asked may answer: then they are waited for no
+    /// more.
+    waiting_until: Option<paperpaw_sdk::Instant>,
     /// The definitions (or a message), and its lines as byte ranges.
     text: String,
     lines: Vec<(usize, usize)>,
+    /// The entries that have more to show: where each starts in the text,
+    /// where its line that opens more starts and ends, and the screen it
+    /// opens.
+    mores: Vec<(usize, usize, usize, Id)>,
+    /// The names of sources above their entries (byte ranges), drawn
+    /// faint.
+    headings: Vec<(usize, usize)>,
     /// First line shown.
     top: usize,
     style: UiStyle,
@@ -272,8 +286,11 @@ impl Popup {
             pending: Vec::new(),
             asked_online: false,
             commands: Vec::new(),
+            waiting_until: None,
             text: String::new(),
             lines: Vec::new(),
+            mores: Vec::new(),
+            headings: Vec::new(),
             top: 0,
             style,
             region: Rect::new(0, top, display.width, display.height - top),
@@ -342,10 +359,21 @@ impl Popup {
         self.show_entries(env);
     }
 
-    /// Runs what providers that answer later need.
+    /// Runs what providers that answer later need, and waits for their
+    /// answers a while.
     fn run_commands(&mut self, cx: &mut Cx<'_, '_>) {
         for command in self.commands.drain(..) {
             cx.command(command);
+        }
+        self.wait(cx);
+    }
+
+    /// Waits [`ANSWER_MS`] for the providers asked, from now.
+    fn wait(&mut self, cx: &mut Cx<'_, '_>) {
+        if !self.pending.is_empty() {
+            let until = cx.env().now.add_millis(ANSWER_MS);
+            self.waiting_until = Some(until);
+            cx.wake_at(until);
         }
     }
 
@@ -356,19 +384,31 @@ impl Popup {
             .next()
             .is_some_and(|first| all.any(|e| e.source != first.source));
         let mut text = String::new();
+        let mut mores = Vec::new();
+        let mut headings = Vec::new();
         let mut last: Option<&str> = None;
         for entry in self.entries.iter().chain(&self.online_entries) {
-            if several && last != Some(entry.source.as_str()) {
-                if !text.is_empty() {
-                    text.push_str("\n\n");
-                }
-                text.push_str(&format!("({})", entry.source));
-                last = Some(&entry.source);
-            }
+            // A blank line between entries; the source's name right above
+            // the first of its own.
             if !text.is_empty() {
                 text.push_str("\n\n");
             }
+            let begins = text.len();
+            if several && last != Some(entry.source.as_str()) {
+                text.push_str(&format!("({})", entry.source));
+                headings.push((begins, text.len()));
+                text.push('\n');
+                last = Some(&entry.source);
+            }
             text.push_str(entry.text.trim_end());
+            // A line that opens the rest.
+            if let Some(more) = &entry.more {
+                text.push('\n');
+                let start = text.len();
+                let source = Arg::Str(&entry.source);
+                text.push_str(&env.i18n.format("dictionary.more", &[("source", source)]));
+                mores.push((begins, start, text.len(), more.clone()));
+            }
         }
         if text.is_empty() && self.pending.is_empty() {
             text = env
@@ -377,7 +417,56 @@ impl Popup {
         }
         let top = self.top;
         self.set_text(env, text);
+        self.mores = mores;
+        self.headings = headings;
         self.top = top.min(self.lines.len().saturating_sub(1));
+    }
+
+    /// The screen line `index` opens more on, if it is such a line.
+    fn more_at(&self, index: usize) -> Option<&Id> {
+        let &(start, _) = self.lines.get(index)?;
+        self.mores
+            .iter()
+            .find(|(_, from, to, _)| (*from..*to).contains(&start))
+            .map(|(_, _, _, more)| more)
+    }
+
+    /// The first entry on the page that has more to show: the text of
+    /// its line that opens it, and the screen.
+    fn more_shown(&self, env: &Env<'_>) -> Option<(&str, &Id)> {
+        let rows = self.rows(env);
+        (self.top..(self.top + rows).min(self.lines.len())).find_map(|i| {
+            let (start, _) = self.lines[i];
+            self.mores
+                .iter()
+                .find(|(begins, _, to, _)| (*begins..*to).contains(&start))
+                .map(|(_, from, to, more)| (&self.text[*from..*to], more))
+        })
+    }
+
+    /// Where line `index` is drawn, if it is on the page.
+    fn line_area(&self, env: &Env<'_>, index: usize) -> Option<Rect> {
+        let rows = self.rows(env);
+        let row = index.checked_sub(self.top).filter(|&r| r < rows)?;
+        let height = self.line_height(env);
+        let header = self.header();
+        let top = f32::from(header.y + header.height) + self.style.gap as f32 / 2.0;
+        Some(Rect::new(
+            self.region.x,
+            (top + height * row as f32) as u16,
+            self.region.width,
+            height as u16,
+        ))
+    }
+
+    /// Opens `more` for the word, in place of the panel.
+    fn open_more(&self, more: Id, cx: &mut Cx<'_, '_>) {
+        let mut params = Params::new().with(params::WORD, self.word.clone());
+        if let Some(language) = &self.language {
+            params = params.with(params::LANGUAGE, language.clone());
+        }
+        cx.command(Command::Back);
+        cx.command(Command::OpenScreen(more, params));
     }
 
     /// Takes `text` and wraps it into lines.
@@ -388,11 +477,13 @@ impl Popup {
             let width = f32::from(self.region.width) - 2.0 * self.style.margin as f32;
             let mut start = 0;
             for paragraph in text.split('\n') {
-                if paragraph.is_empty() {
-                    self.lines.push((start, start));
-                }
+                let before = self.lines.len();
                 for range in font.wrap(self.style.text, paragraph, width) {
                     self.lines.push((start + range.start, start + range.end));
+                }
+                // An empty one: a blank line, once.
+                if self.lines.len() == before {
+                    self.lines.push((start, start));
                 }
                 start += paragraph.len() + 1;
             }
@@ -433,10 +524,12 @@ impl Popup {
     }
 
     /// Whether the word can be looked up online, with a network: the
-    /// providers that go online first, then a screen bound for it (e.g.
-    /// Wikipedia's).
+    /// providers that go online first, then a screen bound for it, unless
+    /// an entry opens more already (Wikipedia's).
     fn can_go_online(&self, env: &Env<'_>) -> bool {
-        env.caps.network && (self.providers_online(env) || env.has_slot(&slots::LOOKUP_ONLINE))
+        env.caps.network
+            && (self.providers_online(env)
+                || (env.has_slot(&slots::LOOKUP_ONLINE) && self.mores.is_empty()))
     }
 
     /// Asks the providers that go online, their entries shown here as
@@ -454,6 +547,7 @@ impl Popup {
             for command in asked.commands {
                 cx.command(command);
             }
+            self.wait(cx);
             self.show_entries(&env);
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Partial);
@@ -539,7 +633,11 @@ impl Screen for Popup {
     /// *Select* closes it, *Menu* looks the word up online where it can;
     /// the arrows scroll.
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
-        if *action == actions::CONFIRM {
+        if *action == actions::CONFIRM
+            && let Some((line, _)) = self.more_shown(env)
+        {
+            paperpaw_sdk::Hint::Text(line.trim_end_matches(" ›").to_string())
+        } else if *action == actions::CONFIRM {
             paperpaw_sdk::Hint::Text(env.i18n.tr("core.hint.close").to_string())
         } else if *action == actions::MENU && self.online_area(env, "").is_some() {
             paperpaw_sdk::Hint::Text(env.i18n.tr("dictionary.online").to_string())
@@ -616,14 +714,31 @@ impl Screen for Popup {
         let top = f32::from(header.y + header.height) + style.gap as f32 / 2.0;
         for (n, &(start, end)) in self.lines.iter().skip(self.top).take(rows).enumerate() {
             let baseline = top + height * n as f32 + ascent;
-            font.draw(
-                canvas,
-                style.text,
-                margin,
-                baseline as i32,
-                &self.text[start..end],
-                Color::BLACK,
-            );
+            let text = &self.text[start..end];
+            let heading = self
+                .headings
+                .iter()
+                .any(|&(from, to)| (from..to).contains(&start));
+            let ink = if heading {
+                style.faint(80)
+            } else {
+                Color::BLACK
+            };
+            font.draw(canvas, style.text, margin, baseline as i32, text, ink);
+            // A line that opens more: a button, for screen readers too.
+            if let Some(area) = self
+                .more_at(self.top + n)
+                .and(self.line_area(env, self.top + n))
+            {
+                let focused = !env.device.input.touch;
+                canvas.describe(
+                    paperpaw_sdk::semantics::Role::Button,
+                    text,
+                    area,
+                    focused,
+                    None,
+                );
+            }
         }
     }
 
@@ -638,6 +753,17 @@ impl Screen for Popup {
     /// Prepares the dictionaries a step at a time, then looks up the word.
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        // Providers that did not answer in time: waited for no more.
+        if let Some(until) = self.waiting_until
+            && env.now >= until
+            && !self.pending.is_empty()
+        {
+            self.pending.clear();
+            self.waiting_until = None;
+            self.show_entries(&env);
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Partial);
+        }
         let State::Preparing(builders, done, _) = &mut self.state else {
             return;
         };
@@ -699,7 +825,10 @@ impl Screen for Popup {
         {
             self.scroll(&env, false, cx);
         } else if *a == actions::CONFIRM {
-            cx.command(Command::Back);
+            match self.more_shown(&env) {
+                Some((_, more)) => self.open_more(more.clone(), cx),
+                None => cx.command(Command::Back),
+            }
         } else if *a == actions::MENU && self.online_area(&env, "").is_some() {
             self.online(cx);
         } else {
@@ -724,7 +853,8 @@ impl Screen for Popup {
         }
         let (_, online) = self.pending.remove(at);
         if !answer.text.trim().is_empty() {
-            let entry = LookupEntry::new(answer.source, answer.text);
+            let mut entry = LookupEntry::new(answer.source, answer.text);
+            entry.more = answer.more;
             match online {
                 true => self.online_entries.push(entry),
                 false => self.entries.push(entry),
@@ -747,6 +877,16 @@ impl Screen for Popup {
             .is_some_and(|area| area.contains(gesture.start))
         {
             self.online(cx);
+            return Handled::Yes;
+        }
+        // A line that opens more.
+        let rows = self.rows(&env);
+        let more = (self.top..(self.top + rows).min(self.lines.len())).find_map(|i| {
+            let area = self.line_area(&env, i)?;
+            self.more_at(i).filter(|_| area.contains(gesture.start))
+        });
+        if let Some(more) = more {
+            self.open_more(more.clone(), cx);
             return Handled::Yes;
         }
         let forward = gesture.start.x > i32::from(self.region.width) / 3;
