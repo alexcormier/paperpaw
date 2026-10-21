@@ -25,6 +25,7 @@ pub mod battery;
 pub mod bm8563;
 pub mod buttons;
 pub mod card;
+pub mod changes;
 pub mod cw2017;
 pub mod display;
 pub mod gt911;

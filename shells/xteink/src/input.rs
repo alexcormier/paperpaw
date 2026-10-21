@@ -25,6 +25,7 @@ use esp_hal::handler;
 use esp_hal::time::Duration;
 use esp_hal::timer::PeriodicTimer;
 use paperpaw_x4::buttons::Debouncer;
+use paperpaw_x4::changes::Queue;
 
 use crate::board::Keys;
 
@@ -32,14 +33,15 @@ use crate::board::Keys;
 const SAMPLE_MS: u64 = 5;
 /// How often the battery is read at most.
 const BATTERY_MS: u64 = 1000;
-/// Presses and releases waiting; more are dropped.
+/// Presses and releases waiting; more are dropped. A finger's moves
+/// while the last one waits take its place ([`Queue::push`]).
 const QUEUE: usize = 32;
 
 /// A finger on the touch screen, on the upright screen: down (with where
 /// the controller had it, to look into), moved, lifted.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[cfg_attr(
-    not(feature = "x4-pro"),
+    not(any(feature = "x4-pro", feature = "remote")),
     expect(dead_code, reason = "only the X4 Pro has a touch screen")
 )]
 pub enum Touch {
@@ -48,6 +50,10 @@ pub enum Touch {
     Up(u16, u16),
     /// The home key (a touch key below the X4 Pro's screen) went down or
     /// up: a button.
+    #[cfg_attr(
+        all(feature = "remote", not(feature = "x4-pro")),
+        expect(dead_code, reason = "only the X4 Pro has a home key")
+    )]
     Home(bool),
 }
 
@@ -69,10 +75,7 @@ pub struct Sampler {
     debouncer: Debouncer,
     /// Woken by the power button, it is still down: it counts once let go.
     power_armed: bool,
-    queue: [Option<Change>; QUEUE],
-    /// Where the next change goes, and how many wait.
-    head: usize,
-    len: usize,
+    queue: Queue<Change, QUEUE>,
 }
 
 static SAMPLER: Mutex<RefCell<Option<Sampler>>> = Mutex::new(RefCell::new(None));
@@ -115,9 +118,7 @@ impl Sampler {
             power,
             debouncer: Debouncer::new(),
             power_armed: false,
-            queue: [None; QUEUE],
-            head: 0,
-            len: 0,
+            queue: Queue::new(),
         }
     }
 
@@ -137,18 +138,85 @@ impl Sampler {
             Ordering::Relaxed,
         );
         LEVELS.store(levels, Ordering::Relaxed);
-        let (queue, head, len) = (&mut self.queue, &mut self.head, &mut self.len);
+        let queue = &mut self.queue;
         let mut push = |change: Change| {
-            if *len < QUEUE {
-                queue[(*head + *len) % QUEUE] = Some(change);
-                *len += 1;
-            }
+            queue.push(change, moved_again);
         };
         self.debouncer.update(reading, now, &mut |name, down| {
             push(Change::Button(name, down, now));
         });
         keys.touch(&mut |touch| push(Change::Touch(touch, now)));
+        #[cfg(feature = "remote")]
+        if let Some(touch) = dragged(now) {
+            push(Change::Touch(touch, now));
+        }
     }
+}
+
+/// Whether `change` is the finger moved again after `last`, which still
+/// waits: it takes its place.
+fn moved_again(last: &Change, change: &Change) -> bool {
+    matches!(
+        (last, change),
+        (
+            Change::Touch(Touch::Move(..), _),
+            Change::Touch(Touch::Move(..), _)
+        )
+    )
+}
+
+/// A finger moved by the remote control (`drag`), read as the touch
+/// controller's readings are: where it goes, in how many steps, how far
+/// apart, the step it is at and when the next is due.
+#[cfg(feature = "remote")]
+#[derive(Debug, Clone, Copy)]
+struct Drag {
+    from: (u16, u16),
+    to: (u16, u16),
+    steps: u16,
+    ms: u16,
+    step: u16,
+    due: u64,
+}
+
+#[cfg(feature = "remote")]
+static DRAG: Mutex<Cell<Option<Drag>>> = Mutex::new(Cell::new(None));
+
+/// Moves a finger from `from` to `to` in `steps` steps `ms` apart, read in
+/// the interrupt as the touch controller's readings are.
+#[cfg(feature = "remote")]
+pub fn drag(from: (u16, u16), to: (u16, u16), steps: u16, ms: u16) {
+    let drag = Drag {
+        from,
+        to,
+        steps,
+        ms,
+        step: 0,
+        due: millis(),
+    };
+    critical_section::with(|cs| DRAG.borrow(cs).set(Some(drag)));
+}
+
+/// The finger of the remote control's drag, where a reading is due.
+#[cfg(feature = "remote")]
+fn dragged(now: u64) -> Option<Touch> {
+    critical_section::with(|cs| {
+        let cell = DRAG.borrow(cs);
+        let mut drag = cell.get().filter(|d| d.due <= now)?;
+        let along = |a: u16, b: u16| {
+            let (a, b, n, i) = (i32::from(a), i32::from(b), i32::from(drag.steps), i32::from(drag.step));
+            (a + (b - a) * i / n) as u16
+        };
+        let touch = match drag.step {
+            0 => Touch::Down(drag.from.0, drag.from.1, drag.from),
+            step if step <= drag.steps => Touch::Move(along(drag.from.0, drag.to.0), along(drag.from.1, drag.to.1)),
+            _ => Touch::Up(drag.to.0, drag.to.1),
+        };
+        drag.step += 1;
+        drag.due = now + u64::from(drag.ms);
+        cell.set((drag.step <= drag.steps + 1).then_some(drag));
+        Some(touch)
+    })
 }
 
 #[handler]
@@ -197,14 +265,7 @@ pub fn sample_now() {
 pub fn next() -> Option<Change> {
     critical_section::with(|cs| {
         let mut sampler = SAMPLER.borrow_ref_mut(cs);
-        let s = sampler.as_mut()?;
-        if s.len == 0 {
-            return None;
-        }
-        let change = s.queue[s.head].take();
-        s.head = (s.head + 1) % QUEUE;
-        s.len -= 1;
-        change
+        sampler.as_mut()?.queue.pop()
     })
 }
 
@@ -316,7 +377,7 @@ pub fn rearm() {
     critical_section::with(|cs| {
         if let Some(s) = SAMPLER.borrow_ref_mut(cs).as_mut() {
             s.power_armed = false;
-            s.len = 0;
+            s.queue.clear();
         }
     });
 }

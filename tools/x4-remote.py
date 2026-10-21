@@ -58,6 +58,8 @@ STEPS, separated by commas:
   Touch (the X4 Pro), where PaperPaw draws:
   tap:240:400        a tap there
   swipe:240:700:240:100   a finger from one point to the other (also :ms)
+  drag:240:700:240:100:40:15  the same as the touch controller reads it
+                     (40 moves 15 ms apart, also while PaperPaw is busy)
   tap-label:Search online  a tap in the middle of what shows that text
 
   The card (paths as PaperPaw writes them, from the card's top):
@@ -500,6 +502,9 @@ def run(x4, step):
             x4.touch("up", x, y)
         case ["swipe", x1, y1, x2, y2, *ms]:
             x4.swipe(int(x1), int(y1), int(x2), int(y2), int(ms[0]) if ms else 300)
+        case ["drag", x1, y1, x2, y2, steps, ms]:
+            x4.ask(f"drag {x1} {y1} {x2} {y2} {steps} {ms}", "OK")
+            time.sleep(int(steps) * int(ms) / 1000)
         case ["tap-label", *_]:
             found = [p for p in x4.parts() if rest in p[6]]
             if not found:

@@ -107,6 +107,10 @@
 //!   send it (`PP:OK`);
 //! - `touch <down|move|up> <x> <y>`: a finger on the screen, where
 //!   PaperPaw draws (`PP:OK`), e.g. to tap or swipe on the X4 Pro;
+//! - `drag <x1> <y1> <x2> <y2> <steps> <ms>`: a finger put down at the
+//!   first point, moved to the second in `steps` steps `ms` apart and
+//!   lifted, read as the touch controller's readings are (in their
+//!   interrupt, also while the main loop is busy); `PP:OK` at once;
 //! - `time set <unix ms>`: the clock set (`PP:OK`);
 //! - `restart`: what plugins keep saved, then the X4 starts again
 //!   (`PP:OK` first; the connection comes back by itself);
@@ -220,6 +224,14 @@ pub enum Command {
         x: i32,
         y: i32,
     },
+    /// A finger moved from one point to another as the touch controller
+    /// reads it: `steps` moves, `ms` apart.
+    Drag {
+        from: (u16, u16),
+        to: (u16, u16),
+        steps: u16,
+        ms: u16,
+    },
     /// The clock set, to milliseconds since 1970.
     SetTime(i64),
     Restart,
@@ -323,6 +335,20 @@ pub fn parse(line: &str) -> Option<Command> {
             from: unhex(words.next()?)?,
             to: unhex(words.next()?)?,
         },
+        "drag" => {
+            let mut number = || words.next()?.parse::<u16>().ok();
+            let (from, to) = ((number()?, number()?), (number()?, number()?));
+            let (steps, ms) = (number()?, number()?);
+            if steps == 0 {
+                return None;
+            }
+            Command::Drag {
+                from,
+                to,
+                steps,
+                ms,
+            }
+        }
         "touch" => Command::Touch {
             phase: match words.next()? {
                 "down" => Touch::Down,
@@ -634,6 +660,17 @@ mod tests {
             })
         );
         assert_eq!(parse("touch tap 1 2"), None);
+        assert_eq!(
+            parse("drag 400 600 300 200 40 10"),
+            Some(Command::Drag {
+                from: (400, 600),
+                to: (300, 200),
+                steps: 40,
+                ms: 10,
+            })
+        );
+        assert_eq!(parse("drag 1 2 3 4 0 10"), None);
+        assert_eq!(parse("drag 1 2 3"), None);
         assert_eq!(
             parse("emit core.book-opened path=2f61"),
             Some(Command::Emit {
