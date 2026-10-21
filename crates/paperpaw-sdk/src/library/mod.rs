@@ -399,12 +399,15 @@ pub fn books_in(
     found: &mut dyn FnMut(&str),
 ) {
     let folder = folder.trim_matches('/');
-    let name = folder.rsplit('/').next().unwrap_or(folder);
-    if !folder.is_empty() && formats.supports(name) && storage.size(folder).is_ok() {
+    if !folder.is_empty() && formats.supports_file(storage, folder) && storage.size(folder).is_ok()
+    {
         return found(folder);
     }
     let mut folders = alloc::vec![String::from(folder)];
     while let Some(folder) = folders.pop() {
+        // Files without an extension, told by their first bytes once the
+        // folder is listed.
+        let mut unknown: Vec<String> = Vec::new();
         let _ = storage.list(&folder, &mut |entry| {
             if entry.name.starts_with('.') {
                 return;
@@ -418,8 +421,15 @@ pub fn books_in(
                 folders.push(path);
             } else if formats.supports(entry.name) {
                 found(&path);
+            } else if formats.may_sniff(entry.name) {
+                unknown.push(path);
             }
         });
+        for path in unknown {
+            if formats.for_file(storage, &path).is_some() {
+                found(&path);
+            }
+        }
     }
 }
 
@@ -1190,6 +1200,7 @@ mod tests {
                     Err(crate::document::DocumentError::UnsupportedFormat)
                 }),
                 prepared: None,
+                sniff: None,
             })
             .unwrap();
         let books = book_keys(&storage, &formats);
@@ -1458,5 +1469,35 @@ books/b.txt",
         take_over_old(&storage);
         assert_eq!(opened_books(&storage), ["books/a.epub"]);
         assert!(storage.exists(".paperpaw/library/books/0000000000000001.ini"));
+    }
+
+    #[test]
+    fn books_without_an_extension_are_found_by_their_first_bytes() {
+        let storage = crate::MemoryStorage::new()
+            .with("books/a.txt", "text")
+            .with("books/download", "BOOK and more")
+            .with("books/notes", "plain")
+            .with("books/photo.jpg", "BOOK too");
+        let mut formats = crate::Formats::new();
+        formats
+            .add(
+                crate::FormatSpec::new(
+                    crate::Id::new_static("test.book"),
+                    "book",
+                    alloc::vec![alloc::borrow::Cow::Borrowed("txt")],
+                    alloc::boxed::Box::new(|_, _, _| {
+                        Err(crate::document::DocumentError::UnsupportedFormat)
+                    }),
+                )
+                .sniff(|head| head.starts_with(b"BOOK")),
+            )
+            .unwrap();
+        let mut found = alloc::vec::Vec::new();
+        books_in(&storage, &formats, "books", &mut |path| {
+            found.push(String::from(path))
+        });
+        found.sort();
+        // Not a file with another extension, whatever it holds.
+        assert_eq!(found, ["books/a.txt", "books/download"]);
     }
 }

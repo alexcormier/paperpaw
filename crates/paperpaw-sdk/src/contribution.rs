@@ -110,19 +110,6 @@ pub enum Contribution {
     Hyphenation(HyphenationSpec),
     MenuEntry(MenuEntry),
     MenuSection(MenuSection),
-    /// An entry placed right after another ([`Registrar::place_menu_entry`]).
-    #[non_exhaustive]
-    MenuPlacement {
-        menu: Id,
-        item: Id,
-        after: Id,
-    },
-    /// An entry taken out of a menu ([`Registrar::hide_menu_entry`]).
-    #[non_exhaustive]
-    MenuHidden {
-        menu: Id,
-        item: Id,
-    },
     #[non_exhaustive]
     Icon {
         item: Id,
@@ -132,6 +119,21 @@ pub enum Contribution {
     MenuNeed {
         item: Id,
         need: MenuNeed,
+    },
+    #[non_exhaustive]
+    HideMenuEntry {
+        menu: Id,
+        item: Id,
+    },
+    #[non_exhaustive]
+    ItemState {
+        item: Id,
+        state: crate::ItemStateFn,
+    },
+    #[non_exhaustive]
+    ItemDescription {
+        item: Id,
+        key: Cow<'static, str>,
     },
     #[non_exhaustive]
     ScreenHints {
@@ -149,6 +151,8 @@ pub enum Contribution {
     Decorator(Box<crate::decorations::DecoratorSpec>),
     PageLayer(Box<crate::layers::PageLayerSpec>),
     PageFrame(Box<crate::layers::PageFrameSpec>),
+    LookupProvider(Box<crate::lookup::LookupProviderSpec>),
+    Voice(Box<crate::voices::VoiceSpec>),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
     /// A bar along an edge of the screen (see [`chrome`](crate::chrome)).
@@ -227,10 +231,11 @@ impl Contribution {
             Contribution::Hyphenation(_) => "hyphenation",
             Contribution::MenuEntry(_) => "menu-entry",
             Contribution::MenuSection(_) => "menu-section",
-            Contribution::MenuPlacement { .. } => "menu-placement",
-            Contribution::MenuHidden { .. } => "menu-hidden",
             Contribution::Icon { .. } => "icon",
             Contribution::MenuNeed { .. } => "menu-need",
+            Contribution::HideMenuEntry { .. } => "hidden-menu-entry",
+            Contribution::ItemState { .. } => "item-state",
+            Contribution::ItemDescription { .. } => "item-description",
             Contribution::ScreenHints { .. } => "screen-hints",
             Contribution::Subscription { .. } => "subscription",
             Contribution::StatusItem(_) => "status-item",
@@ -239,6 +244,8 @@ impl Contribution {
             Contribution::Decorator(_) => "decorator",
             Contribution::PageLayer(_) => "page-layer",
             Contribution::PageFrame(_) => "page-frame",
+            Contribution::LookupProvider(_) => "lookup-provider",
+            Contribution::Voice(_) => "voice",
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
             Contribution::Chrome(_) => "chrome",
@@ -284,6 +291,8 @@ impl Contribution {
             Contribution::Decorator(d) => &d.id,
             Contribution::PageLayer(l) => &l.id,
             Contribution::PageFrame(f) => &f.id,
+            Contribution::LookupProvider(p) => &p.id,
+            Contribution::Voice(v) => &v.id,
             Contribution::InputFilter(f) => &f.id,
             Contribution::RefreshFilter(f) => &f.id,
             Contribution::Chrome(c) => &c.id,
@@ -360,6 +369,13 @@ impl Registrar {
 
     /// Adds `contribution`; every method below is a shorthand for one.
     pub fn add(&mut self, contribution: Contribution) -> Result<(), RegisterError> {
+        // What an entry shows is said by the plugin it belongs to.
+        if let Contribution::ItemState { item, .. } | Contribution::ItemDescription { item, .. } =
+            &contribution
+            && !item.is_owned_by(&self.plugin)
+        {
+            return Err(RegisterError::Namespace { id: item.clone() });
+        }
         // No handler in place of a sealed action of one's own, in either
         // order.
         if let Contribution::Action(action) = &contribution
@@ -602,40 +618,66 @@ impl Registrar {
         self.add(Contribution::MenuEntry(entry))
     }
 
-    /// Adds a heading to a menu; entries ordered after it, up to the next
-    /// heading, belong to it.
-    pub fn add_menu_section(&mut self, section: MenuSection) -> Result<(), RegisterError> {
-        self.add(Contribution::MenuSection(section))
-    }
-
-    /// Places entry `item` of `menu` right after `after` there (also in
-    /// another plugin's menu), in place of its order; where `after` is
-    /// not in the menu, by its order.
+    /// Puts `item` into `menu` at `place`, beside other entries (e.g.
+    /// right after another plugin's); where another plugin puts the same
+    /// entry there by order, this moves it.
     pub fn place_menu_entry(
         &mut self,
         menu: impl Into<Id>,
         item: impl Into<Id>,
-        after: impl Into<Id>,
+        place: crate::MenuPlace,
     ) -> Result<(), RegisterError> {
-        self.add(Contribution::MenuPlacement {
-            menu: menu.into(),
-            item: item.into(),
-            after: after.into(),
-        })
+        self.add_menu_entry(MenuEntry::new(menu.into(), item.into()).place(place))
     }
 
-    /// Takes entry `item` out of `menu` as plugins contribute it (also
-    /// another plugin's); a menu the user defined shows what the user
-    /// listed.
+    /// Takes `item` out of `menu` as plugins contribute it (also another
+    /// plugin's, e.g. an entry a plugin replaces with its own); a user
+    /// who lists it keeps it, and the menu editor tells which plugin took
+    /// it out.
     pub fn hide_menu_entry(
         &mut self,
         menu: impl Into<Id>,
         item: impl Into<Id>,
     ) -> Result<(), RegisterError> {
-        self.add(Contribution::MenuHidden {
+        self.add(Contribution::HideMenuEntry {
             menu: menu.into(),
             item: item.into(),
         })
+    }
+
+    /// What menus show of `item` now, where it changes: another label, a
+    /// switch, faint, hidden, a badge (see
+    /// [`ItemState`](crate::ItemState)). Asked whenever a menu
+    /// shows it: it says it from memory. Only for the plugin's own
+    /// actions and settings ([`RegisterError::Namespace`] otherwise).
+    pub fn set_item_state(
+        &mut self,
+        item: impl Into<Id>,
+        state: impl Fn(&crate::Env<'_>) -> crate::ItemState + 'static,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ItemState {
+            item: item.into(),
+            state: Box::new(state),
+        })
+    }
+
+    /// A line under `item` in menus, by its translation key; only for the
+    /// plugin's own actions and settings.
+    pub fn describe_item(
+        &mut self,
+        item: impl Into<Id>,
+        key: impl Into<Cow<'static, str>>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ItemDescription {
+            item: item.into(),
+            key: key.into(),
+        })
+    }
+
+    /// Adds a heading to a menu; entries ordered after it, up to the next
+    /// heading, belong to it.
+    pub fn add_menu_section(&mut self, section: MenuSection) -> Result<(), RegisterError> {
+        self.add(Contribution::MenuSection(section))
     }
 
     /// Gives an action or setting an icon by name (see
@@ -757,6 +799,22 @@ impl Registrar {
         frame: crate::layers::PageFrameSpec,
     ) -> Result<(), RegisterError> {
         self.add(Contribution::PageFrame(Box::new(frame)))
+    }
+
+    /// Adds a lookup provider: where words are looked up, listed by the
+    /// screen that shows a word's entries (see [`lookup`](crate::lookup)).
+    pub fn add_lookup_provider(
+        &mut self,
+        provider: crate::lookup::LookupProviderSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::LookupProvider(Box::new(provider)))
+    }
+
+    /// Adds a voice: speaks text aloud in place of the system's while the
+    /// setting [`VOICE`](crate::builtin::settings::VOICE) chooses it (see
+    /// [`voices`](crate::voices)).
+    pub fn add_voice(&mut self, voice: crate::voices::VoiceSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Voice(Box::new(voice)))
     }
 
     /// Adds a filter of every input, before screens and key maps see it

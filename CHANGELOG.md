@@ -75,6 +75,72 @@ change the plugin SDK.
   plugin fills its slot.
 - Emulator: scripts measure the heap's peak of one step (`reset-peak`)
   and send an event as a plugin would (`emit:core.library-changed`).
+- SDK: `menus::APPS` (`core.apps`), what there is to open besides the
+  tools; the home screen's grid of tools shows it too, after the tools,
+  and the tools' menu has it as a submenu (*Apps*) where there is
+  something in it, so that it is reached with the buttons alone.
+- Keyboard: other plugins add layouts through the point
+  `keyboard.layouts` (`id; code; letter rows; variants`), chosen as the
+  built-in ones, with variants of letters of their own besides the
+  built-in ones. A layout has at most 6 rows of 16 keys, a code of 4
+  characters and 16 variants a letter; invisible characters and ids
+  named as other layouts are left out.
+- About: other plugins add lines to the page through the point
+  `about.lines`: plain text, up to 512 bytes a plugin, each line named
+  after the plugin that added it.
+- Docs: what the slots besides the reader's promise (home, menu, panel,
+  settings, keyboard, lookup) and the shipped plugins' points.
+- Wikipedia: a lookup provider that goes online. Once *Online* is
+  chosen in the dictionary's panel, its summary shows there as an entry
+  beside the dictionaries', and its line *Open Wikipedia* (or confirm,
+  where the entry shows) opens the whole summary on its own screen
+  without fetching it again; that screen stays bound to
+  `slots::LOOKUP_ONLINE`. *Online* is offered once a word. SDK:
+  `LookupEntry::more`, the screen showing more of an entry, opened with
+  the entry's text (`LookupQuery::answer_entry`, `LookupAnswered::more`).
+  The panel names each source right above its entries.
+- SDK: menu entries placed beside others (`MenuPlace`,
+  `Registrar::place_menu_entry`; several in one place keep the order
+  they were registered in) or taken out by a plugin (`hide_menu_entry`;
+  the menu editor tells which, `Menus::hidden_by`); what a plugin's own
+  entry shows now (`set_item_state`, `ItemState`: a label, a switch,
+  faint, hidden, a badge; `ItemState::text`) and a line under it
+  (`describe_item`), shown by the shipped list, bar, panel and home
+  screen tools alike. A faint entry is passed by the focus and does
+  nothing (`ui::Rows::set_passed`, `ui::draw_faint_button`).
+- Menus: a menu the user redefined shows the entries of plugins
+  installed since, after the entry before them (`[menus-known]` keeps
+  what plugins put there that the user left out; lists kept before stay
+  as they are).
+- SDK: `lookup`, lookup providers (`Registrar::add_lookup_provider`):
+  where words are looked up, at once or later, answering the asker's
+  reply event (`LookupQuery::answer`, by default
+  `events::LOOKUP_ANSWERED`). The dictionary's panel lists every
+  provider's entries, naming each dictionary or provider only where
+  entries come from more than one; it asks those that go online only
+  when *Online* is chosen, and offers the online lookup screen
+  (Wikipedia) after them, waiting 20 seconds at most for those that
+  answer later. The StarDict dictionaries are a provider too.
+- SDK: `voices`, a plugin's voice (`Registrar::add_voice`) speaks text
+  aloud in place of the system's for the languages it speaks, chosen
+  with `settings::VOICE`; it answers as the system does
+  (`Speech::answer`). A device without a voice of its own has speech
+  with one, which speaks unchosen (the choice *Automatic*); the system
+  or another voice speaking in its place stops it.
+- SDK: formats tell files without an extension by their first bytes
+  (`FormatSpec::sniff`, `Formats::for_file`, `supports_file`; the last 32
+  files told are kept by a hash of their path and their size, and
+  however many a folder has, none is left out): the
+  library, the file manager and the browser find such books; EPUB (its
+  stored `mimetype` entry) and XTC say so. Formats read their own
+  settings (`OpenOptions::setting`, filled by `reading::open_options`),
+  and say a document still coming is not ready
+  (`DocumentError::NotReady`; the reader waits for
+  `events::DOCUMENT_READY`).
+- Documents: `Metadata::direction` (`PageProgression`): an EPUB whose
+  pages go right to left says so, and the reader mirrors taps, swipes
+  and swipes in from the edges (`Screen::mirrored`, kept by the
+  kernel's key map). EPUBs are converted anew once (cache version 25).
 - Code plugins fit the firmware again: the SDK's fingerprint no longer
   counts features that add functions and modules only (`kernel`,
   `unstable`), with which the firmware is built and plugins are not, so
@@ -104,9 +170,9 @@ change the plugin SDK.
   files take at most 96 KiB together besides its translations (512 KiB
   of their own), 24 KiB of it of formats 3 and 64 lines for points; the
   files it parses are read one at a time as it registers. An action
-  emits only its own events and sets no guarded setting. SDK:
-  `Registrar::place_menu_entry` and `hide_menu_entry`, for code plugins
-  too.
+  emits only its own events and sets no guarded setting. Its menu
+  entries are placed and taken out as code plugins' are
+  (`Registrar::place_menu_entry`, `hide_menu_entry`).
 - SDK: refreshes. A refresh filter sees why the panel is
   refreshed (`filters::RefreshCause`: a page turned, screens, a notice,
   a status line; told with `Cx::refresh_cause`), the slot, how many

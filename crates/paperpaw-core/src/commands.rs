@@ -525,6 +525,59 @@ impl Kernel {
 
     /// What the shell does for the kernel: firmware, Wi-Fi, the clipboard,
     /// speech, servers, sockets and HTTP.
+    /// Speaks `speech` with the voice the settings choose where it speaks
+    /// the language (see `paperpaw_sdk::voices`), else with the system's.
+    pub(crate) fn speak(&mut self, speech: paperpaw_sdk::Speech) {
+        let screens = self.stack.len();
+        let env = self.shared.env(self.now);
+        let system = self.io.speech.system;
+        if let Some(voice) = self.shared.voices.chosen(&env, &speech.language, system) {
+            // In place of what the system or another voice says now,
+            // unless after it.
+            if !speech.queue {
+                self.io.speech.stop();
+                let other = self
+                    .io
+                    .speech
+                    .voice
+                    .as_ref()
+                    .is_some_and(|(id, _)| *id != voice.id);
+                if other
+                    && let Some((id, _)) = self.io.speech.voice.take()
+                    && let Some(old) = self.shared.voices.get(id.as_str())
+                {
+                    (old.stop)(&env, &mut self.output.commands);
+                }
+            }
+            (voice.speak)(&env, &speech, &mut self.output.commands);
+            self.io.speech.voice = Some((voice.id.clone(), screens));
+            return;
+        }
+        // In place of what a plugin's voice says, unless after it.
+        if !speech.queue {
+            self.stop_voice();
+        }
+        self.io
+            .speech
+            .speak(speech, system, screens, &mut self.output.commands);
+    }
+
+    /// Stops a plugin's voice, if one speaks.
+    fn stop_voice(&mut self) {
+        if let Some((id, _)) = self.io.speech.voice.take() {
+            let env = self.shared.env(self.now);
+            if let Some(voice) = self.shared.voices.get(id.as_str()) {
+                (voice.stop)(&env, &mut self.output.commands);
+            }
+        }
+    }
+
+    /// Stops speaking: the system's voice and a plugin's.
+    pub(crate) fn stop_speaking(&mut self) {
+        self.io.speech.stop();
+        self.stop_voice();
+    }
+
     fn apply_io(&mut self, command: Command) {
         let (network, screens) = (self.shared.caps.network, self.stack.len());
         let out = &mut self.output.commands;
@@ -561,12 +614,11 @@ impl Kernel {
             }
             Command::ReadClipboard(reply, params) => self.reply_clipboard(reply, params),
             Command::Speak(speech) => {
-                let available = self.shared.caps.speech;
-                self.io.speech.speak(speech, available, screens, out);
+                self.speak(speech);
                 self.io.focus_spoken = false;
             }
             Command::StopSpeaking => {
-                self.io.speech.stop();
+                self.stop_speaking();
                 self.io.focus_spoken = false;
             }
             Command::Serve {

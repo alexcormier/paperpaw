@@ -552,9 +552,12 @@ fn menus(r: &mut Registrar, plugin: &Id, source: &str) -> Result<(), RegisterErr
                     None => (value.as_ref(), None),
                 };
                 let item = parsed_id(item, line)?;
-                r.add_menu_entry(paperpaw_sdk::MenuEntry::new(menu.clone(), item.clone()))?;
-                if let Some(after) = after {
-                    r.place_menu_entry(menu, item, parsed_id(after, line)?)?;
+                match after {
+                    Some(after) => {
+                        let place = paperpaw_sdk::MenuPlace::After(parsed_id(after, line)?);
+                        r.place_menu_entry(menu, item, place)?;
+                    }
+                    None => r.add_menu_entry(paperpaw_sdk::MenuEntry::new(menu, item))?,
                 }
             }
             "hide" => {

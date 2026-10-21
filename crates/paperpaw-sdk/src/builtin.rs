@@ -193,6 +193,11 @@ pub mod menus {
     /// main menu stays short however many there are. Also the home
     /// screen's grid of tools.
     pub const TOOLS: Id = Id::new_static("core.tools");
+    /// What there is to open besides the tools: a plugin's own app (a
+    /// game, a notebook). What a launcher, a drawer or a palette lists:
+    /// these and the [`TOOLS`]; the shipped home screen's grid of tools
+    /// shows both.
+    pub const APPS: Id = Id::new_static("core.apps");
     /// Extra pages on the main settings page, below the setting groups
     /// (e.g. the plugin manager). Entries are actions.
     pub const SETTINGS: Id = Id::new_static("core.settings-pages");
@@ -611,6 +616,31 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// A lookup provider's answer that came later
+        /// ([`LOOKUP_ANSWERED`], see [`lookup`](crate::lookup)): its
+        /// entry for the word, none where `text` is empty.
+        pub struct LookupAnswered {
+            pub provider: Id,
+            pub word: String,
+            /// Where it is from, shown above it.
+            pub source: String,
+            pub text: String,
+        }
+        optional {
+            /// The screen that shows more of it
+            /// ([`LookupEntry::more`](crate::lookup::LookupEntry::more)).
+            pub more: Id,
+        }
+    }
+
+    crate::event_data! {
+        /// A document that was not ready is now ([`DOCUMENT_READY`]).
+        pub struct DocumentReady {
+            pub path: String,
+        }
+    }
+
+    crate::event_data! {
         /// A book's notes, exported ([`NOTES_EXPORTED`]).
         pub struct NotesExported {
             /// The file written (Markdown).
@@ -726,6 +756,16 @@ pub mod events {
     /// ([`PageLayerTapped`]); sent for layers that take taps (see
     /// [`layers`](crate::layers)), whose plugin answers.
     pub const PAGE_LAYER_TAPPED: Event<PageLayerTapped> = Event::new("core.page-layer-tapped");
+    /// A lookup provider that answered later ([`LookupAnswered`], see
+    /// [`lookup`](crate::lookup)) has its entry, for a query that names
+    /// no reply of its own (`LookupQuery::reply`): the screen that asked
+    /// shows it.
+    pub const LOOKUP_ANSWERED: Event<LookupAnswered> = Event::new("core.lookup-answered");
+    /// A document that a format could not open yet
+    /// ([`DocumentError::NotReady`](crate::document::DocumentError), e.g.
+    /// still coming in) is there now ([`DocumentReady`]): its format's
+    /// plugin says so, readers waiting for it open it.
+    pub const DOCUMENT_READY: Event<DocumentReady> = Event::new("core.document-ready");
     /// Skimming asks the reader to go somewhere in the book ([`Skim`]).
     pub const SKIM: Event<Skim> = Event::new("core.skim");
     /// Where the book being skimmed is now ([`Skimmed`]): the reader tells
@@ -887,6 +927,11 @@ pub mod settings {
     /// Say what the buttons move to (a row, a button), where the device
     /// speaks: for using PaperPaw without seeing the screen.
     pub const SPEAK_FOCUS: Setting<bool> = Setting::new("core.speak-focus");
+    /// The voice that speaks text aloud: [`VOICE_SYSTEM`] or a plugin's
+    /// (see [`voices`](crate::voices)).
+    pub const VOICE: Setting<Text> = Setting::new("core.voice");
+    /// [`VOICE`]: the system's.
+    pub const VOICE_SYSTEM: &str = "core.voice.system";
     /// Partial refreshes between two full refreshes; `0` disables full
     /// refreshes for ghosting removal.
     pub const FULL_REFRESH_INTERVAL: Setting<i64> = Setting::new("core.full-refresh-interval");

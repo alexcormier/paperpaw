@@ -491,6 +491,9 @@ impl GridView {
             return GridResponse::Handled;
         };
         match target {
+            // A tool shown faint by its plugin: nothing to do now.
+            Target::Run(Command::RunAction(action))
+                if !cx.env().menus.state(cx.env(), action.as_str()).enabled => {}
             Target::Run(command) => cx.command(command),
             Target::Item(item) => self.options(item, cx),
             Target::Button(button) => return GridResponse::Button(button),
@@ -952,6 +955,7 @@ mod tests {
         text_filters: TextFilters,
         decorators: Decorators,
         page_layers: crate::layers::PageLayers,
+        lookup: crate::lookup::LookupProviders,
         widgets: Widgets,
         setup: SetupSteps,
         services: Services,
@@ -997,6 +1001,7 @@ mod tests {
                 text_filters: TextFilters::new(),
                 decorators: Decorators::new(),
                 page_layers: Default::default(),
+                lookup: Default::default(),
                 widgets: Widgets::new(),
                 setup: SetupSteps::new(),
                 services: Services::new(),
@@ -1025,6 +1030,7 @@ mod tests {
                 text_filters: &self.text_filters,
                 decorators: &self.decorators,
                 page_layers: &self.page_layers,
+                lookup: &self.lookup,
                 stylesheets: &[],
                 book_data: &[],
                 book_fields: &[],

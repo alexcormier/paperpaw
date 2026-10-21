@@ -749,10 +749,7 @@ impl Kernel {
             let speech =
                 paperpaw_sdk::Speech::new(text.clone(), Id::new_static("core.focus-spoken"))
                     .language(language);
-            let (available, screens) = (self.shared.caps.speech, self.stack.len());
-            self.io
-                .speech
-                .speak(speech, available, screens, &mut self.output.commands);
+            self.speak(speech);
             self.io.focus_spoken = true;
         }
         self.io.speech.focus = said;
@@ -1168,6 +1165,11 @@ struct Shared {
     decorators: paperpaw_sdk::decorations::Decorators,
     /// Layers on book pages and frames of their text, from every plugin.
     page_layers: paperpaw_sdk::layers::PageLayers,
+    /// Where words are looked up, from every plugin.
+    lookup: paperpaw_sdk::lookup::LookupProviders,
+    /// Plugins' voices (the kernel's alone: plugins speak with
+    /// `Command::Speak`).
+    voices: paperpaw_sdk::voices::Voices,
     /// Filters of every input and of every refresh, from every plugin.
     input_filters: paperpaw_sdk::filters::InputFilters,
     refresh_filters: paperpaw_sdk::filters::RefreshFilters,
@@ -1266,6 +1268,7 @@ impl Shared {
             text_filters: &self.text_filters,
             decorators: &self.decorators,
             page_layers: &self.page_layers,
+            lookup: &self.lookup,
             stylesheets: &self.stylesheets,
             book_data: &self.book_data,
             book_fields: &self.book_fields,

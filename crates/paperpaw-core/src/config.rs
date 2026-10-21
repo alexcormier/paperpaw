@@ -456,14 +456,18 @@ impl Kernel {
                         "invalid font binding".into(),
                     ),
                 },
-                "menus" => {
+                "menus" | crate::plugins::KNOWN => {
                     let actions: Result<Vec<Id>, _> = value
                         .split(',')
                         .map(str::trim)
                         .filter(|a| !a.is_empty())
                         .map(Id::parse)
                         .collect();
+                    let known = entry.section == crate::plugins::KNOWN;
                     match (Id::parse(entry.key), actions) {
+                        (Ok(menu), Ok(actions)) if known => {
+                            self.shared.menus.set_known(menu, actions);
+                        }
                         (Ok(menu), Ok(actions)) => self.shared.menus.customize(menu, actions),
                         _ => self.warn(WarningSource::UserConfig, line, "invalid menu".into()),
                     }

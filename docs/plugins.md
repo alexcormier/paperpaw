@@ -453,13 +453,16 @@ artifact, also when a check failed.
 | Actions | `add_action` | Something to do, bound to buttons and gestures, listed in menus |
 | Screens | `add_screen` | Full screens and overlays (menus, dialogs, panels) |
 | Slots | `add_slot`, `bind_slot` | Roles a screen fills: home, reader, library, menu, settings, keyboard, dictionary, … |
-| Menu entries and sections | `add_menu_entry`, `add_menu_section` | Actions, settings and submenus in any menu |
+| Menu entries and sections | `add_menu_entry`, `add_menu_section`, `place_menu_entry`, `hide_menu_entry` | Actions, settings and submenus in any menu, by order or beside other entries (`MenuPlace`: after, before, in a section, first, last); another plugin's entry taken out. A menu the user redefined shows entries added later too |
+| What entries show now | `set_item_state`, `describe_item` | A label, a switch, faint, hidden or a badge of the plugin's own entries as things are now (`ItemState`); a line under an entry |
 | Icons | `add_icon` | The icon of an action, setting group or menu |
 | Settings and groups | `add_setting`, `add_setting_group` | Shown and saved by the kernel |
 | Setting defaults | `set_setting_default` | New defaults for other plugins' settings (themes) |
 | Event handlers | `subscribe` | React to events |
 | Key maps | `add_keymap`, `add_keymap_preset`, `add_keymap_when` | What buttons, taps and swipes do; bindings that apply while a switch is on |
-| Formats | `add_format` | Open a kind of file as a document to read; big pictures may be decoded when their page shows (`Document::prepare_image`) |
+| Formats | `add_format` | Open a kind of file as a document to read; big pictures may be decoded when their page shows (`Document::prepare_image`); files without a known extension told by their first bytes (`FormatSpec::sniff`); the format's own settings in `OpenOptions::setting`; a document still coming says `DocumentError::NotReady`, then `events::DOCUMENT_READY` |
+| Lookup providers | `add_lookup_provider` | Where words are looked up (a glossary, a translator, Wikipedia): the dictionary's panel lists every provider's entries, those that go online when asked; an entry may open a screen with more of it (`LookupEntry::more`) |
+| Voices | `add_voice` | Speak text aloud in place of the system's voice, for the languages it speaks, chosen with `settings::VOICE` |
 | Fonts | `add_font`, `add_font_file`, `bind_font` | Fonts and the roles they fill |
 | Hyphenation | `add_hyphenation` | Patterns for a language |
 | Text filters | `add_text_filter` | Change a book's text before it is laid out |
@@ -501,6 +504,7 @@ to `core.reader`) replaces the shipped one in full.
 | Where a book was left | `positions::{load, save}`, `Reading::xpointer` with `BOOK_CLOSED` | readers keep it; syncs and lists read it without opening the book |
 | The contents, search, the marks, a footnote, skimming | `slots::TOC`, `SEARCH`, `ANNOTATIONS`, `FOOTNOTE`, `SKIM`, `events::FOLLOW_LINK`, `SKIM`, `SKIMMED` | bind a screen of one's own; readers open the slots, follow the links and go where skimming asks |
 | A book opened as the reader opens it | `reading::open_options`, `reading::conversion` | its places fit the reader's (a search, contents, an XPointer) |
+| Pages that go right to left | `Metadata::direction` (`PageProgression`), `Screen::mirrored` | readers mirror taps and swipes (an EPUB's `page-progression-direction`) |
 | Status lines' settings | `groups::STATUS_LINES` | the group readers put them in |
 | Reading aloud's settings | `setting_sections::ALOUD` | the section readers and shells put them in |
 | Key bindings while reading | the layer `[keymap.core.reader]` | the slot's layer, whichever screen fills it |
@@ -508,6 +512,28 @@ to `core.reader`) replaces the shipped one in full.
 A reader in turn sends the reading events (`BOOK_OPENED`, `PAGE_TURNED`,
 `BOOK_CLOSED`, `BOOK_FINISHED`), takes `GOTO`, and offers its actions
 in these menus.
+
+### What the other slots promise
+
+A screen bound to one of these slots replaces the shipped one; it is
+opened with what the table says and keeps its promises, so the plugins
+around it go on working.
+
+| Slot | Opened with | Promises |
+|---|---|---|
+| `slots::HOME` | nothing | The start screen; where it lists things to open, it lists `menus::APPS` and `menus::TOOLS` |
+| `slots::MENU` | `params::MENU`, `params::HIDE` (entries left out this time) | The menu's entries as `Menus::shown_items` has them, with their state and the line under them; runs an action, changes a setting in place, opens a submenu |
+| `slots::PANEL` | `params::MENU` | The same as controls for quick changes (sliders, switches) |
+| `slots::SETTINGS` | `params::ID` (a group), or nothing for all | The settings by group and `menus::SETTINGS`; a choice with fewer than two values is not listed |
+| `slots::KEYBOARD` | `params::TITLE`, `TEXT`, `MODE` (`text`, `number`, `password`), `REPLY` | Emits the event `reply` with every parameter it was opened with and `text` set to what was typed; nothing when cancelled |
+| `slots::LOOKUP` | `params::WORD`, `LANGUAGE` | The entries of every lookup provider that knows the language (`lookup`), those that go online only when asked; an entry's `more` opened on request, by touch and with the buttons |
+
+Points of the shipped plugins, for `Registrar::contribute`:
+
+| Point | A line each | |
+|---|---|---|
+| `keyboard.layouts` | `id; code; letter rows; variants`, e.g. `dutch.layout; NL; qwertyuiop asdfghjkl zxcvbnm; e=éèë` | a layout to choose, named by the translation of its id |
+| `about.lines` | a paragraph (Markdown) | shown on *About PaperPaw*, below the address |
 
 A reader of one's own builds on the shipped one's parts in
 `paperpaw_sdk::reading` rather than copying them: `FilteredDocument` (a

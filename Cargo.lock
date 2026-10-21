@@ -2066,6 +2066,7 @@ dependencies = [
  "paperpaw-core",
  "paperpaw-i18n",
  "paperpaw-platform",
+ "paperpaw-plugin-dictionary",
  "paperpaw-plugin-fonts-default",
  "paperpaw-sdk",
  "proptest",

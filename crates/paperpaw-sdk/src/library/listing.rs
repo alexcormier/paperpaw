@@ -100,20 +100,59 @@ impl core::fmt::Debug for Listing<'_> {
 
 impl Listing<'_> {
     fn each(&self, f: &mut dyn FnMut(bool, u32, &str, u64)) {
-        let _ = self.storage.list(self.dir, &mut |entry| {
-            let shown = if entry.is_dir {
-                !is_sidecar(entry.name)
-            } else {
-                !self.folders_only && self.formats.supports(entry.name)
-            };
-            if shown && !entry.name.starts_with('.') {
-                let rank = match self.rank {
-                    Some(rank) if !entry.is_dir => rank(entry.name),
-                    _ => UNRANKED,
+        // Files without an extension, told by their first bytes once the
+        // folder is listed: a few at a time (each told from memory once
+        // read, see `Formats::for_file`), listing the folder again for
+        // the next few, so that none is left out however many there are.
+        let step = crate::formats::SNIFFED;
+        let mut done = 0;
+        loop {
+            let first = done == 0;
+            let mut unknown: Vec<(String, u64)> = Vec::new();
+            let mut seen = 0;
+            let _ = self.storage.list(self.dir, &mut |entry| {
+                if !entry.is_dir
+                    && !self.folders_only
+                    && !entry.name.starts_with('.')
+                    && !self.formats.supports(entry.name)
+                    && self.formats.may_sniff(entry.name)
+                {
+                    if seen >= done && unknown.len() < step {
+                        unknown.push((String::from(entry.name), entry.size));
+                    }
+                    seen += 1;
+                }
+                if !first {
+                    return;
+                }
+                let shown = if entry.is_dir {
+                    !is_sidecar(entry.name)
+                } else {
+                    !self.folders_only && self.formats.supports(entry.name)
                 };
-                f(entry.is_dir, rank, entry.name, entry.size);
+                if shown && !entry.name.starts_with('.') {
+                    let rank = match self.rank {
+                        Some(rank) if !entry.is_dir => rank(entry.name),
+                        _ => UNRANKED,
+                    };
+                    f(entry.is_dir, rank, entry.name, entry.size);
+                }
+            });
+            done += unknown.len();
+            for (name, size) in unknown {
+                let path = match self.dir.is_empty() {
+                    true => name.clone(),
+                    false => alloc::format!("{}/{name}", self.dir),
+                };
+                if self.formats.for_file(self.storage, &path).is_some() {
+                    let rank = self.rank.map_or(UNRANKED, |rank| rank(&name));
+                    f(false, rank, &name, size);
+                }
             }
-        });
+            if done >= seen {
+                return;
+            }
+        }
     }
 
     /// `n` entries from index `start` on, holding at most `n` entries at a
@@ -264,6 +303,7 @@ mod tests {
                     Err(crate::document::DocumentError::UnsupportedFormat)
                 }),
                 prepared: None,
+                sniff: None,
             })
             .unwrap();
         formats
@@ -388,6 +428,52 @@ mod tests {
                 .iter()
                 .map(String::as_str)
                 .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn however_many_files_without_an_extension_none_is_left_out() {
+        let mut formats = Formats::new();
+        formats
+            .add(FormatSpec {
+                id: crate::Id::new_static("test.zip"),
+                title: alloc::borrow::Cow::Borrowed("ZIP"),
+                extensions: alloc::vec![alloc::borrow::Cow::Borrowed("zip")],
+                open: alloc::boxed::Box::new(|_, _, _| {
+                    Err(crate::document::DocumentError::UnsupportedFormat)
+                }),
+                prepared: None,
+                sniff: Some(alloc::boxed::Box::new(|head: &[u8]| {
+                    head.starts_with(b"PK")
+                })),
+            })
+            .unwrap();
+        // 40 books without an extension, a LICENSE and a README among
+        // them, which are none.
+        let mut storage = MemoryStorage::new()
+            .with("books/LICENSE", "Permission is granted")
+            .with("books/README", "Read me");
+        for n in 0..40 {
+            storage = storage.with(&alloc::format!("books/book-{n:02}"), "PK and more");
+        }
+        let listing = Listing {
+            storage: &storage,
+            formats: &formats,
+            dir: "books",
+            folders_only: false,
+            rank: None,
+        };
+        assert_eq!(listing.count(), 40);
+        let all = listing.after(None, 50);
+        assert_eq!(all.len(), 40);
+        assert!(names(&all).iter().all(|n| n.starts_with("book-")));
+        // The last page has the last of them.
+        assert_eq!(
+            names(&listing.page(3, 10, 40)),
+            [
+                "book-30", "book-31", "book-32", "book-33", "book-34", "book-35", "book-36",
+                "book-37", "book-38", "book-39"
+            ]
         );
     }
 
