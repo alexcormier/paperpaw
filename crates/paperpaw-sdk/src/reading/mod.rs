@@ -17,7 +17,7 @@ mod index;
 #[cfg(feature = "unstable")]
 mod typeset;
 
-pub use filtered::FilteredDocument;
+pub use filtered::{DroppedRuns, FilteredDocument};
 pub use index::PageIndex;
 #[cfg(feature = "unstable")]
 pub use typeset::{
@@ -160,19 +160,20 @@ impl EventData for PageWords {
     }
 }
 
-/// The text at the target of link `href` of `document`, as a footnote
-/// shows it: the block there and the ones after it, up to a heading or a
-/// few hundred characters, on one line; `None` where the link leads
-/// nowhere in the book or to no text.
+/// The text at the target of link `href` of `document` (the book as the
+/// reader shows it, through the filters), as a footnote shows it: the
+/// block there and the ones after it, up to a heading, a block left out
+/// or a few hundred characters, on one line; `None` where the link leads
+/// nowhere in the book, to a block left out or to no text.
 pub fn note_text(
-    document: &dyn crate::document::Document,
+    document: &FilteredDocument<'_, '_>,
     storage: &dyn crate::Storage,
     href: &str,
 ) -> Option<String> {
-    let mut at = document.link_target(storage, href)?;
+    let mut at = document.document.link_target(storage, href)?;
     let mut text = String::new();
     for _ in 0..4 {
-        let Ok(Some(block)) = document.block_at(storage, at) else {
+        let Ok(Some(block)) = document.kept_block_at(storage, at) else {
             break;
         };
         if matches!(block.kind, crate::document::BlockKind::Heading(_)) && !text.is_empty() {

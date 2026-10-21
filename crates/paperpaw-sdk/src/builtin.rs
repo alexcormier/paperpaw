@@ -979,6 +979,12 @@ pub mod settings {
     pub const INDENT: Setting<bool> = Setting::new("core.indent");
     /// Space between paragraphs.
     pub const PARAGRAPH_SPACING: Setting<bool> = Setting::new("core.paragraph-spacing");
+    /// The fewest lines of a paragraph left alone at the top of a page
+    /// (1 to 4; 1: as they fall), see
+    /// [`layout::Style::widows`](crate::layout::Style).
+    pub const WIDOWS: Setting<i64> = Setting::new("core.widows");
+    /// The same at the bottom of a page.
+    pub const ORPHANS: Setting<i64> = Setting::new("core.orphans");
     /// The book's own styles (an EPUB's CSS), see
     /// [`OpenOptions::publisher_styles`](crate::OpenOptions).
     pub const PUBLISHER_STYLES: Setting<bool> = Setting::new("core.publisher-styles");

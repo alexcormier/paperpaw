@@ -491,6 +491,9 @@ static FONT_PT: SettingExtra = SettingExtra::new()
     .section(setting_sections::FONT)
     .unit("core.unit.pt")
     .slider();
+static LINES_KEPT: SettingExtra = SettingExtra::new()
+    .unit("core.unit.lines")
+    .section(setting_sections::PAGE);
 static WEIGHT: SettingExtra = SettingExtra::new()
     .unit("core.unit.weight")
     .section(setting_sections::FONT);
@@ -886,7 +889,7 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The reading font, and whether a book's settings are its own. The
 /// status lines' font: the menus', the book's or one of its own (the
 /// families are offered once all fonts are known).
-static READING: [SettingSpec; 15] = [
+static READING: [SettingSpec; 17] = [
     SettingSpec::fixed_choice(
         settings::STATUS_FONT.static_str(),
         "core.setting.status-font",
@@ -1017,6 +1020,30 @@ static READING: [SettingSpec; 15] = [
     .scoped()
     .with_extra(&IN_PAGE)
     .described("core.setting.paragraph-spacing.help"),
+    SettingSpec::fixed_number(
+        settings::WIDOWS.static_str(),
+        "core.setting.widows",
+        1,
+        4,
+        1,
+        groups::READING,
+    )
+    .advanced()
+    .scoped()
+    .with_extra(&LINES_KEPT)
+    .described("core.setting.widows.help"),
+    SettingSpec::fixed_number(
+        settings::ORPHANS.static_str(),
+        "core.setting.orphans",
+        1,
+        4,
+        1,
+        groups::READING,
+    )
+    .advanced()
+    .scoped()
+    .with_extra(&LINES_KEPT)
+    .described("core.setting.orphans.help"),
     SettingSpec::fixed_choice(
         settings::FOOTNOTES.static_str(),
         "core.setting.footnotes",

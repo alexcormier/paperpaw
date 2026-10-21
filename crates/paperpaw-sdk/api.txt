@@ -441,6 +441,7 @@ pub const paperpaw_sdk::builtin::settings::MONO_TEXT_LEVELS: &[&str]
 pub const paperpaw_sdk::builtin::settings::NIGHT_MODE: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::NIGHT_PICTURES: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::NOTICE_SECONDS: paperpaw_sdk::setting::Setting<i64>
+pub const paperpaw_sdk::builtin::settings::ORPHANS: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::OWN_PAPER: &str
 pub const paperpaw_sdk::builtin::settings::OWN_TEXT: &str
 pub const paperpaw_sdk::builtin::settings::PAPER_COLOR: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
@@ -478,6 +479,7 @@ pub const paperpaw_sdk::builtin::settings::UI_SEPARATORS: paperpaw_sdk::setting:
 pub const paperpaw_sdk::builtin::settings::UI_SIZE: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::UI_TITLE: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::WEEK_START: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub const paperpaw_sdk::builtin::settings::WIDOWS: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::WORD_SPACING: paperpaw_sdk::setting::Setting<i64>
 pub fn paperpaw_sdk::builtin::settings::parse_rgb(&str) -> core::option::Option<[u8; 3]>
 pub fn paperpaw_sdk::builtin::settings::rgb(&str) -> core::option::Option<[u8; 3]>
@@ -1603,14 +1605,21 @@ pub fn paperpaw_sdk::random::Random::token(&self, usize) -> core::option::Option
 impl core::fmt::Debug for paperpaw_sdk::random::Random
 pub fn paperpaw_sdk::random::Random::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub mod paperpaw_sdk::reading
-pub struct paperpaw_sdk::reading::FilteredDocument<'d, 'e>
+pub struct paperpaw_sdk::reading::DroppedRuns
+impl paperpaw_sdk::reading::DroppedRuns
+pub fn paperpaw_sdk::reading::DroppedRuns::clear(&self)
+pub fn paperpaw_sdk::reading::DroppedRuns::new() -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::reading::FilteredDocument<'d, 'e>
 pub paperpaw_sdk::reading::FilteredDocument::document: &'d dyn paperpaw_document::Document
+pub paperpaw_sdk::reading::FilteredDocument::dropped: core::option::Option<&'d paperpaw_sdk::reading::DroppedRuns>
 pub paperpaw_sdk::reading::FilteredDocument::env: &'d paperpaw_sdk::Env<'e>
 pub paperpaw_sdk::reading::FilteredDocument::language: &'d str
 pub paperpaw_sdk::reading::FilteredDocument::path: &'d str
 impl<'d, 'e> paperpaw_sdk::reading::FilteredDocument<'d, 'e>
 pub fn paperpaw_sdk::reading::FilteredDocument<'d, 'e>::in_book(self, &'d str, &'d str) -> Self
+pub fn paperpaw_sdk::reading::FilteredDocument<'d, 'e>::kept_block_at(&self, &dyn paperpaw_platform::storage::Storage, paperpaw_document::Locator) -> core::result::Result<core::option::Option<paperpaw_document::Block>, paperpaw_document::DocumentError>
 pub fn paperpaw_sdk::reading::FilteredDocument<'d, 'e>::new(&'d dyn paperpaw_document::Document, &'d paperpaw_sdk::Env<'e>) -> Self
+pub fn paperpaw_sdk::reading::FilteredDocument<'d, 'e>::remembering(self, &'d paperpaw_sdk::reading::DroppedRuns) -> Self
 impl core::fmt::Debug for paperpaw_sdk::reading::FilteredDocument<'_, '_>
 pub fn paperpaw_sdk::reading::FilteredDocument<'_, '_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl paperpaw_document::Document for paperpaw_sdk::reading::FilteredDocument<'_, '_>
@@ -1663,7 +1672,7 @@ impl paperpaw_sdk::reading::Word
 pub fn paperpaw_sdk::reading::Word::new(impl core::convert::Into<alloc::string::String>, paperpaw_document::Locator, paperpaw_document::Locator) -> Self
 pub fn paperpaw_sdk::reading::ask_page_words(&paperpaw_sdk::event::Event<paperpaw_sdk::reading::PageWords>) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::reading::conversion(&paperpaw_sdk::Env<'_>) -> u64
-pub fn paperpaw_sdk::reading::note_text(&dyn paperpaw_document::Document, &dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<alloc::string::String>
+pub fn paperpaw_sdk::reading::note_text(&paperpaw_sdk::reading::FilteredDocument<'_, '_>, &dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<alloc::string::String>
 pub fn paperpaw_sdk::reading::open_options(&paperpaw_sdk::Env<'_>) -> paperpaw_sdk::OpenOptions
 pub mod paperpaw_sdk::replies
 #[non_exhaustive] pub enum paperpaw_sdk::replies::ServerNotice

@@ -13,15 +13,24 @@ change the plugin SDK.
   folder.
 
 - SDK: block filters (`TextFilterSpec::block`) know where a block is
-  (`FilterContext`: the book, its language, the place) and may leave it
-  out (`Verdict::Drop`): the reader lays out, searches and shows notes
-  without it.
+  (`FilterContext`: the book, its language, where the block starts) and
+  may leave it out (`Verdict::Drop`): the reader lays out, searches and
+  shows notes without it. `reading::DroppedRuns` keeps where runs left
+  out end, so they are read once; too many left out in a row are an
+  error, not the end of the section. `FilteredDocument::kept_block_at`
+  gives a block only where it is kept, and `reading::note_text` takes
+  the filtered book: a note whose block is left out shows nothing.
 - SDK: `reading::note_text`, the text a footnote shows;
   `layout::{Line, wrap_lines, wrap_lines_hyphenated}` (feature
   `unstable`).
 - Layout: `Style::widows` and `Style::orphans` (`Style::lines_kept`):
   the fewest lines of a paragraph left alone at the top or bottom of a
-  page; 1 by default, as before.
+  page; 1 by default, as before. A paragraph that goes on whole takes
+  the heading before it along, also with 1 where its first line does
+  not fit (`layout::VERSION` 6: page indexes are made anew). Standard
+  reading settings `settings::WIDOWS` and `ORPHANS` (advanced, each
+  book may have its own) set them for every reader.
+- Text: `Line` is `#[non_exhaustive]`, made with `Line::new`.
 - SDK: `reading` holds the reader's building blocks for readers of
   one's own: `FilteredDocument`, `PageIndex`, and with the feature
   `unstable` `PageType`, `ReadingFaces`, `EmbeddedFonts`, `StatusRoom`,
