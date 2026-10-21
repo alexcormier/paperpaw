@@ -1,7 +1,7 @@
 [Night]
 core.night-mode = on
-reader.font-size = 12
+core.font-size = 12
 
 [Large print]
-reader.font-size = 18
+core.font-size = 18
 

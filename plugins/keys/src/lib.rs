@@ -173,21 +173,27 @@ fn all_screens(env: &Env<'_>) -> Vec<Place> {
             layers: Vec::from([id.as_str().to_string(), GLOBAL_KEYMAP_LAYER.to_string()]),
         })
         .collect();
+    // By name, those of the same name always in the same order.
+    all.sort_by(|a, b| {
+        (a.title.to_lowercase(), a.layer()).cmp(&(b.title.to_lowercase(), b.layer()))
+    });
     tell_apart(&mut all);
-    all.sort_by_key(|p| p.title.to_lowercase());
     all
 }
 
-/// Places of the same name told apart by their screen's id, e.g. a
-/// tool's list and its editor, both named after the tool.
+/// Places of the same name, side by side, told apart by a number after
+/// the first, e.g. a tool's list and its editor, both named after the
+/// tool (a screen's id means nothing to whoever reads the list).
 fn tell_apart(places: &mut [Place]) {
-    let alike: Vec<bool> = places
-        .iter()
-        .map(|p| places.iter().filter(|o| o.title == p.title).count() > 1)
-        .collect();
-    for (place, alike) in places.iter_mut().zip(alike) {
-        if alike {
-            place.title = format!("{} ({})", place.title, place.layer());
+    let mut count = 1;
+    let mut previous = String::new();
+    for place in places.iter_mut() {
+        if place.title == previous {
+            count += 1;
+            place.title = format!("{} ({count})", place.title);
+        } else {
+            count = 1;
+            previous.clone_from(&place.title);
         }
     }
 }
@@ -1149,5 +1155,34 @@ mod tests {
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    #[test]
+    fn places_of_the_same_name_are_numbered_not_named_by_id() {
+        let place = |title: &str, layer: &str| super::Place {
+            title: title.into(),
+            layers: alloc::vec![layer.into()],
+        };
+        let mut places = [
+            place("Add a widget", "home.add-to-list"),
+            place("Add a widget", "home.add-widget"),
+            place("Battery", "battery.screen"),
+            place("Notes", "notes.list"),
+            place("Notes", "notes.edit"),
+            place("Notes", "notes.view"),
+        ];
+        super::tell_apart(&mut places);
+        let titles: alloc::vec::Vec<&str> = places.iter().map(|p| p.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            [
+                "Add a widget",
+                "Add a widget (2)",
+                "Battery",
+                "Notes",
+                "Notes (2)",
+                "Notes (3)"
+            ]
+        );
     }
 }

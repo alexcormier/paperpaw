@@ -6,6 +6,21 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Buttons alone: skimming shows where the focus is. The bar has it at
+  first (left and right go along it, Confirm stays), a frame around it
+  says so, and up and down go from it to the buttons below and back to
+  it.
+- Texts: the statistics' tiles fit their values at one size (the week's
+  time was cut on the X4), the update page's explanation gets smaller
+  before it is cut and then ends in "…", the picture widget says in
+  fewer words where pictures go, the menu above the plugins' list has a
+  name (*Plugins: above the list*), and screens of the same name are
+  told apart by a number in the buttons' places rather than by their id.
+- Adding to a menu takes 17 KiB of heap on the X4 (it took 94 KiB): a
+  few bytes a candidate, its name among all the others' in one text.
+- The sample plugin *Large print* sets `core.font-size` and
+  `core.line-spacing` (the reader's settings it named no longer exist,
+  so its larger text never applied).
 - Code plugins fit the firmware again: the SDK's fingerprint no longer
   counts features that add functions and modules only (`kernel`,
   `unstable`), with which the firmware is built and plugins are not, so

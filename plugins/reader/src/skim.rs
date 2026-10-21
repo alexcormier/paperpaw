@@ -3,8 +3,10 @@
 //! there), and buttons for the chapter before and after, back to where
 //! skimming began, and a page number on the keyboard. With buttons, the
 //! page buttons go ten pages, left and right a chapter, up and down move
-//! to the buttons below the bar, confirm presses the one moved to (with
-//! none, stays) and back returns to where one was.
+//! to the buttons below the bar and back to the bar, confirm presses the
+//! one moved to (on the bar, stays) and back returns to where one was. While no button has
+//! the focus, the bar has it: a frame around it says that left and right
+//! move along it and confirm stays.
 //!
 //! It fills the slot `core.skim`: it asks the reader to move with the
 //! event `core.skim` and is told where the book is with `core.skimmed`.
@@ -43,6 +45,8 @@ pub(crate) struct SkimScreen {
     buttons: [Rect; 4],
     /// The button the buttons moved to (none at first and after a touch).
     focus: Option<usize>,
+    /// The focus shows: buttons used, or no touch screen.
+    keys: bool,
 }
 
 impl SkimScreen {
@@ -71,6 +75,7 @@ impl SkimScreen {
         });
         let mut screen = Self {
             focus: None,
+            keys: !env.device.input.touch,
             style,
             region,
             path: params.get(params::PATH).unwrap_or_default().to_string(),
@@ -117,14 +122,22 @@ impl SkimScreen {
         }
     }
 
-    /// The bar's track, where its line is drawn.
+    /// The side of the knob that says where one is.
+    fn knob(&self) -> u16 {
+        (self.bar.height / 2).max(8)
+    }
+
+    /// The bar's track, where its line is drawn: inside the bar by half a
+    /// knob and a little more, so that the knob stays inside it (and
+    /// inside its frame) at either end.
     fn track(&self) -> Rect {
         let style = self.style;
         let h = (style.line * 3).max(3) as u16;
+        let inset = (self.knob() / 2 + style.gap as u16 / 2).min(self.bar.width / 4);
         Rect::new(
-            self.bar.x,
+            self.bar.x + inset,
             self.bar.y + (self.bar.height - h) / 2,
-            self.bar.width,
+            self.bar.width - 2 * inset,
             h,
         )
     }
@@ -197,10 +210,23 @@ impl Screen for SkimScreen {
                 Color::BLACK,
             );
         }
-        let knob = (self.bar.height / 2).max(8);
+        let knob = self.knob();
         let kx = (track.x + done).saturating_sub(knob / 2);
         let ky = self.bar.y + (self.bar.height - knob) / 2;
         canvas.fill(Rect::new(kx, ky, knob, knob), Color::BLACK);
+        // The bar has the focus while no button has it.
+        let on_bar = self.keys && self.focus.is_none();
+        if on_bar {
+            let border = ui::button_border(&style);
+            ui::stroke_round(canvas, &style, self.bar, border, Color::BLACK);
+        }
+        canvas.describe(
+            paperpaw_sdk::semantics::Role::Slider,
+            &self.label,
+            self.bar,
+            on_bar,
+            None,
+        );
         // The buttons.
         for (i, (rect, key)) in self.buttons.iter().zip(BUTTONS).enumerate() {
             let h = ui::button_height(*rect);
@@ -219,6 +245,14 @@ impl Screen for SkimScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
+        // A direction after touching shows the focus; turning pages (also
+        // by swiping) does not.
+        let turning = [actions::PREV_PAGE, actions::NEXT_PAGE].contains(a);
+        if !self.keys && !turning {
+            self.keys = true;
+            cx.request_redraw_area(self.region);
+            cx.request_refresh(RefreshMode::Fast);
+        }
         if *a == actions::PREV_PAGE || *a == actions::PREVIOUS {
             self.go("page:-10", cx);
         } else if *a == actions::NEXT_PAGE || *a == actions::NEXT {
@@ -228,14 +262,15 @@ impl Screen for SkimScreen {
         } else if *a == actions::RIGHT {
             self.go("chapter:+1", cx);
         } else if *a == actions::UP || *a == actions::DOWN {
+            // The bar, then the buttons, then the bar again.
             let len = BUTTONS.len();
             let down = *a == actions::DOWN;
-            self.focus = Some(match self.focus {
-                None if down => 0,
-                None => len - 1,
-                Some(at) if down => (at + 1) % len,
-                Some(at) => (at + len - 1) % len,
-            });
+            self.focus = match self.focus {
+                None if down => Some(0),
+                None => Some(len - 1),
+                Some(at) if down => (at + 1 < len).then_some(at + 1),
+                Some(at) => at.checked_sub(1),
+            };
             cx.request_redraw_area(self.region);
             cx.request_refresh(RefreshMode::Fast);
         } else if *a == actions::CONFIRM {
@@ -262,6 +297,7 @@ impl Screen for SkimScreen {
         let at = gesture.start;
         if let Some(i) = self.buttons.iter().position(|b| b.contains(at)) {
             self.focus = None;
+            self.keys = false;
             self.press(i, cx);
         } else if self.bar.contains(at) {
             let track = self.track();

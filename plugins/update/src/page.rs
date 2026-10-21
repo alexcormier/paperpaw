@@ -536,7 +536,8 @@ impl UpdatePage {
 }
 
 /// Draws `text` left-aligned in `area`, wrapped, at most `max` lines and
-/// as many as `area` holds; returns the height used.
+/// as many as `area` holds: a little smaller where it needs more, only
+/// then cut, the last line ending in "…"; returns the height used.
 #[allow(clippy::too_many_arguments)]
 fn paragraph(
     canvas: &mut Canvas<'_>,
@@ -551,9 +552,18 @@ fn paragraph(
     let Some(font) = style.font(env) else {
         return 0;
     };
-    let height = font.line_metrics(size).line_height as u16;
-    let max = max.min(usize::from(area.height / height.max(1)));
-    let lines = font.wrap(size, text, f32::from(area.width));
+    let width = f32::from(area.width);
+    let lines_at = |size: f32| {
+        let height = font.line_metrics(size).line_height as u16;
+        max.min(usize::from(area.height / height.max(1)))
+    };
+    let size = paperpaw_sdk::widgets::largest_size(size, size * 0.85, |size| {
+        font.wrap(size, text, width).len() <= lines_at(size)
+    })
+    .unwrap_or(size * 0.85);
+    let (height, max) = (font.line_metrics(size).line_height as u16, lines_at(size));
+    let lines = font.wrap(size, text, width);
+    let cut = lines.len() > max;
     let used = height * lines.len().min(max) as u16;
     canvas.describe(
         Role::Text,
@@ -563,17 +573,15 @@ fn paragraph(
         None,
     );
     let mut top = area.y;
-    for range in lines.into_iter().take(max) {
+    for (n, range) in lines.into_iter().take(max).enumerate() {
         let row = Rect::new(area.x, top, area.width, height);
-        ui::draw_label(
-            canvas,
-            &font,
-            size,
-            f32::from(area.x),
-            row,
-            &text[range],
-            color,
-        );
+        let line = if cut && n + 1 == max {
+            let rest = text[range.start..].trim_end();
+            alloc::borrow::Cow::Owned(ui::fit(&font, size, &alloc::format!("{rest} …"), width))
+        } else {
+            alloc::borrow::Cow::Borrowed(&text[range])
+        };
+        ui::draw_label(canvas, &font, size, f32::from(area.x), row, &line, color);
         top += height;
     }
     top - area.y

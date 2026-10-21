@@ -209,11 +209,20 @@ fn screens_of_the_same_name_are_each_a_place() {
     // *Applies*: the places, then every screen.
     test.press("confirm");
     // The list, its picker and its question share the name; each shows,
-    // told apart by its id (cut short where it does not fit).
+    // told apart by a number (never by its id).
     let labels = test.labels();
-    let alike = labels
+    let alike: Vec<&String> = labels
         .iter()
-        .filter(|l| l.starts_with("Buttons and gestures ("))
-        .count();
-    assert_eq!(alike, 3, "{labels:?}");
+        .filter(|l| l.starts_with("Buttons and gestures"))
+        .collect();
+    assert_eq!(
+        alike,
+        [
+            "Buttons and gestures",
+            "Buttons and gestures (2)",
+            "Buttons and gestures (3)"
+        ],
+        "{labels:?}"
+    );
+    assert!(!labels.iter().any(|l| l.contains("(keys.")), "{labels:?}");
 }
