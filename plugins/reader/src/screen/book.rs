@@ -74,6 +74,8 @@ pub(super) struct Book {
     /// asked for: the page's start and their signature.
     pub(super) decorated: Vec<paperpaw_sdk::decorations::Mark>,
     pub(super) decorated_for: Option<(Locator, u64)>,
+    /// Where runs of blocks the text filters leave out end, read once.
+    pub(super) dropped: paperpaw_sdk::reading::DroppedRuns,
 }
 
 /// What the buttons choose on a page, as links are chosen: a link, or a
@@ -174,6 +176,7 @@ impl Book {
             finished: false,
             decorated: Vec::new(),
             decorated_for: None,
+            dropped: paperpaw_sdk::reading::DroppedRuns::new(),
         };
         book.chapter_marks = book.chapter_marks(env);
         book.embedded = Embedded::load(env, book.document.as_ref());
@@ -308,6 +311,8 @@ impl Book {
             return;
         };
         self.typography = typography(env, &font, &self.language, self.document.whole_pages());
+        // The filters may leave out other blocks now.
+        self.dropped.clear();
         self.words = core::cell::OnceCell::new();
         self.xpointer = None;
         let start = self.line_start(env, self.page.start);
@@ -376,8 +381,9 @@ impl Book {
                 patterns.hyphenate(word, out);
             }
         };
-        let filtered =
-            FilteredDocument::new(self.document.as_ref(), env).in_book(&self.path, &self.language);
+        let filtered = FilteredDocument::new(self.document.as_ref(), env)
+            .in_book(&self.path, &self.language)
+            .remembering(&self.dropped);
         let cx = LayoutContext::new(&filtered, env.storage, t.width, &t.style, &faces)
             .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
         Some(f(&cx))

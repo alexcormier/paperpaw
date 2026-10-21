@@ -157,10 +157,11 @@ impl TextFilters {
     pub fn apply_in(&self, env: &Env<'_>, cx: &FilterContext<'_>, block: &mut Block) -> Verdict {
         for filter in &self.filters {
             (filter.filter)(env, block);
-            if let Some(block_filter) = &filter.block
-                && block_filter(env, cx, block) == Verdict::Drop
-            {
-                return Verdict::Drop;
+            if let Some(block_filter) = &filter.block {
+                match block_filter(env, cx, block) {
+                    Verdict::Keep => {}
+                    Verdict::Drop => return Verdict::Drop,
+                }
             }
         }
         Verdict::Keep

@@ -743,6 +743,14 @@ fn sixth_page(sets: &[(&str, &str)]) -> (u32, u32) {
 }
 
 #[test]
+fn paragraphs_keep_lines_together_as_set() {
+    // Lines kept together: pages end earlier, where paragraphs break.
+    let standard = sixth_page(&[]);
+    let kept = sixth_page(&[("core.widows", "3"), ("core.orphans", "3")]);
+    assert!(kept < standard, "{kept:?} {standard:?}");
+}
+
+#[test]
 fn the_page_holds_what_its_type_and_margins_leave_room_for() {
     let standard = sixth_page(&[]);
     // Margins at the top and bottom of their own: more lines, or fewer.
