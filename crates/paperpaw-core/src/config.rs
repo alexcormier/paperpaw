@@ -24,6 +24,17 @@ impl Kernel {
     /// Forgets a setting's value (see [`Command::ResetSetting`]): from the
     /// active scope, or from the configuration file.
     pub(crate) fn reset_setting(&mut self, id: &Id) {
+        // A secret setting is kept with the secrets: reset, it goes.
+        if self
+            .shared
+            .settings
+            .spec(id.as_str())
+            .is_some_and(|spec| spec.extra().secret)
+        {
+            self.set_secret(paperpaw_sdk::secrets::SecretChange::remove(id.as_str()));
+            self.secret_setting_changed(id);
+            return;
+        }
         let scoped = self.shared.settings.goes_to_scope(id.as_str());
         let before = self.scoped_values();
         if let Err(error) = self.shared.settings.reset(id.as_str()) {
@@ -362,6 +373,8 @@ impl Kernel {
     }
 
     pub(crate) fn apply_user_config(&mut self, source: &str) {
+        // Secret settings kept in the file before: moved to the secrets.
+        let mut moved: Vec<(String, String)> = Vec::new();
         for entry in paperpaw_config::parse(source) {
             let entry = match entry {
                 Ok(entry) => entry,
@@ -421,10 +434,35 @@ impl Kernel {
                 ),
                 section => {
                     let id = format!("{section}.{}", entry.key);
+                    let secret = self
+                        .shared
+                        .settings
+                        .spec(&id)
+                        .is_some_and(|spec| spec.extra().secret);
+                    if secret {
+                        moved.push((id, value.to_string()));
+                        continue;
+                    }
                     if let Err(error) = self.shared.settings.set_from_text(&id, &value) {
                         self.warn(WarningSource::UserConfig, line, format!("`{id}`: {error}"));
                     }
                 }
+            }
+        }
+        for (id, value) in moved {
+            let label = self
+                .shared
+                .settings
+                .spec(&id)
+                .map(|spec| String::from(self.shared.translator.tr(&spec.title)))
+                .unwrap_or_default();
+            self.set_secret(paperpaw_sdk::secrets::SecretChange::keep(
+                &id, &label, &value,
+            ));
+            if let Some((section, key)) = id.split_once('.') {
+                self.update_config(&format_args!("`{id}`"), |source| {
+                    paperpaw_config::remove(source, section, key)
+                });
             }
         }
         // Kept apart (see `KeySources::user`).

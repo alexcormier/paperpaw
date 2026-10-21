@@ -61,24 +61,19 @@ impl Plugin for CorePlugin {
                 .context
                 .get(params::ID)
                 .and_then(|id| Id::parse(id).ok());
-            let Some(spec) = id.and_then(|id| env.settings.spec(id.as_str())) else {
+            // The id typed for, a placement's too (`widgets.countdown@2.title`):
+            // its spec is the plain setting's.
+            let Some(id) = id else {
                 return;
             };
-            let text = typed.text.trim();
-            // A secret is kept with the secrets: never in the settings,
-            // which every plugin reads.
-            if spec.extra().secret {
-                let change = if text.is_empty() {
-                    paperpaw_sdk::secrets::SecretChange::remove(spec.id.as_str())
-                } else {
-                    let label = env.i18n.tr(&spec.title);
-                    paperpaw_sdk::secrets::SecretChange::keep(spec.id.as_str(), label, text)
-                };
-                out.push(Command::SetSecret(change));
+            if env.settings.spec(id.as_str()).is_none() {
                 return;
             }
+            // A secret setting's text is kept with the secrets, never in
+            // the settings (see `Kernel::apply_setting`).
+            let text = typed.text.trim();
             out.push(Command::SetSetting(
-                spec.id.clone(),
+                id,
                 paperpaw_sdk::SettingValue::Text(Cow::Owned(String::from(text))),
             ));
         })?;

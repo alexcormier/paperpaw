@@ -472,6 +472,20 @@ fn the_bar_wraps_round_with_the_buttons() {
     assert_eq!(app.screen(), "home.dashboard");
 }
 
+/// The bar tells which of its entries has the focus, as a button, as the
+/// focus moves along it by buttons.
+#[test]
+fn the_bar_tells_its_focus() {
+    let mut app = reading(X4);
+    reader_menu(&mut app);
+    for entry in BAR.iter().take(3) {
+        let parts = app.parts();
+        let focus = paperpaw_sdk::semantics::focused(&parts).unwrap();
+        assert_eq!((focus.role, focus.label.as_str()), (Role::Button, *entry));
+        app.run(actions::RIGHT);
+    }
+}
+
 /// The control focused in the panel, and the setting row it belongs to
 /// (the nearest text before it that names one).
 fn focused_control(app: &mut App) -> Option<(String, String)> {

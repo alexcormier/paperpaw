@@ -13,7 +13,8 @@ change the plugin SDK.
   (`Framebuffer::blind`; 48 KB less on the X4). New roles `Check`,
   `Radio`, `Field`, `Image`, `Link`, `Dialog` and `Progress`
   (`semantics::role_name` names them); progress bars and the keyboard's
-  field describe themselves so. `Screen::secret` (a PIN, a password being
+  field describe themselves so, the reader's menu bar its entries (the
+  focused one too). `Screen::secret` (a PIN, a password being
   typed) keeps its focus from being told, as do screens that guard the
   device; `Kernel::is_secret` says so to the USB remote and the dev
   tools, which then leave out what the parts say. A password typed (an
@@ -21,8 +22,11 @@ change the plugin SDK.
   asked alone, whichever keyboard took it, and while it is typed only
   that plugin's input filters see the keys (`InputFilters::apply_of`).
   A secret setting (`SettingExtra::secret`) is kept with the secrets,
-  never in the settings: read it with `env.secrets.get(id)`; the USB
-  remote sends no secret setting's value. Breaking: a plugin sees its
+  never in the settings: read it with `env.secrets.get(id)`; set or
+  reset, its owner alone hears `SETTING_CHANGED` (with its id, not its
+  value), and one kept in `paperpaw.ini` before moves to the secrets at
+  the start. The USB remote sends no secret setting's value. Text typed
+  for a widget's placement sets the placement's own value. Breaking: a plugin sees its
   own secrets alone, those in its namespace: `env.secrets` is a
   `secrets::Visible` view (`get`, `iter`, `is_empty` of the running
   plugin's, `listed` and `has` of every secret without its value, as

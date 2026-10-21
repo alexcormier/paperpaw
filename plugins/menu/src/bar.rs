@@ -21,6 +21,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params, slots};
+use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
@@ -328,10 +329,19 @@ impl Screen for BarScreen {
                 inner.width + 2 * pad,
                 inner.height,
             );
+            // Told as a button: what it is, which has the focus, which is on.
+            let focused = self.keys && i == self.focus;
+            canvas.describe(
+                Role::Button,
+                &entry.label,
+                frame,
+                focused,
+                on.then_some(true),
+            );
             if on {
                 ui::fill_round(canvas, &style, frame, Color::BLACK);
             }
-            if self.keys && i == self.focus {
+            if focused {
                 ui::stroke_round(
                     canvas,
                     &style,

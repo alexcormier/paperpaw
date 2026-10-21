@@ -778,54 +778,161 @@ fn input_filters_see_no_key_of_a_secret() {
     }
 }
 
-/// A secret setting typed is kept with the secrets, never in the
-/// settings every plugin reads.
-#[test]
-fn a_secret_setting_is_kept_with_the_secrets() {
-    use paperpaw_core::sdk::builtin::{events, params};
-    use paperpaw_core::sdk::event::EventData;
-    static SECRET: [paperpaw_core::sdk::SettingSpec; 1] =
-        [paperpaw_core::sdk::SettingSpec::fixed_text(
-            "vault.key",
-            "vault.key",
-            "",
-            paperpaw_core::sdk::builtin::groups::OTHER,
-        )
-        .with_extra(&KEPT_SECRET)];
-    static KEPT_SECRET: paperpaw_core::sdk::SettingExtra =
-        paperpaw_core::sdk::SettingExtra::new().secret();
-    struct Vault;
-    impl Plugin for Vault {
-        fn manifest(&self) -> Manifest {
-            common::manifest("vault")
-        }
-        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-            r.add_settings(&SECRET)
-        }
+static VAULT_SETTINGS: [paperpaw_core::sdk::SettingSpec; 2] = [
+    paperpaw_core::sdk::SettingSpec::fixed_text(
+        "vault.key",
+        "vault.key",
+        "",
+        paperpaw_core::sdk::builtin::groups::OTHER,
+    )
+    .with_extra(&KEPT_SECRET),
+    paperpaw_core::sdk::SettingSpec::fixed_text(
+        "vault.box.note",
+        "vault.box.note",
+        "",
+        paperpaw_core::sdk::builtin::groups::OTHER,
+    ),
+];
+static KEPT_SECRET: paperpaw_core::sdk::SettingExtra =
+    paperpaw_core::sdk::SettingExtra::new().secret();
+
+/// What the plugins heard changed: `<plugin> <params>`.
+type Heard = Rc<std::cell::RefCell<Vec<String>>>;
+
+/// A plugin with a secret setting (`vault.key`) and one a widget's
+/// placements have (`vault.box.note`), when named `vault`; it forgets the
+/// secret on `vault.forget`. Any name logs the settings it hears changed.
+struct Vault {
+    name: &'static str,
+    heard: Heard,
+}
+
+impl Plugin for Vault {
+    fn manifest(&self) -> Manifest {
+        common::manifest(self.name)
     }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        if self.name == "vault" {
+            r.add_settings(&VAULT_SETTINGS)?;
+            r.subscribe(
+                paperpaw_core::sdk::Id::new_static("vault.forget"),
+                Box::new(|_, _, out| {
+                    out.push(paperpaw_core::sdk::Command::ResetSetting(
+                        paperpaw_core::sdk::Id::new_static("vault.key"),
+                    ));
+                }),
+            )?;
+        }
+        let (name, heard) = (self.name, self.heard.clone());
+        r.subscribe(
+            events::SETTING_CHANGED.id().clone(),
+            Box::new(move |_, params, _| heard.borrow_mut().push(format!("{name} {params:?}"))),
+        )
+    }
+}
+
+/// A kernel with the vault and a spy beside it, on `storage`.
+fn vault(storage: MemoryStorage) -> (Kernel, Heard) {
+    let heard = Heard::default();
     let mut kernel = Kernel::builder(DEVICE)
-        .plugin(Vault)
-        .storage(MemoryStorage::new())
+        .plugin(Vault {
+            name: "vault",
+            heard: heard.clone(),
+        })
+        .plugin(Vault {
+            name: "spy",
+            heard: heard.clone(),
+        })
+        .storage(storage)
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    let typed = paperpaw_core::sdk::Typed::new(
-        "k-123",
-        Params::new()
-            .with(params::ID, "vault.key")
-            .with(params::MODE, "password"),
-    );
+    (kernel, heard)
+}
+
+/// `text` typed for setting `id`, as the settings' editor sends it.
+fn type_for(kernel: &mut Kernel, now: u64, id: &str, text: &str) {
+    use paperpaw_core::sdk::builtin::params;
+    use paperpaw_core::sdk::event::EventData;
+    let typed = paperpaw_core::sdk::Typed::new(text, Params::new().with(params::ID, id));
     kernel.send_event(
-        Instant(100),
+        Instant(now),
         events::SETTING_TYPED.id().clone(),
         typed.to_params(),
     );
+}
+
+/// A secret setting typed is kept with the secrets, never in the
+/// settings every plugin reads; its owner alone hears that it changed,
+/// and not to what.
+#[test]
+fn a_secret_setting_is_kept_with_the_secrets() {
+    let (mut kernel, heard) = vault(MemoryStorage::new());
+    type_for(&mut kernel, 100, "vault.key", "k-123");
     assert_eq!(kernel.settings().text("vault.key"), "");
     assert_eq!(kernel.secrets().get("vault.key"), Some("k-123"));
+    let told = heard.borrow().clone();
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(
+        told[0].starts_with("vault ") && told[0].contains("vault.key"),
+        "{told:?}"
+    );
+    assert!(!told[0].contains("k-123"), "{told:?}");
     // Set directly, the same.
+    heard.borrow_mut().clear();
     kernel
         .set_setting(Instant(200), "vault.key", "k-456")
         .unwrap();
     assert_eq!(kernel.settings().text("vault.key"), "");
     assert_eq!(kernel.secrets().get("vault.key"), Some("k-456"));
+    let told = heard.borrow().clone();
+    assert!(told.len() == 1 && told[0].starts_with("vault "), "{told:?}");
+}
+
+/// Reset, a secret setting goes from the secrets; its owner hears it.
+#[test]
+fn a_secret_setting_reset_goes_from_the_secrets() {
+    let (mut kernel, heard) = vault(MemoryStorage::new());
+    type_for(&mut kernel, 100, "vault.key", "k-123");
+    heard.borrow_mut().clear();
+    kernel.send_event(
+        Instant(200),
+        paperpaw_core::sdk::Id::new_static("vault.forget"),
+        Params::new(),
+    );
+    assert_eq!(kernel.secrets().get("vault.key"), None);
+    assert!(!kernel.storage().exists(SECRETS));
+    let told = heard.borrow().clone();
+    assert!(told.len() == 1 && told[0].starts_with("vault "), "{told:?}");
+}
+
+/// A secret setting kept in `paperpaw.ini` before is moved to the
+/// secrets at the start, and out of the file.
+#[test]
+fn a_secret_setting_in_the_file_moves_to_the_secrets() {
+    use paperpaw_core::sdk::builtin::CONFIG_FILE;
+    let ini = "[vault]\nkey = old-k\nbox.note = kept\n";
+    let (kernel, _) = vault(MemoryStorage::new().with(CONFIG_FILE, ini.as_bytes().to_vec()));
+    assert_eq!(kernel.secrets().get("vault.key"), Some("old-k"));
+    assert_eq!(kernel.settings().text("vault.key"), "");
+    assert_eq!(kernel.settings().text("vault.box.note"), "kept");
+    let file = paperpaw_core::sdk::read_file(kernel.storage(), CONFIG_FILE, 4096).unwrap();
+    let file = String::from_utf8(file).unwrap();
+    assert!(!file.contains("old-k"), "{file}");
+    assert!(file.contains("kept"), "{file}");
+}
+
+/// Typed for a widget's placement, the placement's value is set, not the
+/// setting's shared one.
+#[test]
+fn text_typed_for_a_placement_is_its_own() {
+    let (mut kernel, _) = vault(MemoryStorage::new());
+    type_for(&mut kernel, 100, "vault.box@2.note", "second");
+    let settings = kernel.settings();
+    assert_eq!(settings.text("vault.box.note"), "");
+    let placed = settings.with_placement(Some("vault.box@2"), || {
+        String::from(settings.text("vault.box.note"))
+    });
+    assert_eq!(placed, "second");
 }

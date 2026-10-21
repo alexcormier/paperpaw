@@ -239,6 +239,12 @@ impl Kernel {
 
     /// An event to its subscribers, then to every open screen.
     pub(crate) fn emit(&mut self, event: &Id, params: &Params) {
+        self.emit_to(event, params, None);
+    }
+
+    /// Emits `event` to the plugin `only` alone where one is named: its
+    /// handlers and screens hear it, no other plugin's.
+    pub(crate) fn emit_to(&mut self, event: &Id, params: &Params, only: Option<&str>) {
         // A page turned, also by itself, is use.
         if *event == events::PAGE_TURNED {
             self.last_activity = self.now;
@@ -252,7 +258,7 @@ impl Kernel {
         // keyboard took it.
         let secret = params.get(paperpaw_sdk::builtin::params::MODE) == Some("password");
         let asker = event.namespace();
-        let hears = |plugin: &str| !secret || plugin == asker;
+        let hears = |plugin: &str| (!secret || plugin == asker) && only.is_none_or(|o| plugin == o);
         for (_, plugin, handler) in self
             .subscriptions
             .iter()
@@ -284,6 +290,15 @@ impl Kernel {
         }
     }
 
+    /// Tells the plugin whose secret setting `id` is that it changed, and
+    /// no other: which secret changed is the owner's business too.
+    pub(crate) fn secret_setting_changed(&mut self, id: &Id) {
+        let changed = events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone()));
+        if let Command::Emit(event, params) = changed {
+            self.emit_to(&event, &params, Some(id.namespace()));
+        }
+    }
+
     /// Settings, a book's own, plugins switched, secrets, menus and key
     /// bindings changed.
     fn apply_setting(&mut self, command: Command) {
@@ -308,6 +323,7 @@ impl Kernel {
                     paperpaw_sdk::secrets::SecretChange::keep(id.as_str(), &label, &text)
                 };
                 self.set_secret(change);
+                self.secret_setting_changed(&id);
             }
             Command::SetSetting(id, value) if self.shared.settings.goes_to_scope(id.as_str()) => {
                 self.set_in_scope(&id, value);
