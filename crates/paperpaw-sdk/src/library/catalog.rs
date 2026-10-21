@@ -410,28 +410,6 @@ fn lines_from(
     Ok(start)
 }
 
-/// How many lines the file at `path` has (none where it is not there),
-/// counted without holding them.
-#[cfg(any(test, feature = "kernel"))]
-fn count_lines(storage: &dyn Storage, path: &str) -> Result<usize, StorageError> {
-    let mut buf = [0u8; 1024];
-    let (mut offset, mut count, mut last) = (0u64, 0, b'\n');
-    loop {
-        let n = match storage.read_at(path, offset, &mut buf) {
-            Ok(n) => n,
-            Err(StorageError::NotFound) if offset == 0 => return Ok(0),
-            Err(e) => return Err(e),
-        };
-        if n == 0 {
-            break;
-        }
-        offset += n as u64;
-        count += buf[..n].iter().filter(|&&b| b == b'\n').count();
-        last = buf[n - 1];
-    }
-    Ok(count + usize::from(last != b'\n'))
-}
-
 /// [`lines_from`] the start, every line.
 fn lines(
     storage: &dyn Storage,
@@ -893,7 +871,11 @@ fn listed_path() -> String {
 const STEP_LINES: usize = 16;
 /// Bytes of a folder's listing held at a time while it is listed.
 #[cfg(any(test, feature = "kernel"))]
-const LISTED_PIECE: usize = 8 * 1024;
+const LISTED_PIECE: usize = 4 * 1024;
+/// Lines of the old catalog a walk looks on for a book, from where it
+/// found the last: past as many books gone since.
+#[cfg(any(test, feature = "kernel"))]
+const OLD_WINDOW: usize = 32;
 
 /// What a new catalog is made with: written to the building file a step
 /// at a time, then put in the old one's place, with only the log noted
@@ -1008,7 +990,9 @@ impl Making {
 /// Making the catalog anew from the books under the library folder: the
 /// folders still to walk, and where in the current one's listing it is.
 /// A book whose file is as large as the old catalog says is taken from
-/// it; others from their details, opening only books not seen before.
+/// it, read along with the walk; others from their details, opening only
+/// books not seen before. It holds a few kilobytes, whatever the
+/// library's size.
 /// The kernel walks it as a job; views hear
 /// [`crate::builtin::events::CATALOG_CHANGED`].
 #[cfg(any(test, feature = "kernel"))]
@@ -1016,9 +1000,10 @@ impl Making {
 #[derive(Debug, Default)]
 pub struct Walk {
     making: Making,
-    /// Of the old catalog: each book's path hashed (32 bits) and where its
-    /// line starts, by hash.
-    old: Vec<(u32, u32)>,
+    /// Where the next line of the old catalog starts: it is read along
+    /// with the walk, which meets the books in the order it wrote them
+    /// (nothing of it held); `None` without one.
+    old_at: Option<u64>,
     /// Books to take from their details whatever the old catalog says
     /// (their details changed).
     fresh: Vec<String>,
@@ -1037,25 +1022,15 @@ impl Walk {
     /// cannot be read (nothing is changed then).
     pub fn start(env: &Env<'_>, fresh: Vec<String>) -> Result<Walk, StorageError> {
         let storage = env.storage;
-        // As many as there are lines: a list grown by doubling would hold
-        // twice that for a moment (on the X4, beside the library's index).
-        let mut old = Vec::new();
-        old.try_reserve_exact(count_lines(storage, &catalog_path())?)
-            .map_err(|_| StorageError::TooLarge)?;
-        lines(storage, &catalog_path(), &mut |offset, line| {
-            let path = line.split('\t').next().unwrap_or("");
-            if !path.is_empty()
-                && let Ok(offset) = u32::try_from(offset)
-            {
-                old.push((fnv1a64(path) as u32, offset));
-            }
-            true
+        // Its first line, the header, is not a book.
+        let mut old_at = None;
+        lines_from(storage, &catalog_path(), 0, &mut |_, _| false).map(|next| {
+            old_at = (next > 0).then_some(next);
         })?;
-        old.sort_unstable();
         let making = Making::start(env)?;
         Ok(Walk {
             making,
-            old,
+            old_at,
             fresh,
             dirs: Vec::from([super::folder(env).to_string()]),
             ..Walk::default()
@@ -1188,47 +1163,55 @@ impl Walk {
     }
 
     /// The book at `path` as the old catalog has it, where its file is as
-    /// large as then and its details did not change since.
+    /// large as then and its details did not change since: looked for a
+    /// few lines on from where the last was found (the walk meets the
+    /// books in the order it wrote them; books gone are passed over).
     fn as_old(
-        &self,
+        &mut self,
         storage: &dyn Storage,
         path: &str,
         size: u64,
     ) -> Result<Option<Record>, StorageError> {
+        let Some(at) = self.old_at else {
+            return Ok(None);
+        };
         if self.fresh.iter().any(|p| p == path) {
             return Ok(None);
         }
+        let mut found = None;
+        let mut looked = 0;
+        let next = lines_from(storage, &catalog_path(), at, &mut |_, line| {
+            looked += 1;
+            if line.split('\t').next() == Some(path) {
+                found = Record::parse(line);
+                return false;
+            }
+            looked < OLD_WINDOW
+        })?;
+        let Some(record) = found else {
+            return Ok(None);
+        };
+        self.old_at = Some(next);
         let hash = fnv1a64(path);
-        let short = hash as u32;
-        let from = self.old.partition_point(|(h, _)| *h < short);
-        for &(_, offset) in self.old[from..].iter().take_while(|(h, _)| *h == short) {
-            let Some(record) = read_line(storage, &catalog_path(), u64::from(offset))? else {
-                continue;
-            };
-            if record.path != path || record.size != Some(size) {
-                continue;
-            }
-            // Removed and come again: from its details.
-            if self.making.changes.removed(hash) {
-                return Ok(None);
-            }
-            // How far it is read: noted since, or for the books read last
-            // (read further than noted, where a reading ended without its
-            // book closed) as their details say.
-            let noted = self
-                .making
-                .changes
-                .status(hash)
-                .map_or(record.status.progress, |s| s.progress);
-            let progress = if self.making.opened.binary_search(&hash).is_ok() {
-                super::book_sized(storage, path, size).map_or(noted, |book| book.progress)
-            } else {
-                noted
-            };
-            let status = self.making.status(path, progress);
-            return Ok(Some(record.with_status(status)));
+        // Changed since, or removed and come again: from its details.
+        if record.size != Some(size) || self.making.changes.removed(hash) {
+            return Ok(None);
         }
-        Ok(None)
+        // How far it is read: noted since, or for the books read last
+        // (read further than noted, where a reading ended without its book
+        // closed) as their details say.
+        let noted = self
+            .making
+            .changes
+            .status(hash)
+            .map_or(record.status.progress, |s| s.progress);
+        let progress = if self.making.opened.binary_search(&hash).is_ok() {
+            super::book_sized(storage, path, size).map_or(noted, |book| book.progress)
+        } else {
+            noted
+        };
+        let status = self.making.status(path, progress);
+        Ok(Some(record.with_status(status)))
     }
 }
 

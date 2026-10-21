@@ -12,8 +12,11 @@ change the plugin SDK.
   a start (never at every start: on the X4 every wake is one), for
   another library folder and when books came or went without saying
   which, taking each book whose file did not change from the old
-  catalog instead of reading its details, and listing large folders in a
-  few pieces. Books that came, moved or changed are caught up without a
+  catalog, read along with the walk, instead of reading its details, and
+  listing large folders in a few pieces: a walk takes a few kilobytes
+  whatever the library's size. On a device of little memory (the X4) it
+  waits while the library shows its books, whose index takes the room;
+  with 2400 books the X4's heap peaks at 156 KiB while it walks. Books that came, moved or changed are caught up without a
   walk, at a calm moment when many come one after the other (a Calibre
   or catalog sync); books removed are left out at once. Views of the
   library no longer make it themselves, and show at once what changed (a
@@ -68,6 +71,8 @@ change the plugin SDK.
   (`library::FOLDER` names it) and `builtin::screens::FOLDER_EDITOR`, a
   text setting's editor that opens the folder chooser of whichever
   plugin fills its slot.
+- Emulator: scripts measure the heap's peak of one step (`reset-peak`)
+  and send an event as a plugin would (`emit:core.library-changed`).
 - SDK: `reading` holds the reader's building blocks for readers of
   one's own: `FilteredDocument`, `PageIndex`, and with the feature
   `unstable` `PageType`, `ReadingFaces`, `EmbeddedFonts`, `StatusRoom`,

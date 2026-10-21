@@ -34,6 +34,8 @@ paperpaw-native.workspace = true
 # The tests build environments as the kernel does.
 paperpaw-sdk = { path = ".", features = ["kernel"] }
 proptest.workspace = true
+# A storage on disk, for tests that count the memory taken beside it.
+paperpaw-fs.workspace = true
 # Scalable fonts in tests that draw text (the UI font of fonts-default).
 paperpaw-text = { workspace = true, features = ["outline"] }
 

@@ -351,15 +351,21 @@ struct Catalog {
     walked: core::cell::Cell<bool>,
 }
 
-/// Whether a book is read: the reader is the screen shown (overlays over
-/// it aside). Nothing is done to the catalog meanwhile: its memory and
-/// time are the reader's.
-fn reading(env: &Env<'_>) -> bool {
-    env.stack
-        .iter()
-        .rev()
-        .find(|entry| !entry.overlay)
-        .is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER))
+/// Whether the catalog waits: while a book is read (the reader is the
+/// screen shown, overlays over it aside), its memory and time are the
+/// reader's; on a device of little memory (the X4), while the library
+/// shows its books, the memory is its index's (a walk beside it would
+/// pass the heap's bounds). A library with no catalog yet holds none.
+fn waits(env: &Env<'_>) -> bool {
+    let shown = env.stack.iter().rev().find(|entry| !entry.overlay);
+    let slot = |slot: &Id| shown.is_some_and(|entry| entry.slot.as_ref() == Some(slot));
+    slot(&slots::READER)
+        || (env.device.memory == paperpaw_sdk::MemoryClass::Small
+            && slot(&slots::LIBRARY)
+            && matches!(
+                library::catalog::state(env.storage),
+                library::catalog::State::Ready { .. }
+            ))
 }
 
 impl Catalog {
@@ -416,7 +422,7 @@ impl Catalog {
         use paperpaw_sdk::work::Step;
         let storage = env.storage;
         let mut job = self.job.borrow_mut();
-        if reading(env) {
+        if waits(env) {
             // Begun again once another screen shows.
             if let Some(stopped) = job.take() {
                 let walk = matches!(stopped, CatalogJob::Walk(_));

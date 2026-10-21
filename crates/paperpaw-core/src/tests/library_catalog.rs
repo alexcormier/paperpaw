@@ -42,6 +42,17 @@ impl Plugin for LibraryPlugin {
             Id::new_static("lib.reader"),
             Priority(i16::MAX),
         )?;
+        // A library's list, as the library's slot shows it.
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("lib.list"),
+            "list",
+            Box::new(|_, _| Box::new(Page)),
+        ))?;
+        r.bind_slot(
+            slots::LIBRARY,
+            Id::new_static("lib.list"),
+            Priority(i16::MAX),
+        )?;
         let log = self.log.clone();
         r.subscribe(
             events::CATALOG_CHANGED.id().clone(),
@@ -62,8 +73,12 @@ impl Screen for Page {
 }
 
 fn library(storage: MemoryStorage) -> (Kernel, Log, u64) {
+    library_on(DEVICE, storage)
+}
+
+fn library_on(device: DeviceInfo, storage: MemoryStorage) -> (Kernel, Log, u64) {
     let log = log();
-    let mut kernel = Kernel::builder(DEVICE)
+    let mut kernel = Kernel::builder(device)
         .plugin(LibraryPlugin { log: log.clone() })
         .storage(storage)
         .build()
@@ -141,6 +156,28 @@ fn nothing_is_done_while_a_book_is_read() {
     run(&mut kernel, now, effects);
     assert_eq!(*log.borrow(), ["catalog"]);
     assert_eq!(paths(&kernel), ["books/a.txt", "books/b.txt"]);
+}
+
+/// On a device of little memory (the X4) the catalog waits while the
+/// library shows its books; on others it is made beside them.
+#[test]
+fn on_small_devices_nothing_is_done_while_the_library_shows() {
+    for (memory, beside) in [
+        (paperpaw_platform::MemoryClass::Small, false),
+        (paperpaw_platform::MemoryClass::Large, true),
+    ] {
+        let device = DeviceInfo { memory, ..DEVICE };
+        let (mut kernel, log, now) = library_on(device, two_books());
+        let now = want(&mut kernel, now, false);
+        log.borrow_mut().clear();
+        let effects = kernel.open_slot(Instant(now), slots::LIBRARY, Params::new());
+        let now = run(&mut kernel, now, effects);
+        let now = want(&mut kernel, now, true);
+        assert_eq!(log.borrow().len(), usize::from(beside), "{memory:?}");
+        let effects = kernel.run_action(Instant(now), actions::BACK);
+        run(&mut kernel, now, effects);
+        assert_eq!(log.borrow().len(), 1, "{memory:?}");
+    }
 }
 
 #[test]

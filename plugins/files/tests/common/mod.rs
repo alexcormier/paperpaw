@@ -59,6 +59,15 @@ pub const TOUCH: DeviceInfo = DeviceInfo {
     ..X4
 };
 
+/// A touch screen of much memory (as the Boox's): the catalog's work
+/// runs beside the library.
+pub const LARGE: DeviceInfo = DeviceInfo {
+    id: "test-large",
+    name: "Test large",
+    memory: MemoryClass::Large,
+    ..TOUCH
+};
+
 /// Both devices, for tests that go the same way on each.
 pub const DEVICES: [DeviceInfo; 2] = [X4, TOUCH];
 
@@ -577,6 +586,17 @@ impl App {
     }
 
     /// Back until the home screen shows (at most ten times).
+    /// Lets the kernel's catalog work run where the library shows: on a
+    /// device of little memory it waits while the library shows its
+    /// books (their index takes the memory), so the library is left for
+    /// the home screen and opened again.
+    pub fn let_catalog_work(&mut self) {
+        if self.kernel.device().memory == MemoryClass::Small && self.screen() == "files.browser" {
+            self.home();
+            self.run(actions::LIBRARY);
+        }
+    }
+
     pub fn home(&mut self) {
         for _ in 0..10 {
             if self.screen() == "home.dashboard" {

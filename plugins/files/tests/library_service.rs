@@ -117,34 +117,56 @@ fn a_library_of_ones_own_feeds_every_view() {
     }
 }
 
-#[test]
-fn the_catalog_folded_while_the_list_shows_keeps_it_right() {
-    let _turn = turn();
+/// The library of 4 books on `device`, its log made long by books read
+/// and closed many times (the first two finished).
+fn read_often(device: DeviceInfo) -> (App, u64) {
     let names: Vec<String> = (1..=4).map(|n| format!("books/Book {n:02}.txt")).collect();
     let files: Vec<(&str, &[u8])> = names.iter().map(|n| (n.as_str(), &b"text"[..])).collect();
     let config = "[files]\nsort = files.sort.name\n";
-    let mut app = App::new(X4, Shared::memory(config, &files));
+    let mut app = App::new(device, Shared::memory(config, &files));
     app.run(actions::LIBRARY);
     assert_eq!(rows(&mut app), ["Book 01", "Book 02", "Book 03", "Book 04"]);
     let before = library::catalog::generation(app.storage.0.as_ref()).unwrap();
-    // Books read and closed, many times: the log grows long and is
-    // folded into the catalog at a calm moment, lines moving.
     for n in 0..300 {
         let path = &names[n % 2];
         let reading = events::Reading::new(path.clone(), String::new(), 100.0, 0, 0, String::new());
         app.send(events::BOOK_CLOSED.id().clone(), reading.to_params());
     }
+    (app, before)
+}
+
+/// The rows the list shows, all, then those finished.
+fn shown_and_finished(app: &mut App) {
+    assert_eq!(rows(app), ["Book 01", "Book 02", "Book 03", "Book 04"]);
+    let finished = paperpaw_sdk::ui::choice::Picked::new(String::new(), String::from("finished"));
+    app.send(Id::new_static("files.list.shown"), finished.to_params());
+    assert_eq!(rows(app), ["Book 01", "Book 02"], "{}", app.described());
+}
+
+#[test]
+fn the_catalog_folded_while_the_list_shows_keeps_it_right() {
+    let _turn = turn();
+    // A device of much memory: folded at a calm moment beside the list,
+    // whose lines move; the list follows.
+    let (mut app, before) = read_often(LARGE);
     app.wait(61_000);
     let after = library::catalog::generation(app.storage.0.as_ref()).unwrap();
     assert!(after > before, "not folded");
-    // The rows from the new catalog's lines, the books finished as noted.
-    assert_eq!(rows(&mut app), ["Book 01", "Book 02", "Book 03", "Book 04"]);
-    let finished = paperpaw_sdk::ui::choice::Picked::new(String::new(), String::from("finished"));
-    app.send(Id::new_static("files.list.shown"), finished.to_params());
-    assert_eq!(
-        rows(&mut app),
-        ["Book 01", "Book 02"],
-        "{}",
-        app.described()
-    );
+    shown_and_finished(&mut app);
+}
+
+#[test]
+fn on_the_x4_the_catalog_waits_while_the_list_shows() {
+    let _turn = turn();
+    // Beside the list's index there is no room for it: not while the
+    // list shows, but once it is left.
+    let (mut app, before) = read_often(X4);
+    app.wait(61_000);
+    let generation = |app: &App| library::catalog::generation(app.storage.0.as_ref()).unwrap();
+    assert_eq!(generation(&app), before, "folded beside the list");
+    app.home();
+    app.wait(61_000);
+    assert!(generation(&app) > before, "not folded away from the list");
+    app.run(actions::LIBRARY);
+    shown_and_finished(&mut app);
 }
