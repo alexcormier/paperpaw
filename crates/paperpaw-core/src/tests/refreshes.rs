@@ -12,6 +12,7 @@ const STATUS: Id = Id::new_static("r.status");
 const EXACT: Id = Id::new_static("r.exact");
 const GRAYS: Id = Id::new_static("r.grays");
 const LOCK: Id = Id::new_static("r.lock");
+const OPEN: Id = Id::new_static("r.open");
 
 type Seen = Rc<RefCell<Vec<Refresh>>>;
 
@@ -47,6 +48,10 @@ impl Screen for Page {
             cx.set_refresh(RefreshMode::Fast);
         } else if *action == GRAYS {
             cx.request_redraw_area(Rect::new(0, 40, 10, 5));
+        } else if *action == OPEN {
+            // A screen opened, said to be a status line.
+            cx.refresh_cause(RefreshCause::Status);
+            cx.command(Command::OpenScreen(SHEET, paperpaw_sdk::Params::new()));
         } else {
             return Handled::No;
         }
@@ -191,4 +196,58 @@ fn refreshes_are_deferred_seldom() {
         kernel.run_action(Instant(60), STATUS).refresh().is_some(),
         "under the lock"
     );
+}
+
+/// A screen opened is refreshed, whatever cause a screen said.
+#[test]
+fn a_screen_opened_is_never_deferred() {
+    let (mut kernel, _) = refreshing();
+    let effects = kernel.run_action(Instant(10), OPEN);
+    assert!(effects.refresh().is_some());
+    assert_eq!(kernel.active_screen(), Some(&SHEET));
+}
+
+/// Counts the refreshes it sees.
+struct Spy(Rc<core::cell::Cell<u32>>);
+
+impl Plugin for Spy {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("spy"), "Spy", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let seen = self.0.clone();
+        r.add_refresh_filter(RefreshFilterSpec::new(
+            Id::new_static("spy.refresh"),
+            "",
+            Box::new(move |_, _| {
+                seen.set(seen.get() + 1);
+                RefreshVerdict::Keep
+            }),
+        ))
+    }
+}
+
+/// While a screen guards the device, another plugin's refresh filters see
+/// no refresh, and presses are not counted: neither tells how long a code
+/// typed is.
+#[test]
+fn nothing_counts_what_is_typed_into_a_guard() {
+    let seen = Rc::new(core::cell::Cell::new(0));
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Refreshing(Seen::default()))
+        .plugin(Spy(seen.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    kernel.open_screen(Instant(10), LOCK, paperpaw_sdk::Params::new());
+    render(&mut kernel);
+    let (before, inputs) = (seen.get(), kernel.shared.usage.inputs);
+    press(&mut kernel, 1000, "confirm");
+    kernel.run_action(Instant(2000), STATUS);
+    render(&mut kernel);
+    assert_eq!(seen.get(), before);
+    assert_eq!(kernel.shared.usage.inputs, inputs);
 }

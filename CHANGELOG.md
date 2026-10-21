@@ -23,7 +23,10 @@ change the plugin SDK.
   `notify:<text>`, `emit:<event>`, other actions); `icons.ini` gives
   items icons; `points/<point>.txt` contributes lines to a point;
   `setup.ini` adds steps to the first-run setup; `[fonts]` in
-  `plugin.ini` binds fonts to roles. SDK: `Registrar::place_menu_entry`
+  `plugin.ini` binds fonts to roles. They are read for plugins made for
+  formats 3 alone (others are told what is left out), at most 24 KiB
+  together and 64 lines for points; an action emits only its own events
+  and sets no setting of the lock. SDK: `Registrar::place_menu_entry`
   and `hide_menu_entry`, for code plugins too.
 - SDK: refreshes. A refresh filter sees why the panel is
   refreshed (`filters::RefreshCause`: a page turned, screens, a notice,
@@ -53,8 +56,13 @@ change the plugin SDK.
   `observe_events` (`ObserverSpec`) see every action run and every event
   emitted (a macro recorder, rules on any event); nothing runs for them
   where there are none. While a screen guards the device, only its
-  plugin's handlers in place of others, its observers and its input
-  filters run, and `Command::Input` from others is ignored. What an
+  plugin's handlers in place of others, its observers, its input and
+  refresh filters run, presses are not counted, `Command::Input` from
+  others is ignored, and nobody else changes settings, secrets,
+  plugins, menus, key bindings or slots; what a handler asks shows above
+  the guard only where the guard itself let the action pass. A plugin
+  changes its own secrets; another's only on the reader's behalf, and
+  then only their value. What an
   action or an observer asks that runs the same action again with the
   same params is dropped with a warning. `ActionSpec::describe` and `keywords` give lists
   and searches of actions their words; `Actions::runnable` tells actions
@@ -80,7 +88,8 @@ change the plugin SDK.
   raises an input by its name; `Command::SetKeyLayer` (sent with
   `Cx::set_key_layer`) puts a layer in front of the slot's for the
   screen that sent it, while it is on top (a book's own bindings); none
-  below a screen that guards the device. What is held is resolved for
+  below a screen that guards the device, and none sent from anywhere
+  but the screen itself. What is held is resolved for
   the screen it began on. Input filters may
   `InputVerdict::Cancel` an input (what began with it is forgotten) or
   `InputVerdict::Replace` it (`InputFilters::filter` says the input

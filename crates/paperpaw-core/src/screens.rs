@@ -519,7 +519,15 @@ impl Kernel {
     ) -> Handled {
         let earlier = mem::take(&mut self.output.redraw);
         let given = self.output.commands.len();
-        let trusted = self.guard().is_some_and(|guard| index >= guard);
+        // The guard, and screens of its plugin above it (its keyboard),
+        // open screens above it; another's above it (a sleep screen) does
+        // not.
+        let trusted = self.guard().is_some_and(|guard| {
+            index == guard
+                || (index > guard
+                    && self.stack.get(index).map(|s| s.id.namespace())
+                        == Some(self.stack[guard].id.namespace()))
+        });
         let Some(active) = self.stack.get_mut(index) else {
             self.output.redraw = earlier;
             return Handled::No;
@@ -548,6 +556,11 @@ impl Kernel {
         // A key map layer it asks for is its own, laid at once: one asked
         // for any other screen is not (`Command::SetKeyLayer` from
         // elsewhere is refused).
+        let (secrets, reader) = (&self.shared.secrets, self.shared.reader);
+        let owner = self.stack[index].id.namespace();
+        if crate::commands::vet_secrets(&mut self.output.commands, given, owner, secrets, reader) {
+            self.warn_runtime(format!("{owner}: another plugin's secret is not changed"));
+        }
         let mut at = given;
         while at < self.output.commands.len() {
             let Command::SetKeyLayer(asked, layer) = &self.output.commands[at] else {

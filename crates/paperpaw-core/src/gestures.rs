@@ -4,6 +4,7 @@
 
 #[allow(unused_imports)]
 use super::*;
+use crate::commands::vet_secrets;
 
 /// Where input is: gestures being recognized, the edges' swipes, presses
 /// dropped while a frame was not shown yet.
@@ -686,9 +687,11 @@ impl Kernel {
         f: impl Fn(&mut dyn Screen, &mut Cx<'_, '_>) -> Handled,
     ) -> Handled {
         let Some(mut index) = self.stack.len().checked_sub(1) else {
+            self.offered_down_to = 0;
             return Handled::No;
         };
         loop {
+            self.offered_down_to = index;
             if self.with_screen(index, &f) == Handled::Yes {
                 return Handled::Yes;
             }
@@ -711,7 +714,12 @@ impl Kernel {
         if self.offer(|screen, cx| screen.on_action(&action, cx)) == Handled::Yes {
             return;
         }
-        self.run_handler(&action, params, true);
+        // The guard let it pass only where it was asked (not where a screen
+        // above it took no action and passed nothing on).
+        let passed = self
+            .guard()
+            .is_some_and(|guard| self.offered_down_to <= guard);
+        self.run_handler(&action, params, passed);
     }
 
     /// Runs action `action`'s own handler with `params` into `out`, as
@@ -734,9 +742,9 @@ impl Kernel {
     /// screen guards the device, only a handler put in place by the
     /// guard's own plugin runs in place of the action's own: another
     /// plugin's could open what the guard keeps closed. What it asks is
-    /// trusted to show above the guard only where the guard let the
-    /// action pass (`overridable`: it was offered the action).
-    pub(crate) fn run_handler(&mut self, action: &Id, params: &Params, overridable: bool) {
+    /// trusted to show above the guard only where the guard was offered
+    /// the action and let it pass (`passed`).
+    pub(crate) fn run_handler(&mut self, action: &Id, params: &Params, passed: bool) {
         let guard = self.guard().map(|guard| self.stack[guard].id.namespace());
         let env = self.shared.env(self.now);
         let from = self.output.commands.len();
@@ -744,13 +752,28 @@ impl Kernel {
             .shared
             .actions
             .overrides_of(action.as_str())
-            .find(|(plugin, _)| guard.is_none_or(|ns| plugin.as_str() == ns))
-            .filter(|_| overridable);
-        let owner = if let Some((plugin, handler)) = over {
+            .find(|(plugin, _)| guard.is_none_or(|ns| plugin.as_str() == ns));
+        let (reader, now) = (self.shared.reader, self.now);
+        let top = self.stack.last().map(|s| s.id.namespace());
+        let mut refused_secret = false;
+        if let Some((plugin, handler)) = over {
             let _running = self.shared.meter.enter(plugin.as_str());
             handler(&env, params, &mut self.output.commands);
             drop(_running);
-            // The original it asked for runs in its place, once each.
+            let out = &mut self.output.commands;
+            work::quiet(
+                reader,
+                top,
+                now,
+                from,
+                plugin.as_str(),
+                out,
+                &mut self.works,
+            );
+            let secrets = &self.shared.secrets;
+            refused_secret |= vet_secrets(out, from, plugin.as_str(), secrets, reader);
+            // The original it asked for runs in its place, once each, its
+            // work and secrets its own plugin's.
             let mut at = from;
             while at < self.output.commands.len() {
                 let original = match &self.output.commands[at] {
@@ -764,13 +787,17 @@ impl Kernel {
                 self.output.commands.remove(at);
                 let mut out = Vec::new();
                 self.run_original(action, &original_params, &mut out);
+                let owner = action.namespace();
+                let top = self.stack.last().map(|s| s.id.namespace());
+                work::quiet(reader, top, now, 0, owner, &mut out, &mut self.works);
+                let secrets = &self.shared.secrets;
+                refused_secret |= vet_secrets(&mut out, 0, owner, secrets, reader);
                 let count = out.len();
                 for (offset, command) in out.into_iter().enumerate() {
                     self.output.commands.insert(at + offset, command);
                 }
                 at += count;
             }
-            plugin.as_str()
         } else {
             match self.shared.actions.get(action.as_str()) {
                 Some(spec) if spec.runs_itself() => {
@@ -781,21 +808,24 @@ impl Kernel {
                         (None, Some(handler)) => handler(&env, out),
                         (None, None) => {}
                     }
-                    action.namespace()
+                    let owner = action.namespace();
+                    work::quiet(reader, top, now, from, owner, out, &mut self.works);
+                    let secrets = &self.shared.secrets;
+                    refused_secret |= vet_secrets(out, from, owner, secrets, reader);
                 }
                 Some(_) => return,
                 None => return self.warn_runtime(format!("unknown action `{action}`")),
             }
-        };
-        // Run by a rule, not the reader: nothing said over reading.
-        let (reader, now) = (self.shared.reader, self.now);
-        let top = self.stack.last().map(|s| s.id.namespace());
-        let out = &mut self.output.commands;
-        work::quiet(reader, top, now, from, owner, out, &mut self.works);
+        }
+        if refused_secret {
+            self.warn_runtime(format!(
+                "`{action}`: another plugin's secret is not changed"
+            ));
+        }
         self.drop_self_runs(action, params, from);
         // An action a screen guarding the device let pass (the lock lets
         // sleep pass): what it opens may show above.
-        if overridable && self.guard().is_some() {
+        if passed && self.guard().is_some() {
             self.trusted.extend(from..self.output.commands.len());
         }
     }
@@ -841,7 +871,7 @@ impl Kernel {
         }
         let guard = self.guard().map(|guard| self.stack[guard].id.namespace());
         let env = self.shared.env(self.now);
-        let mut ran_itself = false;
+        let (mut ran_itself, mut refused_secret) = (false, false);
         for spec in observers {
             if guard.is_some_and(|ns| spec.id.namespace() != ns) {
                 continue;
@@ -852,6 +882,8 @@ impl Kernel {
             let top = self.stack.last().map(|s| s.id.namespace());
             let (reader, now) = (self.shared.reader, self.now);
             let out = &mut self.output.commands;
+            let secrets = &self.shared.secrets;
+            refused_secret |= vet_secrets(out, from, spec.id.namespace(), secrets, reader);
             work::quiet(
                 reader,
                 top,
@@ -880,6 +912,9 @@ impl Kernel {
             self.warn_runtime(format!(
                 "an observer runs `{id}` again on seeing it; not run"
             ));
+        }
+        if refused_secret {
+            self.warn_runtime("an observer's change of another plugin's secret is not made");
         }
     }
 

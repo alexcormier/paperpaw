@@ -98,14 +98,17 @@ impl Kernel {
             refresh.pictures = self.frame.pictures_shown;
             // Never a screen opened or closed, nor what shows while a screen
             // guards the device, kept off the panel; nor too often.
-            let may_defer = refresh.cause != paperpaw_sdk::filters::RefreshCause::Screens
+            let may_defer = !self.screens_changed
                 && self.guard().is_none()
                 && self.frame.defers < drawing::MAX_DEFERS;
+            // While a screen guards the device, only its plugin's filters
+            // see refreshes: others could count what is typed into it.
+            let guard = self.guard().map(|guard| self.stack[guard].id.namespace());
             let env = self.shared.env(self.now);
             match self
                 .shared
                 .refresh_filters
-                .apply_limited(&env, refresh, screen, may_defer)
+                .apply_limited(&env, refresh, screen, may_defer, guard)
             {
                 Some(refresh) => {
                     self.frame.defers = 0;
@@ -218,6 +221,14 @@ impl Kernel {
             return;
         };
         match command {
+            // While a screen guards the device, nobody but it changes how
+            // the device is set up: a setting could switch the lock off.
+            command if self.held_by_guard() && changes_setup(&command) => {
+                self.warn_runtime(format!(
+                    "{} not while a screen guards the device",
+                    command_name(&command)
+                ));
+            }
             Command::OpenSlot(slot, params) => self.open_slot_command(slot, None, params),
             Command::OpenInSlot(slot, screen, params) => {
                 self.open_slot_command(slot, Some(screen), params);
@@ -240,8 +251,10 @@ impl Kernel {
                 self.warn_runtime("a key map layer is laid by its screen alone; not laid");
             }
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
-            // Not past a screen that guards the device, but from it.
-            Command::Back if self.held_by_guard() => {}
+            // Not past a screen that guards the device, but from it: a
+            // screen above it closes itself (the sleep screen on waking).
+            Command::Back
+                if self.held_by_guard() && self.guard() == self.stack.len().checked_sub(1) => {}
             Command::Back => self.close_top(paperpaw_sdk::CloseCause::Back),
             Command::Notify(text) | Command::Announce(text) => self.notify(text),
             Command::Emit(event, params) => self.emit(&event, &params),
@@ -351,10 +364,14 @@ impl Kernel {
         // Moments for declared work, and jobs waiting for this event.
         self.works.saw(event, params);
         let env = self.shared.env(self.now);
+        let mut refused_secret = false;
         for (_, plugin, handler) in self.subscriptions.iter().filter(|(id, ..)| id == event) {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
             handler(&env, params, &mut self.output.commands);
+            let (secrets, reader) = (&self.shared.secrets, self.shared.reader);
+            let out = &mut self.output.commands;
+            refused_secret |= vet_secrets(out, from, plugin.as_str(), secrets, reader);
             // Background work says nothing over reading.
             let top = self.stack.last().map(|s| s.id.namespace());
             work::quiet(
@@ -366,6 +383,9 @@ impl Kernel {
                 &mut self.output.commands,
                 &mut self.works,
             );
+        }
+        if refused_secret {
+            self.warn_runtime("another plugin's secret is not changed");
         }
         // A setting may change which bars show and their size, and how
         // input is recognized.
@@ -387,8 +407,8 @@ impl Kernel {
         }
     }
 
-    /// Settings, a book's own, plugins switched, secrets, menus and key
-    /// bindings changed.
+    /// Settings, a book's own, plugins switched or removed, secrets,
+    /// menus, key bindings and slots changed.
     fn apply_setting(&mut self, command: Command) {
         match command {
             Command::SetSetting(id, value) if self.shared.settings.goes_to_scope(id.as_str()) => {
@@ -524,4 +544,75 @@ impl Kernel {
             _ => {}
         }
     }
+}
+
+/// Whether `command` changes how the device is set up: settings, secrets,
+/// plugins, menus, key bindings, slots.
+fn changes_setup(command: &Command) -> bool {
+    matches!(
+        command,
+        Command::SetSetting(..)
+            | Command::ResetSetting(_)
+            | Command::PreviewSettings(_)
+            | Command::SetScope(_)
+            | Command::SetPluginEnabled(..)
+            | Command::RemovePlugin(_)
+            | Command::SetSecret(_)
+            | Command::SetMenu(..)
+            | Command::Bind { .. }
+            | Command::BindSlot(..)
+    )
+}
+
+/// What `command` does, for a warning.
+fn command_name(command: &Command) -> &'static str {
+    match command {
+        Command::SetSetting(..) | Command::ResetSetting(_) | Command::PreviewSettings(_) => {
+            "settings changed"
+        }
+        Command::SetScope(_) => "a book's settings",
+        Command::SetPluginEnabled(..) | Command::RemovePlugin(_) => "plugins changed",
+        Command::SetSecret(_) => "secrets changed",
+        Command::SetMenu(..) => "menus changed",
+        Command::Bind { .. } => "keys bound",
+        Command::BindSlot(..) => "slots bound",
+        _ => "this",
+    }
+}
+
+/// Drops from `out[from..]` the secrets `owner` may not change, and tells
+/// whether it did. A plugin changes its own secrets; another's only on
+/// the reader's behalf (`reader`: Settings › Passwords), and then only
+/// one that is there: taken away, or given another value where the reader
+/// may change it, not renamed.
+pub(crate) fn vet_secrets(
+    out: &mut Vec<Command>,
+    from: usize,
+    owner: &str,
+    secrets: &paperpaw_sdk::secrets::Secrets,
+    reader: bool,
+) -> bool {
+    let before = out.len();
+    let mut index = 0;
+    out.retain(|command| {
+        let keep = index < from
+            || match command {
+                Command::SetSecret(change) => {
+                    let own = change.id.split('.').next() == Some(owner);
+                    let theirs = || {
+                        let kept = secrets.iter().find(|s| s.id == change.id);
+                        reader
+                            && kept.is_some_and(|kept| {
+                                change.value.is_none()
+                                    || (kept.changeable && change.label.is_empty())
+                            })
+                    };
+                    own || theirs()
+                }
+                _ => true,
+            };
+        index += 1;
+        keep
+    });
+    out.len() != before
 }

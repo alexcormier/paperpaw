@@ -496,6 +496,7 @@ impl KernelBuilder {
             timing: drawing::Timing::default(),
             framebuffer,
             subscriptions: Vec::new(),
+            offered_down_to: 0,
             action_observers: Vec::new(),
             event_observers: Vec::new(),
             show_pending: false,
@@ -629,6 +630,9 @@ impl Kernel {
                         continue;
                     }
                 };
+                for problem in plugin.take_problems() {
+                    self.warn_runtime(problem);
+                }
                 if disabled
                     .iter()
                     .any(|id| id == plugin.manifest().id.as_str())

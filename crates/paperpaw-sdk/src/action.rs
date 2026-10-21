@@ -297,6 +297,23 @@ impl Actions {
             .insert(at, (action, priority, plugin, handler));
     }
 
+    /// Lets go of the handlers put in place of sealed actions (made before
+    /// the sealed action was known); the actions they were for.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn drop_sealed_overrides(&mut self) -> Vec<Id> {
+        let mut dropped = Vec::new();
+        let map = &self.map;
+        self.overrides.retain(|(action, ..)| {
+            let sealed = map.get(action.as_str()).is_some_and(ActionSpec::is_sealed);
+            if sealed {
+                dropped.push(action.clone());
+            }
+            !sealed
+        });
+        dropped
+    }
+
     /// The handler put in place of action `id`'s own with the highest
     /// priority, and the plugin whose it is.
     #[cfg(any(test, feature = "kernel"))]

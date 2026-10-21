@@ -222,6 +222,10 @@ impl Kernel {
             });
         }
         staging.merge_into(&mut self.shared.registry, &mut self.shared.actions)?;
+        // A sealed action that came after handlers in its place: they go.
+        for action in self.shared.actions.drop_sealed_overrides() {
+            self.warn_runtime(format!("`{action}` is sealed; not overridden"));
+        }
         for setting in staging.settings.drain(..) {
             // Cannot fail: checked above.
             let _ = match setting {
@@ -560,6 +564,9 @@ impl Kernel {
                 return false;
             }
         };
+        for problem in plugin.take_problems() {
+            self.warn_runtime(problem);
+        }
         let manifest = plugin.manifest();
         let id = manifest.id.clone();
         if self.shared.plugins.get(id.as_str()).is_some() {
@@ -762,6 +769,9 @@ impl Kernel {
             Ok(plugin) => plugin,
             Err(problem) => return refuse(self, problem),
         };
+        for problem in plugin.take_problems() {
+            self.warn_runtime(problem);
+        }
         let version = plugin.manifest().version;
         // Registered aside first (its translations, key map, settings): one
         // that would fail leaves the version before in place.

@@ -753,3 +753,81 @@ proptest! {
         prop_assert!(!device.locked());
     }
 }
+
+/// While the device is locked, no other plugin changes how it is set up:
+/// a setting that would switch the lock off, its secret, the plugin
+/// itself. The lock holds.
+mod setup_under_the_lock {
+    use super::*;
+    use paperpaw_sdk::builtin::events;
+    use paperpaw_sdk::secrets::SecretChange;
+    use paperpaw_sdk::{
+        Command, Manifest, Plugin, RegisterError, Registrar, SettingValue, Version,
+    };
+
+    /// Hears the clock and tries to undo the lock.
+    struct Intruder;
+
+    impl Plugin for Intruder {
+        fn manifest(&self) -> Manifest {
+            Manifest::new(
+                Id::new_static("intruder"),
+                "Intruder",
+                Version::new(1, 0, 0),
+            )
+        }
+
+        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+            r.on(events::STATUS_CHANGED, |_, _, out| {
+                out.push(Command::SetSetting(
+                    Id::new_static("lock.kind"),
+                    SettingValue::Text("lock.kind.off".into()),
+                ));
+                out.push(Command::ResetSetting(Id::new_static("lock.kind")));
+                out.push(Command::SetSecret(SecretChange::remove("lock.code")));
+                out.push(Command::SetPluginEnabled(Id::new_static("lock"), false));
+                out.push(Command::RemovePlugin(Id::new_static("lock")));
+            })
+        }
+    }
+
+    #[test]
+    fn nothing_changes_the_setup_under_the_lock() {
+        let storage = Shared::default();
+        Device::start(BUTTONS, storage.clone()).set_pin("1234");
+        let kept = Device::start(BUTTONS, storage.clone()).kept();
+        let kernel = Kernel::builder(BUTTONS)
+            .storage(storage.clone())
+            .user_config(String::from("[core]\nlanguage = en\n"))
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(Keyboard)
+            .plugin(Lock)
+            .plugin(Intruder)
+            .build()
+            .unwrap();
+        let mut device = Device {
+            kernel,
+            storage,
+            now: 1_000,
+        };
+        let effects = device.kernel.start(Instant(device.now));
+        device.settle(effects);
+        assert!(device.locked());
+        let kind = device.kind();
+        device.now += 100;
+        let status = paperpaw_platform::SystemStatus {
+            clock: Some(paperpaw_platform::WallClock {
+                at: Instant(device.now),
+                unix_millis: 1_700_000_000_000,
+                utc_offset_minutes: None,
+            }),
+            battery: None,
+        };
+        let effects = device.kernel.set_status(Instant(device.now), status);
+        device.settle(effects);
+        device.run(actions::NEXT);
+        assert!(device.locked(), "on top: {:?}", device.on_top());
+        assert_eq!(device.kind(), kind);
+        assert_eq!(device.kept(), kept);
+    }
+}

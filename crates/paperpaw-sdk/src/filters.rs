@@ -454,12 +454,13 @@ impl RefreshFilters {
     /// `refresh` as the filters change it, `None` where one defers it; one
     /// that flashes covers `screen`.
     pub fn apply(&self, env: &Env<'_>, refresh: Refresh, screen: Rect) -> Option<Refresh> {
-        self.apply_with(env, refresh, screen, true)
+        self.apply_with(env, refresh, screen, true, None)
     }
 
-    /// As [`RefreshFilters::apply`]; where it `may_defer` not (a screen
-    /// opened, a lock shown, refreshes deferred too often), a filter that
-    /// defers keeps the refresh.
+    /// As [`RefreshFilters::apply`], by the filters of plugin `only` alone
+    /// where it is given (while a screen guards the device, its plugin's);
+    /// where it `may_defer` not (a screen opened, a lock shown, refreshes
+    /// deferred too often), a filter that defers keeps the refresh.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn apply_limited(
@@ -468,8 +469,9 @@ impl RefreshFilters {
         refresh: Refresh,
         screen: Rect,
         may_defer: bool,
+        only: Option<&str>,
     ) -> Option<Refresh> {
-        self.apply_with(env, refresh, screen, may_defer)
+        self.apply_with(env, refresh, screen, may_defer, only)
     }
 
     fn apply_with(
@@ -478,8 +480,10 @@ impl RefreshFilters {
         mut refresh: Refresh,
         screen: Rect,
         may_defer: bool,
+        only: Option<&str>,
     ) -> Option<Refresh> {
-        for filter in &self.filters {
+        let mine = |filter: &&RefreshFilterSpec| only.is_none_or(|ns| filter.id.namespace() == ns);
+        for filter in self.filters.iter().filter(mine) {
             match (filter.filter)(env, &refresh) {
                 RefreshVerdict::Mode(mode) => {
                     refresh.mode = mode;

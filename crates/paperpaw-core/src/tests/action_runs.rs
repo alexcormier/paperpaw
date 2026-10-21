@@ -431,3 +431,283 @@ fn a_sealed_action_keeps_its_handler() {
         log.borrow()
     );
 }
+
+/// A screen above a guard that takes no action passes none on: what
+/// another plugin then runs (a timer, a rule) is not trusted, and opens
+/// below the guard; what the guard let pass opens above it.
+mod above_the_guard {
+    use super::*;
+
+    struct Gate;
+
+    impl Screen for Gate {
+        fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+        fn guards(&self) -> bool {
+            true
+        }
+
+        fn on_action(&mut self, action: &Id, _: &mut Cx<'_, '_>) -> Handled {
+            if action.as_str() == "up.raise" {
+                Handled::No
+            } else {
+                Handled::Yes
+            }
+        }
+    }
+
+    struct Top;
+
+    impl Screen for Top {
+        fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+        fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+            Handled::No
+        }
+    }
+
+    struct GatePlugin;
+
+    impl Plugin for GatePlugin {
+        fn manifest(&self) -> Manifest {
+            Manifest::new(Id::new_static("gate"), "Gate", Version::new(1, 0, 0))
+                .uses(paperpaw_sdk::Uses::NOTHING)
+        }
+
+        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+            r.add_screen(ScreenSpec::new(
+                Id::new_static("gate.lock"),
+                "lock",
+                Box::new(|_, _| Box::new(Gate)),
+            ))
+        }
+    }
+
+    struct Up;
+
+    impl Plugin for Up {
+        fn manifest(&self) -> Manifest {
+            Manifest::new(Id::new_static("up"), "Up", Version::new(1, 0, 0))
+                .uses(paperpaw_sdk::Uses::NOTHING)
+        }
+
+        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+            for id in ["up.top", "up.evil"] {
+                r.add_screen(ScreenSpec::new(
+                    Id::parse(id).unwrap(),
+                    "top",
+                    Box::new(|_, _| Box::new(Top)),
+                ))?;
+            }
+            r.add_action(
+                ActionSpec::new(Id::new_static("up.raise"), "raise").handler(|_, out| {
+                    out.push(Command::OpenScreen(Id::new_static("up.top"), Params::new()));
+                }),
+            )?;
+            r.add_action(
+                ActionSpec::new(Id::new_static("up.go"), "go").handler(|_, out| {
+                    out.push(Command::OpenScreen(
+                        Id::new_static("up.evil"),
+                        Params::new(),
+                    ));
+                }),
+            )
+        }
+    }
+
+    #[test]
+    fn what_no_guard_let_pass_opens_below_it() {
+        let log = log();
+        let mut kernel = Kernel::builder(DEVICE)
+            .plugin(TestPlugin::new("a", &log))
+            .plugin(GatePlugin)
+            .plugin(Up)
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        kernel.open_screen(Instant(10), Id::new_static("gate.lock"), Params::new());
+        kernel.run_action(Instant(20), Id::new_static("up.raise"));
+        assert_eq!(kernel.active_screen(), Some(&Id::new_static("up.top")));
+        // As from a timer of plugin `up`:
+        kernel.apply(Command::RunAction(Id::new_static("up.go")));
+        kernel.finish();
+        let ids: Vec<&str> = kernel.stack.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(ids, ["a.screen", "up.evil", "gate.lock", "up.top"]);
+    }
+}
+
+/// A plugin changes its own secrets; another's only on the reader's
+/// behalf, and then only its value.
+mod secrets_of_others {
+    use super::*;
+    use paperpaw_sdk::secrets::SecretChange;
+
+    struct Snoop;
+
+    impl Plugin for Snoop {
+        fn manifest(&self) -> Manifest {
+            Manifest::new(Id::new_static("snoop"), "Snoop", Version::new(1, 0, 0))
+                .uses(paperpaw_sdk::Uses::NOTHING)
+        }
+
+        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+            r.add_action(
+                ActionSpec::new(Id::new_static("snoop.rename"), "x").handler(|_, out| {
+                    out.push(Command::SetSecret(SecretChange::keep(
+                        "keeper.pw",
+                        "Mine",
+                        "y",
+                    )));
+                    out.push(Command::SetSecret(SecretChange::keep(
+                        "snoop.own",
+                        "Own",
+                        "z",
+                    )));
+                }),
+            )?;
+            r.add_action(
+                ActionSpec::new(Id::new_static("snoop.change"), "x").handler(|_, out| {
+                    out.push(Command::SetSecret(SecretChange::keep(
+                        "keeper.pw",
+                        "",
+                        "new",
+                    )));
+                }),
+            )?;
+            r.subscribe(
+                Id::new_static("snoop.when"),
+                Box::new(|_, _, out| {
+                    out.push(Command::SetSecret(SecretChange::remove("keeper.pw")));
+                }),
+            )
+        }
+    }
+
+    #[test]
+    fn only_a_plugin_changes_its_secrets() {
+        let log = log();
+        let mut kernel = Kernel::builder(DEVICE)
+            .plugin(TestPlugin::new("a", &log))
+            .plugin(Snoop)
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        kernel.set_secret(SecretChange::keep("keeper.pw", "Password", "x"));
+        kernel.run_action(Instant(10), Id::new_static("snoop.rename"));
+        assert_eq!(kernel.shared.secrets.get("keeper.pw"), Some("x"), "renamed");
+        assert_eq!(kernel.shared.secrets.get("snoop.own"), Some("z"));
+        // Not on the reader's behalf: not taken away.
+        kernel.apply(Command::Emit(Id::new_static("snoop.when"), Params::new()));
+        kernel.finish();
+        assert_eq!(kernel.shared.secrets.get("keeper.pw"), Some("x"));
+        // On the reader's behalf, its value (Settings › Passwords).
+        kernel.run_action(Instant(20), Id::new_static("snoop.change"));
+        assert_eq!(kernel.shared.secrets.get("keeper.pw"), Some("new"));
+        let warnings = kernel.take_warnings();
+        assert!(
+            warnings.iter().any(|w| w.message.contains("secret")),
+            "{warnings:?}"
+        );
+    }
+}
+
+/// The work an original asks for is its own plugin's, also run from a
+/// handler of another in its place.
+mod originals_work {
+    use super::*;
+    use paperpaw_sdk::work::Work;
+
+    struct Worker;
+
+    impl Plugin for Worker {
+        fn manifest(&self) -> Manifest {
+            Manifest::new(Id::new_static("wk"), "Worker", Version::new(1, 0, 0))
+                .uses(paperpaw_sdk::Uses::NOTHING)
+        }
+
+        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+            r.add_action(
+                ActionSpec::new(Id::new_static("wk.plan"), "plan").handler(|_, out| {
+                    out.push(Command::Work(Work::at(
+                        Id::new_static("wk.later"),
+                        Instant(5000),
+                    )));
+                }),
+            )
+        }
+    }
+
+    struct Wrapper;
+
+    impl Plugin for Wrapper {
+        fn manifest(&self) -> Manifest {
+            Manifest::new(Id::new_static("wrap"), "Wrapper", Version::new(1, 0, 0))
+                .uses(paperpaw_sdk::Uses::NOTHING)
+        }
+
+        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+            r.override_action(
+                Id::new_static("wk.plan"),
+                |_, params, out| {
+                    out.push(Command::RunOriginal(
+                        Id::new_static("wk.plan"),
+                        params.clone(),
+                    ))
+                },
+                Priority::DEFAULT,
+            )
+        }
+    }
+
+    #[test]
+    fn the_originals_work_is_kept() {
+        let log = log();
+        let mut kernel = Kernel::builder(DEVICE)
+            .plugin(TestPlugin::new("a", &log))
+            .plugin(Worker)
+            .plugin(Wrapper)
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        let effects = kernel.run_action(Instant(10), Id::new_static("wk.plan"));
+        assert!(
+            effects.wake_at.is_some_and(|at| at <= Instant(5000)),
+            "{:?}",
+            effects.wake_at
+        );
+    }
+}
+
+/// A sealed action keeps its handler also where the handler in its place
+/// came first.
+#[test]
+fn a_sealed_action_keeps_its_handler_in_either_order() {
+    let mut r = Registrar::new(Id::new_static("p"));
+    r.override_action(Id::new_static("p.x"), |_, _, _| {}, Priority(1))
+        .unwrap();
+    assert!(
+        r.add_action(ActionSpec::new(Id::new_static("p.x"), "x").sealed())
+            .is_err()
+    );
+    let (log, screen) = (log(), log());
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin::new("a", &screen))
+        .plugin(Guarding(log.clone()))
+        .plugin(Observing(log.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let warnings = kernel.take_warnings();
+    assert!(
+        warnings.iter().any(|w| w.message.contains("is sealed")),
+        "{warnings:?}"
+    );
+    log.borrow_mut().clear();
+    kernel.apply(Command::RunAction(Id::new_static("obs.sealed")));
+    kernel.finish();
+    assert!(
+        log.borrow().contains(&String::from("sealed")),
+        "{:?}",
+        log.borrow()
+    );
+}

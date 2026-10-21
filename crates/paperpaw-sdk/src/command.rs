@@ -359,7 +359,8 @@ pub enum Command {
     /// (`[keymap.<layer>]`): it applies while that screen is on top and
     /// goes with it; not below a screen that guards the device. `None`
     /// takes it away. A screen sends it with
-    /// [`Cx::set_key_layer`](crate::Cx::set_key_layer).
+    /// [`Cx::set_key_layer`](crate::Cx::set_key_layer); sent from anywhere
+    /// else (a handler, a rule), it is refused.
     SetKeyLayer(crate::ScreenKey, Option<Id>),
     /// Shows task `.0`, a tab of tabs: the screens open now are kept as
     /// the task shown before (by their ids and params; dropped from memory

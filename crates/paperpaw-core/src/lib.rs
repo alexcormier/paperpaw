@@ -316,6 +316,8 @@ pub struct Kernel {
     shared: Shared,
     framebuffer: Framebuffer,
     subscriptions: Vec<(Id, Id, EventHandler)>,
+    /// The lowest screen the last offer of input reached ([`Kernel::offer`]).
+    offered_down_to: usize,
     /// What sees every action run and every event emitted.
     action_observers: Vec<paperpaw_sdk::ObserverSpec>,
     event_observers: Vec<paperpaw_sdk::ObserverSpec>,
@@ -488,7 +490,11 @@ impl Kernel {
         self.hint.pressed = None;
         self.now = now;
         self.last_activity = now;
-        self.shared.usage.inputs = self.shared.usage.inputs.saturating_add(1);
+        // Not counted while a screen guards the device: the count would
+        // tell how long a code typed into it is.
+        if self.guard().is_none() {
+            self.shared.usage.inputs = self.shared.usage.inputs.saturating_add(1);
+        }
         let event = self.page_buttons_swapped(event);
         // Plugins' input filters come first.
         let (verdict, delivered) = {
@@ -1021,6 +1027,9 @@ impl Kernel {
         self.now = now;
         self.last_activity = now;
         self.output.commands.push(Command::SetSetting(id, value));
+        // The shell's, on the reader's behalf: also while a screen guards
+        // the device.
+        self.trusted.push(self.output.commands.len() - 1);
         self.run_commands();
         Ok(self.finish())
     }

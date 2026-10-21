@@ -61,6 +61,17 @@ const MAX_MANIFEST: usize = 4 * 1024;
 const MAX_STEPS: usize = 16;
 /// Most files in `points/`.
 const MAX_POINTS: usize = 16;
+/// Most lines a plugin contributes to points, all files together.
+const MAX_POINT_LINES: usize = 64;
+/// What the files of formats 3 (`menus.ini`, `actions.ini`, `icons.ini`,
+/// `setup.ini`, `points/`) may take together, in bytes: they are held
+/// until the plugin registers, which small devices feel.
+const MAX_FORMAT3_DATA: usize = 24 * 1024;
+/// The version of the formats that brought those files.
+const FORMATS_3: u32 = 3;
+/// Plugins whose settings no action of `actions.ini` sets: those that
+/// guard the device.
+const GUARDED_SETTINGS: [&str; 1] = ["lock"];
 /// The version of the formats of data plugins this PaperPaw reads.
 pub(crate) const FORMATS: u32 = paperpaw_sdk::DATA_FORMATS;
 
@@ -92,6 +103,9 @@ pub(crate) struct DataPlugin {
     points: RefCell<Vec<(String, String)>>,
     /// Fonts for roles, from `[fonts]` of `plugin.ini`.
     roles: RefCell<Vec<(String, String)>>,
+    /// What was left out as it was read, to tell (see
+    /// [`DataPlugin::take_problems`]).
+    problems: RefCell<Vec<String>>,
     /// Paths of font files.
     fonts: RefCell<Vec<String>>,
     /// Packs that extend other fonts: their paths and those fonts' ids.
@@ -117,6 +131,12 @@ impl DataPlugin {
         for source in self.translations.borrow_mut().iter_mut() {
             *source = listing(source, &prefix);
         }
+    }
+
+    /// What was left out of it as it was read (files of formats it does
+    /// not say it is made for, files too large), to tell once.
+    pub(crate) fn take_problems(&self) -> Vec<String> {
+        self.problems.take()
     }
 
     /// Whether its folder holds native code: it is a code plugin.
@@ -395,6 +415,25 @@ fn actions(plugin: &Id, source: &str) -> Result<Vec<MadeAction>, RegisterError> 
         }
     }
     let ids: Vec<Id> = found.iter().map(|action| action.id.clone()).collect();
+    for action in &found {
+        for step in &action.steps {
+            let problem = match step {
+                Step::Emit(event) if event.namespace() != plugin.as_str() => {
+                    Some(format!("`{}`: emits only events of its own", action.id))
+                }
+                Step::Set(setting, _) if GUARDED_SETTINGS.contains(&setting.namespace()) => Some(
+                    format!("`{}`: `{setting}` is not set by actions", action.id),
+                ),
+                _ => None,
+            };
+            if let Some(message) = problem {
+                return Err(RegisterError::Parse {
+                    line: action.line,
+                    message: Cow::Owned(message),
+                });
+            }
+        }
+    }
     let mut made = Vec::new();
     for ReadAction {
         id,
@@ -533,6 +572,20 @@ fn setup_steps(
         .collect()
 }
 
+/// The fonts `[fonts]` in a `plugin.ini` binds to roles, where the plugin
+/// is made for formats 3 (else left out, told).
+fn fonts_for_roles(source: &str, path: &str, budget: &mut Budget) -> Vec<(String, String)> {
+    let found = roles(source);
+    if budget.formats < FORMATS_3 && !found.is_empty() {
+        budget.problems.push(format!(
+            "{path}/plugin.ini: [fonts] left out, the plugin says it is made for formats {}",
+            budget.formats
+        ));
+        return Vec::new();
+    }
+    found
+}
+
 /// The fonts `[fonts]` in a `plugin.ini` binds to roles.
 fn roles(source: &str) -> Vec<(String, String)> {
     paperpaw_config::parse(source)
@@ -547,9 +600,41 @@ fn roles(source: &str) -> Vec<(String, String)> {
         .collect()
 }
 
+/// What the files of formats 3 of one plugin may still take, and what
+/// was left out.
+struct Budget {
+    /// The formats the plugin says it is made for.
+    formats: u32,
+    left: usize,
+    problems: Vec<String>,
+}
+
+impl Budget {
+    /// File `path` of formats 3, within what is left; `None` where it is
+    /// not there, or left out (told).
+    fn read(&mut self, storage: &dyn Storage, path: &str) -> Option<String> {
+        let size = storage.size(path).ok()?;
+        if self.formats < FORMATS_3 {
+            self.problems.push(format!(
+                "{path}: left out, the plugin says it is made for formats {}",
+                self.formats
+            ));
+            return None;
+        }
+        let size = usize::try_from(size).unwrap_or(usize::MAX);
+        if size > self.left.min(MAX_FILE) {
+            self.problems.push(format!("{path}: left out, too large"));
+            return None;
+        }
+        let text = read(storage, path, self.left.min(MAX_FILE))?;
+        self.left -= text.len();
+        Some(text)
+    }
+}
+
 /// The files of a plugin's `points` folder: each point (the file's name
-/// without `.txt`) and its lines.
-fn points(storage: &dyn Storage, path: &str) -> Vec<(String, String)> {
+/// without `.txt`) and its lines, at most [`MAX_POINT_LINES`] in all.
+fn points(storage: &dyn Storage, path: &str, budget: &mut Budget) -> Vec<(String, String)> {
     let dir = format!("{path}/points");
     let mut names: Vec<String> = Vec::new();
     let _ = storage.list(&dir, &mut |entry| {
@@ -558,17 +643,34 @@ fn points(storage: &dyn Storage, path: &str) -> Vec<(String, String)> {
         }
     });
     names.sort_unstable();
-    names
-        .into_iter()
-        .take(MAX_POINTS)
-        .filter_map(|name| {
-            let text = read(storage, &format!("{dir}/{name}"), MAX_FILE)?;
-            let point = name
-                .rsplit_once('.')
-                .map_or(name.as_str(), |(stem, _)| stem);
-            Some((point.to_string(), text))
-        })
-        .collect()
+    let mut lines_left = MAX_POINT_LINES;
+    let mut out = Vec::new();
+    for name in names.into_iter().take(MAX_POINTS) {
+        let file = format!("{dir}/{name}");
+        let Some(text) = budget.read(storage, &file) else {
+            continue;
+        };
+        let mut kept = String::new();
+        for line in text.lines().map(str::trim) {
+            if line.is_empty() || line.starts_with('#') {
+                continue;
+            }
+            if lines_left == 0 {
+                budget
+                    .problems
+                    .push(format!("{file}: lines past {MAX_POINT_LINES} left out"));
+                break;
+            }
+            lines_left -= 1;
+            kept.push_str(line);
+            kept.push('\n');
+        }
+        let point = name
+            .rsplit_once('.')
+            .map_or(name.as_str(), |(stem, _)| stem);
+        out.push((point.to_string(), kept));
+    }
+    out
 }
 
 /// Of a translation catalog `source`, its `[meta]` section and the
@@ -737,8 +839,13 @@ fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, S
     let manifest = read(storage, &format!("{path}/plugin.ini"), MAX_MANIFEST)
         .ok_or_else(|| format!("{path}: no plugin.ini"))?;
     let source = manifest;
-    let manifest =
+    let (manifest, formats) =
         parse_manifest(&source, folder).map_err(|e| format!("{path}/plugin.ini: {e}"))?;
+    let mut budget = Budget {
+        formats,
+        left: MAX_FORMAT3_DATA,
+        problems: Vec::new(),
+    };
     let mut translations = Vec::new();
     let catalogs = format!("{path}/i18n");
     let mut files: Vec<String> = Vec::new();
@@ -767,12 +874,13 @@ fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, S
         settings: RefCell::new(read(storage, &format!("{path}/settings.ini"), MAX_FILE)),
         presets: RefCell::new(read(storage, &format!("{path}/presets.ini"), MAX_FILE)),
         marks: RefCell::new(read(storage, &format!("{path}/marks.ini"), MAX_FILE)),
-        menus: RefCell::new(read(storage, &format!("{path}/menus.ini"), MAX_FILE)),
-        actions: RefCell::new(read(storage, &format!("{path}/actions.ini"), MAX_FILE)),
-        icons: RefCell::new(read(storage, &format!("{path}/icons.ini"), MAX_FILE)),
-        setup: RefCell::new(read(storage, &format!("{path}/setup.ini"), MAX_FILE)),
-        points: RefCell::new(points(storage, path)),
-        roles: RefCell::new(roles(&source)),
+        menus: RefCell::new(budget.read(storage, &format!("{path}/menus.ini"))),
+        actions: RefCell::new(budget.read(storage, &format!("{path}/actions.ini"))),
+        icons: RefCell::new(budget.read(storage, &format!("{path}/icons.ini"))),
+        setup: RefCell::new(budget.read(storage, &format!("{path}/setup.ini"))),
+        points: RefCell::new(points(storage, path, &mut budget)),
+        roles: RefCell::new(fonts_for_roles(&source, path, &mut budget)),
+        problems: RefCell::new(budget.problems),
         fonts: RefCell::new(fonts),
         extensions: RefCell::new(extensions(&source, path)),
         faces: RefCell::new(faces),
@@ -848,6 +956,7 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
         setup: RefCell::new(None),
         points: RefCell::new(Vec::new()),
         roles: RefCell::new(Vec::new()),
+        problems: RefCell::new(Vec::new()),
         fonts: RefCell::new(fonts),
         extensions: RefCell::new(Vec::new()),
         faces: RefCell::new(Vec::new()),
@@ -922,9 +1031,10 @@ fn read(storage: &dyn Storage, path: &str, max: usize) -> Option<String> {
     String::from_utf8(data).ok()
 }
 
-/// The `[plugin]` section of a `plugin.ini`. The id defaults to the
-/// folder's name; the version to 0.1.0.
-fn parse_manifest(source: &str, folder: &str) -> Result<Manifest, String> {
+/// The `[plugin]` section of a `plugin.ini`, and the formats it is made
+/// for. The id defaults to the folder's name; the version to 0.1.0, the
+/// formats to 1.
+fn parse_manifest(source: &str, folder: &str) -> Result<(Manifest, u32), String> {
     let (mut id, mut name, mut description, mut version) = (None, None, None, None);
     let mut formats = None;
     for entry in paperpaw_config::parse(source) {
@@ -942,8 +1052,9 @@ fn parse_manifest(source: &str, folder: &str) -> Result<Manifest, String> {
             _ => {}
         }
     }
+    let mut made_for = 1;
     if let Some(text) = formats {
-        let made_for: u32 = text
+        made_for = text
             .trim()
             .parse()
             .map_err(|_| format!("invalid formats `{text}`"))?;
@@ -963,9 +1074,10 @@ fn parse_manifest(source: &str, folder: &str) -> Result<Manifest, String> {
         None => Version::new(0, 1, 0),
     };
     let name = name.unwrap_or_else(|| id.as_str().to_string());
-    Ok(Manifest::new(id, name, version)
+    let manifest = Manifest::new(id, name, version)
         .description(description.unwrap_or_default())
-        .uses(paperpaw_sdk::Uses::NOTHING))
+        .uses(paperpaw_sdk::Uses::NOTHING);
+    Ok((manifest, made_for))
 }
 
 #[cfg(test)]
@@ -1160,6 +1272,8 @@ kind = Not An Id
         let ini = |formats: &str| format!("[plugin]\nname = Large print\n{formats}");
         assert!(parse_manifest(&ini(""), "large").is_ok());
         assert!(parse_manifest(&ini("formats = 1\n"), "large").is_ok());
+        assert!(parse_manifest(&ini("formats = 2\n"), "large").is_ok());
+        assert_eq!(parse_manifest(&ini(""), "large").unwrap().1, 1);
         assert!(parse_manifest(&ini("formats = 3\n"), "large").is_ok());
         let later = parse_manifest(&ini("formats = 4\n"), "large").unwrap_err();
         assert!(later.contains("later PaperPaw"), "{later}");
@@ -1190,6 +1304,10 @@ kind = Not An Id
         assert_eq!(step("core.home"), Step::Run(Id::new_static("core.home")));
         assert!(Step::parse("Not An Id", 1).is_err());
         let plugin = Id::new_static("cosy");
+        // Only its own events, no setting of the lock.
+        assert!(actions(&plugin, "[a]\nrun = emit:core.started\n").is_err());
+        assert!(actions(&plugin, "[a]\nrun = emit:cosy.done\n").is_ok());
+        assert!(actions(&plugin, "[a]\nrun = lock.kind=lock.kind.off\n").is_err());
         let many = alloc::vec!["core.home"; MAX_STEPS + 1].join(", ");
         assert!(
             actions(
@@ -1241,5 +1359,33 @@ core.font-ui = x.semi
             ),
             [(String::from("core.font-ui"), String::from("x.semi"))]
         );
+    }
+
+    /// Files of formats 3 are read only for a plugin made for them; they
+    /// are held within a budget, and lines for points within a limit.
+    #[test]
+    fn files_of_formats_3_are_read_within_limits() {
+        let older = MemoryStorage::new()
+            .with(
+                "plugins/old/plugin.ini",
+                "[plugin]\nformats = 2\n[fonts]\ncore.font-ui = old.x\n",
+            )
+            .with("plugins/old/menus.ini", "[old.m]\ntitle = M\n");
+        let plugin = load_folder(&older, "plugins/old").unwrap();
+        assert!(plugin.menus.borrow().is_none());
+        assert!(plugin.roles.borrow().is_empty());
+        assert_eq!(plugin.take_problems().len(), 2);
+        let lines: String = (0..MAX_POINT_LINES + 5)
+            .map(|n| format!("line {n}\n"))
+            .collect();
+        let big = alloc::vec![b'#'; MAX_FORMAT3_DATA + 1];
+        let newer = MemoryStorage::new()
+            .with("plugins/new/plugin.ini", "[plugin]\nformats = 3\n")
+            .with("plugins/new/points/core.about.txt", lines.as_str())
+            .with("plugins/new/actions.ini", big);
+        let plugin = load_folder(&newer, "plugins/new").unwrap();
+        assert!(plugin.actions.borrow().is_none(), "too large");
+        assert_eq!(plugin.points.borrow()[0].1.lines().count(), MAX_POINT_LINES);
+        assert_eq!(plugin.take_problems().len(), 2);
     }
 }
