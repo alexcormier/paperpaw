@@ -351,6 +351,9 @@ impl Kernel {
         for place in staging.status_places.drain(..) {
             self.shared.status_items.add_place(place);
         }
+        for place in staging.widget_places.drain(..) {
+            self.shared.widgets.add_place(place);
+        }
         for step in staging.setup_steps.drain(..) {
             self.shared.setup.add(step);
         }

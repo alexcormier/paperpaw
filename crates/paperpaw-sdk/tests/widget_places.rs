@@ -1,0 +1,145 @@
+//! Places of widgets: a stack of them above each other, placed in the
+//! middle or pushed by free spaces, what does not fit left out; what an
+//! event means for the widgets a screen shows; whether any place shows a
+//! widget.
+
+// Tests panic on purpose when something is wrong.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+mod support;
+
+use paperpaw_sdk::builtin::events;
+use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::widgets::{
+    self, FILL, PlaceKind, Refresh, Stack, Widget, WidgetPlace, WidgetSpec, WidgetTarget,
+};
+use paperpaw_sdk::{Canvas, Command, Env, Id, Params, Rect, SettingSpec, SettingValue};
+
+use support::{Device, Harness};
+
+/// A widget as high as `n` times 100, that runs `t.open` when tapped.
+struct Block(u16);
+
+impl Widget for Block {
+    fn height(&self, _: &Env<'_>, _: u16) -> u16 {
+        self.0 * 100
+    }
+
+    fn draw(&self, _: &mut Canvas<'_>, _: &Env<'_>, _: Rect) {}
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        vec![WidgetTarget::new(
+            area,
+            Command::RunAction(Id::new_static("t.open")),
+        )]
+    }
+}
+
+const LIST: Setting<Text> = Setting::new("t.list");
+const PLACE_SETTINGS: &[Id] = &[Id::new_static("t.list")];
+
+/// Blocks one and three high, and a place listing them in `t.list`.
+fn harness() -> Harness {
+    let mut h = Harness::new(Device::TOUCH);
+    h.widgets
+        .add(WidgetSpec::new(Id::new_static("t.one"), "t.one", |_| {
+            Box::new(Block(1))
+        }));
+    h.widgets.add(WidgetSpec::new(
+        Id::new_static("t.three"),
+        "t.three",
+        |_| Box::new(Block(3)),
+    ));
+    h.widgets.add_place(WidgetPlace::new(
+        Id::new_static("t.place"),
+        "t.place",
+        PLACE_SETTINGS,
+        PlaceKind::Stack,
+    ));
+    h.settings
+        .define(SettingSpec::text(&LIST, "t.list", ""))
+        .unwrap();
+    h
+}
+
+/// Where the widgets of a stack of `list` go in an 800 high screen.
+fn areas(h: &Harness, list: &str) -> Vec<Rect> {
+    let env = h.env();
+    Stack::new(&env, list, Rect::new(0, 0, 480, 800))
+        .targets(&env)
+        .into_iter()
+        .map(|t| t.area)
+        .collect()
+}
+
+#[test]
+fn a_stack_is_in_the_middle_unless_free_space_pushes_it() {
+    let h = harness();
+    let gap = paperpaw_sdk::ui::UiStyle::new(&h.env()).gap as u16;
+    let margin = paperpaw_sdk::ui::UiStyle::new(&h.env()).margin as u16;
+    let two = areas(&h, "t.one, t.one");
+    assert_eq!(two.len(), 2);
+    let total = 200 + 2 * gap;
+    assert_eq!(two[0].y, (800 - total) / 2);
+    assert_eq!(two[1].y, two[0].y + 100 + 2 * gap);
+    assert_eq!((two[0].x, two[0].width), (margin, 480 - 2 * margin));
+    // A free space first: at the bottom.
+    let pushed = areas(&h, &format!("{FILL}, t.one"));
+    assert_eq!(pushed[0].y + pushed[0].height, 800);
+    // What does not fit below the others is left out; unknown ones too.
+    let full = areas(&h, "t.three, t.three, t.three, t.unknown, t.one");
+    assert_eq!(full.len(), 2, "{full:?}");
+}
+
+#[test]
+fn an_event_says_what_widgets_shown_need() {
+    let shown = vec!["t.one".to_string(), "t.three@2".to_string()];
+    let changed = |id: &'static str| {
+        let event = events::SETTING_CHANGED.emit(events::SettingChanged::new(Id::new_static(id)));
+        match event {
+            Command::Emit(event, params) => widgets::refresh(&event, &params, "own", &shown),
+            _ => unreachable!(),
+        }
+    };
+    assert_eq!(changed("own.columns"), Refresh::Remake);
+    assert_eq!(changed("core.ui-size"), Refresh::Remake);
+    assert_eq!(changed("t.one.align"), Refresh::Remake);
+    assert_eq!(
+        changed("t.three.size"),
+        Refresh::Remake,
+        "of a placement's widget"
+    );
+    assert_eq!(changed("other.thing"), Refresh::Read);
+    let status = widgets::refresh(events::STATUS_CHANGED.id(), &Params::new(), "own", &shown);
+    assert_eq!(status, Refresh::Live);
+    let mine = widgets::changed(&Id::new_static("t.one"));
+    let Command::Emit(event, params) = mine else {
+        unreachable!()
+    };
+    assert_eq!(
+        widgets::refresh(&event, &params, "own", &shown),
+        Refresh::ReadOne(Id::new_static("t.one"))
+    );
+    let other = Id::new_static("t.other-event");
+    assert_eq!(
+        widgets::refresh(&other, &Params::new(), "own", &shown),
+        Refresh::Nothing
+    );
+}
+
+#[test]
+fn a_place_tells_whether_it_shows_a_widget() {
+    let mut h = harness();
+    assert!(!h.widgets.shown(&h.env(), "t.one"));
+    h.settings
+        .set(
+            "t.list",
+            SettingValue::Text("t.three@2 0/0 1x1, t.one".into()),
+        )
+        .unwrap();
+    let env = h.env();
+    assert!(env.widgets.shown(&env, "t.one"));
+    assert!(env.widgets.shown(&env, "t.three"), "a placement of it");
+    let place = env.widgets.place("t.place").unwrap();
+    assert_eq!(place.widgets(&env), ["t.three@2", "t.one"]);
+}

@@ -149,6 +149,7 @@ pub enum Contribution {
     StatusLine(Box<StatusLineSpec>),
     /// Boxed: four ids, larger than the other contributions.
     StatusPlace(Box<StatusPlace>),
+    WidgetPlace(Box<crate::widgets::WidgetPlace>),
     TextFilter(TextFilterSpec),
     Decorator(Box<crate::decorations::DecoratorSpec>),
     PageLayer(Box<crate::layers::PageLayerSpec>),
@@ -250,6 +251,7 @@ impl Contribution {
             Contribution::StatusItem(_) => "status-item",
             Contribution::StatusLine(_) => "status-line",
             Contribution::StatusPlace(_) => "status-place",
+            Contribution::WidgetPlace(_) => "widget-place",
             Contribution::TextFilter(_) => "text-filter",
             Contribution::Decorator(_) => "decorator",
             Contribution::PageLayer(_) => "page-layer",
@@ -300,6 +302,7 @@ impl Contribution {
             Contribution::StatusItem(i) => &i.id,
             Contribution::StatusLine(l) => &l.id,
             Contribution::StatusPlace(p) => &p.id,
+            Contribution::WidgetPlace(p) => &p.id,
             Contribution::TextFilter(f) => &f.id,
             Contribution::Decorator(d) => &d.id,
             Contribution::PageLayer(l) => &l.id,
@@ -999,6 +1002,16 @@ impl Registrar {
     /// [`status::Place`](crate::status::Place)).
     pub fn add_status_place(&mut self, place: StatusPlace) -> Result<(), RegisterError> {
         self.add(Contribution::StatusPlace(Box::new(place)))
+    }
+
+    /// Adds a place where widgets show: the settings that list them, in a
+    /// grid or above each other (see
+    /// [`widgets::WidgetPlace`](crate::widgets::WidgetPlace)).
+    pub fn add_widget_place(
+        &mut self,
+        place: crate::widgets::WidgetPlace,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::WidgetPlace(Box::new(place)))
     }
 
     /// Publishes a service for other plugins as `id`, found by its type

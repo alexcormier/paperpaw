@@ -8,9 +8,10 @@
 //!   `sleep` at first, as on CrossPoint), one after the other;
 //! - *Message*: PaperPaw's logo and "Sleeping" (the logo as set,
 //!   see [`paperpaw_sdk::logo`]);
-//! - *Widgets*: widgets as on the home screen (setting `sleep.widgets`,
-//!   edited with the home screen's editor), e.g. the book being read and
-//!   today's reading, in the middle of the screen;
+//! - *Widgets*: widgets as on the home screen (setting `sleep.widgets`, a
+//!   place of widgets above each other, edited on the slot
+//!   `core.edit-widgets`), e.g. the book being read and today's reading,
+//!   in the middle of the screen;
 //! - *Page*: the screen stays as it is.
 //!
 //! Without a cover or a picture the message shows. Where the device is
@@ -37,7 +38,7 @@ use paperpaw_sdk::library;
 use paperpaw_sdk::logo::Logo;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::Widget;
+use paperpaw_sdk::widgets::{PlaceKind, Stack, WidgetPlace};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Handled, Id, Manifest, MenuNeed, Params, Plugin, Priority,
     Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, Version,
@@ -54,8 +55,6 @@ pub const PAGE: &str = "sleep.show.page";
 pub const WIDGETS: &str = "sleep.show.widgets";
 /// The widgets shown with [`WIDGETS`], ids separated by commas.
 pub const WIDGET_LIST: Setting<Text> = Setting::new("sleep.widgets");
-/// The home screen's editor of lists of widgets, if installed.
-const EDIT_WIDGETS: Id = Id::new_static("home.edit");
 /// The folder of the pictures.
 pub const FOLDER: Setting<Text> = Setting::new("sleep.folder");
 const SCREEN: Id = Id::new_static("sleep.screen");
@@ -77,7 +76,15 @@ static FOLDER_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::ne
     .editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
 static WIDGETS_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section(SECTION)
-    .editor(EDIT_WIDGETS);
+    .editor_slot(slots::EDIT_WIDGETS);
+/// Where its widgets show, for editors and widgets that ask.
+const PLACE: WidgetPlace = WidgetPlace::new(
+    Id::new_static("sleep.widgets"),
+    "sleep.title",
+    PLACE_SETTINGS,
+    PlaceKind::Stack,
+);
+const PLACE_SETTINGS: &[Id] = &[Id::new_static(WIDGET_LIST.static_str())];
 
 /// What the sleep screen shows, the folder of its pictures and its
 /// widgets.
@@ -134,6 +141,7 @@ impl Plugin for Sleep {
             Box::new(|env, _| Box::new(SleepScreen::new(env))),
         ))?;
         r.bind_slot(slots::SLEEP, SCREEN, Priority::DEFAULT)?;
+        r.add_widget_place(PLACE)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -191,73 +199,12 @@ fn picture(env: &Env<'_>) -> Option<ImageRef> {
     )
 }
 
-/// The widgets of [`WIDGET_LIST`] between the margins, together in the
-/// middle of the screen, or where free spaces push them: each with where
-/// it goes, what it shows read (none if none shows).
-fn place_widgets(env: &Env<'_>) -> Vec<(Box<dyn Widget>, Rect)> {
-    let style = UiStyle::new(env);
-    let display = env.device.display;
-    let margin = style.margin as u16;
-    let gap = style.gap as u16;
-    let width = display.width.saturating_sub(2 * margin);
-    // Free spaces (`None`) share the room the others leave.
-    let mut made: Vec<Option<(Box<dyn Widget>, u16)>> = Vec::new();
-    let mut total = 0u16;
-    let mut shown = 0;
-    for id in paperpaw_sdk::status::item_ids(env.settings.read(&WIDGET_LIST)) {
-        if id == paperpaw_sdk::widgets::FILL {
-            made.push(None);
-            continue;
-        }
-        let Some(widget) = env.widgets.make(id, env) else {
-            continue;
-        };
-        let height = widget.height(env, width);
-        if height == 0 {
-            continue;
-        }
-        let added = height + if shown == 0 { 0 } else { gap * 2 };
-        if total + added > display.height {
-            break;
-        }
-        total += added;
-        shown += 1;
-        made.push(Some((widget, height)));
-    }
-    if shown == 0 {
-        return Vec::new();
-    }
-    let fills = made.iter().filter(|m| m.is_none()).count();
-    let fill =
-        paperpaw_sdk::widgets::fill_height(u32::from(display.height), u32::from(total), fills);
-    let mut y = if fills == 0 {
-        (display.height - total) / 2
-    } else {
-        0
-    };
-    let mut placed = Vec::new();
-    for made in made {
-        let Some((mut widget, height)) = made else {
-            y += fill;
-            continue;
-        };
-        if !placed.is_empty() {
-            y += gap * 2;
-        }
-        let area = Rect::new(margin, y, width, height);
-        widget.place(env, area);
-        placed.push((widget, area));
-        y += height;
-    }
-    placed
-}
-
 /// What the screen shows while the device sleeps.
 struct SleepScreen {
     show: String,
     image: Option<ImageRef>,
     /// The widgets shown, where they go.
-    widgets: Vec<(Box<dyn Widget>, Rect)>,
+    widgets: Stack,
     /// The logo above the message, when the message shows.
     logo: Option<Logo>,
     /// Whether the device woke since the screen opened.
@@ -272,11 +219,14 @@ impl SleepScreen {
             MESSAGE | PAGE | WIDGETS => None,
             _ => cover(env),
         };
-        let widgets = if show == WIDGETS {
-            place_widgets(env)
+        let display = env.device.display;
+        let screen = Rect::new(0, 0, display.width, display.height);
+        let list = if show == WIDGETS {
+            env.settings.read(&WIDGET_LIST)
         } else {
-            Vec::new()
+            ""
         };
+        let widgets = Stack::new(env, list, screen);
         let message = image.is_none() && widgets.is_empty() && show != PAGE;
         let logo = message.then(|| {
             let side = logo_side(env);
@@ -305,9 +255,7 @@ impl Screen for SleepScreen {
         let display = env.device.display;
         let screen = Rect::new(0, 0, display.width, display.height);
         if !self.widgets.is_empty() {
-            for (widget, area) in &self.widgets {
-                widget.draw(canvas, env, *area);
-            }
+            self.widgets.draw(canvas, env);
             return;
         }
         match &self.image {

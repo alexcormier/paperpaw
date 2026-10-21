@@ -128,6 +128,8 @@ impl Plugin for Home {
             Box::new(|env, params| Box::new(edit::AddScreen::new(env, params))),
         ))?;
         r.bind_slot(slots::HOME, SCREEN, Priority::DEFAULT)?;
+        // Lists of widgets above each other (the sleep screen's) edited.
+        r.bind_slot(slots::EDIT_WIDGETS, EDIT_SCREEN, Priority::DEFAULT)?;
         r.add_screen(ScreenSpec::new(
             layouts::SCREEN,
             "home.layouts.title",
@@ -207,10 +209,7 @@ struct Dashboard {
     stale: bool,
 }
 
-/// The next full minute, when the clock shows another time.
-fn next_minute(env: &Env<'_>) -> paperpaw_sdk::Instant {
-    paperpaw_sdk::time::next_minute(env).unwrap_or(env.now.add_millis(60_000))
-}
+use widgets::next_minute;
 
 /// Where the parts of the home screen go: the status line, the grid, the
 /// footer; with `sheet`, a footer that high, the grid's cells as many as
@@ -445,23 +444,6 @@ impl Dashboard {
         }
     }
 
-    /// Whether a change of setting `id` changes how the page is made: the
-    /// home screen's own settings, the look of all (`core.`), and those
-    /// of the widgets on the page. What other settings change, the
-    /// widgets read anew without being made anew.
-    fn remakes(&self, id: &str) -> bool {
-        let of = |widget: &str| {
-            id.strip_prefix(widget)
-                .is_some_and(|rest| rest.starts_with('.'))
-        };
-        of("home")
-            || of("core")
-            || self
-                .shown
-                .iter()
-                .any(|widget| of(widget) || of(widgets::base(widget)))
-    }
-
     fn draw_footer(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let f = self.footer;
@@ -592,38 +574,46 @@ impl Screen for Dashboard {
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let response = self.grid.on_event(event, params, cx);
         let env = *cx.env();
-        let setting = events::SETTING_CHANGED.read(event, params);
         if response != GridResponse::Ignored {
             self.respond(response, cx);
-        } else if (self.chooser.is_some() && (layouts::shows_anew(event) || setting.is_some()))
-            || setting
-                .as_ref()
-                .is_some_and(|changed| self.remakes(changed.id.as_str()))
-        {
-            // The widgets made anew, what they show read again.
-            self.mark_stale(cx);
-            if self.chooser.is_some() {
-                cx.request_refresh(RefreshMode::Partial);
+            return;
+        }
+        let setting = events::SETTING_CHANGED.read(event, params).is_some();
+        let refresh = match widgets::refresh(event, params, PLUGIN.as_str(), &self.shown) {
+            // Choosing a layout, the page shown anew for what it shows.
+            _ if self.chooser.is_some() && (layouts::shows_anew(event) || setting) => {
+                widgets::Refresh::Remake
             }
-        } else if setting.is_some()
-            || *event == events::LIBRARY_CHANGED
-            || *event == events::BOOK_MOVED
-        {
+            refresh => refresh,
+        };
+        match refresh {
+            widgets::Refresh::Remake => {
+                // The widgets made anew, what they show read again.
+                self.mark_stale(cx);
+                if self.chooser.is_some() {
+                    cx.request_refresh(RefreshMode::Partial);
+                }
+            }
             // What the widgets show read again, where they are made (when
             // hidden, they are made anew as it shows).
-            if !self.stale && self.grid.update_widgets(&env, cx) {
+            widgets::Refresh::Read => {
+                if !self.stale && self.grid.update_widgets(&env, cx) {
+                    cx.request_refresh(RefreshMode::Fast);
+                }
+            }
+            widgets::Refresh::ReadOne(id) => {
+                if self.grid.update_widget(id.as_str(), &env, cx) {
+                    cx.request_refresh(RefreshMode::Fast);
+                }
+            }
+            widgets::Refresh::Live => {
+                if let Some(status) = self.status {
+                    cx.request_redraw_area(status);
+                }
+                self.grid.update_live(&env, cx);
                 cx.request_refresh(RefreshMode::Fast);
             }
-        } else if let Some(changed) = events::WIDGET_CHANGED.read(event, params) {
-            if self.grid.update_widget(changed.id.as_str(), &env, cx) {
-                cx.request_refresh(RefreshMode::Fast);
-            }
-        } else if *event == events::STATUS_CHANGED {
-            if let Some(status) = self.status {
-                cx.request_redraw_area(status);
-            }
-            self.grid.update_live(&env, cx);
-            cx.request_refresh(RefreshMode::Fast);
+            _ => {}
         }
     }
 

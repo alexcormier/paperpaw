@@ -129,6 +129,13 @@ pub mod slots {
     /// emitted with all of the parameters and [`PATH`](super::params::PATH)
     /// set to the folder; [`TEXT`](super::params::TEXT), where to start.
     pub const CHOOSE_FOLDER: Id = Id::new_static("core.choose-folder");
+    /// Edits a list of widgets shown above each other (a
+    /// [`WidgetPlace`](crate::widgets::WidgetPlace) of kind
+    /// [`Stack`](crate::widgets::PlaceKind::Stack), e.g. the sleep
+    /// screen's): parameter [`ID`](super::params::ID), the setting that
+    /// lists them. The home screen binds here; name it as the setting's
+    /// editor ([`SettingExtra::editor_slot`](crate::SettingExtra::editor_slot)).
+    pub const EDIT_WIDGETS: Id = Id::new_static("core.edit-widgets");
     /// Picks one of the values of a choice or language setting, on a page
     /// of its own: parameter [`ID`](super::params::ID), the setting. The
     /// settings plugin binds here; menus and the setup open it for a

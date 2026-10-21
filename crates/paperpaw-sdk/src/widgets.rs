@@ -28,6 +28,18 @@
 //!
 //! Screens that show widgets in a grid, as the home screen does, use
 //! [`grid`]: its layout as data, and a view that edits it in place.
+//! Screens that show them above each other, as the sleep screen does, use
+//! a [`Stack`]. Either way the screen asks [`refresh`] what an event means
+//! for the widgets it shows, and reads the live ones anew each minute
+//! ([`next_minute`]).
+//!
+//! The places where widgets show are [`WidgetPlace`]s
+//! ([`Registrar::add_widget_place`](crate::Registrar::add_widget_place)):
+//! the settings that list them, and whether they show in a grid or above
+//! each other. A plugin asks whether any place shows its widget
+//! ([`Widgets::shown`]), e.g. to fetch the weather only then; the slot
+//! [`EDIT_WIDGETS`](crate::builtin::slots::EDIT_WIDGETS) edits a place's
+//! list.
 //!
 //! Widgets share a look the reader shapes for each ([`Frame`], [`Size`],
 //! [`draw_caption`], see [`look`]), and say which kind they are
@@ -51,10 +63,14 @@ use paperpaw_platform::Rect;
 
 use crate::env::Env;
 use crate::id::Id;
+use crate::params::Params;
 use crate::settings::{SettingGroupSpec, SettingKind, SettingSpec, SettingValue};
 
 pub mod grid;
 pub mod look;
+mod stack;
+
+pub use stack::Stack;
 
 pub use look::{
     Frame, Look, Padding, Size, Wrapped, caption_height, choice, draw_caption, draw_frame,
@@ -337,10 +353,131 @@ pub fn changed(id: &Id) -> crate::Command {
     events::WIDGET_CHANGED.emit(events::WidgetChanged { id: id.clone() })
 }
 
+/// How a place holds its widgets ([`WidgetPlace::kind`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PlaceKind {
+    /// Above each other ([`Stack`]): a setting of widget ids separated by
+    /// commas, [`FILL`] and [`SPACE`] among them.
+    Stack,
+    /// In a grid of cells ([`grid`]): settings of items with their cells,
+    /// one a page.
+    Grid,
+}
+
+/// A place where widgets show: the settings that list them, and how it
+/// holds them. Screens of any plugin register theirs, so that plugins
+/// can ask whether their widget shows anywhere ([`Widgets::shown`]) and
+/// editors know them.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct WidgetPlace {
+    pub id: Id,
+    /// Translation key of its name, e.g. "Sleep screen".
+    pub title: Cow<'static, str>,
+    /// The settings that list its widgets (a grid's pages each one).
+    pub settings: Cow<'static, [Id]>,
+    pub kind: PlaceKind,
+}
+
+impl WidgetPlace {
+    /// Made of what it needs; the rest as set with its methods.
+    pub const fn new(
+        id: Id,
+        title: &'static str,
+        settings: &'static [Id],
+        kind: PlaceKind,
+    ) -> Self {
+        Self {
+            id,
+            title: Cow::Borrowed(title),
+            settings: Cow::Borrowed(settings),
+            kind,
+        }
+    }
+
+    /// The widgets it shows now: their ids, a placement's (`home.clock@2`)
+    /// as it is, in the order of its settings.
+    pub fn widgets<'e>(&self, env: &Env<'e>) -> Vec<&'e str> {
+        self.settings
+            .iter()
+            .flat_map(|setting| listed(env.settings.text(setting.as_str())))
+            .filter(|id| env.widgets.has(id))
+            .collect()
+    }
+}
+
+/// The ids a setting listing widgets names: each item's first word, the
+/// cells of a grid's items after it left out.
+fn listed(text: &str) -> impl Iterator<Item = &str> {
+    text.split(',')
+        .filter_map(|item| item.split_whitespace().next())
+}
+
+/// What a screen showing widgets does after an event ([`refresh`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Refresh {
+    /// Nothing: the event is not about them.
+    Nothing,
+    /// Makes them anew: how they are made changed (a setting of the
+    /// screen, of the look, or of a widget shown).
+    Remake,
+    /// Reads what they show anew (a setting, the library changed).
+    Read,
+    /// Reads what this one shows anew ([`changed`]).
+    ReadOne(Id),
+    /// Reads the live ones anew ([`Widget::live`]): the device's status
+    /// changed (the battery).
+    Live,
+}
+
+/// What a screen that shows the widgets `shown` (their ids, a
+/// placement's too), with settings of its own under `own` (e.g. `home`),
+/// does after `event` with `params`: makes them anew after a setting of
+/// its own, of the look (`core.`) or of a widget shown changed, reads
+/// them anew after any other setting or the library changed, reads the
+/// one that says so ([`changed`]), and the live ones after the device's
+/// status changed.
+pub fn refresh(event: &Id, params: &Params, own: &str, shown: &[String]) -> Refresh {
+    use crate::builtin::events;
+    if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
+        let id = changed.id.as_str();
+        let of = |prefix: &str| {
+            id.strip_prefix(prefix)
+                .is_some_and(|rest| rest.starts_with('.'))
+        };
+        let remakes =
+            of(own) || of("core") || shown.iter().any(|widget| of(widget) || of(base(widget)));
+        return if remakes {
+            Refresh::Remake
+        } else {
+            Refresh::Read
+        };
+    }
+    if *event == events::LIBRARY_CHANGED || *event == events::BOOK_MOVED {
+        return Refresh::Read;
+    }
+    if let Some(changed) = events::WIDGET_CHANGED.read(event, params) {
+        return Refresh::ReadOne(changed.id);
+    }
+    if *event == events::STATUS_CHANGED {
+        return Refresh::Live;
+    }
+    Refresh::Nothing
+}
+
+/// When live widgets are read anew next: at the next full minute, when a
+/// clock shows another time (a minute from now without a clock).
+pub fn next_minute(env: &Env<'_>) -> crate::Instant {
+    crate::time::next_minute(env).unwrap_or(env.now.add_millis(60_000))
+}
+
 /// The registered widgets.
 #[derive(Debug, Default)]
 pub struct Widgets {
     widgets: Vec<WidgetSpec>,
+    places: Vec<WidgetPlace>,
 }
 
 impl Widgets {
@@ -358,6 +495,35 @@ impl Widgets {
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shrink_to_fit(&mut self) {
         self.widgets.shrink_to_fit();
+        self.places.shrink_to_fit();
+    }
+
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn add_place(&mut self, place: WidgetPlace) {
+        self.places.push(place);
+    }
+
+    /// Every place where widgets show.
+    pub fn places(&self) -> impl Iterator<Item = &WidgetPlace> {
+        self.places.iter()
+    }
+
+    /// Place `id`, if there is one.
+    pub fn place(&self, id: &str) -> Option<&WidgetPlace> {
+        self.places.iter().find(|p| p.id.as_str() == id)
+    }
+
+    /// Whether any place shows widget `id` now, or a placement of it:
+    /// e.g. to fetch what it shows only then.
+    pub fn shown(&self, env: &Env<'_>, id: &str) -> bool {
+        self.places.iter().any(|place| {
+            place
+                .settings
+                .iter()
+                .flat_map(|setting| listed(env.settings.text(setting.as_str())))
+                .any(|listed| base(listed) == id)
+        })
     }
 
     /// Widget `id`, also of a placement of it (`widgets.clock@2`).

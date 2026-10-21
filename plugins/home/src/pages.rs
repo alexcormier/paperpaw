@@ -178,8 +178,23 @@ static SETTINGS: [SettingSpec; 12] = [
     .described("home.setting.footer-items.help"),
 ];
 
+/// The pages as a place of widgets in a grid.
+const PLACE: widgets::WidgetPlace = widgets::WidgetPlace::new(
+    Id::new_static("home.pages"),
+    "home.title",
+    PAGE_SETTINGS,
+    widgets::PlaceKind::Grid,
+);
+const PAGE_SETTINGS: &[Id] = &[
+    Id::new_static("home.page-1"),
+    Id::new_static("home.page-2"),
+    Id::new_static("home.page-3"),
+    Id::new_static("home.page-4"),
+];
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
+    r.add_widget_place(PLACE)?;
     r.set_menu_need(
         crate::blocks::FOCUS_AT_ONCE,
         paperpaw_sdk::MenuNeed::NoTouch,
