@@ -33,7 +33,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
 };
 
 const DONE: &str = ".paperpaw/plugins/setup/done";
-const CHOICE: Id = Id::new_static("setup.choice");
+const CHOICE: Id = Id::new_static("core.choice-dialog");
 
 struct Test {
     kernel: Kernel,

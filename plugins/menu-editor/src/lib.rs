@@ -758,6 +758,9 @@ struct AddScreen {
     names: String,
     /// Every menu, sorted: the last of the candidates' sources.
     menus: Vec<Id>,
+    /// What is said beside the candidates a plugin took out of this menu
+    /// (which plugin), by source: a few at most.
+    notes: Vec<(u32, String)>,
     frame: Frame,
 }
 
@@ -770,6 +773,9 @@ struct Candidate {
     len: u16,
     /// A menu, which shows "›".
     menu: bool,
+    /// Taken out of this menu by a plugin, which [`AddScreen::notes`]
+    /// says.
+    noted: bool,
 }
 
 /// Where the candidates come from, in order: an id and the key of its
@@ -814,15 +820,31 @@ impl AddScreen {
         }
         let mut candidates = Vec::with_capacity(count);
         let mut names = String::with_capacity(bytes);
+        let mut notes = Vec::new();
         for (at, (id, key)) in sources(env, &menus).enumerate() {
             if candidates.len() < count && wanted(at, id) {
                 let name = env.i18n.tr(key);
+                // Taken out of this menu by a plugin: which, beside it.
+                let noted = env.menus.hidden_by(&menu, id.as_str()).map(|by| {
+                    let plugin = env
+                        .plugins
+                        .get(by.as_str())
+                        .map_or(by.as_str(), |info| info.name(env.i18n));
+                    env.i18n.format(
+                        "menu-editor.hidden-by",
+                        &[("plugin", paperpaw_sdk::Arg::Str(plugin))],
+                    )
+                });
                 candidates.push(Candidate {
                     source: at as u32,
                     start: names.len() as u32,
                     len: name.len().min(usize::from(u16::MAX)) as u16,
                     menu: menus.binary_search(id).is_ok(),
+                    noted: noted.is_some(),
                 });
+                if let Some(note) = noted {
+                    notes.push((at as u32, note));
+                }
                 names.push_str(name);
             }
         }
@@ -832,6 +854,7 @@ impl AddScreen {
             menu,
             candidates,
             names,
+            notes,
             menus,
             frame: Frame::new(env),
         }
@@ -863,11 +886,20 @@ impl AddScreen {
 impl Screen for AddScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let title = env.i18n.tr("menu-editor.add");
-        let (candidates, names) = (&self.candidates, &self.names);
+        let (candidates, names, notes) = (&self.candidates, &self.names, &self.notes);
         let row = |i: usize| {
             let c = &candidates[i];
             let name = &names[c.start as usize..][..usize::from(c.len)];
-            (name, if c.menu { "›" } else { "" })
+            let beside = if c.noted {
+                notes
+                    .binary_search_by_key(&c.source, |(source, _)| *source)
+                    .map_or("", |at| notes[at].1.as_str())
+            } else if c.menu {
+                "›"
+            } else {
+                ""
+            };
+            (name, beside)
         };
         self.frame
             .draw(canvas, env, title, candidates.len(), row, 0);

@@ -82,6 +82,10 @@ pub enum Contribution {
     },
     Stylesheet(Cow<'static, str>),
     BookData(crate::library::BookData),
+    /// A field kept with books ([`Registrar::add_book_field`]).
+    BookField(Box<crate::library::BookField>),
+    /// A badge on books' rows ([`Registrar::add_book_badge`]).
+    BookBadge(Box<crate::library::BookBadge>),
     Font(Box<FontSpec>),
     #[non_exhaustive]
     FontFile {
@@ -106,19 +110,6 @@ pub enum Contribution {
     Hyphenation(HyphenationSpec),
     MenuEntry(MenuEntry),
     MenuSection(MenuSection),
-    /// An entry placed right after another ([`Registrar::place_menu_entry`]).
-    #[non_exhaustive]
-    MenuPlacement {
-        menu: Id,
-        item: Id,
-        after: Id,
-    },
-    /// An entry taken out of a menu ([`Registrar::hide_menu_entry`]).
-    #[non_exhaustive]
-    MenuHidden {
-        menu: Id,
-        item: Id,
-    },
     #[non_exhaustive]
     Icon {
         item: Id,
@@ -128,6 +119,21 @@ pub enum Contribution {
     MenuNeed {
         item: Id,
         need: MenuNeed,
+    },
+    #[non_exhaustive]
+    HideMenuEntry {
+        menu: Id,
+        item: Id,
+    },
+    #[non_exhaustive]
+    ItemState {
+        item: Id,
+        state: crate::ItemStateFn,
+    },
+    #[non_exhaustive]
+    ItemDescription {
+        item: Id,
+        key: Cow<'static, str>,
     },
     #[non_exhaustive]
     ScreenHints {
@@ -145,6 +151,9 @@ pub enum Contribution {
     Decorator(Box<crate::decorations::DecoratorSpec>),
     PageLayer(Box<crate::layers::PageLayerSpec>),
     PageFrame(Box<crate::layers::PageFrameSpec>),
+    LookupProvider(Box<crate::lookup::LookupProviderSpec>),
+    Voice(Box<crate::voices::VoiceSpec>),
+    Reader(crate::readers::ReaderSpec),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
     /// A bar along an edge of the screen (see [`chrome`](crate::chrome)).
@@ -194,6 +203,12 @@ pub enum Contribution {
     },
     /// A translation catalog (see `paperpaw-i18n`).
     Translations(Cow<'static, str>),
+    /// A look for the parts of screens (see [`Registrar::set_ui_look`]).
+    #[non_exhaustive]
+    UiLook {
+        painters: &'static crate::ui::look::Painters,
+        priority: Priority,
+    },
 }
 
 impl Contribution {
@@ -212,6 +227,8 @@ impl Contribution {
             Contribution::KeymapWhen { .. } => "keymap-when",
             Contribution::Stylesheet(_) => "stylesheet",
             Contribution::BookData(_) => "book data",
+            Contribution::BookField(_) => "book field",
+            Contribution::BookBadge(_) => "book badge",
             Contribution::Font(_) => "font",
             Contribution::FontFile { .. } => "font-file",
             Contribution::FontExtension { .. } => "font-extension",
@@ -221,10 +238,11 @@ impl Contribution {
             Contribution::Hyphenation(_) => "hyphenation",
             Contribution::MenuEntry(_) => "menu-entry",
             Contribution::MenuSection(_) => "menu-section",
-            Contribution::MenuPlacement { .. } => "menu-placement",
-            Contribution::MenuHidden { .. } => "menu-hidden",
             Contribution::Icon { .. } => "icon",
             Contribution::MenuNeed { .. } => "menu-need",
+            Contribution::HideMenuEntry { .. } => "hidden-menu-entry",
+            Contribution::ItemState { .. } => "item-state",
+            Contribution::ItemDescription { .. } => "item-description",
             Contribution::ScreenHints { .. } => "screen-hints",
             Contribution::Subscription { .. } => "subscription",
             Contribution::StatusItem(_) => "status-item",
@@ -233,6 +251,9 @@ impl Contribution {
             Contribution::Decorator(_) => "decorator",
             Contribution::PageLayer(_) => "page-layer",
             Contribution::PageFrame(_) => "page-frame",
+            Contribution::LookupProvider(_) => "lookup-provider",
+            Contribution::Voice(_) => "voice",
+            Contribution::Reader(_) => "reader",
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
             Contribution::Chrome(_) => "chrome",
@@ -250,6 +271,7 @@ impl Contribution {
             Contribution::Point(_) => "point",
             Contribution::EventDeclared(_) => "event",
             Contribution::Translations(_) => "translations",
+            Contribution::UiLook { .. } => "ui-look",
         }
     }
 
@@ -278,6 +300,9 @@ impl Contribution {
             Contribution::Decorator(d) => &d.id,
             Contribution::PageLayer(l) => &l.id,
             Contribution::PageFrame(f) => &f.id,
+            Contribution::LookupProvider(p) => &p.id,
+            Contribution::Voice(v) => &v.id,
+            Contribution::Reader(r) => &r.id,
             Contribution::InputFilter(f) => &f.id,
             Contribution::RefreshFilter(f) => &f.id,
             Contribution::Chrome(c) => &c.id,
@@ -285,6 +310,8 @@ impl Contribution {
             Contribution::ActionObserver(o) | Contribution::EventObserver(o) => &o.id,
             Contribution::Gesture(g) => &g.id,
             Contribution::Work(w) => &w.id,
+            Contribution::BookField(f) => &f.id,
+            Contribution::BookBadge(b) => &b.id,
             Contribution::Widget(w) => &w.id,
             Contribution::SetupStep(s) => &s.id,
             Contribution::Preset(p) => &p.id,
@@ -352,6 +379,13 @@ impl Registrar {
 
     /// Adds `contribution`; every method below is a shorthand for one.
     pub fn add(&mut self, contribution: Contribution) -> Result<(), RegisterError> {
+        // What an entry shows is said by the plugin it belongs to.
+        if let Contribution::ItemState { item, .. } | Contribution::ItemDescription { item, .. } =
+            &contribution
+            && !item.is_owned_by(&self.plugin)
+        {
+            return Err(RegisterError::Namespace { id: item.clone() });
+        }
         // No handler in place of a sealed action of one's own, in either
         // order.
         if let Contribution::Action(action) = &contribution
@@ -375,7 +409,11 @@ impl Registrar {
             }
         }
         if let Some(id) = contribution.id() {
-            if !id.is_owned_by(&self.plugin) {
+            // The kernel's services a plugin may stand in for (the
+            // library) are published under the kernel's ids.
+            let stands_in = matches!(contribution, Contribution::Published { .. })
+                && crate::services::REPLACEABLE.contains(&id.as_str());
+            if !id.is_owned_by(&self.plugin) && !stands_in {
                 return Err(RegisterError::Namespace { id: id.clone() });
             }
             let kind = contribution.id_kind();
@@ -401,6 +439,18 @@ impl Registrar {
 
     pub fn add_slot(&mut self, slot: SlotSpec) -> Result<(), RegisterError> {
         self.add(Contribution::Slot(slot))
+    }
+
+    /// Gives the parts of every screen (switches, the focus, buttons,
+    /// headers, …) the look `painters` paint (see
+    /// [`ui::look`](crate::ui::look)). Of several looks the one with the
+    /// highest priority is used, of equal ones the later.
+    pub fn set_ui_look(
+        &mut self,
+        painters: &'static crate::ui::look::Painters,
+        priority: Priority,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::UiLook { painters, priority })
     }
 
     /// Proposes `screen` for `slot`. The binding with the highest priority
@@ -506,6 +556,25 @@ impl Registrar {
         }))
     }
 
+    /// Adds a field plugins keep with books ([`library::set_field`](crate::library::set_field)):
+    /// shown on a book's information page, kept in the catalog where
+    /// [`in_catalog`](crate::library::BookField::in_catalog).
+    pub fn add_book_field(
+        &mut self,
+        field: crate::library::BookField,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::BookField(Box::new(field)))
+    }
+
+    /// Adds a badge to books' rows in every view of the library (see
+    /// [`library::service`](fn@crate::library::service)).
+    pub fn add_book_badge(
+        &mut self,
+        badge: crate::library::BookBadge,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::BookBadge(Box::new(badge)))
+    }
+
     /// Adds a key map preset (same format as [`Registrar::add_keymap`]) that
     /// users can select with the `core.keymap-preset` setting. Its title
     /// is the translation of its id.
@@ -571,40 +640,66 @@ impl Registrar {
         self.add(Contribution::MenuEntry(entry))
     }
 
-    /// Adds a heading to a menu; entries ordered after it, up to the next
-    /// heading, belong to it.
-    pub fn add_menu_section(&mut self, section: MenuSection) -> Result<(), RegisterError> {
-        self.add(Contribution::MenuSection(section))
-    }
-
-    /// Places entry `item` of `menu` right after `after` there (also in
-    /// another plugin's menu), in place of its order; where `after` is
-    /// not in the menu, by its order.
+    /// Puts `item` into `menu` at `place`, beside other entries (e.g.
+    /// right after another plugin's); where another plugin puts the same
+    /// entry there by order, this moves it.
     pub fn place_menu_entry(
         &mut self,
         menu: impl Into<Id>,
         item: impl Into<Id>,
-        after: impl Into<Id>,
+        place: crate::MenuPlace,
     ) -> Result<(), RegisterError> {
-        self.add(Contribution::MenuPlacement {
-            menu: menu.into(),
-            item: item.into(),
-            after: after.into(),
-        })
+        self.add_menu_entry(MenuEntry::new(menu.into(), item.into()).place(place))
     }
 
-    /// Takes entry `item` out of `menu` as plugins contribute it (also
-    /// another plugin's); a menu the user defined shows what the user
-    /// listed.
+    /// Takes `item` out of `menu` as plugins contribute it (also another
+    /// plugin's, e.g. an entry a plugin replaces with its own); a user
+    /// who lists it keeps it, and the menu editor tells which plugin took
+    /// it out.
     pub fn hide_menu_entry(
         &mut self,
         menu: impl Into<Id>,
         item: impl Into<Id>,
     ) -> Result<(), RegisterError> {
-        self.add(Contribution::MenuHidden {
+        self.add(Contribution::HideMenuEntry {
             menu: menu.into(),
             item: item.into(),
         })
+    }
+
+    /// What menus show of `item` now, where it changes: another label, a
+    /// switch, faint, hidden, a badge (see
+    /// [`ItemState`](crate::ItemState)). Asked whenever a menu
+    /// shows it: it says it from memory. Only for the plugin's own
+    /// actions and settings ([`RegisterError::Namespace`] otherwise).
+    pub fn set_item_state(
+        &mut self,
+        item: impl Into<Id>,
+        state: impl Fn(&crate::Env<'_>) -> crate::ItemState + 'static,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ItemState {
+            item: item.into(),
+            state: Box::new(state),
+        })
+    }
+
+    /// A line under `item` in menus, by its translation key; only for the
+    /// plugin's own actions and settings.
+    pub fn describe_item(
+        &mut self,
+        item: impl Into<Id>,
+        key: impl Into<Cow<'static, str>>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ItemDescription {
+            item: item.into(),
+            key: key.into(),
+        })
+    }
+
+    /// Adds a heading to a menu; entries ordered after it, up to the next
+    /// heading, belong to it.
+    pub fn add_menu_section(&mut self, section: MenuSection) -> Result<(), RegisterError> {
+        self.add(Contribution::MenuSection(section))
     }
 
     /// Gives an action or setting an icon by name (see
@@ -726,6 +821,46 @@ impl Registrar {
         frame: crate::layers::PageFrameSpec,
     ) -> Result<(), RegisterError> {
         self.add(Contribution::PageFrame(Box::new(frame)))
+    }
+
+    /// Adds a lookup provider: where words are looked up, listed by the
+    /// screen that shows a word's entries (see [`lookup`](crate::lookup)).
+    pub fn add_lookup_provider(
+        &mut self,
+        provider: crate::lookup::LookupProviderSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::LookupProvider(Box::new(provider)))
+    }
+
+    /// Adds a voice: speaks text aloud in place of the system's while the
+    /// setting [`VOICE`](crate::builtin::settings::VOICE) chooses it (see
+    /// [`voices`](crate::voices)).
+    pub fn add_voice(&mut self, voice: crate::voices::VoiceSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Voice(Box::new(voice)))
+    }
+
+    /// Adds a reading app: a screen of the plugin that shows books of
+    /// some formats, offered where books open (see
+    /// [`readers`](crate::readers)).
+    /// Its screen is one the plugin added before.
+    pub fn add_reader(&mut self, reader: crate::readers::ReaderSpec) -> Result<(), RegisterError> {
+        if !reader.screen.is_owned_by(&self.plugin) {
+            return Err(RegisterError::Namespace { id: reader.screen });
+        }
+        let added = self
+            .contributions
+            .iter()
+            .any(|c| matches!(c, Contribution::Screen(s) if s.id == reader.screen));
+        if !added {
+            return Err(RegisterError::Invalid {
+                message: Cow::Owned(alloc::format!(
+                    "`{}` reads in `{}`, a screen not added",
+                    reader.id,
+                    reader.screen
+                )),
+            });
+        }
+        self.add(Contribution::Reader(reader))
     }
 
     /// Adds a filter of every input, before screens and key maps see it

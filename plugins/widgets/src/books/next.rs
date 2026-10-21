@@ -315,7 +315,7 @@ impl Next {
             pick.clone(),
             day,
             self.generation.get(),
-            catalog_stamp(env.storage),
+            catalog_stamp(env),
             current.as_ref().map(|b| b.path.clone()).unwrap_or_default(),
         );
         if let Some((k, path)) = self.kept.borrow().as_ref()

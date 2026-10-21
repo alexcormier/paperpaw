@@ -416,10 +416,15 @@ impl KernelBuilder {
                 text_filters: paperpaw_sdk::filters::TextFilters::new(),
                 decorators: paperpaw_sdk::decorations::Decorators::new(),
                 page_layers: paperpaw_sdk::layers::PageLayers::new(),
+                lookup: paperpaw_sdk::lookup::LookupProviders::new(),
+                voices: paperpaw_sdk::voices::Voices::new(),
+                readers: paperpaw_sdk::readers::Readers::new(),
                 input_filters: paperpaw_sdk::filters::InputFilters::new(),
                 refresh_filters: paperpaw_sdk::filters::RefreshFilters::new(),
                 stylesheets: Vec::new(),
                 book_data: Vec::new(),
+                book_fields: Vec::new(),
+                book_badges: Vec::new(),
                 caps,
                 wifi: caps.wifi.then(paperpaw_sdk::wifi::Wifi::default),
                 firmware: self.firmware.take(),
@@ -444,6 +449,7 @@ impl KernelBuilder {
                 storage,
                 recall,
                 keymap: Keymap::default(),
+                look: (paperpaw_sdk::ui::look::Look::none(), None),
             },
             frame: drawing::FrameState {
                 pending: None,
@@ -481,13 +487,14 @@ impl KernelBuilder {
                 http: io::http::Http::for_memory(self.device.memory),
                 servers: io::servers::Servers::default(),
                 sockets: io::sockets::Sockets::default(),
-                speech: io::speech::Speech::default(),
+                speech: io::speech::Speech::new(caps.speech),
                 clipboard: io::clipboard::Clipboard::new(caps.system_clipboard),
                 wifi_calls: Vec::new(),
                 firmware_calls: Vec::new(),
                 network_waiting: None,
                 network_busy: false,
                 focus_spoken: false,
+                focus_told: None,
             },
             keys: plugins::KeySources::default(),
             chromes: Vec::new(),
@@ -679,7 +686,8 @@ impl Kernel {
     }
 
     /// The choices of settings that plugins add to: key map presets,
-    /// reading fonts and page frames.
+    /// reading fonts, page frames and voices; speech where the system or
+    /// a plugin speaks.
     pub(crate) fn offer_choices(&mut self) {
         let mut presets: Vec<Cow<'static, str>> =
             alloc::vec![Cow::Borrowed(keymap_presets::STANDARD_NAME)];
@@ -723,6 +731,83 @@ impl Kernel {
         self.shared
             .settings
             .set_choices(core_settings::PAGE_FRAME.as_str(), frames);
+        let mut voices: Vec<Cow<'static, str>> =
+            alloc::vec![Cow::Borrowed(core_settings::VOICE_SYSTEM)];
+        voices.extend(
+            self.shared
+                .voices
+                .ids()
+                .map(|id| Cow::Owned(id.as_str().to_string())),
+        );
+        self.shared
+            .settings
+            .set_choices(core_settings::VOICE.as_str(), voices);
+        self.offer_reading_apps();
+        self.shared.caps.speech = self.io.speech.system || !self.shared.voices.is_empty();
+        self.shared.menus.set_capabilities(self.shared.caps);
+    }
+
+    /// The reading apps to choose: the default one, and one for each
+    /// format (a setting each, in the reading settings' part for them),
+    /// each offering the readers that read its books. Where only one
+    /// does, there is nothing to choose and the setting is not listed.
+    fn offer_reading_apps(&mut self) {
+        let readers: Vec<Cow<'static, str>> = self
+            .shared
+            .readers
+            .iter()
+            .map(|r| Cow::Owned(r.id.as_str().to_string()))
+            .collect();
+        let mut all = alloc::vec![Cow::Borrowed(core_settings::READING_APP_DEFAULT)];
+        if readers.len() > 1 {
+            all.extend(readers);
+        }
+        self.shared
+            .settings
+            .set_choices(core_settings::READING_APP.as_str(), all);
+        let formats: Vec<(Id, Cow<'static, str>)> = self
+            .shared
+            .formats
+            .iter()
+            .map(|f| (f.id.clone(), f.title.clone()))
+            .collect();
+        for (format, title) in formats {
+            let mut choices = alloc::vec![Cow::Borrowed(core_settings::READING_APP_DEFAULT)];
+            let reading: Vec<Cow<'static, str>> = self
+                .shared
+                .readers
+                .reading(Some(&format))
+                .map(|r| Cow::Owned(r.id.as_str().to_string()))
+                .collect();
+            let several = reading.len() > 1;
+            if several {
+                choices.extend(reading);
+            }
+            let id = paperpaw_sdk::readers::format_setting(&format);
+            if self.shared.settings.spec(&id).is_some() {
+                self.shared.settings.set_choices(&id, choices);
+                continue;
+            }
+            // Nothing to choose where one reader reads it: no setting
+            // (memory on small devices), until another comes.
+            if !several {
+                continue;
+            }
+            let Ok(setting) = Id::parse(&id) else {
+                continue;
+            };
+            let spec = paperpaw_sdk::SettingSpec::new(
+                setting,
+                title,
+                paperpaw_sdk::SettingKind::Choice(choices.into()),
+                paperpaw_sdk::SettingValue::Text(Cow::Borrowed(core_settings::READING_APP_DEFAULT)),
+            )
+            .group(paperpaw_sdk::builtin::groups::READING)
+            .section("core.section.reading-apps")
+            .described("core.setting.reading-app.format.help")
+            .keeps_unknown();
+            let _ = self.shared.settings.define(spec);
+        }
     }
 
     /// The device's defaults, then the plugins' (e.g. themes), which win:

@@ -14,13 +14,13 @@ use paperpaw_platform::{
     DeviceInfo, DisplayInfo, InputCaps, InputEvent, Instant, MemoryClass, PixelFormat, Point,
     PointerEvent, PointerPhase, PointerTool, Rotation,
 };
-use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::builtin::{actions, menus, params};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::widgets::{Widget, WidgetSpec};
 use paperpaw_sdk::{
-    Canvas, Env, Id, Manifest, MemoryStorage, Params, Plugin, Rect, RegisterError, Registrar,
-    SettingSpec, Version,
+    ActionSpec, Canvas, Env, Id, Manifest, MemoryStorage, MenuEntry, Params, Plugin, Rect,
+    RegisterError, Registrar, SettingSpec, Version,
 };
 
 /// A device with `touch` or buttons alone, `width` pixels wide.
@@ -56,6 +56,7 @@ struct Probe;
 const PROBE: Id = Id::new_static("probe.widget");
 const OTHER: Setting<bool> = Setting::new("probe.other");
 const OWN: Setting<bool> = Setting::new("probe.widget.own");
+const APP: Id = Id::new_static("probe.app");
 
 struct ProbeWidget;
 
@@ -80,7 +81,15 @@ impl Plugin for Probe {
             Box::new(ProbeWidget)
         }))?;
         r.add_setting(SettingSpec::switch(&OTHER, "probe.other", false))?;
-        r.add_setting(SettingSpec::switch(&OWN, "probe.own", false))
+        r.add_setting(SettingSpec::switch(&OWN, "probe.own", false))?;
+        // Something to open, listed with the tools.
+        r.add_action(ActionSpec::new(APP, "probe.app").handler(|_, _| {}))?;
+        r.add_menu_entry(MenuEntry::new(menus::APPS, APP))?;
+        r.add_icon(APP, "puzzle".into())?;
+        r.add_translations(
+            "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\nprobe.app = Probe app\n"
+                .into(),
+        )
     }
 }
 
@@ -453,4 +462,11 @@ fn every_tool_is_told_by_its_name() {
         let focused: Vec<_> = buttons.iter().filter(|(_, f)| *f).collect();
         assert_eq!(focused, [&(String::from("Settings"), true)], "{labels}");
     }
+}
+
+#[test]
+fn what_there_is_to_open_shows_with_the_tools() {
+    let mut home = Home::new(true, "page-1 = home.tools 0/0 4x6\nstatus-bar = false\n");
+    let shown = home.texts();
+    assert!(shown.iter().any(|(l, _)| l == "Probe app"), "{shown:?}");
 }

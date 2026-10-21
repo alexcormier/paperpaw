@@ -136,6 +136,42 @@ impl Preset {
     }
 }
 
+/// The kind of presets that are themes: values for the appearance
+/// settings, chosen as a whole at the top of them (where any plugin
+/// brings one), so two themes installed do not fight. A theme leaves
+/// out what it does not change; applying it gives those their defaults
+/// ([`theme_settings`] are the settings it covers).
+pub const THEME: &str = "core.theme";
+
+/// The settings a theme covers: those of the appearance group
+/// ([`groups::LOOK`](crate::builtin::groups::LOOK)) but what the reader
+/// needs to read the interface at all, which a theme never changes: the
+/// size of its text, its contrast, the logo.
+pub fn theme_settings(settings: &Settings) -> Vec<Id> {
+    use crate::builtin::settings::{UI_CONTRAST, UI_SIZE};
+    let kept = [
+        UI_SIZE.static_str(),
+        UI_CONTRAST.static_str(),
+        crate::logo::LOGO.static_str(),
+    ];
+    settings
+        .specs()
+        .filter(|spec| settings.group_of(spec) == crate::builtin::groups::LOOK)
+        .filter(|spec| !kept.contains(&spec.id.as_str()))
+        .map(|spec| spec.id.clone())
+        .collect()
+}
+
+/// What applying `theme` makes of the settings it covers
+/// ([`theme_settings`]): what it names outside them (the size of the
+/// interface's text, say) is left out.
+pub fn theme_changes(settings: &Settings, theme: &Preset) -> Vec<(Id, Option<SettingValue>)> {
+    let covered = theme_settings(settings);
+    let mut changes = theme.changes(settings, &covered);
+    changes.retain(|(id, _)| covered.contains(id));
+    changes
+}
+
 /// The commands that give the settings the values of `changes` (see
 /// [`Preset::changes`]): those that have them already are left alone, and
 /// a setting's default is not written down but the setting reset.

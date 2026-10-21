@@ -153,6 +153,8 @@ struct Item {
     title: String,
     icon: Option<String>,
     heading: bool,
+    /// The line under it (a translation key), if it has one.
+    description: Option<String>,
 }
 
 #[derive(Debug)]
@@ -172,28 +174,29 @@ struct MenuScreen {
     icon_width: u16,
     /// How many menus are open below this one (submenus).
     depth: usize,
+    /// What it was opened with, to make it anew (see `on_event`).
+    params: Params,
 }
 
 /// Parameter: the depth of a submenu.
 pub(crate) const DEPTH: &str = "depth";
 
-/// The settings plugin's list for choosing a value.
-const CHOOSE_SCREEN: Id = Id::new_static("settings.choose");
-
-/// Chooses a value of choice or language setting `spec`: in the settings
-/// plugin's list, or the next value at once where that plugin is
-/// replaced or off.
+/// The next value of choice or language setting `spec`, where no screen
+/// lists its values (see `ui::setting_opens`).
 pub(crate) fn choose(env: &Env<'_>, spec: &SettingSpec, cx: &mut Cx<'_, '_>) {
-    if env.screens.iter().any(|(id, _)| *id == CHOOSE_SCREEN) {
-        cx.command(Command::OpenScreen(
-            CHOOSE_SCREEN,
-            Params::new().with(params::ID, spec.id.as_str().to_string()),
-        ));
-    } else if let Some(value) = ui::next_value(env, spec, 1) {
+    if let Some(value) = ui::next_value(env, spec, 1) {
         cx.command(Command::SetSetting(spec.id.clone(), value));
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Fast);
     }
+}
+
+/// Which of `items` the focus passes over: those shown faint now.
+fn passed(env: &Env<'_>, items: &[Item]) -> Vec<bool> {
+    items
+        .iter()
+        .map(|item| !item.heading && !env.menus.state(env, item.id.as_str()).enabled)
+        .collect()
 }
 
 impl MenuScreen {
@@ -202,14 +205,21 @@ impl MenuScreen {
         let menu = params.get(params::MENU).unwrap_or(main.as_str());
         let mut items: Vec<Item> = env
             .menus
-            .items(menu)
+            .shown_items(env, menu)
             .into_iter()
             .filter(|item| !paperpaw_sdk::Menus::hidden(params, item.id.as_str()))
+            // A setting shown only while another has a value.
+            .filter(|item| {
+                env.settings
+                    .spec(item.id.as_str())
+                    .is_none_or(|s| env.settings.shows(s))
+            })
             .map(|item| Item {
                 id: item.id.clone(),
                 title: String::from(item.title),
                 icon: item.icon.map(String::from),
                 heading: item.section,
+                description: env.menus.description(item.id.as_str()).map(String::from),
             })
             .collect();
         // Headings with nothing below them are left out.
@@ -225,10 +235,18 @@ impl MenuScreen {
         let heights: Vec<u16> = items
             .iter()
             .map(|item| {
+                let row = match Self::setting(env, &item.id) {
+                    // A number's − and + grow, and its row with them.
+                    Some(spec) => ui::setting_row(&style, spec, style.row, false) as u16,
+                    None => style.row as u16,
+                };
                 if item.heading {
                     heading
+                } else if item.description.is_some() {
+                    // A line more, below the label.
+                    row + description_height(env, &style)
                 } else {
-                    style.row as u16
+                    row
                 }
             })
             .collect();
@@ -263,22 +281,30 @@ impl MenuScreen {
             items.iter().any(|i| i.icon.is_some() && !i.heading),
         );
         let headings = items.iter().map(|i| i.heading).collect();
+        let mut rows = ui::Rows::new(list_area, heights, headings);
+        rows.set_passed(passed(env, &items));
+        // With buttons, on the first entry that can be chosen.
+        if passed(env, &items).get(rows.focus()) == Some(&true) {
+            rows.step(true);
+        }
         Self {
             items,
             region,
-            rows: ui::Rows::new(list_area, heights, headings),
+            rows,
             pager,
             editing: false,
             keys: !env.device.input.touch,
             icon_width,
             depth: params.get(DEPTH).and_then(|d| d.parse().ok()).unwrap_or(0),
             style,
+            params: params.clone(),
         }
     }
 
     /// The setting behind item `index`, if it is one.
     fn setting<'e>(env: &Env<'e>, id: &Id) -> Option<&'e SettingSpec> {
-        env.settings.specs().find(|spec| spec.id == *id)
+        // Found by its id, not by going through every setting.
+        env.settings.spec(id.as_str()).filter(|spec| spec.id == *id)
     }
 
     /// Changes a setting by one step.
@@ -298,6 +324,10 @@ impl MenuScreen {
         let Some(item) = self.items.get(index).filter(|i| !i.heading) else {
             return;
         };
+        // Shown faint by its plugin: nothing to do now.
+        if !env.menus.state(&env, item.id.as_str()).enabled {
+            return;
+        }
         let id = &item.id;
         if is_menu(&env, id) {
             cx.command(Command::OpenScreen(
@@ -317,11 +347,9 @@ impl MenuScreen {
             cx.command(Command::RunAction(id.clone()));
             return;
         };
-        if let Some(editor) = &spec.extra().editor {
-            cx.command(Command::OpenScreen(
-                editor.clone(),
-                Params::new().with("id", spec.id.as_str().to_string()),
-            ));
+        // Its editor, the keyboard for text, the list of its values.
+        if let Some(command) = ui::setting_opens(&env, spec) {
+            cx.command(command);
             return;
         }
         match spec.kind {
@@ -329,11 +357,6 @@ impl MenuScreen {
                 self.editing = !self.editing;
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
-            }
-            // The list of the standard settings plugin (a choice of two
-            // switches at once, below).
-            SettingKind::Choice(_) | SettingKind::Language if !ui::two_options(&env, spec) => {
-                choose(&env, spec, cx);
             }
             _ => self.step(&env, spec, 1, cx),
         }
@@ -352,7 +375,24 @@ impl MenuScreen {
         let Some(font) = style.font(env) else {
             return;
         };
-        let ink = style.focus_ink(focused);
+        let state = env.menus.state(env, item.id.as_str());
+        let ink = match state.enabled {
+            true => style.focus_ink(focused),
+            false => style.faint(60),
+        };
+        // The line under it, below the row.
+        let rect = match &item.description {
+            Some(key) => {
+                let row = (style.row as u16).min(rect.height);
+                let below = Rect::new(rect.x, rect.y + row, rect.width, rect.height - row);
+                let x = f32::from(below.x) + style.margin as f32 + f32::from(self.icon_width);
+                let width = f32::from(below.width) - x - style.margin as f32;
+                let text = ui::fit(&font, style.small, env.i18n.tr(key), width);
+                ui::draw_label(canvas, &font, style.small, x, below, &text, style.faint(80));
+                Rect::new(rect.x, rect.y, rect.width, row)
+            }
+            None => rect,
+        };
         // The label and value right of the icons.
         let rect = ui::draw_row_icon(
             canvas,
@@ -363,7 +403,19 @@ impl MenuScreen {
             item.icon.as_deref(),
             ink,
         );
-        let label = env.i18n.tr(&item.title);
+        let label = state
+            .label
+            .as_deref()
+            .unwrap_or_else(|| env.i18n.tr(&item.title));
+        // As its plugin says it is now: a switch, a badge.
+        if let Some(on) = state.checked {
+            ui::draw_switch_row(canvas, env, &style, rect, focused, label, "", on);
+            return;
+        }
+        if let Some(badge) = &state.badge {
+            ui::draw_value_row(canvas, env, &style, rect, focused, label, badge);
+            return;
+        }
         match Self::setting(env, &item.id) {
             Some(spec) if matches!(spec.kind, SettingKind::Bool) => {
                 let on = env.settings.bool(spec.id.as_str());
@@ -407,6 +459,13 @@ impl MenuScreen {
             }
         }
     }
+}
+
+/// The height of the line under an entry.
+fn description_height(env: &Env<'_>, style: &UiStyle) -> u16 {
+    style.font(env).map_or(style.small as u16, |font| {
+        font.line_metrics(style.small).line_height as u16
+    })
 }
 
 /// Whether the menu in `params` opens as tiles: the user wants them, it
@@ -523,6 +582,8 @@ impl Screen for MenuScreen {
             cx.request_refresh(RefreshMode::Fast);
             return Handled::Yes;
         }
+        // Entries faint now are passed.
+        self.rows.set_passed(passed(cx.env(), &self.items));
         // The focus changes nothing but its rows: only they are drawn.
         if *a == actions::UP || *a == actions::LEFT || *a == actions::PREVIOUS {
             let change = self.rows.step(false);
@@ -613,10 +674,26 @@ impl Screen for MenuScreen {
         Handled::Yes
     }
 
-    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
-        // Values shown in the menu may have changed.
-        if *event == events::SETTING_CHANGED {
-            cx.request_redraw();
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        // Values shown in the menu may have changed; entries shown only
+        // while a setting has a value come or go with it.
+        if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
+            let env = *cx.env();
+            let before = self.region;
+            if env.settings.governs(changed.id.as_str()) {
+                // Anew, the focus on the entry it was on (where it stays).
+                let focused = self.items.get(self.rows.focus()).map(|i| i.id.clone());
+                let (focus, keys) = (self.rows.focus(), self.keys);
+                let opened = self.params.clone();
+                *self = MenuScreen::new(&env, &opened);
+                let at = focused
+                    .and_then(|id| self.items.iter().position(|i| i.id == id))
+                    .unwrap_or(focus.min(self.items.len().saturating_sub(1)));
+                self.rows.set_focus(at);
+                self.keys = keys;
+            }
+            // What it covered before too, should it have shrunk.
+            cx.request_redraw_area(before.union(&self.region));
         }
     }
 }

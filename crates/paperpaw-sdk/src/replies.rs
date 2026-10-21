@@ -385,22 +385,52 @@ impl EventData for SocketNotice {
 }
 
 /// What the reader typed when asked ([`ask::text`](crate::ask::text)).
+/// Made with [`Typed::new`] (a keyboard of one's own answers so).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Typed {
     pub text: String,
+    /// The text so far, while the reader still types: an answer to a
+    /// question asked [`live`](crate::ask::TextQuestion::live).
+    pub typing: bool,
     /// The parameters the question was asked with.
     pub context: Params,
 }
 
+impl Typed {
+    /// The text typed for the question asked with `context`, the reader
+    /// done typing.
+    pub fn new(text: impl Into<String>, context: Params) -> Self {
+        Self {
+            text: text.into(),
+            typing: false,
+            context,
+        }
+    }
+
+    /// The text so far, while the reader still types (see
+    /// [`Typed::typing`]).
+    pub fn while_typing(mut self) -> Self {
+        self.typing = true;
+        self
+    }
+}
+
 impl EventData for Typed {
     fn to_params(&self) -> Params {
-        with_context(Params::new(), &self.context).with(params::TEXT, self.text.clone())
+        let p = with_context(Params::new(), &self.context).with(params::TEXT, self.text.clone());
+        if self.typing {
+            p.with(params::TYPING, "1")
+        } else {
+            p
+        }
     }
 
     fn from_params(p: &Params) -> Option<Self> {
         Some(Self {
             text: text(p, params::TEXT)?,
-            context: context(p, &[params::TEXT]),
+            typing: p.get(params::TYPING).is_some(),
+            context: context(p, &[params::TEXT, params::TYPING]),
         })
     }
 }
@@ -472,10 +502,13 @@ mod tests {
             from: "192.168.1.2".into(),
         };
         assert_eq!(SocketNotice::from_params(&answer.to_params()), Some(answer));
-        let typed = Typed {
+        let mut typed = Typed {
             text: "secret".into(),
+            typing: false,
             context: Params::new().with("field", "user"),
         };
+        assert_eq!(Typed::from_params(&typed.to_params()), Some(typed.clone()));
+        typed.typing = true;
         assert_eq!(Typed::from_params(&typed.to_params()), Some(typed));
     }
 }

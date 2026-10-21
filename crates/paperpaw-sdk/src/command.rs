@@ -298,6 +298,16 @@ impl Speech {
         self.queue = queue;
         self
     }
+
+    /// Its reply: it was `spoken`, or could not be (a plugin's voice
+    /// answers so, see [`voices`](crate::voices)).
+    pub fn answer(&self, spoken: bool) -> Command {
+        let params = match spoken {
+            true => self.params.clone(),
+            false => self.params.clone().with(speech_params::FAILED, "1"),
+        };
+        Command::Emit(self.reply.clone(), params)
+    }
 }
 
 /// Parameters of the reply to [`Command::Speak`].
@@ -333,6 +343,14 @@ pub enum Command {
     /// screen of slot `.0`: back to it in one step. Nothing where none is
     /// open.
     BackTo(Id),
+    /// Opens a book with the reading app chosen for it, in
+    /// [`slots::READER`](crate::builtin::slots::READER): its path in
+    /// `params::PATH`, and the readers that could not open it. See
+    /// [`readers::open`](crate::readers::open) and
+    /// [`readers::cannot_open`](crate::readers::cannot_open), which make
+    /// it, and [`readers::resolve`](crate::readers::resolve), which says
+    /// what it does.
+    OpenBook(Params),
     /// Opens screen `.1` for slot `.0` with `.2` as [`Command::OpenSlot`]
     /// opens the slot's own: shown again where the slot is open with it
     /// and these params, else in place of what the slot shows (one

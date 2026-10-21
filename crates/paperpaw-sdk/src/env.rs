@@ -30,7 +30,8 @@ pub struct Capabilities {
     /// PaperPaw is the device's firmware and updates it
     /// ([`Env::firmware`]).
     pub firmware: bool,
-    /// Text is spoken aloud ([`Command::Speak`](crate::Command::Speak)).
+    /// Text is spoken aloud ([`Command::Speak`](crate::Command::Speak)):
+    /// by the system, or a plugin's voice (see [`voices`](crate::voices)).
     pub speech: bool,
     /// PaperPaw shows a screen while the device sleeps
     /// ([`actions::SLEEP`](crate::builtin::actions::SLEEP)); where the
@@ -95,12 +96,24 @@ pub struct Env<'a> {
     /// Layers on book pages and frames of their text, from every plugin
     /// (see [`layers`](crate::layers)).
     pub page_layers: &'a crate::layers::PageLayers,
+    /// Where words are looked up, from every plugin (see
+    /// [`lookup`](crate::lookup)).
+    pub lookup: &'a crate::lookup::LookupProviders,
+    /// The reading apps, from every plugin (see
+    /// [`readers`](crate::readers)).
+    pub readers: &'a crate::readers::Readers,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
     /// Folders of what plugins keep for each book
     /// ([`Registrar::add_book_data`](crate::Registrar::add_book_data)).
     pub book_data: &'a [crate::library::BookData],
+    /// Fields plugins keep with books
+    /// ([`Registrar::add_book_field`](crate::Registrar::add_book_field)).
+    pub book_fields: &'a [crate::library::BookField],
+    /// Badges plugins put on books' rows
+    /// ([`Registrar::add_book_badge`](crate::Registrar::add_book_badge)).
+    pub book_badges: &'a [crate::library::BookBadge],
     /// Widgets for screens that show them, from every plugin.
     pub widgets: &'a crate::widgets::Widgets,
     /// The steps of the first-run setup, from every plugin (see
@@ -110,6 +123,10 @@ pub struct Env<'a> {
     pub services: &'a crate::services::Services,
     /// What buttons, taps and swipes do (see [`keys`](crate::keys)).
     pub keys: &'a dyn crate::keys::KeyBindings,
+    /// The look a plugin gave the parts of screens, set with
+    /// [`Registrar::set_ui_look`](crate::Registrar::set_ui_look) (see
+    /// [`ui::look`](crate::ui::look)).
+    pub look: crate::ui::look::Look,
     /// What the device and its shell can do (network, speech, the sleep
     /// screen …).
     pub caps: Capabilities,
@@ -145,9 +162,9 @@ pub struct Env<'a> {
     /// to bind like any other.
     pub inputs: &'a [crate::keys::InputSpec],
     /// Makes the screens plugins added, for [`Env::make_screen`]: the
-    /// kernel's ([`Env::with_screen_maker`]).
-    #[cfg(any(test, feature = "kernel"))]
-    screen_maker: Option<&'a dyn crate::ScreenMaker>,
+    /// kernel's ([`Env::with_screen_maker`]). Never behind a feature: a
+    /// plugin built without `kernel` reads the `Env` the kernel made.
+    screen_maker: Option<&'a dyn crate::screen::ScreenMaker>,
     /// The part of the screen what is handled now is made for and drawn
     /// into, with its place on the screen: all of it but bars and the row
     /// of hints for a screen, a bar's strip for a bar. A screen draws and
@@ -173,7 +190,7 @@ pub struct Env<'a> {
     pub catalog_device: Option<&'a str>,
     /// Passwords and keys, kept for every plugin in one place (see
     /// [`secrets`](crate::secrets)).
-    pub secrets: &'a crate::secrets::Secrets,
+    pub secrets: crate::secrets::Visible<'a>,
     /// Random bytes from the platform's source, for keys and tokens (see
     /// [`random`](crate::random)).
     pub random: crate::random::Random,
@@ -221,12 +238,24 @@ pub struct EnvParts<'a> {
     /// Layers on book pages and frames of their text, from every plugin
     /// (see [`layers`](crate::layers)).
     pub page_layers: &'a crate::layers::PageLayers,
+    /// Where words are looked up, from every plugin (see
+    /// [`lookup`](crate::lookup)).
+    pub lookup: &'a crate::lookup::LookupProviders,
+    /// The reading apps, from every plugin (see
+    /// [`readers`](crate::readers)).
+    pub readers: &'a crate::readers::Readers,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
     /// Folders of what plugins keep for each book
     /// ([`Registrar::add_book_data`](crate::Registrar::add_book_data)).
     pub book_data: &'a [crate::library::BookData],
+    /// Fields plugins keep with books
+    /// ([`Registrar::add_book_field`](crate::Registrar::add_book_field)).
+    pub book_fields: &'a [crate::library::BookField],
+    /// Badges plugins put on books' rows
+    /// ([`Registrar::add_book_badge`](crate::Registrar::add_book_badge)).
+    pub book_badges: &'a [crate::library::BookBadge],
     /// Widgets for screens that show them, from every plugin.
     pub widgets: &'a crate::widgets::Widgets,
     /// The steps of the first-run setup, from every plugin (see
@@ -236,6 +265,10 @@ pub struct EnvParts<'a> {
     pub services: &'a crate::services::Services,
     /// What buttons, taps and swipes do (see [`keys`](crate::keys)).
     pub keys: &'a dyn crate::keys::KeyBindings,
+    /// The look a plugin gave the parts of screens, set with
+    /// [`Registrar::set_ui_look`](crate::Registrar::set_ui_look) (see
+    /// [`ui::look`](crate::ui::look)).
+    pub look: crate::ui::look::Look,
     /// What the device and its shell can do (network, speech, the sleep
     /// screen …).
     pub caps: Capabilities,
@@ -296,6 +329,9 @@ pub struct EnvParts<'a> {
     /// Passwords and keys, kept for every plugin in one place (see
     /// [`secrets`](crate::secrets)).
     pub secrets: &'a crate::secrets::Secrets,
+    /// Which plugin's code runs, for [`Env::secrets`] (see
+    /// [`secrets::Running`](crate::secrets::Running)).
+    pub running: &'a dyn crate::secrets::Running,
     /// Random bytes from the platform's source, for keys and tokens (see
     /// [`random`](crate::random)).
     pub random: crate::random::Random,
@@ -325,12 +361,17 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             text_filters: p.text_filters,
             decorators: p.decorators,
             page_layers: p.page_layers,
+            lookup: p.lookup,
+            readers: p.readers,
             stylesheets: p.stylesheets,
             book_data: p.book_data,
+            book_fields: p.book_fields,
+            book_badges: p.book_badges,
             widgets: p.widgets,
             setup: p.setup,
             services: p.services,
             keys: p.keys,
+            look: p.look,
             caps: p.caps,
             wifi: p.wifi,
             firmware: p.firmware,
@@ -341,7 +382,6 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             clipboard: p.clipboard,
             last_input: p.last_input,
             inputs: p.inputs,
-            #[cfg(any(test, feature = "kernel"))]
             screen_maker: None,
             content: p.content,
             stack: p.stack,
@@ -349,7 +389,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             screens: p.screens,
             font_dirs: p.font_dirs,
             catalog_device: p.catalog_device,
-            secrets: p.secrets,
+            secrets: crate::secrets::Visible::new(p.secrets, p.running),
             random: p.random,
             storage: p.storage,
         }
@@ -395,34 +435,21 @@ impl<'a> Env<'a> {
     /// The screen slot `slot` shows now: the user's choice, else the
     /// plugins' of the highest priority.
     pub fn slot_screen(&self, slot: &str) -> Option<&'a crate::Id> {
-        #[cfg(any(test, feature = "kernel"))]
-        return self.screen_maker?.slot_screen(slot);
-        #[cfg(not(any(test, feature = "kernel")))]
-        {
-            let _ = slot;
-            None
-        }
+        self.screen_maker?.slot_screen(slot)
     }
 
     /// Every screen offered for slot `slot` (to choose another, e.g. a
     /// launcher of several).
     pub fn slot_screens(&self, slot: &str) -> alloc::vec::Vec<&'a crate::Id> {
-        #[cfg(any(test, feature = "kernel"))]
-        return self
-            .screen_maker
-            .map_or_else(alloc::vec::Vec::new, |maker| maker.slot_screens(slot));
-        #[cfg(not(any(test, feature = "kernel")))]
-        {
-            let _ = slot;
-            alloc::vec::Vec::new()
-        }
+        self.screen_maker
+            .map_or_else(alloc::vec::Vec::new, |maker| maker.slot_screens(slot))
     }
 
     /// This environment with `maker` making the screens
     /// [`Env::make_screen`] asks for: the kernel's.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn with_screen_maker(mut self, maker: &'a dyn crate::ScreenMaker) -> Self {
+    pub fn with_screen_maker(mut self, maker: &'a dyn crate::screen::ScreenMaker) -> Self {
         self.screen_maker = Some(maker);
         self
     }
@@ -439,13 +466,7 @@ impl Env<'_> {
         id: &crate::Id,
         params: &crate::Params,
     ) -> Option<alloc::boxed::Box<dyn crate::Screen>> {
-        #[cfg(any(test, feature = "kernel"))]
-        return self.screen_maker?.make(id, self, params);
-        #[cfg(not(any(test, feature = "kernel")))]
-        {
-            let _ = (id, params);
-            None
-        }
+        self.screen_maker?.make(id, self, params)
     }
 
     /// The screen shown on top, if any.

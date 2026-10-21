@@ -162,7 +162,7 @@ impl Harness {
         let notices = Rc::new(RefCell::new(Vec::new()));
         let mut kernel = Kernel::builder(device(memory))
             .storage(storage.clone())
-            .user_config(format!("[core]\nlanguage = en\n{config}"))
+            .user_config(format!("[core]\nlanguage = en\nlibrary-folder =\n{config}"))
             .network(network)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(News)
@@ -302,10 +302,7 @@ fn atom(title: &str, entries: &[&str]) -> String {
 }
 
 fn typed(text: &str) -> Typed {
-    Typed {
-        text: String::from(text),
-        context: Params::new(),
-    }
+    Typed::new(String::from(text), Params::new())
 }
 
 #[test]

@@ -26,6 +26,279 @@ change the plugin SDK.
 - The sample plugin *Large print* sets `core.font-size` and
   `core.line-spacing` (the reader's settings it named no longer exist,
   so its larger text never applied).
+- SDK: `readers`, reading apps. Any plugin registers a screen as a
+  reader of some formats (`Registrar::add_reader`, `ReaderSpec`); books
+  open through one call (`readers::open`, `Command::OpenBook`) in the
+  app chosen for the book, else its folder, else its format, else the
+  default one, else the screen of `slots::READER`. The library, the
+  file manager, the browser, OPDS, the home screen, widgets and the
+  other plugins open books so. The reading settings offer the default
+  app and one for each format (`settings::READING_APP`), where more than
+  one app reads it; the file manager offers *Open with* for a book and
+  *Reading app* for a folder (`readers::ask`), kept with the book or
+  the folder (`readers::folder_moved`: they follow a folder moved or
+  renamed). One reading app is open at a time; one that cannot open a
+  book passes it to the next (`readers::cannot_open`); a choice of an
+  app no longer installed is passed over without a word
+  (`SettingExtra::keeps_unknown`, `SettingSpec::accepts`, `parse`).
+  Shells open books with `Kernel::open_book`, the X4's remote control
+  too.
+- SDK: buttons on touch screens are at least a fingertip (7 mm) high.
+  Breaking: `ui::button_height(style, row)` takes the style. Rows and
+  bars that hold buttons are made with `UiStyle::touch_row`, which grows them
+  by as much as their buttons grow, so the room above and below them,
+  the margin to the screen's sides and the gaps between them stay as
+  they were. A bar of buttons along the top or bottom edge keeps the
+  side margin from that edge too (`ui::edge_bar_height`,
+  `ui::edge_bar_band`, `ui::edge_room`): the file manager's, the
+  store's and the plugin manager's bars, the sync question, the
+  reader's footnote, selection and skim bars, the keyboard and the home
+  screen's layouts. `ui::setting_row(style, spec, row, noted)` gives a
+  number's row its height, in a noted row its first line
+  (`ui::number_title_area`). `ui::button_width(style, label)` says how
+  wide a button must be for its word to stay whole, for buttons laid
+  out as wide as their words (the reader's selection bar). The shipped
+  screens with buttons follow; `paperpaw-dev` finds buttons without
+  their room (`visual.button-room`), the tiles of a grid edge to edge
+  left alone, a last row of one tile too.
+- SDK: accessibility. `events::FOCUS_CHANGED` (`FocusChanged`: role,
+  label, area, on) tells plugins where the focus of the buttons went,
+  worked out only while one listens or the focus is spoken. The kernel
+  describes screens on a framebuffer that keeps no pixels
+  (`Framebuffer::blind`; 48 KB less on the X4). New roles `Check`,
+  `Radio`, `Field`, `Image`, `Link`, `Dialog` and `Progress`
+  (`semantics::role_name` names them); progress bars and the keyboard's
+  field describe themselves so, the reader's menu bar its entries (the
+  focused one too). `Screen::secret` (a PIN, a password being
+  typed) keeps its focus from being told, as do screens that guard the
+  device; `Kernel::is_secret` says so to the USB remote and the dev
+  tools, which then leave out what the parts say. A password typed (an
+  answer to a question asked with `password()`) reaches the plugin that
+  asked alone, whichever keyboard took it, and while it is typed only
+  that plugin's input filters see the keys (`InputFilters::filter_of`).
+  A secret setting (`SettingExtra::secret`) is kept with the secrets,
+  never in the settings: read it with `env.secrets.get(id)`; set or
+  reset, its owner alone hears `SETTING_CHANGED` (with its id, not its
+  value), and one kept in `paperpaw.ini` before moves to the secrets at
+  the start. The USB remote sends no secret setting's value. Text typed
+  for a widget's placement sets the placement's own value. Breaking: a
+  plugin sees its own secrets alone, those in its namespace: `env.secrets` is a
+  `secrets::Visible` view (`get`, `iter`, `is_empty` of the running
+  plugin's, `listed` and `has` of every secret without its value, as
+  the settings' list shows); the kernel tells it which plugin runs
+  (`secrets::Running`, `EnvParts::running`). `wifi::known` takes the
+  secrets to look at. On a blind framebuffer, and
+  while the focus is worked out, no glyph or picture is made.
+- SDK: `ui::setting_opens` says what choosing a setting opens (its
+  editor, the keyboard for text, the list of a choice's values), the
+  same on the settings pages, in menus, the quick panel and the setup;
+  text typed comes back as `events::SETTING_TYPED`, which the kernel
+  sets. A text setting in a menu did nothing before.
+  `SettingExtra::shown_if(setting, value)` shows a setting only while
+  another has a value (`Settings::shows`; screens listing settings make
+  themselves anew when such a setting changes, `Settings::governs`);
+  `SettingExtra::check(fn)`
+  refuses values (`SettingError::Refused`), and the kernel tells the
+  reader why.
+- SDK: one choice dialog for every plugin: `ask::choice(title, &reply)`
+  with `.about(context)` and `.options(labels, &[..])` asks on the
+  screen of the new slot `core.choice` (the kernel's
+  `screens::CHOICE` unless a plugin binds another), so a theme restyles
+  all questions. The fifteen plugins' own choice screens are gone.
+  `ui::choice::open` (a plugin's own choice screen) and
+  `GridView::new(env, choice, chosen)` are deprecated:
+  `GridView::asking(env, chosen)` needs no choice screen.
+- SDK: themes are presets of the kind `core.theme` (`presets::THEME`,
+  covering `presets::theme_settings`, the appearance group): the
+  settings plugin lists them under *Theme* at the top of the appearance
+  settings where any is installed, so two themes no longer fight; *None*
+  gives the appearance settings their defaults again. No theme changes
+  the size of the interface's text, its contrast or the logo, even where
+  it names them (`presets::theme_changes`).
+- SDK: semantic icons (`icons::BACK`, `PREV`, `NEXT`, `HOLD`, `BUSY`,
+  `SHIFT`, `DELETE`, `SPACE`) take the icon a plugin names for them with
+  `add_icon`, so a theme changes the headers' arrows, the hints' marks
+  and the keyboard's keys; without one they look as before.
+  `ui::draw_arrow`, `ui::draw_icon_at` and `ui::has_icon` draw and ask
+  for them. An icon named `U+F8000` is that code point, for icons of
+  one's own. `ui::HOLD_ICON` is deprecated (`icons::HOLD`).
+- SDK: the interface's grays have roles (`ui::Ink`: text, notes,
+  muted, faint, disabled, rules, lines, cards, …), `UiStyle::ink` gives
+  each, from the palette a theme sets in `core.ui-palette` (e.g.
+  `muted=60 line=170`; `ui::Palette`). `UiStyle::size(TextRole)` gives
+  the sizes of text by kind (caption to numeral). The SDK's parts draw
+  in them; two grays became one each (an empty screen's explanation is
+  drawn as notes, the pager's last arrow as what cannot be used).
+- SDK: a plugin gives the parts of every screen a look of its own:
+  `Registrar::set_ui_look(&'static Painters, Priority)` with painters
+  for switches, the focus, separators, buttons, headers, the row of
+  button hints, progress bars and sliders (`ui::look`). The SDK still
+  places the parts and describes them; `UiStyle::look` and `Env::look`
+  carry the look in use (the highest priority, of equal ones the later).
+- SDK: a setting's editor may be a slot (`SettingExtra::editor_slot`,
+  `SettingSpec::editor_slot`), so a plugin filling it edits the setting
+  too. Breaking: `SettingExtra::editor` is now an `Editor` (`Screen` or
+  `Slot`), opened with `Editor::open`. New slot `core.choose-value`
+  (`slots::CHOOSE_VALUE`) picks a choice setting's value; the settings
+  plugin binds it, menus and the setup open it. The dictionary, sleep
+  and picture widget choose their folders with `core.choose-folder`.
+- SDK: `ask::text(..).live()` asks for answers on each change too (a
+  list that filters as one types), each with `Typed::typing` set; the
+  keyboard gives them. `params::FOCUS` opens slot `core.settings` on a
+  setting's page with the focus on it. New: `params::LIVE`,
+  `params::TYPING`. Breaking: `Typed` has the field `typing` and is
+  `#[non_exhaustive]`, made with `Typed::new(text, context)` (and
+  `while_typing`). The kernel sets a setting from `SETTING_TYPED` only
+  once the reader is done typing.
+- SDK: `Services::contributed_points` lists the points contributed to,
+  declared or not. Breaking: `Services::add`,
+  deprecated since 0.4.0, is gone.
+- SDK: `time::iso8601` and `time::parse_iso8601` write and read
+  ISO 8601 times (UTC with milliseconds; offsets and dates alone read
+  too; years too far out and offsets past a day read as none),
+  `time::duration_text` writes a length of time as `1 h 05 min`,
+  `42 min` or `< 1 min` in the language's words. Joplin uses them.
+- SDK: `menus::BOOK` (`core.book-menu`), what can be done with a book
+  in any view of the library, with `events::BOOK_CHOSEN` (`BookChosen`:
+  the action and the book) sent before the action runs: the library's
+  book sheet lists it (on pages, where more come than the sheet holds),
+  its book details are its first entry (`files.book-info`). `menus::APPS` (`core.apps`), what a launcher
+  lists: the home screen's tools list it beside the tools.
+- Library: the kernel keeps the catalog of books, the only one writing
+  it, one change at a time, in the background and never while a book is
+  open. It walks the library folder once the library first shows after
+  a start (never at every start: on the X4 every wake is one), for
+  another library folder and when books came or went without saying
+  which, taking each book whose file did not change from the old
+  catalog, read along with the walk, instead of reading its details, and
+  listing large folders a piece a step: a walk takes a few kilobytes
+  whatever the library's size, and one paused goes on where it was. On a
+  device of little memory (the X4) it waits while the library is open,
+  whose index of the books takes the room (catching up, which takes less,
+  goes on beside it); with 2400 books the X4's heap peaks at 153 KiB
+  while it walks. Books that came, moved or changed are caught up without
+  a walk, at a calm moment when many come one after the other (a Calibre
+  or catalog sync); books removed are left out at once. Views of the
+  library no longer make it themselves, and show at once what changed (a
+  book finished, a favourite, a book removed) without reading each book.
+  What could not be read is never written: an error leaves the old
+  catalog whole, and a status that cannot be read is not noted. Books
+  Calibre, the transfer page or Wallabag delete are removed from the
+  library with what plugins keep for them; books they and catalogs bring
+  are announced. Book information is read out (its rows were drawn
+  only).
+- Library: badges plugins add show on the books' rows, the fields they
+  keep show on a book's information, and actions they add to the book
+  menu show on its sheet. Each size of cover (row, card, covers) is kept
+  apart, so switching views no longer makes covers anew.
+- SDK: the library as a service (`library::service`, `trait Library`):
+  every view of the library, its shelves, its letters and the book
+  widgets read the books through it (`each`, `records`, `version`,
+  `index`, `is_current`, `refresh`, `kept_index`, `keep_index`), so a
+  library of one's own, published as `library::service::SERVICE` (the
+  kernel's services a plugin may stand in for are
+  `services::REPLACEABLE`), feeds them all with its own books. With the
+  catalog's state (`catalog::state`, `catalog::generation`), what was
+  noted beside it (`catalog::Changes`), queries (`catalog::Query`,
+  `query`, `found`, and `query_in`, `found_in` over any library's
+  `catalog::Books`), a page's books with the log read once
+  (`catalog::read_page`), and the index of every book the calm list uses
+  (`library::index::Index`, 24 bytes a book, made from any library with
+  `Index::collect`, its items with `Item::new`, of a `version`, kept in
+  a file while a book is open). New: `events::BOOK_ADDED`,
+  `BOOK_CHANGED` (bits of `library::what`), `BOOK_CHOSEN`,
+  `CATALOG_CHANGED`, `CATALOG_WANTED` (`CatalogWanted`);
+  `library::{added, changed_book, request_catalog, request_catalog_anew,
+  cover_variant}`; `menus::BOOK`; `Registrar::add_book_field`
+  (`library::BookField`) and `add_book_badge` (`library::BookBadge`,
+  `Badge`), listed in `Env::book_fields` and `Env::book_badges`;
+  `catalog::series_order` reads `2,5` as `2.5`; `Formats::is_empty`.
+- SDK, breaking: the catalog is of format 2 (status, added, fields, the
+  file's size; a header with its generation; format 1 is still read)
+  and `Record` has `status`, `added`, `size` and fields; status changes
+  and removals are noted beside it and folded in by the kernel. Making
+  it is the kernel's (`catalog::Walk`, `catalog::Rewrite`,
+  `catalog::note`, `catalog::forget`, `catalog::log_is_long`,
+  `library::note_status`, with the SDK's `kernel` feature): views listen
+  to `CATALOG_CHANGED` and ask with `library::request_catalog` instead of
+  walking. `catalog::changes` gives `Changes`; `Index::load` takes the
+  version it is to be of. `Env` and `EnvParts` have `book_fields` and
+  `book_badges`.
+- The library folder is the kernel's setting, `core.library-folder`
+  (it was the library plugin's `files.root`), so a library of one's own
+  and every plugin that puts books somewhere read the same; a folder set
+  before is read under its old id. SDK: `builtin::settings::LIBRARY_FOLDER`
+  (`library::FOLDER` names it) and `builtin::screens::FOLDER_EDITOR`, a
+  text setting's editor that opens the folder chooser of whichever
+  plugin fills its slot.
+- Emulator: scripts measure the heap's peak of one step (`reset-peak`)
+  and send an event as a plugin would (`emit:core.library-changed`).
+- SDK: `menus::APPS` (`core.apps`), what there is to open besides the
+  tools; the home screen's grid of tools shows it too, after the tools,
+  and the tools' menu has it as a submenu (*Apps*) where there is
+  something in it, so that it is reached with the buttons alone.
+- Keyboard: other plugins add layouts through the point
+  `keyboard.layouts` (`id; code; letter rows; variants`), chosen as the
+  built-in ones, with variants of letters of their own besides the
+  built-in ones. A layout has at most 6 rows of 16 keys, a code of 4
+  characters and 16 variants a letter; invisible characters and ids
+  named as other layouts are left out.
+- About: other plugins add lines to the page through the point
+  `about.lines`: plain text, up to 512 bytes a plugin, each line named
+  after the plugin that added it.
+- Docs: what the slots besides the reader's promise (home, menu, panel,
+  settings, keyboard, lookup) and the shipped plugins' points.
+- Wikipedia: a lookup provider that goes online. Once *Online* is
+  chosen in the dictionary's panel, its summary shows there as an entry
+  beside the dictionaries', and its line *Open Wikipedia* (or confirm,
+  where the entry shows) opens the whole summary on its own screen
+  without fetching it again; that screen stays bound to
+  `slots::LOOKUP_ONLINE`. *Online* is offered once a word. SDK:
+  `LookupEntry::more`, the screen showing more of an entry, opened with
+  the entry's text (`LookupQuery::answer_entry`, `LookupAnswered::more`).
+  The panel names each source right above its entries.
+- SDK: menu entries placed beside others (`MenuPlace`,
+  `Registrar::place_menu_entry`; several in one place keep the order
+  they were registered in) or taken out by a plugin (`hide_menu_entry`;
+  the menu editor tells which, `Menus::hidden_by`); what a plugin's own
+  entry shows now (`set_item_state`, `ItemState`: a label, a switch,
+  faint, hidden, a badge; `ItemState::text`) and a line under it
+  (`describe_item`), shown by the shipped list, bar, panel and home
+  screen tools alike. A faint entry is passed by the focus and does
+  nothing (`ui::Rows::set_passed`, `ui::draw_faint_button`).
+- Menus: a menu the user redefined shows the entries of plugins
+  installed since, after the entry before them (`[menus-known]` keeps
+  what plugins put there that the user left out; lists kept before stay
+  as they are).
+- SDK: `lookup`, lookup providers (`Registrar::add_lookup_provider`):
+  where words are looked up, at once or later, answering the asker's
+  reply event (`LookupQuery::answer`, by default
+  `events::LOOKUP_ANSWERED`). The dictionary's panel lists every
+  provider's entries, naming each dictionary or provider only where
+  entries come from more than one; it asks those that go online only
+  when *Online* is chosen, and offers the online lookup screen
+  (Wikipedia) after them, waiting 20 seconds at most for those that
+  answer later. The StarDict dictionaries are a provider too.
+- SDK: `voices`, a plugin's voice (`Registrar::add_voice`) speaks text
+  aloud in place of the system's for the languages it speaks, chosen
+  with `settings::VOICE`; it answers as the system does
+  (`Speech::answer`). A device without a voice of its own has speech
+  with one, which speaks unchosen (the choice *Automatic*); the system
+  or another voice speaking in its place stops it.
+- SDK: formats tell files without an extension by their first bytes
+  (`FormatSpec::sniff`, `Formats::for_file`, `supports_file`; the last 32
+  files told are kept by a hash of their path and their size, and
+  however many a folder has, none is left out): the
+  library, the file manager and the browser find such books; EPUB (its
+  stored `mimetype` entry) and XTC say so. Formats read their own
+  settings (`OpenOptions::setting`, filled by `reading::open_options`),
+  and say a document still coming is not ready
+  (`DocumentError::NotReady`; the reader waits for
+  `events::DOCUMENT_READY`).
+- Documents: `Metadata::direction` (`PageProgression`): an EPUB whose
+  pages go right to left says so, and the reader mirrors taps, swipes
+  and swipes in from the edges (`Screen::mirrored`, kept by the
+  kernel's key map). EPUBs are converted anew once (cache version 25).
 - Code plugins fit the firmware again: the SDK's fingerprint no longer
   counts features that add functions and modules only (`kernel`,
   `unstable`), with which the firmware is built and plugins are not, so
@@ -55,9 +328,9 @@ change the plugin SDK.
   files take at most 96 KiB together besides its translations (512 KiB
   of their own), 24 KiB of it of formats 3 and 64 lines for points; the
   files it parses are read one at a time as it registers. An action
-  emits only its own events and sets no guarded setting. SDK:
-  `Registrar::place_menu_entry` and `hide_menu_entry`, for code plugins
-  too.
+  emits only its own events and sets no guarded setting. Its menu
+  entries are placed and taken out as code plugins' are
+  (`Registrar::place_menu_entry`, `hide_menu_entry`).
 - SDK: refreshes. A refresh filter sees why the panel is
   refreshed (`filters::RefreshCause`: a page turned, screens, a notice,
   a status line; told with `Cx::refresh_cause`), the slot, how many

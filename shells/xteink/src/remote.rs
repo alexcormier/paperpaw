@@ -178,6 +178,7 @@ impl Remote {
                 println!("PP:INPUT {samples} {front} {side} {power} {millivolts}");
             }
             Command::Setting(id) => match kernel.settings().get(&id) {
+                Some(_) if is_secret(kernel, &id) => println!("PP:SETTING •"),
                 Some(value) => println!("PP:SETTING {}", value.to_config_text()),
                 None => error("no such setting"),
             },
@@ -269,7 +270,11 @@ impl Remote {
                     if id.starts_with(prefix.as_str())
                         && let Some(value) = settings.get(id)
                     {
-                        println!("PP:VALUE {id} {}", value.to_config_text());
+                        if spec.extra().secret {
+                            println!("PP:VALUE {id} •");
+                        } else {
+                            println!("PP:VALUE {id} {}", value.to_config_text());
+                        }
                     }
                 }
                 println!("PP:END");
@@ -556,12 +561,27 @@ fn shot(kernel: &mut Kernel) {
     }
 }
 
+/// Whether setting `id` is a secret, which is never sent.
+fn is_secret(kernel: &Kernel, id: &str) -> bool {
+    kernel
+        .settings()
+        .spec(id)
+        .is_some_and(|spec| spec.extra().secret)
+}
+
 /// Sends what the screen shows, part by part.
 fn describe(kernel: &mut Kernel) {
+    // A PIN or a password being entered: where the parts are, not what
+    // they say.
+    let secret = kernel.is_secret();
     for part in kernel.describe() {
         let state = part_state(part.focused, part.on);
         let a = part.area;
-        let label = part.label.replace('\n', " ");
+        let label = if secret {
+            String::from("•")
+        } else {
+            part.label.replace('\n', " ")
+        };
         println!(
             "PP:PART {:?} {} {} {} {} {state} {label}",
             part.role, a.x, a.y, a.width, a.height

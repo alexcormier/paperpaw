@@ -29,10 +29,13 @@ language = en
 name = English
 plural = one-other
 
-     [messages]
+[messages]
 core.on = On
 core.off = Off
 core.page-of = {page} / {pages}
+core.duration.under-a-minute = < 1 min
+core.duration.minutes = {m} min
+core.duration.hours = {h} h {m} min
 ";
 
 /// A device: its size, and whether it has a touch screen.
@@ -88,6 +91,8 @@ pub struct Harness {
     pub text_filters: paperpaw_sdk::filters::TextFilters,
     pub decorators: paperpaw_sdk::decorations::Decorators,
     pub page_layers: paperpaw_sdk::layers::PageLayers,
+    pub lookup: paperpaw_sdk::lookup::LookupProviders,
+    pub readers: paperpaw_sdk::readers::Readers,
     pub widgets: paperpaw_sdk::widgets::Widgets,
     pub setup: paperpaw_sdk::setup::SetupSteps,
     pub services: paperpaw_sdk::services::Services,
@@ -133,6 +138,8 @@ impl Harness {
             text_filters: Default::default(),
             decorators: Default::default(),
             page_layers: Default::default(),
+            lookup: Default::default(),
+            readers: Default::default(),
             widgets: paperpaw_sdk::widgets::Widgets::new(),
             setup: Default::default(),
             services: Default::default(),
@@ -222,12 +229,17 @@ impl Harness {
             text_filters: &self.text_filters,
             decorators: &self.decorators,
             page_layers: &self.page_layers,
+            lookup: &self.lookup,
+            readers: &self.readers,
             stylesheets: &[],
             book_data: &[],
+            book_fields: &[],
+            book_badges: &[],
             widgets: &self.widgets,
             setup: &self.setup,
             services: &self.services,
             keys: &NoKeys,
+            look: paperpaw_sdk::ui::look::Look::none(),
             caps: Capabilities::default(),
             wifi: None,
             firmware: None,
@@ -245,6 +257,7 @@ impl Harness {
             font_dirs: &[],
             catalog_device: None,
             secrets: &self.secrets,
+            running: &paperpaw_sdk::secrets::Anyone,
             storage: &self.storage,
         })
     }

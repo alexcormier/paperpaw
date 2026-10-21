@@ -535,9 +535,162 @@ pub fn week_start(env: &Env<'_>) -> u8 {
 pub const CLOCK_24H: &str = "core.clock.24h";
 pub const CLOCK_12H: &str = "core.clock.12h";
 
+/// `unix_millis` (milliseconds since 1970, UTC) as ISO 8601 in UTC, as
+/// web services and Joplin write times: `2026-10-19T22:24:10.090Z`.
+pub fn iso8601(unix_millis: i64) -> String {
+    let t = LocalTime::from_seconds(unix_millis.div_euclid(1000));
+    alloc::format!(
+        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
+        t.year,
+        t.month,
+        t.day,
+        t.hour,
+        t.minute,
+        t.second,
+        unix_millis.rem_euclid(1000)
+    )
+}
+
+/// An ISO 8601 time as milliseconds since 1970 (UTC): a date
+/// (`2026-10-19`, its midnight in UTC), or a date and a time with seconds
+/// or not, a fraction of a second or not, and `Z`, an offset such as
+/// `+02:00` or none (taken as UTC). `None` for anything else.
+pub fn parse_iso8601(text: &str) -> Option<i64> {
+    let text = text.trim();
+    let (date, clock) = match text.split_once(['T', ' ']) {
+        Some((date, clock)) => (date, Some(clock)),
+        None => (text, None),
+    };
+    // Digits alone: no "+1".
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
+    let mut d = date.splitn(3, '-');
+    let (year, month, day) = (d.next()?, d.next()?, d.next()?);
+    if !(digits(year) && digits(month) && digits(day)) {
+        return None;
+    }
+    let year: i32 = year.parse().ok()?;
+    let month: u8 = month.parse().ok()?;
+    let day: u8 = day.parse().ok()?;
+    if !(1..=12).contains(&month) || day == 0 || day > days_in_month(year, month) {
+        return None;
+    }
+    let days = days_from_civil(year, month, day);
+    let Some(clock) = clock else {
+        return days.checked_mul(86_400_000);
+    };
+    // The offset: `Z`, `+hh:mm`, `-hh:mm` (or `+hhmm`), or none.
+    let (clock, offset) = if let Some(clock) = clock.strip_suffix('Z') {
+        (clock, 0)
+    } else if let Some(at) = clock.rfind(['+', '-']) {
+        let (clock, zone) = clock.split_at(at);
+        let sign = if zone.starts_with('-') { -1 } else { 1 };
+        let digits: alloc::string::String = zone[1..].chars().filter(|c| *c != ':').collect();
+        if digits.len() != 4 || !digits.bytes().all(|b| b.is_ascii_digit()) {
+            return None;
+        }
+        let hours: i64 = digits[..2].parse().ok()?;
+        let minutes: i64 = digits[2..].parse().ok()?;
+        if hours > 23 || minutes > 59 {
+            return None;
+        }
+        (clock, sign * (hours * 60 + minutes) * 60_000)
+    } else {
+        (clock, 0)
+    };
+    let (hms, fraction) = clock.split_once(['.', ',']).unwrap_or((clock, ""));
+    let mut parts = hms.splitn(3, ':');
+    // Digits alone: no hour of `-1` or `+5`.
+    let number = |s: &str| {
+        (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| s.parse::<u8>().ok())
+            .flatten()
+            .map(i64::from)
+    };
+    let hour = number(parts.next()?)?;
+    let minute = number(parts.next()?)?;
+    let second = parts.next().map_or(Some(0), number)?;
+    if hour > 23 || minute > 59 || second > 60 {
+        return None;
+    }
+    // Milliseconds from the first three digits of the fraction.
+    let mut millis = 0i64;
+    for (n, c) in fraction.chars().enumerate() {
+        let digit = i64::from(c.to_digit(10)?);
+        if n < 3 {
+            millis += digit * [100, 10, 1][n];
+        }
+    }
+    // Years far out overflow the milliseconds: none then.
+    let ms = days
+        .checked_mul(86_400_000)?
+        .checked_add(((hour * 60 + minute) * 60 + second) * 1000 + millis)?;
+    ms.checked_sub(offset)
+}
+
+/// A length of time as people read it: `1 h 05 min`, `42 min`, or
+/// `< 1 min` (in the language's words, `core.duration.*`).
+pub fn duration_text(env: &Env<'_>, seconds: u64) -> String {
+    let minutes = seconds / 60;
+    if minutes == 0 {
+        return env.i18n.tr("core.duration.under-a-minute").into();
+    }
+    if minutes < 60 {
+        return env.i18n.format(
+            "core.duration.minutes",
+            &[("m", paperpaw_i18n::Arg::Int(minutes as i64))],
+        );
+    }
+    env.i18n.format(
+        "core.duration.hours",
+        &[
+            ("h", paperpaw_i18n::Arg::Int((minutes / 60) as i64)),
+            (
+                "m",
+                paperpaw_i18n::Arg::Str(&alloc::format!("{:02}", minutes % 60)),
+            ),
+        ],
+    )
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn iso8601_times_are_written_and_read_back() {
+        let ms = 1_792_448_650_090; // 2026-10-19T22:24:10.090Z
+        assert_eq!(iso8601(ms), "2026-10-19T22:24:10.090Z");
+        assert_eq!(parse_iso8601(&iso8601(ms)), Some(ms));
+        assert_eq!(iso8601(-1), "1969-12-31T23:59:59.999Z");
+        // Offsets, no seconds, no fraction, a date alone.
+        assert_eq!(parse_iso8601("2026-10-20T00:24:10.090+02:00"), Some(ms));
+        assert_eq!(parse_iso8601("2026-10-19T22:24Z"), Some(ms - 10_090));
+        assert_eq!(parse_iso8601("2026-10-19 22:24:10"), Some(ms - 90));
+        assert_eq!(
+            parse_iso8601("2026-10-19"),
+            Some(days_from_civil(2026, 10, 19) * 86_400_000)
+        );
+        // More digits of the fraction than milliseconds hold.
+        assert_eq!(parse_iso8601("2026-10-19T22:24:10.0909Z"), Some(ms));
+        for bad in [
+            "",
+            "2026",
+            "2026-13-01",
+            "2026-02-30",
+            "2026-10-19T25:00Z",
+            "2026-10-19T10:00+2",
+            // An offset past a day, an hour below zero, a year far out.
+            "2026-10-19T10:00+25:00",
+            "2026-10-19T-1:00Z",
+            "2026-10-19T+5:00Z",
+            "2026-+1-19",
+            "+2026-10-19",
+            "2147483647-12-31T23:59:59Z",
+            "x",
+        ] {
+            assert_eq!(parse_iso8601(bad), None, "{bad}");
+        }
+    }
 
     fn utc(year: i32, month: u8, day: u8, hour: i64) -> i64 {
         days_from_civil(year, month, day) * 86_400 + hour * 3600

@@ -163,7 +163,7 @@ impl Layout {
         });
         // The pattern: three by three dots in the same room, OK below
         // where there is no touch.
-        let ok_h = ui::button_height(Rect::new(0, 0, 0, row));
+        let ok_h = ui::button_height(style, Rect::new(0, 0, 0, row));
         let ok_room = if env.device.input.touch {
             0
         } else {
@@ -692,6 +692,11 @@ impl Screen for LockScreen {
 
     /// Locked, nothing gets past: also no swipe in from an edge.
     fn holds_edges(&self) -> bool {
+        true
+    }
+
+    /// The code being entered: its keys are not told to plugins.
+    fn secret(&self) -> bool {
         true
     }
 

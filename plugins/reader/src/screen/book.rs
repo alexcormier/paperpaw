@@ -93,6 +93,33 @@ pub(super) enum Target {
     Layer(usize),
 }
 
+/// Why a book did not open: the message to show instead, and whether it
+/// is only not there yet (`DocumentError::NotReady`), to be opened once
+/// it is.
+#[derive(Debug)]
+pub(super) enum Unopened {
+    Failed(String),
+    NotReady(String),
+}
+
+impl From<String> for Unopened {
+    fn from(message: String) -> Self {
+        Unopened::Failed(message)
+    }
+}
+
+impl Unopened {
+    pub(super) fn not_ready(&self) -> bool {
+        matches!(self, Unopened::NotReady(_))
+    }
+
+    pub(super) fn message(self) -> String {
+        match self {
+            Unopened::Failed(message) | Unopened::NotReady(message) => message,
+        }
+    }
+}
+
 /// Remembers `path` as the book read last (reopened at start-up).
 pub(crate) fn remember_last(storage: &dyn paperpaw_sdk::Storage, path: &str) {
     let state = format!("[reader]\nlast = {}\n", paperpaw_sdk::config::quote(path));
@@ -111,11 +138,14 @@ pub(crate) fn book_dir(path: &str) -> String {
 impl Book {
     /// Opens the book named by the `path` parameter; errors are messages
     /// to show instead of the book.
-    pub(super) fn open(env: &Env<'_>, params: &Params) -> Result<Book, String> {
+    pub(super) fn open(env: &Env<'_>, params: &Params) -> Result<Book, Unopened> {
         let path = params
             .get(params::PATH)
             .ok_or_else(|| env.i18n.tr("reader.no-book").to_string())?;
-        let error = |e: DocumentError| format!("{}\n{e}", env.i18n.tr("reader.error"));
+        let error = |e: DocumentError| match e {
+            DocumentError::NotReady => Unopened::NotReady(env.i18n.tr("reader.not-ready").into()),
+            e => Unopened::Failed(format!("{}\n{e}", env.i18n.tr("reader.error"))),
+        };
         let options = paperpaw_sdk::reading::open_options(env);
         let document = env
             .formats

@@ -30,7 +30,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use crate::secrets::{SecretChange, Secrets};
+use crate::secrets::SecretChange;
 
 /// How long a plugin's request, server or connection waits for the network
 /// before it fails, on a device that manages Wi-Fi.
@@ -199,9 +199,11 @@ pub fn secret_id(ssid: &str) -> String {
 
 /// The networks joined before, as `(name, password)` (an empty password
 /// for an open network).
-pub fn known(secrets: &Secrets) -> Vec<(String, String)> {
+pub fn known<'a>(
+    secrets: impl IntoIterator<Item = &'a crate::secrets::Secret>,
+) -> Vec<(String, String)> {
     secrets
-        .iter()
+        .into_iter()
         .filter_map(|secret| {
             let ssid = secret.id.strip_prefix(SECRET_PREFIX)?;
             Some((String::from(ssid), secret.value.clone()))
@@ -222,6 +224,7 @@ pub fn forget(ssid: &str) -> SecretChange {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::secrets::Secrets;
 
     #[test]
     fn known_networks_are_secrets() {
@@ -230,18 +233,18 @@ mod tests {
         secrets.apply(keep("Cafe", ""));
         secrets.apply(SecretChange::keep("translate.key", "Key", "k"));
         assert_eq!(
-            known(&secrets),
+            known(secrets.iter()),
             [
                 (String::from("Home Net"), String::from("pw!")),
                 (String::from("Cafe"), String::new())
             ]
         );
         secrets.apply(forget("Cafe"));
-        assert_eq!(known(&secrets).len(), 1);
+        assert_eq!(known(secrets.iter()).len(), 1);
         // Kept and read back as named, tabs and all.
         secrets.apply(keep("Odd\tName", "pw"));
         let read = Secrets::decode(&secrets.encode());
-        assert!(known(&read).contains(&(String::from("Odd\tName"), String::from("pw"))));
+        assert!(known(read.iter()).contains(&(String::from("Odd\tName"), String::from("pw"))));
         let join = WifiCommand::Join {
             ssid: String::from("n"),
             password: String::from("s3cr3t"),

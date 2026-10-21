@@ -530,12 +530,15 @@ impl Kernel {
             return self.finish();
         }
         let event = self.page_buttons_swapped(event);
-        // Plugins' input filters come first.
+        // Plugins' input filters come first; while a screen guards the
+        // device, or a PIN or a password is entered, only those of its
+        // plugin.
         let (verdict, delivered) = {
-            // While a screen guards the device, only its plugin's filters.
-            let guard = self.guard().map(|guard| self.stack[guard].id.namespace());
+            let asking = self.secret_owner();
             let env = self.shared.env(now);
-            self.shared.input_filters.filter_of(&env, &event, guard)
+            self.shared
+                .input_filters
+                .filter_of(&env, &event, asking.as_deref())
         };
         let event = match verdict {
             InputVerdict::Take => {
@@ -714,21 +717,73 @@ impl Kernel {
         }
     }
 
+    /// Whether what the screen shows is secret now: a PIN or a password
+    /// being entered ([`Screen::secret`]),
+    /// or the device guarded. Those who show the screen elsewhere (a
+    /// remote control, tools) leave out what its parts say then.
+    pub fn is_secret(&self) -> bool {
+        self.guard().is_some() || self.stack.iter().any(|s| s.screen.secret())
+    }
+
+    /// The plugin of the screen that guards the device, else of the one a
+    /// PIN or a password is entered on; `None` where none is.
+    fn secret_owner(&self) -> Option<alloc::string::String> {
+        let guard = self.guard().map(|at| &self.stack[at]);
+        guard
+            .or_else(|| self.stack.iter().rev().find(|s| s.screen.secret()))
+            .map(|s| alloc::string::String::from(s.id.namespace()))
+    }
+
     /// Says what has the focus now, if it changed and the user asked for
     /// it ([`core_settings::SPEAK_FOCUS`]): in place of what it said of
     /// the focus before, if that is still spoken; not while a plugin
     /// reads aloud.
     fn speak_focus(&mut self) {
-        if !self.shared.caps.speech
-            || !self
+        // Never while a PIN or a password is entered, or the device
+        // guarded: the keys pressed would be told.
+        let secret = self.is_secret();
+        let listened = !secret
+            && self
+                .subscriptions
+                .iter()
+                .any(|(event, ..)| *event == events::FOCUS_CHANGED);
+        let spoken = self.shared.caps.speech
+            && self
                 .shared
                 .settings
                 .bool(core_settings::SPEAK_FOCUS.as_str())
-            || (self.io.speech.speaking() && !self.io.focus_spoken)
-        {
+            && !(self.io.speech.speaking() && !self.io.focus_spoken);
+        if !listened && !spoken {
             return;
         }
+        // At each input: described without a glyph made, the ink of text
+        // taken from its line (exact enough to tell what has the focus).
+        self.shared.fonts.set_describing(true);
         let parts = self.describe();
+        self.shared.fonts.set_describing(false);
+        // Plugins that listen are told where it went.
+        let focus = paperpaw_sdk::semantics::focused(&parts).cloned();
+        if listened && focus != self.io.focus_told {
+            if let Some(part) = &focus {
+                let mut told = events::FocusChanged::new(
+                    String::from(paperpaw_sdk::semantics::role_name(part.role)),
+                    part.label.clone(),
+                    part.area.x,
+                    part.area.y,
+                    part.area.width,
+                    part.area.height,
+                );
+                told.on = part.on;
+                self.io.focus_told = focus;
+                self.output.commands.push(events::FOCUS_CHANGED.emit(told));
+                self.run_commands();
+            } else {
+                self.io.focus_told = None;
+            }
+        }
+        if !spoken {
+            return;
+        }
         let said = paperpaw_sdk::semantics::focused(&parts).map(|part| {
             let state = match part.on {
                 Some(true) => self.shared.translator.tr("core.state.on"),
@@ -749,10 +804,7 @@ impl Kernel {
             let speech =
                 paperpaw_sdk::Speech::new(text.clone(), Id::new_static("core.focus-spoken"))
                     .language(language);
-            let (available, screens) = (self.shared.caps.speech, self.stack.len());
-            self.io
-                .speech
-                .speak(speech, available, screens, &mut self.output.commands);
+            self.speak(speech);
             self.io.focus_spoken = true;
         }
         self.io.speech.focus = said;
@@ -1024,6 +1076,18 @@ impl Kernel {
         self.finish()
     }
 
+    /// Opens the book at `path` with the reading app chosen for it (see
+    /// `paperpaw_sdk::readers`): for a shell asked to open a file.
+    pub fn open_book(&mut self, now: Instant, path: &str) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.shared.reader = true;
+        self.now = now;
+        self.last_activity = now;
+        self.output.commands.push(paperpaw_sdk::readers::open(path));
+        self.run_commands();
+        self.finish()
+    }
+
     /// Opens the screen `screen` with `params`, as a plugin would, e.g.
     /// asked by a shell's remote control or a test.
     pub fn open_screen(&mut self, now: Instant, screen: Id, params: Params) -> Effects {
@@ -1062,7 +1126,7 @@ impl Kernel {
     ) -> Result<Effects, &'static str> {
         // A placement's too (`widgets.clock@2.face`).
         let spec = self.shared.settings.spec(id).ok_or("no such setting")?;
-        let value = spec.kind.parse(text).ok_or("not a value of this setting")?;
+        let value = spec.parse(text).ok_or("not a value of this setting")?;
         let id = Id::parse(id).map_err(|_| "no such setting")?;
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
@@ -1168,6 +1232,13 @@ struct Shared {
     decorators: paperpaw_sdk::decorations::Decorators,
     /// Layers on book pages and frames of their text, from every plugin.
     page_layers: paperpaw_sdk::layers::PageLayers,
+    /// Where words are looked up, from every plugin.
+    lookup: paperpaw_sdk::lookup::LookupProviders,
+    /// Plugins' voices (the kernel's alone: plugins speak with
+    /// `Command::Speak`).
+    voices: paperpaw_sdk::voices::Voices,
+    /// The reading apps, from every plugin.
+    readers: paperpaw_sdk::readers::Readers,
     /// Filters of every input and of every refresh, from every plugin.
     input_filters: paperpaw_sdk::filters::InputFilters,
     refresh_filters: paperpaw_sdk::filters::RefreshFilters,
@@ -1175,6 +1246,9 @@ struct Shared {
     stylesheets: Vec<Cow<'static, str>>,
     /// Folders of what plugins keep for each book.
     book_data: Vec<paperpaw_sdk::library::BookData>,
+    /// Fields kept with books, badges on their rows, from every plugin.
+    book_fields: Vec<paperpaw_sdk::library::BookField>,
+    book_badges: Vec<paperpaw_sdk::library::BookBadge>,
     /// What the device and its shell can do.
     caps: Capabilities,
     /// Wi-Fi, where PaperPaw manages it (see [`KernelBuilder::wifi`]).
@@ -1231,6 +1305,9 @@ struct Shared {
     /// What the storage read during the call going on (see `recall`).
     recall: alloc::rc::Rc<recall::Recall>,
     keymap: Keymap,
+    /// The look of the parts of screens a plugin set, and its priority
+    /// (see [`Registrar::set_ui_look`](paperpaw_sdk::Registrar::set_ui_look)).
+    look: (paperpaw_sdk::ui::look::Look, Option<paperpaw_sdk::Priority>),
     /// What each plugin takes.
     meter: alloc::rc::Rc<meter::Meter>,
 }
@@ -1263,8 +1340,12 @@ impl Shared {
             text_filters: &self.text_filters,
             decorators: &self.decorators,
             page_layers: &self.page_layers,
+            lookup: &self.lookup,
+            readers: &self.readers,
             stylesheets: &self.stylesheets,
             book_data: &self.book_data,
+            book_fields: &self.book_fields,
+            book_badges: &self.book_badges,
             caps: self.caps,
             wifi: self.wifi.as_ref(),
             firmware: self.firmware.as_ref(),
@@ -1282,9 +1363,11 @@ impl Shared {
             font_dirs: &self.font_dirs,
             catalog_device: self.catalog_device,
             secrets: &self.secrets,
+            running: &*self.meter,
             random: self.random,
             storage: self.storage.as_ref(),
             keys: &self.keymap,
+            look: self.look.0,
         })
     }
 }

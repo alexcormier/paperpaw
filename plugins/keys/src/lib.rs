@@ -35,7 +35,7 @@ use paperpaw_sdk::builtin::{CONFIG_FILE, GLOBAL_KEYMAP_LAYER, actions, menus, pa
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::keys::{EDGES, PINCHES, POLICIES, SWIPES, ZONES};
 use paperpaw_sdk::replies::Typed;
-use paperpaw_sdk::ui::choice::{self, Choice, Picked};
+use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
@@ -48,8 +48,6 @@ pub const OPEN: Id = Id::new_static("keys.open");
 const LIST_SCREEN: Id = Id::new_static("keys.list");
 const PICK_SCREEN: Id = Id::new_static("keys.pick");
 const PLACE_SCREEN: Id = Id::new_static("keys.place");
-/// Asks whether to take every change back.
-const CHOICE: Id = Id::new_static("keys.choice");
 /// The answer.
 const RESET_CHOSEN: Event<Picked> = Event::new("keys.reset-chosen");
 /// The action picked for an input: parameters `input` and `id` (empty
@@ -437,11 +435,6 @@ impl Plugin for Keys {
             "keys.place",
             Box::new(|env, params| Box::new(PlaceScreen::new(env, params))),
         ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "keys.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
-        ))?;
         r.add_action(ActionSpec::new(OPEN, "keys.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
@@ -589,14 +582,11 @@ impl ListScreen {
             }
             Some(Row::Reset) => {
                 let question = env.i18n.tr("keys.reset.question");
-                cx.command(choice::open(
-                    CHOICE,
-                    &RESET_CHOSEN,
-                    question,
-                    "",
-                    "keys.option.",
-                    &["reset", "cancel"],
-                ));
+                cx.command(
+                    paperpaw_sdk::ask::choice(question, &RESET_CHOSEN)
+                        .options("keys.option.", &["reset", "cancel"])
+                        .command(),
+                );
             }
             _ => {}
         }

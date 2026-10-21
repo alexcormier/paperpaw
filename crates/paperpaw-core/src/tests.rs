@@ -1520,7 +1520,7 @@ ui-size = 12
             .collect()
     };
     let file = |kernel: &Kernel| -> String {
-        let mut buf = [0u8; 256];
+        let mut buf = [0u8; 4096];
         let n = kernel
             .shared
             .storage
@@ -1538,14 +1538,23 @@ ui-size = 12
     );
     assert_eq!(items(&kernel), ["core.settings", "core.home"]);
     assert!(kernel.shared.menus.is_customized("core.main"));
-    assert_eq!(
-        file(&kernel),
-        "[core]
+    // With what plugins put there when it was redefined: entries added
+    // later show too.
+    let saved = file(&kernel);
+    let start = "[core]
 ui-size = 12
 
 [menus]
 core.main = core.settings, core.home
-"
+
+[menus-known]
+core.main = ";
+    assert!(saved.starts_with(start), "{saved}");
+    // Only what the user left out.
+    let known = &saved[start.len()..];
+    assert!(
+        !known.contains("core.home") && !known.contains("core.settings"),
+        "{saved}"
     );
     kernel.set_menu(Id::new_static("core.main"), None);
     assert_eq!(items(&kernel), defaults);
@@ -1555,6 +1564,8 @@ core.main = core.settings, core.home
 ui-size = 12
 
 [menus]
+
+[menus-known]
 "
     );
 }
@@ -1865,10 +1876,20 @@ fn secrets_are_kept_apart_and_read_at_start() {
             "a.key", "a.label", "hunter2",
         )));
     kernel.run_commands();
-    assert_eq!(
-        kernel.shared.env(Instant(0)).secrets.get("a.key"),
-        Some("hunter2")
-    );
+    // Its plugin sees it; another, or the kernel's own code, not.
+    assert_eq!(kernel.shared.env(Instant(0)).secrets.get("a.key"), None);
+    {
+        let _other = kernel.shared.meter.enter("b");
+        assert_eq!(kernel.shared.env(Instant(0)).secrets.get("a.key"), None);
+        assert_eq!(kernel.shared.env(Instant(0)).secrets.listed().count(), 1);
+    }
+    {
+        let _own = kernel.shared.meter.enter("a");
+        assert_eq!(
+            kernel.shared.env(Instant(0)).secrets.get("a.key"),
+            Some("hunter2")
+        );
+    }
     let data = paperpaw_sdk::read_file(kernel.shared.storage.as_ref(), FILE, 4096).unwrap();
     assert!(!String::from_utf8_lossy(&data).contains("hunter2"));
     // Read again at the next start.
@@ -1877,17 +1898,14 @@ fn secrets_are_kept_apart_and_read_at_start() {
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    assert_eq!(
-        kernel.shared.env(Instant(0)).secrets.get("a.key"),
-        Some("hunter2")
-    );
+    assert_eq!(kernel.shared.secrets.get("a.key"), Some("hunter2"));
     // The last one removed, the file goes.
     kernel
         .output
         .commands
         .push(Command::SetSecret(SecretChange::remove("a.key")));
     kernel.run_commands();
-    assert!(kernel.shared.env(Instant(0)).secrets.is_empty());
+    assert!(kernel.shared.secrets.is_empty());
     assert!(!kernel.shared.storage.exists(FILE));
 }
 
@@ -3251,6 +3269,7 @@ mod hosting;
 mod input;
 mod input_kinds;
 mod kernel_calls;
+mod library_catalog;
 mod plugins_loaded;
 mod refreshes;
 mod screen_life;

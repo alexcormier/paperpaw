@@ -16,6 +16,9 @@ pub struct Rows {
     area: Rect,
     heights: Vec<u16>,
     headings: Vec<bool>,
+    /// Entries the focus passes over with the buttons (see
+    /// [`Rows::set_passed`]).
+    passed: Vec<bool>,
     /// The rows of each page, and the heading repeated at its top.
     pages: Vec<(Option<usize>, Range<usize>)>,
     /// The focused row; never a heading while there are entries.
@@ -71,6 +74,7 @@ impl Rows {
             area,
             heights,
             headings,
+            passed: Vec::new(),
             pages,
             focus,
             before: focus,
@@ -122,6 +126,23 @@ impl Rows {
 
     pub fn is_heading(&self, index: usize) -> bool {
         self.headings.get(index).copied().unwrap_or(false)
+    }
+
+    /// Marks the entries the focus passes over when it moves (those shown
+    /// faint, which cannot be chosen now); they are still drawn and hit.
+    /// Where every entry is passed, the focus moves as without marks.
+    pub fn set_passed(&mut self, passed: Vec<bool>) {
+        self.passed = passed;
+    }
+
+    /// Whether the focus moving stops at row `index`.
+    fn stops_at(&self, index: usize, all_passed: bool) -> bool {
+        !self.is_heading(index) && (all_passed || !self.passed.get(index).copied().unwrap_or(false))
+    }
+
+    /// Every entry is passed (or there are none).
+    fn all_passed(&self) -> bool {
+        (0..self.len()).all(|i| self.is_heading(i) || self.passed.get(i).copied().unwrap_or(false))
     }
 
     /// Draws the rows of the focused page with `draw_row(canvas, index,
@@ -211,7 +232,9 @@ impl Rows {
     /// the last it goes round to the first, and back (quicker with few
     /// buttons).
     pub fn step(&mut self, forward: bool) -> ListChange {
-        let entries = |range: core::ops::Range<usize>| range.filter(|&i| !self.is_heading(i));
+        let (all, this) = (self.all_passed(), &*self);
+        let entries =
+            |range: core::ops::Range<usize>| range.filter(move |&i| this.stops_at(i, all));
         let next = if forward {
             entries(self.focus + 1..self.len())
                 .next()
@@ -239,7 +262,13 @@ impl Rows {
         let Some((_, range)) = self.pages.get(target).cloned() else {
             return ListChange::None;
         };
-        match range.clone().find(|&i| !self.is_heading(i)) {
+        // Its first entry not passed, else its first.
+        let all = self.all_passed();
+        let first = range
+            .clone()
+            .find(|&i| self.stops_at(i, all))
+            .or_else(|| range.clone().find(|&i| !self.is_heading(i)));
+        match first {
             Some(first) => self.set_focus(first),
             None => ListChange::None,
         }
@@ -281,16 +310,20 @@ pub(super) fn draw_cards<T: Copy>(
         let width = u32::from(width);
         let mut canvas = canvas.clipped(shown);
         if style.grays >= 16 {
-            canvas.fill_round_rect(x, y, width, height, style.corner, Color::gray(CARD_GRAY));
+            canvas.fill_round_rect(
+                x,
+                y,
+                width,
+                height,
+                style.corner,
+                style.ink(super::Ink::Section),
+            );
         } else {
             let line = (style.line / 2).max(1);
             canvas.stroke_round_rect(x, y, width, height, line, style.corner, Color::BLACK);
         }
     }
 }
-
-/// The gray of cards on panels of 16 grays: the lightest gray they show.
-const CARD_GRAY: u8 = 238;
 
 /// Draws the focus of the entry in `rect`, kept off the edges of its
 /// card with [`UiStyle::cards`], its corners following the card's.
@@ -339,6 +372,8 @@ pub(super) fn card_style() -> UiStyle {
         cards: true,
         grays: 2,
         finger: 0,
+        look: crate::ui::look::Look::none(),
+        palette: crate::ui::Palette::DEFAULT,
     }
 }
 
@@ -373,6 +408,22 @@ mod tests {
         rows.step(true);
         rows.step(true);
         assert_eq!(rows.focus, 4, "over the heading between");
+    }
+
+    #[test]
+    fn steps_pass_faint_entries() {
+        // A heading, three entries, the middle one faint.
+        let headings = alloc::vec![true, false, false, false];
+        let mut rows = Rows::new(Rect::new(0, 0, 100, 500), alloc::vec![20; 4], headings);
+        rows.set_passed(alloc::vec![false, false, true]);
+        rows.step(true);
+        assert_eq!(rows.focus, 3, "over the faint one");
+        rows.step(false);
+        assert_eq!(rows.focus, 1);
+        // All faint: the focus moves as before.
+        rows.set_passed(alloc::vec![false, true, true, true]);
+        rows.step(true);
+        assert_eq!(rows.focus, 2);
     }
 
     #[test]

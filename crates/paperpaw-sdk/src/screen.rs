@@ -18,9 +18,9 @@ use crate::params::Params;
 pub type ScreenFactory = Box<dyn Fn(&Env<'_>, &Params) -> Box<dyn Screen>>;
 
 /// Makes the screens plugins added: what [`Env::make_screen`] asks (the
-/// kernel's, for screens that host others).
-#[cfg(any(test, feature = "kernel"))]
-#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+/// kernel's, for screens that host others). Present without the `kernel`
+/// feature too: [`Env`] holds one, and a plugin built without the feature
+/// must see `Env` as the kernel built it.
 pub trait ScreenMaker {
     /// Screen `id` made with `params` for `env`, `None` where no plugin
     /// added it.
@@ -291,6 +291,15 @@ pub trait Screen {
         false
     }
 
+    /// Whether what the screen shows is secret now, as a PIN or a
+    /// password being typed: where its focus is, is not told to plugins
+    /// ([`events::FOCUS_CHANGED`](crate::builtin::events::FOCUS_CHANGED)).
+    /// Screens that guard the device ([`Screen::guards`]) count as secret
+    /// too, and so do the screens above them.
+    fn secret(&self) -> bool {
+        false
+    }
+
     /// What a tap outside it does, for an overlay: by default it closes
     /// it.
     fn outside(&self) -> Outside {
@@ -302,6 +311,16 @@ pub trait Screen {
     /// as for a bar or a panel that leaves the page usable. By default it
     /// goes to the action's handler and the key map, as on top.
     fn passes_through(&self) -> bool {
+        false
+    }
+
+    /// Whether its taps and swipes go the other way: what the key map
+    /// binds to the left side and to a swipe to the left happens on the
+    /// right and for a swipe to the right, and the other way round, e.g.
+    /// a book whose pages go right to left
+    /// ([`PageProgression`](crate::document::PageProgression)). Buttons
+    /// stay as they are.
+    fn mirrored(&self) -> bool {
         false
     }
 

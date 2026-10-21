@@ -112,10 +112,7 @@ fn focused(kernel: &mut Kernel) -> String {
 }
 
 fn rename(kernel: &mut Kernel, path: &str, name: &str) {
-    let typed = Typed {
-        text: name.into(),
-        context: Params::new().with(params::PATH, path),
-    };
+    let typed = Typed::new(name, Params::new().with(params::PATH, path));
     let event = Id::new_static("file-manager.renamed");
     let effects = kernel.send_event(Instant(0), event, typed.to_params());
     settle(kernel, effects);
@@ -183,8 +180,29 @@ fn folder_settings_follow_a_rename() {
     let storage = MemoryStorage::new().with("books/a.txt", "A");
     let (mut kernel, _) = manager(storage, "");
     rename(&mut kernel, "books", "Library");
-    assert_eq!(kernel.settings().text("files.root"), "Library");
+    assert_eq!(kernel.settings().text("core.library-folder"), "Library");
     assert_eq!(kernel.settings().text("files.archive"), "Library/Archive");
+}
+
+/// The reading app chosen for a folder follows it renamed, also for the
+/// folders in it.
+#[test]
+fn reading_apps_of_folders_follow_a_rename() {
+    use paperpaw_sdk::readers::{Choice, remember, remembered};
+    let storage = MemoryStorage::new().with("books/Comics/Old/a.txt", "A");
+    let app = Id::new_static("comics.app");
+    remember(&storage, Choice::Folder("books/Comics"), Some(&app)).unwrap();
+    remember(&storage, Choice::Folder("books/Comics/Old"), Some(&app)).unwrap();
+    let (mut kernel, _) = manager(storage, "books");
+    rename(&mut kernel, "books/Comics", "Manga");
+    for folder in ["books/Manga", "books/Manga/Old"] {
+        let kept = remembered(kernel.storage(), Choice::Folder(folder));
+        assert_eq!(kept.as_deref(), Some("comics.app"), "{folder}");
+    }
+    assert_eq!(
+        remembered(kernel.storage(), Choice::Folder("books/Comics")),
+        None
+    );
 }
 
 /// A file picked to be moved goes with its folder when that is deleted:

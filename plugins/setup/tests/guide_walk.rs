@@ -156,7 +156,7 @@ fn skipped_on_its_first_page_it_does_not_come_again() {
             // Back asks first: going on is the first answer, skipping the
             // second.
             app.run(actions::BACK);
-            assert_eq!(app.screen(), "setup.choice", "{}", app.described());
+            assert_eq!(app.screen(), "core.choice-dialog", "{}", app.described());
             assert!(!app.storage.exists(SETUP_DONE));
             press(&mut app, "Skip setup");
         }

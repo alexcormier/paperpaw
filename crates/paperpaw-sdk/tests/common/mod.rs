@@ -64,6 +64,8 @@ pub struct Harness {
     pub text_filters: TextFilters,
     pub decorators: Decorators,
     pub page_layers: paperpaw_sdk::layers::PageLayers,
+    pub lookup: paperpaw_sdk::lookup::LookupProviders,
+    pub readers: paperpaw_sdk::readers::Readers,
     pub widgets: Widgets,
     pub setup: SetupSteps,
     pub services: Services,
@@ -91,6 +93,8 @@ impl Harness {
             text_filters: TextFilters::default(),
             decorators: Decorators::default(),
             page_layers: Default::default(),
+            lookup: Default::default(),
+            readers: Default::default(),
             widgets: Widgets::new(),
             setup: SetupSteps::default(),
             services: Services::default(),
@@ -112,6 +116,11 @@ impl Harness {
     }
 
     pub fn env(&self) -> Env<'_> {
+        self.env_on(&self.storage)
+    }
+
+    /// [`Harness::env`] over another storage (one that fails, say).
+    pub fn env_on<'a>(&'a self, storage: &'a dyn paperpaw_sdk::Storage) -> Env<'a> {
         Env::from(EnvParts {
             device: &DEVICE,
             now: self.now,
@@ -132,12 +141,17 @@ impl Harness {
             text_filters: &self.text_filters,
             decorators: &self.decorators,
             page_layers: &self.page_layers,
+            lookup: &self.lookup,
+            readers: &self.readers,
             stylesheets: &[],
             book_data: &[],
+            book_fields: &[],
+            book_badges: &[],
             widgets: &self.widgets,
             setup: &self.setup,
             services: &self.services,
             keys: &NoKeys,
+            look: paperpaw_sdk::ui::look::Look::none(),
             caps: Capabilities::default(),
             wifi: None,
             firmware: None,
@@ -155,7 +169,8 @@ impl Harness {
             font_dirs: &[],
             catalog_device: None,
             secrets: &self.secrets,
-            storage: &self.storage,
+            running: &paperpaw_sdk::secrets::Anyone,
+            storage,
         })
     }
 }

@@ -362,13 +362,14 @@ impl Sync {
             return;
         };
         let file = temp::file(reply).filter(|_| (200..300).contains(&reply.status));
-        let stored = file.is_some_and(|file| {
+        let stored = file.and_then(|file| {
             let _ = env.storage.create_dir(&run.folder);
-            files::put_in_free_place(env.storage, file, &run.folder, &item.name).is_ok()
+            files::put_in_free_place(env.storage, file, &run.folder, &item.name).ok()
         });
         let report = self.report.get_or_insert_with(Report::default);
-        if stored {
-            out.push(paperpaw_sdk::library::changed());
+        if let Some(path) = stored {
+            // In the library: caught up with the others, not walked.
+            out.push(paperpaw_sdk::library::added(&path, "opds"));
             run.count += 1;
             let _ = env.storage.append(
                 &record_path(&run.catalog.url),

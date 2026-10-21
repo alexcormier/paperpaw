@@ -36,8 +36,6 @@ const FIT: Setting<Text> = Setting::new("widgets.picture.fit");
 const FITS: [&str; 2] = ["widgets.picture.fit.fill", "widgets.picture.fit.whole"];
 /// Its name below it.
 const CAPTION: &str = "caption";
-/// The folder chooser of the `files` plugin, if installed.
-const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 /// The next picture, asked for with a tap.
 const NEXT: Event<()> = Event::new("widgets.picture.next");
 /// The endings of the pictures shown.
@@ -60,7 +58,7 @@ fn stamp_file() -> String {
 /// has an editor).
 /// The folder of the pictures, chosen on the folder chooser.
 static CHOSEN_FOLDER: paperpaw_sdk::SettingExtra =
-    paperpaw_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
+    paperpaw_sdk::SettingExtra::new().editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
 static FOLDER_SETTING: [SettingSpec; 1] = [SettingSpec::fixed_text(
     FOLDER.static_str(),
     "widgets.picture.setting.folder",

@@ -6,6 +6,10 @@
 //! firmware, also the plugins built into it, which an update brings
 //! again; where it loads native code plugins, what they must be built
 //! with to fit it (its fingerprint, as the plugin library lists builds).
+//!
+//! Other plugins add lines to the page through the point [`LINES`]
+//! (`about.lines`), each a paragraph below the address: a theme's
+//! author, a dictionary's source, a font's licence that is not bundled.
 
 #![no_std]
 
@@ -16,16 +20,22 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{menus, params, slots};
+use paperpaw_sdk::builtin::menus;
 use paperpaw_sdk::logo;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, Version,
+    ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Plugin, RegisterError, Registrar,
+    Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("about");
 /// Shows the page.
 pub const OPEN: Id = Id::new_static("about.open");
+/// The point other plugins add lines to the page through, a paragraph
+/// each, after the plugin's name; as plain text (what Markdown makes of
+/// signs is not made), at most [`MOST_LINES`] bytes a plugin.
+pub const LINES: &str = "about.lines";
+/// Bytes of lines a plugin adds, at most.
+pub const MOST_LINES: usize = 512;
 /// The licences, from `tools/licences/build.py`.
 const LICENCES: &str = include_str!("../licences.md");
 /// PaperPaw's logo, as the page shows it.
@@ -51,11 +61,64 @@ fn page(env: &Env<'_>) -> String {
         String::from("logo.png")
     };
     format!(
-        "![PaperPaw]({picture})\n\n# PaperPaw {}\n\n{intro}\n\nhttps://github.com/hthoene/paperpaw\n\n{}{}{LICENCES}",
+        "![PaperPaw]({picture})\n\n# PaperPaw {}\n\n{intro}\n\nhttps://github.com/hthoene/paperpaw\n\n{}{}{}{LICENCES}",
         env!("CARGO_PKG_VERSION"),
+        lines(env),
         built_in(env),
         native(env),
     )
+}
+
+/// The lines other plugins add ([`LINES`]), a paragraph each, named by
+/// their plugin; as plain text, so none makes a heading, a picture or a
+/// list of its own; at most [`MOST_LINES`] bytes a plugin.
+fn lines(env: &Env<'_>) -> String {
+    let mut text = String::new();
+    let mut used: Vec<(&Id, usize)> = Vec::new();
+    for (plugin, contribution) in env.services.contributions(LINES) {
+        for line in contribution
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+        {
+            let at = match used.iter().position(|(p, _)| *p == plugin) {
+                Some(at) => at,
+                None => {
+                    used.push((plugin, 0));
+                    used.len() - 1
+                }
+            };
+            let left = MOST_LINES.saturating_sub(used[at].1);
+            if left == 0 {
+                break;
+            }
+            let mut end = line.len().min(left);
+            while !line.is_char_boundary(end) {
+                end -= 1;
+            }
+            used[at].1 += end;
+            let name = env
+                .plugins
+                .get(plugin.as_str())
+                .map_or(plugin.as_str(), |info| info.name(env.i18n));
+            text.push('*');
+            plain(name, &mut text);
+            text.push_str(":* ");
+            plain(&line[..end], &mut text);
+            text.push_str("\n\n");
+        }
+    }
+    text
+}
+
+/// `text` as plain text in Markdown: its signs escaped.
+fn plain(text: &str, out: &mut String) {
+    for c in text.chars() {
+        if c.is_ascii_punctuation() {
+            out.push('\\');
+        }
+        out.push(c);
+    }
 }
 
 /// The plugins built into the firmware, where PaperPaw is it.
@@ -109,10 +172,7 @@ impl Plugin for About {
                 let path = page_path();
                 let _ = env.storage.create_dir(&Env::plugin_dir(PLUGIN.as_str()));
                 if env.storage.write(&path, page(env).as_bytes()).is_ok() {
-                    out.push(Command::OpenSlot(
-                        slots::READER,
-                        Params::new().with(params::PATH, path),
-                    ));
+                    out.push(paperpaw_sdk::readers::open(path));
                 }
             },
         ))?;

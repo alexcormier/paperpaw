@@ -1,11 +1,17 @@
 //! Wikipedia: a word looked up online, the short summary of its article,
-//! in the language of the book (else of PaperPaw). Bound to the slot
-//! `core.lookup-online`, so the dictionary offers it beside its own
-//! entries when there is a network; another plugin (a translator, an
-//! online dictionary) can take its place.
+//! in the language of the book (else of PaperPaw).
 //!
-//! The summary shows over the page like a dictionary entry: the page
-//! buttons or taps scroll it, confirm or a tap at its end closes it.
+//! A lookup provider that goes online (see `paperpaw_sdk::lookup`): the
+//! dictionary's panel asks it once *Online* is chosen and shows the
+//! summary as an entry beside the dictionaries', from which the reader
+//! opens it on a screen of its own. Other online sources (Wiktionary,
+//! a translator) join the same way, as plugins.
+//!
+//! That screen shows the summary given to it (`text`), else fetches it;
+//! it is bound to the slot `core.lookup-online` too, for lookup screens
+//! without providers, and another plugin can take its place. The
+//! summary shows over the page like a dictionary entry: the page buttons
+//! or taps scroll it, confirm or a tap at its end closes it.
 
 #![no_std]
 
@@ -20,6 +26,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::json;
+use paperpaw_sdk::lookup::{LookupAnswer, LookupEntry, LookupProviderSpec, LookupQuery};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::web::encode;
@@ -30,9 +37,23 @@ use paperpaw_sdk::{
 };
 
 pub const PLUGIN: Id = Id::new_static("wikipedia");
-const SCREEN: Id = Id::new_static("wikipedia.lookup");
-/// The answer to the summary request.
+/// The summary on a screen of its own; parameters `word` and `language`.
+pub const SCREEN: Id = Id::new_static("wikipedia.lookup");
+/// Wikipedia as a lookup provider.
+pub const PROVIDER: Id = Id::new_static("wikipedia.summary");
+/// The answer to the screen's summary request.
 const ANSWERED: Event<HttpReply> = Event::new("wikipedia.answered");
+/// The answer to the provider's summary request, with the query in its
+/// parameters (`word`, `language` and [`REPLY`]).
+const PROVIDED: Event<HttpReply> = Event::new("wikipedia.provided");
+/// The event the query is answered with.
+const REPLY: &str = "reply";
+/// The longest summary read (they are a paragraph or two).
+const MAX_BODY: usize = 16 * 1024;
+/// How long the provider's request may take: less than the dictionary's
+/// panel waits for answers (20 s), so that an answer is never thrown away
+/// after the radio did the work.
+const PROVIDER_TIMEOUT_S: u64 = 15;
 
 /// The wiki's language for `language` (`en-GB` → `en`).
 fn wiki(language: &str) -> String {
@@ -60,6 +81,72 @@ fn summary_url(language: &str, word: &str) -> String {
     )
 }
 
+/// The request for the summary of `word`'s article, answered with
+/// `reply`.
+fn summary_request(language: &str, word: &str, reply: Id) -> HttpRequest {
+    HttpRequest::get(&summary_url(language, word), reply)
+        .header("User-Agent", "PaperPaw/0.1 (e-reader)")
+        .header("Accept", "application/json")
+        .max_body(MAX_BODY)
+}
+
+/// The summary in `reply`, with the article's title; else why there is
+/// none, to show.
+fn summary(env: &Env<'_>, reply: &HttpReply) -> Result<(Option<String>, String), String> {
+    let why = |key: &str| env.i18n.tr(key).to_string();
+    match reply.status {
+        200..=299 => {
+            let members = json::object(&reply.body);
+            match json::text(&members, "extract").filter(|t| !t.trim().is_empty()) {
+                Some(extract) => Ok((
+                    json::text(&members, "title").map(|t| t.to_string()),
+                    extract.to_string(),
+                )),
+                None => Err(why("wikipedia.not-found")),
+            }
+        }
+        404 => Err(why("wikipedia.not-found")),
+        0 => Err(why("wikipedia.unreachable")),
+        _ => Err(why("wikipedia.failed")),
+    }
+}
+
+/// Asks for the summary of the query's word, to answer it later.
+fn provide(env: &Env<'_>, query: &LookupQuery) -> LookupAnswer {
+    let language = query
+        .language
+        .clone()
+        .unwrap_or_else(|| env.i18n.language().to_string());
+    let context = Params::new()
+        .with(params::WORD, query.word.clone())
+        .with(params::LANGUAGE, language.clone())
+        .with(REPLY, query.reply.as_str().to_string());
+    let request = summary_request(&language, &query.word, PROVIDED.id().clone())
+        .with(context)
+        .timeout(core::time::Duration::from_secs(PROVIDER_TIMEOUT_S));
+    LookupAnswer::Pending(alloc::vec![Command::Http(request)])
+}
+
+/// The summary arrived: the query answered with it, the whole screen
+/// for more; or with why there is none.
+fn provided(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    let context = &reply.context;
+    let (Some(word), Some(to)) = (
+        context.get(params::WORD),
+        context.get(REPLY).and_then(|r| Id::parse(r).ok()),
+    ) else {
+        return;
+    };
+    let language = context.get(params::LANGUAGE).map(ToString::to_string);
+    let query = LookupQuery::new(word, language).reply(to);
+    let source = env.i18n.tr("wikipedia.title");
+    let entry = match summary(env, reply) {
+        Ok((_, text)) => LookupEntry::new(source, text).more(SCREEN),
+        Err(why) => LookupEntry::new(source, why),
+    };
+    out.push(query.answer_entry(&PROVIDER, entry));
+}
+
 /// The Wikipedia plugin.
 #[derive(Debug, Default)]
 pub struct Wikipedia;
@@ -78,6 +165,10 @@ impl Plugin for Wikipedia {
             Box::new(|env, params| Box::new(Summary::new(env, params))),
         ))?;
         r.bind_slot(slots::LOOKUP_ONLINE, SCREEN, Priority::DEFAULT)?;
+        r.add_lookup_provider(
+            LookupProviderSpec::new(PROVIDER, "wikipedia.title", provide).online(),
+        )?;
+        r.on(PROVIDED, provided)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -114,8 +205,18 @@ impl Summary {
             top: 0,
             asked: false,
         };
-        let loading = env.i18n.tr("wikipedia.loading").to_string();
-        summary.set_text(env, loading);
+        // The summary given (by the dictionary's panel, which has it):
+        // not fetched again.
+        match params.get(params::TEXT).filter(|t| !t.trim().is_empty()) {
+            Some(text) => {
+                summary.asked = true;
+                summary.set_text(env, text.to_string());
+            }
+            None => {
+                let loading = env.i18n.tr("wikipedia.loading").to_string();
+                summary.set_text(env, loading);
+            }
+        }
         summary
     }
 
@@ -178,22 +279,14 @@ impl Summary {
 
     /// The summary arrived: its title and text, or why not.
     fn answered(&mut self, env: &Env<'_>, reply: &HttpReply) {
-        let text = match reply.status {
-            200..=299 => {
-                let members = json::object(&reply.body);
-                match json::text(&members, "extract").filter(|t| !t.trim().is_empty()) {
-                    Some(extract) => {
-                        if let Some(title) = json::text(&members, "title") {
-                            self.word = title.to_string();
-                        }
-                        extract.to_string()
-                    }
-                    None => env.i18n.tr("wikipedia.not-found").to_string(),
+        let text = match summary(env, reply) {
+            Ok((title, text)) => {
+                if let Some(title) = title {
+                    self.word = title;
                 }
+                text
             }
-            404 => env.i18n.tr("wikipedia.not-found").to_string(),
-            0 => env.i18n.tr("wikipedia.unreachable").to_string(),
-            _ => env.i18n.tr("wikipedia.failed").to_string(),
+            Err(why) => why,
         };
         self.set_text(env, text);
     }
@@ -280,15 +373,7 @@ impl Screen for Summary {
             cx.request_redraw();
             return;
         }
-        let mut request =
-            HttpRequest::new("GET", &summary_url(&self.language, &self.word), ANSWERED);
-        request.headers.push((
-            String::from("User-Agent"),
-            String::from("PaperPaw/0.1 (e-reader)"),
-        ));
-        request
-            .headers
-            .push((String::from("Accept"), String::from("application/json")));
+        let request = summary_request(&self.language, &self.word, ANSWERED.id().clone());
         cx.command(Command::Http(request));
     }
 

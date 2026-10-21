@@ -32,14 +32,14 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::Cell;
 
-use paperpaw_sdk::builtin::{events, params, slots};
+use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::library::{self, catalog};
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::widgets::{self, Align, Look, line_height};
 use paperpaw_sdk::{
-    Arg, Canvas, Color, Command, Env, FontHandle, Id, Params, Point, Rect, RegisterError,
-    Registrar, SettingSpec, Storage,
+    Arg, Canvas, Color, Command, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
+    SettingSpec, Storage,
 };
 
 pub(crate) use crate::{frame_height, today};
@@ -47,10 +47,13 @@ pub(crate) use crate::{frame_height, today};
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_translations(Cow::Borrowed(include_str!("../i18n/books.en.ini")))?;
     r.add_translations(Cow::Borrowed(include_str!("../i18n/books.de.ini")))?;
-    // What was read of the catalog is read again once books came, went
-    // or moved.
+    // What was read of the catalog is read again once it was made anew
+    // (books came, went or moved), a book changed (finished, a favourite)
+    // or its annotations did.
     let generation = Generation::default();
     for event in [
+        events::CATALOG_CHANGED.id(),
+        events::BOOK_CHANGED.id(),
         events::LIBRARY_CHANGED.id(),
         events::BOOK_MOVED.id(),
         events::BOOK_REMOVED.id(),
@@ -144,7 +147,7 @@ impl Book {
 
 /// Opens the book at `path` for reading.
 pub(crate) fn open(path: &str) -> Command {
-    Command::OpenSlot(slots::READER, Params::new().with(params::PATH, path))
+    paperpaw_sdk::readers::open(path)
 }
 
 /// The book being read: the one opened last that is still there.
@@ -158,28 +161,29 @@ pub(crate) fn current(storage: &dyn Storage) -> Option<Book> {
 /// Books looked at, at most, to find one there.
 const MAX_LOOKED_AT: usize = 8;
 
-/// The catalog's file.
-fn catalog_file() -> String {
-    format!("{}/catalog.txt", library::DIR)
-}
-
 /// Whether the library made its catalog (with the books' series and
-/// authors), which views of the library make.
-pub(crate) fn has_catalog(storage: &dyn Storage) -> bool {
-    storage.exists(&catalog_file())
+/// authors), which the kernel makes.
+pub(crate) fn has_catalog(env: &Env<'_>) -> bool {
+    matches!(
+        library::service(env).catalog_state(env),
+        catalog::State::Ready { .. }
+    )
 }
 
-/// What tells the catalog changed: its size.
-pub(crate) fn catalog_stamp(storage: &dyn Storage) -> u64 {
-    storage.size(&catalog_file()).unwrap_or(0)
+/// What tells the catalog changed, or the status of a book in it.
+pub(crate) fn catalog_stamp(env: &Env<'_>) -> u64 {
+    match library::service(env).catalog_state(env) {
+        catalog::State::Ready { stamp } => stamp,
+        _ => 0,
+    }
 }
 
 /// Calls `f` with every book of the library: from the catalog where
 /// there is one, else from the library folder (each book by its path and
 /// file name alone). Nothing is held: the catalog is read in pieces.
 pub(crate) fn each_book(env: &Env<'_>, f: &mut dyn FnMut(catalog::Record)) {
-    if has_catalog(env.storage) {
-        return catalog::each(env.storage, f);
+    if has_catalog(env) {
+        return library::service(env).each(env, &mut |_, record| f(record));
     }
     let folder = library::folder(env);
     library::books_in(env.storage, env.formats, folder, &mut |path| {
@@ -188,21 +192,12 @@ pub(crate) fn each_book(env: &Env<'_>, f: &mut dyn FnMut(catalog::Record)) {
 }
 
 /// A number of a series as a number to sort by: `2`, `2.5`, `10`
-/// (in thousandths; books without one last).
+/// (in thousandths, [`catalog::series_order`]; books without one last).
 pub(crate) fn series_rank(number: &str) -> u64 {
-    let number = number.trim();
-    let (whole, part) = number.split_once(['.', ',']).unwrap_or((number, ""));
-    let Ok(whole) = whole.parse::<u64>() else {
-        return u64::MAX;
-    };
-    let mut thousandths = 0;
-    for (i, digit) in part.bytes().take(3).enumerate() {
-        if !digit.is_ascii_digit() {
-            break;
-        }
-        thousandths += u64::from(digit - b'0') * [100, 10, 1][i];
+    match catalog::series_order(number) {
+        u32::MAX => u64::MAX,
+        order => u64::from(order),
     }
-    whole.saturating_mul(1000).saturating_add(thousandths)
 }
 
 // ---- Days and chance -----------------------------------------------------------

@@ -320,3 +320,32 @@ fn rings_and_arcs_of_nothing_draw_nothing() {
     let more = darkness(|canvas| canvas.fill_ring(c, 10, 3, 77, 1000, Color::BLACK));
     assert_eq!(whole, more);
 }
+
+/// A blind framebuffer keeps no pixels: everything drawn on it is only
+/// described, in the clips it was drawn in, as on a real one.
+#[test]
+fn a_blind_framebuffer_describes_what_is_drawn_and_keeps_no_pixels() {
+    use paperpaw_graphics::{Described, Role};
+    use paperpaw_platform::{Color, Point, Rect};
+    let mut blind = Framebuffer::blind(800, 480);
+    assert_eq!(blind.byte_len(), 0);
+    assert_eq!(blind.bounds(), Rect::new(0, 0, 800, 480));
+    let mut described: Vec<Described> = Vec::new();
+    {
+        let mut canvas = blind.canvas().describing(&mut described);
+        canvas.clear(Color::WHITE);
+        canvas.fill_round(Rect::new(10, 10, 200, 60), 12, Color::BLACK);
+        canvas.stroke_round(Rect::new(10, 100, 200, 60), 3, 12, Color::gray(90));
+        canvas.draw_line(Point::new(0, 0), Point::new(799, 479), 3, Color::BLACK);
+        canvas.fill_circle(Point::new(400, 240), 50, Color::gray(150));
+        canvas.draw_gray_row(0, 300, &[0, 128, 255, 64]);
+        canvas.set_pixel(Point::new(5, 5), Color::BLACK);
+        let mut row = canvas.clipped(Rect::new(0, 400, 800, 80));
+        row.describe(Role::Button, "OK", Rect::new(20, 410, 100, 50), true, None);
+    }
+    assert_eq!(blind.byte_len(), 0);
+    assert_eq!(blind.view().height, 0);
+    assert_eq!(described.len(), 1);
+    assert_eq!(described[0].label, "OK");
+    assert_eq!(described[0].clip, Rect::new(0, 400, 800, 80));
+}

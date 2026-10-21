@@ -135,7 +135,7 @@ impl Harness {
     fn build(storage: Shared, fonts: Option<&str>, network: bool) -> Self {
         let mut builder = Kernel::builder(DEVICE)
             .storage(storage.clone())
-            .user_config("[core]\nlanguage = en\n")
+            .user_config("[core]\nlanguage = en\nlibrary-folder =\n")
             .network(network)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(paperpaw_plugin_format_epub::EpubFormat)
@@ -174,10 +174,7 @@ impl Harness {
     fn go(&mut self, text: &str) -> HttpCall {
         self.send(
             "browser.address",
-            Typed {
-                text: String::from(text),
-                context: Params::new(),
-            },
+            Typed::new(String::from(text), Params::new()),
         );
         self.request()
     }
@@ -281,10 +278,7 @@ fn typed_words_are_searched_and_addresses_loaded() {
     // Nothing typed: nothing loaded.
     h.send(
         "browser.address",
-        Typed {
-            text: String::from("   "),
-            context: Params::new(),
-        },
+        Typed::new(String::from("   "), Params::new()),
     );
     assert!(h.requests().is_empty());
 }
@@ -568,10 +562,7 @@ fn without_a_network_nothing_is_asked() {
     let mut h = Harness::build(Shared::default(), None, false);
     h.send(
         "browser.address",
-        Typed {
-            text: String::from("a.example"),
-            context: Params::new(),
-        },
+        Typed::new(String::from("a.example"), Params::new()),
     );
     assert!(h.requests().is_empty());
     assert!(h.said().contains("needs a network"));

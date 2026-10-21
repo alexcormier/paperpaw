@@ -77,7 +77,9 @@ pub mod slots {
     pub const MENU: Id = Id::new_static("core.menu");
     /// Shows and edits settings; with the parameter
     /// [`ID`](super::params::ID), the settings of that group, e.g. a
-    /// widget's own (see [`widgets`](crate::widgets)).
+    /// widget's own (see [`widgets`](crate::widgets)); with
+    /// [`FOCUS`](super::params::FOCUS), the page of that setting with
+    /// the focus on it.
     pub const SETTINGS: Id = Id::new_static("core.settings");
     /// The first-run setup (see [`setup`](crate::setup)): shown once on
     /// the first start, and again when asked.
@@ -104,8 +106,10 @@ pub mod slots {
     /// [`REPLY`](super::params::REPLY). When the text is confirmed the
     /// screen closes and emits the event named by `reply` with all of its
     /// parameters, `text` set to what was entered, so the asking plugin
-    /// can pass along anything it needs to know (e.g. which setting). Bind
-    /// another screen here for a different keyboard, handwriting or voice.
+    /// can pass along anything it needs to know (e.g. which setting). With
+    /// [`LIVE`](super::params::LIVE) it emits it on each change too, with
+    /// [`TYPING`](super::params::TYPING) set. Bind another screen here for
+    /// a different keyboard, handwriting or voice.
     pub const KEYBOARD: Id = Id::new_static("core.keyboard");
     /// Asks for text typed on another device, e.g. a phone that opens an
     /// address shown as a QR code: handy for passwords and keys. Same
@@ -125,6 +129,17 @@ pub mod slots {
     /// emitted with all of the parameters and [`PATH`](super::params::PATH)
     /// set to the folder; [`TEXT`](super::params::TEXT), where to start.
     pub const CHOOSE_FOLDER: Id = Id::new_static("core.choose-folder");
+    /// Picks one of the values of a choice or language setting, on a page
+    /// of its own: parameter [`ID`](super::params::ID), the setting. The
+    /// settings plugin binds here; menus and the setup open it for a
+    /// setting with more values than two.
+    pub const CHOOSE_VALUE: Id = Id::new_static("core.choose-value");
+    /// Asks to choose one of a few options, e.g. what to do with a file
+    /// or whether to delete it (an overlay at the bottom): asked with
+    /// [`ask::choice`](crate::ask::choice), answered with a
+    /// [`Picked`](crate::ui::choice::Picked). Every plugin's questions
+    /// come here, so a screen bound here asks them all another way.
+    pub const CHOICE: Id = Id::new_static("core.choice");
     /// Shows what is known of a book: parameter [`PATH`](super::params::PATH).
     pub const BOOK_INFO: Id = Id::new_static("core.book-info");
     /// The contents of the book being read: parameters
@@ -193,6 +208,11 @@ pub mod menus {
     /// main menu stays short however many there are. Also the home
     /// screen's grid of tools.
     pub const TOOLS: Id = Id::new_static("core.tools");
+    /// What there is to open besides the tools: a plugin's own app (a
+    /// game, a notebook). What a launcher, a drawer or a palette lists:
+    /// these and the [`TOOLS`]; the shipped home screen's grid of tools
+    /// shows both.
+    pub const APPS: Id = Id::new_static("core.apps");
     /// Extra pages on the main settings page, below the setting groups
     /// (e.g. the plugin manager). Entries are actions.
     pub const SETTINGS: Id = Id::new_static("core.settings-pages");
@@ -214,6 +234,12 @@ pub mod menus {
     /// reader sends [`events::TEXT_CHOSEN`](super::events::TEXT_CHOSEN),
     /// then runs it.
     pub const SELECTION: Id = Id::new_static("core.selection-menu");
+    /// What can be done with a book, wherever a library lists it (its
+    /// sheet: open, finished, favourite, information, …): plugins add
+    /// their actions (send it, sync it now, delete it); when one is
+    /// chosen, the library sends [`events::BOOK_CHOSEN`](super::events::BOOK_CHOSEN)
+    /// with the book, then runs it.
+    pub const BOOK: Id = Id::new_static("core.book-menu");
 }
 
 /// The roles of decorations every reader draws (see
@@ -249,6 +275,15 @@ pub mod params {
     pub const MODE: &str = "mode";
     /// The event a screen emits with its result, e.g. the keyboard's text.
     pub const REPLY: &str = "reply";
+    /// What a screen shows focused first, e.g. a setting in
+    /// [`slots::SETTINGS`](super::slots::SETTINGS).
+    pub const FOCUS: &str = "focus";
+    /// Set (to `1`) when a question is answered on each change too, e.g.
+    /// the keyboard's ([`ask::TextQuestion::live`](crate::ask::TextQuestion::live)).
+    pub const LIVE: &str = "live";
+    /// Set (to `1`) on an answer given while the reader still types
+    /// ([`Typed::typing`](crate::replies::Typed::typing)).
+    pub const TYPING: &str = "typing";
     /// Why something failed, e.g. joining a network
     /// ([`events::WIFI_FAILED`](super::events::WIFI_FAILED)).
     pub const REASON: &str = "reason";
@@ -328,6 +363,27 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// What has the focus of the buttons now ([`FOCUS_CHANGED`]), as
+        /// the screen describes it (see [`semantics`](crate::semantics)).
+        pub struct FocusChanged {
+            /// Its role's name ([`semantics::role_name`](crate::semantics::role_name)),
+            /// e.g. `row` or `button`.
+            pub role: String,
+            /// What it says, e.g. a row's title and value.
+            pub label: String,
+            /// Where it is on the screen.
+            pub x: u16,
+            pub y: u16,
+            pub width: u16,
+            pub height: u16,
+        }
+        optional {
+            /// For switches and buttons that are on or off.
+            pub on: bool,
+        }
+    }
+
+    crate::event_data! {
         /// The screen now on top ([`SCREEN_SHOWN`]).
         pub struct ScreenShown {
             pub screen: Id,
@@ -352,6 +408,17 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// An action was chosen for a book in the library
+        /// ([`BOOK_CHOSEN`], [`menus::BOOK`](super::menus::BOOK)).
+        pub struct BookChosen {
+            /// The action chosen.
+            pub action: Id,
+            /// The book's path.
+            pub path: String,
+        }
+    }
+
+    crate::event_data! {
         /// A book that was deleted ([`BOOK_REMOVED`]).
         pub struct BookRemoved {
             /// Its path, where it was.
@@ -366,6 +433,34 @@ pub mod events {
             pub from: String,
             /// Its new one.
             pub path: String,
+        }
+    }
+
+    crate::event_data! {
+        /// A book that came into the library ([`BOOK_ADDED`]).
+        pub struct BookAdded {
+            pub path: String,
+            /// Where it came from: the plugin that brought it (`transfer`,
+            /// `calibre`, `opds`), empty where it is not known.
+            pub source: String,
+        }
+    }
+
+    crate::event_data! {
+        /// What changed of a book ([`BOOK_CHANGED`]).
+        pub struct BookChanged {
+            pub path: String,
+            /// What changed: bits of [`library::what`](crate::library::what).
+            pub what: u32,
+        }
+    }
+
+    crate::event_data! {
+        /// The catalog wanted ([`CATALOG_WANTED`]).
+        pub struct CatalogWanted {
+            /// Made anew in any case, not only where it was not made since
+            /// PaperPaw started.
+            pub anew: bool,
         }
     }
 
@@ -568,6 +663,41 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// A lookup provider's answer that came later
+        /// ([`LOOKUP_ANSWERED`], see [`lookup`](crate::lookup)): its
+        /// entry for the word, none where `text` is empty.
+        pub struct LookupAnswered {
+            pub provider: Id,
+            pub word: String,
+            /// Where it is from, shown above it.
+            pub source: String,
+            pub text: String,
+        }
+        optional {
+            /// The screen that shows more of it
+            /// ([`LookupEntry::more`](crate::lookup::LookupEntry::more)).
+            pub more: Id,
+        }
+    }
+
+    crate::event_data! {
+        /// The reading app of a book or a folder is to be chosen
+        /// ([`READING_APP_WANTED`], see
+        /// [`readers::ask`](crate::readers::ask)).
+        pub struct ReadingAppWanted {
+            pub path: String,
+            pub folder: bool,
+        }
+    }
+
+    crate::event_data! {
+        /// A document that was not ready is now ([`DOCUMENT_READY`]).
+        pub struct DocumentReady {
+            pub path: String,
+        }
+    }
+
+    crate::event_data! {
         /// A book's notes, exported ([`NOTES_EXPORTED`]).
         pub struct NotesExported {
             /// The file written (Markdown).
@@ -604,6 +734,14 @@ pub mod events {
     pub const STARTED: Event<()> = Event::new("core.started");
     /// After a setting changed: which ([`SettingChanged`]).
     pub const SETTING_CHANGED: Event<SettingChanged> = Event::new("core.setting-changed");
+    /// Text typed for a setting, asked with its parameter
+    /// [`ID`](super::params::ID) (as [`ui::setting_opens`](crate::ui::setting_opens)
+    /// asks): the kernel sets the setting to it, trimmed.
+    pub const SETTING_TYPED: Event<crate::replies::Typed> = Event::new("core.setting-typed");
+    /// The focus of the buttons moved to another part of the screen
+    /// ([`FocusChanged`]): for screen readers of one's own. Worked out
+    /// only while a plugin listens or the focus is spoken.
+    pub const FOCUS_CHANGED: Event<FocusChanged> = Event::new("core.focus-changed");
     /// A book was opened for reading ([`Reading`]). Every reader plugin
     /// emits it, so home screens, statistics or sync plugins work with any
     /// reader. Not for documents in hidden folders
@@ -631,6 +769,29 @@ pub mod events {
     /// change the library emit it ([`library::changed`](crate::library::changed));
     /// a move is [`BOOK_MOVED`].
     pub const LIBRARY_CHANGED: Event<()> = Event::new("core.library-changed");
+    /// A book came into the library ([`BookAdded`]): received, downloaded,
+    /// copied by a plugin. Whoever brings a book emits it
+    /// ([`library::added`](crate::library::added)); views may show it at
+    /// once, the catalog is made anew.
+    pub const BOOK_ADDED: Event<BookAdded> = Event::new("core.book-added");
+    /// Something of a book changed ([`BookChanged`]): its details, how far
+    /// it is read, its cover, whether it is a favourite, a plugin's field.
+    /// Sent by the kernel for the reading events and by plugins that change
+    /// a book ([`library::changed_book`](crate::library::changed_book));
+    /// views show the book anew.
+    pub const BOOK_CHANGED: Event<BookChanged> = Event::new("core.book-changed");
+    /// An action of the book menu ([`menus::BOOK`](super::menus::BOOK)) was
+    /// chosen for a book ([`BookChosen`]), sent just before it runs: the
+    /// plugin whose action it is does it for that book.
+    pub const BOOK_CHOSEN: Event<BookChosen> = Event::new("core.book-chosen");
+    /// The catalog of the library was made anew
+    /// ([`library::catalog`](crate::library::catalog)): views of it read it
+    /// again.
+    pub const CATALOG_CHANGED: Event<()> = Event::new("core.catalog-changed");
+    /// The catalog is wanted ([`CatalogWanted`],
+    /// [`library::request_catalog`](crate::library::request_catalog)):
+    /// the kernel walks the library in the background where needed.
+    pub const CATALOG_WANTED: Event<CatalogWanted> = Event::new("core.catalog-wanted");
     /// The values shown without being kept changed, or ended (see
     /// [`Command::PreviewSettings`](crate::Command::PreviewSettings)).
     pub const PREVIEW_CHANGED: Event<()> = Event::new("core.preview-changed");
@@ -660,6 +821,19 @@ pub mod events {
     /// ([`PageLayerTapped`]); sent for layers that take taps (see
     /// [`layers`](crate::layers)), whose plugin answers.
     pub const PAGE_LAYER_TAPPED: Event<PageLayerTapped> = Event::new("core.page-layer-tapped");
+    /// A lookup provider that answered later ([`LookupAnswered`], see
+    /// [`lookup`](crate::lookup)) has its entry, for a query that names
+    /// no reply of its own (`LookupQuery::reply`): the screen that asked
+    /// shows it.
+    pub const LOOKUP_ANSWERED: Event<LookupAnswered> = Event::new("core.lookup-answered");
+    /// A document that a format could not open yet
+    /// ([`DocumentError::NotReady`](crate::document::DocumentError), e.g.
+    /// still coming in) is there now ([`DocumentReady`]): its format's
+    /// plugin says so, readers waiting for it open it.
+    pub const DOCUMENT_READY: Event<DocumentReady> = Event::new("core.document-ready");
+    /// The reading app of a book or a folder is to be chosen
+    /// ([`ReadingAppWanted`]): the kernel lists the readers that fit.
+    pub const READING_APP_WANTED: Event<ReadingAppWanted> = Event::new("core.reading-app-wanted");
     /// Skimming asks the reader to go somewhere in the book ([`Skim`]).
     pub const SKIM: Event<Skim> = Event::new("core.skim");
     /// Where the book being skimmed is now ([`Skimmed`]): the reader tells
@@ -777,6 +951,17 @@ pub mod screens {
     pub const STATUS_ITEMS: Id = Id::new_static("core.status-items");
     /// Chooses the status lines a setting lists.
     pub const STATUS_LINES: Id = Id::new_static("core.status-lines");
+    /// The list of reading apps to choose from (see
+    /// [`readers::ask`](crate::readers::ask)).
+    pub const READING_APPS: Id = Id::new_static("core.reading-apps");
+    /// The kernel's choice of a few options
+    /// ([`ui::choice::Choice`](crate::ui::choice::Choice)), bound to slot
+    /// [`CHOICE`](super::slots::CHOICE) unless another screen is.
+    pub const CHOICE: Id = Id::new_static("core.choice-dialog");
+    /// Chooses a folder for a setting with the folder chooser
+    /// ([`slots::CHOOSE_FOLDER`](super::slots::CHOOSE_FOLDER)), whichever
+    /// plugin fills it: name it as a text setting's editor.
+    pub const FOLDER_EDITOR: Id = Id::new_static("core.folder-editor");
 }
 
 /// Global settings.
@@ -789,6 +974,11 @@ pub mod settings {
     /// [`groups::DEVELOPER`](super::groups::DEVELOPER) show, and plugins may
     /// show what only developers need (e.g. what each plugin took).
     pub const DEVELOPER: Setting<bool> = Setting::new("core.developer");
+    /// The library folder, where books are kept (`books`; empty for the
+    /// storage's top): the kernel's, so that any library and every plugin
+    /// that puts books somewhere reads the same
+    /// ([`library::folder`](crate::library::folder)).
+    pub const LIBRARY_FOLDER: Setting<Text> = Setting::new("core.library-folder");
     /// Draw everything inverted.
     pub const NIGHT_MODE: Setting<bool> = Setting::new("core.night-mode");
     /// In night mode, pictures inverted too (else as they are, not as
@@ -812,6 +1002,19 @@ pub mod settings {
     /// Say what the buttons move to (a row, a button), where the device
     /// speaks: for using PaperPaw without seeing the screen.
     pub const SPEAK_FOCUS: Setting<bool> = Setting::new("core.speak-focus");
+    /// The reading app books open with where nothing else is chosen
+    /// (see [`readers`](crate::readers)): [`READING_APP_DEFAULT`] (the
+    /// screen bound to [`slots::READER`](super::slots::READER)) or a
+    /// reader's id. Each format has one of its own too
+    /// ([`readers::format_setting`](crate::readers::format_setting)).
+    pub const READING_APP: Setting<Text> = Setting::new("core.reading-app");
+    /// [`READING_APP`] and a format's: as the defaults give.
+    pub const READING_APP_DEFAULT: &str = "core.reading-app.default";
+    /// The voice that speaks text aloud: [`VOICE_SYSTEM`] or a plugin's
+    /// (see [`voices`](crate::voices)).
+    pub const VOICE: Setting<Text> = Setting::new("core.voice");
+    /// [`VOICE`]: the system's.
+    pub const VOICE_SYSTEM: &str = "core.voice.system";
     /// Partial refreshes between two full refreshes; `0` disables full
     /// refreshes for ghosting removal.
     pub const FULL_REFRESH_INTERVAL: Setting<i64> = Setting::new("core.full-refresh-interval");
@@ -972,6 +1175,9 @@ pub mod settings {
     pub const UI_CONTRAST: Setting<Text> = Setting::new("core.ui-contrast");
     pub const CONTRAST_NORMAL: &str = "core.contrast.normal";
     pub const CONTRAST_STRONG: &str = "core.contrast.strong";
+    /// The grays of the interface by what they are for, e.g. `muted=60
+    /// line=170` (see [`ui::Palette`](crate::ui::Palette)): for themes.
+    pub const UI_PALETTE: Setting<Text> = Setting::new("core.ui-palette");
     /// How long short messages show, in seconds.
     pub const NOTICE_SECONDS: Setting<i64> = Setting::new("core.notice-seconds");
     /// Milliseconds a button or finger must be held for a long press.

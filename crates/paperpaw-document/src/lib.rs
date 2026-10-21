@@ -63,9 +63,27 @@ pub struct Metadata {
     pub subjects: Vec<String>,
     /// What the book is about, as plain text (a blurb), if it says.
     pub description: Option<String>,
+    /// The way its pages go: right to left in manga and in books in
+    /// Arabic or Hebrew.
+    pub direction: PageProgression,
+}
+
+/// The way a book's pages go.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum PageProgression {
+    #[default]
+    LeftToRight,
+    RightToLeft,
 }
 
 impl Metadata {
+    /// Its pages going `direction`.
+    pub fn direction(mut self, direction: PageProgression) -> Self {
+        self.direction = direction;
+        self
+    }
+
     pub fn title(mut self, title: impl Into<Option<String>>) -> Self {
         self.title = title.into();
         self
@@ -483,6 +501,9 @@ pub enum DocumentError {
     UnsupportedFormat,
     /// The device has too little free memory for this document.
     OutOfMemory,
+    /// Not there yet (still coming, e.g. streamed): readers wait for
+    /// the event `core.document-ready` naming it and open it again.
+    NotReady,
 }
 
 impl fmt::Display for DocumentError {
@@ -492,6 +513,7 @@ impl fmt::Display for DocumentError {
             DocumentError::Malformed(message) => write!(f, "malformed document: {message}"),
             DocumentError::UnsupportedFormat => f.write_str("unsupported format"),
             DocumentError::OutOfMemory => f.write_str("not enough memory"),
+            DocumentError::NotReady => f.write_str("not ready yet"),
         }
     }
 }

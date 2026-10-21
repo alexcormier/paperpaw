@@ -229,7 +229,7 @@ impl Plugin for Wifi {
             }
             let mut policy = p.borrow_mut();
             policy.asked_at = Some(env.now);
-            let known = wifi::known(env.secrets);
+            let known = wifi::known(env.secrets.iter());
             if known.is_empty() {
                 // Nothing to join: what waits says so now.
                 out.push(Command::Notify(env.i18n.tr("wifi.no-saved").into()));
@@ -260,7 +260,7 @@ impl Plugin for Wifi {
             if wifi.state == WifiState::On
                 && policy.goal == Goal::Nothing
                 && charging_keeps_it(env)
-                && !wifi::known(env.secrets).is_empty()
+                && !wifi::known(env.secrets.iter()).is_empty()
             {
                 wifi_commands(out, policy.retry());
             }
@@ -276,7 +276,7 @@ impl Plugin for Wifi {
             let Some(wifi) = env.wifi else {
                 return;
             };
-            let known = wifi::known(env.secrets);
+            let known = wifi::known(env.secrets.iter());
             let mut policy = p.borrow_mut();
             match policy.scanned(&wifi.networks, &known) {
                 Some(commands) => wifi_commands(out, commands),
@@ -298,7 +298,7 @@ impl Plugin for Wifi {
                 return;
             };
             let (ssid, reason) = (failed.ssid.as_str(), failed.reason);
-            let known = wifi::known(env.secrets);
+            let known = wifi::known(env.secrets.iter());
             let mut policy = p.borrow_mut();
             let chosen = matches!(policy.goal, Goal::Chosen { .. });
             match policy.failed(ssid, &wifi.networks, &known) {
@@ -379,7 +379,7 @@ impl Plugin for Wifi {
                     return;
                 }
                 if (policy.still_wanted(wifi, env.now) || charging_keeps_it(env))
-                    && !wifi::known(env.secrets).is_empty()
+                    && !wifi::known(env.secrets.iter()).is_empty()
                 {
                     wifi_commands(out, policy.retry());
                 } else if !wifi.busy {
@@ -409,7 +409,7 @@ impl Plugin for Wifi {
                     policy.charging_kept = keeps;
                     if keeps {
                         if !wifi.state.is_on() {
-                            let known = wifi::known(env.secrets);
+                            let known = wifi::known(env.secrets.iter());
                             wifi_commands(out, policy.wanted(&wifi.state, &known));
                         }
                     } else if !wifi.busy && !policy.still_wanted(wifi, env.now) {

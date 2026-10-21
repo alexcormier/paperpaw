@@ -25,7 +25,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, params, screens, slots};
+use paperpaw_sdk::builtin::{actions, screens};
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::status::{StatusLine, StatusValue, item_ids};
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
@@ -548,8 +548,7 @@ impl Book {
     }
 
     fn open(&self) -> Command {
-        let params = Params::new().with(params::PATH, self.book.path.clone());
-        Command::OpenSlot(slots::READER, params)
+        paperpaw_sdk::readers::open(self.book.path.clone())
     }
 }
 

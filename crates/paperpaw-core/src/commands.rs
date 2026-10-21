@@ -236,6 +236,32 @@ impl Kernel {
             Command::OpenInSlot(slot, screen, params) => {
                 self.open_slot_command(slot, Some(screen), params);
             }
+            Command::OpenBook(params) => {
+                let env = self.shared.env(self.now);
+                match paperpaw_sdk::readers::resolve(&env, &params) {
+                    // The slot's own screen, by name: in place of another
+                    // reading app the slot may show now. Not where it could
+                    // not open the book either (it is a reader too): it
+                    // says why itself.
+                    Command::OpenSlot(slot, params) => {
+                        let screen = self.shared.registry.resolve_slot(slot.as_str()).cloned();
+                        let failed = screen.as_ref().is_some_and(|screen| {
+                            paperpaw_sdk::readers::past(&params).any(|past| {
+                                self.shared
+                                    .readers
+                                    .get(past)
+                                    .is_some_and(|r| r.screen == *screen)
+                            })
+                        });
+                        if failed {
+                            self.warn_runtime("no reading app could open the book");
+                        } else {
+                            self.open_slot_command(slot, screen, params);
+                        }
+                    }
+                    command => self.apply(command),
+                }
+            }
             Command::Close(key) => self.close_screen(key),
             Command::Replace(screen, params) => self.replace(screen, &params),
             Command::BackTo(id) => self.back_to(&id),
@@ -301,12 +327,40 @@ impl Kernel {
     /// ([`Command::OpenInSlot`]), or shows it again where the slot is open
     /// with it and the same params (closing what is above it).
     pub(crate) fn open_slot_command(&mut self, slot: Id, screen: Option<Id>, params: Params) {
-        let open = self.stack.iter().position(|s| {
-            s.slot.as_ref() == Some(&slot) && screen.as_ref().is_none_or(|screen| s.id == *screen)
+        let in_slot = self
+            .stack
+            .iter()
+            .position(|s| s.slot.as_ref() == Some(&slot));
+        let open = in_slot.filter(|&index| {
+            screen
+                .as_ref()
+                .is_none_or(|screen| self.stack[index].id == *screen)
         });
         // Below a screen that guards the device, it stays as it is; one
         // for something else waits below the guard too.
-        let below_guard = |index: usize| self.held_by_guard() && self.guard() > Some(index);
+        let guard = if self.held_by_guard() {
+            self.guard()
+        } else {
+            None
+        };
+        let below_guard = move |index: usize| guard > Some(index);
+        // Another screen for the slot (another reading app): it goes, so
+        // that the slot holds one (one book open, not two).
+        if open.is_none()
+            && let Some(index) = in_slot.filter(|&index| !below_guard(index))
+        {
+            if !self.may_close_from(index, paperpaw_sdk::CloseCause::Slot) {
+                return;
+            }
+            let closed = (index..self.stack.len())
+                .map(|i| self.changed_region(i))
+                .reduce(|a, b| a.union(&b));
+            self.close_from(index);
+            self.stop_for_closed_screens();
+            if let Some(region) = closed {
+                self.invalidate(region);
+            }
+        }
         if let Some(index) = open.filter(|&index| below_guard(index)) {
             if params.is_empty() || self.stack[index].params == params {
                 return;
@@ -363,6 +417,12 @@ impl Kernel {
     /// typed on the keyboard), goes to those screens and their plugins
     /// alone.
     pub(crate) fn emit(&mut self, event: &Id, params: &Params) {
+        self.emit_to(event, params, None);
+    }
+
+    /// Emits `event` to the plugin `only` alone where one is named: its
+    /// handlers and screens hear it, no other plugin's.
+    pub(crate) fn emit_to(&mut self, event: &Id, params: &Params, only: Option<&str>) {
         // A page turned, also by itself, is use.
         if *event == events::PAGE_TURNED {
             self.last_activity = self.now;
@@ -374,8 +434,19 @@ impl Kernel {
         // Moments for declared work, and jobs waiting for this event.
         self.works.saw(event, params);
         let env = self.shared.env(self.now);
+        // A password typed (an answer to a question asked as one) reaches
+        // the plugin that asked alone, the one its reply event is named
+        // in: no other plugin, nor another's screen, hears it, whichever
+        // keyboard took it.
+        let secret = params.get(paperpaw_sdk::builtin::params::MODE) == Some("password");
+        let asker = event.namespace();
+        let hears = |plugin: &str| (!secret || plugin == asker) && only.is_none_or(|o| plugin == o);
         let mut refused_secret = false;
-        for (_, plugin, handler) in self.subscriptions.iter().filter(|(id, ..)| id == event) {
+        for (_, plugin, handler) in self
+            .subscriptions
+            .iter()
+            .filter(|(id, plugin, _)| id == event && hears(plugin.as_str()))
+        {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
             handler(&env, params, &mut self.output.commands);
@@ -410,10 +481,22 @@ impl Kernel {
             return;
         }
         for index in 0..self.stack.len() {
+            if !hears(self.stack[index].id.namespace()) {
+                continue;
+            }
             self.with_screen(index, |screen, cx| {
                 screen.on_event(event, params, cx);
                 Handled::Yes
             });
+        }
+    }
+
+    /// Tells the plugin whose secret setting `id` is that it changed, and
+    /// no other: which secret changed is the owner's business too.
+    pub(crate) fn secret_setting_changed(&mut self, id: &Id) {
+        let changed = events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone()));
+        if let Command::Emit(event, params) = changed {
+            self.emit_to(&event, &params, Some(id.namespace()));
         }
     }
 
@@ -465,6 +548,28 @@ impl Kernel {
     /// menus, key bindings and slots changed.
     fn apply_setting(&mut self, command: Command) {
         match command {
+            // A secret setting's value goes to the secrets.
+            Command::SetSetting(id, paperpaw_sdk::SettingValue::Text(text))
+                if self
+                    .shared
+                    .settings
+                    .spec(id.as_str())
+                    .is_some_and(|spec| spec.extra().secret) =>
+            {
+                let label = self
+                    .shared
+                    .settings
+                    .spec(id.as_str())
+                    .map(|spec| String::from(self.shared.translator.tr(&spec.title)))
+                    .unwrap_or_default();
+                let change = if text.is_empty() {
+                    paperpaw_sdk::secrets::SecretChange::remove(id.as_str())
+                } else {
+                    paperpaw_sdk::secrets::SecretChange::keep(id.as_str(), &label, &text)
+                };
+                self.set_secret(change);
+                self.secret_setting_changed(&id);
+            }
             Command::SetSetting(id, value) if self.shared.settings.goes_to_scope(id.as_str()) => {
                 self.set_in_scope(&id, value);
             }
@@ -478,6 +583,11 @@ impl Kernel {
                         self.output
                             .commands
                             .push(events::SETTING_CHANGED.emit(changed));
+                    }
+                    // Its check says why: the reader is told.
+                    Err(paperpaw_sdk::SettingError::Refused(why)) => {
+                        let text = String::from(self.shared.translator.tr(why));
+                        self.output.commands.push(Command::Notify(text));
                     }
                     Err(error) => {
                         self.warn_runtime(format!("`{id}`: {error}"));
@@ -525,6 +635,59 @@ impl Kernel {
 
     /// What the shell does for the kernel: firmware, Wi-Fi, the clipboard,
     /// speech, servers, sockets and HTTP.
+    /// Speaks `speech` with the voice the settings choose where it speaks
+    /// the language (see `paperpaw_sdk::voices`), else with the system's.
+    pub(crate) fn speak(&mut self, speech: paperpaw_sdk::Speech) {
+        let screens = self.stack.len();
+        let env = self.shared.env(self.now);
+        let system = self.io.speech.system;
+        if let Some(voice) = self.shared.voices.chosen(&env, &speech.language, system) {
+            // In place of what the system or another voice says now,
+            // unless after it.
+            if !speech.queue {
+                self.io.speech.stop();
+                let other = self
+                    .io
+                    .speech
+                    .voice
+                    .as_ref()
+                    .is_some_and(|(id, _)| *id != voice.id);
+                if other
+                    && let Some((id, _)) = self.io.speech.voice.take()
+                    && let Some(old) = self.shared.voices.get(id.as_str())
+                {
+                    (old.stop)(&env, &mut self.output.commands);
+                }
+            }
+            (voice.speak)(&env, &speech, &mut self.output.commands);
+            self.io.speech.voice = Some((voice.id.clone(), screens));
+            return;
+        }
+        // In place of what a plugin's voice says, unless after it.
+        if !speech.queue {
+            self.stop_voice();
+        }
+        self.io
+            .speech
+            .speak(speech, system, screens, &mut self.output.commands);
+    }
+
+    /// Stops a plugin's voice, if one speaks.
+    fn stop_voice(&mut self) {
+        if let Some((id, _)) = self.io.speech.voice.take() {
+            let env = self.shared.env(self.now);
+            if let Some(voice) = self.shared.voices.get(id.as_str()) {
+                (voice.stop)(&env, &mut self.output.commands);
+            }
+        }
+    }
+
+    /// Stops speaking: the system's voice and a plugin's.
+    pub(crate) fn stop_speaking(&mut self) {
+        self.io.speech.stop();
+        self.stop_voice();
+    }
+
     fn apply_io(&mut self, command: Command) {
         let (network, screens) = (self.shared.caps.network, self.stack.len());
         let out = &mut self.output.commands;
@@ -561,12 +724,11 @@ impl Kernel {
             }
             Command::ReadClipboard(reply, params) => self.reply_clipboard(reply, params),
             Command::Speak(speech) => {
-                let available = self.shared.caps.speech;
-                self.io.speech.speak(speech, available, screens, out);
+                self.speak(speech);
                 self.io.focus_spoken = false;
             }
             Command::StopSpeaking => {
-                self.io.speech.stop();
+                self.stop_speaking();
                 self.io.focus_spoken = false;
             }
             Command::Serve {

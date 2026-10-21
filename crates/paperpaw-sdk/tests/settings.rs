@@ -261,7 +261,21 @@ fn extras_are_kept_in_the_program_and_copied_when_changed() {
         .unit("u")
         .description("d")
         .advanced();
-    assert_eq!(editor.extra().editor, Some(Id::new_static("a.edit")));
+    assert_eq!(
+        editor.extra().editor,
+        Some(paperpaw_sdk::Editor::Screen(Id::new_static("a.edit")))
+    );
+    // A slot's screen edits it, whichever plugin fills the slot.
+    let folder = SettingSpec::switch(&ON, "", false)
+        .editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
+    let opens = folder.extra().editor.as_ref().unwrap().open(&folder.id);
+    assert_eq!(
+        opens,
+        paperpaw_sdk::Command::OpenSlot(
+            paperpaw_sdk::builtin::slots::CHOOSE_FOLDER,
+            paperpaw_sdk::Params::new().with("id", folder.id.as_str().to_string()),
+        )
+    );
     assert_eq!(editor.level, Level::Advanced);
     let fixed = SettingSpec::fixed_switch("a.x", "a.x", true, groups::OTHER)
         .described("help")
@@ -627,4 +641,40 @@ fn a_full_store_says_so_when_a_fixed_setting_is_changed() {
     // The fixed one is as it was.
     let spec = s.spec("a.look").unwrap();
     assert_eq!(spec.default, SettingValue::Text(Cow::Borrowed("a.plain")));
+}
+
+/// A setting shown only while another has a value, and one whose values
+/// are checked before they are set.
+#[test]
+fn settings_show_on_a_condition_and_refuse_what_their_check_refuses() {
+    fn small(_: &Settings, value: &SettingValue) -> Result<(), &'static str> {
+        match value {
+            SettingValue::Int(n) if *n > 5 => Err("a.too-large"),
+            _ => Ok(()),
+        }
+    }
+    static WHILE_ON: SettingExtra = SettingExtra::new().shown_if("a.on", "true");
+    static CHECKED: SettingExtra = SettingExtra::new().check(small);
+    let mut s = Settings::new();
+    s.define(SettingSpec::switch(&ON, "a.on", false)).unwrap();
+    s.define(SettingSpec::text(&NAME, "a.name", "").with_extra(&WHILE_ON))
+        .unwrap();
+    s.define(SettingSpec::number(&SIZE, "a.size", 1, 9, 3).with_extra(&CHECKED))
+        .unwrap();
+    let name = s.spec("a.name").unwrap().clone();
+    assert!(!s.shows(&name));
+    // Screens listing settings make themselves anew when `a.on` changes.
+    assert!(s.governs("a.on"));
+    assert!(!s.governs("a.size"));
+    s.set("a.on", SettingValue::Bool(true)).unwrap();
+    assert!(s.shows(&name));
+    // Settings without a condition always show.
+    assert!(s.shows(&s.spec("a.on").unwrap().clone()));
+    assert_eq!(
+        s.set("a.size", SettingValue::Int(7)),
+        Err(SettingError::Refused("a.too-large"))
+    );
+    assert_eq!(s.int("a.size"), 3);
+    s.set("a.size", SettingValue::Int(4)).unwrap();
+    assert_eq!(s.int("a.size"), 4);
 }
