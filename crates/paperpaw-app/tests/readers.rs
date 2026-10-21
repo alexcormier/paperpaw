@@ -420,8 +420,7 @@ fn focus_on(app: &mut App, name: &str) {
             .kernel
             .describe()
             .into_iter()
-            .filter(|p| p.focused)
-            .last();
+            .rfind(|p| p.focused);
         if focused.is_some_and(|p| p.label.starts_with(name)) {
             return;
         }

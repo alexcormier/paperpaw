@@ -259,7 +259,7 @@ pub fn chosen<'e>(env: &'e Env<'_>, path: &str) -> Option<&'e ReaderSpec> {
     if let Some(reader) = by_format.as_deref().and_then(fits) {
         return Some(reader);
     }
-    fits(&env.settings.read(&settings::READING_APP))
+    fits(env.settings.read(&settings::READING_APP))
 }
 
 /// Opens the book at `path` with the reader chosen for it (see

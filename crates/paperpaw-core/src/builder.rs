@@ -795,7 +795,8 @@ impl Kernel {
                 paperpaw_sdk::SettingValue::Text(Cow::Borrowed(core_settings::READING_APP_DEFAULT)),
             )
             .group(paperpaw_sdk::builtin::groups::READING)
-            .section("core.section.reading-apps");
+            .section("core.section.reading-apps")
+            .described("core.setting.reading-app.format.help");
             let _ = self.shared.settings.define(spec);
         }
     }
