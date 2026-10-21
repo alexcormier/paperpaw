@@ -56,8 +56,6 @@ pub const PROVIDER: Id = Id::new_static("dictionary.stardict");
 const ANSWERED: Id = Id::new_static("dictionary.answered");
 /// How long providers answering later are waited for.
 const ANSWER_MS: u64 = 20_000;
-/// The folder chooser of the `files` plugin, if installed.
-const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 
 /// Bytes of an index read per background step.
 const STEP_BYTES: usize = 64 * 1024;
@@ -72,7 +70,7 @@ pub struct DictionaryPlugin;
 /// chosen on the folder chooser.
 static FOLDER_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section("dictionary.section")
-    .editor(CHOOSE_FOLDER);
+    .editor_slot(paperpaw_sdk::builtin::slots::CHOOSE_FOLDER);
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
     FOLDER.static_str(),
     "dictionary.setting.folder",

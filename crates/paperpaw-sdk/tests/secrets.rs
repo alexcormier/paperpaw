@@ -78,10 +78,10 @@ proptest! {
         let mut secrets = Secrets::default();
         secrets.apply(wifi::keep(&ssid, &password));
         let read = Secrets::decode(&secrets.encode());
-        prop_assert_eq!(wifi::known(&read), vec![(ssid.clone(), password)]);
+        prop_assert_eq!(wifi::known(read.iter()), vec![(ssid.clone(), password)]);
         let mut read = read;
         read.apply(wifi::forget(&ssid));
-        prop_assert!(wifi::known(&read).is_empty());
+        prop_assert!(wifi::known(read.iter()).is_empty());
     }
 }
 
@@ -188,7 +188,7 @@ fn only_wifi_secrets_are_networks() {
     secrets.apply(SecretChange::keep("wifix.net", "other prefix", "x"));
     secrets.apply(wifi::keep("", "empty name"));
     assert_eq!(
-        wifi::known(&secrets),
+        wifi::known(secrets.iter()),
         [(String::new(), String::from("empty name"))]
     );
     assert_eq!(wifi::secret_id("Home"), "wifi.Home");
@@ -235,7 +235,7 @@ fn a_network_name_with_a_tab_keeps_its_password() {
     secrets.apply(wifi::keep("Cafe\tGuest", "pw"));
     let read = Secrets::decode(&secrets.encode());
     assert_eq!(
-        wifi::known(&read),
+        wifi::known(read.iter()),
         [(String::from("Cafe\tGuest"), String::from("pw"))]
     );
 }

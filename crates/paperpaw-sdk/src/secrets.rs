@@ -7,6 +7,18 @@
 //! `paperpaw.ini` and not readable at a glance. That is no encryption:
 //! the devices have no safe place for a key, so whoever has the files
 //! can read them.
+//!
+//! A plugin sees its own secrets alone, those in its namespace
+//! (`kosync.key` for `kosync`): [`Env::secrets`](crate::Env) is a
+//! [`Visible`] view that hands out a value only to the plugin whose code
+//! runs. Every plugin may see which secrets there are, by name and label
+//! ([`Visible::listed`]), as the settings' list of them shows. Code a
+//! plugin hands another to run (a widget or a status item drawn on its
+//! screen) runs as the plugin of that screen, so it sees that plugin's
+//! secrets, not its own: such code keeps its secrets out of drawing.
+//! Native code
+//! can still go past this (plugins are not sandboxed); the SDK hands no
+//! plugin another's secret.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -38,6 +50,94 @@ impl core::fmt::Debug for Secret {
             .field("value", &"…")
             .field("changeable", &self.changeable)
             .finish()
+    }
+}
+
+/// Which plugin's code runs now, as the kernel knows it: what a
+/// [`Visible`] view of the secrets asks.
+pub trait Running {
+    /// Whether the code of `plugin` (a namespace, e.g. `kosync`) runs now.
+    fn runs(&self, plugin: &str) -> bool;
+}
+
+/// Any plugin runs: for tools and tests that see every secret.
+#[derive(Debug, Clone, Copy, Default)]
+pub struct Anyone;
+
+impl Running for Anyone {
+    fn runs(&self, _: &str) -> bool {
+        true
+    }
+}
+
+/// The secrets as the plugin running sees them: its own values, and of
+/// every secret its name and label (see the [module](self)).
+#[derive(Clone, Copy)]
+pub struct Visible<'a> {
+    all: &'a Secrets,
+    running: &'a dyn Running,
+}
+
+impl core::fmt::Debug for Visible<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Visible").finish_non_exhaustive()
+    }
+}
+
+/// A secret as everyone may see it: its name and label, not its value.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Listed<'a> {
+    pub id: &'a str,
+    pub label: &'a str,
+    /// It can be typed anew in the list.
+    pub changeable: bool,
+}
+
+impl<'a> Visible<'a> {
+    /// `all` as the plugin `running` says runs sees them.
+    pub fn new(all: &'a Secrets, running: &'a dyn Running) -> Self {
+        Self { all, running }
+    }
+
+    /// Whether secret `id` is the running plugin's: in its namespace.
+    fn mine(&self, id: &str) -> bool {
+        let plugin = id.split('.').next().unwrap_or_default();
+        !plugin.is_empty() && self.running.runs(plugin)
+    }
+
+    /// The value of the running plugin's secret `id`, if kept; `None` for
+    /// another plugin's.
+    pub fn get(&self, id: &str) -> Option<&'a str> {
+        if self.mine(id) {
+            self.all.get(id)
+        } else {
+            None
+        }
+    }
+
+    /// The running plugin's secrets.
+    pub fn iter(&self) -> impl Iterator<Item = &'a Secret> + '_ {
+        self.all.iter().filter(|s| self.mine(&s.id))
+    }
+
+    /// Whether the running plugin keeps no secret.
+    pub fn is_empty(&self) -> bool {
+        self.iter().next().is_none()
+    }
+
+    /// Every secret, by name and label, without its value: what the
+    /// settings' list of them shows.
+    pub fn listed(&self) -> impl Iterator<Item = Listed<'a>> + 'a {
+        self.all.iter().map(|s| Listed {
+            id: &s.id,
+            label: &s.label,
+            changeable: s.changeable,
+        })
+    }
+
+    /// Whether secret `id` is kept, whoever keeps it.
+    pub fn has(&self, id: &str) -> bool {
+        self.all.get(id).is_some()
     }
 }
 

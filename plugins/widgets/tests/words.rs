@@ -149,7 +149,7 @@ fn the_widgets_show_what_they_should() {
     // A half-wide list inside the widget's padding has no room for the
     // whole item even at the small size: shortened, its start shown.
     assert!(has(&shown, "Return the"), "{shown:?}");
-    assert!(has(&shown, "Put pictures"), "{shown:?}");
+    assert!(has(&shown, "Put JPEG, PNG or GIF pictures"), "{shown:?}");
 }
 
 #[test]

@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, events, settings};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::install::Progress;
-use paperpaw_sdk::ui::choice::{self, Picked};
+use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
@@ -18,8 +18,8 @@ use paperpaw_sdk::{
 
 use crate::catalog::Font;
 use crate::install::{self, DOWNLOADED, INSTALLER};
+use crate::list;
 use crate::samples::{self, SAMPLE, Samples};
-use crate::{CHOICE, list};
 
 /// Parameter of a font's page: the font ([`Font::to_param`]), as the
 /// list has it.
@@ -175,14 +175,12 @@ impl FontScreen {
                     "fonts-browser.remove-question",
                     &[("name", Arg::Str(&font.name))],
                 );
-                cx.command(choice::open(
-                    CHOICE,
-                    &REMOVE,
-                    &title,
-                    &font.plugin(),
-                    "fonts-browser.option.",
-                    &["remove", "keep"],
-                ));
+                cx.command(
+                    paperpaw_sdk::ask::choice(&title, &REMOVE)
+                        .about(font.plugin())
+                        .options("fonts-browser.option.", &["remove", "keep"])
+                        .command(),
+                );
             }
             None => {}
         }

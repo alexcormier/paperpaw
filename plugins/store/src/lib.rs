@@ -37,7 +37,6 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::install::{Installer, Progress, Received};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::Setting;
-use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
     ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
     Registrar, ScreenSpec, SettingSpec, Version,
@@ -52,7 +51,6 @@ const PAGE_SCREEN: Id = Id::new_static("store.plugin");
 const VIEW_SCREEN: Id = Id::new_static("store.view");
 const SOURCE_SCREEN: Id = Id::new_static("store.source");
 const SHOTS_SCREEN: Id = Id::new_static("store.shots");
-const CHOICE: Id = Id::new_static("store.choice");
 /// The fonts browser's list, offered as the entry *Fonts*.
 pub(crate) const FONTS: Id = Id::new_static("fonts-browser.open");
 /// The plugin manager's list of other places to get plugins.
@@ -114,11 +112,6 @@ impl Plugin for Store {
             SHOTS_SCREEN,
             "store.shots",
             Box::new(|env, params| Box::new(shots::ShotsScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "store.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "store.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {

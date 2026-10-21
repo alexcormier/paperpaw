@@ -40,18 +40,17 @@ mod group_list;
 mod page;
 mod search;
 mod secrets;
+mod themes;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, events, groups, menus, params, setting_sections, slots};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::Setting;
-use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::widgets::Widget;
 use paperpaw_sdk::{ActionSpec, MenuEntry};
@@ -74,18 +73,14 @@ pub const GROUP_SCREEN: Id = Id::new_static("settings.group");
 pub const CHOOSE_SCREEN: Id = Id::new_static("settings.choose");
 /// Show advanced settings too.
 pub const ADVANCED: Setting<bool> = Setting::new("settings.advanced");
-/// Emitted by the keyboard with a text setting's new value (parameters
-/// `id` and `text`).
-const TEXT_ENTERED: Event<Typed> = Event::new("settings.text-entered");
 
-/// Asks before settings are reset.
-const CHOICE: Id = Id::new_static("settings.choice");
 /// The answer: the group reset (its id; empty for all) and the option.
 const CHOSEN: Event<choice::Picked> = Event::new("settings.chosen");
 
 const ID: &str = "id";
-/// A setting to focus on its group's page (parameter of [`GROUP_SCREEN`]).
-const FOCUS: &str = "focus";
+/// A setting to focus on its group's page (parameter of [`SCREEN`] and
+/// [`GROUP_SCREEN`]).
+const FOCUS: &str = paperpaw_sdk::builtin::params::FOCUS;
 
 /// The settings plugin.
 #[derive(Debug, Default)]
@@ -111,12 +106,22 @@ impl Plugin for SettingsPlugin {
         r.add_screen(ScreenSpec::new(
             SCREEN,
             "settings.title",
-            Box::new(
-                |env, params| match params.get(ID).and_then(|id| Id::parse(id).ok()) {
-                    Some(group) => Box::new(GroupPage::new(env, group)) as Box<dyn Screen>,
+            Box::new(|env, params| {
+                let group = params.get(ID).and_then(|id| Id::parse(id).ok());
+                // A setting to focus: on its page, unless a group is named.
+                let focus = params.get(FOCUS).and_then(|id| env.settings.spec(id));
+                let group = group.or_else(|| focus.map(|spec| env.settings.group_of(spec)));
+                match group {
+                    Some(group) => {
+                        let mut page = GroupPage::new(env, group);
+                        if let Some(spec) = focus {
+                            page.focus_on(env, spec.id.as_str());
+                        }
+                        Box::new(page) as Box<dyn Screen>
+                    }
                     None => Box::new(GroupList::new(env)),
-                },
-            ),
+                }
+            }),
         ))?;
         r.add_screen(ScreenSpec::new(
             GROUP_SCREEN,
@@ -131,9 +136,9 @@ impl Plugin for SettingsPlugin {
             }),
         ))?;
         r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "settings.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
+            themes::SCREEN,
+            "settings.theme",
+            Box::new(|env, _| Box::new(themes::Themes::new(env))),
         ))?;
         r.add_screen(ScreenSpec::new(
             CHOOSE_SCREEN,
@@ -168,18 +173,8 @@ impl Plugin for SettingsPlugin {
         r.add_icon(secrets::OPEN, Cow::Borrowed("key"))?;
         r.on(secrets::ENTERED, secrets::entered)?;
         r.bind_slot(slots::SETTINGS, SCREEN, Priority::DEFAULT)?;
+        r.bind_slot(slots::CHOOSE_VALUE, CHOOSE_SCREEN, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
-        r.on(TEXT_ENTERED, |env, typed, out| {
-            let id = typed.context.get(ID).and_then(|id| Id::parse(id).ok());
-            if let Some(id) = id
-                && env.settings.get(id.as_str()).is_some()
-            {
-                out.push(Command::SetSetting(
-                    id,
-                    SettingValue::Text(Cow::Owned(typed.text.trim().to_string())),
-                ));
-            }
-        })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -197,14 +192,10 @@ fn ask_reset(env: &Env<'_>, group: Option<(&Id, &str)>) -> Command {
         None => env.i18n.tr("settings.reset-all.question").to_string(),
     };
     let context = group.map_or("", |(id, _)| id.as_str());
-    choice::open(
-        CHOICE,
-        &CHOSEN,
-        &question,
-        context,
-        "settings.option.",
-        &["reset", "cancel"],
-    )
+    paperpaw_sdk::ask::choice(&question, &CHOSEN)
+        .about(context)
+        .options("settings.option.", &["reset", "cancel"])
+        .command()
 }
 
 /// Resets the settings `reset` chose: of its group, or all but the
@@ -251,8 +242,9 @@ fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
     {
         return false;
     }
-    // Not for this device (e.g. reading aloud without a speaker).
-    if !env.menus.available(spec.id.as_str()) {
+    // Not for this device (e.g. reading aloud without a speaker), or not
+    // while another setting has another value.
+    if !env.menus.available(spec.id.as_str()) || !env.settings.shows(spec) {
         return false;
     }
     // For developers, once they asked for it; then without the advanced

@@ -17,7 +17,7 @@ use std::rc::Rc;
 use common::*;
 
 const BROWSER: &str = "file-manager.browser";
-const CHOICE: &str = "file-manager.choice";
+const CHOICE: &str = "core.choice-dialog";
 const INVALID: &str = "That name or place does not work.";
 
 /// A folder of the computer's file system as the device's storage, gone

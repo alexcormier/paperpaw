@@ -167,7 +167,10 @@ Screens say what they show, for reading the interface aloud,
 automation and tests: the `ui` helpers (list rows, buttons, switches,
 headers, labels) tell what they draw by themselves. A screen that draws
 in its own way tells it with `canvas.describe(role, text, area,
-focused, on)`.
+focused, on)`, with the role of what it is (`Row`, `Button`, `Switch`,
+`Check`, `Radio`, `Field`, `Image`, `Link`, `Dialog`, `Progress` …). A
+screen reader of one's own hears where the focus of the buttons goes
+(`events::FOCUS_CHANGED`: its role, label and area).
 
 ### Settings
 
@@ -217,6 +220,16 @@ r.add_settings(&SETTINGS)?;
 
 Such settings are read like any other; those that need a unit, a step,
 a section or an editor screen are made as above.
+
+A setting may show only while another has a value
+(`SettingExtra::shown_if("hello.sync", "on")`, the server's address
+while syncing is on), and check a value before it is set
+(`SettingExtra::check(fn)`): a value it refuses is not set, and the
+reader is told the translation of the key it returns. Screens of your
+own that list settings open them as the settings pages do with
+`ui::setting_opens` (its editor, the keyboard for text, the list of a
+choice's values); text typed there comes back to the kernel as
+`events::SETTING_TYPED`, which sets it.
 
 ### Events
 
@@ -455,13 +468,14 @@ artifact, also when a check failed.
 | Slots | `add_slot`, `bind_slot` | Roles a screen fills: home, reader, library, menu, settings, keyboard, dictionary, … |
 | Menu entries and sections | `add_menu_entry`, `add_menu_section`, `place_menu_entry`, `hide_menu_entry` | Actions, settings and submenus in any menu, by order or beside other entries (`MenuPlace`: after, before, in a section, first, last); another plugin's entry taken out. A menu the user redefined shows entries added later too |
 | What entries show now | `set_item_state`, `describe_item` | A label, a switch, faint, hidden or a badge of the plugin's own entries as things are now (`ItemState`); a line under an entry |
-| Icons | `add_icon` | The icon of an action, setting group or menu |
+| Icons | `add_icon` | The icon of an action, setting group or menu; of a semantic icon (`icons::BACK`, `NEXT`, `SHIFT`, …) for a theme; `U+F8000` names a code point of one's own |
 | Settings and groups | `add_setting`, `add_setting_group` | Shown and saved by the kernel |
 | Setting defaults | `set_setting_default` | New defaults for other plugins' settings (themes) |
 | Event handlers | `subscribe` | React to events |
 | Key maps | `add_keymap`, `add_keymap_preset`, `add_keymap_when` | What buttons, taps and swipes do; bindings that apply while a switch is on |
 | Formats | `add_format` | Open a kind of file as a document to read; big pictures may be decoded when their page shows (`Document::prepare_image`); files without a known extension told by their first bytes (`FormatSpec::sniff`); the format's own settings in `OpenOptions::setting`; a document still coming says `DocumentError::NotReady`, then `events::DOCUMENT_READY` |
 | Lookup providers | `add_lookup_provider` | Where words are looked up (a glossary, a translator, Wikipedia): the dictionary's panel lists every provider's entries, those that go online when asked; an entry may open a screen with more of it (`LookupEntry::more`) |
+| Reading apps | `add_reader` | A screen of the plugin that reads books of some formats (a comics reader), offered where books open and chosen per format, folder or book |
 | Voices | `add_voice` | Speak text aloud in place of the system's voice, for the languages it speaks, chosen with `settings::VOICE` |
 | Fonts | `add_font`, `add_font_file`, `bind_font` | Fonts and the roles they fill |
 | Hyphenation | `add_hyphenation` | Patterns for a language |
@@ -470,7 +484,8 @@ artifact, also when a check failed.
 | Page layers and frames | `add_page_layer`, `add_page_frame` | Draw on book pages beside the words, with room of one's own; set pages in columns |
 | Input filters | `add_input_filter` | See every button and finger first: pass it, take it, or run an action instead |
 | Refresh filters | `add_refresh_filter` | Change how the panel is refreshed, e.g. in full on a screen of your own |
-| Status items and lines | `add_status_item`, `add_status_line` | What status lines show |
+| Status items, lines and places | `add_status_item`, `add_status_line`, `add_status_place` | What status lines show, what a tap on an item does, how much it matters where a line is full; places where items show (`status::Place`) |
+| A look | `set_ui_look` | Another look for switches, the focus, separators, buttons, headers, button hints, progress bars and sliders on every screen (`ui::look`) |
 | Widgets | `add_widget` | Blocks for the home screen and the sleep screen |
 | Setup steps | `add_setup_step` | A page of the first-run setup: a setting to choose or a screen of the plugin's, where the device needs it |
 | Services | `publish` | Anything one plugin offers others, found with `env.services.get` |
@@ -487,11 +502,127 @@ Slots are how a plugin replaces another: bind your screen to
 (`core.main`), its tools (`core.tools`) and the settings' pages
 (`core.settings-pages`).
 
+```rust
+// A home screen of one's own: preferred over the shipped one.
+r.add_screen(ScreenSpec::new(SHELF, "shelf.title", Box::new(|env, _| Box::new(Shelf::new(env)))))?;
+r.bind_slot(slots::HOME, SHELF, Priority::PREFERRED)?;
+```
+
+### What a slot's screen does
+
+A screen bound to a standard slot takes the parameters the others open
+it with and answers as they expect, so that every plugin works with it:
+
+| Slot | Opened with | The screen |
+|---|---|---|
+| `core.home` | nothing; at the start and by `actions::HOME` | is the bottom of the stack: opened again, the screens above it close. It leads to the menu and the library by touch and by buttons alone. |
+| `core.library` | nothing; by `actions::LIBRARY` | opens a book with `readers::open` (the reading app chosen for it). For a book it offers the menu `menus::BOOK`, as `Menus::shown_items` has it: when an entry is chosen it emits `events::BOOK_CHOSEN` with the book, then runs the entry's action. |
+| `core.settings` | nothing: the groups; `params::ID`: the settings of that group; `params::FOCUS`: the page of that setting, focused on it | changes settings with `Command::SetSetting`, and a setting with an editor (`SettingExtra::editor`, a screen or a slot) by opening that (`Editor::open`). |
+| `core.menu` | `params::MENU`, the menu; `params::HIDE`, entries to leave out this time | shows `env.menus.items(menu)`; for an entry chosen it closes (`Command::Back`) and runs its action (`Command::RunAction`); a setting listed there it changes, or opens its editor. |
+| `core.choose-folder`, `core.choose-value` | `params::ID`, the setting | writes the folder, or the value, chosen to the setting. Name the slot as the editor (`SettingExtra::editor_slot`) to have it edited there by whichever plugin fills it. |
+| `core.choice` | `params::TITLE`, `PATH` (what it is about), the options, `REPLY`; asked with `ask::choice` | shows the options; for one chosen it closes and emits the reply as a `Picked` with the option and `path`; *Back* or a tap outside closes without one. |
+| `core.keyboard` | `params::TITLE`, `TEXT` (to start from), `MODE` (`text`, `number`, `password`), `REPLY`, `LIVE` | on confirming, closes and emits the event named by `reply` as a `Typed` with all of its parameters; with `live`, on each change too, with `Typed::typing` set; *Back* closes without an answer. `ask::text` asks this way. |
+
+The documentation of `builtin::slots` says the same for every slot.
+
+### Which one wins
+
+- **Slots.** The screen the user chose in `[slots]`; else the binding
+  with the highest `Priority` (`FALLBACK`, `DEFAULT`, `PREFERRED`, or
+  any number); between equal priorities, the one registered later,
+  that is of the plugin loaded later.
+- **Key bindings.** A later source overrides an earlier one for the
+  same button or gesture: the plugins' `add_keymap`, in the order the
+  plugins load; then their `add_keymap_when` while its switch is on, so
+  these override the plugins' plain bindings; then the device's, the
+  preset the user chose, and the user's own `[keymap.*]`. A plugin's
+  binding never overrides the device's, the preset's or the user's.
+- **Menus.** Entries in their `order`, equal orders in the order they
+  were added; a menu the user redefined in their order, with entries
+  contributed since after their neighbour.
+
+### Examples
+
+A format: files with these extensions open as a `Document`.
+
+```rust
+r.add_format(FormatSpec::new(
+    Id::new_static("notes.format"),
+    "notes.format",
+    vec![Cow::Borrowed("note")],
+    Box::new(|storage, path, _options| Notes::open(storage, path)),
+))?;
+```
+
+A status item: what a status line shows, `None` to hide it; tapped, it
+opens the notes. Where a line is full, items of a low priority give way
+first.
+
+```rust
+r.add_status_item(
+    StatusItemSpec::new(
+        Id::new_static("notes.count"),
+        "notes.count",
+        Box::new(|env, _| Some(StatusValue::Text(count(env).to_string()))),
+    )
+    .tap(|_, _| Some(Command::OpenScreen(Id::new_static("notes.list"), Params::new())))
+    .priority(96),
+)?;
+```
+
+An input filter: it sees every button and finger first.
+
+```rust
+r.add_input_filter(InputFilterSpec::new(
+    Id::new_static("lock.filter"),
+    "lock.filter",
+    Box::new(|env, _input| if locked(env) { InputVerdict::Take } else { InputVerdict::Pass }),
+))?;
+```
+
+A request and its answer: the reply event brings the `HttpReply`.
+
+```rust
+const FETCHED: Event<HttpReply> = Event::new("news.fetched");
+// In an action or a screen:
+out.push(Command::Http(HttpRequest::get("https://example.org/feed", &FETCHED)));
+// When registering:
+r.on(FETCHED, |_env, reply, out| {
+    if reply.status == 200 {
+        out.push(Command::Notify(headline(&reply.body)));
+    }
+})?;
+```
+
+A timer: the work's event comes at that time, here each hour.
+
+```rust
+const TICK: Event<()> = Event::new("weather.tick");
+out.push(Command::Work(
+    Work::at(&TICK, env.now.add_millis(60 * 60 * 1000)).every(Duration::from_secs(3600)),
+));
+r.on(TICK, |_env, _, out| out.push(Command::Http(HttpRequest::get(FORECAST, &FETCHED))))?;
+```
+
 ### What every reader offers
 
 A plugin that works with books never names the reader plugin: it uses
 what `builtin` defines for every reader, so a reader of one's own (bound
-to `core.reader`) replaces the shipped one in full.
+to `core.reader`) replaces the shipped one in full. A reader of some
+formats only registers as a reading app instead (`readers::ReaderSpec`,
+`Registrar::add_reader`): books open in the app chosen for them, and
+whatever opens a book opens it with `readers::open(path)` (never by
+opening `slots::READER` itself). The reader chooses with
+`readers::ask_once` (*Open with …* in the book menu: this time, or kept
+when asked; plugins add other ways to open a book to `menus::OPEN_WITH`),
+`readers::ask` (a book's or a folder's reading app, kept) and in the reading
+settings (`settings::READING_APP`, and one per format that more than one
+app reads). A reading app's screen is its own; one that cannot open a
+book after all answers `readers::cannot_open` instead of an error of
+its own, and the next app in that order opens it. One reading app is
+open at a time. What moves folders calls `readers::folder_moved`, so
+that their choices go along; a shell opens a book with
+`Kernel::open_book`.
 
 | What | Standard | |
 |---|---|---|
@@ -572,6 +703,7 @@ every view of it.
 | Something of one book changed | `events::BOOK_CHANGED` (`library::changed_book`, bits of `library::what`) | finished, a favourite, read further, details, cover, a field |
 | A book came | `events::BOOK_ADDED` (`library::added(path, source)`) | transfers, syncs and downloads send it |
 | What can be done with a book | `menus::BOOK`, `events::BOOK_CHOSEN` | add an action to the menu, hear which book it was chosen for |
+| Another way to open a book | `menus::OPEN_WITH`, `events::BOOK_CHOSEN` | add an action to the list of *Open with …*, beside the reading apps; it hears the book as the book menu's actions do |
 | A book's information | `slots::BOOK_INFO` | lists the fields of `add_book_field` |
 | Where the books are | `settings::LIBRARY_FOLDER` (`library::folder(env)`) | the kernel's setting, chosen with `screens::FOLDER_EDITOR` (the folder chooser of `slots::CHOOSE_FOLDER`) |
 
@@ -896,6 +1028,23 @@ it (`Command::PreviewSettings`: the values show on every screen without
 being kept, until the screen that asked closes) and keep it
 (`presets::commands`).
 
+A theme is a preset of the kind `core.theme` (`presets::THEME`): values
+for the appearance settings. Where any plugin brings one, the
+appearance settings begin with *Theme*, which lists them; the one
+chosen gives the appearance settings its values and those it leaves
+out their defaults, so two themes installed never fight. A data plugin
+brings themes in its `presets.ini`:
+
+```ini
+[paw]
+kind = core.theme
+name = Paw
+description = Round and friendly: a frame for the focus, no lines.
+core.ui-corners = core.corners.soft
+core.ui-focus = core.focus.ring
+core.ui-separators = core.separators.none
+```
+
 ### Passwords and keys
 
 Plugins keep passwords, API keys and tokens with
@@ -905,7 +1054,12 @@ and keys*, where the user changes or removes them. Ask for one on the
 keyboard in password mode (`params::MODE` `password`); the keyboard
 offers to type it on a phone. They are kept apart from the settings and
 not readable at a glance, but not encrypted: the devices have no safe
-place for a key.
+place for a key. A plugin sees its own alone: name them in its
+namespace (`myplugin.token`); `env.secrets.get` gives another plugin's
+none, and `env.secrets.listed()` names every secret without its value.
+A setting marked `secret()` is kept the same way. Native code is not
+sandboxed and could go past this; the SDK hands no plugin another's
+secret.
 
 ### The network
 
@@ -1130,7 +1284,7 @@ plugins/large-print/
   plugin.ini     [plugin] id, name, description, version, formats
   i18n/*.ini     translation catalogs (also whole new languages)
   keymap.ini     key bindings
-  settings.ini   new defaults for any plugin's settings ([reader] font-size = 14)
+  settings.ini   new defaults for any plugin's settings ([core] font-size = 14)
   fonts/*.ttf    fonts to read with (also .otf, .ttc), by family
   fonts/*.ppfp   packs with letters other fonts lack, named in plugin.ini:
                  [extends] cyrillic.ppfp = fonts-default.literata

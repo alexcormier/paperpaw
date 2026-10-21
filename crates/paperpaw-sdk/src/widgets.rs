@@ -156,18 +156,35 @@ pub trait Widget {
 pub type WidgetFactory = Box<dyn Fn(&Env<'_>) -> Box<dyn Widget>>;
 
 /// A place in a widget that does something: a tap on it, or confirm
-/// once buttons moved the focus there, runs `command`.
+/// once buttons moved the focus there, runs `command` (a tap alone where
+/// it is [`touch`](Self::touch)).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct WidgetTarget {
     pub area: Rect,
     pub command: crate::Command,
+    /// Tapped only: the buttons' focus does not stop there (what it does
+    /// is reached otherwise, e.g. by an action bound to a button).
+    pub touch: bool,
 }
 
 impl WidgetTarget {
     /// Made of what it needs; the rest as set with its methods.
     pub fn new(area: Rect, command: crate::Command) -> Self {
-        Self { area, command }
+        Self {
+            area,
+            command,
+            touch: false,
+        }
+    }
+
+    /// A place that does something when tapped, which the buttons' focus
+    /// leaves out.
+    pub fn touch(area: Rect, command: crate::Command) -> Self {
+        Self {
+            touch: true,
+            ..Self::new(area, command)
+        }
     }
 }
 
@@ -246,6 +263,7 @@ impl fmt::Debug for WidgetSpec {
 /// A widget that only draws, as functions ([`WidgetSpec::drawn`]): for
 /// widgets with nothing to read from the storage, such as a clock.
 #[derive(Clone, Copy)]
+#[non_exhaustive]
 pub struct Drawn {
     /// The height it needs for a width.
     pub height: fn(&Env<'_>, u16) -> u16,
@@ -254,6 +272,9 @@ pub struct Drawn {
     /// What it shows now, as text (e.g. the time): when that changes, it
     /// is drawn again. Without it, it is drawn when its screen is.
     pub shows: Option<fn(&Env<'_>) -> String>,
+    /// The places in it that do something, drawn in an area (see
+    /// [`Widget::targets`]).
+    pub targets: Option<fn(&Env<'_>, Rect) -> Vec<WidgetTarget>>,
 }
 
 impl Drawn {
@@ -266,6 +287,15 @@ impl Drawn {
             height,
             draw,
             shows: None,
+            targets: None,
+        }
+    }
+
+    /// The places in it that do something, drawn in an area.
+    pub fn targets(self, targets: fn(&Env<'_>, Rect) -> Vec<WidgetTarget>) -> Self {
+        Self {
+            targets: Some(targets),
+            ..self
         }
     }
 
@@ -307,6 +337,12 @@ impl Widget for DrawnWidget {
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         (self.drawn.draw)(canvas, env, area);
+    }
+
+    fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        self.drawn
+            .targets
+            .map_or_else(Vec::new, |targets| targets(env, area))
     }
 }
 

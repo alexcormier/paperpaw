@@ -86,6 +86,23 @@ impl Plugin for Probe {
         r.add_action(ActionSpec::new(APP, "probe.app").handler(|_, _| {}))?;
         r.add_menu_entry(MenuEntry::new(menus::APPS, APP))?;
         r.add_icon(APP, "puzzle".into())?;
+        // A status item that switches `OTHER` on when tapped.
+        r.add_status_item(
+            paperpaw_sdk::StatusItemSpec::new(
+                Id::new_static("probe.status"),
+                "probe.status",
+                Box::new(|_, _| Some(paperpaw_sdk::StatusValue::Text("Probe".into()))),
+            )
+            .tap(Id::new_static("probe.switch")),
+        )?;
+        r.add_action(
+            ActionSpec::new(Id::new_static("probe.switch"), "probe.switch").handler(|_, out| {
+                out.push(paperpaw_sdk::Command::SetSetting(
+                    Id::new_static("probe.other"),
+                    paperpaw_sdk::SettingValue::Bool(true),
+                ));
+            }),
+        )?;
         r.add_translations(
             "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\nprobe.app = Probe app\n"
                 .into(),
@@ -206,6 +223,11 @@ impl Home {
             i32::from(area.x) + i32::from(area.width) / 2,
             i32::from(area.y) + i32::from(area.height) / 2,
         );
+        self.tap(at);
+    }
+
+    /// A tap at `at`.
+    fn tap(&mut self, at: Point) {
         for phase in [PointerPhase::Down, PointerPhase::Up] {
             self.now += 50;
             let event = InputEvent::Pointer(PointerEvent {
@@ -442,9 +464,44 @@ fn the_focus_on_the_home_screen_is_told() {
     assert_eq!(focused(&mut home).as_deref(), Some("Library"));
 }
 
+/// Every tool is a button named after its action, its name shown or not,
+/// so that each can be told apart and followed; the focus on one of them.
+#[test]
+fn every_tool_is_told_by_its_name() {
+    for labels in ["on", "off"] {
+        let mut home = Home::new(
+            false,
+            &format!(
+                "tool-labels = {labels}\npage-1 = tool:core.settings 0/0 1x1, tool:core.library 1/0 1x1\n"
+            ),
+        );
+        home.run(actions::NEXT);
+        let buttons = home.buttons();
+        for name in ["Settings", "Library"] {
+            let found: Vec<_> = buttons.iter().filter(|(n, _)| n == name).collect();
+            assert_eq!(found.len(), 1, "{labels}: {name} in {buttons:?}");
+        }
+        let focused: Vec<_> = buttons.iter().filter(|(_, f)| *f).collect();
+        assert_eq!(focused, [&(String::from("Settings"), true)], "{labels}");
+    }
+}
+
 #[test]
 fn what_there_is_to_open_shows_with_the_tools() {
     let mut home = Home::new(true, "page-1 = home.tools 0/0 4x6\nstatus-bar = false\n");
     let shown = home.texts();
     assert!(shown.iter().any(|(l, _)| l == "Probe app"), "{shown:?}");
+}
+
+/// An item of the status line above the grid that does something when
+/// tapped does it.
+#[test]
+fn a_tapped_status_item_above_the_grid_does_what_it_says() {
+    let mut home = Home::new(
+        true,
+        "status-bar = true\nstatus.left = probe.status\nstatus.center =\nstatus.right =\n",
+    );
+    assert!(!home.kernel.settings().bool("probe.other"));
+    home.tap(Point::new(36, 24));
+    assert!(home.kernel.settings().bool("probe.other"));
 }

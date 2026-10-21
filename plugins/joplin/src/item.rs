@@ -10,7 +10,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 
 use paperpaw_sdk::digest::md5::Md5;
-use paperpaw_sdk::time::LocalTime;
+use paperpaw_sdk::time::parse_iso8601;
 use paperpaw_sdk::{Storage, StorageError};
 
 use crate::markdown;
@@ -48,43 +48,6 @@ pub fn is_id(text: &str) -> bool {
 /// The file of item `id` in a sync target.
 pub fn file_name(id: &str) -> String {
     format!("{id}.md")
-}
-
-/// `ms` since 1970 (UTC) as Joplin writes times:
-/// `2026-10-19T22:24:10.090Z`.
-pub fn time(ms: i64) -> String {
-    let t = LocalTime::from_seconds(ms.div_euclid(1000));
-    format!(
-        "{:04}-{:02}-{:02}T{:02}:{:02}:{:02}.{:03}Z",
-        t.year,
-        t.month,
-        t.day,
-        t.hour,
-        t.minute,
-        t.second,
-        ms.rem_euclid(1000)
-    )
-}
-
-/// A [`time`] as ms since 1970 (UTC).
-pub fn parse_time(text: &str) -> Option<i64> {
-    let (date, clock) = text.strip_suffix('Z')?.split_once('T')?;
-    let mut d = date.splitn(3, '-');
-    let year = d.next()?.parse().ok()?;
-    let (month, day) = (d.next()?.parse().ok()?, d.next()?.parse().ok()?);
-    let (hms, ms) = clock.split_once('.').unwrap_or((clock, "0"));
-    let mut t = hms.splitn(3, ':').map(str::parse::<u8>);
-    let (hour, minute, second) = (t.next()?.ok()?, t.next()?.ok()?, t.next()?.ok()?);
-    let time = LocalTime {
-        year,
-        month,
-        day,
-        hour,
-        minute,
-        second,
-        weekday: 0,
-    };
-    Some(time.to_seconds() * 1000 + ms.parse::<i64>().ok()?)
 }
 
 /// A property's value on one line, escaped as Joplin escapes it: a line
@@ -140,7 +103,7 @@ pub fn parse_props(text: &str) -> Props {
             "type_" => props.kind = value.parse().unwrap_or(0),
             "parent_id" => props.parent = value.to_string(),
             "created_time" => props.created = value.to_string(),
-            "updated_time" => props.updated = parse_time(value).unwrap_or(0),
+            "updated_time" => props.updated = parse_iso8601(value).unwrap_or(0),
             "user_created_time" => props.user_created = value.to_string(),
             "order" => props.order = value.parse().unwrap_or(0),
             "deleted_time" => props.deleted = !matches!(value, "" | "0"),
@@ -270,13 +233,13 @@ mod tests {
 
     #[test]
     fn times_as_joplin_writes_them() {
-        assert_eq!(time(1_792_448_650_090), "2026-10-19T22:24:10.090Z");
-        assert_eq!(time(0), "1970-01-01T00:00:00.000Z");
+        use paperpaw_sdk::time::iso8601;
+        assert_eq!(iso8601(1_792_448_650_090), "2026-10-19T22:24:10.090Z");
+        assert_eq!(iso8601(0), "1970-01-01T00:00:00.000Z");
         for ms in [0, 951_782_400_123, 1_792_448_650_090, 4_107_542_399_999] {
-            assert_eq!(parse_time(&time(ms)), Some(ms));
+            assert_eq!(parse_iso8601(&iso8601(ms)), Some(ms));
         }
-        assert_eq!(parse_time("2026-10-19"), None);
-        assert_eq!(parse_time(""), None);
+        assert_eq!(parse_iso8601(""), None);
     }
 
     #[test]

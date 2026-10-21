@@ -326,3 +326,766 @@ proptest! {
         prop_assert_eq!(second.secrets().get("drv.key"), Some(value.as_str()));
     }
 }
+
+/// Sets looks for the parts of screens; its home screen tells which look
+/// its style has.
+struct Looks {
+    name: &'static str,
+    looks: Vec<(
+        &'static paperpaw_core::sdk::ui::look::Painters,
+        paperpaw_core::sdk::Priority,
+    )>,
+    seen: Rc<std::cell::RefCell<String>>,
+}
+
+struct LookScreen(Rc<std::cell::RefCell<String>>);
+
+impl paperpaw_core::sdk::Screen for LookScreen {
+    fn draw(&mut self, _: &mut paperpaw_core::sdk::Canvas<'_>, env: &paperpaw_core::sdk::Env<'_>) {
+        let style = paperpaw_core::sdk::ui::UiStyle::new(env);
+        *self.0.borrow_mut() = format!("{:?}", style.look);
+    }
+
+    fn on_action(
+        &mut self,
+        _: &paperpaw_core::sdk::Id,
+        _: &mut paperpaw_core::sdk::Cx<'_, '_>,
+    ) -> paperpaw_core::sdk::Handled {
+        paperpaw_core::sdk::Handled::No
+    }
+}
+
+impl Plugin for Looks {
+    fn manifest(&self) -> Manifest {
+        common::manifest(self.name)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        for (painters, priority) in &self.looks {
+            r.set_ui_look(painters, *priority)?;
+        }
+        if self.name == "looks-a" {
+            let screen = paperpaw_core::sdk::Id::new_static("looks-a.home");
+            let seen = self.seen.clone();
+            r.add_screen(paperpaw_core::sdk::ScreenSpec::new(
+                screen.clone(),
+                "looks-a.home",
+                Box::new(move |_, _| Box::new(LookScreen(seen.clone()))),
+            ))?;
+            r.bind_slot(slots::HOME, screen, paperpaw_core::sdk::Priority(1000))?;
+        }
+        Ok(())
+    }
+}
+
+#[test]
+fn the_look_of_the_highest_priority_is_used_of_equal_ones_the_later() {
+    use paperpaw_core::sdk::Priority;
+    use paperpaw_core::sdk::ui::UiStyle;
+    use paperpaw_core::sdk::ui::look::{FocusPart, Painters, SwitchPart};
+    fn switch(_: &mut paperpaw_core::sdk::Canvas<'_>, _: &UiStyle, _: &SwitchPart) -> bool {
+        true
+    }
+    fn focus(_: &mut paperpaw_core::sdk::Canvas<'_>, _: &UiStyle, _: &FocusPart) -> bool {
+        true
+    }
+    static PLAIN: Painters = Painters::new();
+    static SWITCHES: Painters = Painters::new().switch(switch);
+    static FOCUS: Painters = Painters::new().focus(focus);
+    let seen = Rc::new(std::cell::RefCell::new(String::new()));
+    let looks = |name, looks| Looks {
+        name,
+        looks,
+        seen: seen.clone(),
+    };
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(looks("looks-a", vec![(&PLAIN, Priority::DEFAULT)]))
+        .plugin(looks("looks-b", vec![(&SWITCHES, Priority::PREFERRED)]))
+        .plugin(looks(
+            "looks-c",
+            vec![(&FOCUS, Priority::PREFERRED), (&PLAIN, Priority::FALLBACK)],
+        ))
+        .storage(MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    common::render(&mut kernel);
+    assert_eq!(*seen.borrow(), format!("{:?}", FOCUS));
+}
+
+/// Fills the choice slot with a screen of its own.
+struct Asker {
+    bind: bool,
+}
+
+impl Plugin for Asker {
+    fn manifest(&self) -> Manifest {
+        common::manifest("asker")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        if self.bind {
+            let screen = paperpaw_core::sdk::Id::new_static("asker.choice");
+            let seen = Rc::new(std::cell::RefCell::new(String::new()));
+            r.add_screen(paperpaw_core::sdk::ScreenSpec::new(
+                screen.clone(),
+                "asker.choice",
+                Box::new(move |_, _| Box::new(LookScreen(seen.clone()))),
+            ))?;
+            r.bind_slot(slots::CHOICE, screen, paperpaw_core::sdk::Priority::DEFAULT)?;
+        }
+        Ok(())
+    }
+}
+
+/// Every plugin's questions go to slot `core.choice`: the kernel's
+/// dialog, or the screen another plugin binds there.
+#[test]
+fn questions_are_asked_where_the_choice_slot_says() {
+    use paperpaw_core::sdk::event::Event;
+    use paperpaw_core::sdk::ui::choice::Picked;
+    const CHOSEN: Event<Picked> = Event::new("asker.chosen");
+    for (bind, expected) in [(false, "core.choice-dialog"), (true, "asker.choice")] {
+        let mut kernel = Kernel::builder(DEVICE)
+            .plugin(Asker { bind })
+            .storage(MemoryStorage::new())
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        let paperpaw_core::sdk::Command::OpenSlot(slot, params) =
+            paperpaw_core::sdk::ask::choice("Delete?", &CHOSEN)
+                .options("asker.option.", &["delete", "cancel"])
+                .command()
+        else {
+            panic!("a slot");
+        };
+        kernel.open_slot(Instant(100), slot, params);
+        common::render(&mut kernel);
+        assert_eq!(kernel.active_screen().map(|s| s.as_str()), Some(expected));
+    }
+}
+
+/// A name typed for a setting, and a number whose check refuses large
+/// values.
+struct Checked;
+
+fn at_most_five(
+    _: &paperpaw_core::sdk::Settings,
+    value: &paperpaw_core::sdk::SettingValue,
+) -> Result<(), &'static str> {
+    match value {
+        paperpaw_core::sdk::SettingValue::Int(n) if *n > 5 => Err("checked.too-large"),
+        _ => Ok(()),
+    }
+}
+
+static AT_MOST_FIVE: paperpaw_core::sdk::SettingExtra =
+    paperpaw_core::sdk::SettingExtra::new().check(at_most_five);
+static CHECKED_SETTINGS: [paperpaw_core::sdk::SettingSpec; 2] = [
+    paperpaw_core::sdk::SettingSpec::fixed_text(
+        "checked.name",
+        "checked.name",
+        "",
+        paperpaw_core::sdk::builtin::groups::OTHER,
+    ),
+    paperpaw_core::sdk::SettingSpec::fixed_number(
+        "checked.count",
+        "checked.count",
+        1,
+        9,
+        3,
+        paperpaw_core::sdk::builtin::groups::OTHER,
+    )
+    .with_extra(&AT_MOST_FIVE),
+];
+
+impl Plugin for Checked {
+    fn manifest(&self) -> Manifest {
+        common::manifest("checked")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_settings(&CHECKED_SETTINGS)
+    }
+}
+
+/// Text typed for a setting is set by the kernel, whichever screen asked;
+/// a value the setting's check refuses is not set, and the reader is told.
+#[test]
+fn typed_settings_are_set_and_refused_values_told() {
+    use paperpaw_core::sdk::builtin::{events, params};
+    use paperpaw_core::sdk::event::EventData;
+    let harness = Harness::default();
+    let mut kernel = kernel_with(&harness, Checked);
+    let typed =
+        paperpaw_core::sdk::Typed::new("  Ann ", Params::new().with(params::ID, "checked.name"));
+    kernel.send_event(
+        Instant(100),
+        events::SETTING_TYPED.id().clone(),
+        typed.to_params(),
+    );
+    common::render(&mut kernel);
+    assert_eq!(kernel.settings().text("checked.name"), "Ann");
+    // An answer while still typing sets nothing.
+    let typing =
+        paperpaw_core::sdk::Typed::new("An", Params::new().with(params::ID, "checked.name"))
+            .while_typing();
+    kernel.send_event(
+        Instant(150),
+        events::SETTING_TYPED.id().clone(),
+        typing.to_params(),
+    );
+    common::render(&mut kernel);
+    assert_eq!(kernel.settings().text("checked.name"), "Ann");
+    // Refused: a notice shows, until its time is up.
+    let effects = kernel
+        .set_setting(Instant(200), "checked.count", "7")
+        .unwrap();
+    assert_eq!(kernel.settings().int("checked.count"), 3);
+    assert_eq!(effects.wake_at(), Some(Instant(4_200)));
+    common::render(&mut kernel);
+    let effects = kernel
+        .set_setting(Instant(300), "checked.count", "4")
+        .unwrap();
+    assert_eq!(kernel.settings().int("checked.count"), 4);
+    assert_eq!(effects.wake_at(), Some(Instant(4_200)), "no new notice");
+}
+
+fn kernel_with(harness: &Harness, plugin: impl Plugin + 'static) -> Kernel {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(harness.plugin())
+        .plugin(plugin)
+        .storage(MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    common::render(&mut kernel);
+    harness.take();
+    kernel
+}
+
+/// Two buttons, the focus on one of them, moved by *Down*; and the parts
+/// where the focus goes, heard.
+struct Focused {
+    heard: Rc<std::cell::RefCell<Vec<String>>>,
+    /// Its buttons are a PIN's keys.
+    secret: bool,
+}
+
+struct TwoButtons(usize, bool);
+
+impl paperpaw_core::sdk::Screen for TwoButtons {
+    fn draw(
+        &mut self,
+        canvas: &mut paperpaw_core::sdk::Canvas<'_>,
+        _: &paperpaw_core::sdk::Env<'_>,
+    ) {
+        use paperpaw_core::sdk::semantics::Role;
+        for (i, label) in ["First", "Second"].iter().enumerate() {
+            let area = paperpaw_core::sdk::Rect::new(0, 40 * i as u16, 100, 40);
+            canvas.describe(Role::Button, label, area, self.0 == i, None);
+        }
+    }
+
+    fn secret(&self) -> bool {
+        self.1
+    }
+
+    fn on_action(
+        &mut self,
+        action: &paperpaw_core::sdk::Id,
+        cx: &mut paperpaw_core::sdk::Cx<'_, '_>,
+    ) -> paperpaw_core::sdk::Handled {
+        if *action == paperpaw_core::sdk::builtin::actions::DOWN {
+            self.0 = (self.0 + 1) % 2;
+            cx.request_redraw();
+            return paperpaw_core::sdk::Handled::Yes;
+        }
+        paperpaw_core::sdk::Handled::No
+    }
+}
+
+impl Plugin for Focused {
+    fn manifest(&self) -> Manifest {
+        common::manifest("focused")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let screen = paperpaw_core::sdk::Id::new_static("focused.home");
+        r.add_screen(paperpaw_core::sdk::ScreenSpec::new(
+            screen.clone(),
+            "focused.home",
+            {
+                let secret = self.secret;
+                Box::new(move |_, _| Box::new(TwoButtons(0, secret)))
+            },
+        ))?;
+        r.bind_slot(slots::HOME, screen, paperpaw_core::sdk::Priority(1000))?;
+        let heard = self.heard.clone();
+        r.on(events::FOCUS_CHANGED, move |_, focus, _| {
+            heard
+                .borrow_mut()
+                .push(format!("{} {} {}", focus.role, focus.label, focus.y));
+        })
+    }
+}
+
+/// A plugin that listens hears where the focus goes, once each time.
+#[test]
+fn plugins_hear_where_the_focus_goes() {
+    let heard = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Focused {
+            heard: heard.clone(),
+            secret: false,
+        })
+        .storage(MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    common::render(&mut kernel);
+    common::press(&mut kernel, 100, "down");
+    common::press(&mut kernel, 300, "down");
+    assert_eq!(
+        *heard.borrow(),
+        ["button Second 40", "button First 0"],
+        "the start's focus is told with the first move"
+    );
+}
+
+/// The keys of a PIN or a password are never told: the screen is secret.
+#[test]
+fn the_focus_on_a_secret_screen_is_not_told() {
+    let heard = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Focused {
+            heard: heard.clone(),
+            secret: true,
+        })
+        .storage(MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    common::render(&mut kernel);
+    common::press(&mut kernel, 100, "down");
+    common::press(&mut kernel, 300, "down");
+    assert!(heard.borrow().is_empty(), "{:?}", heard.borrow());
+}
+
+/// Listens to the answers typed for settings: it must never hear a
+/// password.
+struct Spy {
+    heard: Rc<std::cell::RefCell<Vec<String>>>,
+}
+
+impl Plugin for Spy {
+    fn manifest(&self) -> Manifest {
+        common::manifest("spy")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let heard = self.heard.clone();
+        r.on(
+            paperpaw_core::sdk::builtin::events::SETTING_TYPED,
+            move |_, typed, _| {
+                heard.borrow_mut().push(typed.text.clone());
+            },
+        )
+    }
+}
+
+/// A password typed reaches the plugin that asked for it alone; an
+/// answer that is no password reaches everyone who listens.
+#[test]
+fn passwords_typed_reach_the_asker_alone() {
+    use paperpaw_core::sdk::builtin::{events, params};
+    use paperpaw_core::sdk::event::EventData;
+    let heard = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Checked)
+        .plugin(Spy {
+            heard: heard.clone(),
+        })
+        .storage(MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let answer = |text: &str, mode: Option<&str>| {
+        let mut context = Params::new().with(params::ID, "checked.name");
+        if let Some(mode) = mode {
+            context.set(params::MODE, mode);
+        }
+        paperpaw_core::sdk::Typed::new(text, context).to_params()
+    };
+    kernel.send_event(
+        Instant(100),
+        events::SETTING_TYPED.id().clone(),
+        answer("s3cret", Some("password")),
+    );
+    // The kernel, which asked, set it; the spy heard nothing.
+    assert_eq!(kernel.settings().text("checked.name"), "s3cret");
+    assert!(heard.borrow().is_empty(), "{:?}", heard.borrow());
+    kernel.send_event(
+        Instant(200),
+        events::SETTING_TYPED.id().clone(),
+        answer("Ann", None),
+    );
+    assert_eq!(*heard.borrow(), ["Ann"]);
+}
+
+/// An input filter that counts what it sees.
+struct Watcher {
+    seen: Rc<std::cell::Cell<u32>>,
+}
+
+impl Plugin for Watcher {
+    fn manifest(&self) -> Manifest {
+        common::manifest("watcher")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let seen = self.seen.clone();
+        r.add_input_filter(paperpaw_core::sdk::filters::InputFilterSpec::new(
+            paperpaw_core::sdk::Id::new_static("watcher.filter"),
+            "watcher.filter",
+            Box::new(move |_, _| {
+                seen.set(seen.get() + 1);
+                paperpaw_core::sdk::filters::InputVerdict::Pass
+            }),
+        ))
+    }
+}
+
+/// While a PIN or a password is entered, other plugins' input filters
+/// see none of its keys.
+#[test]
+fn input_filters_see_no_key_of_a_secret() {
+    for secret in [false, true] {
+        let seen = Rc::new(std::cell::Cell::new(0));
+        let mut kernel = Kernel::builder(DEVICE)
+            .plugin(Focused {
+                heard: Rc::new(std::cell::RefCell::new(Vec::new())),
+                secret,
+            })
+            .plugin(Watcher { seen: seen.clone() })
+            .storage(MemoryStorage::new())
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        common::render(&mut kernel);
+        common::press(&mut kernel, 100, "down");
+        assert_eq!(seen.get() > 0, !secret, "secret {secret}");
+    }
+}
+
+static VAULT_SETTINGS: [paperpaw_core::sdk::SettingSpec; 3] = [
+    paperpaw_core::sdk::SettingSpec::fixed_text(
+        "vault.key",
+        "vault.key",
+        "",
+        paperpaw_core::sdk::builtin::groups::OTHER,
+    )
+    .with_extra(&KEPT_SECRET),
+    paperpaw_core::sdk::SettingSpec::fixed_text(
+        "vault.box.note",
+        "vault.box.note",
+        "",
+        paperpaw_core::sdk::builtin::groups::OTHER,
+    ),
+    // Keeps the device safe: only its plugin and the settings editor
+    // change it.
+    paperpaw_core::sdk::SettingSpec::fixed_text(
+        "vault.pin",
+        "vault.pin",
+        "",
+        paperpaw_core::sdk::builtin::groups::OTHER,
+    )
+    .guarded(),
+];
+static KEPT_SECRET: paperpaw_core::sdk::SettingExtra =
+    paperpaw_core::sdk::SettingExtra::new().secret();
+
+/// What the plugins heard changed: `<plugin> <params>`.
+type Heard = Rc<std::cell::RefCell<Vec<String>>>;
+
+/// A plugin with a secret setting (`vault.key`) and one a widget's
+/// placements have (`vault.box.note`), when named `vault`; it forgets the
+/// secret on `vault.forget`. Any name logs the settings it hears changed.
+struct Vault {
+    name: &'static str,
+    heard: Heard,
+}
+
+impl Plugin for Vault {
+    fn manifest(&self) -> Manifest {
+        common::manifest(self.name)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        if self.name == "vault" {
+            r.add_settings(&VAULT_SETTINGS)?;
+            r.subscribe(
+                paperpaw_core::sdk::Id::new_static("vault.forget"),
+                Box::new(|_, _, out| {
+                    out.push(paperpaw_core::sdk::Command::ResetSetting(
+                        paperpaw_core::sdk::Id::new_static("vault.key"),
+                    ));
+                }),
+            )?;
+            r.subscribe(
+                paperpaw_core::sdk::Id::new_static("vault.ask"),
+                Box::new(|_, _, out| out.push(ask_keyboard("vault.key"))),
+            )?;
+        }
+        if self.name == "spy" {
+            // Tries to overwrite the vault's secret: set, typed for, reset.
+            r.subscribe(
+                paperpaw_core::sdk::Id::new_static("spy.try"),
+                Box::new(|_, _, out| {
+                    use paperpaw_core::sdk::builtin::params;
+                    use paperpaw_core::sdk::event::EventData;
+                    let key = paperpaw_core::sdk::Id::new_static("vault.key");
+                    out.push(paperpaw_core::sdk::Command::SetSetting(
+                        key.clone(),
+                        paperpaw_core::sdk::SettingValue::Text("spy-set".into()),
+                    ));
+                    let typed = paperpaw_core::sdk::Typed::new(
+                        "spy-typed",
+                        Params::new().with(params::ID, "vault.key"),
+                    );
+                    out.push(paperpaw_core::sdk::Command::Emit(
+                        events::SETTING_TYPED.id().clone(),
+                        typed.to_params(),
+                    ));
+                    out.push(paperpaw_core::sdk::Command::ResetSetting(key));
+                    // Asked of the keyboard, read from the clipboard, for
+                    // the secret and for the guarded setting.
+                    for id in ["vault.key", "vault.pin"] {
+                        out.push(ask_keyboard(id));
+                        out.push(paperpaw_core::sdk::Command::SetClipboard("spy-clip".into()));
+                        out.push(paperpaw_core::sdk::Command::ReadClipboard(
+                            events::SETTING_TYPED.id().clone(),
+                            Params::new().with(params::ID, id),
+                        ));
+                    }
+                    let typed = paperpaw_core::sdk::Typed::new(
+                        "spy-typed",
+                        Params::new().with(params::ID, "vault.pin"),
+                    );
+                    out.push(paperpaw_core::sdk::Command::Emit(
+                        events::SETTING_TYPED.id().clone(),
+                        typed.to_params(),
+                    ));
+                }),
+            )?;
+        }
+        let (name, heard) = (self.name, self.heard.clone());
+        r.subscribe(
+            events::SETTING_CHANGED.id().clone(),
+            Box::new(move |_, params, _| heard.borrow_mut().push(format!("{name} {params:?}"))),
+        )
+    }
+}
+
+/// Asks the keyboard for text for setting `id`, answered to the kernel.
+fn ask_keyboard(id: &str) -> paperpaw_core::sdk::Command {
+    use paperpaw_core::sdk::builtin::{params, slots};
+    paperpaw_core::sdk::Command::OpenSlot(
+        slots::KEYBOARD,
+        Params::new()
+            .with(params::ID, id)
+            .with(params::REPLY, events::SETTING_TYPED.as_str()),
+    )
+}
+
+/// A keyboard that answers at once what it is asked, with `keyed`.
+struct Keys;
+
+impl Plugin for Keys {
+    fn manifest(&self) -> Manifest {
+        common::manifest("keys")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        use paperpaw_core::sdk::builtin::slots;
+        let screen = paperpaw_core::sdk::Id::new_static("keys.screen");
+        r.add_screen(paperpaw_core::sdk::ScreenSpec::new(
+            screen.clone(),
+            "keys",
+            Box::new(|_, asked| {
+                Box::new(Answering(Some(asked.clone()))) as Box<dyn paperpaw_core::sdk::Screen>
+            }),
+        ))?;
+        r.bind_slot(
+            slots::KEYBOARD,
+            screen,
+            paperpaw_core::sdk::Priority::DEFAULT,
+        )?;
+        Ok(())
+    }
+}
+
+/// The keyboard's screen: answers as it shows, then closes.
+struct Answering(Option<Params>);
+
+impl paperpaw_core::sdk::Screen for Answering {
+    fn draw(&mut self, _: &mut paperpaw_core::sdk::Canvas<'_>, _: &paperpaw_core::sdk::Env<'_>) {}
+
+    fn on_action(
+        &mut self,
+        _: &paperpaw_core::sdk::Id,
+        _: &mut paperpaw_core::sdk::Cx<'_, '_>,
+    ) -> paperpaw_core::sdk::Handled {
+        paperpaw_core::sdk::Handled::No
+    }
+
+    fn on_show(&mut self, cx: &mut paperpaw_core::sdk::Cx<'_, '_>) {
+        use paperpaw_core::sdk::builtin::params;
+        use paperpaw_core::sdk::event::EventData;
+        let Some(asked) = self.0.take() else {
+            return;
+        };
+        let reply = asked
+            .get(params::REPLY)
+            .and_then(|r| paperpaw_core::sdk::Id::parse(r).ok());
+        if let Some(reply) = reply {
+            let typed = paperpaw_core::sdk::Typed::new("keyed", asked.clone());
+            cx.command(paperpaw_core::sdk::Command::Emit(reply, typed.to_params()));
+        }
+        cx.command(paperpaw_core::sdk::Command::Back);
+    }
+}
+
+/// A kernel with the vault and a spy beside it, on `storage`.
+fn vault(storage: MemoryStorage) -> (Kernel, Heard) {
+    let heard = Heard::default();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Vault {
+            name: "vault",
+            heard: heard.clone(),
+        })
+        .plugin(Vault {
+            name: "spy",
+            heard: heard.clone(),
+        })
+        .plugin(Keys)
+        .storage(storage)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    (kernel, heard)
+}
+
+/// `text` typed for setting `id`, as the settings' editor sends it.
+fn type_for(kernel: &mut Kernel, now: u64, id: &str, text: &str) {
+    use paperpaw_core::sdk::builtin::params;
+    use paperpaw_core::sdk::event::EventData;
+    let typed = paperpaw_core::sdk::Typed::new(text, Params::new().with(params::ID, id));
+    kernel.send_event(
+        Instant(now),
+        events::SETTING_TYPED.id().clone(),
+        typed.to_params(),
+    );
+}
+
+/// A secret setting typed is kept with the secrets, never in the
+/// settings every plugin reads; its owner alone hears that it changed,
+/// and not to what.
+#[test]
+fn a_secret_setting_is_kept_with_the_secrets() {
+    let (mut kernel, heard) = vault(MemoryStorage::new());
+    type_for(&mut kernel, 100, "vault.key", "k-123");
+    assert_eq!(kernel.settings().text("vault.key"), "");
+    assert_eq!(kernel.secrets().get("vault.key"), Some("k-123"));
+    let told = heard.borrow().clone();
+    assert_eq!(told.len(), 1, "{told:?}");
+    assert!(
+        told[0].starts_with("vault ") && told[0].contains("vault.key"),
+        "{told:?}"
+    );
+    assert!(!told[0].contains("k-123"), "{told:?}");
+    // Set directly, the same.
+    heard.borrow_mut().clear();
+    kernel
+        .set_setting(Instant(200), "vault.key", "k-456")
+        .unwrap();
+    assert_eq!(kernel.settings().text("vault.key"), "");
+    assert_eq!(kernel.secrets().get("vault.key"), Some("k-456"));
+    let told = heard.borrow().clone();
+    assert!(told.len() == 1 && told[0].starts_with("vault "), "{told:?}");
+}
+
+/// Another plugin cannot overwrite a plugin's secret or guarded setting:
+/// not set, reset, typed for, nor asked of the keyboard or the
+/// clipboard; the plugin itself asks the keyboard for its own, which
+/// answers.
+#[test]
+fn another_plugin_cannot_overwrite_a_secret_setting() {
+    let (mut kernel, _) = vault(MemoryStorage::new());
+    type_for(&mut kernel, 100, "vault.key", "k-123");
+    kernel.send_event(
+        Instant(200),
+        paperpaw_core::sdk::Id::new_static("spy.try"),
+        Params::new(),
+    );
+    assert_eq!(kernel.secrets().get("vault.key"), Some("k-123"));
+    assert_eq!(kernel.settings().text("vault.pin"), "");
+    common::render(&mut kernel);
+    assert_eq!(kernel.secrets().get("vault.key"), Some("k-123"));
+    assert_eq!(kernel.settings().text("vault.pin"), "");
+    // Its own, asked of the keyboard by the vault: kept.
+    kernel.send_event(
+        Instant(300),
+        paperpaw_core::sdk::Id::new_static("vault.ask"),
+        Params::new(),
+    );
+    common::render(&mut kernel);
+    assert_eq!(kernel.secrets().get("vault.key"), Some("keyed"));
+}
+
+/// Reset, a secret setting goes from the secrets; its owner hears it.
+#[test]
+fn a_secret_setting_reset_goes_from_the_secrets() {
+    let (mut kernel, heard) = vault(MemoryStorage::new());
+    type_for(&mut kernel, 100, "vault.key", "k-123");
+    heard.borrow_mut().clear();
+    kernel.send_event(
+        Instant(200),
+        paperpaw_core::sdk::Id::new_static("vault.forget"),
+        Params::new(),
+    );
+    assert_eq!(kernel.secrets().get("vault.key"), None);
+    assert!(!kernel.storage().exists(SECRETS));
+    let told = heard.borrow().clone();
+    assert!(told.len() == 1 && told[0].starts_with("vault "), "{told:?}");
+}
+
+/// A secret setting kept in `paperpaw.ini` before is moved to the
+/// secrets at the start, and out of the file.
+#[test]
+fn a_secret_setting_in_the_file_moves_to_the_secrets() {
+    use paperpaw_core::sdk::builtin::CONFIG_FILE;
+    let ini = "[vault]\nkey = old-k\nbox.note = kept\n";
+    let (kernel, _) = vault(MemoryStorage::new().with(CONFIG_FILE, ini.as_bytes().to_vec()));
+    assert_eq!(kernel.secrets().get("vault.key"), Some("old-k"));
+    assert_eq!(kernel.settings().text("vault.key"), "");
+    assert_eq!(kernel.settings().text("vault.box.note"), "kept");
+    let file = paperpaw_core::sdk::read_file(kernel.storage(), CONFIG_FILE, 4096).unwrap();
+    let file = String::from_utf8(file).unwrap();
+    assert!(!file.contains("old-k"), "{file}");
+    assert!(file.contains("kept"), "{file}");
+}
+
+/// Typed for a widget's placement, the placement's value is set, not the
+/// setting's shared one.
+#[test]
+fn text_typed_for_a_placement_is_its_own() {
+    let (mut kernel, _) = vault(MemoryStorage::new());
+    type_for(&mut kernel, 100, "vault.box@2.note", "second");
+    let settings = kernel.settings();
+    assert_eq!(settings.text("vault.box.note"), "");
+    let placed = settings.with_placement(Some("vault.box@2"), || {
+        String::from(settings.text("vault.box.note"))
+    });
+    assert_eq!(placed, "second");
+}

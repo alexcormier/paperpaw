@@ -310,16 +310,20 @@ pub(super) fn draw_cards<T: Copy>(
         let width = u32::from(width);
         let mut canvas = canvas.clipped(shown);
         if style.grays >= 16 {
-            canvas.fill_round_rect(x, y, width, height, style.corner, Color::gray(CARD_GRAY));
+            canvas.fill_round_rect(
+                x,
+                y,
+                width,
+                height,
+                style.corner,
+                style.ink(super::Ink::Section),
+            );
         } else {
             let line = (style.line / 2).max(1);
             canvas.stroke_round_rect(x, y, width, height, line, style.corner, Color::BLACK);
         }
     }
 }
-
-/// The gray of cards on panels of 16 grays: the lightest gray they show.
-const CARD_GRAY: u8 = 238;
 
 /// Draws the focus of the entry in `rect`, kept off the edges of its
 /// card with [`UiStyle::cards`], its corners following the card's.
@@ -368,6 +372,8 @@ pub(super) fn card_style() -> UiStyle {
         cards: true,
         grays: 2,
         finger: 0,
+        look: crate::ui::look::Look::none(),
+        palette: crate::ui::Palette::DEFAULT,
     }
 }
 

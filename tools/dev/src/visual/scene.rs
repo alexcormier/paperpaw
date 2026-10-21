@@ -32,6 +32,8 @@ pub struct Ui {
     pub finger: u16,
     /// Width of lines (`UiStyle::line`).
     pub line: u16,
+    /// The standard gap between elements (`UiStyle::gap`, 2 mm).
+    pub gap: u16,
 }
 
 impl Ui {
@@ -490,6 +492,7 @@ mod tests {
             margin: 26,
             finger: 0,
             line: 2,
+            gap: 19,
         }
     }
 }

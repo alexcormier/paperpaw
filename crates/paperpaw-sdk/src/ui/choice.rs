@@ -1,19 +1,10 @@
 //! An overlay at the bottom with a title and a few choices, e.g. what to
-//! do with a file or whether to delete it.
-//!
-//! A plugin registers it as a screen of its own and opens it with
-//! [`open`]; the choice comes back as the plugin's reply event, a
-//! [`Picked`] with the context it was opened for and the option chosen.
-//! Tapping outside, or *Back*, chooses nothing.
-//!
-//! ```ignore
-//! r.add_screen(ScreenSpec {
-//!     id: CHOICE,
-//!     title: Cow::Borrowed("my.title"),
-//!     factory: Box::new(|env, params| Box::new(Choice::new(env, params))),
-//! })?;
-//! cx.command(choice::open(CHOICE, CHOSEN, "Delete “a.epub”?", "books/a.epub", "my.option.", &["delete", "cancel"]));
-//! ```
+//! do with a file or whether to delete it: the screen of slot
+//! [`CHOICE`](crate::builtin::slots::CHOICE), which
+//! [`ask::choice`](crate::ask::choice) asks. The choice comes back as
+//! the plugin's reply event, a [`Picked`] with the context it was asked
+//! for and the option chosen. Tapping outside, or *Back*, chooses
+//! nothing.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -37,16 +28,20 @@ crate::event_data! {
         pub option: alloc::string::String,
     }
 }
-const OPTIONS: &str = "options";
+/// The options, separated by commas.
+pub(crate) const OPTIONS: &str = "options";
 /// Translation keys of the options: this, then the option.
-const LABELS: &str = "labels";
+pub(crate) const LABELS: &str = "labels";
 /// Lines of the title, at most.
 const TITLE_LINES: usize = 3;
 
-/// Opens the choice overlay `screen` with `title` and `options`, each
-/// shown as the translation of `labels` followed by the option (e.g.
-/// `file-manager.option.` and `delete`). The choice comes back as the
-/// event `reply` ([`Picked`]).
+/// Opens the choice overlay `screen`, a [`Choice`] the plugin registered
+/// itself, with `title` and `options`, each shown as the translation of
+/// `labels` followed by the option. The choice comes back as `reply`.
+#[deprecated(
+    since = "0.4.0",
+    note = "use `ask::choice`, which asks on the screen of slot `core.choice`"
+)]
 pub fn open(
     screen: Id,
     reply: &crate::event::Event<Picked>,
@@ -64,6 +59,18 @@ pub fn open(
             .with(LABELS, labels.to_string())
             .with(OPTIONS, options.join(",")),
     )
+}
+
+/// What option `option` says: the translation of `labels` followed by
+/// it, or, without labels, an action's title where it names one (options
+/// that are actions, such as the other ways to open a book).
+fn label(env: &Env<'_>, labels: &str, option: &str) -> String {
+    if labels.is_empty()
+        && let Some(action) = env.actions.get(option)
+    {
+        return env.i18n.tr(&action.title).to_string();
+    }
+    env.i18n.tr(&alloc::format!("{labels}{option}")).to_string()
 }
 
 /// The choice overlay; see the [module documentation](self).
@@ -249,8 +256,8 @@ impl Screen for Choice {
             &style,
             options.len(),
             |canvas, index, rect, focused| {
-                let key = alloc::format!("{labels}{}", options[index]);
-                ui::draw_value_row(canvas, env, &style, rect, focused, env.i18n.tr(&key), "");
+                let label = label(env, labels, &options[index]);
+                ui::draw_value_row(canvas, env, &style, rect, focused, &label, "");
             },
         );
         if let Some(pager) = &self.pager {

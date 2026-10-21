@@ -22,7 +22,7 @@ use paperpaw_sdk::{
 
 use crate::catalogs::{self, Catalog};
 use crate::sync::{self, Report, Sync};
-use crate::{BROWSE_SCREEN, CHOICE, EDIT_SCREEN, ID, OPTION_LABELS};
+use crate::{BROWSE_SCREEN, EDIT_SCREEN, ID, OPTION_LABELS};
 
 /// Replies: the address of a new catalog, a choice made.
 const ADDRESS: Event<Typed> = Event::new("opds.address");
@@ -143,14 +143,12 @@ impl ListScreen {
             return self.activate(index, cx);
         };
         let title = self.catalogs[i].name.clone();
-        cx.command(choice::open(
-            CHOICE,
-            &CHOSEN,
-            &title,
-            &i.to_string(),
-            OPTION_LABELS,
-            &["open", "sync", "edit", "remove"],
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(&title, &CHOSEN)
+                .about(i.to_string())
+                .options(OPTION_LABELS, &["open", "sync", "edit", "remove"])
+                .command(),
+        );
     }
 
     fn chosen(&mut self, context: &str, option: &str, cx: &mut Cx<'_, '_>) {

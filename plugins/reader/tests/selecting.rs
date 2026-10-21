@@ -200,7 +200,11 @@ fn highlighted_text_offers_to_remove_the_highlight() {
     reading.press(reader::SELECT);
     reading.press(actions::RIGHT);
     reading.press(actions::CONFIRM);
-    assert!(reading.part("Remove highlight").is_some());
+    assert!(
+        reading.part("Remove highlight").is_some(),
+        "{}",
+        reading.described()
+    );
     reading.press(reader::HIGHLIGHT);
     assert!(highlights(&reading).is_empty());
 }
@@ -431,4 +435,30 @@ fn a_tap_in_the_top_right_corner_sets_and_removes_a_bookmark() {
     assert_eq!(bookmarks(&reading), 1);
     reading.tap(Point::new(470, 8));
     assert_eq!(bookmarks(&reading), 0);
+}
+
+/// The bar's buttons keep the side margin, their labels whole; a tap
+/// beside the first or last of them, out to the screen's edge, is theirs.
+#[test]
+fn the_bars_ends_belong_to_its_first_and_last_items() {
+    let mut reading = numbered(TOUCH);
+    let words = reading.words();
+    reading.long_press(words[5]);
+    let shown = reading.described();
+    // Only *More …* has dots: no label is shortened.
+    assert_eq!(shown.matches('…').count(), 1, "a label shortened:\n{shown}");
+    let first = reading.part("Look up").unwrap();
+    let y = i32::from(first.area.y) + i32::from(first.area.height) / 2;
+    reading.tap(Point::new(1, y));
+    assert_eq!(
+        reading.screen(),
+        "recorder.lookup",
+        "{}",
+        reading.described()
+    );
+    reading.press(actions::BACK);
+    assert!(reading.part("Cancel").is_some(), "still selected");
+    let width = i32::from(TOUCH.display.width);
+    reading.tap(Point::new(width - 2, y));
+    assert!(reading.part("Look up").is_none(), "{}", reading.described());
 }

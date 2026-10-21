@@ -57,6 +57,21 @@ pub enum Role {
     Slider,
     /// Text.
     Text,
+    /// A box ticked or not, of several that may each be; `on` says which.
+    Check,
+    /// One of several of which one is chosen; `on` says whether it is.
+    Radio,
+    /// Where text is typed; its text is that typed so far.
+    Field,
+    /// A picture; its text says what it shows, where known.
+    Image,
+    /// Leads elsewhere when chosen, e.g. a link in a book.
+    Link,
+    /// A question over the screen, e.g. a choice of a few options; its
+    /// text is the question.
+    Dialog,
+    /// How far something has come; its text the share done, e.g. `42%`.
+    Progress,
 }
 
 /// Rings are drawn at most this many pixels across their radius, far
@@ -117,6 +132,13 @@ impl<'a> Canvas<'a> {
     pub fn describing(mut self, sink: &'a mut Vec<Described>) -> Self {
         self.described = Some(sink);
         self
+    }
+
+    /// Whether it keeps no pixels ([`Framebuffer::blind`]): what is drawn
+    /// is only described, so drawing that costs (glyphs, pictures) can be
+    /// left out.
+    pub fn is_blind(&self) -> bool {
+        self.framebuffer.is_blind()
     }
 
     /// Whether anyone asks what is drawn (see [`Canvas::describe`]).
@@ -510,10 +532,9 @@ impl<'a> Canvas<'a> {
             return;
         };
         let x = x + self.origin.0;
-        for px in rect.x..rect.right() as u16 {
-            let value = gray[(i32::from(px) - x) as usize];
-            self.framebuffer.put_gray(px, rect.y, value);
-        }
+        let from = (i32::from(rect.x) - x) as usize;
+        let row = &gray[from..from + usize::from(rect.width)];
+        self.framebuffer.put_gray_row(rect.x, rect.y, row);
         self.framebuffer.mark_dirty(rect);
     }
 

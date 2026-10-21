@@ -327,6 +327,15 @@ pub trait Screen {
         false
     }
 
+    /// Whether what the screen shows is secret now, as a PIN or a
+    /// password being typed: where its focus is, is not told to plugins
+    /// ([`events::FOCUS_CHANGED`](crate::builtin::events::FOCUS_CHANGED)).
+    /// Screens that guard the device ([`Screen::guards`]) count as secret
+    /// too, and so do the screens above them.
+    fn secret(&self) -> bool {
+        false
+    }
+
     /// What a tap outside it does, for an overlay: by default it closes
     /// it.
     fn outside(&self) -> Outside {

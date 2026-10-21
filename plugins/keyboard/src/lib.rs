@@ -292,22 +292,26 @@ impl KeyboardScreen {
         }
         let rows = rows(&layouts[current.get()].1, layer, layouts.len() > 1);
         let display = env.device.display;
-        let key_height = style.row as u16;
-        let field_height = (style.small * 1.5) as u16 + style.row as u16;
+        // Keys and the field's buttons grow on touch screens, and their
+        // rows with them.
+        let key_height = style.touch_row(style.row) as u16;
+        let field_height = (style.small * 1.5) as u16 + key_height;
         let gap = style.gap as u16 / 2;
+        // The last row's keys keep the side margin from the bottom edge.
+        let room = ui::edge_room(&style, key_height);
         // On the screen whatever the rows: keys get smaller first.
-        let room = display
+        let most = display
             .height
-            .saturating_sub(field_height.saturating_add(gap * 3));
+            .saturating_sub(field_height.saturating_add(gap * 2 + room));
         let keys_height = key_height
             .saturating_mul(rows.len().max(4) as u16)
-            .min(room);
-        let height = (field_height + keys_height + gap * 3).min(display.height);
+            .min(most);
+        let height = (field_height + keys_height + gap * 2 + room).min(display.height);
         let region = Rect::new(0, display.height - height, display.width, height);
         let field = Rect::new(0, region.y + gap, display.width, field_height);
         let keys = Rect::new(
             0,
-            (region.y + region.height).saturating_sub(keys_height + gap),
+            (region.y + region.height).saturating_sub(keys_height + room),
             display.width,
             keys_height,
         );
@@ -369,7 +373,7 @@ impl KeyboardScreen {
             kinds.push(FieldButton::Paste);
         }
         let b = self.text_box();
-        let height = ui::button_height(b);
+        let height = ui::button_height(&self.style, b);
         let pad = (b.height - height) / 2;
         // From the right: each as wide as its label (rounded up) and the
         // button's padding.
@@ -481,7 +485,7 @@ impl KeyboardScreen {
             self.shift = false;
             self.redraw(cx, self.keys);
         }
-        self.redraw(cx, self.field);
+        self.changed(cx);
     }
 
     fn press(&mut self, key: Key, cx: &mut Cx<'_, '_>) {
@@ -494,7 +498,9 @@ impl KeyboardScreen {
             }
             Key::Space => return self.insert(" ", cx),
             Key::Delete => {
-                self.text.pop();
+                if self.text.pop().is_some() {
+                    return self.changed(cx);
+                }
             }
             Key::Shift => {
                 self.shift = !self.shift;
@@ -595,18 +601,29 @@ impl KeyboardScreen {
         }
     }
 
+    /// Shows the changed text, and sends it where asked on each change.
+    fn changed(&mut self, cx: &mut Cx<'_, '_>) {
+        self.redraw(cx, self.field);
+        if self.params.get(params::LIVE).is_some() {
+            self.answer(self.text.clone(), true, cx);
+        }
+    }
+
     /// Closes the keyboard and sends the text.
     fn finish(&mut self, cx: &mut Cx<'_, '_>) {
         cx.command(Command::Back);
+        let text = core::mem::take(&mut self.text);
+        self.answer(text, false, cx);
+    }
+
+    fn answer(&self, text: String, typing: bool, cx: &mut Cx<'_, '_>) {
         if let Some(reply) = self
             .params
             .get(params::REPLY)
             .and_then(|r| Id::parse(r).ok())
         {
-            let typed = Typed {
-                text: core::mem::take(&mut self.text),
-                context: self.params.clone(),
-            };
+            let typed = Typed::new(text, self.params.clone());
+            let typed = if typing { typed.while_typing() } else { typed };
             cx.command(Command::Emit(reply, typed.to_params()));
         }
     }
@@ -745,6 +762,15 @@ impl KeyboardScreen {
         );
         let box_area = self.text_box();
         ui::stroke_round(canvas, &style, box_area, style.line.max(2), Color::BLACK);
+        // What is typed in it, for screen readers (dots of a password say
+        // nothing).
+        canvas.describe(
+            paperpaw_sdk::semantics::Role::Field,
+            "",
+            box_area,
+            false,
+            None,
+        );
         // The end of the text, with a cursor after it; a password as dots.
         let text = if self.password {
             "•".repeat(self.text.chars().count())
@@ -792,7 +818,7 @@ impl KeyboardScreen {
         let key = self.rows[row][index].0;
         let area = self.key_area(row, index);
         // Buttons as everywhere, with room for the focus frame.
-        let h = ui::button_height(area);
+        let h = ui::button_height(&style, area);
         let pad = self.key_inset() as u16;
         let r = Rect::new(
             area.x + pad,
@@ -821,6 +847,15 @@ impl KeyboardScreen {
             i32::from(r.x) + i32::from(r.width) / 2,
             i32::from(r.y) + i32::from(r.height) / 2,
         );
+        // The icon a theme gave the key, else drawn here.
+        let icon = match key {
+            Key::Shift => paperpaw_sdk::icons::SHIFT,
+            Key::Delete => paperpaw_sdk::icons::DELETE,
+            _ => paperpaw_sdk::icons::SPACE,
+        };
+        if ui::draw_icon_at(canvas, env, icon, style.text, (cx, cy), ink) {
+            return;
+        }
         match key {
             Key::Shift => arrow_up(canvas, cx, cy, size, ink),
             Key::Delete => arrow_left(canvas, cx, cy, size, ink),
@@ -853,7 +888,7 @@ impl KeyboardScreen {
         canvas.stroke(frame, border, Color::BLACK);
         for (index, c) in popup.chars.iter().enumerate() {
             let key = popup.key(index);
-            let h = ui::button_height(key);
+            let h = ui::button_height(&style, key);
             let pad = ui::button_border(&style) as u16 * 3;
             let r = Rect::new(
                 key.x + pad,
@@ -961,6 +996,11 @@ impl Screen for KeyboardScreen {
         self.password
     }
 
+    /// A password's keys are not told to plugins as they are pressed.
+    fn secret(&self) -> bool {
+        self.password
+    }
+
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         if let Some(pasted) = PASTED.read(event, params) {
             self.pasted(&pasted.text, cx);
@@ -1010,7 +1050,7 @@ impl Screen for KeyboardScreen {
                 if row != PASTE_ROW && self.rows[row][index].0 == Key::Delete =>
             {
                 self.text.clear();
-                self.redraw(cx, self.field);
+                self.changed(cx);
             }
             // A long press on a letter shows its variants.
             (GestureKind::LongPress, Some((row, index))) if row != PASTE_ROW => {

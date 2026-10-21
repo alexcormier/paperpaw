@@ -432,13 +432,8 @@ impl Kernel {
     /// clip it was drawn in, e.g. for checks of text cut at a cell's edge.
     pub fn described(&mut self) -> Vec<paperpaw_sdk::semantics::Described> {
         let bounds = self.framebuffer.bounds();
-        let Ok(mut aside) = Framebuffer::new(
-            bounds.width,
-            bounds.height,
-            paperpaw_platform::PixelFormat::Mono1,
-        ) else {
-            return Vec::new();
-        };
+        // Described, not drawn: no pixels kept.
+        let mut aside = Framebuffer::blind(bounds.width, bounds.height);
         let regions: Vec<Option<Rect>> = (0..self.stack.len()).map(|i| self.overlay(i)).collect();
         let row = self.hint_row();
         let env = self.shared.env(self.now);
@@ -451,6 +446,8 @@ impl Kernel {
                 let device = env.device_within(active.area);
                 let own_env = env.within(&device, active.area);
                 let (x, y) = (i32::from(active.area.x), i32::from(active.area.y));
+                // As its plugin, as when drawn: it sees its own secrets.
+                let _running = self.shared.meter.enter(active.id.namespace());
                 active
                     .screen
                     .draw(&mut canvas.clipped(area).offset(x, y), &own_env);
@@ -489,13 +486,8 @@ impl Kernel {
     /// focus through its parts. Draws it once, aside.
     pub fn described_active(&mut self) -> Vec<paperpaw_sdk::semantics::Described> {
         let bounds = self.framebuffer.bounds();
-        let Ok(mut aside) = Framebuffer::new(
-            bounds.width,
-            bounds.height,
-            paperpaw_platform::PixelFormat::Mono1,
-        ) else {
-            return Vec::new();
-        };
+        // Described, not drawn: no pixels kept.
+        let mut aside = Framebuffer::blind(bounds.width, bounds.height);
         let Some(top) = self.stack.len().checked_sub(1) else {
             return Vec::new();
         };
@@ -506,6 +498,7 @@ impl Kernel {
         let own_env = env.within(&device, active.area);
         let (x, y) = (i32::from(active.area.x), i32::from(active.area.y));
         let mut described = Vec::new();
+        let _running = self.shared.meter.enter(active.id.namespace());
         active.screen.draw(
             &mut aside
                 .canvas()

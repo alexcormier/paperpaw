@@ -41,6 +41,8 @@ pub const PLUGIN: Id = Id::new_static("wifi");
 pub const GROUP: Id = Id::new_static("wifi.group");
 /// The Wi-Fi page.
 pub const PAGE: Id = Id::new_static("wifi.page");
+/// Opens the Wi-Fi page: what a tap on Wi-Fi's status item runs.
+pub const OPEN: Id = Id::new_static("wifi.open");
 /// The status item: the Wi-Fi sign while the device is in a network.
 pub const STATUS: Id = Id::new_static("wifi.status");
 /// The radio comes on by itself when a plugin wants the network.
@@ -198,15 +200,25 @@ impl Plugin for Wifi {
                 .page(PAGE),
         )?;
         r.add_icon(GROUP, Cow::Borrowed("wifi"))?;
-        r.add_status_item(StatusItemSpec::new(
-            STATUS,
-            "wifi.status.item",
-            Box::new(|env, _| {
-                env.wifi
-                    .is_some_and(|w| w.state.is_online())
-                    .then_some(StatusValue::Icon(Cow::Borrowed("wifi")))
-            }),
+        // Tapped, the Wi-Fi page.
+        r.add_status_item(
+            StatusItemSpec::new(
+                STATUS,
+                "wifi.status.item",
+                Box::new(|env, _| {
+                    env.wifi
+                        .is_some_and(|w| w.state.is_online())
+                        .then_some(StatusValue::Icon(Cow::Borrowed("wifi")))
+                }),
+            )
+            .tap(OPEN),
+        )?;
+        r.add_action(paperpaw_sdk::ActionSpec::new(OPEN, "wifi.title").handler(
+            |_: &Env<'_>, out: &mut Vec<Command>| {
+                out.push(Command::OpenScreen(PAGE, Params::new()));
+            },
         ))?;
+        r.add_icon(OPEN, Cow::Borrowed("wifi"))?;
         r.add_settings(&SETTINGS)?;
         for spec in &SETTINGS {
             r.set_menu_need(spec.id.clone(), MenuNeed::Wifi)?;
@@ -229,7 +241,7 @@ impl Plugin for Wifi {
             }
             let mut policy = p.borrow_mut();
             policy.asked_at = Some(env.now);
-            let known = wifi::known(env.secrets);
+            let known = wifi::known(env.secrets.iter());
             if known.is_empty() {
                 // Nothing to join: what waits says so now.
                 out.push(Command::Notify(env.i18n.tr("wifi.no-saved").into()));
@@ -260,7 +272,7 @@ impl Plugin for Wifi {
             if wifi.state == WifiState::On
                 && policy.goal == Goal::Nothing
                 && charging_keeps_it(env)
-                && !wifi::known(env.secrets).is_empty()
+                && !wifi::known(env.secrets.iter()).is_empty()
             {
                 wifi_commands(out, policy.retry());
             }
@@ -276,7 +288,7 @@ impl Plugin for Wifi {
             let Some(wifi) = env.wifi else {
                 return;
             };
-            let known = wifi::known(env.secrets);
+            let known = wifi::known(env.secrets.iter());
             let mut policy = p.borrow_mut();
             match policy.scanned(&wifi.networks, &known) {
                 Some(commands) => wifi_commands(out, commands),
@@ -298,7 +310,7 @@ impl Plugin for Wifi {
                 return;
             };
             let (ssid, reason) = (failed.ssid.as_str(), failed.reason);
-            let known = wifi::known(env.secrets);
+            let known = wifi::known(env.secrets.iter());
             let mut policy = p.borrow_mut();
             let chosen = matches!(policy.goal, Goal::Chosen { .. });
             match policy.failed(ssid, &wifi.networks, &known) {
@@ -379,7 +391,7 @@ impl Plugin for Wifi {
                     return;
                 }
                 if (policy.still_wanted(wifi, env.now) || charging_keeps_it(env))
-                    && !wifi::known(env.secrets).is_empty()
+                    && !wifi::known(env.secrets.iter()).is_empty()
                 {
                     wifi_commands(out, policy.retry());
                 } else if !wifi.busy {
@@ -409,7 +421,7 @@ impl Plugin for Wifi {
                     policy.charging_kept = keeps;
                     if keeps {
                         if !wifi.state.is_on() {
-                            let known = wifi::known(env.secrets);
+                            let known = wifi::known(env.secrets.iter());
                             wifi_commands(out, policy.wanted(&wifi.state, &known));
                         }
                     } else if !wifi.busy && !policy.still_wanted(wifi, env.now) {

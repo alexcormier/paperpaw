@@ -245,6 +245,32 @@ impl Kernel {
             Command::OpenInSlot(slot, screen, params) => {
                 self.open_slot_command(slot, Some(screen), params);
             }
+            Command::OpenBook(params) => {
+                let env = self.shared.env(self.now);
+                match paperpaw_sdk::readers::resolve(&env, &params) {
+                    // The slot's own screen, by name: in place of another
+                    // reading app the slot may show now. Not where it could
+                    // not open the book either (it is a reader too): it
+                    // says why itself.
+                    Command::OpenSlot(slot, params) => {
+                        let screen = self.shared.registry.resolve_slot(slot.as_str()).cloned();
+                        let failed = screen.as_ref().is_some_and(|screen| {
+                            paperpaw_sdk::readers::past(&params).any(|past| {
+                                self.shared
+                                    .readers
+                                    .get(past)
+                                    .is_some_and(|r| r.screen == *screen)
+                            })
+                        });
+                        if failed {
+                            self.warn_runtime("no reading app could open the book");
+                        } else {
+                            self.open_slot_command(slot, screen, params);
+                        }
+                    }
+                    command => self.apply(command),
+                }
+            }
             Command::Close(key) => self.close_screen(key),
             Command::Replace(screen, params) => self.replace(screen, &params),
             Command::BackTo(id) => self.back_to(&id),
@@ -310,12 +336,40 @@ impl Kernel {
     /// ([`Command::OpenInSlot`]), or shows it again where the slot is open
     /// with it and the same params (closing what is above it).
     pub(crate) fn open_slot_command(&mut self, slot: Id, screen: Option<Id>, params: Params) {
-        let open = self.stack.iter().position(|s| {
-            s.slot.as_ref() == Some(&slot) && screen.as_ref().is_none_or(|screen| s.id == *screen)
+        let in_slot = self
+            .stack
+            .iter()
+            .position(|s| s.slot.as_ref() == Some(&slot));
+        let open = in_slot.filter(|&index| {
+            screen
+                .as_ref()
+                .is_none_or(|screen| self.stack[index].id == *screen)
         });
         // Below a screen that guards the device, it stays as it is; one
         // for something else waits below the guard too.
-        let below_guard = |index: usize| self.held_by_guard() && self.guard() > Some(index);
+        let guard = if self.held_by_guard() {
+            self.guard()
+        } else {
+            None
+        };
+        let below_guard = move |index: usize| guard > Some(index);
+        // Another screen for the slot (another reading app): it goes, so
+        // that the slot holds one (one book open, not two).
+        if open.is_none()
+            && let Some(index) = in_slot.filter(|&index| !below_guard(index))
+        {
+            if !self.may_close_from(index, paperpaw_sdk::CloseCause::Slot) {
+                return;
+            }
+            let closed = (index..self.stack.len())
+                .map(|i| self.changed_region(i))
+                .reduce(|a, b| a.union(&b));
+            self.close_from(index);
+            self.stop_for_closed_screens();
+            if let Some(region) = closed {
+                self.invalidate(region);
+            }
+        }
         if let Some(index) = open.filter(|&index| below_guard(index)) {
             if params.is_empty() || self.stack[index].params == params {
                 return;
@@ -372,6 +426,12 @@ impl Kernel {
     /// typed on the keyboard), goes to those screens and their plugins
     /// alone.
     pub(crate) fn emit(&mut self, event: &Id, params: &Params) {
+        self.emit_to(event, params, None);
+    }
+
+    /// Emits `event` to the plugin `only` alone where one is named: its
+    /// handlers and screens hear it, no other plugin's.
+    pub(crate) fn emit_to(&mut self, event: &Id, params: &Params, only: Option<&str>) {
         // A page turned, also by itself, is use.
         if *event == events::PAGE_TURNED {
             self.last_activity = self.now;
@@ -383,8 +443,19 @@ impl Kernel {
         // Moments for declared work, and jobs waiting for this event.
         self.works.saw(event, params);
         let env = self.shared.env(self.now);
+        // A password typed (an answer to a question asked as one) reaches
+        // the plugin that asked alone, the one its reply event is named
+        // in: no other plugin, nor another's screen, hears it, whichever
+        // keyboard took it.
+        let secret = params.get(paperpaw_sdk::builtin::params::MODE) == Some("password");
+        let asker = event.namespace();
+        let hears = |plugin: &str| (!secret || plugin == asker) && only.is_none_or(|o| plugin == o);
         let mut refused_secret = false;
-        for (_, plugin, handler) in self.subscriptions.iter().filter(|(id, ..)| id == event) {
+        for (_, plugin, handler) in self
+            .subscriptions
+            .iter()
+            .filter(|(id, plugin, _)| id == event && hears(plugin.as_str()))
+        {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
             handler(&env, params, &mut self.output.commands);
@@ -419,10 +490,22 @@ impl Kernel {
             return;
         }
         for index in 0..self.stack.len() {
+            if !hears(self.stack[index].id.namespace()) {
+                continue;
+            }
             self.with_screen(index, |screen, cx| {
                 screen.on_event(event, params, cx);
                 Handled::Yes
             });
+        }
+    }
+
+    /// Tells the plugin whose secret setting `id` is that it changed, and
+    /// no other: which secret changed is the owner's business too.
+    pub(crate) fn secret_setting_changed(&mut self, id: &Id) {
+        let changed = events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone()));
+        if let Command::Emit(event, params) = changed {
+            self.emit_to(&event, &params, Some(id.namespace()));
         }
     }
 
@@ -474,6 +557,28 @@ impl Kernel {
     /// menus, key bindings and slots changed.
     fn apply_setting(&mut self, command: Command) {
         match command {
+            // A secret setting's value goes to the secrets.
+            Command::SetSetting(id, paperpaw_sdk::SettingValue::Text(text))
+                if self
+                    .shared
+                    .settings
+                    .spec(id.as_str())
+                    .is_some_and(|spec| spec.extra().secret) =>
+            {
+                let label = self
+                    .shared
+                    .settings
+                    .spec(id.as_str())
+                    .map(|spec| String::from(self.shared.translator.tr(&spec.title)))
+                    .unwrap_or_default();
+                let change = if text.is_empty() {
+                    paperpaw_sdk::secrets::SecretChange::remove(id.as_str())
+                } else {
+                    paperpaw_sdk::secrets::SecretChange::keep(id.as_str(), &label, &text)
+                };
+                self.set_secret(change);
+                self.secret_setting_changed(&id);
+            }
             Command::SetSetting(id, value) if self.shared.settings.goes_to_scope(id.as_str()) => {
                 self.set_in_scope(&id, value);
             }
@@ -487,6 +592,11 @@ impl Kernel {
                         self.output
                             .commands
                             .push(events::SETTING_CHANGED.emit(changed));
+                    }
+                    // Its check says why: the reader is told.
+                    Err(paperpaw_sdk::SettingError::Refused(why)) => {
+                        let text = String::from(self.shared.translator.tr(why));
+                        self.output.commands.push(Command::Notify(text));
                     }
                     Err(error) => {
                         self.warn_runtime(format!("`{id}`: {error}"));
@@ -707,6 +817,9 @@ pub(crate) struct Reserved<'a> {
     /// The plugin of the settings editor (the screen of the settings
     /// slot): the reader's own editor.
     editor: Option<&'a str>,
+    /// The plugin of the keyboard (the screen of the keyboard slot),
+    /// which answers what it was asked to, and sees what is typed anyway.
+    keyboard: Option<&'a str>,
 }
 
 impl<'a> Reserved<'a> {
@@ -717,28 +830,74 @@ impl<'a> Reserved<'a> {
         let editor = registry
             .resolve_slot(slots::SETTINGS.as_str())
             .map(Id::namespace);
-        Self { settings, editor }
+        let keyboard = registry
+            .resolve_slot(slots::KEYBOARD.as_str())
+            .map(Id::namespace);
+        Self {
+            settings,
+            editor,
+            keyboard,
+        }
+    }
+}
+
+/// Whether `command` sends text typed for a setting, or asks for it
+/// ([`events::SETTING_TYPED`] as the event it emits or is answered
+/// with), with the parameters that name the setting; `Some(None)` where
+/// what comes from outside could name any (a server's, a socket's).
+fn typed_for(command: &Command) -> Option<Option<&Params>> {
+    let reply = |params: &Params| {
+        params.get(paperpaw_sdk::builtin::params::REPLY) == Some(events::SETTING_TYPED.as_str())
+    };
+    let typed = |event: &Id| *event == events::SETTING_TYPED;
+    match command {
+        Command::Emit(event, params) | Command::ReadClipboard(event, params) if typed(event) => {
+            Some(Some(params))
+        }
+        Command::OpenSlot(_, params)
+        | Command::OpenScreen(_, params)
+        | Command::Replace(_, params)
+        | Command::OpenInSlot(_, _, params)
+        | Command::RunActionWith(_, params)
+        | Command::RunOriginal(_, params)
+            if reply(params) =>
+        {
+            Some(Some(params))
+        }
+        Command::Http(request) if typed(&request.reply) => Some(Some(&request.params)),
+        Command::Speak(speech) if typed(&speech.reply) => Some(Some(&speech.params)),
+        Command::Serve { events, .. }
+        | Command::Connect { events, .. }
+        | Command::Broadcast { events, .. }
+            if typed(events) =>
+        {
+            Some(None)
+        }
+        _ => None,
     }
 }
 
 /// Drops from `out[from..]` what `owner` may not ask, and tells whether
-/// it did: another plugin's secret, a setting that keeps the device safe
-/// (`SettingSpec::guarded`) of another plugin, the sleep slot. The
-/// settings editor may: it is how the reader changes them.
+/// it did: another plugin's secret, another plugin's secret setting or
+/// setting that keeps the device safe (`SettingSpec::guarded`) set, reset
+/// or typed for (text sent for it, or asked for from the keyboard, the
+/// clipboard or anywhere else, see [`typed_for`]), the sleep slot. The
+/// settings editor may: it is how the reader changes them. So may the
+/// kernel's own handlers, which set what was typed once it was vetted,
+/// and the keyboard answer what it was asked.
 pub(crate) fn vet_reserved(
     out: &mut Vec<Command>,
     from: usize,
     owner: &str,
     reserved: &Reserved<'_>,
 ) -> bool {
-    let editor = reserved.editor == Some(owner);
-    let guarded = |id: &Id| {
-        id.namespace() != owner
-            && reserved
-                .settings
-                .spec(id.as_str())
-                .is_some_and(|spec| spec.guarded)
+    let editor = reserved.editor == Some(owner) || owner == crate::meter::CORE;
+    let foreign = |id: &str, kept: fn(&paperpaw_sdk::SettingSpec) -> bool| {
+        id.split('.').next() != Some(owner) && reserved.settings.spec(id).is_some_and(kept)
     };
+    let kept = |spec: &paperpaw_sdk::SettingSpec| spec.guarded || spec.extra().secret;
+    let guarded = |id: &Id| foreign(id.as_str(), kept);
+    let keyboard = reserved.keyboard == Some(owner);
     let before = out.len();
     let mut index = 0;
     out.retain(|command| {
@@ -747,6 +906,15 @@ pub(crate) fn vet_reserved(
             && match command {
                 Command::SetSecret(change) => change.id.split('.').next() != Some(owner),
                 Command::SetSetting(id, _) | Command::ResetSetting(id) => guarded(id),
+                // Text typed for another plugin's secret or guarded
+                // setting, or asked for: the kernel would set it.
+                command if !keyboard && typed_for(command).is_some() => {
+                    typed_for(command).flatten().is_none_or(|params| {
+                        params
+                            .get(paperpaw_sdk::builtin::params::ID)
+                            .is_some_and(|id| foreign(id, kept))
+                    })
+                }
                 // The sleep screen shows over the lock; the settings
                 // editor has these rights.
                 Command::BindSlot(slot, _) => *slot == slots::SLEEP || *slot == slots::SETTINGS,

@@ -418,6 +418,7 @@ impl KernelBuilder {
                 page_layers: paperpaw_sdk::layers::PageLayers::new(),
                 lookup: paperpaw_sdk::lookup::LookupProviders::new(),
                 voices: paperpaw_sdk::voices::Voices::new(),
+                readers: paperpaw_sdk::readers::Readers::new(),
                 input_filters: paperpaw_sdk::filters::InputFilters::new(),
                 refresh_filters: paperpaw_sdk::filters::RefreshFilters::new(),
                 stylesheets: Vec::new(),
@@ -448,6 +449,7 @@ impl KernelBuilder {
                 storage,
                 recall,
                 keymap: Keymap::default(),
+                look: (paperpaw_sdk::ui::look::Look::none(), None),
             },
             frame: drawing::FrameState {
                 pending: None,
@@ -492,6 +494,7 @@ impl KernelBuilder {
                 network_waiting: None,
                 network_busy: false,
                 focus_spoken: false,
+                focus_told: None,
             },
             keys: plugins::KeySources::default(),
             chromes: Vec::new(),
@@ -741,6 +744,7 @@ impl Kernel {
         self.shared
             .settings
             .set_choices(core_settings::VOICE.as_str(), voices);
+        self.offer_reading_apps();
         self.shared.caps.speech = self.io.speech.system || !self.shared.voices.is_empty();
         self.shared.menus.set_capabilities(self.shared.caps);
     }
@@ -784,6 +788,69 @@ impl Kernel {
                 choices.iter().map(|v| Cow::Owned(v.to_string())).collect();
             values.push(value);
             self.shared.settings.set_choices(id.as_str(), values);
+        }
+    }
+
+    /// The reading apps to choose: the default one, and one for each
+    /// format (a setting each, in the reading settings' part for them),
+    /// each offering the readers that read its books. Where only one
+    /// does, there is nothing to choose and the setting is not listed.
+    fn offer_reading_apps(&mut self) {
+        let readers: Vec<Cow<'static, str>> = self
+            .shared
+            .readers
+            .iter()
+            .map(|r| Cow::Owned(r.id.as_str().to_string()))
+            .collect();
+        let mut all = alloc::vec![Cow::Borrowed(core_settings::READING_APP_DEFAULT)];
+        if readers.len() > 1 {
+            all.extend(readers);
+        }
+        self.shared
+            .settings
+            .set_choices(core_settings::READING_APP.as_str(), all);
+        let formats: Vec<(Id, Cow<'static, str>)> = self
+            .shared
+            .formats
+            .iter()
+            .map(|f| (f.id.clone(), f.title.clone()))
+            .collect();
+        for (format, title) in formats {
+            let mut choices = alloc::vec![Cow::Borrowed(core_settings::READING_APP_DEFAULT)];
+            let reading: Vec<Cow<'static, str>> = self
+                .shared
+                .readers
+                .reading(Some(&format))
+                .map(|r| Cow::Owned(r.id.as_str().to_string()))
+                .collect();
+            let several = reading.len() > 1;
+            if several {
+                choices.extend(reading);
+            }
+            let id = paperpaw_sdk::readers::format_setting(&format);
+            if self.shared.settings.spec(&id).is_some() {
+                self.shared.settings.set_choices(&id, choices);
+                continue;
+            }
+            // Nothing to choose where one reader reads it: no setting
+            // (memory on small devices), until another comes.
+            if !several {
+                continue;
+            }
+            let Ok(setting) = Id::parse(&id) else {
+                continue;
+            };
+            let spec = paperpaw_sdk::SettingSpec::new(
+                setting,
+                title,
+                paperpaw_sdk::SettingKind::Choice(choices.into()),
+                paperpaw_sdk::SettingValue::Text(Cow::Borrowed(core_settings::READING_APP_DEFAULT)),
+            )
+            .group(paperpaw_sdk::builtin::groups::READING)
+            .section("core.section.reading-apps")
+            .described("core.setting.reading-app.format.help")
+            .keeps_unknown();
+            let _ = self.shared.settings.define(spec);
         }
     }
 

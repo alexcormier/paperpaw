@@ -9,7 +9,7 @@ use core::fmt;
 use super::{Cells, Geometry, Item, What, dragged, draw_tool};
 use crate::builtin::{actions, params, slots};
 use crate::event::Event;
-use crate::ui::choice::{self, Picked};
+use crate::ui::choice::Picked;
 use crate::ui::{self, UiStyle};
 use crate::widgets::Widget;
 use crate::{
@@ -117,9 +117,9 @@ enum Target {
 /// Its targets are the items' (the places in widgets that do something,
 /// the tools; while editing, the items themselves), then the screen's
 /// own buttons: taps and the buttons' focus reach them in that order.
-/// An item's options are offered by a [`Choice`](crate::ui::choice::Choice)
-/// screen the plugin registers; they come back as its event, which the
-/// screen hands to [`on_event`](Self::on_event).
+/// An item's options are asked with [`ask::choice`](crate::ask::choice);
+/// they come back as the plugin's event, which the screen hands to
+/// [`on_event`](Self::on_event).
 #[derive(Debug)]
 pub struct GridView {
     style: UiStyle,
@@ -130,6 +130,8 @@ pub struct GridView {
     buttons: Vec<(Rect, u16)>,
     /// Where taps and the buttons' focus go, in order.
     targets: Vec<(Rect, Target)>,
+    /// Where taps alone go ([`WidgetTarget::touch`](crate::widgets::WidgetTarget::touch)).
+    touch: Vec<(Rect, Command)>,
     /// What each target is called, as told to screen readers while it
     /// has the focus: its item's name; empty for the screen's own
     /// buttons, which tell theirs.
@@ -139,16 +141,26 @@ pub struct GridView {
     focus_shown: bool,
     edit: Option<Edit>,
     labels: bool,
-    choice: Id,
     chosen: Event<Picked>,
 }
 
 impl GridView {
-    /// An empty grid, not edited; `choice` is the plugin's
-    /// [`Choice`](crate::ui::choice::Choice) screen, `chosen` the event
-    /// the options of an item come back with. Lay it out with
-    /// [`layout`](Self::layout).
+    /// An empty grid, not edited, with the plugin's own choice screen
+    /// `choice`, which is no longer needed: the options are asked with
+    /// [`ask::choice`](crate::ask::choice).
+    #[deprecated(
+        since = "0.4.0",
+        note = "use `GridView::asking`, without a choice screen"
+    )]
     pub fn new(env: &Env<'_>, choice: Id, chosen: Event<Picked>) -> Self {
+        let _ = choice;
+        Self::asking(env, chosen)
+    }
+
+    /// An empty grid, not edited; `chosen` is the event the options of an
+    /// item come back with (asked with [`ask::choice`](crate::ask::choice)).
+    /// Lay it out with [`layout`](Self::layout).
+    pub fn asking(env: &Env<'_>, chosen: Event<Picked>) -> Self {
         Self {
             style: UiStyle::new(env),
             geometry: Geometry::default(),
@@ -156,12 +168,12 @@ impl GridView {
             unplaced: Vec::new(),
             buttons: Vec::new(),
             targets: Vec::new(),
+            touch: Vec::new(),
             names: Vec::new(),
             focus: 0,
             focus_shown: !env.device.input.touch,
             edit: None,
             labels: true,
-            choice,
             chosen,
         }
     }
@@ -219,6 +231,7 @@ impl GridView {
     /// The targets of the items and the buttons as they are now.
     fn target(&mut self, env: &Env<'_>) {
         self.targets.clear();
+        self.touch.clear();
         self.names.clear();
         let editing = self.edit.is_some();
         for (index, shown) in self.items.iter().enumerate() {
@@ -229,8 +242,12 @@ impl GridView {
                 match (&shown.item.what, &shown.widget) {
                     (What::Widget(_), Some(widget)) => {
                         for target in widget.targets(env, shown.area) {
-                            self.targets
-                                .push((target.area, Target::Run(target.command)));
+                            if target.touch {
+                                self.touch.push((target.area, target.command));
+                            } else {
+                                self.targets
+                                    .push((target.area, Target::Run(target.command)));
+                            }
                         }
                     }
                     (What::Widget(_), None) => {}
@@ -367,6 +384,18 @@ impl GridView {
         }
         let line = self.style.line.max(1);
         let clip = canvas.clip();
+        // The target with the focus where it is a tool's (told with the
+        // tool below, as every tool is).
+        let focused_tool = self
+            .targets
+            .get(self.focus)
+            .filter(|(_, target)| self.focus_shown && matches!(target, Target::Run(_)))
+            .map(|(area, _)| *area)
+            .filter(|area| {
+                self.items
+                    .iter()
+                    .any(|s| s.area == *area && matches!(s.item.what, What::Tool(_)))
+            });
         for shown in &self.items {
             // Those outside the part drawn are left (e.g. under a menu).
             if shown.area.intersection(&clip).is_none() {
@@ -378,6 +407,13 @@ impl GridView {
                 (What::Widget(_), None) => {}
                 (What::Tool(action), _) => {
                     draw_tool(canvas, env, shown.area, action, self.labels);
+                    // A button named after its action, also where its
+                    // name is not shown (told after its name, which stays
+                    // a text of its own).
+                    let name = shown.item.what.title(env);
+                    let focused = !editing && focused_tool == Some(shown.area);
+                    let button = crate::semantics::Role::Button;
+                    canvas.describe(button, &name, shown.area, focused, None);
                 }
             }
             if editing {
@@ -412,6 +448,7 @@ impl GridView {
         // button: what a screen reader says, and tools follow, as the
         // buttons move the focus.
         if self.focus_shown
+            && focused_tool.is_none()
             && let Some((area, _)) = self.targets.get(self.focus)
         {
             let name = self.names.get(self.focus).map_or("", String::as_str);
@@ -530,14 +567,12 @@ impl GridView {
             options.push("settings");
         }
         options.push("remove");
-        cx.command(choice::open(
-            self.choice.clone(),
-            &self.chosen,
-            &shown.item.what.title(&env),
-            &format!("{index}"),
-            OPTIONS,
-            &options,
-        ));
+        cx.command(
+            crate::ask::choice(shown.item.what.title(&env), &self.chosen)
+                .about(format!("{index}"))
+                .options(OPTIONS, &options)
+                .command(),
+        );
     }
 
     /// Whether item `index` may take the cells `to`.
@@ -883,7 +918,13 @@ impl GridView {
                     self.focus = index;
                     self.run(index, cx)
                 }
-                None => GridResponse::Ignored,
+                None => match self.touch.iter().find(|(r, _)| r.contains(gesture.start)) {
+                    Some((_, command)) => {
+                        cx.command(command.clone());
+                        GridResponse::Handled
+                    }
+                    None => GridResponse::Ignored,
+                },
             },
             GestureKind::LongPress if self.edit.is_none() => {
                 self.set_editing(true);
@@ -927,7 +968,6 @@ mod tests {
     };
 
     const CHOSEN: Event<Picked> = Event::new("test.chosen");
-    const CHOICE: Id = Id::new_static("test.choice");
 
     struct NoKeys;
 
@@ -956,6 +996,7 @@ mod tests {
         decorators: Decorators,
         page_layers: crate::layers::PageLayers,
         lookup: crate::lookup::LookupProviders,
+        readers: crate::readers::Readers,
         widgets: Widgets,
         setup: SetupSteps,
         services: Services,
@@ -1002,6 +1043,7 @@ mod tests {
                 decorators: Decorators::new(),
                 page_layers: Default::default(),
                 lookup: Default::default(),
+                readers: Default::default(),
                 widgets: Widgets::new(),
                 setup: SetupSteps::new(),
                 services: Services::new(),
@@ -1031,6 +1073,7 @@ mod tests {
                 decorators: &self.decorators,
                 page_layers: &self.page_layers,
                 lookup: &self.lookup,
+                readers: &self.readers,
                 stylesheets: &[],
                 book_data: &[],
                 book_fields: &[],
@@ -1039,6 +1082,7 @@ mod tests {
                 setup: &self.setup,
                 services: &self.services,
                 keys: &NoKeys,
+                look: crate::ui::look::Look::none(),
                 caps: crate::Capabilities::default(),
                 wifi: None,
                 firmware: None,
@@ -1056,6 +1100,7 @@ mod tests {
                 font_dirs: &[],
                 catalog_device: None,
                 secrets: &self.secrets,
+                running: &crate::secrets::Anyone,
                 random: crate::random::Random::default(),
                 storage: &self.storage,
             })
@@ -1089,7 +1134,7 @@ mod tests {
     const BUTTON: (Rect, u16) = (Rect::new(0, 310, 100, 40), 7);
 
     fn laid_out(env: &Env<'_>, items: &[Item], buttons: &[(Rect, u16)]) -> GridView {
-        let mut grid = GridView::new(env, CHOICE, CHOSEN);
+        let mut grid = GridView::asking(env, CHOSEN);
         grid.layout(env, geometry(), items, buttons);
         grid
     }
@@ -1178,8 +1223,8 @@ mod tests {
     fn offered(out: &Output, index: usize) -> bool {
         let path = format!("{index}");
         out.commands.iter().any(|c| {
-            matches!(c, Command::OpenScreen(screen, p)
-                if *screen == CHOICE && p.get(params::PATH) == Some(path.as_str()))
+            matches!(c, Command::OpenSlot(slot, p)
+                if *slot == crate::builtin::slots::CHOICE && p.get(params::PATH) == Some(path.as_str()))
         })
     }
 
@@ -1210,7 +1255,7 @@ mod tests {
         let grid = laid_out(&env, &items, &[]);
         assert_eq!(grid.items(), items);
         // So with places to come, in a grid of one cell.
-        let mut one = GridView::new(&env, CHOICE, CHOSEN);
+        let mut one = GridView::asking(&env, CHOSEN);
         let items = [Item::new(tool("t.a")), Item::new(tool("t.a"))];
         let small = Geometry::of(Rect::new(0, 0, 100, 100), 1, 1, 0);
         one.layout(&env, small, &items, &[]);

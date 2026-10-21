@@ -86,9 +86,10 @@ fn rows_show_values_with_units_and_secrets_as_dots() {
     h.settings
         .set("t.look", SettingValue::Text(Cow::Borrowed("t.look.bold")))
         .unwrap();
-    h.settings
-        .set("t.key", SettingValue::Text(Cow::Borrowed("s3cr3t")))
-        .unwrap();
+    // Kept with the secrets, as the kernel keeps a secret setting.
+    h.secrets.apply(paperpaw_sdk::secrets::SecretChange::keep(
+        "t.key", "Key", "s3cr3t",
+    ));
     h.settings.set("t.on", SettingValue::Bool(false)).unwrap();
     let env = h.env();
     assert_eq!(ui::setting_value(&env, &size), "1 pixel");

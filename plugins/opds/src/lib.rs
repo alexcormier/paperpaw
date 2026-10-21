@@ -37,7 +37,6 @@ use core::cell::RefCell;
 use paperpaw_sdk::builtin::{events, groups, menus, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
-use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
     Registrar, ScreenSpec, SettingSpec, Version,
@@ -58,7 +57,6 @@ const LIST_SCREEN: Id = Id::new_static("opds.catalogs");
 const SYNC_DUE: Event = Event::new("opds.sync-due");
 const BROWSE_SCREEN: Id = Id::new_static("opds.browse");
 const EDIT_SCREEN: Id = Id::new_static("opds.edit");
-const CHOICE: Id = Id::new_static("opds.choice");
 /// Translation keys of the choices: this, then the option.
 const OPTION_LABELS: &str = "opds.option.";
 
@@ -231,11 +229,6 @@ impl Plugin for Opds {
             EDIT_SCREEN,
             "opds.title",
             Box::new(|env, params| Box::new(edit::EditScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "opds.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "opds.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {

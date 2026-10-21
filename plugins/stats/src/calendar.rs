@@ -65,7 +65,14 @@ impl Calendar {
         let display = env.device.display;
         let row = style.row as u16;
         let margin = style.margin as u16;
-        let nav = Rect::new(0, header.area.height + style.gap as u16, display.width, row);
+        // The month's arrows grow on touch screens, and their row with them.
+        let nav_row = style.touch_row(u32::from(row)) as u16;
+        let nav = Rect::new(
+            0,
+            header.area.height + style.gap as u16,
+            display.width,
+            nav_row,
+        );
         let width = display.width - 2 * margin;
         // Square days across the width, unless that leaves too little room
         // for the chosen day below: the weekdays' names (half a day high)
@@ -170,7 +177,7 @@ impl Calendar {
     /// The month's arrows.
     fn arrows(&self) -> (Rect, Rect) {
         let n = self.nav;
-        let size = ui::button_height(n);
+        let size = ui::button_height(&self.style, n);
         let margin = self.style.margin as u16;
         let y = n.y + (n.height - size) / 2;
         (
@@ -264,6 +271,14 @@ impl Calendar {
                 Color::BLACK
             };
             let number = format!("{}", fmt::date_of(day).day);
+            // Each day a part to choose, the chosen one focused.
+            canvas.describe(
+                paperpaw_sdk::semantics::Role::Button,
+                &number,
+                r,
+                day == self.day,
+                None,
+            );
             let x = f32::from(inner.x)
                 + (f32::from(inner.width) - font.measure(style.small, &number)) / 2.0;
             // Above the bar of reading time, if there is one.

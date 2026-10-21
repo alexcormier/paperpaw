@@ -62,8 +62,9 @@ pub fn draw_image_over(
     area: Rect,
     opacity: u8,
 ) {
-    // Frames are drawn in bands: nothing read for those it is not in.
-    if area.intersection(&canvas.clip()).is_none() || opacity == 0 {
+    // Frames are drawn in bands: nothing read for those it is not in, nor
+    // where it is only described.
+    if canvas.is_blind() || area.intersection(&canvas.clip()).is_none() || opacity == 0 {
         return;
     }
     // Its kind from one read of its header, band by band.
@@ -182,6 +183,7 @@ fn draw_source(
     let mut mixed = alloc::vec![0u8; if taller { sw * 2 } else { 0 }];
     let (mut held_upper, mut held_lower) = (None, None);
     let mut row = alloc::vec![0u8; w * if blended { 2 } else { 1 }];
+    let columns = Columns::new(w, sw, wider);
     let mut made = None;
     for y in first..last {
         let oy = (y - top) as usize;
@@ -217,7 +219,7 @@ fn draw_source(
                 mix(&upper, &lower, ty, &mut mixed);
             }
             let line: &[u8] = if between_rows { &mixed } else { &upper };
-            made_row(line, sw, wider, blended, &mut row);
+            made_row(line, &columns, blended, &mut row);
             made = Some((above, below, ty));
         }
         draw_row(canvas, left, y, &row, blended, opacity);
@@ -264,28 +266,60 @@ fn mix(upper: &[u8], lower: &[u8], t: u32, out: &mut [u8]) {
     }
 }
 
-/// A screen row `out` made of the source row `line` (gray and opacity,
-/// `sw` pixels): interpolated between columns where it is made wider,
-/// each pixel the mean of the columns it covers where it is not.
-fn made_row(line: &[u8], sw: usize, wider: bool, blended: bool, out: &mut [u8]) {
+/// Where each screen column takes its pixels from in a source row, worked
+/// out once a picture (not divisions a pixel a row, slow on chips
+/// without them): made wider, the two around it and how far towards the
+/// second (256ths); else the first of those it covers, the last entry the
+/// row's end.
+enum Columns {
+    Between(Vec<(u16, u16, u16)>),
+    Covers(Vec<u16>),
+}
+
+impl Columns {
+    fn new(w: usize, sw: usize, wider: bool) -> Self {
+        if wider {
+            Columns::Between(
+                (0..w)
+                    .map(|x| {
+                        let (x0, x1, t) = between(x, w, sw);
+                        (x0 as u16, x1 as u16, t as u16)
+                    })
+                    .collect(),
+            )
+        } else {
+            Columns::Covers((0..=w).map(|x| (x * sw / w).min(sw) as u16).collect())
+        }
+    }
+}
+
+/// A screen row `out` made of the source row `line` (gray and opacity):
+/// interpolated between columns where it is made wider, each pixel the
+/// mean of the columns it covers where it is not (see [`Columns`]).
+fn made_row(line: &[u8], columns: &Columns, blended: bool, out: &mut [u8]) {
     let w = out.len() / if blended { 2 } else { 1 };
+    let sw = line.len() / 2;
     let pixel = |i: usize| (u32::from(line[i * 2]), u32::from(line[i * 2 + 1]));
     for x in 0..w {
-        let (weighted, opaque, count) = if wider {
-            let (x0, x1, tx) = between(x, w, sw);
-            let ((g0, a0), (g1, a1)) = (pixel(x0), pixel(x1));
-            let (a0, a1) = (a0 * (256 - tx), a1 * tx);
-            (g0 * a0 + g1 * a1, a0 + a1, 256)
-        } else {
-            let from = x * sw / w;
-            let to = ((x + 1) * sw / w).max(from + 1).min(sw);
-            let (mut weighted, mut opaque) = (0u32, 0u32);
-            for i in from..to {
-                let (g, a) = pixel(i);
-                weighted += g * a;
-                opaque += a;
+        let (weighted, opaque, count) = match columns {
+            Columns::Between(at) => {
+                let (x0, x1, tx) = at[x];
+                let ((g0, a0), (g1, a1)) = (pixel(usize::from(x0)), pixel(usize::from(x1)));
+                let tx = u32::from(tx);
+                let (a0, a1) = (a0 * (256 - tx), a1 * tx);
+                (g0 * a0 + g1 * a1, a0 + a1, 256)
             }
-            (weighted, opaque, (to - from) as u32)
+            Columns::Covers(starts) => {
+                let from = usize::from(starts[x]);
+                let to = usize::from(starts[x + 1]).max(from + 1).min(sw);
+                let (mut weighted, mut opaque) = (0u32, 0u32);
+                for i in from..to {
+                    let (g, a) = pixel(i);
+                    weighted += g * a;
+                    opaque += a;
+                }
+                (weighted, opaque, (to - from) as u32)
+            }
         };
         let gray = weighted
             .checked_div(opaque)

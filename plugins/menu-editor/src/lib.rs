@@ -751,11 +751,49 @@ impl Screen for EntryScreen {
 /// settings and other menus, by name.
 struct AddScreen {
     menu: String,
-    /// Ids with their names and what is said beside them (a submenu's
-    /// "›", the plugin that took an entry out of this menu), sorted by
-    /// name.
-    candidates: Vec<(Id, String, String)>,
+    /// The candidates, sorted by name: a few bytes each, every action,
+    /// setting and menu being one (the X4 has little memory).
+    candidates: Vec<Candidate>,
+    /// Their names, one after the other.
+    names: String,
+    /// Every menu, sorted: the last of the candidates' sources.
+    menus: Vec<Id>,
+    /// What is said beside the candidates a plugin took out of this menu
+    /// (which plugin), by source: a few at most.
+    notes: Vec<(u32, String)>,
     frame: Frame,
+}
+
+/// What can be added: where its id is (the actions, then the settings,
+/// then [`AddScreen::menus`], counted together) and where its name is.
+#[derive(Clone, Copy)]
+struct Candidate {
+    source: u32,
+    start: u32,
+    len: u16,
+    /// A menu, which shows "›".
+    menu: bool,
+    /// Taken out of this menu by a plugin, which [`AddScreen::notes`]
+    /// says.
+    noted: bool,
+}
+
+/// Where the candidates come from, in order: an id and the key of its
+/// name.
+fn sources<'e>(env: &'e Env<'_>, menus: &'e [Id]) -> impl Iterator<Item = (&'e Id, &'e str)> {
+    env.actions
+        .iter()
+        .map(|a| (&a.id, a.title.as_ref()))
+        .chain(env.settings.specs().map(|s| (&s.id, s.title.as_ref())))
+        .chain(menus.iter().map(|m| (m, m.as_str())))
+}
+
+/// Case left aside, without making the names anew.
+fn by_name(a: &str, b: &str) -> core::cmp::Ordering {
+    a.chars()
+        .flat_map(char::to_lowercase)
+        .cmp(b.chars().flat_map(char::to_lowercase))
+        .then_with(|| a.cmp(b))
 }
 
 impl AddScreen {
@@ -763,51 +801,83 @@ impl AddScreen {
         let menu = params.get(MENU).unwrap_or_default().to_string();
         let present = entries(env, &menu);
         let menus: Vec<Id> = env.menus.menu_ids().into_iter().cloned().collect();
-        let mut candidates: Vec<(Id, String, String)> = env
-            .actions
-            .iter()
-            .map(|a| a.id.clone())
-            .chain(env.settings.specs().map(|s| s.id.clone()))
-            .chain(menus.iter().cloned())
-            .filter(|id| !present.contains(id) && !makes_circle(env, &menu, id))
-            .map(|id| {
-                let name = name(env, id.as_str());
-                let beside = match env.menus.hidden_by(&menu, id.as_str()) {
-                    Some(by) => {
-                        let plugin = env
-                            .plugins
-                            .get(by.as_str())
-                            .map_or(by.as_str(), |info| info.name(env.i18n));
-                        env.i18n.format(
-                            "menu-editor.hidden-by",
-                            &[("plugin", paperpaw_sdk::Arg::Str(plugin))],
-                        )
-                    }
-                    None if menus.binary_search(&id).is_ok() => String::from("›"),
-                    None => String::new(),
-                };
-                (id, name, beside)
-            })
-            .collect();
-        candidates.sort_by_key(|c| c.1.to_lowercase());
-        candidates.dedup_by(|a, b| a.0 == b.0);
+        let actions = env.actions.iter().count();
+        let settings = actions + env.settings.specs().count();
+        // An id among two sources once (an action's before a setting's).
+        let wanted = |at: usize, id: &Id| {
+            !present.contains(id)
+                && (at < actions || !env.actions.contains(id.as_str()))
+                && (at < settings || env.settings.spec(id.as_str()).is_none())
+                && !makes_circle(env, &menu, id)
+        };
+        // Counted first, then made: no list or name grows as it is made.
+        let (mut count, mut bytes) = (0, 0);
+        for (at, (id, key)) in sources(env, &menus).enumerate() {
+            if wanted(at, id) {
+                count += 1;
+                bytes += env.i18n.tr(key).len();
+            }
+        }
+        let mut candidates = Vec::with_capacity(count);
+        let mut names = String::with_capacity(bytes);
+        let mut notes = Vec::new();
+        for (at, (id, key)) in sources(env, &menus).enumerate() {
+            if candidates.len() < count && wanted(at, id) {
+                let name = env.i18n.tr(key);
+                // Taken out of this menu by a plugin: which, beside it.
+                let noted = env.menus.hidden_by(&menu, id.as_str()).map(|by| {
+                    let plugin = env
+                        .plugins
+                        .get(by.as_str())
+                        .map_or(by.as_str(), |info| info.name(env.i18n));
+                    env.i18n.format(
+                        "menu-editor.hidden-by",
+                        &[("plugin", paperpaw_sdk::Arg::Str(plugin))],
+                    )
+                });
+                candidates.push(Candidate {
+                    source: at as u32,
+                    start: names.len() as u32,
+                    len: name.len().min(usize::from(u16::MAX)) as u16,
+                    menu: menus.binary_search(id).is_ok(),
+                    noted: noted.is_some(),
+                });
+                if let Some(note) = noted {
+                    notes.push((at as u32, note));
+                }
+                names.push_str(name);
+            }
+        }
+        let name = |c: &Candidate| &names[c.start as usize..][..usize::from(c.len)];
+        candidates.sort_unstable_by(|a, b| by_name(name(a), name(b)).then(a.source.cmp(&b.source)));
         Self {
             menu,
             candidates,
+            names,
+            notes,
+            menus,
             frame: Frame::new(env),
         }
     }
 
+    /// The id of the candidate at `index`.
+    fn id(&self, env: &Env<'_>, index: usize) -> Option<Id> {
+        let source = self.candidates.get(index)?.source as usize;
+        sources(env, &self.menus)
+            .nth(source)
+            .map(|(id, _)| id.clone())
+    }
+
     fn choose(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some((id, _, _)) = self.candidates.get(index) else {
+        let Some(id) = self.id(&env, index) else {
             return;
         };
-        if makes_circle(&env, &self.menu, id) {
+        if makes_circle(&env, &self.menu, &id) {
             return;
         }
         let mut ids = entries(&env, &self.menu);
-        ids.push(id.clone());
+        ids.push(id);
         cx.command(Command::Back);
         save(&self.menu, ids, cx);
     }
@@ -816,10 +886,20 @@ impl AddScreen {
 impl Screen for AddScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let title = env.i18n.tr("menu-editor.add");
-        let candidates = &self.candidates;
+        let (candidates, names, notes) = (&self.candidates, &self.names, &self.notes);
         let row = |i: usize| {
-            let (_, name, beside) = &candidates[i];
-            (name.as_str(), beside.as_str())
+            let c = &candidates[i];
+            let name = &names[c.start as usize..][..usize::from(c.len)];
+            let beside = if c.noted {
+                notes
+                    .binary_search_by_key(&c.source, |(source, _)| *source)
+                    .map_or("", |at| notes[at].1.as_str())
+            } else if c.menu {
+                "›"
+            } else {
+                ""
+            };
+            (name, beside)
         };
         self.frame
             .draw(canvas, env, title, candidates.len(), row, 0);
