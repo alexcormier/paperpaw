@@ -254,6 +254,10 @@ impl Storage for DirStorage {
     }
 
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        // By name: the order `read_dir` gives differs between systems
+        // (sorted on Windows, as stored on Linux), and with it what is
+        // listed first, e.g. the order of books of the same title.
+        let mut entries = Vec::new();
         for entry in fs::read_dir(self.resolve_dir(dir)?).map_err(error)? {
             let entry = entry.map_err(error)?;
             let Ok(name) = entry.file_name().into_string() else {
@@ -262,14 +266,19 @@ impl Storage for DirStorage {
             let Ok(metadata) = entry.metadata() else {
                 continue;
             };
+            let size = if metadata.is_file() {
+                metadata.len()
+            } else {
+                0
+            };
+            entries.push((name, metadata.is_dir(), size));
+        }
+        entries.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        for (name, is_dir, size) in &entries {
             visit(DirEntry {
-                name: &name,
-                is_dir: metadata.is_dir(),
-                size: if metadata.is_file() {
-                    metadata.len()
-                } else {
-                    0
-                },
+                name,
+                is_dir: *is_dir,
+                size: *size,
             });
         }
         Ok(())
@@ -424,6 +433,23 @@ mod tests {
         assert_eq!(storage.size("../outside"), Err(StorageError::InvalidPath));
         storage.remove("a/b.txt").unwrap();
         assert_eq!(storage.size("a/b.txt"), Err(StorageError::NotFound));
+        fs::remove_dir_all(root).unwrap();
+    }
+
+    /// A folder is listed by name on every system (what is listed first
+    /// decides e.g. the order of books of the same title).
+    #[test]
+    fn folders_are_listed_by_name() {
+        let root = std::env::temp_dir().join(format!("paperpaw-listed-{}", std::process::id()));
+        let storage = DirStorage::new(&root).unwrap();
+        for name in ["m.txt", "b.epub", "z.txt", "b.txt", "a"] {
+            storage.write(&format!("d/{name}"), b"x").unwrap();
+        }
+        let mut names = Vec::new();
+        storage
+            .list("d", &mut |e| names.push(e.name.to_string()))
+            .unwrap();
+        assert_eq!(names, ["a", "b.epub", "b.txt", "m.txt", "z.txt"]);
         fs::remove_dir_all(root).unwrap();
     }
 

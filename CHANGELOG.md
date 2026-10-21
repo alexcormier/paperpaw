@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Emulator: folders are listed by name on every system (Linux gave the
+  order they are stored in), so books of the same title show in the
+  same order on Linux, macOS and Windows, and the screenshots with them.
 - Buttons alone: skimming shows where the focus is. The bar has it at
   first (left and right go along it, Confirm stays), shown as the style
   shows a focus, and up and down go from it to the buttons below and
