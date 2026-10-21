@@ -243,12 +243,16 @@ fn is_switch(spec: &SettingSpec) -> bool {
 fn widest_value(env: &Env<'_>, style: &UiStyle, font: &FontHandle<'_>, spec: &SettingSpec) -> f32 {
     let size = style.text;
     let widest = |names: &mut dyn Iterator<Item = &str>| {
-        names.map(|name| font.measure(size, name)).fold(0.0, f32::max)
+        names
+            .map(|name| font.measure(size, name))
+            .fold(0.0, f32::max)
     };
     let value = match &spec.kind {
         SettingKind::Choice(choices) => widest(&mut choices.iter().map(|o| env.i18n.tr(o))),
         SettingKind::Language => widest(&mut env.i18n.languages().into_iter().map(|(_, n)| n)),
-        SettingKind::Bool => widest(&mut ["core.on", "core.off"].into_iter().map(|k| env.i18n.tr(k))),
+        SettingKind::Bool => {
+            widest(&mut ["core.on", "core.off"].into_iter().map(|k| env.i18n.tr(k)))
+        }
         _ => font.measure(size, &plain_setting_value(env, spec)),
     };
     let scoped = if spec.scoped {
@@ -310,7 +314,10 @@ fn own_title_height(env: &Env<'_>, style: &UiStyle, width: u16, title: &str) -> 
     if font.measure(style.text, title) <= room + 1.0 {
         return band;
     }
-    let lines = font.wrap(style.text, title, room).len().clamp(1, TITLE_LINES);
+    let lines = font
+        .wrap(style.text, title, room)
+        .len()
+        .clamp(1, TITLE_LINES);
     let line = font.line_metrics(style.text).line_height as u16;
     band + line * (lines as u16 - 1)
 }
@@ -429,7 +436,14 @@ pub fn draw_setting_row(
         return draw_noted_row(canvas, env, style, rect, focused, title, value, note);
     }
     if let Some(font) = style.font(env) {
-        draw_own_title(canvas, style, &font, lines.title, title, style.focus_ink(focused));
+        draw_own_title(
+            canvas,
+            style,
+            &font,
+            lines.title,
+            title,
+            style.focus_ink(focused),
+        );
     }
     draw_value_row(canvas, env, style, lines.control, focused, "", value);
     if !note.is_empty() {
@@ -456,12 +470,25 @@ pub fn draw_switch_lines(
         return draw_switch_row(canvas, env, style, rect, focused, title, note, on);
     }
     if let Some(font) = style.font(env) {
-        draw_own_title(canvas, style, &font, lines.title, title, style.focus_ink(focused));
+        draw_own_title(
+            canvas,
+            style,
+            &font,
+            lines.title,
+            title,
+            style.focus_ink(focused),
+        );
     }
     if !note.is_empty() {
         draw_note_below(canvas, env, style, rect, lines.bottom(), focused, note);
     }
-    draw_switch(canvas, style, lines.control, on, focused && style.dark_focus());
+    draw_switch(
+        canvas,
+        style,
+        lines.control,
+        on,
+        focused && style.dark_focus(),
+    );
 }
 
 /// The note of a number's row below its [`RowLines`].
@@ -664,7 +691,15 @@ pub fn draw_stepper_lines(
     let ink = style.focus_ink(true);
     draw_number_title(canvas, style, &font, lines, minus, title, ink);
     let value_x = centred(&font, style.text, value, minus, plus);
-    draw_label(canvas, &font, style.text, value_x, lines.control, value, ink);
+    draw_label(
+        canvas,
+        &font,
+        style.text,
+        value_x,
+        lines.control,
+        value,
+        ink,
+    );
     let steps = (minus, plus);
     draw_focused_steps(canvas, style, &font, lines.control, steps, editing);
 }

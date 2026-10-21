@@ -545,7 +545,11 @@ fn the_header_keeps_to_the_content_margins() {
 /// the left edge.
 fn ink_rows(frame: &paperpaw_graphics::Framebuffer, columns: std::ops::Range<u16>) -> (u16, u16) {
     let view = frame.view();
-    let inked = |y: u16| columns.clone().any(|x| view.pixel(x, y) != view.pixel(0, y));
+    let inked = |y: u16| {
+        columns
+            .clone()
+            .any(|x| view.pixel(x, y) != view.pixel(0, y))
+    };
     let first = (0..frame.height()).find(|&y| inked(y)).expect("ink");
     let last = (0..frame.height()).rev().find(|&y| inked(y)).expect("ink");
     (first, last)
@@ -981,7 +985,9 @@ fn setting_titles_are_never_cut_for_their_control() {
                     paperpaw_sdk::SettingKind::Int { .. } => {
                         ui::draw_number_lines(c, &env, &style, lines, title, "20", "", None);
                     }
-                    _ => ui::draw_switch_lines(c, &env, &style, rect, lines, false, title, "", true),
+                    _ => {
+                        ui::draw_switch_lines(c, &env, &style, rect, lines, false, title, "", true)
+                    }
                 });
                 assert!(
                     described.iter().any(|d| d.label == title),
@@ -990,7 +996,10 @@ fn setting_titles_are_never_cut_for_their_control() {
                 );
             }
             let side = ui::setting_row(&style, &short, row, noted);
-            assert_eq!(ui::setting_height(&env, &style, &short, 480, "", row, noted), side);
+            assert_eq!(
+                ui::setting_height(&env, &style, &short, 480, "", row, noted),
+                side
+            );
             assert!(!ui::row_lines(&env, &style, &short, 480, "", row, noted).stacked());
         }
     }
@@ -1006,17 +1015,27 @@ fn a_rows_lines_hold_for_every_value_it_may_show() {
     const OPTIONS: [&str; 2] = ["Off", "Only while the device is charging"];
     let mut h = Harness::new(Device::TOUCH);
     let spec = SettingSpec::fixed_choice("t.when", "Sync", &OPTIONS, "Off", groups::OTHER);
-    assert!(matches!(spec.kind, paperpaw_sdk::SettingKind::Choice(Choices::Fixed(_))));
+    assert!(matches!(
+        spec.kind,
+        paperpaw_sdk::SettingKind::Choice(Choices::Fixed(_))
+    ));
     h.settings.define(spec.clone()).unwrap();
     let mut seen = Vec::new();
     for value in OPTIONS {
-        h.settings.set("t.when", SettingValue::Text(value.into())).unwrap();
+        h.settings
+            .set("t.when", SettingValue::Text(value.into()))
+            .unwrap();
         let env = h.env();
         let style = UiStyle::new(&env);
-        seen.push(ui::row_lines(&env, &style, &spec, 480, "", style.row, false));
+        seen.push(ui::row_lines(
+            &env, &style, &spec, 480, "", style.row, false,
+        ));
     }
     assert_eq!(seen[0], seen[1]);
-    assert!(seen[0].stacked(), "the long option does not fit beside the title");
+    assert!(
+        seen[0].stacked(),
+        "the long option does not fit beside the title"
+    );
     // On and off shown as a value (a switch with an editor of its own).
     static EDITED: paperpaw_sdk::SettingExtra =
         paperpaw_sdk::SettingExtra::new().editor(paperpaw_sdk::Id::new_static("t.editor"));
@@ -1030,7 +1049,9 @@ fn a_rows_lines_hold_for_every_value_it_may_show() {
             h.settings.set("t.on", SettingValue::Bool(on)).unwrap();
             let env = h.env();
             let style = UiStyle::new(&env);
-            seen.push(ui::row_lines(&env, &style, &spec, width, "", style.row, false));
+            seen.push(ui::row_lines(
+                &env, &style, &spec, width, "", style.row, false,
+            ));
         }
         assert_eq!(seen[0], seen[1], "{width} px");
     }
@@ -1071,7 +1092,12 @@ fn a_switch_without_a_note_is_measured_as_drawn() {
     let row = style.noted_row();
     // Titles from short to long: whichever the row keeps side by side,
     // drawn there it is whole.
-    for title in ["Night", "Night mode", "Pictures in night", "Pictures in night mode"] {
+    for title in [
+        "Night",
+        "Night mode",
+        "Pictures in night",
+        "Pictures in night mode",
+    ] {
         let spec = SettingSpec::fixed_switch("t.switch", title, false, groups::OTHER);
         assert!(spec.description.is_none());
         let lines = ui::row_lines(&env, &style, &spec, 480, "", row, true);
@@ -1096,6 +1122,14 @@ fn an_empty_screen_in_a_small_area_draws_inside_it() {
     let style = UiStyle::new(&env);
     let area = Rect::new(1, 0, 149, 60);
     let mut frame = frame(480, 800);
-    ui::draw_empty(&mut frame.canvas(), &env, &style, area, "books", "Ὕ\u{dd6}#🀰a\"", "");
+    ui::draw_empty(
+        &mut frame.canvas(),
+        &env,
+        &style,
+        area,
+        "books",
+        "Ὕ\u{dd6}#🀰a\"",
+        "",
+    );
     assert_eq!(drawn_outside(&mut frame, area), None);
 }

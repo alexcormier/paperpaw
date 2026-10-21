@@ -1111,7 +1111,11 @@ fn a_widget_paging_without_end_never_keeps_the_focus() {
     for _ in 0..3 {
         press(&mut view, &env, &actions::RIGHT);
     }
-    assert_eq!(confirmed(&mut view, &env), ran("t.a"), "round and out again");
+    assert_eq!(
+        confirmed(&mut view, &env),
+        ran("t.a"),
+        "round and out again"
+    );
     press(&mut view, &env, &actions::LEFT);
     press(&mut view, &env, &actions::NEXT_PAGE);
     for _ in 0..2 {
@@ -1138,9 +1142,17 @@ fn a_widget_alone_leaves_the_page_buttons_to_the_screen() {
     press(&mut view, &env, &actions::RIGHT);
     assert_eq!(confirmed(&mut view, &env), ran("t.p0-1"));
     press(&mut view, &env, &actions::RIGHT);
-    assert_eq!(confirmed(&mut view, &env), ran("t.p1-0"), "paged at its last");
+    assert_eq!(
+        confirmed(&mut view, &env),
+        ran("t.p1-0"),
+        "paged at its last"
+    );
     press(&mut view, &env, &actions::LEFT);
-    assert_eq!(confirmed(&mut view, &env), ran("t.p0-0"), "paged back at its first");
+    assert_eq!(
+        confirmed(&mut view, &env),
+        ran("t.p0-0"),
+        "paged back at its first"
+    );
 }
 
 /// A swipe on a widget while the focus is elsewhere turns its page and

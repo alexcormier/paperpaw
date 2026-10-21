@@ -620,7 +620,10 @@ impl GridView {
         let start = |grid: &Self, item: usize| grid.owners.iter().position(|o| *o == Some(item));
         let was = owner(self, self.focus);
         let had = was == Some(index);
-        let before = (self.focus, self.targets.get(self.focus).map(|(area, _)| *area));
+        let before = (
+            self.focus,
+            self.targets.get(self.focus).map(|(area, _)| *area),
+        );
         // Where it was among its item's targets, or a button's place from
         // the end: the widget's own count of targets may change.
         let place = match was {

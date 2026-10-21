@@ -829,7 +829,10 @@ fn headers_are_centred_by_their_capitals() {
             let inked = |col: u32| (y..end).any(|row| gray[(row * width + col) as usize] < 128);
             let run = |from: u32| {
                 let start = (from..x + w).find(|col| inked(*col))?;
-                Some((start, (start..x + w).find(|col| !inked(*col)).unwrap_or(x + w)))
+                Some((
+                    start,
+                    (start..x + w).find(|col| !inked(*col)).unwrap_or(x + w),
+                ))
             };
             let first_run = run(x);
             let letter = if profile == "xteink-x4" {

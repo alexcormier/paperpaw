@@ -9,7 +9,7 @@
 //! a newer update the server named. An update that leaves out plugins
 //! built in now says which; one not signed by PaperPaw shows its key,
 //! which the reader accepts at each install. An update the server named
-//! that waits for plugins (see [`waiting`](crate::waiting)) says which,
+//! that waits for plugins (see module `waiting`) says which,
 //! and offers to keep waiting, to update anyway (the offer then, which
 //! says what stops working) or to ask again; the page shown counts as the
 //! reader having looked.

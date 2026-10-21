@@ -1,7 +1,7 @@
 //! One emulated device in the browser: the desktop emulator's device model
 //! (kernel, panel, profile, heap budget) with its files in memory, the
 //! sample books and the data plugins given to it, as a card would have
-//! them. Nothing here knows the browser: the exports ([`crate::exports`])
+//! them. Nothing here knows the browser: the exports (browser builds only)
 //! pass its calls on, and the tests drive it directly.
 
 use std::collections::{BTreeMap, BTreeSet};

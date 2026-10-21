@@ -6,7 +6,7 @@
 //! Nothing is sent unless the reader asks: on the update page, or through
 //! the action `update.check` (e.g. from a rule); and, once an update so
 //! found waits for plugins, once a day at a cheap moment until it no
-//! longer waits ([`waiting`]). The request is a `POST` to
+//! longer waits (module `waiting`). The request is a `POST` to
 //! `<server>/api/v1/updates` with what the device runs:
 //!
 //! ```json
@@ -33,7 +33,7 @@
 //! `waiting` may name code plugins of the question (`id version`) that
 //! have no build for the update yet: with one of them still in use, or
 //! with a crate built in now `missing` as `not-ready`, the update waits
-//! for its plugins ([`waiting`]): a search in the background does not
+//! for its plugins (module `waiting`): a search in the background does not
 //! offer it, the update page says so.
 //! `plugins` are those the update has built in; what the device has and
 //! they lack cannot come along, and `missing` may say why (`unknown`: not
@@ -136,7 +136,7 @@ impl Offer {
     }
 
     /// What it waits for here: code plugins in use with no build for it,
-    /// crates built in now not built for it yet ([`waiting`]).
+    /// crates built in now not built for it yet (module `waiting`).
     pub(crate) fn holding(&self, env: &Env<'_>, firmware: &Firmware) -> waiting::Holding {
         waiting::of_offer(self, env, firmware)
     }

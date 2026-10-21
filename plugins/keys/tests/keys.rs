@@ -232,7 +232,10 @@ fn holding_select_reads_as_what_it_does() {
     let mut test = Test::new(false);
     let mut row = None;
     for _ in 0..10 {
-        row = test.labels().into_iter().find(|l| l.starts_with("Hold: Select"));
+        row = test
+            .labels()
+            .into_iter()
+            .find(|l| l.starts_with("Hold: Select"));
         if row.is_some() {
             break;
         }

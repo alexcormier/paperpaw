@@ -14,7 +14,7 @@
 //! reader chooses it, told it is older. An update without some of the
 //! plugins built in now says which, and the reader chooses to update
 //! without them or to wait. An update whose plugins have no builds for it
-//! yet waits for them ([`waiting`]).
+//! yet waits for them (module `waiting`).
 
 #![no_std]
 

@@ -7,9 +7,9 @@
 //! at once.
 //!
 //! The kernel shows these screens
-//! ([`screens::WIDGET_LIST`](crate::builtin::screens::WIDGET_LIST), bound
+//! ([`screens::WIDGET_LIST`], bound
 //! to slot [`EDIT_WIDGETS`](crate::builtin::slots::EDIT_WIDGETS), and
-//! [`screens::ADD_WIDGET`](crate::builtin::screens::ADD_WIDGET)) for a
+//! [`screens::ADD_WIDGET`]) for a
 //! setting that lists widgets (parameter
 //! [`ID`](crate::builtin::params::ID)), e.g. the sleep screen's: such
 //! settings name the slot as their editor.

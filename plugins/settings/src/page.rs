@@ -243,7 +243,15 @@ impl GroupPage {
             .map(|e| match e {
                 Row::Setting(spec) if !ui::slider::shows(env, spec) => {
                     let (width, row) = (area.width, u32::from(row));
-                    Some(ui::row_lines(env, &style, spec, width, &number_room, row, noted))
+                    Some(ui::row_lines(
+                        env,
+                        &style,
+                        spec,
+                        width,
+                        &number_room,
+                        row,
+                        noted,
+                    ))
                 }
                 _ => None,
             })
@@ -503,7 +511,9 @@ impl Screen for GroupPage {
                     }
                     // On touch screens − and + are always there.
                     SettingKind::Int { .. } if touch => {
-                        ui::draw_number_lines(canvas, env, &style, lines, title, &value, room, None);
+                        ui::draw_number_lines(
+                            canvas, env, &style, lines, title, &value, room, None,
+                        );
                         if !note.is_empty() {
                             ui::draw_lines_note(canvas, env, &style, rect, lines, false, note);
                         }
@@ -521,7 +531,9 @@ impl Screen for GroupPage {
                 if ui::opens_screen(env, spec) {
                     value.push_str(" ›");
                 }
-                ui::draw_setting_row(canvas, env, &style, rect, lines, focused, title, &value, note);
+                ui::draw_setting_row(
+                    canvas, env, &style, rect, lines, focused, title, &value, note,
+                );
             });
     }
 
