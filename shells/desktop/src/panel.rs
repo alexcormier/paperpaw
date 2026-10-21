@@ -80,7 +80,7 @@ impl Panel {
                     let cell = average(&frame, x - x % divisor, y - y % divisor, divisor);
                     value = color_filter(c.luma(), cell, panel.saturation_percent);
                 }
-                if mode == RefreshMode::Fast {
+                if matches!(mode, RefreshMode::Fast | RefreshMode::Mono) {
                     let luma = c.luma();
                     value = if luma >= 128 { [255; 3] } else { [0; 3] };
                 }
@@ -95,7 +95,7 @@ impl Panel {
             }
         }
         let now = Instant::now();
-        if mode == RefreshMode::Full && self.animate {
+        if mode.cleans() && self.animate {
             self.flash = Some((region, now));
         }
         self.highlight = Some((region, now));

@@ -22,19 +22,29 @@ impl RefreshPolicy {
         interval: u32,
     ) -> (RefreshMode, Rect) {
         match requested {
-            RefreshMode::Partial if interval > 0 && self.partials + 1 >= interval => {
+            RefreshMode::Partial | RefreshMode::Gray
+                if interval > 0 && self.partials + 1 >= interval =>
+            {
                 (RefreshMode::Full, screen)
             }
             mode => (mode, dirty),
         }
     }
 
+    /// How many refreshes that leave ghosting were made since the last
+    /// that cleaned the panel.
+    pub(crate) fn since_full(&self) -> u32 {
+        self.partials
+    }
+
     /// A refresh in `mode` was done.
     pub(crate) fn done(&mut self, mode: RefreshMode) {
         match mode {
-            RefreshMode::Full => self.partials = 0,
-            RefreshMode::Partial => self.partials = self.partials.saturating_add(1),
-            // Fast, and modes to come that leave ghosting as they find it.
+            RefreshMode::Full | RefreshMode::Clear => self.partials = 0,
+            RefreshMode::Partial | RefreshMode::Gray => {
+                self.partials = self.partials.saturating_add(1)
+            }
+            // Fast and black and white leave ghosting as they find it.
             _ => {}
         }
     }
