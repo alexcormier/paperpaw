@@ -89,7 +89,18 @@ impl core::fmt::Debug for Listing<'_> {
 
 impl Listing<'_> {
     fn each(&self, f: &mut dyn FnMut(bool, u32, &str, u64)) {
+        // Files without an extension, told by their first bytes once the
+        // folder is listed.
+        let mut unknown: Vec<(String, u64)> = Vec::new();
         let _ = self.storage.list(self.dir, &mut |entry| {
+            if !entry.is_dir
+                && !self.folders_only
+                && !entry.name.starts_with('.')
+                && !self.formats.supports(entry.name)
+                && self.formats.may_sniff(entry.name)
+            {
+                unknown.push((String::from(entry.name), entry.size));
+            }
             let shown = if entry.is_dir {
                 !is_sidecar(entry.name)
             } else {
@@ -103,6 +114,16 @@ impl Listing<'_> {
                 f(entry.is_dir, rank, entry.name, entry.size);
             }
         });
+        for (name, size) in unknown {
+            let path = match self.dir.is_empty() {
+                true => name.clone(),
+                false => alloc::format!("{}/{name}", self.dir),
+            };
+            if self.formats.for_file(self.storage, &path).is_some() {
+                let rank = self.rank.map_or(UNRANKED, |rank| rank(&name));
+                f(false, rank, &name, size);
+            }
+        }
     }
 
     /// `n` entries from index `start` on, holding at most `n` entries at a

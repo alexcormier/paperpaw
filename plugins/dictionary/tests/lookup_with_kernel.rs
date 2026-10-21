@@ -460,3 +460,137 @@ proptest! {
         prop_assert_ne!(lookup.screen(), "dictionary.popup");
     }
 }
+
+/// Providers besides the dictionaries: one online, one offline answering
+/// later; and a screen for the online lookup.
+struct Providers;
+
+const WEB: paperpaw_sdk::Id = paperpaw_sdk::Id::new_static("providers.web");
+const SLOW: paperpaw_sdk::Id = paperpaw_sdk::Id::new_static("providers.slow");
+const ONLINE_SCREEN: paperpaw_sdk::Id = paperpaw_sdk::Id::new_static("providers.online");
+
+/// Many lines from `source`: pages of the panel.
+fn long(source: &str) -> String {
+    (0..LINES)
+        .map(|i| format!("{source} line {i}."))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+struct Blank;
+
+impl paperpaw_sdk::Screen for Blank {
+    fn draw(&mut self, _: &mut paperpaw_sdk::Canvas<'_>, _: &paperpaw_sdk::Env<'_>) {}
+
+    fn on_action(
+        &mut self,
+        _: &paperpaw_sdk::Id,
+        _: &mut paperpaw_sdk::Cx<'_, '_>,
+    ) -> paperpaw_sdk::Handled {
+        paperpaw_sdk::Handled::No
+    }
+}
+
+impl paperpaw_sdk::Plugin for Providers {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest::new(
+            paperpaw_sdk::Id::new_static("providers"),
+            "Providers",
+            paperpaw_sdk::SDK_VERSION,
+        )
+        .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        use paperpaw_sdk::lookup::{LookupAnswer, LookupProviderSpec};
+        r.add_lookup_provider(
+            LookupProviderSpec::new(WEB, "providers.web", |_, q| {
+                LookupAnswer::Pending(vec![q.answer(&WEB, "Web", long("Web"))])
+            })
+            .online(),
+        )?;
+        r.add_lookup_provider(LookupProviderSpec::new(SLOW, "providers.slow", |_, q| {
+            LookupAnswer::Pending(vec![q.answer(&SLOW, "Slow", long("Slow"))])
+        }))?;
+        r.add_screen(paperpaw_sdk::ScreenSpec::new(
+            ONLINE_SCREEN,
+            "providers.online",
+            Box::new(|_, _| Box::new(Blank)),
+        ))?;
+        r.bind_slot(
+            slots::LOOKUP_ONLINE,
+            ONLINE_SCREEN,
+            paperpaw_sdk::Priority::DEFAULT,
+        )
+    }
+}
+
+impl Lookup {
+    /// With the providers, a network, and the dictionaries of `storage`.
+    fn with_providers(storage: Card) -> Self {
+        let mut kernel = Kernel::builder(DEVICE)
+            .storage(storage)
+            .network(true)
+            .user_config("[core]\nlanguage = en\n".to_string())
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(paperpaw_plugin_dictionary::DictionaryPlugin)
+            .plugin(Providers)
+            .build()
+            .unwrap();
+        let effects = kernel.start(Instant(0));
+        let mut lookup = Self {
+            kernel,
+            now: 0,
+            image: Vec::new(),
+        };
+        lookup.settle(effects);
+        lookup
+    }
+
+    /// Opens the panel for `word`, without letting time pass.
+    fn open(&mut self, word: &str) -> paperpaw_core::Effects {
+        self.now += 100;
+        let params = Params::new()
+            .with(params::WORD, word)
+            .with(params::LANGUAGE, "en");
+        self.kernel
+            .open_slot(Instant(self.now), slots::LOOKUP, params)
+    }
+}
+
+#[test]
+fn a_provider_answering_later_is_shown_and_not_waited_for_forever() {
+    let mut lookup = Lookup::with_providers(card());
+    lookup.look_up("apple");
+    // The dictionary's entry and the slow one's: more pages than one
+    // entry has.
+    let (_, pages) = lookup.page().unwrap();
+    let mut alone = Lookup::new(DEVICE, card(), "");
+    alone.look_up("apple");
+    assert!(pages > alone.page().unwrap().1, "{pages}");
+    assert!(!lookup.described().iter().any(|l| l.contains("Asking")));
+}
+
+#[test]
+fn online_answers_given_while_the_dictionaries_are_prepared_stay() {
+    // The dictionaries are prepared after the panel shows: online is
+    // asked meanwhile.
+    let mut asked = Lookup::with_providers(card());
+    let effects = asked.open("apple");
+    asked.press(actions::MENU);
+    asked.settle(effects);
+    let with_online = asked.page().unwrap().1;
+    let mut offline = Lookup::with_providers(card());
+    offline.look_up("apple");
+    assert!(with_online > offline.page().unwrap().1, "{with_online}");
+}
+
+#[test]
+fn once_the_providers_were_asked_online_the_online_screen_is_offered() {
+    let mut lookup = Lookup::with_providers(card());
+    lookup.look_up("apple");
+    lookup.press(actions::MENU);
+    assert_eq!(lookup.screen(), "dictionary.popup");
+    lookup.press(actions::MENU);
+    assert_eq!(lookup.screen(), "providers.online");
+}

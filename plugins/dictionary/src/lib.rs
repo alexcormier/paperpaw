@@ -32,6 +32,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, groups, params, slots};
 use paperpaw_sdk::digest::fnv1a64;
+use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::lookup::{LookupAnswer, LookupEntry, LookupProviderSpec, LookupQuery};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
@@ -49,6 +50,8 @@ pub const POPUP: Id = Id::new_static("dictionary.popup");
 pub const FOLDER: Setting<Text> = Setting::new("dictionary.folder");
 /// The StarDict dictionaries as a lookup provider.
 pub const PROVIDER: Id = Id::new_static("dictionary.stardict");
+/// What providers answering later answer the panel with.
+const ANSWERED: Id = Id::new_static("dictionary.answered");
 /// The folder chooser of the `files` plugin, if installed.
 const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 
@@ -225,12 +228,18 @@ struct Popup {
     language: Option<String>,
     dictionaries: Vec<Dictionary>,
     state: State,
-    /// What was found, from the dictionaries and the providers.
+    /// What was found, in the dictionaries and from offline providers
+    /// (made anew once the dictionaries are prepared), and from online
+    /// providers (kept).
     entries: Vec<LookupEntry>,
-    /// Online providers asked that have not answered yet, and whether
-    /// they were asked (once a word).
-    pending: Vec<Id>,
+    online_entries: Vec<LookupEntry>,
+    /// Providers asked that have not answered yet, and whether each goes
+    /// online; whether those online were asked (once a word).
+    pending: Vec<(Id, bool)>,
     asked_online: bool,
+    /// What providers that answer later need run (their requests), until
+    /// the panel can.
+    commands: Vec<Command>,
     /// The definitions (or a message), and its lines as byte ranges.
     text: String,
     lines: Vec<(usize, usize)>,
@@ -259,8 +268,10 @@ impl Popup {
             dictionaries: Vec::new(),
             state: State::Ready,
             entries: Vec::new(),
+            online_entries: Vec::new(),
             pending: Vec::new(),
             asked_online: false,
+            commands: Vec::new(),
             text: String::new(),
             lines: Vec::new(),
             top: 0,
@@ -310,34 +321,43 @@ impl Popup {
     }
 
     fn query(&self) -> LookupQuery {
-        LookupQuery::new(self.word.clone(), self.language.clone())
+        LookupQuery::new(self.word.clone(), self.language.clone()).reply(ANSWERED.clone())
     }
 
     /// Looks the word up in every dictionary, and asks the providers that
-    /// work offline.
+    /// work offline; what online providers said or will say stays.
     fn look_up(&mut self, env: &Env<'_>) {
         self.entries = self
             .dictionaries
             .iter()
             .flat_map(|dictionary| entries_of(env, dictionary, &self.word))
             .collect();
-        // Their own commands are none: offline providers answer at once.
         let asked = env.lookup.ask(env, &self.query(), false, &[PROVIDER]);
         self.entries.extend(asked.entries);
-        self.pending = asked.pending;
+        self.pending.retain(|(_, online)| *online);
+        self.pending
+            .extend(asked.pending.into_iter().map(|id| (id, false)));
+        self.commands.extend(asked.commands);
         self.state = State::Ready;
         self.show_entries(env);
     }
 
+    /// Runs what providers that answer later need.
+    fn run_commands(&mut self, cx: &mut Cx<'_, '_>) {
+        for command in self.commands.drain(..) {
+            cx.command(command);
+        }
+    }
+
     /// Shows the entries, each source named where there are several.
     fn show_entries(&mut self, env: &Env<'_>) {
-        let several = self
-            .entries
-            .first()
-            .is_some_and(|first| self.entries.iter().any(|e| e.source != first.source));
+        let mut all = self.entries.iter().chain(&self.online_entries);
+        let several = all
+            .next()
+            .is_some_and(|first| all.any(|e| e.source != first.source));
         let mut text = String::new();
         let mut last: Option<&str> = None;
-        for entry in &self.entries {
+        for entry in self.entries.iter().chain(&self.online_entries) {
             if several && last != Some(entry.source.as_str()) {
                 if !text.is_empty() {
                     text.push_str("\n\n");
@@ -402,27 +422,35 @@ impl Popup {
         ))
     }
 
-    /// Whether the word can be looked up online: providers that go
-    /// online, or a screen bound for it; with a network, not yet asked.
+    /// Whether providers that go online are there and not yet asked.
+    fn providers_online(&self, env: &Env<'_>) -> bool {
+        !self.asked_online
+            && env
+                .lookup
+                .fitting(env, &self.query(), true)
+                .next()
+                .is_some()
+    }
+
+    /// Whether the word can be looked up online, with a network: the
+    /// providers that go online first, then a screen bound for it (e.g.
+    /// Wikipedia's).
     fn can_go_online(&self, env: &Env<'_>) -> bool {
-        let providers = env
-            .lookup
-            .fitting(env, &self.query(), true)
-            .next()
-            .is_some();
-        env.caps.network && !self.asked_online && (providers || env.has_slot(&slots::LOOKUP_ONLINE))
+        env.caps.network && (self.providers_online(env) || env.has_slot(&slots::LOOKUP_ONLINE))
     }
 
     /// Asks the providers that go online, their entries shown here as
-    /// they come; without any, opens the online lookup instead.
+    /// they come; once they were asked, or without any, opens the online
+    /// lookup.
     fn online(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let query = self.query();
-        if env.lookup.fitting(&env, &query, true).next().is_some() {
+        if self.providers_online(&env) {
             let asked = env.lookup.ask(&env, &query, true, &[]);
             self.asked_online = true;
-            self.entries.extend(asked.entries);
-            self.pending = asked.pending;
+            self.online_entries.extend(asked.entries);
+            self.pending
+                .extend(asked.pending.into_iter().map(|id| (id, true)));
             for command in asked.commands {
                 cx.command(command);
             }
@@ -600,6 +628,7 @@ impl Screen for Popup {
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        self.run_commands(cx);
         if matches!(self.state, State::Preparing(..)) {
             let now = cx.env().now;
             cx.wake_at(now);
@@ -640,6 +669,7 @@ impl Screen for Popup {
         };
         if finished {
             self.look_up(&env);
+            self.run_commands(cx);
         } else {
             cx.wake_at(env.now.add_millis(1));
         }
@@ -678,21 +708,27 @@ impl Screen for Popup {
         Handled::Yes
     }
 
-    /// An online provider's answer: shown with the others.
+    /// A provider's later answer: shown with the others.
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        let Some(answer) = events::LOOKUP_ANSWERED.read(event, params) else {
+        if *event != ANSWERED {
+            return;
+        }
+        let Some(answer) = <events::LookupAnswered as EventData>::from_params(params) else {
             return;
         };
-        let Some(at) = self.pending.iter().position(|p| *p == answer.provider) else {
+        let Some(at) = self.pending.iter().position(|(p, _)| *p == answer.provider) else {
             return;
         };
         if answer.word != self.word {
             return;
         }
-        self.pending.remove(at);
+        let (_, online) = self.pending.remove(at);
         if !answer.text.trim().is_empty() {
-            self.entries
-                .push(LookupEntry::new(answer.source, answer.text));
+            let entry = LookupEntry::new(answer.source, answer.text);
+            match online {
+                true => self.online_entries.push(entry),
+                false => self.entries.push(entry),
+            }
         }
         let env = *cx.env();
         self.show_entries(&env);

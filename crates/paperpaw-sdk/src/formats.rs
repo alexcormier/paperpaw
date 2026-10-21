@@ -193,6 +193,10 @@ pub struct Formats {
     color: bool,
     /// The screen's size for pictures, if set.
     image_fit: Option<Fit>,
+    /// The file told by its first bytes last, its size and its format
+    /// (by index): asked again for the same file (prepared, then opened),
+    /// it is not read again.
+    sniffed: core::cell::RefCell<Option<(String, u64, Option<usize>)>>,
 }
 
 impl Formats {
@@ -276,21 +280,49 @@ impl Formats {
     }
 
     /// The format of the file at `path`: by its extension, else by its
-    /// first bytes ([`FormatSpec::sniff`]).
+    /// first bytes ([`FormatSpec::sniff`]), read once for the same file.
     pub fn for_file(&self, storage: &dyn Storage, path: &str) -> Option<&FormatSpec> {
         if let Some(spec) = self.for_path(path) {
             return Some(spec);
         }
-        if !self.specs.iter().any(|s| s.sniff.is_some()) {
+        if !self.sniffs() {
             return None;
+        }
+        let size = storage.size(path).ok()?;
+        if let Some((known, known_size, at)) = &*self.sniffed.borrow()
+            && known == path
+            && *known_size == size
+        {
+            return at.and_then(|at| self.specs.get(at));
         }
         let mut head = [0u8; SNIFF_BYTES];
         let read = storage.read_at(path, 0, &mut head).ok()?;
         let head = &head[..read.min(SNIFF_BYTES)];
-        self.specs
+        let at = self
+            .specs
             .iter()
-            .rev()
-            .find(|s| s.sniff.as_ref().is_some_and(|sniff| sniff(head)))
+            .rposition(|s| s.sniff.as_ref().is_some_and(|sniff| sniff(head)));
+        *self.sniffed.borrow_mut() = Some((String::from(path), size, at));
+        at.and_then(|at| self.specs.get(at))
+    }
+
+    /// Whether any format tells files by their first bytes.
+    pub fn sniffs(&self) -> bool {
+        self.specs.iter().any(|s| s.sniff.is_some())
+    }
+
+    /// Whether the file `name` is told by its first bytes, if at all: it
+    /// has no extension (a book downloaded without one) and a format
+    /// tells files so. Lists read only those, and after listing.
+    pub fn may_sniff(&self, name: &str) -> bool {
+        let name = crate::files::name(name);
+        !name.trim_start_matches('.').contains('.') && self.sniffs()
+    }
+
+    /// Whether any format can open the file at `path`: by its extension,
+    /// or, without one, by its first bytes.
+    pub fn supports_file(&self, storage: &dyn Storage, path: &str) -> bool {
+        self.supports(path) || self.may_sniff(path) && self.for_file(storage, path).is_some()
     }
 
     /// Opens `path` with the matching format, as the book intends (see
@@ -376,6 +408,11 @@ mod tests {
         assert_eq!(found("books/missing"), None);
         // The extension first.
         assert_eq!(found("books/x.txt"), Some("a.txt"));
+        assert!(formats.supports_file(&storage, "books/download"));
+        assert!(!formats.supports_file(&storage, "books/notes"));
+        // Only files without an extension are read.
+        assert!(formats.may_sniff("books/download"));
+        assert!(!formats.may_sniff("books/photo.jpg"));
     }
 
     #[test]

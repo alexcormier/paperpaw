@@ -370,7 +370,8 @@ impl Kernel {
     pub(crate) fn speak(&mut self, speech: paperpaw_sdk::Speech) {
         let screens = self.stack.len();
         let env = self.shared.env(self.now);
-        if let Some(voice) = self.shared.voices.chosen(&env, &speech.language) {
+        let system = self.io.speech.system;
+        if let Some(voice) = self.shared.voices.chosen(&env, &speech.language, system) {
             // In place of what the system says now, unless after it.
             if !speech.queue {
                 self.io.speech.stop();
@@ -379,21 +380,29 @@ impl Kernel {
             self.io.speech.voice = Some((voice.id.clone(), screens));
             return;
         }
-        let available = self.io.speech.system;
+        // In place of what a plugin's voice says, unless after it.
+        if !speech.queue {
+            self.stop_voice();
+        }
         self.io
             .speech
-            .speak(speech, available, screens, &mut self.output.commands);
+            .speak(speech, system, screens, &mut self.output.commands);
     }
 
-    /// Stops speaking: the system's voice and a plugin's.
-    pub(crate) fn stop_speaking(&mut self) {
-        self.io.speech.stop();
+    /// Stops a plugin's voice, if one speaks.
+    fn stop_voice(&mut self) {
         if let Some((id, _)) = self.io.speech.voice.take() {
             let env = self.shared.env(self.now);
             if let Some(voice) = self.shared.voices.get(id.as_str()) {
                 (voice.stop)(&env, &mut self.output.commands);
             }
         }
+    }
+
+    /// Stops speaking: the system's voice and a plugin's.
+    pub(crate) fn stop_speaking(&mut self) {
+        self.io.speech.stop();
+        self.stop_voice();
     }
 
     fn apply_io(&mut self, command: Command) {

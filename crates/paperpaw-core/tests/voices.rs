@@ -85,7 +85,8 @@ fn the_voice_chosen_speaks_its_languages() {
         10,
         [say("Hello", "en-GB"), say("Bonjour", "fr")],
     );
-    assert_eq!(*heard.borrow(), ["say Hello"]);
+    // The French in its place: the voice stopped.
+    assert_eq!(*heard.borrow(), ["say Hello", "stop"]);
     // The system's voice the rest.
     assert_eq!(system_said(&mut kernel), ["Bonjour"]);
     // The voice answered as the system does.
@@ -111,7 +112,7 @@ fn a_plugins_voice_gives_a_device_speech() {
     let (harness, heard) = (Harness::new(), Heard::default());
     let mut kernel = kernel(&harness, &heard, "[core]\nvoice = echo.voice\n", false);
     harness.run(&mut kernel, 10, [say("Hello", "en"), say("Hallo", "de")]);
-    assert_eq!(*heard.borrow(), ["say Hello"]);
+    assert_eq!(*heard.borrow(), ["say Hello", "stop"]);
     // German has no voice here: it fails at once, as without speech.
     let replies = harness.lines("event drv.reply");
     assert_eq!(replies.len(), 2, "{replies:?}");
@@ -121,4 +122,23 @@ fn a_plugins_voice_gives_a_device_speech() {
             .any(|r| r.contains("n=Hallo") && r.contains("failed"))
     );
     assert!(system_said(&mut kernel).is_empty());
+}
+
+#[test]
+fn without_the_systems_voice_a_plugins_speaks_unchosen() {
+    let (harness, heard) = (Harness::new(), Heard::default());
+    let mut kernel = kernel(&harness, &heard, "", false);
+    harness.run(&mut kernel, 10, [say("Hello", "en")]);
+    assert_eq!(*heard.borrow(), ["say Hello"]);
+}
+
+#[test]
+fn the_systems_voice_speaking_in_its_place_stops_the_plugins() {
+    let (harness, heard) = (Harness::new(), Heard::default());
+    let mut kernel = kernel(&harness, &heard, "[core]\nvoice = echo.voice\n", true);
+    harness.run(&mut kernel, 10, [say("Hello", "en")]);
+    // French is the system's: the voice stops, not both talking.
+    harness.run(&mut kernel, 20, [say("Bonjour", "fr")]);
+    assert_eq!(*heard.borrow(), ["say Hello", "stop"]);
+    assert_eq!(system_said(&mut kernel), ["Bonjour"]);
 }

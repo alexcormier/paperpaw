@@ -116,11 +116,16 @@ impl Voices {
         self.list.iter().map(|v| &v.id)
     }
 
-    /// The voice [`VOICE`](crate::builtin::settings::VOICE) chooses, if it
-    /// is a plugin's and speaks `language`.
-    pub fn chosen(&self, env: &Env<'_>, language: &str) -> Option<&VoiceSpec> {
+    /// The plugin's voice that speaks `language` now: the one
+    /// [`VOICE`](crate::builtin::settings::VOICE) chooses if it speaks it;
+    /// where the system cannot speak (`system` false), else the first that
+    /// does. `None`: the system's.
+    pub fn chosen(&self, env: &Env<'_>, language: &str, system: bool) -> Option<&VoiceSpec> {
         let chosen = env.settings.read(&crate::builtin::settings::VOICE);
-        self.get(chosen).filter(|v| v.speaks(language))
+        let fitting = |v: &&VoiceSpec| v.speaks(language);
+        self.get(chosen)
+            .filter(fitting)
+            .or_else(|| (!system).then(|| self.list.iter().find(fitting)).flatten())
     }
 }
 

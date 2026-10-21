@@ -139,13 +139,13 @@ impl ReaderScreen {
         let prepared = params
             .get(params::PATH)
             .is_none_or(|path| env.formats.prepared(env.storage, path, &open_options(env)));
-        let (book, preparing) = if prepared {
-            (Book::open(env, params), None)
+        let (book, preparing, waiting) = if prepared {
+            let (book, not_ready) = open_book(env, params);
+            (book, None, not_ready.then(|| params.clone()))
         } else {
             let message = env.i18n.tr("reader.preparing").to_string();
-            (Err(message), Some(params.clone()))
+            (Err(message), Some(params.clone()), None)
         };
-        let waiting = not_ready(env, &book).then(|| params.clone());
         Self {
             smooth: env.settings.read(&crate::settings::SMOOTH_TEXT),
             book,
@@ -170,8 +170,9 @@ impl ReaderScreen {
             return false;
         };
         let env = *cx.env();
-        self.book = Book::open(&env, &params);
-        self.waiting = not_ready(&env, &self.book).then_some(params);
+        let (book, not_ready) = open_book(&env, &params);
+        self.book = book;
+        self.waiting = not_ready.then_some(params);
         // Shown as a screen opening is: the book replaces the notice.
         cx.request_redraw();
         let flash = env
@@ -1054,7 +1055,7 @@ impl ReaderScreen {
             let env = *cx.env();
             let path = book.path.clone();
             self.selection = None;
-            self.book = Book::open(&env, &Params::new().with(params::PATH, path));
+            self.book = open_book(&env, &Params::new().with(params::PATH, path)).0;
             cx.request_redraw();
             cx.wake_at(env.now);
             return;
@@ -1140,10 +1141,16 @@ pub(super) fn marks_not_saved(cx: &mut Cx<'_, '_>) {
     cx.command(Command::Notify(text));
 }
 
-/// Whether opening the book failed because it is not there yet: the
-/// message it says so with.
-fn not_ready(env: &Env<'_>, book: &Result<Book, String>) -> bool {
-    matches!(book, Err(message) if message.as_str() == env.i18n.tr("reader.not-ready"))
+/// The book of `params` opened, or what to show instead; and whether it
+/// is only not there yet.
+fn open_book(env: &Env<'_>, params: &Params) -> (Result<Book, String>, bool) {
+    match Book::open(env, params) {
+        Ok(book) => (Ok(book), false),
+        Err(unopened) => {
+            let not_ready = unopened.not_ready();
+            (Err(unopened.message()), not_ready)
+        }
+    }
 }
 
 /// The page turn an arrow stands for in a book: left and up back, right

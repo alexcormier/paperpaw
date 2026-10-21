@@ -675,7 +675,8 @@ pub mod events {
     /// [`layers`](crate::layers)), whose plugin answers.
     pub const PAGE_LAYER_TAPPED: Event<PageLayerTapped> = Event::new("core.page-layer-tapped");
     /// A lookup provider that answered later ([`LookupAnswered`], see
-    /// [`lookup`](crate::lookup)) has its entry: the screen that asked
+    /// [`lookup`](crate::lookup)) has its entry, for a query that names
+    /// no reply of its own (`LookupQuery::reply`): the screen that asked
     /// shows it.
     pub const LOOKUP_ANSWERED: Event<LookupAnswered> = Event::new("core.lookup-answered");
     /// A document that a format could not open yet

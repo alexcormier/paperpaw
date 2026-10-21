@@ -1594,9 +1594,12 @@ pub fn paperpaw_sdk::lookup::LookupProviders::is_empty(&self) -> bool
 pub fn paperpaw_sdk::lookup::LookupProviders::new() -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::lookup::LookupQuery
 pub paperpaw_sdk::lookup::LookupQuery::language: core::option::Option<alloc::string::String>
+pub paperpaw_sdk::lookup::LookupQuery::reply: paperpaw_sdk::Id
 pub paperpaw_sdk::lookup::LookupQuery::word: alloc::string::String
 impl paperpaw_sdk::lookup::LookupQuery
+pub fn paperpaw_sdk::lookup::LookupQuery::answer(&self, &paperpaw_sdk::Id, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::lookup::LookupQuery::new(impl core::convert::Into<alloc::string::String>, core::option::Option<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::lookup::LookupQuery::reply(self, paperpaw_sdk::Id) -> Self
 pub type paperpaw_sdk::lookup::LookupFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::lookup::LookupQuery) -> paperpaw_sdk::lookup::LookupAnswer>
 pub mod paperpaw_sdk::native
 pub use paperpaw_sdk::native::BadSignature
@@ -2638,7 +2641,7 @@ impl core::fmt::Debug for paperpaw_sdk::voices::VoiceSpec
 pub fn paperpaw_sdk::voices::VoiceSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::voices::Voices
 impl paperpaw_sdk::voices::Voices
-pub fn paperpaw_sdk::voices::Voices::chosen(&self, &paperpaw_sdk::Env<'_>, &str) -> core::option::Option<&paperpaw_sdk::voices::VoiceSpec>
+pub fn paperpaw_sdk::voices::Voices::chosen(&self, &paperpaw_sdk::Env<'_>, &str, bool) -> core::option::Option<&paperpaw_sdk::voices::VoiceSpec>
 pub fn paperpaw_sdk::voices::Voices::get(&self, &str) -> core::option::Option<&paperpaw_sdk::voices::VoiceSpec>
 pub fn paperpaw_sdk::voices::Voices::ids(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::Id>
 pub fn paperpaw_sdk::voices::Voices::is_empty(&self) -> bool
@@ -3732,12 +3735,15 @@ pub fn paperpaw_sdk::Formats::contains(&self, &str) -> bool
 pub fn paperpaw_sdk::Formats::for_file(&self, &dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<&paperpaw_sdk::FormatSpec>
 pub fn paperpaw_sdk::Formats::for_path(&self, &str) -> core::option::Option<&paperpaw_sdk::FormatSpec>
 pub fn paperpaw_sdk::Formats::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::FormatSpec>
+pub fn paperpaw_sdk::Formats::may_sniff(&self, &str) -> bool
 pub fn paperpaw_sdk::Formats::new() -> Self
 pub fn paperpaw_sdk::Formats::open(&self, &dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<alloc::boxed::Box<dyn paperpaw_document::Document>, paperpaw_document::DocumentError>
 pub fn paperpaw_sdk::Formats::open_with(&self, &dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::OpenOptions) -> core::result::Result<alloc::boxed::Box<dyn paperpaw_document::Document>, paperpaw_document::DocumentError>
 pub fn paperpaw_sdk::Formats::options(&self) -> paperpaw_sdk::OpenOptions
 pub fn paperpaw_sdk::Formats::prepared(&self, &dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::OpenOptions) -> bool
+pub fn paperpaw_sdk::Formats::sniffs(&self) -> bool
 pub fn paperpaw_sdk::Formats::supports(&self, &str) -> bool
+pub fn paperpaw_sdk::Formats::supports_file(&self, &dyn paperpaw_platform::storage::Storage, &str) -> bool
 #[non_exhaustive] pub struct paperpaw_sdk::Gesture
 pub paperpaw_sdk::Gesture::end: paperpaw_platform::geometry::Point
 pub paperpaw_sdk::Gesture::kind: paperpaw_sdk::GestureKind

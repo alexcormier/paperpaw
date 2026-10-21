@@ -11,7 +11,7 @@ use std::rc::Rc;
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::Rotation;
-use paperpaw_sdk::builtin::{actions, events, params, slots};
+use paperpaw_sdk::builtin::{actions, params, slots};
 use paperpaw_sdk::lookup::{LookupAnswer, LookupEntry, LookupProviderSpec};
 use paperpaw_sdk::{
     DeviceInfo, DisplayInfo, Id, InputCaps, Instant, Manifest, MemoryClass, MemoryStorage, Params,
@@ -60,9 +60,7 @@ impl Plugin for Glossary {
         r.add_lookup_provider(
             LookupProviderSpec::new(WEB, "glossary.web", |_, q| {
                 // Its answer comes as an event, as an HTTP reply's would.
-                let answer =
-                    events::LookupAnswered::new(WEB, q.word.clone(), "Web".into(), long("online"));
-                LookupAnswer::Pending(vec![events::LOOKUP_ANSWERED.emit(answer)])
+                LookupAnswer::Pending(vec![q.answer(&WEB, "Web", long("online"))])
             })
             .online(),
         )?;

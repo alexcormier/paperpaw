@@ -5,14 +5,22 @@
 //! A provider ([`LookupProviderSpec`], `Registrar::add_lookup_provider`)
 //! answers a [`LookupQuery`] at once with its entries
 //! ([`LookupAnswer::Ready`]), or starts work (an HTTP request, say) and
-//! answers later ([`LookupAnswer::Pending`]): its plugin then emits
-//! [`events::LOOKUP_ANSWERED`](crate::builtin::events::LOOKUP_ANSWERED)
-//! with the entries. Providers that go online are asked only when the
-//! reader asks for it (and there is a network), never with every word.
+//! answers later ([`LookupAnswer::Pending`]): its plugin then emits the
+//! query's reply ([`LookupQuery::answer`], an
+//! [`events::LookupAnswered`](crate::builtin::events::LookupAnswered)),
+//! keeping the reply's id with its request.
 //!
 //! The screen in the lookup slot asks the providers
 //! ([`LookupProviders::ask`]) and shows every entry with the name of its
-//! provider.
+//! provider. Those that go online it asks only when the reader chooses
+//! to (the shipped panel's *Online*), never with every word.
+//!
+//! Privacy: that rule is the asking screen's, not the kernel's, and a
+//! provider that goes online sends the word where it asks. The answer
+//! goes to the asker's reply event (a screen's own id, by default
+//! [`events::LOOKUP_ANSWERED`](crate::builtin::events::LOOKUP_ANSWERED)):
+//! only plugins that listen for that event hear it, but every open
+//! screen sees every event, as with all events.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -29,14 +37,47 @@ pub struct LookupQuery {
     pub word: String,
     /// The language of the text it is from, e.g. `de`, where known.
     pub language: Option<String>,
+    /// The event a provider answering later answers with (see
+    /// [`LookupQuery::answer`]).
+    pub reply: Id,
 }
 
 impl LookupQuery {
+    /// `word` in `language`, answered later with
+    /// [`events::LOOKUP_ANSWERED`](crate::builtin::events::LOOKUP_ANSWERED).
     pub fn new(word: impl Into<String>, language: Option<String>) -> Self {
         Self {
             word: word.into(),
             language,
+            reply: crate::builtin::events::LOOKUP_ANSWERED.id().clone(),
         }
+    }
+
+    /// Answered later with `reply` instead, e.g. the asking screen's own
+    /// event.
+    pub fn reply(mut self, reply: Id) -> Self {
+        self.reply = reply;
+        self
+    }
+
+    /// A later answer of `provider` to the query: its entry from
+    /// `source`, none where `text` is empty.
+    pub fn answer(
+        &self,
+        provider: &Id,
+        source: impl Into<String>,
+        text: impl Into<String>,
+    ) -> Command {
+        let answer = crate::builtin::events::LookupAnswered::new(
+            provider.clone(),
+            self.word.clone(),
+            source.into(),
+            text.into(),
+        );
+        Command::Emit(
+            self.reply.clone(),
+            crate::event::EventData::to_params(&answer),
+        )
     }
 
     /// Whether `languages` (a provider's) take the query's: any where

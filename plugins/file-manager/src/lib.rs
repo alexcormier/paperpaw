@@ -342,7 +342,7 @@ impl Browser {
         let path = ops::join(&self.dir, &entry.name);
         let env = *cx.env();
         let mut options = Vec::new();
-        if !entry.is_dir && env.formats.supports(&path) {
+        if !entry.is_dir && env.formats.supports_file(env.storage, &path) {
             options.push("open");
         }
         options.extend(["rename", "move", "copy", "delete"]);

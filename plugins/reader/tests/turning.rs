@@ -453,3 +453,23 @@ fn pages_that_go_left_to_right_turn_on_with_a_tap_on_the_right() {
     reading.tap(paperpaw_sdk::Point::new(450, 400));
     assert!(reading.shown().offset > first);
 }
+
+#[test]
+fn a_swipe_in_from_the_left_edge_turns_on_where_pages_go_right_to_left() {
+    use paperpaw_platform::PointerPhase;
+    let book = epub_with(
+        &[("c1.xhtml", filler("manga", 6))],
+        &[],
+        r#" page-progression-direction="rtl""#,
+    );
+    let mut reading = Reading::new(TOUCH, Shared::default(), "books/manga.epub", &book, "");
+    reading.open();
+    let first = reading.shown().offset;
+    // From the left edge in, as a swipe further in would: on.
+    reading.now += 1000;
+    reading.finger(PointerPhase::Down, paperpaw_sdk::Point::new(2, 400));
+    reading.finger(PointerPhase::Move, paperpaw_sdk::Point::new(120, 400));
+    reading.finger(PointerPhase::Move, paperpaw_sdk::Point::new(240, 400));
+    reading.finger(PointerPhase::Up, paperpaw_sdk::Point::new(240, 400));
+    assert!(reading.shown().offset > first, "{}", reading.shown().offset);
+}
