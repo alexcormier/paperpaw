@@ -1,4 +1,4 @@
-//! Services and introspection (SDK gap J1): services by contract and
+//! Services and introspection: services by contract and
 //! version, points and events declared, the screens of slots, the
 //! bindings of a layer with their origin.
 

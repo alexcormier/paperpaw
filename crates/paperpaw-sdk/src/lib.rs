@@ -60,6 +60,7 @@ pub mod icons;
 mod id;
 pub mod install;
 pub mod keys;
+pub mod layers;
 pub mod library;
 pub mod logo;
 mod memory_storage;

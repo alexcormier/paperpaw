@@ -1,4 +1,4 @@
-//! The screen stack as plugins read and steer it (SDK gap A2):
+//! The screen stack as plugins read and steer it:
 //! `Env::stack`, closing a screen of one's own, replacing, going back to
 //! a screen, slots chosen for the user, asking before closing, taps
 //! outside, input passed through, a screen's own row of hints.

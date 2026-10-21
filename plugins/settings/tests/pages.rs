@@ -378,3 +378,20 @@ fn everything_reset_keeps_the_language() {
         assert_eq!(settings.text("core.language"), "de");
     }
 }
+
+#[test]
+fn a_choice_with_nothing_to_choose_is_not_listed() {
+    for device in DEVICES {
+        let mut app = settings(device, "");
+        // The page frame offers one column alone until a plugin adds a
+        // frame: nothing to choose.
+        search(&mut app, "page frame");
+        let hits = titles(&mut app);
+        assert!(!hits.iter().any(|h| h == "Page frame"), "{hits:?}");
+        // A choice of two is (the clock's 24 or 12 hours).
+        app.run(actions::BACK);
+        search(&mut app, "clock");
+        let hits = titles(&mut app);
+        assert!(hits.iter().any(|h| h == "Clock"), "{hits:?}");
+    }
+}

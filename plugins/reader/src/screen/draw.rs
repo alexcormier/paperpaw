@@ -1,9 +1,97 @@
 //! Drawing the page: its text and pictures, highlights, links, the
-//! bookmark ribbon, the way back from a link and the status lines.
+//! plugins' layers, the bookmark ribbon, the way back from a link and the
+//! status lines.
 
 use super::*;
 
+use paperpaw_sdk::layers::{LineBox, PageView};
+
 impl Book {
+    /// The lines of the page as layers see them, made once a page.
+    pub(super) fn lines(&self) -> &[LineBox] {
+        self.lines.get_or_init(|| self.line_boxes())
+    }
+
+    /// The lines of the page as layers see them: each as wide as its
+    /// column, as high as a line of body text, on its baseline.
+    fn line_boxes(&self) -> Vec<LineBox> {
+        let t = &self.typography;
+        let text = Rect::new(t.x as u16, t.y as u16, t.width as u16, t.height as u16);
+        self.page
+            .lines
+            .iter()
+            .filter_map(|line| {
+                let (first, last) = (line.words.first()?.0, line.words.last()?.1);
+                let x = (t.x + line.x) as u32;
+                let column = t
+                    .columns
+                    .iter()
+                    .find(|c| u32::from(c.x) <= x && x < c.right())
+                    .copied()
+                    .unwrap_or(text);
+                let top = (t.y + line.baseline - t.ascent).max(0.0);
+                Some(LineBox::new(
+                    Rect::new(column.x, top as u16, column.width, t.line_height as u16),
+                    Locator::new(line.section, first),
+                    Locator::new(line.section, last),
+                ))
+            })
+            .collect()
+    }
+
+    /// The page as layers see it, with its `lines`.
+    pub(super) fn page_view<'a>(&'a self, lines: &'a [LineBox]) -> PageView<'a> {
+        let t = &self.typography;
+        let text = Rect::new(t.x as u16, t.y as u16, t.width as u16, t.height as u16);
+        PageView::new(&self.path, self.page.start, self.page.end, text)
+            .language(&self.language)
+            .columns(&t.columns)
+            .lines(lines)
+            .status(t.top_status, t.status)
+    }
+
+    /// The top of the text and the layers' rooms above it: the margin
+    /// above is above that.
+    fn content_top(&self) -> f32 {
+        let t = &self.typography;
+        t.rooms
+            .iter()
+            .map(|(_, room)| f32::from(room.y))
+            .fold(t.y, f32::min)
+    }
+
+    /// The right edge of the text and the layers' rooms beside it.
+    fn right_edge(&self) -> f32 {
+        let t = &self.typography;
+        t.rooms
+            .iter()
+            .map(|(_, room)| room.right() as f32)
+            .fold(t.x + t.width, f32::max)
+    }
+
+    /// Tells the plugin of layer `layer` its room was tapped, at `at`
+    /// (its middle when chosen with the buttons).
+    pub(super) fn tap_layer(&self, layer: &Id, at: Option<Point>, cx: &mut Cx<'_, '_>) {
+        let Some((_, room)) = self.typography.rooms.iter().find(|(id, _)| id == layer) else {
+            return;
+        };
+        let at = at.unwrap_or_else(|| {
+            Point::new(
+                i32::from(room.x) + i32::from(room.width) / 2,
+                i32::from(room.y) + i32::from(room.height) / 2,
+            )
+        });
+        let line = self
+            .page_view(self.lines())
+            .line_at(at.x, at.y)
+            .map(|l| l.start);
+        let mut tapped = events::PageLayerTapped::new(layer.clone(), self.path.clone(), at.x, at.y);
+        if let Some(line) = line {
+            tapped = tapped.section(line.section).offset(line.offset);
+        }
+        cx.command(events::PAGE_LAYER_TAPPED.emit(tapped));
+    }
+
     /// The page's pictures and text, each word in its ink (`inks`, by the
     /// words' order as [`Book::words`] has them; black where none).
     pub(super) fn draw_page(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, inks: &[Option<Color>]) {
@@ -33,8 +121,9 @@ impl Book {
         // Within the top margin where it is wide enough, so it covers no
         // text.
         let line = font.line_metrics(style.small).line_height;
-        let height = (line + pad).min(self.typography.y - 4.0).max(line);
-        let y = ((self.typography.y - height) / 2.0).max(0.0);
+        let top = self.content_top();
+        let height = (line + pad).min(top - 4.0).max(line);
+        let y = ((top - height) / 2.0).max(0.0);
         Some(Rect::new(
             self.typography.x as u16,
             y as u16,
@@ -79,10 +168,9 @@ impl Book {
     }
 
     pub(super) fn ribbon_area(&self, env: &Env<'_>) -> Rect {
-        let t = &self.typography;
         let width = env.metrics.mm(3) as u16;
-        let height = (t.y * 0.8) as u16;
-        let x = (t.x + t.width) as u16 - width;
+        let height = (self.content_top() * 0.8) as u16;
+        let x = self.right_edge() as u16 - width;
         Rect::new(x, 0, width, height.max(width))
     }
 
@@ -131,9 +219,16 @@ impl Book {
         }
         let style = UiStyle::new(env);
         let size = style.small;
-        let x = self.typography.x + self.typography.width + (style.gap as f32) / 2.0;
+        let columns = &self.typography.columns;
         for mark in highlights.iter().filter(|m| m.noted) {
             if let Some(first) = words.iter().find(|w| mark.overlaps(w.start, w.end)) {
+                // Beside its column; beside the layers' rooms past the last.
+                let x = u32::from(first.area.x);
+                let right = match columns.iter().position(|c| x < c.right()) {
+                    Some(i) if i + 1 < columns.len() => columns[i].right() as f32,
+                    _ => self.right_edge(),
+                };
+                let x = right + (style.gap as f32) / 2.0;
                 ui::draw_icon(canvas, env, "note", size, x, first.area, Color::BLACK);
             }
         }

@@ -415,6 +415,7 @@ impl KernelBuilder {
                 services: paperpaw_sdk::services::Services::new(),
                 text_filters: paperpaw_sdk::filters::TextFilters::new(),
                 decorators: paperpaw_sdk::decorations::Decorators::new(),
+                page_layers: paperpaw_sdk::layers::PageLayers::new(),
                 input_filters: paperpaw_sdk::filters::InputFilters::new(),
                 refresh_filters: paperpaw_sdk::filters::RefreshFilters::new(),
                 stylesheets: Vec::new(),
@@ -670,8 +671,8 @@ impl Kernel {
         self.keys.device = source;
     }
 
-    /// The choices of settings that plugins add to: key map presets and
-    /// reading fonts.
+    /// The choices of settings that plugins add to: key map presets,
+    /// reading fonts and page frames.
     pub(crate) fn offer_choices(&mut self) {
         let mut presets: Vec<Cow<'static, str>> =
             alloc::vec![Cow::Borrowed(keymap_presets::STANDARD_NAME)];
@@ -704,6 +705,17 @@ impl Kernel {
         self.shared
             .settings
             .set_choices(core_settings::STATUS_FONT.as_str(), status);
+        let mut frames: Vec<Cow<'static, str>> =
+            alloc::vec![Cow::Borrowed(core_settings::PAGE_FRAME_SINGLE)];
+        frames.extend(
+            self.shared
+                .page_layers
+                .frames()
+                .map(|id| Cow::Owned(id.as_str().to_string())),
+        );
+        self.shared
+            .settings
+            .set_choices(core_settings::PAGE_FRAME.as_str(), frames);
     }
 
     /// The device's defaults, then the plugins' (e.g. themes), which win:

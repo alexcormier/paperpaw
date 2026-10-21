@@ -951,7 +951,7 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The reading font, and whether a book's settings are its own. The
 /// status lines' font: the menus', the book's or one of its own (the
 /// families are offered once all fonts are known).
-static READING: [SettingSpec; 17] = [
+static READING: [SettingSpec; 18] = [
     SettingSpec::fixed_choice(
         settings::STATUS_FONT.static_str(),
         "core.setting.status-font",
@@ -1116,6 +1116,16 @@ static READING: [SettingSpec; 17] = [
     .advanced()
     .with_extra(&IN_BEHAVIOUR)
     .described("core.setting.footnotes.help"),
+    SettingSpec::fixed_choice(
+        settings::PAGE_FRAME.static_str(),
+        "core.setting.page-frame",
+        &[settings::PAGE_FRAME_SINGLE],
+        settings::PAGE_FRAME_SINGLE,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.page-frame.help"),
     SettingSpec::fixed_switch(
         settings::SCOPE_ONLY.static_str(),
         "core.setting.scope-only",

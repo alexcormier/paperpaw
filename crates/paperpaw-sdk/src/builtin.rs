@@ -541,6 +541,33 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// The room of a page layer that was tapped, or chosen with the
+        /// buttons ([`PAGE_LAYER_TAPPED`]).
+        pub struct PageLayerTapped {
+            pub layer: Id,
+            /// The book.
+            pub path: String,
+            /// Where: the point tapped, the room's middle when chosen with
+            /// the buttons.
+            pub x: i32,
+            pub y: i32,
+        }
+        optional {
+            /// The start of the line beside it, if any (see
+            /// [`PageView::line_at`](crate::layers::PageView::line_at)).
+            pub section: u32,
+            pub offset: u32,
+        }
+    }
+
+    impl PageLayerTapped {
+        /// The start of the line beside it, if any.
+        pub fn line(&self) -> Option<Locator> {
+            Some(Locator::new(self.section?, self.offset?))
+        }
+    }
+
+    crate::event_data! {
         /// A book's notes, exported ([`NOTES_EXPORTED`]).
         pub struct NotesExported {
             /// The file written (Markdown).
@@ -629,6 +656,10 @@ pub mod events {
     /// ([`DecorationTapped`]); sent for decorators that take taps (see
     /// [`decorations`](crate::decorations)), whose plugin answers.
     pub const DECORATION_TAPPED: Event<DecorationTapped> = Event::new("core.decoration-tapped");
+    /// The room of a page layer was tapped, or chosen with the buttons
+    /// ([`PageLayerTapped`]); sent for layers that take taps (see
+    /// [`layers`](crate::layers)), whose plugin answers.
+    pub const PAGE_LAYER_TAPPED: Event<PageLayerTapped> = Event::new("core.page-layer-tapped");
     /// Skimming asks the reader to go somewhere in the book ([`Skim`]).
     pub const SKIM: Event<Skim> = Event::new("core.skim");
     /// Where the book being skimmed is now ([`Skimmed`]): the reader tells
@@ -1011,6 +1042,12 @@ pub mod settings {
     pub const FOOTNOTES: Setting<Text> = Setting::new("core.footnotes");
     pub const FOOTNOTES_POPUP: &str = "core.footnotes.popup";
     pub const FOOTNOTES_JUMP: &str = "core.footnotes.jump";
+    /// The frame that sets book pages in columns (see
+    /// [`layers`](crate::layers)): [`PAGE_FRAME_SINGLE`] or the id of a
+    /// plugin's frame; each book may have its own ([`SCOPE_ONLY`]).
+    pub const PAGE_FRAME: Setting<Text> = Setting::new("core.page-frame");
+    /// [`PAGE_FRAME`]: the text in one column.
+    pub const PAGE_FRAME_SINGLE: &str = "core.page-frame.single";
     /// The font of the status lines while reading
     /// ([`fonts::STATUS`](super::fonts::STATUS)): [`STATUS_FONT_UI`],
     /// [`STATUS_FONT_BOOK`] or a font family's name.

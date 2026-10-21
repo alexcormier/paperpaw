@@ -1,4 +1,4 @@
-//! Inputs of more kinds (SDK gap E1): double presses and taps, taps of
+//! Inputs of more kinds: double presses and taps, taps of
 //! two fingers, a layer's own zones, inputs raised by plugins, key map
 //! layers put in front, filters that cancel or replace, plugins' own
 //! recognizers.

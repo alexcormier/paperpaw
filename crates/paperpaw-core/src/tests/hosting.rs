@@ -1,5 +1,5 @@
 //! Screens hosted in a screen of another plugin, and tasks with their own
-//! way back (SDK gap A1, second part).
+//! way back.
 
 use super::*;
 use paperpaw_sdk::host::ScreenHost;

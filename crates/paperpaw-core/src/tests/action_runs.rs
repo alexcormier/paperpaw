@@ -1,4 +1,4 @@
-//! Actions (SDK gap E2): run with params, handlers put in place of
+//! Actions: run with params, handlers put in place of
 //! others', what runs by itself, observers of actions and events, the
 //! value a setting had.
 

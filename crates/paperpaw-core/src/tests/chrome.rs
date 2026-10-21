@@ -1,4 +1,4 @@
-//! Bars along the edges of the screen (SDK gap A1): what they leave to
+//! Bars along the edges of the screen: what they leave to
 //! the screens, where things are drawn, where taps go, when they show.
 
 use super::*;

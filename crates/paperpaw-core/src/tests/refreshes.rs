@@ -1,4 +1,4 @@
-//! Refreshes (SDK gap F1): why the panel is refreshed, verdicts of
+//! Refreshes: why the panel is refreshed, verdicts of
 //! filters (a mode, grays, later), a mode set exactly, a screen's own
 //! mode when it opens.
 
