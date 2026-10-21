@@ -88,7 +88,9 @@ pub fn pseudo_plugin(context: &Context) -> Result<Vec<(String, Vec<u8>)>, String
 
 pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
     // Pictures of an earlier run would mislead.
-    let _ = std::fs::remove_dir_all(context.path("lint"));
+    if !context.in_memory {
+        let _ = std::fs::remove_dir_all(context.path("lint"));
+    }
     let session = Session::new(context, &Variant::x4())?;
     let kernel = &session.device.kernel;
     let all: Vec<String> = kernel
@@ -158,10 +160,10 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
     };
     for plugin in &looked {
         let data = context.target.data.iter().find(|d| &d.id == plugin);
-        let is_own = own(plugin, data.map(|d| d.folder.as_path()));
+        let is_own = own(plugin, data.and_then(|d| d.folder.as_deref()));
         let source = sources(plugin);
         let place = |code: &str| match (data, &source) {
-            (Some(data), _) if data.folder.join(format!("i18n/{code}.ini")).is_file() => {
+            (Some(data), _) if data.file(&format!("i18n/{code}.ini")).is_some() => {
                 format!("i18n/{code}.ini")
             }
             (None, Some(folder)) if folder.join(format!("i18n/{code}.ini")).is_file() => {
@@ -175,21 +177,15 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
         // Their files: dashes, keys; a data plugin's settings.
         let found = match (data, &source) {
             (Some(data), _) => {
-                let mut found =
-                    files::catalog_files(plugin, &data.folder, &data.folder, is_own, &translates);
+                let ini = files::data_ini_files(data);
+                let mut found = files::catalog_files(plugin, ini, is_own, &translates);
                 let known = |id: &str| kernel.settings().spec(id).is_some();
-                found.extend(files::settings_set(
-                    plugin,
-                    &data.folder,
-                    &data.folder,
-                    &known,
-                ));
+                found.extend(files::settings_set(data, &known));
                 found
             }
             (None, Some(folder)) => files::catalog_files(
                 plugin,
-                &folder.join("i18n"),
-                &repository,
+                files::folder_ini_files(&folder.join("i18n"), &repository),
                 is_own,
                 &translates,
             ),
@@ -281,6 +277,9 @@ impl Measure for Ui<'_> {
 /// Saves `image` for a finding at `name` in the output folder; the path
 /// relative to it.
 fn picture(context: &Context, image: &crate::image::Image, name: &str) -> Option<PathBuf> {
+    if context.in_memory {
+        return None;
+    }
     let relative = PathBuf::from("lint").join(format!("{name}.png"));
     let path = context.path(&relative.to_string_lossy());
     if let Some(parent) = path.parent() {
@@ -367,25 +366,24 @@ struct Drawn {
 /// The names in the library of `session` (files and folders, two levels
 /// deep), lowercase, as words: data, not texts of the app.
 fn library_words(session: &Session) -> Vec<String> {
-    let mut words: Vec<String> = Vec::new();
-    let mut add = |dir: &Path| {
-        for entry in std::fs::read_dir(dir).into_iter().flatten().flatten() {
-            let name = entry.file_name().to_string_lossy().to_lowercase();
-            for word in name.split(|c: char| !c.is_alphanumeric()) {
-                if !word.is_empty() && !words.iter().any(|w| w == word) {
-                    words.push(word.to_string());
-                }
-            }
+    let storage = session.storage();
+    let mut names: Vec<String> = Vec::new();
+    let mut dirs: Vec<String> = Vec::new();
+    let _ = storage.list("", &mut |entry| {
+        names.push(entry.name.to_string());
+        if entry.is_dir {
+            dirs.push(entry.name.to_string());
         }
-    };
-    add(session.root());
-    for entry in std::fs::read_dir(session.root())
-        .into_iter()
-        .flatten()
-        .flatten()
-    {
-        if entry.path().is_dir() {
-            add(&entry.path());
+    });
+    for dir in dirs {
+        let _ = storage.list(&dir, &mut |entry| names.push(entry.name.to_string()));
+    }
+    let mut words: Vec<String> = Vec::new();
+    for name in names {
+        for word in name.to_lowercase().split(|c: char| !c.is_alphanumeric()) {
+            if !word.is_empty() && !words.iter().any(|w| w == word) {
+                words.push(word.to_string());
+            }
         }
     }
     words

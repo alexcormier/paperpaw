@@ -23,6 +23,16 @@ change the plugin SDK.
   way. Titles of headers are 115 % of the text by default (was 130 %),
   as titles of dialogs are; `core.ui-title` still sets them, in steps of
   5 %.
+- X4 Pro: dragging and sizing a widget by touch keeps up with the finger.
+  The firmware queues touch readings while it refreshes the panel; a
+  finger's moves while the last one still waits now take its place
+  (`paperpaw_x4::changes::Queue`). Before, every reading was handled
+  with a refresh of its own and a drag overflowed the queue, so the lift
+  was lost: a 0.6 s drag kept the device busy for 7 s and the widget
+  stayed where it was; now it is done 2.7 s after the finger came down,
+  the widget where the finger left it. The remote control's `drag`
+  plays a finger as the touch controller reads it.
+
 - Dragging an item of a grid (moving or sizing it on the home screen)
   draws it again only when it goes to other cells: a finger trembling in
   a cell asked for a refresh each time, most of a second each on the
@@ -160,6 +170,28 @@ change the plugin SDK.
   picture is decoded once while it stays the same; the picker says why
   the last one did not show. Other plugins add sleep modes of their
   own: a screen offered among the choices of `sleep.show`.
+- The web emulator (`shells/web`): the standard app in a browser as
+  WebAssembly, on an emulated X4, X4 Pro or Boox Go 7 drawn into a
+  canvas, with buttons, keys and touch; a page hands in a data plugin's
+  files, which show after a restart, and asks `paperpaw-dev`'s checks of
+  them, through the emulator frame's messages
+  ([docs/web-emulator.md](docs/web-emulator.md)). `paperpaw-emulator`
+  builds without its window (feature `window`) and for `wasm32`: its
+  storage a folder or kept in memory (`device::Library`,
+  `Device::in_memory`), time and random numbers from the page where
+  there is no operating system (`host`). `paperpaw-dev` checks data
+  plugins handed in as files (`target::DataPlugin` holds them,
+  `data::check`), and plugins with code added to the app (a module of
+  their own around `paperpaw-web` as a library: `set_plugins`, called
+  from its `pp_plugins`; `check` with `plugins` runs `lint`, `visual`,
+  `reach` and `perf` on them), its libraries kept in memory where asked
+  (`Context::in_memory`). The frame says when the device ran out of its
+  memory (`out-of-memory`, once the module stopped, before it starts again;
+  `budget::last_refused` and `budget::clear_last_refused` tell the size
+  refused), names the build in `ready` and `version`, holds buttons
+  for long presses (`hold`), and takes screenshots of another device,
+  night mode or the sleep screen. Releases carry the module and its
+  pages as `paperpaw-web-<version>.zip`.
 
 - SDK: status items run an action of their own plugin when tapped
   (`StatusItemSpec::tap`, with the line's context; bindable to buttons

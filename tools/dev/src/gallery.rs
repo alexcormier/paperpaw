@@ -34,7 +34,6 @@ mod pages;
 use std::collections::{BTreeMap, HashMap};
 use std::hash::{Hash, Hasher};
 use std::path::{Path, PathBuf};
-use std::time::Instant;
 
 use paperpaw_core::sdk::builtin::settings::NOTICE_SECONDS;
 
@@ -186,7 +185,7 @@ fn context_size(grid: (u8, u8)) -> (u8, u8) {
 }
 
 pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
-    let started = Instant::now();
+    let started = paperpaw_emulator::host::micros();
     let dir = context.path("gallery");
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
@@ -204,7 +203,7 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
         gallery.shown,
         gallery.variants.len(),
         gallery.files,
-        started.elapsed().as_secs_f64()
+        (paperpaw_emulator::host::micros() - started) as f64 / 1e6
     );
     eprintln!("paperpaw-dev: gallery: {message}");
     report.add(Finding::info("gallery.made", "gallery/index.html", message));

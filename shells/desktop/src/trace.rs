@@ -8,7 +8,6 @@
 //! calls are the same on both.
 
 use std::cell::{Cell, RefCell};
-use std::time::Instant;
 
 use paperpaw_platform::{DirEntry, Storage, StorageError};
 
@@ -117,6 +116,12 @@ pub fn record() {
     RECORDING.with(|on| on.set(true));
 }
 
+/// Stops recording frames ([`record`]); those recorded are dropped.
+pub fn stop_recording() {
+    RECORDING.with(|on| on.set(false));
+    drop(take_frames());
+}
+
 /// The frames recorded since the last call.
 pub fn take_frames() -> Vec<FrameRecord> {
     FRAMES.with(|frames| std::mem::take(&mut *frames.borrow_mut()))
@@ -157,7 +162,8 @@ fn now() -> Counts {
 /// A frame being drawn, from [`Frame::start`] until [`Frame::done`].
 #[derive(Debug)]
 pub struct Frame {
-    started: Instant,
+    /// When it began ([`crate::host::micros`]).
+    started: u64,
     before: Counts,
     band: Counts,
     bands: Vec<u32>,
@@ -176,7 +182,7 @@ impl Frame {
             CALLS.with(|calls| calls.borrow_mut().clear());
         }
         on().then(|| Frame {
-            started: Instant::now(),
+            started: crate::host::micros(),
             before: now(),
             band: now(),
             bands: Vec::new(),
@@ -196,12 +202,12 @@ impl Frame {
 
     /// The frame is drawn: its line, the screen shown being `screen`.
     pub fn done(self, screen: &str) {
-        let took = self.started.elapsed();
+        let took = crate::host::micros().saturating_sub(self.started);
         BAND.with(|band| band.set(None));
         let counts = now();
         let drawing = counts.since(&self.before);
         let before = LAST.with(|last| self.before.since(&last.replace(counts)));
-        let millis = took.as_secs_f64() * 1000.0;
+        let millis = took as f64 / 1000.0;
         if ON.with(Cell::get) {
             println!(
                 "frame {screen}: drawn in {millis:.1} ms, {} bands {:?}, {drawing}; before it {before}",

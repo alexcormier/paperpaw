@@ -794,6 +794,15 @@ impl Firmware {
                 self.apply(effects);
                 remote::ok();
             }
+            Command::Drag {
+                from,
+                to,
+                steps,
+                ms,
+            } => {
+                input::drag(from, to, steps, ms);
+                remote::ok();
+            }
             Command::Touch { phase, x, y } => {
                 use paperpaw_x4::remote::Touch;
                 let phase = match phase {

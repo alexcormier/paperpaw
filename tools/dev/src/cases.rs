@@ -58,18 +58,38 @@ impl ShownWidget {
     }
 }
 
-/// The screens the target's plugins add, sorted by id.
+/// The screens the target's plugins add, sorted by id; for data plugins
+/// alone, the standard screens they are seen on.
 pub fn screens(session: &Session, target: &Target) -> Vec<String> {
-    let mut ids: Vec<String> = session
-        .device
-        .kernel
-        .known_screens()
-        .map(ToString::to_string)
+    let known = || {
+        session
+            .device
+            .kernel
+            .known_screens()
+            .map(ToString::to_string)
+    };
+    let mut ids: Vec<String> = known()
         .filter(|id| target.ours(id) && !id.starts_with(probe::PLUGIN))
         .collect();
+    // Data plugins add no screens: theirs are those they change (a theme,
+    // a layout), the standard app's main ones.
+    let data_only = !target.data.is_empty()
+        && target
+            .plugins
+            .iter()
+            .all(|p| target.data.iter().any(|d| &d.id == p));
+    if ids.is_empty() && data_only {
+        ids = known()
+            .filter(|id| STANDARD_SCREENS.contains(&id.as_str()))
+            .collect();
+    }
     ids.sort();
     ids
 }
+
+/// The standard app's main screens, on which data plugins are seen: the
+/// home screen, the library and the settings.
+pub const STANDARD_SCREENS: [&str; 3] = ["home.dashboard", "files.browser", "settings.list"];
 
 /// The widgets the target's plugins add, with their titles (translated),
 /// sorted by id; those that are only room between others left out.
