@@ -171,3 +171,24 @@ fn a_sleep_picture_fits_the_x4s_heap() {
         "ran out of memory"
     );
 }
+
+/// Another device, night mode or the sleep screen, made apart: what is
+/// shown stays as it is.
+#[test]
+fn snapshots_of_other_devices_leave_what_is_shown() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let mut x4 = started("xteink-x4");
+    let shown = x4.shown();
+    let (w, h, boox) = x4.snapshot(Some("boox-go-7"), None, false).unwrap();
+    assert_eq!((w, h), (1264, 1680));
+    assert_eq!(boox.len(), 1264 * 1680 * 4);
+    let (_, _, dark) = x4.snapshot(None, Some(true), false).unwrap();
+    let dark_pixels = dark.chunks(4).filter(|p| p[0] < 100).count();
+    let light_pixels = shown.chunks(4).filter(|p| p[0] < 100).count();
+    assert!(dark_pixels > light_pixels * 2, "night mode is dark");
+    let (_, _, asleep) = x4.snapshot(None, None, true).unwrap();
+    assert!(asleep != shown, "the sleep screen");
+    // This one as it was, and still running.
+    assert!(x4.shown() == shown);
+    assert!(x4.button("right", true));
+}

@@ -184,6 +184,18 @@ export class PaperPawDevice {
     return this.#image(this.exports.pp_shown());
   }
 
+  /// What another device (`profile`), night mode or not (`dark`), or the
+  /// sleep screen (`asleep`) shows with the card as it is, made apart:
+  /// what this device shows stays.
+  snapshot({ profile = "", dark, asleep = false } = {}) {
+    const night = dark === undefined ? 2 : dark ? 1 : 0;
+    this.#check(this.#with([profile], (p, l) => this.exports.pp_snapshot(p, l, night, asleep ? 1 : 0)));
+    const [width, height] = this.#result().split("x").map(Number);
+    const ptr = this.exports.pp_snapshot_pixels();
+    const bytes = new Uint8ClampedArray(this.memory.buffer, ptr, width * height * 4).slice();
+    return new ImageData(bytes, width, height);
+  }
+
   /// paperpaw-dev's report of the data plugins on the card (`commands`:
   /// some of package, lint, visual, reach; none: all).
   check(commands = []) {

@@ -325,6 +325,50 @@ pub extern "C" fn pp_shown() -> *const u8 {
     .unwrap_or(std::ptr::null())
 }
 
+/// What another device, night mode or the sleep screen shows (see
+/// [`Emulator::snapshot`]): the profile named (empty: this one's), `dark`
+/// 0 off, 1 on, 2 as now, `asleep` 1 for the sleep screen. Its pixels
+/// at [`pp_shown`]'s place (call [`pp_snapshot_pixels`]), its size as
+/// `<width>x<height>` in the result buffer.
+///
+/// # Safety
+///
+/// The name is memory the script wrote ([`pp_alloc`]).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pp_snapshot(
+    profile_ptr: *const u8,
+    profile_len: usize,
+    dark: u32,
+    asleep: u32,
+) -> u32 {
+    // SAFETY: as the caller promises.
+    let profile = unsafe { text(profile_ptr, profile_len) };
+    let profile = (!profile.is_empty()).then_some(profile);
+    let dark = match dark {
+        0 => Some(false),
+        1 => Some(true),
+        _ => None,
+    };
+    let mut made = None;
+    let status = with(|emulator| {
+        made = Some(emulator.snapshot(profile, dark, asleep == 1)?);
+        Ok(())
+    });
+    if let Some((width, height, pixels)) = made {
+        let _ = state(|state| {
+            state.shown = pixels;
+            state.result = format!("{width}x{height}").into_bytes();
+        });
+    }
+    status
+}
+
+/// Where the pixels of the last [`pp_snapshot`] are.
+#[unsafe(no_mangle)]
+pub extern "C" fn pp_snapshot_pixels() -> *const u8 {
+    state(|state| state.shown.as_ptr()).unwrap_or(std::ptr::null())
+}
+
 /// How often the device ran out of its memory since the module started
 /// (see [`Emulator::out_of_memory`]).
 #[unsafe(no_mangle)]

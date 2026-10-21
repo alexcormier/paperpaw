@@ -287,6 +287,48 @@ impl Emulator {
         Ok(report?.json())
     }
 
+    /// What another device (`profile`), night mode or not (`dark`), or the
+    /// sleep screen (`asleep`) shows with the card as it is: made on a
+    /// device of its own, so that what this one shows stays as it is.
+    /// Width, height and four bytes a pixel (RGBA), settled.
+    pub fn snapshot(
+        &self,
+        profile: Option<&str>,
+        dark: Option<bool>,
+        asleep: bool,
+    ) -> Result<(u16, u16, Vec<u8>), String> {
+        let profile = profile.unwrap_or(self.profile.device.id);
+        let mut other = Emulator::new(profile, &self.language, dark.unwrap_or(self.dark))?;
+        // The same card, copied: what the other device writes stays its.
+        for (path, bytes) in files_under(&*self.files, "") {
+            other
+                .files
+                .write(&path, &bytes)
+                .map_err(|e| format!("{path}: {e:?}"))?;
+        }
+        other.plugins = self.plugins.clone();
+        // Its memory is no part of this device's.
+        budget::override_limit(None);
+        let made = other.start().map(|()| {
+            other.advance(5_000);
+            if asleep && let Some(device) = &mut other.device {
+                device.call(|kernel, now| {
+                    kernel.open_slot(
+                        now,
+                        paperpaw_core::sdk::builtin::slots::SLEEP,
+                        Default::default(),
+                    )
+                });
+            }
+            other.advance(10_000);
+            let (width, height) = other.size();
+            (width, height, other.shown())
+        });
+        drop(other);
+        budget::end_override(self.profile.heap_budget);
+        made
+    }
+
     /// How often the device ran out of its memory (the X4's heap budget)
     /// since the emulator started: in a browser such allocations are made
     /// all the same and counted (`budget::set_soft`), where the device
@@ -328,16 +370,18 @@ impl Emulator {
     }
 }
 
-/// Every file under `dir` of `storage`, by its path from `dir`.
+/// Every file under `dir` of `storage` (`""` the whole card), by its
+/// path from `dir`.
 fn files_under(storage: &dyn Storage, dir: &str) -> BTreeMap<String, Vec<u8>> {
     let mut out = BTreeMap::new();
     let mut folders = vec![String::new()];
+    let join = |a: &str, b: &str| match (a.is_empty(), b.is_empty()) {
+        (true, _) => b.to_string(),
+        (_, true) => a.to_string(),
+        _ => format!("{a}/{b}"),
+    };
     while let Some(folder) = folders.pop() {
-        let at = if folder.is_empty() {
-            dir.to_string()
-        } else {
-            format!("{dir}/{folder}")
-        };
+        let at = join(dir, &folder);
         let mut entries = Vec::new();
         let _ = storage.list(&at, &mut |entry| {
             entries.push((entry.name.to_string(), entry.is_dir));
@@ -351,7 +395,7 @@ fn files_under(storage: &dyn Storage, dir: &str) -> BTreeMap<String, Vec<u8>> {
             if is_dir {
                 folders.push(path);
             } else if let Ok(bytes) =
-                paperpaw_core::sdk::read_file(storage, &format!("{dir}/{path}"), usize::MAX)
+                paperpaw_core::sdk::read_file(storage, &join(dir, &path), usize::MAX)
             {
                 out.insert(path, bytes);
             }

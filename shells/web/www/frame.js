@@ -202,9 +202,12 @@ async function input({ event }) {
   return {};
 }
 
-/// The panel as a PNG, at the device's own resolution.
-async function screenshot() {
-  const image = device.shown();
+/// The panel as a PNG, at the device's own resolution; of another device,
+/// night mode or not, or the sleep screen where asked, what is shown left
+/// as it is.
+async function screenshot({ profile, dark, asleep }) {
+  const apart = profile !== undefined || dark !== undefined || asleep;
+  const image = apart ? device.snapshot({ profile, dark, asleep }) : device.shown();
   const offscreen = new OffscreenCanvas(image.width, image.height);
   offscreen.getContext("2d").putImageData(image, 0, 0);
   const blob = await offscreen.convertToBlob({ type: "image/png" });
