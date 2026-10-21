@@ -171,21 +171,48 @@ fn all_screens(env: &Env<'_>) -> Vec<Place> {
             layers: Vec::from([id.as_str().to_string(), GLOBAL_KEYMAP_LAYER.to_string()]),
         })
         .collect();
-    tell_apart(&mut all);
-    all.sort_by_key(|p| p.title.to_lowercase());
+    // By name, those of the same name always in the same order.
+    all.sort_by_cached_key(|p| (p.title.to_lowercase(), p.layer().to_string()));
+    tell_apart(&mut all, &|layer| kind(env, layer));
     all
 }
 
-/// Places of the same name told apart by their screen's id, e.g. a
-/// tool's list and its editor, both named after the tool.
-fn tell_apart(places: &mut [Place]) {
-    let alike: Vec<bool> = places
-        .iter()
-        .map(|p| places.iter().filter(|o| o.title == p.title).count() > 1)
+/// What kind of screen the one of `layer` (its id) is, to tell it from
+/// others of the same name: the last part of its id, in the language read
+/// where it is a common kind (a choice, a list, a page), else its words.
+fn kind(env: &Env<'_>, layer: &str) -> String {
+    let last = layer.rsplit('.').next().unwrap_or(layer);
+    env.i18n
+        .get(&format!("keys.kind.{last}"))
+        .map_or_else(|| last.replace('-', " "), ToString::to_string)
+}
+
+/// Places of the same name, side by side, told apart by the kind of
+/// screen each is (`kind` of its id), e.g. a tool's list and its choice,
+/// both named after the tool; a tool's main screen (`….screen`) keeps
+/// the name alone. Those still alike then are numbered.
+fn tell_apart(places: &mut [Place], kind: &dyn Fn(&str) -> String) {
+    let shared: Vec<bool> = (0..places.len())
+        .map(|i| {
+            let title = &places[i].title;
+            (i > 0 && places[i - 1].title == *title)
+                || places.get(i + 1).is_some_and(|next| next.title == *title)
+        })
         .collect();
-    for (place, alike) in places.iter_mut().zip(alike) {
-        if alike {
-            place.title = format!("{} ({})", place.title, place.layer());
+    for (place, shared) in places.iter_mut().zip(shared) {
+        if shared && !place.layer().ends_with(".screen") {
+            place.title = format!("{} ({})", place.title, kind(place.layer()));
+        }
+    }
+    let mut count = 1;
+    let mut previous = String::new();
+    for place in places.iter_mut() {
+        if place.title == previous {
+            count += 1;
+            place.title = format!("{} {count}", place.title);
+        } else {
+            count = 1;
+            previous.clone_from(&place.title);
         }
     }
 }
@@ -1139,5 +1166,40 @@ mod tests {
         let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
         let issues = check::compare(&en, &de);
         assert!(issues.is_empty(), "{issues:?}");
+    }
+
+    #[test]
+    fn places_of_the_same_name_say_what_kind_of_screen_each_is() {
+        let place = |title: &str, layer: &str| super::Place {
+            title: title.into(),
+            layers: alloc::vec![layer.into()],
+        };
+        let mut places = [
+            place("Add a widget", "home.add-to-list"),
+            place("Add a widget", "home.add-widget"),
+            place("Battery", "battery.screen"),
+            place("Notes", "notes.choice"),
+            place("Notes", "notes.other.choice"),
+            place("Notes", "notes.list"),
+            place("Notes", "notes.screen"),
+        ];
+        let kind = |layer: &str| match layer.rsplit('.').next().unwrap() {
+            "choice" => alloc::string::String::from("choice"),
+            other => other.replace('-', " "),
+        };
+        super::tell_apart(&mut places, &kind);
+        let titles: alloc::vec::Vec<&str> = places.iter().map(|p| p.title.as_str()).collect();
+        assert_eq!(
+            titles,
+            [
+                "Add a widget (add to list)",
+                "Add a widget (add widget)",
+                "Battery",
+                "Notes (choice)",
+                "Notes (choice) 2",
+                "Notes (list)",
+                "Notes"
+            ]
+        );
     }
 }

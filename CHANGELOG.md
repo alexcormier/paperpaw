@@ -19,28 +19,52 @@ change the plugin SDK.
   edits a list of widgets; the home screen binds it, and the sleep
   screen's list opens it instead of a screen of the home screen's.
 - SDK: status items run an action of their own plugin when tapped
-  (`StatusItemSpec::tap`, with the line's context; bindable to
-  buttons too), say how much they matter
-  (`StatusItemSpec::priority`, `status::PRIORITY`) and keep a least
-  width (`StatusItemSpec::min_width`). Where a line has no room for all
-  its items, the battery's percentage goes first, then the items that
-  matter least (texts are shortened first), never cut. `StatusValue::Labelled` shows an icon with a
-  text. `StatusLine::targets` and `StatusLineSpec::targets` say where a
-  tap does something; the reader, the home screen's status line and the
+  (`StatusItemSpec::tap`, with the line's context; bindable to buttons
+  too), say how much they matter (`StatusItemSpec::priority`,
+  `status::PRIORITY`) and keep a least width
+  (`StatusItemSpec::min_width`). Where a line has no room for all its
+  items, the battery's percentage goes first, then the items that
+  matter least (texts are shortened first), never cut.
+  `StatusValue::Labelled` shows an icon with a text.
+  `StatusLine::targets` and `StatusLineSpec::targets` say where a tap
+  does something; the reader, the home screen's status line and the
   quick panel's head run it (Wi-Fi opens its page, `wifi.open`, the
-  power mode its settings, `power.open`). Places where items show are `status::Place`s
-  (`Registrar::add_status_place`; the reader's above and below the text,
-  the home screen's, the quick panel's), and `StatusFrame::place` and
-  `StatusFrame::font` tell a line where it is drawn. `Drawn::targets`
-  gives a drawn widget places that do something, and
-  `WidgetTarget::touch` one tapped only, which the buttons' focus
-  leaves out. Breaking: `StatusLine`
-  and `widgets::Drawn` are made with `new` (`StatusLine::percent`,
+  power mode its settings, `power.open`). Places where items show are
+  `status::Place`s (`Registrar::add_status_place`; the reader's above
+  and below the text, the home screen's, the quick panel's), and
+  `StatusFrame::place` and `StatusFrame::font` tell a line where it is
+  drawn. `Drawn::targets` gives a drawn widget places that do
+  something, and `WidgetTarget::touch` one tapped only, which the
+  buttons' focus leaves out. Breaking: `StatusLine` and
+  `widgets::Drawn` are made with `new` (`StatusLine::percent`,
   `Drawn::shows`, `Drawn::targets`).
 - Kernel: a plugin cannot overwrite another plugin's secret or guarded
   setting: not set, reset, nor typed for, nor ask for text for it from
   the keyboard, the clipboard or anywhere else; only the settings
   editor and the plugin itself can, and the keyboard answers them.
+- Emulator: folders are listed by name on every system (Linux gave the
+  order they are stored in), so books of the same title show in the
+  same order on Linux, macOS and Windows, and the screenshots with them.
+- Buttons alone: skimming shows where the focus is. The bar has it at
+  first (left and right go along it, Confirm stays), shown as the style
+  shows a focus, and up and down go from it to the buttons below and
+  back to it. Every tool on the home screen and in the drawer is told
+  as a button by its name, its name shown or not, the focus on one.
+- Pictures over the whole screen (a cover while sleeping) are drawn in
+  half the time: a row's dither worked out once rather than for every
+  pixel, and a picture's columns once rather than for every row.
+- Texts: the statistics' tiles fit their values at one size (the week's
+  time was cut on the X4), the update page's explanation gets smaller
+  before it is cut and then ends in "…", the picture widget says in
+  fewer words where pictures go, the menu above the plugins' list has a
+  name (*Plugins: above the list*), and screens of the same name are
+  told apart by the kind of screen each is in the buttons' places
+  (*Buttons and gestures (list)*) rather than by their id.
+- Adding to a menu takes 17 KiB of heap on the X4 (it took 94 KiB): a
+  few bytes a candidate, its name among all the others' in one text.
+- The sample plugin *Large print* sets `core.font-size` and
+  `core.line-spacing` (the reader's settings it named no longer exist,
+  so its larger text never applied).
 - SDK: `readers`, reading apps. Any plugin registers a screen as a
   reader of some formats (`Registrar::add_reader`, `ReaderSpec`); books
   open through one call (`readers::open`, `Command::OpenBook`) in the
@@ -58,6 +82,16 @@ change the plugin SDK.
   (`SettingExtra::keeps_unknown`, `SettingSpec::accepts`, `parse`).
   Shells open books with `Kernel::open_book`, the X4's remote control
   too.
+- Book menu: *Open with …* (`actions::OPEN_WITH`), where there is
+  something to choose, lists the reading apps that read the book, the
+  other ways to open it plugins add (`menus::OPEN_WITH`, run after
+  `events::BOOK_CHOSEN` as the book menu's are) and *Always open it with
+  …*; the others open it this time only (`readers::ask_once`). The file
+  manager's *Open with* is the same list. The library's sheet shows the
+  book menu as its entries say they are now (`Menus::shown_items`, their
+  label and badge). Lists of reading apps are asked on `slots::CHOICE`
+  (`ask::choice`); `screens::READING_APPS` is gone, and a choice whose
+  option is an action shows the action's title.
 - SDK: buttons on touch screens are at least a fingertip (7 mm) high.
   Breaking: `ui::button_height(style, row)` takes the style. Rows and
   bars that hold buttons are made with `UiStyle::touch_row`, which grows them

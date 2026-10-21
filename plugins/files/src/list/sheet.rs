@@ -96,11 +96,14 @@ impl BookSheet {
             actions.push((Action::Archive, tr("files.option.archive")));
         }
         let mut plugins = Vec::new();
-        for item in env.menus.items(menus::BOOK.as_str()) {
+        // As shown now, with the label and badge their plugins give them
+        // (*Open with …* only where there is something to choose).
+        for item in env.menus.shown_items(env, menus::BOOK.as_str()) {
             if item.section {
                 continue;
             }
-            actions.push((Action::Plugin(plugins.len()), tr(item.title)));
+            let label = env.menus.state(env, item.id.as_str()).text(&tr(item.title));
+            actions.push((Action::Plugin(plugins.len()), label));
             plugins.push(item.id.clone());
         }
         if !env.device.input.touch {

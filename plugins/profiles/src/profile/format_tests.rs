@@ -29,10 +29,10 @@ fn version_2_profiles() -> Vec<Profile> {
     Vec::from([
         profile(
             "Night reading",
-            &[("core.night-mode", "on"), ("reader.font-size", "12")],
+            &[("core.night-mode", "on"), ("core.font-size", "12")],
         ),
-        profile("  Large [print] = big ", &[("reader.font-size", "18")]),
-        profile("Quote \" and \\ back", &[("reader.line-spacing", "")]),
+        profile("  Large [print] = big ", &[("core.font-size", "18")]),
+        profile("Quote \" and \\ back", &[("core.line-spacing", "")]),
     ])
 }
 

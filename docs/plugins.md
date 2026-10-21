@@ -516,7 +516,7 @@ it with and answers as they expect, so that every plugin works with it:
 | Slot | Opened with | The screen |
 |---|---|---|
 | `core.home` | nothing; at the start and by `actions::HOME` | is the bottom of the stack: opened again, the screens above it close. It leads to the menu and the library by touch and by buttons alone. |
-| `core.library` | nothing; by `actions::LIBRARY` | opens a book with `Command::OpenSlot(slots::READER, ..)` and `params::PATH`. For a book it offers the menu `menus::BOOK`: when an entry is chosen it emits `events::BOOK_CHOSEN` with the book, then runs the entry's action. |
+| `core.library` | nothing; by `actions::LIBRARY` | opens a book with `readers::open` (the reading app chosen for it). For a book it offers the menu `menus::BOOK`, as `Menus::shown_items` has it: when an entry is chosen it emits `events::BOOK_CHOSEN` with the book, then runs the entry's action. |
 | `core.settings` | nothing: the groups; `params::ID`: the settings of that group; `params::FOCUS`: the page of that setting, focused on it | changes settings with `Command::SetSetting`, and a setting with an editor (`SettingExtra::editor`, a screen or a slot) by opening that (`Editor::open`). |
 | `core.menu` | `params::MENU`, the menu; `params::HIDE`, entries to leave out this time | shows `env.menus.items(menu)`; for an entry chosen it closes (`Command::Back`) and runs its action (`Command::RunAction`); a setting listed there it changes, or opens its editor. |
 | `core.choose-folder`, `core.choose-value` | `params::ID`, the setting | writes the folder, or the value, chosen to the setting. Name the slot as the editor (`SettingExtra::editor_slot`) to have it edited there by whichever plugin fills it. |
@@ -613,7 +613,9 @@ formats only registers as a reading app instead (`readers::ReaderSpec`,
 `Registrar::add_reader`): books open in the app chosen for them, and
 whatever opens a book opens it with `readers::open(path)` (never by
 opening `slots::READER` itself). The reader chooses with
-`readers::ask` (*Open with*, a folder's reading app) and in the reading
+`readers::ask_once` (*Open with …* in the book menu: this time, or kept
+when asked; plugins add other ways to open a book to `menus::OPEN_WITH`),
+`readers::ask` (a book's or a folder's reading app, kept) and in the reading
 settings (`settings::READING_APP`, and one per format that more than one
 app reads). A reading app's screen is its own; one that cannot open a
 book after all answers `readers::cannot_open` instead of an error of
@@ -701,6 +703,7 @@ every view of it.
 | Something of one book changed | `events::BOOK_CHANGED` (`library::changed_book`, bits of `library::what`) | finished, a favourite, read further, details, cover, a field |
 | A book came | `events::BOOK_ADDED` (`library::added(path, source)`) | transfers, syncs and downloads send it |
 | What can be done with a book | `menus::BOOK`, `events::BOOK_CHOSEN` | add an action to the menu, hear which book it was chosen for |
+| Another way to open a book | `menus::OPEN_WITH`, `events::BOOK_CHOSEN` | add an action to the list of *Open with …*, beside the reading apps; it hears the book as the book menu's actions do |
 | A book's information | `slots::BOOK_INFO` | lists the fields of `add_book_field` |
 | Where the books are | `settings::LIBRARY_FOLDER` (`library::folder(env)`) | the kernel's setting, chosen with `screens::FOLDER_EDITOR` (the folder chooser of `slots::CHOOSE_FOLDER`) |
 
@@ -1240,7 +1243,7 @@ plugins/large-print/
   plugin.ini     [plugin] id, name, description, version, formats
   i18n/*.ini     translation catalogs (also whole new languages)
   keymap.ini     key bindings
-  settings.ini   new defaults for any plugin's settings ([reader] font-size = 14)
+  settings.ini   new defaults for any plugin's settings ([core] font-size = 14)
   fonts/*.ttf    fonts to read with (also .otf, .ttc), by family
   fonts/*.ppfp   packs with letters other fonts lack, named in plugin.ini:
                  [extends] cyrillic.ppfp = fonts-default.literata

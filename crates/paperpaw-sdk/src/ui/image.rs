@@ -70,6 +70,12 @@ pub fn draw_image(canvas: &mut Canvas<'_>, storage: &dyn Storage, image: &ImageR
     }
     let mut rows = RowChunk::new(file.width as usize);
     let mut row = alloc::vec![0u8; w as usize];
+    // Where each column's pixels start in a source row, worked out once
+    // (not two divisions a pixel a row); the last is the row's end.
+    let sw = file.width as usize;
+    let starts: Vec<u16> = (0..=w as usize)
+        .map(|x| (x * sw / w as usize).min(sw) as u16)
+        .collect();
     let mut loaded = None;
     for y in first..last {
         let sy = ((y - top) as u64 * u64::from(file.height) / h as u64) as u32;
@@ -78,12 +84,18 @@ pub fn draw_image(canvas: &mut Canvas<'_>, storage: &dyn Storage, image: &ImageR
                 return;
             };
             loaded = Some(sy);
-            let sw = file.width as usize;
-            for (x, out) in row.iter_mut().enumerate() {
-                let from = x * sw / w as usize;
-                let to = ((x + 1) * sw / w as usize).max(from + 1).min(sw);
-                let sum: u32 = source[from..to].iter().map(|&v| u32::from(v)).sum();
-                *out = (sum / (to - from) as u32) as u8;
+            if sw <= w as usize {
+                // As large or larger: a source pixel each.
+                for (out, &from) in row.iter_mut().zip(&starts) {
+                    *out = source[usize::from(from).min(sw - 1)];
+                }
+            } else {
+                for (x, out) in row.iter_mut().enumerate() {
+                    let from = usize::from(starts[x]);
+                    let to = usize::from(starts[x + 1]).max(from + 1).min(sw);
+                    let sum: u32 = source[from..to].iter().map(|&v| u32::from(v)).sum();
+                    *out = (sum / (to - from) as u32) as u8;
+                }
             }
         }
         canvas.draw_gray_row(left, y, &row);

@@ -95,6 +95,7 @@ pub const paperpaw_sdk::builtin::actions::MENU: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::NEXT: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::NEXT_PAGE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::NOTHING: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::actions::OPEN_WITH: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::PREVIOUS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::PREV_PAGE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::actions::QUICK_PANEL: paperpaw_sdk::Id
@@ -298,9 +299,11 @@ pub fn paperpaw_sdk::builtin::events::Reading::from_params(&paperpaw_sdk::Params
 pub fn paperpaw_sdk::builtin::events::Reading::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::builtin::events::ReadingAppWanted
 pub paperpaw_sdk::builtin::events::ReadingAppWanted::folder: bool
+pub paperpaw_sdk::builtin::events::ReadingAppWanted::once: core::option::Option<bool>
 pub paperpaw_sdk::builtin::events::ReadingAppWanted::path: alloc::string::String
 impl paperpaw_sdk::builtin::events::ReadingAppWanted
 pub fn paperpaw_sdk::builtin::events::ReadingAppWanted::new(alloc::string::String, bool) -> Self
+pub fn paperpaw_sdk::builtin::events::ReadingAppWanted::once(self, impl core::convert::Into<core::option::Option<bool>>) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::ReadingAppWanted
 pub fn paperpaw_sdk::builtin::events::ReadingAppWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::ReadingAppWanted::to_params(&self) -> paperpaw_sdk::Params
@@ -465,6 +468,7 @@ pub mod paperpaw_sdk::builtin::menus
 pub const paperpaw_sdk::builtin::menus::APPS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::menus::BOOK: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::menus::MAIN: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::menus::OPEN_WITH: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::menus::QUICK: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::menus::READER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::menus::READER_MORE: paperpaw_sdk::Id
@@ -504,7 +508,6 @@ pub mod paperpaw_sdk::builtin::screens
 pub const paperpaw_sdk::builtin::screens::CHOICE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::FOLDER_EDITOR: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::PLACEHOLDER: paperpaw_sdk::Id
-pub const paperpaw_sdk::builtin::screens::READING_APPS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::STATUS_ITEMS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::STATUS_LINES: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::sections
@@ -2332,6 +2335,7 @@ pub const paperpaw_sdk::readers::DEFAULT: &str
 pub const paperpaw_sdk::readers::DIR: &str
 pub const paperpaw_sdk::readers::FOLDERS: &str
 pub fn paperpaw_sdk::readers::ask(paperpaw_sdk::readers::Choice<'_>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::readers::ask_once(&str) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::readers::cannot_open(&paperpaw_sdk::Params, &paperpaw_sdk::Id) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::readers::chosen<'e>(&'e paperpaw_sdk::Env<'_>, &str) -> core::option::Option<&'e paperpaw_sdk::readers::ReaderSpec>
 pub fn paperpaw_sdk::readers::folder_moved(&dyn paperpaw_platform::storage::Storage, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>

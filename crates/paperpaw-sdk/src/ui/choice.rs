@@ -61,6 +61,18 @@ pub fn open(
     )
 }
 
+/// What option `option` says: the translation of `labels` followed by
+/// it, or, without labels, an action's title where it names one (options
+/// that are actions, such as the other ways to open a book).
+fn label(env: &Env<'_>, labels: &str, option: &str) -> String {
+    if labels.is_empty()
+        && let Some(action) = env.actions.get(option)
+    {
+        return env.i18n.tr(&action.title).to_string();
+    }
+    env.i18n.tr(&alloc::format!("{labels}{option}")).to_string()
+}
+
 /// The choice overlay; see the [module documentation](self).
 #[derive(Debug)]
 pub struct Choice {
@@ -244,8 +256,8 @@ impl Screen for Choice {
             &style,
             options.len(),
             |canvas, index, rect, focused| {
-                let key = alloc::format!("{labels}{}", options[index]);
-                ui::draw_value_row(canvas, env, &style, rect, focused, env.i18n.tr(&key), "");
+                let label = label(env, labels, &options[index]);
+                ui::draw_value_row(canvas, env, &style, rect, focused, &label, "");
             },
         );
         if let Some(pager) = &self.pager {
