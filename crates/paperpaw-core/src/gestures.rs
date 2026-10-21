@@ -714,11 +714,28 @@ impl Kernel {
         self.run_handler(&action, params, true);
     }
 
+    /// Runs action `action`'s own handler with `params` into `out`, as
+    /// a handler in its place asked ([`Command::RunOriginal`]).
+    fn run_original(&self, action: &Id, params: &Params, out: &mut Vec<Command>) {
+        let Some(spec) = self.shared.actions.get(action.as_str()) else {
+            return;
+        };
+        let env = self.shared.env(self.now);
+        let _running = self.shared.meter.enter(action.namespace());
+        match (spec.params_handler(), &spec.handler) {
+            (Some(handler), _) => handler(&env, params, out),
+            (None, Some(handler)) => handler(&env, out),
+            (None, None) => {}
+        }
+    }
+
     /// Runs the handler of `action` with `params`: one put in its place
     /// (`overridable`) with the highest priority, else its own. While a
     /// screen guards the device, only a handler put in place by the
     /// guard's own plugin runs in place of the action's own: another
-    /// plugin's could open what the guard keeps closed.
+    /// plugin's could open what the guard keeps closed. What it asks is
+    /// trusted to show above the guard only where the guard let the
+    /// action pass (`overridable`: it was offered the action).
     pub(crate) fn run_handler(&mut self, action: &Id, params: &Params, overridable: bool) {
         let guard = self.guard().map(|guard| self.stack[guard].id.namespace());
         let env = self.shared.env(self.now);
@@ -732,6 +749,27 @@ impl Kernel {
         let owner = if let Some((plugin, handler)) = over {
             let _running = self.shared.meter.enter(plugin.as_str());
             handler(&env, params, &mut self.output.commands);
+            drop(_running);
+            // The original it asked for runs in its place, once each.
+            let mut at = from;
+            while at < self.output.commands.len() {
+                let original = match &self.output.commands[at] {
+                    Command::RunOriginal(a, p) if a == action => Some(p.clone()),
+                    _ => None,
+                };
+                let Some(original_params) = original else {
+                    at += 1;
+                    continue;
+                };
+                self.output.commands.remove(at);
+                let mut out = Vec::new();
+                self.run_original(action, &original_params, &mut out);
+                let count = out.len();
+                for (offset, command) in out.into_iter().enumerate() {
+                    self.output.commands.insert(at + offset, command);
+                }
+                at += count;
+            }
             plugin.as_str()
         } else {
             match self.shared.actions.get(action.as_str()) {
@@ -754,23 +792,31 @@ impl Kernel {
         let top = self.stack.last().map(|s| s.id.namespace());
         let out = &mut self.output.commands;
         work::quiet(reader, top, now, from, owner, out, &mut self.works);
-        self.drop_self_runs(action, from);
+        self.drop_self_runs(action, params, from);
         // An action a screen guarding the device let pass (the lock lets
         // sleep pass): what it opens may show above.
-        if self.guard().is_some() {
+        if overridable && self.guard().is_some() {
             self.trusted.extend(from..self.output.commands.len());
         }
     }
 
-    /// Drops what was asked since `from` that runs `action` again: it
-    /// would run itself without end (a handler in place of the action's
-    /// own runs the original with [`Command::RunOriginal`]).
-    fn drop_self_runs(&mut self, action: &Id, from: usize) {
+    /// Drops what was asked since `from` that runs `action` again with
+    /// the same `params`: it would run itself without end (a handler in
+    /// place of the action's own runs the original with
+    /// [`Command::RunOriginal`]). With other params it runs (stepping
+    /// through profiles).
+    fn drop_self_runs(&mut self, action: &Id, params: &Params, from: usize) {
         let before = self.output.commands.len();
         let mut index = 0;
         self.output.commands.retain(|command| {
             let again = index >= from
-                && matches!(command, Command::RunAction(a) | Command::RunActionWith(a, _) if a == action);
+                && match command {
+                    Command::RunAction(a) => a == action && params.is_empty(),
+                    Command::RunActionWith(a, p) | Command::RunOriginal(a, p) => {
+                        a == action && p == params
+                    }
+                    _ => false,
+                };
             index += 1;
             !again
         });

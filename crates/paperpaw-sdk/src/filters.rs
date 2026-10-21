@@ -271,8 +271,32 @@ impl InputFilters {
     /// the input it did it with (another where a filter before it
     /// replaced it).
     pub fn filter(&self, env: &Env<'_>, event: &InputEvent) -> (InputVerdict, InputEvent) {
+        self.filter_by(env, event, None)
+    }
+
+    /// As [`InputFilters::filter`], by the filters of plugin `only` alone
+    /// where it is given: while a screen guards the device, those of its
+    /// plugin (no other sees a PIN typed).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn filter_of(
+        &self,
+        env: &Env<'_>,
+        event: &InputEvent,
+        only: Option<&str>,
+    ) -> (InputVerdict, InputEvent) {
+        self.filter_by(env, event, only)
+    }
+
+    fn filter_by(
+        &self,
+        env: &Env<'_>,
+        event: &InputEvent,
+        only: Option<&str>,
+    ) -> (InputVerdict, InputEvent) {
         let mut seen = *event;
-        for filter in &self.filters {
+        let mine = |filter: &&InputFilterSpec| only.is_none_or(|ns| filter.id.namespace() == ns);
+        for filter in self.filters.iter().filter(mine) {
             match (filter.filter)(env, &seen) {
                 InputVerdict::Pass => {}
                 InputVerdict::Replace(other) => seen = other,
@@ -362,7 +386,9 @@ pub enum RefreshVerdict {
     /// for them.
     Grays(bool),
     /// Not now: what changed is refreshed with the next refresh (no
-    /// refresh for a clock that ticked on a page shown in grays).
+    /// refresh for a clock that ticked on a page shown in grays). Not
+    /// for a screen opened or closed, nor while a screen guards the
+    /// device, nor more than three times in a row: then it is kept.
     Defer,
 }
 
@@ -427,7 +453,32 @@ impl RefreshFilters {
 
     /// `refresh` as the filters change it, `None` where one defers it; one
     /// that flashes covers `screen`.
-    pub fn apply(&self, env: &Env<'_>, mut refresh: Refresh, screen: Rect) -> Option<Refresh> {
+    pub fn apply(&self, env: &Env<'_>, refresh: Refresh, screen: Rect) -> Option<Refresh> {
+        self.apply_with(env, refresh, screen, true)
+    }
+
+    /// As [`RefreshFilters::apply`]; where it `may_defer` not (a screen
+    /// opened, a lock shown, refreshes deferred too often), a filter that
+    /// defers keeps the refresh.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn apply_limited(
+        &self,
+        env: &Env<'_>,
+        refresh: Refresh,
+        screen: Rect,
+        may_defer: bool,
+    ) -> Option<Refresh> {
+        self.apply_with(env, refresh, screen, may_defer)
+    }
+
+    fn apply_with(
+        &self,
+        env: &Env<'_>,
+        mut refresh: Refresh,
+        screen: Rect,
+        may_defer: bool,
+    ) -> Option<Refresh> {
         for filter in &self.filters {
             match (filter.filter)(env, &refresh) {
                 RefreshVerdict::Mode(mode) => {
@@ -437,7 +488,7 @@ impl RefreshFilters {
                     }
                 }
                 RefreshVerdict::Grays(grays) => refresh.grays = grays,
-                RefreshVerdict::Defer => return None,
+                RefreshVerdict::Defer if may_defer => return None,
                 _ => {}
             }
         }

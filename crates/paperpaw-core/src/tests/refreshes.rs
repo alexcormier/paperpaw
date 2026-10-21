@@ -11,8 +11,24 @@ const SHEET: Id = Id::new_static("r.sheet");
 const STATUS: Id = Id::new_static("r.status");
 const EXACT: Id = Id::new_static("r.exact");
 const GRAYS: Id = Id::new_static("r.grays");
+const LOCK: Id = Id::new_static("r.lock");
 
 type Seen = Rc<RefCell<Vec<Refresh>>>;
+
+/// A page that guards the device.
+struct Lock;
+
+impl Screen for Lock {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn guards(&self) -> bool {
+        true
+    }
+
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        Page.on_action(action, cx)
+    }
+}
 
 /// A page: its status line changes (`r.status`), a change it sets the
 /// mode of exactly (`r.exact`), a change that wants grays (`r.grays`).
@@ -56,6 +72,11 @@ impl Plugin for Refreshing {
             ScreenSpec::new(SHEET, "sheet", Box::new(|_, _| Box::new(Page)))
                 .refresh_on_open(RefreshMode::Fast),
         )?;
+        r.add_screen(ScreenSpec::new(
+            LOCK,
+            "lock",
+            Box::new(|_, _| Box::new(Lock)),
+        ))?;
         r.bind_slot(slots::HOME, PAGE, Priority::DEFAULT)?;
         let seen = self.0.clone();
         r.add_refresh_filter(RefreshFilterSpec::new(
@@ -64,8 +85,9 @@ impl Plugin for Refreshing {
             Box::new(move |_, refresh| {
                 seen.borrow_mut().push(refresh.clone());
                 match refresh.cause {
-                    // A status line changed: shown with what comes next.
-                    RefreshCause::Status => RefreshVerdict::Defer,
+                    // A status line changed: shown with what comes next;
+                    // screens too, as far as the kernel lets it.
+                    RefreshCause::Status | RefreshCause::Screens => RefreshVerdict::Defer,
                     _ if refresh.region.y == 40 => RefreshVerdict::Grays(true),
                     _ => RefreshVerdict::Keep,
                 }
@@ -152,4 +174,21 @@ fn the_periodic_full_refresh_says_so() {
     assert!(!seen[0].periodic);
     assert!(seen[1].periodic, "{:?}", seen[1]);
     assert_eq!(seen[1].mode, RefreshMode::Full);
+}
+
+/// Refreshes are deferred at most three times in a row, and never while
+/// a screen guards the device.
+#[test]
+fn refreshes_are_deferred_seldom() {
+    let (mut kernel, _) = refreshing();
+    for at in [10, 20, 30] {
+        assert_eq!(kernel.run_action(Instant(at), STATUS).refresh(), None);
+    }
+    assert!(kernel.run_action(Instant(40), STATUS).refresh().is_some());
+    kernel.open_screen(Instant(50), LOCK, Params::new());
+    render(&mut kernel);
+    assert!(
+        kernel.run_action(Instant(60), STATUS).refresh().is_some(),
+        "under the lock"
+    );
 }

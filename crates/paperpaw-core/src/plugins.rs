@@ -277,6 +277,17 @@ impl Kernel {
         }
         self.subscriptions.append(&mut staging.subscriptions);
         for (action, priority, handler) in staging.overrides.drain(..) {
+            // Not in place of a sealed action (one known by now; one that
+            // comes later is never overridden either).
+            if self
+                .shared
+                .actions
+                .get(action.as_str())
+                .is_some_and(paperpaw_sdk::ActionSpec::is_sealed)
+            {
+                self.warn_runtime(format!("{plugin}: `{action}` is sealed; not overridden"));
+                continue;
+            }
             self.shared
                 .actions
                 .add_override(action, priority, plugin.clone(), handler);

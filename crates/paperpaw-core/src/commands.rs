@@ -96,9 +96,19 @@ impl Kernel {
             refresh.periodic = mode != requested;
             refresh.grays = grays;
             refresh.pictures = self.frame.pictures_shown;
+            // Never a screen opened or closed, nor what shows while a screen
+            // guards the device, kept off the panel; nor too often.
+            let may_defer = refresh.cause != paperpaw_sdk::filters::RefreshCause::Screens
+                && self.guard().is_none()
+                && self.frame.defers < drawing::MAX_DEFERS;
             let env = self.shared.env(self.now);
-            match self.shared.refresh_filters.apply(&env, refresh, screen) {
+            match self
+                .shared
+                .refresh_filters
+                .apply_limited(&env, refresh, screen, may_defer)
+            {
                 Some(refresh) => {
+                    self.frame.defers = 0;
                     // Counted as done, after the filters.
                     self.frame.refresh.done(refresh.mode);
                     effects.refresh = Some((refresh.region, refresh.mode));
@@ -109,7 +119,10 @@ impl Kernel {
                         .meter
                         .refreshed(top, refresh.mode, refresh.region);
                 }
-                None => self.frame.deferred = Some(dirty),
+                None => {
+                    self.frame.deferred = Some(dirty);
+                    self.frame.defers += 1;
+                }
             }
         }
         let input = [
@@ -214,11 +227,18 @@ impl Kernel {
             Command::BackTo(id) => self.back_to(&id),
             Command::BindSlot(slot, screen) => self.bind_slot(slot, screen),
             Command::SwitchTask(task) => self.switch_task(task),
+            // Not past a screen that guards the device, but from it: what
+            // is typed into it is the reader's alone.
+            Command::Input(_) if self.held_by_guard() => {}
             Command::Input(name) => match InputKey::parse(&name) {
                 Some(key) => self.route_key(key),
                 None => self.warn_runtime(format!("unknown input `{name}`")),
             },
-            Command::SetKeyLayer(key, layer) => self.set_key_layer(key, layer),
+            // Laid by the screen itself as it asks (see `with_screen`):
+            // here it came from elsewhere.
+            Command::SetKeyLayer(..) => {
+                self.warn_runtime("a key map layer is laid by its screen alone; not laid");
+            }
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
             // Not past a screen that guards the device, but from it.
             Command::Back if self.held_by_guard() => {}
@@ -227,7 +247,13 @@ impl Kernel {
             Command::Emit(event, params) => self.emit(&event, &params),
             Command::RunAction(action) => self.dispatch(action),
             Command::RunActionWith(action, params) => self.dispatch_with(action, &params),
-            Command::RunOriginal(action, params) => self.run_handler(&action, &params, false),
+            // Run in its place where a handler in place of the action's own
+            // asked for it (see `run_handler`): here it came from elsewhere.
+            Command::RunOriginal(action, _) => {
+                self.warn_runtime(format!(
+                    "`{action}`'s own handler runs only from a handler in its place"
+                ));
+            }
             command @ (Command::Work(_)
             | Command::CancelWork(..)
             | Command::CancelHttp(_)

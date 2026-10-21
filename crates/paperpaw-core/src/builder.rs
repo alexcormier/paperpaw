@@ -457,6 +457,7 @@ impl KernelBuilder {
                 mark: None,
                 refresh: RefreshPolicy::default(),
                 deferred: None,
+                defers: 0,
             },
             input: gestures::InputState {
                 recognizer: Recognizer::default(),

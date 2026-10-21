@@ -22,8 +22,10 @@ change the plugin SDK.
   (`since_full`), whether the kernel made it full for that (`periodic`,
   so a filter keeping its own count replaces the policy), grays and
   pictures. Breaking: filters answer with `RefreshVerdict` (`Keep`,
-  `Mode`, `Grays`, `Defer`: refreshed with the next one) and
-  `RefreshFilters::apply` gives `None` for a refresh deferred.
+  `Mode`, `Grays`, `Defer`: refreshed with the next one, but never a
+  screen opened or closed, nothing while a screen guards the device and
+  not more than three times in a row) and `RefreshFilters::apply` gives
+  `None` for a refresh deferred.
   `Cx::set_refresh` sets the mode exactly, over the event's requests;
   `ScreenSpec::refresh_on_open` sets it for a screen opening.
   `RefreshMode` has `Mono`, `Gray` and `Clear` (a transition through
@@ -35,14 +37,16 @@ change the plugin SDK.
   the profile it names). `Registrar::override_action(action, handler,
   priority)` puts a handler in place of any action's own; the one of the
   highest priority runs, as for slots, and `Command::RunOriginal` runs
-  the action's own from it. `ActionSpec::sealed` keeps others' handlers
-  out (the lock's `lock.now`). `Registrar::observe_actions` and
+  the action's own from it (from nowhere else). `ActionSpec::sealed`
+  keeps others' handlers out (the lock's `lock.now`; overriding one is
+  an error). `Registrar::observe_actions` and
   `observe_events` (`ObserverSpec`) see every action run and every event
   emitted (a macro recorder, rules on any event); nothing runs for them
   where there are none. While a screen guards the device, only its
-  plugin's handlers in place of others and its observers run. What an
-  action or an observer asks that runs the same action again is dropped
-  with a warning. `ActionSpec::describe` and `keywords` give lists
+  plugin's handlers in place of others, its observers and its input
+  filters run, and `Command::Input` from others is ignored. What an
+  action or an observer asks that runs the same action again with the
+  same params is dropped with a warning. `ActionSpec::describe` and `keywords` give lists
   and searches of actions their words; `Actions::runnable` tells actions
   that run by themselves from screen actions. `SettingChanged` carries
   the value before (`old`) where the kernel changed it and a plugin
@@ -112,7 +116,6 @@ change the plugin SDK.
   before the first release in a store. It installs as a new app beside
   the old one; books and settings of the old one stay in its own
   folder.
-
 - SDK: block filters (`TextFilterSpec::block`) know where a block is
   (`FilterContext`: the book, its language, where the block starts) and
   may leave it out (`Verdict::Drop`): the reader lays out, searches and

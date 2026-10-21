@@ -185,32 +185,103 @@ fn two_fingers_and_own_zones() {
     assert_eq!(*log.borrow(), ["a:core.next-page"]);
 }
 
-/// Inputs raised by command run what they are bound to; a layer put in
-/// front binds before the slot's and the global one.
+/// A screen that lays a key map layer for itself (`lay.on`, `lay.off`)
+/// or tries one for the screen below it (`lay.other`); it logs the
+/// actions it gets.
+struct Layered(Log);
+
+impl Screen for Layered {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        self.0.borrow_mut().push(alloc::format!("lay:{action}"));
+        let book = Id::new_static("book.mine");
+        match action.as_str() {
+            "lay.on" => cx.set_key_layer(Some(book)),
+            "lay.off" => cx.set_key_layer(None),
+            "lay.other" => {
+                let below = cx.env().stack[0].key;
+                cx.command(Command::SetKeyLayer(below, Some(book)));
+            }
+            _ if *action == actions::CONFIRM => {}
+            _ => return Handled::No,
+        }
+        Handled::Yes
+    }
+}
+
+struct LayerPlugin(Log);
+
+impl Plugin for LayerPlugin {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("lay"), "Layers", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let log = self.0.clone();
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("lay.screen"),
+            "layered",
+            Box::new(move |_, _| Box::new(Layered(log.clone()))),
+        ))?;
+        r.bind_slot(slots::HOME, Id::new_static("lay.screen"), Priority(20))?;
+        for action in ["lay.on", "lay.off", "lay.other", "lay.hit"] {
+            r.add_action(ActionSpec::new(Id::parse(action).unwrap(), action))?;
+        }
+        r.add_keymap(Cow::Borrowed(
+            "[keymap.book.mine]\nbutton.confirm = lay.hit\n",
+        ))
+    }
+}
+
+fn layered(log: &Log) -> Kernel {
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(LayerPlugin(log.clone()))
+        .plugin(TestPlugin::new("b", log))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    log.borrow_mut().clear();
+    kernel
+}
+
+/// Inputs raised by command run what they are bound to; a layer a screen
+/// lays for itself binds before the slot's and the global one. A layer
+/// asked for by command, or by a screen for another, is not laid.
 #[test]
 fn inputs_raised_and_layers_put_in_front() {
     let log = log();
-    let mut kernel = kernel_with(&log, "[keymap.book.mine]\nbutton.confirm = a.special\n");
+    let mut kernel = layered(&log);
     kernel.apply(Command::Input(String::from("button.confirm")));
     kernel.finish();
-    assert_eq!(*log.borrow(), ["a:core.confirm"]);
+    assert_eq!(*log.borrow(), ["lay:core.confirm"]);
     log.borrow_mut().clear();
-    let key = paperpaw_sdk::ScreenKey::new(kernel.stack[kernel.stack.len() - 1].serial);
-    kernel.apply(Command::SetKeyLayer(key, Some(Id::new_static("book.mine"))));
+    kernel.run_action(Instant(10), Id::new_static("lay.on"));
     kernel.apply(Command::Input(String::from("button.confirm")));
     kernel.finish();
-    assert_eq!(*log.borrow(), ["a:a.special"]);
+    assert_eq!(*log.borrow(), ["lay:lay.on", "lay:lay.hit"]);
     log.borrow_mut().clear();
-    kernel.apply(Command::SetKeyLayer(key, None));
+    kernel.run_action(Instant(20), Id::new_static("lay.off"));
     press(&mut kernel, 2000, "confirm");
-    assert_eq!(*log.borrow(), ["a:core.confirm"]);
+    assert_eq!(*log.borrow(), ["lay:lay.off", "lay:core.confirm"]);
+    // By command, also with the screen's own key: not laid.
+    let key = paperpaw_sdk::ScreenKey::new(kernel.stack[0].serial);
+    kernel.apply(Command::SetKeyLayer(key, Some(Id::new_static("book.mine"))));
+    kernel.finish();
+    assert_eq!(kernel.stack[0].key_layer, None);
+    // By a screen for the one below it: not laid.
+    kernel.open_screen(Instant(30), Id::new_static("lay.screen"), Params::new());
+    kernel.run_action(Instant(40), Id::new_static("lay.other"));
+    assert_eq!(kernel.stack[0].key_layer, None);
     kernel.apply(Command::Input(String::from("no.such-input")));
     kernel.finish();
+    let warnings = kernel.take_warnings();
+    assert!(warnings.iter().any(|w| w.message.contains("no.such-input")));
     assert!(
-        kernel
-            .take_warnings()
+        warnings
             .iter()
-            .any(|w| w.message.contains("no.such-input"))
+            .any(|w| w.message.contains("laid by its screen"))
     );
 }
 
@@ -473,9 +544,15 @@ fn recognizers_see_nothing_under_a_guard() {
         "{:?}",
         log.borrow()
     );
+    // An input raised by another plugin does not reach the lock: what is
+    // typed into it is the reader's alone.
     log.borrow_mut().clear();
     kernel.apply(Command::Input(String::from("button.menu")));
     kernel.finish();
+    assert!(log.borrow().is_empty(), "{:?}", log.borrow());
+    // Another plugin's input filter sees nothing of what is typed into
+    // the lock (it would make *Menu* confirm).
+    press(&mut kernel, 2000, "menu");
     assert_eq!(*log.borrow(), ["lock:core.menu"]);
 }
 
@@ -498,56 +575,28 @@ fn recognizers_follow_the_screens_policy() {
     assert!(log.borrow().is_empty(), "{:?}", log.borrow());
 }
 
-/// A layer put in front is the screen's that set it: it applies while
+/// A layer put in front is the screen's that laid it: it applies while
 /// that screen is on top, not over another, and goes with it.
 #[test]
 fn a_key_layer_lives_with_its_screen() {
     let log = log();
-    let mut kernel = Kernel::builder(DEVICE)
-        .plugin(TestPlugin {
-            keymap: Some("[keymap.book.mine]\nbutton.confirm = a.special\n"),
-            ..TestPlugin::new("a", &log)
-        })
-        .plugin(TestPlugin::new("b", &log))
-        .build()
-        .unwrap();
-    kernel.start(Instant(0));
-    let key = paperpaw_sdk::ScreenKey::new(kernel.stack[kernel.stack.len() - 1].serial);
-    kernel.apply(Command::SetKeyLayer(key, Some(Id::new_static("book.mine"))));
-    kernel.finish();
-    let top = kernel.stack[0].id.clone();
-    let other = if top.as_str() == "a.screen" {
-        "b.screen"
-    } else {
-        "a.screen"
-    };
-    kernel.open_screen(Instant(10), Id::parse(other).unwrap(), Params::new());
+    let mut kernel = layered(&log);
+    kernel.run_action(Instant(5), Id::new_static("lay.on"));
+    kernel.open_screen(Instant(10), Id::new_static("b.screen"), Params::new());
     log.borrow_mut().clear();
     press(&mut kernel, 1000, "confirm");
-    assert!(
-        !log.borrow().iter().any(|l| l.ends_with("a.special")),
-        "{:?}",
-        log.borrow()
-    );
+    assert_eq!(*log.borrow(), ["b:core.confirm"]);
     let last = kernel.stack.len() - 1;
     kernel.close_from(last);
     log.borrow_mut().clear();
     press(&mut kernel, 2000, "confirm");
-    assert!(
-        log.borrow().iter().any(|l| l.ends_with("a.special")),
-        "{:?}",
-        log.borrow()
-    );
+    assert_eq!(*log.borrow(), ["lay:lay.hit"]);
     // Made anew, the screen has no layer.
     kernel.close_from(0);
-    kernel.open_screen(Instant(3000), top, Params::new());
+    kernel.open_screen(Instant(3000), Id::new_static("lay.screen"), Params::new());
     log.borrow_mut().clear();
     press(&mut kernel, 4000, "confirm");
-    assert!(
-        !log.borrow().iter().any(|l| l.ends_with("a.special")),
-        "{:?}",
-        log.borrow()
-    );
+    assert_eq!(*log.borrow(), ["lay:core.confirm"]);
 }
 
 /// A press waiting for a second is resolved for the screen it began on,

@@ -338,6 +338,17 @@ impl Registrar {
 
     /// Adds `contribution`; every method below is a shorthand for one.
     pub fn add(&mut self, contribution: Contribution) -> Result<(), RegisterError> {
+        // No handler in place of a sealed action of one's own.
+        if let Contribution::ActionOverride(over) = &contribution {
+            let sealed = self.contributions.iter().any(
+                |c| matches!(c, Contribution::Action(a) if a.id == over.action && a.is_sealed()),
+            );
+            if sealed {
+                return Err(RegisterError::Invalid {
+                    message: Cow::Owned(alloc::format!("`{}` is sealed", over.action)),
+                });
+            }
+        }
         if let Some(id) = contribution.id() {
             if !id.is_owned_by(&self.plugin) {
                 return Err(RegisterError::Namespace { id: id.clone() });

@@ -68,6 +68,45 @@ impl Plugin for Observing {
             },
             Priority::DEFAULT,
         )?;
+        // Opens a screen of its own; a step through profiles, run again
+        // with the next.
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("obs.page"),
+            "page",
+            Box::new(|_, _| Box::new(Lock)),
+        ))?;
+        r.add_action(
+            ActionSpec::new(Id::new_static("obs.open"), "obs.open").handler(|_, out| {
+                out.push(Command::OpenScreen(
+                    Id::new_static("obs.page"),
+                    Params::new(),
+                ));
+            }),
+        )?;
+        let log = self.0.clone();
+        r.add_action(
+            ActionSpec::new(Id::new_static("obs.step"), "obs.step").handler_with(
+                move |_, params, out| {
+                    let n: u8 = params.get("n").and_then(|n| n.parse().ok()).unwrap_or(0);
+                    log.borrow_mut().push(alloc::format!("step {n}"));
+                    if n < 2 {
+                        let next = Params::new().with("n", alloc::format!("{}", n + 1));
+                        out.push(Command::RunActionWith(Id::new_static("obs.step"), next));
+                    }
+                    // The same again: dropped.
+                    out.push(Command::RunActionWith(
+                        Id::new_static("obs.step"),
+                        params.clone(),
+                    ));
+                },
+            ),
+        )?;
+        let log = self.0.clone();
+        r.add_action(
+            ActionSpec::new(Id::new_static("obs.sealed"), "obs.sealed")
+                .handler(move |_, _| log.borrow_mut().push(String::from("sealed")))
+                .sealed(),
+        )?;
         // In place of another plugin's action, which its screen takes.
         let log = self.0.clone();
         r.override_action(
@@ -120,6 +159,10 @@ struct Guarding(Log);
 
 struct Lock;
 
+/// What passes the test lock, as sleep passes the real one: it takes
+/// every other action itself.
+const PASSING: [&str; 4] = ["obs.overridden", "obs.wrapped", "obs.guarded", "obs.open"];
+
 impl Screen for Lock {
     fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
 
@@ -127,8 +170,12 @@ impl Screen for Lock {
         true
     }
 
-    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
-        Handled::No
+    fn on_action(&mut self, action: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        if PASSING.contains(&action.as_str()) {
+            Handled::No
+        } else {
+            Handled::Yes
+        }
     }
 }
 
@@ -150,6 +197,8 @@ impl Plugin for Guarding {
             move |_, _, _| log.borrow_mut().push(String::from("g guarded")),
             Priority::DEFAULT,
         )?;
+        // In place of a sealed action: refused when the kernel takes it.
+        r.override_action(Id::new_static("obs.sealed"), |_, _, _| {}, Priority(50))?;
         let log = self.0.clone();
         r.observe_actions(ObserverSpec::new(
             Id::new_static("g.actions"),
@@ -292,4 +341,93 @@ fn a_setting_changed_says_what_it_was() {
     kernel.apply(Command::ResetSetting(level));
     kernel.finish();
     assert_eq!(*log.borrow(), ["changed from 2", "changed from 4"]);
+}
+
+/// The original runs only from a handler in its place: asked for by any
+/// other (a timer, a rule), it is refused, also while a screen guards
+/// the device, where it would open what the guard keeps closed.
+#[test]
+fn the_original_runs_only_from_its_override() {
+    let (mut kernel, log, _) = observed_with_screen();
+    kernel.apply(Command::RunOriginal(WRAPPED, Params::new()));
+    kernel.finish();
+    assert!(
+        !log.borrow().contains(&String::from("inner")),
+        "{:?}",
+        log.borrow()
+    );
+    kernel.open_screen(Instant(10), LOCK, Params::new());
+    kernel.apply(Command::RunOriginal(
+        Id::new_static("obs.open"),
+        Params::new(),
+    ));
+    kernel.finish();
+    assert_eq!(kernel.active_screen(), Some(&LOCK));
+    let warnings = kernel.take_warnings();
+    assert!(
+        warnings
+            .iter()
+            .any(|w| w.message.contains("own handler runs only")),
+        "{warnings:?}"
+    );
+}
+
+/// An action the lock takes runs no handler; one it lets pass opens
+/// above it.
+#[test]
+fn the_lock_takes_what_it_does_not_let_pass() {
+    let (mut kernel, log, _) = observed_with_screen();
+    kernel.open_screen(Instant(10), LOCK, Params::new());
+    log.borrow_mut().clear();
+    kernel.run_action(Instant(20), PLAIN);
+    assert!(
+        !log.borrow().contains(&String::from("plain")),
+        "{:?}",
+        log.borrow()
+    );
+    kernel.run_action(Instant(30), Id::new_static("obs.open"));
+    assert_eq!(kernel.active_screen(), Some(&Id::new_static("obs.page")));
+}
+
+/// An action run again with other params runs (stepping through
+/// profiles); with the same params it is dropped.
+#[test]
+fn an_action_runs_again_with_other_params() {
+    let (mut kernel, log) = observed();
+    kernel.apply(Command::RunAction(Id::new_static("obs.step")));
+    kernel.finish();
+    let log = log.borrow();
+    let steps: Vec<&str> = log
+        .iter()
+        .map(String::as_str)
+        .filter(|line| line.starts_with("step"))
+        .collect();
+    assert_eq!(steps, ["step 0", "step 1", "step 2"]);
+}
+
+/// A handler in place of a sealed action is refused: of one's own
+/// action as it is registered, of another's as the kernel takes it.
+#[test]
+fn a_sealed_action_keeps_its_handler() {
+    let mut r = Registrar::new(Id::new_static("p"));
+    r.add_action(ActionSpec::new(Id::new_static("p.x"), "x").sealed())
+        .unwrap();
+    assert!(
+        r.override_action(Id::new_static("p.x"), |_, _, _| {}, Priority(1))
+            .is_err()
+    );
+    let (mut kernel, log) = observed();
+    let warnings = kernel.take_warnings();
+    assert!(
+        warnings.iter().any(|w| w.message.contains("is sealed")),
+        "{warnings:?}"
+    );
+    log.borrow_mut().clear();
+    kernel.apply(Command::RunAction(Id::new_static("obs.sealed")));
+    kernel.finish();
+    assert!(
+        log.borrow().contains(&String::from("sealed")),
+        "{:?}",
+        log.borrow()
+    );
 }

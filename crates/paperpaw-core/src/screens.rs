@@ -540,15 +540,30 @@ impl Kernel {
             let all = self.output.redraw_area.map_or(own, |a| a.union(&own));
             self.output.redraw_area = Some(all);
         }
-        // The commands of a guarding screen, or of one above it, open
-        // screens above it.
-        if trusted {
-            self.trusted.extend(given..self.output.commands.len());
-        }
         // A time it asked for is its own: it waits while the screen is
         // covered.
         if let Some(at) = self.output.wake_at.take() {
             active.timer = Some(active.timer.map_or(at, |t| t.min(at)));
+        }
+        // A key map layer it asks for is its own, laid at once: one asked
+        // for any other screen is not (`Command::SetKeyLayer` from
+        // elsewhere is refused).
+        let mut at = given;
+        while at < self.output.commands.len() {
+            let Command::SetKeyLayer(asked, layer) = &self.output.commands[at] else {
+                at += 1;
+                continue;
+            };
+            let (asked, layer) = (*asked, layer.clone());
+            self.output.commands.remove(at);
+            if asked == key {
+                self.set_key_layer(key, layer);
+            }
+        }
+        // The commands of a guarding screen, or of one above it, open
+        // screens above it.
+        if trusted {
+            self.trusted.extend(given..self.output.commands.len());
         }
         // `request_redraw` means the caller's own region. A screen below an
         // overlay is still partly visible (e.g. the page behind a menu that

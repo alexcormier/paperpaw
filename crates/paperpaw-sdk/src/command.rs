@@ -345,7 +345,9 @@ pub enum Command {
     RunActionWith(Id, Params),
     /// Runs action `.0`'s own handler with params `.1`, past the handlers
     /// put in its place and the screens: for a handler put in its place
-    /// that does more around it. Seen by no observer.
+    /// that does more around it. Only from such a handler of action `.0`
+    /// (its commands then come where it asked for them); from anywhere
+    /// else it is refused. Seen by no observer.
     RunOriginal(Id, Params),
     /// Raises the input `.0` as written in key maps (`button.menu`,
     /// `double-tap.center`, a plugin's `input.<id>`): it runs what the

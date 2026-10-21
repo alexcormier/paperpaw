@@ -492,8 +492,10 @@ impl Kernel {
         let event = self.page_buttons_swapped(event);
         // Plugins' input filters come first.
         let (verdict, delivered) = {
+            // While a screen guards the device, only its plugin's filters.
+            let guard = self.guard().map(|guard| self.stack[guard].id.namespace());
             let env = self.shared.env(now);
-            self.shared.input_filters.filter(&env, &event)
+            self.shared.input_filters.filter_of(&env, &event, guard)
         };
         let event = match verdict {
             InputVerdict::Take => {

@@ -30,7 +30,13 @@ pub(crate) struct FrameState {
     /// What a refresh filter deferred ([`RefreshVerdict::Defer`]): it goes
     /// with the next refresh.
     pub(crate) deferred: Option<Rect>,
+    /// Refreshes deferred in a row (see [`MAX_DEFERS`]).
+    pub(crate) defers: u8,
 }
+
+/// Refreshes deferred in a row at most: the next is made whatever the
+/// filters say.
+pub(crate) const MAX_DEFERS: u8 = 3;
 
 /// How long what a call opened, closed or ran takes (for the busy mark).
 #[derive(Debug, Default)]
