@@ -183,7 +183,7 @@ fn folder_settings_follow_a_rename() {
     let storage = MemoryStorage::new().with("books/a.txt", "A");
     let (mut kernel, _) = manager(storage, "");
     rename(&mut kernel, "books", "Library");
-    assert_eq!(kernel.settings().text("files.root"), "Library");
+    assert_eq!(kernel.settings().text("core.library-folder"), "Library");
     assert_eq!(kernel.settings().text("files.archive"), "Library/Archive");
 }
 

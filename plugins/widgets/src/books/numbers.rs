@@ -171,7 +171,7 @@ impl Library {
     }
 
     fn count(&self, env: &Env<'_>) -> Numbers {
-        let key = (self.generation.get(), catalog_stamp(env.storage));
+        let key = (self.generation.get(), catalog_stamp(env));
         let mut kept = self.kept.borrow_mut();
         if kept.as_ref().is_none_or(|counted| counted.key != key) {
             let mut books = 0;

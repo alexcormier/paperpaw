@@ -5,7 +5,7 @@
 
 use alloc::borrow::Cow;
 use alloc::format;
-use alloc::string::ToString;
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::actions;
@@ -15,7 +15,7 @@ use paperpaw_sdk::{
 };
 
 use crate::LAYOUTS_SETTING;
-use crate::layouts::{AUTO, LAYOUTS, drawable};
+use crate::layouts::{AUTO, LAYOUTS, added, drawable};
 
 pub(crate) struct ChooseScreen {
     style: UiStyle,
@@ -23,17 +23,24 @@ pub(crate) struct ChooseScreen {
     list: ListView,
     /// The rows ([`ids`]), found once: whether the fonts draw a layout
     /// takes a look at every letter.
-    rows: Vec<&'static str>,
+    rows: Vec<String>,
 }
 
-/// The rows: *Automatic*, then the built-in layouts the fonts can draw.
-fn ids<'a>(env: &'a Env<'_>) -> impl Iterator<Item = &'static str> + 'a {
-    core::iter::once(AUTO).chain(
-        LAYOUTS
-            .iter()
-            .filter(move |l| drawable(env, l.letters))
-            .map(|l| l.id),
-    )
+/// The rows: *Automatic*, the built-in layouts the fonts can draw, then
+/// those other plugins added.
+fn ids(env: &Env<'_>) -> Vec<String> {
+    let builtin = LAYOUTS
+        .iter()
+        .filter(|l| drawable(env, l.letters))
+        .map(|l| String::from(l.id));
+    let added = added(env)
+        .into_iter()
+        .filter(|l| drawable(env, &l.letters))
+        .map(|l| l.id);
+    core::iter::once(String::from(AUTO))
+        .chain(builtin)
+        .chain(added)
+        .collect()
 }
 
 fn chosen<'e>(env: &Env<'e>) -> Vec<&'e str> {
@@ -56,13 +63,13 @@ impl ChooseScreen {
             list: ListView::new(area, style.row).focus_on_keys(env),
             style,
             header,
-            rows: ids(env).collect(),
+            rows: ids(env),
         }
     }
 
     fn toggle(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some(&id) = self.rows.get(index) else {
+        let Some(id) = self.rows.get(index).map(String::as_str) else {
             return;
         };
         let mut chosen = chosen(&env);
@@ -100,7 +107,7 @@ impl Screen for ChooseScreen {
         let rows = &self.rows;
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
-                let id = rows[index];
+                let id = rows[index].as_str();
                 let on = chosen.iter().position(|c| *c == id);
                 // Chosen layouts carry their place in switching: "On (2)".
                 let value = match on {

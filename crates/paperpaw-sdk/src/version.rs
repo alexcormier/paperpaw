@@ -17,8 +17,10 @@ pub const SDK_VERSION: Version = Version::new(0, 4, 0);
 /// 0020). A data plugin says which it is made for with `formats` in
 /// `[plugin]` (1 if it does not); one made for a later version is not
 /// loaded, rather than read wrongly. 2 adds `marks.ini` (see
-/// [`decorations::MarkRules`](crate::decorations::MarkRules)).
-pub const DATA_FORMATS: u32 = 2;
+/// [`decorations::MarkRules`](crate::decorations::MarkRules)); 3 adds
+/// `menus.ini`, `actions.ini`, `icons.ini`, `points/`, `setup.ini` and
+/// `[fonts]` in `plugin.ini`.
+pub const DATA_FORMATS: u32 = 3;
 
 impl Version {
     pub const fn new(major: u16, minor: u16, patch: u16) -> Self {

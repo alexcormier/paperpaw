@@ -73,6 +73,8 @@ impl Plugin for Reader {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // A line of its own on the page.
+        r.contribute(Id::new_static("about.lines"), alloc_text().into())?;
         let opened = self.0.clone();
         r.add_screen(ScreenSpec::new(
             Id::new_static("fake-reader.screen"),
@@ -247,4 +249,34 @@ fn nothing_opens_when_the_page_cannot_be_written() {
     let _ = kernel.start(Instant(0));
     let _ = kernel.run_action(Instant(100), Id::new_static("about.open"));
     assert!(opened.borrow().is_empty());
+}
+
+/// What the fake reader adds to the page: a line, a fake heading and
+/// picture, and far too much.
+fn alloc_text() -> String {
+    format!(
+        "The fake reader is by A. Tester.\n# PaperPaw 99 ![x](y.png)\n{}",
+        "z".repeat(2000)
+    )
+}
+
+#[test]
+fn lines_of_other_plugins_are_on_the_page() {
+    let mut device = Device::new(MemoryStorage::new(), "");
+    device.open();
+    let page = device.page();
+    // Named by its plugin, as plain text.
+    let line = page
+        .find("*Reader:* The fake reader is by A\\. Tester\\.")
+        .unwrap_or_else(|| panic!("{page}"));
+    assert!(page.find("https://github.com/hthoene/paperpaw").unwrap() < line);
+    // No heading nor picture of its own.
+    assert!(
+        page.contains("*Reader:* \\# PaperPaw 99 \\!\\[x\\]\\(y\\.png\\)"),
+        "{page}"
+    );
+    assert!(!page.contains("\n# PaperPaw 99"));
+    // At most 512 bytes of it.
+    let zs = page.matches('z').count();
+    assert!(zs < 512, "{zs}");
 }

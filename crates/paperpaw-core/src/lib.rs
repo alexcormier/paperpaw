@@ -38,6 +38,7 @@
 extern crate alloc;
 
 mod builder;
+mod chrome;
 mod code_plugin;
 mod commands;
 mod config;
@@ -282,13 +283,28 @@ struct ActiveScreen {
     /// Made for the part above the row of hints (when the row shows), as
     /// it asked ([`Hints::Shown`]).
     hinted: bool,
+    /// The part of the screen it is made for and drawn into: all of it
+    /// but the bars shown over it and the row of hints (see
+    /// [`Env::content`]).
+    area: Rect,
     /// What it was opened with, e.g. the book.
     params: Params,
     screen: Box<dyn Screen>,
     /// When it wants [`Screen::on_timer`] ([`Cx::wake_at`]); below another
     /// screen, once it is on top again.
     timer: Option<Instant>,
+    /// The key map layer put in front of its slot's while it is on top
+    /// ([`Command::SetKeyLayer`]).
+    key_layer: Option<Id>,
+    /// Opened above a screen guarding the device by that screen (or one
+    /// it opened): its keyboard. Others above it (a sleep screen) get no
+    /// input and are closed as the device wakes.
+    by_guard: bool,
 }
+
+/// An open screen kept while its task is not shown
+/// ([`Command::SwitchTask`]): its id, slot and params.
+type KeptScreen = (Id, Option<Id>, Params);
 
 /// A finger that came down at an edge (see [`Kernel::edge_lifted`]).
 #[derive(Debug, Clone, Copy)]
@@ -303,8 +319,12 @@ struct EdgeTouch {
 pub struct Kernel {
     shared: Shared,
     framebuffer: Framebuffer,
-    registry: Registry,
     subscriptions: Vec<(Id, Id, EventHandler)>,
+    /// The lowest screen the last offer of input reached ([`Kernel::offer`]).
+    offered_down_to: usize,
+    /// What sees every action run and every event emitted.
+    action_observers: Vec<paperpaw_sdk::ObserverSpec>,
+    event_observers: Vec<paperpaw_sdk::ObserverSpec>,
     /// The screen on top changed: it is told ([`Screen::on_show`]) once
     /// the commands of the call are done, so that one shown for a moment
     /// (e.g. below a menu that closes to open another screen) is not.
@@ -328,6 +348,8 @@ pub struct Kernel {
     withheld: Vec<Command>,
     /// Of `withheld`, the commands of a guarding screen (see `trusted`).
     withheld_trusted: Vec<usize>,
+    /// Of `withheld`, those of the guard itself (see `own_trusted`).
+    withheld_own: Vec<usize>,
     /// The commands in `output.commands` (by their place) that a guarding
     /// screen ([`Screen::guards`]) or a screen above it gave: those alone
     /// open screens above it.
@@ -335,6 +357,12 @@ pub struct Kernel {
     /// The command being carried out came from a guarding screen or one
     /// above it.
     from_guard: bool,
+    /// The command carried out comes from a screen guarding the device
+    /// itself, or one it opened (see `own_trusted`).
+    from_guard_own: bool,
+    /// Of the commands asked for, those of a screen guarding the device or
+    /// one it opened: what they open above it is its own.
+    own_trusted: Vec<usize>,
     /// A notice given while a screen guarded the device, shown once it
     /// lets go.
     held_notice: Option<String>,
@@ -348,6 +376,10 @@ pub struct Kernel {
     /// The screen that asked for the values shown without being kept
     /// ([`Command::PreviewSettings`]), if any (its `serial`).
     preview_owner: Option<u32>,
+    /// The task shown ([`Command::SwitchTask`]); `None` the home slot's.
+    task: Option<Id>,
+    /// The screens of the tasks not shown, by their ids, slots and params.
+    tasks: Vec<(Id, Vec<KeptScreen>)>,
     /// The `serial` of the screen opened next.
     next_serial: u32,
     /// `paperpaw.ini` is there but could not be read at start: the user
@@ -367,6 +399,11 @@ pub struct Kernel {
     io: network::IoState,
     frame: drawing::FrameState,
     keys: plugins::KeySources,
+    /// The bars along the edges of the screen plugins added
+    /// ([`paperpaw_sdk::chrome`]), the outermost first.
+    chromes: Vec<chrome::Chrome>,
+    /// Those shown now, by their place in `chromes`, with their strips.
+    chrome_strips: Vec<(usize, Rect)>,
     /// The plugin of each of `Shared::stylesheets`, to drop them with it.
     stylesheet_owners: Vec<Id>,
     timing: drawing::Timing,
@@ -465,24 +502,80 @@ impl Kernel {
         self.hint.pressed = None;
         self.now = now;
         self.last_activity = now;
-        self.shared.usage.inputs = self.shared.usage.inputs.saturating_add(1);
+        // Not counted while a screen guards the device: the count would
+        // tell how long a code typed into it is.
+        if self.guard().is_none() {
+            self.shared.usage.inputs = self.shared.usage.inputs.saturating_add(1);
+        }
+        // A screen above a guard that the guard did not open (a sleep
+        // screen) gets no input: what is typed into the guard is its own.
+        // A press or a finger put down closes it, so that the guard is
+        // reached again also where the shell never resumes
+        // ([`Kernel::resume`]); the release of the press that opened it
+        // does not.
+        if self.top_shut_out() {
+            let begins = matches!(
+                event,
+                InputEvent::Button {
+                    state: ButtonState::Pressed,
+                    ..
+                } | InputEvent::Pointer(PointerEvent {
+                    phase: PointerPhase::Down,
+                    ..
+                })
+            );
+            if begins {
+                self.close_shut_out();
+            }
+            return self.finish();
+        }
         let event = self.page_buttons_swapped(event);
         // Plugins' input filters come first.
-        let verdict = {
+        let (verdict, delivered) = {
+            // While a screen guards the device, only its plugin's filters.
+            let guard = self.guard().map(|guard| self.stack[guard].id.namespace());
             let env = self.shared.env(now);
-            self.shared.input_filters.apply(&env, &event)
+            self.shared.input_filters.filter_of(&env, &event, guard)
         };
-        match verdict {
-            InputVerdict::Pass => {}
-            InputVerdict::Take => return self.finish(),
+        let event = match verdict {
+            InputVerdict::Take => {
+                // Taken from the recognizers that follow the finger too.
+                if let InputEvent::Pointer(p) = delivered {
+                    self.recognizers_lose(&p);
+                }
+                return self.finish();
+            }
             InputVerdict::Run(action) => {
                 self.dispatch(action);
                 self.run_commands();
                 return self.finish();
             }
-        }
+            InputVerdict::Cancel => {
+                self.cancel_input(&delivered);
+                self.run_commands();
+                return self.finish();
+            }
+            InputVerdict::Replace(other) => other,
+            _ => event,
+        };
+        self.shared.last_input = match event {
+            InputEvent::Button { .. } => paperpaw_sdk::keys::InputMode::Buttons,
+            InputEvent::Pointer(p)
+                if matches!(
+                    p.tool,
+                    paperpaw_platform::PointerTool::Pen | paperpaw_platform::PointerTool::Eraser
+                ) =>
+            {
+                paperpaw_sdk::keys::InputMode::Pen
+            }
+            InputEvent::Pointer(_) => paperpaw_sdk::keys::InputMode::Touch,
+            _ => self.shared.last_input,
+        };
         match event {
             InputEvent::Button { name, state } => {
+                if state == ButtonState::Pressed {
+                    self.input.pressed_on = self.stack.last().map(|top| top.serial);
+                }
                 // Without a long press to tell apart, at once.
                 let long = InputKey::LongButton(Cow::Borrowed(name));
                 let at_once = self.resolve(&long).is_none();
@@ -553,6 +646,13 @@ impl Kernel {
         let mut trusted = mem::take(&mut self.withheld_trusted);
         let shift = commands.len();
         trusted.extend(mem::take(&mut self.trusted).into_iter().map(|i| i + shift));
+        let mut own = mem::take(&mut self.withheld_own);
+        own.extend(
+            mem::take(&mut self.own_trusted)
+                .into_iter()
+                .map(|i| i + shift),
+        );
+        self.own_trusted = own;
         commands.append(&mut self.output.commands);
         self.output.commands = commands;
         self.trusted = trusted;
@@ -571,7 +671,9 @@ impl Kernel {
                 let below = self.stack.len().checked_sub(2)?;
                 Some(format!("back:{}", self.stack[below].id))
             }
-            Command::RunAction(action) => Some(format!("run:{action}")),
+            Command::RunAction(action)
+            | Command::RunActionWith(action, _)
+            | Command::RunOriginal(action, _) => Some(format!("run:{action}")),
             _ => None,
         }
     }
@@ -647,10 +749,7 @@ impl Kernel {
             let speech =
                 paperpaw_sdk::Speech::new(text.clone(), Id::new_static("core.focus-spoken"))
                     .language(language);
-            let (available, screens) = (self.shared.caps.speech, self.stack.len());
-            self.io
-                .speech
-                .speak(speech, available, screens, &mut self.output.commands);
+            self.speak(speech);
             self.io.focus_spoken = true;
         }
         self.io.speech.focus = said;
@@ -723,6 +822,18 @@ impl Kernel {
             self.shared.reader = true;
             self.recognized(recognized);
         }
+        if self
+            .input
+            .pending
+            .as_ref()
+            .is_some_and(|(_, until, _)| *until <= now)
+        {
+            // No second press or tap came: the first is single.
+            self.shared.reader = true;
+            self.route_key_pending();
+        }
+        self.tick_recognizers();
+        self.tick_chromes();
         if let Some(top) = self.stack.last_mut()
             && top.timer.is_some_and(|at| at <= now)
         {
@@ -954,6 +1065,9 @@ impl Kernel {
         self.now = now;
         self.last_activity = now;
         self.output.commands.push(Command::SetSetting(id, value));
+        // The shell's, on the reader's behalf: also while a screen guards
+        // the device.
+        self.trusted.push(self.output.commands.len() - 1);
         self.run_commands();
         Ok(self.finish())
     }
@@ -991,8 +1105,23 @@ impl Kernel {
         self.last_activity = now;
         // The time asleep is no screen's.
         self.shown_since = now;
+        self.close_shut_out();
         self.output.commands.push(events::RESUME.emit(()));
         self.finish()
+    }
+
+    /// Closes the screens above a guard that it did not open (a sleep
+    /// screen): input goes to the guard again.
+    fn close_shut_out(&mut self) {
+        while self.top_shut_out() {
+            let top = self.stack.len() - 1;
+            let key = paperpaw_sdk::ScreenKey::new(self.stack[top].serial);
+            let before = self.stack.len();
+            self.close_screen(key);
+            if self.stack.len() == before {
+                break;
+            }
+        }
     }
 
     fn warn(&mut self, source: WarningSource, line: Option<u32>, message: String) {
@@ -1012,6 +1141,9 @@ impl Kernel {
 
 /// Everything plugins can read through [`Env`].
 struct Shared {
+    /// The screens and slots plugins added (in here so that a screen can
+    /// make another to host it: [`Env::make_screen`]).
+    registry: Registry,
     device: DeviceInfo,
     settings: Settings,
     translator: Translator,
@@ -1033,6 +1165,11 @@ struct Shared {
     decorators: paperpaw_sdk::decorations::Decorators,
     /// Layers on book pages and frames of their text, from every plugin.
     page_layers: paperpaw_sdk::layers::PageLayers,
+    /// Where words are looked up, from every plugin.
+    lookup: paperpaw_sdk::lookup::LookupProviders,
+    /// Plugins' voices (the kernel's alone: plugins speak with
+    /// `Command::Speak`).
+    voices: paperpaw_sdk::voices::Voices,
     /// Filters of every input and of every refresh, from every plugin.
     input_filters: paperpaw_sdk::filters::InputFilters,
     refresh_filters: paperpaw_sdk::filters::RefreshFilters,
@@ -1040,6 +1177,9 @@ struct Shared {
     stylesheets: Vec<Cow<'static, str>>,
     /// Folders of what plugins keep for each book.
     book_data: Vec<paperpaw_sdk::library::BookData>,
+    /// Fields kept with books, badges on their rows, from every plugin.
+    book_fields: Vec<paperpaw_sdk::library::BookField>,
+    book_badges: Vec<paperpaw_sdk::library::BookBadge>,
     /// What the device and its shell can do.
     caps: Capabilities,
     /// Wi-Fi, where PaperPaw manages it (see [`KernelBuilder::wifi`]).
@@ -1064,9 +1204,16 @@ struct Shared {
     /// The system's clipboard has text (see
     /// [`Kernel::set_clipboard_available`]).
     system_clipboard: bool,
+    /// What the reader used last ([`Env::last_input`]).
+    last_input: paperpaw_sdk::keys::InputMode,
+    /// The inputs plugins added, those the device can make
+    /// ([`Env::inputs`]).
+    inputs: Vec<paperpaw_sdk::keys::InputSpec>,
     /// The open screens as plugins see them ([`Env::stack`]), kept in
     /// step with the kernel's stack.
     stack: Vec<paperpaw_sdk::StackEntry>,
+    /// The part of the screen the screen on top has ([`Env::content`]).
+    content: Rect,
     /// Slots some screen is bound to.
     slots: Vec<Id>,
     /// Every screen, with the translation key of its name.
@@ -1095,6 +1242,10 @@ struct Shared {
 
 impl Shared {
     fn env(&self, now: Instant) -> Env<'_> {
+        self.env_parts(now).with_screen_maker(&self.registry)
+    }
+
+    fn env_parts(&self, now: Instant) -> Env<'_> {
         Env::from(EnvParts {
             device: &self.device,
             now,
@@ -1117,8 +1268,11 @@ impl Shared {
             text_filters: &self.text_filters,
             decorators: &self.decorators,
             page_layers: &self.page_layers,
+            lookup: &self.lookup,
             stylesheets: &self.stylesheets,
             book_data: &self.book_data,
+            book_fields: &self.book_fields,
+            book_badges: &self.book_badges,
             caps: self.caps,
             wifi: self.wifi.as_ref(),
             firmware: self.firmware.as_ref(),
@@ -1127,6 +1281,9 @@ impl Shared {
             work: &self.work_states,
             reader: self.reader,
             clipboard: self.system_clipboard || !self.clipboard.is_empty(),
+            last_input: self.last_input,
+            inputs: &self.inputs,
+            content: self.content,
             stack: &self.stack,
             slots: &self.slots,
             screens: &self.screens,

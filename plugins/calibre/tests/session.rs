@@ -155,7 +155,9 @@ fn kernel(storage: &Shared, config: &str) -> Kernel {
     kernel_on(DEVICE, storage, config)
 }
 
+/// The library at the storage's top, unless `config` says otherwise.
 fn kernel_on(device: DeviceInfo, storage: &Shared, config: &str) -> Kernel {
+    let config = format!("[core]\nlibrary-folder =\n{config}");
     let mut kernel = Kernel::builder(device)
         .storage(storage.clone())
         .user_config(config)

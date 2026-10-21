@@ -71,6 +71,8 @@ fn wanting() -> DataPlugin {
     let text = String::from_utf8(plugin.files["plugin.ini"].clone()).unwrap();
     let text = text.replace("wanting;", "wanting \u{2014}");
     plugin.files.insert("plugin.ini".into(), text.into_bytes());
+    // Handed in, as a community plugin is: not one of this repository's.
+    plugin.folder = None;
     plugin
 }
 

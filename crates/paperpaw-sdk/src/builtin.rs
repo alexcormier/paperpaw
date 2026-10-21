@@ -193,6 +193,11 @@ pub mod menus {
     /// main menu stays short however many there are. Also the home
     /// screen's grid of tools.
     pub const TOOLS: Id = Id::new_static("core.tools");
+    /// What there is to open besides the tools: a plugin's own app (a
+    /// game, a notebook). What a launcher, a drawer or a palette lists:
+    /// these and the [`TOOLS`]; the shipped home screen's grid of tools
+    /// shows both.
+    pub const APPS: Id = Id::new_static("core.apps");
     /// Extra pages on the main settings page, below the setting groups
     /// (e.g. the plugin manager). Entries are actions.
     pub const SETTINGS: Id = Id::new_static("core.settings-pages");
@@ -214,6 +219,12 @@ pub mod menus {
     /// reader sends [`events::TEXT_CHOSEN`](super::events::TEXT_CHOSEN),
     /// then runs it.
     pub const SELECTION: Id = Id::new_static("core.selection-menu");
+    /// What can be done with a book, wherever a library lists it (its
+    /// sheet: open, finished, favourite, information, …): plugins add
+    /// their actions (send it, sync it now, delete it); when one is
+    /// chosen, the library sends [`events::BOOK_CHOSEN`](super::events::BOOK_CHOSEN)
+    /// with the book, then runs it.
+    pub const BOOK: Id = Id::new_static("core.book-menu");
 }
 
 /// The roles of decorations every reader draws (see
@@ -343,6 +354,12 @@ pub mod events {
         pub struct SettingChanged {
             pub id: Id,
         }
+        optional {
+            /// Its value before, as written in `paperpaw.ini`, where the
+            /// kernel changed it and a plugin subscribes to the event or
+            /// observes events (it is not made for nobody).
+            pub old: String,
+        }
     }
 
     crate::event_data! {
@@ -359,6 +376,43 @@ pub mod events {
             /// Its old path.
             pub from: String,
             /// Its new one.
+            pub path: String,
+        }
+    }
+
+    crate::event_data! {
+        /// A book that came into the library ([`BOOK_ADDED`]).
+        pub struct BookAdded {
+            pub path: String,
+            /// Where it came from: the plugin that brought it (`transfer`,
+            /// `calibre`, `opds`), empty where it is not known.
+            pub source: String,
+        }
+    }
+
+    crate::event_data! {
+        /// What changed of a book ([`BOOK_CHANGED`]).
+        pub struct BookChanged {
+            pub path: String,
+            /// What changed: bits of [`library::what`](crate::library::what).
+            pub what: u32,
+        }
+    }
+
+    crate::event_data! {
+        /// The catalog wanted ([`CATALOG_WANTED`]).
+        pub struct CatalogWanted {
+            /// Made anew in any case, not only where it was not made since
+            /// PaperPaw started.
+            pub anew: bool,
+        }
+    }
+
+    crate::event_data! {
+        /// An action of the book menu chosen for a book ([`BOOK_CHOSEN`]).
+        pub struct BookChosen {
+            /// The action, from [`menus::BOOK`](super::menus::BOOK).
+            pub action: Id,
             pub path: String,
         }
     }
@@ -562,6 +616,31 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// A lookup provider's answer that came later
+        /// ([`LOOKUP_ANSWERED`], see [`lookup`](crate::lookup)): its
+        /// entry for the word, none where `text` is empty.
+        pub struct LookupAnswered {
+            pub provider: Id,
+            pub word: String,
+            /// Where it is from, shown above it.
+            pub source: String,
+            pub text: String,
+        }
+        optional {
+            /// The screen that shows more of it
+            /// ([`LookupEntry::more`](crate::lookup::LookupEntry::more)).
+            pub more: Id,
+        }
+    }
+
+    crate::event_data! {
+        /// A document that was not ready is now ([`DOCUMENT_READY`]).
+        pub struct DocumentReady {
+            pub path: String,
+        }
+    }
+
+    crate::event_data! {
         /// A book's notes, exported ([`NOTES_EXPORTED`]).
         pub struct NotesExported {
             /// The file written (Markdown).
@@ -625,6 +704,29 @@ pub mod events {
     /// change the library emit it ([`library::changed`](crate::library::changed));
     /// a move is [`BOOK_MOVED`].
     pub const LIBRARY_CHANGED: Event<()> = Event::new("core.library-changed");
+    /// A book came into the library ([`BookAdded`]): received, downloaded,
+    /// copied by a plugin. Whoever brings a book emits it
+    /// ([`library::added`](crate::library::added)); views may show it at
+    /// once, the catalog is made anew.
+    pub const BOOK_ADDED: Event<BookAdded> = Event::new("core.book-added");
+    /// Something of a book changed ([`BookChanged`]): its details, how far
+    /// it is read, its cover, whether it is a favourite, a plugin's field.
+    /// Sent by the kernel for the reading events and by plugins that change
+    /// a book ([`library::changed_book`](crate::library::changed_book));
+    /// views show the book anew.
+    pub const BOOK_CHANGED: Event<BookChanged> = Event::new("core.book-changed");
+    /// An action of the book menu ([`menus::BOOK`](super::menus::BOOK)) was
+    /// chosen for a book ([`BookChosen`]), sent just before it runs: the
+    /// plugin whose action it is does it for that book.
+    pub const BOOK_CHOSEN: Event<BookChosen> = Event::new("core.book-chosen");
+    /// The catalog of the library was made anew
+    /// ([`library::catalog`](crate::library::catalog)): views of it read it
+    /// again.
+    pub const CATALOG_CHANGED: Event<()> = Event::new("core.catalog-changed");
+    /// The catalog is wanted ([`CatalogWanted`],
+    /// [`library::request_catalog`](crate::library::request_catalog)):
+    /// the kernel walks the library in the background where needed.
+    pub const CATALOG_WANTED: Event<CatalogWanted> = Event::new("core.catalog-wanted");
     /// The values shown without being kept changed, or ended (see
     /// [`Command::PreviewSettings`](crate::Command::PreviewSettings)).
     pub const PREVIEW_CHANGED: Event<()> = Event::new("core.preview-changed");
@@ -654,6 +756,16 @@ pub mod events {
     /// ([`PageLayerTapped`]); sent for layers that take taps (see
     /// [`layers`](crate::layers)), whose plugin answers.
     pub const PAGE_LAYER_TAPPED: Event<PageLayerTapped> = Event::new("core.page-layer-tapped");
+    /// A lookup provider that answered later ([`LookupAnswered`], see
+    /// [`lookup`](crate::lookup)) has its entry, for a query that names
+    /// no reply of its own (`LookupQuery::reply`): the screen that asked
+    /// shows it.
+    pub const LOOKUP_ANSWERED: Event<LookupAnswered> = Event::new("core.lookup-answered");
+    /// A document that a format could not open yet
+    /// ([`DocumentError::NotReady`](crate::document::DocumentError), e.g.
+    /// still coming in) is there now ([`DocumentReady`]): its format's
+    /// plugin says so, readers waiting for it open it.
+    pub const DOCUMENT_READY: Event<DocumentReady> = Event::new("core.document-ready");
     /// Skimming asks the reader to go somewhere in the book ([`Skim`]).
     pub const SKIM: Event<Skim> = Event::new("core.skim");
     /// Where the book being skimmed is now ([`Skimmed`]): the reader tells
@@ -771,6 +883,10 @@ pub mod screens {
     pub const STATUS_ITEMS: Id = Id::new_static("core.status-items");
     /// Chooses the status lines a setting lists.
     pub const STATUS_LINES: Id = Id::new_static("core.status-lines");
+    /// Chooses a folder for a setting with the folder chooser
+    /// ([`slots::CHOOSE_FOLDER`](super::slots::CHOOSE_FOLDER)), whichever
+    /// plugin fills it: name it as a text setting's editor.
+    pub const FOLDER_EDITOR: Id = Id::new_static("core.folder-editor");
 }
 
 /// Global settings.
@@ -783,6 +899,11 @@ pub mod settings {
     /// [`groups::DEVELOPER`](super::groups::DEVELOPER) show, and plugins may
     /// show what only developers need (e.g. what each plugin took).
     pub const DEVELOPER: Setting<bool> = Setting::new("core.developer");
+    /// The library folder, where books are kept (`books`; empty for the
+    /// storage's top): the kernel's, so that any library and every plugin
+    /// that puts books somewhere reads the same
+    /// ([`library::folder`](crate::library::folder)).
+    pub const LIBRARY_FOLDER: Setting<Text> = Setting::new("core.library-folder");
     /// Draw everything inverted.
     pub const NIGHT_MODE: Setting<bool> = Setting::new("core.night-mode");
     /// In night mode, pictures inverted too (else as they are, not as
@@ -806,6 +927,11 @@ pub mod settings {
     /// Say what the buttons move to (a row, a button), where the device
     /// speaks: for using PaperPaw without seeing the screen.
     pub const SPEAK_FOCUS: Setting<bool> = Setting::new("core.speak-focus");
+    /// The voice that speaks text aloud: [`VOICE_SYSTEM`] or a plugin's
+    /// (see [`voices`](crate::voices)).
+    pub const VOICE: Setting<Text> = Setting::new("core.voice");
+    /// [`VOICE`]: the system's.
+    pub const VOICE_SYSTEM: &str = "core.voice.system";
     /// Partial refreshes between two full refreshes; `0` disables full
     /// refreshes for ghosting removal.
     pub const FULL_REFRESH_INTERVAL: Setting<i64> = Setting::new("core.full-refresh-interval");
@@ -970,6 +1096,18 @@ pub mod settings {
     pub const NOTICE_SECONDS: Setting<i64> = Setting::new("core.notice-seconds");
     /// Milliseconds a button or finger must be held for a long press.
     pub const LONG_PRESS_MS: Setting<i64> = Setting::new("core.long-press-ms");
+    /// Milliseconds within which a second tap or press makes a double tap
+    /// or press, where something is bound to one.
+    pub const DOUBLE_TAP_MS: Setting<i64> = Setting::new("core.double-tap-ms");
+    /// How far, in millimetres, a finger may move and still tap.
+    pub const TAP_SLOP: Setting<i64> = Setting::new("core.tap-slop");
+    /// How far, in millimetres, a finger must move to swipe.
+    pub const SWIPE_DISTANCE: Setting<i64> = Setting::new("core.swipe-distance");
+    /// How bright the front light is, in percent, where the device has one
+    /// it lets PaperPaw set ([`Capabilities::frontlight`](crate::Capabilities)).
+    pub const FRONTLIGHT: Setting<i64> = Setting::new("core.frontlight");
+    /// How warm the front light is, in percent (0 cold, 100 warm).
+    pub const FRONTLIGHT_WARMTH: Setting<i64> = Setting::new("core.frontlight-warmth");
     /// Base size of user interface text in points; UI metrics scale with it.
     pub const UI_SIZE: Setting<i64> = Setting::new("core.ui-size");
     /// The active key map preset (see [`keymap_presets`](super::keymap_presets)).

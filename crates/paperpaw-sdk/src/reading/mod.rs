@@ -210,6 +210,33 @@ pub fn open_options(env: &crate::Env<'_>) -> crate::OpenOptions {
         .options()
         .publisher_styles(styles)
         .css(env.stylesheets.join("\n"))
+        .settings(format_settings(env))
+}
+
+/// The values of the format plugins' own settings (those in their
+/// namespace), each book's own where it has them.
+fn format_settings(env: &crate::Env<'_>) -> Vec<(String, String)> {
+    let mut owners: Vec<&str> = env
+        .formats
+        .iter()
+        .filter_map(|f| f.id.as_str().split_once('.').map(|(plugin, _)| plugin))
+        .collect();
+    owners.sort_unstable();
+    owners.dedup();
+    env.settings
+        .specs()
+        .filter(|spec| {
+            let id = spec.id.as_str();
+            owners
+                .iter()
+                .any(|o| id.strip_prefix(o).is_some_and(|rest| rest.starts_with('.')))
+        })
+        .filter_map(|spec| {
+            let id = spec.id.as_str();
+            let value = env.settings.get(id)?.to_config_text();
+            Some((id.to_string(), value))
+        })
+        .collect()
 }
 
 /// Which conversion of a book [`open_options`] make: places

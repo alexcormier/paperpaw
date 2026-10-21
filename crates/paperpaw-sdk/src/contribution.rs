@@ -45,7 +45,7 @@ use crate::widgets::WidgetSpec;
 /// ones are boxed: a plugin's list stays small on small devices.
 #[non_exhaustive]
 pub enum Contribution {
-    Action(ActionSpec),
+    Action(Box<ActionSpec>),
     Screen(ScreenSpec),
     Slot(SlotSpec),
     /// A screen proposed for a slot (see [`Registrar::bind_slot`]).
@@ -82,6 +82,10 @@ pub enum Contribution {
     },
     Stylesheet(Cow<'static, str>),
     BookData(crate::library::BookData),
+    /// A field kept with books ([`Registrar::add_book_field`]).
+    BookField(Box<crate::library::BookField>),
+    /// A badge on books' rows ([`Registrar::add_book_badge`]).
+    BookBadge(Box<crate::library::BookBadge>),
     Font(Box<FontSpec>),
     #[non_exhaustive]
     FontFile {
@@ -117,6 +121,21 @@ pub enum Contribution {
         need: MenuNeed,
     },
     #[non_exhaustive]
+    HideMenuEntry {
+        menu: Id,
+        item: Id,
+    },
+    #[non_exhaustive]
+    ItemState {
+        item: Id,
+        state: crate::ItemStateFn,
+    },
+    #[non_exhaustive]
+    ItemDescription {
+        item: Id,
+        key: Cow<'static, str>,
+    },
+    #[non_exhaustive]
     ScreenHints {
         screen: Id,
         hints: Hints,
@@ -132,8 +151,23 @@ pub enum Contribution {
     Decorator(Box<crate::decorations::DecoratorSpec>),
     PageLayer(Box<crate::layers::PageLayerSpec>),
     PageFrame(Box<crate::layers::PageFrameSpec>),
+    LookupProvider(Box<crate::lookup::LookupProviderSpec>),
+    Voice(Box<crate::voices::VoiceSpec>),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
+    /// A bar along an edge of the screen (see [`chrome`](crate::chrome)).
+    Chrome(Box<crate::chrome::ChromeSpec>),
+    /// A named input (see [`keys::InputSpec`](crate::keys::InputSpec)).
+    Input(crate::keys::InputSpec),
+    /// A handler put in place of an action's own, of any plugin
+    /// ([`Registrar::override_action`]).
+    ActionOverride(Box<crate::action::ActionOverride>),
+    /// Sees every action run ([`Registrar::observe_actions`]).
+    ActionObserver(Box<crate::action::ObserverSpec>),
+    /// Sees every event emitted ([`Registrar::observe_events`]).
+    EventObserver(Box<crate::action::ObserverSpec>),
+    /// A recognizer of gestures (see [`keys::GestureSpec`](crate::keys::GestureSpec)).
+    Gesture(Box<crate::keys::GestureSpec>),
     /// A job: work done in steps (see [`work`](crate::work)).
     Work(Box<crate::work::WorkSpec>),
     Widget(Box<WidgetSpec>),
@@ -155,6 +189,10 @@ pub enum Contribution {
         id: Id,
         service: crate::services::Service,
     },
+    /// A point declared to contribute to ([`Registrar::add_point`]).
+    Point(Box<crate::services::PointSpec>),
+    /// An event declared ([`Registrar::declare_event`]).
+    EventDeclared(Box<crate::services::EventSpec>),
     /// Text for a point another plugin defined (see
     /// [`services`](crate::services)).
     #[non_exhaustive]
@@ -182,6 +220,8 @@ impl Contribution {
             Contribution::KeymapWhen { .. } => "keymap-when",
             Contribution::Stylesheet(_) => "stylesheet",
             Contribution::BookData(_) => "book data",
+            Contribution::BookField(_) => "book field",
+            Contribution::BookBadge(_) => "book badge",
             Contribution::Font(_) => "font",
             Contribution::FontFile { .. } => "font-file",
             Contribution::FontExtension { .. } => "font-extension",
@@ -193,6 +233,9 @@ impl Contribution {
             Contribution::MenuSection(_) => "menu-section",
             Contribution::Icon { .. } => "icon",
             Contribution::MenuNeed { .. } => "menu-need",
+            Contribution::HideMenuEntry { .. } => "hidden-menu-entry",
+            Contribution::ItemState { .. } => "item-state",
+            Contribution::ItemDescription { .. } => "item-description",
             Contribution::ScreenHints { .. } => "screen-hints",
             Contribution::Subscription { .. } => "subscription",
             Contribution::StatusItem(_) => "status-item",
@@ -201,14 +244,24 @@ impl Contribution {
             Contribution::Decorator(_) => "decorator",
             Contribution::PageLayer(_) => "page-layer",
             Contribution::PageFrame(_) => "page-frame",
+            Contribution::LookupProvider(_) => "lookup-provider",
+            Contribution::Voice(_) => "voice",
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
+            Contribution::Chrome(_) => "chrome",
+            Contribution::Input(_) => "input",
+            Contribution::ActionOverride(_) => "action-override",
+            Contribution::ActionObserver(_) => "action-observer",
+            Contribution::EventObserver(_) => "event-observer",
+            Contribution::Gesture(_) => "gesture",
             Contribution::Work(_) => "work",
             Contribution::Widget(_) => "widget",
             Contribution::SetupStep(_) => "setup-step",
             Contribution::Preset(_) | Contribution::FixedPresets(_) => "preset",
             Contribution::Service { .. } | Contribution::Published { .. } => "service",
             Contribution::ToPoint { .. } => "to-point",
+            Contribution::Point(_) => "point",
+            Contribution::EventDeclared(_) => "event",
             Contribution::Translations(_) => "translations",
         }
     }
@@ -238,13 +291,23 @@ impl Contribution {
             Contribution::Decorator(d) => &d.id,
             Contribution::PageLayer(l) => &l.id,
             Contribution::PageFrame(f) => &f.id,
+            Contribution::LookupProvider(p) => &p.id,
+            Contribution::Voice(v) => &v.id,
             Contribution::InputFilter(f) => &f.id,
             Contribution::RefreshFilter(f) => &f.id,
+            Contribution::Chrome(c) => &c.id,
+            Contribution::Input(i) => &i.id,
+            Contribution::ActionObserver(o) | Contribution::EventObserver(o) => &o.id,
+            Contribution::Gesture(g) => &g.id,
             Contribution::Work(w) => &w.id,
+            Contribution::BookField(f) => &f.id,
+            Contribution::BookBadge(b) => &b.id,
             Contribution::Widget(w) => &w.id,
             Contribution::SetupStep(s) => &s.id,
             Contribution::Preset(p) => &p.id,
             Contribution::Service { id, .. } | Contribution::Published { id, .. } => id,
+            Contribution::Point(p) => &p.id,
+            Contribution::EventDeclared(e) => &e.id,
             _ => return None,
         })
     }
@@ -306,8 +369,41 @@ impl Registrar {
 
     /// Adds `contribution`; every method below is a shorthand for one.
     pub fn add(&mut self, contribution: Contribution) -> Result<(), RegisterError> {
+        // What an entry shows is said by the plugin it belongs to.
+        if let Contribution::ItemState { item, .. } | Contribution::ItemDescription { item, .. } =
+            &contribution
+            && !item.is_owned_by(&self.plugin)
+        {
+            return Err(RegisterError::Namespace { id: item.clone() });
+        }
+        // No handler in place of a sealed action of one's own, in either
+        // order.
+        if let Contribution::Action(action) = &contribution
+            && action.is_sealed()
+            && self.contributions.iter().any(
+                |c| matches!(c, Contribution::ActionOverride(over) if over.action == action.id),
+            )
+        {
+            return Err(RegisterError::Invalid {
+                message: Cow::Owned(alloc::format!("`{}` is sealed", action.id)),
+            });
+        }
+        if let Contribution::ActionOverride(over) = &contribution {
+            let sealed = self.contributions.iter().any(
+                |c| matches!(c, Contribution::Action(a) if a.id == over.action && a.is_sealed()),
+            );
+            if sealed {
+                return Err(RegisterError::Invalid {
+                    message: Cow::Owned(alloc::format!("`{}` is sealed", over.action)),
+                });
+            }
+        }
         if let Some(id) = contribution.id() {
-            if !id.is_owned_by(&self.plugin) {
+            // The kernel's services a plugin may stand in for (the
+            // library) are published under the kernel's ids.
+            let stands_in = matches!(contribution, Contribution::Published { .. })
+                && crate::services::REPLACEABLE.contains(&id.as_str());
+            if !id.is_owned_by(&self.plugin) && !stands_in {
                 return Err(RegisterError::Namespace { id: id.clone() });
             }
             let kind = contribution.id_kind();
@@ -324,7 +420,7 @@ impl Registrar {
     }
 
     pub fn add_action(&mut self, action: ActionSpec) -> Result<(), RegisterError> {
-        self.add(Contribution::Action(action))
+        self.add(Contribution::Action(Box::new(action)))
     }
 
     pub fn add_screen(&mut self, screen: ScreenSpec) -> Result<(), RegisterError> {
@@ -438,6 +534,25 @@ impl Registrar {
         }))
     }
 
+    /// Adds a field plugins keep with books ([`library::set_field`](crate::library::set_field)):
+    /// shown on a book's information page, kept in the catalog where
+    /// [`in_catalog`](crate::library::BookField::in_catalog).
+    pub fn add_book_field(
+        &mut self,
+        field: crate::library::BookField,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::BookField(Box::new(field)))
+    }
+
+    /// Adds a badge to books' rows in every view of the library (see
+    /// [`library::service`](fn@crate::library::service)).
+    pub fn add_book_badge(
+        &mut self,
+        badge: crate::library::BookBadge,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::BookBadge(Box::new(badge)))
+    }
+
     /// Adds a key map preset (same format as [`Registrar::add_keymap`]) that
     /// users can select with the `core.keymap-preset` setting. Its title
     /// is the translation of its id.
@@ -501,6 +616,62 @@ impl Registrar {
     /// redefined by the user.
     pub fn add_menu_entry(&mut self, entry: MenuEntry) -> Result<(), RegisterError> {
         self.add(Contribution::MenuEntry(entry))
+    }
+
+    /// Puts `item` into `menu` at `place`, beside other entries (e.g.
+    /// right after another plugin's); where another plugin puts the same
+    /// entry there by order, this moves it.
+    pub fn place_menu_entry(
+        &mut self,
+        menu: impl Into<Id>,
+        item: impl Into<Id>,
+        place: crate::MenuPlace,
+    ) -> Result<(), RegisterError> {
+        self.add_menu_entry(MenuEntry::new(menu.into(), item.into()).place(place))
+    }
+
+    /// Takes `item` out of `menu` as plugins contribute it (also another
+    /// plugin's, e.g. an entry a plugin replaces with its own); a user
+    /// who lists it keeps it, and the menu editor tells which plugin took
+    /// it out.
+    pub fn hide_menu_entry(
+        &mut self,
+        menu: impl Into<Id>,
+        item: impl Into<Id>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::HideMenuEntry {
+            menu: menu.into(),
+            item: item.into(),
+        })
+    }
+
+    /// What menus show of `item` now, where it changes: another label, a
+    /// switch, faint, hidden, a badge (see
+    /// [`ItemState`](crate::ItemState)). Asked whenever a menu
+    /// shows it: it says it from memory. Only for the plugin's own
+    /// actions and settings ([`RegisterError::Namespace`] otherwise).
+    pub fn set_item_state(
+        &mut self,
+        item: impl Into<Id>,
+        state: impl Fn(&crate::Env<'_>) -> crate::ItemState + 'static,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ItemState {
+            item: item.into(),
+            state: Box::new(state),
+        })
+    }
+
+    /// A line under `item` in menus, by its translation key; only for the
+    /// plugin's own actions and settings.
+    pub fn describe_item(
+        &mut self,
+        item: impl Into<Id>,
+        key: impl Into<Cow<'static, str>>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ItemDescription {
+            item: item.into(),
+            key: key.into(),
+        })
     }
 
     /// Adds a heading to a menu; entries ordered after it, up to the next
@@ -630,6 +801,22 @@ impl Registrar {
         self.add(Contribution::PageFrame(Box::new(frame)))
     }
 
+    /// Adds a lookup provider: where words are looked up, listed by the
+    /// screen that shows a word's entries (see [`lookup`](crate::lookup)).
+    pub fn add_lookup_provider(
+        &mut self,
+        provider: crate::lookup::LookupProviderSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::LookupProvider(Box::new(provider)))
+    }
+
+    /// Adds a voice: speaks text aloud in place of the system's while the
+    /// setting [`VOICE`](crate::builtin::settings::VOICE) chooses it (see
+    /// [`voices`](crate::voices)).
+    pub fn add_voice(&mut self, voice: crate::voices::VoiceSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Voice(Box::new(voice)))
+    }
+
     /// Adds a filter of every input, before screens and key maps see it
     /// (see [`filters`](crate::filters)).
     pub fn add_input_filter(&mut self, filter: InputFilterSpec) -> Result<(), RegisterError> {
@@ -640,6 +827,62 @@ impl Registrar {
     /// [`filters`](crate::filters)).
     pub fn add_refresh_filter(&mut self, filter: RefreshFilterSpec) -> Result<(), RegisterError> {
         self.add(Contribution::RefreshFilter(filter))
+    }
+
+    /// Puts `handler` in place of action `action`'s own, also of another
+    /// plugin's (one with none too, e.g. a screen action where no screen
+    /// takes it): of several, the one of the highest priority runs, as
+    /// for slots. It gets the params the action was run with.
+    pub fn override_action(
+        &mut self,
+        action: Id,
+        handler: impl Fn(&crate::Env<'_>, &crate::Params, &mut Vec<crate::Command>) + 'static,
+        priority: Priority,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ActionOverride(Box::new(
+            crate::action::ActionOverride {
+                action,
+                handler: Box::new(handler),
+                priority,
+            },
+        )))
+    }
+
+    /// Sees every action run, with its params, before it runs (see
+    /// [`ObserverSpec`](crate::ObserverSpec)).
+    pub fn observe_actions(
+        &mut self,
+        observer: crate::action::ObserverSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ActionObserver(Box::new(observer)))
+    }
+
+    /// Sees every event emitted, with its params, after its subscribers
+    /// (see [`ObserverSpec`](crate::ObserverSpec)).
+    pub fn observe_events(
+        &mut self,
+        observer: crate::action::ObserverSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::EventObserver(Box::new(observer)))
+    }
+
+    /// Adds an input of one's own, `input.<id>`, bound in key maps as any
+    /// other and raised with [`Command::Input`](crate::Command::Input)
+    /// (see [`keys::InputSpec`](crate::keys::InputSpec)).
+    pub fn add_input(&mut self, input: crate::keys::InputSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Input(input))
+    }
+
+    /// Adds a recognizer of gestures of one's own, `gesture.<id>` in key
+    /// maps (see [`keys::GestureSpec`](crate::keys::GestureSpec)).
+    pub fn add_gesture(&mut self, gesture: crate::keys::GestureSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Gesture(Box::new(gesture)))
+    }
+
+    /// Adds a bar that stays along an edge of the screen across the
+    /// screens shown: tabs, a dock (see [`chrome`](crate::chrome)).
+    pub fn add_chrome(&mut self, chrome: crate::chrome::ChromeSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Chrome(Box::new(chrome)))
     }
 
     /// Adds a job: the steps of the work declared with its id (see
@@ -719,6 +962,37 @@ impl Registrar {
             id,
             service: crate::services::Service::new(service),
         })
+    }
+
+    /// Publishes `service` for other plugins as `id` in `version`, a type
+    /// with a contract ([`services::ServiceType`](crate::services::ServiceType)):
+    /// found by its key also by native plugins built apart, and by the
+    /// version others need ([`Services::get_versioned`](crate::services::Services::get_versioned)).
+    pub fn provide<T: crate::services::ServiceType>(
+        &mut self,
+        id: Id,
+        service: T,
+        version: crate::Version,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::Published {
+            id,
+            service: crate::services::Service::typed(service, version),
+        })
+    }
+
+    /// Declares a point of one's own that others contribute to (see
+    /// [`services`](crate::services)), with what a contribution there is.
+    pub fn add_point(&mut self, point: crate::services::PointSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Point(Box::new(point)))
+    }
+
+    /// Declares an event of one's own, with the params it carries: rules
+    /// and macro editors offer it.
+    pub fn declare_event(
+        &mut self,
+        event: crate::services::EventSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::EventDeclared(Box::new(event)))
     }
 
     /// Adds `contribution` to `point`, a point another plugin defined
