@@ -6,25 +6,30 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-- SDK: status items do something when tapped
-  (`StatusItemSpec::tap`), say how much they matter
-  (`StatusItemSpec::priority`, `status::PRIORITY`) and keep a least
-  width (`StatusItemSpec::min_width`). Where a line has no room for all
-  its items, the battery's percentage goes first, then the items that
-  matter least, never cut. `StatusValue::Labelled` shows an icon with a
-  text. `StatusLine::targets` and `StatusLineSpec::targets` say where a
-  tap does something; the reader, the home screen's status line and the
-  quick panel's head run it (Wi-Fi opens its page, the power mode its
-  settings). Places where items show are `status::Place`s
-  (`Registrar::add_status_place`; the reader's above and below the text,
-  the home screen's, the quick panel's), and `StatusFrame::place` and
-  `StatusFrame::font` tell a line where it is drawn. `Drawn::targets`
-  gives a drawn widget places that do something. Breaking: `StatusLine`
-  and `widgets::Drawn` are made with `new` (`StatusLine::percent`,
+- SDK: status items run an action of their own plugin when tapped
+  (`StatusItemSpec::tap`, with the line's context; bindable to buttons
+  too), say how much they matter (`StatusItemSpec::priority`,
+  `status::PRIORITY`) and keep a least width
+  (`StatusItemSpec::min_width`). Where a line has no room for all its
+  items, the battery's percentage goes first, then the items that
+  matter least (texts are shortened first), never cut.
+  `StatusValue::Labelled` shows an icon with a text.
+  `StatusLine::targets` and `StatusLineSpec::targets` say where a tap
+  does something; the reader, the home screen's status line and the
+  quick panel's head run it (Wi-Fi opens its page, `wifi.open`, the
+  power mode its settings, `power.open`). Places where items show are
+  `status::Place`s (`Registrar::add_status_place`; the reader's above
+  and below the text, the home screen's, the quick panel's), and
+  `StatusFrame::place` and `StatusFrame::font` tell a line where it is
+  drawn. `Drawn::targets` gives a drawn widget places that do
+  something, and `WidgetTarget::touch` one tapped only, which the
+  buttons' focus leaves out. Breaking: `StatusLine` and
+  `widgets::Drawn` are made with `new` (`StatusLine::percent`,
   `Drawn::shows`, `Drawn::targets`).
-- Kernel: a plugin cannot overwrite another plugin's secret setting,
-  set, reset or typed for; only the settings editor and the plugin
-  itself can.
+- Kernel: a plugin cannot overwrite another plugin's secret or guarded
+  setting: not set, reset, nor typed for, nor ask for text for it from
+  the keyboard, the clipboard or anywhere else; only the settings
+  editor and the plugin itself can, and the keyboard answers them.
 - Emulator: folders are listed by name on every system (Linux gave the
   order they are stored in), so books of the same title show in the
   same order on Linux, macOS and Windows, and the screenshots with them.
