@@ -50,12 +50,10 @@ impl Kernel {
     /// over the bottom of one that has it on a press, for a while.
     pub(crate) fn hint_row(&self) -> Option<Rect> {
         let panel = self.framebuffer.bounds();
-        let top = self.shared.device.display.height;
-        if top < panel.height {
-            return Some(Rect::new(0, top, panel.width, panel.height - top));
-        }
         let height = self.hint.height.min(panel.height / 2);
-        (height > 0 && self.hint.until.is_some_and(|until| self.now < until))
+        let below = self.stack.last().is_some_and(|top| top.hinted);
+        let pressed = self.hint.until.is_some_and(|until| self.now < until);
+        (height > 0 && (below || pressed))
             .then(|| Rect::new(0, panel.height - height, panel.width, height))
     }
 
@@ -75,7 +73,7 @@ impl Kernel {
         active
             .screen
             .hints()
-            .unwrap_or_else(|| self.registry.hints_of(&active.id))
+            .unwrap_or_else(|| self.shared.registry.hints_of(&active.id))
     }
 
     /// Shows the row for a while over a screen that has it on a press.

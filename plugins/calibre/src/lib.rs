@@ -340,7 +340,7 @@ impl CalibreScreen {
                                 provided(&coming.metadata),
                             );
                             self.received += 1;
-                            cx.command(paperpaw_sdk::library::changed());
+                            cx.command(paperpaw_sdk::library::added(&coming.path, "calibre"));
                         }
                     }
                     // A book dropped (its path led out of the library).
@@ -452,15 +452,19 @@ impl CalibreScreen {
                     if library::sent(env.storage, &lpath)
                         && let Some(path) = protocol::safe_path(&lpath)
                     {
-                        let _ = env
-                            .storage
-                            .remove(&paperpaw_sdk::files::join(library_folder(&env), &path));
+                        let path = paperpaw_sdk::files::join(library_folder(&env), &path);
+                        if env.storage.remove(&path).is_ok() {
+                            // What plugins keep for it goes too.
+                            cx.command(
+                                paperpaw_sdk::builtin::events::BOOK_REMOVED
+                                    .emit(paperpaw_sdk::builtin::events::BookRemoved::new(path)),
+                            );
+                        }
                     }
                     let uuid = library::forget(env.storage, &lpath).unwrap_or_default();
                     let reply = format!("{{\"uuid\": {}}}", paperpaw_sdk::json::string(&uuid));
                     self.send(op::OK, &reply, cx);
                 }
-                cx.command(paperpaw_sdk::library::changed());
             }
             op::NOOP => {
                 if protocol::member(args, "ejecting").is_some() {

@@ -162,6 +162,7 @@ impl Kernel {
         ] {
             let sole = {
                 let mut providers = self
+                    .shared
                     .registry
                     .slot_screens(&slot)
                     .map(Id::namespace)
@@ -228,7 +229,11 @@ impl Kernel {
                 id: spec.id.clone(),
             });
         }
-        staging.merge_into(&mut self.registry, &mut self.shared.actions)?;
+        staging.merge_into(&mut self.shared.registry, &mut self.shared.actions)?;
+        // A sealed action that came after handlers in its place: they go.
+        for action in self.shared.actions.drop_sealed_overrides() {
+            self.warn_runtime(format!("`{action}` is sealed; not overridden"));
+        }
         for setting in staging.settings.drain(..) {
             // Cannot fail: checked above.
             let _ = match setting {
@@ -283,6 +288,24 @@ impl Kernel {
             let _ = self.shared.hyphenation.add(spec);
         }
         self.subscriptions.append(&mut staging.subscriptions);
+        for (action, priority, handler) in staging.overrides.drain(..) {
+            // Not in place of a sealed action (one known by now; one that
+            // comes later is never overridden either).
+            if self
+                .shared
+                .actions
+                .get(action.as_str())
+                .is_some_and(paperpaw_sdk::ActionSpec::is_sealed)
+            {
+                self.warn_runtime(format!("{plugin}: `{action}` is sealed; not overridden"));
+                continue;
+            }
+            self.shared
+                .actions
+                .add_override(action, priority, plugin.clone(), handler);
+        }
+        self.action_observers.append(&mut staging.action_observers);
+        self.event_observers.append(&mut staging.event_observers);
         self.plugin_defaults.extend(
             staging
                 .setting_defaults
@@ -311,7 +334,7 @@ impl Kernel {
             self.shared.menus.set_description(item, key);
         }
         for (screen, hints) in staging.screen_hints.drain(..) {
-            self.registry.hints.insert(screen, hints);
+            self.shared.registry.hints.insert(screen, hints);
         }
         for item in staging.status_items.drain(..) {
             self.shared.status_items.add(item);
@@ -335,8 +358,16 @@ impl Kernel {
             .extend(staging.stylesheets.iter().map(|_| plugin.clone()));
         self.shared.stylesheets.append(&mut staging.stylesheets);
         self.shared.book_data.append(&mut staging.book_data);
+        self.shared.book_fields.append(&mut staging.book_fields);
+        self.shared.book_badges.append(&mut staging.book_badges);
         for (id, service) in staging.services.drain(..) {
             self.shared.services.insert(id, service);
+        }
+        for point in staging.points.drain(..) {
+            self.shared.services.declare_point(point);
+        }
+        for event in staging.events.drain(..) {
+            self.shared.services.declare_event(event);
         }
         for (point, contribution) in staging.contributions.drain(..) {
             self.shared
@@ -369,6 +400,31 @@ impl Kernel {
         }
         for filter in staging.refresh_filters.drain(..) {
             self.shared.refresh_filters.add(filter);
+        }
+        for chrome in staging.chromes.drain(..) {
+            self.add_chrome(chrome);
+        }
+        let caps = self.shared.caps;
+        let inputs = staging.inputs.drain(..);
+        let made = inputs.filter(|input| input.need.is_none_or(|need| need.met(caps)));
+        self.shared.inputs.extend(made);
+        // Recognizers are made once, their makers dropped; listed among
+        // the inputs, to bind.
+        for spec in staging.gestures.drain(..) {
+            let recognizer = (spec.factory)();
+            let mut listed = paperpaw_sdk::keys::InputSpec::new(spec.id.clone(), spec.title);
+            listed.kind = paperpaw_sdk::keys::InputKind::Gesture;
+            if caps.touch {
+                self.shared.inputs.push(listed);
+            }
+            let id = spec.id;
+            let fingers = Vec::new();
+            let made = gestures::PluginRecognizer {
+                id,
+                recognizer,
+                fingers,
+            };
+            self.input.recognizers.push(made);
         }
         for spec in staging.works.drain(..) {
             self.works.add_spec(spec);
@@ -543,13 +599,16 @@ impl Kernel {
     /// warning, if it could not be.
     fn register_folder(&mut self, folder: &str) -> bool {
         let storage = self.shared.storage.clone();
-        let plugin = match crate::data_plugin::load_folder(storage.as_ref(), folder) {
+        let plugin = match crate::data_plugin::load_folder(&storage, folder) {
             Ok(plugin) => plugin,
             Err(problem) => {
                 self.warn_runtime(problem);
                 return false;
             }
         };
+        for problem in plugin.take_problems() {
+            self.warn_runtime(problem);
+        }
         let manifest = plugin.manifest();
         let id = manifest.id.clone();
         if self.shared.plugins.get(id.as_str()).is_some() {
@@ -748,10 +807,13 @@ impl Kernel {
                 format!("{folder}: not the plugin `{id}`; not installed"),
             );
         }
-        let plugin = match data_plugin::load_folder_as(storage.as_ref(), folder, id.as_str()) {
+        let plugin = match data_plugin::load_folder_as(&storage, folder, id.as_str()) {
             Ok(plugin) => plugin,
             Err(problem) => return refuse(self, problem),
         };
+        for problem in plugin.take_problems() {
+            self.warn_runtime(problem);
+        }
         let version = plugin.manifest().version;
         // Registered aside first (its translations, key map, settings): one
         // that would fail leaves the version before in place.
@@ -821,7 +883,7 @@ impl Kernel {
     /// Releases memory reserved while plugins registered: on small devices
     /// every kilobyte counts, and registries are not modified afterwards.
     pub(crate) fn shrink_to_fit(&mut self) {
-        self.registry.shrink_to_fit();
+        self.shared.registry.shrink_to_fit();
         self.keys.plugins.shrink_to_fit();
         self.stylesheet_owners.shrink_to_fit();
         self.keys.presets.shrink_to_fit();
@@ -829,6 +891,8 @@ impl Kernel {
         self.keys.user.shrink_to_fit();
         self.keys.shell.shrink_to_fit();
         self.subscriptions.shrink_to_fit();
+        self.action_observers.shrink_to_fit();
+        self.event_observers.shrink_to_fit();
         self.shared.plugins.shrink_to_fit();
         self.warnings.shrink_to_fit();
         let shared = &mut self.shared;
@@ -849,6 +913,7 @@ impl Kernel {
         shared.voices.shrink_to_fit();
         shared.readers.shrink_to_fit();
         shared.input_filters.shrink_to_fit();
+        shared.inputs.shrink_to_fit();
         shared.refresh_filters.shrink_to_fit();
         shared.stylesheets.shrink_to_fit();
         shared.translator.shrink_to_fit();

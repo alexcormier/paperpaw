@@ -271,6 +271,24 @@ fn passwords_that_cannot_be_read_are_left_as_they_are() {
     assert_eq!(saved.get("b.key"), Some("swordfish"));
 }
 
+/// The library folder set as `files.root` (before it was the kernel's)
+/// is read as `core.library-folder`, without a warning.
+#[test]
+fn the_library_folder_set_before_is_taken_over() {
+    let config = "[core]\nlanguage = en\n\n[files]\nroot = Novels\nsort = files.sort.name\n";
+    let mut kernel = kernel_with(MemoryStorage::new().with(CONFIG_FILE, config));
+    assert_eq!(kernel.settings().text("core.library-folder"), "Novels");
+    let warnings = kernel.take_warnings();
+    assert!(
+        !warnings.iter().any(|w| w.message.contains("files.root")),
+        "{warnings:?}"
+    );
+    // Where both are set, the new one stays.
+    let config = "[core]\nlibrary-folder = Books\n[files]\nroot = Novels\n";
+    let kernel = kernel_with(MemoryStorage::new().with(CONFIG_FILE, config));
+    assert_eq!(kernel.settings().text("core.library-folder"), "Books");
+}
+
 /// The reader's type settings moved to the kernel: what was set under
 /// their old ids is read, unless the new id is set as well.
 #[test]

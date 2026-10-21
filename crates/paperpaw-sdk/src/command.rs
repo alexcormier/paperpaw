@@ -354,6 +354,38 @@ pub enum Command {
     /// and these params, else in place of what the slot shows (one
     /// launcher of several, chosen once).
     OpenInSlot(Id, Id, Params),
+    /// Runs action `.0` with params `.1`, as [`Command::RunAction`]: a
+    /// handler made with [`ActionSpec::handler_with`](crate::ActionSpec::handler_with)
+    /// gets them (a screen that takes the action does not), e.g. a
+    /// rule applying the profile it names.
+    RunActionWith(Id, Params),
+    /// Runs action `.0`'s own handler with params `.1`, past the handlers
+    /// put in its place and the screens: for a handler put in its place
+    /// that does more around it. Only from such a handler of action `.0`
+    /// (its commands then come where it asked for them); from anywhere
+    /// else it is refused. Seen by no observer.
+    RunOriginal(Id, Params),
+    /// Raises the input `.0` as written in key maps (`button.menu`,
+    /// `double-tap.center`, a plugin's `input.<id>`): it runs what the
+    /// layers shown bind it to, as if it had come (switch access, chords
+    /// of one's own).
+    Input(String),
+    /// Puts the key map layer `.1` in front of the slot's and the global
+    /// layer for open screen `.0`, e.g. a book's own bindings
+    /// (`[keymap.<layer>]`): it applies while that screen is on top and
+    /// goes with it; not below a screen that guards the device. `None`
+    /// takes it away. A screen sends it with
+    /// [`Cx::set_key_layer`](crate::Cx::set_key_layer); sent from anywhere
+    /// else (a handler, a rule), it is refused.
+    SetKeyLayer(crate::ScreenKey, Option<Id>),
+    /// Shows task `.0`, a tab of tabs: the screens open now are kept as
+    /// the task shown before (by their ids and params; dropped from memory
+    /// and made anew when it is shown again), and those of task `.0` open
+    /// again, or the first time the screen of slot `.0` (or screen `.0`).
+    /// Each task keeps its own way back; its first screen is the first of
+    /// [`Env::stack`](crate::Env::stack). At start the task is the home
+    /// slot's.
+    SwitchTask(Id),
     /// Binds slot `.0` to screen `.1` for the user, or back to what the
     /// plugins bind it to (`None`): at once and kept in `paperpaw.ini`
     /// (`[slots]`), e.g. "use this as the home screen?".

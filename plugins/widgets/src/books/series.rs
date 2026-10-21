@@ -255,7 +255,7 @@ impl Series {
                 ..Shown::default()
             };
         }
-        if !has_catalog(env.storage) {
+        if !has_catalog(env) {
             return Shown {
                 name,
                 empty: Some("widgets.series.no-catalog"),
@@ -265,7 +265,7 @@ impl Series {
         let key = (
             name.to_lowercase(),
             self.generation.get(),
-            catalog_stamp(env.storage),
+            catalog_stamp(env),
         );
         let around = chosen(env, WIDGET, "start") != STARTS[1];
         let near = current

@@ -605,11 +605,13 @@ fn online_answers_given_while_the_dictionaries_are_prepared_stay() {
 }
 
 #[test]
-fn once_the_providers_were_asked_online_the_online_screen_is_offered() {
+fn once_the_providers_were_asked_online_is_not_offered_again() {
     let mut lookup = Lookup::with_providers(card());
     lookup.look_up("apple");
     lookup.press(actions::MENU);
     assert_eq!(lookup.screen(), "dictionary.popup");
+    // Neither while they answer nor after: no second request.
+    assert!(!lookup.described().iter().any(|l| l.starts_with("Online")));
     lookup.press(actions::MENU);
-    assert_eq!(lookup.screen(), "providers.online");
+    assert_ne!(lookup.screen(), "providers.online");
 }

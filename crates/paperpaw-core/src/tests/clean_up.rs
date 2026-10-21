@@ -27,25 +27,6 @@ fn cleaning_up_keeps_what_belongs_to_files_still_there() {
     assert!(!storage.exists(&annotations("Books/gone.txt")), "left over");
 }
 
-/// The library folder as the `files` plugin offers it.
-struct LibraryFolder;
-
-impl Plugin for LibraryFolder {
-    fn manifest(&self) -> Manifest {
-        Manifest::new(Id::new_static("files"), "Files", Version::new(1, 0, 0))
-            .uses(paperpaw_sdk::Uses::NOTHING)
-    }
-
-    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_setting(SettingSpec::new(
-            Id::new_static("files.root"),
-            "files.root",
-            SettingKind::Text,
-            SettingValue::Text(Cow::Borrowed("books")),
-        ))
-    }
-}
-
 /// On a memory card, which ignores case, what is kept for a book stays
 /// whether the library folder is spelt as its setting says (`books`) or
 /// as the card has it (`Books`).
@@ -56,8 +37,8 @@ fn cleaning_up_keeps_books_by_every_spelling_of_their_folder() {
         .with("Books/a.txt", "a book")
         .with(&annotations("books/a.txt"), "a note")
         .with(&annotations("Books/a.txt"), "a note");
+    // The kernel's library folder, `books` by default.
     let mut kernel = Kernel::builder(DEVICE)
-        .plugin(LibraryFolder)
         .storage(super::storage::Fat(storage))
         .build()
         .unwrap();

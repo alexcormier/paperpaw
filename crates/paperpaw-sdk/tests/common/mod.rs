@@ -116,6 +116,11 @@ impl Harness {
     }
 
     pub fn env(&self) -> Env<'_> {
+        self.env_on(&self.storage)
+    }
+
+    /// [`Harness::env`] over another storage (one that fails, say).
+    pub fn env_on<'a>(&'a self, storage: &'a dyn paperpaw_sdk::Storage) -> Env<'a> {
         Env::from(EnvParts {
             device: &DEVICE,
             now: self.now,
@@ -140,6 +145,8 @@ impl Harness {
             readers: &self.readers,
             stylesheets: &[],
             book_data: &[],
+            book_fields: &[],
+            book_badges: &[],
             widgets: &self.widgets,
             setup: &self.setup,
             services: &self.services,
@@ -152,13 +159,16 @@ impl Harness {
             work: paperpaw_sdk::work::WorkStates::none(),
             reader: true,
             clipboard: false,
+            last_input: Default::default(),
+            inputs: &[],
+            content: paperpaw_platform::Rect::default(),
             stack: &[],
             slots: &[],
             screens: &[],
             font_dirs: &[],
             catalog_device: None,
             secrets: &self.secrets,
-            storage: &self.storage,
+            storage,
         })
     }
 }

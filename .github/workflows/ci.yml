@@ -321,7 +321,10 @@ jobs:
     steps:
       - uses: actions/checkout@v7
       - uses: EmbarkStudios/cargo-deny-action@v2
-      - name: The X4 firmware's dependencies too
-        uses: EmbarkStudios/cargo-deny-action@v2
+      # The firmware pins its own compiler (rust-toolchain.toml), which the
+      # action's container cannot install: cargo-deny runs on the runner.
+      - uses: taiki-e/install-action@v2
         with:
-          manifest-path: shells/xteink/Cargo.toml
+          tool: cargo-deny
+      - name: The X4 firmware's dependencies too
+        run: cargo deny --manifest-path shells/xteink/Cargo.toml --all-features check

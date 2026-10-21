@@ -6,7 +6,7 @@
 //! plugin set is compared with the app it joined.
 //!
 //! The command comes from a small plugin of the tool's
-//! ([`Installing`]), which hears an event of its own and asks for the
+//! (`Installing`), which hears an event of its own and asks for the
 //! installation, as the store plugin would.
 
 use std::sync::Mutex;

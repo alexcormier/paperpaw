@@ -208,7 +208,13 @@ impl Panel {
     /// Answers each request made with the summary.
     fn answer(&mut self) -> usize {
         let calls = self.requests();
-        for call in &calls {
+        self.respond(&calls);
+        calls.len()
+    }
+
+    /// Answers `calls` with the summary.
+    fn respond(&mut self, calls: &[HttpCall]) {
+        for call in calls {
             assert!(call.url.contains("wikipedia.org"), "{call:?}");
             self.now += 100;
             let effects = self.kernel.http_response(
@@ -222,7 +228,6 @@ impl Panel {
             );
             self.settle(effects);
         }
-        calls.len()
     }
 
     /// Writes the screen as `name`.pgm where `PAPERPAW_SHOTS` says.
@@ -262,7 +267,18 @@ fn wikipedia_is_asked_once_online_is_chosen_and_shown_in_the_panel() {
         assert_eq!(panel.requests().len(), 0, "not asked before *Online*");
         panel.shot("1-panel");
         panel.online();
-        assert_eq!(panel.answer(), 1);
+        // One request, quicker than the panel waits, of a small body.
+        let calls = panel.requests();
+        assert_eq!(calls.len(), 1);
+        assert!(calls[0].timeout_ms > 0 && calls[0].timeout_ms < 20_000);
+        assert!(calls[0].max_response <= 16 * 1024);
+        // While it is asked, not again.
+        let labels = panel.labels();
+        assert!(
+            !labels.iter().any(|l| l.starts_with("Online")),
+            "{labels:?}"
+        );
+        panel.respond(&calls);
         panel.shot("2-online");
         // The summary in the panel, below the dictionary's entry, with a
         // way to the whole article; *Online* done.
@@ -290,10 +306,11 @@ fn wikipedia_is_asked_once_online_is_chosen_and_shown_in_the_panel() {
             panel.kernel.active_screen(),
             Some(&paperpaw_plugin_wikipedia::SCREEN)
         );
-        assert_eq!(panel.answer(), 1);
+        // The summary it was given: not fetched again.
+        assert_eq!(panel.answer(), 0);
         panel.shot("3-article");
         let labels = panel.labels();
-        assert!(labels.iter().any(|l| l == "Apple"), "{labels:?}");
+        assert!(labels.iter().any(|l| l == "apple"), "{labels:?}");
     }
 }
 

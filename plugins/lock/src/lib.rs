@@ -134,6 +134,7 @@ static SETTINGS: [SettingSpec; 2] = [
         groups::SYSTEM,
     )
     .described("lock.setting.kind.help")
+    .guarded()
     .with_extra(&ON_PAGE),
     SettingSpec::fixed_switch(
         ON_WAKE.static_str(),
@@ -142,7 +143,8 @@ static SETTINGS: [SettingSpec; 2] = [
         groups::SYSTEM,
     )
     .advanced()
-    .described("lock.setting.on-wake.help"),
+    .described("lock.setting.on-wake.help")
+    .guarded(),
 ];
 
 impl Plugin for Lock {
@@ -164,11 +166,14 @@ impl Plugin for Lock {
         ))?;
         r.add_settings(&SETTINGS)?;
         let now = state.clone();
-        r.add_action(ActionSpec::new(NOW, "lock.now").handler(
-            move |env: &Env<'_>, out: &mut Vec<Command>| {
-                lock(env, &now, out);
-            },
-        ))?;
+        // Sealed: no other plugin's handler may lock in its place.
+        r.add_action(
+            ActionSpec::new(NOW, "lock.now")
+                .handler(move |env: &Env<'_>, out: &mut Vec<Command>| {
+                    lock(env, &now, out);
+                })
+                .sealed(),
+        )?;
         r.add_icon(NOW, Cow::Borrowed("lock"))?;
         let start = state.clone();
         r.on(events::STARTED, move |env, _, out| {

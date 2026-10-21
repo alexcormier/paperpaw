@@ -176,7 +176,11 @@ fn an_empty_library_shows_again_after_its_menu_closes() {
 fn a_library_folder_that_is_missing_shows_as_empty() {
     let _turn = turn();
     for device in DEVICES {
-        let mut app = library(device, "[files]\nroot = nowhere/at/all\n", &many(3));
+        let mut app = library(
+            device,
+            "[core]\nlibrary-folder = nowhere/at/all\n",
+            &many(3),
+        );
         assert!(app.shows("No books here yet"), "{}", app.described());
         assert!(app.shows("nowhere/at/all"), "{}", app.described());
     }
@@ -399,11 +403,13 @@ fn a_book_removed_while_the_list_shows_goes_from_it() {
         let mut app = library(device, "[files]\nsort = files.sort.name\n", &many(4));
         assert_eq!(rows(&mut app).len(), 4);
         app.storage.remove("books/Book 02.txt").unwrap();
-        // Told: the list as it is now.
+        // Told: the list as it is now (on the X4 once the catalog was
+        // made, away from the list).
         app.send(
             paperpaw_sdk::builtin::events::LIBRARY_CHANGED,
             Params::new(),
         );
+        app.let_catalog_work();
         assert_eq!(rows(&mut app), ["Book 01", "Book 03", "Book 04"]);
     }
 }
@@ -442,6 +448,7 @@ fn every_book_of_the_whole_library_folder_removed_leaves_it_empty() {
         paperpaw_sdk::builtin::events::LIBRARY_CHANGED,
         Params::new(),
     );
+    app.let_catalog_work();
     assert!(app.shows("No books here yet"), "{}", app.described());
     // A tap where the rows were opens no book: with nothing there, a tap
     // in the middle opens the menu, as on any screen.

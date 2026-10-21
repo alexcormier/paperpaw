@@ -1,0 +1,152 @@
+//! Making the catalog of a large library takes a few kilobytes, whatever
+//! its size, on a FAT card as the X4's: a walk reads the old catalog along
+//! with it instead of holding it (and takes every book from it), lists
+//! folders a piece a step, and writes a few books a step; catching up
+//! copies the old catalog a piece at a time. With a long log of status
+//! changes and full lists of favourites and books opened (the X4 has
+//! about 192 KiB of heap in all, the library's index of 2000 books 48 KB
+//! of it).
+
+#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+
+mod common;
+
+use std::alloc::{GlobalAlloc, Layout, System};
+use std::borrow::Cow;
+use std::io::Cursor;
+use std::sync::atomic::{AtomicUsize, Ordering};
+
+use paperpaw_fat::FatStorage;
+use paperpaw_fat::fatfs::{
+    self, FileSystem, FormatVolumeOptions, FsOptions, Seek, SeekFrom, StdIoWrapper,
+};
+use paperpaw_sdk::document::DocumentError;
+use paperpaw_sdk::library::catalog::{self, MAX_LOG, Rewrite, Status, Walk};
+use paperpaw_sdk::{Env, FormatSpec, Formats, Id, Storage};
+
+/// Counts the bytes allocated now, and the most since the peak was reset.
+struct Counting;
+
+static NOW: AtomicUsize = AtomicUsize::new(0);
+static PEAK: AtomicUsize = AtomicUsize::new(0);
+
+// SAFETY: passes every call on to the system's allocator.
+unsafe impl GlobalAlloc for Counting {
+    unsafe fn alloc(&self, layout: Layout) -> *mut u8 {
+        // SAFETY: as the caller asked.
+        let ptr = unsafe { System.alloc(layout) };
+        if !ptr.is_null() {
+            let now = NOW.fetch_add(layout.size(), Ordering::Relaxed) + layout.size();
+            PEAK.fetch_max(now, Ordering::Relaxed);
+        }
+        ptr
+    }
+
+    unsafe fn dealloc(&self, ptr: *mut u8, layout: Layout) {
+        // SAFETY: as the caller asked.
+        unsafe { System.dealloc(ptr, layout) };
+        NOW.fetch_sub(layout.size(), Ordering::Relaxed);
+    }
+}
+
+#[global_allocator]
+static ALLOCATOR: Counting = Counting;
+
+/// The most the heap grows above where it is while `run` runs, and what
+/// `run` gives.
+fn growth<T>(run: impl FnOnce() -> T) -> (usize, T) {
+    let before = NOW.load(Ordering::Relaxed);
+    PEAK.store(before, Ordering::Relaxed);
+    let out = run();
+    (PEAK.load(Ordering::Relaxed) - before, out)
+}
+
+/// Books in the library, in a few folders.
+const BOOKS: usize = 2400;
+/// The most making a catalog may take beside what is there.
+const BOUND: usize = 12 * 1024;
+
+/// A FAT card of 32 MB in memory, formatted (its bytes allocated before
+/// anything is counted, never grown).
+fn card() -> FatStorage<StdIoWrapper<Cursor<Vec<u8>>>> {
+    let mut disk = StdIoWrapper::from(Cursor::new(vec![0u8; 32 << 20]));
+    fatfs::format_volume(&mut disk, FormatVolumeOptions::new()).unwrap();
+    disk.seek(SeekFrom::Start(0)).unwrap();
+    let fs = FileSystem::new(disk, FsOptions::new()).unwrap();
+    FatStorage::new(Box::leak(Box::new(fs)))
+}
+
+fn path(n: usize) -> String {
+    format!("books/Shelf {}/A rather long book title {n:04}.txt", n % 6)
+}
+
+/// A walk to its end: how many books it took from the old catalog.
+fn walk(env: &Env<'_>) -> usize {
+    let mut walk = Walk::start(env, Vec::new()).unwrap();
+    while !walk.step(env).unwrap() {}
+    walk.from_old()
+}
+
+#[test]
+fn making_the_catalog_of_a_large_library_takes_a_few_kilobytes() {
+    let mut h = common::Harness::new();
+    let mut formats = Formats::new();
+    formats
+        .add(FormatSpec::new(
+            Id::new_static("test.txt"),
+            "TXT",
+            vec![Cow::Borrowed("txt")],
+            Box::new(|_, _, _| Err(DocumentError::UnsupportedFormat)),
+        ))
+        .unwrap();
+    h.formats = formats;
+    let storage = card();
+    storage.create_dir("books").unwrap();
+    for shelf in 0..6 {
+        storage.create_dir(&format!("books/Shelf {shelf}")).unwrap();
+    }
+    for n in 0..BOOKS {
+        storage.write(&path(n), b"text").unwrap();
+    }
+    // The lists as full as they get: 500 favourites, 100 books opened.
+    storage.create_dir(".paperpaw").unwrap();
+    storage.create_dir(".paperpaw/library").unwrap();
+    let list = |count: usize| (0..count).map(|n| path(n * 3) + "\n").collect::<String>();
+    storage
+        .write(".paperpaw/library/favourites.txt", list(500).as_bytes())
+        .unwrap();
+    storage
+        .write(".paperpaw/library/opened.txt", list(100).as_bytes())
+        .unwrap();
+    let env = h.env_on(&storage);
+    // The first walk reads every book's details (none were known).
+    let (first, _) = growth(|| walk(&env));
+    let mut count = 0;
+    catalog::each(&storage, &mut |_| count += 1);
+    assert_eq!(count, BOOKS);
+    // A log as long as it gets before it is folded in.
+    for n in 0..MAX_LOG {
+        let status = Status::new(Some(50), true, true);
+        catalog::note(&storage, &path(n * 7 % BOOKS), status).unwrap();
+    }
+    assert!(catalog::log_is_long(&storage));
+    // Again: every book from the old catalog, read along.
+    let (again, from_old) = growth(|| walk(&env));
+    assert_eq!(from_old, BOOKS, "books taken from the old catalog");
+    // Caught up: the old catalog copied a piece a step.
+    for n in 0..MAX_LOG {
+        let status = Status::new(Some(100), false, true);
+        catalog::note(&storage, &path(n * 11 % BOOKS), status).unwrap();
+    }
+    let (caught_up, ()) = growth(|| {
+        let mut rewrite = Rewrite::start(&env, vec![path(0)]).unwrap();
+        while !rewrite.step(&env).unwrap() {}
+    });
+    for (what, took) in [
+        ("first walk", first),
+        ("walk", again),
+        ("catch-up", caught_up),
+    ] {
+        assert!(took <= BOUND, "{what} took {took} bytes");
+    }
+}

@@ -256,10 +256,12 @@ What is known of books is a service, not a screen's: `library` has a
 book's details (title, author, series, tags, cover, progress, and
 fields plugins add with `library::set_field`), the books read last and
 the favourites, so any plugin can show or use them. Views of many books
-show covers made small and kept on the storage (`library::cover`, a few
-kilobytes each, not the picture) and take a book's details with the
-size a listing told (`library::listing`, `library::book_sized`): on a
-card, each file looked up again is a search through its folder.
+read the catalog rather than each book (below, "What every library
+offers"), show covers made small and kept on the storage
+(`library::cover_variant`, a few kilobytes each, not the picture, one
+for each size a view shows) and take a book's details with the size a
+listing told (`library::listing`, `library::book_sized`): on a card,
+each file looked up again is a search through its folder.
 
 The bookmarks and highlights of books are shared: `annotations` reads
 and keeps them, and whoever changes them emits
@@ -476,6 +478,8 @@ artifact, also when a check failed.
 | Contributions | `contribute` | Additions to a point another plugin defined |
 | Translations | `add_translations` | Catalogs for any language |
 | Book data | `add_book_data` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book, cleaned up when it is gone |
+| Book fields | `add_book_field` | A value kept with books (`library::set_field`), shown on their information page and, where `in_catalog`, kept in the catalog to filter by |
+| Book badges | `add_book_badge` | A few letters or an icon on books' rows in views of the library |
 
 Slots are how a plugin replaces another: bind your screen to
 `core.home` and it is the home screen; the user's
@@ -557,6 +561,37 @@ A text filter that needs to know where a block is, or leaves blocks out
 (a web page's adverts, printed page numbers in a book), is a block
 filter: `TextFilterSpec::block` gets a `FilterContext` (the book, its
 language, the place) and answers `Verdict::Keep` or `Verdict::Drop`.
+
+### What every library offers
+
+A view of the library of one's own (bound to `core.library`) is as
+fast as the shipped one, on the X4 too, as both ask the same service
+and read the same catalog; plugins that add to the library add to
+every view of it.
+
+| What | Standard | |
+|---|---|---|
+| The library to ask | `library::service(env)` (`trait Library`; a library of one's own publishes one as `library::service::SERVICE`, giving at least `each`, `records` and `version`) | a book's details, the catalog's state, queries, the index of all books, finished and favourite; a plugin may publish its own as `library::service::SERVICE` |
+| Every book, without reading each | `library::catalog` | one line a book: author, title, series, number, tags, how far read, favourite, opened, added, fields; read in pieces (`each`, `each_at`, `read_at`) |
+| Books found, a page at a time | `catalog::Query`, `query`, `found` | by how far read, words, author, series, tag, folder, added since; sorted by title, author, series or added |
+| All books to sort and filter in memory | `library::index::Index` | 24 bytes a book (2000 at most on the X4: 48 KB), kept in a file while a book is open (`save`, `load`), status changes taken with `refresh` |
+| The catalog made anew | the kernel, as work in the background, never while a book is open | walked once a view asks after a start (`library::request_catalog`, `request_catalog_anew`), for a new library folder and after `LIBRARY_CHANGED`; caught up after `BOOK_ADDED`, `BOOK_MOVED` and changed fields; `BOOK_REMOVED` leaves a book out at once; then `events::CATALOG_CHANGED` |
+| Something of one book changed | `events::BOOK_CHANGED` (`library::changed_book`, bits of `library::what`) | finished, a favourite, read further, details, cover, a field |
+| A book came | `events::BOOK_ADDED` (`library::added(path, source)`) | transfers, syncs and downloads send it |
+| What can be done with a book | `menus::BOOK`, `events::BOOK_CHOSEN` | add an action to the menu, hear which book it was chosen for |
+| A book's information | `slots::BOOK_INFO` | lists the fields of `add_book_field` |
+| Where the books are | `settings::LIBRARY_FOLDER` (`library::folder(env)`) | the kernel's setting, chosen with `screens::FOLDER_EDITOR` (the folder chooser of `slots::CHOOSE_FOLDER`) |
+
+How far a book is read and whether it is a favourite change while the
+catalog stands: the kernel notes such changes beside it (when a book is
+opened, closed or finished, and through the service's setters), so a
+view knows them at once without a new catalog and without reading each
+book. A view keeps nothing of the catalog but its index, of the
+library's version (`Library::version`: keys hold only for it,
+`Library::is_current`); a page's books are read by their keys in one go
+(`Library::records`), their badges asked then
+(`library::service::badges`), never while drawing.
+
 
 ### Services and points of your own
 
@@ -1071,12 +1106,64 @@ plugins/large-print/
   styles.css     a stylesheet for books, after a book's own (EPUB)
   presets.ini    ready-made sets of settings, e.g. home screen layouts
   marks.ini      words marked on book pages by patterns (formats 2)
+  menus.ini      entries of menus, a menu of one's own (formats 3)
+  actions.ini    actions made of steps (formats 3)
+  icons.ini      icons of actions and settings: item = icon-name (formats 3)
+  points/*.txt   lines for a point, one a line, e.g. core.about.txt (formats 3)
+  setup.ini      steps of the first-run setup (formats 3)
+```
+
+`plugin.ini` may also bind fonts to roles (formats 3):
+
+```ini
+[fonts]
+core.font-ui-strong = my.semibold
+```
+
+An action of `actions.ini` runs its steps in order, at most 16:
+`<setting>=<value>` sets a setting (a value not of its kind is passed
+over, and a setting that keeps the device safe, such as the lock's, is
+never set), `open:<slot>` opens a slot, `notify:<text>` says something,
+`emit:<event>` emits an event of the plugin's own (`<plugin>.<name>`),
+and an action's id runs that action (not one of the same file). `menus.ini` adds to any menu, places an entry
+after another and takes entries out; `title` and `entries` make a menu
+of one's own, which other menus list by its id:
+
+```ini
+# actions.ini
+[night]
+title = Night reading
+icon = moon
+run = core.night-mode=on, core.font-size=14, notify:Good night
+
+# menus.ini
+[core.reader-menu]
+add = my.night after reader.toc
+hide = stats.open
+
+[my.tools]
+title = My tools
+entries = my.night, core.library
+
+# setup.ini
+[size]
+setting = core.font-size
+order = 35
 ```
 
 `formats` says which version of these files' formats the plugin is made
-for (2 now: `marks.ini` came with it; 1 if it is left out); a PaperPaw
+for (3 now: menus, actions, icons, points, setup steps and font roles
+came with it, `marks.ini` with 2; 1 if it is left out); a PaperPaw
 that reads an older one leaves the plugin out and says why, rather than
-reading it wrongly.
+reading it wrongly. The files of formats 3 are read only for a plugin
+that says `formats = 3`; for one made for an earlier version they are
+left out, and PaperPaw says so.
+
+A plugin's files take at most 96 KiB together besides its translations
+(512 KiB of their own), those of formats 3 at
+most 24 KiB of it, and its points at most 64 lines; what goes past is
+left out and told. A default (`settings.ini`) or a preset does not
+change a setting that keeps the device safe, such as the lock's.
 
 Packs for other scripts (`tools/script-pack.py` builds Cyrillic and
 Greek for Literata) are read a glyph at a time, so devices with little

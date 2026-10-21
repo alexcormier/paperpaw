@@ -24,7 +24,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ask;
-use paperpaw_sdk::builtin::{actions, events, groups, menus, params, slots};
+use paperpaw_sdk::builtin::{actions, events, groups, menus, params, screens, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::choice::{self, Choice};
@@ -853,11 +853,9 @@ fn moved_folder(storage: &dyn Storage, value: &str, from: &str, to: &str) -> Opt
 /// chooser, name it at `to` now.
 fn follow_folders(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
     for spec in env.settings.specs() {
-        let folder = spec
-            .extra()
-            .editor
-            .as_ref()
-            .is_some_and(|editor| *editor == CHOOSE_FOLDER || *editor == slots::CHOOSE_FOLDER);
+        let folder = spec.extra().editor.as_ref().is_some_and(|editor| {
+            [CHOOSE_FOLDER, slots::CHOOSE_FOLDER, screens::FOLDER_EDITOR].contains(editor)
+        });
         if !folder {
             continue;
         }
