@@ -168,7 +168,8 @@ pub(crate) fn translates(env: &Env<'_>) -> bool {
 /// Where the bar is: over the status line at the bottom.
 pub(crate) fn bar_area(env: &Env<'_>, style: &UiStyle) -> Rect {
     let display = env.device.display;
-    let height = style.row as u16;
+    // Its buttons grow on touch screens, and the bar with them.
+    let height = style.touch_row(style.row) as u16;
     Rect::new(0, display.height - height, display.width, height)
 }
 
@@ -235,7 +236,7 @@ pub(crate) fn draw_bar(
     let areas = item_areas(env, &style, items);
     for (index, (item, &area)) in items.iter().zip(&areas).enumerate() {
         // Buttons as everywhere; the whole part stays the target of taps.
-        let h = ui::button_height(area);
+        let h = ui::button_height(&style, area);
         let pad = button_pad(&style);
         let button = Rect::new(
             area.x + pad,

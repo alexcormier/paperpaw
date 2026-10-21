@@ -130,6 +130,8 @@ struct Geometry {
     pager: u16,
     /// It hangs from the top of the screen.
     top: bool,
+    /// The sizes buttons are made from.
+    style: UiStyle,
 }
 
 /// Where the panel's parts go.
@@ -216,7 +218,7 @@ fn layout(lines: &[Line], g: Geometry) -> Layout {
 
 /// The controls of `line` in its row, `area`.
 fn place(line: &Line, area: Rect, g: Geometry) -> Row {
-    let inner = inset(area, g.margin);
+    let inner = inset(area, &g);
     let rest = Rect::new(
         inner.x + g.label,
         inner.y,
@@ -318,6 +320,7 @@ impl PanelScreen {
             head,
             pager: style.touch_row(u32::from(ui::Pager::height(&style))) as u16,
             top,
+            style,
         };
         let layout = layout(&lines(env, &style, &items, geometry), geometry);
         Self {
@@ -384,7 +387,7 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
         }
     };
     // Where a setting's controls go, beside its label.
-    let inner = inset(Rect::new(0, 0, g.width, g.row), g.margin);
+    let inner = inset(Rect::new(0, 0, g.width, g.row), &g);
     let rest = Rect::new(
         inner.x + g.label,
         inner.y,
@@ -713,9 +716,9 @@ fn fits_segments(
 }
 
 /// `area` without `margin` left and right and a little above and below.
-fn inset(area: Rect, margin: u16) -> Rect {
-    let pad = (area.height - ui::button_height(area)) / 2;
-    area.inset(margin, pad)
+fn inset(area: Rect, g: &Geometry) -> Rect {
+    let pad = (area.height - ui::button_height(&g.style, area)) / 2;
+    area.inset(g.margin, pad)
 }
 
 /// `count` equal parts of `area` side by side, `gap` apart.
@@ -1032,6 +1035,7 @@ mod layout_tests {
         head: 40,
         pager: 45,
         top: false,
+        style: UiStyle::PLAIN,
     };
 
     fn id(name: &'static str) -> Id {

@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: buttons on touch screens are at least a fingertip (7 mm) high:
+  `ui::button_height(style, row)` takes the style, and rows and bars
+  that hold buttons are made with `UiStyle::touch_row`, which grows them
+  by as much as their buttons grow, so the room above and below them,
+  the margin to the screen's sides and the gaps between them stay as
+  they were. `ui::setting_row` gives a number's row its height. The
+  shipped screens with buttons follow; `paperpaw-dev` finds buttons
+  without their room (`visual.button-room`).
 - SDK: accessibility. `events::FOCUS_CHANGED` (`FocusChanged`: role,
   label, area, on) tells plugins where the focus of the buttons went,
   worked out only while one listens or the focus is spoken. The kernel

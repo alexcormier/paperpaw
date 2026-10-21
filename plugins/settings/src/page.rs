@@ -224,7 +224,7 @@ impl GroupPage {
             .map(|e| match e {
                 Row::Heading(_) => heading,
                 Row::Setting(spec) if ui::slider::shows(env, spec) => slider_row,
-                Row::Setting(_) => row,
+                Row::Setting(spec) => ui::setting_row(&style, spec, u32::from(row)) as u16,
                 Row::Reset | Row::Theme => style.row as u16,
             })
             .collect();

@@ -224,10 +224,11 @@ impl MenuScreen {
         let heights: Vec<u16> = items
             .iter()
             .map(|item| {
-                if item.heading {
-                    heading
-                } else {
-                    style.row as u16
+                match Self::setting(env, &item.id) {
+                    _ if item.heading => heading,
+                    // A number's − and + grow, and its row with them.
+                    Some(spec) => ui::setting_row(&style, spec, style.row) as u16,
+                    None => style.row as u16,
                 }
             })
             .collect();

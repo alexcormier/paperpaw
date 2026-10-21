@@ -4,9 +4,13 @@
 use super::*;
 
 /// The height of buttons in a row of height `row.height`: the `−` and `+`
-/// of numbers, the buttons of panels. One size everywhere.
-pub fn button_height(row: Rect) -> u16 {
-    (u32::from(row.height) * 7 / 10) as u16
+/// of numbers, the buttons of panels. One size everywhere: seven tenths
+/// of the row, and on touch screens at least as large as a fingertip
+/// ([`UiStyle::finger`]), no higher than the row (rows made with
+/// [`UiStyle::touch_row`] keep room around them).
+pub fn button_height(style: &UiStyle, row: Rect) -> u16 {
+    let height = u32::from(row.height);
+    (height * 7 / 10).max(style.finger).min(height) as u16
 }
 
 /// The width of buttons' and boxes' borders.

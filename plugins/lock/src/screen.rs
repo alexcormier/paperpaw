@@ -163,7 +163,7 @@ impl Layout {
         });
         // The pattern: three by three dots in the same room, OK below
         // where there is no touch.
-        let ok_h = ui::button_height(Rect::new(0, 0, 0, row));
+        let ok_h = ui::button_height(style, Rect::new(0, 0, 0, row));
         let ok_room = if env.device.input.touch {
             0
         } else {

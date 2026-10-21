@@ -61,7 +61,9 @@ impl FootnoteScreen {
             }
             None => (Vec::new(), row),
         };
-        let height = gap * 3 + line_height * lines.len() as u16 + row;
+        // The buttons' row grows with them on touch screens.
+        let button_row = style.touch_row(u32::from(row)) as u16;
+        let height = gap * 3 + line_height * lines.len() as u16 + button_row;
         let region = Rect::new(
             0,
             display.height.saturating_sub(height),
@@ -69,19 +71,19 @@ impl FootnoteScreen {
             height,
         );
         let half = display.width / 2;
-        let buttons_y = region.y + height - row - gap / 2;
+        let buttons_y = region.y + height - button_row - gap / 2;
         let buttons = [
             Rect::new(
                 margin,
                 buttons_y,
                 half.saturating_sub(margin + gap / 2),
-                row,
+                button_row,
             ),
             Rect::new(
                 half + gap / 2,
                 buttons_y,
                 half.saturating_sub(margin + gap / 2),
-                row,
+                button_row,
             ),
         ];
         Self {
@@ -138,7 +140,7 @@ impl Screen for FootnoteScreen {
             .zip(["reader.footnote.close", "reader.footnote.go"])
             .enumerate()
         {
-            let h = ui::button_height(*rect);
+            let h = ui::button_height(&style, *rect);
             let button = Rect::new(rect.x, rect.y + (rect.height - h) / 2, rect.width, h);
             let label = env.i18n.tr(label);
             ui::draw_button(

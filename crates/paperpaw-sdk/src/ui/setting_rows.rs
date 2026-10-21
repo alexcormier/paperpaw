@@ -127,13 +127,23 @@ pub fn draw_value_row(
 /// buttons of rows above each other line up.
 pub(super) const STEPPER_VALUE: &str = "000 %";
 
+/// The height of the row of setting `spec` in a list of rows `row` high:
+/// a number's row, which holds its − and +, grows on touch screens with
+/// its buttons ([`UiStyle::touch_row`]), the others stay as they are.
+pub fn setting_row(style: &UiStyle, spec: &SettingSpec, row: u32) -> u32 {
+    match spec.kind {
+        SettingKind::Int { .. } => style.touch_row(row),
+        _ => row,
+    }
+}
+
 /// The − and + buttons of a number row, with room for `room` between
 /// them (at least for "000 %"): the value, or the widest of the
 /// numbers in rows above each other (see [`number_room`]), so their
 /// buttons line up.
 pub fn stepper(env: &Env<'_>, style: &UiStyle, rect: Rect, room: &str) -> Option<(Rect, Rect)> {
     let font = style.font(env)?;
-    let size = button_height(rect);
+    let size = button_height(style, rect);
     let y = rect.y + (rect.height - size) / 2;
     let margin = style.margin as u16;
     let gap = style.gap as u16;

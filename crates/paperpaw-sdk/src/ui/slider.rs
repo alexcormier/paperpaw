@@ -403,7 +403,7 @@ pub fn band(style: &UiStyle, row: Rect) -> Rect {
 /// other rows' and flush with the margins (where titles start and values
 /// end), the track between them.
 pub fn parts(style: &UiStyle, band: Rect) -> SliderParts {
-    let size = button_height(band);
+    let size = button_height(style, band);
     let y = band.y + (band.height - size) / 2;
     let margin = style.margin as u16;
     let gap = style.gap as u16;
@@ -700,17 +700,23 @@ mod tests {
         // Flush with the margins, where titles start and values end.
         assert_eq!(minus.x, 12);
         assert_eq!(plus.right(), 480 - 12);
-        assert_eq!(minus.height, button_height(band));
+        assert_eq!(minus.height, button_height(&STYLE, band));
         assert_eq!(track.x, minus.right() as u16 + 8);
         assert_eq!(track.right() + 8, u32::from(plus.x));
         // A row with a note is higher by the note's lines.
         assert!(row_height(&STYLE, true) > row_height(&STYLE, false));
-        // By touch, − and + are a fingertip large, the band higher still.
+        // By touch, − and + are a fingertip large, the band higher by as
+        // much: the room above and below them stays as it was.
         let row = Rect::new(0, 100, 480, row_height(&TOUCH, false));
         let band = super::band(&TOUCH, row);
-        assert_eq!(band.height, 87);
+        let base = TOUCH.title_band();
+        assert_eq!(band.height, 75);
+        assert_eq!(
+            (band.height - 61) / 2,
+            ((base - button_height(&STYLE, Rect::new(0, 0, 0, base as u16)) as u32) / 2) as u16
+        );
         let SliderParts { minus, track, plus } = parts(&TOUCH, band);
-        assert_eq!((minus.height, plus.height, track.height), (60, 60, 60));
+        assert_eq!((minus.height, plus.height, track.height), (61, 61, 61));
         assert!(band.bottom() <= row.bottom());
         assert!(row_height(&TOUCH, false) > row_height(&STYLE, false));
     }

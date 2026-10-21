@@ -18,6 +18,7 @@ pub const MARGIN: &str = "visual.margin";
 pub const ALIGN: &str = "visual.align";
 pub const INK_CENTRE: &str = "visual.ink-centre";
 pub const TOUCH_TARGET: &str = "visual.touch-target";
+pub const BUTTON_ROOM: &str = "visual.button-room";
 pub const FOCUS: &str = "visual.focus";
 pub const CONTRAST: &str = "visual.contrast";
 
@@ -38,6 +39,9 @@ pub fn all(scene: &Scene<'_>) -> Vec<Issue> {
     }
     issues.extend(ink_centre(scene));
     issues.extend(touch_targets(scene));
+    if scene.cell.is_none() {
+        issues.extend(button_room(scene));
+    }
     issues.extend(contrast(scene));
     issues
 }
@@ -995,6 +999,98 @@ pub fn touch_targets(scene: &Scene<'_>) -> Vec<Issue> {
     )]
 }
 
+// ---- Room around buttons ------------------------------------------------
+
+/// Buttons keep their room as they grow: the margin from the screen's
+/// sides, and half a gap (the room a button has in its row) from the
+/// screen's top and bottom, from the edges of the row they are in and
+/// from each other. A button grown into the room around it (a bar that
+/// did not grow with it, `UiStyle::touch_row`) is found.
+pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
+    let ui = scene.ui;
+    let tolerance = i32::from(ui.tolerance());
+    let half = i32::from(ui.gap / 2);
+    let margin = i32::from(ui.margin);
+    let screen = scene.screen;
+    let buttons: Vec<&Described> = scene
+        .parts(&[Role::Button])
+        .filter(|b| b.area.width > 0 && b.area.height > 0)
+        .collect();
+    let rows: Vec<Rect> = scene.parts(&[Role::Row]).map(|r| r.area).collect();
+    let mut found: Vec<(String, Rect, String)> = Vec::new();
+    let (left, right) = (i32::from(screen.x), screen.right() as i32);
+    let (top, bottom) = (i32::from(screen.y), screen.bottom() as i32);
+    for b in &buttons {
+        let a = b.area;
+        let (x0, x1) = (i32::from(a.x), a.right() as i32);
+        let (y0, y1) = (i32::from(a.y), a.bottom() as i32);
+        let side = (x0 - left).min(right - x1);
+        if side < margin - tolerance {
+            found.push((
+                named(b),
+                a,
+                format!("{side} px from the side (margin {margin} px)"),
+            ));
+        }
+        let edge = (y0 - top).min(bottom - y1);
+        if edge < half - tolerance {
+            found.push((named(b), a, format!("{edge} px from the screen's edge")));
+        }
+        // Its row: room above and below it.
+        if let Some(row) = rows.iter().find(|r| inside(a, **r) && **r != a) {
+            let room = (y0 - i32::from(row.y)).min(row.bottom() as i32 - y1);
+            if room < half - tolerance {
+                found.push((named(b), a, format!("{room} px from its row's edge")));
+            }
+        }
+    }
+    // Neighbours side by side, and above each other.
+    for (i, a) in buttons.iter().enumerate() {
+        for b in &buttons[i + 1..] {
+            let (p, q) = (a.area, b.area);
+            let across = i32::from(p.y) < q.bottom() as i32 && i32::from(q.y) < p.bottom() as i32;
+            let down = i32::from(p.x) < q.right() as i32 && i32::from(q.x) < p.right() as i32;
+            let gap = if across {
+                (i32::from(q.x) - p.right() as i32).max(i32::from(p.x) - q.right() as i32)
+            } else if down {
+                (i32::from(q.y) - p.bottom() as i32).max(i32::from(p.y) - q.bottom() as i32)
+            } else {
+                continue;
+            };
+            // Overlapping ones are the overlap check's.
+            if (0..half - tolerance).contains(&gap) {
+                found.push((
+                    format!("{} and {}", named(a), named(b)),
+                    p.union(&q),
+                    format!("{gap} px apart"),
+                ));
+            }
+        }
+    }
+    if found.is_empty() {
+        return Vec::new();
+    }
+    let area = found
+        .iter()
+        .fold(Rect::default(), |s, (_, a, _)| s.union(a));
+    let mut names: Vec<String> = found
+        .iter()
+        .take(4)
+        .map(|(name, _, what)| format!("{name} {what}"))
+        .collect();
+    if found.len() > 4 {
+        names.push(format!("{} more", found.len() - 4));
+    }
+    vec![Issue::warning(
+        BUTTON_ROOM,
+        area,
+        format!(
+            "buttons without their room (the margin at the sides, half a gap, {half} px, elsewhere; rows and bars grow with their buttons, UiStyle::touch_row): {}",
+            names.join(", ")
+        ),
+    )]
+}
+
 // ---- Focus --------------------------------------------------------------
 
 /// Whether moving the focus changed the picture where the focus is now:
@@ -1145,6 +1241,7 @@ mod tests {
             margin: 26,
             finger: 0,
             line: 2,
+            gap: 19,
         }
     }
 

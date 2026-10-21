@@ -291,8 +291,10 @@ impl KeyboardScreen {
         }
         let rows = rows(&layouts[current.get()].1, layer, layouts.len() > 1);
         let display = env.device.display;
-        let key_height = style.row as u16;
-        let field_height = (style.small * 1.5) as u16 + style.row as u16;
+        // Keys and the field's buttons grow on touch screens, and their
+        // rows with them.
+        let key_height = style.touch_row(style.row) as u16;
+        let field_height = (style.small * 1.5) as u16 + key_height;
         let keys_height = key_height * rows.len().max(4) as u16;
         let gap = style.gap as u16 / 2;
         let height = (field_height + keys_height + gap * 3).min(display.height);
@@ -362,7 +364,7 @@ impl KeyboardScreen {
             kinds.push(FieldButton::Paste);
         }
         let b = self.text_box();
-        let height = ui::button_height(b);
+        let height = ui::button_height(&self.style, b);
         let pad = (b.height - height) / 2;
         // From the right: each as wide as its label (rounded up) and the
         // button's padding.
@@ -791,7 +793,7 @@ impl KeyboardScreen {
         let key = self.rows[row][index].0;
         let area = self.key_area(row, index);
         // Buttons as everywhere, with room for the focus frame.
-        let h = ui::button_height(area);
+        let h = ui::button_height(&style, area);
         let pad = self.key_inset() as u16;
         let r = Rect::new(
             area.x + pad,
@@ -861,7 +863,7 @@ impl KeyboardScreen {
         canvas.stroke(frame, border, Color::BLACK);
         for (index, c) in popup.chars.iter().enumerate() {
             let key = popup.key(index);
-            let h = ui::button_height(key);
+            let h = ui::button_height(&style, key);
             let pad = ui::button_border(&style) as u16 * 3;
             let r = Rect::new(
                 key.x + pad,

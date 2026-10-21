@@ -78,7 +78,7 @@ impl ConfirmScreen {
                 (text, Vec::from(["kosync.ok"]), None)
             }
         };
-        let height = (style.row * 4) as u16;
+        let height = (style.row * 3 + style.touch_row(style.row)) as u16;
         let region = Rect::new(
             0,
             display.height.saturating_sub(height),
@@ -99,7 +99,7 @@ impl ConfirmScreen {
     /// The row with the buttons.
     fn button_row(&self) -> Rect {
         let r = self.region;
-        let row = self.style.row as u16;
+        let row = self.style.touch_row(self.style.row) as u16;
         Rect::new(
             r.x,
             r.y + r.height - row - self.style.gap as u16,
@@ -113,7 +113,7 @@ impl ConfirmScreen {
         let (margin, gap) = (self.style.margin as u16, self.style.gap as u16 * 2);
         let count = self.buttons.len() as u16;
         let width = (row.width - 2 * margin - gap * (count - 1)) / count;
-        let height = ui::button_height(row);
+        let height = ui::button_height(&self.style, row);
         let x = row.x + margin + index as u16 * (width + gap);
         Rect::new(x, row.y + (row.height - height) / 2, width, height)
     }

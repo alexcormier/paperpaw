@@ -144,7 +144,8 @@ pub fn draw_heading(
 
 /// The switch of an on/off setting at the right end of `row`.
 pub fn switch_rect(style: &UiStyle, row: Rect) -> Rect {
-    let height = (button_height(row) * 3 / 4).max(8);
+    // A switch is tapped with its whole row: drawn as large as before.
+    let height = (row.height * 7 / 10 * 3 / 4).max(8);
     let width = height * 2;
     Rect::new(
         (row.x + row.width).saturating_sub(width + style.margin as u16),

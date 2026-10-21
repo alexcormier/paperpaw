@@ -366,11 +366,13 @@ impl UiStyle {
         }
     }
 
-    /// A row of `height` made high enough on touch screens that the
-    /// buttons in it ([`button_height`]) are as large as a fingertip
-    /// ([`UiStyle::finger`]); as it is with buttons alone.
+    /// A row or bar of `height` for buttons: on touch screens as much
+    /// higher as its buttons ([`button_height`]) grow to be as large as a
+    /// fingertip ([`UiStyle::finger`]), so that the room above and below
+    /// them stays what it is in a row of `height`; as it is with buttons
+    /// alone. Every row or bar that holds buttons is made with it.
     pub fn touch_row(&self, height: u32) -> u32 {
-        height.max(self.finger * 10 / 7)
+        height.max(self.finger + (height - height * 7 / 10))
     }
 
     /// The colour of `ink` in the palette; gray text (notes, headings,
