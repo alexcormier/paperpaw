@@ -174,8 +174,10 @@ pub enum PointerVerdict {
 /// gestures itself (`gestures.policy`), nor while a screen guards the
 /// device (unless the recognizer is of the guard's plugin). Then it sees
 /// the samples of the fingers it follows ([`PointerVerdict`]); a finger
-/// taken away (by an input filter) comes as
-/// [`PointerPhase::Cancel`](paperpaw_platform::PointerPhase::Cancel).
+/// taken away (by an input filter, or as a screen comes up that guards
+/// the device) comes as
+/// [`PointerPhase::Cancel`](paperpaw_platform::PointerPhase::Cancel), at a
+/// point that may not be where it was.
 pub trait GestureRecognizer {
     /// A sample of a finger at `now`.
     fn pointer(&mut self, event: &PointerEvent, now: Instant) -> PointerVerdict;

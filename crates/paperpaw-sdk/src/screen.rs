@@ -481,6 +481,15 @@ impl<'a, 'e> Cx<'a, 'e> {
         self.output.refresh_set = Some(mode);
     }
 
+    /// Puts key map layer `layer` in front of the slot's for this screen
+    /// while it is on top (see [`Command::SetKeyLayer`]); `None` takes it
+    /// away. Nothing for a screen not of the stack.
+    pub fn set_key_layer(&mut self, layer: Option<Id>) {
+        if let Some(key) = self.key {
+            self.output.commands.push(Command::SetKeyLayer(key, layer));
+        }
+    }
+
     /// Says why the panel is refreshed, for refresh filters (the reader
     /// tells [`RefreshCause::PageTurn`](crate::filters::RefreshCause::PageTurn)).
     pub fn refresh_cause(&mut self, cause: crate::filters::RefreshCause) {

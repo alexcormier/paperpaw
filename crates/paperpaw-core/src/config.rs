@@ -61,18 +61,25 @@ pub(crate) struct Scope {
 }
 
 impl Kernel {
-    /// Forgets a setting's value (see [`Command::ResetSetting`]): from the
-    /// active scope, or from the configuration file.
-    /// Setting `id`'s value now, as written in `paperpaw.ini`.
-    pub(crate) fn setting_text(&self, id: &Id) -> Option<String> {
-        let value = self.shared.settings.get(id.as_str())?;
+    /// Setting `id`'s value now, as written in `paperpaw.ini`, where a
+    /// plugin hears [`events::SETTING_CHANGED`] (it is not made for
+    /// nobody).
+    pub(crate) fn setting_text_if_heard(&self, id: &Id) -> Option<String> {
+        let heard = !self.event_observers.is_empty()
+            || self
+                .subscriptions
+                .iter()
+                .any(|(event, ..)| *event == events::SETTING_CHANGED);
+        let value = self.shared.settings.get(id.as_str()).filter(|_| heard)?;
         Some(value.to_config_text())
     }
 
+    /// Forgets a setting's value (see [`Command::ResetSetting`]): from the
+    /// active scope, or from the configuration file.
     pub(crate) fn reset_setting(&mut self, id: &Id) {
         let scoped = self.shared.settings.goes_to_scope(id.as_str());
         let before = self.scoped_values();
-        let old = self.setting_text(id);
+        let old = self.setting_text_if_heard(id);
         if let Err(error) = self.shared.settings.reset(id.as_str()) {
             return self.warn_runtime(format!("`{id}`: {error}"));
         }

@@ -246,9 +246,11 @@ impl Kernel {
     /// past does not keep the device awake.
     pub(crate) fn recognizers_due(&self) -> Option<Instant> {
         let floor = self.now.add_millis(RECOGNIZER_TICK_MS);
+        let guard = self.guard().map(|guard| self.stack[guard].id.namespace());
         self.input
             .recognizers
             .iter()
+            .filter(|r| guard.is_none_or(|ns| r.id.namespace() == ns))
             .filter_map(|r| r.recognizer.next_tick())
             .min()
             .map(|at| at.max(floor))
@@ -650,9 +652,13 @@ impl Kernel {
         let mut layers = [GLOBAL_KEYMAP_LAYER; 4];
         let mut count = 0;
         let top = self.stack.get(index);
+        // No layer of a screen below one that guards the device.
+        let guarded = self.guard().is_some_and(|guard| index < guard);
         let named = [
             top.map(|top| top.id.as_str()),
-            top.and_then(|top| top.key_layer.as_ref()).map(Id::as_str),
+            top.and_then(|top| top.key_layer.as_ref())
+                .filter(|_| !guarded)
+                .map(Id::as_str),
             top.and_then(|top| top.slot.as_ref()).map(Id::as_str),
         ];
         for layer in named.into_iter().flatten() {
@@ -705,42 +711,50 @@ impl Kernel {
         if self.offer(|screen, cx| screen.on_action(&action, cx)) == Handled::Yes {
             return;
         }
+        self.run_handler(&action, params, true);
+    }
+
+    /// Runs the handler of `action` with `params`: one put in its place
+    /// (`overridable`) with the highest priority, else its own. While a
+    /// screen guards the device, only a handler put in place by the
+    /// guard's own plugin runs in place of the action's own: another
+    /// plugin's could open what the guard keeps closed.
+    pub(crate) fn run_handler(&mut self, action: &Id, params: &Params, overridable: bool) {
+        let guard = self.guard().map(|guard| self.stack[guard].id.namespace());
         let env = self.shared.env(self.now);
         let from = self.output.commands.len();
-        let owner =
-            if let Some((plugin, handler)) = self.shared.actions.override_of(action.as_str()) {
-                let _running = self.shared.meter.enter(plugin.as_str());
-                handler(&env, params, &mut self.output.commands);
-                plugin.clone()
-            } else {
-                match self.shared.actions.get(action.as_str()) {
-                    Some(spec) if spec.runs_itself() => {
-                        let _running = self.shared.meter.enter(action.namespace());
-                        let out = &mut self.output.commands;
-                        match (&spec.handler_with, &spec.handler) {
-                            (Some(handler), _) => handler(&env, params, out),
-                            (None, Some(handler)) => handler(&env, out),
-                            (None, None) => {}
-                        }
-                        action.clone()
+        let over = self
+            .shared
+            .actions
+            .overrides_of(action.as_str())
+            .find(|(plugin, _)| guard.is_none_or(|ns| plugin.as_str() == ns))
+            .filter(|_| overridable);
+        let owner = if let Some((plugin, handler)) = over {
+            let _running = self.shared.meter.enter(plugin.as_str());
+            handler(&env, params, &mut self.output.commands);
+            plugin.as_str()
+        } else {
+            match self.shared.actions.get(action.as_str()) {
+                Some(spec) if spec.runs_itself() => {
+                    let _running = self.shared.meter.enter(action.namespace());
+                    let out = &mut self.output.commands;
+                    match (spec.params_handler(), &spec.handler) {
+                        (Some(handler), _) => handler(&env, params, out),
+                        (None, Some(handler)) => handler(&env, out),
+                        (None, None) => {}
                     }
-                    Some(_) => return,
-                    None => return self.warn_runtime(format!("unknown action `{action}`")),
+                    action.namespace()
                 }
-            };
+                Some(_) => return,
+                None => return self.warn_runtime(format!("unknown action `{action}`")),
+            }
+        };
         // Run by a rule, not the reader: nothing said over reading.
         let (reader, now) = (self.shared.reader, self.now);
         let top = self.stack.last().map(|s| s.id.namespace());
         let out = &mut self.output.commands;
-        work::quiet(
-            reader,
-            top,
-            now,
-            from,
-            owner.namespace(),
-            out,
-            &mut self.works,
-        );
+        work::quiet(reader, top, now, from, owner, out, &mut self.works);
+        self.drop_self_runs(action, from);
         // An action a screen guarding the device let pass (the lock lets
         // sleep pass): what it opens may show above.
         if self.guard().is_some() {
@@ -748,8 +762,28 @@ impl Kernel {
         }
     }
 
+    /// Drops what was asked since `from` that runs `action` again: it
+    /// would run itself without end (a handler in place of the action's
+    /// own runs the original with [`Command::RunOriginal`]).
+    fn drop_self_runs(&mut self, action: &Id, from: usize) {
+        let before = self.output.commands.len();
+        let mut index = 0;
+        self.output.commands.retain(|command| {
+            let again = index >= from
+                && matches!(command, Command::RunAction(a) | Command::RunActionWith(a, _) if a == action);
+            index += 1;
+            !again
+        });
+        if self.output.commands.len() != before {
+            self.warn_runtime(format!("`{action}` runs itself; not run again"));
+        }
+    }
+
     /// The observers of actions (`actions`) or of events see `id` with
-    /// `params`. Nothing to do where there are none.
+    /// `params`. Nothing to do where there are none. While a screen guards
+    /// the device only its plugin's observers see anything: another's
+    /// could follow what is typed into it (a PIN entered with the
+    /// buttons).
     pub(crate) fn observe(&mut self, id: &Id, params: &Params, actions: bool) {
         let observers = if actions {
             &self.action_observers
@@ -759,8 +793,13 @@ impl Kernel {
         if observers.is_empty() {
             return;
         }
+        let guard = self.guard().map(|guard| self.stack[guard].id.namespace());
         let env = self.shared.env(self.now);
+        let mut ran_itself = false;
         for spec in observers {
+            if guard.is_some_and(|ns| spec.id.namespace() != ns) {
+                continue;
+            }
             let _running = self.shared.meter.enter(spec.id.namespace());
             let from = self.output.commands.len();
             (spec.observer)(&env, id, params, &mut self.output.commands);
@@ -776,6 +815,69 @@ impl Kernel {
                 out,
                 &mut self.works,
             );
+            // Seeing what it runs or emits itself, it would without end.
+            let before = out.len();
+            let mut index = 0;
+            out.retain(|command| {
+                let again = index >= from
+                    && match command {
+                        Command::RunAction(a) | Command::RunActionWith(a, _) => actions && a == id,
+                        Command::Emit(event, _) => !actions && event == id,
+                        _ => false,
+                    };
+                index += 1;
+                !again
+            });
+            ran_itself |= out.len() != before;
+        }
+        if ran_itself {
+            self.warn_runtime(format!(
+                "an observer runs `{id}` again on seeing it; not run"
+            ));
+        }
+    }
+
+    /// Lays key map layer `layer` in front of the slot's for open screen
+    /// `key` ([`Command::SetKeyLayer`]); not for a screen below one that
+    /// guards the device.
+    pub(crate) fn set_key_layer(&mut self, key: paperpaw_sdk::ScreenKey, layer: Option<Id>) {
+        let Some(index) = self
+            .stack
+            .iter()
+            .position(|active| paperpaw_sdk::ScreenKey::new(active.serial) == key)
+        else {
+            return;
+        };
+        if self.guard().is_some_and(|guard| index < guard) {
+            return;
+        }
+        self.stack[index].key_layer = layer;
+    }
+
+    /// While a screen guards the device, other plugins' recognizers let go
+    /// of the fingers they follow: each comes to them as cancelled (where
+    /// it is not known).
+    pub(crate) fn guard_takes_fingers(&mut self) {
+        let Some(guard) = self.guard() else {
+            return;
+        };
+        let ns = self.stack[guard].id.namespace();
+        let (now, meter) = (self.now, self.shared.meter.clone());
+        for r in self.input.recognizers.iter_mut() {
+            if r.fingers.is_empty() || r.id.namespace() == ns {
+                continue;
+            }
+            let _running = meter.enter(r.id.namespace());
+            for (id, _) in mem::take(&mut r.fingers) {
+                let gone = PointerEvent {
+                    id,
+                    phase: PointerPhase::Cancel,
+                    point: Point::new(0, 0),
+                    tool: paperpaw_platform::PointerTool::Finger,
+                    pressure: 0,
+                };
+                r.recognizer.pointer(&gone, now);
+            }
         }
     }
 

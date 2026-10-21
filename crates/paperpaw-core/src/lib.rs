@@ -622,9 +622,9 @@ impl Kernel {
                 let below = self.stack.len().checked_sub(2)?;
                 Some(format!("back:{}", self.stack[below].id))
             }
-            Command::RunAction(action) | Command::RunActionWith(action, _) => {
-                Some(format!("run:{action}"))
-            }
+            Command::RunAction(action)
+            | Command::RunActionWith(action, _)
+            | Command::RunOriginal(action, _) => Some(format!("run:{action}")),
             _ => None,
         }
     }

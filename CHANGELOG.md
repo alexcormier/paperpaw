@@ -25,13 +25,19 @@ change the plugin SDK.
   a handler made with `ActionSpec::handler_with` gets (a rule applying
   the profile it names). `Registrar::override_action(action, handler,
   priority)` puts a handler in place of any action's own; the one of the
-  highest priority runs, as for slots. `Registrar::observe_actions` and
+  highest priority runs, as for slots, and `Command::RunOriginal` runs
+  the action's own from it. `ActionSpec::sealed` keeps others' handlers
+  out (the lock's `lock.now`). `Registrar::observe_actions` and
   `observe_events` (`ObserverSpec`) see every action run and every event
   emitted (a macro recorder, rules on any event); nothing runs for them
-  where there are none. `ActionSpec::describe` and `keywords` give lists
+  where there are none. While a screen guards the device, only its
+  plugin's handlers in place of others and its observers run. What an
+  action or an observer asks that runs the same action again is dropped
+  with a warning. `ActionSpec::describe` and `keywords` give lists
   and searches of actions their words; `Actions::runnable` tells actions
   that run by themselves from screen actions. `SettingChanged` carries
-  the value before (`old`) where the kernel changed it. Breaking:
+  the value before (`old`) where the kernel changed it and a plugin
+  hears the event. Breaking:
   `Contribution::Action` holds a `Box<ActionSpec>`.
 - SDK: inputs of more kinds (gap E1). Key maps bind `double.<button>`
   (pressed twice), `double-tap.<zone>`, `tap2` (two fingers),
@@ -48,10 +54,11 @@ change the plugin SDK.
   they are tapped. Screens get `GestureKind::DoubleTap` (as a tap where
   they decline it; only to screens that say `Screen::takes_double_taps`)
   and `GestureKind::TwoFingerTap`. `Command::Input`
-  raises an input by its name; `Command::SetKeyLayer` puts a layer in
-  front of the slot's for the screen on top while it is on top (a
-  book's own bindings). What is held is resolved for the screen it
-  began on. Input filters may
+  raises an input by its name; `Command::SetKeyLayer` (sent with
+  `Cx::set_key_layer`) puts a layer in front of the slot's for the
+  screen that sent it, while it is on top (a book's own bindings); none
+  below a screen that guards the device. What is held is resolved for
+  the screen it began on. Input filters may
   `InputVerdict::Cancel` an input (what began with it is forgotten) or
   `InputVerdict::Replace` it (`InputFilters::filter` says the input
   a verdict was made for); `InputVerdict` is now non-exhaustive.

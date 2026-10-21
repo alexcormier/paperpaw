@@ -218,11 +218,7 @@ impl Kernel {
                 Some(key) => self.route_key(key),
                 None => self.warn_runtime(format!("unknown input `{name}`")),
             },
-            Command::SetKeyLayer(layer) => {
-                if let Some(top) = self.stack.last_mut() {
-                    top.key_layer = layer;
-                }
-            }
+            Command::SetKeyLayer(key, layer) => self.set_key_layer(key, layer),
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
             // Not past a screen that guards the device, but from it.
             Command::Back if self.held_by_guard() => {}
@@ -231,6 +227,7 @@ impl Kernel {
             Command::Emit(event, params) => self.emit(&event, &params),
             Command::RunAction(action) => self.dispatch(action),
             Command::RunActionWith(action, params) => self.dispatch_with(action, &params),
+            Command::RunOriginal(action, params) => self.run_handler(&action, &params, false),
             command @ (Command::Work(_)
             | Command::CancelWork(..)
             | Command::CancelHttp(_)
@@ -372,7 +369,7 @@ impl Kernel {
                 self.set_in_scope(&id, value);
             }
             Command::SetSetting(id, value) => {
-                let old = self.setting_text(&id);
+                let old = self.setting_text_if_heard(&id);
                 match self.shared.settings.set(id.as_str(), value) {
                     Ok(()) => {
                         self.persist_setting(&id);

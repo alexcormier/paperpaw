@@ -223,6 +223,7 @@ impl Kernel {
         self.shared.stack.clear();
         self.shared.stack.extend(entries);
         self.sync_chromes();
+        self.guard_takes_fingers();
     }
 
     /// Closes the open screen `key` (see [`Command::Close`]), leaving the

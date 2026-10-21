@@ -56,11 +56,11 @@ pub struct ObserverSpec {
 
 impl ObserverSpec {
     pub fn new(
-        id: Id,
+        id: impl Into<Id>,
         observer: impl Fn(&Env<'_>, &Id, &Params, &mut Vec<Command>) + 'static,
     ) -> Self {
         Self {
-            id,
+            id: id.into(),
             observer: Box::new(observer),
         }
     }
@@ -93,18 +93,20 @@ pub struct ActionSpec {
     /// Translation key of the action's display name (for key map editors).
     pub title: Cow<'static, str>,
     pub handler: Option<ActionHandler>,
-    /// What it does with the params it was run with, in place of
-    /// [`handler`](Self::handler) ([`ActionSpec::handler_with`]).
-    pub handler_with: Option<ActionParamsHandler>,
     /// How the row of hints shows it where a screen leaves that to the
     /// action ([`Hint::Default`](crate::Hint::Default)).
     pub hint: ActionHint,
-    /// Translation key of what it does, in a sentence, for lists of
-    /// actions to choose from.
-    pub description: Option<Cow<'static, str>>,
-    /// Translation key of words it is found by in a search of actions,
-    /// separated by commas.
-    pub keywords: Option<Cow<'static, str>>,
+    /// What few actions have, kept aside so that the others stay small.
+    extra: Option<Box<ActionExtra>>,
+}
+
+/// What few actions have ([`ActionSpec`]).
+#[derive(Default)]
+struct ActionExtra {
+    handler_with: Option<ActionParamsHandler>,
+    description: Option<Cow<'static, str>>,
+    keywords: Option<Cow<'static, str>>,
+    sealed: bool,
 }
 
 impl ActionSpec {
@@ -114,11 +116,13 @@ impl ActionSpec {
             id: id.into(),
             title: title.into(),
             handler: None,
-            handler_with: None,
             hint: ActionHint::Title,
-            description: None,
-            keywords: None,
+            extra: None,
         }
+    }
+
+    fn extra(&mut self) -> &mut ActionExtra {
+        self.extra.get_or_insert_with(Default::default)
     }
 
     /// What it does where the screen shown does not take it.
@@ -135,7 +139,7 @@ impl ActionSpec {
         mut self,
         handler: impl Fn(&Env<'_>, &Params, &mut Vec<Command>) + 'static,
     ) -> Self {
-        self.handler_with = Some(Box::new(handler));
+        self.extra().handler_with = Some(Box::new(handler));
         self
     }
 
@@ -145,22 +149,51 @@ impl ActionSpec {
         self
     }
 
-    /// What it does, in a sentence (a translation key).
+    /// What it does, in a sentence (a translation key), for lists of
+    /// actions to choose from.
     pub fn describe(mut self, description: impl Into<Cow<'static, str>>) -> Self {
-        self.description = Some(description.into());
+        self.extra().description = Some(description.into());
         self
     }
 
-    /// Words it is found by (a translation key; its text separated by
-    /// commas).
+    /// Words it is found by in a search of actions (a translation key;
+    /// its text separated by commas).
     pub fn keywords(mut self, keywords: impl Into<Cow<'static, str>>) -> Self {
-        self.keywords = Some(keywords.into());
+        self.extra().keywords = Some(keywords.into());
         self
+    }
+
+    /// No handler of another plugin is put in its place
+    /// ([`Registrar::override_action`](crate::Registrar::override_action)):
+    /// for actions that keep the device safe, such as locking it.
+    pub fn sealed(mut self) -> Self {
+        self.extra().sealed = true;
+        self
+    }
+
+    /// The handler that gets the params ([`ActionSpec::handler_with`]).
+    pub fn params_handler(&self) -> Option<&ActionParamsHandler> {
+        self.extra.as_ref()?.handler_with.as_ref()
+    }
+
+    /// What it does ([`ActionSpec::describe`]).
+    pub fn description(&self) -> Option<&str> {
+        self.extra.as_ref()?.description.as_deref()
+    }
+
+    /// The words it is found by ([`ActionSpec::keywords`]).
+    pub fn search_keywords(&self) -> Option<&str> {
+        self.extra.as_ref()?.keywords.as_deref()
+    }
+
+    /// Whether no other handler is put in its place ([`ActionSpec::sealed`]).
+    pub fn is_sealed(&self) -> bool {
+        self.extra.as_ref().is_some_and(|extra| extra.sealed)
     }
 
     /// Whether it does something itself, without a screen that takes it.
     pub fn runs_itself(&self) -> bool {
-        self.handler.is_some() || self.handler_with.is_some()
+        self.handler.is_some() || self.params_handler().is_some()
     }
 }
 
@@ -171,7 +204,8 @@ impl fmt::Debug for ActionSpec {
             .field("title", &self.title)
             .field("handler", &self.runs_itself())
             .field("hint", &self.hint)
-            .field("description", &self.description)
+            .field("description", &self.description())
+            .field("sealed", &self.is_sealed())
             .finish()
     }
 }
@@ -268,17 +302,36 @@ impl Actions {
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn override_of(&self, id: &str) -> Option<(&Id, &ActionParamsHandler)> {
+        self.first_override(id)
+    }
+
+    #[cfg(not(any(test, feature = "kernel")))]
+    fn override_of(&self, id: &str) -> Option<(&Id, &ActionParamsHandler)> {
+        self.first_override(id)
+    }
+
+    fn first_override(&self, id: &str) -> Option<(&Id, &ActionParamsHandler)> {
+        if self.get(id).is_some_and(ActionSpec::is_sealed) {
+            return None;
+        }
         self.overrides
             .iter()
             .find(|(action, ..)| action.as_str() == id)
             .map(|(_, _, plugin, handler)| (plugin, handler))
     }
 
-    #[cfg(not(any(test, feature = "kernel")))]
-    fn override_of(&self, id: &str) -> Option<(&Id, &ActionParamsHandler)> {
+    /// The handlers put in place of action `id`'s own, the highest
+    /// priority first, with their plugins; none for a sealed action.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn overrides_of<'a>(
+        &'a self,
+        id: &'a str,
+    ) -> impl Iterator<Item = (&'a Id, &'a ActionParamsHandler)> + 'a {
+        let sealed = self.get(id).is_some_and(ActionSpec::is_sealed);
         self.overrides
             .iter()
-            .find(|(action, ..)| action.as_str() == id)
+            .filter(move |(action, ..)| !sealed && action.as_str() == id)
             .map(|(_, _, plugin, handler)| (plugin, handler))
     }
 

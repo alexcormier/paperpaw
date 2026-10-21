@@ -195,12 +195,13 @@ fn inputs_raised_and_layers_put_in_front() {
     kernel.finish();
     assert_eq!(*log.borrow(), ["a:core.confirm"]);
     log.borrow_mut().clear();
-    kernel.apply(Command::SetKeyLayer(Some(Id::new_static("book.mine"))));
+    let key = paperpaw_sdk::ScreenKey::new(kernel.stack[kernel.stack.len() - 1].serial);
+    kernel.apply(Command::SetKeyLayer(key, Some(Id::new_static("book.mine"))));
     kernel.apply(Command::Input(String::from("button.confirm")));
     kernel.finish();
     assert_eq!(*log.borrow(), ["a:a.special"]);
     log.borrow_mut().clear();
-    kernel.apply(Command::SetKeyLayer(None));
+    kernel.apply(Command::SetKeyLayer(key, None));
     press(&mut kernel, 2000, "confirm");
     assert_eq!(*log.borrow(), ["a:core.confirm"]);
     kernel.apply(Command::Input(String::from("no.such-input")));
@@ -511,7 +512,8 @@ fn a_key_layer_lives_with_its_screen() {
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    kernel.apply(Command::SetKeyLayer(Some(Id::new_static("book.mine"))));
+    let key = paperpaw_sdk::ScreenKey::new(kernel.stack[kernel.stack.len() - 1].serial);
+    kernel.apply(Command::SetKeyLayer(key, Some(Id::new_static("book.mine"))));
     kernel.finish();
     let top = kernel.stack[0].id.clone();
     let other = if top.as_str() == "a.screen" {
@@ -583,4 +585,25 @@ fn a_waiting_press_keeps_its_screen() {
     kernel.close_from(0);
     kernel.tick(Instant(3400));
     assert!(log.borrow().is_empty(), "{:?}", log.borrow());
+}
+
+/// A screen that guards the device takes the fingers others' recognizers
+/// follow: they see them cancelled and wake the device no more; a layer
+/// is not laid below the guard.
+#[test]
+fn a_guard_takes_the_fingers_of_recognizers() {
+    let log = log();
+    let mut kernel = flick_kernel(&log);
+    finger(&mut kernel, 1000, 0, PointerPhase::Down, (45, 45));
+    assert!(!kernel.input.recognizers[0].fingers.is_empty());
+    kernel.open_screen(Instant(1010), Id::new_static("lock.screen"), Params::new());
+    assert!(kernel.input.recognizers[0].fingers.is_empty());
+    assert_eq!(kernel.recognizers_due(), None, "nothing to wake for");
+    let below = paperpaw_sdk::ScreenKey::new(kernel.stack[0].serial);
+    kernel.apply(Command::SetKeyLayer(
+        below,
+        Some(Id::new_static("book.mine")),
+    ));
+    kernel.finish();
+    assert_eq!(kernel.stack[0].key_layer, None);
 }

@@ -343,17 +343,22 @@ pub enum Command {
     /// gets them (a screen that takes the action does not), e.g. a
     /// rule applying the profile it names.
     RunActionWith(Id, Params),
+    /// Runs action `.0`'s own handler with params `.1`, past the handlers
+    /// put in its place and the screens: for a handler put in its place
+    /// that does more around it. Seen by no observer.
+    RunOriginal(Id, Params),
     /// Raises the input `.0` as written in key maps (`button.menu`,
     /// `double-tap.center`, a plugin's `input.<id>`): it runs what the
     /// layers shown bind it to, as if it had come (switch access, chords
     /// of one's own).
     Input(String),
-    /// Puts the key map layer `.0` in front of the slot's and the global
-    /// layer for the screen on top when it is carried out (the screen
-    /// that asks, from its own handlers), e.g. a book's own bindings
+    /// Puts the key map layer `.1` in front of the slot's and the global
+    /// layer for open screen `.0`, e.g. a book's own bindings
     /// (`[keymap.<layer>]`): it applies while that screen is on top and
-    /// goes with it. `None` takes it away.
-    SetKeyLayer(Option<Id>),
+    /// goes with it; not below a screen that guards the device. `None`
+    /// takes it away. A screen sends it with
+    /// [`Cx::set_key_layer`](crate::Cx::set_key_layer).
+    SetKeyLayer(crate::ScreenKey, Option<Id>),
     /// Shows task `.0`, a tab of tabs: the screens open now are kept as
     /// the task shown before (by their ids and params; dropped from memory
     /// and made anew when it is shown again), and those of task `.0` open

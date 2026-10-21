@@ -345,7 +345,8 @@ pub mod events {
         }
         optional {
             /// Its value before, as written in `paperpaw.ini`, where the
-            /// kernel knew it.
+            /// kernel changed it and a plugin subscribes to the event or
+            /// observes events (it is not made for nobody).
             pub old: String,
         }
     }
