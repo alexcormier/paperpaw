@@ -285,32 +285,51 @@ const MAX_CHANGES: usize = 1024;
 
 /// What was noted beside the catalog since it was made: each book's last
 /// status, or that it was removed, by its path hashed (FNV-1a, 64 bits,
-/// of which the low 32 are kept, as the index keeps them: 8 bytes a
+/// all of them, so that two books all but never share one: 12 bytes a
 /// book).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Changes {
-    /// By the low bits of the hash; `None` for a book removed.
-    entries: Vec<(u32, Option<Status>)>,
+    /// By the hash's low bits, then its high bits (the index finds a book
+    /// by the low ones); `None` for a book removed.
+    entries: Vec<(u32, u32, Option<Status>)>,
+}
+
+/// A hash as [`Changes`] keeps it: its low bits, then its high bits.
+fn halves(hash: u64) -> (u32, u32) {
+    (hash as u32, (hash >> 32) as u32)
 }
 
 impl Changes {
     fn get(&self, hash: u64) -> Option<Option<Status>> {
-        self.get_short(hash as u32)
+        let key = halves(hash);
+        let at = self
+            .entries
+            .binary_search_by_key(&key, |(low, high, _)| (*low, *high))
+            .ok()?;
+        Some(self.entries[at].2)
     }
 
     /// The change noted of the book whose path's hash has these low bits
-    /// ([`super::index::hash`]).
+    /// ([`super::index::hash`], which keeps no more of it).
     pub(crate) fn get_short(&self, hash: u32) -> Option<Option<Status>> {
-        let at = self.entries.binary_search_by_key(&hash, |(h, _)| *h).ok()?;
-        Some(self.entries[at].1)
+        let at = self.entries.partition_point(|(low, _, _)| *low < hash);
+        self.entries
+            .get(at)
+            .filter(|(low, _, _)| *low == hash)
+            .map(|(_, _, change)| *change)
     }
 
     fn note(&mut self, hash: u64, change: Option<Status>) {
-        let hash = hash as u32;
-        match self.entries.binary_search_by_key(&hash, |(h, _)| *h) {
-            Ok(at) => self.entries[at].1 = change,
-            Err(at) if self.entries.len() < MAX_CHANGES => self.entries.insert(at, (hash, change)),
+        let key = halves(hash);
+        match self
+            .entries
+            .binary_search_by_key(&key, |(low, high, _)| (*low, *high))
+        {
+            Ok(at) => self.entries[at].2 = change,
+            Err(at) if self.entries.len() < MAX_CHANGES => {
+                self.entries.insert(at, (key.0, key.1, change));
+            }
             Err(_) => {}
         }
     }
@@ -921,6 +940,10 @@ const OLD_WINDOW: usize = 32;
 /// Bytes of the old catalog a walk reads ahead.
 #[cfg(any(test, feature = "kernel"))]
 const READ_AHEAD: usize = 1024;
+/// The longest line of the old catalog a walk reads (values are at most a
+/// kilobyte each: no line written whole is this long).
+#[cfg(any(test, feature = "kernel"))]
+const OLD_LINE: usize = 8 * 1024;
 /// Bytes of the new catalog written at once while catching up.
 #[cfg(any(test, feature = "kernel"))]
 const WRITTEN_PIECE: usize = 2 * 1024;
@@ -1120,9 +1143,18 @@ impl OldCatalog {
         Ok(old)
     }
 
+    /// Lets go of what was read ahead (read again from where the walk is
+    /// when it goes on).
+    fn let_go(&mut self) {
+        self.ahead = Vec::new();
+        self.from = 0;
+        self.end = false;
+    }
+
     /// The line that starts at `offset` and where the next one starts;
     /// `None` at its end. Read from what was read ahead, else read ahead
-    /// from there.
+    /// from there. A line longer than [`OLD_LINE`] (none is, written
+    /// whole) is passed over as empty, not read.
     fn line(
         &mut self,
         storage: &dyn Storage,
@@ -1153,9 +1185,12 @@ impl OldCatalog {
                     want = (self.ahead.len() * 2).max(READ_AHEAD);
                 }
             }
-            // Values are at most a kilobyte each: no line is this long.
-            if want > 64 * 1024 {
-                return Ok(None);
+            if want > OLD_LINE {
+                return self.pass_over(storage, offset);
+            }
+            // Back to its size after a long line.
+            if want == READ_AHEAD && self.ahead.capacity() > 2 * READ_AHEAD {
+                self.ahead = Vec::new();
             }
             self.ahead.clear();
             self.ahead.resize(want, 0);
@@ -1174,6 +1209,28 @@ impl OldCatalog {
             self.ahead.truncate(read);
             self.from = offset;
             self.end = read < want;
+        }
+    }
+
+    /// The line at `offset` passed over, too long to hold: an empty line,
+    /// and where the next starts (`None` past the end).
+    fn pass_over(
+        &mut self,
+        storage: &dyn Storage,
+        offset: u64,
+    ) -> Result<Option<(String, u64)>, StorageError> {
+        self.let_go();
+        let mut buf = [0u8; 256];
+        let mut at = offset;
+        loop {
+            let n = storage.read_at(&catalog_path(), at, &mut buf)?;
+            if n == 0 {
+                return Ok(None);
+            }
+            if let Some(end) = buf[..n].iter().position(|&b| b == b'\n') {
+                return Ok(Some((String::new(), at + end as u64 + 1)));
+            }
+            at += n as u64;
         }
     }
 
@@ -1295,7 +1352,7 @@ impl Walk {
     /// while the reader or the library takes the memory.
     pub fn pause(&mut self) {
         self.making.pause();
-        self.old.ahead = Vec::new();
+        self.old.let_go();
     }
 
     /// Gives up: the old catalog stays.
@@ -1337,7 +1394,7 @@ impl Walk {
             return Ok(false);
         }
         // The books' lines, written together.
-        let mut piece = String::new();
+        let mut piece = String::with_capacity(WRITTEN_PIECE);
         let (mut taken, mut books) = (0, 0);
         for (is_dir, size, name) in &entries {
             taken += 1;
@@ -1556,6 +1613,42 @@ impl Rewrite {
 mod tests {
     use super::*;
     use crate::MemoryStorage;
+
+    /// Two paths whose hashes share their low 32 bits.
+    fn alike() -> (String, String) {
+        let mut seen = alloc::collections::BTreeMap::new();
+        for n in 0u32.. {
+            let path = format!("books/b{n}.txt");
+            if let Some(other) = seen.insert(fnv1a64(&path) as u32, path.clone()) {
+                return (other, path);
+            }
+        }
+        unreachable!()
+    }
+
+    #[test]
+    fn books_whose_hashes_share_their_low_bits_are_kept_apart() {
+        let (a, b) = alike();
+        assert_ne!(fnv1a64(&a), fnv1a64(&b));
+        let storage = MemoryStorage::new();
+        write(
+            &storage,
+            &[
+                Record::of(&a, &Book::default()),
+                Record::of(&b, &Book::default()),
+            ],
+        );
+        note(&storage, &b, Status::new(Some(40), false, true)).unwrap();
+        forget(&storage, &a).unwrap();
+        let changes = changes(&storage);
+        assert!(changes.removed(fnv1a64(&a)));
+        assert!(!changes.removed(fnv1a64(&b)));
+        assert_eq!(changes.status(fnv1a64(&b)).unwrap().progress, Some(40));
+        // Read, the other book stays.
+        let mut left = Vec::new();
+        each(&storage, &mut |r| left.push(r.path));
+        assert_eq!(left, [b]);
+    }
 
     #[test]
     fn written_read_and_searched() {

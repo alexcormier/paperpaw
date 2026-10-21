@@ -356,3 +356,56 @@ fn a_walk_paused_goes_on_where_it_was() {
     assert_eq!(again.len(), made.len());
     assert!(again.contains(&("books/Shelf 1/b04.txt".to_string(), Some(100))));
 }
+
+#[test]
+fn a_walk_paused_after_a_new_book_still_takes_the_others_from_the_old_catalog() {
+    // A book new to the library anywhere among nine known, the walk paused
+    // after every step: the nine still come from the old catalog.
+    for new in ["a-new.txt", "b05-new.txt", "z-new.txt"] {
+        let storage = MemoryStorage::new();
+        storage.create_dir("books").unwrap();
+        for n in 0..9 {
+            storage
+                .write(&format!("books/b{n:02}.txt"), b"text")
+                .unwrap();
+        }
+        let h = harness(MemoryStorage::new());
+        let env = h.env_on(&storage);
+        walk(&env);
+        storage.write(&format!("books/{new}"), b"text").unwrap();
+        let mut walk = Walk::start(&env, Vec::new()).unwrap();
+        loop {
+            walk.pause();
+            if walk.step(&env).unwrap() {
+                break;
+            }
+        }
+        assert_eq!(walk.from_old(), 9, "{new}");
+        assert_eq!(walk.found(), 10, "{new}");
+    }
+}
+
+#[test]
+fn a_line_too_long_in_the_old_catalog_is_passed_over() {
+    let storage = MemoryStorage::new();
+    storage.create_dir("books").unwrap();
+    for n in 0..5 {
+        storage
+            .write(&format!("books/b{n:02}.txt"), b"text")
+            .unwrap();
+    }
+    let h = harness(MemoryStorage::new());
+    let env = h.env_on(&storage);
+    walk(&env);
+    // A line of 100 KB (not one the catalog writes) before the third book.
+    let path = ".paperpaw/library/catalog.txt";
+    let text = paperpaw_sdk::read_file(&storage, path, 1 << 20).unwrap();
+    let text = String::from_utf8(text).unwrap();
+    let at = text.find("books/b02.txt").unwrap();
+    let long = format!("{}{}\n{}", &text[..at], "x".repeat(100 * 1024), &text[at..]);
+    storage.write(path, long.as_bytes()).unwrap();
+    let mut walk = Walk::start(&env, Vec::new()).unwrap();
+    while !walk.step(&env).unwrap() {}
+    assert_eq!(walk.from_old(), 5);
+    assert_eq!(walk.found(), 5);
+}
