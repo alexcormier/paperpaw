@@ -108,6 +108,51 @@ pub struct Heard {
 /// nothing.
 pub struct Recorder(pub Rc<RefCell<Heard>>);
 
+/// The parts of the recorder's own place of status items: its item at
+/// the left.
+static PLACE_PARTS: [paperpaw_sdk::SettingSpec; 3] = [
+    part("recorder.left", "recorder.status"),
+    part("recorder.center", ""),
+    part("recorder.right", ""),
+];
+
+const fn part(id: &'static str, default: &'static str) -> paperpaw_sdk::SettingSpec {
+    paperpaw_sdk::SettingSpec::fixed(
+        id,
+        "recorder",
+        paperpaw_sdk::SettingKind::List,
+        paperpaw_sdk::SettingValue::Text(std::borrow::Cow::Borrowed(default)),
+        paperpaw_sdk::builtin::groups::OTHER,
+    )
+}
+
+/// A screen that, as it shows, notes how many targets the reader's line
+/// of items has in the recorder's place (`lines`, parameter `targets`).
+struct LinesProbe(Rc<RefCell<Heard>>);
+
+impl Screen for LinesProbe {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+
+    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let context = Params::new();
+        let area = paperpaw_sdk::Rect::new(0, 0, 480, 40);
+        let frame =
+            paperpaw_sdk::StatusFrame::new(area, false, 20.0, paperpaw_sdk::Color::BLACK, &context)
+                .place("recorder.place");
+        let targets = env
+            .status_items
+            .line_targets("reader.status-line.items", &env, &frame)
+            .len();
+        let noted = Params::new().with("targets", targets.to_string());
+        self.0.borrow_mut().slots.push(("lines", noted));
+    }
+}
+
 /// A screen standing in for another plugin's: it shows nothing and closes
 /// on *Back* as any screen does.
 struct Stand;
@@ -167,6 +212,25 @@ impl Plugin for Recorder {
             ))?;
             r.bind_slot(slot, screen, Priority::DEFAULT)?;
         }
+        // A place of status items of its own, its item at the left, and a
+        // screen that asks the reader's line of items for its targets
+        // there.
+        r.add_settings(&PLACE_PARTS)?;
+        r.add_status_place(paperpaw_sdk::status::Place::new(
+            Id::new_static("recorder.place"),
+            "recorder",
+            [
+                Id::new_static("recorder.left"),
+                Id::new_static("recorder.center"),
+                Id::new_static("recorder.right"),
+            ],
+        ))?;
+        let heard = self.0.clone();
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("recorder.lines"),
+            "recorder",
+            Box::new(move |_, _| Box::new(LinesProbe(heard.clone()))),
+        ))?;
         // A status item that opens the book's information when tapped.
         r.add_status_item(
             paperpaw_sdk::StatusItemSpec::new(
@@ -174,10 +238,15 @@ impl Plugin for Recorder {
                 "recorder",
                 Box::new(|_, _| Some(paperpaw_sdk::StatusValue::Text("Tapped item".into()))),
             )
-            .tap(|_, _| {
-                let from = Params::new().with("from", "status");
-                Some(paperpaw_sdk::Command::OpenSlot(slots::BOOK_INFO, from))
-            }),
+            .tap(Id::new_static("recorder.info")),
+        )?;
+        r.add_action(
+            paperpaw_sdk::ActionSpec::new(Id::new_static("recorder.info"), "recorder").handler(
+                |_: &Env<'_>, out: &mut Vec<paperpaw_sdk::Command>| {
+                    let from = Params::new().with("from", "status");
+                    out.push(paperpaw_sdk::Command::OpenSlot(slots::BOOK_INFO, from));
+                },
+            ),
         )?;
         Ok(())
     }

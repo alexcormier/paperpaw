@@ -30,6 +30,8 @@ use paperpaw_sdk::{
 
 pub const PLUGIN: Id = Id::new_static("power");
 const GROUP: Id = Id::new_static("power.group");
+/// Opens the power settings: what a tap on the mode's status item runs.
+pub const OPEN: Id = Id::new_static("power.open");
 /// Which mode: one of `MODES`.
 pub const MODE: Setting<Text> = Setting::new("power.mode");
 /// Automatic: Saving below this percentage of charge.
@@ -178,15 +180,19 @@ impl Plugin for Power {
                     Some(StatusValue::Icon(Cow::Borrowed(icon)))
                 }),
             )
-            .tap(|_, _| {
+            .tap(OPEN),
+        )?;
+        r.add_action(paperpaw_sdk::ActionSpec::new(OPEN, "power.title").handler(
+            |_: &paperpaw_sdk::Env<'_>, out: &mut Vec<paperpaw_sdk::Command>| {
                 let page = paperpaw_sdk::Params::new()
                     .with(paperpaw_sdk::builtin::params::ID, GROUP.as_str());
-                Some(Command::OpenSlot(
+                out.push(paperpaw_sdk::Command::OpenSlot(
                     paperpaw_sdk::builtin::slots::SETTINGS,
                     page,
-                ))
-            }),
-        )?;
+                ));
+            },
+        ))?;
+        r.add_icon(OPEN, Cow::Borrowed("leaf"))?;
         // Silently: the mode changes, only the status mark says so.
         for event in [
             events::STARTED.id(),

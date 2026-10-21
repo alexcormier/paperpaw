@@ -299,7 +299,9 @@ fn draw_status_line(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look
 }
 
 /// Where a tap on the status line in `area` does something (the items
-/// that do something when tapped).
+/// that do something when tapped): by touch alone, the buttons reaching
+/// what they do by the actions bound to them, so that the focus never
+/// stops on an item that comes and goes (Wi-Fi).
 fn status_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
@@ -309,7 +311,7 @@ fn status_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         .line(env, area, style.small, Color::BLACK)
         .targets(env, &font, &Params::new())
         .into_iter()
-        .map(|t| WidgetTarget::new(t.area, t.command))
+        .map(|t| WidgetTarget::touch(t.area, t.command))
         .collect()
 }
 

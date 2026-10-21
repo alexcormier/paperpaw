@@ -41,6 +41,8 @@ pub const PLUGIN: Id = Id::new_static("wifi");
 pub const GROUP: Id = Id::new_static("wifi.group");
 /// The Wi-Fi page.
 pub const PAGE: Id = Id::new_static("wifi.page");
+/// Opens the Wi-Fi page: what a tap on Wi-Fi's status item runs.
+pub const OPEN: Id = Id::new_static("wifi.open");
 /// The status item: the Wi-Fi sign while the device is in a network.
 pub const STATUS: Id = Id::new_static("wifi.status");
 /// The radio comes on by itself when a plugin wants the network.
@@ -209,8 +211,14 @@ impl Plugin for Wifi {
                         .then_some(StatusValue::Icon(Cow::Borrowed("wifi")))
                 }),
             )
-            .tap(|_, _| Some(Command::OpenScreen(PAGE, Params::new()))),
+            .tap(OPEN),
         )?;
+        r.add_action(paperpaw_sdk::ActionSpec::new(OPEN, "wifi.title").handler(
+            |_: &Env<'_>, out: &mut Vec<Command>| {
+                out.push(Command::OpenScreen(PAGE, Params::new()));
+            },
+        ))?;
+        r.add_icon(OPEN, Cow::Borrowed("wifi"))?;
         r.add_settings(&SETTINGS)?;
         for spec in &SETTINGS {
             r.set_menu_need(spec.id.clone(), MenuNeed::Wifi)?;

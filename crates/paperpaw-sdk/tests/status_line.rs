@@ -295,7 +295,7 @@ fn tapping() -> Harness {
             Box::new(|_, _| Some(StatusValue::Text("Important".into()))),
         )
         .priority(200)
-        .tap(|_, _| Some(paperpaw_sdk::Command::Notify("high".into()))),
+        .tap(Id::new_static("t.high-tapped")),
     );
     h.status_items.add(
         StatusItemSpec::new(
@@ -304,7 +304,7 @@ fn tapping() -> Harness {
             Box::new(|_, _| Some(StatusValue::Text("Unimportant".into()))),
         )
         .priority(10)
-        .tap(|_, _| Some(paperpaw_sdk::Command::Notify("low".into()))),
+        .tap(Id::new_static("t.low-tapped")),
     );
     h.status_items.add(
         StatusItemSpec::new(
@@ -317,7 +317,7 @@ fn tapping() -> Harness {
                 })
             }),
         )
-        .tap(|_, _| Some(paperpaw_sdk::Command::Notify("labelled".into()))),
+        .tap(Id::new_static("t.labelled-tapped")),
     );
     h.status_items.add(
         StatusItemSpec::new(
@@ -326,7 +326,7 @@ fn tapping() -> Harness {
             Box::new(|_, _| Some(StatusValue::Text("9:59".into()))),
         )
         .min_width(4.0)
-        .tap(|_, _| Some(paperpaw_sdk::Command::Notify("clock".into()))),
+        .tap(Id::new_static("t.clock-tapped")),
     );
     h
 }
@@ -337,7 +337,11 @@ fn told(line: &StatusLine<'_>, env: &Env<'_>) -> Vec<String> {
     line.targets(env, &font, &Params::new())
         .into_iter()
         .map(|t| match t.command {
-            paperpaw_sdk::Command::Notify(what) => what,
+            paperpaw_sdk::Command::RunActionWith(action, _) => action
+                .as_str()
+                .trim_start_matches("t.")
+                .trim_end_matches("-tapped")
+                .to_string(),
             other => format!("{other:?}"),
         })
         .collect()
@@ -358,8 +362,9 @@ fn items_that_matter_least_give_way_first() {
         Color::BLACK,
     );
     assert_eq!(told(&wide, &env), ["low", "high"]);
-    // The low one at the right, the high one at the left: the low goes.
-    let area = Rect::new(0, 0, 150, 40);
+    // The low one at the right, the high one at the left: where not even
+    // a few letters of each fit, the low goes.
+    let area = Rect::new(0, 0, 100, 40);
     let narrow = StatusLine::new(area, ["t.high", "", "t.low"], 20.0, Color::BLACK);
     assert_eq!(told(&narrow, &env), ["high"]);
     let mut frame = frame(480, 100);
@@ -398,4 +403,83 @@ fn labelled_items_show_whole_and_targets_keep_their_width() {
     let targets = clock.targets(&env, &font, &Params::new());
     assert_eq!(targets.len(), 1);
     assert!(targets[0].area.width >= 80, "{targets:?}");
+}
+
+/// A battery whose percentage is the first to go where a line is
+/// crowded, and comes back once an item that matters as much went.
+#[test]
+fn the_percentage_goes_first_and_comes_back() {
+    let h = tapping();
+    let env = h.env();
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let context = Params::new().with("level", "80");
+    let right = format!("{LEVEL}, t.labelled");
+    let line = |width: f32| {
+        StatusLine::new(
+            Rect::new(0, 0, width as u16 + 2, 40),
+            ["", "", &right],
+            20.0,
+            Color::BLACK,
+        )
+    };
+    let battery = 26.0;
+    let with_percent = battery + 6.0 + font.measure(20.0, "80 %");
+    let labelled =
+        paperpaw_sdk::ui::icon_width(&env, "wifi", 20.0) + 5.0 + font.measure(20.0, "Home network");
+    let gap = 8.0;
+    // Room for all, and without the percentage: the labelled one stays.
+    assert_eq!(
+        told(&line(with_percent + gap + labelled), &env),
+        ["labelled"]
+    );
+    assert_eq!(told(&line(battery + gap + labelled), &env), ["labelled"]);
+    // Not even that: it goes, and the percentage comes back.
+    assert!(with_percent < battery + gap + labelled);
+    assert!(told(&line(with_percent), &env).is_empty());
+    let mut frame = frame(480, 100);
+    line(with_percent).draw(&mut frame.canvas(), &env, &font, &context);
+    let drawn = frame.take_dirty().unwrap();
+    assert!(
+        drawn.width > battery as u16 + 4,
+        "the percentage beside the battery: {drawn:?}"
+    );
+}
+
+/// A long text in the centre is shortened to its room, not left out.
+#[test]
+fn a_long_centre_text_is_shortened_not_dropped() {
+    let h = tapping();
+    let env = h.env();
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let context = Params::new().with(
+        "chapter",
+        "A chapter with a title much too long for any status line at all",
+    );
+    let area = Rect::new(0, 0, 300, 40);
+    let line = StatusLine::new(area, ["", CHAPTER, "t.high"], 20.0, Color::BLACK);
+    assert_eq!(told(&line, &env), ["high"]);
+    let mut frame = frame(480, 100);
+    line.draw(&mut frame.canvas(), &env, &font, &context);
+    let drawn = frame.take_dirty().unwrap();
+    // Ink well left of the right part: the chapter, shortened.
+    assert!(drawn.x < 150, "{drawn:?}");
+    assert_eq!(drawn_outside(&mut frame, area), None);
+}
+
+/// An item with a least width keeps it when drawn: what follows it
+/// starts after that width, however short its text.
+#[test]
+fn a_least_width_keeps_the_items_after_it_in_place() {
+    let h = tapping();
+    let env = h.env();
+    let line = StatusLine::new(
+        Rect::new(0, 0, 480, 40),
+        ["t.clock, t.low", "", ""],
+        20.0,
+        Color::BLACK,
+    );
+    let font = paperpaw_sdk::ui::UiStyle::new(&env).font(&env).unwrap();
+    let targets = line.targets(&env, &font, &Params::new());
+    assert_eq!(targets.len(), 2);
+    assert!(targets[1].area.x >= 80, "{targets:?}");
 }

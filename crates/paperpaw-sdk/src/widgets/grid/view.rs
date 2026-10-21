@@ -130,6 +130,8 @@ pub struct GridView {
     buttons: Vec<(Rect, u16)>,
     /// Where taps and the buttons' focus go, in order.
     targets: Vec<(Rect, Target)>,
+    /// Where taps alone go ([`WidgetTarget::touch`](crate::widgets::WidgetTarget::touch)).
+    touch: Vec<(Rect, Command)>,
     /// What each target is called, as told to screen readers while it
     /// has the focus: its item's name; empty for the screen's own
     /// buttons, which tell theirs.
@@ -166,6 +168,7 @@ impl GridView {
             unplaced: Vec::new(),
             buttons: Vec::new(),
             targets: Vec::new(),
+            touch: Vec::new(),
             names: Vec::new(),
             focus: 0,
             focus_shown: !env.device.input.touch,
@@ -228,6 +231,7 @@ impl GridView {
     /// The targets of the items and the buttons as they are now.
     fn target(&mut self, env: &Env<'_>) {
         self.targets.clear();
+        self.touch.clear();
         self.names.clear();
         let editing = self.edit.is_some();
         for (index, shown) in self.items.iter().enumerate() {
@@ -238,8 +242,12 @@ impl GridView {
                 match (&shown.item.what, &shown.widget) {
                     (What::Widget(_), Some(widget)) => {
                         for target in widget.targets(env, shown.area) {
-                            self.targets
-                                .push((target.area, Target::Run(target.command)));
+                            if target.touch {
+                                self.touch.push((target.area, target.command));
+                            } else {
+                                self.targets
+                                    .push((target.area, Target::Run(target.command)));
+                            }
                         }
                     }
                     (What::Widget(_), None) => {}
@@ -910,7 +918,13 @@ impl GridView {
                     self.focus = index;
                     self.run(index, cx)
                 }
-                None => GridResponse::Ignored,
+                None => match self.touch.iter().find(|(r, _)| r.contains(gesture.start)) {
+                    Some((_, command)) => {
+                        cx.command(command.clone());
+                        GridResponse::Handled
+                    }
+                    None => GridResponse::Ignored,
+                },
             },
             GestureKind::LongPress if self.edit.is_none() => {
                 self.set_editing(true);
