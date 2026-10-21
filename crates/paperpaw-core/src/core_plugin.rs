@@ -827,7 +827,7 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
     ))?;
     r.add_screen(ScreenSpec::new(
         screens::ADD_WIDGET,
-        "core.widgets.edit.add",
+        "core.widgets.edit.add-to-list",
         Box::new(|env, params| {
             Box::new(paperpaw_sdk::ui::widget_list::AddScreen::open(env, params))
         }),
