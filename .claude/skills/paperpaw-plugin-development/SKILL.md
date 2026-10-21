@@ -1,6 +1,6 @@
 ---
 name: paperpaw-plugin-development
-description: Helps write a plugin for PaperPaw as it is, without changing PaperPaw (a community plugin, usually in its own repository): code plugins in Rust against the released paperpaw-sdk and data plugins without code; trying them in the desktop emulator and on a real Xteink X4; measuring speed, heap and stack; keeping within the memory of small devices. Use when someone writes, ports, debugs, tests or profiles such a plugin. Not for work on PaperPaw itself (its kernel, SDK, firmware or its own plugins in plugins/), where extending the SDK is the rule: that follows CONTRIBUTING.md.
+description: "Helps write a plugin for PaperPaw as it is, without changing PaperPaw (a community plugin, usually in its own repository): code plugins in Rust against the released paperpaw-sdk and data plugins without code; trying them in the desktop emulator and on a real Xteink X4; measuring speed, heap and stack; keeping within the memory of small devices. Use when someone writes, ports, debugs, tests or profiles such a plugin. Not for work on PaperPaw itself (its kernel, SDK, firmware or its own plugins in plugins/), where extending the SDK is the rule: that follows CONTRIBUTING.md."
 ---
 
 # Developing PaperPaw plugins
