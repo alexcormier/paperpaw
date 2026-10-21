@@ -9,8 +9,10 @@
 
 use paperpaw_platform::{ColorPanel, FrameView, Rect, RefreshMode};
 
-const INK: [u8; 3] = [0x1e, 0x1e, 0x1e];
-const PAPER: [u8; 3] = [0xe9, 0xe6, 0xdd];
+/// The colour a gray panel's darkest level is shown in.
+pub const INK: [u8; 3] = [0x1e, 0x1e, 0x1e];
+/// The colour a gray panel's lightest level (its paper) is shown in.
+pub const PAPER: [u8; 3] = [0xe9, 0xe6, 0xdd];
 /// Duration of each flash phase of a full refresh, in microseconds.
 const FLASH_PHASE: u64 = 120_000;
 /// How long the refresh-region overlay stays visible, in microseconds.

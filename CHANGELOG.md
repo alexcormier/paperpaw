@@ -18,7 +18,13 @@ change the plugin SDK.
   there is no operating system (`host`). `paperpaw-dev` checks data
   plugins handed in as files (`target::DataPlugin` holds them,
   `data::check`), its libraries kept in memory where asked
-  (`Context::in_memory`).
+  (`Context::in_memory`). The frame says when the device ran out of its
+  memory (`out-of-memory`, after the module stopped and started again;
+  `budget::last_refused` and `budget::clear_last_refused` tell the size
+  refused), names the build in `ready` and `version`, holds buttons
+  for long presses (`hold`), and takes screenshots of another device,
+  night mode or the sleep screen. Releases carry the module and its
+  pages as `paperpaw-web-<version>.zip`.
 
 - SDK: status items run an action of their own plugin when tapped
   (`StatusItemSpec::tap`, with the line's context; bindable to buttons

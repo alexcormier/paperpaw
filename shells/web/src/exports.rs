@@ -79,8 +79,11 @@ unsafe fn text<'a>(ptr: *const u8, len: usize) -> &'a str {
 /// What a call returns once a panic stopped the module (see above).
 pub const STOPPED: u32 = 2;
 
-/// Runs `f` on the state; `None` where a panic left it held.
+/// Runs `f` on the state; `None` where a panic left it held. A refusal
+/// of the heap budget before is forgotten: [`pp_refused`] tells those of
+/// this call.
 fn state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
+    paperpaw_emulator::budget::clear_last_refused();
     STATE.with(|state| state.try_borrow_mut().ok().map(|mut held| f(&mut held)))
 }
 
@@ -171,8 +174,6 @@ pub unsafe extern "C" fn pp_new(
 ) -> u32 {
     std::panic::set_hook(Box::new(|info| log(&info.to_string())));
     paperpaw_emulator::host::set_random(random);
-    // Past the device's memory: said, rather than a trap that stops all.
-    paperpaw_emulator::budget::set_soft(true);
     // SAFETY: as the caller promises.
     let (profile, language) = unsafe {
         (
@@ -369,11 +370,13 @@ pub extern "C" fn pp_snapshot_pixels() -> *const u8 {
     state(|state| state.shown.as_ptr()).unwrap_or(std::ptr::null())
 }
 
-/// How often the device ran out of its memory since the module started
-/// (see [`Emulator::out_of_memory`]).
+/// The size of an allocation the device's heap budget refused during the
+/// last call, 0 if none was: asked after a trap, whether the device ran
+/// out of memory there (the X4 would have stopped too). It reads no
+/// state, so it answers after a panic as well.
 #[unsafe(no_mangle)]
-pub extern "C" fn pp_out_of_memory() -> u32 {
-    read(0, |e| e.out_of_memory() as u32)
+pub extern "C" fn pp_refused() -> u32 {
+    u32::try_from(paperpaw_emulator::budget::last_refused()).unwrap_or(u32::MAX)
 }
 
 /// 1 while the panel still changes by itself (a full refresh flashing).

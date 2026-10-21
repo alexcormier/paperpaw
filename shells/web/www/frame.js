@@ -22,8 +22,6 @@ let last = null;
 let plugins = {};
 let timer = null;
 let drawing = false;
-/// How often the device had run out of memory when last looked.
-let outOfMemory = 0;
 
 const loading = PaperPawDevice.load(new URL("paperpaw-web.wasm", import.meta.url));
 
@@ -50,6 +48,10 @@ async function restart(reason) {
   const broken = device;
   device = null;
   if (!broken || !last) return;
+  // Out of the device's memory (its heap budget refused an allocation
+  // with no way around it): the device would have stopped there too.
+  const refused = broken.refused();
+  if (refused > 0) tell({ type: "out-of-memory", bytes: refused, device: info?.id });
   try {
     device = await broken.fresh();
     boot(last, plugins);
@@ -108,10 +110,6 @@ function step() {
   clearTimeout(timer);
   if (!device) return;
   const next = guarded(() => device.advance(now()));
-  // Past the device's memory: where the device would have stopped.
-  const over = device.outOfMemory();
-  if (over > outOfMemory) tell({ type: "out-of-memory", count: over, device: info?.id });
-  outOfMemory = over;
   requestDraw();
   if (next !== null) timer = setTimeout(step, Math.max(next, 1));
 }

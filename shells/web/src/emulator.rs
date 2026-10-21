@@ -13,7 +13,7 @@ use paperpaw_dev::report::json_string;
 use paperpaw_dev::target::DataPlugin;
 use paperpaw_emulator::device::Device;
 use paperpaw_emulator::profiles::{self, Profile};
-use paperpaw_emulator::{budget, trace};
+use paperpaw_emulator::{budget, panel, trace};
 use paperpaw_platform::{
     ButtonState, InputEvent, PixelFormat, Point, PointerEvent, PointerPhase, PointerTool,
 };
@@ -204,6 +204,13 @@ impl Emulator {
     pub fn advance(&mut self, now_ms: u64) -> Option<u64> {
         #[cfg(target_arch = "wasm32")]
         paperpaw_emulator::host::set_micros(now_ms.saturating_mul(1000));
+        self.run_to(now_ms)
+    }
+
+    /// Lets the device's own time run to `now_ms` and does what is due,
+    /// the host's clock left as it is (a snapshot's device runs ahead of
+    /// it); as [`Emulator::advance`] says.
+    fn run_to(&mut self, now_ms: u64) -> Option<u64> {
         let device = self.device.as_mut()?;
         let now = device.now().millis();
         device.advance(now_ms.saturating_sub(now));
@@ -238,7 +245,7 @@ impl Emulator {
         if let Some(device) = &self.device {
             for pixel in device.panel.compose() {
                 let rgb = [(pixel >> 16) as u8, (pixel >> 8) as u8, pixel as u8];
-                let [r, g, b] = if gray { rgb.map(eink) } else { rgb };
+                let [r, g, b] = if gray { eink(rgb) } else { rgb };
                 self.frame.extend_from_slice(&[r, g, b, 255]);
             }
         }
@@ -309,7 +316,7 @@ impl Emulator {
         // Its memory is no part of this device's.
         budget::override_limit(None);
         let made = other.start().map(|()| {
-            other.advance(5_000);
+            other.run_to(5_000);
             if asleep && let Some(device) = &mut other.device {
                 device.call(|kernel, now| {
                     kernel.open_slot(
@@ -319,21 +326,13 @@ impl Emulator {
                     )
                 });
             }
-            other.advance(10_000);
+            other.run_to(10_000);
             let (width, height) = other.size();
             (width, height, other.shown())
         });
         drop(other);
         budget::end_override(self.profile.heap_budget);
         made
-    }
-
-    /// How often the device ran out of its memory (the X4's heap budget)
-    /// since the emulator started: in a browser such allocations are made
-    /// all the same and counted (`budget::set_soft`), where the device
-    /// would have stopped.
-    pub fn out_of_memory(&self) -> usize {
-        budget::stats().failed
     }
 
     /// The device as the page shows it, as JSON: its name, screen size,
@@ -370,21 +369,25 @@ impl Emulator {
 }
 
 /// The darkest a gray e-ink panel shows: its black reflects about a
-/// twelfth of what its paper does, where a screen's black reflects
-/// almost nothing (the panel model's ink, `0x1e`).
+/// twelfth of the light its paper does (in linear light, against the
+/// panel model's paper), where a screen's black reflects almost nothing
+/// (the panel model's ink, [`panel::INK`]).
 const EINK_BLACK: u8 = 0x48;
-/// The panel model's ink and paper (the darkest and the lightest level
-/// it draws).
-const MODEL_INK: u8 = 0x1e;
 
-/// A channel of the panel model's colour in the tones of e-ink: the range
-/// from its ink to paper narrowed to that from e-ink's black, so that text
-/// is as dark as on the device, not darker (it looks bolder on a screen
-/// than on the panel otherwise). Paper stays as it is.
-pub fn eink(value: u8) -> u8 {
-    let (value, ink) = (u32::from(value.max(MODEL_INK)), u32::from(MODEL_INK));
-    let (black, white) = (u32::from(EINK_BLACK), 255);
-    (black + (value - ink) * (white - black) / (white - ink)) as u8
+/// The panel model's colour in the tones of e-ink: each channel's range
+/// from its ink to its paper ([`panel::PAPER`]) narrowed to that from
+/// e-ink's black, so that text is as dark as on the device, not darker
+/// (it looks bolder on a screen than on the panel otherwise). Paper stays
+/// as it is, as in screenshots; what is lighter (a full refresh's white
+/// flash) keeps its order.
+pub fn eink(rgb: [u8; 3]) -> [u8; 3] {
+    let mut out = rgb;
+    for ((out, ink), paper) in out.iter_mut().zip(panel::INK).zip(panel::PAPER) {
+        let (value, ink) = (u32::from((*out).max(ink)), u32::from(ink));
+        let (black, paper) = (u32::from(EINK_BLACK), u32::from(paper));
+        *out = (black + (value - ink) * (paper - black) / (paper - ink)) as u8;
+    }
+    out
 }
 
 /// Every file under `dir` of `storage` (`""` the whole card), by its
