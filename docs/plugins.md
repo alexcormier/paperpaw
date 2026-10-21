@@ -486,7 +486,7 @@ artifact, also when a check failed.
 | Refresh filters | `add_refresh_filter` | Change how the panel is refreshed, e.g. in full on a screen of your own |
 | Status items, lines and places | `add_status_item`, `add_status_line`, `add_status_place` | What status lines show, what a tap on an item does, how much it matters where a line is full; places where items show (`status::Place`) |
 | A look | `set_ui_look` | Another look for switches, the focus, separators, buttons, headers, button hints, progress bars and sliders on every screen (`ui::look`) |
-| Widgets | `add_widget` | Blocks for the home screen and the sleep screen |
+| Widgets and their places | `add_widget`, `add_widget_place` | Blocks for the home screen and the sleep screen; places that show widgets (`widgets::WidgetPlace`), in a grid or above each other (`widgets::Stack`), which plugins ask whether they show theirs (`Widgets::shown`) |
 | Setup steps | `add_setup_step` | A page of the first-run setup: a setting to choose or a screen of the plugin's, where the device needs it |
 | Services | `publish` | Anything one plugin offers others, found with `env.services.get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |

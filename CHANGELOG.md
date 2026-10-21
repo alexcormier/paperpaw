@@ -6,6 +6,18 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: places of widgets. `widgets::WidgetPlace`
+  (`Registrar::add_widget_place`; `PlaceKind::Stack` or `Grid`) names
+  the settings that list a place's widgets: the home screen's pages and
+  the sleep screen's list register theirs, and `Widgets::shown` tells a
+  plugin whether any place shows its widget (the weather fetches only
+  then, without reading every setting). `widgets::Stack` shows widgets
+  above each other, as the sleep screen does; `widgets::refresh` says
+  what an event means for the widgets a screen shows (make anew, read
+  anew, read one, the live ones), `widgets::next_minute` when to read
+  the live ones. New slot `core.edit-widgets` (`slots::EDIT_WIDGETS`)
+  edits a list of widgets; the home screen binds it, and the sleep
+  screen's list opens it instead of a screen of the home screen's.
 - SDK: status items run an action of their own plugin when tapped
   (`StatusItemSpec::tap`, with the line's context; bindable to
   buttons too), say how much they matter
