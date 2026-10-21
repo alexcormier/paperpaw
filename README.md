@@ -11,9 +11,7 @@ PaperPaw was called QuireInk up to version 0.3.
 > reading positions, bookmarks and highlights shared with KOReader,
 > Calibre's wireless connection, OPDS catalogs and much more; see the
 > [changelog](CHANGELOG.md). The firmware for the
-> Xteink X4 is built but has not run on a device yet. The
-> [project plan](docs/PLANNING.md) has the
-> [roadmap](docs/PLANNING.md#12-roadmap).
+> Xteink X4 is built but has not run on a device yet.
 
 <p align="center">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="24%" alt="The home screen: the date, the book to continue and the one read before">
@@ -99,8 +97,7 @@ some-plugin = off
 
 Plugins contribute screens, actions, settings, key maps and translations
 through the [`paperpaw-sdk`](crates/paperpaw-sdk) crate. See
-[docs/PLANNING.md §7](docs/PLANNING.md#7-extensibility) for the full
-extension model.
+[docs/plugins.md](docs/plugins.md) for the full extension model.
 
 ### Plugins without code
 
@@ -194,7 +191,7 @@ cargo run -p paperpaw-emulator -- --headless --profile boox-go-7 --set core.lang
 | `shells/android` | Android app for e-readers such as Boox ([build and install](shells/android/README.md)) |
 | `shells/xteink` | Firmware for the Xteink X4 ([build, save the stock firmware, flash](shells/xteink/README.md)) |
 | `samples/` | Emulator library with public-domain books, sample plugins |
-| `docs/` | [Plan](docs/PLANNING.md), [writing plugins](docs/plugins.md) and [architecture decisions](docs/adr/) |
+| `docs/` | [Writing plugins](docs/plugins.md) and [architecture decisions](docs/adr/) |
 
 ## Contributing
 

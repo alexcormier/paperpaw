@@ -49,6 +49,13 @@ change the plugin SDK.
   pages go right to left says so, and the reader mirrors taps, swipes
   and swipes in from the edges (`Screen::mirrored`, kept by the
   kernel's key map). EPUBs are converted anew once (cache version 25).
+- Code plugins fit the firmware again: the SDK's fingerprint no longer
+  counts features that add functions and modules only (`kernel`,
+  `unstable`), with which the firmware is built and plugins are not, so
+  no plugin built by an author fitted any firmware. A code plugin built
+  as a library for a computer (`plugin!`) loads on Linux: it defines the
+  unwinder's name that `core` and `alloc` leave open, never called where
+  a plugin cannot unwind.
 - Android: the app is now `org.paperpaw.app` (was
   `io.github.hthoene.paperpaw`), named after the project's own domain
   before the first release in a store. It installs as a new app beside
@@ -745,7 +752,7 @@ change the plugin SDK.
 - Battery: hostile logs no longer overflow, a damaged line loses only
   itself, 3999 mV shows as 4.00 V, and the hours left fit on the X4.
 - Joplin: its menu entries show icons again.
-- Native code plugins as files (ADR 0024, PLANNING P5): a code plugin
+- Native code plugins as files (ADR 0024): a code plugin
   can be a file in its folder on the card (`plugins/<id>/code.ppn`),
   which the Xteink X4 and X4 Pro load at their start, without a new
   firmware: the X4 Pro runs it from PSRAM, the X4 writes it once into
@@ -867,7 +874,7 @@ change the plugin SDK.
   as bright as the first); 1 % is dimmer than the least light before,
   100 % as bright. `−` and `+` change it a
   percent, a slider moves it further; its colour stays in fives.
-- Reading (PLANNING T1 to T12), after a comparison with CrossPoint,
+- Reading, after a comparison with CrossPoint,
   CrossInk and KOReader:
   - Holding a page button goes a chapter on or back (*Hold a page
     button for the next chapter* under Controls, advanced, turns it off,
@@ -1322,8 +1329,8 @@ change the plugin SDK.
 - Rules: a rule can apply when the battery reaches a level (80 %, 90 %,
   full or another), once each time it gets there and not again while
   the level wavers around it; with *Only if … While charging* it says
-  when to unplug, for devices that cannot stop charging by themselves
-  (PLANNING D8). On the X4 the level comes from the battery's voltage,
+  when to unplug, for devices that cannot stop charging by themselves.
+  On the X4 the level comes from the battery's voltage,
   which reads high while charging, and the choice of level says so; the
   X4 Pro's fuel gauge reports it directly. In the rules file the
   trigger is `battery-at 80`.
@@ -1379,7 +1386,7 @@ change the plugin SDK.
   `KernelBuilder::random` (the system's on Android and desktops, the
   chip's on the X4); `files::is_plain_name` and `files::plain_path`
   check names and paths that come from outside.
-- Joplin (PLANNING C15, S1): a book's highlights and notes, once
+- Joplin: a book's highlights and notes, once
   exported, become a note in Joplin, one per book, in a notebook named
   in the settings. Exporting again updates the note, also where it was
   moved to in Joplin; a note whose text was edited in Joplin stays, and
@@ -1403,7 +1410,7 @@ change the plugin SDK.
   `LocalTime::to_seconds` is the way back from
   `LocalTime::from_seconds`; `web::http_date` reads the dates servers
   send (`Last-Modified`, WebDAV's `getlastmodified`).
-- Settings: a live preview above the reading settings (PLANNING §6.7):
+- Settings: a live preview above the reading settings:
   two short paragraphs set exactly as book pages are (the same layout
   engine, type, margins at the sides, justification, indents and
   hyphenation, in the interface's language), following each value at
@@ -1418,7 +1425,7 @@ change the plugin SDK.
   pages show it above the group, and `Widgets::iter` leaves such
   widgets out.
 - Settings: on touch screens, numbers better set by eye are sliders on
-  the settings pages (PLANNING §6.7): the text size, word and line
+  the settings pages: the text size, word and line
   spacing, the margins, the speed of reading aloud, the interface's
   size, row height and margins, the frontlight; with buttons alone they
   keep their compact rows with `−` and `+`. A number changed with the buttons now
@@ -1440,7 +1447,7 @@ change the plugin SDK.
   hear it as `semantics::Role::Slider`. The help texts
   of the margins and the word spacing say more plainly what they do, and
   a test checks that every slider shows its unit.
-- Screens draw without reading the card (PLANNING §12.3, B3). The X4
+- Screens draw without reading the card. The X4
   draws a frame in five bands, and what a screen read or worked out as it
   drew, it did five times over, and again for every frame. Covers on the
   home screen, in the book widgets, on the book information and in OPDS
@@ -1519,7 +1526,7 @@ change the plugin SDK.
   start). Kernel: `Kernel::describe` also tells the notice shown over
   the screens.
 - A plugin store on the device (*More plugins*, in the tools and in the
-  plugin manager, PLANNING O6, ADR 0023): the data plugins of
+  plugin manager, ADR 0023): the data plugins of
   paperpaw.org's plugin library made for this device, PaperPaw version
   and data format, by group as on the website, named and described in
   the language shown, with *Search* (by name and what a plugin does)
@@ -2669,7 +2676,7 @@ change the plugin SDK.
 - *Say what is chosen* (System, where the device speaks): says the row
   or button the buttons move to, with a switch's state, for using
   PaperPaw without looking at the screen.
-- Screens say what they show (PLANNING G11): rows with their text and
+- Screens say what they show: rows with their text and
   focus, buttons, switches and headings, told by the drawing helpers as
   they draw (`Canvas::describe`, `semantics::parts`,
   `Kernel::describe`). The emulator's scripts tap by name

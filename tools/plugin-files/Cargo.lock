@@ -112,7 +112,6 @@ dependencies = [
 name = "paperpaw-plugin-browser"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-digest",
  "paperpaw-sdk",
 ]
 
@@ -120,8 +119,6 @@ dependencies = [
 name = "paperpaw-plugin-calibre"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-digest",
- "paperpaw-json",
  "paperpaw-sdk",
 ]
 
@@ -164,7 +161,6 @@ dependencies = [
 name = "paperpaw-plugin-fonts-browser"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-json",
  "paperpaw-sdk",
 ]
 
@@ -172,8 +168,6 @@ dependencies = [
 name = "paperpaw-plugin-joplin"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-digest",
- "paperpaw-json",
  "paperpaw-sdk",
  "paperpaw-xml",
 ]
@@ -196,8 +190,6 @@ dependencies = [
 name = "paperpaw-plugin-kosync"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-digest",
- "paperpaw-json",
  "paperpaw-sdk",
 ]
 
@@ -226,7 +218,6 @@ dependencies = [
 name = "paperpaw-plugin-readwise"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-json",
  "paperpaw-sdk",
 ]
 
@@ -241,7 +232,6 @@ dependencies = [
 name = "paperpaw-plugin-stats"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-digest",
  "paperpaw-sdk",
  "paperpaw-sqlite",
 ]
@@ -250,7 +240,6 @@ dependencies = [
 name = "paperpaw-plugin-translate"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-json",
  "paperpaw-sdk",
 ]
 
@@ -265,7 +254,6 @@ dependencies = [
 name = "paperpaw-plugin-wallabag"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-json",
  "paperpaw-sdk",
 ]
 
@@ -273,7 +261,6 @@ dependencies = [
 name = "paperpaw-plugin-weather"
 version = "0.4.0-dev"
 dependencies = [
- "paperpaw-json",
  "paperpaw-sdk",
 ]
 
@@ -299,6 +286,7 @@ dependencies = [
  "paperpaw-hyphen",
  "paperpaw-i18n",
  "paperpaw-image",
+ "paperpaw-json",
  "paperpaw-layout",
  "paperpaw-native",
  "paperpaw-platform",

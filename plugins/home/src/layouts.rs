@@ -1,4 +1,4 @@
-//! Ready-made layouts of the home screen (PLANNING §12.1, C27): presets
+//! Ready-made layouts of the home screen: presets
 //! of the kind [`KIND`] (see `paperpaw_sdk::presets`), five of the home
 //! screen's own and any other plugin's (data plugins bring them in a
 //! `presets.ini`). A layout sets the pages and how the screen looks (its

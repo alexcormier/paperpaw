@@ -13,8 +13,8 @@ built for each reader's choice (a build service) was ruled out (waiting
 time, GitHub's terms, a signing key on a server), and building every
 plugin into the firmware does not scale.
 
-So a code plugin must be a file the device loads. ADR 0004 and
-PLANNING P5 planned WebAssembly for that. A spike measured both ways
+So a code plugin must be a file the device loads. ADR 0004
+planned WebAssembly for that. A spike measured both ways
 (its report and prototype are kept on the branch `spike/native-plugins`,
 not merged: the prototype is reference, not the implementation):
 
@@ -98,7 +98,8 @@ the kernel like any other. A small C table from the firmware gives the
 plugin the kernel's heap, panics and the clock (`Api`, which grows only
 at its end and says its size). A **fingerprint** of compiler, target and
 SDK (version and features: Android builds the SDK with `outline` and
-`color`, the X4 without) is in the firmware and in every plugin file;
+`color`, the X4 without; `kernel` and `unstable`, which only add
+functions and modules, are left out) is in the firmware and in every plugin file;
 only files with the firmware's own are loaded. Every release breaks
 every code plugin until it is rebuilt, which is accepted before 1.0.
 
@@ -241,8 +242,8 @@ and the plugin manager says why.
   1.0 on, plugins survive minor releases; the versioned plugin API is a
   blocker for 1.0.
 - A Play build of the Android app has no code plugins.
-- ADR 0004's "sandboxed WebAssembly modules (larger devices)" and
-  PLANNING P5 change to native plugin files.
+- ADR 0004's "sandboxed WebAssembly modules (larger devices)"
+  changes to native plugin files.
 
 ## Open points
 

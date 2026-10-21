@@ -1,4 +1,4 @@
-//! What a screen shows, as parts with roles and text (PLANNING G11): for
+//! What a screen shows, as parts with roles and text: for
 //! reading the interface aloud, automation and tests.
 //!
 //! Nothing has to be written for it: the drawing helpers of [`ui`](crate::ui)
