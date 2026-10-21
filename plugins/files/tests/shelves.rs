@@ -1,6 +1,7 @@
 //! The shelves (by author, series, tag) with the real kernel, which makes
-//! the library's catalog: once after it starts, again only after the
-//! library changed, and shelves shown follow it.
+//! the library's catalog: walked once a view shows after a start,
+//! caught up after single books came or went, and shelves shown follow
+//! it.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -138,12 +139,13 @@ fn the_kernel_makes_the_catalog_once_and_after_changes() {
     assert!(shown(&mut kernel).contains("40 books"));
     assert_eq!(listings.get(), 0, "made anew without a change");
 
-    // A book came: made anew, and the shelf shown follows.
+    // A book came: caught up without walking the library (no folder
+    // listed), and the shelf shown follows.
     storage.write("books/book 40.txt", b"More text.").unwrap();
     let book = paperpaw_sdk::library::added("books/book 40.txt", "test");
     let effects = emit(&mut kernel, now, book);
     now = run(&mut kernel, now, effects, 1000);
-    assert!(listings.get() > 0, "not made anew after a change");
+    assert_eq!(listings.get(), 0, "walked for one book");
     let text = shown(&mut kernel);
     assert!(text.contains("41 books"), "{text}");
 

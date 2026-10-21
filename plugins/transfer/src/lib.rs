@@ -201,7 +201,8 @@ impl TransferScreen {
                 cx.command(Command::Respond(response));
                 if let Some(done) = done {
                     // The library follows: a book added, a book removed (what
-                    // plugins keep for it goes too), a folder.
+                    // plugins keep for it goes too; a folder removed, its
+                    // books with it).
                     match &done {
                         web::Done::Received(path) => {
                             cx.command(paperpaw_sdk::library::added(path, "transfer"));
@@ -211,8 +212,7 @@ impl TransferScreen {
                             cx.command(events::BOOK_REMOVED.emit(removed));
                             cx.command(paperpaw_sdk::library::changed());
                         }
-                        web::Done::Folder(_) => cx.command(paperpaw_sdk::library::changed()),
-                        web::Done::Sent(_) | web::Done::NotReceived(_) => {}
+                        web::Done::Folder(_) | web::Done::Sent(_) | web::Done::NotReceived(_) => {}
                     }
                     let (key, name) = match &done {
                         web::Done::Received(path) => {

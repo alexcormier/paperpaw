@@ -465,7 +465,6 @@ impl CalibreScreen {
                     let reply = format!("{{\"uuid\": {}}}", paperpaw_sdk::json::string(&uuid));
                     self.send(op::OK, &reply, cx);
                 }
-                cx.command(paperpaw_sdk::library::changed());
             }
             op::NOOP => {
                 if protocol::member(args, "ejecting").is_some() {

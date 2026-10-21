@@ -835,14 +835,25 @@ pub fn note_status(storage: &dyn Storage, path: &str) {
 }
 
 pub(crate) fn noted_status(storage: &dyn Storage, path: &str) {
-    let progress = book(storage, path).and_then(|b| b.progress);
-    let favourite = favourites(storage).iter().any(|p| p == path);
-    let opened = opened_books(storage).iter().any(|p| p == path);
-    catalog::noted(
-        storage,
-        path,
-        catalog::Status::new(progress, favourite, opened),
-    );
+    // What could not be read is not noted: a status of nothing would
+    // stand for the book until the catalog is made anew.
+    if let Ok(status) = status_of(storage, path) {
+        let _ = catalog::noted(storage, path, status);
+    }
+}
+
+/// The status of the book at `path` as its details and the lists say;
+/// an error where one of them cannot be read, or the book is gone.
+fn status_of(storage: &dyn Storage, path: &str) -> Result<catalog::Status, StorageError> {
+    let size = storage.size(path)?;
+    let progress = crate::data::Format::FIRST
+        .load(storage, &book_file(path), MAX_DETAILS)?
+        .map(|source| parse_details(&source))
+        .filter(|book| book.size == size)
+        .and_then(|book| book.progress);
+    let favourite = read_favourites(storage)?.iter().any(|p| p == path);
+    let opened = read_opened(storage)?.iter().any(|p| p == path);
+    Ok(catalog::Status::new(progress, favourite, opened))
 }
 
 /// Moves what the library knows of a book from `from` to `to`: its
@@ -891,12 +902,22 @@ pub fn set_finished(storage: &dyn Storage, path: &str, finished: bool) {
 /// Paths of the books opened last, most recent first (also of books no
 /// longer there).
 pub fn opened_books(storage: &dyn Storage) -> Vec<String> {
-    read_list(storage, &opened_file(), MAX_OPENED).unwrap_or_default()
+    read_opened(storage).unwrap_or_default()
+}
+
+/// [`opened_books`], or the error reading them.
+pub(crate) fn read_opened(storage: &dyn Storage) -> Result<Vec<String>, StorageError> {
+    read_list(storage, &opened_file(), MAX_OPENED)
+}
+
+/// [`favourites`], or the error reading them.
+pub(crate) fn read_favourites(storage: &dyn Storage) -> Result<Vec<String>, StorageError> {
+    read_list(storage, &favourites_file(), MAX_FAVOURITES)
 }
 
 /// The paths of the favourite books, the newest first.
 pub fn favourites(storage: &dyn Storage) -> Vec<String> {
-    read_list(storage, &favourites_file(), MAX_FAVOURITES).unwrap_or_default()
+    read_favourites(storage).unwrap_or_default()
 }
 
 /// Makes the book at `path` a favourite, or no longer one.
@@ -951,12 +972,22 @@ pub fn added(path: &str, source: &str) -> crate::Command {
     })
 }
 
-/// The command that asks the kernel to make the catalog anew, in the
-/// background ([`events::CATALOG_WANTED`](crate::builtin::events::CATALOG_WANTED));
+/// The command a view of the library sends as it shows: the kernel makes
+/// the catalog anew in the background where it was not made since
+/// PaperPaw started (books may have been copied meanwhile) or is not
+/// there ([`events::CATALOG_WANTED`](crate::builtin::events::CATALOG_WANTED));
 /// [`events::CATALOG_CHANGED`](crate::builtin::events::CATALOG_CHANGED)
-/// follows.
+/// follows where it was.
 pub fn request_catalog() -> crate::Command {
-    crate::builtin::events::CATALOG_WANTED.emit(())
+    let wanted = crate::builtin::events::CatalogWanted::new(false);
+    crate::builtin::events::CATALOG_WANTED.emit(wanted)
+}
+
+/// The command that has the kernel make the catalog anew in any case,
+/// e.g. where a book it lists is gone without a word.
+pub fn request_catalog_anew() -> crate::Command {
+    let wanted = crate::builtin::events::CatalogWanted::new(true);
+    crate::builtin::events::CATALOG_WANTED.emit(wanted)
 }
 
 #[cfg(test)]

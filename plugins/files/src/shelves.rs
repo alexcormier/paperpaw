@@ -19,7 +19,6 @@ use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
-    Storage,
 };
 
 use crate::list::shelf::{self as books, Kind};
@@ -74,9 +73,9 @@ fn keys(record: &Record, shelf: Shelf) -> Vec<&str> {
 
 /// The names of the authors, series or tags and how many books each
 /// has, alphabetically.
-fn names(storage: &dyn Storage, shelf: Shelf) -> Vec<(String, usize)> {
+fn names(books: catalog::Books<'_>, shelf: Shelf) -> Vec<(String, usize)> {
     let mut names: Vec<(String, usize)> = Vec::new();
-    catalog::each(storage, &mut |line| {
+    books(&mut |_, line| {
         for key in keys(&line, shelf) {
             // Books without series are no series; those without author
             // are listed under "Unknown author".
@@ -114,7 +113,7 @@ impl ShelfScreen {
         let shelf = Shelf::of(params.get(params::MODE));
         Self {
             list: ListView::new(area, style.noted_row()).focus_on_keys(env),
-            names: names(env.storage, shelf),
+            names: names(&mut |f| library::service(env).each(env, f), shelf),
             collecting: false,
             shelf,
             style,
@@ -192,11 +191,18 @@ impl Screen for ShelfScreen {
     }
 
     fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == events::CATALOG_CHANGED {
-            // The new catalog: the names again, keeping the place.
+        // The new catalog, or a book gone (noted beside it): the names
+        // again, keeping the place.
+        if [
+            events::CATALOG_CHANGED.id(),
+            events::BOOK_REMOVED.id(),
+            events::BOOK_MOVED.id(),
+        ]
+        .contains(&event)
+        {
             let env = *cx.env();
             self.collecting = false;
-            self.names = names(env.storage, self.shelf);
+            self.names = names(&mut |f| library::service(&env).each(&env, f), self.shelf);
             self.list.set_len(self.names.len());
             self.redraw(cx);
         }
@@ -278,7 +284,7 @@ mod tests {
             })
             .collect();
         catalog::write(&storage, &records);
-        let authors = names(&storage, Shelf::Authors);
+        let authors = names(&mut |f| catalog::each_at(&storage, f), Shelf::Authors);
         assert_eq!(
             authors,
             [
@@ -287,9 +293,12 @@ mod tests {
                 (String::from("bob"), 1)
             ]
         );
-        assert_eq!(names(&storage, Shelf::Series), [(String::from("Tales"), 2)]);
         assert_eq!(
-            names(&storage, Shelf::Tags),
+            names(&mut |f| catalog::each_at(&storage, f), Shelf::Series),
+            [(String::from("Tales"), 2)]
+        );
+        assert_eq!(
+            names(&mut |f| catalog::each_at(&storage, f), Shelf::Tags),
             [(String::from("Fantasy"), 2), (String::from("Kids"), 1)]
         );
         // Searching: every word, anywhere, in any case.

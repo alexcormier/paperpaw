@@ -515,7 +515,7 @@ impl ListScreen {
         } else {
             format!("{}/", self.root)
         };
-        library::catalog::each(env.storage, &mut |line| {
+        library::service(env).each(env, &mut |_, line| {
             let finished = line.reading() == library::catalog::Reading::Finished;
             if !authors.contains(&line.author) {
                 authors.push(line.author.clone());
@@ -681,13 +681,23 @@ impl ListScreen {
         }
         // The page before goes first: never two pages of covers at once.
         self.loaded = Vec::new();
-        let (style, sizes) = (&self.layout.style, &self.layout.sizes);
         let width = self.layout.area.width;
         let mut loaded = Vec::new();
+        // The page's books in one go, by their keys, which hold only for
+        // the books' version the index is of: else the index anew first.
         let service = library::service(env);
-        for index in self.page_range(page) {
-            let item = usize::from(self.order[index]);
-            let Some(record) = service.record(env, &self.index, item) else {
+        if !service.is_current(env, &self.index) {
+            self.rebuild(env);
+            return;
+        }
+        let keys: Vec<u64> = self
+            .page_range(page)
+            .map(|i| u64::from(self.index.items[usize::from(self.order[i])].offset))
+            .collect();
+        let records = service.records(env, &keys);
+        let (style, sizes) = (&self.layout.style, &self.layout.sizes);
+        for (index, record) in self.page_range(page).zip(records) {
+            let Some(record) = record else {
                 continue;
             };
             let card = self.card && index == 0;
@@ -831,7 +841,7 @@ impl ListScreen {
         // Gone without a word (deleted on a computer, say): left out, and
         // the catalog made anew.
         self.gone.push(hash(&path));
-        cx.command(library::request_catalog());
+        cx.command(library::request_catalog_anew());
         self.refilter_in_place(&env);
         cx.command(Command::Notify(env.i18n.tr("files.list.gone").to_string()));
         cx.request_redraw();
@@ -1048,19 +1058,20 @@ impl Screen for ListScreen {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        let service = library::service(&env);
         if core::mem::take(&mut self.fresh) {
-            if library::service(&env).catalog_state(&env) == State::Missing {
-                // No catalog yet: the kernel makes it, then it shows.
-                cx.command(library::request_catalog());
-            }
+            // The kernel makes the catalog where it is not there, or was
+            // not made since PaperPaw started; it shows once it is.
+            cx.command(library::request_catalog());
         } else if core::mem::take(&mut self.covered) {
             // Back from a book or a screen over the whole library: the
             // index as it was kept (else made anew), then what changed
             // meanwhile: the books read last, the status of those read.
             self.archive = archive(&env);
-            self.index =
-                Index::load(env.storage, KEPT, &self.archive).unwrap_or_else(|| make_index(&env));
-            self.index.refresh(env.storage);
+            self.index = service
+                .kept_index(&env, KEPT, &self.archive)
+                .unwrap_or_else(|| make_index(&env));
+            service.refresh(&env, &mut self.index);
             self.collecting = collecting(&env);
             let keep = self.kept_focus.take();
             self.refilter_keeping(&env, keep, true);
@@ -1092,7 +1103,8 @@ impl Screen for ListScreen {
         let env = *cx.env();
         if !self.covered && self.index.dirty {
             let _ = env.storage.create_dir(".paperpaw/plugins/files");
-            self.index.dirty = !self.index.save(env.storage, KEPT, &self.archive);
+            let kept = library::service(&env).keep_index(&env, &self.index, KEPT, &self.archive);
+            self.index.dirty = !kept;
         }
     }
 
@@ -1220,7 +1232,13 @@ impl Screen for ListScreen {
             // the books are known anew from the status logged, its page
             // read again. While covered, done when it shows.
             if !self.covered {
-                self.index.refresh(env.storage);
+                let service = library::service(&env);
+                if service.is_current(&env, &self.index) {
+                    service.refresh(&env, &mut self.index);
+                } else {
+                    self.index = Index::default();
+                    self.index = make_index(&env);
+                }
                 self.loaded_page = None;
                 self.refilter_in_place(&env);
                 cx.request_redraw();

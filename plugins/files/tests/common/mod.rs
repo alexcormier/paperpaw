@@ -316,6 +316,13 @@ impl App {
         }
     }
 
+    /// Lets `ms` go by without input, then what is due.
+    pub fn wait(&mut self, ms: u64) {
+        self.now += ms;
+        let effects = self.kernel.tick(Instant(self.now));
+        self.settle(effects);
+    }
+
     /// Runs `action` as a button bound to it would.
     pub fn run(&mut self, action: Id) {
         self.now += 100;

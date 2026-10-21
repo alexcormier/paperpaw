@@ -163,13 +163,16 @@ const MAX_LOOKED_AT: usize = 8;
 
 /// Whether the library made its catalog (with the books' series and
 /// authors), which the kernel makes.
-pub(crate) fn has_catalog(storage: &dyn Storage) -> bool {
-    matches!(catalog::state(storage), catalog::State::Ready { .. })
+pub(crate) fn has_catalog(env: &Env<'_>) -> bool {
+    matches!(
+        library::service(env).catalog_state(env),
+        catalog::State::Ready { .. }
+    )
 }
 
 /// What tells the catalog changed, or the status of a book in it.
-pub(crate) fn catalog_stamp(storage: &dyn Storage) -> u64 {
-    match catalog::state(storage) {
+pub(crate) fn catalog_stamp(env: &Env<'_>) -> u64 {
+    match library::service(env).catalog_state(env) {
         catalog::State::Ready { stamp } => stamp,
         _ => 0,
     }
@@ -179,8 +182,8 @@ pub(crate) fn catalog_stamp(storage: &dyn Storage) -> u64 {
 /// there is one, else from the library folder (each book by its path and
 /// file name alone). Nothing is held: the catalog is read in pieces.
 pub(crate) fn each_book(env: &Env<'_>, f: &mut dyn FnMut(catalog::Record)) {
-    if has_catalog(env.storage) {
-        return catalog::each(env.storage, f);
+    if has_catalog(env) {
+        return library::service(env).each(env, &mut |_, record| f(record));
     }
     let folder = library::folder(env);
     library::books_in(env.storage, env.formats, folder, &mut |path| {

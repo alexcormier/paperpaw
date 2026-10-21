@@ -11,7 +11,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params};
-use paperpaw_sdk::library::catalog;
+use paperpaw_sdk::library::{self, catalog};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
@@ -108,6 +108,9 @@ pub(crate) struct ShelfScreen {
     list: ListView,
     loaded: Vec<Loaded>,
     loaded_page: Option<usize>,
+    /// The version of the library's books the entries' keys are of
+    /// ([`library::Library::version`]).
+    version: Option<u64>,
     fresh: bool,
 }
 
@@ -136,6 +139,7 @@ impl ShelfScreen {
             summary_text: String::new(),
             loaded: Vec::new(),
             loaded_page: None,
+            version: library::service(env).version(env),
             fresh: true,
             kind,
             name,
@@ -180,19 +184,35 @@ impl ShelfScreen {
         if self.loaded_page == Some(page) {
             return;
         }
+        // The keys hold only for the books' version they are of: else
+        // found anew first.
+        let service = library::service(env);
+        if service.version(env) != self.version {
+            self.find_again(env);
+            return;
+        }
         self.loaded = Vec::new();
         let rows = self.list.rows();
         let series = self.kind == Kind::Series;
         let width = self.list.area().width;
         let mut loaded = Vec::new();
-        for (n, entry) in self
+        let keys: Vec<u64> = self
+            .entries
+            .iter()
+            .skip(page * rows)
+            .take(rows)
+            .map(|e| u64::from(e.offset))
+            .collect();
+        let records = service.records(env, &keys);
+        for ((n, entry), record) in self
             .entries
             .iter_mut()
             .enumerate()
             .skip(page * rows)
             .take(rows)
+            .zip(records)
         {
-            let Some(record) = catalog::read_at(env.storage, u64::from(entry.offset)) else {
+            let Some(record) = record else {
                 continue;
             };
             let mut book = Loaded::load(env, record, self.sizes.cover, "");
@@ -240,6 +260,7 @@ impl ShelfScreen {
     /// focus kept at its place.
     fn find_again(&mut self, env: &Env<'_>) {
         let focus = self.list.focus();
+        self.version = library::service(env).version(env);
         self.entries = find(env, self.kind, &self.name);
         self.mark_next();
         self.list
@@ -260,7 +281,6 @@ impl ShelfScreen {
 /// The books of the list `kind` named `name`, in its order: a series by
 /// number, the others by title.
 fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
-    let storage = env.storage;
     let folder = alloc::format!("{name}/");
     let words: Vec<String> = name
         .to_lowercase()
@@ -269,7 +289,7 @@ fn find(env: &Env<'_>, kind: Kind, name: &str) -> Vec<Entry> {
         .collect();
     let wanted = name.bytes().next().unwrap_or(b'#');
     let mut entries = Vec::new();
-    catalog::each_at(storage, &mut |offset, line| {
+    library::service(env).each(env, &mut |offset, line| {
         let found = match kind {
             Kind::Series => line.series == name,
             Kind::Folder => line.path.starts_with(&folder),
@@ -384,8 +404,15 @@ impl Screen for ShelfScreen {
     }
 
     fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
-        // A new catalog: its books where their lines are now.
-        if *event == events::CATALOG_CHANGED {
+        // A new catalog (its books where their lines are now), or a book
+        // gone (noted beside it).
+        if [
+            events::CATALOG_CHANGED.id(),
+            events::BOOK_REMOVED.id(),
+            events::BOOK_MOVED.id(),
+        ]
+        .contains(&event)
+        {
             let env = *cx.env();
             self.find_again(&env);
             cx.request_redraw();

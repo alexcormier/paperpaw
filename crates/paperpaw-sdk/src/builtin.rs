@@ -389,6 +389,15 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// The catalog wanted ([`CATALOG_WANTED`]).
+        pub struct CatalogWanted {
+            /// Made anew in any case, not only where it was not made since
+            /// PaperPaw started.
+            pub anew: bool,
+        }
+    }
+
+    crate::event_data! {
         /// An action of the book menu chosen for a book ([`BOOK_CHOSEN`]).
         pub struct BookChosen {
             /// The action, from [`menus::BOOK`](super::menus::BOOK).
@@ -651,10 +660,10 @@ pub mod events {
     /// ([`library::catalog`](crate::library::catalog)): views of it read it
     /// again.
     pub const CATALOG_CHANGED: Event<()> = Event::new("core.catalog-changed");
-    /// The catalog is to be made anew
-    /// ([`library::request_catalog`](crate::library::request_catalog)):
-    /// the kernel walks the library in the background.
-    pub const CATALOG_WANTED: Event<()> = Event::new("core.catalog-wanted");
+    /// The catalog is wanted ([`CatalogWanted`],
+    /// [`library::request_catalog`](crate::library::request_catalog)):
+    /// the kernel walks the library in the background where needed.
+    pub const CATALOG_WANTED: Event<CatalogWanted> = Event::new("core.catalog-wanted");
     /// The values shown without being kept changed, or ended (see
     /// [`Command::PreviewSettings`](crate::Command::PreviewSettings)).
     pub const PREVIEW_CHANGED: Event<()> = Event::new("core.preview-changed");

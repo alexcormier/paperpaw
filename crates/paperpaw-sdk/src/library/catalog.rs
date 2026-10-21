@@ -4,18 +4,22 @@
 //! the fields plugins keep in it), for views of the library, its filters
 //! and searches, without reading each book's details.
 //!
-//! It is kept in `.paperpaw/library/catalog.txt`, a book a line, and made
-//! anew by the kernel in the background (`Walk`, as a job; see
-//! [`super::request_catalog`]): from the details the library keeps of
-//! each book, opening only books not seen before, a few entries at a
-//! time. Until a new one is complete, the old one is read. It is read a
-//! piece at a time, never held in memory.
+//! It is kept in `.paperpaw/library/catalog.txt`, a book a line, and only
+//! the kernel writes it, one change at a time, in the background: made
+//! anew from the library folder (`Walk`) when the library is first shown
+//! after a start, when books came or went without a word and for another
+//! library folder, taking each book whose file did not change from the
+//! old catalog, others from their details, opening only books not seen
+//! before; caught up (`Rewrite`) after books came or moved. Until a new
+//! one is complete, the old one is read. It is read a piece at a time,
+//! never held in memory.
 //!
-//! How far a book is read and whether it is a favourite change while
-//! the catalog stands: such changes are appended to a short log beside it
-//! (`status.log`, by the kernel and the library's setters) and read with
-//! it, and folded into it when the log grows long, so a page turned never
-//! rewrites the catalog.
+//! How far a book is read, whether it is a favourite, and that a book was
+//! removed change while the catalog stands: they are appended to a short
+//! log beside it (`status.log`) and read with it ([`Changes`]), and
+//! folded into it at a calm moment once the log is long, so a page turned
+//! never rewrites the catalog. What was noted before a catalog was made
+//! is in it, and goes from the log.
 //!
 //! The first line of a catalog of this format is a header (`\tcatalog\t2`
 //! and its [`generation`]); a catalog of format 1 (six columns, no
@@ -25,10 +29,8 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-#[cfg(any(test, feature = "kernel"))]
-use super::listing::{Entry, Listing};
 use super::{Book, DIR};
-use crate::{Env, Storage, files};
+use crate::{Env, Storage, StorageError, files};
 use paperpaw_digest::fnv1a64;
 
 /// Between a book's tags (and its fields) in the catalog.
@@ -36,13 +38,11 @@ const SEPARATOR: char = '\u{1f}';
 /// Books [`search`] finds at most: a page of them fits the smallest
 /// device (a record takes some 200 bytes).
 pub const MAX_FOUND: usize = 200;
-/// Entries looked at, and books opened, in one step of making the catalog.
-const STEP_ENTRIES: usize = 12;
 /// The start of the first line of a catalog of this format; its
 /// generation follows.
 const HEADER: &str = "\tcatalog\t2";
-/// Changes of books' status the log holds before they are folded into
-/// the catalog; read with it, 16 bytes each.
+/// Lines the log holds before the kernel folds it into the catalog; read
+/// with it, 16 bytes a book.
 pub const MAX_LOG: usize = 256;
 
 fn catalog_path() -> String {
@@ -55,10 +55,6 @@ fn building_path() -> String {
 
 fn log_path() -> String {
     format!("{DIR}/status.log")
-}
-
-fn folding_path() -> String {
-    format!("{DIR}/catalog.fold")
 }
 
 /// How far a book is read and what the reader made of it: what changes
@@ -123,6 +119,9 @@ pub struct Record {
     /// Fields plugins keep in the catalog (`id=value`, separated by
     /// [`SEPARATOR`]); see [`Record::field`].
     fields: String,
+    /// How large its file was when it was catalogued: a file of another
+    /// size is read anew.
+    pub size: Option<u64>,
 }
 
 impl Record {
@@ -145,6 +144,7 @@ impl Record {
             status: Status::new(book.progress, false, false),
             added: book.added,
             fields: String::new(),
+            size: (book.size > 0).then_some(book.size),
         }
     }
 
@@ -197,6 +197,7 @@ impl Record {
         let mut next = || fields.next().unwrap_or("").to_string();
         let (author, title, series, number, tags) = (next(), next(), next(), next(), next());
         let (progress, flags, added, extra) = (next(), next(), next(), next());
+        let size = next().parse().ok();
         Some(Record {
             path,
             author,
@@ -207,6 +208,7 @@ impl Record {
             status: Status::parse(&progress, &flags),
             added: added.parse().ok(),
             fields: extra,
+            size,
         })
     }
 
@@ -214,8 +216,9 @@ impl Record {
         let clean = |s: &str| s.replace(['\t', '\n', '\r'], " ");
         let (progress, flags) = self.status.columns();
         let added = self.added.map(|a| a.to_string()).unwrap_or_default();
+        let size = self.size.map(|s| s.to_string()).unwrap_or_default();
         format!(
-            "{}\t{}\t{}\t{}\t{}\t{}\t{progress}\t{flags}\t{added}\t{}\n",
+            "{}\t{}\t{}\t{}\t{}\t{}\t{progress}\t{flags}\t{added}\t{}\t{size}\n",
             clean(&self.path),
             clean(&self.author),
             clean(&self.title),
@@ -276,60 +279,178 @@ pub fn series_order(number: &str) -> u32 {
 
 // ---- Reading the catalog ----------------------------------------------
 
-/// The status changes logged since the catalog was made or folded, the
-/// last of each book, by its path hashed (FNV-1a, 64 bits); at most
-/// [`MAX_LOG`] twice.
-pub fn changes(storage: &dyn Storage) -> Vec<(u64, Status)> {
-    let mut log: Vec<(u64, Status)> = Vec::new();
-    lines(storage, &log_path(), &mut |_, line| {
-        let mut columns = line.split('\t');
-        let hash = columns.next().and_then(|h| u64::from_str_radix(h, 16).ok());
-        let (progress, flags) = (columns.next().unwrap_or(""), columns.next().unwrap_or(""));
-        if let Some(hash) = hash {
-            let status = Status::parse(progress, flags);
-            if let Some(entry) = log.iter_mut().find(|(h, _)| *h == hash) {
-                entry.1 = status;
-            } else if log.len() < MAX_LOG * 2 {
-                log.push((hash, status));
-            }
-        }
-    });
-    log
+/// Books whose changes [`Changes`] holds at most (the kernel folds the
+/// log in long before: [`MAX_LOG`] lines).
+const MAX_CHANGES: usize = 1024;
+
+/// What was noted beside the catalog since it was made: each book's last
+/// status, or that it was removed, by its path hashed (FNV-1a, 64 bits).
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Changes {
+    /// By hash; `None` for a book removed.
+    pub(crate) entries: Vec<(u64, Option<Status>)>,
 }
 
-/// Calls `f` with each line of the file at `path` and where it starts,
-/// reading it in pieces.
-fn lines(storage: &dyn Storage, path: &str, f: &mut dyn FnMut(u64, &str)) {
+impl Changes {
+    fn get(&self, hash: u64) -> Option<Option<Status>> {
+        let at = self.entries.binary_search_by_key(&hash, |(h, _)| *h).ok()?;
+        Some(self.entries[at].1)
+    }
+
+    fn note(&mut self, hash: u64, change: Option<Status>) {
+        match self.entries.binary_search_by_key(&hash, |(h, _)| *h) {
+            Ok(at) => self.entries[at].1 = change,
+            Err(at) if self.entries.len() < MAX_CHANGES => self.entries.insert(at, (hash, change)),
+            Err(_) => {}
+        }
+    }
+
+    /// The status noted last of the book whose path hashes to `hash`.
+    pub fn status(&self, hash: u64) -> Option<Status> {
+        self.get(hash).flatten()
+    }
+
+    /// Whether the book whose path hashes to `hash` was removed.
+    pub fn removed(&self, hash: u64) -> bool {
+        self.get(hash) == Some(None)
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.entries.is_empty()
+    }
+
+    /// `record` as noted last: with its status, or `None` where the book
+    /// was removed.
+    pub fn apply(&self, mut record: Record) -> Option<Record> {
+        if self.entries.is_empty() {
+            return Some(record);
+        }
+        match self.get(fnv1a64(&record.path)) {
+            Some(None) => None,
+            Some(Some(status)) => {
+                record.status = status;
+                Some(record)
+            }
+            None => Some(record),
+        }
+    }
+}
+
+/// What was noted beside the catalog ([`Changes`]); none where the log
+/// cannot be read.
+pub fn changes(storage: &dyn Storage) -> Changes {
+    read_changes(storage).unwrap_or_default()
+}
+
+fn read_changes(storage: &dyn Storage) -> Result<Changes, StorageError> {
+    let mut changes = Changes::default();
+    lines(storage, &log_path(), &mut |_, line| {
+        if let Some((hash, change)) = parse_change(line) {
+            changes.note(hash, change);
+        }
+        true
+    })?;
+    Ok(changes)
+}
+
+/// A line of the log: the path's hash, then its progress and flags, or
+/// `-` for a book removed.
+fn parse_change(line: &str) -> Option<(u64, Option<Status>)> {
+    let mut columns = line.split('\t');
+    let hash = u64::from_str_radix(columns.next()?, 16).ok()?;
+    let progress = columns.next().unwrap_or("");
+    if progress == "-" {
+        return Some((hash, None));
+    }
+    Some((
+        hash,
+        Some(Status::parse(progress, columns.next().unwrap_or(""))),
+    ))
+}
+
+/// Calls `f` with each line of the file at `path` from byte `from` on and
+/// where it starts, reading it in pieces, until `f` says `false`; where
+/// the next line starts. A file that is not there has no lines; any other
+/// error ends it with the error.
+fn lines_from(
+    storage: &dyn Storage,
+    path: &str,
+    from: u64,
+    f: &mut dyn FnMut(u64, &str) -> bool,
+) -> Result<u64, StorageError> {
     let mut buf = [0u8; 1024];
     let mut rest: Vec<u8> = Vec::new();
     // Where `rest` starts in the file, and where the next read does.
-    let (mut start, mut offset) = (0u64, 0u64);
-    while let Ok(n) = storage.read_at(path, offset, &mut buf) {
+    let (mut start, mut offset) = (from, from);
+    loop {
+        let n = match storage.read_at(path, offset, &mut buf) {
+            Ok(n) => n,
+            Err(StorageError::NotFound) if offset == from => return Ok(from),
+            Err(e) => return Err(e),
+        };
         if n == 0 {
             break;
         }
         offset += n as u64;
         rest.extend_from_slice(&buf[..n]);
         while let Some(end) = rest.iter().position(|&b| b == b'\n') {
-            f(start, String::from_utf8_lossy(&rest[..end]).trim_end());
-            rest.drain(..=end);
+            let go_on = f(start, String::from_utf8_lossy(&rest[..end]).trim_end());
             start += end as u64 + 1;
+            rest.drain(..=end);
+            if !go_on {
+                return Ok(start);
+            }
         }
     }
     if !rest.is_empty() {
         f(start, String::from_utf8_lossy(&rest).trim_end());
+        start += rest.len() as u64;
     }
+    Ok(start)
+}
+
+/// How many lines the file at `path` has (none where it is not there),
+/// counted without holding them.
+#[cfg(any(test, feature = "kernel"))]
+fn count_lines(storage: &dyn Storage, path: &str) -> Result<usize, StorageError> {
+    let mut buf = [0u8; 1024];
+    let (mut offset, mut count, mut last) = (0u64, 0, b'\n');
+    loop {
+        let n = match storage.read_at(path, offset, &mut buf) {
+            Ok(n) => n,
+            Err(StorageError::NotFound) if offset == 0 => return Ok(0),
+            Err(e) => return Err(e),
+        };
+        if n == 0 {
+            break;
+        }
+        offset += n as u64;
+        count += buf[..n].iter().filter(|&&b| b == b'\n').count();
+        last = buf[n - 1];
+    }
+    Ok(count + usize::from(last != b'\n'))
+}
+
+/// [`lines_from`] the start, every line.
+fn lines(
+    storage: &dyn Storage,
+    path: &str,
+    f: &mut dyn FnMut(u64, &str) -> bool,
+) -> Result<(), StorageError> {
+    lines_from(storage, path, 0, f).map(|_| ())
 }
 
 /// Calls `f` with each book of the catalog and where its line starts
-/// (to read it again, [`read_at`]), its status as last logged.
+/// (to read it again, [`read_page`]), as noted last: those removed left
+/// out. Where the catalog cannot be read further, the books before.
 pub fn each_at(storage: &dyn Storage, f: &mut dyn FnMut(u64, Record)) {
-    let log = changes(storage);
-    lines(storage, &catalog_path(), &mut |offset, line| {
-        if let Some(mut record) = Record::parse(line) {
-            apply(&log, &mut record);
+    let changes = changes(storage);
+    let _ = lines(storage, &catalog_path(), &mut |offset, line| {
+        if let Some(record) = Record::parse(line).and_then(|r| changes.apply(r)) {
             f(offset, record);
         }
+        true
     });
 }
 
@@ -338,25 +459,18 @@ pub fn each(storage: &dyn Storage, f: &mut dyn FnMut(Record)) {
     each_at(storage, &mut |_, record| f(record));
 }
 
-fn apply(log: &[(u64, Status)], record: &mut Record) {
-    if log.is_empty() {
-        return;
-    }
-    let hash = fnv1a64(&record.path);
-    if let Some((_, status)) = log.iter().find(|(h, _)| *h == hash) {
-        record.status = *status;
-    }
-}
-
-/// The book whose line starts at `offset` in the catalog (as
-/// [`each_at`] told), its status as last logged.
-pub fn read_at(storage: &dyn Storage, offset: u64) -> Option<Record> {
-    let path = catalog_path();
+/// The line of the catalog at `path` that starts at `offset`, as it is
+/// written.
+fn read_line(
+    storage: &dyn Storage,
+    path: &str,
+    offset: u64,
+) -> Result<Option<Record>, StorageError> {
     let mut buf = [0u8; 256];
     let mut bytes = Vec::new();
     let mut at = offset;
     loop {
-        let n = storage.read_at(&path, at, &mut buf).ok()?;
+        let n = storage.read_at(path, at, &mut buf)?;
         if n == 0 {
             break;
         }
@@ -371,17 +485,30 @@ pub fn read_at(storage: &dyn Storage, offset: u64) -> Option<Record> {
             break;
         }
     }
-    let mut record = Record::parse(String::from_utf8_lossy(&bytes).trim_end())?;
-    // One book's change, found without holding the whole log.
-    let hash = fnv1a64(&record.path);
-    lines(storage, &log_path(), &mut |_, line| {
-        let mut columns = line.split('\t');
-        if columns.next().and_then(|h| u64::from_str_radix(h, 16).ok()) == Some(hash) {
-            let progress = columns.next().unwrap_or("");
-            record.status = Status::parse(progress, columns.next().unwrap_or(""));
-        }
-    });
-    Some(record)
+    Ok(Record::parse(String::from_utf8_lossy(&bytes).trim_end()))
+}
+
+/// The book whose line starts at `offset` in the catalog (as [`each_at`]
+/// told), as noted last; for more than one, [`read_page`] reads the log
+/// once.
+pub fn read_at(storage: &dyn Storage, offset: u64) -> Option<Record> {
+    read_page(storage, &[offset]).pop().flatten()
+}
+
+/// The books whose lines start at `offsets` (a page of a view), as noted
+/// last: the log read once. `None` for one removed or not there.
+pub fn read_page(storage: &dyn Storage, offsets: &[u64]) -> Vec<Option<Record>> {
+    let changes = changes(storage);
+    let path = catalog_path();
+    offsets
+        .iter()
+        .map(|&offset| {
+            read_line(storage, &path, offset)
+                .ok()
+                .flatten()
+                .and_then(|r| changes.apply(r))
+        })
+        .collect()
 }
 
 /// Whether there is a catalog, and whether it is being made anew.
@@ -412,8 +539,9 @@ pub fn state(storage: &dyn Storage) -> State {
 }
 
 /// Which catalog there is: a number that grows each time it is written
-/// anew (made, folded), so that what a view keeps of it (where its lines
-/// start, say) is known to be of this one; `None` without a catalog.
+/// anew (made, caught up), so that what a view keeps of it (where its
+/// lines start) is known to be of this one; `None` without a catalog.
+/// Only the kernel writes it, one at a time.
 pub fn generation(storage: &dyn Storage) -> Option<u64> {
     let mut buf = [0u8; 48];
     let n = storage.read_at(&catalog_path(), 0, &mut buf).ok()?;
@@ -442,70 +570,46 @@ fn next_header(storage: &dyn Storage) -> String {
 // ---- Status changes ---------------------------------------------------
 
 /// Notes the status of the book at `path` (how far it is read, favourite,
-/// opened) beside the catalog, read with it at once; folds the log into
-/// the catalog once it holds [`MAX_LOG`] changes. The kernel calls this
-/// from the reading events and the library's setters ([`super::record`],
-/// [`super::set_finished`], [`super::set_favourite`]).
+/// opened) beside the catalog, read with it at once. The kernel calls
+/// this from the reading events and the library's setters
+/// ([`super::record`], [`super::set_finished`], [`super::set_favourite`]),
+/// and folds the log into the catalog at a calm moment once it is long.
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-pub fn note(storage: &dyn Storage, path: &str, status: Status) {
-    noted(storage, path, status);
+pub fn note(storage: &dyn Storage, path: &str, status: Status) -> Result<(), StorageError> {
+    noted(storage, path, status)
 }
 
-pub(crate) fn noted(storage: &dyn Storage, path: &str, status: Status) {
+pub(crate) fn noted(storage: &dyn Storage, path: &str, status: Status) -> Result<(), StorageError> {
     if !storage.exists(&catalog_path()) {
         // Made anew from the books' details, which have it.
-        return;
+        return Ok(());
     }
     let (progress, flags) = status.columns();
     let line = format!("{:016x}\t{progress}\t{flags}\n", fnv1a64(path));
-    let _ = storage.append(&log_path(), line.as_bytes());
-    // A line takes some 22 bytes.
-    if storage.size(&log_path()).unwrap_or(0) > (MAX_LOG * 22) as u64 {
-        folded(storage);
-    }
+    storage.append(&log_path(), line.as_bytes())
 }
 
-/// Writes the logged status changes into the catalog and empties the
-/// log: the catalog read and written a piece at a time.
+/// Notes beside the catalog that the book at `path` is no longer there
+/// (it was removed, or moved away): views leave it out at once, and what
+/// was noted of it before no longer counts.
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-pub fn fold(storage: &dyn Storage) {
-    folded(storage);
+pub fn forget(storage: &dyn Storage, path: &str) -> Result<(), StorageError> {
+    if !storage.exists(&catalog_path()) {
+        return Ok(());
+    }
+    let line = format!("{:016x}\t-\t\n", fnv1a64(path));
+    storage.append(&log_path(), line.as_bytes())
 }
 
-fn folded(storage: &dyn Storage) {
-    let log = changes(storage);
-    if log.is_empty() {
-        let _ = storage.remove(&log_path());
-        return;
-    }
-    let folding = folding_path();
-    if storage
-        .write(&folding, next_header(storage).as_bytes())
-        .is_err()
-    {
-        return;
-    }
-    let mut piece = String::new();
-    let mut failed = false;
-    lines(storage, &catalog_path(), &mut |_, line| {
-        let Some(mut record) = Record::parse(line) else {
-            return;
-        };
-        apply(&log, &mut record);
-        piece.push_str(&record.text());
-        if piece.len() > 2048 {
-            failed |= storage.append(&folding, piece.as_bytes()).is_err();
-            piece.clear();
-        }
-    });
-    failed |= storage.append(&folding, piece.as_bytes()).is_err();
-    if failed || files::move_to(storage, &folding, &catalog_path()).is_err() {
-        let _ = storage.remove(&folding);
-        return;
-    }
-    let _ = storage.remove(&log_path());
+/// Whether the log beside the catalog is long enough to be folded into
+/// it ([`MAX_LOG`] lines; [`Rewrite`]).
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub fn log_is_long(storage: &dyn Storage) -> bool {
+    // A line takes some 22 bytes.
+    storage.size(&log_path()).unwrap_or(0) > (MAX_LOG * 22) as u64
 }
 
 // ---- Queries ----------------------------------------------------------
@@ -651,6 +755,11 @@ impl Query {
     }
 }
 
+/// A library's books, each with its key ([`each_at`] for the catalog's,
+/// [`crate::library::Library::each`] for any library's): called with what
+/// to do with each.
+pub type Books<'a> = &'a mut dyn FnMut(&mut dyn FnMut(u64, Record));
+
 /// `n` books `query` finds, in its order, those after `after` (from the
 /// first without): one reading of the catalog that holds only `n` books
 /// at a time (keyset pagination).
@@ -660,9 +769,14 @@ pub fn query(
     after: Option<&Record>,
     n: usize,
 ) -> Vec<Record> {
+    query_in(&mut |f| each_at(storage, f), query, after, n)
+}
+
+/// [`query`] in `books`.
+pub fn query_in(books: Books<'_>, query: &Query, after: Option<&Record>, n: usize) -> Vec<Record> {
     let after = after.map(|r| query.key(r));
     let mut page: Vec<((u32, String, String), Record)> = Vec::new();
-    each(storage, &mut |record| {
+    books(&mut |_, record| {
         if n == 0 || !query.finds(&record) {
             return;
         }
@@ -681,10 +795,13 @@ pub fn query(
 
 /// How many books `query` finds.
 pub fn found(storage: &dyn Storage, query: &Query) -> usize {
+    found_in(&mut |f| each_at(storage, f), query)
+}
+
+/// [`found`] in `books`.
+pub fn found_in(books: Books<'_>, query: &Query) -> usize {
     let mut count = 0;
-    each(storage, &mut |record| {
-        count += usize::from(query.finds(&record))
-    });
+    books(&mut |_, record| count += usize::from(query.finds(&record)));
     count
 }
 
@@ -764,106 +881,436 @@ pub fn write(storage: &dyn Storage, records: &[Record]) {
 
 // ---- Making the catalog -----------------------------------------------
 
-/// Making the catalog anew: the folders still to walk, and where the
-/// current one is. The kernel walks it as a job; views wait for
+/// Where a walk keeps the listing of the folder it walks, so that it goes
+/// on where it was without listing the folder again.
+#[cfg(any(test, feature = "kernel"))]
+fn listed_path() -> String {
+    format!("{DIR}/walk.list")
+}
+
+/// Entries of a folder, or lines of the catalog, taken in one step.
+#[cfg(any(test, feature = "kernel"))]
+const STEP_LINES: usize = 16;
+/// Bytes of a folder's listing held at a time while it is listed.
+#[cfg(any(test, feature = "kernel"))]
+const LISTED_PIECE: usize = 8 * 1024;
+
+/// What a new catalog is made with: written to the building file a step
+/// at a time, then put in the old one's place, with only the log noted
+/// since it began kept (what was noted before is in it).
+#[cfg(any(test, feature = "kernel"))]
+#[derive(Debug, Default)]
+struct Making {
+    /// How long the log was when it began.
+    log_from: u64,
+    /// What was noted before it began.
+    changes: Changes,
+    /// The favourites and the books opened last, their paths hashed, by
+    /// hash.
+    favourites: Vec<u64>,
+    opened: Vec<u64>,
+    /// The ids of the fields kept in the catalog.
+    fields: Vec<String>,
+    /// Books written.
+    found: usize,
+}
+
+#[cfg(any(test, feature = "kernel"))]
+impl Making {
+    fn start(env: &Env<'_>) -> Result<Making, StorageError> {
+        let storage = env.storage;
+        let hashed = |paths: Vec<String>| {
+            let mut hashes: Vec<u64> = paths.iter().map(fnv1a64).collect();
+            hashes.sort_unstable();
+            hashes
+        };
+        let log_from = match storage.size(&log_path()) {
+            Ok(size) => size,
+            Err(StorageError::NotFound) => 0,
+            Err(e) => return Err(e),
+        };
+        let making = Making {
+            log_from,
+            changes: read_changes(storage)?,
+            favourites: hashed(super::read_favourites(storage)?),
+            opened: hashed(super::read_opened(storage)?),
+            fields: env
+                .book_fields
+                .iter()
+                .filter(|f| f.in_catalog)
+                .map(|f| f.id.as_str().to_string())
+                .collect(),
+            found: 0,
+        };
+        storage.write(&building_path(), next_header(storage).as_bytes())?;
+        Ok(making)
+    }
+
+    /// The record of the book at `path` from its details (made, the book
+    /// opened, where there are none of this file): favourite and opened
+    /// as the lists say; `true` where the book was opened.
+    fn of_details(&self, env: &Env<'_>, path: &str, size: u64) -> (Record, bool) {
+        let cached = super::book_sized(env.storage, path, size).filter(|b| b.indexed);
+        let opened = cached.is_none();
+        let book = cached.unwrap_or_else(|| super::index(env, path));
+        let fields: Vec<&str> = self.fields.iter().map(String::as_str).collect();
+        let record = Record::of(path, &book)
+            .with_status(self.status(path, book.progress))
+            .with_fields(&book, &fields);
+        (record, opened)
+    }
+
+    fn status(&self, path: &str, progress: Option<u8>) -> Status {
+        let hash = fnv1a64(path);
+        Status::new(
+            progress,
+            self.favourites.binary_search(&hash).is_ok(),
+            self.opened.binary_search(&hash).is_ok(),
+        )
+    }
+
+    fn write(&mut self, storage: &dyn Storage, records: &[Record]) -> Result<(), StorageError> {
+        if records.is_empty() {
+            return Ok(());
+        }
+        let text: String = records.iter().map(Record::text).collect();
+        storage.append(&building_path(), text.as_bytes())?;
+        self.found += records.len();
+        Ok(())
+    }
+
+    /// Puts the new catalog in place and keeps the log noted since it
+    /// began; the log goes where it cannot be read (the details have what
+    /// it said).
+    fn finish(&self, storage: &dyn Storage) -> Result<(), StorageError> {
+        files::move_to(storage, &building_path(), &catalog_path())?;
+        let mut since = String::new();
+        let read = lines_from(storage, &log_path(), self.log_from, &mut |_, line| {
+            since.push_str(line);
+            since.push('\n');
+            true
+        });
+        let kept = read.is_ok()
+            && !since.is_empty()
+            && storage.write(&log_path(), since.as_bytes()).is_ok();
+        if !kept {
+            let _ = storage.remove(&log_path());
+        }
+        Ok(())
+    }
+
+    fn abort(storage: &dyn Storage) {
+        let _ = storage.remove(&building_path());
+        let _ = storage.remove(&listed_path());
+    }
+}
+
+/// Making the catalog anew from the books under the library folder: the
+/// folders still to walk, and where in the current one's listing it is.
+/// A book whose file is as large as the old catalog says is taken from
+/// it; others from their details, opening only books not seen before.
+/// The kernel walks it as a job; views hear
 /// [`crate::builtin::events::CATALOG_CHANGED`].
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 #[derive(Debug, Default)]
 pub struct Walk {
+    making: Making,
+    /// Of the old catalog: each book's path hashed (32 bits) and where its
+    /// line starts, by hash.
+    old: Vec<(u32, u32)>,
+    /// Books to take from their details whatever the old catalog says
+    /// (their details changed).
+    fresh: Vec<String>,
     dirs: Vec<String>,
+    /// The folder being walked, its listing in [`listed_path`], and where
+    /// the next entry of it is there.
     dir: Option<String>,
-    last: Option<Entry>,
-    /// Books found so far.
-    found: usize,
-    /// The paths (hashed) of the favourites and the books opened last.
-    favourites: Vec<u64>,
-    opened: Vec<u64>,
+    at: u64,
 }
 
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 impl Walk {
-    /// Starts anew with the books under `root`.
-    pub fn start(storage: &dyn Storage, root: &str) -> Walk {
-        let _ = storage.write(&building_path(), next_header(storage).as_bytes());
-        let hashed = |paths: Vec<String>| paths.iter().map(fnv1a64).collect();
-        Walk {
-            dirs: Vec::from([root.trim_matches('/').to_string()]),
-            favourites: hashed(super::favourites(storage)),
-            opened: hashed(super::opened_books(storage)),
+    /// Starts anew with the books under the library folder, the books
+    /// `fresh` taken from their details; an error where what it needs
+    /// cannot be read (nothing is changed then).
+    pub fn start(env: &Env<'_>, fresh: Vec<String>) -> Result<Walk, StorageError> {
+        let storage = env.storage;
+        // As many as there are lines: a list grown by doubling would hold
+        // twice that for a moment (on the X4, beside the library's index).
+        let mut old = Vec::new();
+        old.try_reserve_exact(count_lines(storage, &catalog_path())?)
+            .map_err(|_| StorageError::TooLarge)?;
+        lines(storage, &catalog_path(), &mut |offset, line| {
+            let path = line.split('\t').next().unwrap_or("");
+            if !path.is_empty()
+                && let Ok(offset) = u32::try_from(offset)
+            {
+                old.push((fnv1a64(path) as u32, offset));
+            }
+            true
+        })?;
+        old.sort_unstable();
+        let making = Making::start(env)?;
+        Ok(Walk {
+            making,
+            old,
+            fresh,
+            dirs: Vec::from([super::folder(env).to_string()]),
             ..Walk::default()
-        }
+        })
     }
 
     /// Books found so far.
     pub fn found(&self) -> usize {
-        self.found
+        self.making.found
     }
 
-    /// One step: a few entries of a folder, at most one book opened;
-    /// `true` when the catalog is complete.
-    pub fn step(&mut self, env: &Env<'_>) -> bool {
-        let Some(dir) = self.dir.clone().or_else(|| self.dirs.pop()) else {
-            // Done: the new catalog replaces the old one. The log stays:
-            // what was noted while it was made is read with it (each
-            // book's last change is the newest).
-            let _ = files::move_to(env.storage, &building_path(), &catalog_path());
-            return true;
+    /// One step: a folder listed, or a few of its entries, at most one
+    /// book opened; `true` when the catalog is made. On an error nothing
+    /// is changed: the old catalog stays.
+    pub fn step(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
+        let result = self.go_on(env);
+        if result.is_err() {
+            Making::abort(env.storage);
+        }
+        result
+    }
+
+    /// Gives up: the old catalog stays.
+    pub fn abort(self, storage: &dyn Storage) {
+        Making::abort(storage);
+    }
+
+    fn go_on(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
+        let storage = env.storage;
+        let Some(dir) = self.dir.clone() else {
+            let Some(dir) = self.dirs.pop() else {
+                let _ = storage.remove(&listed_path());
+                self.making.finish(storage)?;
+                return Ok(true);
+            };
+            self.list(env, &dir)?;
+            self.dir = Some(dir);
+            self.at = 0;
+            return Ok(false);
         };
-        self.dir = Some(dir.clone());
-        let listing = Listing {
-            storage: env.storage,
-            formats: env.formats,
-            dir: &dir,
-            folders_only: false,
-            rank: None,
-        };
-        let entries = listing.after(self.last.as_ref(), STEP_ENTRIES);
+        let mut entries: Vec<(bool, u64, String)> = Vec::new();
+        let next = lines_from(storage, &listed_path(), self.at, &mut |_, line| {
+            let mut columns = line.splitn(3, '\t');
+            let kind = columns.next().unwrap_or("");
+            let size = columns.next().and_then(|s| s.parse().ok()).unwrap_or(0);
+            if let Some(name) = columns.next() {
+                entries.push((kind == "d", size, name.to_string()));
+            }
+            entries.len() < STEP_LINES
+        })?;
         if entries.is_empty() {
             self.dir = None;
-            self.last = None;
-            return false;
+            return Ok(false);
         }
-        let fields: Vec<&str> = env
-            .book_fields
-            .iter()
-            .filter(|f| f.in_catalog)
-            .map(|f| f.id.as_str())
-            .collect();
-        for entry in entries {
-            let path = files::join(&dir, &entry.name);
-            let mut opened = false;
-            if entry.is_dir {
+        let mut records = Vec::new();
+        let mut taken = 0;
+        for (is_dir, size, name) in &entries {
+            taken += 1;
+            let path = files::join(&dir, name);
+            if *is_dir {
                 self.dirs.push(path);
-            } else {
-                let cached =
-                    super::book_sized(env.storage, &path, entry.size).filter(|b| b.indexed);
-                let book = cached.unwrap_or_else(|| {
-                    opened = true;
-                    super::index(env, &path)
-                });
-                let hash = fnv1a64(&path);
-                let status = Status::new(
-                    book.progress,
-                    self.favourites.contains(&hash),
-                    self.opened.contains(&hash),
-                );
-                let record = Record::of(&path, &book)
-                    .with_status(status)
-                    .with_fields(&book, &fields);
-                let _ = env
-                    .storage
-                    .append(&building_path(), record.text().as_bytes());
-                self.found += 1;
+                continue;
             }
-            self.last = Some(entry);
+            if let Some(record) = self.as_old(storage, &path, *size)? {
+                records.push(record);
+                continue;
+            }
+            let (record, opened) = self.making.of_details(env, &path, *size);
+            records.push(record);
             // Opening a book takes a moment: the rest in the next step.
             if opened {
                 break;
             }
         }
-        false
+        self.making.write(storage, &records)?;
+        if taken == entries.len() {
+            self.at = next;
+        } else {
+            // Where the first entry not taken starts: listed again from
+            // the listing kept, not from the folder.
+            let mut skip = taken;
+            self.at = lines_from(storage, &listed_path(), self.at, &mut |_, _| {
+                skip -= 1;
+                skip > 0
+            })?;
+        }
+        Ok(false)
+    }
+
+    /// Lists folder `dir` into the listing kept: its folders and the files
+    /// a format plugin opens, but hidden ones. A library folder that is
+    /// not there is empty; a folder in it gone meanwhile is left out. A
+    /// piece of the listing at a time is held, and written after the
+    /// folder was listed (never while it is): a large folder is listed as
+    /// many times as it has pieces.
+    fn list(&mut self, env: &Env<'_>, dir: &str) -> Result<(), StorageError> {
+        let storage = env.storage;
+        storage.write(&listed_path(), b"")?;
+        let mut taken = 0;
+        loop {
+            let mut piece = String::new();
+            let (mut at, mut more) = (0, false);
+            let listed = storage.list(dir, &mut |entry| {
+                if more || !super::listing::shown(env.formats, entry.name, entry.is_dir) {
+                    return;
+                }
+                if at < taken {
+                    at += 1;
+                    return;
+                }
+                if piece.len() >= LISTED_PIECE {
+                    more = true;
+                    return;
+                }
+                let kind = if entry.is_dir { 'd' } else { 'f' };
+                piece.push_str(&format!("{kind}\t{}\t{}\n", entry.size, entry.name));
+                at += 1;
+            });
+            match listed {
+                Ok(()) => {}
+                Err(StorageError::NotFound) => return Ok(()),
+                Err(e) => return Err(e),
+            }
+            storage.append(&listed_path(), piece.as_bytes())?;
+            if !more {
+                return Ok(());
+            }
+            taken = at;
+        }
+    }
+
+    /// The book at `path` as the old catalog has it, where its file is as
+    /// large as then and its details did not change since.
+    fn as_old(
+        &self,
+        storage: &dyn Storage,
+        path: &str,
+        size: u64,
+    ) -> Result<Option<Record>, StorageError> {
+        if self.fresh.iter().any(|p| p == path) {
+            return Ok(None);
+        }
+        let hash = fnv1a64(path);
+        let short = hash as u32;
+        let from = self.old.partition_point(|(h, _)| *h < short);
+        for &(_, offset) in self.old[from..].iter().take_while(|(h, _)| *h == short) {
+            let Some(record) = read_line(storage, &catalog_path(), u64::from(offset))? else {
+                continue;
+            };
+            if record.path != path || record.size != Some(size) {
+                continue;
+            }
+            // Removed and come again: from its details.
+            if self.making.changes.removed(hash) {
+                return Ok(None);
+            }
+            // How far it is read: noted since, or for the books read last
+            // (read further than noted, where a reading ended without its
+            // book closed) as their details say.
+            let noted = self
+                .making
+                .changes
+                .status(hash)
+                .map_or(record.status.progress, |s| s.progress);
+            let progress = if self.making.opened.binary_search(&hash).is_ok() {
+                super::book_sized(storage, path, size).map_or(noted, |book| book.progress)
+            } else {
+                noted
+            };
+            let status = self.making.status(path, progress);
+            return Ok(Some(record.with_status(status)));
+        }
+        Ok(None)
+    }
+}
+
+/// Catching the catalog up without walking the library: what was noted
+/// beside it folded in, the books removed left out, and the books that
+/// came or changed (`fresh`) taken from their details. The kernel does it
+/// as a job, after books came or moved, or once the log is long.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+#[derive(Debug, Default)]
+pub struct Rewrite {
+    making: Making,
+    fresh: Vec<String>,
+    /// Where the next line of the old catalog starts; `None` once it is
+    /// copied.
+    at: Option<u64>,
+}
+
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+impl Rewrite {
+    /// Starts catching up, the books `fresh` taken from their details; an
+    /// error where what it needs cannot be read.
+    pub fn start(env: &Env<'_>, mut fresh: Vec<String>) -> Result<Rewrite, StorageError> {
+        fresh.sort_unstable();
+        fresh.dedup();
+        Ok(Rewrite {
+            making: Making::start(env)?,
+            fresh,
+            at: Some(0),
+        })
+    }
+
+    /// One step: a few lines of the old catalog copied, or one book taken
+    /// from its details; `true` when the catalog is made. On an error
+    /// nothing is changed.
+    pub fn step(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
+        let result = self.go_on(env);
+        if result.is_err() {
+            Making::abort(env.storage);
+        }
+        result
+    }
+
+    /// Gives up: the old catalog stays.
+    pub fn abort(self, storage: &dyn Storage) {
+        Making::abort(storage);
+    }
+
+    fn go_on(&mut self, env: &Env<'_>) -> Result<bool, StorageError> {
+        let storage = env.storage;
+        if let Some(at) = self.at {
+            let mut records = Vec::new();
+            let mut count = 0;
+            let next = lines_from(storage, &catalog_path(), at, &mut |_, line| {
+                count += 1;
+                if let Some(record) = Record::parse(line)
+                    && self.fresh.binary_search(&record.path).is_err()
+                    && let Some(record) = self.making.changes.apply(record)
+                {
+                    records.push(record);
+                }
+                count < STEP_LINES
+            })?;
+            self.making.write(storage, &records)?;
+            self.at = (count == STEP_LINES).then_some(next);
+            return Ok(false);
+        }
+        let Some(path) = self.fresh.pop() else {
+            self.making.finish(storage)?;
+            return Ok(true);
+        };
+        match storage.size(&path) {
+            Ok(size) => {
+                let (record, _) = self.making.of_details(env, &path, size);
+                self.making.write(storage, &[record])?;
+            }
+            // Gone again meanwhile.
+            Err(StorageError::NotFound) => {}
+            Err(e) => return Err(e),
+        }
+        Ok(false)
     }
 }
 
@@ -929,47 +1376,45 @@ mod tests {
     }
 
     #[test]
-    fn status_changes_are_logged_read_with_the_catalog_and_folded() {
+    fn status_changes_and_removals_are_logged_and_read_with_the_catalog() {
         let storage = MemoryStorage::new();
         let books: Vec<Record> = (0..5)
             .map(|n| Record::of(&format!("books/{n}.txt"), &Book::default()))
             .collect();
         write(&storage, &books);
-        note(&storage, "books/2.txt", Status::new(Some(30), false, true));
-        note(&storage, "books/2.txt", Status::new(Some(55), true, true));
-        note(&storage, "books/4.txt", Status::new(Some(100), false, true));
+        note(&storage, "books/2.txt", Status::new(Some(30), false, true)).unwrap();
+        note(&storage, "books/2.txt", Status::new(Some(55), true, true)).unwrap();
+        note(&storage, "books/4.txt", Status::new(Some(100), false, true)).unwrap();
         let found = |show| found(&storage, &Query::new().show(show));
         assert_eq!(found(Show::Reading), 1);
         assert_eq!(found(Show::Finished), 1);
         assert_eq!(found(Show::Favourites), 1);
         assert_eq!(found(Show::Unread), 3);
-        // Read one by where its line starts: with its change.
-        let mut at = None;
-        each_at(&storage, &mut |offset, r| {
-            if r.path == "books/2.txt" {
-                at = Some(offset);
-            }
-        });
-        let two = read_at(&storage, at.unwrap()).unwrap();
-        assert_eq!(two.status.progress, Some(55));
-        assert!(two.status.favourite);
-        // Folded: the same, the log gone, a catalog of the next
-        // generation.
-        let stamp = state(&storage);
-        let before = generation(&storage).unwrap();
-        fold(&storage);
-        assert!(!storage.exists(&log_path()));
-        assert_ne!(state(&storage), stamp);
-        assert_eq!(generation(&storage), Some(before + 1));
-        assert_eq!(found(Show::Reading), 1);
-        assert_eq!(found(Show::Finished), 1);
-        // Many changes fold by themselves.
-        for n in 0..(MAX_LOG * 2) {
+        // Read by where their lines start, the log read once: with their
+        // changes.
+        let mut at = Vec::new();
+        each_at(&storage, &mut |offset, _| at.push(offset));
+        let page = read_page(&storage, &at);
+        assert_eq!(page[2].as_ref().unwrap().status.progress, Some(55));
+        assert!(page[2].as_ref().unwrap().status.favourite);
+        // Removed: left out at once, by every reader, its status no
+        // longer counting; noted again, it counts.
+        forget(&storage, "books/4.txt").unwrap();
+        assert_eq!(found(Show::All), 4);
+        assert_eq!(found(Show::Finished), 0);
+        assert!(read_page(&storage, &at)[4].is_none());
+        assert!(changes(&storage).removed(fnv1a64("books/4.txt")));
+        // The log grows long only by lines: the kernel folds it then.
+        assert!(!log_is_long(&storage));
+        for n in 0..MAX_LOG {
             let status = Status::new(Some((n % 100) as u8), false, true);
-            note(&storage, &format!("books/{}.txt", n % 5), status);
+            note(&storage, &format!("books/{}.txt", n % 4), status).unwrap();
         }
-        assert!(storage.size(&log_path()).unwrap_or(0) <= (MAX_LOG * 22) as u64);
-        assert_eq!(found(Show::All), 5);
+        assert!(log_is_long(&storage));
+        // Nothing is noted without a catalog: the walk takes the details.
+        let bare = MemoryStorage::new();
+        note(&bare, "books/1.txt", Status::default()).unwrap();
+        assert!(!bare.exists(&log_path()));
     }
 
     #[test]
@@ -1031,8 +1476,7 @@ mod tests {
     fn its_state() {
         let storage = MemoryStorage::new();
         assert_eq!(state(&storage), State::Missing);
-        let walk = Walk::start(&storage, "books");
-        assert_eq!(walk.found(), 0);
+        storage.write(&building_path(), b"").unwrap();
         assert_eq!(state(&storage), State::Building);
         write(&storage, &[]);
         assert!(matches!(state(&storage), State::Ready { .. }));

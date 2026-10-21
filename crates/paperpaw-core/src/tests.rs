@@ -3242,6 +3242,7 @@ mod frames;
 mod guard;
 mod input;
 mod kernel_calls;
+mod library_catalog;
 mod plugins_loaded;
 mod screen_life;
 mod settings_files;

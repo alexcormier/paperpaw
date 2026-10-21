@@ -27,39 +27,87 @@ pub const SERVICE: &str = "core.library";
 
 /// What every view of the library asks: books, their details, what is
 /// found, the index of all, and changes to a book. Every method has the
-/// kernel's library as its default; a replacement overrides what it keeps
-/// otherwise.
+/// kernel's library (its catalog) as its default. A library of one's own
+/// overrides at least [`Library::each`], [`Library::records`] and
+/// [`Library::version`] (and [`Library::catalog_state`]): the index,
+/// queries, shelves, the letters and the widgets are then of its books.
 pub trait Library {
     /// What the library knows of the book at `path`.
     fn book(&self, env: &Env<'_>, path: &str) -> Option<Book> {
         super::book(env.storage, path)
     }
 
-    /// Whether there is a catalog to ask ([`catalog::state`]).
+    /// Whether there are books to ask for ([`catalog::state`]).
     fn catalog_state(&self, env: &Env<'_>) -> State {
         catalog::state(env.storage)
     }
 
+    /// Calls `f` with every book and its key (where its line starts in the
+    /// catalog, [`catalog::each_at`]): a key fits 32 bits, and
+    /// [`Library::records`] reads the book again by it.
+    fn each(&self, env: &Env<'_>, f: &mut dyn FnMut(u64, Record)) {
+        catalog::each_at(env.storage, f);
+    }
+
+    /// The books of `keys` (a page of a view), each `None` where it is no
+    /// longer there ([`catalog::read_page`]).
+    fn records(&self, env: &Env<'_>, keys: &[u64]) -> Vec<Option<Record>> {
+        catalog::read_page(env.storage, keys)
+    }
+
+    /// Which version of the books there is: another once keys may mean
+    /// other books ([`index::catalog_version`](super::index::catalog_version)),
+    /// so that what a view keeps of them is known to hold; `None` without
+    /// books.
+    fn version(&self, env: &Env<'_>) -> Option<u64> {
+        super::index::catalog_version(env.storage)
+    }
+
     /// `n` books `query` finds, after `after` ([`catalog::query`]).
     fn query(&self, env: &Env<'_>, query: &Query, after: Option<&Record>, n: usize) -> Vec<Record> {
-        catalog::query(env.storage, query, after, n)
+        catalog::query_in(&mut |f| self.each(env, f), query, after, n)
     }
 
     /// How many books `query` finds.
     fn found(&self, env: &Env<'_>, query: &Query) -> usize {
-        catalog::found(env.storage, query)
+        catalog::found_in(&mut |f| self.each(env, f), query)
     }
 
-    /// The index of every book ([`Index::build`]): at most `cap`, those in
-    /// the folder `archive` left out.
+    /// The index of every book ([`Index::collect`]): at most `cap`, those
+    /// in the folder `archive` left out.
     fn index(&self, env: &Env<'_>, cap: usize, archive: &str) -> Index {
-        Index::build(env.storage, cap, archive)
+        let opened = super::index::opened(env.storage);
+        let version = self.version(env);
+        Index::collect(cap, archive, &opened, version, &mut |f| self.each(env, f))
     }
 
-    /// The book of item `i` of `index` ([`Index::record`]), e.g. for the
-    /// page a view shows.
+    /// Whether `index` is of the books there are now: its keys hold.
+    fn is_current(&self, env: &Env<'_>, index: &Index) -> bool {
+        index.version == self.version(env)
+    }
+
+    /// Takes what changed of single books into `index` (how far read,
+    /// favourite, removed, the books read last; [`Index::refresh`]).
+    fn refresh(&self, env: &Env<'_>, index: &mut Index) {
+        index.refresh(env.storage);
+    }
+
+    /// Keeps `index` in the file `file` while the view lets it go
+    /// ([`Index::save`]); `false` where it is not kept.
+    fn keep_index(&self, env: &Env<'_>, index: &Index, file: &str, archive: &str) -> bool {
+        index.save(env.storage, file, archive)
+    }
+
+    /// The index kept in `file`, where it is of the books there are now
+    /// ([`Index::load`]).
+    fn kept_index(&self, env: &Env<'_>, file: &str, archive: &str) -> Option<Index> {
+        Index::load(env.storage, file, archive, self.version(env)?)
+    }
+
+    /// The book of item `i` of `index`.
     fn record(&self, env: &Env<'_>, index: &Index, i: usize) -> Option<Record> {
-        index.record(env.storage, i)
+        let key = u64::from(index.items.get(i)?.offset);
+        self.records(env, &[key]).pop().flatten()
     }
 
     /// Marks the book at `path` finished, or unread; the command tells

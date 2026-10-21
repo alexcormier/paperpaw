@@ -306,70 +306,175 @@ fn add_handled<const N: usize>(
     Ok(())
 }
 
-/// The work that makes the library's catalog anew ([`library::catalog`]).
+/// The work that makes the library's catalog anew or catches it up
+/// ([`library::catalog`]).
 const CATALOG_WORK: Id = Id::new_static("core.catalog");
-/// How old a catalog is taken as it is when the device wakes, in
-/// milliseconds: books copied meanwhile without a word (a computer, a
-/// phone's own file manager) are found after that.
-const CATALOG_AGE_MS: u64 = 30 * 60 * 1000;
+
+/// What the kernel does to the catalog: walk the library, or catch up.
+enum CatalogJob {
+    Walk(library::catalog::Walk),
+    Rewrite(library::catalog::Rewrite),
+}
+
+impl CatalogJob {
+    fn step(&mut self, env: &Env<'_>) -> Result<bool, paperpaw_sdk::StorageError> {
+        match self {
+            CatalogJob::Walk(walk) => walk.step(env),
+            CatalogJob::Rewrite(rewrite) => rewrite.step(env),
+        }
+    }
+
+    fn abort(self, storage: &dyn paperpaw_sdk::Storage) {
+        match self {
+            CatalogJob::Walk(walk) => walk.abort(storage),
+            CatalogJob::Rewrite(rewrite) => rewrite.abort(storage),
+        }
+    }
+}
 
 /// The making of the catalog, shared by the kernel's handlers and its
-/// job.
+/// job: the only writer of the catalog, one change at a time.
 #[derive(Default)]
 struct Catalog {
-    /// The walk under way.
-    walk: core::cell::RefCell<Option<paperpaw_sdk::library::catalog::Walk>>,
-    /// Asked for again since the walk began: it starts anew.
+    job: core::cell::RefCell<Option<CatalogJob>>,
+    /// A walk is wanted (else catching up, for `fresh` or a long log).
+    walk: core::cell::Cell<bool>,
+    /// A walk was wanted anew while one is under way: it starts again.
     restart: core::cell::Cell<bool>,
-    /// Asked for at once, not yet made.
+    /// Books to take from their details: they came, moved here, changed.
+    fresh: core::cell::RefCell<Vec<String>>,
+    /// What the job under way took of `fresh`, given back where it fails.
+    taken: core::cell::RefCell<Vec<String>>,
+    /// Wanted at once.
     urgent: core::cell::Cell<bool>,
-    /// When it was made last (milliseconds since start, plus one; 0 not
-    /// yet).
-    made: core::cell::Cell<u64>,
+    /// The library was walked since PaperPaw started.
+    walked: core::cell::Cell<bool>,
+}
+
+/// Whether a book is read: the reader is the screen shown (overlays over
+/// it aside). Nothing is done to the catalog meanwhile: its memory and
+/// time are the reader's.
+fn reading(env: &Env<'_>) -> bool {
+    env.stack
+        .iter()
+        .rev()
+        .find(|entry| !entry.overlay)
+        .is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER))
 }
 
 impl Catalog {
-    /// Asks for the catalog to be made anew: `now` (asked for, another
-    /// library folder, books came or went), else at a calm moment
-    /// (no input for a while, a book closed, the device plugged in;
-    /// within a minute at the latest), so that books coming one after the
-    /// other (from Calibre, say) are walked once, and never while the
-    /// device goes to sleep or opens a book; a walk under way starts
-    /// again. A calm request does not put off one at once.
-    fn want(&self, now: bool, out: &mut Vec<Command>) {
+    /// Wants the library walked: `now`, or at a calm moment.
+    fn want_walk(&self, now: bool, out: &mut Vec<Command>) {
+        self.restart.set(self.job.borrow().is_some());
+        self.walk.set(true);
+        self.declare(now, out);
+    }
+
+    /// Wants the catalog caught up, with the book at `path` taken from its
+    /// details: `now`, or at a calm moment (books coming one after the
+    /// other, from Calibre say, caught up once).
+    fn want_catch_up(&self, path: Option<&str>, now: bool, out: &mut Vec<Command>) {
+        if let Some(path) = path {
+            let mut fresh = self.fresh.borrow_mut();
+            if !fresh.iter().any(|p| p == path) {
+                fresh.push(path.into());
+            }
+        }
+        self.declare(now, out);
+    }
+
+    /// Declares the work: at once, or at a calm moment (no input for a
+    /// while, a book closed, the device plugged in; within a minute at the
+    /// latest), never while the device goes to sleep or opens a book. A
+    /// calm request does not put off one at once.
+    fn declare(&self, now: bool, out: &mut Vec<Command>) {
         use paperpaw_sdk::work::{Moments, Work};
-        self.restart.set(true);
         self.urgent.set(self.urgent.get() || now);
         let calm = Moments::IDLE | Moments::BOOK_CLOSED | Moments::CHARGING;
-        let work = Work::new(CATALOG_WORK).at_moments(calm);
         let within = if self.urgent.get() { 0 } else { 60 };
         out.push(Command::Work(
-            work.within(core::time::Duration::from_secs(within)),
+            Work::new(CATALOG_WORK)
+                .at_moments(calm)
+                .within(core::time::Duration::from_secs(within)),
         ));
     }
 
-    /// One step of the walk; `true` when the catalog is made.
-    fn step(&self, env: &Env<'_>) -> bool {
-        let mut walk = self.walk.borrow_mut();
-        if self.restart.replace(false) || walk.is_none() {
-            *walk = Some(paperpaw_sdk::library::catalog::Walk::start(
-                env.storage,
-                library::folder(env),
-            ));
+    /// Gives what the job under way took back, for the next.
+    fn give_back(&self, walk: bool) {
+        let taken = core::mem::take(&mut *self.taken.borrow_mut());
+        let mut fresh = self.fresh.borrow_mut();
+        for path in taken {
+            if !fresh.contains(&path) {
+                fresh.push(path);
+            }
         }
-        if !walk.as_mut().is_some_and(|w| w.step(env)) {
-            return false;
-        }
-        *walk = None;
-        self.urgent.set(false);
-        self.made.set(env.now.millis().saturating_add(1));
-        true
+        self.walk.set(self.walk.get() || walk);
     }
 
-    /// Whether it is older than [`CATALOG_AGE_MS`], or not made yet.
-    fn old(&self, env: &Env<'_>) -> bool {
-        let made = self.made.get();
-        made == 0 || env.now.millis().saturating_sub(made - 1) >= CATALOG_AGE_MS
+    /// One step of the job.
+    fn step(&self, env: &Env<'_>, out: &mut Vec<Command>) -> paperpaw_sdk::work::Step {
+        use paperpaw_sdk::work::Step;
+        let storage = env.storage;
+        let mut job = self.job.borrow_mut();
+        if reading(env) {
+            // Begun again once another screen shows.
+            if let Some(stopped) = job.take() {
+                let walk = matches!(stopped, CatalogJob::Walk(_));
+                stopped.abort(storage);
+                self.give_back(walk);
+            }
+            return Step::WaitFor(events::SCREEN_SHOWN.id().clone());
+        }
+        if self.restart.replace(false)
+            && let Some(stopped) = job.take()
+        {
+            let walk = matches!(stopped, CatalogJob::Walk(_));
+            stopped.abort(storage);
+            self.give_back(walk);
+        }
+        if job.is_none() {
+            let fresh = core::mem::take(&mut *self.fresh.borrow_mut());
+            let walk = self.walk.replace(false);
+            let started = if walk {
+                library::catalog::Walk::start(env, fresh.clone()).map(CatalogJob::Walk)
+            } else if !fresh.is_empty() || library::catalog::log_is_long(storage) {
+                library::catalog::Rewrite::start(env, fresh.clone()).map(CatalogJob::Rewrite)
+            } else {
+                self.urgent.set(false);
+                return Step::Done;
+            };
+            *self.taken.borrow_mut() = fresh;
+            match started {
+                Ok(started) => *job = Some(started),
+                Err(error) => {
+                    self.give_back(walk);
+                    return Step::Failed(alloc::format!("catalog: {error:?}"));
+                }
+            }
+        }
+        let walk = matches!(*job, Some(CatalogJob::Walk(_)));
+        let result = job.as_mut().map_or(Ok(true), |job| job.step(env));
+        match result {
+            Ok(false) => Step::Continue,
+            Ok(true) => {
+                *job = None;
+                self.taken.borrow_mut().clear();
+                self.walked.set(self.walked.get() || walk);
+                out.push(events::CATALOG_CHANGED.emit(()));
+                if self.walk.get() || !self.fresh.borrow().is_empty() {
+                    Step::Continue
+                } else {
+                    self.urgent.set(false);
+                    Step::Done
+                }
+            }
+            Err(error) => {
+                // The old catalog stays; tried again after a while.
+                *job = None;
+                self.give_back(walk);
+                Step::Failed(alloc::format!("catalog: {error:?}"))
+            }
+        }
     }
 }
 
@@ -377,78 +482,70 @@ impl Catalog {
 /// the books.
 fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     use alloc::rc::Rc;
-    use paperpaw_sdk::work::{Step, WorkSpec};
+    use paperpaw_sdk::work::WorkSpec;
 
-    // The catalog, made anew as a job: a few books a step, after the
-    // frame and while no input waits; views hear CATALOG_CHANGED.
+    // The catalog, made anew or caught up as a job: a few books a step,
+    // after the frame and while no input waits; views hear
+    // CATALOG_CHANGED.
     let catalog = Rc::new(Catalog::default());
     {
         let catalog = Rc::clone(&catalog);
         r.add_work(WorkSpec::new(
             CATALOG_WORK,
             "core.work.catalog",
-            move |env, _, out| {
-                if !catalog.step(env) {
-                    return Step::Continue;
-                }
-                out.push(events::CATALOG_CHANGED.emit(()));
-                Step::Done
-            },
+            move |env, _, out| catalog.step(env, out),
         ))?;
     }
-    // Made after the start (books may have come over USB meanwhile), on
-    // waking after a while, and after a book came (one of many, often),
-    // at a calm moment; at once when asked, when books came or went, or
-    // for another library folder.
-    // Without a format nothing is a book.
+    // Walked when a view of the library first shows after a start (books
+    // may have been copied meanwhile) or asks for it anew, for another
+    // library folder, and when books came or went without saying which
+    // (`LIBRARY_CHANGED`): at once, taking the books whose files did not
+    // change from the old catalog. Never at every start: on the X4 every
+    // wake is one. Without a format nothing is a book.
     {
         let catalog = Rc::clone(&catalog);
-        r.on(events::STARTED, move |env, _, out| {
-            if !env.formats.is_empty() {
-                catalog.want(false, out);
+        r.on(events::CATALOG_WANTED, move |env, wanted, out| {
+            let missing = library::catalog::state(env.storage) == library::catalog::State::Missing;
+            if !env.formats.is_empty() && (wanted.anew || missing || !catalog.walked.get()) {
+                catalog.want_walk(true, out);
             }
         })?;
     }
     {
         let catalog = Rc::clone(&catalog);
-        r.on(events::RESUME, move |env, _, out| {
-            if !env.formats.is_empty() && catalog.old(env) {
-                catalog.want(false, out);
-            }
-        })?;
-    }
-    for event in [events::LIBRARY_CHANGED, events::CATALOG_WANTED] {
-        let catalog = Rc::clone(&catalog);
-        r.on(event, move |_, _, out| catalog.want(true, out))?;
-    }
-    {
-        let catalog = Rc::clone(&catalog);
-        r.on(events::BOOK_ADDED, move |_, _, out| {
-            catalog.want(false, out)
+        r.on(events::LIBRARY_CHANGED, move |_, _, out| {
+            catalog.want_walk(true, out);
         })?;
     }
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::SETTING_CHANGED, move |_, changed, out| {
             if changed.id == *library::FOLDER.id() {
-                catalog.want(true, out);
+                catalog.want_walk(true, out);
             }
         })?;
     }
-    // A field kept in the catalog changed: in it at a calm moment (the
-    // book's details have it at once).
+    // A book came, or changed what the catalog keeps of it: caught up at
+    // a calm moment, without walking the library.
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::BOOK_ADDED, move |_, added, out| {
+            catalog.want_catch_up(Some(&added.path), false, out);
+        })?;
+    }
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::BOOK_CHANGED, move |env, changed, out| {
             let kept = env.book_fields.iter().any(|f| f.in_catalog);
             if changed.what & library::what::FIELDS != 0 && kept {
-                catalog.want(false, out);
+                catalog.want_catch_up(Some(&changed.path), false, out);
             }
         })?;
     }
     // The library service follows the reading, whichever plugins
     // show it: how far a book is read, in its details and, when it is
-    // opened, closed or finished, beside the catalog.
+    // opened, closed or finished, beside the catalog (folded into it at a
+    // calm moment once the log is long).
     r.on(events::BOOK_OPENED, |env, reading, out| {
         library::record(env, reading, true);
         out.push(library::changed_book(
@@ -460,23 +557,30 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
         library::record(env, reading, false);
     })?;
     for event in [events::BOOK_CLOSED, events::BOOK_FINISHED] {
-        r.on(event, |env, reading, out| {
+        let catalog = Rc::clone(&catalog);
+        r.on(event, move |env, reading, out| {
             library::record(env, reading, false);
             library::note_status(env.storage, &reading.path);
             out.push(library::changed_book(
                 &reading.path,
                 library::what::PROGRESS,
             ));
+            if library::catalog::log_is_long(env.storage) {
+                catalog.want_catch_up(None, false, out);
+            }
         })?;
     }
-    // What plugins keep for a book follows it: moved, removed; the
-    // catalog is made anew at once (the book is not where views show it).
+    // What plugins keep for a book follows it: moved, removed. The catalog
+    // leaves it out at once (noted beside it); a book moved is caught up
+    // where it is now, at once (the book is not where views show it).
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::BOOK_MOVED, move |env, moved, out| {
             library::moved(env.storage, &moved.from, &moved.path);
             library::move_data(env.storage, env.book_data, &moved.from, &moved.path);
-            catalog.want(true, out);
+            let _ = library::catalog::forget(env.storage, &moved.from);
+            catalog.fresh.borrow_mut().retain(|p| *p != moved.from);
+            catalog.want_catch_up(Some(&moved.path), true, out);
         })?;
     }
     {
@@ -484,7 +588,11 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
         r.on(events::BOOK_REMOVED, move |env, removed, out| {
             library::removed(env.storage, &removed.path);
             library::remove_data(env.storage, env.book_data, &removed.path);
-            catalog.want(true, out);
+            let _ = library::catalog::forget(env.storage, &removed.path);
+            catalog.fresh.borrow_mut().retain(|p| *p != removed.path);
+            if library::catalog::log_is_long(env.storage) {
+                catalog.want_catch_up(None, false, out);
+            }
         })?;
     }
     // The notes of books are the kernel's.

@@ -525,11 +525,11 @@ every view of it.
 
 | What | Standard | |
 |---|---|---|
-| The library to ask | `library::service(env)` (`trait Library`) | a book's details, the catalog's state, queries, the index of all books, finished and favourite; a plugin may publish its own as `library::service::SERVICE` |
+| The library to ask | `library::service(env)` (`trait Library`; a library of one's own publishes one as `library::service::SERVICE`, giving at least `each`, `records` and `version`) | a book's details, the catalog's state, queries, the index of all books, finished and favourite; a plugin may publish its own as `library::service::SERVICE` |
 | Every book, without reading each | `library::catalog` | one line a book: author, title, series, number, tags, how far read, favourite, opened, added, fields; read in pieces (`each`, `each_at`, `read_at`) |
 | Books found, a page at a time | `catalog::Query`, `query`, `found` | by how far read, words, author, series, tag, folder, added since; sorted by title, author, series or added |
 | All books to sort and filter in memory | `library::index::Index` | 24 bytes a book (2000 at most on the X4: 48 KB), kept in a file while a book is open (`save`, `load`), status changes taken with `refresh` |
-| The catalog made anew | the kernel, as work in the background | after the start, after `BOOK_ADDED`, `BOOK_REMOVED`, `BOOK_MOVED`, `LIBRARY_CHANGED`, a new library folder, or `library::request_catalog()`; then `events::CATALOG_CHANGED` |
+| The catalog made anew | the kernel, as work in the background, never while a book is open | walked once a view asks after a start (`library::request_catalog`, `request_catalog_anew`), for a new library folder and after `LIBRARY_CHANGED`; caught up after `BOOK_ADDED`, `BOOK_MOVED` and changed fields; `BOOK_REMOVED` leaves a book out at once; then `events::CATALOG_CHANGED` |
 | Something of one book changed | `events::BOOK_CHANGED` (`library::changed_book`, bits of `library::what`) | finished, a favourite, read further, details, cover, a field |
 | A book came | `events::BOOK_ADDED` (`library::added(path, source)`) | transfers, syncs and downloads send it |
 | What can be done with a book | `menus::BOOK`, `events::BOOK_CHOSEN` | add an action to the menu, hear which book it was chosen for |
@@ -540,9 +540,11 @@ How far a book is read and whether it is a favourite change while the
 catalog stands: the kernel notes such changes beside it (when a book is
 opened, closed or finished, and through the service's setters), so a
 view knows them at once without a new catalog and without reading each
-book. A view keeps nothing of the catalog but its index; a page's books
-are read by where their lines start (`Index::record`), their badges
-asked then (`library::service::badges`), never while drawing.
+book. A view keeps nothing of the catalog but its index, of the
+library's version (`Library::version`: keys hold only for it,
+`Library::is_current`); a page's books are read by their keys in one go
+(`Library::records`), their badges asked then
+(`library::service::badges`), never while drawing.
 
 
 ### Services and points of your own

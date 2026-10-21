@@ -309,7 +309,11 @@ impl Registrar {
     /// Adds `contribution`; every method below is a shorthand for one.
     pub fn add(&mut self, contribution: Contribution) -> Result<(), RegisterError> {
         if let Some(id) = contribution.id() {
-            if !id.is_owned_by(&self.plugin) {
+            // The kernel's services a plugin may stand in for (the
+            // library) are published under the kernel's ids.
+            let stands_in = matches!(contribution, Contribution::Published { .. })
+                && crate::services::REPLACEABLE.contains(&id.as_str());
+            if !id.is_owned_by(&self.plugin) && !stands_in {
                 return Err(RegisterError::Namespace { id: id.clone() });
             }
             let kind = contribution.id_kind();

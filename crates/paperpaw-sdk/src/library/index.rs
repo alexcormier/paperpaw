@@ -13,7 +13,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use super::catalog::{self, Record, Show};
+use super::catalog::{self, Books, Record, Show};
 use crate::{MemoryClass, Storage};
 
 /// Not among the books read last ([`Item::recent`]).
@@ -48,11 +48,13 @@ pub fn cap(memory: MemoryClass) -> usize {
     }
 }
 
-/// A book of the catalog, as the index keeps it.
+/// A book of the library, as the index keeps it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Item {
-    /// Where its line starts in the catalog ([`catalog::read_at`]).
+    /// Its key in the library: where its line starts in the catalog
+    /// ([`catalog::read_page`]), or what a library of one's own names it
+    /// by ([`super::Library::each`]).
     pub offset: u32,
     /// A hash of its path, to find it again ([`hash`]).
     pub hash: u32,
@@ -66,7 +68,7 @@ pub struct Item {
     pub progress: u8,
     /// Its place among the books read last (0 the last), or [`NEVER`].
     pub recent: u8,
-    /// [`FAVOURITE`], [`OPENED`].
+    /// [`FAVOURITE`], [`OPENED`], [`REMOVED`].
     pub flags: u8,
 }
 
@@ -74,10 +76,38 @@ pub struct Item {
 pub const FAVOURITE: u8 = 1;
 /// Opened once ([`Item::flags`]).
 pub const OPENED: u8 = 2;
+/// Removed since the index was made ([`Item::flags`]): shown nowhere.
+pub const REMOVED: u8 = 4;
 
 impl Item {
+    /// The item of `record`, whose key is `offset`, of the series
+    /// `series` ([`Index::series`], or [`NO_SERIES`]), at the place
+    /// `recent` among the books read last (or [`NEVER`]).
+    pub fn new(offset: u32, record: &Record, series: u16, recent: u8) -> Item {
+        let mut flags = 0;
+        if record.status.favourite {
+            flags |= FAVOURITE;
+        }
+        if record.status.opened {
+            flags |= OPENED;
+        }
+        Item {
+            offset,
+            hash: hash(&record.path),
+            key: sort_key(&record.title),
+            series,
+            number: number(&record.number),
+            progress: record.status.progress.unwrap_or(NONE),
+            recent,
+            flags,
+        }
+    }
+
     /// Whether `show` shows it.
     pub fn shown(&self, show: Show) -> bool {
+        if self.flags & REMOVED != 0 {
+            return false;
+        }
         let opened = self.flags & OPENED != 0 || self.progress != NONE;
         match show {
             Show::Unread => !opened,
@@ -187,6 +217,9 @@ pub struct Index {
     pub archived: usize,
     /// Changed since it was kept in a file ([`Index::save`]).
     pub dirty: bool,
+    /// Of which version of the library's books it is
+    /// ([`super::Library::version`]): where its keys hold.
+    pub version: Option<u64>,
 }
 
 impl Index {
@@ -198,23 +231,48 @@ impl Index {
     /// Makes the index from the catalog: at most `cap` books, those in the
     /// folder `archive` left out (counted).
     pub fn build(storage: &dyn Storage, cap: usize, archive: &str) -> Index {
+        Index::collect(
+            cap,
+            archive,
+            &opened(storage),
+            catalog_version(storage),
+            &mut |f| catalog::each_at(storage, f),
+        )
+    }
+
+    /// Makes the index from `books` (any library's, read twice: counted,
+    /// then taken): at most `cap`, those in the folder `archive` left out
+    /// (counted), `opened` the books read last (their paths [`hash`]ed,
+    /// the last first), of the library's `version`.
+    pub fn collect(
+        cap: usize,
+        archive: &str,
+        opened: &[u32],
+        version: Option<u64>,
+        books: Books<'_>,
+    ) -> Index {
         let archive = if archive.is_empty() {
             String::new()
         } else {
             format!("{archive}/")
         };
-        let opened = opened(storage);
+        let in_archive = |path: &str| !archive.is_empty() && path.starts_with(&archive);
         // As many as there are books: a list grown by doubling would hold
         // twice that for a moment.
-        let lines = count_lines(storage);
-        let mut items = Vec::with_capacity(lines.min(cap));
+        let mut count = 0;
+        books(&mut |_, record| count += usize::from(!in_archive(&record.path)));
+        let mut items = Vec::with_capacity(count.min(cap));
         let mut series: Vec<String> = Vec::new();
-        let mut archived = 0;
-        catalog::each_at(storage, &mut |offset, record| {
-            if !archive.is_empty() && record.path.starts_with(&archive) {
+        let (mut archived, mut total) = (0, 0);
+        books(&mut |key, record| {
+            if in_archive(&record.path) {
                 archived += 1;
                 return;
             }
+            total += 1;
+            let Ok(key) = u32::try_from(key) else {
+                return;
+            };
             if items.len() >= cap {
                 return;
             }
@@ -228,16 +286,16 @@ impl Index {
             } else {
                 NO_SERIES
             };
-            items.push(item(offset, &record, of, &opened));
+            let recent = rank(opened, hash(&record.path));
+            items.push(Item::new(key, &record, of, recent));
         });
-        // The catalog's lines but its header.
-        let total = lines.saturating_sub(1).saturating_sub(archived);
         Index {
             total: total.max(items.len()),
             archived,
             items,
             series,
             dirty: true,
+            version,
         }
     }
 
@@ -246,19 +304,30 @@ impl Index {
         catalog::read_at(storage, u64::from(self.items.get(i)?.offset))
     }
 
-    /// Takes the order of the books read last, and the status changes
-    /// logged beside the catalog (how far read, favourite), anew: after
+    /// Takes the order of the books read last, and what was noted beside
+    /// the catalog (how far read, favourite, removed), anew: after
     /// reading, a few short files read, not the catalog.
     pub fn refresh(&mut self, storage: &dyn Storage) {
         let opened = opened(storage);
         let changes = catalog::changes(storage);
+        let mut short: Vec<(u32, Option<catalog::Status>)> = changes
+            .entries
+            .iter()
+            .map(|(hash, change)| (*hash as u32, *change))
+            .collect();
+        short.sort_unstable_by_key(|(hash, _)| *hash);
         for item in &mut self.items {
             let recent = rank(&opened, item.hash);
             let (mut progress, mut flags) = (item.progress, item.flags);
-            if let Some((_, status)) = changes.iter().find(|(h, _)| *h as u32 == item.hash) {
-                progress = status.progress.unwrap_or(NONE);
-                flags =
-                    (u8::from(status.favourite) * FAVOURITE) | (u8::from(status.opened) * OPENED);
+            if let Ok(at) = short.binary_search_by_key(&item.hash, |(h, _)| *h) {
+                match short[at].1 {
+                    Some(status) => {
+                        progress = status.progress.unwrap_or(NONE);
+                        flags = (u8::from(status.favourite) * FAVOURITE)
+                            | (u8::from(status.opened) * OPENED);
+                    }
+                    None => flags |= REMOVED,
+                }
             }
             self.dirty |= (item.recent, item.progress, item.flags) != (recent, progress, flags);
             (item.recent, item.progress, item.flags) = (recent, progress, flags);
@@ -366,7 +435,7 @@ impl Index {
     /// for it meanwhile; `archive` is the folder it was made without.
     /// Written a piece at a time; `false` where it could not be.
     pub fn save(&self, storage: &dyn Storage, file: &str, archive: &str) -> bool {
-        let Some(stamp) = made(storage) else {
+        let Some(stamp) = self.version else {
             return false;
         };
         let mut head = Vec::with_capacity(HEAD);
@@ -410,9 +479,11 @@ impl Index {
     }
 
     /// The index kept by [`Index::save`] in `file`, if it is of the
-    /// catalog there is now and made without the folder `archive`.
-    pub fn load(storage: &dyn Storage, file: &str, archive: &str) -> Option<Index> {
-        let stamp = made(storage)?;
+    /// library's `version` there is now ([`super::Library::version`];
+    /// [`catalog_version`] for the catalog) and made without the folder
+    /// `archive`.
+    pub fn load(storage: &dyn Storage, file: &str, archive: &str, version: u64) -> Option<Index> {
+        let stamp = version;
         let mut head = [0u8; HEAD];
         if storage.read_at(file, 0, &mut head).ok()? != head.len() || &head[..4] != MAGIC {
             return None;
@@ -475,34 +546,13 @@ impl Index {
             total,
             archived,
             dirty: false,
+            version: Some(version),
         })
     }
 }
 
-/// The item of `record`, whose line starts at `offset`.
-fn item(offset: u64, record: &Record, series: u16, opened: &[u32]) -> Item {
-    let hash = hash(&record.path);
-    let mut flags = 0;
-    if record.status.favourite {
-        flags |= FAVOURITE;
-    }
-    if record.status.opened {
-        flags |= OPENED;
-    }
-    Item {
-        offset: offset as u32,
-        hash,
-        key: sort_key(&record.title),
-        series,
-        number: number(&record.number),
-        progress: record.status.progress.unwrap_or(NONE),
-        recent: rank(opened, hash),
-        flags,
-    }
-}
-
-/// The books opened last, hashed, the last first.
-fn opened(storage: &dyn Storage) -> Vec<u32> {
+/// The books opened last, their paths [`hash`]ed, the last first.
+pub fn opened(storage: &dyn Storage) -> Vec<u32> {
     super::opened_books(storage)
         .iter()
         .map(|p| hash(p))
@@ -517,26 +567,11 @@ fn rank(opened: &[u32], hash: u32) -> u8 {
         .map_or(NEVER, |r| r.min(usize::from(NEVER) - 1) as u8)
 }
 
-/// How many lines the catalog has, counted without reading them.
-/// Which catalog an index is of: its generation and length (not its
-/// log's, which [`Index::refresh`] reads).
-fn made(storage: &dyn Storage) -> Option<u64> {
+/// Which catalog there is, as an index of it keeps it
+/// ([`Index::version`]): its generation and length (not its log's, which
+/// [`Index::refresh`] reads).
+pub fn catalog_version(storage: &dyn Storage) -> Option<u64> {
     Some((catalog::generation(storage)? << 40) ^ catalog::size(storage)?)
-}
-
-fn count_lines(storage: &dyn Storage) -> usize {
-    let path = format!("{}/catalog.txt", super::DIR);
-    let mut buf = [0u8; 1024];
-    let (mut offset, mut lines, mut last) = (0u64, 0, b'\n');
-    while let Ok(n) = storage.read_at(&path, offset, &mut buf) {
-        if n == 0 {
-            break;
-        }
-        offset += n as u64;
-        lines += buf[..n].iter().filter(|&&b| b == b'\n').count();
-        last = buf[n - 1];
-    }
-    lines + usize::from(last != b'\n')
 }
 
 #[cfg(test)]
@@ -612,7 +647,8 @@ mod tests {
             &storage,
             "books/Book 0002.txt",
             Status::new(Some(100), true, true),
-        );
+        )
+        .unwrap();
         let mut index = index;
         index.refresh(&storage);
         assert_eq!(index.order(Show::Finished, false).len(), 1);
@@ -657,33 +693,60 @@ mod tests {
     fn a_kept_index_is_read_back_while_its_catalog_is_the_same() {
         let storage = catalog(9);
         let mut index = Index::build(&storage, 100, "books/Archive");
+        let version = catalog_version(&storage).unwrap();
+        assert_eq!(index.version, Some(version));
         index.set_progress(index.items[2].hash, Some(42));
         assert!(index.save(&storage, "kept.bin", "books/Archive"));
-        let kept = Index::load(&storage, "kept.bin", "books/Archive").unwrap();
+        let kept = Index::load(&storage, "kept.bin", "books/Archive", version).unwrap();
         assert_eq!(kept.items, index.items);
         assert_eq!(kept.series, index.series);
         assert_eq!((kept.total, kept.archived), (index.total, index.archived));
         // Another archive folder: made anew.
-        assert!(Index::load(&storage, "kept.bin", "books/Old").is_none());
+        assert!(Index::load(&storage, "kept.bin", "books/Old", version).is_none());
         // A change noted beside the catalog: still of it, the change
-        // taken by refreshing.
+        // taken by refreshing; a book removed is shown nowhere.
         catalog::note(
             &storage,
             "books/Book 0001.txt",
             Status::new(Some(100), false, true),
-        );
-        let mut kept = Index::load(&storage, "kept.bin", "books/Archive").unwrap();
+        )
+        .unwrap();
+        catalog::forget(&storage, "books/Book 0003.txt").unwrap();
+        assert_eq!(catalog_version(&storage), Some(version));
+        let mut kept = Index::load(&storage, "kept.bin", "books/Archive", version).unwrap();
         kept.refresh(&storage);
         assert_eq!(kept.order(Show::Finished, false).len(), 1);
-        // The catalog written anew (folded, made), even as long as it
-        // was: made anew, where its lines start may have moved.
+        assert_eq!(kept.order(Show::All, false).len(), index.items.len() - 1);
+        // The catalog written anew, even as long as it was: another
+        // version, where its lines start may have moved.
         let records: Vec<Record> = {
             let mut all = Vec::new();
             catalog::each(&storage, &mut |r| all.push(r));
             all
         };
-        assert!(index.save(&storage, "kept.bin", "books/Archive"));
         catalog::write(&storage, &records);
-        assert!(Index::load(&storage, "kept.bin", "books/Archive").is_none());
+        assert_ne!(catalog_version(&storage), Some(version));
+    }
+
+    /// A library of one's own makes its index of its own books.
+    #[test]
+    fn any_library_makes_an_index_of_its_books() {
+        let books: Vec<(u64, Record)> = (0..4u64)
+            .map(|n| {
+                let book = Book::default().title(Some(format!("Book {n}")));
+                (n * 10, Record::of(&format!("remote/{n}"), &book))
+            })
+            .collect();
+        let index = Index::collect(3, "", &[], Some(7), &mut |f| {
+            for (key, record) in &books {
+                f(*key, record.clone());
+            }
+        });
+        assert_eq!(index.items.len(), 3, "at most its cap");
+        assert_eq!(index.total, 4);
+        assert_eq!(index.version, Some(7));
+        assert_eq!(index.items[1].offset, 10);
+        let item = Item::new(5, &books[0].1, NO_SERIES, NEVER);
+        assert_eq!(item.hash, hash("remote/0"));
     }
 }

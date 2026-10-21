@@ -6,46 +6,68 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-- Library: the kernel makes the catalog of books in the background: at
-  once when books came, went or moved, another library folder was chosen
-  or a view asks, and at a calm moment (within a minute) after the
-  start, after a long sleep and while a sync brings books one after the
-  other; views of the library no longer make it themselves, and show at
-  once what changed (a book finished, a favourite) without reading each
-  book. Books Calibre, the transfer page or Wallabag delete are removed
-  from the library with what plugins keep for them; books they bring are
-  announced. Book information is read out (its rows were drawn only).
+- Library: the kernel keeps the catalog of books, the only one writing
+  it, one change at a time, in the background and never while a book is
+  open. It walks the library folder once the library first shows after
+  a start (never at every start: on the X4 every wake is one), for
+  another library folder and when books came or went without saying
+  which, taking each book whose file did not change from the old
+  catalog instead of reading its details, and listing large folders in a
+  few pieces. Books that came, moved or changed are caught up without a
+  walk, at a calm moment when many come one after the other (a Calibre
+  or catalog sync); books removed are left out at once. Views of the
+  library no longer make it themselves, and show at once what changed (a
+  book finished, a favourite, a book removed) without reading each book.
+  What could not be read is never written: an error leaves the old
+  catalog whole, and a status that cannot be read is not noted. Books
+  Calibre, the transfer page or Wallabag delete are removed from the
+  library with what plugins keep for them; books they and catalogs bring
+  are announced. Book information is read out (its rows were drawn
+  only).
 - Library: badges plugins add show on the books' rows, the fields they
   keep show on a book's information, and actions they add to the book
   menu show on its sheet. Each size of cover (row, card, covers) is kept
   apart, so switching views no longer makes covers anew.
-- SDK: the library as a service (`library::service`, `trait Library`,
-  replaceable as `library::service::SERVICE`), with the catalog's state
-  (`catalog::state`, `catalog::generation`), queries (`catalog::Query`,
-  `query`, `found`) and the index of every book the calm list uses
-  (`library::index::Index`, 24 bytes a book, kept in a file while a book
-  is open). New: `events::BOOK_ADDED`, `BOOK_CHANGED` (bits of
-  `library::what`), `BOOK_CHOSEN`, `CATALOG_CHANGED`, `CATALOG_WANTED`;
-  `library::{added, changed_book, request_catalog, cover_variant}`; `menus::BOOK`; `Registrar::add_book_field`
+- SDK: the library as a service (`library::service`, `trait Library`):
+  every view of the library, its shelves, its letters and the book
+  widgets read the books through it (`each`, `records`, `version`,
+  `index`, `is_current`, `refresh`, `kept_index`, `keep_index`), so a
+  library of one's own, published as `library::service::SERVICE` (the
+  kernel's services a plugin may stand in for are
+  `services::REPLACEABLE`), feeds them all with its own books. With the
+  catalog's state (`catalog::state`, `catalog::generation`), what was
+  noted beside it (`catalog::Changes`), queries (`catalog::Query`,
+  `query`, `found`, and `query_in`, `found_in` over any library's
+  `catalog::Books`), a page's books with the log read once
+  (`catalog::read_page`), and the index of every book the calm list uses
+  (`library::index::Index`, 24 bytes a book, made from any library with
+  `Index::collect`, its items with `Item::new`, of a `version`, kept in
+  a file while a book is open). New: `events::BOOK_ADDED`,
+  `BOOK_CHANGED` (bits of `library::what`), `BOOK_CHOSEN`,
+  `CATALOG_CHANGED`, `CATALOG_WANTED` (`CatalogWanted`);
+  `library::{added, changed_book, request_catalog, request_catalog_anew,
+  cover_variant}`; `menus::BOOK`; `Registrar::add_book_field`
   (`library::BookField`) and `add_book_badge` (`library::BookBadge`,
   `Badge`), listed in `Env::book_fields` and `Env::book_badges`;
   `catalog::series_order` reads `2,5` as `2.5`; `Formats::is_empty`.
-- SDK, breaking: the catalog is of format 2 (status, added, fields; a
-  header with its generation; format 1 is still read) and `Record` has
-  `status`, `added` and fields; status changes are noted beside it
-  (`catalog::note`, folded in with `catalog::fold`). The catalog's
-  `Walk` is the kernel's work: views listen to `CATALOG_CHANGED` and ask
-  with `library::request_catalog` instead of walking. `Env` and
-  `EnvParts` have `book_fields` and `book_badges`.
+- SDK, breaking: the catalog is of format 2 (status, added, fields, the
+  file's size; a header with its generation; format 1 is still read)
+  and `Record` has `status`, `added`, `size` and fields; status changes
+  and removals are noted beside it and folded in by the kernel. Making
+  it is the kernel's (`catalog::Walk`, `catalog::Rewrite`,
+  `catalog::note`, `catalog::forget`, `catalog::log_is_long`,
+  `library::note_status`, with the SDK's `kernel` feature): views listen
+  to `CATALOG_CHANGED` and ask with `library::request_catalog` instead of
+  walking. `catalog::changes` gives `Changes`; `Index::load` takes the
+  version it is to be of. `Env` and `EnvParts` have `book_fields` and
+  `book_badges`.
 - The library folder is the kernel's setting, `core.library-folder`
   (it was the library plugin's `files.root`), so a library of one's own
   and every plugin that puts books somewhere read the same; a folder set
-  before is taken over once. SDK: `builtin::settings::LIBRARY_FOLDER`
+  before is read under its old id. SDK: `builtin::settings::LIBRARY_FOLDER`
   (`library::FOLDER` names it) and `builtin::screens::FOLDER_EDITOR`, a
   text setting's editor that opens the folder chooser of whichever
-  plugin fills its slot. The catalog's writers (`catalog::Walk`,
-  `catalog::note`, `catalog::fold`, `library::note_status`) come with
-  the SDK's `kernel` feature.
+  plugin fills its slot.
 - SDK: `reading` holds the reader's building blocks for readers of
   one's own: `FilteredDocument`, `PageIndex`, and with the feature
   `unstable` `PageType`, `ReadingFaces`, `EmbeddedFonts`, `StatusRoom`,
