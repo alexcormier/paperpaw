@@ -271,6 +271,14 @@ impl Calendar {
                 Color::BLACK
             };
             let number = format!("{}", fmt::date_of(day).day);
+            // Each day a part to choose, the chosen one focused.
+            canvas.describe(
+                paperpaw_sdk::semantics::Role::Button,
+                &number,
+                r,
+                day == self.day,
+                None,
+            );
             let x = f32::from(inner.x)
                 + (f32::from(inner.width) - font.measure(style.small, &number)) / 2.0;
             // Above the bar of reading time, if there is one.

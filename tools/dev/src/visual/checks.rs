@@ -1055,6 +1055,23 @@ pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
             }
         }
     }
+    // Tiles of a grid: of a size with others in its row and its column,
+    // two or more each way, each cell the target; they lie edge to edge.
+    let tile = |d: &Described| {
+        let alike =
+            |o: &&&Described| o.area.width == d.area.width && o.area.height == d.area.height;
+        let across = buttons
+            .iter()
+            .filter(alike)
+            .filter(|o| o.area.y == d.area.y)
+            .count();
+        let down = buttons
+            .iter()
+            .filter(alike)
+            .filter(|o| o.area.x == d.area.x)
+            .count();
+        across >= 2 && down >= 2
+    };
     // Neighbours side by side, and above each other.
     for (i, a) in buttons.iter().enumerate() {
         for b in &buttons[i + 1..] {
@@ -1068,9 +1085,9 @@ pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
             } else {
                 continue;
             };
-            // Tiles of a grid, each cell the target, lie edge to edge;
-            // overlapping ones are the overlap check's.
-            let tiles = gap == 0 && p.width == q.width && p.height == q.height;
+            // Tiles of a grid lie edge to edge; overlapping ones are the
+            // overlap check's.
+            let tiles = gap == 0 && tile(a) && tile(b);
             if !tiles && (0..half - tolerance).contains(&gap) {
                 found.push((
                     format!("{} and {}", named(a), named(b)),

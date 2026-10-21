@@ -224,7 +224,7 @@ impl GroupPage {
             .map(|e| match e {
                 Row::Heading(_) => heading,
                 Row::Setting(spec) if ui::slider::shows(env, spec) => slider_row,
-                Row::Setting(spec) => ui::setting_row(&style, spec, u32::from(row)) as u16,
+                Row::Setting(spec) => ui::setting_row(&style, spec, u32::from(row), noted) as u16,
                 Row::Reset | Row::Theme => style.row as u16,
             })
             .collect();
@@ -281,15 +281,6 @@ impl GroupPage {
         if let Some(at) = at {
             self.rows.set_focus(at);
             self.keys = true;
-        }
-    }
-
-    /// Where a row's title and value (or stepper) are drawn.
-    pub(super) fn title_area(&self, rect: Rect) -> Rect {
-        if self.noted {
-            ui::title_area(&self.style, rect)
-        } else {
-            rect
         }
     }
 
@@ -375,7 +366,13 @@ impl GroupPage {
         } else {
             &self.number_room
         };
-        ui::stepper(env, &self.style, self.title_area(rect), room)
+        // Its first line, as high as − and + need.
+        let area = if self.noted {
+            ui::number_title_area(&self.style, rect)
+        } else {
+            rect
+        };
+        ui::stepper(env, &self.style, area, room)
     }
 
     /// Redraws row `index` where it is (a value shown that changed).
@@ -475,26 +472,26 @@ impl Screen for GroupPage {
                 match spec.kind {
                     SettingKind::Int { .. } if focused => {
                         let area = if noted {
-                            ui::title_area(&style, rect)
+                            ui::number_title_area(&style, rect)
                         } else {
                             rect
                         };
                         ui::draw_stepper(canvas, env, &style, area, title, &value, room, editing);
                         if !note.is_empty() {
-                            ui::draw_note(canvas, env, &style, rect, true, note);
+                            ui::draw_number_note(canvas, env, &style, rect, true, note);
                         }
                         return;
                     }
                     // On touch screens − and + are always there.
                     SettingKind::Int { .. } if touch => {
                         let area = if noted {
-                            ui::title_area(&style, rect)
+                            ui::number_title_area(&style, rect)
                         } else {
                             rect
                         };
                         ui::draw_number(canvas, env, &style, area, title, &value, room, None);
                         if !note.is_empty() {
-                            ui::draw_note(canvas, env, &style, rect, false, note);
+                            ui::draw_number_note(canvas, env, &style, rect, false, note);
                         }
                         return;
                     }

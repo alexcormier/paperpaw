@@ -326,8 +326,9 @@ impl Chooser {
         if !env.device.input.touch {
             return style.row as u16 + help + gap;
         }
-        // Its buttons keep the side margin from the bottom edge.
-        gap + style.row as u16 * 2 + help + style.margin as u16
+        // Its buttons a fingertip large by touch, the side margin from
+        // the bottom edge.
+        gap + style.row as u16 + help + gap + button(&style) + style.margin as u16
     }
 
     /// Places the sheet's parts in `sheet`.
@@ -335,7 +336,9 @@ impl Chooser {
         let style = UiStyle::new(env);
         let margin = style.margin as u16;
         let gap = style.gap as u16;
-        let row = style.row as u16;
+        // The buttons: as high as buttons are everywhere, by touch at least
+        // a fingertip.
+        let row = button(&style);
         let y = (sheet.y + sheet.height).saturating_sub(margin + row);
         let width = sheet.width.saturating_sub(2 * margin);
         self.sheet = sheet;
@@ -515,6 +518,13 @@ pub(crate) fn action(action: &Id) -> Option<Tap> {
 /// widgets reads the card.
 pub(crate) fn shows_anew(event: &Id) -> bool {
     *event == events::PREVIEW_CHANGED
+}
+
+/// The height of the sheet's buttons: of a row's buttons, by touch at
+/// least a fingertip ([`ui::button_height`] of a [`UiStyle::touch_row`]).
+fn button(style: &UiStyle) -> u16 {
+    let row = style.touch_row(style.row) as u16;
+    ui::button_height(style, Rect::new(0, 0, 0, row))
 }
 
 #[cfg(test)]

@@ -112,7 +112,6 @@ struct Geometry {
     /// The screen's.
     width: u16,
     height: u16,
-    margin: u16,
     gap: u16,
     /// Between buttons side by side: wider on touch screens, so that a
     /// finger hits the one it means.
@@ -132,6 +131,13 @@ struct Geometry {
     top: bool,
     /// The sizes buttons are made from.
     style: UiStyle,
+}
+
+impl Geometry {
+    /// The margin at the screen's sides, the style's.
+    fn margin(&self) -> u16 {
+        self.style.margin as u16
+    }
 }
 
 /// Where the panel's parts go.
@@ -207,9 +213,9 @@ fn layout(lines: &[Line], g: Geometry) -> Layout {
         rows,
         region,
         head: Rect::new(
-            g.margin,
+            g.margin(),
             region.y + gap / 2,
-            g.width.saturating_sub(2 * g.margin),
+            g.width.saturating_sub(2 * g.margin()),
             head,
         ),
         pager,
@@ -308,7 +314,6 @@ impl PanelScreen {
         let geometry = Geometry {
             width,
             height: display.height,
-            margin,
             gap,
             spacing: if touch { gap } else { gap / 2 },
             row: style.touch_row(style.row) as u16,
@@ -365,7 +370,7 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
     let small = |text: &str| font.as_ref().map_or(0.0, |f| f.measure(style.small, text));
     // As many buttons to a row as stay readable.
     let per_row = |group: &[Control]| -> usize {
-        let inner = f32::from(g.width - 2 * g.margin);
+        let inner = f32::from(g.width - 2 * g.margin());
         (1..=PER_ROW.min(group.len()))
             .rev()
             .find(|&n| {
@@ -718,7 +723,7 @@ fn fits_segments(
 /// `area` without `margin` left and right and a little above and below.
 fn inset(area: Rect, g: &Geometry) -> Rect {
     let pad = (area.height - ui::button_height(&g.style, area)) / 2;
-    area.inset(g.margin, pad)
+    area.inset(g.margin(), pad)
 }
 
 /// `count` equal parts of `area` side by side, `gap` apart.
@@ -1022,21 +1027,25 @@ pub(crate) const QUICK_SIZE: Setting<i64> = Setting::new("menu.quick.size");
 mod layout_tests {
     use super::*;
 
-    const GEOMETRY: Geometry = Geometry {
-        width: 480,
-        height: 800,
-        margin: 20,
-        gap: 10,
-        spacing: 5,
-        row: 60,
-        slider: 150,
-        border: 2,
-        label: 150,
-        head: 40,
-        pager: 45,
-        top: false,
-        style: UiStyle::PLAIN,
-    };
+    fn geometry() -> Geometry {
+        // Margins of 20: wider than the plain style's.
+        let mut style = UiStyle::PLAIN;
+        style.margin = 20;
+        Geometry {
+            width: 480,
+            height: 800,
+            gap: 10,
+            spacing: 5,
+            row: 60,
+            slider: 150,
+            border: 2,
+            label: 150,
+            head: 40,
+            pager: 45,
+            top: false,
+            style,
+        }
+    }
 
     fn id(name: &'static str) -> Id {
         Id::new_static(name)
@@ -1045,7 +1054,7 @@ mod layout_tests {
     #[test]
     fn at_the_bottom_rows_follow_each_other() {
         let lines = [Line::Stepper(id("a.size")), Line::Open(id("a.font"))];
-        let layout = layout(&lines, GEOMETRY);
+        let layout = layout(&lines, geometry());
         assert_eq!(layout.region.y + layout.region.height, 800);
         assert!(layout.pager.is_none());
         let [first, second] = layout.rows.as_slice() else {
@@ -1061,7 +1070,7 @@ mod layout_tests {
     fn from_the_top_the_head_comes_first() {
         let g = Geometry {
             top: true,
-            ..GEOMETRY
+            ..geometry()
         };
         let layout = layout(&[Line::Open(id("a.font"))], g);
         assert_eq!(layout.region.y, 0);
@@ -1072,7 +1081,7 @@ mod layout_tests {
     #[test]
     fn too_many_rows_go_to_pages() {
         let lines: Vec<Line> = (0..20).map(|_| Line::Open(id("a.font"))).collect();
-        let layout = layout(&lines, GEOMETRY);
+        let layout = layout(&lines, geometry());
         assert!(layout.rows.last().unwrap().page > 0);
         assert!(layout.region.height <= (800.0 * MAX_SHARE) as u16);
         let pager = layout.pager.expect("a pager");
@@ -1096,7 +1105,7 @@ mod layout_tests {
         // the second.
         let mut lines = alloc::vec![Line::Slider(id("a.light")), Line::Slider(id("a.warmth"))];
         lines.extend((0..6).map(|_| Line::Open(id("a.font"))));
-        let layout = layout(&lines, GEOMETRY);
+        let layout = layout(&lines, geometry());
         let rows = &layout.rows;
         assert_eq!(rows[0].area.height, 150);
         assert_eq!(rows[1].area.y, rows[0].area.y + 150);
@@ -1116,7 +1125,7 @@ mod layout_tests {
             Control::Toggle(id("a.two")),
             Control::Toggle(id("a.three")),
         ]);
-        let row = place(&buttons, Rect::new(0, 100, 480, 60), GEOMETRY);
+        let row = place(&buttons, Rect::new(0, 100, 480, 60), geometry());
         assert_eq!(row.controls.len(), 3);
         let widths: Vec<u16> = row.controls.iter().map(|(_, r)| r.width).collect();
         assert!(widths.iter().all(|w| *w == widths[0]));
@@ -1125,7 +1134,7 @@ mod layout_tests {
 
         // A slider is its whole row, across the screen.
         let area = Rect::new(0, 0, 480, 150);
-        let slider = place(&Line::Slider(id("a.light")), area, GEOMETRY);
+        let slider = place(&Line::Slider(id("a.light")), area, geometry());
         assert_eq!(
             slider.controls,
             [(Control::Slide(id("a.light")), area)].as_slice()
@@ -1135,7 +1144,7 @@ mod layout_tests {
             id("a.align"),
             alloc::vec![String::from("l"), String::from("r")],
         );
-        let row = place(&segments, Rect::new(0, 0, 480, 60), GEOMETRY);
+        let row = place(&segments, Rect::new(0, 0, 480, 60), geometry());
         assert_eq!(row.controls.len(), 2);
         assert_eq!(
             row.controls[1].0,

@@ -227,7 +227,7 @@ impl MenuScreen {
                 match Self::setting(env, &item.id) {
                     _ if item.heading => heading,
                     // A number's − and + grow, and its row with them.
-                    Some(spec) => ui::setting_row(&style, spec, style.row) as u16,
+                    Some(spec) => ui::setting_row(&style, spec, style.row, false) as u16,
                     None => style.row as u16,
                 }
             })
@@ -279,7 +279,8 @@ impl MenuScreen {
 
     /// The setting behind item `index`, if it is one.
     fn setting<'e>(env: &Env<'e>, id: &Id) -> Option<&'e SettingSpec> {
-        env.settings.specs().find(|spec| spec.id == *id)
+        // Found by its id, not by going through every setting.
+        env.settings.spec(id.as_str()).filter(|spec| spec.id == *id)
     }
 
     /// Changes a setting by one step.

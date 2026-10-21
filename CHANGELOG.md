@@ -6,9 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-- SDK: buttons on touch screens are at least a fingertip (7 mm) high:
-  `ui::button_height(style, row)` takes the style, and rows and bars
-  that hold buttons are made with `UiStyle::touch_row`, which grows them
+- SDK: buttons on touch screens are at least a fingertip (7 mm) high.
+  Breaking: `ui::button_height(style, row)` takes the style. Rows and
+  bars that hold buttons are made with `UiStyle::touch_row`, which grows them
   by as much as their buttons grow, so the room above and below them,
   the margin to the screen's sides and the gaps between them stay as
   they were. A bar of buttons along the top or bottom edge keeps the
@@ -16,7 +16,9 @@ change the plugin SDK.
   `ui::edge_bar_band`, `ui::edge_room`): the file manager's, the
   store's and the plugin manager's bars, the sync question, the
   reader's footnote, selection and skim bars, the keyboard and the home
-  screen's layouts. `ui::setting_row` gives a number's row its height. The
+  screen's layouts. `ui::setting_row(style, spec, row, noted)` gives a
+  number's row its height, in a noted row its first line
+  (`ui::number_title_area`). The
   shipped screens with buttons follow; `paperpaw-dev` finds buttons
   without their room (`visual.button-room`).
 - SDK: accessibility. `events::FOCUS_CHANGED` (`FocusChanged`: role,

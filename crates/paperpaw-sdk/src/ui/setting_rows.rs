@@ -13,6 +13,29 @@ pub fn title_area(style: &UiStyle, rect: Rect) -> Rect {
     Rect::new(rect.x, rect.y + style.gap as u16 / 2, rect.width, band)
 }
 
+/// The part of a noted row of a number that holds its title and its
+/// `−` and `+`: as [`title_area`], on touch screens as much higher as the
+/// buttons grow to a fingertip ([`UiStyle::touch_row`]); the note goes
+/// below it ([`draw_number_note`]).
+pub fn number_title_area(style: &UiStyle, rect: Rect) -> Rect {
+    let band = (style.touch_row(style.title_band()) as u16).min(rect.height);
+    Rect::new(rect.x, rect.y + style.gap as u16 / 2, rect.width, band)
+}
+
+/// Draws the note of a noted row of a number, below its
+/// [`number_title_area`].
+pub fn draw_number_note(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    focused: bool,
+    note: &str,
+) {
+    let below = number_title_area(style, rect).bottom() as u16;
+    draw_note_below(canvas, env, style, rect, below, focused, note);
+}
+
 /// Draws a row with `title` and `value` on its first line and `note` in
 /// small text below, wrapped to [`NOTE_LINES`] lines and shortened with
 /// "…" if longer. Rows are always fully readable before they are tapped,
@@ -127,11 +150,17 @@ pub fn draw_value_row(
 /// buttons of rows above each other line up.
 pub(super) const STEPPER_VALUE: &str = "000 %";
 
-/// The height of the row of setting `spec` in a list of rows `row` high:
-/// a number's row, which holds its − and +, grows on touch screens with
-/// its buttons ([`UiStyle::touch_row`]), the others stay as they are.
-pub fn setting_row(style: &UiStyle, spec: &SettingSpec, row: u32) -> u32 {
+/// The height of the row of setting `spec` in a list of rows `row` high,
+/// `noted` ones ([`UiStyle::noted_row`]) or not: a number's row, which
+/// holds its − and +, grows on touch screens with its buttons
+/// ([`UiStyle::touch_row`]; in a noted row its first line,
+/// [`number_title_area`]), the others stay as they are.
+pub fn setting_row(style: &UiStyle, spec: &SettingSpec, row: u32, noted: bool) -> u32 {
     match spec.kind {
+        SettingKind::Int { .. } if noted => {
+            let band = style.title_band();
+            row + style.touch_row(band) - band
+        }
         SettingKind::Int { .. } => style.touch_row(row),
         _ => row,
     }
