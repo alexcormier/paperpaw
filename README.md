@@ -37,7 +37,7 @@ menu at the top, then turn the switch on. Where that menu has no such
 entry, a computer with `adb` lifts the restriction:
 
 ```sh
-adb shell appops set --user 0 io.github.hthoene.paperpaw ACCESS_RESTRICTED_SETTINGS allow
+adb shell appops set --user 0 org.paperpaw.app ACCESS_RESTRICTED_SETTINGS allow
 ```
 
 For updates as they are released, [Obtainium](https://github.com/ImranR98/Obtainium)

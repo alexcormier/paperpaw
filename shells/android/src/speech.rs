@@ -29,7 +29,7 @@ const MAX_CHARS: usize = 3_900;
 const QUEUE_FLUSH: i32 = 0;
 const QUEUE_ADD: i32 = 1;
 /// The listener class, in the APK's `classes.dex`.
-const LISTENER: &str = "io.github.hthoene.paperpaw.SpeechListener";
+const LISTENER: &str = "org.paperpaw.app.SpeechListener";
 
 /// Texts the engine reported as ended (spoken or not), from its threads.
 static ENDED: Mutex<Vec<(u32, bool)>> = Mutex::new(Vec::new());

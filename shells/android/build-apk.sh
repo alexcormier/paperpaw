@@ -140,9 +140,9 @@ echo "Compiling the speech listener (the only Java class)"
 rm -rf "$out/classes" "$out/dex"
 mkdir -p "$out/classes" "$out/dex"
 "$javac" -source 8 -target 8 -nowarn -Xlint:-options -classpath "$platform" -d "$out/classes" \
-    shells/android/java/io/github/hthoene/paperpaw/*.java
+    shells/android/java/org/paperpaw/app/*.java
 "$java" -cp "$tools/lib/d8.jar" com.android.tools.r8.D8 --release --min-api 26 \
-    --lib "$platform" --output "$out/dex" "$out"/classes/io/github/hthoene/paperpaw/*.class
+    --lib "$platform" --output "$out/dex" "$out"/classes/org/paperpaw/app/*.class
 cp "$out/dex/classes.dex" "$out/apk/"
 
 echo "Packaging"

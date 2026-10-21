@@ -7,7 +7,7 @@
 //!
 //! Books live in the shared `Books` folder once the user allows access
 //! (the home screen offers it; see `access`). Until then, the library is the
-//! app's own folder (`Android/data/io.github.hthoene.paperpaw/files/books`)
+//! app's own folder (`Android/data/org.paperpaw.app/files/books`)
 //! with the bundled sample books. Settings and caches always stay in the
 //! app's folder.
 //!
