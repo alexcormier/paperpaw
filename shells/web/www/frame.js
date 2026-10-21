@@ -22,6 +22,9 @@ let last = null;
 let plugins = {};
 let timer = null;
 let drawing = false;
+/// The recorded answers and whether the page fetches the rest: kept for
+/// every device made after (a restart after a trap too).
+let network = { fixtures: [], mode: "fixtures" };
 
 const loading = PaperPawDevice.load(new URL("paperpaw-web.wasm", import.meta.url));
 
@@ -115,7 +118,48 @@ function step() {
   if (!device) return;
   const next = guarded(() => device.advance(now()));
   requestDraw();
+  requests();
   if (next !== null) timer = setTimeout(step, Math.max(next, 1));
+}
+
+/// Tells the page every request plugins made, and fetches those it is to.
+function requests() {
+  for (const seen of guarded(() => device.requests())) tell({ type: "request", ...seen });
+  for (const call of guarded(() => device.outbox())) fetchFor(call);
+}
+
+/// Bytes written in hexadecimal.
+function bytesOf(hex) {
+  return Uint8Array.from(hex.match(/../g) ?? [], (pair) => parseInt(pair, 16));
+}
+
+/// Fetches a request for the device (real network allowed, see
+/// docs/web-emulator.md), within the page's own rules (CORS, its
+/// Content-Security-Policy): what it may not reach fails, status 0.
+async function fetchFor(call) {
+  let status = 0;
+  let headers = "";
+  let body = new Uint8Array();
+  const stop = new AbortController();
+  const timeout = setTimeout(() => stop.abort(), call.timeout_ms);
+  try {
+    const answer = await fetch(call.url, {
+      method: call.method,
+      headers: call.headers,
+      body: call.body === null ? undefined : bytesOf(call.body),
+      signal: stop.signal,
+    });
+    status = answer.status;
+    headers = [...answer.headers].map(([name, value]) => `${name}: ${value}`).join("\n");
+    body = new Uint8Array(await answer.arrayBuffer());
+  } catch (error) {
+    body = new TextEncoder().encode(String(error.message ?? error));
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!device) return;
+  guarded(() => device.fetched(call.id, status, headers, body, now()));
+  step();
 }
 
 /// The buttons below the screen: the row the device has, else all.
@@ -171,6 +215,8 @@ for (const type of ["keydown", "keyup"]) {
 /// id) on its card and starts it.
 function boot(how, given) {
   device.create(how);
+  device.setFixtures(network.fixtures);
+  device.setNetwork(network.mode);
   plugins = {};
   for (const [id, files] of Object.entries(given)) put(id, files);
   device.start();
@@ -284,7 +330,22 @@ const commands = {
   },
 };
 
-const HANDLERS = { start, files, input, screenshot, check, ...commands };
+/// Recorded answers for plugins' requests, kept for devices made after.
+function fixtures({ fixtures: given = [] }) {
+  network.fixtures = given;
+  device?.setFixtures(given);
+  return {};
+}
+
+/// Whether the page fetches what no recorded answer answers.
+function networkMode({ mode }) {
+  if (mode !== "fixtures" && mode !== "real") throw new Error(`no network mode ${mode}`);
+  network.mode = mode;
+  device?.setNetwork(mode);
+  return {};
+}
+
+const HANDLERS = { start, files, input, screenshot, check, fixtures, network: networkMode, ...commands };
 
 window.addEventListener("message", async (event) => {
   if (event.source !== window.parent || event.source === window) return;
@@ -293,7 +354,8 @@ window.addEventListener("message", async (event) => {
   // `request` pairs the answer with the message (`id` names a plugin).
   const reply = (answer) => event.source.postMessage({ type: message.type, request: message.request, ...answer }, event.origin);
   if (!handler) return reply({ error: `unknown message type ${message.type}` });
-  if (message.type !== "start" && !device) return reply({ error: "no device started yet" });
+  const before = ["start", "fixtures", "network"];
+  if (!before.includes(message.type) && !device) return reply({ error: "no device started yet" });
   try {
     reply(await handler(message));
   } catch (error) {

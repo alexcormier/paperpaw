@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Web emulator: plugins' requests get the page's recorded answers
+  (method and address pattern to status, headers, body and a delay of
+  the device's time), offline and the same each time; one no answer
+  matches fails as without a network, and each request is told to the
+  page (`request`). A local setup may let the frame fetch the rest
+  itself (`network` `"real"`); nothing goes through paperpaw.org. Frame
+  messages `fixtures` and `network`; `Emulator::set_fixtures`,
+  `set_real_network`, `requests`, `outbox`, `fetched`. The emulator's
+  HTTP takes a route of a shell's (`http::set_route`, `answer_later`).
+
 - The web emulator takes the remote control's commands, as
   `tools/x4-remote.py` sends them to an X4 and parsed the same
   (`paperpaw_x4::remote`): screens and slots opened by id with

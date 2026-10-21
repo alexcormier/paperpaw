@@ -4,6 +4,9 @@
 //! them. Nothing here knows the browser: the exports (browser builds only)
 //! pass its calls on, and the tests drive it directly.
 
+mod commands;
+
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
@@ -13,12 +16,12 @@ use paperpaw_dev::report::json_string;
 use paperpaw_dev::target::{DataPlugin, Target};
 use paperpaw_emulator::device::{AddPlugins, Device};
 use paperpaw_emulator::profiles::{self, Profile};
-use paperpaw_emulator::{budget, panel, trace};
-mod commands;
-
+use paperpaw_emulator::{budget, http, panel, trace};
 use paperpaw_platform::{
     ButtonState, InputEvent, PixelFormat, Point, PointerEvent, PointerPhase, PointerTool,
 };
+
+use crate::network::{self, Fixture, Network, Routed};
 
 /// The books every library starts with (from `samples/library`).
 const BOOKS: &[(&str, &[u8])] = &[
@@ -62,6 +65,9 @@ pub struct Emulator {
     device: Option<Device>,
     /// What the panel shows, four bytes a pixel (RGBA), for a canvas.
     frame: Vec<u8>,
+    /// Plugins' requests: recorded answers, the page's fetches (see
+    /// [`crate::network`]).
+    network: Rc<RefCell<Network>>,
 }
 
 impl Emulator {
@@ -96,6 +102,7 @@ impl Emulator {
             plugins: BTreeSet::new(),
             device: None,
             frame: Vec::new(),
+            network: Network::shared(),
         })
     }
 
@@ -153,8 +160,56 @@ impl Emulator {
             added(),
         )
         .map_err(|e| e.to_string())?;
+        // Its requests to the network of the page's making.
+        http::set_route(Some(Box::new(Routed(self.network.clone()))));
         device.start();
         self.device = Some(device);
+        Ok(())
+    }
+
+    /// The recorded answers plugins' requests get (see
+    /// [`crate::network`]); those before are let go.
+    pub fn set_fixtures(&mut self, fixtures: Vec<Fixture>) {
+        self.network.borrow_mut().set_fixtures(fixtures);
+    }
+
+    /// Adds a recorded answer after those there are.
+    pub fn add_fixture(&mut self, fixture: Fixture) {
+        self.network.borrow_mut().add_fixture(fixture);
+    }
+
+    /// Lets the page fetch what no recorded answer answers (`true`), or
+    /// fails it as without a network.
+    pub fn set_real_network(&mut self, real: bool) {
+        self.network.borrow_mut().set_real(real);
+    }
+
+    /// The requests plugins made since asked last, as JSON (see
+    /// [`network::seen_json`]).
+    pub fn requests(&mut self) -> String {
+        network::seen_json(&self.network.borrow_mut().take_seen())
+    }
+
+    /// The requests for the page to fetch since asked last, as JSON (see
+    /// [`network::outbox_json`]).
+    pub fn outbox(&mut self) -> String {
+        network::outbox_json(&self.network.borrow_mut().take_outbox())
+    }
+
+    /// The page's answer to request `id` it fetched (status 0: failed,
+    /// the reason in `body`), at `now_ms`: given to the device.
+    pub fn fetched(
+        &mut self,
+        id: u32,
+        status: u16,
+        headers: &str,
+        body: Vec<u8>,
+        now_ms: u64,
+    ) -> Result<(), String> {
+        if !self.network.borrow_mut().fetched(id, status, headers, body) {
+            return Err(format!("no request {id} waits for an answer"));
+        }
+        self.advance(now_ms);
         Ok(())
     }
 
@@ -214,6 +269,8 @@ impl Emulator {
     /// browser counts it) and does what is due; how many milliseconds
     /// until something is due next, `None` if nothing is.
     pub fn advance(&mut self, now_ms: u64) -> Option<u64> {
+        // Recorded answers due by then.
+        self.network.borrow_mut().tick(now_ms);
         let device = self.device.as_mut()?;
         let now = device.now().millis();
         device.advance(now_ms.saturating_sub(now));
@@ -332,6 +389,8 @@ impl Emulator {
     ) -> Result<(u16, u16, Vec<u8>), String> {
         let profile = profile.unwrap_or(self.profile.device.id);
         let mut other = Emulator::new(profile, &self.language, dark.unwrap_or(self.dark))?;
+        // The same recorded answers; its requests told to the page too.
+        other.network = Rc::clone(&self.network);
         // The same card, copied: what the other device writes stays its.
         for (path, bytes) in files_under(&*self.files, "") {
             other

@@ -16,6 +16,7 @@
 pub mod emulator;
 #[cfg(target_arch = "wasm32")]
 pub mod exports;
+pub mod network;
 
 pub use emulator::set_plugins;
 pub use paperpaw_emulator::device::AddPlugins;

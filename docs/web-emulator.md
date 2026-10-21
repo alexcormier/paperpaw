@@ -36,8 +36,9 @@ false`, no `winit`) and for `wasm32`:
   the page (`host::set_clock`, `host::set_random`). The emulated wall
   clock is fixed (14 October 2026, 10:41), as in `paperpaw-dev`'s
   pictures.
-- In a browser there is no network: requests fail at once, plugins'
-  servers do not listen. Speech is logged as on the desktop.
+- In a browser plugins' requests get the page's recorded answers
+  (below); none goes through a server of PaperPaw's. Plugins' servers do
+  not listen. Speech is logged as on the desktop.
 
 ## The emulator frame
 
@@ -71,6 +72,33 @@ stops the device too), the frame says so before it starts again:
 | `{ type: "emit", event, params? }` | Sends an event, as a plugin would | `{ answer: {} }` |
 | `{ type: "until", text, timeout? }` | Waits until the screen is `text` (its id) or shows it in a part's label, the device running meanwhile; at most `timeout` ms (30000) | `{}`, or `error` (`not shown in … ms`) |
 | `{ type: "expect", text }` | The same, now | `{}`, or `error` (`not shown`) |
+| `{ type: "fixtures", fixtures: [{ method?, url, status?, headers?, body?, delay? }] }` | Recorded answers for plugins' requests, in place of those before; kept for every device started after (also before `start`) | `{}` |
+| `{ type: "network", mode }` | `"fixtures"` (the default): requests no recorded answer answers fail as without a network; `"real"`: the frame fetches them itself (a local setup) | `{}` |
+
+**Plugins' requests.** By default nothing leaves the browser: a request
+gets the first recorded answer whose `method` (any where none is named)
+and `url` match, `url` a pattern where `*` stands for any text
+(`https://api.example.com/v1/*`); `status` is 200 unless said, `headers`
+an object (`content-type`, `etag` and the headers a plugin asks for come
+from it), `body` text, bytes or an object (sent as JSON), `delay` in ms
+of the device's time. Answers are cut to what a request takes, as a
+device does. A request no recorded answer answers fails as without a
+network (status 0). In `"real"` mode the frame fetches it instead
+(`fetch()`, within the page's own rules: servers without CORS, and
+addresses the frame's Content-Security-Policy leaves out, fail with
+status 0 and the reason), so a local setup (the workshop's own compose,
+a page served on the computer) can let plugins reach the internet;
+paperpaw.org forwards nothing. Every request is told to the page as it
+is made:
+
+`{ type: "request", id, method, url, source, status }`: `source` is
+`"fixture"` (with its `status`), `"none"` (failed, `status` 0) or
+`"fetch"` (fetched by the frame, `status` null).
+
+On an X4 profile PaperPaw manages the radio as on the device: a plugin
+that waits for Wi-Fi asks for it to be joined first (the pretend radio's
+network `PaperPaw Test`, any password but `wrong`); on the Boox the
+network is the system's.
 
 **Commands.** `command` takes the remote control's lines, parsed as on
 an X4 (`paperpaw_x4::remote`) and carried out with the same kernel
@@ -131,6 +159,8 @@ device.putFile("dusk", "plugin.ini", bytes);
 device.start();
 device.button("right", true, performance.now());
 device.command("run calibre.open", performance.now()); // {}
+device.setFixtures([{ url: "https://api.example.com/*", body: { items: [] } }]);
+device.requests(); // [{ id, method, url, source, status }]
 device.shows("calibre.screen"); // true
 const next = device.advance(performance.now()); // ms until due, or null
 canvas.getContext("2d").putImageData(device.frame(), 0, 0);
