@@ -1055,22 +1055,33 @@ pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
             }
         }
     }
-    // Tiles of a grid: of a size with others in its row and its column,
-    // two or more each way, each cell the target; they lie edge to edge.
+    // Tiles of a grid, each cell the target, lie edge to edge: a button
+    // is one where buttons of its size lie on its grid's lines (its x
+    // and y a whole number of cells from theirs), in two columns and two
+    // rows or more. A last row of one tile is the grid's too.
     let tile = |d: &Described| {
-        let alike =
-            |o: &&&Described| o.area.width == d.area.width && o.area.height == d.area.height;
-        let across = buttons
-            .iter()
-            .filter(alike)
-            .filter(|o| o.area.y == d.area.y)
-            .count();
-        let down = buttons
-            .iter()
-            .filter(alike)
-            .filter(|o| o.area.x == d.area.x)
-            .count();
-        across >= 2 && down >= 2
+        let (w, h) = (i32::from(d.area.width), i32::from(d.area.height));
+        let mut columns: Vec<u16> = Vec::new();
+        let mut lines: Vec<u16> = Vec::new();
+        for o in &buttons {
+            let (dx, dy) = (
+                i32::from(o.area.x) - i32::from(d.area.x),
+                i32::from(o.area.y) - i32::from(d.area.y),
+            );
+            if o.area.width == d.area.width
+                && o.area.height == d.area.height
+                && dx % w == 0
+                && dy % h == 0
+            {
+                columns.push(o.area.x);
+                lines.push(o.area.y);
+            }
+        }
+        for v in [&mut columns, &mut lines] {
+            v.sort_unstable();
+            v.dedup();
+        }
+        columns.len() >= 2 && lines.len() >= 2
     };
     // Neighbours side by side, and above each other.
     for (i, a) in buttons.iter().enumerate() {
@@ -1405,6 +1416,28 @@ mod tests {
             d(Role::Switch, "", switch),
         ];
         assert_eq!(checks(&overlap(&scene(&image, long))), [OVERLAP]);
+    }
+
+    #[test]
+    fn tiles_of_a_grid_lie_edge_to_edge() {
+        let image = paper();
+        // Seven tiles in three columns: the last row has one.
+        let tiles = |at: &[(u16, u16)]| {
+            at.iter()
+                .map(|(c, r)| {
+                    d(
+                        Role::Button,
+                        "",
+                        Rect::new(30 + c * 140, 100 + r * 140, 140, 140),
+                    )
+                })
+                .collect::<Vec<_>>()
+        };
+        let grid = [(0, 0), (1, 0), (2, 0), (0, 1), (1, 1), (2, 1), (0, 2)];
+        assert!(button_room(&scene(&image, tiles(&grid))).is_empty());
+        // Buttons of a size in one row, edge to edge, are no grid.
+        let issues = button_room(&scene(&image, tiles(&[(0, 0), (1, 0), (2, 0)])));
+        assert_eq!(checks(&issues), [BUTTON_ROOM]);
     }
 
     #[test]

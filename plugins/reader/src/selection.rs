@@ -196,17 +196,16 @@ fn button_pad(style: &UiStyle) -> u16 {
 /// keeps around them (see [`ui::draw_button`]), so none is shortened.
 fn natural_widths(env: &Env<'_>, style: &UiStyle, items: &[Item]) -> Vec<f32> {
     let font = style.font(env);
-    // Half a gap inside the button at each side of its label, and the
-    // part's own room around the button: the spare width is shared out
-    // after.
-    let around = style.gap as f32 + 2.0 * f32::from(button_pad(style));
+    // The button's room at each side of its label, and the part's own
+    // room around the button: the spare width is shared out after.
+    let around = 2.0 * f32::from(button_pad(style));
     items
         .iter()
         .map(|item| {
             let label = font
                 .as_ref()
                 .map_or(0.0, |f| f.measure(style.small, env.i18n.tr(&item.title)));
-            label + around
+            ui::button_width(style, label) + around
         })
         .collect()
 }

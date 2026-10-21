@@ -18,9 +18,12 @@ change the plugin SDK.
   reader's footnote, selection and skim bars, the keyboard and the home
   screen's layouts. `ui::setting_row(style, spec, row, noted)` gives a
   number's row its height, in a noted row its first line
-  (`ui::number_title_area`). The
-  shipped screens with buttons follow; `paperpaw-dev` finds buttons
-  without their room (`visual.button-room`).
+  (`ui::number_title_area`). `ui::button_width(style, label)` says how
+  wide a button must be for its word to stay whole, for buttons laid
+  out as wide as their words (the reader's selection bar). The shipped
+  screens with buttons follow; `paperpaw-dev` finds buttons without
+  their room (`visual.button-room`), the tiles of a grid edge to edge
+  left alone, a last row of one tile too.
 - SDK: accessibility. `events::FOCUS_CHANGED` (`FocusChanged`: role,
   label, area, on) tells plugins where the focus of the buttons went,
   worked out only while one listens or the focus is spoken. The kernel

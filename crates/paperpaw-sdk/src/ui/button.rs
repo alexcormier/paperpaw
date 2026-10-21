@@ -138,6 +138,25 @@ pub(super) fn button_frame(
     Some(ink)
 }
 
+/// The room a button `width` wide keeps at each side of its word: a gap;
+/// narrow buttons (a keyboard's keys) keep less, so short words fit.
+fn label_pad(style: &UiStyle, width: f32) -> f32 {
+    (style.gap as f32).min(width / 12.0)
+}
+
+/// How wide a button must be for its word, `label` wide, not to be
+/// shortened ([`draw_button`] keeps room at its sides): for laying out
+/// buttons as wide as their words.
+pub fn button_width(style: &UiStyle, label: f32) -> f32 {
+    // A gap at each side, or a twelfth of the width where that is less.
+    let gap = style.gap as f32;
+    if label >= 10.0 * gap {
+        label + 2.0 * gap
+    } else {
+        label * 1.2
+    }
+}
+
 /// A button's word, centred and shortened to fit.
 pub(super) fn button_label(
     canvas: &mut Canvas<'_>,
@@ -158,9 +177,8 @@ pub(super) fn button_label(
             size *= room / width;
         }
     }
-    // A single character (− or +) is never shortened; narrow buttons (a
-    // keyboard's keys) keep less room at their sides, so short words fit.
-    let pad = (style.gap as f32).min(f32::from(rect.width) / 12.0);
+    // A single character (− or +) is never shortened.
+    let pad = label_pad(style, f32::from(rect.width));
     let room = if single {
         f32::from(rect.width)
     } else {
@@ -169,4 +187,28 @@ pub(super) fn button_label(
     let label = fit(font, size, label, room);
     let label_x = f32::from(rect.x) + (f32::from(rect.width) - font.measure(size, &label)) / 2.0;
     draw_label(canvas, font, size, label_x, rect, &label, ink);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A button as wide as `button_width` says keeps the room its word
+    /// needs, at every gap and for words short and long.
+    #[test]
+    fn a_button_as_wide_as_its_word_needs_keeps_it_whole() {
+        for gap in [0, 8, 19, 30] {
+            let style = UiStyle {
+                gap,
+                ..UiStyle::PLAIN
+            };
+            for label in [0.0f32, 5.0, 40.0, 190.0, 300.0, 600.0] {
+                let width = button_width(&style, label);
+                let room = width - 2.0 * label_pad(&style, width);
+                assert!(room + 0.01 >= label, "gap {gap}, {label}: {room}");
+                // Not much wider than that.
+                assert!(width <= label * 1.2 + 2.0 * gap as f32 + 0.01);
+            }
+        }
+    }
 }
