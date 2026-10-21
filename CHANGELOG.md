@@ -10,9 +10,10 @@ change the plugin SDK.
   plugins in use have no build for a new PaperPaw yet (`waiting`), or
   plugins built in are not built for it yet, a search in the background
   does not offer it. The update page says *PaperPaw 0.5.0 waits for
-  plugins* and which, with *Keep waiting* and *Update anyway*; PaperPaw
-  asks again once a day at a cheap moment and offers the update once it
-  waits no more. Unseen for a week, the page opens once at a start.
+  plugins* and which, with *Keep waiting*, *Update anyway* (the offer
+  then, which says what stops working) and *Check again*; PaperPaw asks
+  again once a day at a cheap moment and offers the update once it waits
+  no more. Unseen for a week, the page opens once at a start.
 
 - X4 Pro: dragging and sizing a widget by touch keeps up with the finger.
   The firmware queues touch readings while it refreshes the panel; a

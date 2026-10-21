@@ -10,8 +10,9 @@
 //! built in now says which; one not signed by PaperPaw shows its key,
 //! which the reader accepts at each install. An update the server named
 //! that waits for plugins (see [`waiting`](crate::waiting)) says which,
-//! and offers to keep waiting or to update anyway; the page shown counts
-//! as the reader having looked.
+//! and offers to keep waiting, to update anyway (the offer then, which
+//! says what stops working) or to ask again; the page shown counts as the
+//! reader having looked.
 //!
 //! Buttons: up and down (or left and right) move between the buttons,
 //! *Select* chooses, *Back* closes (not while installing). Touch: tap.
@@ -66,16 +67,20 @@ enum View {
         status: u16,
         reason: String,
     },
-    /// An update the server named, and the plugin crates it leaves out.
+    /// An update the server named, the plugin crates it leaves out, and
+    /// the names of the code plugins that stop working with it (chosen
+    /// anyway while it waits).
     Offer {
         offer: Offer,
         leaves: Vec<String>,
+        stopping: String,
     },
-    /// An update the server named that waits for plugins, and their
-    /// names.
+    /// An update the server named that waits for plugins: their names,
+    /// and those of the crates that cannot come along in any case.
     Waiting {
         offer: Offer,
         names: String,
+        unknown: String,
     },
     /// Downloading the update of this version.
     Downloading(String),
@@ -106,6 +111,8 @@ pub(crate) struct UpdatePage {
     /// Whether the focus shows (once a button was used; at once without
     /// touch).
     shown: bool,
+    /// An update that waits chosen anyway: offered as one that does not.
+    anyway: bool,
 }
 
 /// The text for why an update cannot be installed.
@@ -133,6 +140,7 @@ impl UpdatePage {
             view: View::Nothing,
             focus: 0,
             shown: !env.device.input.touch,
+            anyway: false,
         };
         page.view = page.look_noted(env);
         page
@@ -148,20 +156,44 @@ impl UpdatePage {
         view
     }
 
-    /// The names of the plugins `offer` waits for: the code plugins with
-    /// no build for it, and the crates built in now not built for it yet.
-    fn waiting_names(env: &Env<'_>, offer: &Offer) -> String {
-        let code = offer.waiting_ids().map(|id| {
+    /// The names of the code plugins (ids) `ids`.
+    fn code_names<'a>(env: &Env<'_>, ids: impl Iterator<Item = &'a str>) -> Vec<String> {
+        ids.map(|id| {
             env.plugins
                 .iter()
                 .find(|p| p.manifest.id.as_str() == id)
                 .map_or_else(|| String::from(id), |p| String::from(p.name(env.i18n)))
-        });
-        let crates = offer.missing.lines().filter_map(|line| {
-            let (name, why) = line.split_once(' ')?;
-            (why.trim() == "not-ready").then(|| Self::crate_name(env, name))
-        });
-        code.chain(crates).collect::<Vec<_>>().join(", ")
+        })
+        .collect()
+    }
+
+    /// The names of what `holding` holds the update for: its code plugins,
+    /// then its crates.
+    fn holding_names(env: &Env<'_>, holding: &crate::waiting::Holding) -> String {
+        let mut names = Self::code_names(env, holding.plugins.iter().map(|(id, _)| id.as_str()));
+        names.extend(
+            holding
+                .crates
+                .iter()
+                .map(|name| Self::crate_name(env, name)),
+        );
+        names.join(", ")
+    }
+
+    /// The names of the crates built in now that `offer` lacks and that
+    /// are not in the plugin library (they never come).
+    fn unknown_names(
+        env: &Env<'_>,
+        offer: &Offer,
+        firmware: &paperpaw_sdk::firmware::Firmware,
+    ) -> String {
+        firmware
+            .plugins
+            .missing_from(&offer.plugins)
+            .filter(|name| offer.why_missing(name) == Some("unknown"))
+            .map(|name| Self::crate_name(env, name))
+            .collect::<Vec<_>>()
+            .join(", ")
     }
 
     /// A plugin crate's name: first-party crates are named after their
@@ -218,18 +250,29 @@ impl UpdatePage {
                     leaves,
                 }
             }
-            (_, Some(offer)) if offer.waits() => View::Waiting {
-                names: Self::waiting_names(env, &offer),
-                offer,
-            },
             (_, Some(offer)) => {
+                let holding = offer.holding(env, firmware);
+                if !holding.is_empty() && !self.anyway {
+                    return View::Waiting {
+                        names: Self::holding_names(env, &holding),
+                        unknown: Self::unknown_names(env, &offer, firmware),
+                        offer,
+                    };
+                }
                 let wanted = crate::fetch::wanted(env, &offer.builds);
                 let leaves = offer
                     .leaves_out(env.storage, firmware, &wanted)
                     .into_iter()
                     .map(String::from)
                     .collect();
-                View::Offer { offer, leaves }
+                let stopping =
+                    Self::code_names(env, holding.plugins.iter().map(|(id, _)| id.as_str()))
+                        .join(", ");
+                View::Offer {
+                    offer,
+                    leaves,
+                    stopping,
+                }
             }
             (Err(InstallFailure::Unreadable) | Ok(_), None) => View::Nothing,
             (Err(why), None) => View::Unfit(why),
@@ -245,8 +288,10 @@ impl UpdatePage {
     /// The plugins `crates` leave out, by their names, and why the server
     /// says they are missing.
     fn plugin_names(&self, env: &Env<'_>, crates: &[String]) -> String {
+        // Why each is missing; not after choosing anyway, where they are
+        // all gone alike (said once for all of them).
         let offer = match &self.view {
-            View::Offer { offer, .. } => Some(offer),
+            View::Offer { offer, .. } if !self.anyway => Some(offer),
             _ => None,
         };
         let names: Vec<String> = crates
@@ -271,11 +316,12 @@ impl UpdatePage {
             return help;
         }
         let names = self.plugin_names(env, leaves);
-        // Before a download, the choice is to download without them.
-        let key = if matches!(self.view, View::Offer { .. }) {
-            "update.leaves.download"
-        } else {
-            "update.leaves"
+        // Before a download, the choice is to download without them;
+        // chosen anyway while it waits, they are gone after it.
+        let key = match self.view {
+            View::Offer { .. } if self.anyway => "update.leaves.anyway",
+            View::Offer { .. } => "update.leaves.download",
+            _ => "update.leaves",
         };
         alloc::format!(
             "{help} {}",
@@ -304,8 +350,9 @@ impl UpdatePage {
             }
             View::Ready { .. } => alloc::vec![Button::Install, Button::Close],
             View::Offer { .. } => alloc::vec![Button::Download, Button::Close],
-            // Waiting is the way on; updating anyway the other.
-            View::Waiting { .. } => alloc::vec![Button::Close, Button::Download],
+            // Waiting is the way on; updating anyway, or asking again, the
+            // others.
+            View::Waiting { .. } => alloc::vec![Button::Close, Button::Download, Button::Check],
             View::Unreachable { .. } => alloc::vec![Button::Check, Button::Close],
             View::Unfit(_) | View::Failed(_) | View::UpToDate => alloc::vec![Button::Close],
             View::Installing { .. } | View::Installed | View::Checking | View::Downloading(_) => {
@@ -345,8 +392,12 @@ impl UpdatePage {
                 "update.download-without"
             }
             (Button::Download, View::Waiting { .. }) => "update.anyway",
+            (Button::Download, View::Offer { stopping, .. }) if !stopping.is_empty() => {
+                "update.download-anyway"
+            }
             (Button::Download, _) => "update.download",
             (Button::Check, View::Unreachable { .. }) => "update.retry",
+            (Button::Check, View::Waiting { .. }) => "update.check-again",
             (Button::Check, _) => "update.check",
             (Button::Transfer, _) => "update.transfer",
             (Button::Close, View::Waiting { .. }) => "update.keep-waiting",
@@ -424,7 +475,11 @@ impl UpdatePage {
                     },
                 )
             }
-            View::Offer { offer, leaves } => {
+            View::Offer {
+                offer,
+                leaves,
+                stopping,
+            } => {
                 let size = files::size(offer.size, env.i18n.tr("update.decimal"));
                 let help = with(
                     if offer.size > 0 {
@@ -434,21 +489,40 @@ impl UpdatePage {
                     },
                     &[("current", Arg::Str(current)), ("size", Arg::Str(&size))],
                 );
+                let mut help = self.with_leaves(env, help, leaves);
+                if !stopping.is_empty() {
+                    help.push(' ');
+                    help.push_str(&with("update.stopping", &[("plugins", Arg::Str(stopping))]));
+                }
                 (
                     with(
                         "update.offer.title",
                         &[("version", Arg::Str(&offer.version))],
                     ),
-                    self.with_leaves(env, help, leaves),
+                    help,
                 )
             }
-            View::Waiting { offer, names } => (
-                with(
-                    "update.waiting.title",
-                    &[("version", Arg::Str(&offer.version))],
-                ),
-                with("update.waiting.help", &[("plugins", Arg::Str(names))]),
-            ),
+            View::Waiting {
+                offer,
+                names,
+                unknown,
+            } => {
+                let mut help = with("update.waiting.help", &[("plugins", Arg::Str(names))]);
+                if !unknown.is_empty() {
+                    help.push(' ');
+                    help.push_str(&with(
+                        "update.waiting.unknown",
+                        &[("plugins", Arg::Str(unknown))],
+                    ));
+                }
+                (
+                    with(
+                        "update.waiting.title",
+                        &[("version", Arg::Str(&offer.version))],
+                    ),
+                    help,
+                )
+            }
             View::Downloading(version) => (
                 with(
                     "update.downloading.title",
@@ -511,8 +585,15 @@ impl UpdatePage {
                 self.focus = 0;
                 self.redraw(cx, RefreshMode::Partial);
             }
+            // Chosen anyway: the offer first, which says what stops working.
+            Button::Download if matches!(self.view, View::Waiting { .. }) => {
+                self.anyway = true;
+                self.view = self.look(&env);
+                self.focus = 0;
+                self.redraw(cx, RefreshMode::Partial);
+            }
             Button::Download => {
-                let (View::Offer { offer, .. } | View::Waiting { offer, .. }) = &self.view else {
+                let View::Offer { offer, .. } = &self.view else {
                     return;
                 };
                 let mut out = Vec::new();

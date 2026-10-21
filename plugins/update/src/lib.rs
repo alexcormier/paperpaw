@@ -106,11 +106,9 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
         )));
         return;
     }
-    // An update waiting for plugins: gone once installed or no longer
-    // newer; a week unseen, the page opens once.
-    if online::offer(storage, firmware).is_none_or(|offer| !offer.waits()) {
-        waiting::clear(storage);
-    } else if waiting::at_start(storage, paperpaw_sdk::time::unix_seconds(env), out) {
+    // An update waiting for plugins: asked for again where due; a week
+    // unseen, the page opens once.
+    if waiting::at_start(env, firmware, out) {
         out.push(Command::OpenScreen(PAGE, Params::new()));
         return;
     }

@@ -189,6 +189,20 @@ impl Device {
         self.kernel.http_response(Instant(self.now), response);
     }
 
+    /// No request asked of the shell now.
+    fn no_request(&mut self) {
+        let calls: Vec<HttpCall> = self
+            .kernel
+            .take_io()
+            .into_iter()
+            .filter_map(|io| match io {
+                Io::Http(call) => Some(call),
+                _ => None,
+            })
+            .collect();
+        assert!(calls.is_empty(), "{calls:?}");
+    }
+
     /// The one install the kernel asks the shell for now.
     fn install(&mut self) -> FirmwareCommand {
         let mut commands: Vec<FirmwareCommand> = self
@@ -238,6 +252,11 @@ fn offer_waiting(size: usize) -> String {
 }
 
 const WAITING: &str = ".paperpaw/plugins/update/waiting.txt";
+const OFFER: &str = ".paperpaw/plugins/update/offer.txt";
+/// The answer of [`offer_waiting`] as the plugin keeps it.
+const OFFER_WAITING: &str = "0.5.0\n/api/v1/updates/paperpaw-x4-0.5.0-update.bin\n5000\n\
+     plugin paperpaw-plugin-stats 0.5.0\nmissing chess-for-paperpaw not-ready\n\
+     waiting dict-xl 0.3.1\n";
 
 #[test]
 fn an_update_waiting_for_plugins_says_which_and_waits() {
@@ -251,21 +270,66 @@ fn an_update_waiting_for_plugins_says_which_and_waits() {
         shown.contains("PaperPaw 0.5.0 waits for plugins"),
         "{shown}"
     );
-    assert!(
-        shown.contains("yet: dict-xl, chess-for-paperpaw."),
-        "{shown}"
-    );
+    // The code plugin named is not installed here: only the crate holds.
+    assert!(shown.contains("yet: chess-for-paperpaw."), "{shown}");
+    assert!(!shown.contains("dict-xl"), "{shown}");
     assert!(shown.contains("Keep waiting"), "{shown}");
     assert!(shown.contains("Update anyway"), "{shown}");
+    assert!(shown.contains("Check again"), "{shown}");
     // Looked at: it does not open by itself later.
     let waiting = device.storage.0.get(WAITING).unwrap();
     assert!(String::from_utf8_lossy(&waiting).contains("seen"));
-    // Updated anyway: downloaded.
+    // Updated anyway: the offer first, saying what is gone after it.
     device.run(actions::DOWN);
+    device.run(actions::CONFIRM);
+    let shown = device.shown();
+    assert!(shown.contains("PaperPaw 0.5.0 is available"), "{shown}");
+    assert!(
+        shown.contains("gone after the update until an update has them again"),
+        "{shown}"
+    );
+    assert!(shown.contains("Download without them"), "{shown}");
     device.run(actions::CONFIRM);
     let call = device.request();
     assert_eq!(call.method, "GET");
     assert!(device.shown().contains("Downloading PaperPaw 0.5.0"));
+}
+
+/// An answer still waiting is kept as it was before W15 wrote
+/// `waiting.txt` (or with it lost): a start makes the record anew and
+/// asks.
+#[test]
+fn a_waiting_update_without_its_record_is_kept_and_asked_for() {
+    let storage = Shared(Rc::new(MemoryStorage::new().with(OFFER, OFFER_WAITING)));
+    let start = 1_760_000_000;
+    let mut device = Device::at(storage.clone(), Some(start));
+    let call = device.request();
+    assert_eq!(call.method, "POST");
+    let waiting = String::from_utf8(device.storage.0.get(WAITING).unwrap()).unwrap();
+    assert!(waiting.contains("crate chess-for-paperpaw"), "{waiting}");
+}
+
+/// Without an answer (no network), the question is not asked again at
+/// every wake: once a day.
+#[test]
+fn a_question_without_an_answer_counts() {
+    let start = 1_760_000_000;
+    let storage = Shared(Rc::new(
+        MemoryStorage::new().with(OFFER, OFFER_WAITING).with(
+            WAITING,
+            format!(
+                "0.5.0\nsince {start}\nchecked {}\ncrate chess-for-paperpaw\n",
+                start - 2 * 24 * 3600
+            ),
+        ),
+    ));
+    let mut device = Device::at(storage.clone(), Some(start));
+    let call = device.request();
+    device.answer(&call, 0, b"no network");
+    let mut device = Device::at(storage.clone(), Some(start + 3600));
+    device.no_request();
+    let mut device = Device::at(storage.clone(), Some(start + 25 * 3600));
+    device.request();
 }
 
 #[test]
@@ -273,14 +337,10 @@ fn a_waiting_update_found_in_the_background_opens_once_after_a_week() {
     let (start, day) = (1_760_000_000, 24 * 3600);
     // Found by a search in the background: kept, not offered.
     let storage = Shared(Rc::new(
-        MemoryStorage::new()
-            .with(
-                ".paperpaw/plugins/update/offer.txt",
-                "0.5.0\n/api/v1/updates/paperpaw-x4-0.5.0-update.bin\n5000\n\
-                 plugin paperpaw-plugin-stats 0.5.0\nmissing chess-for-paperpaw not-ready\n\
-                 waiting dict-xl 0.3.1\n",
-            )
-            .with(WAITING, format!("0.5.0\nsince {start}\nchecked {start}\n")),
+        MemoryStorage::new().with(OFFER, OFFER_WAITING).with(
+            WAITING,
+            format!("0.5.0\nsince {start}\nchecked {start}\ncrate chess-for-paperpaw\n"),
+        ),
     ));
     // Started again (on the X4 at each wake). Six days on: asked again by
     // itself (a day passed), still waiting, nothing shown.

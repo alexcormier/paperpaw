@@ -4,8 +4,10 @@
 //! `updates`, where it is installed as one copied there would be.
 //!
 //! Nothing is sent unless the reader asks: on the update page, or through
-//! the action `update.check` (e.g. from a rule). The request is a `POST`
-//! to `<server>/api/v1/updates` with what the device runs:
+//! the action `update.check` (e.g. from a rule); and, once an update so
+//! found waits for plugins, once a day at a cheap moment until it no
+//! longer waits ([`waiting`]). The request is a `POST` to
+//! `<server>/api/v1/updates` with what the device runs:
 //!
 //! ```json
 //! {"project": "paperpaw-xteink", "chip": 5, "version": "0.4.0",
@@ -29,9 +31,10 @@
 //!
 //! `url` may be a path on the server (`/api/v1/updates/…`).
 //! `waiting` may name code plugins of the question (`id version`) that
-//! have no build for the update yet: with them, or with a crate `missing`
-//! as `not-ready`, the update waits for its plugins ([`waiting`]): a
-//! search in the background does not offer it, the update page says so.
+//! have no build for the update yet: with one of them still in use, or
+//! with a crate built in now `missing` as `not-ready`, the update waits
+//! for its plugins ([`waiting`]): a search in the background does not
+//! offer it, the update page says so.
 //! `plugins` are those the update has built in; what the device has and
 //! they lack cannot come along, and `missing` may say why (`unknown`: not
 //! in the plugin library; `not-ready`: not built for that version yet).
@@ -132,21 +135,10 @@ impl Offer {
         })
     }
 
-    /// Whether it waits for plugins: code plugins with no build for it,
-    /// or plugins built in now not built for it yet.
-    pub(crate) fn waits(&self) -> bool {
-        self.waiting.lines().any(|line| !line.trim().is_empty())
-            || self
-                .missing
-                .lines()
-                .any(|line| line.split_whitespace().nth(1) == Some("not-ready"))
-    }
-
-    /// The ids of the code plugins it waits for.
-    pub(crate) fn waiting_ids(&self) -> impl Iterator<Item = &str> {
-        self.waiting
-            .lines()
-            .filter_map(|line| line.split_whitespace().next())
+    /// What it waits for here: code plugins in use with no build for it,
+    /// crates built in now not built for it yet ([`waiting`]).
+    pub(crate) fn holding(&self, env: &Env<'_>, firmware: &Firmware) -> waiting::Holding {
+        waiting::of_offer(self, env, firmware)
     }
 
     /// The plugin crates the running firmware has that this update lacks
@@ -246,6 +238,11 @@ pub(crate) fn is_version(version: &str) -> bool {
 /// Removes what a download cut off (by a restart, a failure) left in
 /// `updates`: the file being downloaded, and the part the shell writes
 /// it through.
+/// Whether an update the server named is kept.
+pub(crate) fn has_offer(storage: &dyn Storage) -> bool {
+    storage.exists(&file(OFFER))
+}
+
 pub(crate) fn clear_download(storage: &dyn Storage) {
     let _ = storage.remove(PART);
     let _ = storage.remove(&files::part_path(PART));
@@ -330,6 +327,8 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Vec<Command>) {
         .map(|p| (p.manifest.id.as_str(), p.manifest.version.to_string()))
         .collect();
     request.body = Some(question(firmware, env.native, &code));
+    // Asked: an update waiting is asked for again not before a day.
+    waiting::tried(env.storage, paperpaw_sdk::time::unix_seconds(env));
     if quiet {
         request.params.set(QUIET, "1");
     }
@@ -354,12 +353,10 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) 
     let _ = storage.create_dir(&Env::plugin_dir(crate::PLUGIN.as_str()));
     let _ = storage.write(&file(OFFER), offer.to_text().as_bytes());
     // Waiting for plugins: kept and asked for again, offered once ready.
-    if offer.waits() {
-        waiting::answered(
-            storage,
-            &offer.version,
-            paperpaw_sdk::time::unix_seconds(env),
-        );
+    let holding = offer.holding(env, firmware);
+    if !holding.is_empty() {
+        let now = paperpaw_sdk::time::unix_seconds(env);
+        waiting::answered(storage, &offer.version, holding, now);
         waiting::later(out);
         // Asked for by the reader (the action): shown where it waits.
         if reply.context.get(QUIET).is_some() && env.reader {
