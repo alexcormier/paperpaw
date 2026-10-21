@@ -93,8 +93,11 @@ function draw() {
       canvas.height = height;
       fit();
     }
+    // Asked first: a flash ending while the frame is copied still gets
+    // the frame after it (its paper) drawn.
+    const animating = device.animating();
     context.putImageData(device.frame(), 0, 0);
-    return device.animating();
+    return animating;
   });
   if (animating) requestDraw();
 }

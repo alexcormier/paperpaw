@@ -22,29 +22,28 @@ pub const CODE_COMMANDS: &[&str] = &["lint", "visual", "reach", "perf"];
 /// Checks the plugins of `target` (its data plugins; the plugins with
 /// code its `add` adds, those it names) on `profiles` with `commands`
 /// (each of [`COMMANDS`], of [`CODE_COMMANDS`] too where it adds code;
-/// none: all of [`COMMANDS`]), one variant a profile (English, light,
-/// the default look); the report. A command that cannot run (the plugin
-/// is refused at start) is an error in it, and the others run still.
+/// none: all of them), one variant a profile (English, light, the
+/// default look); the report. A command that cannot run (the plugin is
+/// refused at start) is an error in it, and the others run still.
 pub fn check(
     target: Target,
     profiles: Vec<&'static Profile>,
     commands: &[&str],
 ) -> Result<Report, String> {
+    // In the order they run.
+    let mut known: Vec<&str> = COMMANDS.to_vec();
+    if target.add.is_some() {
+        known.extend(CODE_COMMANDS.iter().filter(|c| !COMMANDS.contains(c)));
+    }
     let commands = if commands.is_empty() {
-        COMMANDS
+        &known[..]
     } else {
         commands
     };
-    let known = |c: &&str| COMMANDS.contains(c) || (target.add.is_some() && CODE_COMMANDS.contains(c));
-    if let Some(unknown) = commands.iter().find(|c| !known(c)) {
-        let what = if target.add.is_some() {
-            CODE_COMMANDS
-        } else {
-            COMMANDS
-        };
+    if let Some(unknown) = commands.iter().find(|c| !known.contains(c)) {
         return Err(format!(
             "`{unknown}` is no check of these plugins (they are {})",
-            what.join(", ")
+            known.join(", ")
         ));
     }
     let mut context = Context::new(target, PathBuf::new());
@@ -54,8 +53,7 @@ pub fn check(
         context.profiles = profiles;
     }
     let mut report = Report::default();
-    let order = COMMANDS.iter().chain(CODE_COMMANDS.iter().filter(|c| !COMMANDS.contains(c)));
-    for command in order.filter(|c| commands.contains(c)) {
+    for command in known.iter().filter(|c| commands.contains(c)) {
         report.ran.push((*command).to_string());
         if let Err(error) = run_command(command, &context, &mut report) {
             report.add(Finding::error("dev.run", *command, error));

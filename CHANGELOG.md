@@ -22,7 +22,7 @@ change the plugin SDK.
   from its `pp_plugins`; `check` with `plugins` runs `lint`, `visual`,
   `reach` and `perf` on them), its libraries kept in memory where asked
   (`Context::in_memory`). The frame says when the device ran out of its
-  memory (`out-of-memory`, after the module stopped and started again;
+  memory (`out-of-memory`, once the module stopped, before it starts again;
   `budget::last_refused` and `budget::clear_last_refused` tell the size
   refused), names the build in `ready` and `version`, holds buttons
   for long presses (`hold`), and takes screenshots of another device,

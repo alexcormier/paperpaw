@@ -182,7 +182,13 @@ pub unsafe extern "C" fn pp_new(
     language_len: usize,
     dark: u32,
 ) -> u32 {
-    std::panic::set_hook(Box::new(|info| log(&info.to_string())));
+    std::panic::set_hook(Box::new(|info| {
+        // A panic is no lack of memory: a refusal the device took its
+        // way around before it is not why the call stopped (running out
+        // aborts without a panic).
+        paperpaw_emulator::budget::clear_last_refused();
+        log(&info.to_string());
+    }));
     paperpaw_emulator::host::set_random(random);
     paperpaw_emulator::host::set_clock(clock);
     // SAFETY: as the caller promises.

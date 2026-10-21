@@ -30,6 +30,14 @@ export const KEYS = {
   p: "power",
 };
 
+/// Throws unless `now` is a time: input stamped with none would be taken
+/// as at the start, and a short press as a long one.
+function needsTime(now) {
+  if (!Number.isFinite(now)) {
+    throw new TypeError("the time it happens at is needed (ms, as advance takes it)");
+  }
+}
+
 export class PaperPawDevice {
   /// Loads the module from `url` (`paperpaw-web.wasm`).
   static async load(url) {
@@ -137,6 +145,7 @@ export class PaperPawDevice {
   /// A button pressed or let go at `now` (ms since the page started, as
   /// `advance` takes it); false if the device has none so named.
   button(name, pressed, now) {
+    needsTime(now);
     const status = this.#with([name], (p, l) => this.exports.pp_button(p, l, pressed ? 1 : 0, now));
     if (status === STOPPED) this.#check(status);
     return status === 0;
@@ -145,6 +154,7 @@ export class PaperPawDevice {
   /// A finger on the screen (`phase` of PHASES) at the screen's pixel,
   /// at `now` (as `button`).
   pointer(phase, x, y, now) {
+    needsTime(now);
     this.#check(this.exports.pp_pointer(PHASES[phase] ?? PHASES.cancel, Math.round(x), Math.round(y), now));
   }
 
