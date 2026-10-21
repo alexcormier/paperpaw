@@ -1,0 +1,253 @@
+//! Refreshes: why the panel is refreshed, verdicts of
+//! filters (a mode, grays, later), a mode set exactly, a screen's own
+//! mode when it opens.
+
+use super::*;
+use paperpaw_sdk::Params;
+use paperpaw_sdk::filters::{Refresh, RefreshCause, RefreshFilterSpec, RefreshVerdict};
+
+const PAGE: Id = Id::new_static("r.page");
+const SHEET: Id = Id::new_static("r.sheet");
+const STATUS: Id = Id::new_static("r.status");
+const EXACT: Id = Id::new_static("r.exact");
+const GRAYS: Id = Id::new_static("r.grays");
+const LOCK: Id = Id::new_static("r.lock");
+const OPEN: Id = Id::new_static("r.open");
+
+type Seen = Rc<RefCell<Vec<Refresh>>>;
+
+/// A page that guards the device.
+struct Lock;
+
+impl Screen for Lock {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn guards(&self) -> bool {
+        true
+    }
+
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        Page.on_action(action, cx)
+    }
+}
+
+/// A page: its status line changes (`r.status`), a change it sets the
+/// mode of exactly (`r.exact`), a change that wants grays (`r.grays`).
+struct Page;
+
+impl Screen for Page {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        if *action == STATUS {
+            cx.request_redraw_area(Rect::new(0, 0, 10, 5));
+            cx.refresh_cause(RefreshCause::Status);
+        } else if *action == EXACT {
+            cx.request_redraw_area(Rect::new(0, 20, 10, 5));
+            cx.request_refresh(RefreshMode::Full);
+            cx.set_refresh(RefreshMode::Fast);
+        } else if *action == GRAYS {
+            cx.request_redraw_area(Rect::new(0, 40, 10, 5));
+        } else if *action == OPEN {
+            // A screen opened, said to be a status line.
+            cx.refresh_cause(RefreshCause::Status);
+            cx.command(Command::OpenScreen(SHEET, paperpaw_sdk::Params::new()));
+        } else {
+            return Handled::No;
+        }
+        Handled::Yes
+    }
+}
+
+struct Refreshing(Seen);
+
+impl Plugin for Refreshing {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("r"), "Refreshing", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_screen(ScreenSpec::new(
+            PAGE,
+            "page",
+            Box::new(|_, _| Box::new(Page)),
+        ))?;
+        r.add_screen(
+            ScreenSpec::new(SHEET, "sheet", Box::new(|_, _| Box::new(Page)))
+                .refresh_on_open(RefreshMode::Fast),
+        )?;
+        r.add_screen(ScreenSpec::new(
+            LOCK,
+            "lock",
+            Box::new(|_, _| Box::new(Lock)),
+        ))?;
+        r.bind_slot(slots::HOME, PAGE, Priority::DEFAULT)?;
+        let seen = self.0.clone();
+        r.add_refresh_filter(RefreshFilterSpec::new(
+            Id::new_static("r.filter"),
+            "",
+            Box::new(move |_, refresh| {
+                seen.borrow_mut().push(refresh.clone());
+                match refresh.cause {
+                    // A status line changed: shown with what comes next;
+                    // screens too, as far as the kernel lets it.
+                    RefreshCause::Status | RefreshCause::Screens => RefreshVerdict::Defer,
+                    _ if refresh.region.y == 40 => RefreshVerdict::Grays(true),
+                    _ => RefreshVerdict::Keep,
+                }
+            }),
+        ))
+    }
+}
+
+fn refreshing() -> (Kernel, Seen) {
+    let seen = Seen::default();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Refreshing(seen.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    seen.borrow_mut().clear();
+    (kernel, seen)
+}
+
+/// Filters hear why the panel is refreshed: a screen opened, a status
+/// line; a refresh deferred goes with the next one.
+#[test]
+fn a_deferred_refresh_goes_with_the_next() {
+    let (mut kernel, seen) = refreshing();
+    let effects = kernel.run_action(Instant(10), STATUS);
+    assert_eq!(effects.refresh(), None);
+    assert_eq!(seen.borrow()[0].cause, RefreshCause::Status);
+    let effects = kernel.run_action(Instant(20), EXACT);
+    let (region, mode) = effects.refresh().unwrap();
+    assert_eq!(
+        mode,
+        RefreshMode::Fast,
+        "set exactly, over the full requested"
+    );
+    assert!(
+        region.contains(Point::new(1, 1)),
+        "the status line: {region:?}"
+    );
+    assert!(region.contains(Point::new(1, 21)), "{region:?}");
+    let effects = kernel.run_action(Instant(30), GRAYS);
+    assert!(effects.grays, "a filter wanted grays");
+}
+
+/// A screen opened in the mode it asks for; the filters hear it was a
+/// screen, on top, and how many partial refreshes were made since the
+/// panel was last cleaned.
+#[test]
+fn a_screen_opens_in_its_own_mode() {
+    let (mut kernel, seen) = refreshing();
+    let effects = kernel.open_screen(Instant(10), SHEET, Params::new());
+    assert_eq!(
+        effects.refresh().map(|(_, mode)| mode),
+        Some(RefreshMode::Fast)
+    );
+    let refresh = seen.borrow()[0].clone();
+    assert_eq!(refresh.cause, RefreshCause::Screens);
+    assert_eq!(refresh.screen, Some(SHEET));
+    assert!(!refresh.periodic);
+    let effects = kernel.open_screen(Instant(20), PAGE, Params::new());
+    assert_eq!(
+        effects.refresh().map(|(_, mode)| mode),
+        Some(RefreshMode::Full)
+    );
+}
+
+/// The periodic full refresh says it is one; a clearing refresh cleans
+/// the panel as a full one does.
+#[test]
+fn the_periodic_full_refresh_says_so() {
+    let (mut kernel, seen) = refreshing();
+    kernel
+        .set_setting(Instant(1), settings::FULL_REFRESH_INTERVAL.as_str(), "2")
+        .unwrap();
+    render(&mut kernel);
+    kernel.frame.refresh.done(RefreshMode::Clear);
+    seen.borrow_mut().clear();
+    for at in [10, 20] {
+        kernel.run_action(Instant(at), GRAYS);
+        render(&mut kernel);
+    }
+    let seen = seen.borrow();
+    assert_eq!(seen[0].since_full, 0);
+    assert!(!seen[0].periodic);
+    assert!(seen[1].periodic, "{:?}", seen[1]);
+    assert_eq!(seen[1].mode, RefreshMode::Full);
+}
+
+/// Refreshes are deferred at most three times in a row, and never while
+/// a screen guards the device.
+#[test]
+fn refreshes_are_deferred_seldom() {
+    let (mut kernel, _) = refreshing();
+    for at in [10, 20, 30] {
+        assert_eq!(kernel.run_action(Instant(at), STATUS).refresh(), None);
+    }
+    assert!(kernel.run_action(Instant(40), STATUS).refresh().is_some());
+    kernel.open_screen(Instant(50), LOCK, Params::new());
+    render(&mut kernel);
+    assert!(
+        kernel.run_action(Instant(60), STATUS).refresh().is_some(),
+        "under the lock"
+    );
+}
+
+/// A screen opened is refreshed, whatever cause a screen said.
+#[test]
+fn a_screen_opened_is_never_deferred() {
+    let (mut kernel, _) = refreshing();
+    let effects = kernel.run_action(Instant(10), OPEN);
+    assert!(effects.refresh().is_some());
+    assert_eq!(kernel.active_screen(), Some(&SHEET));
+}
+
+/// Counts the refreshes it sees.
+struct Spy(Rc<core::cell::Cell<u32>>);
+
+impl Plugin for Spy {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("spy"), "Spy", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let seen = self.0.clone();
+        r.add_refresh_filter(RefreshFilterSpec::new(
+            Id::new_static("spy.refresh"),
+            "",
+            Box::new(move |_, _| {
+                seen.set(seen.get() + 1);
+                RefreshVerdict::Keep
+            }),
+        ))
+    }
+}
+
+/// While a screen guards the device, another plugin's refresh filters see
+/// no refresh, and presses are not counted: neither tells how long a code
+/// typed is.
+#[test]
+fn nothing_counts_what_is_typed_into_a_guard() {
+    let seen = Rc::new(core::cell::Cell::new(0));
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Refreshing(Seen::default()))
+        .plugin(Spy(seen.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    render(&mut kernel);
+    kernel.open_screen(Instant(10), LOCK, paperpaw_sdk::Params::new());
+    render(&mut kernel);
+    let (before, inputs) = (seen.get(), kernel.shared.usage.inputs);
+    press(&mut kernel, 1000, "confirm");
+    kernel.run_action(Instant(2000), STATUS);
+    render(&mut kernel);
+    assert_eq!(seen.get(), before);
+    assert_eq!(kernel.shared.usage.inputs, inputs);
+}

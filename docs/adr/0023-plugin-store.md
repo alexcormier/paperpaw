@@ -15,7 +15,7 @@ its own, then loads it (`Command::LoadPlugin`).
 
 The X4 and the X4 Pro should find, install, update and remove every kind
 of data plugin (themes, home layouts, translations, key maps, script
-packs, presets) on the device itself (PLANNING O6). They have a few
+packs, presets) on the device itself. They have a few
 hundred kilobytes of memory: a list must be read as it streams, a
 download written as it arrives, nothing unpacked in memory.
 

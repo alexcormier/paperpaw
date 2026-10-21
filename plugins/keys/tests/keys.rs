@@ -158,6 +158,23 @@ fn select_moves_to_another_button_first() {
     assert!(test.config().contains("long.menu = core.menu"));
 }
 
+/// Buttons pressed twice are listed to bind, the last section on a
+/// device with buttons only.
+#[test]
+fn buttons_pressed_twice_are_listed() {
+    let mut test = Test::new(false);
+    // Up from the first row: *Reset*; once more, the last input.
+    test.press("up");
+    test.press("up");
+    let labels = test.labels();
+    assert!(
+        labels.iter().any(|l| l.starts_with("Press twice: Down")),
+        "{labels:?}"
+    );
+    test.picked("double.down", "core.home");
+    assert!(test.config().contains("double.down = core.home"));
+}
+
 #[test]
 fn a_touch_screen_reaches_everything_without_buttons() {
     let mut test = Test::new(true);

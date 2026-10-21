@@ -49,6 +49,9 @@ pub struct Capabilities {
     pub button_row: bool,
     /// The system has a clipboard of its own, shared with other apps.
     pub system_clipboard: bool,
+    /// A front light PaperPaw sets
+    /// ([`settings::FRONTLIGHT`](crate::builtin::settings::FRONTLIGHT)).
+    pub frontlight: bool,
     /// The panel shows black and white alone (no grays), e.g. the X4.
     pub black_and_white: bool,
 }
@@ -139,6 +142,23 @@ pub struct Env<'a> {
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
     pub clipboard: bool,
+    /// What the reader used last: buttons, a finger or a pen, e.g. to
+    /// show a focus only after buttons were used, also on touch devices.
+    pub last_input: crate::keys::InputMode,
+    /// The inputs plugins added ([`keys::InputSpec`](crate::keys::InputSpec)),
+    /// to bind like any other.
+    pub inputs: &'a [crate::keys::InputSpec],
+    /// Makes the screens plugins added, for [`Env::make_screen`]: the
+    /// kernel's ([`Env::with_screen_maker`]).
+    #[cfg(any(test, feature = "kernel"))]
+    screen_maker: Option<&'a dyn crate::ScreenMaker>,
+    /// The part of the screen what is handled now is made for and drawn
+    /// into, with its place on the screen: all of it but bars and the row
+    /// of hints for a screen, a bar's strip for a bar. A screen draws and
+    /// gets input relative to its corner, and
+    /// [`device.display`](paperpaw_platform::DeviceInfo::display) has its
+    /// size.
+    pub content: paperpaw_platform::Rect,
     /// The open screens, the one shown last (see [`StackEntry`](crate::StackEntry)):
     /// what is shown, e.g. for a rule or a refresh filter.
     pub stack: &'a [crate::StackEntry],
@@ -251,6 +271,19 @@ pub struct EnvParts<'a> {
     /// the system has a clipboard, in another app; read it with
     /// [`Command::ReadClipboard`](crate::Command::ReadClipboard).
     pub clipboard: bool,
+    /// What the reader used last: buttons, a finger or a pen, e.g. to
+    /// show a focus only after buttons were used, also on touch devices.
+    pub last_input: crate::keys::InputMode,
+    /// The inputs plugins added ([`keys::InputSpec`](crate::keys::InputSpec)),
+    /// to bind like any other.
+    pub inputs: &'a [crate::keys::InputSpec],
+    /// The part of the screen what is handled now is made for and drawn
+    /// into, with its place on the screen: all of it but bars and the row
+    /// of hints for a screen, a bar's strip for a bar. A screen draws and
+    /// gets input relative to its corner, and
+    /// [`device.display`](paperpaw_platform::DeviceInfo::display) has its
+    /// size.
+    pub content: paperpaw_platform::Rect,
     /// The open screens, the one shown last (see [`StackEntry`](crate::StackEntry)):
     /// what is shown, e.g. for a rule or a refresh filter.
     pub stack: &'a [crate::StackEntry],
@@ -314,6 +347,11 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             work: p.work,
             reader: p.reader,
             clipboard: p.clipboard,
+            last_input: p.last_input,
+            inputs: p.inputs,
+            #[cfg(any(test, feature = "kernel"))]
+            screen_maker: None,
+            content: p.content,
             stack: p.stack,
             slots: p.slots,
             screens: p.screens,
@@ -335,7 +373,89 @@ impl fmt::Debug for Env<'_> {
     }
 }
 
+impl<'a> Env<'a> {
+    /// The device as a screen made for `area` sees it: the display as
+    /// large as `area` (see [`Env::within`]).
+    pub fn device_within(&self, area: paperpaw_platform::Rect) -> paperpaw_platform::DeviceInfo {
+        let mut device = *self.device;
+        device.display.width = area.width;
+        device.display.height = area.height;
+        device
+    }
+
+    /// This environment for a screen made for `area` of the screen (a
+    /// tab of a screen that hosts others, a bar): `device` is
+    /// [`Env::device_within`]`(area)`, and [`Env::content`] is `area`.
+    pub fn within<'b>(
+        &self,
+        device: &'b paperpaw_platform::DeviceInfo,
+        area: paperpaw_platform::Rect,
+    ) -> Env<'b>
+    where
+        'a: 'b,
+    {
+        let mut env: Env<'b> = *self;
+        env.device = device;
+        env.content = area;
+        env
+    }
+
+    /// The screen slot `slot` shows now: the user's choice, else the
+    /// plugins' of the highest priority.
+    pub fn slot_screen(&self, slot: &str) -> Option<&'a crate::Id> {
+        #[cfg(any(test, feature = "kernel"))]
+        return self.screen_maker?.slot_screen(slot);
+        #[cfg(not(any(test, feature = "kernel")))]
+        {
+            let _ = slot;
+            None
+        }
+    }
+
+    /// Every screen offered for slot `slot` (to choose another, e.g. a
+    /// launcher of several).
+    pub fn slot_screens(&self, slot: &str) -> alloc::vec::Vec<&'a crate::Id> {
+        #[cfg(any(test, feature = "kernel"))]
+        return self
+            .screen_maker
+            .map_or_else(alloc::vec::Vec::new, |maker| maker.slot_screens(slot));
+        #[cfg(not(any(test, feature = "kernel")))]
+        {
+            let _ = slot;
+            alloc::vec::Vec::new()
+        }
+    }
+
+    /// This environment with `maker` making the screens
+    /// [`Env::make_screen`] asks for: the kernel's.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn with_screen_maker(mut self, maker: &'a dyn crate::ScreenMaker) -> Self {
+        self.screen_maker = Some(maker);
+        self
+    }
+}
+
 impl Env<'_> {
+    /// Screen `id`, made with `params` for this environment, to host it in
+    /// a screen of one's own (tabs, a split view; see
+    /// [`host::ScreenHost`](crate::host::ScreenHost)): made for
+    /// [`Env::content`] as it is here, so make it with the environment
+    /// [`Env::within`] the part it gets. `None` where no plugin added it.
+    pub fn make_screen(
+        &self,
+        id: &crate::Id,
+        params: &crate::Params,
+    ) -> Option<alloc::boxed::Box<dyn crate::Screen>> {
+        #[cfg(any(test, feature = "kernel"))]
+        return self.screen_maker?.make(id, self, params);
+        #[cfg(not(any(test, feature = "kernel")))]
+        {
+            let _ = (id, params);
+            None
+        }
+    }
+
     /// The screen shown on top, if any.
     pub fn top(&self) -> Option<&crate::StackEntry> {
         self.stack.last()

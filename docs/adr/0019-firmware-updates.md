@@ -72,5 +72,4 @@ may leave a device that does not start.
   device and a USB cable can flash it anyway.
 - Devices flashed before the two partitions came need the web flasher
   once more; until then the update page is not offered.
-- Updates over the network (from paperpaw.org, O3 to O6 in the
-  planning) build on this: they only fetch the file.
+- Updates over the network (from paperpaw.org) build on this: they only fetch the file.

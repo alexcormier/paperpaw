@@ -17,6 +17,28 @@ use crate::params::Params;
 /// command that opened it (e.g. the path of a book).
 pub type ScreenFactory = Box<dyn Fn(&Env<'_>, &Params) -> Box<dyn Screen>>;
 
+/// Makes the screens plugins added: what [`Env::make_screen`] asks (the
+/// kernel's, for screens that host others).
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub trait ScreenMaker {
+    /// Screen `id` made with `params` for `env`, `None` where no plugin
+    /// added it.
+    fn make(&self, id: &Id, env: &Env<'_>, params: &Params) -> Option<Box<dyn Screen>>;
+
+    /// The screen slot `slot` shows, as the user or the plugins bound it.
+    fn slot_screen(&self, slot: &str) -> Option<&Id> {
+        let _ = slot;
+        None
+    }
+
+    /// Every screen offered for slot `slot`, in the order offered.
+    fn slot_screens(&self, slot: &str) -> Vec<&Id> {
+        let _ = slot;
+        Vec::new()
+    }
+}
+
 /// A screen contribution.
 #[non_exhaustive]
 pub struct ScreenSpec {
@@ -24,6 +46,10 @@ pub struct ScreenSpec {
     /// Translation key of the screen's display name.
     pub title: Cow<'static, str>,
     pub factory: ScreenFactory,
+    /// How the panel is refreshed when it opens, in place of the kernel's
+    /// choice (a full refresh, or a partial one where the user turned
+    /// flashing off): e.g. [`RefreshMode::Fast`] for a quick sheet.
+    pub refresh_on_open: Option<RefreshMode>,
 }
 
 impl ScreenSpec {
@@ -33,7 +59,14 @@ impl ScreenSpec {
             id,
             title: title.into(),
             factory,
+            refresh_on_open: None,
         }
+    }
+
+    /// How the panel is refreshed when it opens.
+    pub fn refresh_on_open(mut self, mode: RefreshMode) -> Self {
+        self.refresh_on_open = Some(mode);
+        self
     }
 }
 
@@ -191,8 +224,10 @@ pub trait Screen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>);
 
     /// `None` for a full screen; `Some(region)` makes the screen an
-    /// overlay (menu, dialog, popup) drawn above the screens below it.
-    /// Tapping outside an overlay closes it.
+    /// overlay (menu, dialog, popup) drawn above the screens below it,
+    /// `region` from the corner of the part of the screen it has
+    /// ([`Env::content`], that of the full screen below it). Tapping
+    /// outside an overlay closes it.
     fn region(&self, env: &Env<'_>) -> Option<Rect> {
         let _ = env;
         None
@@ -232,6 +267,17 @@ pub trait Screen {
     /// e.g. while things on it are arranged by dragging. Gestures a screen
     /// never wants are better switched off for it (`gestures.policy`).
     fn holds_edges(&self) -> bool {
+        false
+    }
+
+    /// Whether the screen takes double taps: a second tap close to the
+    /// first in time and place comes as [`GestureKind::DoubleTap`]
+    /// (as a tap where it answers [`Handled::No`]). By default it comes
+    /// as a tap, so that screens that take any gesture on a button do not
+    /// lose quick taps.
+    ///
+    /// [`GestureKind::DoubleTap`]: crate::GestureKind::DoubleTap
+    fn takes_double_taps(&self) -> bool {
         false
     }
 
@@ -357,9 +403,14 @@ pub struct Output {
     pub commands: Vec<Command>,
     /// Requested refresh mode for the region drawn during the event.
     pub refresh: Option<RefreshMode>,
+    /// The mode set exactly ([`Cx::set_refresh`]): it wins over requests.
+    pub refresh_set: Option<RefreshMode>,
+    /// Why the panel is refreshed ([`Cx::refresh_cause`]).
+    pub refresh_cause: Option<crate::filters::RefreshCause>,
     /// Whether the whole screen should be redrawn.
     pub redraw: bool,
-    /// Part of the screen to redraw, in screen coordinates.
+    /// Part of the screen to redraw, from the corner of the part of the
+    /// screen the screen has ([`Env::content`]).
     pub redraw_area: Option<Rect>,
     /// When the screen wants [`Screen::on_timer`] to be called (see
     /// [`Cx::wake_at`]).
@@ -444,13 +495,37 @@ impl<'a, 'e> Cx<'a, 'e> {
         self.output.request_refresh(mode);
     }
 
+    /// Sets the refresh mode for what was drawn exactly, over the requests
+    /// of the event (the last one set wins): e.g. [`RefreshMode::Fast`]
+    /// for an overlay opening, where the kernel would choose more. Refresh
+    /// filters still see it.
+    pub fn set_refresh(&mut self, mode: RefreshMode) {
+        self.output.refresh_set = Some(mode);
+    }
+
+    /// Puts key map layer `layer` in front of the slot's for this screen
+    /// while it is on top (see [`Command::SetKeyLayer`]); `None` takes it
+    /// away. Nothing for a screen not of the stack.
+    pub fn set_key_layer(&mut self, layer: Option<Id>) {
+        if let Some(key) = self.key {
+            self.output.commands.push(Command::SetKeyLayer(key, layer));
+        }
+    }
+
+    /// Says why the panel is refreshed, for refresh filters (the reader
+    /// tells [`RefreshCause::PageTurn`](crate::filters::RefreshCause::PageTurn)).
+    pub fn refresh_cause(&mut self, cause: crate::filters::RefreshCause) {
+        self.output.refresh_cause = Some(cause);
+    }
+
     /// Requests a complete redraw via [`Screen::draw`].
     pub fn request_redraw(&mut self) {
         self.output.redraw = true;
     }
 
-    /// Requests a redraw of `area` (screen coordinates) only, e.g. a status
-    /// line or a focused item: [`Screen::draw`] runs clipped to it.
+    /// Requests a redraw of `area` only, from the corner of the part of
+    /// the screen the screen has ([`Env::content`]), as it draws; e.g. a
+    /// status line or a focused item: [`Screen::draw`] runs clipped to it.
     pub fn request_redraw_area(&mut self, area: Rect) {
         self.output.redraw_area = Some(self.output.redraw_area.map_or(area, |a| a.union(&area)));
     }

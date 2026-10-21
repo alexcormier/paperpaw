@@ -8,12 +8,16 @@ use crate::round::{self, corner_inset};
 
 /// A drawing surface clipped to a region of a [`Framebuffer`].
 ///
-/// Coordinates are absolute screen coordinates; everything outside the clip
-/// region is silently discarded.
+/// Coordinates are screen coordinates, or relative to an origin set with
+/// [`Canvas::offset`] (a screen drawn into part of the screen, below a
+/// bar); everything outside the clip region is silently discarded.
 #[derive(Debug)]
 pub struct Canvas<'a> {
     framebuffer: &'a mut Framebuffer,
+    /// In screen coordinates.
     clip: Rect,
+    /// Where `(0, 0)` lies on the screen.
+    origin: (i32, i32),
     /// Where what is drawn is described, if anyone asks (see
     /// [`Canvas::describing`]).
     described: Option<&'a mut Vec<Described>>,
@@ -65,8 +69,48 @@ impl<'a> Canvas<'a> {
         Self {
             framebuffer,
             clip,
+            origin: (0, 0),
             described: None,
         }
+    }
+
+    /// This canvas with `(0, 0)` moved by `(dx, dy)`: what is drawn at
+    /// `(x, y)` lands at `(x + dx, y + dy)` of the canvas before, and
+    /// [`clip`](Self::clip), [`clipped`](Self::clipped) and what is
+    /// described are in the moved coordinates too. For a screen drawn into
+    /// part of the screen (below a bar, a tab of another screen).
+    pub fn offset(mut self, dx: i32, dy: i32) -> Self {
+        self.origin = (self.origin.0 + dx, self.origin.1 + dy);
+        self
+    }
+
+    /// Where `(0, 0)` of this canvas lies on the screen.
+    pub fn origin(&self) -> Point {
+        Point::new(self.origin.0, self.origin.1)
+    }
+
+    /// `area` moved from this canvas's coordinates to the screen's, cut
+    /// to what a `Rect` holds: a part moved past the screen's top or left
+    /// edge is cut off, not moved back onto it.
+    fn to_screen(&self, area: Rect) -> Rect {
+        let fit = |v: i64| v.clamp(0, i64::from(u16::MAX)) as u16;
+        let (ox, oy) = (i64::from(self.origin.0), i64::from(self.origin.1));
+        let (left, top) = (i64::from(area.x) + ox, i64::from(area.y) + oy);
+        let (right, bottom) = (left + i64::from(area.width), top + i64::from(area.height));
+        let (x, y) = (fit(left), fit(top));
+        Rect::new(x, y, fit(right) - x, fit(bottom) - y)
+    }
+
+    /// The clip region in this canvas's coordinates, wide.
+    fn local_clip(&self) -> (i64, i64, i64, i64) {
+        let (ox, oy) = (i64::from(self.origin.0), i64::from(self.origin.1));
+        let clip = self.clip;
+        (
+            i64::from(clip.x) - ox,
+            i64::from(clip.y) - oy,
+            i64::from(clip.right()) - ox,
+            i64::from(clip.bottom()) - oy,
+        )
     }
 
     /// This canvas, describing what is drawn into `sink`.
@@ -90,6 +134,7 @@ impl<'a> Canvas<'a> {
         on: Option<bool>,
     ) {
         let clip = self.clip;
+        let area = self.to_screen(area);
         if let Some(sink) = self.described.as_deref_mut() {
             sink.push(Described {
                 role,
@@ -102,17 +147,26 @@ impl<'a> Canvas<'a> {
         }
     }
 
-    /// The visible region of this canvas.
+    /// The visible region of this canvas, in its coordinates.
     pub fn clip(&self) -> Rect {
-        self.clip
+        let (left, top, right, bottom) = self.local_clip();
+        let fit = |v: i64| v.clamp(0, i64::from(u16::MAX)) as u16;
+        let (x, y) = (fit(left), fit(top));
+        let (width, height) = (
+            fit(right) - x.min(fit(right)),
+            fit(bottom) - y.min(fit(bottom)),
+        );
+        Rect::new(x, y, width, height)
     }
 
     /// A canvas restricted to `region` (intersected with this canvas).
     pub fn clipped(&mut self, region: Rect) -> Canvas<'_> {
+        let region = self.to_screen(region);
         let clip = self.clip.intersection(&region).unwrap_or_default();
         Canvas {
             framebuffer: self.framebuffer,
             clip,
+            origin: self.origin,
             described: self.described.as_deref_mut(),
         }
     }
@@ -362,8 +416,9 @@ impl<'a> Canvas<'a> {
         // whose pen covers a row follow one another, and as the pen moves
         // by a pixel at most from one to the next, together they cover a
         // single span of the row, from the first one's pen to the last's.
-        let first_row = (y0.min(y0 + dy) - half).max(i64::from(self.clip.y));
-        let end_row = (y0.max(y0 + dy) - half + pen).min(i64::from(self.clip.bottom()));
+        let (_, clip_top, _, clip_bottom) = self.local_clip();
+        let first_row = (y0.min(y0 + dy) - half).max(clip_top);
+        let end_row = (y0.max(y0 + dy) - half + pen).min(clip_bottom);
         for row in first_row..end_row {
             // The steps whose pen covers the row are those at `low..=high`.
             let (low, high) = (row + half - pen + 1, row + half);
@@ -454,6 +509,7 @@ impl<'a> Canvas<'a> {
         let Some(rect) = self.clip_signed(x, y, width, 1) else {
             return;
         };
+        let x = x + self.origin.0;
         for px in rect.x..rect.right() as u16 {
             let value = gray[(i32::from(px) - x) as usize];
             self.framebuffer.put_gray(px, rect.y, value);
@@ -469,6 +525,7 @@ impl<'a> Canvas<'a> {
         let Some(rect) = self.clip_signed(x, y, width, 1) else {
             return;
         };
+        let x = x + self.origin.0;
         for px in rect.x..rect.right() as u16 {
             let at = (i32::from(px) - x) as usize * 3;
             self.framebuffer
@@ -514,6 +571,7 @@ impl<'a> Canvas<'a> {
         let Some(rect) = self.clip_wide(x, y, width, height) else {
             return;
         };
+        let (x, y) = (x + i64::from(self.origin.0), y + i64::from(self.origin.1));
         for py in rect.y..rect.bottom() as u16 {
             for px in rect.x..rect.right() as u16 {
                 let alpha = coverage(i64::from(px) - x, i64::from(py) - y);
@@ -529,8 +587,9 @@ impl<'a> Canvas<'a> {
     /// shows, so that a shape far larger than it costs no more than it.
     fn visible_rows(&self, y: i32, height: u32) -> core::ops::Range<u32> {
         let (y, height) = (i64::from(y), i64::from(height));
-        let first = (i64::from(self.clip.y) - y).clamp(0, height);
-        let end = (i64::from(self.clip.bottom()) - y).clamp(first, height);
+        let (_, clip_top, _, clip_bottom) = self.local_clip();
+        let first = (clip_top - y).clamp(0, height);
+        let end = (clip_bottom - y).clamp(first, height);
         first as u32..end as u32
     }
 
@@ -538,8 +597,10 @@ impl<'a> Canvas<'a> {
         self.clip_wide(x.into(), y.into(), width.into(), height.into())
     }
 
-    /// The part of an area that the clip region shows.
+    /// The part of an area (in this canvas's coordinates) that the clip
+    /// region shows, in screen coordinates.
     fn clip_wide(&self, x: i64, y: i64, width: u64, height: u64) -> Option<Rect> {
+        let (x, y) = (x + i64::from(self.origin.0), y + i64::from(self.origin.1));
         let clip = self.clip;
         let size = |size: u64| i64::try_from(size).unwrap_or(i64::MAX);
         let left = x.max(i64::from(clip.x));
@@ -587,6 +648,51 @@ fn signed(area: Rect) -> (i32, i32, u32, u32) {
 mod tests {
     use super::*;
     use paperpaw_platform::PixelFormat;
+
+    /// Drawn on a canvas moved by an offset, everything lands moved, cut
+    /// by the clip where it was, and is described where it shows.
+    #[test]
+    fn an_offset_moves_what_is_drawn() {
+        let mut moved = Framebuffer::new(20, 20, PixelFormat::Gray4).unwrap();
+        let mut plain = Framebuffer::new(20, 20, PixelFormat::Gray4).unwrap();
+        let mut described = Vec::new();
+        {
+            let mut canvas = moved.canvas();
+            let mut canvas = canvas.clipped(Rect::new(0, 5, 20, 15));
+            let canvas = canvas.clipped(Rect::new(0, 0, 20, 20)).offset(3, 5);
+            assert_eq!(canvas.clip(), Rect::new(0, 0, 17, 15));
+            let mut canvas = canvas.describing(&mut described);
+            canvas.fill(Rect::new(1, 1, 4, 2), Color::BLACK);
+            canvas.draw_line(Point::new(0, 6), Point::new(8, 6), 1, Color::BLACK);
+            canvas.draw_gray_row(2, 9, &[0, 0, 255, 0]);
+            canvas.draw_mask(
+                10,
+                10,
+                2,
+                2,
+                Color::BLACK,
+                |dx, _| if dx == 0 { 255 } else { 0 },
+            );
+            canvas.fill_rect(-5, -9, 4, 4, Color::BLACK);
+            canvas.describe(Role::Button, "OK", Rect::new(1, 1, 4, 2), false, None);
+        }
+        {
+            let mut canvas = plain.canvas();
+            canvas.fill(Rect::new(4, 6, 4, 2), Color::BLACK);
+            canvas.draw_line(Point::new(3, 11), Point::new(11, 11), 1, Color::BLACK);
+            canvas.draw_gray_row(5, 14, &[0, 0, 255, 0]);
+            canvas.draw_mask(
+                13,
+                15,
+                2,
+                2,
+                Color::BLACK,
+                |dx, _| if dx == 0 { 255 } else { 0 },
+            );
+        }
+        assert_eq!(moved.view().data, plain.view().data);
+        assert_eq!(described[0].area, Rect::new(4, 6, 4, 2));
+    }
 
     #[test]
     fn washed_out_towards_the_paper() {
@@ -738,6 +844,25 @@ mod tests {
             .canvas()
             .stroke_round_rect(0, 0, 6, 6, 1, 0, Color::BLACK);
         assert_eq!(square.view().pixel(0, 0).r, 0);
+    }
+
+    /// With a negative offset, what lies past the screen's top or left
+    /// edge is cut off: clipping and describing stay where they are drawn.
+    #[test]
+    fn negative_offsets_cut_what_lies_outside() {
+        let mut fb = Framebuffer::new(10, 10, PixelFormat::Gray8).unwrap();
+        {
+            let mut canvas = fb.canvas().offset(-4, -4);
+            let mut inner = canvas.clipped(Rect::new(2, 2, 4, 4));
+            inner.clear(Color::BLACK);
+        }
+        assert_eq!(fb.take_dirty(), Some(Rect::new(0, 0, 2, 2)));
+        let mut described = Vec::new();
+        {
+            let mut canvas = fb.canvas().describing(&mut described).offset(-4, -6);
+            canvas.describe(Role::Row, "row", Rect::new(1, 1, 5, 9), false, None);
+        }
+        assert_eq!(described[0].area, Rect::new(0, 0, 2, 4));
     }
 
     #[test]

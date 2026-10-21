@@ -232,6 +232,28 @@ pub enum MenuNeed {
     /// ([`Capabilities::black_and_white`](crate::Capabilities)), hidden
     /// elsewhere.
     BlackAndWhite,
+    /// A front light PaperPaw sets ([`Capabilities::frontlight`](crate::Capabilities)).
+    Frontlight,
+}
+
+impl MenuNeed {
+    /// Whether a device that can do `caps` has what it needs (also for
+    /// [`ChromeSpec::need`](crate::chrome::ChromeSpec::need)).
+    pub fn met(self, caps: crate::Capabilities) -> bool {
+        match self {
+            MenuNeed::Speech => caps.speech,
+            MenuNeed::Sleep => caps.sleep,
+            MenuNeed::Rotation => caps.rotation,
+            MenuNeed::Colors => caps.colors,
+            MenuNeed::ButtonRow => caps.button_row,
+            MenuNeed::Wifi => caps.wifi,
+            MenuNeed::Firmware => caps.firmware,
+            MenuNeed::BlackAndWhite => caps.black_and_white,
+            MenuNeed::NoTouch => !caps.touch,
+            MenuNeed::Touch => caps.touch,
+            MenuNeed::Frontlight => caps.frontlight,
+        }
+    }
 }
 
 /// One entry of a resolved menu.
@@ -334,16 +356,9 @@ impl Menus {
     fn offered(&self, item: &str, listed: bool) -> bool {
         let caps = &self.caps;
         match self.needs.get(item) {
-            Some(MenuNeed::Speech) => caps.speech,
-            Some(MenuNeed::Sleep) => caps.sleep,
-            Some(MenuNeed::Rotation) => caps.rotation,
-            Some(MenuNeed::Colors) => caps.colors,
-            Some(MenuNeed::ButtonRow) => caps.button_row,
-            Some(MenuNeed::Wifi) => caps.wifi,
-            Some(MenuNeed::Firmware) => caps.firmware,
-            Some(MenuNeed::BlackAndWhite) => caps.black_and_white,
+            // Put into a menu by the user, it shows also on touch screens.
             Some(MenuNeed::NoTouch) => listed || !caps.touch,
-            Some(MenuNeed::Touch) => caps.touch,
+            Some(need) => need.met(*caps),
             None => true,
         }
     }
@@ -459,10 +474,22 @@ impl Menus {
     /// Every entry plugins contribute to `menu` in their places, also
     /// those this device does not offer.
     pub fn contributed_ids(&self, menu: &str) -> Vec<&Id> {
+        let in_menu = |e: &&MenuEntry| e.menu.as_str() == menu;
+        // An entry placed beside others takes the place of the same entry
+        // by order (another plugin's, say): it moves it.
+        let placed_too = |e: &MenuEntry| {
+            e.by_order().is_some()
+                && self
+                    .entries
+                    .iter()
+                    .filter(in_menu)
+                    .any(|other| other.item == e.item && other.by_order().is_none())
+        };
         let entries: Vec<&MenuEntry> = self
             .entries
             .iter()
-            .filter(|e| e.menu.as_str() == menu)
+            .filter(in_menu)
+            .filter(|e| !placed_too(e))
             .filter(|e| {
                 !self
                     .hidden
@@ -717,6 +744,20 @@ mod tests {
         let by = menus.hidden_by("m.menu", "m.a");
         assert_eq!(by.map(Id::as_str), Some("p"));
         assert_eq!(menus.hidden_by("m.menu", "m.b"), None);
+    }
+
+    #[test]
+    fn an_entry_placed_moves_the_same_one_by_order() {
+        let mut menus = Menus::new();
+        for (item, order) in [("m.a", 10), ("m.b", 20), ("m.c", 30)] {
+            menus.add(entry(item, order));
+        }
+        // Another plugin puts c right after a: moved, not twice.
+        menus.add(
+            MenuEntry::new(Id::new_static("m.menu"), Id::new_static("m.c"))
+                .place(MenuPlace::After(Id::new_static("m.a"))),
+        );
+        assert_eq!(ids(&menus), ["m.a", "m.c", "m.b"]);
     }
 
     #[test]

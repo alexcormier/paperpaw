@@ -53,7 +53,10 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
    and so does a change to a crate it passes on (config, document,
    layout, xml, image, hyphen, zip, json, digest: each its own
    `api.txt`),
-   and what goes is `#[deprecated]` first.
+   and what goes is `#[deprecated]` first. The SDK's features `kernel`
+   and `unstable` add only functions and modules, never a field, variant
+   or trait item: a plugin's fingerprint leaves them out
+   (`ADDING_ONLY` in `crates/paperpaw-sdk/build.rs`).
 
 Significant decisions are recorded as [Architecture Decision Records](docs/adr/).
 

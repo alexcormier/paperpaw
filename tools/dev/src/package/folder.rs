@@ -4,7 +4,7 @@
 //! The rules come from three places, kept in step with them:
 //!
 //! - the SDK's `install` module, which the store and the fonts browser
-//!   download with: [`is_plugin_name`], [`is_safe_path`], [`MAX_FILES`]
+//!   download with: `is_plugin_name`, `is_safe_path`, [`MAX_FILES`]
 //!   and [`Package::is_valid`];
 //! - the kernel's loader (`crates/paperpaw-core/src/data_plugin.rs`):
 //!   which files it reads, how large they may be, `[extends]` and

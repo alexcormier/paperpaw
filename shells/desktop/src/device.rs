@@ -75,7 +75,7 @@ pub struct Device {
     /// The texts being spoken (emulated), in order: number and when each
     /// ends.
     speech: std::collections::VecDeque<(u32, Instant)>,
-    /// The kernel's warnings since start (the last [`KEPT_WARNINGS`]),
+    /// The kernel's warnings since start (the last `KEPT_WARNINGS`),
     /// besides printed: for tools that check there are none.
     pub warnings: Vec<Warning>,
 }

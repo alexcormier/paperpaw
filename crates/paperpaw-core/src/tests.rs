@@ -2737,7 +2737,9 @@ impl Plugin for FilterPlugin {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        use paperpaw_sdk::filters::{InputFilterSpec, InputVerdict, RefreshFilterSpec};
+        use paperpaw_sdk::filters::{
+            InputFilterSpec, InputVerdict, RefreshFilterSpec, RefreshVerdict,
+        };
         r.add_input_filter(InputFilterSpec::new(
             Id::new_static("filter.input"),
             "",
@@ -2757,8 +2759,11 @@ impl Plugin for FilterPlugin {
             Id::new_static("filter.refresh"),
             "",
             Box::new(|_, refresh| {
-                (refresh.screen.as_ref().map(Id::as_str) == Some("a.screen"))
-                    .then_some(RefreshMode::Full)
+                if refresh.screen.as_ref().map(Id::as_str) == Some("a.screen") {
+                    RefreshVerdict::Mode(RefreshMode::Full)
+                } else {
+                    RefreshVerdict::Keep
+                }
             }),
         ))
     }
@@ -3247,14 +3252,20 @@ fn overlays_leave_the_rows_they_do_not_cover() {
     assert_eq!(uncovered(part, Rect::new(40, 200, 400, 600)), Some(part));
 }
 
+mod action_runs;
+mod chrome;
 mod clean_up;
 mod declared_work;
 mod frames;
 mod guard;
+mod hosting;
 mod input;
+mod input_kinds;
 mod kernel_calls;
 mod plugins_loaded;
+mod refreshes;
 mod screen_life;
+mod services_declared;
 mod settings_files;
 mod stack;
 mod storage;

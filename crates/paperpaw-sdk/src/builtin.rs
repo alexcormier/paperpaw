@@ -348,6 +348,12 @@ pub mod events {
         pub struct SettingChanged {
             pub id: Id,
         }
+        optional {
+            /// Its value before, as written in `paperpaw.ini`, where the
+            /// kernel changed it and a plugin subscribes to the event or
+            /// observes events (it is not made for nobody).
+            pub old: String,
+        }
     }
 
     crate::event_data! {
@@ -1015,6 +1021,18 @@ pub mod settings {
     pub const NOTICE_SECONDS: Setting<i64> = Setting::new("core.notice-seconds");
     /// Milliseconds a button or finger must be held for a long press.
     pub const LONG_PRESS_MS: Setting<i64> = Setting::new("core.long-press-ms");
+    /// Milliseconds within which a second tap or press makes a double tap
+    /// or press, where something is bound to one.
+    pub const DOUBLE_TAP_MS: Setting<i64> = Setting::new("core.double-tap-ms");
+    /// How far, in millimetres, a finger may move and still tap.
+    pub const TAP_SLOP: Setting<i64> = Setting::new("core.tap-slop");
+    /// How far, in millimetres, a finger must move to swipe.
+    pub const SWIPE_DISTANCE: Setting<i64> = Setting::new("core.swipe-distance");
+    /// How bright the front light is, in percent, where the device has one
+    /// it lets PaperPaw set ([`Capabilities::frontlight`](crate::Capabilities)).
+    pub const FRONTLIGHT: Setting<i64> = Setting::new("core.frontlight");
+    /// How warm the front light is, in percent (0 cold, 100 warm).
+    pub const FRONTLIGHT_WARMTH: Setting<i64> = Setting::new("core.frontlight-warmth");
     /// Base size of user interface text in points; UI metrics scale with it.
     pub const UI_SIZE: Setting<i64> = Setting::new("core.ui-size");
     /// The active key map preset (see [`keymap_presets`](super::keymap_presets)).
