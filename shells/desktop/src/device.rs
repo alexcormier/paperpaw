@@ -1,5 +1,8 @@
 //! The emulated device: kernel + panel + clock, independent of any window.
+//! Its storage is a folder ([`Library::Dir`]) or kept in memory
+//! ([`Library::Memory`], e.g. in a browser).
 
+use std::rc::Rc;
 use std::time::{Duration, Instant as StdInstant};
 
 use paperpaw_core::{Effects, Io, Kernel, KernelBuilder, KernelError, SpeechCall, Warning};
@@ -12,7 +15,9 @@ use paperpaw_platform::{
 use crate::budget;
 use crate::panel::Panel;
 use crate::profiles::Profile;
+use paperpaw_core::sdk::MemoryStorage;
 use paperpaw_fs::DirStorage;
+use paperpaw_platform::{DirEntry, Storage, StorageError};
 
 /// What the emulated device's storage says it has free (`--free-space`),
 /// where set: screenshots that look the same on every computer.
@@ -33,6 +38,87 @@ pub fn library(root: &std::path::Path) -> std::io::Result<DirStorage> {
     })
 }
 
+/// Where the emulated device keeps its files, as a card would: opened
+/// anew for each kernel (at start and at every restart).
+#[derive(Debug, Clone)]
+pub enum Library {
+    /// A folder of the computer.
+    Dir(std::path::PathBuf),
+    /// Files in memory, kept across restarts.
+    Memory(Rc<MemoryStorage>),
+}
+
+impl Library {
+    /// The storage for a kernel.
+    pub fn open(&self) -> std::io::Result<Card> {
+        Ok(match self {
+            Library::Dir(root) => Card::Dir(library(root)?),
+            Library::Memory(files) => Card::Memory(files.clone()),
+        })
+    }
+}
+
+/// A [`Library`] opened: what the kernel reads and writes.
+#[derive(Debug)]
+pub enum Card {
+    Dir(DirStorage),
+    Memory(Rc<MemoryStorage>),
+}
+
+impl Card {
+    fn get(&self) -> &dyn Storage {
+        match self {
+            Card::Dir(storage) => storage,
+            Card::Memory(files) => &**files,
+        }
+    }
+}
+
+impl Storage for Card {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.get().read_at(path, offset, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.get().size(path)
+    }
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.get().write(path, data)
+    }
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.get().append(path, data)
+    }
+    fn sync(&self) -> Result<(), StorageError> {
+        self.get().sync()
+    }
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.get().list(dir, visit)
+    }
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.get().remove(path)
+    }
+    fn exists(&self, path: &str) -> bool {
+        self.get().exists(path)
+    }
+    fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        self.get().rename(from, to)
+    }
+    fn create_dir(&self, path: &str) -> Result<(), StorageError> {
+        self.get().create_dir(path)
+    }
+    fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
+        self.get().remove_dir_all(path)
+    }
+    fn ignores_case(&self) -> bool {
+        self.get().ignores_case()
+    }
+    fn free_space(&self) -> Option<u64> {
+        self.get().free_space()
+    }
+    fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
+        self.get().local_path(path, with);
+    }
+}
+
 /// How long closing the window waits for answers to what plugins sent as
 /// they saved (e.g. reading progress).
 const SHUT_DOWN_WAIT: Duration = Duration::from_secs(5);
@@ -50,7 +136,7 @@ pub struct Device {
     pub kernel: Kernel,
     /// What a restart needs to build the kernel again.
     user_config: Option<String>,
-    root: std::path::PathBuf,
+    library: Library,
     /// Plugins added to the standard app.
     add: Option<AddPlugins>,
     /// The panel controller's frame memory: the kernel writes changed rows
@@ -109,17 +195,43 @@ impl Device {
         simulated_time: bool,
         add: Option<AddPlugins>,
     ) -> Result<Self, KernelError> {
+        let library = Library::Dir(storage.root().to_path_buf());
+        let card = Card::Dir(storage);
+        Self::build(profile, user_config, library, card, simulated_time, add)
+    }
+
+    /// A device whose files are kept in memory, `files` (e.g. in a
+    /// browser), its app with the plugins `add` adds.
+    pub fn in_memory(
+        profile: &'static Profile,
+        user_config: Option<String>,
+        files: Rc<MemoryStorage>,
+        simulated_time: bool,
+        add: Option<AddPlugins>,
+    ) -> Result<Self, KernelError> {
+        let card = Card::Memory(files.clone());
+        let library = Library::Memory(files);
+        Self::build(profile, user_config, library, card, simulated_time, add)
+    }
+
+    fn build(
+        profile: &'static Profile,
+        user_config: Option<String>,
+        library: Library,
+        card: Card,
+        simulated_time: bool,
+        add: Option<AddPlugins>,
+    ) -> Result<Self, KernelError> {
         budget::set_limit(profile.heap_budget);
-        let root = storage.root().to_path_buf();
         let config = user_config.as_deref();
-        let mut kernel = build_kernel(profile, config, storage, Rotation::Deg0, add)?;
+        let mut kernel = build_kernel(profile, config, card, Rotation::Deg0, add)?;
         // Turned by the settings: built again for the turned size.
         let rotation = kernel.rotation();
         if rotation != Rotation::Deg0
-            && let Ok(storage) = library(&root)
+            && let Ok(card) = library.open()
         {
             drop(kernel);
-            kernel = build_kernel(profile, user_config.as_deref(), storage, rotation, add)?;
+            kernel = build_kernel(profile, user_config.as_deref(), card, rotation, add)?;
         }
         let display = turned(profile.device, rotation).display;
         let controller = Framebuffer::new(display.width, display.height, display.format)
@@ -128,7 +240,7 @@ impl Device {
             profile,
             kernel,
             user_config,
-            root,
+            library,
             add,
             controller,
             panel: Panel::new(display.width, display.height, display.color),
@@ -151,9 +263,9 @@ impl Device {
         Ok(device)
     }
 
-    /// The folder emulating the device's storage.
-    pub fn root(&self) -> &std::path::Path {
-        &self.root
+    /// Where the device keeps its files.
+    pub fn library(&self) -> &Library {
+        &self.library
     }
 
     pub fn now(&self) -> Instant {
@@ -184,6 +296,7 @@ impl Device {
     /// battery at 80 %.
     fn status(&self, now: Instant) -> SystemStatus {
         let clock = match self.clock {
+            #[cfg(not(target_arch = "wasm32"))]
             Clock::Real(_) => {
                 let local = chrono::Local::now();
                 WallClock {
@@ -192,8 +305,9 @@ impl Device {
                     utc_offset_minutes: Some(local.offset().local_minus_utc() / 60),
                 }
             }
-            // 14 October 2026, 10:41 in Berlin.
-            Clock::Simulated(_) => WallClock {
+            // 14 October 2026, 10:41 in Berlin (also in a browser, which
+            // drives the clock itself).
+            _ => WallClock {
                 at: now,
                 unix_millis: 1_791_967_260_000,
                 utc_offset_minutes: Some(120),
@@ -484,11 +598,12 @@ impl Device {
         }
     }
 
-    /// Builds a new kernel, as the device would after a reboot.
-    fn restart(&mut self) {
-        let storage = match library(&self.root) {
+    /// Builds a new kernel, as the device would after a reboot: also
+    /// after its files changed, e.g. a data plugin's.
+    pub fn restart(&mut self) {
+        let storage = match self.library.open() {
             Ok(storage) => storage,
-            Err(e) => return eprintln!("restart: {}: {e}", self.root.display()),
+            Err(e) => return eprintln!("restart: {:?}: {e}", self.library),
         };
         // Plugins save what is pending, as on the device before it restarts.
         let now = self.now();
@@ -559,7 +674,7 @@ impl Device {
 fn build_kernel(
     profile: &'static Profile,
     user_config: Option<&str>,
-    storage: DirStorage,
+    storage: Card,
     rotation: Rotation,
     add: Option<AddPlugins>,
 ) -> Result<Kernel, KernelError> {
@@ -573,8 +688,8 @@ fn build_kernel(
         device.input.keys = profile.buttons;
         let mut builder = Kernel::builder(device)
             .storage(crate::trace::Traced(storage))
-            .clock(micros)
-            .random(random)
+            .clock(crate::host::micros)
+            .random(crate::host::random)
             .glyph_cache(profile.glyph_cache)
             .busy_mark(profile.busy_mark)
             .colors(profile.colors)
@@ -627,20 +742,6 @@ fn turned(mut device: DeviceInfo, rotation: Rotation) -> DeviceInfo {
         (display.width, display.height) = (display.height, display.width);
     }
     device
-}
-
-/// Random bytes from the operating system.
-fn random(buf: &mut [u8]) -> bool {
-    getrandom::fill(buf).is_ok()
-}
-
-/// Microseconds since start, for measuring what plugins take.
-fn micros() -> u64 {
-    static START: std::sync::OnceLock<std::time::Instant> = std::sync::OnceLock::new();
-    START
-        .get_or_init(std::time::Instant::now)
-        .elapsed()
-        .as_micros() as u64
 }
 
 /// Plugins' servers, on this computer only: the emulator is for trying

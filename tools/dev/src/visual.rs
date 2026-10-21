@@ -474,7 +474,7 @@ fn uneven(screens: &[(String, u16, bool)], tolerance: u16) -> Vec<(String, u16, 
 struct SizeIssue {
     issue: Issue,
     sizes: Vec<String>,
-    picture: PathBuf,
+    picture: Option<PathBuf>,
 }
 
 /// Turns issues into findings, with the picture saved once a place.
@@ -497,7 +497,11 @@ impl Found<'_> {
     }
 
     /// Saves the picture of `place`; its path in the output folder.
-    fn picture(&self, place: &str, image: &Image) -> Result<PathBuf, String> {
+    /// None where nothing is written ([`Context::in_memory`]).
+    fn picture(&self, place: &str, image: &Image) -> Result<Option<PathBuf>, String> {
+        if self.context.in_memory {
+            return Ok(None);
+        }
         let file: String = place
             .chars()
             .map(|c| {
@@ -512,17 +516,18 @@ impl Found<'_> {
             .join(self.variant.slug())
             .join(format!("{file}.png"));
         image.save_png(&self.context.out.join(&picture))?;
-        Ok(picture)
+        Ok(Some(picture))
     }
 
-    fn finding(&mut self, place: &str, picture: PathBuf, issue: Issue) {
-        self.report.add(
-            Finding::new(issue.check, issue.level, place, issue.message)
-                .plugin(owner(self.context, place))
-                .variant(self.variant.name())
-                .picture(picture)
-                .area(issue.area),
-        );
+    fn finding(&mut self, place: &str, picture: Option<PathBuf>, issue: Issue) {
+        let mut finding = Finding::new(issue.check, issue.level, place, issue.message)
+            .plugin(owner(self.context, place))
+            .variant(self.variant.name())
+            .area(issue.area);
+        if let Some(picture) = picture {
+            finding = finding.picture(picture);
+        }
+        self.report.add(finding);
     }
 }
 

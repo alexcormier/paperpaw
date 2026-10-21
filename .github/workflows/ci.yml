@@ -102,6 +102,11 @@ jobs:
           -p paperpaw-app --no-default-features --features packs,store-plugins,diagnostics
           -p paperpaw-image -p paperpaw-sqlite -p paperpaw-stardict
           -p paperpaw-sample-hello -p paperpaw-x4 -p paperpaw-fat
+      - name: Build the web emulator
+        # The emulator's device model and paperpaw-dev's checks, with std,
+        # in a browser (shells/web).
+        if: matrix.target == 'wasm32-unknown-unknown'
+        run: cargo build --target wasm32-unknown-unknown -p paperpaw-web
 
   firmware:
     name: Firmware (${{ matrix.device }})

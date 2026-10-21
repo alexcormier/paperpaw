@@ -32,7 +32,6 @@
 //! Everything measured is listed on `<out>/perf/index.html`.
 
 use std::fmt::Write as _;
-use std::path::Path;
 
 use paperpaw_core::sdk::Params;
 use paperpaw_core::sdk::builtin::{actions, params, slots};
@@ -278,16 +277,13 @@ pub fn draw_io(
     found
 }
 
-/// The size of `path` in the library at `root` if it is a decoded
-/// picture (`PPGI` gray, `PPCI` colour, see `paperpaw_image`).
-fn picture_size(root: &Path, path: &str) -> Option<u64> {
-    use std::io::Read as _;
-    let file = root.join(path.trim_start_matches('/'));
+/// The size of `path` in `library` if it is a decoded picture (`PPGI`
+/// gray, `PPCI` colour, see `paperpaw_image`).
+fn picture_size(library: &dyn paperpaw_platform::Storage, path: &str) -> Option<u64> {
+    let path = path.trim_start_matches('/');
     let mut magic = [0u8; 4];
-    let mut opened = std::fs::File::open(&file).ok()?;
-    opened.read_exact(&mut magic).ok()?;
-    (&magic == b"PPGI" || &magic == b"PPCI")
-        .then(|| opened.metadata().map(|m| m.len()).unwrap_or(0))
+    let read = library.read_at(path, 0, &mut magic).ok()?;
+    (read == 4 && (&magic == b"PPGI" || &magic == b"PPCI")).then(|| library.size(path).unwrap_or(0))
 }
 
 /// The factor from frames here to frames on an X4.
@@ -598,8 +594,12 @@ fn measure_variant(context: &Context, variant: &Variant) -> Result<Run, String> 
 /// Opens `case` and closes it `cycles` times; `None` if a screen showed
 /// something else.
 fn measure(session: &mut Session, case: &Case, cycles: usize) -> Result<Option<Measured>, String> {
-    let root = session.root().to_path_buf();
-    let picture = |path: &str| picture_size(&root, path);
+    let library = session
+        .device
+        .library()
+        .open()
+        .map_err(|e| format!("library: {e}"))?;
+    let picture = |path: &str| picture_size(&library, path);
     case.hide(session)?;
     let reference = fastest(session, 3);
     drop(session.frames());

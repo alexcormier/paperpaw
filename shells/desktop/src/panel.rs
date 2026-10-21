@@ -7,16 +7,14 @@
 //! - Fast refreshes show only black and white, like A2/DU waveforms.
 //! - Full refreshes flash (black, then white, then the new content).
 
-use std::time::{Duration, Instant};
-
 use paperpaw_platform::{ColorPanel, FrameView, Rect, RefreshMode};
 
 const INK: [u8; 3] = [0x1e, 0x1e, 0x1e];
 const PAPER: [u8; 3] = [0xe9, 0xe6, 0xdd];
-/// Duration of each flash phase of a full refresh.
-const FLASH_PHASE: Duration = Duration::from_millis(120);
-/// How long the refresh-region overlay stays visible.
-const HIGHLIGHT: Duration = Duration::from_millis(600);
+/// Duration of each flash phase of a full refresh, in microseconds.
+const FLASH_PHASE: u64 = 120_000;
+/// How long the refresh-region overlay stays visible, in microseconds.
+const HIGHLIGHT: u64 = 600_000;
 const HIGHLIGHT_COLOR: u32 = 0x00d0_3030;
 
 /// The simulated panel state: what the e-ink currently shows.
@@ -27,8 +25,9 @@ pub struct Panel {
     color: Option<ColorPanel>,
     /// Shown pixels as `0x00RRGGBB`.
     pixels: Vec<u32>,
-    flash: Option<(Rect, Instant)>,
-    highlight: Option<(Rect, Instant)>,
+    /// Regions and when they were refreshed ([`crate::host::micros`]).
+    flash: Option<(Rect, u64)>,
+    highlight: Option<(Rect, u64)>,
     /// Show refreshed regions with an outline.
     pub show_regions: bool,
     /// Simulate flashing full refreshes.
@@ -94,7 +93,7 @@ impl Panel {
                     on_paper(value);
             }
         }
-        let now = Instant::now();
+        let now = crate::host::micros();
         if mode == RefreshMode::Full && self.animate {
             self.flash = Some((region, now));
         }
@@ -103,23 +102,23 @@ impl Panel {
 
     /// Whether an animation or overlay still needs frames.
     pub fn is_animating(&self) -> bool {
-        let now = Instant::now();
+        let now = crate::host::micros();
         let flashing = self
             .flash
-            .is_some_and(|(_, start)| now - start < FLASH_PHASE * 2);
+            .is_some_and(|(_, start)| now.saturating_sub(start) < FLASH_PHASE * 2);
         let highlighted = self.show_regions
             && self
                 .highlight
-                .is_some_and(|(_, start)| now - start < HIGHLIGHT);
+                .is_some_and(|(_, start)| now.saturating_sub(start) < HIGHLIGHT);
         flashing || highlighted
     }
 
     /// The panel as it currently looks, including flash and overlay.
     pub fn compose(&self) -> Vec<u32> {
         let mut out = self.pixels.clone();
-        let now = Instant::now();
+        let now = crate::host::micros();
         if let Some((region, start)) = self.flash {
-            let elapsed = now - start;
+            let elapsed = now.saturating_sub(start);
             let fill = if elapsed < FLASH_PHASE {
                 Some(rgb(INK))
             } else if elapsed < FLASH_PHASE * 2 {
@@ -133,7 +132,7 @@ impl Panel {
         }
         if self.show_regions
             && let Some((region, start)) = self.highlight
-            && now - start < HIGHLIGHT
+            && now.saturating_sub(start) < HIGHLIGHT
         {
             self.outline(&mut out, region, HIGHLIGHT_COLOR);
         }

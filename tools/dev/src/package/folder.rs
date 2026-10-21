@@ -14,8 +14,6 @@
 //!   and an id and a version named in `plugin.ini` that its catalogue
 //!   entry repeats.
 
-use std::path::{Path, PathBuf};
-
 use paperpaw_sdk::install::{self, Digest, MAX_FILES, Package, PackageFile};
 use paperpaw_sdk::{DATA_FORMATS, Id, Version};
 
@@ -53,7 +51,7 @@ pub struct File {
     /// Its path in the folder, with `/`.
     pub path: String,
     pub size: u64,
-    pub full: PathBuf,
+    pub bytes: Vec<u8>,
 }
 
 /// A line of an ini file: section, key, value and line number.
@@ -110,12 +108,17 @@ impl Folder {
 pub fn check(plugin: &DataPlugin, report: &mut Report) -> Option<Folder> {
     let id = plugin.id.clone();
     let mut add = |finding: Finding| report.add(finding.plugin(id.clone()));
-    let mut files = Vec::new();
-    if let Err(error) = walk(&plugin.folder, &plugin.folder, &mut files) {
-        add(Finding::error("package.files", "", error));
-        return None;
-    }
-    files.sort_by(|a, b| a.path.cmp(&b.path));
+    // Every file, hidden ones too (the installer and the website see
+    // them), by path.
+    let files = plugin
+        .files
+        .iter()
+        .map(|(path, bytes)| File {
+            path: path.clone(),
+            size: bytes.len() as u64,
+            bytes: bytes.clone(),
+        })
+        .collect();
     let mut folder = Folder {
         files,
         ..Folder::default()
@@ -131,30 +134,6 @@ pub fn check(plugin: &DataPlugin, report: &mut Report) -> Option<Folder> {
     pictures(plugin, &folder, &mut add);
     package(plugin, &folder, &mut add);
     Some(folder)
-}
-
-/// Every file under `dir`, hidden ones too (the installer and the website
-/// see them).
-fn walk(root: &Path, dir: &Path, out: &mut Vec<File>) -> Result<(), String> {
-    let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("{}: {e}", dir.display()))?;
-        let full = entry.path();
-        let meta = entry
-            .metadata()
-            .map_err(|e| format!("{}: {e}", full.display()))?;
-        if meta.is_dir() {
-            walk(root, &full, out)?;
-        } else if meta.is_file() {
-            let relative = full.strip_prefix(root).unwrap_or(&full);
-            out.push(File {
-                path: relative.to_string_lossy().replace('\\', "/"),
-                size: meta.len(),
-                full,
-            });
-        }
-    }
-    Ok(())
 }
 
 /// The extension of `path`, lower-case.
@@ -180,18 +159,7 @@ fn text(folder: &Folder, path: &str, max: u64, add: &mut dyn FnMut(Finding)) -> 
         ));
         return None;
     }
-    let bytes = match std::fs::read(&file.full) {
-        Ok(bytes) => bytes,
-        Err(error) => {
-            add(Finding::error(
-                "package.files",
-                path,
-                format!("unreadable: {error}"),
-            ));
-            return None;
-        }
-    };
-    match String::from_utf8(bytes) {
+    match String::from_utf8(file.bytes.clone()) {
         Ok(text) => Some(text),
         Err(_) => {
             add(Finding::error(
@@ -331,7 +299,8 @@ fn manifest(plugin: &DataPlugin, folder: &mut Folder, add: &mut dyn FnMut(Findin
             }
             let folder_name = plugin
                 .folder
-                .file_name()
+                .as_ref()
+                .and_then(|folder| folder.file_name())
                 .map(|n| n.to_string_lossy().into_owned())
                 .unwrap_or_default();
             if !folder_name.is_empty() && &folder_name != id {
@@ -654,8 +623,7 @@ fn fonts(folder: &Folder, add: &mut dyn FnMut(Finding)) {
         } else {
             scalable = true;
         }
-        let head = head(&file.full, 4);
-        if !expected.iter().any(|magic| head.starts_with(magic)) {
+        if !expected.iter().any(|magic| file.bytes.starts_with(magic)) {
             add(Finding::error(
                 "package.fonts",
                 file.path.as_str(),
@@ -676,8 +644,7 @@ fn fonts(folder: &Folder, add: &mut dyn FnMut(Finding)) {
 fn pictures(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Finding)) {
     let id = folder.id(plugin);
     for file in &folder.files {
-        if extension(&file.path) == "png" && !head(&file.full, 8).starts_with(b"\x89PNG\r\n\x1a\n")
-        {
+        if extension(&file.path) == "png" && !file.bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
             add(Finding::error(
                 "package.pictures",
                 file.path.as_str(),
@@ -726,11 +693,7 @@ fn package(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Finding)) {
                     file.path
                 ),
                 file.size,
-                Digest::Sha1(
-                    std::fs::read(&file.full)
-                        .map(|bytes| paperpaw_digest::sha1::hex(&bytes))
-                        .unwrap_or_default(),
-                ),
+                Digest::Sha1(paperpaw_digest::sha1::hex(&file.bytes)),
             )
         })
         .collect();
@@ -757,17 +720,6 @@ fn package(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Finding)) {
     ));
 }
 
-/// The first `n` bytes of a file (fewer if it is shorter).
-fn head(path: &Path, n: usize) -> Vec<u8> {
-    use std::io::Read;
-    let mut buf = vec![0; n];
-    let read = std::fs::File::open(path)
-        .and_then(|mut f| f.read(&mut buf))
-        .unwrap_or(0);
-    buf.truncate(read);
-    buf
-}
-
 /// `2.3 KB`, `512 bytes`, `4.1 MB`.
 pub fn size_text(bytes: u64) -> String {
     if bytes < 1024 {
@@ -785,25 +737,18 @@ mod tests {
     use crate::report::Level;
 
     fn folder(name: &str, files: &[(&str, &[u8])]) -> DataPlugin {
-        let root = std::env::temp_dir()
-            .join(format!("paperpaw-dev-folder-{}", std::process::id()))
-            .join(name);
-        let _ = std::fs::remove_dir_all(&root);
-        for (path, bytes) in files {
-            let file = root.join(path);
-            std::fs::create_dir_all(file.parent().unwrap()).unwrap();
-            std::fs::write(file, bytes).unwrap();
-        }
-        DataPlugin {
-            id: crate::target::data_plugin_id(&root),
-            folder: root,
-        }
+        let files = files
+            .iter()
+            .map(|(path, bytes)| (path.to_string(), bytes.to_vec()))
+            .collect();
+        let mut plugin = DataPlugin::new(name, files);
+        plugin.folder = Some(std::path::PathBuf::from("plugins").join(name));
+        plugin
     }
 
     fn findings(plugin: &DataPlugin) -> Vec<(Level, &'static str, String, String)> {
         let mut report = Report::default();
         check(plugin, &mut report);
-        let _ = std::fs::remove_dir_all(&plugin.folder);
         report
             .findings
             .into_iter()

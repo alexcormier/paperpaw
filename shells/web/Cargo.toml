@@ -1,0 +1,24 @@
+[package]
+name = "paperpaw-web"
+description = "PaperPaw in a browser: the emulator's device model built for wasm32, drawn into a canvas, with data plugins and their checks"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+publish = false
+
+[lib]
+# The module the browser loads, and a library for the tests.
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+paperpaw-emulator = { path = "../desktop", default-features = false }
+paperpaw-dev = { path = "../../tools/dev" }
+paperpaw-core = { workspace = true, features = ["color", "outline"] }
+paperpaw-platform.workspace = true
+
+[lints]
+workspace = true

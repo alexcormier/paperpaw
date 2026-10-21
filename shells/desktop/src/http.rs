@@ -2,11 +2,15 @@
 //! thread of its own (Windows, macOS and Linux ship it), so the emulator
 //! needs no TLS library.
 
-use std::io::Write;
-use std::process::{Command, Stdio};
 use std::sync::mpsc::{Receiver, Sender, channel};
-use std::thread;
 use std::time::Duration;
+// `curl` on a thread, where there are processes and threads.
+#[cfg(not(target_arch = "wasm32"))]
+use std::{
+    io::Write,
+    process::{Command, Stdio},
+    thread,
+};
 
 use paperpaw_core::{HttpCall, HttpResponse};
 
@@ -35,12 +39,22 @@ impl Http {
     }
 
     /// Starts a request.
+    #[cfg(not(target_arch = "wasm32"))]
     pub fn start(&mut self, call: HttpCall) {
         let sender = self.sender.clone();
         self.in_flight += 1;
         thread::spawn(move || {
             let _ = sender.send(run(call));
         });
+    }
+
+    /// Answers a request at once as failed: in a browser the emulator
+    /// has no network of its own.
+    #[cfg(target_arch = "wasm32")]
+    pub fn start(&mut self, call: HttpCall) {
+        self.in_flight += 1;
+        let failed = HttpResponse::failed(call.id, "no network in the browser's emulator");
+        let _ = self.sender.send(failed);
     }
 
     /// An answer that has arrived, if any; waits up to `wait`.
@@ -57,6 +71,7 @@ impl Http {
 }
 
 /// Makes the request with `curl`; status 0 with the reason if it fails.
+#[cfg(not(target_arch = "wasm32"))]
 fn run(call: HttpCall) -> HttpResponse {
     let failed = |reason: String| HttpResponse {
         id: call.id,

@@ -2,16 +2,81 @@
 //! plugin's repository added, see [`crate::main`]), data plugin folders
 //! and `.ppn` files.
 
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use crate::AddPlugins;
 
-/// A data plugin folder, as the device would find it in `plugins`.
+/// A data plugin, as the device would find it in `plugins`: its files,
+/// read from a folder or handed in (by the browser's emulator).
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataPlugin {
     /// Its id, from `plugin.ini` (else the folder's name).
     pub id: String,
-    pub folder: PathBuf,
+    /// The folder it was read from; `None` for one handed in.
+    pub folder: Option<PathBuf>,
+    /// Its files by their path in it (with `/`), hidden ones too.
+    pub files: BTreeMap<String, Vec<u8>>,
+}
+
+impl DataPlugin {
+    /// The plugin in `folder`, every file read.
+    pub fn read(folder: &Path) -> Result<DataPlugin, String> {
+        let mut files = BTreeMap::new();
+        read_dir(folder, folder, &mut files)?;
+        let name = folder
+            .file_name()
+            .map(|n| n.to_string_lossy().into_owned())
+            .unwrap_or_default();
+        Ok(DataPlugin {
+            id: data_plugin_id(&files).unwrap_or(name),
+            folder: Some(folder.to_path_buf()),
+            files,
+        })
+    }
+
+    /// A plugin of `files` (path in it, bytes), its id `plugin.ini`'s or
+    /// else `id`.
+    pub fn new(id: &str, files: BTreeMap<String, Vec<u8>>) -> DataPlugin {
+        DataPlugin {
+            id: data_plugin_id(&files).unwrap_or_else(|| id.to_string()),
+            folder: None,
+            files,
+        }
+    }
+
+    /// The file at `path` in it.
+    pub fn file(&self, path: &str) -> Option<&[u8]> {
+        self.files.get(path).map(Vec::as_slice)
+    }
+
+    /// Where it is, for messages: its folder, else its id.
+    pub fn place(&self) -> String {
+        match &self.folder {
+            Some(folder) => folder.display().to_string(),
+            None => self.id.clone(),
+        }
+    }
+}
+
+/// Every file under `dir` into `out`, by its path from `root`.
+fn read_dir(root: &Path, dir: &Path, out: &mut BTreeMap<String, Vec<u8>>) -> Result<(), String> {
+    let entries = std::fs::read_dir(dir).map_err(|e| format!("{}: {e}", dir.display()))?;
+    for entry in entries {
+        let entry = entry.map_err(|e| format!("{}: {e}", dir.display()))?;
+        let full = entry.path();
+        let meta = entry
+            .metadata()
+            .map_err(|e| format!("{}: {e}", full.display()))?;
+        if meta.is_dir() {
+            read_dir(root, &full, out)?;
+        } else if meta.is_file() {
+            let relative = full.strip_prefix(root).unwrap_or(&full);
+            let bytes = std::fs::read(&full).map_err(|e| format!("{}: {e}", full.display()))?;
+            out.insert(relative.to_string_lossy().replace('\\', "/"), bytes);
+        }
+    }
+    Ok(())
 }
 
 /// What a run looks at.
@@ -44,14 +109,7 @@ impl Target {
             return Ok(());
         }
         if path.join("plugin.ini").is_file() {
-            let id = data_plugin_id(path);
-            if !self.plugins.contains(&id) {
-                self.plugins.push(id.clone());
-            }
-            self.data.push(DataPlugin {
-                id,
-                folder: path.to_path_buf(),
-            });
+            self.take_data(DataPlugin::read(path)?);
             return Ok(());
         }
         if path.join("Cargo.toml").is_file() {
@@ -66,6 +124,14 @@ impl Target {
             "{}: neither a data plugin folder (with plugin.ini) nor a .ppn file",
             path.display()
         ))
+    }
+
+    /// Looks at a data plugin.
+    pub fn take_data(&mut self, plugin: DataPlugin) {
+        if !self.plugins.contains(&plugin.id) {
+            self.plugins.push(plugin.id.clone());
+        }
+        self.data.push(plugin);
     }
 
     /// Whether `id` (a screen, widget, setting, translation key or
@@ -91,22 +157,13 @@ impl Target {
     }
 }
 
-/// The id a data plugin folder's `plugin.ini` gives, else its name.
-pub fn data_plugin_id(folder: &Path) -> String {
-    let from_ini = std::fs::read_to_string(folder.join("plugin.ini"))
-        .ok()
-        .and_then(|text| {
-            paperpaw_config::parse(&text)
-                .filter_map(Result::ok)
-                .find(|entry| entry.section == "plugin" && entry.key == "id")
-                .map(|entry| entry.value.as_str().into_owned())
-        });
-    from_ini.unwrap_or_else(|| {
-        folder
-            .file_name()
-            .map(|n| n.to_string_lossy().into_owned())
-            .unwrap_or_default()
-    })
+/// The id a data plugin's `plugin.ini` gives, if any.
+pub fn data_plugin_id(files: &BTreeMap<String, Vec<u8>>) -> Option<String> {
+    let text = std::str::from_utf8(files.get("plugin.ini")?).ok()?;
+    paperpaw_config::parse(text)
+        .filter_map(Result::ok)
+        .find(|entry| entry.section == "plugin" && entry.key == "id")
+        .map(|entry| entry.value.as_str().into_owned())
 }
 
 #[cfg(test)]
@@ -134,5 +191,18 @@ mod tests {
         target.take_path(&folder).unwrap();
         assert_eq!(target.data.len(), 1);
         assert_eq!(target.plugins, [target.data[0].id.clone()]);
+        assert!(target.data[0].file("plugin.ini").is_some());
+    }
+
+    #[test]
+    fn a_data_plugin_handed_in_is_named_by_its_manifest() {
+        let files = BTreeMap::from([(
+            "plugin.ini".to_string(),
+            b"[plugin]\nid = dusk\nname = Dusk\n".to_vec(),
+        )]);
+        let plugin = DataPlugin::new("given", files);
+        assert_eq!(plugin.id, "dusk");
+        assert_eq!(plugin.place(), "dusk");
+        assert_eq!(DataPlugin::new("given", BTreeMap::new()).id, "given");
     }
 }

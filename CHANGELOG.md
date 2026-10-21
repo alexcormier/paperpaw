@@ -6,6 +6,20 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The web emulator (`shells/web`): the standard app in a browser as
+  WebAssembly, on an emulated X4, X4 Pro or Boox Go 7 drawn into a
+  canvas, with buttons, keys and touch; a page hands in a data plugin's
+  files, which show after a restart, and asks `paperpaw-dev`'s checks of
+  them, through the emulator frame's messages
+  ([docs/web-emulator.md](docs/web-emulator.md)). `paperpaw-emulator`
+  builds without its window (feature `window`) and for `wasm32`: its
+  storage a folder or kept in memory (`device::Library`,
+  `Device::in_memory`), time and random numbers from the page where
+  there is no operating system (`host`). `paperpaw-dev` checks data
+  plugins handed in as files (`target::DataPlugin` holds them,
+  `data::check`), its libraries kept in memory where asked
+  (`Context::in_memory`).
+
 - Code plugins fit the firmware again: the SDK's fingerprint no longer
   counts features that add functions and modules only (`kernel`,
   `unstable`), with which the firmware is built and plugins are not, so

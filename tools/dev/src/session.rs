@@ -1,15 +1,18 @@
 //! One emulated device in a variant, for the checks to drive: a fresh
 //! library (the sample books, the data plugins looked at, the first-run
 //! setup done), the standard app with the plugins added, simulated time.
+//! The library is a folder in the output folder, or kept in memory
+//! ([`Context::in_memory`], e.g. in a browser).
 
-use std::path::{Path, PathBuf};
+use std::path::PathBuf;
+use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use paperpaw_core::sdk::semantics::{Described, Part};
 use paperpaw_core::sdk::{Id, Params};
 use paperpaw_emulator::device::Device;
 use paperpaw_emulator::{budget, headless, trace};
-use paperpaw_platform::Instant;
+use paperpaw_platform::{Instant, Storage};
 
 use crate::cli::Context;
 use crate::image::Image;
@@ -53,7 +56,8 @@ pub struct Start {
 pub struct Session {
     pub device: Device,
     pub variant: Variant,
-    root: PathBuf,
+    /// The library's folder, unless it is kept in memory.
+    root: Option<PathBuf>,
     keep: bool,
 }
 
@@ -64,42 +68,25 @@ impl Session {
     }
 
     pub fn start(context: &Context, variant: &Variant, start: &Start) -> Result<Session, String> {
-        let n = NEXT.fetch_add(1, Ordering::Relaxed);
-        let root = context
-            .out
-            .join("work")
-            .join(format!("{n:04}-{}", variant.slug()));
-        let _ = std::fs::remove_dir_all(&root);
-        let write = |path: &str, bytes: &[u8]| -> Result<(), String> {
-            let file = root.join(path);
-            if let Some(parent) = file.parent() {
-                std::fs::create_dir_all(parent)
-                    .map_err(|e| format!("{}: {e}", parent.display()))?;
-            }
-            std::fs::write(&file, bytes).map_err(|e| format!("{}: {e}", file.display()))
-        };
-        for (path, bytes) in BOOKS {
-            write(path, bytes)?;
-        }
+        let mut files: Vec<(String, Vec<u8>)> = BOOKS
+            .iter()
+            .map(|(path, bytes)| (path.to_string(), bytes.to_vec()))
+            .collect();
         if !start.setup {
-            write(".paperpaw/plugins/setup/done", b"")?;
+            files.push((".paperpaw/plugins/setup/done".into(), Vec::new()));
         }
-        for (path, bytes) in &start.files {
-            write(path, bytes)?;
-        }
+        files.extend(start.files.iter().cloned());
         if variant.language == crate::lint::PSEUDO {
-            for (path, bytes) in crate::lint::pseudo_plugin(context)? {
-                write(&path, &bytes)?;
-            }
+            files.extend(crate::lint::pseudo_plugin(context)?);
         }
         for plugin in &context.target.data {
-            copy_dir(&plugin.folder, &root.join("plugins").join(&plugin.id))?;
+            for (path, bytes) in &plugin.files {
+                files.push((format!("plugins/{}/{path}", plugin.id), bytes.clone()));
+            }
         }
         let mut settings: Vec<(&str, &str)> = variant.settings();
         settings.extend(start.settings.iter().map(|(k, v)| (k.as_str(), v.as_str())));
         let config = variant::config(settings);
-        let storage = paperpaw_fs::DirStorage::new(&root)
-            .map_err(|e| format!("library {}: {e}", root.display()))?;
         // The budget is compared after (see `perf`), rather than making
         // the run fail where the device would run out; frames are kept
         // for the checks that look at them.
@@ -107,14 +94,38 @@ impl Session {
         crate::probe::set_target(context.target.add);
         trace::record();
         drop(trace::take_frames());
-        let mut device = Device::with_plugins(
-            variant.profile,
-            Some(config),
-            storage,
-            true,
-            Some(crate::probe::add),
-        )
-        .map_err(|e| format!("{}: {e}", variant.name()))?;
+        let profile = variant.profile;
+        let add = Some(crate::probe::add as paperpaw_emulator::device::AddPlugins);
+        let (device, root) = if context.in_memory {
+            let library = paperpaw_core::sdk::MemoryStorage::new();
+            for (path, bytes) in &files {
+                library
+                    .write(path, bytes)
+                    .map_err(|e| format!("{path}: {e:?}"))?;
+            }
+            let device = Device::in_memory(profile, Some(config), Rc::new(library), true, add);
+            (device, None)
+        } else {
+            let n = NEXT.fetch_add(1, Ordering::Relaxed);
+            let root = context
+                .out
+                .join("work")
+                .join(format!("{n:04}-{}", variant.slug()));
+            let _ = std::fs::remove_dir_all(&root);
+            for (path, bytes) in &files {
+                let file = root.join(path);
+                if let Some(parent) = file.parent() {
+                    std::fs::create_dir_all(parent)
+                        .map_err(|e| format!("{}: {e}", parent.display()))?;
+                }
+                std::fs::write(&file, bytes).map_err(|e| format!("{}: {e}", file.display()))?;
+            }
+            let storage = paperpaw_fs::DirStorage::new(&root)
+                .map_err(|e| format!("library {}: {e}", root.display()))?;
+            let device = Device::with_plugins(profile, Some(config), storage, true, add);
+            (device, Some(root))
+        };
+        let mut device = device.map_err(|e| format!("{}: {e}", variant.name()))?;
         device.start();
         device.tick_if_due();
         let mut session = Session {
@@ -127,9 +138,9 @@ impl Session {
         Ok(session)
     }
 
-    /// The folder emulating the device's storage.
-    pub fn root(&self) -> &Path {
-        &self.root
+    /// The device's storage, as its kernel has it.
+    pub fn storage(&self) -> &dyn Storage {
+        self.device.kernel.storage()
     }
 
     /// Lets what is due happen, up to a few seconds of emulated time
@@ -243,25 +254,10 @@ impl Session {
 
 impl Drop for Session {
     fn drop(&mut self) {
-        if !self.keep {
-            let _ = std::fs::remove_dir_all(&self.root);
+        if let Some(root) = &self.root
+            && !self.keep
+        {
+            let _ = std::fs::remove_dir_all(root);
         }
     }
-}
-
-/// Copies a folder with everything in it.
-pub fn copy_dir(from: &Path, to: &Path) -> Result<(), String> {
-    std::fs::create_dir_all(to).map_err(|e| format!("{}: {e}", to.display()))?;
-    let entries = std::fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))?;
-    for entry in entries {
-        let entry = entry.map_err(|e| format!("{}: {e}", from.display()))?;
-        let path = entry.path();
-        let target = to.join(entry.file_name());
-        if path.is_dir() {
-            copy_dir(&path, &target)?;
-        } else {
-            std::fs::copy(&path, &target).map_err(|e| format!("{}: {e}", path.display()))?;
-        }
-    }
-    Ok(())
 }

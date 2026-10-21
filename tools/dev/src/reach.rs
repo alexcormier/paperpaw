@@ -886,6 +886,9 @@ fn picture(
     what: &str,
     image: &Image,
 ) -> Option<String> {
+    if context.in_memory {
+        return None;
+    }
     let path = format!("reach/{}/{screen}-{what}.png", variant.slug());
     image.save_png(&context.path(&path)).ok()?;
     Some(path)

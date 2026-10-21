@@ -198,6 +198,13 @@ pub fn override_limit(limit: Option<usize>) {
     OVERRIDDEN.store(true, Ordering::Relaxed);
 }
 
+/// Ends [`override_limit`]: the budget is `limit` again, and the next
+/// device sets its profile's.
+pub fn end_override(limit: Option<usize>) {
+    OVERRIDDEN.store(false, Ordering::Relaxed);
+    set_limit(limit);
+}
+
 /// Prints every tracked allocation of at least `bytes` to stderr, to find
 /// what makes up a peak.
 pub fn trace(bytes: usize) {

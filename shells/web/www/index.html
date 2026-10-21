@@ -1,0 +1,90 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaperPaw in the browser</title>
+<style>
+  body { margin: 0; font: 14px system-ui, sans-serif; display: grid; grid-template-columns: 320px 1fr; height: 100vh; }
+  aside { padding: 16px; border-right: 1px solid #ddd; overflow: auto; display: flex; flex-direction: column; gap: 12px; }
+  label { display: flex; flex-direction: column; gap: 4px; }
+  iframe { border: 0; width: 100%; height: 100%; }
+  pre { white-space: pre-wrap; font-size: 12px; background: #f4f4f4; padding: 8px; }
+</style>
+</head>
+<body>
+<aside>
+  <strong>PaperPaw in the browser</strong>
+  <label>Device
+    <select id="profile">
+      <option value="xteink-x4">Xteink X4</option>
+      <option value="xteink-x4-pro">Xteink X4 Pro</option>
+      <option value="boox-go-7">Boox Go 7</option>
+    </select>
+  </label>
+  <label>Language <input id="language" value="en" size="4"></label>
+  <label><span><input id="dark" type="checkbox"> Dark</span></label>
+  <label>A data plugin (its folder) <input id="folder" type="file" webkitdirectory multiple></label>
+  <button id="check">Check the plugin</button>
+  <pre id="report"></pre>
+</aside>
+<iframe id="frame" src="frame.html" title="The emulated device"></iframe>
+<script type="module">
+  // A page around the frame, as the workshop is: it speaks the frame's
+  // messages only (docs/web-emulator.md).
+  const frame = document.getElementById("frame");
+  const report = document.getElementById("report");
+  let plugin = null;
+  let next = 1;
+  const waiting = new Map();
+
+  function send(message) {
+    const id = next++;
+    frame.contentWindow.postMessage({ ...message, id }, "*");
+    return new Promise((resolve) => waiting.set(id, resolve));
+  }
+
+  window.addEventListener("message", (event) => {
+    if (event.source !== frame.contentWindow) return;
+    if (event.data.type === "ready") return start();
+    waiting.get(event.data.id)?.(event.data);
+    waiting.delete(event.data.id);
+  });
+
+  async function start() {
+    const answer = await send({
+      type: "start",
+      profile: document.getElementById("profile").value,
+      language: document.getElementById("language").value,
+      dark: document.getElementById("dark").checked,
+      plugins: plugin ? [plugin] : [],
+    });
+    report.textContent = answer.error ?? `${answer.device.name}: ${answer.device.width} x ${answer.device.height}, ${answer.device.grays} grays`;
+  }
+
+  for (const id of ["profile", "language", "dark"]) {
+    document.getElementById(id).addEventListener("change", start);
+  }
+
+  document.getElementById("folder").addEventListener("change", async (event) => {
+    const files = {};
+    let id = null;
+    for (const file of event.target.files) {
+      const [folder, ...rest] = file.webkitRelativePath.split("/");
+      id ??= folder;
+      files[rest.join("/")] = new Uint8Array(await file.arrayBuffer());
+    }
+    if (!id) return;
+    plugin = { id, files };
+    const answer = await send({ type: "files", id, files });
+    report.textContent = answer.error ?? `${id}: ${Object.keys(files).length} files on the card`;
+  });
+
+  document.getElementById("check").addEventListener("click", async () => {
+    report.textContent = "Checking ...";
+    const answer = await send({ type: "check" });
+    report.textContent = answer.error ?? answer.report.findings.map((f) => `${f.level} ${f.check} ${f.place}: ${f.message}`).join("\n") || "No findings.";
+  });
+</script>
+</body>
+</html>

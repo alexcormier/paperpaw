@@ -78,6 +78,7 @@ members = [
     "plugins/hyphenation",
     "plugins/keyboard",
     "shells/desktop",
+    "shells/web",
     "shells/android",
     "tools/fontgen",
     "tools/sign",

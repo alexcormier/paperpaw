@@ -1,12 +1,13 @@
 //! A plugin's files: dashes the project does not use, catalog keys, and
 //! what a data plugin's `settings.ini` and `presets.ini` set.
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 
 use paperpaw_i18n::Catalog;
 
 use super::catalogs;
 use crate::report::{Finding, Level};
+use crate::target::DataPlugin;
 
 /// The dashes PaperPaw's texts do not use, with their names.
 pub const DASHES: [(char, &str); 2] = [
@@ -52,20 +53,66 @@ pub fn dashes(plugin: &str, place: &str, text: &str, own: bool) -> Vec<Finding> 
     findings
 }
 
-/// The `.ini` files of a plugin's folder and its `i18n` folder, by name.
-pub fn ini_files(folder: &Path) -> Vec<PathBuf> {
+/// An `.ini` file of a plugin.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct IniFile {
+    /// Where it is, as findings write it.
+    pub place: String,
+    /// A catalog: in the plugin's `i18n`.
+    pub catalog: bool,
+    /// Its text; `None` where it is not UTF-8.
+    pub text: Option<String>,
+}
+
+/// Whether `name` is an `.ini` file's.
+fn is_ini(name: &str) -> bool {
+    name.rsplit_once('.')
+        .is_some_and(|(_, x)| x.eq_ignore_ascii_case("ini"))
+}
+
+/// The `.ini` files of a data plugin and of its `i18n`, by name.
+pub fn data_ini_files(plugin: &DataPlugin) -> Vec<IniFile> {
+    let mut top = Vec::new();
+    let mut catalogs = Vec::new();
+    for (path, bytes) in &plugin.files {
+        let (dir, name) = path.rsplit_once('/').unwrap_or(("", path));
+        if !is_ini(name) || !(dir.is_empty() || dir == "i18n") {
+            continue;
+        }
+        let file = IniFile {
+            place: path.clone(),
+            catalog: dir == "i18n",
+            text: String::from_utf8(bytes.clone()).ok(),
+        };
+        if file.catalog {
+            catalogs.push(file);
+        } else {
+            top.push(file);
+        }
+    }
+    top.extend(catalogs);
+    top
+}
+
+/// The `.ini` files of `folder` and of its `i18n` folder, by name, their
+/// places relative to `shown`.
+pub fn folder_ini_files(folder: &Path, shown: &Path) -> Vec<IniFile> {
     let mut files = Vec::new();
     for dir in [folder.to_path_buf(), folder.join("i18n")] {
         let Ok(entries) = std::fs::read_dir(&dir) else {
             continue;
         };
-        let mut found: Vec<PathBuf> = entries
+        let mut found: Vec<_> = entries
             .filter_map(Result::ok)
             .map(|e| e.path())
-            .filter(|p| p.is_file() && p.extension().is_some_and(|e| e.eq_ignore_ascii_case("ini")))
+            .filter(|p| p.is_file() && is_ini(&p.to_string_lossy()))
             .collect();
         found.sort();
-        files.extend(found);
+        files.extend(found.into_iter().map(|path| IniFile {
+            place: relative(&path, shown),
+            catalog: path.parent().is_some_and(|p| p.ends_with("i18n")),
+            text: std::fs::read_to_string(&path).ok(),
+        }));
     }
     files
 }
@@ -75,20 +122,19 @@ pub fn relative(path: &Path, base: &Path) -> String {
     crate::report::slashed(path.strip_prefix(base).unwrap_or(path))
 }
 
-/// The catalog files of a plugin in `folder`'s `i18n`: dashes, keys well
-/// formed and in its namespace. `shown` is how paths are written.
+/// A plugin's `.ini` files (see [`data_ini_files`] and
+/// [`folder_ini_files`]): dashes; in its catalogs keys well formed and in
+/// its namespace.
 pub fn catalog_files(
     plugin: &str,
-    folder: &Path,
-    shown: &Path,
+    files: Vec<IniFile>,
     own: bool,
     translates: &dyn Fn(&str) -> bool,
 ) -> Vec<Finding> {
     let mut findings = Vec::new();
-    for file in ini_files(folder) {
-        let in_i18n = file.parent().is_some_and(|p| p.ends_with("i18n"));
-        let place = relative(&file, shown);
-        let Ok(text) = std::fs::read_to_string(&file) else {
+    for file in files {
+        let place = file.place;
+        let Some(text) = file.text else {
             findings.push(
                 Finding::error("lint.catalog", place, "Cannot be read as UTF-8 text.")
                     .plugin(plugin.to_string()),
@@ -96,7 +142,7 @@ pub fn catalog_files(
             continue;
         };
         findings.extend(dashes(plugin, &place, &text, own));
-        if !in_i18n {
+        if !file.catalog {
             continue;
         }
         match Catalog::parse(text) {
@@ -119,20 +165,14 @@ pub fn catalog_files(
 /// What a data plugin's `settings.ini` and `presets.ini` set that no
 /// plugin has (`known` says which settings exist): a misspelt id is
 /// ignored on the device.
-pub fn settings_set(
-    plugin: &str,
-    folder: &Path,
-    shown: &Path,
-    known: &dyn Fn(&str) -> bool,
-) -> Vec<Finding> {
+pub fn settings_set(data: &DataPlugin, known: &dyn Fn(&str) -> bool) -> Vec<Finding> {
+    let plugin = &data.id;
     let mut findings = Vec::new();
-    for (name, whole) in [("settings.ini", false), ("presets.ini", true)] {
-        let file = folder.join(name);
-        let Ok(text) = std::fs::read_to_string(&file) else {
+    for (place, whole) in [("settings.ini", false), ("presets.ini", true)] {
+        let Some(text) = data.file(place).and_then(|b| std::str::from_utf8(b).ok()) else {
             continue;
         };
-        let place = relative(&file, shown);
-        for entry in paperpaw_config::parse(&text).filter_map(Result::ok) {
+        for entry in paperpaw_config::parse(text).filter_map(Result::ok) {
             let id = if whole {
                 // Preset values have the whole id; the rest describe it.
                 if !entry.key.contains('.') {
@@ -168,20 +208,18 @@ mod tests {
 
     /// The fixture data plugin with dashes put in (the repository has
     /// none, the fixture neither).
-    fn fixture() -> PathBuf {
+    fn fixture() -> DataPlugin {
         let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lint/data-plugin");
-        let to =
-            std::env::temp_dir().join(format!("paperpaw-dev-lint-files-{}", std::process::id()));
-        let _ = std::fs::remove_dir_all(&to);
-        crate::session::copy_dir(&from, &to).unwrap();
-        let dash = |file: &str, from: &str, to_: &str| {
-            let path = to.join(file);
-            let text = std::fs::read_to_string(&path).unwrap();
-            std::fs::write(&path, text.replace(from, to_)).unwrap();
+        let mut plugin = DataPlugin::read(&from).unwrap();
+        let mut dash = |file: &str, from: &str, to: &str| {
+            let text = String::from_utf8(plugin.files[file].clone()).unwrap();
+            plugin
+                .files
+                .insert(file.to_string(), text.replace(from, to).into_bytes());
         };
         dash("plugin.ini", "wanting;", "wanting \u{2014}");
         dash("i18n/en.ini", "1 to 2", "1\u{2013}2");
-        to
+        plugin
     }
 
     #[test]
@@ -198,8 +236,8 @@ mod tests {
 
     #[test]
     fn a_data_plugins_files() {
-        let folder = fixture();
-        let found = catalog_files("wanting", &folder, &folder, false, &|_| false);
+        let plugin = fixture();
+        let found = catalog_files("wanting", data_ini_files(&plugin), false, &|_| false);
         let places: Vec<&str> = found.iter().map(|f| f.place.as_str()).collect();
         assert!(places.contains(&"plugin.ini:3"), "{found:#?}");
         assert!(places.contains(&"i18n/en.ini:7"), "{found:#?}");
@@ -210,11 +248,15 @@ mod tests {
             "{found:#?}"
         );
         let known = |id: &str| id == "core.ui-size";
-        let set = settings_set("wanting", &folder, &folder, &known);
+        let set = settings_set(&plugin, &known);
         assert_eq!(set.len(), 2, "{set:#?}");
         assert!(set[0].message.contains("`core.ui-sise`"));
         assert_eq!(set[0].place, "settings.ini:3");
         assert!(set[1].message.contains("`home.colums`"));
-        let _ = std::fs::remove_dir_all(&folder);
+        // The same plugin read from its folder: the same findings.
+        let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lint/data-plugin");
+        let on_disk = folder_ini_files(&from, &from);
+        let in_memory = data_ini_files(&DataPlugin::read(&from).unwrap());
+        assert_eq!(on_disk, in_memory);
     }
 }
