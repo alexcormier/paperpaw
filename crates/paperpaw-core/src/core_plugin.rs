@@ -396,6 +396,22 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     // stays the same however many there are.
     r.add_menu_entry(MenuEntry::new(menus::TOOLS, actions::SCREENSHOT).order(95))?;
     r.add_icon(actions::SCREENSHOT, Cow::Borrowed("camera"))?;
+    // What there is to open, a submenu of the tools (an action named like
+    // its menu) where plugins put something there: reached with the
+    // buttons too, however full the home screen is.
+    r.add_action(ActionSpec::new(menus::APPS, "core.action.apps").handler(
+        |_: &Env<'_>, out: &mut Vec<Command>| {
+            out.push(Command::OpenSlot(
+                slots::MENU,
+                Params::new().with(params::MENU, menus::APPS.as_str()),
+            ));
+        },
+    ))?;
+    r.add_menu_entry(MenuEntry::new(menus::TOOLS, menus::APPS).order(90))?;
+    r.add_icon(menus::APPS, Cow::Borrowed("apps"))?;
+    r.set_item_state(menus::APPS, |env| {
+        paperpaw_sdk::ItemState::new().shown(!env.menus.items(menus::APPS.as_str()).is_empty())
+    })?;
     for (action, order, icon) in [
         (actions::HOME, 10, "home"),
         (actions::LIBRARY, 20, "books"),

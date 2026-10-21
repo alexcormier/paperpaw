@@ -31,8 +31,11 @@ pub const PLUGIN: Id = Id::new_static("about");
 /// Shows the page.
 pub const OPEN: Id = Id::new_static("about.open");
 /// The point other plugins add lines to the page through, a paragraph
-/// each (Markdown).
+/// each, after the plugin's name; as plain text (what Markdown makes of
+/// signs is not made), at most [`MOST_LINES`] bytes a plugin.
 pub const LINES: &str = "about.lines";
+/// Bytes of lines a plugin adds, at most.
+pub const MOST_LINES: usize = 512;
 /// The licences, from `tools/licences/build.py`.
 const LICENCES: &str = include_str!("../licences.md");
 /// PaperPaw's logo, as the page shows it.
@@ -66,20 +69,56 @@ fn page(env: &Env<'_>) -> String {
     )
 }
 
-/// The lines other plugins add ([`LINES`]), a paragraph each.
+/// The lines other plugins add ([`LINES`]), a paragraph each, named by
+/// their plugin; as plain text, so none makes a heading, a picture or a
+/// list of its own; at most [`MOST_LINES`] bytes a plugin.
 fn lines(env: &Env<'_>) -> String {
     let mut text = String::new();
-    for line in env
-        .services
-        .contributions(LINES)
-        .flat_map(|(_, text)| text.lines())
-        .map(str::trim)
-        .filter(|line| !line.is_empty())
-    {
-        text.push_str(line);
-        text.push_str("\n\n");
+    let mut used: Vec<(&Id, usize)> = Vec::new();
+    for (plugin, contribution) in env.services.contributions(LINES) {
+        for line in contribution
+            .lines()
+            .map(str::trim)
+            .filter(|l| !l.is_empty())
+        {
+            let at = match used.iter().position(|(p, _)| *p == plugin) {
+                Some(at) => at,
+                None => {
+                    used.push((plugin, 0));
+                    used.len() - 1
+                }
+            };
+            let left = MOST_LINES.saturating_sub(used[at].1);
+            if left == 0 {
+                break;
+            }
+            let mut end = line.len().min(left);
+            while !line.is_char_boundary(end) {
+                end -= 1;
+            }
+            used[at].1 += end;
+            let name = env
+                .plugins
+                .get(plugin.as_str())
+                .map_or(plugin.as_str(), |info| info.name(env.i18n));
+            text.push('*');
+            plain(name, &mut text);
+            text.push_str(":* ");
+            plain(&line[..end], &mut text);
+            text.push_str("\n\n");
+        }
     }
     text
+}
+
+/// `text` as plain text in Markdown: its signs escaped.
+fn plain(text: &str, out: &mut String) {
+    for c in text.chars() {
+        if c.is_ascii_punctuation() {
+            out.push('\\');
+        }
+        out.push(c);
+    }
 }
 
 /// The plugins built into the firmware, where PaperPaw is it.

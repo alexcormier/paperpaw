@@ -1546,9 +1546,16 @@ ui-size = 12
 
 [menus]
 core.main = core.settings, core.home
-core.main.known = ";
+
+[menus-known]
+core.main = ";
     assert!(saved.starts_with(start), "{saved}");
-    assert!(saved.contains("core.home"), "{saved}");
+    // Only what the user left out.
+    let known = &saved[start.len()..];
+    assert!(
+        !known.contains("core.home") && !known.contains("core.settings"),
+        "{saved}"
+    );
     kernel.set_menu(Id::new_static("core.main"), None);
     assert_eq!(items(&kernel), defaults);
     assert_eq!(
@@ -1557,6 +1564,8 @@ core.main.known = ";
 ui-size = 12
 
 [menus]
+
+[menus-known]
 "
     );
 }

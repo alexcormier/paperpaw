@@ -6,11 +6,15 @@ use super::*;
 
 /// Sections of `paperpaw.ini` that are no plugin's settings: no plugin
 /// may take their name as its id (its settings would be read as these).
-pub(crate) const RESERVED_IDS: [&str; 4] = ["plugins", "fonts", "menus", "slots"];
+pub(crate) const RESERVED_IDS: [&str; 5] = ["plugins", "fonts", "menus", KNOWN, "slots"];
 
 /// After a menu's id in `[menus]`: the entries plugins contributed when
 /// the user redefined it.
-pub(crate) const KNOWN: &str = ".known";
+/// The config section with what plugins contributed to menus the user
+/// redefined, and the user left out (see [`Menus::set_known`]).
+///
+/// [`Menus::set_known`]: paperpaw_sdk::Menus::set_known
+pub(crate) const KNOWN: &str = "menus-known";
 
 /// The key maps the kernel's is built from.
 #[derive(Debug, Default)]
@@ -297,8 +301,8 @@ impl Kernel {
         for (item, need) in staging.menu_needs.drain(..) {
             self.shared.menus.set_need(item, need);
         }
-        for (menu, item) in staging.hidden_entries.drain(..) {
-            self.shared.menus.hide(menu, item);
+        for (menu, item, by) in staging.hidden_entries.drain(..) {
+            self.shared.menus.hide(menu, item, by);
         }
         for (item, state) in staging.item_states.drain(..) {
             self.shared.menus.set_state(item, state);
@@ -413,16 +417,18 @@ impl Kernel {
     }
 
     /// Redefines or resets a menu (see [`Command::SetMenu`]) and saves it,
-    /// with the entries plugins contribute to it now: those added later
-    /// show in the user's list too (`<menu>.known`).
+    /// with the entries plugins contribute to it now that the user left
+    /// out: those added later show in the user's list too (`[menus-known]`).
     pub(crate) fn set_menu(&mut self, menu: Id, entries: Option<Vec<Id>>) {
         let join = |ids: &[Id]| ids.iter().map(Id::as_str).collect::<Vec<_>>().join(", ");
         let value = entries.as_deref().map(join);
+        let listed = entries.as_deref().unwrap_or_default();
         let known: Vec<Id> = self
             .shared
             .menus
             .contributed_ids(menu.as_str())
             .into_iter()
+            .filter(|id| !listed.contains(id))
             .cloned()
             .collect();
         let known_value = join(&known);
@@ -435,15 +441,14 @@ impl Kernel {
         }
         // New entries need their labels.
         self.set_menu_titles();
-        let known_key = format!("{menu}{KNOWN}");
         self.update_config(&format_args!("menu `{menu}`"), |source| match &value {
             Some(value) => {
                 let source = paperpaw_config::set(source, "menus", menu.as_str(), value);
-                paperpaw_config::set(&source, "menus", &known_key, &known_value)
+                paperpaw_config::set(&source, KNOWN, menu.as_str(), &known_value)
             }
             None => {
                 let source = paperpaw_config::remove(source, "menus", menu.as_str());
-                paperpaw_config::remove(&source, "menus", &known_key)
+                paperpaw_config::remove(&source, KNOWN, menu.as_str())
             }
         });
         self.output

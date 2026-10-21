@@ -2449,6 +2449,7 @@ pub fn paperpaw_sdk::ui::Rows::paging(&self) -> (usize, usize)
 pub fn paperpaw_sdk::ui::Rows::rect_of(&self, usize) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::Rows::request(&self, paperpaw_sdk::ui::ListChange, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::Rows::set_focus(&mut self, usize) -> paperpaw_sdk::ui::ListChange
+pub fn paperpaw_sdk::ui::Rows::set_passed(&mut self, alloc::vec::Vec<bool>)
 pub fn paperpaw_sdk::ui::Rows::step(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::Rows::visible(&self) -> alloc::vec::Vec<(usize, paperpaw_platform::geometry::Rect)>
@@ -2562,6 +2563,7 @@ pub fn paperpaw_sdk::ui::draw_button(&mut paperpaw_graphics::canvas::Canvas<'_>,
 pub fn paperpaw_sdk::ui::draw_button_hints(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, &[paperpaw_sdk::Hint], &[bool], core::option::Option<usize>)
 pub fn paperpaw_sdk::ui::draw_chevron(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, i32, i32, bool, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::draw_empty(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, &str, &str)
+pub fn paperpaw_sdk::ui::draw_faint_button(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, bool)
 pub fn paperpaw_sdk::ui::draw_focus(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::ui::draw_header(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, core::option::Option<&str>)
 pub fn paperpaw_sdk::ui::draw_heading(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str)
@@ -3860,6 +3862,7 @@ pub fn paperpaw_sdk::ItemState::enabled(self, bool) -> Self
 pub fn paperpaw_sdk::ItemState::label(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub const fn paperpaw_sdk::ItemState::new() -> Self
 pub fn paperpaw_sdk::ItemState::shown(self, bool) -> Self
+pub fn paperpaw_sdk::ItemState::text(&self, &str) -> alloc::string::String
 impl core::default::Default for paperpaw_sdk::ItemState
 pub fn paperpaw_sdk::ItemState::default() -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::Manifest
@@ -3918,6 +3921,7 @@ pub fn paperpaw_sdk::Menus::contributed_ids(&self, &str) -> alloc::vec::Vec<&pap
 pub fn paperpaw_sdk::Menus::default_ids(&self, &str) -> alloc::vec::Vec<&paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Menus::description(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::Menus::hidden(&paperpaw_sdk::Params, &str) -> bool
+pub fn paperpaw_sdk::Menus::hidden_by(&self, &str, &str) -> core::option::Option<&paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Menus::icon(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::Menus::ids(&self, &str) -> alloc::vec::Vec<&paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Menus::is_customized(&self, &str) -> bool

@@ -491,6 +491,9 @@ impl GridView {
             return GridResponse::Handled;
         };
         match target {
+            // A tool shown faint by its plugin: nothing to do now.
+            Target::Run(Command::RunAction(action))
+                if !cx.env().menus.state(cx.env(), action.as_str()).enabled => {}
             Target::Run(command) => cx.command(command),
             Target::Item(item) => self.options(item, cx),
             Target::Button(button) => return GridResponse::Button(button),

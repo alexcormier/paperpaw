@@ -145,7 +145,8 @@ pub(crate) struct Staging {
     pub(crate) menu_sections: Vec<paperpaw_sdk::MenuSection>,
     pub(crate) icons: Vec<(Id, Cow<'static, str>)>,
     pub(crate) menu_needs: Vec<(Id, paperpaw_sdk::MenuNeed)>,
-    pub(crate) hidden_entries: Vec<(Id, Id)>,
+    /// (menu, item, the plugin hiding it).
+    pub(crate) hidden_entries: Vec<(Id, Id, Id)>,
     pub(crate) item_states: Vec<(Id, paperpaw_sdk::ItemStateFn)>,
     pub(crate) item_descriptions: Vec<(Id, Cow<'static, str>)>,
     pub(crate) screen_hints: Vec<(Id, paperpaw_sdk::Hints)>,
@@ -289,7 +290,7 @@ pub(crate) fn stage(
             Contribution::Icon { item, icon, .. } => staging.icons.push((item, icon)),
             Contribution::MenuNeed { item, need, .. } => staging.menu_needs.push((item, need)),
             Contribution::HideMenuEntry { menu, item, .. } => {
-                staging.hidden_entries.push((menu, item));
+                staging.hidden_entries.push((menu, item, plugin.clone()));
             }
             Contribution::ItemState { item, state, .. } => staging.item_states.push((item, state)),
             Contribution::ItemDescription { item, key, .. } => {

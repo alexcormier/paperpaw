@@ -93,9 +93,12 @@ impl Listing<'_> {
         // folder is listed.
         let mut unknown: Vec<(String, u64)> = Vec::new();
         let _ = self.storage.list(self.dir, &mut |entry| {
+            // At most a few: each told from memory once read (see
+            // `Formats::for_file`).
             if !entry.is_dir
                 && !self.folders_only
                 && !entry.name.starts_with('.')
+                && unknown.len() < crate::formats::SNIFFED
                 && !self.formats.supports(entry.name)
                 && self.formats.may_sniff(entry.name)
             {

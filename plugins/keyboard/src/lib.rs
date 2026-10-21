@@ -294,14 +294,20 @@ impl KeyboardScreen {
         let display = env.device.display;
         let key_height = style.row as u16;
         let field_height = (style.small * 1.5) as u16 + style.row as u16;
-        let keys_height = key_height * rows.len().max(4) as u16;
         let gap = style.gap as u16 / 2;
+        // On the screen whatever the rows: keys get smaller first.
+        let room = display
+            .height
+            .saturating_sub(field_height.saturating_add(gap * 3));
+        let keys_height = key_height
+            .saturating_mul(rows.len().max(4) as u16)
+            .min(room);
         let height = (field_height + keys_height + gap * 3).min(display.height);
         let region = Rect::new(0, display.height - height, display.width, height);
         let field = Rect::new(0, region.y + gap, display.width, field_height);
         let keys = Rect::new(
             0,
-            region.y + region.height - keys_height - gap,
+            (region.y + region.height).saturating_sub(keys_height + gap),
             display.width,
             keys_height,
         );
@@ -544,20 +550,30 @@ impl KeyboardScreen {
         let Some(Key::Char(c)) = self.rows.get(row).and_then(|r| r.get(index)).map(|k| k.0) else {
             return false;
         };
-        // The layout's own, then the built-in ones.
+        // The layout's own, then the built-in ones of the letter.
         let own = self.layouts[self.current.get()]
             .2
             .iter()
             .find(|(base, _)| c.to_lowercase().eq(core::iter::once(*base)))
-            .map(|(_, variants)| variants.as_str());
-        let Some(variants) = own.or_else(|| layouts::variants(c)) else {
+            .map_or("", |(_, variants)| variants.as_str());
+        let builtin = layouts::variants(c).unwrap_or_default();
+        let mut chars: Vec<char> = Vec::new();
+        for v in own.chars().chain(builtin.chars()).map(|v| self.cased(v)) {
+            if !chars.contains(&v) && chars.len() < 2 * layouts::MAX_VARIANTS {
+                chars.push(v);
+            }
+        }
+        if chars.is_empty() {
             return false;
-        };
-        let chars: Vec<char> = variants.chars().map(|v| self.cased(v)).collect();
+        }
         let key = self.key_area(row, index);
         let margin = self.style.margin as u16 / 2;
-        let room = self.region.width - 2 * margin;
-        let width = (key.width.max(self.key_height) * chars.len() as u16).min(room);
+        let room = self.region.width.saturating_sub(2 * margin);
+        let width = key
+            .width
+            .max(self.key_height)
+            .saturating_mul(chars.len() as u16)
+            .min(room);
         let center = key.x + key.width / 2;
         let x = center
             .saturating_sub(width / 2)

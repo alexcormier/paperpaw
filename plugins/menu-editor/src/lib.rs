@@ -751,10 +751,10 @@ impl Screen for EntryScreen {
 /// settings and other menus, by name.
 struct AddScreen {
     menu: String,
-    /// Ids with their names, sorted by name.
-    candidates: Vec<(Id, String)>,
-    /// Every menu, sorted: those among the candidates show "›".
-    menus: Vec<Id>,
+    /// Ids with their names and what is said beside them (a submenu's
+    /// "›", the plugin that took an entry out of this menu), sorted by
+    /// name.
+    candidates: Vec<(Id, String, String)>,
     frame: Frame,
 }
 
@@ -763,7 +763,7 @@ impl AddScreen {
         let menu = params.get(MENU).unwrap_or_default().to_string();
         let present = entries(env, &menu);
         let menus: Vec<Id> = env.menus.menu_ids().into_iter().cloned().collect();
-        let mut candidates: Vec<(Id, String)> = env
+        let mut candidates: Vec<(Id, String, String)> = env
             .actions
             .iter()
             .map(|a| a.id.clone())
@@ -772,7 +772,21 @@ impl AddScreen {
             .filter(|id| !present.contains(id) && !makes_circle(env, &menu, id))
             .map(|id| {
                 let name = name(env, id.as_str());
-                (id, name)
+                let beside = match env.menus.hidden_by(&menu, id.as_str()) {
+                    Some(by) => {
+                        let plugin = env
+                            .plugins
+                            .get(by.as_str())
+                            .map_or(by.as_str(), |info| info.name(env.i18n));
+                        env.i18n.format(
+                            "menu-editor.hidden-by",
+                            &[("plugin", paperpaw_sdk::Arg::Str(plugin))],
+                        )
+                    }
+                    None if menus.binary_search(&id).is_ok() => String::from("›"),
+                    None => String::new(),
+                };
+                (id, name, beside)
             })
             .collect();
         candidates.sort_by_key(|c| c.1.to_lowercase());
@@ -780,14 +794,13 @@ impl AddScreen {
         Self {
             menu,
             candidates,
-            menus,
             frame: Frame::new(env),
         }
     }
 
     fn choose(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some((id, _)) = self.candidates.get(index) else {
+        let Some((id, _, _)) = self.candidates.get(index) else {
             return;
         };
         if makes_circle(&env, &self.menu, id) {
@@ -803,11 +816,10 @@ impl AddScreen {
 impl Screen for AddScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let title = env.i18n.tr("menu-editor.add");
-        let (candidates, menus) = (&self.candidates, &self.menus);
+        let candidates = &self.candidates;
         let row = |i: usize| {
-            let (id, name) = &candidates[i];
-            let menu = menus.binary_search(id).is_ok();
-            (name.as_str(), if menu { "›" } else { "" })
+            let (_, name, beside) = &candidates[i];
+            (name.as_str(), beside.as_str())
         };
         self.frame
             .draw(canvas, env, title, candidates.len(), row, 0);

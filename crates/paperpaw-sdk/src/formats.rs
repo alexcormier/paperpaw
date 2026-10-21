@@ -22,6 +22,9 @@ pub type FormatSniff = Box<dyn Fn(&[u8]) -> bool>;
 /// Bytes of a file a format's [`FormatSpec::sniff`] gets at most.
 pub const SNIFF_BYTES: usize = 512;
 
+/// Files told by their first bytes kept (see [`Formats::for_file`]).
+pub const SNIFFED: usize = 32;
+
 /// Whether a document opens at once as `options` say (see
 /// [`FormatSpec::prepared`]).
 pub type FormatPrepared = Box<dyn Fn(&dyn Storage, &str, &OpenOptions) -> bool>;
@@ -193,10 +196,12 @@ pub struct Formats {
     color: bool,
     /// The screen's size for pictures, if set.
     image_fit: Option<Fit>,
-    /// The file told by its first bytes last, its size and its format
-    /// (by index): asked again for the same file (prepared, then opened),
-    /// it is not read again.
-    sniffed: core::cell::RefCell<Option<(String, u64, Option<usize>)>>,
+    /// The files told by their first bytes lately, with their sizes and
+    /// formats (by index): asked again (a list turning pages, a book
+    /// prepared then opened), they are not read again. At most
+    /// [`SNIFFED`]; the storage gives no time a file changed, so one
+    /// replaced by another of the same size is told as before.
+    sniffed: core::cell::RefCell<Vec<(String, u64, Option<usize>)>>,
 }
 
 impl Formats {
@@ -279,20 +284,24 @@ impl Formats {
         self.for_path(path).is_some()
     }
 
-    /// The format of the file at `path`: by its extension, else by its
-    /// first bytes ([`FormatSpec::sniff`]), read once for the same file.
+    /// The format of the file at `path`: by its extension, else, for a
+    /// file without one ([`Formats::may_sniff`]), by its first bytes
+    /// ([`FormatSpec::sniff`]), read once for the same file and size.
     pub fn for_file(&self, storage: &dyn Storage, path: &str) -> Option<&FormatSpec> {
         if let Some(spec) = self.for_path(path) {
             return Some(spec);
         }
-        if !self.sniffs() {
+        if !self.may_sniff(path) {
             return None;
         }
         let size = storage.size(path).ok()?;
-        if let Some((known, known_size, at)) = &*self.sniffed.borrow()
-            && known == path
-            && *known_size == size
-        {
+        let known = self
+            .sniffed
+            .borrow()
+            .iter()
+            .find(|(known, known_size, _)| known == path && *known_size == size)
+            .map(|(_, _, at)| *at);
+        if let Some(at) = known {
             return at.and_then(|at| self.specs.get(at));
         }
         let mut head = [0u8; SNIFF_BYTES];
@@ -302,7 +311,12 @@ impl Formats {
             .specs
             .iter()
             .rposition(|s| s.sniff.as_ref().is_some_and(|sniff| sniff(head)));
-        *self.sniffed.borrow_mut() = Some((String::from(path), size, at));
+        let mut sniffed = self.sniffed.borrow_mut();
+        sniffed.retain(|(known, _, _)| known != path);
+        if sniffed.len() == SNIFFED {
+            sniffed.remove(0);
+        }
+        sniffed.push((String::from(path), size, at));
         at.and_then(|at| self.specs.get(at))
     }
 
@@ -401,7 +415,8 @@ mod tests {
             .unwrap();
         let storage = crate::MemoryStorage::new()
             .with("books/download", "PK and more")
-            .with("books/notes", "plain text");
+            .with("books/notes", "plain text")
+            .with("books/odd.bin", "PK and more");
         let found = |path| formats.for_file(&storage, path).map(|s| s.id.as_str());
         assert_eq!(found("books/download"), Some("b.zip"));
         assert_eq!(found("books/notes"), None);
@@ -413,6 +428,14 @@ mod tests {
         // Only files without an extension are read.
         assert!(formats.may_sniff("books/download"));
         assert!(!formats.may_sniff("books/photo.jpg"));
+        // A file with another extension is not read, whatever it holds.
+        assert_eq!(found("books/odd.bin"), None);
+        // Told again from memory: the same answer, also for many files.
+        for n in 0..(SNIFFED + 5) {
+            let _ = formats.for_file(&storage, &alloc::format!("books/x{n}"));
+        }
+        assert!(formats.sniffed.borrow().len() <= SNIFFED);
+        assert_eq!(found("books/download"), Some("b.zip"));
     }
 
     #[test]

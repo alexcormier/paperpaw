@@ -90,6 +90,16 @@ impl Plugin for Listener {
             Id::new_static("keyboard.layouts"),
             "dutch.layout; NL; qwertyuiop asdfghjkl zxcvbnm; i=ïí".into(),
         )?;
+        // Far too big, and ids that are there already.
+        let rows = ["abcdefghijklmnopqrstuvwxyz"; 30].join(" ");
+        let variants = "é".repeat(500);
+        r.contribute(
+            Id::new_static("keyboard.layouts"),
+            format!(
+                "huge.layout; HUGE; {rows}; a={variants}\nkeyboard.layout.de; XX; abc\ndutch.layout; NX; abc"
+            )
+            .into(),
+        )?;
         let heard = self.0.clone();
         r.on(TYPED, move |_, typed, _| {
             heard.borrow_mut().push(typed.clone())
@@ -814,4 +824,39 @@ fn a_layout_another_plugin_adds_is_typed_with() {
     touch.tap("ï");
     touch.tap("OK");
     assert_eq!(touch.answer(), "ï");
+}
+
+#[test]
+fn a_layout_far_too_big_stays_on_the_screen() {
+    let config = "[keyboard]\nlayouts = huge.layout\n";
+    for device in [TOUCH, BUTTONS] {
+        let mut typing = Typing::with_config(device, config);
+        typing.open(&[]);
+        // Its keys within the screen, a long press on one too.
+        let height = i32::from(device.display.height);
+        assert!(typing.parts().iter().all(|p| i32::from(p.area.y) < height));
+        // A long press on a letter of many variants: no overflow.
+        if device.input.touch {
+            typing.hold("a");
+        }
+    }
+}
+
+#[test]
+fn layouts_named_as_others_are_left_out() {
+    let mut typing = Typing::new(BUTTONS);
+    typing.now += 100;
+    let effects = typing.kernel.open_screen(
+        Instant(typing.now),
+        Id::new_static("keyboard.choose"),
+        Params::new(),
+    );
+    typing.settle(effects);
+    let labels: Vec<String> = typing.parts().into_iter().map(|p| p.label).collect();
+    let german = labels.iter().filter(|l| l.starts_with("German")).count();
+    let dutch = labels
+        .iter()
+        .filter(|l| l.starts_with("dutch.layout"))
+        .count();
+    assert!(german <= 1 && dutch <= 1, "{labels:?}");
 }

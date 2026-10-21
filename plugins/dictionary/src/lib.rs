@@ -52,6 +52,8 @@ pub const FOLDER: Setting<Text> = Setting::new("dictionary.folder");
 pub const PROVIDER: Id = Id::new_static("dictionary.stardict");
 /// What providers answering later answer the panel with.
 const ANSWERED: Id = Id::new_static("dictionary.answered");
+/// How long providers answering later are waited for.
+const ANSWER_MS: u64 = 20_000;
 /// The folder chooser of the `files` plugin, if installed.
 const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 
@@ -240,6 +242,9 @@ struct Popup {
     /// What providers that answer later need run (their requests), until
     /// the panel can.
     commands: Vec<Command>,
+    /// Until when providers asked may answer: then they are waited for no
+    /// more.
+    waiting_until: Option<paperpaw_sdk::Instant>,
     /// The definitions (or a message), and its lines as byte ranges.
     text: String,
     lines: Vec<(usize, usize)>,
@@ -272,6 +277,7 @@ impl Popup {
             pending: Vec::new(),
             asked_online: false,
             commands: Vec::new(),
+            waiting_until: None,
             text: String::new(),
             lines: Vec::new(),
             top: 0,
@@ -342,10 +348,21 @@ impl Popup {
         self.show_entries(env);
     }
 
-    /// Runs what providers that answer later need.
+    /// Runs what providers that answer later need, and waits for their
+    /// answers a while.
     fn run_commands(&mut self, cx: &mut Cx<'_, '_>) {
         for command in self.commands.drain(..) {
             cx.command(command);
+        }
+        self.wait(cx);
+    }
+
+    /// Waits [`ANSWER_MS`] for the providers asked, from now.
+    fn wait(&mut self, cx: &mut Cx<'_, '_>) {
+        if !self.pending.is_empty() {
+            let until = cx.env().now.add_millis(ANSWER_MS);
+            self.waiting_until = Some(until);
+            cx.wake_at(until);
         }
     }
 
@@ -454,6 +471,7 @@ impl Popup {
             for command in asked.commands {
                 cx.command(command);
             }
+            self.wait(cx);
             self.show_entries(&env);
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Partial);
@@ -638,6 +656,17 @@ impl Screen for Popup {
     /// Prepares the dictionaries a step at a time, then looks up the word.
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        // Providers that did not answer in time: waited for no more.
+        if let Some(until) = self.waiting_until
+            && env.now >= until
+            && !self.pending.is_empty()
+        {
+            self.pending.clear();
+            self.waiting_until = None;
+            self.show_entries(&env);
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Partial);
+        }
         let State::Preparing(builders, done, _) = &mut self.state else {
             return;
         };

@@ -438,18 +438,15 @@ impl Kernel {
                         "invalid font binding".into(),
                     ),
                 },
-                "menus" => {
+                "menus" | crate::plugins::KNOWN => {
                     let actions: Result<Vec<Id>, _> = value
                         .split(',')
                         .map(str::trim)
                         .filter(|a| !a.is_empty())
                         .map(Id::parse)
                         .collect();
-                    let (key, known) = match entry.key.strip_suffix(crate::plugins::KNOWN) {
-                        Some(menu) => (menu, true),
-                        None => (entry.key, false),
-                    };
-                    match (Id::parse(key), actions) {
+                    let known = entry.section == crate::plugins::KNOWN;
+                    match (Id::parse(entry.key), actions) {
                         (Ok(menu), Ok(actions)) if known => {
                             self.shared.menus.set_known(menu, actions);
                         }
