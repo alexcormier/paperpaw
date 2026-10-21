@@ -271,8 +271,7 @@ pub(crate) fn level(seconds: u32, goal: Option<u64>) -> u8 {
 /// The text size widget `widget`'s size setting gives, smaller where
 /// `text` is wider than `width` (down to the body's size, below which it
 /// is shortened) or a line of it higher than `height` (down to the small
-/// size); "as large as fits" fits it into both, up to three times a
-/// title's size.
+/// size); "as large as fits" fits it into both, as large as they hold.
 fn text_size(
     env: &Env<'_>,
     font: &FontHandle<'_>,
@@ -283,7 +282,7 @@ fn text_size(
 ) -> f32 {
     let style = UiStyle::new(env);
     let max = match widgets::size(env, widget) {
-        Size::Fit => style.title * 3.0,
+        Size::Fit => f32::from(height).max(style.text),
         size => size.text(&style),
     };
     sized(font, &style, text, (width, height), (max, style.text))

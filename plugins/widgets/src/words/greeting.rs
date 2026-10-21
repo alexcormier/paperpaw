@@ -211,12 +211,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     }
     let icon_width = |size: f32| icon_width(icon, size);
     // As large as set, or as fits: on one line as large as the width
-    // allows and most of the height left by the date.
+    // and the height left by the date allow.
     let (max, min) = match widgets::size(env, ID.as_str()) {
-        Size::Fit => (
-            (room * 0.62).clamp(style.small, style.title * 3.0),
-            style.small,
-        ),
+        // As large as the room holds, a line of it checked below.
+        Size::Fit => (room.max(style.small), style.small),
         size => (size.text(&style), size.text(&style).min(style.small)),
     };
     let one_line = widgets::largest_size(max, min, |size| {
