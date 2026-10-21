@@ -13,11 +13,13 @@ change the plugin SDK.
   another library folder and when books came or went without saying
   which, taking each book whose file did not change from the old
   catalog, read along with the walk, instead of reading its details, and
-  listing large folders in a few pieces: a walk takes a few kilobytes
-  whatever the library's size. On a device of little memory (the X4) it
-  waits while the library shows its books, whose index takes the room;
-  with 2400 books the X4's heap peaks at 156 KiB while it walks. Books that came, moved or changed are caught up without a
-  walk, at a calm moment when many come one after the other (a Calibre
+  listing large folders a piece a step: a walk takes a few kilobytes
+  whatever the library's size, and one paused goes on where it was. On a
+  device of little memory (the X4) it waits while the library is open,
+  whose index of the books takes the room (catching up, which takes less,
+  goes on beside it); with 2400 books the X4's heap peaks at 153 KiB
+  while it walks. Books that came, moved or changed are caught up without
+  a walk, at a calm moment when many come one after the other (a Calibre
   or catalog sync); books removed are left out at once. Views of the
   library no longer make it themselves, and show at once what changed (a
   book finished, a favourite, a book removed) without reading each book.

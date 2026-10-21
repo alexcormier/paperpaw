@@ -585,11 +585,10 @@ impl App {
         ASKED.with(|asked| asked.borrow().clone())
     }
 
-    /// Back until the home screen shows (at most ten times).
-    /// Lets the kernel's catalog work run where the library shows: on a
-    /// device of little memory it waits while the library shows its
-    /// books (their index takes the memory), so the library is left for
-    /// the home screen and opened again.
+    /// Lets the kernel's walk of the library run: on a device of little
+    /// memory it waits while the library is open (its index takes the
+    /// memory), so the library is left for the home screen and opened
+    /// again.
     pub fn let_catalog_work(&mut self) {
         if self.kernel.device().memory == MemoryClass::Small && self.screen() == "files.browser" {
             self.home();
@@ -597,6 +596,7 @@ impl App {
         }
     }
 
+    /// Back until the home screen shows (at most ten times).
     pub fn home(&mut self) {
         for _ in 0..10 {
             if self.screen() == "home.dashboard" {

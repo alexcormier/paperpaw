@@ -310,17 +310,11 @@ impl Index {
     pub fn refresh(&mut self, storage: &dyn Storage) {
         let opened = opened(storage);
         let changes = catalog::changes(storage);
-        let mut short: Vec<(u32, Option<catalog::Status>)> = changes
-            .entries
-            .iter()
-            .map(|(hash, change)| (*hash as u32, *change))
-            .collect();
-        short.sort_unstable_by_key(|(hash, _)| *hash);
         for item in &mut self.items {
             let recent = rank(&opened, item.hash);
             let (mut progress, mut flags) = (item.progress, item.flags);
-            if let Ok(at) = short.binary_search_by_key(&item.hash, |(h, _)| *h) {
-                match short[at].1 {
+            if let Some(change) = changes.get_short(item.hash) {
+                match change {
                     Some(status) => {
                         progress = status.progress.unwrap_or(NONE);
                         flags = (u8::from(status.favourite) * FAVOURITE)

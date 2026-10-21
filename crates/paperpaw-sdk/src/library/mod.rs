@@ -481,11 +481,11 @@ pub fn cover_variant(
     Some(thumb)
 }
 
-fn opened_file() -> String {
+pub(crate) fn opened_file() -> String {
     format!("{DIR}/opened.txt")
 }
 
-fn favourites_file() -> String {
+pub(crate) fn favourites_file() -> String {
     format!("{DIR}/favourites.txt")
 }
 

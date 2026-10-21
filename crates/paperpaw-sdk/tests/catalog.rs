@@ -285,3 +285,74 @@ fn a_status_that_cannot_be_read_is_not_noted() {
     let status = noted.status(paperpaw_sdk::digest::fnv1a64("books/a.txt"));
     assert_eq!(status, Some(Status::new(None, true, false)));
 }
+
+/// The old catalog has the books of a folder Y before those of X, and
+/// `removed` of Y's are removed since: a walk finds its place again past
+/// them, and takes every book of X from the old catalog.
+fn taken_after_removed(removed: usize) -> (usize, usize) {
+    let storage = MemoryStorage::new();
+    storage.create_dir("books").unwrap();
+    for (dir, n) in [("X", 40), ("Y", removed)] {
+        storage.create_dir(&format!("books/{dir}")).unwrap();
+        for i in 0..n {
+            storage
+                .write(&format!("books/{dir}/b{i:03}.txt"), b"text")
+                .unwrap();
+        }
+    }
+    let h = harness(MemoryStorage::new());
+    let env = h.env_on(&storage);
+    walk(&env);
+    // Marked, to tell what the next walk takes from the old catalog.
+    let mut records = Vec::new();
+    catalog::each(&storage, &mut |r| records.push(r));
+    for record in &mut records {
+        record.title = String::from("OLD");
+    }
+    catalog::write(&storage, &records);
+    for i in 0..removed {
+        storage.remove(&format!("books/Y/b{i:03}.txt")).unwrap();
+    }
+    let mut walk = Walk::start(&env, Vec::new()).unwrap();
+    while !walk.step(&env).unwrap() {}
+    let (mut old, mut all) = (0, 0);
+    catalog::each(&storage, &mut |r| {
+        all += 1;
+        old += usize::from(r.title == "OLD");
+    });
+    assert_eq!(walk.from_old(), old);
+    (old, all)
+}
+
+#[test]
+fn a_walk_finds_its_place_again_past_books_removed() {
+    for removed in [10, 31, 33, 100] {
+        assert_eq!(taken_after_removed(removed), (40, 40), "{removed} removed");
+    }
+}
+
+/// Paused after every step (letting go of what it read), a walk makes
+/// the same catalog.
+#[test]
+fn a_walk_paused_goes_on_where_it_was() {
+    let mut storage = MemoryStorage::new();
+    for n in 0..30 {
+        storage = storage.with(&format!("books/Shelf {}/b{n:02}.txt", n % 3), "text");
+    }
+    let h = harness(storage);
+    let env = h.env();
+    walk(&env);
+    let made = books(&h.storage);
+    library::set_finished(&h.storage, "books/Shelf 1/b04.txt", true);
+    let mut walk = Walk::start(&env, Vec::new()).unwrap();
+    loop {
+        walk.pause();
+        if walk.step(&env).unwrap() {
+            break;
+        }
+    }
+    assert_eq!(walk.from_old(), 30);
+    let again = books(&h.storage);
+    assert_eq!(again.len(), made.len());
+    assert!(again.contains(&("books/Shelf 1/b04.txt".to_string(), Some(100))));
+}

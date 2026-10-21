@@ -156,17 +156,32 @@ fn the_catalog_folded_while_the_list_shows_keeps_it_right() {
 }
 
 #[test]
-fn on_the_x4_the_catalog_waits_while_the_list_shows() {
+fn on_the_x4_the_catalog_is_caught_up_beside_the_list() {
     let _turn = turn();
-    // Beside the list's index there is no room for it: not while the
-    // list shows, but once it is left.
+    // Catching up takes a few kilobytes: there is room for it beside the
+    // list's index, and the list follows.
     let (mut app, before) = read_often(X4);
     app.wait(61_000);
+    let after = library::catalog::generation(app.storage.0.as_ref()).unwrap();
+    assert!(after > before, "not folded beside the list");
+    shown_and_finished(&mut app);
+}
+
+#[test]
+fn on_the_x4_a_walk_waits_while_the_list_shows() {
+    let _turn = turn();
+    // A walk takes more: not while the list shows, but once it is left.
+    let (mut app, _) = read_often(X4);
+    app.wait(61_000);
     let generation = |app: &App| library::catalog::generation(app.storage.0.as_ref()).unwrap();
-    assert_eq!(generation(&app), before, "folded beside the list");
+    let before = generation(&app);
+    let anew = events::CatalogWanted::new(true);
+    app.send(events::CATALOG_WANTED.id().clone(), anew.to_params());
+    app.wait(61_000);
+    assert_eq!(generation(&app), before, "walked beside the list");
     app.home();
     app.wait(61_000);
-    assert!(generation(&app) > before, "not folded away from the list");
+    assert!(generation(&app) > before, "not walked away from the list");
     app.run(actions::LIBRARY);
     shown_and_finished(&mut app);
 }

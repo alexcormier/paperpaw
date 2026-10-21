@@ -330,6 +330,13 @@ impl CatalogJob {
             CatalogJob::Rewrite(rewrite) => rewrite.abort(storage),
         }
     }
+
+    fn pause(&mut self) {
+        match self {
+            CatalogJob::Walk(walk) => walk.pause(),
+            CatalogJob::Rewrite(rewrite) => rewrite.pause(),
+        }
+    }
 }
 
 /// The making of the catalog, shared by the kernel's handlers and its
@@ -351,17 +358,24 @@ struct Catalog {
     walked: core::cell::Cell<bool>,
 }
 
-/// Whether the catalog waits: while a book is read (the reader is the
-/// screen shown, overlays over it aside), its memory and time are the
-/// reader's; on a device of little memory (the X4), while the library
-/// shows its books, the memory is its index's (a walk beside it would
-/// pass the heap's bounds). A library with no catalog yet holds none.
-fn waits(env: &Env<'_>) -> bool {
+/// Whether the catalog's job waits (paused, it goes on where it was):
+/// while a book is read (the reader is the screen shown, overlays over it
+/// aside), its memory and time are the reader's; on a device of little
+/// memory (the X4), a walk waits while the library is open (shown, or
+/// under the screens it opened: finding, a shelf, a book's information),
+/// whose index takes the memory. Catching up, which takes little, goes on
+/// beside the library; a library with no catalog yet holds no index.
+fn waits(env: &Env<'_>, walk: bool) -> bool {
     let shown = env.stack.iter().rev().find(|entry| !entry.overlay);
-    let slot = |slot: &Id| shown.is_some_and(|entry| entry.slot.as_ref() == Some(slot));
-    slot(&slots::READER)
-        || (env.device.memory == paperpaw_sdk::MemoryClass::Small
-            && slot(&slots::LIBRARY)
+    let reading = shown.is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER));
+    let library_open = env
+        .stack
+        .iter()
+        .any(|entry| entry.slot.as_ref() == Some(&slots::LIBRARY));
+    reading
+        || (walk
+            && env.device.memory == paperpaw_sdk::MemoryClass::Small
+            && library_open
             && matches!(
                 library::catalog::state(env.storage),
                 library::catalog::State::Ready { .. }
@@ -370,7 +384,15 @@ fn waits(env: &Env<'_>) -> bool {
 
 impl Catalog {
     /// Wants the library walked: `now`, or at a calm moment.
-    fn want_walk(&self, now: bool, out: &mut Vec<Command>) {
+    /// Wants the library walked: `now`, or at a calm moment; `anew`
+    /// where what a walk under way met may have changed (it starts again),
+    /// else one under way, paused or not, goes on.
+    fn want_walk(&self, now: bool, anew: bool, out: &mut Vec<Command>) {
+        let walking = matches!(*self.job.borrow(), Some(CatalogJob::Walk(_)));
+        if walking && !anew {
+            self.declare(now, out);
+            return;
+        }
         self.restart.set(self.job.borrow().is_some());
         self.walk.set(true);
         self.declare(now, out);
@@ -422,12 +444,14 @@ impl Catalog {
         use paperpaw_sdk::work::Step;
         let storage = env.storage;
         let mut job = self.job.borrow_mut();
-        if waits(env) {
-            // Begun again once another screen shows.
-            if let Some(stopped) = job.take() {
-                let walk = matches!(stopped, CatalogJob::Walk(_));
-                stopped.abort(storage);
-                self.give_back(walk);
+        let walk_next = match &*job {
+            Some(running) => matches!(running, CatalogJob::Walk(_)),
+            None => self.walk.get(),
+        };
+        if waits(env, walk_next) {
+            // Goes on where it was once another screen shows.
+            if let Some(running) = job.as_mut() {
+                running.pause();
             }
             return Step::WaitFor(events::SCREEN_SHOWN.id().clone());
         }
@@ -513,21 +537,21 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
         r.on(events::CATALOG_WANTED, move |env, wanted, out| {
             let missing = library::catalog::state(env.storage) == library::catalog::State::Missing;
             if !env.formats.is_empty() && (wanted.anew || missing || !catalog.walked.get()) {
-                catalog.want_walk(true, out);
+                catalog.want_walk(true, wanted.anew, out);
             }
         })?;
     }
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::LIBRARY_CHANGED, move |_, _, out| {
-            catalog.want_walk(true, out);
+            catalog.want_walk(true, true, out);
         })?;
     }
     {
         let catalog = Rc::clone(&catalog);
         r.on(events::SETTING_CHANGED, move |_, changed, out| {
             if changed.id == *library::FOLDER.id() {
-                catalog.want_walk(true, out);
+                catalog.want_walk(true, true, out);
             }
         })?;
     }
