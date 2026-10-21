@@ -11,7 +11,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use crate::builtin::{fonts, settings};
-use crate::document::{Document, Locator};
+use crate::document::{Document, DocumentError, Locator};
 use crate::layout::{Face, Page, PageImage, PageLine, Style, Typesetter};
 use crate::{Canvas, Color, Env, FontHandle, FontSet, Id, Rect};
 
@@ -152,6 +152,11 @@ pub struct PageType {
     /// The status lines above and below the content, where there are any.
     pub top_status: Option<Rect>,
     pub status: Option<Rect>,
+    /// The rooms page layers reserve beside the content (see
+    /// [`layers`](crate::layers)), and the columns the content is set in,
+    /// left to right: the content alone without a frame.
+    pub rooms: Vec<(Id, Rect)>,
+    pub columns: Vec<Rect>,
     /// The language whose hyphenation patterns are used, if hyphenating.
     pub hyphenation: Option<String>,
     /// What the plugins' text filters did when it was made
@@ -230,8 +235,30 @@ impl PageType {
         } else {
             screen - ends
         };
-        let height = (end - y).max(1.0);
-        let line = |y: f32| Rect::new(margin as u16, y as u16, width as u16, status.height as u16);
+        let mut height = (end - y).max(1.0);
+        let (mut x, mut y, mut width) = (margin, y, width);
+        // The layers' rooms, then the frame's columns; for whole pages
+        // neither.
+        let content = Rect::new(x as u16, y as u16, width as u16, height as u16);
+        // Asked only where there are layers or frames: nothing is made
+        // for each book's type otherwise (the X4's heap).
+        let (rooms, columns, layers) = match whole_pages || env.page_layers.is_idle() {
+            true => (Vec::new(), alloc::vec![content], None),
+            false => {
+                let (rooms, text) = env.page_layers.rooms(env, content);
+                if !rooms.is_empty() {
+                    (x, y) = (f32::from(text.x), f32::from(text.y));
+                    (width, height) = (f32::from(text.width), f32::from(text.height));
+                }
+                let columns = env.page_layers.columns(env, text);
+                // Laid out as before, with the key as before, where they
+                // change nothing.
+                let changed = !rooms.is_empty() || columns != [text];
+                let key = changed.then(|| env.page_layers.key(env, content));
+                (rooms, columns, key)
+            }
+        };
+        let line = |at: f32| Rect::new(content.x, at as u16, content.width, status.height as u16);
         let top_status = status.top.then(|| line(status.edge));
         let bottom_status = status
             .bottom
@@ -259,6 +286,12 @@ impl PageType {
                 env.text_filters.signature(env),
             ))
         );
+        // Pages without layers' rooms or a frame keep their key (and their
+        // page indexes).
+        let key = match layers {
+            None => key,
+            Some(layers) => format!("{key}-{:016x}", paperpaw_digest::fnv1a64(&layers)),
+        };
         Self {
             size,
             weight,
@@ -266,12 +299,14 @@ impl PageType {
             ascent,
             line_height,
             style,
-            x: margin,
+            x,
             y,
             width,
             height,
             top_status,
             status: bottom_status,
+            rooms,
+            columns,
             hyphenation,
             filters: env.text_filters.signature(env),
             key,
@@ -288,10 +323,87 @@ impl PageType {
         height: f32,
         pad: f32,
     ) -> Self {
+        let page = Self::new(env, font, language, false, StatusRoom::NONE);
+        let height = (height - 2.0 * pad).max(1.0);
+        let text = Rect::new(page.x as u16, pad as u16, page.width as u16, height as u16);
+        // In the frame chosen, as book pages are.
+        let columns = match env.page_layers.has_frames() {
+            true => env.page_layers.columns(env, text),
+            false => alloc::vec![text],
+        };
         Self {
             y: pad,
-            height: (height - 2.0 * pad).max(1.0),
-            ..Self::new(env, font, language, false, StatusRoom::NONE)
+            height,
+            rooms: Vec::new(),
+            columns,
+            ..page
+        }
+    }
+
+    /// The text's box, in whole pixels.
+    pub fn text_box(&self) -> Rect {
+        Rect::new(
+            self.x as u16,
+            self.y as u16,
+            self.width as u16,
+            self.height as u16,
+        )
+    }
+
+    /// Whether the text is set in columns other than its box (a frame,
+    /// see [`layers`](crate::layers)).
+    pub fn in_columns(&self) -> bool {
+        self.columns != [self.text_box()]
+    }
+
+    /// The page from `at` as `lay` lays out a column (its width and
+    /// height, where it begins): the text's box in one, or column by
+    /// column, each taking up where the one before ends, its lines and
+    /// pictures moved to its place (one page for all).
+    pub fn lay_out(
+        &self,
+        at: Locator,
+        mut lay: impl FnMut(f32, f32, Locator) -> Result<Page, DocumentError>,
+    ) -> Result<Page, DocumentError> {
+        if !self.in_columns() {
+            return lay(self.width, self.height, at);
+        }
+        let mut page = Page::new(at, at, Vec::new(), Vec::new());
+        let mut next = at;
+        for (i, column) in self.columns.iter().enumerate() {
+            let mut laid = lay(f32::from(column.width), f32::from(column.height), next)?;
+            if laid.is_past_end() {
+                break;
+            }
+            let (dx, dy) = (f32::from(column.x) - self.x, f32::from(column.y) - self.y);
+            for line in &mut laid.lines {
+                line.x += dx;
+                line.baseline += dy;
+            }
+            for image in &mut laid.images {
+                image.x += dx;
+                image.y += dy;
+            }
+            if i == 0 {
+                page.start = laid.start;
+            }
+            page.end = laid.end;
+            page.lines.append(&mut laid.lines);
+            page.images.append(&mut laid.images);
+            if laid.end <= next {
+                break;
+            }
+            next = laid.end;
+        }
+        Ok(page)
+    }
+
+    /// The width lines are broken in where the start of a place's line is
+    /// looked for: the text's, or its first column's.
+    pub fn line_width(&self) -> f32 {
+        match (self.in_columns(), self.columns.first()) {
+            (true, Some(first)) => f32::from(first.width),
+            _ => self.width,
         }
     }
 }

@@ -68,6 +68,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-json"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-platform",
+]
+
+[[package]]
 name = "paperpaw-layout"
 version = "0.4.0-dev"
 dependencies = [
@@ -88,6 +95,10 @@ name = "paperpaw-platform"
 version = "0.4.0-dev"
 
 [[package]]
+name = "paperpaw-qr"
+version = "0.4.0-dev"
+
+[[package]]
 name = "paperpaw-sample-hello"
 version = "0.4.0-dev"
 dependencies = [
@@ -105,9 +116,11 @@ dependencies = [
  "paperpaw-hyphen",
  "paperpaw-i18n",
  "paperpaw-image",
+ "paperpaw-json",
  "paperpaw-layout",
  "paperpaw-native",
  "paperpaw-platform",
+ "paperpaw-qr",
  "paperpaw-text",
  "paperpaw-update",
  "paperpaw-xml",

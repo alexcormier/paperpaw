@@ -6,12 +6,31 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Code plugins fit the firmware again: the SDK's fingerprint no longer
+  counts features that add functions and modules only (`kernel`,
+  `unstable`), with which the firmware is built and plugins are not, so
+  no plugin built by an author fitted any firmware. A code plugin built
+  as a library for a computer (`plugin!`) loads on Linux: it defines the
+  unwinder's name that `core` and `alloc` leave open, never called where
+  a plugin cannot unwind.
 - Android: the app is now `org.paperpaw.app` (was
   `io.github.hthoene.paperpaw`), named after the project's own domain
   before the first release in a store. It installs as a new app beside
   the old one; books and settings of the old one stay in its own
   folder.
 
+- SDK: `layers`, page layers and frames. A layer
+  (`Registrar::add_page_layer`) draws on every page a reader shows,
+  behind the text or over it, with the page's lines and columns
+  (`PageView`); it may reserve room beside the text and hear taps on it
+  (`events::PAGE_LAYER_TAPPED`, also with the buttons). A frame
+  (`Registrar::add_page_frame`) sets pages in columns, chosen with
+  `settings::PAGE_FRAME` (each book may have its own); a screen in
+  columns is one page of the page index. `reading::PageType` has the
+  layers' `rooms` and the frame's `columns`, and lays a page out in them
+  (`PageType::lay_out`), also the settings' preview.
+- Settings: a choice with nothing to choose from (one value) is not
+  listed.
 - SDK: block filters (`TextFilterSpec::block`) know where a block is
   (`FilterContext`: the book, its language, where the block starts) and
   may leave it out (`Verdict::Drop`): the reader lays out, searches and

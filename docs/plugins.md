@@ -462,6 +462,7 @@ artifact, also when a check failed.
 | Hyphenation | `add_hyphenation` | Patterns for a language |
 | Text filters | `add_text_filter` | Change a book's text before it is laid out |
 | Decorators | `add_decorator` | Mark words on book pages (a background, a line, a frame), drawn the same by every reader |
+| Page layers and frames | `add_page_layer`, `add_page_frame` | Draw on book pages beside the words, with room of one's own; set pages in columns |
 | Input filters | `add_input_filter` | See every button and finger first: pass it, take it, or run an action instead |
 | Refresh filters | `add_refresh_filter` | Change how the panel is refreshed, e.g. in full on a screen of your own |
 | Status items and lines | `add_status_item`, `add_status_line` | What status lines show |
@@ -630,6 +631,47 @@ Any plugin can read the words of the page shown, not only decorators:
 `reading::ask_page_words(&MY_WORDS)` asks the reader, which answers with
 the event `MY_WORDS`, a `reading::PageWords` (the book, the page's start
 and end, its words with their places).
+
+### Drawing on the page
+
+A page layer (`layers::PageLayerSpec`) draws on every page a reader
+shows: side notes, a reading ruler, change bars. It may reserve room at
+a side of the text, which is then laid out without it, and it hears
+taps on that room (`events::PAGE_LAYER_TAPPED`, also when the room is
+chosen with the buttons, as links are):
+
+```rust
+use paperpaw_sdk::layers::{PageLayerSpec, Side};
+
+r.add_page_layer(
+    PageLayerSpec::new(Id::new_static("notes.margin"), "notes.margin", |canvas, env, page| {
+        let Some(room) = page.room else { return };
+        for line in page.lines.iter().filter(|l| has_note(env, page.path, l.start)) {
+            canvas.fill_rect(room.x.into(), line.area.y.into(), 4, line.area.height.into(), Color::BLACK);
+        }
+    })
+    .reserve(|env| Some((Side::Right, env.metrics.mm(8) as u16)))
+    .taps(),
+)?;
+```
+
+- `page` (`PageView`) has the book, the page's start and end, the
+  text's box and columns, its lines (`LineBox`: where each is and what
+  it holds), the status lines and the layer's room.
+- Layers draw what they know from memory, on some devices once for every
+  band of the page: they read nothing from storage there. Those of an
+  order below 0 are drawn behind the text.
+- A layer whose drawing changes while the page stays asks for the
+  screen to be drawn again (`Command::Redraw`).
+
+A frame (`layers::PageFrameSpec`) sets the text in columns: two
+columns, two pages side by side. The setting `core.page-frame` (each
+book may have its own) offers every frame by its id, named by the
+translation of the id:
+
+```rust
+r.add_page_frame(PageFrameSpec::columns(Id::new_static("columns.two"), 2, 24))?;
+```
 
 ### Widgets
 
@@ -895,9 +937,9 @@ cargo +esp x4pro          # xtensa-esp32s3-none-elf, the X4 Pro (espup's toolcha
 
 Until PaperPaw 1.0 a plugin file runs only on the PaperPaw it was built
 for: the same compiler for the same chip from the same SDK with the same
-features. Its fingerprint says so, and a device loads only files with
-its own; *About* shows the device's fingerprint and the compiler to
-build with. Build against the SDK of the release (`paperpaw-sdk = "0.5"`)
+features (but `kernel` and `unstable`, which only add functions). Its
+fingerprint says so, and a device loads only files with its own;
+*About* shows the device's fingerprint and the compiler to build with. Build against the SDK of the release (`paperpaw-sdk = "0.5"`)
 with the toolchain that release names, and build again for every
 release; the store and the update check show which plugins wait for a
 build. From 1.0 on, plugins will be built against a versioned interface

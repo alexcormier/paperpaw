@@ -89,6 +89,9 @@ pub struct Env<'a> {
     /// Marks on the words of book pages, from every plugin (see
     /// [`decorations`](crate::decorations)).
     pub decorators: &'a crate::decorations::Decorators,
+    /// Layers on book pages and frames of their text, from every plugin
+    /// (see [`layers`](crate::layers)).
+    pub page_layers: &'a crate::layers::PageLayers,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
@@ -195,6 +198,9 @@ pub struct EnvParts<'a> {
     /// Marks on the words of book pages, from every plugin (see
     /// [`decorations`](crate::decorations)).
     pub decorators: &'a crate::decorations::Decorators,
+    /// Layers on book pages and frames of their text, from every plugin
+    /// (see [`layers`](crate::layers)).
+    pub page_layers: &'a crate::layers::PageLayers,
     /// Plugins' stylesheets for books, in the order of the plugins (see
     /// [`Registrar::add_stylesheet`](crate::Registrar::add_stylesheet)).
     pub stylesheets: &'a [alloc::borrow::Cow<'static, str>],
@@ -285,6 +291,7 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             status_items: p.status_items,
             text_filters: p.text_filters,
             decorators: p.decorators,
+            page_layers: p.page_layers,
             stylesheets: p.stylesheets,
             book_data: p.book_data,
             widgets: p.widgets,
