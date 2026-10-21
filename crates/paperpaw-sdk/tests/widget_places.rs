@@ -143,3 +143,61 @@ fn a_place_tells_whether_it_shows_a_widget() {
     let place = env.widgets.place("t.place").unwrap();
     assert_eq!(place.widgets(&env), ["t.three@2", "t.one"]);
 }
+
+/// A widget that says how many cells it takes gets them when added
+/// (without being made), within the grid; resized, it keeps its least
+/// and, square, as wide as high.
+#[test]
+fn a_widget_takes_the_cells_it_says() {
+    use paperpaw_sdk::widgets::CellsHint;
+    use paperpaw_sdk::widgets::grid::{Cells, Geometry, What};
+    let mut h = harness();
+    h.widgets.add(
+        WidgetSpec::new(Id::new_static("t.round"), "t.round", |_| Box::new(Block(1)))
+            .cells(CellsHint::new(2, 2).min(2, 2).square()),
+    );
+    h.widgets.add(
+        WidgetSpec::new(Id::new_static("t.wide"), "t.wide", |_| Box::new(Block(1)))
+            .cells(CellsHint::new(9, 1)),
+    );
+    let env = h.env();
+    let geometry = Geometry::of(Rect::new(0, 100, 480, 600), 4, 6, 8);
+    let size = |id: &str| geometry.size_of(&env, &What::Widget(id.to_string()));
+    assert_eq!(size("t.round"), (2, 2));
+    assert_eq!(size("t.wide"), (4, 1), "no more than the grid has");
+    assert_eq!(size("t.one").0, 4, "without a hint the grid's width");
+    let hint = env.widgets.cells("t.round@2").unwrap();
+    assert_eq!(
+        hint.keep(Cells::new(0, 0, 1, 2), true),
+        Cells::new(0, 0, 2, 2)
+    );
+    assert_eq!(
+        hint.keep(Cells::new(0, 0, 3, 2), true),
+        Cells::new(0, 0, 3, 3)
+    );
+    assert_eq!(
+        hint.keep(Cells::new(0, 0, 3, 4), false),
+        Cells::new(0, 0, 4, 4)
+    );
+}
+
+/// Areas are small, medium or large by their shorter side.
+#[test]
+fn areas_have_a_size_class() {
+    use paperpaw_sdk::widgets::SizeClass;
+    let h = harness();
+    let env = h.env();
+    let mm = |n: u32| env.metrics.mm(n) as u16;
+    assert_eq!(
+        SizeClass::of(&env, Rect::new(0, 0, mm(80), mm(10))),
+        SizeClass::Small
+    );
+    assert_eq!(
+        SizeClass::of(&env, Rect::new(0, 0, mm(80), mm(30))),
+        SizeClass::Medium
+    );
+    assert_eq!(
+        SizeClass::of(&env, Rect::new(0, 0, mm(80), mm(60))),
+        SizeClass::Large
+    );
+}

@@ -3624,6 +3624,23 @@ impl paperpaw_sdk::widgets::look::Size
 pub fn paperpaw_sdk::widgets::look::Size::of(&str) -> Self
 pub fn paperpaw_sdk::widgets::look::Size::text(self, &paperpaw_sdk::ui::UiStyle) -> f32
 pub const fn paperpaw_sdk::widgets::look::Size::value(self) -> &'static str
+#[non_exhaustive] pub enum paperpaw_sdk::widgets::SizeClass
+pub paperpaw_sdk::widgets::SizeClass::Large
+pub paperpaw_sdk::widgets::SizeClass::Medium
+pub paperpaw_sdk::widgets::SizeClass::Small
+impl paperpaw_sdk::widgets::SizeClass
+pub fn paperpaw_sdk::widgets::SizeClass::of(&paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect) -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::widgets::CellsHint
+pub paperpaw_sdk::widgets::CellsHint::h: u8
+pub paperpaw_sdk::widgets::CellsHint::min_h: u8
+pub paperpaw_sdk::widgets::CellsHint::min_w: u8
+pub paperpaw_sdk::widgets::CellsHint::square: bool
+pub paperpaw_sdk::widgets::CellsHint::w: u8
+impl paperpaw_sdk::widgets::CellsHint
+pub fn paperpaw_sdk::widgets::CellsHint::keep(&self, paperpaw_sdk::widgets::grid::Cells, bool) -> paperpaw_sdk::widgets::grid::Cells
+pub const fn paperpaw_sdk::widgets::CellsHint::min(self, u8, u8) -> Self
+pub const fn paperpaw_sdk::widgets::CellsHint::new(u8, u8) -> Self
+pub const fn paperpaw_sdk::widgets::CellsHint::square(self) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::widgets::Drawn
 pub paperpaw_sdk::widgets::Drawn::draw: fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect)
 pub paperpaw_sdk::widgets::Drawn::height: fn(&paperpaw_sdk::Env<'_>, u16) -> u16
@@ -3666,12 +3683,14 @@ pub const fn paperpaw_sdk::widgets::WidgetPlace::new(paperpaw_sdk::Id, &'static 
 pub fn paperpaw_sdk::widgets::WidgetPlace::widgets<'e>(&self, &paperpaw_sdk::Env<'e>) -> alloc::vec::Vec<&'e str>
 #[non_exhaustive] pub struct paperpaw_sdk::widgets::WidgetSpec
 pub paperpaw_sdk::widgets::WidgetSpec::category: alloc::borrow::Cow<'static, str>
+pub paperpaw_sdk::widgets::WidgetSpec::cells: core::option::Option<paperpaw_sdk::widgets::CellsHint>
 pub paperpaw_sdk::widgets::WidgetSpec::factory: paperpaw_sdk::widgets::WidgetFactory
 pub paperpaw_sdk::widgets::WidgetSpec::id: paperpaw_sdk::Id
 pub paperpaw_sdk::widgets::WidgetSpec::previews: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::widgets::WidgetSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::widgets::WidgetSpec
 pub fn paperpaw_sdk::widgets::WidgetSpec::category(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub fn paperpaw_sdk::widgets::WidgetSpec::cells(self, paperpaw_sdk::widgets::CellsHint) -> Self
 pub fn paperpaw_sdk::widgets::WidgetSpec::drawn(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::widgets::Drawn) -> Self
 pub fn paperpaw_sdk::widgets::WidgetSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>) -> alloc::boxed::Box<dyn paperpaw_sdk::widgets::Widget> + 'static) -> Self
 pub fn paperpaw_sdk::widgets::WidgetSpec::previews(self, paperpaw_sdk::Id) -> Self
@@ -3687,6 +3706,7 @@ pub fn paperpaw_sdk::widgets::WidgetTarget::touch(paperpaw_platform::geometry::R
 pub struct paperpaw_sdk::widgets::Widgets
 impl paperpaw_sdk::widgets::Widgets
 pub fn paperpaw_sdk::widgets::Widgets::category(&self, &str) -> core::option::Option<&str>
+pub fn paperpaw_sdk::widgets::Widgets::cells(&self, &str) -> core::option::Option<paperpaw_sdk::widgets::CellsHint>
 pub fn paperpaw_sdk::widgets::Widgets::has(&self, &str) -> bool
 pub fn paperpaw_sdk::widgets::Widgets::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
 pub fn paperpaw_sdk::widgets::Widgets::make(&self, &str, &paperpaw_sdk::Env<'_>) -> core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::widgets::Widget>>

@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: a widget says how many cells of a grid it takes
+  (`WidgetSpec::cells`, `widgets::CellsHint`: its size, its least, square
+  or not): added, it gets them without being made to be measured;
+  resized by touch or buttons, it keeps its least and stays square where
+  it says. `widgets::SizeClass::of` tells a widget how large it is drawn
+  (small, medium, large by its shorter side), to show more where it has
+  the room.
 - SDK: places of widgets. `widgets::WidgetPlace`
   (`Registrar::add_widget_place`; `PlaceKind::Stack` or `Grid`) names
   the settings that list a place's widgets: the home screen's pages and

@@ -287,6 +287,14 @@ impl Geometry {
     fn sizes_of(&self, env: &Env<'_>, what: &What) -> (u8, u8, u8) {
         match what {
             What::Tool(_) => (1, 1, 1),
+            // As it says, within the grid, without making it.
+            What::Widget(id) if let Some(hint) = env.widgets.cells(id) => {
+                let w = hint.w.clamp(1, self.columns.max(1));
+                let h = hint.h.clamp(1, self.rows.max(1));
+                let cells = hint.keep(Cells::new(0, 0, w, h), w <= h);
+                let (w, h) = (cells.w.min(self.columns), cells.h.min(self.rows));
+                (w, h, hint.min_h.clamp(1, h))
+            }
             What::Widget(id) => {
                 let width = (u16::from(self.columns) * self.cell_w).saturating_sub(self.gap);
                 let (height, least) = env.widgets.make(id, env).map_or((0, 0), |widget| {
@@ -307,7 +315,9 @@ impl Geometry {
 /// The cells an item at `from` takes when a finger that came down at
 /// `start` is at `point`: moved by as many cells as the finger moved, or
 /// with `resize` (its corner taken), its corner in the cell under the
-/// finger, at least one cell. `None` off the grid.
+/// finger, at least one cell (a widget's least where it says, see
+/// [`CellsHint::keep`](crate::widgets::CellsHint::keep)). `None` off the
+/// grid.
 pub fn dragged(
     geometry: &Geometry,
     from: Cells,

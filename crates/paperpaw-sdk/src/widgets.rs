@@ -217,6 +217,9 @@ pub struct WidgetSpec {
     /// The group of settings it previews, if it is made for that (see
     /// [`WidgetSpec::previews`]).
     pub previews: Option<Id>,
+    /// The cells it takes in a grid ([`WidgetSpec::cells`]); without it,
+    /// the grid's width and the rows it needs.
+    pub cells: Option<CellsHint>,
 }
 
 impl WidgetSpec {
@@ -232,6 +235,16 @@ impl WidgetSpec {
             factory: Box::new(factory),
             category: Cow::Borrowed(categories::OTHER),
             previews: None,
+            cells: None,
+        }
+    }
+
+    /// Takes `cells` in a grid: added, that many; resized, no fewer than
+    /// its least.
+    pub fn cells(self, cells: CellsHint) -> Self {
+        Self {
+            cells: Some(cells),
+            ..self
         }
     }
 
@@ -368,6 +381,93 @@ impl Widget for DrawnWidget {
 pub fn changed(id: &Id) -> crate::Command {
     use crate::builtin::events;
     events::WIDGET_CHANGED.emit(events::WidgetChanged { id: id.clone() })
+}
+
+/// How many cells of a grid a widget takes ([`WidgetSpec::cells`]):
+/// added, it gets `w` by `h` (no more than the grid has), and resized
+/// never less than `min_w` by `min_h`; a `square` one stays as wide as
+/// it is high, in cells (a round clock, an icon).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CellsHint {
+    pub w: u8,
+    pub h: u8,
+    pub min_w: u8,
+    pub min_h: u8,
+    pub square: bool,
+}
+
+impl CellsHint {
+    /// `w` by `h` cells, at least one by one.
+    pub const fn new(w: u8, h: u8) -> Self {
+        Self {
+            w,
+            h,
+            min_w: 1,
+            min_h: 1,
+            square: false,
+        }
+    }
+
+    /// Never less than `w` by `h` cells.
+    pub const fn min(self, w: u8, h: u8) -> Self {
+        Self {
+            min_w: w,
+            min_h: h,
+            ..self
+        }
+    }
+
+    /// As wide as it is high, in cells.
+    pub const fn square(self) -> Self {
+        Self {
+            square: true,
+            ..self
+        }
+    }
+
+    /// `cells` as the hint keeps them: no less than its least, square
+    /// where it is (the side `wide` changed, the other following it).
+    pub fn keep(&self, cells: grid::Cells, wide: bool) -> grid::Cells {
+        let mut w = cells.w.max(self.min_w).max(1);
+        let mut h = cells.h.max(self.min_h).max(1);
+        if self.square {
+            if wide {
+                h = w;
+            } else {
+                w = h;
+            }
+        }
+        grid::Cells { w, h, ..cells }
+    }
+}
+
+/// How large a widget is drawn, for widgets that show more where they
+/// have the room (a day's forecast small, the week's large): by the
+/// shorter side of its area, in millimetres.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum SizeClass {
+    /// Less than 20 mm on its shorter side: a figure, an icon.
+    Small,
+    /// Up to 45 mm.
+    Medium,
+    /// More.
+    Large,
+}
+
+impl SizeClass {
+    /// The class of `area` on this screen.
+    pub fn of(env: &Env<'_>, area: Rect) -> Self {
+        let short = u32::from(area.width.min(area.height));
+        if short < env.metrics.mm(20) {
+            Self::Small
+        } else if short <= env.metrics.mm(45) {
+            Self::Medium
+        } else {
+            Self::Large
+        }
+    }
 }
 
 /// How a place holds its widgets ([`WidgetPlace::kind`]).
@@ -571,6 +671,12 @@ impl Widgets {
     /// The kind of widget `id`, one of [`categories`] (or a plugin's own).
     pub fn category(&self, id: &str) -> Option<&str> {
         self.get(id).map(|w| w.category.as_ref())
+    }
+
+    /// The cells widget `id` takes in a grid, where it says
+    /// ([`WidgetSpec::cells`]).
+    pub fn cells(&self, id: &str) -> Option<CellsHint> {
+        self.get(id)?.cells
     }
 
     /// The translation key of the name of widget `id`.

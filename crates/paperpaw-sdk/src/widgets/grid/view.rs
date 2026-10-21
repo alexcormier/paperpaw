@@ -501,6 +501,23 @@ impl GridView {
         cx.request_refresh(RefreshMode::Fast);
     }
 
+    /// `cells` for item `index` as its widget's hint keeps them
+    /// ([`CellsHint::keep`](crate::widgets::CellsHint::keep)), the side
+    /// that changed `wide` or high.
+    fn kept(&self, index: usize, cells: Cells, wide: bool, env: &Env<'_>) -> Cells {
+        let hint = self
+            .items
+            .get(index)
+            .and_then(|shown| match &shown.item.what {
+                What::Widget(id) => env.widgets.cells(id),
+                What::Tool(_) => None,
+            });
+        match hint {
+            Some(hint) => hint.keep(cells, wide),
+            None => cells,
+        }
+    }
+
     /// The target nearest below (or above) the focused one.
     fn vertical(&self, down: bool) -> Option<usize> {
         let (from, _) = self.targets.get(self.focus)?;
@@ -789,14 +806,24 @@ impl GridView {
                 row: step(c.row, down),
                 ..c
             },
-            Mode::Resize if left || right => Cells {
-                w: step(c.w, right).max(1),
-                ..c
-            },
-            Mode::Resize if up || down => Cells {
-                h: step(c.h, down).max(1),
-                ..c
-            },
+            Mode::Resize if left || right => self.kept(
+                index,
+                Cells {
+                    w: step(c.w, right).max(1),
+                    ..c
+                },
+                true,
+                cx.env(),
+            ),
+            Mode::Resize if up || down => self.kept(
+                index,
+                Cells {
+                    h: step(c.h, down).max(1),
+                    ..c
+                },
+                false,
+                cx.env(),
+            ),
             _ => return GridResponse::Ignored,
         };
         if to != c {
@@ -857,6 +884,12 @@ impl GridView {
                 let Some(to) = dragged(&self.geometry, from, drag.start, event.point, drag.resize)
                 else {
                     return GridResponse::Handled;
+                };
+                let to = if drag.resize {
+                    let wide = to.w != from.w;
+                    self.kept(drag.index, to, wide, cx.env())
+                } else {
+                    to
                 };
                 if to != drag.to || !drag.moved {
                     cx.request_redraw_area(self.around(self.geometry.rect(drag.to)));
