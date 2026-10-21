@@ -890,24 +890,19 @@ fn widgets_take_swipes_holds_and_the_focus() {
         [Command::RunAction(Id::new_static("t.hold"))]
     );
     assert!(!view.editing());
-    // By the buttons: Right swipes it (it takes that), its long press is
-    // Select held (the menu); Left, which it does not take, moves the
-    // focus to the tool, and back: told each time; drawn its own way.
-    press(&mut view, &env, &actions::RIGHT);
+    // By the buttons: the next page swipes it (it takes that), its long
+    // press is Select held; Right moves the focus to the tool, Left back:
+    // told each time; drawn its own way.
+    press(&mut view, &env, &actions::NEXT_PAGE);
     assert_eq!(told(), ["swipe Left"]);
-    assert_eq!(
-        view.hint(&actions::LONG_CONFIRM, &env),
-        paperpaw_sdk::Hint::Text("core.grid.hold".into()),
-        "the hint says it"
-    );
     let (_, output) = with_cx(&env, |cx| view.on_action(&actions::LONG_CONFIRM, cx));
     assert_eq!(
         output.commands,
         [Command::RunAction(Id::new_static("t.hold"))]
     );
-    press(&mut view, &env, &actions::LEFT);
-    assert_eq!(told(), ["focus false"]);
     press(&mut view, &env, &actions::RIGHT);
+    assert_eq!(told(), ["focus false"]);
+    press(&mut view, &env, &actions::LEFT);
     assert_eq!(told(), ["focus true"]);
     let mut frame = support::frame(480, 800);
     view.draw(&mut frame.canvas(), &env);
@@ -996,10 +991,12 @@ fn a_touch_target_keeps_its_long_press() {
     assert!(!view.editing());
 }
 
-/// Two pages of two targets side by side, turned by swipes.
+/// Two pages of two targets side by side, turned by swipes; `endless`
+/// takes every swipe (a calendar going on and on).
 #[derive(Default)]
 struct Paged {
     page: usize,
+    endless: bool,
 }
 
 impl Widget for Paged {
@@ -1029,6 +1026,7 @@ impl Widget for Paged {
     ) -> bool {
         use paperpaw_sdk::widgets::WidgetInput;
         match input {
+            WidgetInput::Swipe(_) if self.endless => self.page = (self.page + 1) % 2,
             WidgetInput::Swipe(paperpaw_sdk::Direction::Left) if self.page == 0 => self.page = 1,
             WidgetInput::Swipe(paperpaw_sdk::Direction::Right) if self.page == 1 => self.page = 0,
             _ => return false,
@@ -1037,50 +1035,118 @@ impl Widget for Paged {
     }
 }
 
-/// With the buttons a widget's targets come first, then at its edge a
-/// swipe, and where it takes none the next item; after a swipe it took,
-/// Select runs what shows; Up leaves it with nothing above.
-#[test]
-fn buttons_go_through_a_widget_then_page_it_then_leave_it() {
-    let mut h = harness(Device::BUTTONS);
+/// A grid of a paged widget (`endless` or not) above a tool.
+fn paged(h: &mut Harness, endless: bool) {
     h.widgets.add(WidgetSpec::new(
         Id::new_static("t.paged"),
         "t.paged",
-        |_| Box::new(Paged::default()),
+        move |_| Box::new(Paged { page: 0, endless }),
     ));
-    let env = h.env();
-    let items = [
+}
+
+fn paged_items() -> [Item; 2] {
+    [
         Item::placed(widget("t.paged"), Cells::new(0, 0, 4, 1)),
         Item::placed(tool("t.a"), Cells::new(0, 1, 1, 1)),
-    ];
+    ]
+}
+
+fn confirmed(view: &mut GridView, env: &Env<'_>) -> Option<Command> {
+    let (_, output) = with_cx(env, |cx| view.on_action(&actions::CONFIRM, cx));
+    output.commands.first().cloned()
+}
+
+fn ran(id: &'static str) -> Option<Command> {
+    Some(Command::RunAction(Id::new_static(id)))
+}
+
+/// With the buttons Left and Right go through a widget's targets and on
+/// out of it; the page buttons turn its pages while it has the focus
+/// (Select then runs what shows), the screen's where it takes none.
+#[test]
+fn buttons_go_through_a_widget_and_page_it_with_the_page_buttons() {
+    let mut h = harness(Device::BUTTONS);
+    paged(&mut h, false);
+    let env = h.env();
     let mut view = GridView::asking(&env, CHOSEN);
-    view.layout(&env, geometry(), &items, &[]);
-    let confirm = |view: &mut GridView| {
-        let (_, output) = with_cx(&env, |cx| view.on_action(&actions::CONFIRM, cx));
-        output.commands.first().cloned()
-    };
-    let ran = |id: &'static str| Some(Command::RunAction(Id::new_static(id)));
-    assert_eq!(confirm(&mut view), ran("t.p0-0"));
+    view.layout(&env, geometry(), &paged_items(), &[]);
+    assert_eq!(confirmed(&mut view, &env), ran("t.p0-0"));
     press(&mut view, &env, &actions::RIGHT);
-    assert_eq!(confirm(&mut view), ran("t.p0-1"), "its next target first");
+    assert_eq!(confirmed(&mut view, &env), ran("t.p0-1"), "its next target");
     press(&mut view, &env, &actions::RIGHT);
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"), "then out of it");
+    press(&mut view, &env, &actions::LEFT);
     assert_eq!(
-        confirm(&mut view),
+        press(&mut view, &env, &actions::NEXT_PAGE),
+        GridResponse::Handled
+    );
+    assert_eq!(
+        confirmed(&mut view, &env),
         ran("t.p1-0"),
-        "then its next page, what shows"
+        "its next page, what shows"
     );
-    press(&mut view, &env, &actions::RIGHT);
-    press(&mut view, &env, &actions::RIGHT);
     assert_eq!(
-        confirm(&mut view),
-        ran("t.a"),
-        "at its last page, out of it"
+        press(&mut view, &env, &actions::NEXT_PAGE),
+        GridResponse::Ignored,
+        "at its last page the screen's"
     );
-    // Back into it, and up with nothing above: out again.
-    press(&mut view, &env, &actions::UP);
-    assert_eq!(confirm(&mut view), ran("t.p1-0"));
-    press(&mut view, &env, &actions::UP);
-    assert_eq!(confirm(&mut view), ran("t.a"), "Up leaves it");
+    press(&mut view, &env, &actions::PREV_PAGE);
+    assert_eq!(confirmed(&mut view, &env), ran("t.p0-0"));
+}
+
+/// A widget that takes every swipe never keeps the focus: Left and Right
+/// leave it after its last target, on a device with no Up and Down (the
+/// X4) and a single page.
+#[test]
+fn a_widget_paging_without_end_never_keeps_the_focus() {
+    let mut h = harness(Device::BUTTONS);
+    paged(&mut h, true);
+    let env = h.env();
+    let mut view = GridView::asking(&env, CHOSEN);
+    view.layout(&env, geometry(), &paged_items(), &[]);
+    for _ in 0..2 {
+        press(&mut view, &env, &actions::RIGHT);
+    }
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"));
+    for _ in 0..3 {
+        press(&mut view, &env, &actions::RIGHT);
+    }
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"), "round and out again");
+    press(&mut view, &env, &actions::LEFT);
+    press(&mut view, &env, &actions::NEXT_PAGE);
+    for _ in 0..2 {
+        press(&mut view, &env, &actions::RIGHT);
+    }
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"), "paged, still out");
+}
+
+/// A swipe on a widget while the focus is elsewhere turns its page and
+/// leaves the focus where it was; with the focus on it, the focus goes to
+/// its first target and it is told.
+#[test]
+fn a_swipe_on_a_widget_leaves_the_focus_where_it_was() {
+    let mut h = harness(Device::BUTTONS);
+    paged(&mut h, false);
+    let env = h.env();
+    let mut view = GridView::asking(&env, CHOSEN);
+    view.layout(&env, geometry(), &paged_items(), &[]);
+    for _ in 0..2 {
+        press(&mut view, &env, &actions::RIGHT);
+    }
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"));
+    let m = middle(geometry().rect(Cells::new(0, 0, 4, 1)));
+    let swipe = paperpaw_sdk::Gesture::new(
+        paperpaw_sdk::GestureKind::Swipe(paperpaw_sdk::Direction::Left),
+        m,
+        Point::new(m.x - 100, m.y),
+        paperpaw_platform::PointerTool::Finger,
+    );
+    let (response, output) = with_cx(&env, |cx| view.on_gesture(swipe, cx));
+    assert_eq!(response, GridResponse::Handled);
+    assert!(output.commands.is_empty());
+    assert_eq!(confirmed(&mut view, &env), ran("t.a"), "the focus stays");
+    press(&mut view, &env, &actions::LEFT);
+    assert_eq!(confirmed(&mut view, &env), ran("t.p1-1"), "its page turned");
 }
 
 /// Dragging an item, by its middle to move it or by its corner to size

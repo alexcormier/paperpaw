@@ -216,14 +216,16 @@ pub trait Widget {
     /// Input on it beside taps on its targets: a swipe that started on it
     /// (a list turning its page), the buttons' focus coming to one of its
     /// targets or leaving it. `true` if it took it, the commands it asks
-    /// for in `out`: the screen draws it again, and asks its
-    /// [`targets`](Self::targets) anew. Widgets that take none keep the
-    /// default.
+    /// for in `out`: the screen draws it again; after a swipe it took, it
+    /// also asks its [`targets`](Self::targets) anew (its page turned).
+    /// Widgets that take none keep the default.
     ///
-    /// The buttons send swipes too: Left and Right move the focus among
-    /// its targets, and at its first or last one they are a swipe to it
-    /// (Right as a swipe to the left). A widget refuses a swipe it cannot
-    /// do (at its last page): the focus then goes on to the next item.
+    /// The buttons send swipes too: the page buttons, while one of its
+    /// targets has the focus (the next page as a swipe to the left). A
+    /// widget refuses a swipe it cannot do (at its last page): the screen
+    /// then turns its own page. Left and Right always move the focus on,
+    /// out of the widget after its last target, so a widget that pages
+    /// without end never keeps it.
     fn on_input(
         &mut self,
         env: &Env<'_>,
@@ -281,8 +283,8 @@ impl<'a> WidgetContext<'a> {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum WidgetInput {
-    /// A swipe that started on it, this way; also Left or Right of the
-    /// buttons at its first or last target (see [`Widget::on_input`]).
+    /// A swipe that started on it, this way; also a page button while one
+    /// of its targets has the focus (see [`Widget::on_input`]).
     Swipe(crate::gesture::Direction),
     /// The buttons' focus came to its target in this area, or (`None`)
     /// left it.

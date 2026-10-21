@@ -64,12 +64,23 @@ change the plugin SDK.
   `Widget::context` tells it where it shows (`widgets::WidgetContext`:
   its placement, so a widget placed twice tells its taps apart, the
   screen showing it, `GridView::set_host`, and its `SizeClass`). With the
-  buttons, Left and Right go to a widget's next target, at its first or
-  last one they are a swipe to it, and where it takes none the focus
-  goes on; Up and Down always leave a widget; after a swipe it took, its
-  targets are asked anew. Holding Select is an action of its own
-  (`actions::LONG_CONFIRM`, the menu where no screen takes it): on a
-  target with a long press of its own it runs that, its hint saying so.
+  buttons, the page buttons are a swipe to the widget that has the focus
+  (the screen's own page where it takes none); Left and Right always go
+  on through the targets, out of a widget after its last, so one that
+  pages without end never keeps the focus (the X4 has no Up and Down);
+  Up and Down go to the target above or below. After a swipe it took,
+  its targets are asked anew: where it had the focus, the focus goes to
+  its first target and it is told; elsewhere the focus stays where it
+  was. Holding Select is an action of its own (`actions::LONG_CONFIRM`,
+  *Menu or more*, the menu where no screen takes it): on a target with a
+  long press of its own it runs that.
+- SDK: holding Select sends `actions::LONG_CONFIRM` to the screen first
+  (the key map's `long.confirm`); the menu opens only where the screen
+  does not take it. A screen that took every action it does not know
+  (such as the keyboard typing a password) no longer gets
+  `actions::MENU` when Select is held: it takes `LONG_CONFIRM` as it
+  took the menu. The keyboard does, for a letter's variants and to end
+  the entry.
 - SDK: a widget says how many cells of a grid it takes
   (`WidgetSpec::cells`, `widgets::CellsHint`: its size, its least, square
   or not): added, it gets them without being made to be measured;

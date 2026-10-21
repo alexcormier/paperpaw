@@ -526,10 +526,6 @@ impl GridView {
         if *action == actions::BACK && self.edit.is_some() {
             return Hint::Text(env.i18n.tr("core.grid.done").to_string());
         }
-        // Holding Select does what the focused target holds.
-        if *action == actions::LONG_CONFIRM && self.focused_hold().is_some() {
-            return Hint::Text(env.i18n.tr("core.grid.hold").to_string());
-        }
         Hint::Default
     }
 
@@ -615,23 +611,57 @@ impl GridView {
     }
 
     /// The targets anew after item `index`'s widget took a swipe (its
-    /// page turned): the focus on its first target (`first`) or its last,
-    /// so that what Select runs is what shows.
-    fn retarget(&mut self, index: usize, first: bool, cx: &mut Cx<'_, '_>) {
+    /// page turned). Where the focus was on it, it goes to its first
+    /// target, so that what Select runs is what shows (the widget told);
+    /// elsewhere it stays on the target it was on.
+    fn retarget(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        let owner = |grid: &Self, at: usize| grid.owners.get(at).copied().flatten();
+        let start = |grid: &Self, item: usize| grid.owners.iter().position(|o| *o == Some(item));
+        let was = owner(self, self.focus);
+        let had = was == Some(index);
+        let before = (self.focus, self.targets.get(self.focus).map(|(area, _)| *area));
+        // Where it was among its item's targets, or a button's place from
+        // the end: the widget's own count of targets may change.
+        let place = match was {
+            Some(item) => Ok((item, self.focus - start(self, item).unwrap_or(self.focus))),
+            None => Err(self.targets.len() - self.focus),
+        };
         self.target(&env);
-        let mut own = self
-            .owners
-            .iter()
-            .enumerate()
-            .filter(|(_, owner)| **owner == Some(index))
-            .map(|(at, _)| at);
-        let at = if first { own.next() } else { own.next_back() };
-        if let Some(at) = at {
-            self.focus = at;
+        let len = self.targets.len();
+        if len == 0 {
+            return;
         }
+        let to = match place {
+            _ if had => start(self, index).unwrap_or(self.focus),
+            Ok((item, at)) => {
+                let first = start(self, item).unwrap_or(self.focus);
+                let count = self.owners.iter().filter(|o| **o == Some(item)).count();
+                first + at.min(count.saturating_sub(1))
+            }
+            Err(from_end) => len.saturating_sub(from_end),
+        };
+        self.focus = to.min(len - 1);
         if let Some(shown) = self.items.get(index) {
             cx.request_redraw_area(self.around(shown.area));
+        }
+        let area = self.targets.get(self.focus).map(|(area, _)| *area);
+        if had && self.focus_shown && before != (self.focus, area) {
+            match owner(self, self.focus) {
+                Some(item) if item == index => {
+                    self.tell(index, WidgetInput::Focus(area), cx);
+                }
+                came => {
+                    // None of its own left: the focus went on.
+                    self.tell(index, WidgetInput::Focus(None), cx);
+                    if let Some(item) = came {
+                        self.tell(item, WidgetInput::Focus(area), cx);
+                    }
+                    if let Some(area) = area {
+                        cx.request_redraw_area(self.around(area));
+                    }
+                }
+            }
         }
     }
 
@@ -911,6 +941,26 @@ impl GridView {
             cx.command(hold);
             return GridResponse::Handled;
         }
+        // The page buttons turn the focused widget's pages (a list, a
+        // calendar) where it takes them, as a swipe on it would; else the
+        // screen's. Left and Right always go on through the targets, so a
+        // widget that pages without end keeps the focus nowhere.
+        let next = *a == actions::NEXT_PAGE;
+        if (next || *a == actions::PREV_PAGE)
+            && self.focus_shown
+            && self.edit.is_none()
+            && let Some(item) = self.owners.get(self.focus).copied().flatten()
+        {
+            let direction = if next {
+                crate::gesture::Direction::Left
+            } else {
+                crate::gesture::Direction::Right
+            };
+            if self.tell(item, WidgetInput::Swipe(direction), cx) {
+                self.retarget(item, cx);
+                return GridResponse::Handled;
+            }
+        }
         let moves = [
             actions::UP,
             actions::DOWN,
@@ -929,38 +979,6 @@ impl GridView {
             self.focus_on(self.focus, cx);
             return GridResponse::Handled;
         }
-        // Left and right in a widget: to its next target; at its edge a
-        // swipe to it (a list turning its page; the next as by a swipe to
-        // the left); where it takes none, on out of it.
-        let step = if *a == actions::RIGHT {
-            1
-        } else if *a == actions::LEFT {
-            -1
-        } else {
-            0
-        };
-        if step != 0
-            && self.edit.is_none()
-            && let Some(item) = self.owners.get(self.focus).copied().flatten()
-        {
-            let next = self.focus as isize + step;
-            let inside = usize::try_from(next)
-                .ok()
-                .filter(|&n| self.owners.get(n).copied().flatten() == Some(item));
-            if let Some(next) = inside {
-                self.focus_on(next, cx);
-                return GridResponse::Handled;
-            }
-            let direction = if step > 0 {
-                crate::gesture::Direction::Left
-            } else {
-                crate::gesture::Direction::Right
-            };
-            if self.tell(item, WidgetInput::Swipe(direction), cx) {
-                self.retarget(item, step > 0, cx);
-                return GridResponse::Handled;
-            }
-        }
         let len = self.targets.len();
         let to = if *a == actions::CONFIRM {
             return self.run(self.focus, cx);
@@ -969,20 +987,10 @@ impl GridView {
         } else if *a == actions::LEFT || *a == actions::PREVIOUS {
             ui::step_focus(self.focus, -1, len)
         } else {
-            // Nothing above or below: it stays, but in a widget the one
-            // before or after, so that the focus always leaves a widget
-            // (one taking every swipe would keep it).
-            let down = *a == actions::DOWN;
-            let in_widget = self
-                .owners
-                .get(self.focus)
-                .copied()
-                .flatten()
-                .and_then(|item| self.items.get(item))
-                .is_some_and(|shown| shown.widget.is_some());
-            match self.vertical(down) {
+            // The nearest above or below (in a widget too); nothing there,
+            // it stays.
+            match self.vertical(*a == actions::DOWN) {
                 Some(to) => to,
-                None if in_widget => ui::step_focus(self.focus, if down { 1 } else { -1 }, len),
                 None => return GridResponse::Handled,
             }
         };
@@ -1207,7 +1215,7 @@ impl GridView {
                     .position(|s| s.widget.is_some() && s.area.contains(gesture.start));
                 match index {
                     Some(index) if self.tell(index, WidgetInput::Swipe(direction), cx) => {
-                        self.retarget(index, true, cx);
+                        self.retarget(index, cx);
                         GridResponse::Handled
                     }
                     _ => GridResponse::Ignored,
