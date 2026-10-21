@@ -18,9 +18,9 @@ use crate::params::Params;
 pub type ScreenFactory = Box<dyn Fn(&Env<'_>, &Params) -> Box<dyn Screen>>;
 
 /// Makes the screens plugins added: what [`Env::make_screen`] asks (the
-/// kernel's, for screens that host others).
-#[cfg(any(test, feature = "kernel"))]
-#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+/// kernel's, for screens that host others). Present without the `kernel`
+/// feature too: [`Env`] holds one, and a plugin built without the feature
+/// must see `Env` as the kernel built it.
 pub trait ScreenMaker {
     /// Screen `id` made with `params` for `env`, `None` where no plugin
     /// added it.
