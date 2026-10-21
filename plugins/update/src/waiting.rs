@@ -21,14 +21,19 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::time::Duration;
 
-use paperpaw_sdk::firmware::Firmware;
+use paperpaw_sdk::firmware::{Firmware, compare_versions};
 use paperpaw_sdk::work::Work;
-use paperpaw_sdk::{Command, Env, PluginKind, Storage};
+use paperpaw_sdk::{Command, Env, PluginInfo, PluginKind, Storage};
 
 use crate::online::{self, Offer};
 use crate::{CHECK_DUE, PLUGIN, file};
 
 const WAITING: &str = "waiting.txt";
+/// The most `waiting.txt` is read with: far more than its lines for every
+/// plugin a device holds ([`MAX_ENTRIES`] each).
+const MAX_LEN: usize = 32 * 1024;
+/// Plugins and crates kept at most, each.
+const MAX_ENTRIES: usize = 200;
 /// How long an update waits before the page opens by itself.
 pub(crate) const WEEK_SECONDS: i64 = 7 * 24 * 3600;
 /// How often the server is asked again while an update waits.
@@ -50,26 +55,39 @@ impl Holding {
     /// What of it still holds: plugins installed, switched on and of the
     /// version asked about, crates still built in.
     pub(crate) fn still(&self, env: &Env<'_>, firmware: &Firmware) -> Self {
+        self.kept(
+            |id, version| in_use(env.plugins.iter(), id, version),
+            |name| firmware.plugins.iter().any(|c| c.name == name),
+        )
+    }
+
+    /// What of it `plugin` and `built_in` say still holds.
+    fn kept(&self, plugin: impl Fn(&str, &str) -> bool, built_in: impl Fn(&str) -> bool) -> Self {
         Self {
             plugins: self
                 .plugins
                 .iter()
-                .filter(|(id, version)| in_use(env, id, version))
+                .filter(|(id, version)| plugin(id, version))
                 .cloned()
                 .collect(),
             crates: self
                 .crates
                 .iter()
-                .filter(|name| firmware.plugins.iter().any(|c| c.name == name.as_str()))
+                .filter(|name| built_in(name))
                 .cloned()
                 .collect(),
         }
     }
 }
 
-/// Whether the code plugin `id` is installed at `version` and switched on.
-pub(crate) fn in_use(env: &Env<'_>, id: &str, version: &str) -> bool {
-    env.plugins.iter().any(|p| {
+/// Whether the code plugin `id` is among `plugins` at `version` and
+/// switched on.
+pub(crate) fn in_use<'a>(
+    plugins: impl IntoIterator<Item = &'a PluginInfo>,
+    id: &str,
+    version: &str,
+) -> bool {
+    plugins.into_iter().any(|p| {
         p.kind == PluginKind::Code
             && p.enabled
             && p.manifest.id.as_str() == id
@@ -144,10 +162,10 @@ impl Waiting {
                 text.push('\n');
             }
         }
-        for (id, version) in &self.holding.plugins {
+        for (id, version) in self.holding.plugins.iter().take(MAX_ENTRIES) {
             text.push_str(&format!("plugin {id} {version}\n"));
         }
-        for name in &self.holding.crates {
+        for name in self.holding.crates.iter().take(MAX_ENTRIES) {
             text.push_str(&format!("crate {name}\n"));
         }
         text
@@ -189,7 +207,7 @@ impl Waiting {
 }
 
 pub(crate) fn read(storage: &dyn Storage) -> Option<Waiting> {
-    let text = paperpaw_sdk::read_file(storage, &file(WAITING), 4096).ok()?;
+    let text = paperpaw_sdk::read_file(storage, &file(WAITING), MAX_LEN).ok()?;
     Waiting::parse(&String::from_utf8(text).ok()?)
 }
 
@@ -265,8 +283,8 @@ pub(crate) fn at_start(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command
         clear(storage);
         return false;
     }
-    let mut waiting = match read(storage) {
-        Some(waiting) => waiting,
+    let (mut waiting, made) = match read(storage) {
+        Some(waiting) => (waiting, false),
         None => {
             let Some(offer) = online::offer(storage, firmware) else {
                 return false;
@@ -275,15 +293,18 @@ pub(crate) fn at_start(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command
             if holding.is_empty() {
                 return false;
             }
-            Waiting {
+            let waiting = Waiting {
                 version: offer.version,
                 holding,
                 ..Waiting::default()
-            }
+            };
+            (waiting, true)
         }
     };
+    // Installed meanwhile (from the card) or no longer newer: nothing
+    // waits; nor where what it waits for is no longer in use.
     let holding = waiting.holding.still(env, firmware);
-    if holding.is_empty() {
+    if !compare_versions(&waiting.version, &firmware.version).is_gt() || holding.is_empty() {
         clear(storage);
         return false;
     }
@@ -293,7 +314,7 @@ pub(crate) fn at_start(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command
     if due {
         out.push(ask(None, Duration::from_secs(DAY_SECONDS as u64)));
     }
-    if waiting != before {
+    if made || waiting != before {
         write(storage, &waiting);
     }
     open
@@ -351,6 +372,88 @@ mod tests {
             Some(None)
         );
         assert_eq!(Waiting::parse("soon\n"), None);
+    }
+
+    fn info(
+        id: &'static str,
+        version: (u16, u16, u16),
+        kind: PluginKind,
+        enabled: bool,
+    ) -> PluginInfo {
+        PluginInfo {
+            manifest: paperpaw_sdk::Manifest::new(
+                paperpaw_sdk::Id::parse(id).unwrap(),
+                id,
+                paperpaw_sdk::Version::new(version.0, version.1, version.2),
+            ),
+            state: paperpaw_sdk::PluginState::Running,
+            enabled,
+            required_for: Default::default(),
+            kind,
+            problem: None,
+            update: None,
+        }
+    }
+
+    #[test]
+    fn only_code_plugins_in_use_at_that_version_hold() {
+        let plugins = [
+            info("dict", (0, 3, 1), PluginKind::Code, true),
+            info("chess", (1, 2, 0), PluginKind::Code, false),
+            info("theme", (1, 0, 0), PluginKind::Data, true),
+        ];
+        assert!(in_use(&plugins, "dict", "0.3.1"));
+        assert!(!in_use(&plugins, "dict", "0.3.0"), "updated meanwhile");
+        assert!(!in_use(&plugins, "chess", "1.2.0"), "switched off");
+        assert!(!in_use(&plugins, "theme", "1.0.0"), "no code");
+        assert!(!in_use(&plugins, "gone", "1.0.0"), "removed");
+        let holding = Holding {
+            plugins: alloc::vec![
+                (String::from("dict"), String::from("0.3.1")),
+                (String::from("chess"), String::from("1.2.0")),
+            ],
+            crates: alloc::vec![String::from("kept-crate"), String::from("gone-crate")],
+        };
+        let kept = holding.kept(|id, v| in_use(&plugins, id, v), |name| name == "kept-crate");
+        assert_eq!(
+            kept,
+            Holding {
+                plugins: alloc::vec![(String::from("dict"), String::from("0.3.1"))],
+                crates: alloc::vec![String::from("kept-crate")],
+            }
+        );
+        assert!(!kept.is_empty());
+        assert!(Holding::default().is_empty());
+    }
+
+    #[test]
+    fn a_damaged_record_is_none_and_a_large_one_is_read_whole() {
+        assert_eq!(Waiting::parse(""), None);
+        assert_eq!(Waiting::parse("\u{0}\u{1}garbage\n"), None);
+        // Lines it does not know are passed over.
+        assert!(Waiting::parse("0.5.0\nsince 12\nwhat is this\n").is_some());
+        let many = Waiting {
+            version: String::from("0.5.0"),
+            since: Some(1),
+            checked: Some(2),
+            holding: Holding {
+                plugins: (0..MAX_ENTRIES)
+                    .map(|i| {
+                        (
+                            format!("plugin-with-a-long-name-{i}"),
+                            String::from("10.20.30"),
+                        )
+                    })
+                    .collect(),
+                crates: (0..MAX_ENTRIES)
+                    .map(|i| format!("paperpaw-plugin-with-a-long-name-{i}"))
+                    .collect(),
+            },
+            ..Waiting::default()
+        };
+        let text = many.to_text();
+        assert!(text.len() < MAX_LEN, "{} bytes", text.len());
+        assert_eq!(Waiting::parse(&text), Some(many));
     }
 
     fn waiting(since: Option<i64>) -> Waiting {

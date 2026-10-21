@@ -84,11 +84,14 @@ version yet) must say so before anything changes, never fail half way.
   start, never again for that version. Data plugins never wait: a newer
   PaperPaw reads those made for an older SDK.
 
-  *Update anyway* offers the update first, saying what it costs: code
-  plugins with no build for it stay installed and switched off (their
-  code is for the old firmware) until a build for it is installed;
+  *Update anyway* offers the update first, saying what it costs (*Not
+  now* first): code plugins with no build for it stay installed and
+  switched on, but do not run, their code built for another build
+  (`PluginProblem::OtherBuild`), until a build for it is installed;
   crates built in now that it lacks are gone after it and come back only
-  with an update that has them.
+  with an update that has them. The question sends every code plugin
+  installed, switched off ones too, so that builds come along for them;
+  only those switched on hold an update.
 - **The web flasher** reads which app partition runs (the OTA data),
   then the list at 0x120 of that partition, and offers the same plugins
   for the image it writes.

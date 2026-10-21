@@ -349,6 +349,9 @@ impl UpdatePage {
                 alloc::vec![Button::Install, Button::Check, Button::Close]
             }
             View::Ready { .. } => alloc::vec![Button::Install, Button::Close],
+            // Chosen anyway while it waits: not downloading is the safe
+            // way on, which a second press does not pass by.
+            View::Offer { .. } if self.anyway => alloc::vec![Button::Close, Button::Download],
             View::Offer { .. } => alloc::vec![Button::Download, Button::Close],
             // Waiting is the way on; updating anyway, or asking again, the
             // others.
@@ -388,13 +391,12 @@ impl UpdatePage {
                 "update.install-without"
             }
             (Button::Install, _) => "update.install",
+            // Chosen anyway: right whether plugins stay off or are gone.
+            (Button::Download, View::Offer { .. }) if self.anyway => "update.download-anyway",
             (Button::Download, View::Offer { leaves, .. }) if !leaves.is_empty() => {
                 "update.download-without"
             }
             (Button::Download, View::Waiting { .. }) => "update.anyway",
-            (Button::Download, View::Offer { stopping, .. }) if !stopping.is_empty() => {
-                "update.download-anyway"
-            }
             (Button::Download, _) => "update.download",
             (Button::Check, View::Unreachable { .. }) => "update.retry",
             (Button::Check, View::Waiting { .. }) => "update.check-again",
@@ -489,11 +491,15 @@ impl UpdatePage {
                     },
                     &[("current", Arg::Str(current)), ("size", Arg::Str(&size))],
                 );
-                let mut help = self.with_leaves(env, help, leaves);
+                // Chosen anyway, what it costs is what counts: what stops
+                // working first (cut short, the end goes), then what is
+                // gone; not the size, which leaves no room for them.
+                let mut help = if self.anyway { String::new() } else { help };
                 if !stopping.is_empty() {
                     help.push(' ');
                     help.push_str(&with("update.stopping", &[("plugins", Arg::Str(stopping))]));
                 }
+                let help = String::from(self.with_leaves(env, help, leaves).trim_start());
                 (
                     with(
                         "update.offer.title",

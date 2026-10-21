@@ -288,16 +288,18 @@ fn an_update_waiting_for_plugins_says_which_and_waits() {
         shown.contains("gone after the update until an update has them again"),
         "{shown}"
     );
-    assert!(shown.contains("Download without them"), "{shown}");
+    // *Not now* first; downloading is chosen on purpose.
+    assert!(shown.contains("Download anyway"), "{shown}");
+    device.run(actions::DOWN);
     device.run(actions::CONFIRM);
     let call = device.request();
     assert_eq!(call.method, "GET");
     assert!(device.shown().contains("Downloading PaperPaw 0.5.0"));
 }
 
-/// An answer still waiting is kept as it was before W15 wrote
-/// `waiting.txt` (or with it lost): a start makes the record anew and
-/// asks.
+/// An answer still waiting kept without its record (from before
+/// `waiting.txt` held what it waits for, or with it lost): a start makes
+/// the record anew and asks.
 #[test]
 fn a_waiting_update_without_its_record_is_kept_and_asked_for() {
     let storage = Shared(Rc::new(MemoryStorage::new().with(OFFER, OFFER_WAITING)));
@@ -328,8 +330,149 @@ fn a_question_without_an_answer_counts() {
     device.answer(&call, 0, b"no network");
     let mut device = Device::at(storage.clone(), Some(start + 3600));
     device.no_request();
+    // An error of the server alike.
     let mut device = Device::at(storage.clone(), Some(start + 25 * 3600));
+    let call = device.request();
+    device.answer(&call, 500, b"");
+    let mut device = Device::at(storage.clone(), Some(start + 26 * 3600));
+    device.no_request();
+}
+
+/// A record that cannot be read is made anew from the kept answer.
+#[test]
+fn a_damaged_record_is_made_anew() {
+    let storage = Shared(Rc::new(
+        MemoryStorage::new()
+            .with(OFFER, OFFER_WAITING)
+            .with(WAITING, &b"\xff\xfe not a record"[..]),
+    ));
+    let mut device = Device::at(storage.clone(), Some(1_760_000_000));
     device.request();
+    let waiting = String::from_utf8(device.storage.0.get(WAITING).unwrap()).unwrap();
+    assert!(waiting.starts_with("0.5.0\n"), "{waiting}");
+}
+
+/// Without a clock, a record made anew is kept: asked once, not at every
+/// wake.
+#[test]
+fn without_a_clock_it_asks_once() {
+    let storage = Shared(Rc::new(MemoryStorage::new().with(OFFER, OFFER_WAITING)));
+    let mut device = Device::at(storage.clone(), None);
+    device.request();
+    let waiting = String::from_utf8(device.storage.0.get(WAITING).unwrap()).unwrap();
+    assert!(waiting.contains("asked"), "{waiting}");
+    let mut device = Device::at(storage.clone(), None);
+    device.no_request();
+}
+
+/// Installed (or once installed) and the update named from the card: the
+/// kept answer is no longer newer, nothing waits.
+#[test]
+fn an_update_installed_meanwhile_waits_no_more() {
+    let storage = Shared(Rc::new(
+        MemoryStorage::new().with(OFFER, OFFER_WAITING).with(
+            WAITING,
+            "0.5.0\nsince 1\nchecked 1\ncrate chess-for-paperpaw\n",
+        ),
+    ));
+    let mut device = with_code_plugin(storage, "0.5.0", "");
+    device.no_request();
+    assert!(device.storage.0.get(WAITING).is_none());
+}
+
+/// A dictionary of one's own with code, built for the firmware running.
+const DICT_INI: &str = "[plugin]\nid = dict-xl\nname = Dictionary XL\nversion = 0.3.1\n";
+
+/// PaperPaw `version` loading code plugins, with the dictionary installed
+/// and `config` read.
+fn with_code_plugin(storage: Shared, version: &str, config: &str) -> Device {
+    storage
+        .0
+        .write("plugins/dict-xl/plugin.ini", DICT_INI.as_bytes())
+        .unwrap();
+    storage
+        .0
+        .write("plugins/dict-xl/code.ppn", &code_file())
+        .unwrap();
+    let firmware = Firmware {
+        version: version.into(),
+        project: PROJECT.into(),
+        chip: CHIP,
+        keys: vec![paperpaw_update::public_key(&SEED)],
+        room: 1_000_000,
+        plugins: Plugins::new(RUNNING),
+        ..Firmware::default()
+    };
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage.clone())
+        .network(true)
+        .firmware(firmware)
+        .user_config(config)
+        .code_plugins(
+            paperpaw_sdk::native::Native::new("code.ppn"),
+            Box::new(NoCode),
+        )
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Update)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    Device {
+        kernel,
+        storage,
+        now: 0,
+    }
+}
+
+/// PaperPaw 0.5.0, for which the dictionary has no build yet.
+fn offer_waiting_for_dict(size: usize) -> String {
+    format!(
+        r#"{{"version": "0.5.0", "url": "/api/v1/updates/paperpaw-x4-0.5.0-update.bin",
+            "size": {size}, "plugins": ["paperpaw-plugin-stats 0.5.0", "chess-for-paperpaw 1.1.0"],
+            "waiting": ["dict-xl 0.3.1"]}}"#
+    )
+}
+
+#[test]
+fn a_code_plugin_in_use_holds_and_updating_anyway_says_it_stops() {
+    let mut device = with_code_plugin(Shared::default(), "0.4.0", "");
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    assert!(
+        String::from_utf8_lossy(call.body.as_deref().unwrap_or_default()).contains("dict-xl 0.3.1")
+    );
+    device.answer(&call, 200, offer_waiting_for_dict(5000).as_bytes());
+    let shown = device.shown();
+    assert!(shown.contains("waits for plugins"), "{shown}");
+    assert!(shown.contains("yet: Dictionary XL."), "{shown}");
+    // Anyway: the offer, *Not now* first, saying what stops working.
+    device.run(actions::DOWN);
+    device.run(actions::CONFIRM);
+    let shown = device.shown();
+    assert!(
+        shown
+            .contains("These stop working until there is a version of them for it: Dictionary XL."),
+        "{shown}"
+    );
+    let not_now = shown.find("Not now").unwrap();
+    let download = shown.find("Download anyway").unwrap();
+    assert!(not_now < download, "{shown}");
+    // A second press keeps it: the page closes, nothing downloads.
+    device.run(actions::CONFIRM);
+    device.no_request();
+}
+
+#[test]
+fn a_code_plugin_switched_off_does_not_hold() {
+    let mut device = with_code_plugin(Shared::default(), "0.4.0", "[plugins]\ndict-xl = off\n");
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    device.answer(&call, 200, offer_waiting_for_dict(5000).as_bytes());
+    let shown = device.shown();
+    assert!(shown.contains("PaperPaw 0.5.0 is available"), "{shown}");
+    assert!(!shown.contains("Dictionary XL"), "{shown}");
 }
 
 #[test]

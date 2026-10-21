@@ -235,14 +235,14 @@ pub(crate) fn is_version(version: &str) -> bool {
             .all(|b| b.is_ascii_alphanumeric() || b"-+.".contains(&b))
 }
 
-/// Removes what a download cut off (by a restart, a failure) left in
-/// `updates`: the file being downloaded, and the part the shell writes
-/// it through.
 /// Whether an update the server named is kept.
 pub(crate) fn has_offer(storage: &dyn Storage) -> bool {
     storage.exists(&file(OFFER))
 }
 
+/// Removes what a download cut off (by a restart, a failure) left in
+/// `updates`: the file being downloaded, and the part the shell writes
+/// it through.
 pub(crate) fn clear_download(storage: &dyn Storage) {
     let _ = storage.remove(PART);
     let _ = storage.remove(&files::part_path(PART));
@@ -341,10 +341,15 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) 
     let Some(firmware) = env.firmware else {
         return;
     };
+    let storage = env.storage;
     if !(200..300).contains(&reply.status) {
+        // An update waiting: tried (see `check`), the next day again,
+        // also where the device stays on that long.
+        if waiting::read(storage).is_some() {
+            waiting::later(out);
+        }
         return;
     }
-    let storage = env.storage;
     let Some(offer) = Offer::from_answer(&reply.body, firmware) else {
         let _ = storage.remove(&file(OFFER));
         waiting::clear(storage);
