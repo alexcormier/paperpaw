@@ -69,6 +69,8 @@ pub(crate) struct BarScreen {
     focus: usize,
     /// The focus is shown (buttons used, or no touch screen).
     keys: bool,
+    /// What it was opened with, to make it anew (see `on_event`).
+    params: Params,
 }
 
 impl BarScreen {
@@ -199,6 +201,7 @@ impl BarScreen {
             focus: 0,
             keys: !env.device.input.touch,
             style,
+            params: params.clone(),
         }
     }
 
@@ -414,9 +417,15 @@ impl Screen for BarScreen {
         Handled::Yes
     }
 
-    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
-        // A switch shown here may have changed.
-        if *event == events::SETTING_CHANGED {
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        // A switch shown here may have changed; entries shown only while a
+        // setting has a value come or go with it.
+        if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
+            let env = *cx.env();
+            if env.settings.governs(changed.id.as_str()) {
+                let opened = self.params.clone();
+                *self = BarScreen::new(&env, &opened);
+            }
             cx.request_redraw_area(self.region);
         }
     }

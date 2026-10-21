@@ -558,10 +558,17 @@ fn shot(kernel: &mut Kernel) {
 
 /// Sends what the screen shows, part by part.
 fn describe(kernel: &mut Kernel) {
+    // A PIN or a password being entered: where the parts are, not what
+    // they say.
+    let secret = kernel.is_secret();
     for part in kernel.describe() {
         let state = part_state(part.focused, part.on);
         let a = part.area;
-        let label = part.label.replace('\n', " ");
+        let label = if secret {
+            String::from("•")
+        } else {
+            part.label.replace('\n', " ")
+        };
         println!(
             "PP:PART {:?} {} {} {} {} {state} {label}",
             part.role, a.x, a.y, a.width, a.height

@@ -401,7 +401,7 @@ const THEMES: &[(&str, &[u8])] = &[
     ),
     (
         "plugins/themes/presets.ini",
-        b"[tall]\nkind = core.theme\nname = Tall\ndescription = Taller rows.\ncore.ui-row = 180\n\n[framed]\nkind = core.theme\nname = Framed\ndescription = A frame for the focus.\ncore.ui-focus = core.focus.ring\n",
+        b"[tall]\nkind = core.theme\nname = Tall\ndescription = Taller rows.\ncore.ui-row = 180\ncore.ui-size = 20\n\n[framed]\nkind = core.theme\nname = Framed\ndescription = A frame for the focus.\ncore.ui-focus = core.focus.ring\n",
     ),
 ];
 
@@ -437,6 +437,8 @@ ui-size = 14
         choose(&mut app, "Tall");
         assert_ne!(app.screen(), "settings.themes");
         assert_eq!(app.kernel.settings().int("core.ui-row"), 180);
+        // It names the text size too: left as the reader has it.
+        assert_eq!(app.kernel.settings().int("core.ui-size"), 14);
         assert!(rows(&mut app)[0].contains("Tall"), "{:?}", rows(&mut app));
         // The other theme: its value set, the first one's at its default.
         choose(&mut app, "Theme");

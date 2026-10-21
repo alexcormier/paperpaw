@@ -671,3 +671,64 @@ fn the_focus_on_a_secret_screen_is_not_told() {
     common::press(&mut kernel, 300, "down");
     assert!(heard.borrow().is_empty(), "{:?}", heard.borrow());
 }
+
+/// Listens to the answers typed for settings: it must never hear a
+/// password.
+struct Spy {
+    heard: Rc<std::cell::RefCell<Vec<String>>>,
+}
+
+impl Plugin for Spy {
+    fn manifest(&self) -> Manifest {
+        common::manifest("spy")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let heard = self.heard.clone();
+        r.on(
+            paperpaw_core::sdk::builtin::events::SETTING_TYPED,
+            move |_, typed, _| {
+                heard.borrow_mut().push(typed.text.clone());
+            },
+        )
+    }
+}
+
+/// A password typed reaches the plugin that asked for it alone; an
+/// answer that is no password reaches everyone who listens.
+#[test]
+fn passwords_typed_reach_the_asker_alone() {
+    use paperpaw_core::sdk::builtin::{events, params};
+    use paperpaw_core::sdk::event::EventData;
+    let heard = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Checked)
+        .plugin(Spy {
+            heard: heard.clone(),
+        })
+        .storage(MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let answer = |text: &str, mode: Option<&str>| {
+        let mut context = Params::new().with(params::ID, "checked.name");
+        if let Some(mode) = mode {
+            context.set(params::MODE, mode);
+        }
+        paperpaw_core::sdk::Typed::new(text, context).to_params()
+    };
+    kernel.send_event(
+        Instant(100),
+        events::SETTING_TYPED.id().clone(),
+        answer("s3cret", Some("password")),
+    );
+    // The kernel, which asked, set it; the spy heard nothing.
+    assert_eq!(kernel.settings().text("checked.name"), "s3cret");
+    assert!(heard.borrow().is_empty(), "{:?}", heard.borrow());
+    kernel.send_event(
+        Instant(200),
+        events::SETTING_TYPED.id().clone(),
+        answer("Ann", None),
+    );
+    assert_eq!(*heard.borrow(), ["Ann"]);
+}

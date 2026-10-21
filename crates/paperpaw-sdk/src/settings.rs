@@ -1174,6 +1174,14 @@ impl Settings {
         }
     }
 
+    /// Whether the showing of another setting depends on setting `id`
+    /// ([`SettingExtra::shown_if`]): screens listing settings make
+    /// themselves anew when it changes.
+    pub fn governs(&self, id: &str) -> bool {
+        self.specs()
+            .any(|spec| spec.extra().shown_if.is_some_and(|(of, _)| of == id))
+    }
+
     /// Whether `spec` shows now: not while the setting its
     /// [`SettingExtra::shown_if`] names has another value.
     pub fn shows(&self, spec: &SettingSpec) -> bool {

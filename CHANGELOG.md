@@ -15,14 +15,20 @@ change the plugin SDK.
   (`semantics::role_name` names them); progress bars and the keyboard's
   field describe themselves so. `Screen::secret` (a PIN, a password being
   typed) keeps its focus from being told, as do screens that guard the
-  device. On a blind framebuffer no glyph or picture is made.
+  device; `Kernel::is_secret` says so to the USB remote and the dev
+  tools, which then leave out what the parts say. A password typed (an
+  answer to a question asked with `password()`) reaches the plugin that
+  asked alone, whichever keyboard took it. On a blind framebuffer, and
+  while the focus is worked out, no glyph or picture is made.
 - SDK: `ui::setting_opens` says what choosing a setting opens (its
   editor, the keyboard for text, the list of a choice's values), the
   same on the settings pages, in menus, the quick panel and the setup;
   text typed comes back as `events::SETTING_TYPED`, which the kernel
   sets. A text setting in a menu did nothing before.
   `SettingExtra::shown_if(setting, value)` shows a setting only while
-  another has a value (`Settings::shows`); `SettingExtra::check(fn)`
+  another has a value (`Settings::shows`; screens listing settings make
+  themselves anew when such a setting changes, `Settings::governs`);
+  `SettingExtra::check(fn)`
   refuses values (`SettingError::Refused`), and the kernel tells the
   reader why.
 - SDK: one choice dialog for every plugin: `ask::choice(title, &reply)`
@@ -38,7 +44,8 @@ change the plugin SDK.
   settings plugin lists them under *Theme* at the top of the appearance
   settings where any is installed, so two themes no longer fight; *None*
   gives the appearance settings their defaults again. No theme changes
-  the size of the interface's text, its contrast or the logo.
+  the size of the interface's text, its contrast or the logo, even where
+  it names them (`presets::theme_changes`).
 - SDK: semantic icons (`icons::BACK`, `PREV`, `NEXT`, `HOLD`, `BUSY`,
   `SHIFT`, `DELETE`, `SPACE`) take the icon a plugin names for them with
   `add_icon`, so a theme changes the headers' arrows, the hints' marks
@@ -89,8 +96,8 @@ change the plugin SDK.
 - SDK: `menus::BOOK` (`core.book-menu`), what can be done with a book
   in any view of the library, with `events::BOOK_CHOSEN` (`BookChosen`:
   the action and the book) sent before the action runs: the library's
-  book sheet lists it, its book details are its first entry
-  (`files.book-info`). `menus::APPS` (`core.apps`), what a launcher
+  book sheet lists it (on pages, where more come than the sheet holds),
+  its book details are its first entry (`files.book-info`). `menus::APPS` (`core.apps`), what a launcher
   lists: the home screen's tools list it beside the tools.
 - A row's title and value keep a margin between them, not two: on a
   screen as narrow as the X4's both stay whole where they fit (Joplin's

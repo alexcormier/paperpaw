@@ -152,6 +152,21 @@ pub struct Fonts {
     /// [`STATUS_FONT`](crate::builtin::settings::STATUS_FONT).
     status: Option<String>,
     cache: RefCell<GlyphCache>,
+    /// Only described, not drawn (see [`Fonts::set_describing`]): no
+    /// glyph is made.
+    describing: core::cell::Cell<bool>,
+}
+
+impl Fonts {
+    /// While on, screens are only described, not drawn (a blind
+    /// framebuffer): no glyph is made, also not to measure ink, which is
+    /// taken from the line's measures. The kernel sets it around
+    /// describing a screen.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn set_describing(&self, on: bool) {
+        self.describing.set(on);
+    }
 }
 
 impl fmt::Debug for Fonts {
@@ -176,6 +191,7 @@ impl Fonts {
             family: None,
             status: None,
             cache: RefCell::new(GlyphCache::new(cache_bytes)),
+            describing: core::cell::Cell::new(false),
         }
     }
 
@@ -566,6 +582,7 @@ impl Fonts {
             // Handles are made for loaded fonts only.
             font: entry.font.as_ref().unwrap_or_else(|| unreachable!()),
             cache: &self.cache,
+            describing: &self.describing,
             index: index as u16,
             others,
         }
@@ -649,6 +666,9 @@ fn read_font(storage: &dyn Storage, path: &str, weight: Option<f32>) -> Option<F
 pub struct FontSet {
     fonts: Vec<(Id, Font)>,
     cache: RefCell<GlyphCache>,
+    /// Only described, not drawn (see [`Fonts::set_describing`]): no
+    /// glyph is made.
+    describing: core::cell::Cell<bool>,
 }
 
 impl fmt::Debug for FontSet {
@@ -668,6 +688,7 @@ impl FontSet {
         Self {
             fonts: Vec::new(),
             cache: RefCell::new(GlyphCache::new(cache_bytes)),
+            describing: core::cell::Cell::new(false),
         }
     }
 
@@ -692,6 +713,7 @@ impl FontSet {
             id,
             font,
             cache: &self.cache,
+            describing: &self.describing,
             index: index as u16,
             others: [None; OTHERS],
         })
@@ -705,6 +727,8 @@ pub struct FontHandle<'a> {
     font: &'a Font,
     /// The glyph cache of the registry or set the font is in.
     cache: &'a RefCell<GlyphCache>,
+    /// Its registry only describes what is drawn: no glyph is made.
+    describing: &'a core::cell::Cell<bool>,
     /// The font's number in that cache.
     index: u16,
     /// Fonts for the characters this one lacks, asked in turn, and their
@@ -779,6 +803,11 @@ impl<'a> FontHandle<'a> {
     ///
     /// [`ui::draw_header`]: crate::ui::draw_header
     pub fn ink(&self, size: f32, text: &str) -> Option<(i32, i32)> {
+        // Only described: as a line would be, no glyph made.
+        if self.describing.get() {
+            let metrics = self.line_metrics(size);
+            return Some((-(metrics.ascent as i32), -(metrics.descent as i32)));
+        }
         let mut cache = self.cache.borrow_mut();
         let mut ink: Option<(i32, i32)> = None;
         for ch in text.chars() {
@@ -804,6 +833,10 @@ impl<'a> FontHandle<'a> {
     /// its advance (e.g. an icon in its column). `None` for text without
     /// ink.
     pub fn ink_across(&self, size: f32, text: &str) -> Option<(i32, i32)> {
+        // Only described: as far as its advances go, no glyph made.
+        if self.describing.get() {
+            return Some((0, self.measure(size, text) as i32));
+        }
         let mut cache = self.cache.borrow_mut();
         let mut ink: Option<(i32, i32)> = None;
         let mut pen = 0.0f32;
@@ -857,7 +890,7 @@ impl<'a> FontHandle<'a> {
         extra: u16,
     ) -> f32 {
         // Only described, as a screen reader asks: no glyph made.
-        if canvas.is_blind() {
+        if canvas.is_blind() || self.describing.get() {
             return self.measure(size, text);
         }
         let mut cache = self.cache.borrow_mut();

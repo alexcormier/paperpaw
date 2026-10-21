@@ -23,7 +23,7 @@ fn changes(env: &Env<'_>, id: &Id) -> Option<Vec<(Id, Option<SettingValue>)>> {
         return Some(covered.into_iter().map(|id| (id, None)).collect());
     }
     let theme = themes(env).find(|theme| theme.id == *id)?;
-    Some(theme.changes(env.settings, &covered))
+    Some(presets::theme_changes(env.settings, theme))
 }
 
 /// The themes there are, in the order of the plugins.

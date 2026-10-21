@@ -16,7 +16,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setup::SetupPage;
@@ -61,7 +61,8 @@ struct Layout {
 }
 
 pub(crate) struct Guide {
-    /// The steps asked on this device, as they were when it opened.
+    /// The steps asked on this device: as they were when it opened, and
+    /// anew where a step's setting shows only while another has a value.
     steps: Vec<Id>,
     /// The page shown; one past the last step is the end.
     page: usize,
@@ -117,24 +118,27 @@ fn paragraph(
     }
 }
 
+/// The steps asked on this device now: not those of a setting shown
+/// only while another has another value.
+fn steps(env: &Env<'_>) -> Vec<Id> {
+    env.setup
+        .applying(env)
+        .into_iter()
+        .filter(|s| match &s.page {
+            paperpaw_sdk::setup::SetupPage::Setting(id) => env
+                .settings
+                .spec(id.as_str())
+                .is_none_or(|spec| env.settings.shows(spec)),
+            _ => true,
+        })
+        .map(|s| s.id.clone())
+        .collect()
+}
+
 impl Guide {
     pub(crate) fn new(env: &Env<'_>) -> Self {
-        let steps = env
-            .setup
-            .applying(env)
-            .into_iter()
-            // A setting shown only while another has a value.
-            .filter(|s| match &s.page {
-                paperpaw_sdk::setup::SetupPage::Setting(id) => env
-                    .settings
-                    .spec(id.as_str())
-                    .is_none_or(|spec| env.settings.shows(spec)),
-                _ => true,
-            })
-            .map(|s| s.id.clone())
-            .collect();
         let mut guide = Self {
-            steps,
+            steps: steps(env),
             page: 0,
             focus: Target::Next,
             shown: !env.device.input.touch,
@@ -654,6 +658,21 @@ impl Screen for Guide {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        // A step that shows only while an earlier one has a value comes
+        // or goes with it; the page shown stays.
+        if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
+            let env = *cx.env();
+            if env.settings.governs(changed.id.as_str()) {
+                let shown = self.steps.get(self.page).cloned();
+                self.steps = steps(&env);
+                self.page = shown
+                    .and_then(|id| self.steps.iter().position(|s| *s == id))
+                    .unwrap_or(self.page.min(self.steps.len()));
+                self.layout = self.layout(&env);
+                cx.request_redraw();
+            }
+            return;
+        }
         if SKIP_CHOSEN
             .read(event, params)
             .is_some_and(|p| p.option == "skip")

@@ -162,6 +162,16 @@ pub fn theme_settings(settings: &Settings) -> Vec<Id> {
         .collect()
 }
 
+/// What applying `theme` makes of the settings it covers
+/// ([`theme_settings`]): what it names outside them (the size of the
+/// interface's text, say) is left out.
+pub fn theme_changes(settings: &Settings, theme: &Preset) -> Vec<(Id, Option<SettingValue>)> {
+    let covered = theme_settings(settings);
+    let mut changes = theme.changes(settings, &covered);
+    changes.retain(|(id, _)| covered.contains(id));
+    changes
+}
+
 /// The commands that give the settings the values of `changes` (see
 /// [`Preset::changes`]): those that have them already are left alone, and
 /// a setting's default is not written down but the setting reset.

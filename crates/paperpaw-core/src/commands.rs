@@ -246,7 +246,18 @@ impl Kernel {
         // Moments for declared work, and jobs waiting for this event.
         self.works.saw(event, params);
         let env = self.shared.env(self.now);
-        for (_, plugin, handler) in self.subscriptions.iter().filter(|(id, ..)| id == event) {
+        // A password typed (an answer to a question asked as one) reaches
+        // the plugin that asked alone, the one its reply event is named
+        // in: no other plugin, nor another's screen, hears it, whichever
+        // keyboard took it.
+        let secret = params.get(paperpaw_sdk::builtin::params::MODE) == Some("password");
+        let asker = event.namespace();
+        let hears = |plugin: &str| !secret || plugin == asker;
+        for (_, plugin, handler) in self
+            .subscriptions
+            .iter()
+            .filter(|(id, plugin, _)| id == event && hears(plugin.as_str()))
+        {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
             handler(&env, params, &mut self.output.commands);
@@ -263,6 +274,9 @@ impl Kernel {
             );
         }
         for index in 0..self.stack.len() {
+            if !hears(self.stack[index].id.namespace()) {
+                continue;
+            }
             self.with_screen(index, |screen, cx| {
                 screen.on_event(event, params, cx);
                 Handled::Yes

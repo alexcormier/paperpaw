@@ -172,6 +172,8 @@ struct MenuScreen {
     icon_width: u16,
     /// How many menus are open below this one (submenus).
     depth: usize,
+    /// What it was opened with, to make it anew (see `on_event`).
+    params: Params,
 }
 
 /// Parameter: the depth of a submenu.
@@ -270,6 +272,7 @@ impl MenuScreen {
             icon_width,
             depth: params.get(DEPTH).and_then(|d| d.parse().ok()).unwrap_or(0),
             style,
+            params: params.clone(),
         }
     }
 
@@ -603,9 +606,19 @@ impl Screen for MenuScreen {
         Handled::Yes
     }
 
-    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
-        // Values shown in the menu may have changed.
-        if *event == events::SETTING_CHANGED {
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        // Values shown in the menu may have changed; entries shown only
+        // while a setting has a value come or go with it.
+        if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
+            let env = *cx.env();
+            if env.settings.governs(changed.id.as_str()) {
+                let (focus, keys) = (self.rows.focus(), self.keys);
+                let opened = self.params.clone();
+                *self = MenuScreen::new(&env, &opened);
+                self.rows
+                    .set_focus(focus.min(self.items.len().saturating_sub(1)));
+                self.keys = keys;
+            }
             cx.request_redraw();
         }
     }

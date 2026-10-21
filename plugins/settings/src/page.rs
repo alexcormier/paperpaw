@@ -729,13 +729,7 @@ impl Screen for GroupPage {
             // A setting shown only while this one has a value.
             let shows_others = events::SETTING_CHANGED
                 .read(event, params)
-                .is_some_and(|changed| {
-                    env.settings.specs().any(|spec| {
-                        spec.extra()
-                            .shown_if
-                            .is_some_and(|(id, _)| id == changed.id.as_str())
-                    })
-                });
+                .is_some_and(|changed| env.settings.governs(changed.id.as_str()));
             if covered || shows_others {
                 self.rebuild(&env);
                 cx.request_redraw();

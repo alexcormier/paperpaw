@@ -663,6 +663,9 @@ fn settings_show_on_a_condition_and_refuse_what_their_check_refuses() {
         .unwrap();
     let name = s.spec("a.name").unwrap().clone();
     assert!(!s.shows(&name));
+    // Screens listing settings make themselves anew when `a.on` changes.
+    assert!(s.governs("a.on"));
+    assert!(!s.governs("a.size"));
     s.set("a.on", SettingValue::Bool(true)).unwrap();
     assert!(s.shows(&name));
     // Settings without a condition always show.

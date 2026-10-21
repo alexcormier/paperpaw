@@ -82,6 +82,8 @@ pub(crate) struct PanelScreen {
     dragged: Option<(usize, i64)>,
     page: usize,
     pager: Option<ui::Pager>,
+    /// What it was opened with, to make it anew (see `on_event`).
+    params: Params,
 }
 
 fn spec<'e>(env: &Env<'e>, id: &Id) -> Option<&'e SettingSpec> {
@@ -330,6 +332,7 @@ impl PanelScreen {
             dragged: None,
             page: 0,
             pager: layout.pager.map(|area| ui::Pager::new(env, area)),
+            params: params.clone(),
         }
     }
 }
@@ -952,9 +955,18 @@ impl Screen for PanelScreen {
         }
     }
 
-    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
-        // Values shown may have changed.
-        if *event == events::SETTING_CHANGED {
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        // Values shown may have changed; controls shown only while a
+        // setting has a value come or go with it.
+        if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
+            let env = *cx.env();
+            if env.settings.governs(changed.id.as_str()) {
+                let (focus, page) = (self.focus, self.page);
+                let opened = self.params.clone();
+                *self = PanelScreen::open(&env, &opened);
+                self.focus = focus;
+                self.page = page.min(self.pages().saturating_sub(1));
+            }
             self.redraw(cx);
         } else if *event == events::PREVIEW_CHANGED
             && let Some(area) = self.moving_row()

@@ -616,10 +616,18 @@ impl Kernel {
     /// it ([`core_settings::SPEAK_FOCUS`]): in place of what it said of
     /// the focus before, if that is still spoken; not while a plugin
     /// reads aloud.
+    /// Whether what the screen shows is secret now: a PIN or a password
+    /// being entered ([`Screen::secret`](paperpaw_sdk::Screen::secret)),
+    /// or the device guarded. Those who show the screen elsewhere (a
+    /// remote control, tools) leave out what its parts say then.
+    pub fn is_secret(&self) -> bool {
+        self.guard().is_some() || self.stack.iter().any(|s| s.screen.secret())
+    }
+
     fn speak_focus(&mut self) {
         // Never while a PIN or a password is entered, or the device
         // guarded: the keys pressed would be told.
-        let secret = self.guard().is_some() || self.stack.iter().any(|s| s.screen.secret());
+        let secret = self.is_secret();
         let listened = !secret
             && self
                 .subscriptions
@@ -634,7 +642,11 @@ impl Kernel {
         if !listened && !spoken {
             return;
         }
+        // At each input: described without a glyph made, the ink of text
+        // taken from its line (exact enough to tell what has the focus).
+        self.shared.fonts.set_describing(true);
         let parts = self.describe();
+        self.shared.fonts.set_describing(false);
         // Plugins that listen are told where it went.
         let focus = paperpaw_sdk::semantics::focused(&parts).cloned();
         if listened && focus != self.io.focus_told {

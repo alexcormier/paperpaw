@@ -593,10 +593,16 @@ pub fn parse_iso8601(text: &str) -> Option<i64> {
     };
     let (hms, fraction) = clock.split_once(['.', ',']).unwrap_or((clock, ""));
     let mut parts = hms.splitn(3, ':');
-    // Unsigned: no hour of `-1`.
-    let hour = i64::from(parts.next()?.parse::<u8>().ok()?);
-    let minute = i64::from(parts.next()?.parse::<u8>().ok()?);
-    let second = i64::from(parts.next().map_or(Some(0), |s| s.parse::<u8>().ok())?);
+    // Digits alone: no hour of `-1` or `+5`.
+    let number = |s: &str| {
+        (!s.is_empty() && s.bytes().all(|b| b.is_ascii_digit()))
+            .then(|| s.parse::<u8>().ok())
+            .flatten()
+            .map(i64::from)
+    };
+    let hour = number(parts.next()?)?;
+    let minute = number(parts.next()?)?;
+    let second = parts.next().map_or(Some(0), number)?;
     if hour > 23 || minute > 59 || second > 60 {
         return None;
     }
@@ -670,6 +676,7 @@ mod tests {
             // An offset past a day, an hour below zero, a year far out.
             "2026-10-19T10:00+25:00",
             "2026-10-19T-1:00Z",
+            "2026-10-19T+5:00Z",
             "2147483647-12-31T23:59:59Z",
             "x",
         ] {
