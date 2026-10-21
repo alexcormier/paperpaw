@@ -219,7 +219,7 @@ impl Plugin for DataPlugin {
         if let Some(source) = self.icons.take() {
             for entry in paperpaw_config::parse(&source) {
                 let entry = entry.map_err(parse_error)?;
-                let item = parsed_id(&entry.key, entry.line)?;
+                let item = parsed_id(entry.key, entry.line)?;
                 r.add_icon(item, Cow::Owned(entry.value.as_str().trim().to_string()))?;
             }
         }
@@ -338,6 +338,16 @@ impl Step {
     }
 }
 
+/// An action of `actions.ini` as read: its id, title, icon, steps and
+/// the line it begins on.
+struct ReadAction {
+    id: Id,
+    title: String,
+    icon: Option<String>,
+    steps: Vec<Step>,
+    line: u32,
+}
+
 /// An action of `actions.ini`, with its icon.
 struct MadeAction {
     id: Id,
@@ -349,17 +359,27 @@ struct MadeAction {
 /// `run`, its steps separated by commas. None runs an action of the same
 /// file: they would run each other without end.
 fn actions(plugin: &Id, source: &str) -> Result<Vec<MadeAction>, RegisterError> {
-    let mut found: Vec<(Id, String, Option<String>, Vec<Step>, u32)> = Vec::new();
+    let mut found: Vec<ReadAction> = Vec::new();
     for entry in paperpaw_config::parse(source) {
         let entry = entry.map_err(parse_error)?;
         if entry.section.is_empty() {
             continue;
         }
         let id = own_id(plugin, entry.section, entry.line)?;
-        if found.last().is_none_or(|(last, ..)| *last != id) {
-            found.push((id, String::new(), None, Vec::new(), entry.line));
+        if found.last().is_none_or(|last| last.id != id) {
+            let (title, icon, steps, line) = (String::new(), None, Vec::new(), entry.line);
+            found.push(ReadAction {
+                id,
+                title,
+                icon,
+                steps,
+                line,
+            });
         }
-        let Some((_, title, icon, steps, _)) = found.last_mut() else {
+        let Some(ReadAction {
+            title, icon, steps, ..
+        }) = found.last_mut()
+        else {
             continue;
         };
         let value = entry.value.as_str();
@@ -374,9 +394,16 @@ fn actions(plugin: &Id, source: &str) -> Result<Vec<MadeAction>, RegisterError> 
             _ => {}
         }
     }
-    let ids: Vec<Id> = found.iter().map(|(id, ..)| id.clone()).collect();
+    let ids: Vec<Id> = found.iter().map(|action| action.id.clone()).collect();
     let mut made = Vec::new();
-    for (id, title, icon, steps, line) in found {
+    for ReadAction {
+        id,
+        title,
+        icon,
+        steps,
+        line,
+    } in found
+    {
         let problem = if steps.len() > MAX_STEPS {
             Some(format!("`{id}`: more than {MAX_STEPS} steps"))
         } else if steps
