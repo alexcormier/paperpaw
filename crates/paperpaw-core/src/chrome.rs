@@ -337,9 +337,18 @@ impl Kernel {
         let base = self.shared.env(self.now);
         let device = base.device_within(strip);
         let env = base.within(&device, strip);
+        let cx_given = self.output.commands.len();
         let mut cx = Cx::new(&env, &mut self.output);
+        let given = cx_given;
         let handled = f(screen.as_mut(), &mut cx);
         drop(running);
+        let reserved = crate::commands::Reserved::of(&self.shared.settings, &self.shared.registry);
+        let owner = self.chromes[index].spec.id.namespace();
+        if crate::commands::vet_reserved(&mut self.output.commands, given, owner, &reserved) {
+            self.warn_runtime(format!(
+                "{owner} asked what only the settings editor may; not done"
+            ));
+        }
         // What it asks to draw again is in its strip; a time it asks for
         // is its own.
         if let Some(at) = self.output.wake_at.take() {

@@ -787,6 +787,7 @@ mod setup_under_the_lock {
                 out.push(Command::SetSecret(SecretChange::remove("lock.code")));
                 out.push(Command::SetPluginEnabled(Id::new_static("lock"), false));
                 out.push(Command::RemovePlugin(Id::new_static("lock")));
+                out.push(Command::LoadPlugin(String::from("plugins/intruder")));
             })
         }
     }
@@ -829,5 +830,86 @@ mod setup_under_the_lock {
         assert!(device.locked(), "on top: {:?}", device.on_top());
         assert_eq!(device.kind(), kind);
         assert_eq!(device.kept(), kept);
+    }
+}
+
+/// A sleep screen of another plugin, over the lock as the device sleeps,
+/// gets no input, and closes as the device wakes: it sees nothing of the
+/// PIN typed into the lock.
+mod sleep_screen_over_the_lock {
+    use super::*;
+    use paperpaw_sdk::builtin::slots;
+    use paperpaw_sdk::{
+        Canvas, Cx, Env, Handled, Manifest, Plugin, Priority, RegisterError, Registrar, Screen,
+        ScreenSpec, Version,
+    };
+    use std::cell::RefCell;
+
+    type Seen = Rc<RefCell<Vec<String>>>;
+
+    struct Watcher(Seen);
+
+    impl Screen for Watcher {
+        fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+        fn on_action(&mut self, action: &Id, _: &mut Cx<'_, '_>) -> Handled {
+            self.0.borrow_mut().push(action.as_str().to_string());
+            Handled::Yes
+        }
+    }
+
+    struct Sleepy(Seen);
+
+    impl Plugin for Sleepy {
+        fn manifest(&self) -> Manifest {
+            Manifest::new(Id::new_static("sleepy"), "Sleepy", Version::new(1, 0, 0))
+        }
+
+        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+            let seen = self.0.clone();
+            r.add_screen(ScreenSpec::new(
+                Id::new_static("sleepy.screen"),
+                "sleepy",
+                Box::new(move |_, _| Box::new(Watcher(seen.clone()))),
+            ))?;
+            r.bind_slot(slots::SLEEP, Id::new_static("sleepy.screen"), Priority(100))
+        }
+    }
+
+    #[test]
+    fn a_sleep_screen_sees_nothing_of_the_pin() {
+        let storage = Shared::default();
+        Device::start(BUTTONS, storage.clone()).set_pin("1234");
+        let seen = Seen::default();
+        let kernel = Kernel::builder(BUTTONS)
+            .storage(storage.clone())
+            .sleep(true)
+            .user_config(String::from("[core]\nlanguage = en\n"))
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(Keyboard)
+            .plugin(Lock)
+            .plugin(Sleepy(seen.clone()))
+            .build()
+            .unwrap();
+        let mut device = Device {
+            kernel,
+            storage,
+            now: 1_000,
+        };
+        let effects = device.kernel.start(Instant(device.now));
+        device.settle(effects);
+        assert!(device.locked());
+        device.run(actions::SLEEP);
+        assert_eq!(device.on_top(), Some("sleepy.screen"));
+        device.run(actions::NEXT);
+        device.run(actions::DOWN);
+        assert!(seen.borrow().is_empty(), "{:?}", seen.borrow());
+        device.now += 100;
+        let effects = device.kernel.resume(Instant(device.now));
+        device.settle(effects);
+        assert_eq!(device.on_top(), Some(LOCK_SCREEN));
+        device.enter_pin("1234");
+        assert!(seen.borrow().is_empty(), "{:?}", seen.borrow());
+        assert!(!device.locked());
     }
 }

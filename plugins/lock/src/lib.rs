@@ -134,6 +134,7 @@ static SETTINGS: [SettingSpec; 2] = [
         groups::SYSTEM,
     )
     .described("lock.setting.kind.help")
+    .guarded()
     .with_extra(&ON_PAGE),
     SettingSpec::fixed_switch(
         ON_WAKE.static_str(),
@@ -142,7 +143,8 @@ static SETTINGS: [SettingSpec; 2] = [
         groups::SYSTEM,
     )
     .advanced()
-    .described("lock.setting.on-wake.help"),
+    .described("lock.setting.on-wake.help")
+    .guarded(),
 ];
 
 impl Plugin for Lock {

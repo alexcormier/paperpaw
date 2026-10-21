@@ -296,6 +296,10 @@ struct ActiveScreen {
     /// The key map layer put in front of its slot's while it is on top
     /// ([`Command::SetKeyLayer`]).
     key_layer: Option<Id>,
+    /// Opened above a screen guarding the device by that screen (or one
+    /// it opened): its keyboard. Others above it (a sleep screen) get no
+    /// input and are closed as the device wakes.
+    by_guard: bool,
 }
 
 /// An open screen kept while its task is not shown
@@ -344,6 +348,8 @@ pub struct Kernel {
     withheld: Vec<Command>,
     /// Of `withheld`, the commands of a guarding screen (see `trusted`).
     withheld_trusted: Vec<usize>,
+    /// Of `withheld`, those of the guard itself (see `own_trusted`).
+    withheld_own: Vec<usize>,
     /// The commands in `output.commands` (by their place) that a guarding
     /// screen ([`Screen::guards`]) or a screen above it gave: those alone
     /// open screens above it.
@@ -351,6 +357,12 @@ pub struct Kernel {
     /// The command being carried out came from a guarding screen or one
     /// above it.
     from_guard: bool,
+    /// The command carried out comes from a screen guarding the device
+    /// itself, or one it opened (see `own_trusted`).
+    from_guard_own: bool,
+    /// Of the commands asked for, those of a screen guarding the device or
+    /// one it opened: what they open above it is its own.
+    own_trusted: Vec<usize>,
     /// A notice given while a screen guarded the device, shown once it
     /// lets go.
     held_notice: Option<String>,
@@ -495,6 +507,11 @@ impl Kernel {
         if self.guard().is_none() {
             self.shared.usage.inputs = self.shared.usage.inputs.saturating_add(1);
         }
+        // A screen above a guard that the guard did not open (a sleep
+        // screen) gets no input: what is typed into the guard is its own.
+        if self.top_shut_out() {
+            return self.finish();
+        }
         let event = self.page_buttons_swapped(event);
         // Plugins' input filters come first.
         let (verdict, delivered) = {
@@ -612,6 +629,13 @@ impl Kernel {
         let mut trusted = mem::take(&mut self.withheld_trusted);
         let shift = commands.len();
         trusted.extend(mem::take(&mut self.trusted).into_iter().map(|i| i + shift));
+        let mut own = mem::take(&mut self.withheld_own);
+        own.extend(
+            mem::take(&mut self.own_trusted)
+                .into_iter()
+                .map(|i| i + shift),
+        );
+        self.own_trusted = own;
         commands.append(&mut self.output.commands);
         self.output.commands = commands;
         self.trusted = trusted;
@@ -1067,6 +1091,16 @@ impl Kernel {
         self.last_activity = now;
         // The time asleep is no screen's.
         self.shown_since = now;
+        // Screens above a guard that it did not open (a sleep screen) go.
+        while self.top_shut_out() {
+            let top = self.stack.len() - 1;
+            let key = paperpaw_sdk::ScreenKey::new(self.stack[top].serial);
+            let before = self.stack.len();
+            self.close_screen(key);
+            if self.stack.len() == before {
+                break;
+            }
+        }
         self.output.commands.push(events::RESUME.emit(()));
         self.finish()
     }

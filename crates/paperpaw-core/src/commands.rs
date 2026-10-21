@@ -202,11 +202,14 @@ impl Kernel {
                 continue;
             }
             let trusted = mem::take(&mut self.trusted);
+            let own = mem::take(&mut self.own_trusted);
             for (i, command) in mem::take(&mut self.output.commands).into_iter().enumerate() {
                 self.from_guard = trusted.contains(&i);
+                self.from_guard_own = own.contains(&i);
                 self.apply(command);
             }
             self.from_guard = false;
+            self.from_guard_own = false;
         }
         if !self.output.commands.is_empty() {
             self.output.commands.clear();
@@ -369,9 +372,9 @@ impl Kernel {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
             handler(&env, params, &mut self.output.commands);
-            let (secrets, reader) = (&self.shared.secrets, self.shared.reader);
+            let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
             let out = &mut self.output.commands;
-            refused_secret |= vet_secrets(out, from, plugin.as_str(), secrets, reader);
+            refused_secret |= vet_reserved(out, from, plugin.as_str(), &reserved);
             // Background work says nothing over reading.
             let top = self.stack.last().map(|s| s.id.namespace());
             work::quiet(
@@ -385,7 +388,7 @@ impl Kernel {
             );
         }
         if refused_secret {
-            self.warn_runtime("another plugin's secret is not changed");
+            self.warn_runtime("a plugin asked what only the settings editor may; not done");
         }
         // A setting may change which bars show and their size, and how
         // input is recognized.
@@ -561,6 +564,8 @@ fn changes_setup(command: &Command) -> bool {
             | Command::SetMenu(..)
             | Command::Bind { .. }
             | Command::BindSlot(..)
+            | Command::LoadPlugin(_)
+            | Command::InstallPlugin(..)
     )
 }
 
@@ -571,7 +576,10 @@ fn command_name(command: &Command) -> &'static str {
             "settings changed"
         }
         Command::SetScope(_) => "a book's settings",
-        Command::SetPluginEnabled(..) | Command::RemovePlugin(_) => "plugins changed",
+        Command::SetPluginEnabled(..)
+        | Command::RemovePlugin(_)
+        | Command::LoadPlugin(_)
+        | Command::InstallPlugin(..) => "plugins changed",
         Command::SetSecret(_) => "secrets changed",
         Command::SetMenu(..) => "menus changed",
         Command::Bind { .. } => "keys bound",
@@ -580,39 +588,60 @@ fn command_name(command: &Command) -> &'static str {
     }
 }
 
-/// Drops from `out[from..]` the secrets `owner` may not change, and tells
-/// whether it did. A plugin changes its own secrets; another's only on
-/// the reader's behalf (`reader`: Settings › Passwords), and then only
-/// one that is there: taken away, or given another value where the reader
-/// may change it, not renamed.
-pub(crate) fn vet_secrets(
+/// What only some may change: other plugins' secrets, settings that keep
+/// the device safe, the sleep slot (see [`vet_reserved`]).
+pub(crate) struct Reserved<'a> {
+    settings: &'a paperpaw_sdk::Settings,
+    /// The plugin of the settings editor (the screen of the settings
+    /// slot): the reader's own editor.
+    editor: Option<&'a str>,
+}
+
+impl<'a> Reserved<'a> {
+    pub(crate) fn of(
+        settings: &'a paperpaw_sdk::Settings,
+        registry: &'a crate::registry::Registry,
+    ) -> Self {
+        let editor = registry
+            .resolve_slot(slots::SETTINGS.as_str())
+            .map(Id::namespace);
+        Self { settings, editor }
+    }
+}
+
+/// Drops from `out[from..]` what `owner` may not ask, and tells whether
+/// it did: another plugin's secret, a setting that keeps the device safe
+/// (`SettingSpec::guarded`) of another plugin, the sleep slot. The
+/// settings editor may: it is how the reader changes them.
+pub(crate) fn vet_reserved(
     out: &mut Vec<Command>,
     from: usize,
     owner: &str,
-    secrets: &paperpaw_sdk::secrets::Secrets,
-    reader: bool,
+    reserved: &Reserved<'_>,
 ) -> bool {
+    let editor = reserved.editor == Some(owner);
+    let guarded = |id: &Id| {
+        id.namespace() != owner
+            && reserved
+                .settings
+                .spec(id.as_str())
+                .is_some_and(|spec| spec.guarded)
+    };
     let before = out.len();
     let mut index = 0;
     out.retain(|command| {
-        let keep = index < from
-            || match command {
-                Command::SetSecret(change) => {
-                    let own = change.id.split('.').next() == Some(owner);
-                    let theirs = || {
-                        let kept = secrets.iter().find(|s| s.id == change.id);
-                        reader
-                            && kept.is_some_and(|kept| {
-                                change.value.is_none()
-                                    || (kept.changeable && change.label.is_empty())
-                            })
-                    };
-                    own || theirs()
-                }
-                _ => true,
+        let refused = index >= from
+            && !editor
+            && match command {
+                Command::SetSecret(change) => change.id.split('.').next() != Some(owner),
+                Command::SetSetting(id, _) | Command::ResetSetting(id) => guarded(id),
+                // The sleep screen shows over the lock; the settings
+                // editor has these rights.
+                Command::BindSlot(slot, _) => *slot == slots::SLEEP || *slot == slots::SETTINGS,
+                _ => false,
             };
         index += 1;
-        keep
+        !refused
     });
     out.len() != before
 }

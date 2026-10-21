@@ -4220,6 +4220,7 @@ pub fn paperpaw_sdk::SettingGroupSpec::page(self, impl core::convert::Into<core:
 pub paperpaw_sdk::SettingSpec::default: paperpaw_sdk::SettingValue
 pub paperpaw_sdk::SettingSpec::description: core::option::Option<alloc::borrow::Cow<'static, str>>
 pub paperpaw_sdk::SettingSpec::group: paperpaw_sdk::Id
+pub paperpaw_sdk::SettingSpec::guarded: bool
 pub paperpaw_sdk::SettingSpec::id: paperpaw_sdk::Id
 pub paperpaw_sdk::SettingSpec::kind: paperpaw_sdk::SettingKind
 pub paperpaw_sdk::SettingSpec::level: paperpaw_sdk::Level
@@ -4239,6 +4240,7 @@ pub const fn paperpaw_sdk::SettingSpec::fixed_switch(&'static str, &'static str,
 pub const fn paperpaw_sdk::SettingSpec::fixed_text(&'static str, &'static str, &'static str, paperpaw_sdk::Id) -> Self
 pub const fn paperpaw_sdk::SettingSpec::for_advanced(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::group(self, paperpaw_sdk::Id) -> Self
+pub const fn paperpaw_sdk::SettingSpec::guarded(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::language(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::SettingSpec::list(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::SettingSpec::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::SettingKind, paperpaw_sdk::SettingValue) -> Self

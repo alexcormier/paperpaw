@@ -24,10 +24,13 @@ change the plugin SDK.
   items icons; `points/<point>.txt` contributes lines to a point;
   `setup.ini` adds steps to the first-run setup; `[fonts]` in
   `plugin.ini` binds fonts to roles. They are read for plugins made for
-  formats 3 alone (others are told what is left out), at most 24 KiB
-  together and 64 lines for points; an action emits only its own events
-  and sets no setting of the lock. SDK: `Registrar::place_menu_entry`
-  and `hide_menu_entry`, for code plugins too.
+  formats 3 alone (others are told what is left out). A data plugin's
+  files take at most 96 KiB together besides its translations (512 KiB
+  of their own), 24 KiB of it of formats 3 and 64 lines for points; the
+  files it parses are read one at a time as it registers. An action
+  emits only its own events and sets no guarded setting. SDK:
+  `Registrar::place_menu_entry` and `hide_menu_entry`, for code plugins
+  too.
 - SDK: refreshes. A refresh filter sees why the panel is
   refreshed (`filters::RefreshCause`: a page turned, screens, a notice,
   a status line; told with `Cx::refresh_cause`), the slot, how many
@@ -60,9 +63,14 @@ change the plugin SDK.
   refresh filters run, presses are not counted, `Command::Input` from
   others is ignored, and nobody else changes settings, secrets,
   plugins, menus, key bindings or slots; what a handler asks shows above
-  the guard only where the guard itself let the action pass. A plugin
-  changes its own secrets; another's only on the reader's behalf, and
-  then only their value. What an
+  the guard only where the guard itself let the action pass; screens
+  above it that it did not open (a sleep screen) get no input and close
+  as the device wakes. A plugin changes its own secrets; another's, a
+  setting that keeps the device safe (`SettingSpec::guarded`, the
+  lock's) and the sleep and settings slots only the settings editor does
+  (the plugin of the settings slot), never another on the reader's
+  behalf; no other plugin's default or preset changes such a setting,
+  and plugins are not loaded or installed under the guard. What an
   action or an observer asks that runs the same action again with the
   same params is dropped with a warning. `ActionSpec::describe` and `keywords` give lists
   and searches of actions their words; `Actions::runnable` tells actions

@@ -39,11 +39,15 @@
 //! ```
 //!
 //! The kernel lists them like every other plugin, so they can be switched
-//! off in the plugin manager. Files are read once at start-up; only what a
-//! plugin contributes stays in memory.
+//! off in the plugin manager. Files are read once at start-up, at most
+//! [`MAX_PLUGIN_DATA`] of a plugin in all; the files that are parsed
+//! (settings, presets, marks, menus, actions, icons, setup steps, points)
+//! one at a time as the plugin registers, so that only what it
+//! contributes stays in memory.
 
 use alloc::borrow::Cow;
 use alloc::format;
+use alloc::rc::Rc;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::cell::RefCell;
@@ -63,15 +67,29 @@ const MAX_STEPS: usize = 16;
 const MAX_POINTS: usize = 16;
 /// Most lines a plugin contributes to points, all files together.
 const MAX_POINT_LINES: usize = 64;
+/// What the files of a data plugin may take together, in bytes: its key
+/// map, styles and the files it registers.
+pub(crate) const MAX_PLUGIN_DATA: usize = 96 * 1024;
+/// What its translations may take together, in bytes: they stay in
+/// memory as catalogs anyway, and a language of its own (all plugins'
+/// texts) is large.
+const MAX_TRANSLATIONS: usize = 512 * 1024;
 /// What the files of formats 3 (`menus.ini`, `actions.ini`, `icons.ini`,
-/// `setup.ini`, `points/`) may take together, in bytes: they are held
-/// until the plugin registers, which small devices feel.
+/// `setup.ini`, `points/`) may take of it.
 const MAX_FORMAT3_DATA: usize = 24 * 1024;
 /// The version of the formats that brought those files.
 const FORMATS_3: u32 = 3;
-/// Plugins whose settings no action of `actions.ini` sets: those that
-/// guard the device.
-const GUARDED_SETTINGS: [&str; 1] = ["lock"];
+/// The files read as the plugin registers, and whether each is of
+/// formats 3.
+const LATER: [(&str, bool); 7] = [
+    ("settings.ini", false),
+    ("presets.ini", false),
+    ("marks.ini", false),
+    ("menus.ini", true),
+    ("actions.ini", true),
+    ("icons.ini", true),
+    ("setup.ini", true),
+];
 /// The version of the formats of data plugins this PaperPaw reads.
 pub(crate) const FORMATS: u32 = paperpaw_sdk::DATA_FORMATS;
 
@@ -92,15 +110,10 @@ pub(crate) struct DataPlugin {
     translations: RefCell<Vec<String>>,
     keymap: RefCell<Option<String>>,
     styles: RefCell<Option<String>>,
-    settings: RefCell<Option<String>>,
-    presets: RefCell<Option<String>>,
-    marks: RefCell<Option<String>>,
-    menus: RefCell<Option<String>>,
-    actions: RefCell<Option<String>>,
-    icons: RefCell<Option<String>>,
-    setup: RefCell<Option<String>>,
-    /// The lines for points: each point and its file.
-    points: RefCell<Vec<(String, String)>>,
+    /// Where the files read as it registers are.
+    storage: Option<Rc<dyn Storage>>,
+    /// The files read as it registers (within the budget): their paths.
+    later: RefCell<Vec<String>>,
     /// Fonts for roles, from `[fonts]` of `plugin.ini`.
     roles: RefCell<Vec<(String, String)>>,
     /// What was left out as it was read, to tell (see
@@ -131,6 +144,22 @@ impl DataPlugin {
         for source in self.translations.borrow_mut().iter_mut() {
             *source = listing(source, &prefix);
         }
+    }
+
+    /// File `name` of its folder, read now where it was let through as it
+    /// loaded.
+    fn read_later(&self, name: &str) -> Option<String> {
+        let path = format!("{}/{name}", self.folder);
+        self.take_later(&path)
+    }
+
+    /// File `path`, read now where it was let through as it loaded.
+    fn take_later(&self, path: &str) -> Option<String> {
+        let mut later = self.later.borrow_mut();
+        let at = later.iter().position(|p| p == path)?;
+        later.remove(at);
+        drop(later);
+        read(self.storage.as_deref()?, path, MAX_FILE)
     }
 
     /// What was left out of it as it was read (files of formats it does
@@ -201,7 +230,7 @@ impl Plugin for DataPlugin {
                 r.add_font_face(FontFace::new(id, path, family.clone(), bold, italic))?;
             }
         }
-        if let Some(source) = self.settings.take() {
+        if let Some(source) = self.read_later("settings.ini") {
             for entry in paperpaw_config::parse(&source) {
                 let entry = entry.map_err(|error| RegisterError::Parse {
                     line: error.line,
@@ -219,13 +248,13 @@ impl Plugin for DataPlugin {
                 r.set_setting_default(id, Cow::Owned(entry.value.as_str().into_owned()))?;
             }
         }
-        if let Some(source) = self.presets.take() {
+        if let Some(source) = self.read_later("presets.ini") {
             for preset in presets(&self.manifest.id, &source)? {
                 r.add_preset(preset)?;
             }
         }
         let id = &self.manifest.id;
-        if let Some(source) = self.actions.take() {
+        if let Some(source) = self.read_later("actions.ini") {
             for action in actions(id, &source)? {
                 r.add_action(action.spec)?;
                 if let Some(icon) = action.icon {
@@ -233,34 +262,52 @@ impl Plugin for DataPlugin {
                 }
             }
         }
-        if let Some(source) = self.menus.take() {
+        if let Some(source) = self.read_later("menus.ini") {
             menus(r, id, &source)?;
         }
-        if let Some(source) = self.icons.take() {
+        if let Some(source) = self.read_later("icons.ini") {
             for entry in paperpaw_config::parse(&source) {
                 let entry = entry.map_err(parse_error)?;
                 let item = parsed_id(entry.key, entry.line)?;
                 r.add_icon(item, Cow::Owned(entry.value.as_str().trim().to_string()))?;
             }
         }
-        if let Some(source) = self.setup.take() {
+        if let Some(source) = self.read_later("setup.ini") {
             for step in setup_steps(id, &source)? {
                 r.add_setup_step(step)?;
             }
         }
-        for (point, text) in self.points.take() {
-            let point = parsed_id(&point, 0)?;
+        // The points' files, one at a time, at most `MAX_POINT_LINES`
+        // lines in all.
+        let prefix = format!("{}/points/", self.folder);
+        let files: Vec<String> = self
+            .later
+            .borrow()
+            .iter()
+            .filter(|p| p.starts_with(&prefix))
+            .cloned()
+            .collect();
+        let mut lines_left = MAX_POINT_LINES;
+        for file in files {
+            let Some(text) = self.take_later(&file) else {
+                continue;
+            };
+            let name = file.rsplit('/').next().unwrap_or(&file);
+            let point = name.rsplit_once('.').map_or(name, |(stem, _)| stem);
+            let point = parsed_id(point, 0)?;
             for line in text.lines().map(str::trim) {
-                if !line.is_empty() && !line.starts_with('#') {
-                    r.contribute(point.clone(), Cow::Owned(line.to_string()))?;
+                if line.is_empty() || line.starts_with('#') || lines_left == 0 {
+                    continue;
                 }
+                lines_left -= 1;
+                r.contribute(point.clone(), Cow::Owned(line.to_string()))?;
             }
         }
         for (role, font) in self.roles.take() {
             let (role, font) = (parsed_id(&role, 0)?, parsed_id(&font, 0)?);
             r.bind_font(role, font, paperpaw_sdk::Priority::DEFAULT)?;
         }
-        if let Some(source) = self.marks.take() {
+        if let Some(source) = self.read_later("marks.ini") {
             let marks = paperpaw_sdk::decorations::MarkRules::parse(&self.manifest.id, &source)?;
             for (role, title, look) in marks.roles {
                 paperpaw_sdk::decorations::add_role(r, &role, title, look)?;
@@ -421,9 +468,6 @@ fn actions(plugin: &Id, source: &str) -> Result<Vec<MadeAction>, RegisterError> 
                 Step::Emit(event) if event.namespace() != plugin.as_str() => {
                     Some(format!("`{}`: emits only events of its own", action.id))
                 }
-                Step::Set(setting, _) if GUARDED_SETTINGS.contains(&setting.namespace()) => Some(
-                    format!("`{}`: `{setting}` is not set by actions", action.id),
-                ),
                 _ => None,
             };
             if let Some(message) = problem {
@@ -600,41 +644,58 @@ fn roles(source: &str) -> Vec<(String, String)> {
         .collect()
 }
 
-/// What the files of formats 3 of one plugin may still take, and what
-/// was left out.
+/// What the files of one plugin may still take (all, and those of
+/// formats 3), and what was left out.
 struct Budget {
     /// The formats the plugin says it is made for.
     formats: u32,
     left: usize,
+    left3: usize,
     problems: Vec<String>,
 }
 
 impl Budget {
-    /// File `path` of formats 3, within what is left; `None` where it is
-    /// not there, or left out (told).
-    fn read(&mut self, storage: &dyn Storage, path: &str) -> Option<String> {
-        let size = storage.size(path).ok()?;
-        if self.formats < FORMATS_3 {
+    /// Whether file `path` (`format3`: of formats 3) is read, within what
+    /// is left; `false` where it is not there, or left out (told).
+    fn allow(&mut self, storage: &dyn Storage, path: &str, format3: bool) -> bool {
+        let Ok(size) = storage.size(path) else {
+            return false;
+        };
+        if format3 && self.formats < FORMATS_3 {
             self.problems.push(format!(
                 "{path}: left out, the plugin says it is made for formats {}",
                 self.formats
             ));
-            return None;
+            return false;
         }
         let size = usize::try_from(size).unwrap_or(usize::MAX);
-        if size > self.left.min(MAX_FILE) {
-            self.problems.push(format!("{path}: left out, too large"));
-            return None;
+        let room = if format3 {
+            self.left.min(self.left3)
+        } else {
+            self.left
+        };
+        if size > room.min(MAX_FILE) {
+            self.problems
+                .push(format!("{path}: left out, more than the plugin may take"));
+            return false;
         }
-        let text = read(storage, path, self.left.min(MAX_FILE))?;
-        self.left -= text.len();
-        Some(text)
+        self.left -= size;
+        if format3 {
+            self.left3 -= size;
+        }
+        true
+    }
+
+    /// File `path`, read now within what is left.
+    fn read_now(&mut self, storage: &dyn Storage, path: &str) -> Option<String> {
+        self.allow(storage, path, false)
+            .then(|| read(storage, path, MAX_FILE))
+            .flatten()
     }
 }
 
-/// The files of a plugin's `points` folder: each point (the file's name
-/// without `.txt`) and its lines, at most [`MAX_POINT_LINES`] in all.
-fn points(storage: &dyn Storage, path: &str, budget: &mut Budget) -> Vec<(String, String)> {
+/// The files of a plugin's `points` folder that may be read, by path.
+fn point_files(storage: &dyn Storage, path: &str, budget: &mut Budget) -> Vec<String> {
     let dir = format!("{path}/points");
     let mut names: Vec<String> = Vec::new();
     let _ = storage.list(&dir, &mut |entry| {
@@ -643,34 +704,12 @@ fn points(storage: &dyn Storage, path: &str, budget: &mut Budget) -> Vec<(String
         }
     });
     names.sort_unstable();
-    let mut lines_left = MAX_POINT_LINES;
-    let mut out = Vec::new();
-    for name in names.into_iter().take(MAX_POINTS) {
-        let file = format!("{dir}/{name}");
-        let Some(text) = budget.read(storage, &file) else {
-            continue;
-        };
-        let mut kept = String::new();
-        for line in text.lines().map(str::trim) {
-            if line.is_empty() || line.starts_with('#') {
-                continue;
-            }
-            if lines_left == 0 {
-                budget
-                    .problems
-                    .push(format!("{file}: lines past {MAX_POINT_LINES} left out"));
-                break;
-            }
-            lines_left -= 1;
-            kept.push_str(line);
-            kept.push('\n');
-        }
-        let point = name
-            .rsplit_once('.')
-            .map_or(name.as_str(), |(stem, _)| stem);
-        out.push((point.to_string(), kept));
-    }
-    out
+    names
+        .into_iter()
+        .take(MAX_POINTS)
+        .map(|name| format!("{dir}/{name}"))
+        .filter(|file| budget.allow(storage, file, true))
+        .collect()
 }
 
 /// Of a translation catalog `source`, its `[meta]` section and the
@@ -788,7 +827,7 @@ pub(crate) fn folders(
 }
 
 /// The plugin in folder `path`, e.g. `plugins/font-fredoka`.
-pub(crate) fn load_folder(storage: &dyn Storage, path: &str) -> Result<DataPlugin, String> {
+pub(crate) fn load_folder(storage: &Rc<dyn Storage>, path: &str) -> Result<DataPlugin, String> {
     let path = path.trim_end_matches('/');
     let name = path.rsplit('/').next().unwrap_or(path);
     load(storage, path, name)
@@ -797,7 +836,7 @@ pub(crate) fn load_folder(storage: &dyn Storage, path: &str) -> Result<DataPlugi
 /// The plugin in folder `path`, its id `name` unless its `plugin.ini`
 /// names one (for a folder named otherwise, e.g. one downloaded into).
 pub(crate) fn load_folder_as(
-    storage: &dyn Storage,
+    storage: &Rc<dyn Storage>,
     path: &str,
     name: &str,
 ) -> Result<DataPlugin, String> {
@@ -835,7 +874,8 @@ pub(crate) fn folders_of(storage: &dyn Storage, dir: &str, id: &str) -> Vec<Stri
 }
 
 /// The plugin in folder `path`.
-fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, String> {
+fn load(shared: &Rc<dyn Storage>, path: &str, folder: &str) -> Result<DataPlugin, String> {
+    let storage = shared.as_ref();
     let manifest = read(storage, &format!("{path}/plugin.ini"), MAX_MANIFEST)
         .ok_or_else(|| format!("{path}: no plugin.ini"))?;
     let source = manifest;
@@ -843,7 +883,8 @@ fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, S
         parse_manifest(&source, folder).map_err(|e| format!("{path}/plugin.ini: {e}"))?;
     let mut budget = Budget {
         formats,
-        left: MAX_FORMAT3_DATA,
+        left: MAX_PLUGIN_DATA,
+        left3: MAX_FORMAT3_DATA,
         problems: Vec::new(),
     };
     let mut translations = Vec::new();
@@ -856,11 +897,33 @@ fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, S
         }
     });
     files.sort_unstable();
+    let mut translations_left = MAX_TRANSLATIONS;
     for file in files {
         let path = format!("{catalogs}/{file}");
-        translations
-            .push(read(storage, &path, MAX_FILE).ok_or_else(|| format!("{path}: unreadable"))?);
+        let size = storage
+            .size(&path)
+            .map_or(usize::MAX, |s| usize::try_from(s).unwrap_or(usize::MAX));
+        if size > translations_left.min(MAX_FILE) {
+            budget
+                .problems
+                .push(format!("{path}: left out, more than the plugin may take"));
+            continue;
+        }
+        if let Some(text) = read(storage, &path, MAX_FILE) {
+            translations_left -= text.len();
+            translations.push(text);
+        }
     }
+    let keymap = budget.read_now(storage, &format!("{path}/keymap.ini"));
+    let styles = budget.read_now(storage, &format!("{path}/styles.css"));
+    let mut later: Vec<String> = LATER
+        .iter()
+        .map(|(name, format3)| (format!("{path}/{name}"), *format3))
+        .filter(|(file, format3)| budget.allow(storage, file, *format3))
+        .map(|(file, _)| file)
+        .collect();
+    later.extend(point_files(storage, path, &mut budget));
+    let roles = fonts_for_roles(&source, path, &mut budget);
     let (family, faces) = family(&source, path);
     let mut fonts = font_files(storage, &format!("{path}/fonts"));
     // A family's faces are not fonts of their own as well.
@@ -869,17 +932,11 @@ fn load(storage: &dyn Storage, path: &str, folder: &str) -> Result<DataPlugin, S
         manifest,
         folder: path.to_string(),
         translations: RefCell::new(translations),
-        keymap: RefCell::new(read(storage, &format!("{path}/keymap.ini"), MAX_FILE)),
-        styles: RefCell::new(read(storage, &format!("{path}/styles.css"), MAX_FILE)),
-        settings: RefCell::new(read(storage, &format!("{path}/settings.ini"), MAX_FILE)),
-        presets: RefCell::new(read(storage, &format!("{path}/presets.ini"), MAX_FILE)),
-        marks: RefCell::new(read(storage, &format!("{path}/marks.ini"), MAX_FILE)),
-        menus: RefCell::new(budget.read(storage, &format!("{path}/menus.ini"))),
-        actions: RefCell::new(budget.read(storage, &format!("{path}/actions.ini"))),
-        icons: RefCell::new(budget.read(storage, &format!("{path}/icons.ini"))),
-        setup: RefCell::new(budget.read(storage, &format!("{path}/setup.ini"))),
-        points: RefCell::new(points(storage, path, &mut budget)),
-        roles: RefCell::new(fonts_for_roles(&source, path, &mut budget)),
+        keymap: RefCell::new(keymap),
+        styles: RefCell::new(styles),
+        storage: Some(shared.clone()),
+        later: RefCell::new(later),
+        roles: RefCell::new(roles),
         problems: RefCell::new(budget.problems),
         fonts: RefCell::new(fonts),
         extensions: RefCell::new(extensions(&source, path)),
@@ -947,14 +1004,8 @@ pub(crate) fn font_folder(storage: &dyn Storage, dirs: &[String]) -> Option<Data
         translations: RefCell::new(Vec::new()),
         keymap: RefCell::new(None),
         styles: RefCell::new(None),
-        settings: RefCell::new(None),
-        presets: RefCell::new(None),
-        marks: RefCell::new(None),
-        menus: RefCell::new(None),
-        actions: RefCell::new(None),
-        icons: RefCell::new(None),
-        setup: RefCell::new(None),
-        points: RefCell::new(Vec::new()),
+        storage: None,
+        later: RefCell::new(Vec::new()),
         roles: RefCell::new(Vec::new()),
         problems: RefCell::new(Vec::new()),
         fonts: RefCell::new(fonts),
@@ -1085,9 +1136,17 @@ mod tests {
     use super::*;
     use paperpaw_sdk::MemoryStorage;
 
+    fn shared(storage: MemoryStorage) -> Rc<dyn Storage> {
+        Rc::new(storage)
+    }
+
     /// Every data plugin in `dir` that loads, the others reported.
-    fn discover(storage: &dyn Storage, dir: &str, warn: &mut dyn FnMut(String)) -> Vec<DataPlugin> {
-        folders(storage, dir, warn)
+    fn discover(
+        storage: &Rc<dyn Storage>,
+        dir: &str,
+        warn: &mut dyn FnMut(String),
+    ) -> Vec<DataPlugin> {
+        folders(storage.as_ref(), dir, warn)
             .iter()
             .filter_map(|path| load_folder(storage, path).map_err(&mut *warn).ok())
             .collect()
@@ -1116,6 +1175,7 @@ mod tests {
             .with("plugins/broken/readme.txt", "")
             .with("plugins/bad-id/plugin.ini", "[plugin]\nid = a.b\n");
         let mut warnings = Vec::new();
+        let storage = shared(storage);
         let plugins = discover(&storage, "plugins", &mut |w| warnings.push(w));
         assert_eq!(plugins.len(), 1);
         let large = &plugins[0];
@@ -1123,7 +1183,13 @@ mod tests {
         assert_eq!(large.manifest.name, "Large print");
         assert_eq!(large.manifest.version, Version::new(1, 2, 0));
         assert_eq!(large.translations.borrow().len(), 2, "any case");
-        assert!(large.settings.borrow().is_some());
+        assert!(
+            large
+                .later
+                .borrow()
+                .iter()
+                .any(|p| p.ends_with("settings.ini"))
+        );
         assert!(large.keymap.borrow().is_none());
         assert_eq!(
             large.styles.borrow().as_deref(),
@@ -1145,18 +1211,19 @@ mod tests {
             .with("fonts/a.otf", "x")
             .with("more-fonts/b.ttc", "x")
             .with("more-fonts/family/c.ttf", "x");
+        let storage = shared(storage);
         let plugins = discover(&storage, "plugins", &mut |_| {});
         assert_eq!(
             *plugins[0].fonts.borrow(),
             ["plugins/serif/fonts/Book Antiqua-Bold.TTF"]
         );
         let dirs = [String::from("fonts"), String::from("more-fonts")];
-        let folder = font_folder(&storage, &dirs).unwrap();
+        let folder = font_folder(storage.as_ref(), &dirs).unwrap();
         assert_eq!(
             *folder.fonts.borrow(),
             ["fonts/a.otf", "more-fonts/b.ttc", "more-fonts/family/c.ttf"]
         );
-        assert!(font_folder(&storage, &[String::from("nothing")]).is_none());
+        assert!(font_folder(storage.as_ref(), &[String::from("nothing")]).is_none());
         assert_eq!(slug("Book Antiqua-Bold.TTF"), "book-antiqua-bold");
         // Packs that extend other fonts, named in plugin.ini.
         let source = "[plugin]
@@ -1191,7 +1258,7 @@ italic = ../escape.ppfp
             )
             .with("plugins/font-round/fonts/Round.ttf", "x")
             .with("plugins/font-round/fonts/Extra.ttf", "x");
-        let plugin = load_folder(&storage, "plugins/font-round/").unwrap();
+        let plugin = load_folder(&shared(storage), "plugins/font-round/").unwrap();
         assert_eq!(plugin.folder(), "plugins/font-round");
         assert_eq!(plugin.family.as_deref(), Some("Round"));
         assert_eq!(
@@ -1307,7 +1374,10 @@ kind = Not An Id
         // Only its own events, no setting of the lock.
         assert!(actions(&plugin, "[a]\nrun = emit:core.started\n").is_err());
         assert!(actions(&plugin, "[a]\nrun = emit:cosy.done\n").is_ok());
-        assert!(actions(&plugin, "[a]\nrun = lock.kind=lock.kind.off\n").is_err());
+        assert!(
+            actions(&plugin, "[a]\nrun = lock.kind=lock.kind.off\n").is_ok(),
+            "refused as it runs, see vet_reserved"
+        );
         let many = alloc::vec!["core.home"; MAX_STEPS + 1].join(", ");
         assert!(
             actions(
@@ -1371,8 +1441,8 @@ core.font-ui = x.semi
                 "[plugin]\nformats = 2\n[fonts]\ncore.font-ui = old.x\n",
             )
             .with("plugins/old/menus.ini", "[old.m]\ntitle = M\n");
-        let plugin = load_folder(&older, "plugins/old").unwrap();
-        assert!(plugin.menus.borrow().is_none());
+        let plugin = load_folder(&shared(older), "plugins/old").unwrap();
+        assert!(plugin.later.borrow().is_empty());
         assert!(plugin.roles.borrow().is_empty());
         assert_eq!(plugin.take_problems().len(), 2);
         let lines: String = (0..MAX_POINT_LINES + 5)
@@ -1383,9 +1453,28 @@ core.font-ui = x.semi
             .with("plugins/new/plugin.ini", "[plugin]\nformats = 3\n")
             .with("plugins/new/points/core.about.txt", lines.as_str())
             .with("plugins/new/actions.ini", big);
-        let plugin = load_folder(&newer, "plugins/new").unwrap();
-        assert!(plugin.actions.borrow().is_none(), "too large");
-        assert_eq!(plugin.points.borrow()[0].1.lines().count(), MAX_POINT_LINES);
+        let plugin = load_folder(&shared(newer), "plugins/new").unwrap();
+        let later = plugin.later.borrow().clone();
+        assert_eq!(later, ["plugins/new/points/core.about.txt"], "too large");
+        assert_eq!(plugin.take_problems().len(), 1);
+        let mut r = Registrar::new(Id::new_static("new"));
+        plugin.register(&mut r).unwrap();
+        let lines = r
+            .contributions()
+            .iter()
+            .filter(|c| c.kind() == "to-point")
+            .count();
+        assert_eq!(lines, MAX_POINT_LINES);
+        // All files of a plugin together: within one budget.
+        let file = alloc::vec![b'#'; MAX_FILE - 1];
+        let many = MemoryStorage::new()
+            .with("plugins/many/plugin.ini", "[plugin]\n")
+            .with("plugins/many/keymap.ini", file.clone())
+            .with("plugins/many/settings.ini", file.clone())
+            .with("plugins/many/presets.ini", file);
+        let plugin = load_folder(&shared(many), "plugins/many").unwrap();
+        assert!(plugin.keymap.borrow().is_some());
+        assert_eq!(plugin.later.borrow().len(), 0);
         assert_eq!(plugin.take_problems().len(), 2);
     }
 }

@@ -55,6 +55,7 @@ impl Kernel {
             screen,
             timer: None,
             key_layer: None,
+            by_guard: self.guard().is_some() && self.from_guard_own,
         };
         // Opened by another while a screen guards the device: it waits
         // below the guard, hidden.
@@ -519,14 +520,11 @@ impl Kernel {
     ) -> Handled {
         let earlier = mem::take(&mut self.output.redraw);
         let given = self.output.commands.len();
-        // The guard, and screens of its plugin above it (its keyboard),
-        // open screens above it; another's above it (a sleep screen) does
-        // not.
+        // The guard, and the screens it opened above itself (the
+        // keyboard to type its password, of the keyboard plugin), open
+        // screens above it; another above it (a sleep screen) does not.
         let trusted = self.guard().is_some_and(|guard| {
-            index == guard
-                || (index > guard
-                    && self.stack.get(index).map(|s| s.id.namespace())
-                        == Some(self.stack[guard].id.namespace()))
+            index == guard || (index > guard && self.stack.get(index).is_some_and(|s| s.by_guard))
         });
         let Some(active) = self.stack.get_mut(index) else {
             self.output.redraw = earlier;
@@ -556,10 +554,13 @@ impl Kernel {
         // A key map layer it asks for is its own, laid at once: one asked
         // for any other screen is not (`Command::SetKeyLayer` from
         // elsewhere is refused).
-        let (secrets, reader) = (&self.shared.secrets, self.shared.reader);
+        let reserved = crate::commands::Reserved::of(&self.shared.settings, &self.shared.registry);
         let owner = self.stack[index].id.namespace();
-        if crate::commands::vet_secrets(&mut self.output.commands, given, owner, secrets, reader) {
-            self.warn_runtime(format!("{owner}: another plugin's secret is not changed"));
+        let out = &mut self.output.commands;
+        if crate::commands::vet_reserved(out, given, owner, &reserved) {
+            self.warn_runtime(format!(
+                "{owner} asked what only the settings editor may; not done"
+            ));
         }
         let mut at = given;
         while at < self.output.commands.len() {
@@ -577,6 +578,7 @@ impl Kernel {
         // screens above it.
         if trusted {
             self.trusted.extend(given..self.output.commands.len());
+            self.own_trusted.extend(given..self.output.commands.len());
         }
         // `request_redraw` means the caller's own region. A screen below an
         // overlay is still partly visible (e.g. the page behind a menu that

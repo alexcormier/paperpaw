@@ -557,7 +557,7 @@ impl Kernel {
     /// warning, if it could not be.
     fn register_folder(&mut self, folder: &str) -> bool {
         let storage = self.shared.storage.clone();
-        let plugin = match crate::data_plugin::load_folder(storage.as_ref(), folder) {
+        let plugin = match crate::data_plugin::load_folder(&storage, folder) {
             Ok(plugin) => plugin,
             Err(problem) => {
                 self.warn_runtime(problem);
@@ -765,7 +765,7 @@ impl Kernel {
                 format!("{folder}: not the plugin `{id}`; not installed"),
             );
         }
-        let plugin = match data_plugin::load_folder_as(storage.as_ref(), folder, id.as_str()) {
+        let plugin = match data_plugin::load_folder_as(&storage, folder, id.as_str()) {
             Ok(plugin) => plugin,
             Err(problem) => return refuse(self, problem),
         };

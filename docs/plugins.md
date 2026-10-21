@@ -1054,9 +1054,10 @@ core.font-ui-strong = my.semibold
 
 An action of `actions.ini` runs its steps in order, at most 16:
 `<setting>=<value>` sets a setting (a value not of its kind is passed
-over), `open:<slot>` opens a slot, `notify:<text>` says something,
-`emit:<event>` emits an event, and an action's id runs that action (not
-one of the same file). `menus.ini` adds to any menu, places an entry
+over, and a setting that keeps the device safe, such as the lock's, is
+never set), `open:<slot>` opens a slot, `notify:<text>` says something,
+`emit:<event>` emits an event of the plugin's own (`<plugin>.<name>`),
+and an action's id runs that action (not one of the same file). `menus.ini` adds to any menu, places an entry
 after another and takes entries out; `title` and `entries` make a menu
 of one's own, which other menus list by its id:
 
@@ -1086,7 +1087,15 @@ order = 35
 for (3 now: menus, actions, icons, points, setup steps and font roles
 came with it, `marks.ini` with 2; 1 if it is left out); a PaperPaw
 that reads an older one leaves the plugin out and says why, rather than
-reading it wrongly.
+reading it wrongly. The files of formats 3 are read only for a plugin
+that says `formats = 3`; for one made for an earlier version they are
+left out, and PaperPaw says so.
+
+A plugin's files take at most 96 KiB together besides its translations
+(512 KiB of their own), those of formats 3 at
+most 24 KiB of it, and its points at most 64 lines; what goes past is
+left out and told. A default (`settings.ini`) or a preset does not
+change a setting that keeps the device safe, such as the lock's.
 
 Packs for other scripts (`tools/script-pack.py` builds Cyrillic and
 Greek for Literata) are read a glyph at a time, so devices with little

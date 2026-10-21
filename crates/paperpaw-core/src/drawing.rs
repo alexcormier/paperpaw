@@ -523,6 +523,7 @@ impl Kernel {
         self.frame.mark = Some(mark);
         self.withheld = mem::take(&mut self.output.commands);
         self.withheld_trusted = mem::take(&mut self.trusted);
+        self.withheld_own = mem::take(&mut self.own_trusted);
         self.output.request_refresh(RefreshMode::Fast);
         let mut effects = self.finish();
         effects.proceed = true;

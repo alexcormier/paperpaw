@@ -4,7 +4,7 @@
 
 #[allow(unused_imports)]
 use super::*;
-use crate::commands::vet_secrets;
+use crate::commands::{Reserved, vet_reserved};
 
 /// Where input is: gestures being recognized, the edges' swipes, presses
 /// dropped while a frame was not shown yet.
@@ -682,11 +682,25 @@ impl Kernel {
     /// Offers input to the screen on top with `f`, and on to the screens
     /// below it while the one asked lets what it does not take pass
     /// ([`Screen::passes_through`]).
+    /// The topmost screen that gets input: not one above a screen guarding
+    /// the device that the guard did not open (a sleep screen).
+    pub(crate) fn input_top(&self) -> Option<usize> {
+        let guard = self.guard();
+        (0..self.stack.len())
+            .rev()
+            .find(|&i| guard.is_none_or(|g| i <= g || self.stack[i].by_guard))
+    }
+
+    /// Whether the screen on top gets no input (see [`Self::input_top`]).
+    pub(crate) fn top_shut_out(&self) -> bool {
+        self.input_top() != self.stack.len().checked_sub(1)
+    }
+
     pub(crate) fn offer(
         &mut self,
         f: impl Fn(&mut dyn Screen, &mut Cx<'_, '_>) -> Handled,
     ) -> Handled {
-        let Some(mut index) = self.stack.len().checked_sub(1) else {
+        let Some(mut index) = self.input_top() else {
             self.offered_down_to = 0;
             return Handled::No;
         };
@@ -770,8 +784,8 @@ impl Kernel {
                 out,
                 &mut self.works,
             );
-            let secrets = &self.shared.secrets;
-            refused_secret |= vet_secrets(out, from, plugin.as_str(), secrets, reader);
+            let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
+            refused_secret |= vet_reserved(out, from, plugin.as_str(), &reserved);
             // The original it asked for runs in its place, once each, its
             // work and secrets its own plugin's.
             let mut at = from;
@@ -790,8 +804,8 @@ impl Kernel {
                 let owner = action.namespace();
                 let top = self.stack.last().map(|s| s.id.namespace());
                 work::quiet(reader, top, now, 0, owner, &mut out, &mut self.works);
-                let secrets = &self.shared.secrets;
-                refused_secret |= vet_secrets(&mut out, 0, owner, secrets, reader);
+                let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
+                refused_secret |= vet_reserved(&mut out, 0, owner, &reserved);
                 let count = out.len();
                 for (offset, command) in out.into_iter().enumerate() {
                     self.output.commands.insert(at + offset, command);
@@ -810,8 +824,8 @@ impl Kernel {
                     }
                     let owner = action.namespace();
                     work::quiet(reader, top, now, from, owner, out, &mut self.works);
-                    let secrets = &self.shared.secrets;
-                    refused_secret |= vet_secrets(out, from, owner, secrets, reader);
+                    let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
+                    refused_secret |= vet_reserved(out, from, owner, &reserved);
                 }
                 Some(_) => return,
                 None => return self.warn_runtime(format!("unknown action `{action}`")),
@@ -882,8 +896,8 @@ impl Kernel {
             let top = self.stack.last().map(|s| s.id.namespace());
             let (reader, now) = (self.shared.reader, self.now);
             let out = &mut self.output.commands;
-            let secrets = &self.shared.secrets;
-            refused_secret |= vet_secrets(out, from, spec.id.namespace(), secrets, reader);
+            let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
+            refused_secret |= vet_reserved(out, from, spec.id.namespace(), &reserved);
             work::quiet(
                 reader,
                 top,
@@ -914,7 +928,7 @@ impl Kernel {
             ));
         }
         if refused_secret {
-            self.warn_runtime("an observer's change of another plugin's secret is not made");
+            self.warn_runtime("an observer asked what only the settings editor may; not done");
         }
     }
 

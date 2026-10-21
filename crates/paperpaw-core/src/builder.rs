@@ -514,8 +514,11 @@ impl KernelBuilder {
             busy_mark: self.busy_mark,
             withheld: Vec::new(),
             withheld_trusted: Vec::new(),
+            withheld_own: Vec::new(),
             trusted: Vec::new(),
             from_guard: false,
+            from_guard_own: false,
+            own_trusted: Vec::new(),
             held_notice: None,
             last_activity: Instant(0),
             shown_since: Instant(0),
@@ -623,7 +626,7 @@ impl Kernel {
             }
             // One at a time: loaded, registered, its files let go.
             for folder in folders {
-                let plugin = match data_plugin::load_folder(storage.as_ref(), &folder) {
+                let plugin = match data_plugin::load_folder(&storage, &folder) {
                     Ok(plugin) => plugin,
                     Err(problem) => {
                         self.warn_runtime(problem);
@@ -732,6 +735,21 @@ impl Kernel {
             }
         }
         for (plugin, id, value) in mem::take(&mut self.plugin_defaults) {
+            // A setting that keeps the device safe takes no other plugin's
+            // default.
+            let guarded = self
+                .shared
+                .settings
+                .spec(id.as_str())
+                .is_some_and(|spec| spec.guarded);
+            if guarded && id.namespace() != plugin.as_str() {
+                self.warn(
+                    WarningSource::Plugin(plugin),
+                    None,
+                    format!("default for `{id}`: it keeps the device safe; not taken"),
+                );
+                continue;
+            }
             if let Err(error) = self
                 .shared
                 .settings

@@ -528,19 +528,57 @@ mod above_the_guard {
         kernel.open_screen(Instant(10), Id::new_static("gate.lock"), Params::new());
         kernel.run_action(Instant(20), Id::new_static("up.raise"));
         assert_eq!(kernel.active_screen(), Some(&Id::new_static("up.top")));
-        // As from a timer of plugin `up`:
+        // That screen gets no input: an action run (as from a timer of
+        // plugin `up`) reaches the guard, which takes it.
+        assert!(kernel.top_shut_out());
         kernel.apply(Command::RunAction(Id::new_static("up.go")));
         kernel.finish();
         let ids: Vec<&str> = kernel.stack.iter().map(|s| s.id.as_str()).collect();
-        assert_eq!(ids, ["a.screen", "up.evil", "gate.lock", "up.top"]);
+        assert_eq!(ids, ["a.screen", "gate.lock", "up.top"]);
+        // Waking, it closes; the guard is on top.
+        kernel.resume(Instant(30));
+        assert_eq!(kernel.active_screen(), Some(&Id::new_static("gate.lock")));
     }
 }
 
-/// A plugin changes its own secrets; another's only on the reader's
-/// behalf, and then only its value.
+/// A plugin changes its own secrets; another's only the settings editor
+/// (the plugin of the settings slot) does, never another on the reader's
+/// behalf.
 mod secrets_of_others {
     use super::*;
     use paperpaw_sdk::secrets::SecretChange;
+
+    /// The settings editor: the screen of the settings slot.
+    struct Editor;
+
+    impl Plugin for Editor {
+        fn manifest(&self) -> Manifest {
+            Manifest::new(Id::new_static("editor"), "Editor", Version::new(1, 0, 0))
+                .uses(paperpaw_sdk::Uses::NOTHING)
+        }
+
+        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+            r.add_screen(ScreenSpec::new(
+                Id::new_static("editor.screen"),
+                "editor",
+                Box::new(|_, _| Box::new(Lock)),
+            ))?;
+            r.bind_slot(
+                slots::SETTINGS,
+                Id::new_static("editor.screen"),
+                Priority::DEFAULT,
+            )?;
+            r.add_action(
+                ActionSpec::new(Id::new_static("editor.change"), "x").handler(|_, out| {
+                    out.push(Command::SetSecret(SecretChange::keep(
+                        "keeper.pw",
+                        "",
+                        "new",
+                    )));
+                }),
+            )
+        }
+    }
 
     struct Snoop;
 
@@ -589,6 +627,7 @@ mod secrets_of_others {
         let mut kernel = Kernel::builder(DEVICE)
             .plugin(TestPlugin::new("a", &log))
             .plugin(Snoop)
+            .plugin(Editor)
             .build()
             .unwrap();
         kernel.start(Instant(0));
@@ -600,12 +639,17 @@ mod secrets_of_others {
         kernel.apply(Command::Emit(Id::new_static("snoop.when"), Params::new()));
         kernel.finish();
         assert_eq!(kernel.shared.secrets.get("keeper.pw"), Some("x"));
-        // On the reader's behalf, its value (Settings › Passwords).
+        // Not on the reader's behalf either (any input starts one).
         kernel.run_action(Instant(20), Id::new_static("snoop.change"));
+        assert_eq!(kernel.shared.secrets.get("keeper.pw"), Some("x"));
+        // The settings editor does (Settings › Passwords).
+        kernel.run_action(Instant(30), Id::new_static("editor.change"));
         assert_eq!(kernel.shared.secrets.get("keeper.pw"), Some("new"));
         let warnings = kernel.take_warnings();
         assert!(
-            warnings.iter().any(|w| w.message.contains("secret")),
+            warnings
+                .iter()
+                .any(|w| w.message.contains("settings editor")),
             "{warnings:?}"
         );
     }
@@ -710,4 +754,96 @@ fn a_sealed_action_keeps_its_handler_in_either_order() {
         "{:?}",
         log.borrow()
     );
+}
+
+/// A setting that keeps the device safe is changed by its own plugin and
+/// the settings editor alone: another's command, an action of a data
+/// plugin or a default of another are refused.
+mod guarded_settings {
+    use super::*;
+
+    struct Safe;
+
+    impl Plugin for Safe {
+        fn manifest(&self) -> Manifest {
+            Manifest::new(Id::new_static("safe"), "Safe", Version::new(1, 0, 0))
+                .uses(paperpaw_sdk::Uses::NOTHING)
+        }
+
+        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+            r.add_setting(
+                SettingSpec::new(
+                    Id::new_static("safe.on"),
+                    "on",
+                    SettingKind::Bool,
+                    SettingValue::Bool(true),
+                )
+                .guarded(),
+            )?;
+            r.add_action(
+                ActionSpec::new(Id::new_static("safe.off"), "off").handler(|_, out| {
+                    out.push(Command::SetSetting(
+                        Id::new_static("safe.on"),
+                        SettingValue::Bool(false),
+                    ));
+                }),
+            )
+        }
+    }
+
+    struct Other;
+
+    impl Plugin for Other {
+        fn manifest(&self) -> Manifest {
+            Manifest::new(Id::new_static("other"), "Other", Version::new(1, 0, 0))
+                .uses(paperpaw_sdk::Uses::NOTHING)
+        }
+
+        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+            r.set_setting_default(Id::new_static("safe.on"), Cow::Borrowed("false"))?;
+            r.add_action(
+                ActionSpec::new(Id::new_static("other.off"), "off").handler(|_, out| {
+                    out.push(Command::SetSetting(
+                        Id::new_static("safe.on"),
+                        SettingValue::Bool(false),
+                    ));
+                    out.push(Command::BindSlot(
+                        slots::SLEEP,
+                        Some(Id::new_static("other.screen")),
+                    ));
+                }),
+            )
+        }
+    }
+
+    #[test]
+    fn a_guarded_setting_is_its_plugins() {
+        let log = log();
+        let storage = paperpaw_sdk::MemoryStorage::new()
+            .with("plugins/macro/plugin.ini", "[plugin]\nformats = 3\n")
+            .with("plugins/macro/actions.ini", "[off]\nrun = safe.on=false\n");
+        let mut kernel = Kernel::builder(DEVICE)
+            .plugin(TestPlugin::new("a", &log))
+            .plugin(Safe)
+            .plugin(Other)
+            .storage(storage)
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        let on = |k: &Kernel| k.settings().get("safe.on") == Some(&SettingValue::Bool(true));
+        assert!(on(&kernel), "no other plugin's default");
+        kernel.run_action(Instant(10), Id::new_static("other.off"));
+        assert!(on(&kernel), "no other plugin's command");
+        kernel.run_action(Instant(20), Id::new_static("macro.off"));
+        assert!(on(&kernel), "no data plugin's action");
+        assert!(
+            kernel
+                .shared
+                .registry
+                .resolve_slot(slots::SLEEP.as_str())
+                .is_none()
+        );
+        kernel.run_action(Instant(30), Id::new_static("safe.off"));
+        assert!(!on(&kernel), "its own plugin's");
+    }
 }
