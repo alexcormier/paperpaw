@@ -288,6 +288,27 @@ impl Kernel {
     /// bindings changed.
     fn apply_setting(&mut self, command: Command) {
         match command {
+            // A secret setting's value goes to the secrets.
+            Command::SetSetting(id, paperpaw_sdk::SettingValue::Text(text))
+                if self
+                    .shared
+                    .settings
+                    .spec(id.as_str())
+                    .is_some_and(|spec| spec.extra().secret) =>
+            {
+                let label = self
+                    .shared
+                    .settings
+                    .spec(id.as_str())
+                    .map(|spec| String::from(self.shared.translator.tr(&spec.title)))
+                    .unwrap_or_default();
+                let change = if text.is_empty() {
+                    paperpaw_sdk::secrets::SecretChange::remove(id.as_str())
+                } else {
+                    paperpaw_sdk::secrets::SecretChange::keep(id.as_str(), &label, &text)
+                };
+                self.set_secret(change);
+            }
             Command::SetSetting(id, value) if self.shared.settings.goes_to_scope(id.as_str()) => {
                 self.set_in_scope(&id, value);
             }

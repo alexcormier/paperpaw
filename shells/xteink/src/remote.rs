@@ -178,6 +178,7 @@ impl Remote {
                 println!("PP:INPUT {samples} {front} {side} {power} {millivolts}");
             }
             Command::Setting(id) => match kernel.settings().get(&id) {
+                Some(_) if is_secret(kernel, &id) => println!("PP:SETTING •"),
                 Some(value) => println!("PP:SETTING {}", value.to_config_text()),
                 None => error("no such setting"),
             },
@@ -269,7 +270,11 @@ impl Remote {
                     if id.starts_with(prefix.as_str())
                         && let Some(value) = settings.get(id)
                     {
-                        println!("PP:VALUE {id} {}", value.to_config_text());
+                        if spec.extra().secret {
+                            println!("PP:VALUE {id} •");
+                        } else {
+                            println!("PP:VALUE {id} {}", value.to_config_text());
+                        }
                     }
                 }
                 println!("PP:END");
@@ -554,6 +559,14 @@ fn shot(kernel: &mut Kernel) {
     } else {
         busy();
     }
+}
+
+/// Whether setting `id` is a secret, which is never sent.
+fn is_secret(kernel: &Kernel, id: &str) -> bool {
+    kernel
+        .settings()
+        .spec(id)
+        .is_some_and(|spec| spec.extra().secret)
 }
 
 /// Sends what the screen shows, part by part.

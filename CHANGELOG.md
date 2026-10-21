@@ -18,7 +18,11 @@ change the plugin SDK.
   device; `Kernel::is_secret` says so to the USB remote and the dev
   tools, which then leave out what the parts say. A password typed (an
   answer to a question asked with `password()`) reaches the plugin that
-  asked alone, whichever keyboard took it. On a blind framebuffer, and
+  asked alone, whichever keyboard took it, and while it is typed only
+  that plugin's input filters see the keys (`InputFilters::apply_of`).
+  A secret setting (`SettingExtra::secret`) is kept with the secrets,
+  never in the settings: read it with `env.secrets.get(id)`; the USB
+  remote sends no secret setting's value. On a blind framebuffer, and
   while the focus is worked out, no glyph or picture is made.
 - SDK: `ui::setting_opens` says what choosing a setting opens (its
   editor, the keyboard for text, the list of a choice's values), the

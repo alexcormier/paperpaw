@@ -250,14 +250,31 @@ impl App {
         Self::at(device, storage, 0)
     }
 
+    /// The same, with `plugin` installed too.
+    pub fn with_plugin(
+        device: DeviceInfo,
+        storage: Shared,
+        plugin: impl paperpaw_sdk::Plugin + 'static,
+    ) -> Self {
+        Self::made(device, storage, 0, |builder| builder.plugin(plugin))
+    }
+
     fn at(device: DeviceInfo, storage: Shared, now: u64) -> Self {
+        Self::made(device, storage, now, |builder| builder)
+    }
+
+    fn made(
+        device: DeviceInfo,
+        storage: Shared,
+        now: u64,
+        extra: impl FnOnce(paperpaw_core::KernelBuilder) -> paperpaw_core::KernelBuilder,
+    ) -> Self {
         TYPED.with(|typed| typed.borrow_mut().clear());
         ASKED.with(|asked| asked.borrow_mut().clear());
         let builder = Kernel::builder(device).storage(storage.clone());
-        let mut kernel = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs)
-            .plugin(TestKeyboard)
-            .build()
-            .unwrap();
+        let builder =
+            paperpaw_app::install(builder, paperpaw_app::Fonts::Packs).plugin(TestKeyboard);
+        let mut kernel = extra(builder).build().unwrap();
         let effects = kernel.start(Instant(now));
         let display = device.display;
         let mut app = Self {

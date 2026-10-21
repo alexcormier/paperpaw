@@ -1012,6 +1012,7 @@ pub fn paperpaw_sdk::filters::InputFilterSpec::fmt(&self, &mut core::fmt::Format
 pub struct paperpaw_sdk::filters::InputFilters
 impl paperpaw_sdk::filters::InputFilters
 pub fn paperpaw_sdk::filters::InputFilters::apply(&self, &paperpaw_sdk::Env<'_>, &paperpaw_platform::input::InputEvent) -> paperpaw_sdk::filters::InputVerdict
+pub fn paperpaw_sdk::filters::InputFilters::apply_of(&self, &paperpaw_sdk::Env<'_>, &paperpaw_platform::input::InputEvent, core::option::Option<&str>) -> paperpaw_sdk::filters::InputVerdict
 pub fn paperpaw_sdk::filters::InputFilters::new() -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::filters::Refresh
 pub paperpaw_sdk::filters::Refresh::mode: paperpaw_platform::display::RefreshMode

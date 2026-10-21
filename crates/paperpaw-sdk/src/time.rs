@@ -561,10 +561,16 @@ pub fn parse_iso8601(text: &str) -> Option<i64> {
         Some((date, clock)) => (date, Some(clock)),
         None => (text, None),
     };
+    // Digits alone: no "+1".
+    let digits = |s: &str| !s.is_empty() && s.bytes().all(|b| b.is_ascii_digit());
     let mut d = date.splitn(3, '-');
-    let year: i32 = d.next()?.parse().ok()?;
-    let month: u8 = d.next()?.parse().ok()?;
-    let day: u8 = d.next()?.parse().ok()?;
+    let (year, month, day) = (d.next()?, d.next()?, d.next()?);
+    if !(digits(year) && digits(month) && digits(day)) {
+        return None;
+    }
+    let year: i32 = year.parse().ok()?;
+    let month: u8 = month.parse().ok()?;
+    let day: u8 = day.parse().ok()?;
     if !(1..=12).contains(&month) || day == 0 || day > days_in_month(year, month) {
         return None;
     }
@@ -677,6 +683,8 @@ mod tests {
             "2026-10-19T10:00+25:00",
             "2026-10-19T-1:00Z",
             "2026-10-19T+5:00Z",
+            "2026-+1-19",
+            "+2026-10-19",
             "2147483647-12-31T23:59:59Z",
             "x",
         ] {

@@ -190,8 +190,21 @@ impl InputFilters {
 
     /// What the first filter that does not pass it does with `event`.
     pub fn apply(&self, env: &Env<'_>, event: &InputEvent) -> InputVerdict {
+        self.apply_of(env, event, None)
+    }
+
+    /// The same, with the filters of plugin `plugin` alone where one is
+    /// named: while a PIN or a password is entered, the others see no
+    /// key of it.
+    pub fn apply_of(
+        &self,
+        env: &Env<'_>,
+        event: &InputEvent,
+        plugin: Option<&str>,
+    ) -> InputVerdict {
         self.filters
             .iter()
+            .filter(|filter| plugin.is_none_or(|p| filter.id.namespace() == p))
             .map(|filter| (filter.filter)(env, event))
             .find(|verdict| *verdict != InputVerdict::Pass)
             .unwrap_or(InputVerdict::Pass)

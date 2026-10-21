@@ -337,7 +337,18 @@ pub(super) fn plain_setting_value(env: &Env<'_>, spec: &SettingSpec) -> String {
             Some(unit) => env.i18n.plural(unit, *v, &[]),
             None => format!("{v}"),
         },
-        Some(SettingValue::Text(v)) if spec.extra().secret && !v.is_empty() => "••••••".to_string(),
+        // Kept with the secrets: dots where there is one.
+        _ if spec.extra().secret => {
+            if env
+                .secrets
+                .get(spec.id.as_str())
+                .is_some_and(|s| !s.is_empty())
+            {
+                "••••••".to_string()
+            } else {
+                String::new()
+            }
+        }
         Some(SettingValue::Text(v)) => option_name(env, spec, v),
         None => String::new(),
     }

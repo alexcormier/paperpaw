@@ -732,3 +732,100 @@ fn passwords_typed_reach_the_asker_alone() {
     );
     assert_eq!(*heard.borrow(), ["Ann"]);
 }
+
+/// An input filter that counts what it sees.
+struct Watcher {
+    seen: Rc<std::cell::Cell<u32>>,
+}
+
+impl Plugin for Watcher {
+    fn manifest(&self) -> Manifest {
+        common::manifest("watcher")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let seen = self.seen.clone();
+        r.add_input_filter(paperpaw_core::sdk::filters::InputFilterSpec::new(
+            paperpaw_core::sdk::Id::new_static("watcher.filter"),
+            "watcher.filter",
+            Box::new(move |_, _| {
+                seen.set(seen.get() + 1);
+                paperpaw_core::sdk::filters::InputVerdict::Pass
+            }),
+        ))
+    }
+}
+
+/// While a PIN or a password is entered, other plugins' input filters
+/// see none of its keys.
+#[test]
+fn input_filters_see_no_key_of_a_secret() {
+    for secret in [false, true] {
+        let seen = Rc::new(std::cell::Cell::new(0));
+        let mut kernel = Kernel::builder(DEVICE)
+            .plugin(Focused {
+                heard: Rc::new(std::cell::RefCell::new(Vec::new())),
+                secret,
+            })
+            .plugin(Watcher { seen: seen.clone() })
+            .storage(MemoryStorage::new())
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        common::render(&mut kernel);
+        common::press(&mut kernel, 100, "down");
+        assert_eq!(seen.get() > 0, !secret, "secret {secret}");
+    }
+}
+
+/// A secret setting typed is kept with the secrets, never in the
+/// settings every plugin reads.
+#[test]
+fn a_secret_setting_is_kept_with_the_secrets() {
+    use paperpaw_core::sdk::builtin::{events, params};
+    use paperpaw_core::sdk::event::EventData;
+    static SECRET: [paperpaw_core::sdk::SettingSpec; 1] =
+        [paperpaw_core::sdk::SettingSpec::fixed_text(
+            "vault.key",
+            "vault.key",
+            "",
+            paperpaw_core::sdk::builtin::groups::OTHER,
+        )
+        .with_extra(&KEPT_SECRET)];
+    static KEPT_SECRET: paperpaw_core::sdk::SettingExtra =
+        paperpaw_core::sdk::SettingExtra::new().secret();
+    struct Vault;
+    impl Plugin for Vault {
+        fn manifest(&self) -> Manifest {
+            common::manifest("vault")
+        }
+        fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+            r.add_settings(&SECRET)
+        }
+    }
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Vault)
+        .storage(MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let typed = paperpaw_core::sdk::Typed::new(
+        "k-123",
+        Params::new()
+            .with(params::ID, "vault.key")
+            .with(params::MODE, "password"),
+    );
+    kernel.send_event(
+        Instant(100),
+        events::SETTING_TYPED.id().clone(),
+        typed.to_params(),
+    );
+    assert_eq!(kernel.settings().text("vault.key"), "");
+    assert_eq!(kernel.secrets().get("vault.key"), Some("k-123"));
+    // Set directly, the same.
+    kernel
+        .set_setting(Instant(200), "vault.key", "k-456")
+        .unwrap();
+    assert_eq!(kernel.settings().text("vault.key"), "");
+    assert_eq!(kernel.secrets().get("vault.key"), Some("k-456"));
+}

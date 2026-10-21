@@ -960,12 +960,19 @@ impl Screen for PanelScreen {
         // setting has a value come or go with it.
         if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
             let env = *cx.env();
+            let before = self.region;
             if env.settings.governs(changed.id.as_str()) {
-                let (focus, page) = (self.focus, self.page);
+                // Anew, the focus on the control it was on (where it stays).
+                let focused = self
+                    .focus
+                    .and_then(|at| self.controls().nth(at).map(|(c, _)| c.clone()));
+                let page = self.page;
                 let opened = self.params.clone();
                 *self = PanelScreen::open(&env, &opened);
-                self.focus = focus;
+                self.focus = focused.and_then(|c| self.controls().position(|(d, _)| *d == c));
                 self.page = page.min(self.pages().saturating_sub(1));
+                // What it covered before too, should it have shrunk.
+                cx.request_redraw_area(before.union(&self.region));
             }
             self.redraw(cx);
         } else if *event == events::PREVIEW_CHANGED

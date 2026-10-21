@@ -422,11 +422,22 @@ impl Screen for BarScreen {
         // setting has a value come or go with it.
         if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
             let env = *cx.env();
+            let before = self.region;
             if env.settings.governs(changed.id.as_str()) {
+                // Anew, the focus on the entry it was on (where it stays).
+                let focused = self.entries.get(self.focus).map(|e| e.id.clone());
+                let keys = self.keys;
                 let opened = self.params.clone();
                 *self = BarScreen::new(&env, &opened);
+                if let Some(at) =
+                    focused.and_then(|id| self.entries.iter().position(|e| e.id == id))
+                {
+                    self.focus = at;
+                }
+                self.keys = keys;
             }
-            cx.request_redraw_area(self.region);
+            // What it covered before too, should it have shrunk.
+            cx.request_redraw_area(before.union(&self.region));
         }
     }
 }

@@ -61,13 +61,26 @@ impl Plugin for CorePlugin {
                 .context
                 .get(params::ID)
                 .and_then(|id| Id::parse(id).ok());
-            if let Some(id) = id.filter(|id| env.settings.spec(id.as_str()).is_some()) {
-                let text = String::from(typed.text.trim());
-                out.push(Command::SetSetting(
-                    id,
-                    paperpaw_sdk::SettingValue::Text(Cow::Owned(text)),
-                ));
+            let Some(spec) = id.and_then(|id| env.settings.spec(id.as_str())) else {
+                return;
+            };
+            let text = typed.text.trim();
+            // A secret is kept with the secrets: never in the settings,
+            // which every plugin reads.
+            if spec.extra().secret {
+                let change = if text.is_empty() {
+                    paperpaw_sdk::secrets::SecretChange::remove(spec.id.as_str())
+                } else {
+                    let label = env.i18n.tr(&spec.title);
+                    paperpaw_sdk::secrets::SecretChange::keep(spec.id.as_str(), label, text)
+                };
+                out.push(Command::SetSecret(change));
+                return;
             }
+            out.push(Command::SetSetting(
+                spec.id.clone(),
+                paperpaw_sdk::SettingValue::Text(Cow::Owned(String::from(text))),
+            ));
         })?;
         // Each plugin's network (its settings made by the kernel).
         r.add_setting_group(

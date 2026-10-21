@@ -467,10 +467,14 @@ impl Kernel {
         self.last_activity = now;
         self.shared.usage.inputs = self.shared.usage.inputs.saturating_add(1);
         let event = self.page_buttons_swapped(event);
-        // Plugins' input filters come first.
+        // Plugins' input filters come first; while a PIN or a password is
+        // entered, only those of the plugin asking for it.
         let verdict = {
+            let asking = self.secret_owner();
             let env = self.shared.env(now);
-            self.shared.input_filters.apply(&env, &event)
+            self.shared
+                .input_filters
+                .apply_of(&env, &event, asking.as_deref())
         };
         match verdict {
             InputVerdict::Pass => {}
@@ -612,10 +616,6 @@ impl Kernel {
         }
     }
 
-    /// Says what has the focus now, if it changed and the user asked for
-    /// it ([`core_settings::SPEAK_FOCUS`]): in place of what it said of
-    /// the focus before, if that is still spoken; not while a plugin
-    /// reads aloud.
     /// Whether what the screen shows is secret now: a PIN or a password
     /// being entered ([`Screen::secret`](paperpaw_sdk::Screen::secret)),
     /// or the device guarded. Those who show the screen elsewhere (a
@@ -624,6 +624,19 @@ impl Kernel {
         self.guard().is_some() || self.stack.iter().any(|s| s.screen.secret())
     }
 
+    /// The plugin of the screen that guards the device, else of the one a
+    /// PIN or a password is entered on; `None` where none is.
+    fn secret_owner(&self) -> Option<alloc::string::String> {
+        let guard = self.guard().map(|at| &self.stack[at]);
+        guard
+            .or_else(|| self.stack.iter().rev().find(|s| s.screen.secret()))
+            .map(|s| alloc::string::String::from(s.id.namespace()))
+    }
+
+    /// Says what has the focus now, if it changed and the user asked for
+    /// it ([`core_settings::SPEAK_FOCUS`]): in place of what it said of
+    /// the focus before, if that is still spoken; not while a plugin
+    /// reads aloud.
     fn speak_focus(&mut self) {
         // Never while a PIN or a password is entered, or the device
         // guarded: the keys pressed would be told.
