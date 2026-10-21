@@ -152,6 +152,11 @@ pub struct PageType {
     /// The status lines above and below the content, where there are any.
     pub top_status: Option<Rect>,
     pub status: Option<Rect>,
+    /// The rooms page layers reserve beside the content (see
+    /// [`layers`](crate::layers)), and the columns the content is set in,
+    /// left to right: the content alone without a frame.
+    pub rooms: Vec<(Id, Rect)>,
+    pub columns: Vec<Rect>,
     /// The language whose hyphenation patterns are used, if hyphenating.
     pub hyphenation: Option<String>,
     /// What the plugins' text filters did when it was made
@@ -230,8 +235,24 @@ impl PageType {
         } else {
             screen - ends
         };
-        let height = (end - y).max(1.0);
-        let line = |y: f32| Rect::new(margin as u16, y as u16, width as u16, status.height as u16);
+        let mut height = (end - y).max(1.0);
+        let (mut x, mut y, mut width) = (margin, y, width);
+        // The layers' rooms, then the frame's columns; for whole pages
+        // neither.
+        let content = Rect::new(x as u16, y as u16, width as u16, height as u16);
+        let (rooms, columns, layers) = match whole_pages {
+            true => (Vec::new(), alloc::vec![content], String::new()),
+            false => {
+                let (rooms, text) = env.page_layers.rooms(env, content);
+                if !rooms.is_empty() {
+                    (x, y) = (f32::from(text.x), f32::from(text.y));
+                    (width, height) = (f32::from(text.width), f32::from(text.height));
+                }
+                let columns = env.page_layers.columns(env, text);
+                (rooms, columns, env.page_layers.key(env, content))
+            }
+        };
+        let line = |at: f32| Rect::new(content.x, at as u16, content.width, status.height as u16);
         let top_status = status.top.then(|| line(status.edge));
         let bottom_status = status
             .bottom
@@ -259,6 +280,12 @@ impl PageType {
                 env.text_filters.signature(env),
             ))
         );
+        // Pages without layers' rooms or a frame keep their key (and their
+        // page indexes).
+        let key = match (rooms.is_empty(), columns.len()) {
+            (true, 1) => key,
+            _ => format!("{key}-{:016x}", paperpaw_digest::fnv1a64(&layers)),
+        };
         Self {
             size,
             weight,
@@ -266,12 +293,14 @@ impl PageType {
             ascent,
             line_height,
             style,
-            x: margin,
+            x,
             y,
             width,
             height,
             top_status,
             status: bottom_status,
+            rooms,
+            columns,
             hyphenation,
             filters: env.text_filters.signature(env),
             key,
@@ -288,10 +317,15 @@ impl PageType {
         height: f32,
         pad: f32,
     ) -> Self {
+        let page = Self::new(env, font, language, false, StatusRoom::NONE);
+        let height = (height - 2.0 * pad).max(1.0);
+        let column = Rect::new(page.x as u16, pad as u16, page.width as u16, height as u16);
         Self {
             y: pad,
-            height: (height - 2.0 * pad).max(1.0),
-            ..Self::new(env, font, language, false, StatusRoom::NONE)
+            height,
+            rooms: Vec::new(),
+            columns: alloc::vec![column],
+            ..page
         }
     }
 }

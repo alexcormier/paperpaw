@@ -130,6 +130,8 @@ pub enum Contribution {
     StatusLine(StatusLineSpec),
     TextFilter(TextFilterSpec),
     Decorator(Box<crate::decorations::DecoratorSpec>),
+    PageLayer(Box<crate::layers::PageLayerSpec>),
+    PageFrame(Box<crate::layers::PageFrameSpec>),
     InputFilter(InputFilterSpec),
     RefreshFilter(RefreshFilterSpec),
     /// A job: work done in steps (see [`work`](crate::work)).
@@ -197,6 +199,8 @@ impl Contribution {
             Contribution::StatusLine(_) => "status-line",
             Contribution::TextFilter(_) => "text-filter",
             Contribution::Decorator(_) => "decorator",
+            Contribution::PageLayer(_) => "page-layer",
+            Contribution::PageFrame(_) => "page-frame",
             Contribution::InputFilter(_) => "input-filter",
             Contribution::RefreshFilter(_) => "refresh-filter",
             Contribution::Work(_) => "work",
@@ -232,6 +236,8 @@ impl Contribution {
             Contribution::StatusLine(l) => &l.id,
             Contribution::TextFilter(f) => &f.id,
             Contribution::Decorator(d) => &d.id,
+            Contribution::PageLayer(l) => &l.id,
+            Contribution::PageFrame(f) => &f.id,
             Contribution::InputFilter(f) => &f.id,
             Contribution::RefreshFilter(f) => &f.id,
             Contribution::Work(w) => &w.id,
@@ -602,6 +608,26 @@ impl Registrar {
         decorator: crate::decorations::DecoratorSpec,
     ) -> Result<(), RegisterError> {
         self.add(Contribution::Decorator(Box::new(decorator)))
+    }
+
+    /// Adds a layer: drawn on book pages by every reader, with room of its
+    /// own beside the text if it reserves some (see
+    /// [`layers`](crate::layers)).
+    pub fn add_page_layer(
+        &mut self,
+        layer: crate::layers::PageLayerSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::PageLayer(Box::new(layer)))
+    }
+
+    /// Adds a frame: book pages set in columns, offered by the setting
+    /// [`PAGE_FRAME`](crate::builtin::settings::PAGE_FRAME) (see
+    /// [`layers`](crate::layers)).
+    pub fn add_page_frame(
+        &mut self,
+        frame: crate::layers::PageFrameSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::PageFrame(Box::new(frame)))
     }
 
     /// Adds a filter of every input, before screens and key maps see it

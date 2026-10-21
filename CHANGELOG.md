@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `layers`, page layers and frames. A layer
+  (`Registrar::add_page_layer`) draws on every page a reader shows,
+  behind the text or over it, with the page's lines and columns
+  (`PageView`); it may reserve room beside the text and hear taps on it
+  (`events::PAGE_LAYER_TAPPED`, also with the buttons). A frame
+  (`Registrar::add_page_frame`) sets pages in columns, chosen with
+  `settings::PAGE_FRAME` (each book may have its own); a screen in
+  columns is one page of the page index. `reading::PageType` has the
+  layers' `rooms` and the frame's `columns`.
+- Settings: a choice with nothing to choose from (one value) is not
+  listed.
 - SDK: block filters (`TextFilterSpec::block`) know where a block is
   (`FilterContext`: the book, its language, where the block starts) and
   may leave it out (`Verdict::Drop`): the reader lays out, searches and

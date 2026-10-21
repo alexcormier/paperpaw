@@ -86,6 +86,8 @@ pub(super) enum Target {
     Link(usize),
     /// Of [`Book::decorated`].
     Mark(usize),
+    /// The room of a page layer that hears taps, of the type's `rooms`.
+    Layer(usize),
 }
 
 /// Remembers `path` as the book read last (reopened at start-up).
@@ -330,6 +332,15 @@ impl Book {
         self.index_stopped = false;
     }
 
+    /// Whether the page's type is another now than the pages were laid
+    /// out in (a frame chosen, a layer's room).
+    pub(super) fn retyped(&self, env: &Env<'_>) -> bool {
+        self.font(env).is_some_and(|font| {
+            let whole = self.document.whole_pages();
+            typography(env, &font, &self.language, whole).key != self.typography.key
+        })
+    }
+
     /// Decodes the pictures of the page shown that are not yet: books
     /// decode them when their page shows, not while pages are laid out
     /// in the background.
@@ -354,22 +365,73 @@ impl Book {
 
     /// The start of the line `at` is in, as this book is laid out now
     /// (see `layout::line_start`).
+    /// In columns, as the first column sets its lines.
     pub(super) fn line_start(&self, env: &Env<'_>, at: Locator) -> Locator {
-        self.laid_out(env, |cx| line_start(cx, at).unwrap_or(at))
+        let t = &self.typography;
+        let width = match t.columns.len() {
+            0 | 1 => t.width,
+            _ => f32::from(t.columns[0].width),
+        };
+        self.laid_out(env, width, |cx| line_start(cx, at).unwrap_or(at))
             .unwrap_or(at)
     }
 
-    /// The page that starts at `at`, as this book is laid out now.
+    /// The page that starts at `at`, as this book is laid out now. In
+    /// columns (a plugin's frame, see `paperpaw_sdk::layers`) each takes
+    /// up where the one before ends, its lines moved to its place: one
+    /// page of the page index for all.
     pub(super) fn layout(&self, env: &Env<'_>, at: Locator) -> Result<Page, DocumentError> {
-        let height = self.typography.height;
-        self.laid_out(env, |cx| layout_page(cx, at, height))
-            .unwrap_or_else(|| Ok(Page::default()))
+        let t = &self.typography;
+        if t.columns.len() <= 1 {
+            return self
+                .laid_out(env, t.width, |cx| layout_page(cx, at, t.height))
+                .unwrap_or_else(|| Ok(Page::default()));
+        }
+        let mut page = Page::new(at, at, Vec::new(), Vec::new());
+        let mut next = at;
+        for (i, column) in t.columns.iter().enumerate() {
+            let height = f32::from(column.height);
+            let Some(laid) = self.laid_out(env, f32::from(column.width), |cx| {
+                layout_page(cx, next, height)
+            }) else {
+                break;
+            };
+            let mut laid = laid?;
+            if laid.is_past_end() {
+                break;
+            }
+            let (dx, dy) = (f32::from(column.x) - t.x, f32::from(column.y) - t.y);
+            for line in &mut laid.lines {
+                line.x += dx;
+                line.baseline += dy;
+            }
+            for image in &mut laid.images {
+                image.x += dx;
+                image.y += dy;
+            }
+            if i == 0 {
+                page.start = laid.start;
+            }
+            page.end = laid.end;
+            page.lines.append(&mut laid.lines);
+            page.images.append(&mut laid.images);
+            if laid.end <= next {
+                break;
+            }
+            next = laid.end;
+        }
+        Ok(page)
     }
 
-    /// `f` with the context this book is laid out in now: its type, its
-    /// faces and hyphenation, the text through the plugins' filters;
-    /// `None` without the reading font.
-    fn laid_out<R>(&self, env: &Env<'_>, f: impl FnOnce(&LayoutContext<'_>) -> R) -> Option<R> {
+    /// `f` with the context this book is laid out in now, its lines
+    /// `width` wide: its type, its faces and hyphenation, the text through
+    /// the plugins' filters; `None` without the reading font.
+    fn laid_out<R>(
+        &self,
+        env: &Env<'_>,
+        width: f32,
+        f: impl FnOnce(&LayoutContext<'_>) -> R,
+    ) -> Option<R> {
         let t = &self.typography;
         let faces = Faces::new(env, t, self.embedded.as_ref())?;
         let patterns = t
@@ -384,7 +446,7 @@ impl Book {
         let filtered = FilteredDocument::new(self.document.as_ref(), env)
             .in_book(&self.path, &self.language)
             .remembering(&self.dropped);
-        let cx = LayoutContext::new(&filtered, env.storage, t.width, &t.style, &faces)
+        let cx = LayoutContext::new(&filtered, env.storage, width, &t.style, &faces)
             .hyphenate(patterns.is_some().then_some(&hyphenate as Hyphenate<'_>));
         Some(f(&cx))
     }
@@ -695,7 +757,17 @@ impl Book {
                 .map(|(i, m)| (m.start, Target::Mark(i))),
         );
         order.sort_by_key(|(at, _)| *at);
-        order.into_iter().map(|(_, target)| target).collect()
+        let mut targets: Vec<Target> = order.into_iter().map(|(_, target)| target).collect();
+        // Then the rooms of layers that hear taps.
+        targets.extend(
+            self.typography
+                .rooms
+                .iter()
+                .enumerate()
+                .filter(|(_, (id, _))| env.page_layers.on(env).any(|l| l.taps && l.id == *id))
+                .map(|(i, _)| Target::Layer(i)),
+        );
+        targets
     }
 
     /// Where target `target` is on the page.
@@ -707,6 +779,7 @@ impl Book {
                 .get(i)
                 .map(|l| (Locator::new(section, l.start), Locator::new(section, l.end))),
             Target::Mark(i) => self.decorated.get(i).map(|m| (m.start, m.end)),
+            Target::Layer(_) => None,
         }
     }
 

@@ -641,6 +641,14 @@ impl Screen for ReaderScreen {
                 self.next_status_line(top, cx);
                 return Handled::Yes;
             }
+            // The room of a layer that hears taps: its plugin answers.
+            if let Some(layer) = env
+                .page_layers
+                .tapped(&env, &book.typography.rooms, p.x, p.y)
+            {
+                book.tap_layer(layer, Some(p), cx);
+                return Handled::Yes;
+            }
         }
         let Ok(book) = &self.book else {
             return Handled::No;
@@ -747,6 +755,7 @@ impl ReaderScreen {
             || self.aloud.is_some()
             || !book.links.is_empty()
             || !env.decorators.is_empty();
+        let layered = !env.page_layers.is_empty();
         book.update_decorations(env);
         let Ok(book) = &self.book else {
             return;
@@ -761,9 +770,24 @@ impl ReaderScreen {
             })
             .map(|a| (a.now.from, a.now.to));
         let marks = book.page_marks(env, aloud, words);
+        // The plugins' layers behind the text and over it; their line
+        // boxes only while there are layers.
+        let lines = if layered {
+            book.line_boxes()
+        } else {
+            Vec::new()
+        };
+        let view = book.page_view(&lines);
+        let rooms = &book.typography.rooms;
+        if layered {
+            env.page_layers.draw(canvas, env, &view, rooms, true);
+        }
         marks.draw_behind(canvas, env);
         book.draw_page(canvas, env, &marks.inks);
         marks.draw_over(canvas, env);
+        if layered {
+            env.page_layers.draw(canvas, env, &view, rooms, false);
+        }
         book.draw_note_signs(canvas, env, words);
         book.draw_back(canvas, env);
         book.draw_status(canvas, env);
@@ -948,7 +972,16 @@ impl ReaderScreen {
         // own all begin with `reader.`).
         let font_changed = TYPE_SETTINGS.contains(&id)
             || id == paperpaw_sdk::builtin::settings::READING_FONT.as_str()
-            || id == crate::settings::PUBLISHER_STYLES.as_str();
+            || id == crate::settings::PUBLISHER_STYLES.as_str()
+            // Anything else the page's box depends on: the frame, the
+            // room a plugin's layer takes.
+            || changed.is_some() && self.book.as_ref().is_ok_and(|b| b.retyped(cx.env()));
+        // A layer switched on or off: drawn again.
+        if changed.is_some() && cx.env().page_layers.get_by_switch(id).is_some() && !font_changed {
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Partial);
+            return;
+        }
         // How marks look, or what decorators mark (a switch, their data):
         // the page drawn again as it is laid out.
         if changed.is_some()
