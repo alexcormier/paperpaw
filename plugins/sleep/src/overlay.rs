@@ -100,20 +100,22 @@ impl core::fmt::Debug for Over {
     }
 }
 
-/// What goes over the page, made for its box; why not, where nothing can
-/// (a file PaperPaw does not read, an empty folder).
+/// What goes over the page, made for its box; why not, in the reader's
+/// language, where nothing can (a file PaperPaw does not read, an empty
+/// folder).
 pub(crate) fn over(env: &Env<'_>) -> Result<Over, String> {
+    let tr = |key: &str, name: &str| env.i18n.tr(key).replace("{name}", name);
     let widget = env.settings.text(WIDGET.as_str()).trim();
     if !widget.is_empty() {
         return env
             .widgets
             .make(widget, env)
             .map(Over::Widget)
-            .ok_or_else(|| format!("no widget `{widget}`"));
+            .ok_or_else(|| tr("sleep.overlay.no-widget", widget));
     }
     let chosen = env.settings.text(PICTURE.as_str()).trim().to_string();
     let path = if chosen.is_empty() {
-        crate::next_from_folder(env).ok_or_else(|| "no picture in the folder".to_string())?
+        crate::next_from_folder(env).ok_or_else(|| tr("sleep.overlay.empty-folder", ""))?
     } else {
         chosen
     };
@@ -127,7 +129,8 @@ fn picture(env: &Env<'_>, path: &str) -> Result<ImageRef, String> {
     let side = u32::from(box_side(env));
     let decoded = crate::data("overlay.gray");
     let kept = crate::data("overlay.key");
-    let key = key(env, path, side).ok_or_else(|| format!("{path}: not found"))?;
+    let missing = || env.i18n.tr("sleep.overlay.missing").replace("{name}", path);
+    let key = key(env, path, side).ok_or_else(missing)?;
     let same = paperpaw_sdk::read_file(env.storage, &kept, 1024).is_ok_and(|k| k == key.as_bytes());
     if same && let Some(file) = paperpaw_sdk::image::AlphaFile::open(env.storage, &decoded) {
         return Ok(ImageRef {
@@ -136,13 +139,20 @@ fn picture(env: &Env<'_>, path: &str) -> Result<ImageRef, String> {
             height: file.height,
         });
     }
+    // The key names the decoded file only once it is decoded.
+    let _ = env.storage.remove(&kept);
     let image = paperpaw_sdk::image::picture_with_alpha(
         env.storage,
         path,
         &decoded,
         paperpaw_sdk::image::Fit::side(side),
     )
-    .map_err(|e| format!("{path}: {e}"))?;
+    .map_err(|e| {
+        env.i18n
+            .tr("sleep.overlay.unreadable")
+            .replace("{name}", path)
+            .replace("{reason}", &format!("{e}"))
+    })?;
     let _ = env.storage.write(&kept, key.as_bytes());
     Ok(image)
 }

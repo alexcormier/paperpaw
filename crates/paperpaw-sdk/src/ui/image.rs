@@ -146,11 +146,12 @@ fn between(i: usize, out: usize, source: usize) -> (usize, usize, u32) {
     (first, (first + 1).min(source - 1), (at & 255) as u32)
 }
 
-/// [`draw_image_over`] for a picture drawn as gray: made smaller, each
-/// pixel the mean of the columns it covers, its gray weighted by how
-/// opaque each is; made larger, interpolated between the four pixels
-/// around it (bilinear, in whole numbers). Opaque and not to be seen
-/// through, it is drawn as gray rows.
+/// [`draw_image_over`] for a picture drawn as gray, each axis on its
+/// own: made smaller, each pixel the mean of the columns it covers (one
+/// row read for it), its gray weighted by how opaque each is; made
+/// larger, interpolated between the pixels around it (bilinear, in whole
+/// numbers). Opaque and not to be seen through, it is drawn as gray
+/// rows.
 fn draw_source(
     canvas: &mut Canvas<'_>,
     storage: &dyn Storage,
@@ -170,81 +171,131 @@ fn draw_source(
     if first >= last {
         return;
     }
-    let larger = w > sw || h > sh;
+    // An axis made larger interpolates, one made smaller averages.
+    let (wider, taller) = (w > sw, h > sh);
     let blended = opacity < 255 || matches!(source, ImageSource::Alpha(_));
     let mut rows = RowChunk::new(sw * source.bytes());
-    // The source rows interpolated between, as gray and opacity.
+    // The source row a screen row comes from, as gray and opacity; made
+    // taller, the one below it too, and the two mixed.
     let mut upper = alloc::vec![0u8; sw * 2];
-    let mut lower = alloc::vec![0u8; sw * 2];
-    let mut held: (Option<usize>, Option<usize>) = (None, None);
+    let mut lower = alloc::vec![0u8; if taller { sw * 2 } else { 0 }];
+    let mut mixed = alloc::vec![0u8; if taller { sw * 2 } else { 0 }];
+    let (mut held_upper, mut held_lower) = (None, None);
     let mut row = alloc::vec![0u8; w * if blended { 2 } else { 1 }];
     let mut made = None;
     for y in first..last {
         let oy = (y - top) as usize;
-        let (above, below, ty) = if larger {
+        let (above, below, ty) = if taller {
             between(oy, h, sh)
         } else {
             let sy = oy * sh / h;
             (sy, sy, 0)
         };
-        if made == Some((above, below, ty)) {
-            draw_row(canvas, left, y, &row, blended, opacity);
-            continue;
-        }
-        // The rows needed, read and turned into gray and opacity.
-        for (want, buffer, slot) in [(above, &mut upper, 0), (below, &mut lower, 1)] {
-            let have = if slot == 0 { held.0 } else { held.1 };
-            if have == Some(want) {
-                continue;
-            }
-            let Some(read) = rows.get(want as u32, |y, out| source.read_rows(storage, y, out))
-            else {
+        if made != Some((above, below, ty)) {
+            if !load(
+                &mut rows,
+                source,
+                storage,
+                above,
+                &mut upper,
+                &mut held_upper,
+            ) {
                 return;
-            };
-            source.gray_alpha(read, buffer);
-            if slot == 0 {
-                held.0 = Some(want);
-            } else {
-                held.1 = Some(want);
             }
-        }
-        made = Some((above, below, ty));
-        for x in 0..w {
-            let (gray, alpha) = if larger {
-                let (x0, x1, tx) = between(x, w, sw);
-                let corners = [
-                    (&upper, x0, (256 - tx) * (256 - ty)),
-                    (&upper, x1, tx * (256 - ty)),
-                    (&lower, x0, (256 - tx) * ty),
-                    (&lower, x1, tx * ty),
-                ];
-                let (mut weighted, mut opaque) = (0u32, 0u32);
-                for (line, i, weight) in corners {
-                    let (g, a) = (u32::from(line[i * 2]), u32::from(line[i * 2 + 1]));
-                    weighted += g * a * weight / 256;
-                    opaque += a * weight / 256;
+            let between_rows = ty > 0 && below != above;
+            if between_rows {
+                if !load(
+                    &mut rows,
+                    source,
+                    storage,
+                    below,
+                    &mut lower,
+                    &mut held_lower,
+                ) {
+                    return;
                 }
-                (weighted.checked_div(opaque), opaque / 256)
-            } else {
-                let from = x * sw / w;
-                let to = ((x + 1) * sw / w).max(from + 1).min(sw);
-                let (mut weighted, mut opaque) = (0u32, 0u32);
-                for i in from..to {
-                    let (g, a) = (u32::from(upper[i * 2]), u32::from(upper[i * 2 + 1]));
-                    weighted += g * a;
-                    opaque += a;
-                }
-                (weighted.checked_div(opaque), opaque / (to - from) as u32)
-            };
-            let gray = gray.map_or(255, |g| g.min(255) as u8);
-            if blended {
-                row[x * 2] = gray;
-                row[x * 2 + 1] = alpha.min(255) as u8;
-            } else {
-                row[x] = gray;
+                mix(&upper, &lower, ty, &mut mixed);
             }
+            let line: &[u8] = if between_rows { &mixed } else { &upper };
+            made_row(line, sw, wider, blended, &mut row);
+            made = Some((above, below, ty));
         }
         draw_row(canvas, left, y, &row, blended, opacity);
+    }
+}
+
+/// Reads source row `y` into `into` as gray and opacity, unless it holds
+/// it already (`held`); whether it could be read.
+fn load(
+    rows: &mut RowChunk,
+    source: &ImageSource,
+    storage: &dyn Storage,
+    y: usize,
+    into: &mut [u8],
+    held: &mut Option<usize>,
+) -> bool {
+    if *held == Some(y) {
+        return true;
+    }
+    let Some(read) = rows.get(y as u32, |y, out| source.read_rows(storage, y, out)) else {
+        return false;
+    };
+    source.gray_alpha(read, into);
+    *held = Some(y);
+    true
+}
+
+/// `upper` and `lower` (gray and opacity) mixed into `out`, `t` (in
+/// 256ths) towards `lower`, the gray weighted by opacity.
+fn mix(upper: &[u8], lower: &[u8], t: u32, out: &mut [u8]) {
+    let pairs = upper
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .zip(lower.as_chunks::<2>().0);
+    for (pixel, (&[g0, a0], &[g1, a1])) in out.as_chunks_mut::<2>().0.iter_mut().zip(pairs) {
+        let (a0, a1) = (u32::from(a0) * (256 - t), u32::from(a1) * t);
+        let opaque = a0 + a1;
+        let weighted = u32::from(g0) * a0 + u32::from(g1) * a1;
+        let gray = weighted
+            .checked_div(opaque)
+            .map_or(255, |g| g.min(255) as u8);
+        *pixel = [gray, (opaque / 256).min(255) as u8];
+    }
+}
+
+/// A screen row `out` made of the source row `line` (gray and opacity,
+/// `sw` pixels): interpolated between columns where it is made wider,
+/// each pixel the mean of the columns it covers where it is not.
+fn made_row(line: &[u8], sw: usize, wider: bool, blended: bool, out: &mut [u8]) {
+    let w = out.len() / if blended { 2 } else { 1 };
+    let pixel = |i: usize| (u32::from(line[i * 2]), u32::from(line[i * 2 + 1]));
+    for x in 0..w {
+        let (weighted, opaque, count) = if wider {
+            let (x0, x1, tx) = between(x, w, sw);
+            let ((g0, a0), (g1, a1)) = (pixel(x0), pixel(x1));
+            let (a0, a1) = (a0 * (256 - tx), a1 * tx);
+            (g0 * a0 + g1 * a1, a0 + a1, 256)
+        } else {
+            let from = x * sw / w;
+            let to = ((x + 1) * sw / w).max(from + 1).min(sw);
+            let (mut weighted, mut opaque) = (0u32, 0u32);
+            for i in from..to {
+                let (g, a) = pixel(i);
+                weighted += g * a;
+                opaque += a;
+            }
+            (weighted, opaque, (to - from) as u32)
+        };
+        let gray = weighted
+            .checked_div(opaque)
+            .map_or(255, |g| g.min(255) as u8);
+        if blended {
+            out[x * 2] = gray;
+            out[x * 2 + 1] = (opaque / count).min(255) as u8;
+        } else {
+            out[x] = gray;
+        }
     }
 }
 

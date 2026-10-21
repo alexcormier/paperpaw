@@ -285,6 +285,7 @@ fn the_kind_of_a_decoded_file_is_read_from_its_header_once() {
             Decoded::Gray(_) => 1,
             Decoded::Color(_) => 3,
             Decoded::Alpha(_) => 2,
+            _ => 0,
         };
         assert_eq!(kind, bytes);
         let file = ImageFile::open(&storage, "f").unwrap();

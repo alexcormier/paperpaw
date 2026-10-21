@@ -217,3 +217,28 @@ proptest! {
         prop_assert_eq!(drawn_outside(&mut frame, both), None);
     }
 }
+
+/// Each axis on its own: made taller but narrower, the columns are
+/// averaged (not sampled between), the rows interpolated.
+#[test]
+fn an_axis_made_smaller_is_averaged_while_the_other_grows() {
+    let storage = MemoryStorage::new();
+    let mut writer = GrayWriter::new(&storage, "stripes.gray");
+    writer.start(8, 1).unwrap();
+    writer.row(&[0, 255, 0, 255, 0, 255, 0, 255]).unwrap();
+    writer.finish().unwrap();
+    let image = ImageRef {
+        path: "stripes.gray".into(),
+        width: 8,
+        height: 1,
+    };
+    let mut frame =
+        paperpaw_graphics::Framebuffer::new(4, 4, paperpaw_sdk::PixelFormat::Gray8).unwrap();
+    ui::draw_image(&mut frame.canvas(), &storage, &image, Rect::new(0, 0, 4, 4));
+    for y in 0..4 {
+        for x in 0..4 {
+            let luma = pixel(&frame, x, y).luma();
+            assert!(luma.abs_diff(127) <= 1, "{x},{y}: {luma}");
+        }
+    }
+}

@@ -1,5 +1,5 @@
 pub mod paperpaw_image
-pub enum paperpaw_image::Decoded
+#[non_exhaustive] pub enum paperpaw_image::Decoded
 pub paperpaw_image::Decoded::Alpha(paperpaw_image::AlphaFile)
 pub paperpaw_image::Decoded::Color(paperpaw_image::ColorFile)
 pub paperpaw_image::Decoded::Gray(paperpaw_image::GrayFile)

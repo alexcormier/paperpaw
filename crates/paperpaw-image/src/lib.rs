@@ -670,6 +670,7 @@ impl ImageFile {
 
 /// A decoded image in storage, of the kind its first bytes name.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Decoded {
     Gray(GrayFile),
     Color(ColorFile),

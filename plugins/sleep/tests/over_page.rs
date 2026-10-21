@@ -11,6 +11,8 @@
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
+use std::sync::atomic::{AtomicUsize, Ordering};
+
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::{
     Color, DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation,
@@ -146,6 +148,10 @@ struct Owls;
 
 struct Night;
 
+/// How often the night was shown, and woken.
+static NIGHT_SHOWN: AtomicUsize = AtomicUsize::new(0);
+static NIGHT_WOKEN: AtomicUsize = AtomicUsize::new(0);
+
 impl Screen for Night {
     fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
         canvas.clear(Color::BLACK);
@@ -153,6 +159,16 @@ impl Screen for Night {
 
     fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
         Handled::No
+    }
+
+    fn on_show(&mut self, _: &mut Cx<'_, '_>) {
+        NIGHT_SHOWN.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn on_event(&mut self, event: &Id, _: &Params, _: &mut Cx<'_, '_>) {
+        if *event == paperpaw_sdk::builtin::events::RESUME {
+            NIGHT_WOKEN.fetch_add(1, Ordering::Relaxed);
+        }
     }
 }
 
@@ -547,6 +563,19 @@ fn the_picture_is_decoded_once_while_it_stays_the_same() {
     let shown = device.render().to_vec();
     let (left, top, _) = BOX;
     assert_eq!(at(&shown, left + 2, top + 2), Color::BLACK, "the kept one");
+    // A picture that cannot be read: the key of the one before goes.
+    device.wake();
+    let key = format!("{}/overlay.key", Env::plugin_dir("sleep"));
+    assert!(device.kernel.storage().exists(&key));
+    device
+        .kernel
+        .storage()
+        .write("owls/broken.png", b"not a picture")
+        .unwrap();
+    device.set("sleep.overlay-picture", "owls/broken.png");
+    device.run(actions::SLEEP);
+    assert!(!device.kernel.storage().exists(&key));
+    device.set("sleep.overlay-picture", "");
     // Larger: decoded anew, the ring's clear corner showing the page.
     device.wake();
     device.set("sleep.overlay-size", "60");
@@ -614,8 +643,10 @@ fn other_plugins_add_sleep_modes() {
     let shown = device.render().to_vec();
     assert_eq!(at(&shown, 240, 400), Color::BLACK);
     assert_eq!(at(&shown, 5, 9), Color::BLACK);
+    assert!(NIGHT_SHOWN.load(Ordering::Relaxed) >= 1, "told it shows");
     // Asleep as the sleep screen is: it closes as the device wakes.
     device.wake();
+    assert!(NIGHT_WOKEN.load(Ordering::Relaxed) >= 1, "told of waking");
     assert_ne!(device.kernel.active_screen().map(Id::as_str), Some(SCREEN));
 }
 

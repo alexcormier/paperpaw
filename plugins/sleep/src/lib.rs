@@ -511,6 +511,21 @@ impl Screen for SleepScreen {
         if self.show != PAGE {
             cx.request_refresh(RefreshMode::Full);
         }
+        if let Some(shown) = &mut self.shown {
+            shown.on_show(cx);
+        }
+    }
+
+    fn on_hide(&mut self) {
+        if let Some(shown) = &mut self.shown {
+            shown.on_hide();
+        }
+    }
+
+    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        if let Some(shown) = &mut self.shown {
+            shown.on_timer(cx);
+        }
     }
 
     /// A cover or a picture (also over the page): in grays where the
@@ -537,7 +552,10 @@ impl Screen for SleepScreen {
         }
     }
 
-    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        if let Some(shown) = &mut self.shown {
+            shown.on_event(event, params, cx);
+        }
         if *event == events::RESUME {
             // Awake: gone, if on top. A screen that opened as the device
             // woke (a lock) is above it now; this one goes when it shows
