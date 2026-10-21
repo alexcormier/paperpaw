@@ -456,6 +456,9 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
         findings(&run, report);
         runs.push(run);
     }
+    if context.in_memory {
+        return Ok(());
+    }
     let dir = context.path("perf");
     std::fs::create_dir_all(&dir).map_err(|e| format!("{}: {e}", dir.display()))?;
     let file = dir.join("index.html");
@@ -470,6 +473,9 @@ fn measure_variant(context: &Context, variant: &Variant) -> Result<Run, String> 
         settings: context.settings.clone(),
         ..Start::default()
     };
+    // Heap of no session's: another device running beside the checks
+    // (the browser's emulator), not what the app keeps.
+    let outside = budget::stats().live;
     let mut session = Session::start(context, variant, &start)?;
     // A book read a little, as on a device in use: the home screen and
     // the book widgets show it, with its cover.
@@ -485,7 +491,7 @@ fn measure_variant(context: &Context, variant: &Variant) -> Result<Run, String> 
     cases::home(&mut session);
     let calibration = calibrate(&mut session);
     drop(session.frames());
-    let app = budget::stats().live;
+    let app = budget::stats().live.saturating_sub(outside);
     let mut run = Run {
         variant: variant.clone(),
         calibration,

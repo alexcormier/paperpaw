@@ -10,7 +10,7 @@ use std::path::Path;
 
 use paperpaw_dev::data;
 use paperpaw_dev::report::Level;
-use paperpaw_dev::target::DataPlugin;
+use paperpaw_dev::target::{DataPlugin, Target};
 use paperpaw_emulator::profiles;
 
 fn sample(name: &str) -> DataPlugin {
@@ -22,10 +22,20 @@ fn sample(name: &str) -> DataPlugin {
     DataPlugin::new(&read.id, read.files)
 }
 
+
+/// What is looked at: the data plugins `plugins`.
+fn of(plugins: Vec<DataPlugin>) -> Target {
+    let mut target = Target::default();
+    for plugin in plugins {
+        target.take_data(plugin);
+    }
+    target
+}
+
 #[test]
 fn a_sample_theme_passes_in_memory() {
     let x4 = profiles::find("xteink-x4").unwrap();
-    let report = data::check(vec![sample("theme-paw")], vec![x4], &[]).unwrap();
+    let report = data::check(of(vec![sample("theme-paw")]), vec![x4], &[]).unwrap();
     assert_eq!(report.ran, data::COMMANDS);
     let errors: Vec<_> = report
         .findings
@@ -51,7 +61,7 @@ fn a_damaged_plugin_is_found_wanting() {
     ]);
     let boox = profiles::find("boox-go-7").unwrap();
     let plugin = DataPlugin::new("dusk", files);
-    let report = data::check(vec![plugin], vec![boox], &["package", "lint"]).unwrap();
+    let report = data::check(of(vec![plugin]), vec![boox], &["package", "lint"]).unwrap();
     assert_eq!(report.ran, ["package", "lint"]);
     assert!(
         report
@@ -82,7 +92,7 @@ fn a_damaged_plugin_is_found_wanting() {
         ),
     ]);
     let plugin = DataPlugin::new("dusk", files);
-    let report = data::check(vec![plugin], vec![boox], &["lint"]).unwrap();
+    let report = data::check(of(vec![plugin]), vec![boox], &["lint"]).unwrap();
     assert!(
         report
             .findings
@@ -95,7 +105,7 @@ fn a_damaged_plugin_is_found_wanting() {
 
 #[test]
 fn only_checks_of_data_plugins_are_run() {
-    let error = data::check(Vec::new(), Vec::new(), &["perf"]).unwrap_err();
+    let error = data::check(Target::default(), Vec::new(), &["perf"]).unwrap_err();
     assert!(error.contains("perf"));
 }
 

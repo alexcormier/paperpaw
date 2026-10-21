@@ -96,9 +96,7 @@ function draw() {
     context.putImageData(device.frame(), 0, 0);
     return device.animating();
   });
-  // A full refresh flashing goes by the clock: it moves on with it (and
-  // draws again), not only when the device next has work.
-  if (animating) step();
+  if (animating) requestDraw();
 }
 
 function requestDraw() {
@@ -232,8 +230,8 @@ async function screenshot({ profile, dark, asleep }) {
   return { png: new Uint8Array(await blob.arrayBuffer()) };
 }
 
-function check({ commands }) {
-  return { report: device.check(commands ?? []) };
+function check({ commands, plugins }) {
+  return { report: device.check(commands ?? [], plugins ?? []) };
 }
 
 const HANDLERS = { start, files, input, screenshot, check };

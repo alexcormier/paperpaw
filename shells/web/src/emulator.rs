@@ -10,8 +10,8 @@ use std::rc::Rc;
 use paperpaw_core::sdk::install::{is_plugin_name, is_safe_path};
 use paperpaw_core::sdk::{MemoryStorage, Storage};
 use paperpaw_dev::report::json_string;
-use paperpaw_dev::target::DataPlugin;
-use paperpaw_emulator::device::Device;
+use paperpaw_dev::target::{DataPlugin, Target};
+use paperpaw_emulator::device::{AddPlugins, Device};
 use paperpaw_emulator::profiles::{self, Profile};
 use paperpaw_emulator::{budget, panel, trace};
 use paperpaw_platform::{
@@ -144,7 +144,7 @@ impl Emulator {
             self.language
         );
         let mut device =
-            Device::in_memory(self.profile, Some(config), self.files.clone(), true, None)
+            Device::in_memory(self.profile, Some(config), self.files.clone(), true, added())
                 .map_err(|e| e.to_string())?;
         device.start();
         self.device = Some(device);
@@ -207,15 +207,6 @@ impl Emulator {
     /// browser counts it) and does what is due; how many milliseconds
     /// until something is due next, `None` if nothing is.
     pub fn advance(&mut self, now_ms: u64) -> Option<u64> {
-        #[cfg(target_arch = "wasm32")]
-        paperpaw_emulator::host::set_micros(now_ms.saturating_mul(1000));
-        self.run_to(now_ms)
-    }
-
-    /// Lets the device's own time run to `now_ms` and does what is due,
-    /// the host's clock left as it is (a snapshot's device runs ahead of
-    /// it); as [`Emulator::advance`] says.
-    fn run_to(&mut self, now_ms: u64) -> Option<u64> {
         let device = self.device.as_mut()?;
         let now = device.now().millis();
         device.advance(now_ms.saturating_sub(now));
@@ -283,20 +274,33 @@ impl Emulator {
         self.device.as_ref().is_some_and(|d| d.panel.is_animating())
     }
 
-    /// The data plugins given, checked by `paperpaw-dev` on this device's
-    /// profile with `commands` (none: package, lint, visual and reach);
-    /// its report as JSON (`report.json`).
-    pub fn check(&mut self, commands: &[&str]) -> Result<String, String> {
-        if self.plugins.is_empty() {
+    /// The data plugins given and the plugins with code named in `code`
+    /// (added with [`set_plugins`]), checked by `paperpaw-dev` on this
+    /// device's profile with `commands` (none: package, lint, visual and
+    /// reach; `perf` too where code is checked); its report as JSON
+    /// (`report.json`).
+    pub fn check(&mut self, commands: &[&str], code: &[&str]) -> Result<String, String> {
+        if self.plugins.is_empty() && code.is_empty() {
             return Err("no data plugin on the card to check".to_string());
         }
+        let mut target = Target::default();
+        if !code.is_empty() {
+            let add = added().ok_or("no plugin with code was added (`set_plugins`)")?;
+            let device = self.device.as_ref().ok_or("the device has not started")?;
+            for id in code {
+                if !device.kernel.plugins().iter().any(|p| p.manifest.id.as_str() == *id) {
+                    return Err(format!("no plugin `{id}` in the app"));
+                }
+                target.plugins.push((*id).to_string());
+            }
+            target.add = Some(add);
+        }
         // Read from the card, held while checked.
-        let plugins = self
-            .plugins
-            .iter()
-            .map(|id| DataPlugin::new(id, files_under(&*self.files, &format!("plugins/{id}"))))
-            .collect();
-        let report = paperpaw_dev::data::check(plugins, vec![self.profile], commands);
+        for id in &self.plugins {
+            let files = files_under(&*self.files, &format!("plugins/{id}"));
+            target.take_data(DataPlugin::new(id, files));
+        }
+        let report = paperpaw_dev::data::check(target, vec![self.profile], commands);
         // The checks measure their own devices; this one keeps its budget
         // and records no frames.
         trace::stop_recording();
@@ -327,7 +331,7 @@ impl Emulator {
         // Its memory is no part of this device's.
         budget::override_limit(None);
         let made = other.start().map(|()| {
-            other.run_to(5_000);
+            other.advance(5_000);
             if asleep && let Some(device) = &mut other.device {
                 device.call(|kernel, now| {
                     kernel.open_slot(
@@ -337,7 +341,7 @@ impl Emulator {
                     )
                 });
             }
-            other.run_to(10_000);
+            other.advance(10_000);
             let (width, height) = other.size();
             (width, height, other.shown())
         });
@@ -377,6 +381,33 @@ impl Emulator {
             json_string(&version()),
         )
     }
+}
+
+/// The plugins with code added to the standard app ([`set_plugins`]).
+static PLUGINS: std::sync::Mutex<Option<AddPlugins>> = std::sync::Mutex::new(None);
+
+/// Adds plugins with code to the standard app of every device started
+/// after: for a module built around a plugin being written, a crate of
+/// its own with `paperpaw-web` as a library and a `cdylib` of its own
+/// (the module the page loads, with all of this one's functions). It
+/// calls this from a function `pp_plugins` it exports, which the page's
+/// loader calls first:
+///
+/// ```ignore
+/// #[unsafe(no_mangle)]
+/// pub extern "C" fn pp_plugins() {
+///     paperpaw_web::set_plugins(|app| app.plugin(my_plugin::MyPlugin));
+/// }
+/// ```
+///
+/// Its checks name the plugin's id ([`Emulator::check`]).
+pub fn set_plugins(add: AddPlugins) {
+    *PLUGINS.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(add);
+}
+
+/// The plugins with code added ([`set_plugins`]).
+fn added() -> Option<AddPlugins> {
+    *PLUGINS.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// The darkest a gray e-ink panel shows: its black reflects about a

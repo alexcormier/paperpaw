@@ -195,15 +195,15 @@ fn a_data_plugin_shows_after_a_restart() {
 fn the_plugin_is_checked_and_the_device_keeps_going() {
     let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
     let mut emulator = started("xteink-x4");
-    assert!(emulator.check(&[]).is_err(), "nothing to check");
+    assert!(emulator.check(&[], &[]).is_err(), "nothing to check");
     for (path, bytes) in sample("theme-paw") {
         emulator.put_file("theme-paw", &path, &bytes).unwrap();
     }
     emulator.restart();
-    let json = emulator.check(&["package", "lint"]).unwrap();
+    let json = emulator.check(&["package", "lint"], &[]).unwrap();
     assert!(json.contains("\"findings\""), "{json}");
     assert!(json.contains("package.size"), "{json}");
-    assert!(emulator.check(&["perf"]).is_err());
+    assert!(emulator.check(&["perf"], &[]).is_err());
     // The device runs on after the check.
     assert!(emulator.button("right", true, 5_000));
     emulator.advance(20_000);

@@ -1,8 +1,8 @@
 //! What the emulated device takes from the computer it runs on: the time
 //! that passes and random numbers. On a computer with an operating system
 //! they come from it; in a browser (`wasm32`), where neither is reachable
-//! from Rust alone, the shell hands them in ([`set_micros`],
-//! [`set_random`]).
+//! from Rust alone, the shell hands in where to read them
+//! ([`set_clock`], [`set_random`]).
 
 /// Random bytes into the buffer; `false` where there are none.
 pub type Random = fn(&mut [u8]) -> bool;
@@ -18,22 +18,25 @@ pub fn micros() -> u64 {
         .as_micros() as u64
 }
 
-/// Microseconds since the emulator started, as the shell last said
-/// ([`set_micros`]).
+/// Microseconds as the shell's clock counts them ([`set_clock`]), 0
+/// before it set one.
 #[cfg(target_arch = "wasm32")]
 pub fn micros() -> u64 {
-    MICROS.load(std::sync::atomic::Ordering::Relaxed)
+    CLOCK.get().map_or(0, |clock| clock())
 }
 
+/// Microseconds since some moment that stays; they never go back.
 #[cfg(target_arch = "wasm32")]
-static MICROS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+pub type Clock = fn() -> u64;
 
-/// Tells the time that has passed since the emulator started, where the
-/// operating system cannot (a browser's `performance.now()`); it never
-/// goes back.
 #[cfg(target_arch = "wasm32")]
-pub fn set_micros(micros: u64) {
-    MICROS.fetch_max(micros, std::sync::atomic::Ordering::Relaxed);
+static CLOCK: std::sync::OnceLock<Clock> = std::sync::OnceLock::new();
+
+/// Takes the time from `clock` where the operating system cannot tell
+/// it (a browser's `performance.now()`); the first one set stays.
+#[cfg(target_arch = "wasm32")]
+pub fn set_clock(clock: Clock) {
+    let _ = CLOCK.set(clock);
 }
 
 /// Random bytes from the operating system, or from the source the shell

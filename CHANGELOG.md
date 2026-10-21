@@ -17,7 +17,10 @@ change the plugin SDK.
   `Device::in_memory`), time and random numbers from the page where
   there is no operating system (`host`). `paperpaw-dev` checks data
   plugins handed in as files (`target::DataPlugin` holds them,
-  `data::check`), its libraries kept in memory where asked
+  `data::check`), and plugins with code added to the app (a module of
+  their own around `paperpaw-web` as a library: `set_plugins`, called
+  from its `pp_plugins`; `check` with `plugins` runs `lint`, `visual`,
+  `reach` and `perf` on them), its libraries kept in memory where asked
   (`Context::in_memory`). The frame says when the device ran out of its
   memory (`out-of-memory`, after the module stopped and started again;
   `budget::last_refused` and `budget::clear_last_refused` tell the size

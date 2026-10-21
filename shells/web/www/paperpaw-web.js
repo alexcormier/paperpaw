@@ -48,12 +48,15 @@ export class PaperPawDevice {
         log: (ptr, len) => {
           console.error("paperpaw:", decoder.decode(new Uint8Array(device.memory.buffer, ptr, len)));
         },
+        now: () => performance.now(),
       },
     };
     const instance = await WebAssembly.instantiate(module, imports);
     device.module = module;
     device.exports = instance.exports;
     device.memory = instance.exports.memory;
+    // A module built around plugins with code adds them first.
+    device.exports.pp_plugins?.();
     return device;
   }
 
@@ -201,8 +204,8 @@ export class PaperPawDevice {
 
   /// paperpaw-dev's report of the data plugins on the card (`commands`:
   /// some of package, lint, visual, reach; none: all).
-  check(commands = []) {
-    this.#check(this.#with([commands.join(",")], (p, l) => this.exports.pp_check(p, l)));
+  check(commands = [], plugins = []) {
+    this.#check(this.#with([commands.join(","), plugins.join(",")], (...args) => this.exports.pp_check(...args)));
     return JSON.parse(this.#result());
   }
 }

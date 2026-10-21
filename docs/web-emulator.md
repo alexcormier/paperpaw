@@ -33,7 +33,7 @@ false`, no `winit`) and for `wasm32`:
   `Device::in_memory`); a restart reads the card anew, so changed plugin
   files show after it.
 - Time and random numbers come from the computer, or in a browser from
-  the page (`host::set_micros`, `host::set_random`). The emulated wall
+  the page (`host::set_clock`, `host::set_random`). The emulated wall
   clock is fixed (14 October 2026, 10:41), as in `paperpaw-dev`'s
   pictures.
 - In a browser there is no network: requests fail at once, plugins'
@@ -60,7 +60,7 @@ stops the device too), the frame says so before it starts again:
 | `{ type: "files", id, files }` | Replaces a data plugin's files (whatever of it was on the card goes) and starts the device again (a few milliseconds); `files: {}` takes it off | `{}` |
 | `{ type: "input", event }` | `event`: `{ kind: "button", name, pressed }`, `{ kind: "button", name, hold }` (a long press, held `hold` ms), `{ kind: "key", key, pressed }` (the keyboard's keys as the desktop emulator maps them), `{ kind: "pointer", phase: "down" \| "move" \| "up" \| "cancel", x, y }` (the screen's pixels) | `{}` |
 | `{ type: "screenshot", profile?, dark?, asleep? }` | The panel as it shows, at the device's resolution; with `profile`, `dark` or `asleep`, what that device, night mode or the sleep screen would show with the same card, made apart (what is shown stays) | `{ png }` (bytes) |
-| `{ type: "check", commands? }` | `paperpaw-dev`'s checks of the data plugins on the card, on this device: `package`, `lint`, `visual`, `reach` (all if none named), the libraries in memory | `{ report }` (as `report.json`) |
+| `{ type: "check", commands?, plugins? }` | `paperpaw-dev`'s checks of the data plugins on the card, on this device: `package`, `lint`, `visual`, `reach` (all if none named), the libraries in memory; with `plugins`, the ids of plugins with code the module adds (see below), checked too, `perf` among the commands | `{ report }` (as `report.json`) |
 
 The frame draws at the device's resolution: each of its pixels a whole
 number of the screen's (devicePixelRatio counted), crisp, where it fits
@@ -72,9 +72,14 @@ device's buttons are below it, its keys on the keyboard, and the screen
 takes touch where the device has a touch screen.
 
 A code plugin cannot be added to the running module: WebAssembly shares
-no Rust types between modules. A build of the whole app with the plugin
-compiled in (as `paperpaw-dev`'s harness does) is the way, and it speaks
-the same messages.
+no Rust types between modules. A module of its own is: a crate with
+`paperpaw-web` as a library (its `#[no_mangle]` functions are the new
+module's too) and `crate-type = ["cdylib"]`, which exports `pp_plugins`
+calling `paperpaw_web::set_plugins` with the plugins to add. The loader
+calls `pp_plugins` first where a module has it; the frame and its
+messages stay the same, and `check` with `plugins: ["<id>"]` looks at
+the plugin as `paperpaw-dev check --plugin <id>` does (`lint`, `visual`,
+`reach`, `perf`).
 
 ## The module
 
@@ -96,8 +101,10 @@ const report = device.check(["package", "lint"]);
 
 Buttons and touch take the time they happen at, as `advance` does: the
 device lets time pass to then first, so that a press is as long as it
-was held, also after a while in which nothing was due. While a full
-refresh flashes (`animating()`), `advance` moves it on.
+was held, also after a while in which nothing was due. A full
+refresh flashes by the page's clock (`animating()` while it does).
 
 The module imports `paperpaw.random(ptr, len)` (fills memory with random
-bytes, returns 1) and `paperpaw.log(ptr, len)` (a panic's message).
+bytes, returns 1), `paperpaw.log(ptr, len)` (a panic's message) and
+`paperpaw.now()` (`performance.now()`: the panel's animations, the time
+plugins take, which `perf` measures).

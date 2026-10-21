@@ -4,9 +4,11 @@
 //! through memory the script asks for ([`pp_alloc`]); texts come back
 //! through the result buffer ([`pp_result_ptr`], [`pp_result_len`]).
 //!
-//! The module imports two functions from `paperpaw`: `random(ptr, len)`,
-//! which fills memory with random bytes and returns 1, and `log(ptr,
-//! len)`, which shows a text (a panic's message).
+//! The module imports three functions from `paperpaw`: `random(ptr,
+//! len)`, which fills memory with random bytes and returns 1, `log(ptr,
+//! len)`, which shows a text (a panic's message), and `now()`, the
+//! page's `performance.now()` in milliseconds (the panel's animations,
+//! the time plugins take).
 //!
 //! A panic stops a call in its middle (a trap): the module's memory stays
 //! as it was, its state held. Every call after that says so ([`STOPPED`],
@@ -25,6 +27,14 @@ unsafe extern "C" {
     fn host_random(ptr: *mut u8, len: usize) -> u32;
     #[link_name = "log"]
     fn host_log(ptr: *const u8, len: usize);
+    #[link_name = "now"]
+    fn host_now() -> f64;
+}
+
+/// The page's clock in microseconds.
+fn clock() -> u64 {
+    // SAFETY: the import takes nothing and returns a number.
+    (unsafe { host_now() } * 1000.0) as u64
 }
 
 #[derive(Debug, Default)]
@@ -174,6 +184,7 @@ pub unsafe extern "C" fn pp_new(
 ) -> u32 {
     std::panic::set_hook(Box::new(|info| log(&info.to_string())));
     paperpaw_emulator::host::set_random(random);
+    paperpaw_emulator::host::set_clock(clock);
     // SAFETY: as the caller promises.
     let (profile, language) = unsafe {
         (
@@ -414,26 +425,40 @@ pub extern "C" fn pp_device() -> u32 {
     failed
 }
 
-/// Checks the data plugins with `paperpaw-dev`: the commands named,
-/// separated by commas (empty: all for data plugins); the report as JSON
-/// into the result buffer.
+/// Checks the data plugins and the plugins with code named with
+/// `paperpaw-dev` (see [`Emulator::check`]): the commands and the code
+/// plugins' ids, each separated by commas (no commands: all for data
+/// plugins); the report as JSON into the result buffer.
 ///
 /// # Safety
 ///
-/// The text is memory the script wrote ([`pp_alloc`]).
+/// The texts are memory the script wrote ([`pp_alloc`]).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn pp_check(commands_ptr: *const u8, commands_len: usize) -> u32 {
+pub unsafe extern "C" fn pp_check(
+    commands_ptr: *const u8,
+    commands_len: usize,
+    code_ptr: *const u8,
+    code_len: usize,
+) -> u32 {
+    let list = |text: &str| -> Vec<String> {
+        text.split(',')
+            .map(str::trim)
+            .filter(|c| !c.is_empty())
+            .map(String::from)
+            .collect()
+    };
     // SAFETY: as the caller promises.
-    let commands: Vec<String> = unsafe { text(commands_ptr, commands_len) }
-        .split(',')
-        .map(str::trim)
-        .filter(|c| !c.is_empty())
-        .map(String::from)
-        .collect();
+    let (commands, code) = unsafe {
+        (
+            list(text(commands_ptr, commands_len)),
+            list(text(code_ptr, code_len)),
+        )
+    };
     let commands: Vec<&str> = commands.iter().map(String::as_str).collect();
+    let code: Vec<&str> = code.iter().map(String::as_str).collect();
     let mut json = String::new();
     let failed = with(|emulator| {
-        json = emulator.check(&commands)?;
+        json = emulator.check(&commands, &code)?;
         Ok(())
     });
     if failed == 0 {
