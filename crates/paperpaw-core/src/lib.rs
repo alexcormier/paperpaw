@@ -718,7 +718,7 @@ impl Kernel {
     }
 
     /// Whether what the screen shows is secret now: a PIN or a password
-    /// being entered ([`Screen::secret`](paperpaw_sdk::Screen::secret)),
+    /// being entered ([`Screen::secret`]),
     /// or the device guarded. Those who show the screen elsewhere (a
     /// remote control, tools) leave out what its parts say then.
     pub fn is_secret(&self) -> bool {

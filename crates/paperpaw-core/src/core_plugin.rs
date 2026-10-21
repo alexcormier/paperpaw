@@ -156,6 +156,8 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
         let title = env
             .i18n
             .format(key, &[("name", paperpaw_sdk::Arg::Str(name))]);
+        // The reading apps' own list; moves to `ask::choice` with "Open with".
+        #[allow(deprecated)]
         out.push(paperpaw_sdk::ui::choice::open(
             screens::READING_APPS,
             &READING_APP_PICKED,
