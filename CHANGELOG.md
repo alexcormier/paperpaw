@@ -20,6 +20,15 @@ change the plugin SDK.
   draws it again only when it goes to other cells: a finger trembling in
   a cell asked for a refresh each time, most of a second each on the
   X4 Pro, so the item fell seconds behind the finger.
+- SDK: a header's note is a button only where the screen says it does
+  something (`ui::Header::note_button`, or while it has the focus): then
+  it is told as a button as high as the bar. Breaking: a plugin whose
+  note opens something sets `note_button`; one that only tells
+  something (*3 hits*) is said with the title and is no button.
+- The library's pills are at least as wide as they are high, so *All*
+  is a fingertip wide on the Boox. The kernel's screen that adds a
+  widget to a list is called *Add a widget to a list*, so the places of
+  the buttons tell it from the home screen's.
 - SDK: any place of status items shows a whole status line of the
   reader's choice. The line of a place's items is the kernel's
   (`status_lines::ITEMS`); it answers to the reader's

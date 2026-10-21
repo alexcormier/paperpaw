@@ -3211,6 +3211,7 @@ pub paperpaw_sdk::ui::TextRole::Small
 pub paperpaw_sdk::ui::TextRole::Title
 pub struct paperpaw_sdk::ui::Header
 pub paperpaw_sdk::ui::Header::area: paperpaw_platform::geometry::Rect
+pub paperpaw_sdk::ui::Header::note_button: bool
 pub paperpaw_sdk::ui::Header::note_focused: bool
 impl paperpaw_sdk::ui::Header
 pub fn paperpaw_sdk::ui::Header::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &str, core::option::Option<&str>, core::option::Option<(usize, usize)>)

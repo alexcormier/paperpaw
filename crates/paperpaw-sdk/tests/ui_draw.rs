@@ -556,6 +556,39 @@ fn a_focused_header_note_is_told_as_a_focused_button() {
     assert!(note.focused);
 }
 
+/// A note that only tells something ("3 hits") is a text; one that
+/// does something is a button as high as the bar, a fingertip by touch.
+#[test]
+fn a_header_note_is_a_button_only_where_it_does_something() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let mut header = Header::new(&env, &style, true);
+    let note = |header: &Header| {
+        let (described, _) = describe(480, 800, |c| {
+            header.draw(c, &env, &style, "Search", Some("3 hits"), None);
+        });
+        described
+    };
+    // Said with the title, no button.
+    let told = note(&header);
+    assert!(
+        told.iter()
+            .any(|d| d.role == Role::Heading && d.label == "Search, 3 hits")
+    );
+    assert!(
+        !told
+            .iter()
+            .any(|d| d.role == Role::Button && d.label == "3 hits")
+    );
+    header.note_button = true;
+    let button = note(&header)
+        .into_iter()
+        .find(|d| d.role == Role::Button && d.label == "3 hits")
+        .unwrap();
+    assert!(u32::from(button.area.height) >= style.finger, "{button:?}");
+}
+
 #[test]
 fn the_pager_turns_by_halves_on_touch_screens_only() {
     for touch in [true, false] {

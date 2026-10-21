@@ -76,6 +76,10 @@ pub struct Header {
     /// for screens where buttons move the focus to it, e.g. a sort order
     /// that opens a menu as a tap on it does.
     pub note_focused: bool,
+    /// The note does something when tapped or confirmed (the screen
+    /// handles it): told as a button, the header's height high, a
+    /// fingertip for touch. Otherwise it is a text, e.g. "3 hits".
+    pub note_button: bool,
     /// Shows the back arrow.
     back: bool,
     /// Shows arrows for paging.
@@ -102,6 +106,7 @@ impl Header {
         Self {
             area: Rect::new(0, 0, env.device.display.width, style.header as u16),
             note_focused: false,
+            note_button: false,
             back: back && touch,
             arrows: touch,
         }
@@ -183,7 +188,15 @@ impl Header {
         page: Option<(usize, usize)>,
     ) {
         let parts = self.layout(env, style, page);
-        canvas.describe(Role::Heading, title, self.area, false, None);
+        // A note that only tells something is said with the title ("„word“,
+        // 3 hits"); one that does something is a button of its own.
+        let told = match note {
+            Some(note) if !(self.note_button || self.note_focused) => {
+                alloc::format!("{title}, {note}")
+            }
+            _ => String::from(title),
+        };
+        canvas.describe(Role::Heading, &told, self.area, false, None);
         style.header_background(canvas, self.area);
         let ink = style.header_colors().1;
         let Some(font) = style.font(env) else {
@@ -244,7 +257,11 @@ impl Header {
                 (width + 2.0 * pad) as u16,
                 high,
             );
-            canvas.describe(Role::Button, note, around, self.note_focused, None);
+            if self.note_button || self.note_focused {
+                // As high as the bar, where a tap on it is taken.
+                let target = Rect::new(around.x, band.y, around.width, band.height);
+                canvas.describe(Role::Button, note, target, self.note_focused, None);
+            }
             let note_ink = if self.note_focused {
                 canvas.fill_round(around, style.radius(u32::from(around.height)), ink);
                 style.header_colors().0
