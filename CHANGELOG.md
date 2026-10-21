@@ -20,7 +20,8 @@ change the plugin SDK.
   (`Registrar::add_page_frame`) sets pages in columns, chosen with
   `settings::PAGE_FRAME` (each book may have its own); a screen in
   columns is one page of the page index. `reading::PageType` has the
-  layers' `rooms` and the frame's `columns`.
+  layers' `rooms` and the frame's `columns`, and lays a page out in them
+  (`PageType::lay_out`), also the settings' preview.
 - Settings: a choice with nothing to choose from (one value) is not
   listed.
 - SDK: block filters (`TextFilterSpec::block`) know where a block is

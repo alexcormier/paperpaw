@@ -245,14 +245,19 @@ impl PageLayerSpec {
 }
 
 /// The columns a frame sets a page's text in, from the text's box.
-pub type FramesFn = Box<dyn Fn(&Env<'_>, Rect) -> Vec<Rect>>;
+pub type ColumnsFn = Box<dyn Fn(&Env<'_>, Rect) -> Vec<Rect>>;
 
 /// A frame contribution (see the [module documentation](self)): its
 /// name is the translation of its id.
+///
+/// Its columns are best of one width: where a reader looks for the start
+/// of the line a place is in (a place kept, a link's target), it breaks
+/// lines as the first column does. Pages are laid out column by column
+/// from their starts all the same.
 #[non_exhaustive]
 pub struct PageFrameSpec {
     pub id: Id,
-    pub frames: FramesFn,
+    pub columns: ColumnsFn,
 }
 
 impl fmt::Debug for PageFrameSpec {
@@ -264,12 +269,12 @@ impl fmt::Debug for PageFrameSpec {
 }
 
 impl PageFrameSpec {
-    /// Frame `id`, setting the text's box in the columns `frames` gives,
-    /// left to right.
-    pub fn new(id: Id, frames: impl Fn(&Env<'_>, Rect) -> Vec<Rect> + 'static) -> Self {
+    /// Frame `id`, setting the text's box in the columns `columns`
+    /// gives, left to right.
+    pub fn new(id: Id, columns: impl Fn(&Env<'_>, Rect) -> Vec<Rect> + 'static) -> Self {
         Self {
             id,
-            frames: Box::new(frames),
+            columns: Box::new(columns),
         }
     }
 
@@ -279,17 +284,20 @@ impl PageFrameSpec {
     }
 }
 
-/// `area` split in `count` columns of the same width, `gap` apart; the
-/// last takes the pixels left over.
+/// `area` split in `count` columns (at most [`MAX_COLUMNS`]) of the same
+/// width, `gap` apart; the last takes the pixels left over.
 pub fn split(area: Rect, count: u16, gap: u16) -> Vec<Rect> {
-    let count = count.max(1);
+    let count = count.clamp(1, MAX_COLUMNS as u16);
     let gaps = gap.saturating_mul(count - 1);
     let width = area.width.saturating_sub(gaps) / count;
+    let right = u16::try_from(area.right()).unwrap_or(u16::MAX);
     (0..count)
         .map(|i| {
-            let x = area.x + i * (width + gap);
+            let x = area
+                .x
+                .saturating_add(i.saturating_mul(width.saturating_add(gap)));
             let width = match i + 1 == count {
-                true => (area.right() as u16).saturating_sub(x),
+                true => right.saturating_sub(x),
                 false => width,
             };
             Rect::new(x, area.y, width, area.height)
@@ -337,6 +345,17 @@ impl PageLayers {
     /// Whether there are no layers (there may be frames).
     pub fn is_empty(&self) -> bool {
         self.layers.is_empty()
+    }
+
+    /// Whether there are frames.
+    pub fn has_frames(&self) -> bool {
+        !self.frames.is_empty()
+    }
+
+    /// Whether neither layers nor frames change pages: nothing to ask
+    /// them.
+    pub fn is_idle(&self) -> bool {
+        self.layers.is_empty() && self.frames.is_empty()
     }
 
     /// The layer `id`, e.g. for its name.
@@ -415,7 +434,7 @@ impl PageLayers {
             .frames
             .iter()
             .find(|f| f.id.as_str() == &*chosen)
-            .map(|frame| (frame.frames)(env, content))
+            .map(|frame| (frame.columns)(env, content))
             .unwrap_or_default()
             .into_iter()
             .filter_map(|column| column.intersection(&content))
@@ -502,6 +521,10 @@ mod tests {
 
     #[test]
     fn columns_split_the_box_evenly() {
+        // Near the end of the coordinates and with many columns: no
+        // overflow, at most four.
+        assert_eq!(split(Rect::new(u16::MAX - 10, 0, 10, 5), 3, 300).len(), 3);
+        assert_eq!(split(Rect::new(0, 0, 400, 5), 50, 2).len(), MAX_COLUMNS);
         let columns = split(Rect::new(10, 20, 410, 300), 2, 10);
         assert_eq!(
             columns,

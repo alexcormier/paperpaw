@@ -17,6 +17,9 @@ pub(super) struct Book {
     pub(super) page: Page,
     /// The words of the page, once measured (see [`Book::words`]).
     pub(super) words: core::cell::OnceCell<Vec<WordBox>>,
+    /// Its lines as page layers see them, while there are layers (see
+    /// `Book::lines`).
+    pub(super) lines: core::cell::OnceCell<Vec<paperpaw_sdk::layers::LineBox>>,
     /// The starts of the pages turned forward to this one, one after
     /// another (none before a jump).
     pub(super) history: Vec<Locator>,
@@ -151,6 +154,7 @@ impl Book {
             index_stopped: false,
             page: Page::default(),
             words: core::cell::OnceCell::new(),
+            lines: core::cell::OnceCell::new(),
             history: Vec::new(),
             saved_at: None,
             unsaved: false,
@@ -316,6 +320,7 @@ impl Book {
         // The filters may leave out other blocks now.
         self.dropped.clear();
         self.words = core::cell::OnceCell::new();
+        self.lines = core::cell::OnceCell::new();
         self.xpointer = None;
         let start = self.line_start(env, self.page.start);
         if let Ok(page) = self.layout(env, start) {
@@ -333,12 +338,14 @@ impl Book {
     }
 
     /// Whether the page's type is another now than the pages were laid
-    /// out in (a frame chosen, a layer's room).
+    /// out in (a frame chosen, a layer's room); asked only where there
+    /// are layers or frames.
     pub(super) fn retyped(&self, env: &Env<'_>) -> bool {
-        self.font(env).is_some_and(|font| {
-            let whole = self.document.whole_pages();
-            typography(env, &font, &self.language, whole).key != self.typography.key
-        })
+        !env.page_layers.is_idle()
+            && self.font(env).is_some_and(|font| {
+                let whole = self.document.whole_pages();
+                typography(env, &font, &self.language, whole).key != self.typography.key
+            })
     }
 
     /// Decodes the pictures of the page shown that are not yet: books
@@ -364,63 +371,22 @@ impl Book {
     }
 
     /// The start of the line `at` is in, as this book is laid out now
-    /// (see `layout::line_start`).
-    /// In columns, as the first column sets its lines.
+    /// (see `layout::line_start`); in columns as the first one breaks
+    /// lines.
     pub(super) fn line_start(&self, env: &Env<'_>, at: Locator) -> Locator {
-        let t = &self.typography;
-        let width = match t.columns.len() {
-            0 | 1 => t.width,
-            _ => f32::from(t.columns[0].width),
-        };
+        let width = self.typography.line_width();
         self.laid_out(env, width, |cx| line_start(cx, at).unwrap_or(at))
             .unwrap_or(at)
     }
 
-    /// The page that starts at `at`, as this book is laid out now. In
-    /// columns (a plugin's frame, see `paperpaw_sdk::layers`) each takes
-    /// up where the one before ends, its lines moved to its place: one
-    /// page of the page index for all.
+    /// The page that starts at `at`, as this book is laid out now: in
+    /// columns where a plugin's frame sets them (see
+    /// `paperpaw_sdk::layers`), one page of the page index for all.
     pub(super) fn layout(&self, env: &Env<'_>, at: Locator) -> Result<Page, DocumentError> {
-        let t = &self.typography;
-        if t.columns.len() <= 1 {
-            return self
-                .laid_out(env, t.width, |cx| layout_page(cx, at, t.height))
-                .unwrap_or_else(|| Ok(Page::default()));
-        }
-        let mut page = Page::new(at, at, Vec::new(), Vec::new());
-        let mut next = at;
-        for (i, column) in t.columns.iter().enumerate() {
-            let height = f32::from(column.height);
-            let Some(laid) = self.laid_out(env, f32::from(column.width), |cx| {
-                layout_page(cx, next, height)
-            }) else {
-                break;
-            };
-            let mut laid = laid?;
-            if laid.is_past_end() {
-                break;
-            }
-            let (dx, dy) = (f32::from(column.x) - t.x, f32::from(column.y) - t.y);
-            for line in &mut laid.lines {
-                line.x += dx;
-                line.baseline += dy;
-            }
-            for image in &mut laid.images {
-                image.x += dx;
-                image.y += dy;
-            }
-            if i == 0 {
-                page.start = laid.start;
-            }
-            page.end = laid.end;
-            page.lines.append(&mut laid.lines);
-            page.images.append(&mut laid.images);
-            if laid.end <= next {
-                break;
-            }
-            next = laid.end;
-        }
-        Ok(page)
+        self.typography.lay_out(at, |width, height, at| {
+            self.laid_out(env, width, |cx| layout_page(cx, at, height))
+                .unwrap_or_else(|| Ok(Page::default()))
+        })
     }
 
     /// `f` with the context this book is laid out in now, its lines
@@ -622,6 +588,7 @@ impl Book {
         }
         self.page = page;
         self.words = core::cell::OnceCell::new();
+        self.lines = core::cell::OnceCell::new();
         self.xpointer = None;
         self.prepare_images(&env);
         self.update_chapter(&env);

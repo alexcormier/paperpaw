@@ -7,9 +7,14 @@ use super::*;
 use paperpaw_sdk::layers::{LineBox, PageView};
 
 impl Book {
+    /// The lines of the page as layers see them, made once a page.
+    pub(super) fn lines(&self) -> &[LineBox] {
+        self.lines.get_or_init(|| self.line_boxes())
+    }
+
     /// The lines of the page as layers see them: each as wide as its
     /// column, as high as a line of body text, on its baseline.
-    pub(super) fn line_boxes(&self) -> Vec<LineBox> {
+    fn line_boxes(&self) -> Vec<LineBox> {
         let t = &self.typography;
         let text = Rect::new(t.x as u16, t.y as u16, t.width as u16, t.height as u16);
         self.page
@@ -45,6 +50,16 @@ impl Book {
             .status(t.top_status, t.status)
     }
 
+    /// The top of the text and the layers' rooms above it: the margin
+    /// above is above that.
+    fn content_top(&self) -> f32 {
+        let t = &self.typography;
+        t.rooms
+            .iter()
+            .map(|(_, room)| f32::from(room.y))
+            .fold(t.y, f32::min)
+    }
+
     /// The right edge of the text and the layers' rooms beside it.
     fn right_edge(&self) -> f32 {
         let t = &self.typography;
@@ -66,8 +81,10 @@ impl Book {
                 i32::from(room.y) + i32::from(room.height) / 2,
             )
         });
-        let lines = self.line_boxes();
-        let line = self.page_view(&lines).line_at(at.x, at.y).map(|l| l.start);
+        let line = self
+            .page_view(self.lines())
+            .line_at(at.x, at.y)
+            .map(|l| l.start);
         let mut tapped = events::PageLayerTapped::new(layer.clone(), self.path.clone(), at.x, at.y);
         if let Some(line) = line {
             tapped = tapped.section(line.section).offset(line.offset);
@@ -104,8 +121,9 @@ impl Book {
         // Within the top margin where it is wide enough, so it covers no
         // text.
         let line = font.line_metrics(style.small).line_height;
-        let height = (line + pad).min(self.typography.y - 4.0).max(line);
-        let y = ((self.typography.y - height) / 2.0).max(0.0);
+        let top = self.content_top();
+        let height = (line + pad).min(top - 4.0).max(line);
+        let y = ((top - height) / 2.0).max(0.0);
         Some(Rect::new(
             self.typography.x as u16,
             y as u16,
@@ -150,9 +168,8 @@ impl Book {
     }
 
     pub(super) fn ribbon_area(&self, env: &Env<'_>) -> Rect {
-        let t = &self.typography;
         let width = env.metrics.mm(3) as u16;
-        let height = (t.y * 0.8) as u16;
+        let height = (self.content_top() * 0.8) as u16;
         let x = self.right_edge() as u16 - width;
         Rect::new(x, 0, width, height.max(width))
     }

@@ -1316,7 +1316,7 @@ pub paperpaw_sdk::layers::LineBox::start: paperpaw_document::Locator
 impl paperpaw_sdk::layers::LineBox
 pub fn paperpaw_sdk::layers::LineBox::new(paperpaw_platform::geometry::Rect, paperpaw_document::Locator, paperpaw_document::Locator) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::layers::PageFrameSpec
-pub paperpaw_sdk::layers::PageFrameSpec::frames: paperpaw_sdk::layers::FramesFn
+pub paperpaw_sdk::layers::PageFrameSpec::columns: paperpaw_sdk::layers::ColumnsFn
 pub paperpaw_sdk::layers::PageFrameSpec::id: paperpaw_sdk::Id
 impl paperpaw_sdk::layers::PageFrameSpec
 pub fn paperpaw_sdk::layers::PageFrameSpec::columns(paperpaw_sdk::Id, u16, u16) -> Self
@@ -1346,7 +1346,9 @@ pub fn paperpaw_sdk::layers::PageLayers::draw(&self, &mut paperpaw_graphics::can
 pub fn paperpaw_sdk::layers::PageLayers::frames(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::Id>
 pub fn paperpaw_sdk::layers::PageLayers::get(&self, &paperpaw_sdk::Id) -> core::option::Option<&paperpaw_sdk::layers::PageLayerSpec>
 pub fn paperpaw_sdk::layers::PageLayers::get_by_switch(&self, &str) -> core::option::Option<&paperpaw_sdk::layers::PageLayerSpec>
+pub fn paperpaw_sdk::layers::PageLayers::has_frames(&self) -> bool
 pub fn paperpaw_sdk::layers::PageLayers::is_empty(&self) -> bool
+pub fn paperpaw_sdk::layers::PageLayers::is_idle(&self) -> bool
 pub fn paperpaw_sdk::layers::PageLayers::key(&self, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect) -> alloc::string::String
 pub fn paperpaw_sdk::layers::PageLayers::new() -> Self
 pub fn paperpaw_sdk::layers::PageLayers::on<'s>(&'s self, &'s paperpaw_sdk::Env<'_>) -> impl core::iter::traits::iterator::Iterator<Item = &'s paperpaw_sdk::layers::PageLayerSpec>
@@ -1373,8 +1375,8 @@ pub fn paperpaw_sdk::layers::PageView<'a>::room(self, core::option::Option<paper
 pub fn paperpaw_sdk::layers::PageView<'a>::status(self, core::option::Option<paperpaw_platform::geometry::Rect>, core::option::Option<paperpaw_platform::geometry::Rect>) -> Self
 pub const paperpaw_sdk::layers::MAX_COLUMNS: usize
 pub fn paperpaw_sdk::layers::split(paperpaw_platform::geometry::Rect, u16, u16) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>
+pub type paperpaw_sdk::layers::ColumnsFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>>
 pub type paperpaw_sdk::layers::DrawLayerFn = alloc::boxed::Box<dyn core::ops::function::Fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::layers::PageView<'_>)>
-pub type paperpaw_sdk::layers::FramesFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>>
 pub type paperpaw_sdk::layers::ReserveFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>) -> core::option::Option<(paperpaw_sdk::layers::Side, u16)>>
 pub mod paperpaw_sdk::library
 pub mod paperpaw_sdk::library::catalog

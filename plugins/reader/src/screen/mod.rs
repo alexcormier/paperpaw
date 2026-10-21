@@ -641,10 +641,13 @@ impl Screen for ReaderScreen {
                 self.next_status_line(top, cx);
                 return Handled::Yes;
             }
-            // The room of a layer that hears taps: its plugin answers.
-            if let Some(layer) = env
-                .page_layers
-                .tapped(&env, &book.typography.rooms, p.x, p.y)
+            // The room of a layer that hears taps: its plugin answers (not
+            // where the bookmark corner or the way back are).
+            if !corner
+                && !back
+                && let Some(layer) = env
+                    .page_layers
+                    .tapped(&env, &book.typography.rooms, p.x, p.y)
             {
                 book.tap_layer(layer, Some(p), cx);
                 return Handled::Yes;
@@ -772,12 +775,8 @@ impl ReaderScreen {
         let marks = book.page_marks(env, aloud, words);
         // The plugins' layers behind the text and over it; their line
         // boxes only while there are layers.
-        let lines = if layered {
-            book.line_boxes()
-        } else {
-            Vec::new()
-        };
-        let view = book.page_view(&lines);
+        let lines = if layered { book.lines() } else { &[] };
+        let view = book.page_view(lines);
         let rooms = &book.typography.rooms;
         if layered {
             env.page_layers.draw(canvas, env, &view, rooms, true);
