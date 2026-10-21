@@ -73,6 +73,11 @@ impl Plugin for Reader {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // A line of its own on the page.
+        r.contribute(
+            Id::new_static("about.lines"),
+            "The fake reader is by A. Tester.".into(),
+        )?;
         let opened = self.0.clone();
         r.add_screen(ScreenSpec::new(
             Id::new_static("fake-reader.screen"),
@@ -247,4 +252,17 @@ fn nothing_opens_when_the_page_cannot_be_written() {
     let _ = kernel.start(Instant(0));
     let _ = kernel.run_action(Instant(100), Id::new_static("about.open"));
     assert!(opened.borrow().is_empty());
+}
+
+#[test]
+fn lines_of_other_plugins_are_on_the_page() {
+    let mut device = Device::new(MemoryStorage::new(), "");
+    device.open();
+    let page = device.page();
+    let line = page
+        .find("The fake reader is by A. Tester.")
+        .expect("the line");
+    // Below the address, above the licences.
+    assert!(page.find("https://github.com/hthoene/paperpaw").unwrap() < line);
+    assert!(line < page.find("Gerard D.C. Kuiken").unwrap_or(usize::MAX));
 }

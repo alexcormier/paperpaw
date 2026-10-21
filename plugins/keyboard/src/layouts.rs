@@ -5,6 +5,13 @@
 //! one is shown. The *automatic* layout is the built-in one of the UI
 //! language, or else what its translation brings under `keyboard.letters`,
 //! so a language pack works without code.
+//!
+//! Other plugins add layouts to the point [`POINT`] (`keyboard.layouts`),
+//! a line each: `id; code; letter rows; variants`, e.g.
+//! `dutch.layout; NL; qwertyuiop asdfghjkl zxcvbnm; e=éèë i=ïí`. The id is
+//! also the translation key of its name; the rows are separated by
+//! spaces, as the built-in ones; the variants (optional) are a letter, `=`
+//! and its variants, besides the built-in ones.
 
 use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
@@ -14,6 +21,58 @@ use paperpaw_sdk::Env;
 
 /// The setting value (and list entry) for the UI language's layout.
 pub(crate) const AUTO: &str = "keyboard.layout.auto";
+
+/// The point other plugins add layouts to (see the module's
+/// documentation).
+pub const POINT: &str = "keyboard.layouts";
+
+/// A layout chosen: the code on the key that switches layouts, the letter
+/// rows, and the variants of letters it adds.
+pub(crate) type Chosen = (String, Cow<'static, str>, Vec<(char, String)>);
+
+/// A layout another plugin added (see [`POINT`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Added {
+    pub id: String,
+    pub code: String,
+    pub letters: String,
+    pub variants: Vec<(char, String)>,
+}
+
+/// The layouts other plugins added, in the order of the plugins; lines
+/// that say too little are left out.
+pub(crate) fn added(env: &Env<'_>) -> Vec<Added> {
+    env.services
+        .contributions(POINT)
+        .flat_map(|(_, text)| text.lines())
+        .filter_map(parse)
+        .collect()
+}
+
+/// A line of [`POINT`].
+fn parse(line: &str) -> Option<Added> {
+    let mut fields = line.split(';').map(str::trim);
+    let id = fields.next().filter(|id| !id.is_empty())?;
+    let code = fields.next().filter(|code| !code.is_empty())?;
+    let letters = fields.next().filter(|rows| !rows.is_empty())?;
+    let variants = fields
+        .next()
+        .unwrap_or_default()
+        .split_whitespace()
+        .filter_map(|pair| {
+            let (base, variants) = pair.split_once('=')?;
+            let mut chars = base.chars();
+            let base = chars.next().filter(|_| chars.next().is_none())?;
+            (!variants.is_empty()).then(|| (base, variants.to_string()))
+        })
+        .collect();
+    Some(Added {
+        id: id.to_string(),
+        code: code.to_string(),
+        letters: letters.to_string(),
+        variants,
+    })
+}
 
 /// A built-in layout: its id (also the translation key of its name), the
 /// short code on the key that switches layouts, and the letter rows
@@ -147,20 +206,34 @@ pub(crate) fn drawable(env: &Env<'_>, letters: &str) -> bool {
 /// The layouts chosen in the setting `value` (ids separated by commas),
 /// as their codes and letter rows; the UI language's layout if none.
 /// Layouts the fonts cannot draw are left out.
-pub(crate) fn chosen(env: &Env<'_>, value: &str) -> Vec<(String, Cow<'static, str>)> {
-    let mut layouts: Vec<(String, Cow<'static, str>)> = Vec::new();
+pub(crate) fn chosen(env: &Env<'_>, value: &str) -> Vec<Chosen> {
+    let mut layouts: Vec<Chosen> = Vec::new();
+    let mut added: Option<Vec<Added>> = None;
     for id in value.split(',').map(str::trim).filter(|id| !id.is_empty()) {
         if id == AUTO {
-            layouts.push(automatic(env));
+            let (code, letters) = automatic(env);
+            layouts.push((code, letters, Vec::new()));
         } else if let Some(layout) = LAYOUTS
             .iter()
             .find(|l| l.id == id && drawable(env, l.letters))
         {
-            layouts.push((layout.code.to_string(), Cow::Borrowed(layout.letters)));
+            layouts.push((
+                layout.code.to_string(),
+                Cow::Borrowed(layout.letters),
+                Vec::new(),
+            ));
+        } else if let Some(layout) = added
+            .get_or_insert_with(|| self::added(env))
+            .iter()
+            .find(|l| l.id == id && drawable(env, &l.letters))
+        {
+            let letters = Cow::Owned(layout.letters.clone());
+            layouts.push((layout.code.clone(), letters, layout.variants.clone()));
         }
     }
     if layouts.is_empty() {
-        layouts.push(automatic(env));
+        let (code, letters) = automatic(env);
+        layouts.push((code, letters, Vec::new()));
     }
     layouts
 }
@@ -195,6 +268,26 @@ mod tests {
             assert_eq!(layout.letters.split(' ').count(), 3, "{}", layout.id);
         }
         assert!(en.contains("keyboard.layout.auto ="));
+    }
+
+    #[test]
+    fn added_layouts_are_read_from_their_lines() {
+        let dutch = parse("dutch.layout; NL; qwertyuiop asdfghjkl zxcvbnm; e=éèë ij=x i=ïí");
+        let dutch = dutch.unwrap();
+        assert_eq!(
+            (dutch.id.as_str(), dutch.code.as_str()),
+            ("dutch.layout", "NL")
+        );
+        assert_eq!(dutch.letters, "qwertyuiop asdfghjkl zxcvbnm");
+        // Two letters before `=` are no letter.
+        assert_eq!(
+            dutch.variants,
+            [('e', String::from("éèë")), ('i', String::from("ïí"))]
+        );
+        assert!(parse("plain.layout; PL; abc").unwrap().variants.is_empty());
+        for line in ["", "only.id", "id; CODE", "; X; abc", "id;; abc"] {
+            assert_eq!(parse(line), None, "{line}");
+        }
     }
 
     #[test]

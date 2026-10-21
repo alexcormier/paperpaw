@@ -256,8 +256,9 @@ struct KeyboardScreen {
     title: String,
     text: String,
     layer: Layer,
-    /// The chosen layouts (code, letter rows) and the one in use.
-    layouts: Vec<(String, Cow<'static, str>)>,
+    /// The chosen layouts (code, letter rows, variants they add) and the
+    /// one in use.
+    layouts: Vec<layouts::Chosen>,
     current: Rc<Cell<usize>>,
     /// Shown as dots (mode `password`).
     password: bool,
@@ -543,7 +544,13 @@ impl KeyboardScreen {
         let Some(Key::Char(c)) = self.rows.get(row).and_then(|r| r.get(index)).map(|k| k.0) else {
             return false;
         };
-        let Some(variants) = layouts::variants(c) else {
+        // The layout's own, then the built-in ones.
+        let own = self.layouts[self.current.get()]
+            .2
+            .iter()
+            .find(|(base, _)| c.to_lowercase().eq(core::iter::once(*base)))
+            .map(|(_, variants)| variants.as_str());
+        let Some(variants) = own.or_else(|| layouts::variants(c)) else {
             return false;
         };
         let chars: Vec<char> = variants.chars().map(|v| self.cased(v)).collect();

@@ -390,6 +390,7 @@ pub const paperpaw_sdk::builtin::keymap_presets::STANDARD: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::keymap_presets::STANDARD_NAME: &str
 pub const paperpaw_sdk::builtin::keymap_presets::TWO_BUTTONS: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::menus
+pub const paperpaw_sdk::builtin::menus::APPS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::menus::MAIN: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::menus::QUICK: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::menus::READER: paperpaw_sdk::Id

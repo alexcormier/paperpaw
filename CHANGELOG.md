@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: `menus::APPS` (`core.apps`), what there is to open besides the
+  tools; the home screen's grid of tools shows it too.
+- Keyboard: other plugins add layouts through the point
+  `keyboard.layouts` (`id; code; letter rows; variants`), chosen as the
+  built-in ones, with variants of letters of their own.
+- About: other plugins add lines to the page through the point
+  `about.lines`.
+- Docs: what the slots besides the reader's promise (home, menu, panel,
+  settings, keyboard, lookup) and the shipped plugins' points.
 - SDK: menu entries placed beside others (`MenuPlace`,
   `Registrar::place_menu_entry`) or taken out by a plugin
   (`hide_menu_entry`); what an entry shows now (`set_item_state`,

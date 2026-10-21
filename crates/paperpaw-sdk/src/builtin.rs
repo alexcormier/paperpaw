@@ -193,6 +193,11 @@ pub mod menus {
     /// main menu stays short however many there are. Also the home
     /// screen's grid of tools.
     pub const TOOLS: Id = Id::new_static("core.tools");
+    /// What there is to open besides the tools: a plugin's own app (a
+    /// game, a notebook). What a launcher, a drawer or a palette lists:
+    /// these and the [`TOOLS`]; the shipped home screen's grid of tools
+    /// shows both.
+    pub const APPS: Id = Id::new_static("core.apps");
     /// Extra pages on the main settings page, below the setting groups
     /// (e.g. the plugin manager). Entries are actions.
     pub const SETTINGS: Id = Id::new_static("core.settings-pages");

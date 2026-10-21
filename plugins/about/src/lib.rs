@@ -6,6 +6,10 @@
 //! firmware, also the plugins built into it, which an update brings
 //! again; where it loads native code plugins, what they must be built
 //! with to fit it (its fingerprint, as the plugin library lists builds).
+//!
+//! Other plugins add lines to the page through the point [`LINES`]
+//! (`about.lines`), each a paragraph below the address: a theme's
+//! author, a dictionary's source, a font's licence that is not bundled.
 
 #![no_std]
 
@@ -26,6 +30,9 @@ use paperpaw_sdk::{
 pub const PLUGIN: Id = Id::new_static("about");
 /// Shows the page.
 pub const OPEN: Id = Id::new_static("about.open");
+/// The point other plugins add lines to the page through, a paragraph
+/// each (Markdown).
+pub const LINES: &str = "about.lines";
 /// The licences, from `tools/licences/build.py`.
 const LICENCES: &str = include_str!("../licences.md");
 /// PaperPaw's logo, as the page shows it.
@@ -51,11 +58,28 @@ fn page(env: &Env<'_>) -> String {
         String::from("logo.png")
     };
     format!(
-        "![PaperPaw]({picture})\n\n# PaperPaw {}\n\n{intro}\n\nhttps://github.com/hthoene/paperpaw\n\n{}{}{LICENCES}",
+        "![PaperPaw]({picture})\n\n# PaperPaw {}\n\n{intro}\n\nhttps://github.com/hthoene/paperpaw\n\n{}{}{}{LICENCES}",
         env!("CARGO_PKG_VERSION"),
+        lines(env),
         built_in(env),
         native(env),
     )
+}
+
+/// The lines other plugins add ([`LINES`]), a paragraph each.
+fn lines(env: &Env<'_>) -> String {
+    let mut text = String::new();
+    for line in env
+        .services
+        .contributions(LINES)
+        .flat_map(|(_, text)| text.lines())
+        .map(str::trim)
+        .filter(|line| !line.is_empty())
+    {
+        text.push_str(line);
+        text.push_str("\n\n");
+    }
+    text
 }
 
 /// The plugins built into the firmware, where PaperPaw is it.

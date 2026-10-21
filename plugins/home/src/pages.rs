@@ -260,11 +260,12 @@ pub(crate) fn slot_of(id: &str) -> Option<usize> {
     (0..MAX_PAGES).find(|&i| setting(i).as_str() == id)
 }
 
-/// The tools a page may show: the shortcuts, the tools, then the
-/// settings; their action and the translation key of their name.
+/// The tools a page may show: the shortcuts, what there is to open
+/// ([`menus::APPS`]), the tools, then the settings; their action and the
+/// translation key of their name.
 pub(crate) fn tools(env: &Env<'_>) -> Vec<(Id, String)> {
     let mut items: Vec<(Id, String)> = Vec::new();
-    for menu in [ACTIONS, menus::TOOLS] {
+    for menu in [ACTIONS, menus::APPS, menus::TOOLS] {
         for item in env.menus.items(menu.as_str()) {
             // A screenshot from here shows only the home screen: it is
             // for the tools opened over a book (unless listed above).

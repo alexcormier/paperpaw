@@ -85,6 +85,11 @@ impl Plugin for Listener {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        // A layout of its own, with variants of its own.
+        r.contribute(
+            Id::new_static("keyboard.layouts"),
+            "dutch.layout; NL; qwertyuiop asdfghjkl zxcvbnm; i=ïí".into(),
+        )?;
         let heard = self.0.clone();
         r.on(TYPED, move |_, typed, _| {
             heard.borrow_mut().push(typed.clone())
@@ -794,4 +799,19 @@ fn layouts_are_chosen_in_order_and_automatic_stands_alone() {
     let saved = paperpaw_sdk::read_file(typing.kernel.storage(), "paperpaw.ini", 1 << 16).unwrap();
     let saved = String::from_utf8(saved).unwrap();
     assert!(saved.contains("keyboard.layout.auto"), "{saved}");
+}
+
+#[test]
+fn a_layout_another_plugin_adds_is_typed_with() {
+    let config = "[keyboard]\nlayouts = keyboard.layout.en, dutch.layout\n";
+    let mut touch = Typing::with_config(TOUCH, config);
+    touch.open(&[]);
+    // English first, then the added one with its code.
+    touch.tap("EN");
+    assert!(touch.part("NL").is_some(), "{:?}", touch.parts());
+    // Its own variants.
+    touch.hold("i");
+    touch.tap("ï");
+    touch.tap("OK");
+    assert_eq!(touch.answer(), "ï");
 }

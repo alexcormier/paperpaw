@@ -509,6 +509,28 @@ A reader in turn sends the reading events (`BOOK_OPENED`, `PAGE_TURNED`,
 `BOOK_CLOSED`, `BOOK_FINISHED`), takes `GOTO`, and offers its actions
 in these menus.
 
+### What the other slots promise
+
+A screen bound to one of these slots replaces the shipped one; it is
+opened with what the table says and keeps its promises, so the plugins
+around it go on working.
+
+| Slot | Opened with | Promises |
+|---|---|---|
+| `slots::HOME` | nothing | The start screen; where it lists things to open, it lists `menus::APPS` and `menus::TOOLS` |
+| `slots::MENU` | `params::MENU`, `params::HIDE` (entries left out this time) | The menu's entries as `Menus::shown_items` has them, with their state and the line under them; runs an action, changes a setting in place, opens a submenu |
+| `slots::PANEL` | `params::MENU` | The same as controls for quick changes (sliders, switches) |
+| `slots::SETTINGS` | `params::ID` (a group), or nothing for all | The settings by group and `menus::SETTINGS`; a choice with fewer than two values is not listed |
+| `slots::KEYBOARD` | `params::TITLE`, `TEXT`, `MODE` (`text`, `number`, `password`), `REPLY` | Emits the event `reply` with every parameter it was opened with and `text` set to what was typed; nothing when cancelled |
+| `slots::LOOKUP` | `params::WORD`, `LANGUAGE` | The entries of every lookup provider that knows the language (`lookup`), those that go online only when asked |
+
+Points of the shipped plugins, for `Registrar::contribute`:
+
+| Point | A line each | |
+|---|---|---|
+| `keyboard.layouts` | `id; code; letter rows; variants`, e.g. `dutch.layout; NL; qwertyuiop asdfghjkl zxcvbnm; e=éèë` | a layout to choose, named by the translation of its id |
+| `about.lines` | a paragraph (Markdown) | shown on *About PaperPaw*, below the address |
+
 A reader of one's own builds on the shipped one's parts in
 `paperpaw_sdk::reading` rather than copying them: `FilteredDocument` (a
 book through the plugins' text filters; kept `DroppedRuns` read the
