@@ -595,11 +595,8 @@ impl KeyboardScreen {
             .get(params::REPLY)
             .and_then(|r| Id::parse(r).ok())
         {
-            let typed = Typed {
-                text,
-                typing,
-                context: self.params.clone(),
-            };
+            let typed = Typed::new(text, self.params.clone());
+            let typed = if typing { typed.while_typing() } else { typed };
             cx.command(Command::Emit(reply, typed.to_params()));
         }
     }
@@ -969,6 +966,11 @@ impl Screen for KeyboardScreen {
 
     /// Typing a password, no swipe in from an edge opens anything over it.
     fn holds_edges(&self) -> bool {
+        self.password
+    }
+
+    /// A password's keys are not told to plugins as they are pressed.
+    fn secret(&self) -> bool {
         self.password
     }
 

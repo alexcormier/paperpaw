@@ -144,11 +144,20 @@ impl Preset {
 pub const THEME: &str = "core.theme";
 
 /// The settings a theme covers: those of the appearance group
-/// ([`groups::LOOK`](crate::builtin::groups::LOOK)).
+/// ([`groups::LOOK`](crate::builtin::groups::LOOK)) but what the reader
+/// needs to read the interface at all, which a theme never changes: the
+/// size of its text, its contrast, the logo.
 pub fn theme_settings(settings: &Settings) -> Vec<Id> {
+    use crate::builtin::settings::{UI_CONTRAST, UI_SIZE};
+    let kept = [
+        UI_SIZE.static_str(),
+        UI_CONTRAST.static_str(),
+        crate::logo::LOGO.static_str(),
+    ];
     settings
         .specs()
         .filter(|spec| settings.group_of(spec) == crate::builtin::groups::LOOK)
+        .filter(|spec| !kept.contains(&spec.id.as_str()))
         .map(|spec| spec.id.clone())
         .collect()
 }

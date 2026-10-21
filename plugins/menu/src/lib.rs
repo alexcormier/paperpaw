@@ -196,6 +196,12 @@ impl MenuScreen {
             .items(menu)
             .into_iter()
             .filter(|item| !paperpaw_sdk::Menus::hidden(params, item.id.as_str()))
+            // A setting shown only while another has a value.
+            .filter(|item| {
+                env.settings
+                    .spec(item.id.as_str())
+                    .is_none_or(|s| env.settings.shows(s))
+            })
             .map(|item| Item {
                 id: item.id.clone(),
                 title: String::from(item.title),

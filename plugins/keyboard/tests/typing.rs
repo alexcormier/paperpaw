@@ -274,11 +274,7 @@ impl Typing {
     /// Text arriving as if typed on a phone.
     fn typed_on_phone(&mut self, text: &str) {
         self.now += 100;
-        let typed = Typed {
-            typing: false,
-            text: text.to_string(),
-            context: Params::new(),
-        };
+        let typed = Typed::new(text.to_string(), Params::new());
         let effects = self.kernel.send_event(
             Instant(self.now),
             Id::new_static(REMOTE_TEXT),

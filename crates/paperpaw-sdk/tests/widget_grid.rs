@@ -81,7 +81,7 @@ fn geometry() -> Geometry {
 }
 
 fn view(env: &Env<'_>, items: &[Item]) -> GridView {
-    let mut view = GridView::new(env, CHOSEN);
+    let mut view = GridView::asking(env, CHOSEN);
     view.layout(env, geometry(), items, &[]);
     view
 }

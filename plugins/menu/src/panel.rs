@@ -271,7 +271,13 @@ impl PanelScreen {
         let display = env.device.display;
         let width = display.width;
         let margin = style.margin as u16;
-        let items = env.menus.items(menu);
+        let mut items = env.menus.items(menu);
+        // A setting shown only while another has a value.
+        items.retain(|item| {
+            env.settings
+                .spec(item.id.as_str())
+                .is_none_or(|s| env.settings.shows(s))
+        });
         // Labels as wide as the longest needs, at most half the row;
         // sliders have their titles above them.
         let font = style.font(env);

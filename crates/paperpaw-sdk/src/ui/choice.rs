@@ -35,6 +35,32 @@ pub(crate) const LABELS: &str = "labels";
 /// Lines of the title, at most.
 const TITLE_LINES: usize = 3;
 
+/// Opens the choice overlay `screen`, a [`Choice`] the plugin registered
+/// itself, with `title` and `options`, each shown as the translation of
+/// `labels` followed by the option. The choice comes back as `reply`.
+#[deprecated(
+    since = "0.4.0",
+    note = "use `ask::choice`, which asks on the screen of slot `core.choice`"
+)]
+pub fn open(
+    screen: Id,
+    reply: &crate::event::Event<Picked>,
+    title: &str,
+    context: &str,
+    labels: &str,
+    options: &[&str],
+) -> Command {
+    Command::OpenScreen(
+        screen,
+        Params::new()
+            .with(params::TITLE, title.to_string())
+            .with(params::PATH, context.to_string())
+            .with(params::REPLY, reply.as_str())
+            .with(LABELS, labels.to_string())
+            .with(OPTIONS, options.join(",")),
+    )
+}
+
 /// The choice overlay; see the [module documentation](self).
 #[derive(Debug)]
 pub struct Choice {

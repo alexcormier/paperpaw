@@ -20,20 +20,12 @@ use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{Id, Instant, Params};
 
 fn typed(text: &str) -> Typed {
-    Typed {
-        typing: false,
-        text: String::from(text),
-        context: Params::new(),
-    }
+    Typed::new(String::from(text), Params::new())
 }
 
 /// What the keyboard answers for a field of the details.
 fn field(key: &'static str, text: &str) -> Typed {
-    Typed {
-        typing: false,
-        text: String::from(text),
-        context: Params::new().with("field", key),
-    }
+    Typed::new(String::from(text), Params::new().with("field", key))
 }
 
 fn picked(index: &str, option: &str) -> Picked {

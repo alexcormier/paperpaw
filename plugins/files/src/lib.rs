@@ -30,7 +30,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ask;
-use paperpaw_sdk::builtin::{actions as core_actions, events, groups, params, slots};
+use paperpaw_sdk::builtin::{
+    actions as core_actions, events, groups, menus as core_menus, params, slots,
+};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::files;
 use paperpaw_sdk::replies::Typed;
@@ -74,6 +76,8 @@ pub const SEARCH: Id = Id::new_static("files.search");
 const SEARCH_ENTERED: Event<Typed> = Event::new("files.search-entered");
 /// Book information; parameter `path`.
 pub const INFO_SCREEN: Id = Id::new_static("files.info");
+/// A book's details, as an entry of the book menu (`menus::BOOK`).
+pub const BOOK_INFO: Id = Id::new_static("files.book-info");
 /// The submenu with the views above ("Shelves").
 pub const SHELVES_MENU: Id = Id::new_static("files.shelves");
 const SHELF_SCREEN: Id = Id::new_static("files.shelf");
@@ -192,6 +196,22 @@ impl Plugin for Files {
         r.add_icon(FAVOURITES, Cow::Borrowed("star"))?;
         r.bind_slot(slots::CHOOSE_FOLDER, CHOOSE_FOLDER, Priority::DEFAULT)?;
         r.bind_slot(slots::BOOK_INFO, INFO_SCREEN, Priority::DEFAULT)?;
+        // A book's details, in every view's book menu: shown for the book
+        // chosen (the action itself only names the entry).
+        r.add_action(
+            paperpaw_sdk::ActionSpec::new(BOOK_INFO, "files.option.info")
+                .handler(|_: &Env<'_>, _: &mut Vec<Command>| {}),
+        )?;
+        r.add_menu_entry(paperpaw_sdk::MenuEntry::new(core_menus::BOOK, BOOK_INFO).order(10))?;
+        r.add_icon(BOOK_INFO, Cow::Borrowed("info-circle"))?;
+        r.on(events::BOOK_CHOSEN, |_, chosen, out| {
+            if chosen.action == BOOK_INFO {
+                out.push(Command::OpenScreen(
+                    INFO_SCREEN,
+                    Params::new().with(params::PATH, chosen.path.clone()),
+                ));
+            }
+        })?;
         r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
         r.bind_slot(slots::LIBRARY, SCREEN, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;

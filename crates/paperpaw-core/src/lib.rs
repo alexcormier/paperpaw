@@ -617,10 +617,14 @@ impl Kernel {
     /// the focus before, if that is still spoken; not while a plugin
     /// reads aloud.
     fn speak_focus(&mut self) {
-        let listened = self
-            .subscriptions
-            .iter()
-            .any(|(event, ..)| *event == events::FOCUS_CHANGED);
+        // Never while a PIN or a password is entered, or the device
+        // guarded: the keys pressed would be told.
+        let secret = self.guard().is_some() || self.stack.iter().any(|s| s.screen.secret());
+        let listened = !secret
+            && self
+                .subscriptions
+                .iter()
+                .any(|(event, ..)| *event == events::FOCUS_CHANGED);
         let spoken = self.shared.caps.speech
             && self
                 .shared

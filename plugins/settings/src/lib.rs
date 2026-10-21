@@ -50,7 +50,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, events, groups, menus, params, setting_sections, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::setting::Setting;
-use paperpaw_sdk::ui::choice::{self};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::widgets::Widget;
 use paperpaw_sdk::{ActionSpec, MenuEntry};

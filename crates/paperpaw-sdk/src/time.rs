@@ -584,15 +584,19 @@ pub fn parse_iso8601(text: &str) -> Option<i64> {
         }
         let hours: i64 = digits[..2].parse().ok()?;
         let minutes: i64 = digits[2..].parse().ok()?;
+        if hours > 23 || minutes > 59 {
+            return None;
+        }
         (clock, sign * (hours * 60 + minutes) * 60_000)
     } else {
         (clock, 0)
     };
     let (hms, fraction) = clock.split_once(['.', ',']).unwrap_or((clock, ""));
     let mut parts = hms.splitn(3, ':');
-    let hour: i64 = parts.next()?.parse().ok()?;
-    let minute: i64 = parts.next()?.parse().ok()?;
-    let second: i64 = parts.next().map_or(Some(0), |s| s.parse().ok())?;
+    // Unsigned: no hour of `-1`.
+    let hour = i64::from(parts.next()?.parse::<u8>().ok()?);
+    let minute = i64::from(parts.next()?.parse::<u8>().ok()?);
+    let second = i64::from(parts.next().map_or(Some(0), |s| s.parse::<u8>().ok())?);
     if hour > 23 || minute > 59 || second > 60 {
         return None;
     }
@@ -604,7 +608,10 @@ pub fn parse_iso8601(text: &str) -> Option<i64> {
             millis += digit * [100, 10, 1][n];
         }
     }
-    let ms = ((days * 24 + hour) * 60 + minute) * 60_000 + second * 1000 + millis;
+    // Years far out overflow the milliseconds: none then.
+    let ms = days
+        .checked_mul(86_400_000)?
+        .checked_add(((hour * 60 + minute) * 60 + second) * 1000 + millis)?;
     ms.checked_sub(offset)
 }
 
@@ -660,6 +667,10 @@ mod tests {
             "2026-02-30",
             "2026-10-19T25:00Z",
             "2026-10-19T10:00+2",
+            // An offset past a day, an hour below zero, a year far out.
+            "2026-10-19T10:00+25:00",
+            "2026-10-19T-1:00Z",
+            "2147483647-12-31T23:59:59Z",
             "x",
         ] {
             assert_eq!(parse_iso8601(bad), None, "{bad}");

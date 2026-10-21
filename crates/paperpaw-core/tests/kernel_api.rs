@@ -517,15 +517,23 @@ fn typed_settings_are_set_and_refused_values_told() {
     use paperpaw_core::sdk::event::EventData;
     let harness = Harness::default();
     let mut kernel = kernel_with(&harness, Checked);
-    let typed = paperpaw_core::sdk::Typed {
-        text: "  Ann ".into(),
-        typing: false,
-        context: Params::new().with(params::ID, "checked.name"),
-    };
+    let typed =
+        paperpaw_core::sdk::Typed::new("  Ann ", Params::new().with(params::ID, "checked.name"));
     kernel.send_event(
         Instant(100),
         events::SETTING_TYPED.id().clone(),
         typed.to_params(),
+    );
+    common::render(&mut kernel);
+    assert_eq!(kernel.settings().text("checked.name"), "Ann");
+    // An answer while still typing sets nothing.
+    let typing =
+        paperpaw_core::sdk::Typed::new("An", Params::new().with(params::ID, "checked.name"))
+            .while_typing();
+    kernel.send_event(
+        Instant(150),
+        events::SETTING_TYPED.id().clone(),
+        typing.to_params(),
     );
     common::render(&mut kernel);
     assert_eq!(kernel.settings().text("checked.name"), "Ann");
@@ -560,9 +568,11 @@ fn kernel_with(harness: &Harness, plugin: impl Plugin + 'static) -> Kernel {
 /// where the focus goes, heard.
 struct Focused {
     heard: Rc<std::cell::RefCell<Vec<String>>>,
+    /// Its buttons are a PIN's keys.
+    secret: bool,
 }
 
-struct TwoButtons(usize);
+struct TwoButtons(usize, bool);
 
 impl paperpaw_core::sdk::Screen for TwoButtons {
     fn draw(
@@ -575,6 +585,10 @@ impl paperpaw_core::sdk::Screen for TwoButtons {
             let area = paperpaw_core::sdk::Rect::new(0, 40 * i as u16, 100, 40);
             canvas.describe(Role::Button, label, area, self.0 == i, None);
         }
+    }
+
+    fn secret(&self) -> bool {
+        self.1
     }
 
     fn on_action(
@@ -601,7 +615,10 @@ impl Plugin for Focused {
         r.add_screen(paperpaw_core::sdk::ScreenSpec::new(
             screen.clone(),
             "focused.home",
-            Box::new(|_, _| Box::new(TwoButtons(0))),
+            {
+                let secret = self.secret;
+                Box::new(move |_, _| Box::new(TwoButtons(0, secret)))
+            },
         ))?;
         r.bind_slot(slots::HOME, screen, paperpaw_core::sdk::Priority(1000))?;
         let heard = self.heard.clone();
@@ -620,6 +637,7 @@ fn plugins_hear_where_the_focus_goes() {
     let mut kernel = Kernel::builder(DEVICE)
         .plugin(Focused {
             heard: heard.clone(),
+            secret: false,
         })
         .storage(MemoryStorage::new())
         .build()
@@ -633,4 +651,23 @@ fn plugins_hear_where_the_focus_goes() {
         ["button Second 40", "button First 0"],
         "the start's focus is told with the first move"
     );
+}
+
+/// The keys of a PIN or a password are never told: the screen is secret.
+#[test]
+fn the_focus_on_a_secret_screen_is_not_told() {
+    let heard = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Focused {
+            heard: heard.clone(),
+            secret: true,
+        })
+        .storage(MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    common::render(&mut kernel);
+    common::press(&mut kernel, 100, "down");
+    common::press(&mut kernel, 300, "down");
+    assert!(heard.borrow().is_empty(), "{:?}", heard.borrow());
 }

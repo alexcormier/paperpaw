@@ -119,6 +119,11 @@ impl Framebuffer {
         self.width
     }
 
+    /// Whether it holds no pixels ([`Framebuffer::blind`]).
+    pub fn is_blind(&self) -> bool {
+        self.blind
+    }
+
     pub fn height(&self) -> u16 {
         self.height
     }

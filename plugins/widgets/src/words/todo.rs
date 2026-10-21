@@ -22,7 +22,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::time;
-use paperpaw_sdk::ui::choice::{self};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::widgets::{
     self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,

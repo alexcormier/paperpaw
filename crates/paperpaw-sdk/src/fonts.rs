@@ -856,6 +856,10 @@ impl<'a> FontHandle<'a> {
         color: Color,
         extra: u16,
     ) -> f32 {
+        // Only described, as a screen reader asks: no glyph made.
+        if canvas.is_blind() {
+            return self.measure(size, text);
+        }
         let mut cache = self.cache.borrow_mut();
         let mut pen = x;
         // Runs of characters drawn by the same font.

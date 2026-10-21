@@ -53,6 +53,10 @@ impl Plugin for CorePlugin {
         // Text typed for a setting (`ui::setting_opens`), whichever screen
         // asked.
         r.on(events::SETTING_TYPED, |env, typed, out| {
+            // Only once the reader is done typing, not at each key.
+            if typed.typing {
+                return;
+            }
             let id = typed
                 .context
                 .get(params::ID)

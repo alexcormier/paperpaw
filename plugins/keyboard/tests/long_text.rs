@@ -75,11 +75,7 @@ fn typed(length: usize) -> String {
     kernel.start(Instant(0));
     kernel.run_action(Instant(100), ASK);
     // Typed on a phone (or pasted): it takes the field's place.
-    let text = Typed {
-        text: "x".repeat(length),
-        typing: false,
-        context: Params::new(),
-    };
+    let text = Typed::new("x".repeat(length), Params::new());
     kernel.send_event(
         Instant(200),
         Id::new_static("keyboard.remote-text"),

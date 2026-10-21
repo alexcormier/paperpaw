@@ -33,7 +33,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, events, groups, menus, params, slots};
 use paperpaw_sdk::decorations::{Decoration, LineKind};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::ui::choice::{self};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,

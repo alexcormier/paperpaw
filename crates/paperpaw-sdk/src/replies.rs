@@ -385,7 +385,9 @@ impl EventData for SocketNotice {
 }
 
 /// What the reader typed when asked ([`ask::text`](crate::ask::text)).
+/// Made with [`Typed::new`] (a keyboard of one's own answers so).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Typed {
     pub text: String,
     /// The text so far, while the reader still types: an answer to a
@@ -393,6 +395,25 @@ pub struct Typed {
     pub typing: bool,
     /// The parameters the question was asked with.
     pub context: Params,
+}
+
+impl Typed {
+    /// The text typed for the question asked with `context`, the reader
+    /// done typing.
+    pub fn new(text: impl Into<String>, context: Params) -> Self {
+        Self {
+            text: text.into(),
+            typing: false,
+            context,
+        }
+    }
+
+    /// The text so far, while the reader still types (see
+    /// [`Typed::typing`]).
+    pub fn while_typing(mut self) -> Self {
+        self.typing = true;
+        self
+    }
 }
 
 impl EventData for Typed {

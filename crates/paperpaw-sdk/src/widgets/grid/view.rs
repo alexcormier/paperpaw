@@ -143,10 +143,22 @@ pub struct GridView {
 }
 
 impl GridView {
+    /// An empty grid, not edited, with the plugin's own choice screen
+    /// `choice`, which is no longer needed: the options are asked with
+    /// [`ask::choice`](crate::ask::choice).
+    #[deprecated(
+        since = "0.4.0",
+        note = "use `GridView::asking`, without a choice screen"
+    )]
+    pub fn new(env: &Env<'_>, choice: Id, chosen: Event<Picked>) -> Self {
+        let _ = choice;
+        Self::asking(env, chosen)
+    }
+
     /// An empty grid, not edited; `chosen` is the event the options of an
     /// item come back with (asked with [`ask::choice`](crate::ask::choice)).
     /// Lay it out with [`layout`](Self::layout).
-    pub fn new(env: &Env<'_>, chosen: Event<Picked>) -> Self {
+    pub fn asking(env: &Env<'_>, chosen: Event<Picked>) -> Self {
         Self {
             style: UiStyle::new(env),
             geometry: Geometry::default(),
@@ -1069,7 +1081,7 @@ mod tests {
     const BUTTON: (Rect, u16) = (Rect::new(0, 310, 100, 40), 7);
 
     fn laid_out(env: &Env<'_>, items: &[Item], buttons: &[(Rect, u16)]) -> GridView {
-        let mut grid = GridView::new(env, CHOSEN);
+        let mut grid = GridView::asking(env, CHOSEN);
         grid.layout(env, geometry(), items, buttons);
         grid
     }
@@ -1190,7 +1202,7 @@ mod tests {
         let grid = laid_out(&env, &items, &[]);
         assert_eq!(grid.items(), items);
         // So with places to come, in a grid of one cell.
-        let mut one = GridView::new(&env, CHOSEN);
+        let mut one = GridView::asking(&env, CHOSEN);
         let items = [Item::new(tool("t.a")), Item::new(tool("t.a"))];
         let small = Geometry::of(Rect::new(0, 0, 100, 100), 1, 1, 0);
         one.layout(&env, small, &items, &[]);

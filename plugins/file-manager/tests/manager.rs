@@ -112,11 +112,7 @@ fn focused(kernel: &mut Kernel) -> String {
 }
 
 fn rename(kernel: &mut Kernel, path: &str, name: &str) {
-    let typed = Typed {
-        text: name.into(),
-        typing: false,
-        context: Params::new().with(params::PATH, path),
-    };
+    let typed = Typed::new(name, Params::new().with(params::PATH, path));
     let event = Id::new_static("file-manager.renamed");
     let effects = kernel.send_event(Instant(0), event, typed.to_params());
     settle(kernel, effects);

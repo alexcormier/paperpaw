@@ -226,11 +226,7 @@ impl Screen for Keyboard {
             .get(params::REPLY)
             .and_then(|r| Id::parse(r).ok());
         if let Some(reply) = reply {
-            let typed = Typed {
-                typing: false,
-                text,
-                context: self.params.clone(),
-            };
+            let typed = Typed::new(text, self.params.clone());
             cx.command(Command::Emit(
                 reply,
                 paperpaw_sdk::event::EventData::to_params(&typed),

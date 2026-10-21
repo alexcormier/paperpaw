@@ -13,7 +13,9 @@ change the plugin SDK.
   (`Framebuffer::blind`; 48 KB less on the X4). New roles `Check`,
   `Radio`, `Field`, `Image`, `Link`, `Dialog` and `Progress`
   (`semantics::role_name` names them); progress bars and the keyboard's
-  field describe themselves so.
+  field describe themselves so. `Screen::secret` (a PIN, a password being
+  typed) keeps its focus from being told, as do screens that guard the
+  device. On a blind framebuffer no glyph or picture is made.
 - SDK: `ui::setting_opens` says what choosing a setting opens (its
   editor, the keyboard for text, the list of a choice's values), the
   same on the settings pages, in menus, the quick panel and the setup;
@@ -27,19 +29,23 @@ change the plugin SDK.
   with `.about(context)` and `.options(labels, &[..])` asks on the
   screen of the new slot `core.choice` (the kernel's
   `screens::CHOICE` unless a plugin binds another), so a theme restyles
-  all questions. `ui::choice::open` is gone, and with it the fifteen
-  plugins' own choice screens; `GridView::new` no longer takes one.
+  all questions. The fifteen plugins' own choice screens are gone.
+  `ui::choice::open` (a plugin's own choice screen) and
+  `GridView::new(env, choice, chosen)` are deprecated:
+  `GridView::asking(env, chosen)` needs no choice screen.
 - SDK: themes are presets of the kind `core.theme` (`presets::THEME`,
   covering `presets::theme_settings`, the appearance group): the
   settings plugin lists them under *Theme* at the top of the appearance
-  settings where any is installed, so two themes no longer fight.
+  settings where any is installed, so two themes no longer fight; *None*
+  gives the appearance settings their defaults again. No theme changes
+  the size of the interface's text, its contrast or the logo.
 - SDK: semantic icons (`icons::BACK`, `PREV`, `NEXT`, `HOLD`, `BUSY`,
   `SHIFT`, `DELETE`, `SPACE`) take the icon a plugin names for them with
   `add_icon`, so a theme changes the headers' arrows, the hints' marks
   and the keyboard's keys; without one they look as before.
   `ui::draw_arrow`, `ui::draw_icon_at` and `ui::has_icon` draw and ask
   for them. An icon named `U+F8000` is that code point, for icons of
-  one's own. `ui::HOLD_ICON` is gone (`icons::HOLD`).
+  one's own. `ui::HOLD_ICON` is deprecated (`icons::HOLD`).
 - SDK: the interface's grays have roles (`ui::Ink`: text, notes,
   muted, faint, disabled, rules, lines, cards, …), `UiStyle::ink` gives
   each, from the palette a theme sets in `core.ui-palette` (e.g.
@@ -55,8 +61,8 @@ change the plugin SDK.
   carry the look in use (the highest priority, of equal ones the later).
 - SDK: a setting's editor may be a slot (`SettingExtra::editor_slot`,
   `SettingSpec::editor_slot`), so a plugin filling it edits the setting
-  too: `SettingExtra::editor` is now an `Editor` (`Screen` or `Slot`),
-  opened with `Editor::open`. New slot `core.choose-value`
+  too. Breaking: `SettingExtra::editor` is now an `Editor` (`Screen` or
+  `Slot`), opened with `Editor::open`. New slot `core.choose-value`
   (`slots::CHOOSE_VALUE`) picks a choice setting's value; the settings
   plugin binds it, menus and the setup open it. The dictionary, sleep
   and picture widget choose their folders with `core.choose-folder`.
@@ -64,21 +70,28 @@ change the plugin SDK.
   list that filters as one types), each with `Typed::typing` set; the
   keyboard gives them. `params::FOCUS` opens slot `core.settings` on a
   setting's page with the focus on it. New: `params::LIVE`,
-  `params::TYPING`; `Typed` has the field `typing`.
+  `params::TYPING`. Breaking: `Typed` has the field `typing` and is
+  `#[non_exhaustive]`, made with `Typed::new(text, context)` (and
+  `while_typing`). The kernel sets a setting from `SETTING_TYPED` only
+  once the reader is done typing.
 - SDK: a menu the user redefined shows the entries plugins contribute
-  after it was made, beside their neighbours: `Menus::customize` takes
-  the entries known then (kernel), `Menus::known_ids` gives them.
+  after it was made, beside their neighbours: `Menus::known_ids` gives
+  them. Breaking (kernel only): `Menus::customize` takes the entries
+  known then.
 - SDK: `Services::ids` and `Services::points` list the services
-  published and the points contributed to; `Services::add` (deprecated)
-  is gone.
+  published and the points contributed to. Breaking: `Services::add`,
+  deprecated since 0.4.0, is gone.
 - SDK: `time::iso8601` and `time::parse_iso8601` write and read
   ISO 8601 times (UTC with milliseconds; offsets and dates alone read
-  too), `time::duration_text` writes a length of time as `1 h 05 min`,
+  too; years too far out and offsets past a day read as none),
+  `time::duration_text` writes a length of time as `1 h 05 min`,
   `42 min` or `< 1 min` in the language's words. Joplin uses them.
 - SDK: `menus::BOOK` (`core.book-menu`), what can be done with a book
   in any view of the library, with `events::BOOK_CHOSEN` (`BookChosen`:
-  the action and the book) sent before the action runs; `menus::APPS`
-  (`core.apps`), what a launcher lists.
+  the action and the book) sent before the action runs: the library's
+  book sheet lists it, its book details are its first entry
+  (`files.book-info`). `menus::APPS` (`core.apps`), what a launcher
+  lists: the home screen's tools list it beside the tools.
 - A row's title and value keep a margin between them, not two: on a
   screen as narrow as the X4's both stay whole where they fit (Joplin's
   "Synchronised with, Joplin Cloud" lost the end of both).

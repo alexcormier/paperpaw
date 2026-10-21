@@ -44,8 +44,9 @@ pub fn draw_qr(canvas: &mut Canvas<'_>, qr: &crate::qr::QrCode, area: Rect) -> O
 /// rows inside the canvas clip are read. Grays are dithered on two-level
 /// panels; colour shows as colour on colour screens, as gray elsewhere.
 pub fn draw_image(canvas: &mut Canvas<'_>, storage: &dyn Storage, image: &ImageRef, area: Rect) {
-    // Frames are drawn in bands: nothing read for those it is not in.
-    if area.intersection(&canvas.clip()).is_none() {
+    // Frames are drawn in bands: nothing read for those it is not in, nor
+    // where it is only described.
+    if canvas.is_blind() || area.intersection(&canvas.clip()).is_none() {
         return;
     }
     if let Some(file) = crate::image::ColorFile::open(storage, &image.path) {

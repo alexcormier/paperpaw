@@ -336,10 +336,8 @@ fn nothing_is_asked_before_the_account_is_set_up_or_without_network() {
 fn secrets_typed_in_are_kept_veiled_and_sent_encoded() {
     let storage = Shared::default();
     let mut h = Harness::build(storage, "[core]\nlanguage = en\n", true);
-    let typed = |field: &'static str, text: &str| Typed {
-        typing: false,
-        text: String::from(text),
-        context: Params::new().with("field", field),
+    let typed = |field: &'static str, text: &str| {
+        Typed::new(String::from(text), Params::new().with("field", field))
     };
     h.send(
         "wallabag.entered",

@@ -123,6 +123,14 @@ impl Guide {
             .setup
             .applying(env)
             .into_iter()
+            // A setting shown only while another has a value.
+            .filter(|s| match &s.page {
+                paperpaw_sdk::setup::SetupPage::Setting(id) => env
+                    .settings
+                    .spec(id.as_str())
+                    .is_none_or(|spec| env.settings.shows(spec)),
+                _ => true,
+            })
             .map(|s| s.id.clone())
             .collect();
         let mut guide = Self {

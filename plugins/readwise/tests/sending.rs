@@ -178,11 +178,10 @@ fn the_token_is_asked_for_once_kept_veiled_and_sent() {
     // The keyboard answers, with the notes' path passed along.
     h.send(
         "readwise.token-entered",
-        Typed {
-            typing: false,
-            text: String::from("  t0k-en  "),
-            context: Params::new().with(params::PATH, NOTES),
-        },
+        Typed::new(
+            String::from("  t0k-en  "),
+            Params::new().with(params::PATH, NOTES),
+        ),
     );
     let calls = h.requests();
     assert_eq!(calls.len(), 1, "{calls:?}");
@@ -210,11 +209,7 @@ fn an_empty_token_is_not_kept() {
     let mut h = Harness::new(storage, true);
     h.send(
         "readwise.token-entered",
-        Typed {
-            typing: false,
-            text: String::from("   "),
-            context: Params::new().with(params::PATH, NOTES),
-        },
+        Typed::new(String::from("   "), Params::new().with(params::PATH, NOTES)),
     );
     assert!(h.requests().is_empty());
     assert_eq!(h.kernel.secrets().get(SECRET), None);

@@ -18,13 +18,11 @@ pub fn draw_progress(
     ink: Color,
 ) {
     let done = permille.min(1000);
-    canvas.describe(
-        Role::Progress,
-        &format!("{}%", done / 10),
-        area,
-        false,
-        None,
-    );
+    // Its share in words only for those who ask: no text made each draw.
+    if canvas.is_describing() {
+        let done = format!("{}%", done / 10);
+        canvas.describe(Role::Progress, &done, area, false, None);
+    }
     let part = super::look::ProgressPart {
         area,
         permille: done,

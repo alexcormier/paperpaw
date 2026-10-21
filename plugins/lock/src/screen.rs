@@ -695,6 +695,11 @@ impl Screen for LockScreen {
         true
     }
 
+    /// The code being entered: its keys are not told to plugins.
+    fn secret(&self) -> bool {
+        true
+    }
+
     /// Locked, no screen shows above it but its own (the keyboard for a
     /// password): others wait below until it is unlocked.
     fn guards(&self) -> bool {

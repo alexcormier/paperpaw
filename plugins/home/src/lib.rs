@@ -53,7 +53,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params, slots};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::ui::choice::{self};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item, What};
@@ -284,7 +284,7 @@ impl Dashboard {
         });
         // Opened by *Edit home screen*.
         let editing = page_set.or_else(|| (params.get(params::MODE) == Some("edit")).then_some(0));
-        let mut grid = GridView::new(env, CHOSEN);
+        let mut grid = GridView::asking(env, CHOSEN);
         grid.set_editing(editing.is_some());
         let (status, _, footer) = frame(env, None);
         Self {

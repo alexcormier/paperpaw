@@ -13,14 +13,22 @@ pub fn button_hints_height(env: &Env<'_>) -> u16 {
     ((line * 1.5) as u32 + style.line).max(env.metrics.mm(4)) as u16
 }
 
-/// The row of hints below the screen: a line above it, then what each
-/// button under it does, centred in an equal share of the width, as the
-/// buttons lie. The hint of the button `pressed` is drawn inverted, as a
-/// sign that its press is being worked on.
 /// PaperPaw's paw: on empty screens ([`draw_empty`]) and as the busy
 /// mark, also in the hint of a button whose press is being worked on.
 pub const PAW_ICON: &str = "paw";
 
+/// The mark beside a button's label in the row of hints where holding
+/// the button does something too.
+#[deprecated(
+    since = "0.4.0",
+    note = "use `icons::HOLD`, which a theme may draw another way"
+)]
+pub const HOLD_ICON: &str = "hand-click";
+
+/// The row of hints below the screen: a line above it, then what each
+/// button under it does, centred in an equal share of the width, as the
+/// buttons lie. The hint of the button `pressed` is drawn inverted, as a
+/// sign that its press is being worked on.
 pub fn draw_button_hints(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

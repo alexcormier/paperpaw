@@ -94,7 +94,6 @@ pub fn parts(described: Vec<Described>) -> Vec<Part> {
     parts
 }
 
-/// The part with the focus, if any.
 /// The name of `role`, e.g. `button` (as [`events::FocusChanged`](crate::builtin::events::FocusChanged)
 /// says it).
 pub fn role_name(role: Role) -> &'static str {
@@ -116,6 +115,7 @@ pub fn role_name(role: Role) -> &'static str {
     }
 }
 
+/// The part with the focus, if any.
 pub fn focused(parts: &[Part]) -> Option<&Part> {
     parts.iter().rev().find(|p| p.focused)
 }

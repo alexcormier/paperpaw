@@ -220,11 +220,7 @@ impl Kernel {
 
     /// Answers a [`Command::ReadClipboard`] with the text known here.
     pub(crate) fn reply_clipboard(&mut self, reply: Id, params: Params) {
-        let typed = paperpaw_sdk::Typed {
-            text: self.shared.clipboard.clone(),
-            typing: false,
-            context: params,
-        };
+        let typed = paperpaw_sdk::Typed::new(self.shared.clipboard.clone(), params);
         self.output
             .commands
             .push(Command::Emit(reply, typed.to_params()));

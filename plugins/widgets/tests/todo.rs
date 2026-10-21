@@ -136,21 +136,16 @@ impl List {
 
     /// An item typed on the screen, as the text input answers.
     fn add(&mut self, text: &str) {
-        let typed = Typed {
-            typing: false,
-            text: text.to_string(),
-            context: Params::new(),
-        };
+        let typed = Typed::new(text.to_string(), Params::new());
         self.send("widgets.todo.added", typed.to_params());
     }
 
     /// Item `index`'s text typed anew.
     fn edit(&mut self, index: usize, text: &str) {
-        let typed = Typed {
-            typing: false,
-            text: text.to_string(),
-            context: Params::new().with("index", index.to_string()),
-        };
+        let typed = Typed::new(
+            text.to_string(),
+            Params::new().with("index", index.to_string()),
+        );
         self.send("widgets.todo.edited", typed.to_params());
     }
 

@@ -1,13 +1,15 @@
 //! What can be done with a book: a sheet from the bottom with its cover,
 //! title, author and how far it is read, then the actions (go on reading
-//! or open, its series, finished or unread, favourite, information).
+//! or open, its series, finished or unread, favourite), then what plugins
+//! add to the book menu (`menus::BOOK`: its details, sending it, …),
+//! which get `events::BOOK_CHOSEN` with the book before their action runs.
 //!
 //! The book's details and small cover are read when the sheet opens.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::builtin::{actions, events, menus, params};
 use paperpaw_sdk::library;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
@@ -20,7 +22,7 @@ use super::rows::{self, Loaded, Sizes};
 use super::shelf::{self, Kind};
 
 /// An action of the sheet.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 enum Action {
     Open,
     Series,
@@ -28,7 +30,8 @@ enum Action {
     Unfinished,
     Favourite,
     Unfavourite,
-    Info,
+    /// An entry of the book menu, a plugin's (see `menus::BOOK`).
+    Book(Id),
     Archive,
     Menu,
 }
@@ -91,7 +94,12 @@ impl BookSheet {
         } else {
             actions.push((Action::Favourite, tr("files.option.favourite")));
         }
-        actions.push((Action::Info, tr("files.option.info")));
+        // What plugins add for a book, the library's details first.
+        for item in env.menus.items(menus::BOOK.as_str()) {
+            if !item.section {
+                actions.push((Action::Book(item.id.clone()), tr(item.title)));
+            }
+        }
         if crate::can_archive(env, &path) {
             actions.push((Action::Archive, tr("files.option.archive")));
         }
@@ -148,10 +156,11 @@ impl BookSheet {
                 };
                 cx.command(Command::Notify(env.i18n.tr(key).to_string()));
             }
-            Action::Info => cx.command(Command::OpenScreen(
-                crate::INFO_SCREEN,
-                Params::new().with(params::PATH, path.to_string()),
-            )),
+            Action::Book(action) => {
+                let chosen = events::BookChosen::new(action.clone(), path.to_string());
+                cx.command(events::BOOK_CHOSEN.emit(chosen));
+                cx.command(Command::RunAction(action.clone()));
+            }
             Action::Archive => crate::archive(&env, path, cx),
             Action::Menu => super::open_menu(cx),
         }

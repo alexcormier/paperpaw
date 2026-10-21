@@ -123,11 +123,7 @@ impl PhoneScreen {
                         .and_then(|r| Id::parse(r).ok())
                 {
                     cx.command(Command::Back);
-                    let typed = Typed {
-                        typing: false,
-                        text,
-                        context: self.params.clone(),
-                    };
+                    let typed = Typed::new(text, self.params.clone());
                     cx.command(Command::Emit(reply, typed.to_params()));
                 }
                 return;

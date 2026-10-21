@@ -81,6 +81,12 @@ impl BarScreen {
             .items(menu)
             .into_iter()
             .filter(|item| !item.section && !paperpaw_sdk::Menus::hidden(params, item.id.as_str()))
+            // A setting shown only while another has a value.
+            .filter(|item| {
+                env.settings
+                    .spec(item.id.as_str())
+                    .is_none_or(|s| env.settings.shows(s))
+            })
             .map(|item| Entry {
                 id: item.id.clone(),
                 label: env

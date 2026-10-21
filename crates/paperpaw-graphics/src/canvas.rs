@@ -90,6 +90,13 @@ impl<'a> Canvas<'a> {
         self
     }
 
+    /// Whether it keeps no pixels ([`Framebuffer::blind`]): what is drawn
+    /// is only described, so drawing that costs (glyphs, pictures) can be
+    /// left out.
+    pub fn is_blind(&self) -> bool {
+        self.framebuffer.is_blind()
+    }
+
     /// Whether anyone asks what is drawn (see [`Canvas::describe`]).
     pub fn is_describing(&self) -> bool {
         self.described.is_some()

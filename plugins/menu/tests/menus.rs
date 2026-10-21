@@ -282,13 +282,17 @@ fn a_choice_of_more_opens_its_list_and_the_value_chosen_is_kept() {
 /// Every row of the menu shown, page by page: turned with the page
 /// buttons, or on touch screens by the pager's arrow at the bottom right.
 fn paged(app: &mut App) -> Vec<String> {
+    // Page by page until one comes again (the last stays, or the first
+    // follows it): entries of the same name each count.
     let mut seen: Vec<String> = Vec::new();
+    let mut pages: Vec<Vec<String>> = Vec::new();
     for _ in 0..20 {
-        for row in rows(app) {
-            if !seen.contains(&row) {
-                seen.push(row);
-            }
+        let page = rows(app);
+        if pages.contains(&page) {
+            break;
         }
+        seen.extend(page.iter().cloned());
+        pages.push(page);
         if touch(app) {
             app.tap(Point::new(450, 785));
         } else {

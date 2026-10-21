@@ -27,7 +27,7 @@ use paperpaw_sdk::builtin::{actions, groups, menus, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::setting::Setting;
-use paperpaw_sdk::ui::choice::{self};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::web::{clean_name, host};
 use paperpaw_sdk::{

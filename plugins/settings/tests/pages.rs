@@ -410,7 +410,16 @@ const THEMES: &[(&str, &[u8])] = &[
 #[test]
 fn a_theme_is_chosen_at_the_top_of_the_appearance_settings() {
     for device in DEVICES {
-        let mut app = App::new(device, Shared::memory("", THEMES));
+        // The reader's own text size, which no theme touches.
+        let mut app = App::new(
+            device,
+            Shared::memory(
+                "[core]
+ui-size = 14
+",
+                THEMES,
+            ),
+        );
         let look = || {
             Params::new().with(
                 params::ID,
@@ -435,6 +444,14 @@ fn a_theme_is_chosen_at_the_top_of_the_appearance_settings() {
         let settings = app.kernel.settings();
         assert_eq!(settings.text("core.ui-focus"), "core.focus.ring");
         assert!(!settings.is_set("core.ui-row"));
+        assert_eq!(settings.int("core.ui-size"), 14);
+        // None: the appearance as it comes, the text size still the reader's.
+        choose(&mut app, "Theme");
+        choose(&mut app, "None");
+        let settings = app.kernel.settings();
+        assert!(!settings.is_set("core.ui-focus"));
+        assert_eq!(settings.int("core.ui-size"), 14);
+        assert!(rows(&mut app)[0].contains("None"), "{:?}", rows(&mut app));
     }
     // Without themes, no such row.
     let mut app = App::new(X4, Shared::memory("", &[]));

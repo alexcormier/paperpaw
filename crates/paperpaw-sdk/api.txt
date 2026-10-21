@@ -1586,10 +1586,13 @@ pub fn paperpaw_sdk::replies::HttpReply::refused(paperpaw_sdk::work::Refusal, pa
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::HttpReply::to_params(&self) -> paperpaw_sdk::Params
-pub struct paperpaw_sdk::replies::Typed
+#[non_exhaustive] pub struct paperpaw_sdk::replies::Typed
 pub paperpaw_sdk::replies::Typed::context: paperpaw_sdk::Params
 pub paperpaw_sdk::replies::Typed::text: alloc::string::String
 pub paperpaw_sdk::replies::Typed::typing: bool
+impl paperpaw_sdk::replies::Typed
+pub fn paperpaw_sdk::replies::Typed::new(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Params) -> Self
+pub fn paperpaw_sdk::replies::Typed::while_typing(self) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Typed
 pub fn paperpaw_sdk::replies::Typed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Typed::to_params(&self) -> paperpaw_sdk::Params
@@ -1877,6 +1880,7 @@ pub fn paperpaw_sdk::ui::choice::Choice::on_pointer(&mut self, &paperpaw_platfor
 pub fn paperpaw_sdk::ui::choice::Choice::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::ui::choice::Choice::secret(&self) -> bool
 #[non_exhaustive] pub struct paperpaw_sdk::ui::choice::Picked
 pub paperpaw_sdk::ui::choice::Picked::option: alloc::string::String
 pub paperpaw_sdk::ui::choice::Picked::path: alloc::string::String
@@ -1886,6 +1890,7 @@ impl paperpaw_sdk::event::EventData for paperpaw_sdk::ui::choice::Picked
 pub fn paperpaw_sdk::ui::choice::Picked::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::choice::Picked::to_params(&self) -> paperpaw_sdk::Params
 pub const paperpaw_sdk::ui::choice::OPTION: &str
+pub fn paperpaw_sdk::ui::choice::open(paperpaw_sdk::Id, &paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked>, &str, &str, &str, &[&str]) -> paperpaw_sdk::Command
 pub mod paperpaw_sdk::ui::items
 pub struct paperpaw_sdk::ui::items::ItemsScreen
 impl paperpaw_sdk::ui::items::ItemsScreen
@@ -1908,6 +1913,7 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::on_pointer(&mut self, &paperpaw_pla
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::ui::items::ItemsScreen::secret(&self) -> bool
 pub const paperpaw_sdk::ui::items::LINES: &str
 pub mod paperpaw_sdk::ui::look
 #[non_exhaustive] pub struct paperpaw_sdk::ui::look::ButtonPart
@@ -2290,6 +2296,7 @@ pub fn paperpaw_sdk::ui::UiStyle::noted_row_of(&self, usize) -> u32
 pub fn paperpaw_sdk::ui::UiStyle::radius(&self, u32) -> u32
 pub fn paperpaw_sdk::ui::UiStyle::size(&self, paperpaw_sdk::ui::TextRole) -> f32
 pub fn paperpaw_sdk::ui::UiStyle::touch_row(&self, u32) -> u32
+pub const paperpaw_sdk::ui::HOLD_ICON: &str
 pub const paperpaw_sdk::ui::ICON_SCALE: f32
 pub const paperpaw_sdk::ui::NOTE_LINES: usize
 pub const paperpaw_sdk::ui::PAW_ICON: &str
@@ -2435,6 +2442,7 @@ impl core::default::Default for paperpaw_sdk::widgets::grid::Geometry
 pub fn paperpaw_sdk::widgets::grid::Geometry::default() -> Self
 pub struct paperpaw_sdk::widgets::grid::GridView
 impl paperpaw_sdk::widgets::grid::GridView
+pub fn paperpaw_sdk::widgets::grid::GridView::asking(&paperpaw_sdk::Env<'_>, paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked>) -> Self
 pub fn paperpaw_sdk::widgets::grid::GridView::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
 pub fn paperpaw_sdk::widgets::grid::GridView::editing(&self) -> bool
 pub fn paperpaw_sdk::widgets::grid::GridView::geometry(&self) -> &paperpaw_sdk::widgets::grid::Geometry
@@ -2442,7 +2450,7 @@ pub fn paperpaw_sdk::widgets::grid::GridView::hint(&self, &paperpaw_sdk::Id, &pa
 pub fn paperpaw_sdk::widgets::grid::GridView::holds_edges(&self) -> bool
 pub fn paperpaw_sdk::widgets::grid::GridView::items(&self) -> alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>
 pub fn paperpaw_sdk::widgets::grid::GridView::layout(&mut self, &paperpaw_sdk::Env<'_>, paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item], &[(paperpaw_platform::geometry::Rect, u16)])
-pub fn paperpaw_sdk::widgets::grid::GridView::new(&paperpaw_sdk::Env<'_>, paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked>) -> Self
+pub fn paperpaw_sdk::widgets::grid::GridView::new(&paperpaw_sdk::Env<'_>, paperpaw_sdk::Id, paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked>) -> Self
 pub fn paperpaw_sdk::widgets::grid::GridView::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::widgets::grid::GridResponse
 pub fn paperpaw_sdk::widgets::grid::GridView::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::widgets::grid::GridResponse
 pub fn paperpaw_sdk::widgets::grid::GridView::on_gesture(&mut self, paperpaw_sdk::Gesture, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::widgets::grid::GridResponse
@@ -3910,10 +3918,13 @@ pub fn paperpaw_sdk::status::StatusLineSpec::new(paperpaw_sdk::Id, impl core::co
 pub fn paperpaw_sdk::status::StatusLineSpec::signature(self, paperpaw_sdk::status::StatusSignatureFn) -> Self
 impl core::fmt::Debug for paperpaw_sdk::status::StatusLineSpec
 pub fn paperpaw_sdk::status::StatusLineSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct paperpaw_sdk::Typed
+#[non_exhaustive] pub struct paperpaw_sdk::Typed
 pub paperpaw_sdk::Typed::context: paperpaw_sdk::Params
 pub paperpaw_sdk::Typed::text: alloc::string::String
 pub paperpaw_sdk::Typed::typing: bool
+impl paperpaw_sdk::replies::Typed
+pub fn paperpaw_sdk::replies::Typed::new(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Params) -> Self
+pub fn paperpaw_sdk::replies::Typed::while_typing(self) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Typed
 pub fn paperpaw_sdk::replies::Typed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Typed::to_params(&self) -> paperpaw_sdk::Params
@@ -4036,6 +4047,7 @@ pub fn paperpaw_sdk::Screen::on_pointer(&mut self, &paperpaw_platform::input::Po
 pub fn paperpaw_sdk::Screen::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::Screen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::Screen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::Screen::secret(&self) -> bool
 impl paperpaw_sdk::Screen for paperpaw_sdk::ui::choice::Choice
 pub fn paperpaw_sdk::ui::choice::Choice::dims_below(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
@@ -4052,6 +4064,7 @@ pub fn paperpaw_sdk::ui::choice::Choice::on_pointer(&mut self, &paperpaw_platfor
 pub fn paperpaw_sdk::ui::choice::Choice::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::ui::choice::Choice::secret(&self) -> bool
 impl paperpaw_sdk::Screen for paperpaw_sdk::ui::items::ItemsScreen
 pub fn paperpaw_sdk::ui::items::ItemsScreen::dims_below(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
@@ -4068,6 +4081,7 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::on_pointer(&mut self, &paperpaw_pla
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::ui::items::ItemsScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::cover_fit(paperpaw_image::Fit) -> paperpaw_image::Fit
 pub fn paperpaw_sdk::read_file(&dyn paperpaw_platform::storage::Storage, &str, usize) -> core::result::Result<alloc::vec::Vec<u8>, paperpaw_platform::storage::StorageError>
 pub type paperpaw_sdk::ActionHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &mut alloc::vec::Vec<paperpaw_sdk::Command>)>

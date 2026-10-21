@@ -174,11 +174,7 @@ impl Harness {
     fn go(&mut self, text: &str) -> HttpCall {
         self.send(
             "browser.address",
-            Typed {
-                text: String::from(text),
-                typing: false,
-                context: Params::new(),
-            },
+            Typed::new(String::from(text), Params::new()),
         );
         self.request()
     }
@@ -282,11 +278,7 @@ fn typed_words_are_searched_and_addresses_loaded() {
     // Nothing typed: nothing loaded.
     h.send(
         "browser.address",
-        Typed {
-            text: String::from("   "),
-            typing: false,
-            context: Params::new(),
-        },
+        Typed::new(String::from("   "), Params::new()),
     );
     assert!(h.requests().is_empty());
 }
@@ -570,11 +562,7 @@ fn without_a_network_nothing_is_asked() {
     let mut h = Harness::build(Shared::default(), None, false);
     h.send(
         "browser.address",
-        Typed {
-            text: String::from("a.example"),
-            typing: false,
-            context: Params::new(),
-        },
+        Typed::new(String::from("a.example"), Params::new()),
     );
     assert!(h.requests().is_empty());
     assert!(h.said().contains("needs a network"));
