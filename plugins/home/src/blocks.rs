@@ -27,7 +27,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, screens};
 use paperpaw_sdk::document::ImageRef;
-use paperpaw_sdk::status::{StatusLine, StatusValue, item_ids};
+use paperpaw_sdk::status::Place;
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::widgets::{
     self, Align, Drawn, Frame, Size, Widget, WidgetSpec, WidgetTarget, grid, line_height,
@@ -60,10 +60,19 @@ pub(crate) const TOOL_LABELS: Setting<bool> = Setting::new("home.tool-labels");
 pub(crate) const FOCUS_AT_ONCE: Setting<bool> = Setting::new("home.focus-at-once");
 /// The status items of the status line's left, centre and right (ids
 /// separated by commas).
-pub(crate) const STATUS_PARTS: [Setting<Text>; 3] = [STATUS_LEFT, STATUS_CENTER, STATUS_RIGHT];
 const STATUS_LEFT: Setting<Text> = Setting::new("home.status.left");
 const STATUS_CENTER: Setting<Text> = Setting::new("home.status.center");
 const STATUS_RIGHT: Setting<Text> = Setting::new("home.status.right");
+/// Where the status line's items show, above the grid and as a widget.
+const PLACE: Place = Place::new(
+    Id::new_static("home.status-line"),
+    "home.widget.status",
+    [
+        Id::new_static(STATUS_LEFT.static_str()),
+        Id::new_static(STATUS_CENTER.static_str()),
+        Id::new_static(STATUS_RIGHT.static_str()),
+    ],
+);
 /// The status line's parts, each a list of status items chosen on their
 /// picker: the time on the left; Wi-Fi and the battery on the right.
 static STATUS_ITEMS: SettingExtra = SettingExtra::new().editor(screens::STATUS_ITEMS);
@@ -166,7 +175,9 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         WidgetSpec::drawn(
             Id::new_static(STATUS),
             "home.widget.status",
-            Drawn::new(status_widget_height, draw_status_widget).shows(status_signature),
+            Drawn::new(status_widget_height, draw_status_widget)
+                .shows(status_signature)
+                .targets(status_widget_targets),
         )
         .category(categories::DEVICE),
     )?;
@@ -204,6 +215,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     let status = Id::new_static(STATUS);
     r.add_setting_group(widgets::settings_group(&status, "home.widget.status"))?;
     r.add_settings(&STATUS_SETTINGS)?;
+    r.add_status_place(PLACE)?;
     // Each other widget's settings, in its own group.
     for (id, title) in [
         (DATE, "home.widget.date"),
@@ -244,7 +256,7 @@ pub(crate) fn status_height(env: &Env<'_>, _: u16) -> u16 {
 }
 
 /// The status line above the grid ([`status_height`]): the status items
-/// chosen for its left, centre and right ([`STATUS_PARTS`]), any
+/// chosen for its left, centre and right ([`PLACE`]), any
 /// plugin's, as the reader's lines have them.
 pub(crate) fn draw_status(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, STATUS, area);
@@ -268,88 +280,59 @@ fn draw_status_widget(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 }
 
 /// The status items in `area`, as many as fit whole: where all do not,
-/// the battery's percentage is left out first, then the centre's items,
-/// then the left's (the percentage back where that makes room), so that
-/// nothing is cut or drawn outside.
+/// the battery's percentage is left out first, then the items that
+/// matter least (the status line leaves them out), so that nothing is
+/// cut or drawn outside.
 fn draw_status_line(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, area: Rect) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
     };
-    let size = style.small;
-    let mut lists = STATUS_PARTS.each_ref().map(|part| env.settings.read(part));
-    let mut percent = true;
-    let room = f32::from(area.width);
-    'fit: for drop in [None, Some(1), Some(0)] {
-        if let Some(part) = drop {
-            lists[part] = "";
-        }
-        for with in [true, false] {
-            percent = with;
-            if status_width(env, &font, size, &lists, percent) <= room {
-                break 'fit;
-            }
-        }
-    }
-    let line = StatusLine {
-        area,
-        lists,
-        size,
-        color: if look.frame == Frame::Dark {
-            look.faint
-        } else {
-            style.faint(60)
-        },
-        percent,
+    let color = if look.frame == Frame::Dark {
+        look.faint
+    } else {
+        style.faint(60)
     };
-    line.draw(canvas, env, &font, &Params::new());
+    PLACE
+        .line(env, area, style.small, color)
+        .draw(canvas, env, &font, &Params::new());
 }
 
-/// How wide the status items of `lists` are side by side at `size`,
-/// with the narrowest gaps the status line leaves between them (as
-/// [`StatusLine`] measures them).
-fn status_width(
-    env: &Env<'_>,
-    font: &paperpaw_sdk::FontHandle<'_>,
-    size: f32,
-    lists: &[&str; 3],
-    percent: bool,
-) -> f32 {
-    let mut width = 0.0;
-    let mut count = 0usize;
-    for list in lists {
-        for id in item_ids(list) {
-            let Some(value) = env.status_items.value(id, env, &Params::new()) else {
-                continue;
-            };
-            count += 1;
-            width += match value {
-                StatusValue::Icon(name) => ui::icon_width(env, &name, size),
-                StatusValue::Text(text) => font.measure(size, &text),
-                StatusValue::Level { percent: p, .. } if percent => {
-                    size * 1.6 + font.measure(size, &format!("{p} %"))
-                }
-                StatusValue::Level { .. } => size * 1.3,
-                StatusValue::Bar { .. } => size * 4.0,
-                _ => 0.0,
-            };
-        }
-    }
-    width + size * 0.4 * count.saturating_sub(1) as f32
+/// Where a tap on the status line in `area` does something (the items
+/// that do something when tapped).
+fn status_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+    let style = UiStyle::new(env);
+    let Some(font) = style.font(env) else {
+        return Vec::new();
+    };
+    PLACE
+        .line(env, area, style.small, Color::BLACK)
+        .targets(env, &font, &Params::new())
+        .into_iter()
+        .map(|t| WidgetTarget::new(t.area, t.command))
+        .collect()
+}
+
+/// Where a tap on the status line above the grid ([`draw_status`]) does
+/// something.
+pub(crate) fn status_bar_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+    let look = widgets::look::look(env, STATUS, area);
+    let inner = if look.frame == Frame::None {
+        area
+    } else {
+        look.area
+    };
+    status_targets(env, inner)
+}
+
+/// Where a tap on the status line widget in `area` does something.
+fn status_widget_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+    status_targets(env, widgets::look::look(env, STATUS, area).area)
 }
 
 /// What the status line shows now, to draw it again when it changes.
 fn status_signature(env: &Env<'_>) -> String {
-    let mut signature = String::new();
-    for part in &STATUS_PARTS {
-        for id in item_ids(env.settings.read(part)) {
-            if let Some(value) = env.status_items.value(id, env, &Params::new()) {
-                signature.push_str(&format!("{value:?}|"));
-            }
-        }
-        signature.push('/');
-    }
-    signature
+    PLACE.signature(env, &Params::new())
 }
 
 // ---- Date ---------------------------------------------------------------

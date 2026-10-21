@@ -296,6 +296,26 @@ impl Book {
         })
     }
 
+    /// What a tap at `point` on the status line at the top (or bottom)
+    /// does, where an item of it does something: the item under it from
+    /// side to side, its place reaching to the edge.
+    pub(super) fn status_tap(
+        &self,
+        env: &Env<'_>,
+        top: bool,
+        point: Point,
+    ) -> Option<paperpaw_sdk::Command> {
+        let (area, _) = self.status_areas().find(|(_, at_top)| *at_top == top)?;
+        let context = self.status_context(env);
+        let frame = status::frame(env, area, top, &context);
+        let id = status::current(env, top, &self.status_lines[usize::from(!top)]);
+        let x = i32::from(point.x);
+        status::targets(env, id, &frame)
+            .into_iter()
+            .find(|t| (i32::from(t.area.x)..t.area.right() as i32).contains(&x))
+            .map(|t| t.command)
+    }
+
     /// The status lines' areas.
     pub(super) fn status_areas(&self) -> impl Iterator<Item = (Rect, bool)> {
         let t = &self.typography;
@@ -320,13 +340,7 @@ impl Book {
         for (area, top) in areas {
             canvas.fill(area, Color::WHITE);
             let id = status::current(env, top, &self.status_lines[usize::from(!top)]);
-            let frame = paperpaw_sdk::StatusFrame::new(
-                area,
-                top,
-                status::size(env),
-                status::color(env),
-                &context,
-            );
+            let frame = status::frame(env, area, top, &context);
             env.status_items.draw_line(id, canvas, env, &frame);
         }
     }

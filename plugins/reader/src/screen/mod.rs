@@ -653,7 +653,12 @@ impl Screen for ReaderScreen {
                 && !back
                 && let Some(top) = book.status_hit(&env, p)
             {
-                self.next_status_line(top, cx);
+                // An item that does something when tapped, else the next
+                // line.
+                match book.status_tap(&env, top, p) {
+                    Some(command) => cx.command(command),
+                    None => self.next_status_line(top, cx),
+                }
                 return Handled::Yes;
             }
             // The room of a layer that hears taps: its plugin answers (not

@@ -348,6 +348,9 @@ impl Kernel {
         for line in staging.status_lines.drain(..) {
             self.shared.status_items.add_line(line);
         }
+        for place in staging.status_places.drain(..) {
+            self.shared.status_items.add_place(place);
+        }
         for step in staging.setup_steps.drain(..) {
             self.shared.setup.add(step);
         }

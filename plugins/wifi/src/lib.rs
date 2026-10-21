@@ -198,15 +198,19 @@ impl Plugin for Wifi {
                 .page(PAGE),
         )?;
         r.add_icon(GROUP, Cow::Borrowed("wifi"))?;
-        r.add_status_item(StatusItemSpec::new(
-            STATUS,
-            "wifi.status.item",
-            Box::new(|env, _| {
-                env.wifi
-                    .is_some_and(|w| w.state.is_online())
-                    .then_some(StatusValue::Icon(Cow::Borrowed("wifi")))
-            }),
-        ))?;
+        // Tapped, the Wi-Fi page.
+        r.add_status_item(
+            StatusItemSpec::new(
+                STATUS,
+                "wifi.status.item",
+                Box::new(|env, _| {
+                    env.wifi
+                        .is_some_and(|w| w.state.is_online())
+                        .then_some(StatusValue::Icon(Cow::Borrowed("wifi")))
+                }),
+            )
+            .tap(|_, _| Some(Command::OpenScreen(PAGE, Params::new()))),
+        )?;
         r.add_settings(&SETTINGS)?;
         for spec in &SETTINGS {
             r.set_menu_need(spec.id.clone(), MenuNeed::Wifi)?;

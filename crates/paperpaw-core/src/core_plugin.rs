@@ -1788,11 +1788,15 @@ static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::fixed_number(
 /// The time of day and the battery, for status lines.
 fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&TIME)?;
-    r.add_status_item(StatusItemSpec::new(
-        status_items::CLOCK,
-        "core.status.clock",
-        Box::new(|env, _| time::clock_text(env).map(StatusValue::Text)),
-    ))?;
+    // The time and the battery give way after most others.
+    r.add_status_item(
+        StatusItemSpec::new(
+            status_items::CLOCK,
+            "core.status.clock",
+            Box::new(|env, _| time::clock_text(env).map(StatusValue::Text)),
+        )
+        .priority(160),
+    )?;
     r.add_status_item(StatusItemSpec::new(
         status_items::DATE,
         "core.status.date",
@@ -1803,16 +1807,19 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
         "core.status.date-short",
         Box::new(|env, _| time::short_date_text(env).map(StatusValue::Text)),
     ))?;
-    r.add_status_item(StatusItemSpec::new(
-        status_items::BATTERY,
-        "core.status.battery",
-        Box::new(|env, _| {
-            env.status.battery.map(|b| StatusValue::Level {
-                percent: b.percent,
-                charging: b.charging,
-            })
-        }),
-    ))?;
+    r.add_status_item(
+        StatusItemSpec::new(
+            status_items::BATTERY,
+            "core.status.battery",
+            Box::new(|env, _| {
+                env.status.battery.map(|b| StatusValue::Level {
+                    percent: b.percent,
+                    charging: b.charging,
+                })
+            }),
+        )
+        .priority(192),
+    )?;
     r.add_status_item(StatusItemSpec::new(
         status_items::BATTERY_LOW,
         "core.status.battery-low",
