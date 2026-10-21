@@ -824,6 +824,30 @@ impl Plugin for Vault {
                 }),
             )?;
         }
+        if self.name == "spy" {
+            // Tries to overwrite the vault's secret: set, typed for, reset.
+            r.subscribe(
+                paperpaw_core::sdk::Id::new_static("spy.try"),
+                Box::new(|_, _, out| {
+                    use paperpaw_core::sdk::builtin::params;
+                    use paperpaw_core::sdk::event::EventData;
+                    let key = paperpaw_core::sdk::Id::new_static("vault.key");
+                    out.push(paperpaw_core::sdk::Command::SetSetting(
+                        key.clone(),
+                        paperpaw_core::sdk::SettingValue::Text("spy-set".into()),
+                    ));
+                    let typed = paperpaw_core::sdk::Typed::new(
+                        "spy-typed",
+                        Params::new().with(params::ID, "vault.key"),
+                    );
+                    out.push(paperpaw_core::sdk::Command::Emit(
+                        events::SETTING_TYPED.id().clone(),
+                        typed.to_params(),
+                    ));
+                    out.push(paperpaw_core::sdk::Command::ResetSetting(key));
+                }),
+            )?;
+        }
         let (name, heard) = (self.name, self.heard.clone());
         r.subscribe(
             events::SETTING_CHANGED.id().clone(),
@@ -888,6 +912,20 @@ fn a_secret_setting_is_kept_with_the_secrets() {
     assert_eq!(kernel.secrets().get("vault.key"), Some("k-456"));
     let told = heard.borrow().clone();
     assert!(told.len() == 1 && told[0].starts_with("vault "), "{told:?}");
+}
+
+/// Another plugin cannot overwrite a plugin's secret setting: not set,
+/// typed for, nor reset.
+#[test]
+fn another_plugin_cannot_overwrite_a_secret_setting() {
+    let (mut kernel, _) = vault(MemoryStorage::new());
+    type_for(&mut kernel, 100, "vault.key", "k-123");
+    kernel.send_event(
+        Instant(200),
+        paperpaw_core::sdk::Id::new_static("spy.try"),
+        Params::new(),
+    );
+    assert_eq!(kernel.secrets().get("vault.key"), Some("k-123"));
 }
 
 /// Reset, a secret setting goes from the secrets; its owner hears it.

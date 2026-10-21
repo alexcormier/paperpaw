@@ -823,23 +823,22 @@ impl<'a> Reserved<'a> {
 }
 
 /// Drops from `out[from..]` what `owner` may not ask, and tells whether
-/// it did: another plugin's secret, a setting that keeps the device safe
+/// it did: another plugin's secret or secret setting (set, reset or
+/// typed for), a setting that keeps the device safe
 /// (`SettingSpec::guarded`) of another plugin, the sleep slot. The
-/// settings editor may: it is how the reader changes them.
+/// settings editor may: it is how the reader changes them. So may the
+/// kernel's own handlers, which set what was typed once it was vetted.
 pub(crate) fn vet_reserved(
     out: &mut Vec<Command>,
     from: usize,
     owner: &str,
     reserved: &Reserved<'_>,
 ) -> bool {
-    let editor = reserved.editor == Some(owner);
-    let guarded = |id: &Id| {
-        id.namespace() != owner
-            && reserved
-                .settings
-                .spec(id.as_str())
-                .is_some_and(|spec| spec.guarded)
+    let editor = reserved.editor == Some(owner) || owner == crate::meter::CORE;
+    let foreign = |id: &str, kept: fn(&paperpaw_sdk::SettingSpec) -> bool| {
+        id.split('.').next() != Some(owner) && reserved.settings.spec(id).is_some_and(kept)
     };
+    let guarded = |id: &Id| foreign(id.as_str(), |spec| spec.guarded || spec.extra().secret);
     let before = out.len();
     let mut index = 0;
     out.retain(|command| {
@@ -848,6 +847,11 @@ pub(crate) fn vet_reserved(
             && match command {
                 Command::SetSecret(change) => change.id.split('.').next() != Some(owner),
                 Command::SetSetting(id, _) | Command::ResetSetting(id) => guarded(id),
+                // Text typed for another plugin's secret setting: the
+                // kernel would set it.
+                Command::Emit(event, params) if *event == events::SETTING_TYPED => params
+                    .get(paperpaw_sdk::builtin::params::ID)
+                    .is_some_and(|id| foreign(id, |spec| spec.extra().secret)),
                 // The sleep screen shows over the lock; the settings
                 // editor has these rights.
                 Command::BindSlot(slot, _) => *slot == slots::SLEEP || *slot == slots::SETTINGS,
