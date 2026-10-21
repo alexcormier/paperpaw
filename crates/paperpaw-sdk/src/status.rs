@@ -76,6 +76,9 @@ pub struct StatusFrame<'a> {
     /// ([`fonts::STATUS`](crate::builtin::fonts::STATUS)) unless the
     /// screen says another.
     pub font: &'a str,
+    /// Levels (the battery) with their percentage beside the symbol, or
+    /// the symbol alone.
+    pub percent: bool,
 }
 
 impl<'a> StatusFrame<'a> {
@@ -89,7 +92,13 @@ impl<'a> StatusFrame<'a> {
             context,
             place: None,
             font: crate::builtin::fonts::STATUS.static_str(),
+            percent: true,
         }
+    }
+
+    /// Levels with their percentage, or the symbol alone.
+    pub fn percent(self, percent: bool) -> Self {
+        Self { percent, ..self }
     }
 
     /// Drawn in place `place` ([`Place::id`]).
@@ -281,6 +290,11 @@ pub struct Place {
     pub title: Cow<'static, str>,
     /// The settings of its left, centre and right.
     pub parts: [Id; 3],
+    /// The setting of the status line it shows (the first of the ids it
+    /// lists), where the place lets the reader choose: without one, or
+    /// where it lists none, its items
+    /// ([`status_lines::ITEMS`](crate::builtin::status_lines::ITEMS)).
+    pub line: Option<Id>,
 }
 
 impl Place {
@@ -290,7 +304,47 @@ impl Place {
             id,
             title: Cow::Borrowed(title),
             parts,
+            line: None,
         }
+    }
+
+    /// The status line it shows is the one setting `line` names first.
+    pub const fn with_line(mut self, line: Id) -> Self {
+        // Nothing to drop: made without a line (`new`), in a const.
+        core::mem::forget(self.line.replace(line));
+        self
+    }
+
+    /// The status line it shows now: the one its line setting names
+    /// first, where there is such a line, else its items.
+    pub fn current_line<'e>(&self, env: &Env<'e>) -> &'e str {
+        let items = crate::builtin::status_lines::ITEMS.static_str();
+        let Some(setting) = &self.line else {
+            return items;
+        };
+        item_ids(env.settings.text(setting.as_str()))
+            .find(|id| env.status_items.title(id).is_some())
+            .unwrap_or(items)
+    }
+
+    /// Draws its line in `frame`, told that it is in this place.
+    pub fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, frame: &StatusFrame<'_>) {
+        let framed = StatusFrame {
+            place: Some(self.id.as_str()),
+            ..*frame
+        };
+        env.status_items
+            .draw_line(self.current_line(env), canvas, env, &framed);
+    }
+
+    /// Where a tap on its line, drawn in `frame`, does something.
+    pub fn targets(&self, env: &Env<'_>, frame: &StatusFrame<'_>) -> Vec<StatusTarget> {
+        let framed = StatusFrame {
+            place: Some(self.id.as_str()),
+            ..*frame
+        };
+        env.status_items
+            .line_targets(self.current_line(env), env, &framed)
     }
 
     /// The items listed for its left, centre and right now.
@@ -305,10 +359,17 @@ impl Place {
         StatusLine::new(area, self.lists(env), size, color)
     }
 
-    /// What its items show now, with `context`: to draw it again when
+    /// What its line shows now, with `context`: to draw it again when
     /// that changes.
     pub fn signature(&self, env: &Env<'_>, context: &Params) -> String {
-        signature(env, &self.lists(env), context)
+        let line = self.current_line(env);
+        if line == crate::builtin::status_lines::ITEMS.static_str() {
+            return signature(env, &self.lists(env), context);
+        }
+        let mut out = String::from(line);
+        out.push('|');
+        out.push_str(&env.status_items.line_signature(line, env, context));
+        out
     }
 }
 

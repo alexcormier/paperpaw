@@ -24,9 +24,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{fonts, params, screens};
-use paperpaw_sdk::status::{
-    Place, StatusFrame, StatusLine, StatusTarget, StatusValue, context, item_ids,
-};
+use paperpaw_sdk::status::{Place, StatusFrame, StatusTarget, StatusValue, context, item_ids};
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::{
     Arg, Canvas, Env, Id, Params, RegisterError, Registrar, SettingExtra, SettingKind, SettingSpec,
@@ -235,17 +233,14 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             lines::ITEMS,
             "reader.status.line.items",
             Box::new(|canvas, env, frame| {
-                let Some(font) = env.fonts.role(frame.font) else {
-                    return;
-                };
-                items_line(env, frame).draw(canvas, env, &font, frame.context);
+                let frame = frame.percent(env.settings.read(&PERCENT));
+                env.status_items.draw_line(ITEMS_LINE, canvas, env, &frame);
             }),
         )
         .signature(Box::new(items_signature))
         .targets(Box::new(|env, frame| {
-            env.fonts.role(frame.font).map_or_else(Vec::new, |font| {
-                items_line(env, frame).targets(env, &font, frame.context)
-            })
+            let frame = frame.percent(env.settings.read(&PERCENT));
+            env.status_items.line_targets(ITEMS_LINE, env, &frame)
         })),
     )?;
     r.add_status_line(
@@ -373,16 +368,10 @@ fn chapter_pages(cx: &Params) -> Option<(i64, i64)> {
     ))
 }
 
-/// The line of items drawn in `frame`: its place's items (the reader's
-/// above or below the text where it names none).
-fn items_line<'e>(env: &Env<'e>, frame: &StatusFrame<'_>) -> StatusLine<'e> {
-    let place = frame.place.and_then(|id| env.status_items.place(id));
-    let lists = match place {
-        Some(place) => place.lists(env),
-        None => lists(env, frame.top),
-    };
-    StatusLine::new(frame.area, lists, frame.size, frame.color).percent(env.settings.read(&PERCENT))
-}
+/// The kernel's line of the items of the place it is drawn in: the
+/// reader's own ([`lines::ITEMS`]) is it, its id kept for the lines the
+/// reader chose.
+const ITEMS_LINE: &str = paperpaw_sdk::builtin::status_lines::ITEMS.static_str();
 
 /// The frame of the line at the top (or bottom) in `area`, in its place.
 pub(crate) fn frame<'a>(

@@ -654,6 +654,8 @@ pub const paperpaw_sdk::builtin::status_items::BATTERY_LOW: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::status_items::CLOCK: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::status_items::DATE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::status_items::DATE_SHORT: paperpaw_sdk::Id
+pub mod paperpaw_sdk::builtin::status_lines
+pub const paperpaw_sdk::builtin::status_lines::ITEMS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::CONFIG_FILE: &str
 pub const paperpaw_sdk::builtin::CORE_PLUGIN: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::GLOBAL_KEYMAP_LAYER: &str
@@ -2733,24 +2735,31 @@ pub paperpaw_sdk::status::StatusValue::Level::percent: u8
 pub paperpaw_sdk::status::StatusValue::Text(alloc::string::String)
 #[non_exhaustive] pub struct paperpaw_sdk::status::Place
 pub paperpaw_sdk::status::Place::id: paperpaw_sdk::Id
+pub paperpaw_sdk::status::Place::line: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::status::Place::parts: [paperpaw_sdk::Id; 3]
 pub paperpaw_sdk::status::Place::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::status::Place
+pub fn paperpaw_sdk::status::Place::current_line<'e>(&self, &paperpaw_sdk::Env<'e>) -> &'e str
+pub fn paperpaw_sdk::status::Place::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>)
 pub fn paperpaw_sdk::status::Place::line<'e>(&self, &paperpaw_sdk::Env<'e>, paperpaw_platform::geometry::Rect, f32, paperpaw_platform::pixel::Color) -> paperpaw_sdk::status::StatusLine<'e>
 pub fn paperpaw_sdk::status::Place::lists<'e>(&self, &paperpaw_sdk::Env<'e>) -> [&'e str; 3]
 pub const fn paperpaw_sdk::status::Place::new(paperpaw_sdk::Id, &'static str, [paperpaw_sdk::Id; 3]) -> Self
 pub fn paperpaw_sdk::status::Place::signature(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> alloc::string::String
+pub fn paperpaw_sdk::status::Place::targets(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>) -> alloc::vec::Vec<paperpaw_sdk::status::StatusTarget>
+pub const fn paperpaw_sdk::status::Place::with_line(self, paperpaw_sdk::Id) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::status::StatusFrame<'a>
 pub paperpaw_sdk::status::StatusFrame::area: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::status::StatusFrame::color: paperpaw_platform::pixel::Color
 pub paperpaw_sdk::status::StatusFrame::context: &'a paperpaw_sdk::Params
 pub paperpaw_sdk::status::StatusFrame::font: &'a str
+pub paperpaw_sdk::status::StatusFrame::percent: bool
 pub paperpaw_sdk::status::StatusFrame::place: core::option::Option<&'a str>
 pub paperpaw_sdk::status::StatusFrame::size: f32
 pub paperpaw_sdk::status::StatusFrame::top: bool
 impl<'a> paperpaw_sdk::status::StatusFrame<'a>
 pub fn paperpaw_sdk::status::StatusFrame<'a>::font(self, &'a str) -> Self
 pub fn paperpaw_sdk::status::StatusFrame<'a>::new(paperpaw_platform::geometry::Rect, bool, f32, paperpaw_platform::pixel::Color, &'a paperpaw_sdk::Params) -> Self
+pub fn paperpaw_sdk::status::StatusFrame<'a>::percent(self, bool) -> Self
 pub fn paperpaw_sdk::status::StatusFrame<'a>::place(self, &'a str) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::status::StatusItemSpec
 pub paperpaw_sdk::status::StatusItemSpec::id: paperpaw_sdk::Id
@@ -3111,6 +3120,7 @@ pub fn paperpaw_sdk::ui::widget_list::AddScreen::outside(&self) -> paperpaw_sdk:
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::passes_through(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::secret(&self) -> bool
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::takes_double_taps(&self) -> bool
 pub struct paperpaw_sdk::ui::widget_list::ListScreen
 impl paperpaw_sdk::ui::widget_list::ListScreen
@@ -3137,6 +3147,7 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::outside(&self) -> paperpaw_sdk
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::passes_through(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::secret(&self) -> bool
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::takes_double_taps(&self) -> bool
 #[non_exhaustive] pub enum paperpaw_sdk::ui::Focus
 pub paperpaw_sdk::ui::Focus::Fill
@@ -5290,12 +5301,14 @@ pub paperpaw_sdk::StatusFrame::area: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::StatusFrame::color: paperpaw_platform::pixel::Color
 pub paperpaw_sdk::StatusFrame::context: &'a paperpaw_sdk::Params
 pub paperpaw_sdk::StatusFrame::font: &'a str
+pub paperpaw_sdk::StatusFrame::percent: bool
 pub paperpaw_sdk::StatusFrame::place: core::option::Option<&'a str>
 pub paperpaw_sdk::StatusFrame::size: f32
 pub paperpaw_sdk::StatusFrame::top: bool
 impl<'a> paperpaw_sdk::status::StatusFrame<'a>
 pub fn paperpaw_sdk::status::StatusFrame<'a>::font(self, &'a str) -> Self
 pub fn paperpaw_sdk::status::StatusFrame<'a>::new(paperpaw_platform::geometry::Rect, bool, f32, paperpaw_platform::pixel::Color, &'a paperpaw_sdk::Params) -> Self
+pub fn paperpaw_sdk::status::StatusFrame<'a>::percent(self, bool) -> Self
 pub fn paperpaw_sdk::status::StatusFrame<'a>::place(self, &'a str) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::StatusItemSpec
 pub paperpaw_sdk::StatusItemSpec::id: paperpaw_sdk::Id
@@ -5583,6 +5596,7 @@ pub fn paperpaw_sdk::ui::widget_list::AddScreen::outside(&self) -> paperpaw_sdk:
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::passes_through(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::secret(&self) -> bool
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::takes_double_taps(&self) -> bool
 impl paperpaw_sdk::Screen for paperpaw_sdk::ui::widget_list::ListScreen
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::dims_below(&self) -> bool
@@ -5606,6 +5620,7 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::outside(&self) -> paperpaw_sdk
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::passes_through(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::secret(&self) -> bool
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::takes_double_taps(&self) -> bool
 pub fn paperpaw_sdk::cover_fit(paperpaw_image::Fit) -> paperpaw_image::Fit
 pub fn paperpaw_sdk::read_file(&dyn paperpaw_platform::storage::Storage, &str, usize) -> core::result::Result<alloc::vec::Vec<u8>, paperpaw_platform::storage::StorageError>

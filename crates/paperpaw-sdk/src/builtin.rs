@@ -944,6 +944,15 @@ pub mod events {
     pub const WORK_CHANGED: Event<()> = Event::new("core.work-changed");
 }
 
+/// The kernel's status lines (see [`status`](crate::status)).
+pub mod status_lines {
+    use crate::Id;
+
+    /// The items of the place it is drawn in, at its left, centre and
+    /// right ([`status::Place`](crate::status::Place)).
+    pub const ITEMS: Id = Id::new_static("core.status-line.items");
+}
+
 /// Status items of the kernel (see [`status`](crate::status)).
 pub mod status_items {
     use crate::Id;

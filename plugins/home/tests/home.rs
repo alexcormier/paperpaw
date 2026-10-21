@@ -51,6 +51,10 @@ static MADE: AtomicUsize = AtomicUsize::new(0);
 
 /// A plugin with a widget that counts how often it is made, and a
 /// setting of its own that its widget does not have.
+/// How often the probe's status line was drawn in the home screen's
+/// place.
+static LINES: AtomicUsize = AtomicUsize::new(0);
+
 struct Probe;
 
 const PROBE: Id = Id::new_static("probe.widget");
@@ -91,6 +95,16 @@ impl Plugin for Probe {
             Id::new_static("probe.switch"),
         ))?;
         r.add_icon(APP, "puzzle".into())?;
+        // A whole status line of its own, that counts its drawings.
+        r.add_status_line(paperpaw_sdk::StatusLineSpec::new(
+            Id::new_static("probe.line"),
+            "probe.line",
+            Box::new(|_, _, frame| {
+                if frame.place == Some("home.status-line") {
+                    LINES.fetch_add(1, Ordering::SeqCst);
+                }
+            }),
+        ))?;
         // A status item that switches `OTHER` on when tapped.
         r.add_status_item(
             paperpaw_sdk::StatusItemSpec::new(
@@ -518,5 +532,31 @@ fn an_action_below_the_page_runs_when_tapped() {
     let mut home = Home::new(true, "");
     assert!(home.says("probe.switch"), "{:?}", home.shown());
     home.tap_on("probe.switch");
+    assert!(home.kernel.settings().bool("probe.other"));
+}
+
+/// A whole status line chosen for the home screen's status line shows
+/// there, told it is in the home screen's place; by default its items.
+#[test]
+fn a_status_line_chosen_for_home_shows_there() {
+    let before = LINES.load(Ordering::SeqCst);
+    let mut home = Home::new(
+        true,
+        "status-bar = true
+status.line = probe.line
+",
+    );
+    home.kernel.render(&mut |_, _| {});
+    assert!(LINES.load(Ordering::SeqCst) > before);
+    // Its items otherwise, a tap on one doing what it says.
+    let mut home = Home::new(
+        true,
+        "status-bar = true
+status.left = probe.status
+status.center =
+status.right =
+",
+    );
+    home.tap(Point::new(36, 24));
     assert!(home.kernel.settings().bool("probe.other"));
 }

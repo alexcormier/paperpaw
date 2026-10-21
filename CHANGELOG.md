@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: any place of status items shows a whole status line of the
+  reader's choice. The line of a place's items is the kernel's
+  (`status_lines::ITEMS`, the reader's `reader.status-line.items` is it);
+  `Place::with_line` names the setting that chooses the line, and
+  `Place::draw`, `Place::targets` and `Place::signature` draw it, tap it
+  and tell when it changed. The home screen's status line
+  (`home.status.line`) and the quick panel's head (`menu.quick.line`)
+  show the line chosen, their items by default. `StatusFrame::percent`
+  says whether levels show their percentage.
 - SDK: widgets' frames. A look restyles every widget's frame
   (`ui::look::Painters::frame`, `FramePart`, through `set_ui_look`);
   *Frames of widgets* (`core.widgets.frame`, `settings::WIDGET_FRAME`)

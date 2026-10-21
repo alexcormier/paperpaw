@@ -1811,9 +1811,47 @@ static BATTERY_LOW: [SettingSpec; 1] = [SettingSpec::fixed_number(
 .advanced()
 .described("core.setting.battery-low.help")];
 
-/// The time of day and the battery, for status lines.
+/// The line of the items of the place it is drawn in.
+fn items_line<'e>(
+    env: &Env<'e>,
+    frame: &paperpaw_sdk::StatusFrame<'_>,
+) -> Option<paperpaw_sdk::status::StatusLine<'e>> {
+    let place = env.status_items.place(frame.place?)?;
+    let line = place.line(env, frame.area, frame.size, frame.color);
+    Some(line.percent(frame.percent))
+}
+
+/// The time of day and the battery, for status lines; the line of a
+/// place's items.
 fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&TIME)?;
+    r.add_status_line(
+        paperpaw_sdk::StatusLineSpec::new(
+            paperpaw_sdk::builtin::status_lines::ITEMS,
+            "core.status.line.items",
+            Box::new(|canvas, env, frame| {
+                let (Some(line), Some(font)) = (items_line(env, frame), env.fonts.role(frame.font))
+                else {
+                    return;
+                };
+                line.draw(canvas, env, &font, frame.context);
+            }),
+        )
+        .signature(Box::new(|env, context| {
+            let lists: Vec<&str> = env
+                .status_items
+                .places()
+                .flat_map(|p| p.lists(env))
+                .collect();
+            paperpaw_sdk::status::signature(env, &lists, context)
+        }))
+        .targets(Box::new(|env, frame| {
+            match (items_line(env, frame), env.fonts.role(frame.font)) {
+                (Some(line), Some(font)) => line.targets(env, &font, frame.context),
+                _ => Vec::new(),
+            }
+        })),
+    )?;
     // The time and the battery give way after most others.
     r.add_status_item(
         StatusItemSpec::new(
