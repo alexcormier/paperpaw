@@ -199,13 +199,7 @@ fn another_level_on_the_keyboard() {
     test.kernel.run_action(at, OPEN);
     test.pick("rules.trigger-chosen", "", "battery-at");
     test.pick("rules.level-chosen", "", "other");
-    let typed = |text: &str| {
-        Typed {
-            text: text.to_string(),
-            context: Params::new(),
-        }
-        .to_params()
-    };
+    let typed = |text: &str| Typed::new(text.to_string(), Params::new()).to_params();
     // Not a level: no rule.
     test.answer("rules.level-entered", typed("120"));
     test.pick("rules.effect-chosen", "", "message");

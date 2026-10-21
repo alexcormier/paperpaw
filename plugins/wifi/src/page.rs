@@ -147,7 +147,7 @@ impl WifiPage {
                 cx.command(Command::Wifi(WifiCommand::On));
             }
             Row::Network(network) => {
-                let known = wifi::known(env.secrets);
+                let known = wifi::known(env.secrets.iter());
                 let saved = known.iter().find(|(ssid, _)| *ssid == network.ssid);
                 if wifi.state.ssid() == Some(&network.ssid) {
                     // Joined already (or joining).
@@ -205,7 +205,7 @@ impl WifiPage {
         let Some(Row::Network(network)) = Self::rows(&env).into_iter().nth(index) else {
             return false;
         };
-        if !wifi::known(env.secrets)
+        if !wifi::known(env.secrets.iter())
             .iter()
             .any(|(ssid, _)| *ssid == network.ssid)
         {
@@ -235,7 +235,7 @@ impl Screen for WifiPage {
         let Some(wifi) = env.wifi else {
             return;
         };
-        let known = wifi::known(env.secrets);
+        let known = wifi::known(env.secrets.iter());
         self.list
             .draw(canvas, &style, len, |canvas, row, rect, focused| {
                 let tr = |key| env.i18n.tr(key);
@@ -345,7 +345,7 @@ impl Screen for WifiPage {
     fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {
         let row = Self::rows(env).into_iter().nth(self.list.focus());
         let saved = |network: &WifiNetwork| {
-            wifi::known(env.secrets)
+            wifi::known(env.secrets.iter())
                 .iter()
                 .any(|(ssid, _)| *ssid == network.ssid)
         };

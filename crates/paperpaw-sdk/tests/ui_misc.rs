@@ -499,3 +499,47 @@ fn fills_share_what_is_left_and_never_overflow() {
         }
     }
 }
+
+/// Lengths of time read as people say them, in the language's words.
+#[test]
+fn durations_read_in_hours_and_minutes() {
+    let h = support::Harness::new(support::Device::BUTTONS);
+    let env = h.env();
+    let text = |s| paperpaw_sdk::time::duration_text(&env, s);
+    assert_eq!(text(0), "< 1 min");
+    assert_eq!(text(59), "< 1 min");
+    assert_eq!(text(60 * 42), "42 min");
+    assert_eq!(text(3600 + 5 * 60 + 30), "1 h 05 min");
+    assert_eq!(text(10 * 3600), "10 h 00 min");
+}
+
+/// What choosing a setting opens is the same on every screen: text on the
+/// keyboard, answered to the kernel; an editor; a switch nothing.
+#[test]
+fn a_text_setting_opens_the_keyboard_on_every_screen() {
+    use paperpaw_sdk::builtin::{events, params, slots};
+    use paperpaw_sdk::{Command, SettingSpec, Text};
+    const NAME: paperpaw_sdk::Setting<Text> = paperpaw_sdk::Setting::new("t.name");
+    const ON: paperpaw_sdk::Setting<bool> = paperpaw_sdk::Setting::new("t.on");
+    let h = support::Harness::new(support::Device::TOUCH);
+    let env = h.env();
+    let name = SettingSpec::text(&NAME, "t.name", "Ann");
+    let Some(Command::OpenSlot(slot, asked)) = ui::setting_opens(&env, &name) else {
+        panic!("the keyboard");
+    };
+    assert_eq!(slot, slots::KEYBOARD);
+    assert_eq!(
+        asked.get(params::REPLY),
+        Some(events::SETTING_TYPED.as_str())
+    );
+    assert_eq!(asked.get(params::ID), Some("t.name"));
+    let edited = SettingSpec::text(&NAME, "t.name", "").editor(Id::new_static("t.edit"));
+    assert!(matches!(
+        ui::setting_opens(&env, &edited),
+        Some(Command::OpenScreen(screen, _)) if screen == Id::new_static("t.edit")
+    ));
+    assert_eq!(
+        ui::setting_opens(&env, &SettingSpec::switch(&ON, "t.on", true)),
+        None
+    );
+}

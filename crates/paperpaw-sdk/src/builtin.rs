@@ -77,7 +77,9 @@ pub mod slots {
     pub const MENU: Id = Id::new_static("core.menu");
     /// Shows and edits settings; with the parameter
     /// [`ID`](super::params::ID), the settings of that group, e.g. a
-    /// widget's own (see [`widgets`](crate::widgets)).
+    /// widget's own (see [`widgets`](crate::widgets)); with
+    /// [`FOCUS`](super::params::FOCUS), the page of that setting with
+    /// the focus on it.
     pub const SETTINGS: Id = Id::new_static("core.settings");
     /// The first-run setup (see [`setup`](crate::setup)): shown once on
     /// the first start, and again when asked.
@@ -104,8 +106,10 @@ pub mod slots {
     /// [`REPLY`](super::params::REPLY). When the text is confirmed the
     /// screen closes and emits the event named by `reply` with all of its
     /// parameters, `text` set to what was entered, so the asking plugin
-    /// can pass along anything it needs to know (e.g. which setting). Bind
-    /// another screen here for a different keyboard, handwriting or voice.
+    /// can pass along anything it needs to know (e.g. which setting). With
+    /// [`LIVE`](super::params::LIVE) it emits it on each change too, with
+    /// [`TYPING`](super::params::TYPING) set. Bind another screen here for
+    /// a different keyboard, handwriting or voice.
     pub const KEYBOARD: Id = Id::new_static("core.keyboard");
     /// Asks for text typed on another device, e.g. a phone that opens an
     /// address shown as a QR code: handy for passwords and keys. Same
@@ -125,6 +129,17 @@ pub mod slots {
     /// emitted with all of the parameters and [`PATH`](super::params::PATH)
     /// set to the folder; [`TEXT`](super::params::TEXT), where to start.
     pub const CHOOSE_FOLDER: Id = Id::new_static("core.choose-folder");
+    /// Picks one of the values of a choice or language setting, on a page
+    /// of its own: parameter [`ID`](super::params::ID), the setting. The
+    /// settings plugin binds here; menus and the setup open it for a
+    /// setting with more values than two.
+    pub const CHOOSE_VALUE: Id = Id::new_static("core.choose-value");
+    /// Asks to choose one of a few options, e.g. what to do with a file
+    /// or whether to delete it (an overlay at the bottom): asked with
+    /// [`ask::choice`](crate::ask::choice), answered with a
+    /// [`Picked`](crate::ui::choice::Picked). Every plugin's questions
+    /// come here, so a screen bound here asks them all another way.
+    pub const CHOICE: Id = Id::new_static("core.choice");
     /// Shows what is known of a book: parameter [`PATH`](super::params::PATH).
     pub const BOOK_INFO: Id = Id::new_static("core.book-info");
     /// The contents of the book being read: parameters
@@ -260,6 +275,15 @@ pub mod params {
     pub const MODE: &str = "mode";
     /// The event a screen emits with its result, e.g. the keyboard's text.
     pub const REPLY: &str = "reply";
+    /// What a screen shows focused first, e.g. a setting in
+    /// [`slots::SETTINGS`](super::slots::SETTINGS).
+    pub const FOCUS: &str = "focus";
+    /// Set (to `1`) when a question is answered on each change too, e.g.
+    /// the keyboard's ([`ask::TextQuestion::live`](crate::ask::TextQuestion::live)).
+    pub const LIVE: &str = "live";
+    /// Set (to `1`) on an answer given while the reader still types
+    /// ([`Typed::typing`](crate::replies::Typed::typing)).
+    pub const TYPING: &str = "typing";
     /// Why something failed, e.g. joining a network
     /// ([`events::WIFI_FAILED`](super::events::WIFI_FAILED)).
     pub const REASON: &str = "reason";
@@ -339,6 +363,27 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// What has the focus of the buttons now ([`FOCUS_CHANGED`]), as
+        /// the screen describes it (see [`semantics`](crate::semantics)).
+        pub struct FocusChanged {
+            /// Its role's name ([`semantics::role_name`](crate::semantics::role_name)),
+            /// e.g. `row` or `button`.
+            pub role: String,
+            /// What it says, e.g. a row's title and value.
+            pub label: String,
+            /// Where it is on the screen.
+            pub x: u16,
+            pub y: u16,
+            pub width: u16,
+            pub height: u16,
+        }
+        optional {
+            /// For switches and buttons that are on or off.
+            pub on: bool,
+        }
+    }
+
+    crate::event_data! {
         /// The screen now on top ([`SCREEN_SHOWN`]).
         pub struct ScreenShown {
             pub screen: Id,
@@ -359,6 +404,17 @@ pub mod events {
             /// kernel changed it and a plugin subscribes to the event or
             /// observes events (it is not made for nobody).
             pub old: String,
+        }
+    }
+
+    crate::event_data! {
+        /// An action was chosen for a book in the library
+        /// ([`BOOK_CHOSEN`], [`menus::BOOK`](super::menus::BOOK)).
+        pub struct BookChosen {
+            /// The action chosen.
+            pub action: Id,
+            /// The book's path.
+            pub path: String,
         }
     }
 
@@ -405,15 +461,6 @@ pub mod events {
             /// Made anew in any case, not only where it was not made since
             /// PaperPaw started.
             pub anew: bool,
-        }
-    }
-
-    crate::event_data! {
-        /// An action of the book menu chosen for a book ([`BOOK_CHOSEN`]).
-        pub struct BookChosen {
-            /// The action, from [`menus::BOOK`](super::menus::BOOK).
-            pub action: Id,
-            pub path: String,
         }
     }
 
@@ -687,6 +734,14 @@ pub mod events {
     pub const STARTED: Event<()> = Event::new("core.started");
     /// After a setting changed: which ([`SettingChanged`]).
     pub const SETTING_CHANGED: Event<SettingChanged> = Event::new("core.setting-changed");
+    /// Text typed for a setting, asked with its parameter
+    /// [`ID`](super::params::ID) (as [`ui::setting_opens`](crate::ui::setting_opens)
+    /// asks): the kernel sets the setting to it, trimmed.
+    pub const SETTING_TYPED: Event<crate::replies::Typed> = Event::new("core.setting-typed");
+    /// The focus of the buttons moved to another part of the screen
+    /// ([`FocusChanged`]): for screen readers of one's own. Worked out
+    /// only while a plugin listens or the focus is spoken.
+    pub const FOCUS_CHANGED: Event<FocusChanged> = Event::new("core.focus-changed");
     /// A book was opened for reading ([`Reading`]). Every reader plugin
     /// emits it, so home screens, statistics or sync plugins work with any
     /// reader. Not for documents in hidden folders
@@ -899,6 +954,10 @@ pub mod screens {
     /// The list of reading apps to choose from (see
     /// [`readers::ask`](crate::readers::ask)).
     pub const READING_APPS: Id = Id::new_static("core.reading-apps");
+    /// The kernel's choice of a few options
+    /// ([`ui::choice::Choice`](crate::ui::choice::Choice)), bound to slot
+    /// [`CHOICE`](super::slots::CHOICE) unless another screen is.
+    pub const CHOICE: Id = Id::new_static("core.choice-dialog");
     /// Chooses a folder for a setting with the folder chooser
     /// ([`slots::CHOOSE_FOLDER`](super::slots::CHOOSE_FOLDER)), whichever
     /// plugin fills it: name it as a text setting's editor.
@@ -1116,6 +1175,9 @@ pub mod settings {
     pub const UI_CONTRAST: Setting<Text> = Setting::new("core.ui-contrast");
     pub const CONTRAST_NORMAL: &str = "core.contrast.normal";
     pub const CONTRAST_STRONG: &str = "core.contrast.strong";
+    /// The grays of the interface by what they are for, e.g. `muted=60
+    /// line=170` (see [`ui::Palette`](crate::ui::Palette)): for themes.
+    pub const UI_PALETTE: Setting<Text> = Setting::new("core.ui-palette");
     /// How long short messages show, in seconds.
     pub const NOTICE_SECONDS: Setting<i64> = Setting::new("core.notice-seconds");
     /// Milliseconds a button or finger must be held for a long press.

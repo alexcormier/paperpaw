@@ -7,6 +7,12 @@
 //! and the device's tests that run a kernel under a budget, take
 //! [`LOCK`] so they do not see each other's allocations. Other tests
 //! allocate untracked, which the counters leave alone.
+//!
+//! What a test charges it frees before it lets [`LOCK`] go. Nothing is
+//! printed while tracking, a panic's message neither: the test harness
+//! keeps a test's output in a buffer of its own, which would grow
+//! charged and be freed later on another thread, in another test's
+//! count.
 
 use std::alloc::Layout;
 use std::sync::{Mutex, MutexGuard};
@@ -98,7 +104,6 @@ fn a_budget_given_on_the_command_line_wins_over_the_profiles() {
 
 #[test]
 fn tracking_ends_with_the_call_even_nested_or_after_a_panic() {
-    // The panic's message is allocated tracked.
     let _alone = alone();
     assert!(!tracking());
     track(|| {
@@ -107,9 +112,17 @@ fn tracking_ends_with_the_call_even_nested_or_after_a_panic() {
         assert!(tracking(), "still inside the outer call");
     });
     assert!(!tracking());
-    let caught = std::panic::catch_unwind(|| track(|| panic!("a plugin's panic")));
+    // Unwound without the panic hook: its message, printed into the
+    // harness's buffer, would be charged and freed elsewhere (see the
+    // module's documentation). The payload is allocated tracked.
+    let before = live();
+    let caught = std::panic::catch_unwind(|| {
+        track(|| std::panic::resume_unwind(Box::new("a plugin's panic")))
+    });
     assert!(caught.is_err());
     assert!(!tracking(), "restored while unwinding");
+    drop(caught);
+    assert_eq!(live(), before, "all of it freed here");
 }
 
 #[test]

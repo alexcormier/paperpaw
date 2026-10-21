@@ -203,7 +203,7 @@ fn the_bar_shows_labels_and_badges_and_its_focus_passes_faint_entries() {
     let texts: Vec<String> = test
         .parts()
         .into_iter()
-        .filter(|p| p.role == Role::Text)
+        .filter(|p| p.role == Role::Button)
         .map(|p| p.label)
         .collect();
     assert!(texts.iter().any(|t| t == "Not now"), "{texts:?}");

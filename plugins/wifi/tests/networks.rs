@@ -401,7 +401,7 @@ impl Device {
 
     /// The networks kept among the secrets: names and passwords.
     fn saved(&self) -> Vec<(String, String)> {
-        paperpaw_sdk::wifi::known(self.kernel.secrets())
+        paperpaw_sdk::wifi::known(self.kernel.secrets().iter())
     }
 
     /// Switches the radio on from the page and lets it find `networks`.

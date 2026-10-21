@@ -28,7 +28,6 @@ use alloc::format;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, menus, slots};
-use paperpaw_sdk::ui::choice::Choice;
 use paperpaw_sdk::{
     ActionSpec, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, RegisterError,
     Registrar, ScreenSpec, Version, library,
@@ -39,8 +38,6 @@ pub const PLUGIN: Id = Id::new_static("setup");
 pub const OPEN: Id = Id::new_static("setup.open");
 /// The guide.
 pub const SCREEN: Id = Id::new_static("setup.guide");
-/// Its questions.
-const CHOICE: Id = Id::new_static("setup.choice");
 
 /// The file whose being there says the setup was done or skipped.
 fn done_file() -> alloc::string::String {
@@ -71,11 +68,6 @@ impl Plugin for Setup {
             Box::new(|env, _| Box::new(guide::Guide::new(env))),
         ))?;
         r.bind_slot(slots::SETUP, SCREEN, Priority::DEFAULT)?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "setup.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
-        ))?;
         r.add_action(ActionSpec::new(OPEN, "setup.open").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenSlot(slots::SETUP, Params::new()));

@@ -418,13 +418,7 @@ fn an_old_file_without_a_password_just_goes() {
 fn the_folder_user_and_password_are_entered_on_the_page() {
     let mut app = App::new(TOUCH, MemoryStorage::new(), Some(NOW), "", true);
     app.open("stats.sync", Params::new());
-    let typed = |text: &str| {
-        Typed {
-            text: text.to_string(),
-            context: Params::new(),
-        }
-        .to_params()
-    };
+    let typed = |text: &str| Typed::new(text.to_string(), Params::new()).to_params();
     for (event, text) in [
         ("stats.url-entered", " cloud.example.org/dav/KOReader/ "),
         ("stats.user-entered", "  anna "),

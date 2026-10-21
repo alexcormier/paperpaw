@@ -11,6 +11,7 @@ mod hints;
 mod image;
 pub mod items;
 mod list;
+pub mod look;
 mod progress;
 pub mod reorder;
 mod rows;

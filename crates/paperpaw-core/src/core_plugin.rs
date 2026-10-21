@@ -51,6 +51,33 @@ impl Plugin for CorePlugin {
         register_time_and_battery(r)?;
         register_keymaps_and_setup(r)?;
         r.add_presets(&POWER_MODES)?;
+        // Text typed for a setting (`ui::setting_opens`), whichever screen
+        // asked.
+        r.on(events::SETTING_TYPED, |env, typed, out| {
+            // Only once the reader is done typing, not at each key.
+            if typed.typing {
+                return;
+            }
+            let id = typed
+                .context
+                .get(params::ID)
+                .and_then(|id| Id::parse(id).ok());
+            // The id typed for, a placement's too (`widgets.countdown@2.title`):
+            // its spec is the plain setting's.
+            let Some(id) = id else {
+                return;
+            };
+            if env.settings.spec(id.as_str()).is_none() {
+                return;
+            }
+            // A secret setting's text is kept with the secrets, never in
+            // the settings (see `Kernel::apply_setting`).
+            let text = typed.text.trim();
+            out.push(Command::SetSetting(
+                id,
+                paperpaw_sdk::SettingValue::Text(Cow::Owned(String::from(text))),
+            ));
+        })?;
         // Each plugin's network (its settings made by the kernel).
         r.add_setting_group(
             SettingGroupSpec::new(crate::work::NETWORK_GROUP, "core.group.network").order(87),
@@ -129,6 +156,8 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
         let title = env
             .i18n
             .format(key, &[("name", paperpaw_sdk::Arg::Str(name))]);
+        // The reading apps' own list; moves to `ask::choice` with "Open with".
+        #[allow(deprecated)]
         out.push(paperpaw_sdk::ui::choice::open(
             screens::READING_APPS,
             &READING_APP_PICKED,
@@ -740,6 +769,14 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
             Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, &params))
         }),
     ))?;
+    // The choice every plugin asks (`ask::choice`), unless another
+    // screen fills the slot.
+    r.add_screen(ScreenSpec::new(
+        screens::CHOICE,
+        "core.choice",
+        Box::new(|env, params| Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))),
+    ))?;
+    r.bind_slot(slots::CHOICE, screens::CHOICE, Priority::FALLBACK)?;
     r.add_screen(ScreenSpec::new(
         screens::PLACEHOLDER,
         "core.screen.placeholder",
@@ -1048,7 +1085,7 @@ fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 /// advanced settings its header, corners, highlight, lines, groups,
 /// titles and room. The defaults are PaperPaw's look (soft corners,
 /// pills, plain headers, faint lines); themes (data plugins) set others.
-static LOOK: [SettingSpec; 12] = [
+static LOOK: [SettingSpec; 13] = [
     SettingSpec::fixed_number(
         settings::UI_SIZE.static_str(),
         "core.setting.ui-size",
@@ -1178,6 +1215,16 @@ static LOOK: [SettingSpec; 12] = [
     )
     .for_advanced()
     .described("core.setting.logo.help"),
+    // The interface's grays by what they are for: for themes, which set
+    // it in their settings.ini.
+    SettingSpec::fixed_text(
+        settings::UI_PALETTE.static_str(),
+        "core.setting.ui-palette",
+        "",
+        groups::LOOK,
+    )
+    .for_advanced()
+    .described("core.setting.ui-palette.help"),
 ];
 
 fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {

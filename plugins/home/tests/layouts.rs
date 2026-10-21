@@ -77,7 +77,7 @@ proptest! {
         app.run(Id::new_static("home.edit-pages"));
         app.run(actions::RIGHT);
         app.run(actions::CONFIRM);
-        if app.screen() == "home.choice" && app.shows("Remove") {
+        if app.screen() == "core.choice-dialog" && app.shows("Remove") {
             if touch {
                 app.tap_on("Remove");
             } else {
@@ -109,7 +109,7 @@ fn overlapping_places_are_kept_apart_once_edited() {
     // The library's options; removed.
     app.run(actions::RIGHT);
     app.run(actions::CONFIRM);
-    assert_eq!(app.screen(), "home.choice", "{}", app.described());
+    assert_eq!(app.screen(), "core.choice-dialog", "{}", app.described());
     while app.focused().as_deref() != Some("Remove") {
         app.run(actions::DOWN);
     }

@@ -44,11 +44,51 @@ pub fn icon_ink(env: &Env<'_>, name: &str, size: f32) -> Option<(i32, i32)> {
 }
 
 /// The icon font and the character of icon `name`, where it has a drawing
-/// (its own, or an icon pack's).
+/// (its own, or an icon pack's). A semantic icon
+/// ([`icons::BACK`](crate::icons::BACK) and the others) is the icon a
+/// plugin named for it, else its default.
 pub(super) fn icon<'f>(env: &Env<'f>, name: &str) -> Option<(FontHandle<'f>, char)> {
+    let name = if name.starts_with("core.icon.") {
+        env.menus
+            .icon(name)
+            .or_else(|| crate::icons::default_of(name))?
+    } else {
+        name
+    };
     let font = env.fonts.bound(crate::builtin::fonts::ICONS.as_str())?;
     let ch = crate::icons::char(name)?;
     font.has_char(ch).then_some((font, ch))
+}
+
+/// Whether icon `name` has a drawing here (see [`draw_icon`]), e.g. a
+/// semantic icon a theme gave one.
+pub fn has_icon(env: &Env<'_>, name: &str) -> bool {
+    icon(env, name).is_some()
+}
+
+/// Draws icon `name` `size` pixels high with its ink centred at
+/// `(x, y)`; `false`, drawing nothing, where it has no drawing.
+pub fn draw_icon_at(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    name: &str,
+    size: f32,
+    (x, y): (i32, i32),
+    color: Color,
+) -> bool {
+    let Some((first, last)) = icon_ink(env, name, size) else {
+        return false;
+    };
+    let height = (size * 2.0) as u16;
+    let area = Rect::new(
+        0,
+        (y - i32::from(height) / 2).max(0) as u16,
+        u16::MAX,
+        height,
+    );
+    let start = x as f32 - (first + last) as f32 / 2.0;
+    draw_icon(canvas, env, name, size, start, area, color);
+    true
 }
 
 /// The height of a section's heading in a list (see [`Rows`]): small
@@ -98,13 +138,14 @@ pub fn draw_heading(
         x,
         text_area,
         text,
-        style.faint(90),
+        style.ink(Ink::Muted),
     );
 }
 
 /// The switch of an on/off setting at the right end of `row`.
 pub fn switch_rect(style: &UiStyle, row: Rect) -> Rect {
-    let height = (button_height(row) * 3 / 4).max(8);
+    // A switch is tapped with its whole row: drawn as large as before.
+    let height = (row.height * 7 / 10 * 3 / 4).max(8);
     let width = height * 2;
     Rect::new(
         (row.x + row.width).saturating_sub(width + style.margin as u16),
@@ -120,6 +161,14 @@ pub fn switch_rect(style: &UiStyle, row: Rect) -> Rect {
 pub fn draw_switch(canvas: &mut Canvas<'_>, style: &UiStyle, row: Rect, on: bool, inverted: bool) {
     let r = switch_rect(style, row);
     canvas.describe(Role::Switch, "", r, false, Some(on));
+    let part = super::look::SwitchPart {
+        rect: r,
+        on,
+        inverted,
+    };
+    if style.look.switch(canvas, style, part) {
+        return;
+    }
     let (ink, paper) = if inverted {
         (Color::WHITE, Color::BLACK)
     } else {
@@ -392,7 +441,7 @@ pub fn draw_note_line(
     if style.separators != Separators::None {
         canvas.fill_tint(
             Rect::new(area.x + margin, area.y, width, style.line as u16),
-            Color::gray(190),
+            style.ink(Ink::Line),
         );
     }
     let Some(font) = style.font(env) else {
@@ -427,7 +476,7 @@ pub fn draw_note_line(
             f32::from(row.x),
             row,
             &shown,
-            style.faint(60),
+            style.ink(Ink::Note),
         );
         y += line;
     }
@@ -512,7 +561,7 @@ pub fn draw_empty(
             icon_size,
             centre(w),
             at,
-            style.faint(120),
+            style.ink(Ink::Faint),
         );
         // A small paw beside the icon, as if it had just walked past;
         // the icon stays in the middle.
@@ -527,7 +576,7 @@ pub fn draw_empty(
         // Only where it fits beside the icon (not in a narrow area).
         let right = f32::from(area.x) + f32::from(area.width);
         if x + icon_width(env, PAW_ICON, size) <= right {
-            draw_icon(canvas, env, PAW_ICON, size, x, below, style.faint(120));
+            draw_icon(canvas, env, PAW_ICON, size, x, below, style.ink(Ink::Faint));
         }
         y += icon_room;
     }
@@ -575,7 +624,7 @@ pub fn draw_empty(
             x,
             (y + ascent) as i32,
             &shown,
-            style.faint(70),
+            style.ink(Ink::Note),
         );
         y += line;
     }

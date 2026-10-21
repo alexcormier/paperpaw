@@ -34,7 +34,7 @@ use paperpaw_sdk::builtin::{actions, menus, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::files;
 use paperpaw_sdk::replies::{HttpReply, Typed};
-use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
@@ -49,7 +49,6 @@ pub const PLUGIN: Id = Id::new_static("browser");
 /// Opens the browser's start screen.
 pub const OPEN: Id = Id::new_static("browser.open");
 const SCREEN: Id = Id::new_static("browser.screen");
-const CHOICE: Id = Id::new_static("browser.choice");
 /// Replies: the address typed, a page loaded, a choice made.
 const ADDRESS: Event<Typed> = Event::new("browser.address");
 const LOADED: Event<HttpReply> = Event::new("browser.loaded");
@@ -84,11 +83,6 @@ impl Plugin for Browser {
             SCREEN,
             "browser.title",
             Box::new(move |env, params| Box::new(BrowserScreen::new(env, params, session.clone()))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "browser.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
         ))?;
         r.bind_slot(slots::BROWSER, SCREEN, Priority::DEFAULT)?;
         r.add_action(ActionSpec::new(OPEN, "browser.title").handler(
@@ -334,14 +328,12 @@ impl BrowserScreen {
         );
         if book && env.formats.supports_file(env.storage, &target) {
             self.message = None;
-            cx.command(choice::open(
-                CHOICE,
-                &CHOSEN,
-                &text,
-                &format!("read:{target}"),
-                OPTION_LABELS,
-                &["read", "ok"],
-            ));
+            cx.command(
+                paperpaw_sdk::ask::choice(&text, &CHOSEN)
+                    .about(format!("read:{target}"))
+                    .options(OPTION_LABELS, &["read", "ok"])
+                    .command(),
+            );
             self.redraw(cx);
         } else {
             self.say(text, cx);
@@ -374,14 +366,12 @@ impl BrowserScreen {
             .and_then(|row| self.entry(row))
             .map(|e| e.title.clone())
             .unwrap_or_default();
-        cx.command(choice::open(
-            CHOICE,
-            &CHOSEN,
-            &title,
-            &context,
-            OPTION_LABELS,
-            options,
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(&title, &CHOSEN)
+                .about(&context)
+                .options(OPTION_LABELS, options)
+                .command(),
+        );
     }
 
     fn chosen(&mut self, context: &str, option: &str, cx: &mut Cx<'_, '_>) {

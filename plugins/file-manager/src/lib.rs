@@ -27,7 +27,7 @@ use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, events, groups, menus, params, screens, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
-use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
@@ -46,7 +46,6 @@ pub const OPEN: Id = Id::new_static("file-manager.open");
 /// Shows files and folders starting with `.`.
 pub const HIDDEN: Setting<bool> = Setting::new("file-manager.hidden");
 const SCREEN: Id = Id::new_static("file-manager.browser");
-const CHOICE: Id = Id::new_static("file-manager.choice");
 /// Replies of the choice overlay and the keyboard.
 const CHOSEN: Event<choice::Picked> = Event::new("file-manager.chosen");
 const RENAMED: Event<Typed> = Event::new("file-manager.renamed");
@@ -105,11 +104,6 @@ impl Plugin for FileManager {
             "file-manager.title",
             Box::new(|env, params| Box::new(Browser::new(env, params))),
         ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "file-manager.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
-        ))?;
         r.add_action(ActionSpec::new(OPEN, "file-manager.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
@@ -147,10 +141,12 @@ impl Browser {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let bar_height = style.row as u16;
+        // The bar of buttons along the bottom: they keep the side margin
+        // from the edge too.
+        let bar_height = ui::edge_bar_height(&style);
         let top = header.area.height + style.gap as u16;
         // The bar, and a line for messages above it.
-        let bottom = bar_height * 2 + style.gap as u16;
+        let bottom = bar_height + style.row as u16 + style.gap as u16;
         let area = Rect::new(
             0,
             top,
@@ -267,12 +263,12 @@ impl Browser {
         let margin = self.style.margin as u16;
         let gap = self.style.gap as u16 * 2;
         let width = (self.bar.width - 2 * margin - gap * (count - 1)) / count;
-        let height = ui::button_height(self.bar);
+        let band = ui::edge_bar_band(&self.style, self.bar, false);
         Rect::new(
             margin + index as u16 * (width + gap),
-            self.bar.y + (self.bar.height - height) / 2,
+            band.y,
             width,
-            height,
+            band.height,
         )
     }
 
@@ -353,14 +349,12 @@ impl Browser {
             options.push("reading-app");
         }
         options.extend(["rename", "move", "copy", "delete"]);
-        cx.command(choice::open(
-            CHOICE,
-            &CHOSEN,
-            &entry.name,
-            &path,
-            OPTION_LABELS,
-            &options,
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(&entry.name, &CHOSEN)
+                .about(&path)
+                .options(OPTION_LABELS, &options)
+                .command(),
+        );
     }
 
     fn press(&mut self, button: Button, cx: &mut Cx<'_, '_>) {
@@ -444,14 +438,12 @@ impl Browser {
                 let title = env
                     .i18n
                     .format("file-manager.delete-question", &[("name", Arg::Str(&name))]);
-                cx.command(choice::open(
-                    CHOICE,
-                    &CHOSEN,
-                    &title,
-                    path,
-                    OPTION_LABELS,
-                    &["delete-yes", "cancel"],
-                ));
+                cx.command(
+                    paperpaw_sdk::ask::choice(&title, &CHOSEN)
+                        .about(path)
+                        .options(OPTION_LABELS, &["delete-yes", "cancel"])
+                        .command(),
+                );
             }
             "delete-yes" => {
                 // The books in it, said gone once it is: what is kept
@@ -855,9 +847,17 @@ fn moved_folder(storage: &dyn Storage, value: &str, from: &str, to: &str) -> Opt
 /// chooser, name it at `to` now.
 fn follow_folders(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
     for spec in env.settings.specs() {
-        let folder = spec.extra().editor.as_ref().is_some_and(|editor| {
-            [CHOOSE_FOLDER, slots::CHOOSE_FOLDER, screens::FOLDER_EDITOR].contains(editor)
-        });
+        let folder = spec
+            .extra()
+            .editor
+            .as_ref()
+            .is_some_and(|editor| match editor {
+                paperpaw_sdk::Editor::Slot(slot) => *slot == slots::CHOOSE_FOLDER,
+                paperpaw_sdk::Editor::Screen(screen) => {
+                    [CHOOSE_FOLDER, screens::FOLDER_EDITOR].contains(screen)
+                }
+                _ => false,
+            });
         if !folder {
             continue;
         }

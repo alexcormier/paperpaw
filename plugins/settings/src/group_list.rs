@@ -54,7 +54,7 @@ impl GroupList {
             .items(menu)
             .iter()
             // Passwords and keys only once there are some.
-            .filter(|item| *item.id != secrets::OPEN || !env.secrets.is_empty())
+            .filter(|item| *item.id != secrets::OPEN || env.secrets.listed().next().is_some())
             .map(|item| {
                 let order = env.menus.order_of(menu, item.id.as_str());
                 (

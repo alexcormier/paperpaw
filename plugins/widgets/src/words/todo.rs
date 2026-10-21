@@ -22,7 +22,7 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::time;
-use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::widgets::{
     self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
@@ -54,7 +54,6 @@ const BOXES: [&str; 3] = [
 /// "To do" above the items.
 const CAPTION: &str = "caption";
 const SCREEN: Id = Id::new_static("widgets.todo.list");
-const CHOICE: Id = Id::new_static("widgets.todo.choice");
 const CHOSEN: Event<choice::Picked> = Event::new("widgets.todo.chosen");
 /// An item tapped in the widget: its text ([`TEXT`]) and whether it was
 /// done ([`WAS_DONE`]).
@@ -151,11 +150,6 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
             let changes = changes.clone();
             move |env, _| Box::new(TodoScreen::new(env, changes.clone()))
         }),
-    ))?;
-    r.add_screen(ScreenSpec::new(
-        CHOICE,
-        "widgets.todo",
-        Box::new(|env, params| Box::new(Choice::new(env, params))),
     ))?;
     r.add_action(ActionSpec::new(OPEN, "widgets.todo").handler(
         |_: &Env<'_>, out: &mut Vec<Command>| {
@@ -726,14 +720,12 @@ impl TodoScreen {
         } else {
             "tick"
         };
-        cx.command(choice::open(
-            CHOICE,
-            &CHOSEN,
-            &item.text,
-            &format!("{}", row - 1),
-            OPTION_LABELS,
-            &[tick, "edit", "up", "down", "remove"],
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(&item.text, &CHOSEN)
+                .about(format!("{}", row - 1))
+                .options(OPTION_LABELS, &[tick, "edit", "up", "down", "remove"])
+                .command(),
+        );
     }
 }
 

@@ -282,13 +282,17 @@ fn a_choice_of_more_opens_its_list_and_the_value_chosen_is_kept() {
 /// Every row of the menu shown, page by page: turned with the page
 /// buttons, or on touch screens by the pager's arrow at the bottom right.
 fn paged(app: &mut App) -> Vec<String> {
+    // Page by page until one comes again (the last stays, or the first
+    // follows it): entries of the same name each count.
     let mut seen: Vec<String> = Vec::new();
+    let mut pages: Vec<Vec<String>> = Vec::new();
     for _ in 0..20 {
-        for row in rows(app) {
-            if !seen.contains(&row) {
-                seen.push(row);
-            }
+        let page = rows(app);
+        if pages.contains(&page) {
+            break;
         }
+        seen.extend(page.iter().cloned());
+        pages.push(page);
         if touch(app) {
             app.tap(Point::new(450, 785));
         } else {
@@ -466,6 +470,20 @@ fn the_bar_wraps_round_with_the_buttons() {
     app.run(actions::LEFT);
     app.run(actions::CONFIRM);
     assert_eq!(app.screen(), "home.dashboard");
+}
+
+/// The bar tells which of its entries has the focus, as a button, as the
+/// focus moves along it by buttons.
+#[test]
+fn the_bar_tells_its_focus() {
+    let mut app = reading(X4);
+    reader_menu(&mut app);
+    for entry in BAR.iter().take(3) {
+        let parts = app.parts();
+        let focus = paperpaw_sdk::semantics::focused(&parts).unwrap();
+        assert_eq!((focus.role, focus.label.as_str()), (Role::Button, *entry));
+        app.run(actions::RIGHT);
+    }
 }
 
 /// The control focused in the panel, and the setting row it belongs to
