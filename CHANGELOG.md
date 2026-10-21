@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: menu entries placed beside others (`MenuPlace`,
+  `Registrar::place_menu_entry`) or taken out by a plugin
+  (`hide_menu_entry`); what an entry shows now (`set_item_state`,
+  `ItemState`: a label, a switch, faint, hidden, a badge) and a line
+  under it (`describe_item`), shown by the shipped menus.
+- Menus: a menu the user redefined shows the entries of plugins
+  installed since, after the entry before them (`[menus] <menu>.known`
+  keeps what was there; lists kept before stay as they are).
 - SDK: `lookup`, lookup providers (`Registrar::add_lookup_provider`):
   where words are looked up, at once or later
   (`events::LOOKUP_ANSWERED`). The dictionary's panel lists every

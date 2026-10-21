@@ -1520,7 +1520,7 @@ ui-size = 12
             .collect()
     };
     let file = |kernel: &Kernel| -> String {
-        let mut buf = [0u8; 256];
+        let mut buf = [0u8; 4096];
         let n = kernel
             .shared
             .storage
@@ -1538,15 +1538,17 @@ ui-size = 12
     );
     assert_eq!(items(&kernel), ["core.settings", "core.home"]);
     assert!(kernel.shared.menus.is_customized("core.main"));
-    assert_eq!(
-        file(&kernel),
-        "[core]
+    // With what plugins put there when it was redefined: entries added
+    // later show too.
+    let saved = file(&kernel);
+    let start = "[core]
 ui-size = 12
 
 [menus]
 core.main = core.settings, core.home
-"
-    );
+core.main.known = ";
+    assert!(saved.starts_with(start), "{saved}");
+    assert!(saved.contains("core.home"), "{saved}");
     kernel.set_menu(Id::new_static("core.main"), None);
     assert_eq!(items(&kernel), defaults);
     assert_eq!(

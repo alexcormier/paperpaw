@@ -451,7 +451,8 @@ artifact, also when a check failed.
 | Actions | `add_action` | Something to do, bound to buttons and gestures, listed in menus |
 | Screens | `add_screen` | Full screens and overlays (menus, dialogs, panels) |
 | Slots | `add_slot`, `bind_slot` | Roles a screen fills: home, reader, library, menu, settings, keyboard, dictionary, … |
-| Menu entries and sections | `add_menu_entry`, `add_menu_section` | Actions, settings and submenus in any menu |
+| Menu entries and sections | `add_menu_entry`, `add_menu_section`, `place_menu_entry`, `hide_menu_entry` | Actions, settings and submenus in any menu, by order or beside other entries (`MenuPlace`: after, before, in a section, first, last); another plugin's entry taken out. A menu the user redefined shows entries added later too |
+| What entries show now | `set_item_state`, `describe_item` | A label, a switch, faint, hidden or a badge as things are now (`ItemState`); a line under an entry |
 | Icons | `add_icon` | The icon of an action, setting group or menu |
 | Settings and groups | `add_setting`, `add_setting_group` | Shown and saved by the kernel |
 | Setting defaults | `set_setting_default` | New defaults for other plugins' settings (themes) |

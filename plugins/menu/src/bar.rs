@@ -78,7 +78,7 @@ impl BarScreen {
         let menu = params.get(params::MENU).unwrap_or_default();
         let entries: Vec<Entry> = env
             .menus
-            .items(menu)
+            .shown_items(env, menu)
             .into_iter()
             .filter(|item| !item.section && !paperpaw_sdk::Menus::hidden(params, item.id.as_str()))
             .map(|item| Entry {

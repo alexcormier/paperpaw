@@ -8,6 +8,10 @@ use super::*;
 /// may take their name as its id (its settings would be read as these).
 pub(crate) const RESERVED_IDS: [&str; 4] = ["plugins", "fonts", "menus", "slots"];
 
+/// After a menu's id in `[menus]`: the entries plugins contributed when
+/// the user redefined it.
+pub(crate) const KNOWN: &str = ".known";
+
 /// The key maps the kernel's is built from.
 #[derive(Debug, Default)]
 pub(crate) struct KeySources {
@@ -293,6 +297,15 @@ impl Kernel {
         for (item, need) in staging.menu_needs.drain(..) {
             self.shared.menus.set_need(item, need);
         }
+        for (menu, item) in staging.hidden_entries.drain(..) {
+            self.shared.menus.hide(menu, item);
+        }
+        for (item, state) in staging.item_states.drain(..) {
+            self.shared.menus.set_state(item, state);
+        }
+        for (item, key) in staging.item_descriptions.drain(..) {
+            self.shared.menus.set_description(item, key);
+        }
         for (screen, hints) in staging.screen_hints.drain(..) {
             self.registry.hints.insert(screen, hints);
         }
@@ -399,20 +412,39 @@ impl Kernel {
         self.shared.keymap = keymap;
     }
 
-    /// Redefines or resets a menu (see [`Command::SetMenu`]) and saves it.
+    /// Redefines or resets a menu (see [`Command::SetMenu`]) and saves it,
+    /// with the entries plugins contribute to it now: those added later
+    /// show in the user's list too (`<menu>.known`).
     pub(crate) fn set_menu(&mut self, menu: Id, entries: Option<Vec<Id>>) {
-        let value = entries
-            .as_ref()
-            .map(|ids| ids.iter().map(Id::as_str).collect::<Vec<_>>().join(", "));
+        let join = |ids: &[Id]| ids.iter().map(Id::as_str).collect::<Vec<_>>().join(", ");
+        let value = entries.as_deref().map(join);
+        let known: Vec<Id> = self
+            .shared
+            .menus
+            .contributed_ids(menu.as_str())
+            .into_iter()
+            .cloned()
+            .collect();
+        let known_value = join(&known);
         match entries {
-            Some(ids) => self.shared.menus.customize(menu.clone(), ids),
+            Some(ids) => {
+                self.shared.menus.customize(menu.clone(), ids);
+                self.shared.menus.set_known(menu.clone(), known);
+            }
             None => self.shared.menus.reset(menu.as_str()),
         }
         // New entries need their labels.
         self.set_menu_titles();
+        let known_key = format!("{menu}{KNOWN}");
         self.update_config(&format_args!("menu `{menu}`"), |source| match &value {
-            Some(value) => paperpaw_config::set(source, "menus", menu.as_str(), value),
-            None => paperpaw_config::remove(source, "menus", menu.as_str()),
+            Some(value) => {
+                let source = paperpaw_config::set(source, "menus", menu.as_str(), value);
+                paperpaw_config::set(&source, "menus", &known_key, &known_value)
+            }
+            None => {
+                let source = paperpaw_config::remove(source, "menus", menu.as_str());
+                paperpaw_config::remove(&source, "menus", &known_key)
+            }
         });
         self.output
             .commands

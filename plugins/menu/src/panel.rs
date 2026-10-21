@@ -271,7 +271,7 @@ impl PanelScreen {
         let display = env.device.display;
         let width = display.width;
         let margin = style.margin as u16;
-        let items = env.menus.items(menu);
+        let items = env.menus.shown_items(env, menu);
         // Labels as wide as the longest needs, at most half the row;
         // sliders have their titles above them.
         let font = style.font(env);

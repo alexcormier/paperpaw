@@ -145,6 +145,9 @@ pub(crate) struct Staging {
     pub(crate) menu_sections: Vec<paperpaw_sdk::MenuSection>,
     pub(crate) icons: Vec<(Id, Cow<'static, str>)>,
     pub(crate) menu_needs: Vec<(Id, paperpaw_sdk::MenuNeed)>,
+    pub(crate) hidden_entries: Vec<(Id, Id)>,
+    pub(crate) item_states: Vec<(Id, paperpaw_sdk::ItemStateFn)>,
+    pub(crate) item_descriptions: Vec<(Id, Cow<'static, str>)>,
     pub(crate) screen_hints: Vec<(Id, paperpaw_sdk::Hints)>,
     pub(crate) keymap_presets: Vec<(Id, Cow<'static, str>)>,
     pub(crate) setting_defaults: Vec<(Id, Cow<'static, str>)>,
@@ -285,6 +288,13 @@ pub(crate) fn stage(
             Contribution::MenuSection(section) => staging.menu_sections.push(section),
             Contribution::Icon { item, icon, .. } => staging.icons.push((item, icon)),
             Contribution::MenuNeed { item, need, .. } => staging.menu_needs.push((item, need)),
+            Contribution::HideMenuEntry { menu, item, .. } => {
+                staging.hidden_entries.push((menu, item));
+            }
+            Contribution::ItemState { item, state, .. } => staging.item_states.push((item, state)),
+            Contribution::ItemDescription { item, key, .. } => {
+                staging.item_descriptions.push((item, key));
+            }
             Contribution::ScreenHints { screen, hints, .. } => {
                 staging.screen_hints.push((screen, hints));
             }

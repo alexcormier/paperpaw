@@ -108,7 +108,9 @@ pub use gesture::{Direction, Gesture, GestureKind};
 pub use hyphenation::{Hyphenation, HyphenationSpec};
 pub use id::{Id, InvalidId};
 pub use memory_storage::{MemoryStorage, read_file};
-pub use menus::{MenuEntry, MenuItem, MenuNeed, MenuSection, Menus};
+pub use menus::{
+    ItemState, ItemStateFn, MenuEntry, MenuItem, MenuNeed, MenuPlace, MenuSection, Menus,
+};
 pub use params::Params;
 pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec, Uses};
 pub use plugins::{PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, RequiredFor};

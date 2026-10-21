@@ -445,7 +445,14 @@ impl Kernel {
                         .filter(|a| !a.is_empty())
                         .map(Id::parse)
                         .collect();
-                    match (Id::parse(entry.key), actions) {
+                    let (key, known) = match entry.key.strip_suffix(crate::plugins::KNOWN) {
+                        Some(menu) => (menu, true),
+                        None => (entry.key, false),
+                    };
+                    match (Id::parse(key), actions) {
+                        (Ok(menu), Ok(actions)) if known => {
+                            self.shared.menus.set_known(menu, actions);
+                        }
                         (Ok(menu), Ok(actions)) => self.shared.menus.customize(menu, actions),
                         _ => self.warn(WarningSource::UserConfig, line, "invalid menu".into()),
                     }

@@ -117,6 +117,21 @@ pub enum Contribution {
         need: MenuNeed,
     },
     #[non_exhaustive]
+    HideMenuEntry {
+        menu: Id,
+        item: Id,
+    },
+    #[non_exhaustive]
+    ItemState {
+        item: Id,
+        state: crate::ItemStateFn,
+    },
+    #[non_exhaustive]
+    ItemDescription {
+        item: Id,
+        key: Cow<'static, str>,
+    },
+    #[non_exhaustive]
     ScreenHints {
         screen: Id,
         hints: Hints,
@@ -195,6 +210,9 @@ impl Contribution {
             Contribution::MenuSection(_) => "menu-section",
             Contribution::Icon { .. } => "icon",
             Contribution::MenuNeed { .. } => "menu-need",
+            Contribution::HideMenuEntry { .. } => "hidden-menu-entry",
+            Contribution::ItemState { .. } => "item-state",
+            Contribution::ItemDescription { .. } => "item-description",
             Contribution::ScreenHints { .. } => "screen-hints",
             Contribution::Subscription { .. } => "subscription",
             Contribution::StatusItem(_) => "status-item",
@@ -507,6 +525,50 @@ impl Registrar {
     /// redefined by the user.
     pub fn add_menu_entry(&mut self, entry: MenuEntry) -> Result<(), RegisterError> {
         self.add(Contribution::MenuEntry(entry))
+    }
+
+    /// Puts `item` into `menu` at `place`, beside other entries (e.g.
+    /// right after another plugin's).
+    pub fn place_menu_entry(
+        &mut self,
+        menu: Id,
+        item: Id,
+        place: crate::MenuPlace,
+    ) -> Result<(), RegisterError> {
+        self.add_menu_entry(MenuEntry::new(menu, item).place(place))
+    }
+
+    /// Takes `item` out of `menu` as plugins contribute it (e.g. an entry
+    /// a plugin replaces with its own); a user who lists it keeps it.
+    pub fn hide_menu_entry(&mut self, menu: Id, item: Id) -> Result<(), RegisterError> {
+        self.add(Contribution::HideMenuEntry { menu, item })
+    }
+
+    /// What menus show of `item` now, where it changes: another label, a
+    /// switch, faint, hidden, a badge (see
+    /// [`ItemState`](crate::ItemState)). Asked whenever a menu
+    /// shows it: it says it from memory.
+    pub fn set_item_state(
+        &mut self,
+        item: impl Into<Id>,
+        state: impl Fn(&crate::Env<'_>) -> crate::ItemState + 'static,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ItemState {
+            item: item.into(),
+            state: Box::new(state),
+        })
+    }
+
+    /// A line under `item` in menus, by its translation key.
+    pub fn describe_item(
+        &mut self,
+        item: impl Into<Id>,
+        key: impl Into<Cow<'static, str>>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::ItemDescription {
+            item: item.into(),
+            key: key.into(),
+        })
     }
 
     /// Adds a heading to a menu; entries ordered after it, up to the next
