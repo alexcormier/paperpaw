@@ -541,6 +541,46 @@ fn the_header_keeps_to_the_content_margins() {
     }
 }
 
+/// The first and last rows with ink in `columns`, against the paper at
+/// the left edge.
+fn ink_rows(frame: &paperpaw_graphics::Framebuffer, columns: std::ops::Range<u16>) -> (u16, u16) {
+    let view = frame.view();
+    let inked = |y: u16| columns.clone().any(|x| view.pixel(x, y) != view.pixel(0, y));
+    let first = (0..frame.height()).find(|&y| inked(y)).expect("ink");
+    let last = (0..frame.height()).rev().find(|&y| inked(y)).expect("ink");
+    (first, last)
+}
+
+/// Every title stands on one line, its capitals in the middle of the bar
+/// (as the arrows are): one with a descender as one without, on every
+/// density.
+#[test]
+fn header_titles_are_centred_by_their_capitals() {
+    for dpi in [150, 220, 300] {
+        let mut h = Harness::new(Device::BUTTONS);
+        h.device.display.dpi = dpi;
+        let env = h.env();
+        let style = UiStyle::new(&env);
+        let header = Header::new(&env, &style, false);
+        let height = header.area.height;
+        let title = |text: &str| {
+            let mut shot = frame(480, 800);
+            header.draw(&mut shot.canvas(), &env, &style, text, None, None);
+            ink_rows(&shot, 0..240)
+        };
+        let (caps, base) = title("HELL");
+        let (top, _) = title("Hey");
+        assert_eq!(top, caps, "the same capitals' top at {dpi} dpi");
+        // A line below the bar may take a pixel or two of it, the edges
+        // of the letters (gray) one more.
+        let (above, below) = (caps, height - 1 - base);
+        assert!(
+            above.abs_diff(below) <= style.line as u16 + 2,
+            "capitals {caps}..{base} in {height} at {dpi} dpi"
+        );
+    }
+}
+
 #[test]
 fn a_focused_header_note_is_told_as_a_focused_button() {
     let h = Harness::new(Device::BUTTONS);

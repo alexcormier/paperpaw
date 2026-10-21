@@ -331,12 +331,14 @@ pub(super) fn draw_text(
     font.draw(canvas, size, x, baseline, text, color)
 }
 
-/// The baseline that centres the ink of `text` at `size` in `band`,
-/// rather than its line, which leaves more room above the letters than
-/// below them: what headers use, so their words sit in the middle as
-/// their signs do.
-pub(super) fn ink_baseline(font: &FontHandle<'_>, band: Rect, size: f32, text: &str) -> i32 {
-    let (top, bottom) = font.ink(size, text).unwrap_or_else(|| {
+/// The baseline that centres the capitals of `size` in `band` (from the
+/// baseline to the top of an *H*), rather than the line, which leaves
+/// more room above the letters than below them, or the ink of the text
+/// itself, which puts a word with a *g* higher than one without: what
+/// headers use, so every title stands on one line, its capitals in the
+/// middle as the arrows beside them are.
+pub(super) fn cap_baseline(font: &FontHandle<'_>, band: Rect, size: f32) -> i32 {
+    let (top, bottom) = font.ink(size, "H").unwrap_or_else(|| {
         // No ink at all: as a line would be.
         let metrics = font.line_metrics(size);
         (-(metrics.ascent as i32), -(metrics.descent as i32))

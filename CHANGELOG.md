@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Headers centre their titles by the capitals (the baseline to the top
+  of an *H*) rather than by each title's own ink: a title with a *g* or
+  *y* stood higher than one without and above the back arrow, by up to
+  6 pixels on the Boox. Notes and page numbers in headers stand the same
+  way. Titles of headers are 115 % of the text by default (was 130 %),
+  as titles of dialogs are; `core.ui-title` still sets them, in steps of
+  5 %.
 - Dragging an item of a grid (moving or sizing it on the home screen)
   draws it again only when it goes to other cells: a finger trembling in
   a cell asked for a refresh each time, most of a second each on the

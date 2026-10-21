@@ -33,7 +33,7 @@ pub fn draw_header(
     let title = fit(&font, style.head, title, right - f32::from(area.x) - margin);
     let band = style.header_band(area);
     if let Some(note) = note.as_deref() {
-        let (x, baseline) = (right + margin, ink_baseline(&font, band, style.small, note));
+        let (x, baseline) = (right + margin, cap_baseline(&font, band, style.small));
         draw_label_on(
             &mut canvas,
             &font,
@@ -47,7 +47,7 @@ pub fn draw_header(
     }
     let (x, baseline) = (
         f32::from(area.x) + margin,
-        ink_baseline(&font, band, style.head, &title),
+        cap_baseline(&font, band, style.head),
     );
     draw_label_on(
         &mut canvas,
@@ -203,7 +203,7 @@ impl Header {
             return;
         };
         // Everything centred in the band by its ink: the arrows by their
-        // drawing, each text by its letters.
+        // drawing, each text by its capitals.
         let band = style.header_band(self.area);
         let arrow = |canvas: &mut Canvas<'_>, x: i32, icon: &str, left: bool, color: Color| {
             let (_, y) = center(band);
@@ -224,7 +224,7 @@ impl Header {
         let label = page
             .filter(|_| parts.pager.is_some())
             .map(|page| Self::page_label(env, page));
-        let baseline = |size: f32, text: &str| ink_baseline(&font, band, size, text);
+        let baseline = |size: f32| cap_baseline(&font, band, size);
         let (back_x, prev_x, next_x) = parts.arrows;
         if parts.back.is_some() {
             arrow(canvas, back_x, crate::icons::BACK, true, ink);
@@ -243,7 +243,7 @@ impl Header {
                 );
             }
             let x = f32::from(at.x);
-            let y = baseline(style.small, text);
+            let y = baseline(style.small);
             draw_label_on(canvas, &font, style.small, x, at, y, text, ink);
         }
         let mut canvas = canvas.clipped(t);
@@ -268,11 +268,11 @@ impl Header {
             } else {
                 ink
             };
-            let y = baseline(style.small, note);
+            let y = baseline(style.small);
             draw_label_on(&mut canvas, &font, style.small, x, t, y, note, note_ink);
         }
         let x = f32::from(t.x);
-        let y = baseline(style.head, &title);
+        let y = baseline(style.head);
         draw_label_on(&mut canvas, &font, style.head, x, t, y, &title, ink);
     }
 
