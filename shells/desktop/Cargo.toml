@@ -13,6 +13,7 @@ publish = false
 [[bin]]
 name = "paperpaw-emu"
 path = "src/main.rs"
+required-features = ["window"]
 
 [dependencies]
 paperpaw-app = { workspace = true, features = ["outline", "packs"] }
@@ -21,19 +22,27 @@ paperpaw-fs.workspace = true
 paperpaw-serve.workspace = true
 paperpaw-graphics = { workspace = true, features = ["color"] }
 paperpaw-platform.workspace = true
+png = "0.17"
+softbuffer = { version = "0.4", optional = true }
+# Without client-side decorations on Wayland: they pull in the unmaintained
+# `ttf-parser` (RUSTSEC-2026-0192).
+winit = { version = "0.30", default-features = false, features = ["rwh_06", "x11", "wayland", "wayland-dlopen"], optional = true }
+# The sample plugin of `docs/plugins.md`, with `--features hello`.
+paperpaw-sample-hello = { path = "../../samples/hello-plugin", optional = true }
+
+# What a browser does not give Rust: it hands time and random numbers in
+# (see `host`).
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # The computer's random numbers, for keys (`KernelBuilder::random`).
 getrandom = "0.4"
 # The computer's time zone for the emulated clock.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
-png = "0.17"
-softbuffer = "0.4"
-# Without client-side decorations on Wayland: they pull in the unmaintained
-# `ttf-parser` (RUSTSEC-2026-0192).
-winit = { version = "0.30", default-features = false, features = ["rwh_06", "x11", "wayland", "wayland-dlopen"] }
-# The sample plugin of `docs/plugins.md`, with `--features hello`.
-paperpaw-sample-hello = { path = "../../samples/hello-plugin", optional = true }
 
 [features]
+default = ["window"]
+# The `paperpaw-emu` window; without it the device model alone, for tools
+# and for the browser (`shells/web`).
+window = ["dep:winit", "dep:softbuffer"]
 hello = ["dep:paperpaw-sample-hello"]
 
 [lints]

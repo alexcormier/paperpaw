@@ -77,6 +77,19 @@ fn a_tracked_allocation_past_the_budget_is_refused_and_counted() {
 }
 
 #[test]
+fn the_last_refusal_is_remembered_until_cleared() {
+    let _alone = alone();
+    clear_last_refused();
+    set_limit(Some(stats().live + 2048));
+    let refused = track(|| Vec::<u8>::new().try_reserve_exact(4096));
+    set_limit(None);
+    assert!(refused.is_err());
+    assert_eq!(last_refused(), 4096);
+    clear_last_refused();
+    assert_eq!(last_refused(), 0);
+}
+
+#[test]
 fn untracked_allocations_are_never_refused() {
     let _alone = alone();
     set_limit(Some(live()));

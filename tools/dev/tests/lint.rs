@@ -10,7 +10,7 @@ use paperpaw_dev::cases;
 use paperpaw_dev::cli::Context;
 use paperpaw_dev::lint::{self, PSEUDO, pseudo};
 use paperpaw_dev::report::{Level, Report};
-use paperpaw_dev::session::{self, Session};
+use paperpaw_dev::session::Session;
 use paperpaw_dev::target::{DataPlugin, Target};
 use paperpaw_dev::variant::Variant;
 
@@ -65,37 +65,43 @@ fn the_settings_list_in_the_pseudo_language() {
 }
 
 /// The fixture data plugin, dashes put in (the repository has none).
-fn wanting(to: &Path) -> PathBuf {
+fn wanting() -> DataPlugin {
     let from = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/lint/data-plugin");
-    let folder = to.join("wanting");
-    let _ = std::fs::remove_dir_all(&folder);
-    session::copy_dir(&from, &folder).unwrap();
-    let path = folder.join("plugin.ini");
-    let text = std::fs::read_to_string(&path).unwrap();
-    std::fs::write(&path, text.replace("wanting;", "wanting \u{2014}")).unwrap();
-    folder
+    let mut plugin = DataPlugin::read(&from).unwrap();
+    let text = String::from_utf8(plugin.files["plugin.ini"].to_vec()).unwrap();
+    let text = text.replace("wanting;", "wanting \u{2014}");
+    plugin
+        .files
+        .insert("plugin.ini".into(), text.into_bytes().into());
+    // Handed in, as a community plugin is: not one of this repository's.
+    plugin.folder = None;
+    plugin
 }
 
-#[test]
-fn a_data_plugin_found_wanting() {
-    let dir = out("data");
-    let folder = wanting(&dir);
+/// The lint command on [`wanting`], the libraries in folders or in
+/// memory.
+fn lint_wanting(dir: &Path, in_memory: bool) -> Report {
     let mut context = Context::new(
         Target {
             plugins: vec!["wanting".into()],
-            data: vec![DataPlugin {
-                id: "wanting".into(),
-                folder,
-            }],
+            data: vec![wanting()],
             ..Target::default()
         },
         dir.join("out"),
     );
+    context.in_memory = in_memory;
     // One device with buttons, quick.
     context.profiles.truncate(1);
     context.languages = Some(vec!["en".into(), "de".into()]);
     let mut report = Report::default();
     lint::run(&context, &mut report).unwrap();
+    report
+}
+
+#[test]
+fn a_data_plugin_found_wanting() {
+    let dir = out("data");
+    let report = lint_wanting(&dir, false);
     let found = |check: &str, place: &str| {
         report
             .findings
@@ -118,5 +124,19 @@ fn a_data_plugin_found_wanting() {
         "{:#?}",
         report.findings
     );
+    // In memory, as in a browser: the same findings, no library written.
+    let _ = std::fs::remove_dir_all(&dir);
+    let in_memory = lint_wanting(&dir, true);
+    let places = |report: &Report| {
+        let mut all: Vec<String> = report
+            .findings
+            .iter()
+            .map(|f| format!("{} {}", f.check, f.place))
+            .collect();
+        all.sort();
+        all
+    };
+    assert_eq!(places(&in_memory), places(&report));
+    assert!(!dir.join("out/work").exists());
     let _ = std::fs::remove_dir_all(&dir);
 }

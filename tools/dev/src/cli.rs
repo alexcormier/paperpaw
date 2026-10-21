@@ -92,6 +92,9 @@ pub struct Context {
     pub strict: bool,
     pub verbose: bool,
     pub keep: bool,
+    /// The emulated libraries kept in memory and no pictures written:
+    /// where there is no file system (the browser's emulator).
+    pub in_memory: bool,
     app_languages: OnceLock<Vec<String>>,
 }
 
@@ -116,6 +119,7 @@ impl Context {
             strict: false,
             verbose: false,
             keep: false,
+            in_memory: false,
             app_languages: OnceLock::new(),
         }
     }
