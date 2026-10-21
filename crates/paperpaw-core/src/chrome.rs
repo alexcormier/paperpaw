@@ -128,6 +128,11 @@ impl Kernel {
     /// where it shows it): what the bars shown over the full screen at or
     /// below it leave, so that an overlay shares its full screen's bars;
     /// no bars for a screen that guards the device and those above it.
+    /// One rule for the row, the bars and the screens: the row shows as
+    /// the screen on top shows it ([`Kernel::hint_row`]), the bars lie
+    /// above it, and the screen on top's part is above both; a full screen
+    /// below an overlay keeps its part, the row and bars lying over its
+    /// bottom meanwhile.
     pub(crate) fn area_of(&self, index: usize) -> Rect {
         let base = (0..=index)
             .rev()
@@ -185,10 +190,13 @@ impl Kernel {
         }
         let mut strips: Vec<(usize, Rect)> = Vec::new();
         let base = self.shown_base();
+        // Above the row of hints as the screen on top shows it, as its
+        // part is (see `area_of`).
+        let hinted = self.stack.last().is_some_and(|top| top.hinted);
         if self.guard().is_none()
-            && let (Some(active), Some(entry)) = (self.stack.get(base), self.shared.stack.get(base))
+            && let Some(entry) = self.shared.stack.get(base)
         {
-            self.layout(active.hinted, Some(entry), Some(&mut strips));
+            self.layout(hinted, Some(entry), Some(&mut strips));
         }
         // Gone, or made for another size: closed.
         let mut changed: Vec<Rect> = Vec::new();

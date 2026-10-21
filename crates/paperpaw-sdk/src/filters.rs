@@ -263,18 +263,25 @@ impl InputFilters {
 
     /// What the first filter that does not pass it does with `event`.
     pub fn apply(&self, env: &Env<'_>, event: &InputEvent) -> InputVerdict {
+        self.filter(env, event).0
+    }
+
+    /// What the first filter that does not pass it does with `event`, and
+    /// the input it did it with (another where a filter before it
+    /// replaced it).
+    pub fn filter(&self, env: &Env<'_>, event: &InputEvent) -> (InputVerdict, InputEvent) {
         let mut seen = *event;
         for filter in &self.filters {
             match (filter.filter)(env, &seen) {
                 InputVerdict::Pass => {}
                 InputVerdict::Replace(other) => seen = other,
-                verdict => return verdict,
+                verdict => return (verdict, seen),
             }
         }
         if seen == *event {
-            InputVerdict::Pass
+            (InputVerdict::Pass, seen)
         } else {
-            InputVerdict::Replace(seen)
+            (InputVerdict::Replace(seen), seen)
         }
     }
 }

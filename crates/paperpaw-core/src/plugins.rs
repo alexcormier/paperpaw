@@ -353,13 +353,23 @@ impl Kernel {
         let inputs = staging.inputs.drain(..);
         let made = inputs.filter(|input| input.need.is_none_or(|need| need.met(caps)));
         self.shared.inputs.extend(made);
-        // Recognizers are made once, their makers dropped.
+        // Recognizers are made once, their makers dropped; listed among
+        // the inputs, to bind.
         for spec in staging.gestures.drain(..) {
             let recognizer = (spec.factory)();
+            let mut listed = paperpaw_sdk::keys::InputSpec::new(spec.id.clone(), spec.title);
+            listed.kind = paperpaw_sdk::keys::InputKind::Gesture;
+            if caps.touch {
+                self.shared.inputs.push(listed);
+            }
             let id = spec.id;
-            self.input
-                .recognizers
-                .push(gestures::PluginRecognizer { id, recognizer });
+            let fingers = Vec::new();
+            let made = gestures::PluginRecognizer {
+                id,
+                recognizer,
+                fingers,
+            };
+            self.input.recognizers.push(made);
         }
         for spec in staging.works.drain(..) {
             self.works.add_spec(spec);

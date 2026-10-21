@@ -88,6 +88,8 @@ pub enum InputMode {
 /// An input of one's own (`input.<id>` in key maps), e.g. a chord a
 /// plugin recognizes or a switch of a switch-access device: bound like
 /// any other, raised with [`Command::Input`](crate::Command::Input).
+/// [`Env::inputs`](crate::Env::inputs) lists them with the gestures
+/// plugins recognize ([`InputKind::Gesture`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct InputSpec {
@@ -96,6 +98,19 @@ pub struct InputSpec {
     pub title: Cow<'static, str>,
     /// What the device must have for it.
     pub need: Option<MenuNeed>,
+    /// An input of its own, or a gesture a recognizer makes.
+    pub kind: InputKind,
+}
+
+/// What an input of [`Env::inputs`](crate::Env::inputs) is.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum InputKind {
+    /// `input.<id>` ([`Registrar::add_input`](crate::Registrar::add_input)).
+    #[default]
+    Input,
+    /// `gesture.<id>` ([`Registrar::add_gesture`](crate::Registrar::add_gesture)).
+    Gesture,
 }
 
 impl InputSpec {
@@ -104,6 +119,15 @@ impl InputSpec {
             id,
             title: title.into(),
             need: None,
+            kind: InputKind::Input,
+        }
+    }
+
+    /// Its name in key maps: `input.<id>` or `gesture.<id>`.
+    pub fn key(&self) -> String {
+        match self.kind {
+            InputKind::Gesture => format!("gesture.{}", self.id),
+            _ => format!("input.{}", self.id),
         }
     }
 
@@ -113,22 +137,48 @@ impl InputSpec {
     }
 }
 
-/// What a recognizer of gestures made of what it saw.
+/// What a recognizer of gestures made of the time that went on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Recognition {
     /// Nothing yet.
     Nothing,
-    /// Its gesture: `gesture.<id>` runs what it is bound to.
+    /// Its gesture: `gesture.<id>` runs what it is bound to, and the
+    /// fingers it follows are its own from now.
+    Recognized,
+}
+
+/// What a recognizer does with a finger, told at each of its samples.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum PointerVerdict {
+    /// Not for it: it sees no more of this touch.
+    Pass,
+    /// It follows the finger, and the kernel recognizes it as usual (a
+    /// tap, a long press, a swipe) beside it.
+    Observe,
+    /// The finger is its own: the kernel recognizes nothing of it any
+    /// more.
+    Capture,
+    /// Its gesture: `gesture.<id>` runs what it is bound to, and the
+    /// finger is its own (as [`Capture`](Self::Capture)).
     Recognized,
 }
 
 /// Recognizes a gesture of one's own from the fingers on the screen (a
-/// circle, a zigzag, three fingers): every pointer sample comes to it,
-/// in the screen's coordinates, beside what the kernel recognizes.
+/// circle, a zigzag, three fingers), in the screen's coordinates, beside
+/// what the kernel recognizes.
+///
+/// It sees a finger come down where gestures are the key map's: not on a
+/// bar, at an edge, on a screen that took the finger or that takes
+/// gestures itself (`gestures.policy`), nor while a screen guards the
+/// device (unless the recognizer is of the guard's plugin). Then it sees
+/// the samples of the fingers it follows ([`PointerVerdict`]); a finger
+/// taken away (by an input filter) comes as
+/// [`PointerPhase::Cancel`](paperpaw_platform::PointerPhase::Cancel).
 pub trait GestureRecognizer {
-    /// A pointer sample at `now`.
-    fn pointer(&mut self, event: &PointerEvent, now: Instant) -> Recognition;
+    /// A sample of a finger at `now`.
+    fn pointer(&mut self, event: &PointerEvent, now: Instant) -> PointerVerdict;
 
     /// Time went on to `now` (asked with [`next_tick`](Self::next_tick)).
     fn tick(&mut self, now: Instant) -> Recognition {
@@ -136,7 +186,8 @@ pub trait GestureRecognizer {
         Recognition::Nothing
     }
 
-    /// When it wants [`tick`](Self::tick), e.g. for a gesture of holding.
+    /// When it wants [`tick`](Self::tick), e.g. for a gesture of holding;
+    /// asked again after each, at most twenty times a second.
     fn next_tick(&self) -> Option<Instant> {
         None
     }

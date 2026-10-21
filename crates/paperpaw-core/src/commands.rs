@@ -88,12 +88,8 @@ impl Kernel {
         }
         let input = [
             self.input.recognizer.next_deadline(&self.thresholds()),
-            self.input.pending.as_ref().map(|(_, until)| *until),
-            self.input
-                .recognizers
-                .iter()
-                .filter_map(|r| r.recognizer.next_tick())
-                .min(),
+            self.input.pending.as_ref().map(|(_, until, _)| *until),
+            self.recognizers_due(),
         ]
         .into_iter()
         .flatten()
@@ -196,7 +192,11 @@ impl Kernel {
                 Some(key) => self.route_key(key),
                 None => self.warn_runtime(format!("unknown input `{name}`")),
             },
-            Command::SetKeyLayer(layer) => self.input.key_layer = layer,
+            Command::SetKeyLayer(layer) => {
+                if let Some(top) = self.stack.last_mut() {
+                    top.key_layer = layer;
+                }
+            }
             Command::OpenScreen(screen, params) => self.open(screen, None, &params),
             // Not past a screen that guards the device, but from it.
             Command::Back if self.held_by_guard() => {}
@@ -318,8 +318,10 @@ impl Kernel {
                 &mut self.works,
             );
         }
-        // A setting may change which bars show and their size.
+        // A setting may change which bars show and their size, and how
+        // input is recognized.
         if *event == events::SETTING_CHANGED {
+            self.input.thresholds.set(None);
             self.sync_chromes();
         }
         self.observe(event, params, false);

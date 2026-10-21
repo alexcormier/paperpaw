@@ -428,14 +428,23 @@ fn switching_to_no_task_closes_nothing() {
             .iter()
             .any(|w| w.message.contains("bar.nothing"))
     );
-    let tasks = [slots::READER, PAGE, BOOK, MENU, Id::new_static("bar.tabs")];
-    for (n, task) in tasks.into_iter().cycle().take(12).enumerate() {
-        // Each its own task, of its own name.
-        let name = Id::parse(&alloc::format!("bar.task{n}")).unwrap();
-        let _ = task;
-        kernel.apply(Command::SwitchTask(PAGE));
-        kernel.finish();
-        kernel.task = Some(name);
+}
+
+/// A few tasks are kept; with as many as are kept, the one switched to
+/// shows again (it is looked up before the oldest is let go).
+#[test]
+fn a_task_switched_to_at_capacity_shows_again() {
+    let log = log();
+    let mut kernel = bar_kernel(&log, Edge::Bottom, DEVICE);
+    for n in 0..8 {
+        let task = Id::parse(&alloc::format!("bar.task{n}")).unwrap();
+        let screens = alloc::vec![(BOOK, None, Params::new())];
+        kernel.tasks.push((task, screens));
     }
-    assert!(kernel.tasks.len() <= 8, "{}", kernel.tasks.len());
+    kernel.apply(Command::SwitchTask(Id::new_static("bar.task0")));
+    kernel.finish();
+    let ids: Vec<&str> = kernel.screens().map(Id::as_str).collect();
+    assert_eq!(ids, ["bar.book"]);
+    assert_eq!(kernel.tasks.len(), 8);
+    assert!(kernel.tasks.iter().any(|(task, _)| *task == slots::HOME));
 }

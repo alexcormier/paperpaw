@@ -348,9 +348,11 @@ pub enum Command {
     /// layers shown bind it to, as if it had come (switch access, chords
     /// of one's own).
     Input(String),
-    /// Puts the key map layer `.0` in front of the screen's slot and the
-    /// global layer, e.g. a book's own bindings (`[keymap.<layer>]`);
-    /// `None` takes it away.
+    /// Puts the key map layer `.0` in front of the slot's and the global
+    /// layer for the screen on top when it is carried out (the screen
+    /// that asks, from its own handlers), e.g. a book's own bindings
+    /// (`[keymap.<layer>]`): it applies while that screen is on top and
+    /// goes with it. `None` takes it away.
     SetKeyLayer(Option<Id>),
     /// Shows task `.0`, a tab of tabs: the screens open now are kept as
     /// the task shown before (by their ids and params; dropped from memory

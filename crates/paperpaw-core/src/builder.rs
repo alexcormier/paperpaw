@@ -471,7 +471,8 @@ impl KernelBuilder {
                 pending: None,
                 last_tap: None,
                 recognizers: Vec::new(),
-                key_layer: None,
+                pressed_on: None,
+                thresholds: core::cell::Cell::new(None),
             },
             io: network::IoState {
                 http: io::http::Http::for_memory(self.device.memory),

@@ -4,8 +4,11 @@
 //! recognizers.
 
 use super::*;
-use paperpaw_sdk::keys::{GestureRecognizer, GestureSpec, InputMode, InputSpec, Recognition};
-use paperpaw_sdk::{Gesture, GestureKind};
+use crate::gestures;
+use paperpaw_sdk::keys::{
+    GestureRecognizer, GestureSpec, InputMode, InputSpec, PointerVerdict, Recognition,
+};
+use paperpaw_sdk::{Gesture, GestureKind, Params};
 
 /// A kernel showing plugin `a`'s screen, with its key map `keymap`.
 fn kernel_with(log: &Log, keymap: &'static str) -> Kernel {
@@ -269,28 +272,37 @@ fn filters_cancel_and_replace_inputs() {
     assert_eq!(kernel.shared.last_input, InputMode::Touch);
 }
 
-/// Recognizes a flick off the right side, and a finger held a second.
+/// Recognizes a flick off the right side, and a finger held a while
+/// (before the kernel's long press); a finger coming down at the far left
+/// is its own.
 #[derive(Default)]
 struct Flick {
     held_until: Option<Instant>,
 }
 
 impl GestureRecognizer for Flick {
-    fn pointer(&mut self, event: &PointerEvent, now: Instant) -> Recognition {
+    fn pointer(&mut self, event: &PointerEvent, now: Instant) -> PointerVerdict {
         match event.phase {
             PointerPhase::Down => {
-                self.held_until = Some(now.add_millis(1000));
-                Recognition::Nothing
-            }
-            PointerPhase::Up => {
-                self.held_until = None;
-                if event.point.x > 80 {
-                    Recognition::Recognized
+                self.held_until = Some(now.add_millis(300));
+                if event.point.x < 40 {
+                    PointerVerdict::Capture
                 } else {
-                    Recognition::Nothing
+                    PointerVerdict::Observe
                 }
             }
-            _ => Recognition::Nothing,
+            PointerPhase::Move => {
+                self.held_until = None;
+                PointerVerdict::Observe
+            }
+            PointerPhase::Up if event.point.x > 80 => {
+                self.held_until = None;
+                PointerVerdict::Recognized
+            }
+            _ => {
+                self.held_until = None;
+                PointerVerdict::Pass
+            }
         }
     }
 
@@ -329,37 +341,246 @@ impl Plugin for FlickPlugin {
     }
 }
 
-/// A plugin's recognizer sees the fingers beside the kernel and runs
-/// what its gesture is bound to, also when the time it asked for comes;
-/// a plugin's input is raised by command. Inputs the device cannot make
-/// are not offered.
-#[test]
-fn plugins_recognize_gestures_and_add_inputs() {
-    let log = log();
+fn flick_kernel(log: &Log) -> Kernel {
     let mut kernel = Kernel::builder(DEVICE)
-        .plugin(TestPlugin::new("a", &log))
+        .plugin(TestPlugin::new("a", log))
         .plugin(FlickPlugin)
+        .plugin(LockPlugin(log.clone()))
+        .plugin(Filters)
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    let ids: Vec<&str> = kernel.shared.inputs.iter().map(|i| i.id.as_str()).collect();
-    assert_eq!(ids, ["g.chord"]);
+    kernel
+}
+
+/// A plugin's recognizer sees the fingers beside the kernel and runs
+/// what its gesture is bound to, also when the time it asked for comes:
+/// then the finger is its own, and the kernel makes no long press of it.
+/// A finger it captures is not the kernel's. A plugin's input is raised
+/// by command; inputs the device cannot make are not offered.
+#[test]
+fn plugins_recognize_gestures_and_add_inputs() {
+    let log = log();
+    let mut kernel = flick_kernel(&log);
+    // The gesture is listed to bind too; the input for a front light is
+    // not, as the device has none.
+    let keys: Vec<String> = kernel.shared.inputs.iter().map(InputSpec::key).collect();
+    assert_eq!(keys, ["input.g.chord", "gesture.g.flick"]);
     finger(&mut kernel, 1000, 0, PointerPhase::Down, (60, 45));
     finger(&mut kernel, 1100, 0, PointerPhase::Up, (85, 45));
     assert_eq!(*log.borrow(), ["a:a.special"]);
     log.borrow_mut().clear();
     finger(&mut kernel, 2000, 0, PointerPhase::Down, (45, 45));
     let effects = kernel.tick(Instant(2100));
-    assert!(effects.wake_at.is_some_and(|at| at <= Instant(3000)));
+    assert!(effects.wake_at.is_some_and(|at| at <= Instant(2300)));
+    kernel.tick(Instant(2300));
     kernel.tick(Instant(3000));
-    assert!(
-        log.borrow().contains(&String::from("a:a.special")),
-        "{:?}",
-        log.borrow()
-    );
     finger(&mut kernel, 3100, 0, PointerPhase::Up, (45, 45));
+    assert_eq!(*log.borrow(), ["a:a.special"], "no long tap besides");
     log.borrow_mut().clear();
+    // Captured on the left: no tap of the kernel's.
+    finger(&mut kernel, 4000, 0, PointerPhase::Down, (30, 45));
+    finger(&mut kernel, 4050, 0, PointerPhase::Up, (30, 45));
+    assert!(log.borrow().is_empty(), "{:?}", log.borrow());
     kernel.apply(Command::Input(String::from("input.g.chord")));
     kernel.finish();
     assert_eq!(*log.borrow(), ["a:core.confirm"]);
+}
+
+/// A finger a filter cancels is gone for the recognizers too: no gesture
+/// comes of it when its time comes.
+#[test]
+fn a_cancelled_finger_is_gone_for_recognizers() {
+    let log = log();
+    let mut kernel = flick_kernel(&log);
+    finger(&mut kernel, 1000, 2, PointerPhase::Down, (45, 45));
+    finger(&mut kernel, 1050, 2, PointerPhase::Move, (45, 46));
+    kernel.tick(Instant(1300));
+    kernel.tick(Instant(2000));
+    assert!(log.borrow().is_empty(), "{:?}", log.borrow());
+}
+
+/// A recognizer asking for a time past wakes the device at most twenty
+/// times a second.
+#[test]
+fn recognizers_wake_the_device_seldom() {
+    let log = log();
+    let mut kernel = flick_kernel(&log);
+    // It asks for its time 300 ms after the finger came down (its own:
+    // the kernel waits for nothing): past by then, as the device slept.
+    finger(&mut kernel, 1000, 0, PointerPhase::Down, (30, 45));
+    let wake = kernel.handle(
+        Instant(5000),
+        InputEvent::Button {
+            name: "nothing",
+            state: ButtonState::Released,
+        },
+    );
+    let at = wake.wake_at.unwrap();
+    assert!(at >= Instant(5000 + gestures::RECOGNIZER_TICK_MS), "{at:?}");
+}
+
+/// A lock of its own plugin: it guards the device and logs the actions
+/// it gets.
+struct Lock(Log);
+
+impl Screen for Lock {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn guards(&self) -> bool {
+        true
+    }
+
+    fn on_action(&mut self, action: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        self.0.borrow_mut().push(alloc::format!("lock:{action}"));
+        Handled::Yes
+    }
+}
+
+struct LockPlugin(Log);
+
+impl Plugin for LockPlugin {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("lock"), "Lock", Version::new(1, 0, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let log = self.0.clone();
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("lock.screen"),
+            "lock",
+            Box::new(move |_, _| Box::new(Lock(log.clone()))),
+        ))
+    }
+}
+
+/// While a screen of another plugin guards the device, recognizers see
+/// no finger (not the path of an unlock pattern, nor where a PIN is
+/// tapped); an input raised by command reaches the guard first.
+#[test]
+fn recognizers_see_nothing_under_a_guard() {
+    let log = log();
+    let mut kernel = flick_kernel(&log);
+    kernel.open_screen(Instant(10), Id::new_static("lock.screen"), Params::new());
+    log.borrow_mut().clear();
+    finger(&mut kernel, 1000, 0, PointerPhase::Down, (60, 45));
+    finger(&mut kernel, 1100, 0, PointerPhase::Up, (85, 45));
+    assert!(kernel.input.recognizers[0].fingers.is_empty());
+    assert!(
+        !log.borrow().contains(&String::from("a:a.special")),
+        "{:?}",
+        log.borrow()
+    );
+    log.borrow_mut().clear();
+    kernel.apply(Command::Input(String::from("button.menu")));
+    kernel.finish();
+    assert_eq!(*log.borrow(), ["lock:core.menu"]);
+}
+
+/// On a screen that takes gestures itself, recognizers see no finger and
+/// gesture bindings do not run.
+#[test]
+fn recognizers_follow_the_screens_policy() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin {
+            keymap: Some("[keymap.a.screen]\ngestures.policy = core.gestures.own\n"),
+            ..TestPlugin::new("a", &log)
+        })
+        .plugin(FlickPlugin)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    finger(&mut kernel, 1000, 0, PointerPhase::Down, (60, 45));
+    finger(&mut kernel, 1100, 0, PointerPhase::Up, (85, 45));
+    assert!(log.borrow().is_empty(), "{:?}", log.borrow());
+}
+
+/// A layer put in front is the screen's that set it: it applies while
+/// that screen is on top, not over another, and goes with it.
+#[test]
+fn a_key_layer_lives_with_its_screen() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin {
+            keymap: Some("[keymap.book.mine]\nbutton.confirm = a.special\n"),
+            ..TestPlugin::new("a", &log)
+        })
+        .plugin(TestPlugin::new("b", &log))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.apply(Command::SetKeyLayer(Some(Id::new_static("book.mine"))));
+    kernel.finish();
+    let top = kernel.stack[0].id.clone();
+    let other = if top.as_str() == "a.screen" {
+        "b.screen"
+    } else {
+        "a.screen"
+    };
+    kernel.open_screen(Instant(10), Id::parse(other).unwrap(), Params::new());
+    log.borrow_mut().clear();
+    press(&mut kernel, 1000, "confirm");
+    assert!(
+        !log.borrow().iter().any(|l| l.ends_with("a.special")),
+        "{:?}",
+        log.borrow()
+    );
+    let last = kernel.stack.len() - 1;
+    kernel.close_from(last);
+    log.borrow_mut().clear();
+    press(&mut kernel, 2000, "confirm");
+    assert!(
+        log.borrow().iter().any(|l| l.ends_with("a.special")),
+        "{:?}",
+        log.borrow()
+    );
+    // Made anew, the screen has no layer.
+    kernel.close_from(0);
+    kernel.open_screen(Instant(3000), top, Params::new());
+    log.borrow_mut().clear();
+    press(&mut kernel, 4000, "confirm");
+    assert!(
+        !log.borrow().iter().any(|l| l.ends_with("a.special")),
+        "{:?}",
+        log.borrow()
+    );
+}
+
+/// A press waiting for a second is resolved for the screen it began on,
+/// also when another came up meanwhile; nothing where that one closed.
+#[test]
+fn a_waiting_press_keeps_its_screen() {
+    let log = log();
+    let keymap = "[keymap.a.screen]\ndouble.confirm = core.home\nbutton.confirm = a.special\n";
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin {
+            keymap: Some(keymap),
+            priority: Priority(10),
+            ..TestPlugin::new("a", &log)
+        })
+        .plugin(TestPlugin::new("b", &log))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    press(&mut kernel, 1000, "confirm");
+    kernel.open_screen(Instant(1100), Id::new_static("b.screen"), Params::new());
+    log.borrow_mut().clear();
+    kernel.tick(Instant(1400));
+    assert_eq!(*log.borrow(), ["b:a.special"], "a.screen's binding");
+    log.borrow_mut().clear();
+    // Pressed on b: b's binding. Pressed on a, a closed meanwhile:
+    // nothing.
+    press(&mut kernel, 2000, "confirm");
+    kernel.tick(Instant(2400));
+    assert_eq!(*log.borrow(), ["b:core.confirm"]);
+    let top = kernel.stack.len() - 1;
+    kernel.close_from(top);
+    log.borrow_mut().clear();
+    press(&mut kernel, 3000, "confirm");
+    kernel.open_screen(Instant(3100), Id::new_static("b.screen"), Params::new());
+    kernel.close_from(0);
+    kernel.tick(Instant(3400));
+    assert!(log.borrow().is_empty(), "{:?}", log.borrow());
 }

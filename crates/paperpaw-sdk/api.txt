@@ -1112,6 +1112,7 @@ pub fn paperpaw_sdk::filters::InputFilterSpec::fmt(&self, &mut core::fmt::Format
 pub struct paperpaw_sdk::filters::InputFilters
 impl paperpaw_sdk::filters::InputFilters
 pub fn paperpaw_sdk::filters::InputFilters::apply(&self, &paperpaw_sdk::Env<'_>, &paperpaw_platform::input::InputEvent) -> paperpaw_sdk::filters::InputVerdict
+pub fn paperpaw_sdk::filters::InputFilters::filter(&self, &paperpaw_sdk::Env<'_>, &paperpaw_platform::input::InputEvent) -> (paperpaw_sdk::filters::InputVerdict, paperpaw_platform::input::InputEvent)
 pub fn paperpaw_sdk::filters::InputFilters::new() -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::filters::Refresh
 pub paperpaw_sdk::filters::Refresh::mode: paperpaw_platform::display::RefreshMode
@@ -1335,10 +1336,18 @@ pub use paperpaw_sdk::json::string_array
 pub use paperpaw_sdk::json::text
 pub use paperpaw_sdk::json::unquote
 pub mod paperpaw_sdk::keys
+#[non_exhaustive] pub enum paperpaw_sdk::keys::InputKind
+pub paperpaw_sdk::keys::InputKind::Gesture
+pub paperpaw_sdk::keys::InputKind::Input
 #[non_exhaustive] pub enum paperpaw_sdk::keys::InputMode
 pub paperpaw_sdk::keys::InputMode::Buttons
 pub paperpaw_sdk::keys::InputMode::Pen
 pub paperpaw_sdk::keys::InputMode::Touch
+#[non_exhaustive] pub enum paperpaw_sdk::keys::PointerVerdict
+pub paperpaw_sdk::keys::PointerVerdict::Capture
+pub paperpaw_sdk::keys::PointerVerdict::Observe
+pub paperpaw_sdk::keys::PointerVerdict::Pass
+pub paperpaw_sdk::keys::PointerVerdict::Recognized
 #[non_exhaustive] pub enum paperpaw_sdk::keys::Recognition
 pub paperpaw_sdk::keys::Recognition::Nothing
 pub paperpaw_sdk::keys::Recognition::Recognized
@@ -1352,9 +1361,11 @@ impl core::fmt::Debug for paperpaw_sdk::keys::GestureSpec
 pub fn paperpaw_sdk::keys::GestureSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::keys::InputSpec
 pub paperpaw_sdk::keys::InputSpec::id: paperpaw_sdk::Id
+pub paperpaw_sdk::keys::InputSpec::kind: paperpaw_sdk::keys::InputKind
 pub paperpaw_sdk::keys::InputSpec::need: core::option::Option<paperpaw_sdk::MenuNeed>
 pub paperpaw_sdk::keys::InputSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::keys::InputSpec
+pub fn paperpaw_sdk::keys::InputSpec::key(&self) -> alloc::string::String
 pub fn paperpaw_sdk::keys::InputSpec::need(self, paperpaw_sdk::MenuNeed) -> Self
 pub fn paperpaw_sdk::keys::InputSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub const paperpaw_sdk::keys::EDGES: [&str; 4]
@@ -1364,7 +1375,7 @@ pub const paperpaw_sdk::keys::SWIPES: [&str; 4]
 pub const paperpaw_sdk::keys::ZONES: [&str; 9]
 pub trait paperpaw_sdk::keys::GestureRecognizer
 pub fn paperpaw_sdk::keys::GestureRecognizer::next_tick(&self) -> core::option::Option<paperpaw_platform::input::Instant>
-pub fn paperpaw_sdk::keys::GestureRecognizer::pointer(&mut self, &paperpaw_platform::input::PointerEvent, paperpaw_platform::input::Instant) -> paperpaw_sdk::keys::Recognition
+pub fn paperpaw_sdk::keys::GestureRecognizer::pointer(&mut self, &paperpaw_platform::input::PointerEvent, paperpaw_platform::input::Instant) -> paperpaw_sdk::keys::PointerVerdict
 pub fn paperpaw_sdk::keys::GestureRecognizer::tick(&mut self, paperpaw_platform::input::Instant) -> paperpaw_sdk::keys::Recognition
 pub trait paperpaw_sdk::keys::KeyBindings
 pub fn paperpaw_sdk::keys::KeyBindings::bound(&self, &[&str], &str) -> core::option::Option<paperpaw_sdk::Id>

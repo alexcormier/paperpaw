@@ -53,6 +53,7 @@ impl Kernel {
             params: params.clone(),
             screen,
             timer: None,
+            key_layer: None,
         };
         // Opened by another while a screen guards the device: it waits
         // below the guard, hidden.
@@ -342,6 +343,11 @@ impl Kernel {
                 )
             })
             .collect();
+        let again = self
+            .tasks
+            .iter()
+            .position(|(task, _)| *task == id)
+            .map(|at| self.tasks.remove(at).1);
         self.tasks.retain(|(task, _)| *task != current);
         // A few tasks are kept, the one shown longest ago let go first.
         if self.tasks.len() >= TASKS_KEPT {
@@ -350,11 +356,6 @@ impl Kernel {
         self.tasks.push((current, kept));
         self.close_from(0);
         self.stop_for_closed_screens();
-        let again = self
-            .tasks
-            .iter()
-            .position(|(task, _)| *task == id)
-            .map(|at| self.tasks.remove(at).1);
         self.task = (id != slots::HOME).then(|| id.clone());
         match again {
             Some(screens) if !screens.is_empty() => {

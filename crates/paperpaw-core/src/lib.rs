@@ -293,6 +293,9 @@ struct ActiveScreen {
     /// When it wants [`Screen::on_timer`] ([`Cx::wake_at`]); below another
     /// screen, once it is on top again.
     timer: Option<Instant>,
+    /// The key map layer put in front of its slot's while it is on top
+    /// ([`Command::SetKeyLayer`]).
+    key_layer: Option<Id>,
 }
 
 /// An open screen kept while its task is not shown
@@ -488,19 +491,25 @@ impl Kernel {
         self.shared.usage.inputs = self.shared.usage.inputs.saturating_add(1);
         let event = self.page_buttons_swapped(event);
         // Plugins' input filters come first.
-        let verdict = {
+        let (verdict, delivered) = {
             let env = self.shared.env(now);
-            self.shared.input_filters.apply(&env, &event)
+            self.shared.input_filters.filter(&env, &event)
         };
         let event = match verdict {
-            InputVerdict::Take => return self.finish(),
+            InputVerdict::Take => {
+                // Taken from the recognizers that follow the finger too.
+                if let InputEvent::Pointer(p) = delivered {
+                    self.recognizers_lose(&p);
+                }
+                return self.finish();
+            }
             InputVerdict::Run(action) => {
                 self.dispatch(action);
                 self.run_commands();
                 return self.finish();
             }
             InputVerdict::Cancel => {
-                self.cancel_input(&event);
+                self.cancel_input(&delivered);
                 self.run_commands();
                 return self.finish();
             }
@@ -522,6 +531,9 @@ impl Kernel {
         };
         match event {
             InputEvent::Button { name, state } => {
+                if state == ButtonState::Pressed {
+                    self.input.pressed_on = self.stack.last().map(|top| top.serial);
+                }
                 // Without a long press to tell apart, at once.
                 let long = InputKey::LongButton(Cow::Borrowed(name));
                 let at_once = self.resolve(&long).is_none();
@@ -768,7 +780,7 @@ impl Kernel {
             .input
             .pending
             .as_ref()
-            .is_some_and(|(_, until)| *until <= now)
+            .is_some_and(|(_, until, _)| *until <= now)
         {
             // No second press or tap came: the first is single.
             self.shared.reader = true;

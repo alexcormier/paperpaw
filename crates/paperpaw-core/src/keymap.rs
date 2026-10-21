@@ -399,6 +399,23 @@ impl Keymap {
             .and_then(|binding| binding.action.as_ref())
     }
 
+    /// What a tap (`long`: a long tap) in a layer's own zone `name` is
+    /// bound to through `layers`, as [`Self::resolve`], making no key.
+    pub(crate) fn resolve_zone(&self, layers: &[&str], long: bool, name: &str) -> Option<&Id> {
+        layers
+            .iter()
+            .find_map(|layer| {
+                self.layers
+                    .get(*layer)?
+                    .iter()
+                    .find_map(|(key, binding)| match key {
+                        InputKey::ZoneTap(l, n) if *l == long && n == name => Some(binding),
+                        _ => None,
+                    })
+            })
+            .and_then(|binding| binding.action.as_ref())
+    }
+
     /// All bound action ids, for validation.
     pub(crate) fn actions(&self) -> impl Iterator<Item = &Id> {
         self.layers

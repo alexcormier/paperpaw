@@ -24,17 +24,23 @@ change the plugin SDK.
   `pinch.<out|in>`, a layer's own zones (`[zones.<layer>] <name> =
   <left> <top> <width> <height>` in percent, tapped as `tap.<name>`),
   plugins' `input.<id>` (`Registrar::add_input`, `keys::InputSpec`,
-  listed in `Env::inputs` where the device can make them) and
-  `gesture.<id>` (`Registrar::add_gesture`, a `keys::GestureRecognizer`
-  that sees every finger). A press or tap waits for a second only where
+  listed in `Env::inputs` where the device can make them, with the
+  gestures, `keys::InputKind`) and `gesture.<id>`
+  (`Registrar::add_gesture`, a `keys::GestureRecognizer` that sees the
+  fingers where gestures are the key map's, never under another
+  plugin's guard, and may claim them with `keys::PointerVerdict`). The
+  keys plugin lists them all to bind. A press or tap waits for a second only where
   something is bound to the double one, so pages still turn as fast as
   they are tapped. Screens get `GestureKind::DoubleTap` (as a tap where
   they decline it; only to screens that say `Screen::takes_double_taps`)
   and `GestureKind::TwoFingerTap`. `Command::Input`
   raises an input by its name; `Command::SetKeyLayer` puts a layer in
-  front of the slot's (a book's own bindings). Input filters may
+  front of the slot's for the screen on top while it is on top (a
+  book's own bindings). What is held is resolved for the screen it
+  began on. Input filters may
   `InputVerdict::Cancel` an input (what began with it is forgotten) or
-  `InputVerdict::Replace` it; `InputVerdict` is now non-exhaustive.
+  `InputVerdict::Replace` it (`InputFilters::filter` says the input
+  a verdict was made for); `InputVerdict` is now non-exhaustive.
   `Env::last_input` says whether buttons, a finger or a pen came last.
   `keys::inputs` lists every input a device makes, with `keys::ZONES`,
   `SWIPES`, `EDGES`, `PINCHES` and `POLICIES`. New settings
