@@ -483,11 +483,11 @@ fn only_books_are_deleted_and_what_fails_says_why() {
     ] {
         assert!(!library.can_delete(&env, path), "{path}");
         let deleted = library.delete(&env, &[path]);
-        assert!(deleted.commands.is_empty(), "{path}");
-        assert_eq!(
-            deleted.failed,
-            [(path.to_string(), StorageError::InvalidPath)]
+        assert!(
+            deleted.commands.is_empty() && deleted.failed.is_empty(),
+            "{path}"
         );
+        assert_eq!(deleted.refused, [path]);
     }
     assert!(storage.exists("books/notes.md") && storage.exists(".paperpaw/library/x.txt"));
     // A card that cannot be written: the book stays, and why is said.
@@ -500,4 +500,34 @@ fn only_books_are_deleted_and_what_fails_says_why() {
         [("books/a.txt".to_string(), StorageError::Unsupported)]
     );
     assert!(locked.exists("books/a.txt"));
+}
+
+#[test]
+fn a_book_without_an_extension_known_by_its_first_bytes_is_deleted() {
+    let storage = MemoryStorage::new()
+        .with("books/Story", "%STORY and the rest of it")
+        .with("books/README", "plain words, of no format");
+    let mut h = harness(MemoryStorage::new());
+    let mut formats = Formats::new();
+    formats
+        .add(
+            FormatSpec::new(
+                Id::new_static("test.story"),
+                "Story",
+                vec![Cow::Borrowed("story")],
+                Box::new(|_, _, _| Err(DocumentError::UnsupportedFormat)),
+            )
+            .sniff(|bytes| bytes.starts_with(b"%STORY")),
+        )
+        .unwrap();
+    h.formats = formats;
+    let env = h.env_on(&storage);
+    let library = library::service(&env);
+    assert!(library.can_delete(&env, "books/Story"));
+    assert!(!library.can_delete(&env, "books/README"));
+    let deleted = library.delete(&env, &["books/Story", "books/README"]);
+    assert!(!storage.exists("books/Story"));
+    assert!(storage.exists("books/README"));
+    assert_eq!(deleted.refused, ["books/README"]);
+    assert_eq!(deleted.commands.len(), 1);
 }

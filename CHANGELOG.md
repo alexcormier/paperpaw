@@ -13,13 +13,15 @@ change the plugin SDK.
   plugins keep), by touch and by buttons alike. SDK: `Library::delete`
   and `Library::can_delete` (`library::Deleted`), so a library of one's
   own deletes its own way; the kernel's removes the files and says each
-  is gone (`BOOK_REMOVED`). Only books are deleted: of a format known,
-  never in PaperPaw's own folder (`library::is_book_path`); what fails
-  says why (`Deleted::failed`, with the storage's error), and the sheet
-  tells it (a card that cannot be written, not a book). On a sheet of
-  pages the answers sit at its bottom edge. Tasks kept follow their
-  books: switching back to a book deleted no longer opens a file that
-  is gone, and one moved opens where it is now.
+  is gone (`BOOK_REMOVED`). Only books are deleted: of a format known
+  (by extension, or by the first bytes of a file without one), never in
+  PaperPaw's own folder (`library::is_book_path`); what is not a book is
+  refused (`Deleted::refused`), what the storage cannot delete says why
+  (`Deleted::failed`), and the sheet tells which. On a sheet of pages
+  the answers sit at its bottom edge. Tasks kept follow their books:
+  switching back no longer opens a book deleted (its screens and those
+  over them go, the others stay), and a book moved opens where it is
+  now.
 - SDK: a setting's title is never cut for its control. Where it does not
   fit beside its `−` value `+`, its switch or its value, the control goes
   on a line of its own below the title, at the right, and a title too

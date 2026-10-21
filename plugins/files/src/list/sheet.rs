@@ -201,11 +201,14 @@ impl BookSheet {
         cx.command(Command::Back);
         let deleted = library::service(&env).delete(&env, &[self.book.path.as_str()]);
         // Why not, where it failed.
-        let key = match deleted.failed.first().map(|(_, error)| error) {
-            None => "files.deleted",
-            Some(StorageError::InvalidPath) => "files.delete-failed.not-book",
-            Some(StorageError::Unsupported) => "files.delete-failed.read-only",
-            Some(_) => "files.delete-failed",
+        let key = if !deleted.refused.is_empty() {
+            "files.delete-failed.not-book"
+        } else {
+            match deleted.failed.first().map(|(_, error)| error) {
+                None => "files.deleted",
+                Some(StorageError::Unsupported) => "files.delete-failed.read-only",
+                Some(_) => "files.delete-failed",
+            }
         };
         for command in deleted.commands {
             cx.command(command);

@@ -136,17 +136,16 @@ pub trait Library {
     /// on which the kernel forgets it and removes what is kept for it
     /// (its place, notes, details, covers, what plugins keep); a book
     /// whose file is gone already is forgotten as well. What is not a
-    /// book ([`is_book_path`]) is never deleted: it fails as
-    /// [`StorageError::InvalidPath`]. Asking first is the view's.
+    /// book ([`is_book_path`]) is never deleted: it is refused
+    /// ([`Deleted::refused`]). Asking first is the view's.
     fn delete(&self, env: &Env<'_>, paths: &[&str]) -> Deleted {
         let mut deleted = Deleted::default();
         for path in paths {
-            let done = if is_book_path(env, path) {
-                env.storage.remove(path)
-            } else {
-                Err(StorageError::InvalidPath)
-            };
-            match done {
+            if !is_book_path(env, path) {
+                deleted.refused.push(String::from(*path));
+                continue;
+            }
+            match env.storage.remove(path) {
                 Ok(()) => {
                     let removed = crate::builtin::events::BookRemoved::new(String::from(*path));
                     let command = crate::builtin::events::BOOK_REMOVED.emit(removed);
@@ -159,26 +158,30 @@ pub trait Library {
     }
 }
 
-/// Whether `path` may be a book of the library: of a format known
-/// ([`Formats::for_path`](crate::Formats::for_path)), not in PaperPaw's
-/// own folder ([`DIR`](crate::data::DIR), its settings and what it keeps)
-/// and not climbing out of where it is (`..`).
+/// Whether `path` may be a book of the library: of a format known, by
+/// its extension or, without one, by its first bytes
+/// ([`Formats::supports_file`](crate::Formats::supports_file)), not in
+/// PaperPaw's own folder ([`DIR`](crate::data::DIR), its settings and
+/// what it keeps) and not climbing out of where it is (`..`).
 pub fn is_book_path(env: &Env<'_>, path: &str) -> bool {
     let mut parts = path.trim_start_matches('/').split('/');
     let own = parts
         .clone()
         .next()
         .is_some_and(|first| first.eq_ignore_ascii_case(crate::data::DIR));
-    !own && !parts.any(|part| part == "..") && env.formats.for_path(path).is_some()
+    !own && !parts.any(|part| part == "..") && env.formats.supports_file(env.storage, path)
 }
 
-/// What [`Library::delete`] did: the commands that tell everyone, and the
-/// books it could not delete with why (they stay as they were).
+/// What [`Library::delete`] did: the commands that tell everyone, the
+/// books the storage could not delete with its error, and what was
+/// refused as no book of the library ([`is_book_path`]). What failed or
+/// was refused stays as it was.
 #[derive(Debug, Default)]
 #[non_exhaustive]
 pub struct Deleted {
     pub commands: Vec<Command>,
     pub failed: Vec<(String, StorageError)>,
+    pub refused: Vec<String>,
 }
 
 /// The kernel's library.

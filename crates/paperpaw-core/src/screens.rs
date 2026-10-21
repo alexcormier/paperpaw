@@ -388,16 +388,22 @@ impl Kernel {
         self.screen_changed(bounds, false);
     }
 
-    /// Tasks kept follow their books: one with a screen of a book deleted
-    /// (`BOOK_REMOVED`) is let go, so switching back never opens a file
-    /// that is gone; the screens of a book moved (`BOOK_MOVED`) open it
-    /// where it is now.
+    /// Tasks kept follow their books. A book deleted (`BOOK_REMOVED`):
+    /// a task's screens from the first that shows it are let go (those
+    /// above it were opened over it, e.g. its menu), those below stay,
+    /// and a task with none left goes; so switching back never opens a
+    /// file that is gone. A book moved (`BOOK_MOVED`): its screens open
+    /// it where it is now.
     pub(crate) fn tasks_follow_books(&mut self, event: &Id, params: &Params) {
         let path = builtin_params::PATH;
         if let Some(removed) = events::BOOK_REMOVED.read(event, params) {
             let gone = Some(removed.path.as_str());
-            self.tasks
-                .retain(|(_, screens)| !screens.iter().any(|(_, _, p)| p.get(path) == gone));
+            for (_, screens) in &mut self.tasks {
+                if let Some(at) = screens.iter().position(|(_, _, p)| p.get(path) == gone) {
+                    screens.truncate(at);
+                }
+            }
+            self.tasks.retain(|(_, screens)| !screens.is_empty());
         } else if let Some(moved) = events::BOOK_MOVED.read(event, params) {
             let screens = self.tasks.iter_mut().flat_map(|(_, screens)| screens);
             for (_, _, p) in screens.filter(|(_, _, p)| p.get(path) == Some(moved.from.as_str())) {

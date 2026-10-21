@@ -1890,6 +1890,7 @@ pub fn paperpaw_sdk::library::service::BookField::new(impl core::convert::Into<p
 #[non_exhaustive] pub struct paperpaw_sdk::library::service::Deleted
 pub paperpaw_sdk::library::service::Deleted::commands: alloc::vec::Vec<paperpaw_sdk::Command>
 pub paperpaw_sdk::library::service::Deleted::failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>
+pub paperpaw_sdk::library::service::Deleted::refused: alloc::vec::Vec<alloc::string::String>
 pub struct paperpaw_sdk::library::service::Kept
 impl paperpaw_sdk::library::service::Library for paperpaw_sdk::library::service::Kept
 pub fn paperpaw_sdk::library::service::Kept::book(&self, &paperpaw_sdk::Env<'_>, &str) -> core::option::Option<paperpaw_sdk::library::Book>
@@ -2011,6 +2012,7 @@ pub fn paperpaw_sdk::library::service::BookField::new(impl core::convert::Into<p
 #[non_exhaustive] pub struct paperpaw_sdk::library::Deleted
 pub paperpaw_sdk::library::Deleted::commands: alloc::vec::Vec<paperpaw_sdk::Command>
 pub paperpaw_sdk::library::Deleted::failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>
+pub paperpaw_sdk::library::Deleted::refused: alloc::vec::Vec<alloc::string::String>
 #[non_exhaustive] pub struct paperpaw_sdk::library::Provided
 pub paperpaw_sdk::library::Provided::author: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::library::Provided::series: core::option::Option<alloc::string::String>
