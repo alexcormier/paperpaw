@@ -207,7 +207,14 @@ impl Screen for SkimScreen {
         let track = self.track();
         let width = u32::from(track.width);
         let done = (width * self.at / 1000) as u16;
-        canvas.fill_tint(track, Color::gray(170));
+        if on_bar && style.dark_focus() {
+            // Gray does not show on the dark focus: a thin line of its ink.
+            let thin = (style.line as u16).max(1);
+            let y = track.y + (track.height - thin) / 2;
+            canvas.fill(Rect::new(track.x, y, track.width, thin), ink);
+        } else {
+            canvas.fill_tint(track, Color::gray(170));
+        }
         canvas.fill(Rect::new(track.x, track.y, done, track.height), ink);
         let tick = track.height * 3;
         for &mark in self.marks.iter().filter(|&&m| m > 0 && m < 1000) {
