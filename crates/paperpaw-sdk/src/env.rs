@@ -145,9 +145,9 @@ pub struct Env<'a> {
     /// to bind like any other.
     pub inputs: &'a [crate::keys::InputSpec],
     /// Makes the screens plugins added, for [`Env::make_screen`]: the
-    /// kernel's ([`Env::with_screen_maker`]).
-    #[cfg(any(test, feature = "kernel"))]
-    screen_maker: Option<&'a dyn crate::ScreenMaker>,
+    /// kernel's ([`Env::with_screen_maker`]). Never behind a feature: a
+    /// plugin built without `kernel` reads the `Env` the kernel made.
+    screen_maker: Option<&'a dyn crate::screen::ScreenMaker>,
     /// The part of the screen what is handled now is made for and drawn
     /// into, with its place on the screen: all of it but bars and the row
     /// of hints for a screen, a bar's strip for a bar. A screen draws and
@@ -341,7 +341,6 @@ impl<'a> From<EnvParts<'a>> for Env<'a> {
             clipboard: p.clipboard,
             last_input: p.last_input,
             inputs: p.inputs,
-            #[cfg(any(test, feature = "kernel"))]
             screen_maker: None,
             content: p.content,
             stack: p.stack,
@@ -395,34 +394,21 @@ impl<'a> Env<'a> {
     /// The screen slot `slot` shows now: the user's choice, else the
     /// plugins' of the highest priority.
     pub fn slot_screen(&self, slot: &str) -> Option<&'a crate::Id> {
-        #[cfg(any(test, feature = "kernel"))]
-        return self.screen_maker?.slot_screen(slot);
-        #[cfg(not(any(test, feature = "kernel")))]
-        {
-            let _ = slot;
-            None
-        }
+        self.screen_maker?.slot_screen(slot)
     }
 
     /// Every screen offered for slot `slot` (to choose another, e.g. a
     /// launcher of several).
     pub fn slot_screens(&self, slot: &str) -> alloc::vec::Vec<&'a crate::Id> {
-        #[cfg(any(test, feature = "kernel"))]
-        return self
-            .screen_maker
-            .map_or_else(alloc::vec::Vec::new, |maker| maker.slot_screens(slot));
-        #[cfg(not(any(test, feature = "kernel")))]
-        {
-            let _ = slot;
-            alloc::vec::Vec::new()
-        }
+        self.screen_maker
+            .map_or_else(alloc::vec::Vec::new, |maker| maker.slot_screens(slot))
     }
 
     /// This environment with `maker` making the screens
     /// [`Env::make_screen`] asks for: the kernel's.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn with_screen_maker(mut self, maker: &'a dyn crate::ScreenMaker) -> Self {
+    pub fn with_screen_maker(mut self, maker: &'a dyn crate::screen::ScreenMaker) -> Self {
         self.screen_maker = Some(maker);
         self
     }
@@ -439,13 +425,7 @@ impl Env<'_> {
         id: &crate::Id,
         params: &crate::Params,
     ) -> Option<alloc::boxed::Box<dyn crate::Screen>> {
-        #[cfg(any(test, feature = "kernel"))]
-        return self.screen_maker?.make(id, self, params);
-        #[cfg(not(any(test, feature = "kernel")))]
-        {
-            let _ = (id, params);
-            None
-        }
+        self.screen_maker?.make(id, self, params)
     }
 
     /// The screen shown on top, if any.
