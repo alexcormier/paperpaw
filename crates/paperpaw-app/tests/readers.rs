@@ -1,14 +1,16 @@
 //! Reading apps besides the shipped reader: books open with the one
 //! chosen for the book, else for its folder, else for its format, else
 //! the default one, else the shipped reader; a reader is offered only
-//! for the formats it reads; the choices outlast a restart.
+//! for the formats it reads; the choices outlast a restart; chosen with
+//! the buttons of an X4 or by touch.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
 
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::{
-    DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation,
+    DeviceInfo, DisplayInfo, InputCaps, InputEvent, Instant, MemoryClass, PixelFormat,
+    PointerEvent, PointerPhase, PointerTool, Rotation,
 };
 use paperpaw_sdk::readers::{self, Choice, ReaderSpec};
 use paperpaw_sdk::{
@@ -34,6 +36,27 @@ const DEVICE: DeviceInfo = DeviceInfo {
         keys: &["back", "confirm", "left", "right", "up", "down", "power"],
     },
     memory: MemoryClass::Small,
+};
+
+/// A touch screen, as a Boox.
+const BOOX: DeviceInfo = DeviceInfo {
+    id: "test-boox",
+    name: "Test Boox",
+    display: DisplayInfo {
+        width: 1264,
+        height: 1680,
+        dpi: 300,
+        format: PixelFormat::Gray4,
+        rotation: Rotation::Deg0,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: false,
+        touch: true,
+        pen: false,
+        keys: &[],
+    },
+    memory: MemoryClass::Large,
 };
 
 const TEXT: &str = "books/notes.txt";
@@ -113,10 +136,18 @@ impl App {
 
     /// The same, with the plain reader or without (as shipped).
     fn with(storage: MemoryStorage, config: &str, plain: bool) -> Self {
+        Self::on(DEVICE, storage, config, plain)
+    }
+
+    /// The same on `device`.
+    fn on(device: DeviceInfo, storage: MemoryStorage, config: &str, plain: bool) -> Self {
         let storage = storage.with(".paperpaw/plugins/setup/done", "");
-        let builder = Kernel::builder(DEVICE)
+        let builder = Kernel::builder(device)
             .storage(storage)
-            .user_config(format!("[core]\nlanguage = en\n{config}"));
+            // On touch screens without the tips on gestures over it all.
+            .user_config(format!(
+                "[home]\ngesture-tips = false\n[core]\nlanguage = en\n{config}"
+            ));
         let mut builder = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs);
         if plain {
             builder = builder.plugin(Plain);
@@ -139,6 +170,55 @@ impl App {
             self.now = self.now.max(at.0);
             effects = self.kernel.tick(Instant(self.now));
         }
+    }
+
+    /// A tap on the middle of the row or button that starts with `label`,
+    /// the topmost.
+    fn tap(&mut self, label: &str) -> String {
+        self.press_on(label, 60)
+    }
+
+    /// A finger held a second on what starts with `label`.
+    fn long_press(&mut self, label: &str) -> String {
+        self.press_on(label, 1000)
+    }
+
+    /// A finger on what starts with `label`, `ms` long.
+    fn press_on(&mut self, label: &str, ms: u64) -> String {
+        self.kernel.render(&mut |_, _| {});
+        let parts = self.kernel.describe();
+        let part = parts
+            .iter()
+            .rev()
+            .find(|p| p.label.starts_with(label))
+            .unwrap_or_else(|| panic!("{label}: {parts:?}"));
+        let (x, y) = (
+            i32::from(part.area.x) + i32::from(part.area.width) / 2,
+            i32::from(part.area.y) + i32::from(part.area.height) / 2,
+        );
+        for phase in [PointerPhase::Down, PointerPhase::Up] {
+            let event = InputEvent::Pointer(PointerEvent {
+                id: 0,
+                phase,
+                point: paperpaw_sdk::Point::new(x, y),
+                tool: PointerTool::Finger,
+                pressure: 1000,
+            });
+            self.now += 20;
+            let effects = self.kernel.handle(Instant(self.now), event);
+            if phase == PointerPhase::Up {
+                self.settle(effects);
+            } else {
+                // Held: what a long press does happens meanwhile (no
+                // waiting past it, which would hold a tap too long).
+                self.now += ms;
+                self.kernel.tick(Instant(self.now));
+            }
+        }
+        self.kernel
+            .active_screen()
+            .map(|id| id.to_string())
+            .unwrap_or_default()
     }
 
     /// The screen a book opens in, opened by `action`.
@@ -257,6 +337,42 @@ fn open_with_lists_the_readers_of_the_book_and_keeps_the_one_chosen() {
 }
 
 #[test]
+fn by_touch_a_reading_app_is_tapped_in_the_list_and_in_the_settings() {
+    let mut app = App::on(BOOX, books(), "", true);
+    assert_eq!(app.opens("plain.ask-book"), "core.reading-apps");
+    assert_eq!(app.tap("Plain text reader"), "plain.screen");
+    assert_eq!(app.opens("plain.text"), "plain.screen");
+    // The default one, in the reading settings.
+    let mut app = App::on(BOOX, books(), "", true);
+    app.now += 100;
+    let params = paperpaw_sdk::Params::new().with(
+        paperpaw_sdk::builtin::params::ID,
+        paperpaw_sdk::builtin::groups::READING.as_str(),
+    );
+    let effects = app.kernel.open_slot(
+        Instant(app.now),
+        paperpaw_sdk::builtin::slots::SETTINGS,
+        params,
+    );
+    app.settle(effects);
+    for _ in 0..10 {
+        app.kernel.render(&mut |_, _| {});
+        if app
+            .kernel
+            .describe()
+            .iter()
+            .any(|p| p.label.starts_with("Reading app"))
+        {
+            break;
+        }
+        app.opens("core.next-page");
+    }
+    app.tap("Reading app");
+    app.tap("Plain text reader");
+    assert_eq!(app.opens("plain.text"), "plain.screen");
+}
+
+#[test]
 fn a_folders_reading_app_is_chosen_from_every_reader() {
     let mut app = App::new(books(), "");
     app.opens("plain.ask-folder");
@@ -275,10 +391,11 @@ fn a_folders_reading_app_is_chosen_from_every_reader() {
 
 /// The screen as a picture (PGM, gray), for a look before and after.
 fn shot(app: &mut App, dir: &std::path::Path, name: &str) {
-    let display = DEVICE.display;
+    let display = app.kernel.device().display;
     let (w, h) = (usize::from(display.width), usize::from(display.height));
     let mut gray = vec![255u8; w * h];
-    // All of it, also what was drawn before.
+    // All of it, also what was drawn before (once what waits is drawn).
+    app.kernel.render(&mut |_, _| {});
     app.kernel.rerender(&mut |y, view| {
         for row in 0..view.height {
             for x in 0..view.width {
@@ -363,5 +480,51 @@ fn shots() {
             false => focus_on(&mut app, "Reset to defaults"),
         }
         shot(&mut app, &dir, &format!("x4-reading-settings-{when}"));
+
+        // The same by touch: rows held for their options, tapped.
+        let mut app = App::on(BOOX, books(), "", plain);
+        app.opens("file-manager.open");
+        app.tap("books");
+        app.long_press("notes.txt");
+        shot(&mut app, &dir, &format!("boox-book-options-{when}"));
+        app.opens("core.back");
+        app.long_press("plain");
+        shot(&mut app, &dir, &format!("boox-folder-options-{when}"));
+        if plain {
+            app.opens("core.back");
+            app.long_press("notes.txt");
+            app.tap("Open with");
+            shot(&mut app, &dir, "boox-open-with-after");
+        }
+        let mut app = App::on(BOOX, books(), "", plain);
+        app.now += 100;
+        let params = paperpaw_sdk::Params::new().with(
+            paperpaw_sdk::builtin::params::ID,
+            paperpaw_sdk::builtin::groups::READING.as_str(),
+        );
+        let effects = app.kernel.open_slot(
+            Instant(app.now),
+            paperpaw_sdk::builtin::slots::SETTINGS,
+            params,
+        );
+        app.settle(effects);
+        let wanted = if plain {
+            "Reading app"
+        } else {
+            "Reset to defaults"
+        };
+        for _ in 0..10 {
+            app.kernel.render(&mut |_, _| {});
+            if app
+                .kernel
+                .describe()
+                .iter()
+                .any(|p| p.label.starts_with(wanted))
+            {
+                break;
+            }
+            app.opens("core.next-page");
+        }
+        shot(&mut app, &dir, &format!("boox-reading-settings-{when}"));
     }
 }
