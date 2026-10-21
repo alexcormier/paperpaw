@@ -113,7 +113,7 @@ plugins/large-print/
   plugin.ini     [plugin] id, name, description, version
   i18n/*.ini     translations, also whole new languages
   keymap.ini     key bindings, as in paperpaw.ini
-  settings.ini   new defaults for any setting, e.g. [reader] font-size = 14
+  settings.ini   new defaults for any setting, e.g. [core] font-size = 14
   fonts/*.ttf    fonts to read with (also .otf, .ttc)
 ```
 

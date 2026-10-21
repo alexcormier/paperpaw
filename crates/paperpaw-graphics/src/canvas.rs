@@ -532,10 +532,9 @@ impl<'a> Canvas<'a> {
             return;
         };
         let x = x + self.origin.0;
-        for px in rect.x..rect.right() as u16 {
-            let value = gray[(i32::from(px) - x) as usize];
-            self.framebuffer.put_gray(px, rect.y, value);
-        }
+        let from = (i32::from(rect.x) - x) as usize;
+        let row = &gray[from..from + usize::from(rect.width)];
+        self.framebuffer.put_gray_row(rect.x, rect.y, row);
         self.framebuffer.mark_dirty(rect);
     }
 

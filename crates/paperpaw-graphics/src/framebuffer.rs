@@ -476,10 +476,38 @@ impl Framebuffer {
         self.store(x, y, value);
     }
 
+    /// A row of grays from `(x, y)` on, as [`Framebuffer::put_gray`] puts
+    /// each, the dither's offsets worked out once for the row rather than
+    /// for every pixel (a division each, slow on chips without one: a
+    /// picture over the whole screen is some 400,000 pixels).
+    pub(crate) fn put_gray_row(&mut self, x: u16, y: u16, grays: &[u8]) {
+        if self.blind {
+            return;
+        }
+        let count = u32::try_from(grays.len()).unwrap_or(u32::MAX);
+        self.pictured = self
+            .pictured
+            .saturating_add(count * u32::from(self.counting));
+        let offsets: [i32; 4] = core::array::from_fn(|column| self.offset(column as u16, y));
+        let keep = self.inverted && self.pictures_kept;
+        for (px, &gray) in (x..).zip(grays) {
+            let gray = (i32::from(gray) + offsets[usize::from(px % 4)]).clamp(0, 255) as u8;
+            let gray = if keep { 255 - gray } else { gray };
+            let value = self.encode(Color::gray(gray));
+            self.store(px, y, value);
+        }
+    }
+
     /// `gray` at `(x, y)` with the offset of an ordered dither where the
     /// format has few gray levels (as is elsewhere), so areas of a gray
     /// between them show as a pattern of the levels around it.
     fn dithered(&self, x: u16, y: u16, gray: u8) -> u8 {
+        (i32::from(gray) + self.offset(x, y)).clamp(0, 255) as u8
+    }
+
+    /// The ordered dither's offset at `(x, y)`: none where the format has
+    /// many grays (or colours).
+    fn offset(&self, x: u16, y: u16) -> i32 {
         /// 4×4 Bayer matrix.
         const BAYER: [[u8; 4]; 4] = [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
         match self.format.gray_levels() {
@@ -488,10 +516,9 @@ impl Framebuffer {
             // floating point reckon it for every pixel of a picture.
             Some(levels @ 2..=16) => {
                 let threshold = i32::from(BAYER[usize::from(y % 4)][usize::from(x % 4)]);
-                let offset = (2 * threshold - 15) * 255 / (32 * i32::from(levels - 1));
-                (i32::from(gray) + offset).clamp(0, 255) as u8
+                (2 * threshold - 15) * 255 / (32 * i32::from(levels - 1))
             }
-            _ => gray,
+            _ => 0,
         }
     }
 
@@ -725,6 +752,35 @@ mod tests {
         fb.fill_clipped(Rect::new(1, 0, 1, 1), Color::WHITE);
         fb.blend_pixel(1, 0, Color::BLACK, 255);
         assert_eq!(fb.view().pixel(1, 0), Color::WHITE);
+    }
+
+    #[test]
+    fn a_row_of_grays_is_put_as_each_of_its_pixels() {
+        let grays: Vec<u8> = (0..=255u8).step_by(3).collect();
+        let width = grays.len() as u16 + 5;
+        for format in [
+            PixelFormat::Mono1,
+            PixelFormat::Gray2,
+            PixelFormat::Gray4,
+            PixelFormat::Gray8,
+        ] {
+            for (inverted, kept) in [(false, false), (true, false), (true, true)] {
+                let mut each = Framebuffer::new(width, 5, format).unwrap();
+                let mut row = Framebuffer::new(width, 5, format).unwrap();
+                for fb in [&mut each, &mut row] {
+                    fb.set_inverted(inverted);
+                    fb.set_pictures_kept(kept);
+                }
+                for y in 0..5 {
+                    for (i, &gray) in grays.iter().enumerate() {
+                        each.put_gray(3 + i as u16, y, gray);
+                    }
+                    row.put_gray_row(3, y, &grays);
+                }
+                assert_eq!(each.data, row.data, "{format:?} {inverted} {kept}");
+                assert_eq!(each.take_pictured(), row.take_pictured());
+            }
+        }
     }
 
     #[test]

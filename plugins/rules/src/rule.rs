@@ -546,7 +546,7 @@ mod tests {
         assert_eq!(rules[2].condition, Condition::NotReading);
         assert_eq!(
             rules[3].effect,
-            Effect::Number(Id::new_static("reader.font-size"), 12)
+            Effect::Number(Id::new_static("core.font-size"), 12)
         );
         assert_eq!(
             rules[3].condition,

@@ -9,11 +9,23 @@
 //! screen passes, e.g. the reader's `title`, `chapter`, `page` and
 //! `progress` (see [`context`]).
 //!
+//! An item may do something when it is tapped ([`StatusItemSpec::tap`]:
+//! the battery opens its settings), and says how much it matters
+//! ([`StatusItemSpec::priority`]): where a line has no room for all its
+//! items, those that matter least are left out first, never cut.
+//!
 //! Plugins can also add whole status lines
 //! ([`Registrar::add_status_line`](crate::Registrar::add_status_line)),
 //! which draw the line themselves: a progress bar, a large clock, anything.
 //! The reader offers the lines the user chose, above and below the text,
 //! and switches between them when the line is tapped.
+//!
+//! The places where status items show are [`Place`]s
+//! ([`Registrar::add_status_place`](crate::Registrar::add_status_place)):
+//! three settings of the items for a line's left, centre and right. The
+//! reader has one above and one below the text, the home screen one in
+//! its status widget, the quick panel one at its head; a status line
+//! drawn in a place is told which ([`StatusFrame::place`]).
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -57,6 +69,13 @@ pub struct StatusFrame<'a> {
     pub color: Color,
     /// What the screen tells about its content (see [`context`]).
     pub context: &'a Params,
+    /// The place it is drawn in ([`Place`]), whose items a line of items
+    /// shows; `None` where the screen has none.
+    pub place: Option<&'a str>,
+    /// The font role its text is drawn in: the status lines' own
+    /// ([`fonts::STATUS`](crate::builtin::fonts::STATUS)) unless the
+    /// screen says another.
+    pub font: &'a str,
 }
 
 impl<'a> StatusFrame<'a> {
@@ -68,7 +87,22 @@ impl<'a> StatusFrame<'a> {
             size,
             color,
             context,
+            place: None,
+            font: crate::builtin::fonts::STATUS.static_str(),
         }
+    }
+
+    /// Drawn in place `place` ([`Place::id`]).
+    pub fn place(self, place: &'a str) -> Self {
+        Self {
+            place: Some(place),
+            ..self
+        }
+    }
+
+    /// Its text in the font of role `font`.
+    pub fn font(self, font: &'a str) -> Self {
+        Self { font, ..self }
     }
 }
 
@@ -78,6 +112,26 @@ pub type StatusLineFn = Box<dyn Fn(&mut Canvas<'_>, &Env<'_>, &StatusFrame<'_>)>
 /// What a status line shows now, as text: the screen redraws the line
 /// when it changes (e.g. each minute for a clock).
 pub type StatusSignatureFn = Box<dyn Fn(&Env<'_>, &Params) -> String>;
+
+/// The places in a status line drawn in a frame that do something when
+/// tapped (see [`StatusLineSpec::targets`]).
+pub type StatusTargetsFn = Box<dyn Fn(&Env<'_>, &StatusFrame<'_>) -> Vec<StatusTarget>>;
+
+/// A place in a status line that does something: a tap on it runs
+/// `command`, e.g. an item's [`StatusItemSpec::tap`].
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct StatusTarget {
+    pub area: Rect,
+    pub command: crate::Command,
+}
+
+impl StatusTarget {
+    /// Made of what it needs; the rest as set with its methods.
+    pub fn new(area: Rect, command: crate::Command) -> Self {
+        Self { area, command }
+    }
+}
 
 /// A whole status line contributed by a plugin.
 #[non_exhaustive]
@@ -89,6 +143,9 @@ pub struct StatusLineSpec {
     /// What it shows; without one it is redrawn when the context
     /// changes (the page, the chapter, …).
     pub signature: Option<StatusSignatureFn>,
+    /// Where a tap on it does something; without them a tap does what
+    /// the screen does with it (the reader shows its next line).
+    pub targets: Option<StatusTargetsFn>,
 }
 
 impl StatusLineSpec {
@@ -99,11 +156,18 @@ impl StatusLineSpec {
             title: title.into(),
             draw,
             signature: None,
+            targets: None,
         }
     }
 
     pub fn signature(mut self, signature: StatusSignatureFn) -> Self {
         self.signature = Some(signature);
+        self
+    }
+
+    /// Where a tap on it does something, drawn in a frame.
+    pub fn targets(mut self, targets: StatusTargetsFn) -> Self {
+        self.targets = Some(targets);
         self
     }
 }
@@ -135,10 +199,19 @@ pub enum StatusValue {
     Bar {
         permille: u16,
     },
+    /// An icon by name with a text after it, e.g. Wi-Fi's and the
+    /// network's name; shown whole or not at all.
+    Labelled {
+        icon: Cow<'static, str>,
+        text: String,
+    },
 }
 
 /// Computes an item's value; `None` hides it (e.g. no battery).
 pub type StatusFn = Box<dyn Fn(&Env<'_>, &Params) -> Option<StatusValue>>;
+
+/// How much an item matters where none says ([`StatusItemSpec::priority`]).
+pub const PRIORITY: u8 = 128;
 
 /// A status item contribution.
 #[non_exhaustive]
@@ -147,6 +220,21 @@ pub struct StatusItemSpec {
     /// Translation key of its name in settings, e.g. "Battery".
     pub title: Cow<'static, str>,
     pub value: StatusFn,
+    /// The action a tap on it runs, one of its own plugin's, with the
+    /// context its line was drawn with (see [`context`];
+    /// [`Command::RunActionWith`](crate::Command::RunActionWith)): it
+    /// runs as that plugin, whichever screen shows the line, and can be
+    /// bound to buttons too. Without it a tap does what the screen does
+    /// with the line.
+    pub tap: Option<Id>,
+    /// How much it matters: where a line has no room for all its items,
+    /// those of the lowest priority are left out first ([`PRIORITY`] by
+    /// default).
+    pub priority: u8,
+    /// The least width it takes, in times the text's size, so that the
+    /// line does not move when its text gets shorter (a clock's `9:59`
+    /// after `10:00`); 0 for its own width.
+    pub min_width: f32,
 }
 
 impl StatusItemSpec {
@@ -156,8 +244,87 @@ impl StatusItemSpec {
             id,
             title: title.into(),
             value,
+            tap: None,
+            priority: PRIORITY,
+            min_width: 0.0,
         }
     }
+
+    /// The action a tap on it runs, one of its own plugin's.
+    pub fn tap(self, tap: Id) -> Self {
+        Self {
+            tap: Some(tap),
+            ..self
+        }
+    }
+
+    /// How much it matters (higher stays longer; [`PRIORITY`] by default).
+    pub fn priority(self, priority: u8) -> Self {
+        Self { priority, ..self }
+    }
+
+    /// The least width it takes, in times the text's size.
+    pub fn min_width(self, min_width: f32) -> Self {
+        Self { min_width, ..self }
+    }
+}
+
+/// A place where status items show: the settings of the items listed for
+/// its left, centre and right (ids separated by commas, see
+/// [`item_ids`]). A status line of items drawn there shows these
+/// ([`StatusFrame::place`]); the settings' editors may list the places.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct Place {
+    pub id: Id,
+    /// Translation key of its name, e.g. "Below the text".
+    pub title: Cow<'static, str>,
+    /// The settings of its left, centre and right.
+    pub parts: [Id; 3],
+}
+
+impl Place {
+    /// Made of what it needs; the rest as set with its methods.
+    pub const fn new(id: Id, title: &'static str, parts: [Id; 3]) -> Self {
+        Self {
+            id,
+            title: Cow::Borrowed(title),
+            parts,
+        }
+    }
+
+    /// The items listed for its left, centre and right now.
+    pub fn lists<'e>(&self, env: &Env<'e>) -> [&'e str; 3] {
+        self.parts
+            .each_ref()
+            .map(|part| env.settings.text(part.as_str()))
+    }
+
+    /// Its items as a line in `area`, with text of `size` in `color`.
+    pub fn line<'e>(&self, env: &Env<'e>, area: Rect, size: f32, color: Color) -> StatusLine<'e> {
+        StatusLine::new(area, self.lists(env), size, color)
+    }
+
+    /// What its items show now, with `context`: to draw it again when
+    /// that changes.
+    pub fn signature(&self, env: &Env<'_>, context: &Params) -> String {
+        signature(env, &self.lists(env), context)
+    }
+}
+
+/// What the items of `lists` show now, with `context`, as text.
+pub fn signature(env: &Env<'_>, lists: &[&str], context: &Params) -> String {
+    use core::fmt::Write;
+    let mut out = String::new();
+    for list in lists {
+        for id in item_ids(list) {
+            if let Some(value) = env.status_items.value(id, env, context) {
+                let _ = write!(out, "{value:?}|");
+            }
+        }
+        out.push('/');
+    }
+    out
 }
 
 impl fmt::Debug for StatusItemSpec {
@@ -174,6 +341,7 @@ impl fmt::Debug for StatusItemSpec {
 pub struct StatusItems {
     items: Vec<StatusItemSpec>,
     lines: Vec<StatusLineSpec>,
+    places: Vec<Place>,
 }
 
 impl StatusItems {
@@ -192,6 +360,23 @@ impl StatusItems {
     pub fn shrink_to_fit(&mut self) {
         self.items.shrink_to_fit();
         self.lines.shrink_to_fit();
+        self.places.shrink_to_fit();
+    }
+
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn add_place(&mut self, place: Place) {
+        self.places.push(place);
+    }
+
+    /// Every place where status items show.
+    pub fn places(&self) -> impl Iterator<Item = &Place> {
+        self.places.iter()
+    }
+
+    /// Place `id`, if there is one.
+    pub fn place(&self, id: &str) -> Option<&Place> {
+        self.places.iter().find(|p| p.id.as_str() == id)
     }
 
     #[cfg(any(test, feature = "kernel"))]
@@ -219,6 +404,20 @@ impl StatusItems {
                 true
             }
             None => false,
+        }
+    }
+
+    /// Where a tap on status line `id`, drawn in `frame`, does something.
+    pub fn line_targets(
+        &self,
+        id: &str,
+        env: &Env<'_>,
+        frame: &StatusFrame<'_>,
+    ) -> Vec<StatusTarget> {
+        let line = self.lines.iter().find(|l| l.id.as_str() == id);
+        match line.and_then(|l| l.targets.as_ref()) {
+            Some(targets) => targets(env, frame),
+            None => Vec::new(),
         }
     }
 
@@ -252,8 +451,26 @@ impl StatusItems {
 
     /// The value of item `id` now.
     pub fn value(&self, id: &str, env: &Env<'_>, context: &Params) -> Option<StatusValue> {
-        let item = self.items.iter().find(|i| i.id.as_str() == id)?;
-        (item.value)(env, context)
+        (self.item(id)?.value)(env, context)
+    }
+
+    /// What a tap on item `id`, drawn with `context`, runs: its action
+    /// ([`StatusItemSpec::tap`]) with the context, where the action is
+    /// its own plugin's.
+    pub fn tap(&self, id: &str, context: &Params) -> Option<crate::Command> {
+        let item = self.item(id)?;
+        let action = item.tap.as_ref()?;
+        (action.namespace() == item.id.namespace())
+            .then(|| crate::Command::RunActionWith(action.clone(), context.clone()))
+    }
+
+    /// How much item `id` matters ([`StatusItemSpec::priority`]).
+    pub fn priority(&self, id: &str) -> u8 {
+        self.item(id).map_or(PRIORITY, |i| i.priority)
+    }
+
+    pub(crate) fn item(&self, id: &str) -> Option<&StatusItemSpec> {
+        self.items.iter().find(|i| i.id.as_str() == id)
     }
 }
 
@@ -265,6 +482,7 @@ pub fn item_ids(list: &str) -> impl Iterator<Item = &str> {
 /// A status line: the items listed (comma-separated ids) for its left,
 /// centre and right, drawn in `area` with text of `size` in `color`.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct StatusLine<'a> {
     pub area: Rect,
     pub lists: [&'a str; 3],
@@ -275,7 +493,58 @@ pub struct StatusLine<'a> {
     pub percent: bool,
 }
 
-impl StatusLine<'_> {
+/// An item as a line places it: where it starts, how wide it is, and
+/// what it shows there (a text shortened to its room).
+#[derive(Debug)]
+struct Laid<'a> {
+    id: &'a str,
+    value: StatusValue,
+    x: f32,
+    width: f32,
+    percent: bool,
+}
+
+/// An item listed in a part of a line: its value now, measured once.
+struct Listed<'a> {
+    id: &'a str,
+    value: StatusValue,
+    priority: u8,
+    /// Its width with a level's percentage and without it, at least its
+    /// least width.
+    widths: [f32; 2],
+    /// Its least width, in pixels.
+    least: f32,
+}
+
+impl Listed<'_> {
+    fn width(&self, percent: bool) -> f32 {
+        self.widths[usize::from(!percent)]
+    }
+
+    fn text(&self) -> bool {
+        matches!(self.value, StatusValue::Text(_))
+    }
+}
+
+impl<'a> StatusLine<'a> {
+    /// The items of `lists` in `area`, with text of `size` in `color`;
+    /// levels with their percentage.
+    pub fn new(area: Rect, lists: [&'a str; 3], size: f32, color: Color) -> Self {
+        Self {
+            area,
+            lists,
+            size,
+            color,
+            percent: true,
+        }
+    }
+
+    /// Levels with their percentage beside the symbol, or the symbol
+    /// alone.
+    pub fn percent(self, percent: bool) -> Self {
+        Self { percent, ..self }
+    }
+
     /// Whether no item is listed.
     pub fn is_empty(&self) -> bool {
         self.lists
@@ -287,6 +556,8 @@ impl StatusLine<'_> {
     /// time, the battery) stay whole: the right and centre parts take what
     /// they need, and long texts such as a chapter's title on the left are
     /// shortened with "…" to the rest (keeping a few letters at least).
+    /// Where even so not all fit, the battery's percentage is left out,
+    /// then the items that matter least ([`StatusItemSpec::priority`]).
     pub fn draw(
         &self,
         canvas: &mut Canvas<'_>,
@@ -294,37 +565,65 @@ impl StatusLine<'_> {
         font: &FontHandle<'_>,
         context: &Params,
     ) {
-        let (area, size, percent) = (self.area, self.size, self.percent);
-        let values = |list: &str| -> Vec<StatusValue> {
+        let (area, size) = (self.area, self.size);
+        let metrics = font.line_metrics(size);
+        let baseline = i32::from(area.y)
+            + ((f32::from(area.height) + metrics.ascent - metrics.descent) / 2.0) as i32;
+        // Nothing past the line's area, whatever its items.
+        let mut canvas = canvas.clipped(area);
+        for laid in self.layout(env, font, context) {
+            draw_value(&mut canvas, env, font, self, &laid, baseline);
+        }
+    }
+
+    /// Where a tap on the line does something: the items with a
+    /// [`StatusItemSpec::tap`] as drawn, each with half the gap beside
+    /// it, in reading order.
+    pub fn targets(
+        &self,
+        env: &Env<'_>,
+        font: &FontHandle<'_>,
+        context: &Params,
+    ) -> Vec<StatusTarget> {
+        let area = self.area;
+        let reach = self.size * 0.2;
+        let mut laid = self.layout(env, font, context);
+        laid.sort_by(|a, b| a.x.total_cmp(&b.x));
+        laid.iter()
+            .filter_map(|item| {
+                let command = env.status_items.tap(item.id, context)?;
+                let x0 = (item.x - reach).max(f32::from(area.x));
+                let x1 =
+                    (item.x + item.width + reach).min(f32::from(area.x) + f32::from(area.width));
+                let rect = Rect::new(x0 as u16, area.y, (x1 - x0).max(0.0) as u16, area.height);
+                Some(StatusTarget::new(rect, command))
+            })
+            .collect()
+    }
+
+    /// Where each item goes, what does not fit left out.
+    fn layout(&self, env: &Env<'_>, font: &FontHandle<'_>, context: &Params) -> Vec<Laid<'a>> {
+        let (area, size) = (self.area, self.size);
+        let mut parts: [Vec<Listed<'a>>; 3] = self.lists.map(|list| {
             item_ids(list)
-                .filter_map(|id| env.status_items.value(id, env, context))
+                .filter_map(|id| listed(env, font, size, id, context))
                 .collect()
-        };
-        let [left, center, right] = self.lists.map(values);
+        });
+        let percent = fit(size, f32::from(area.width), &mut parts, self.percent);
+        let [left, center, right] = parts;
+        let measure = |item: &Listed<'_>| item.width(percent);
         // A gap as wide as the text is high; narrower, down to 40 %, where
         // the items would not fit whole with it (wide margins, large text).
-        let parts = [&left, &center, &right];
-        let inked: f32 = parts
-            .iter()
-            .flat_map(|p| p.iter())
-            .map(|v| value_width(env, font, size, v, percent))
-            .sum();
-        let gaps = parts
-            .iter()
-            .map(|p| p.len())
-            .sum::<usize>()
-            .saturating_sub(1);
+        let all = [&left, &center, &right];
+        let inked: f32 = all.iter().flat_map(|p| p.iter()).map(measure).sum();
+        let gaps = all.iter().map(|p| p.len()).sum::<usize>().saturating_sub(1);
         let gap = if gaps == 0 {
             size
         } else {
             ((f32::from(area.width) - inked) / gaps as f32).clamp(size * 0.4, size)
         };
-        let width = |values: &[StatusValue]| -> f32 {
-            values
-                .iter()
-                .map(|v| value_width(env, font, size, v, percent))
-                .sum::<f32>()
-                + gap * values.len().saturating_sub(1) as f32
+        let width = |items: &[Listed<'_>]| -> f32 {
+            items.iter().map(measure).sum::<f32>() + gap * items.len().saturating_sub(1) as f32
         };
         let x0 = f32::from(area.x);
         let x1 = x0 + f32::from(area.width);
@@ -351,23 +650,84 @@ impl StatusLine<'_> {
             .min(right_x - gap - center_w)
             .max(x0 + left_room);
         let left_end = if center.is_empty() { right_x } else { center_x } - gap;
-        // Nothing past the line's area, whatever its items.
-        let mut canvas = canvas.clipped(area);
-        let mut draw = |values: &[StatusValue], x: f32, end: f32| {
-            draw_values(
-                &mut canvas,
-                env,
-                font,
-                area,
-                values,
-                (x, end),
-                (size, gap, percent),
-                self.color,
-            );
+        let mut laid = Vec::new();
+        let mut place = |items: Vec<Listed<'a>>, x: f32, end: f32| {
+            place(&mut laid, font, (size, gap, percent), items, (x, end));
         };
-        draw(&center, center_x, right_x - gap);
-        draw(&right, right_x, x1);
-        draw(&left, x0, left_end);
+        place(center, center_x, right_x - gap);
+        place(right, right_x, x1);
+        place(left, x0, left_end);
+        laid
+    }
+}
+
+/// Item `id` with its value now (`None` where it shows nothing), measured
+/// at `size`.
+fn listed<'a>(
+    env: &Env<'_>,
+    font: &FontHandle<'_>,
+    size: f32,
+    id: &'a str,
+    context: &Params,
+) -> Option<Listed<'a>> {
+    let item = env.status_items.item(id)?;
+    let value = (item.value)(env, context)?;
+    let least = item.min_width * size;
+    let width = |percent| value_width(env, font, size, &value, percent).max(least);
+    Some(Listed {
+        id,
+        widths: [width(true), width(false)],
+        value,
+        priority: item.priority,
+        least,
+    })
+}
+
+/// Leaves out of `parts` what does not fit `room` whole, and says whether
+/// levels show their percentage (where `percent` wants it): the
+/// percentage goes first, then the items of the lowest priority, of
+/// equal ones the centre's, then the left's, then the right's, each
+/// part's from its end; after each, the percentage is tried again. Texts
+/// count with a few letters, as they are shortened to their room.
+fn fit(size: f32, room: f32, parts: &mut [Vec<Listed<'_>>; 3], percent: bool) -> bool {
+    loop {
+        let levels = parts
+            .iter()
+            .flatten()
+            .any(|item| matches!(item.value, StatusValue::Level { .. }));
+        let tries: &[bool] = if percent && levels {
+            &[true, false]
+        } else {
+            &[false]
+        };
+        for &with in tries {
+            let count: usize = parts.iter().map(Vec::len).sum();
+            let mut need = size * 0.4 * count.saturating_sub(1) as f32;
+            for item in parts.iter().flatten() {
+                let width = item.width(with);
+                need += if item.text() {
+                    width.min(size * 3.0)
+                } else {
+                    width
+                };
+            }
+            // A pixel of slack for rounding, as when the parts are placed.
+            if need <= room + 1.0 {
+                return with && percent;
+            }
+        }
+        let mut least: Option<(u8, usize, usize)> = None;
+        for (rank, at) in [1, 0, 2].into_iter().enumerate() {
+            for (index, item) in parts[at].iter().enumerate().rev() {
+                if least.is_none_or(|(p, r, _)| (item.priority, rank) < (p, r)) {
+                    least = Some((item.priority, rank, index));
+                }
+            }
+        }
+        let Some((_, rank, index)) = least else {
+            return false;
+        };
+        parts[[1, 0, 2][rank]].remove(index);
     }
 }
 
@@ -386,12 +746,20 @@ fn value_width(
         }
         StatusValue::Level { .. } => battery_width(size),
         StatusValue::Bar { .. } => bar_width(size),
+        StatusValue::Labelled { icon, text } => {
+            crate::ui::icon_width(env, icon, size) + label_gap(size) + font.measure(size, text)
+        }
     }
 }
 
 /// A bar's length: about as long as a short word.
 fn bar_width(size: f32) -> f32 {
     size * 4.0
+}
+
+/// Between a labelled item's icon and its text.
+fn label_gap(size: f32) -> f32 {
+    size * 0.25
 }
 
 fn level_text(percent: u8) -> String {
@@ -402,89 +770,109 @@ fn battery_width(size: f32) -> f32 {
     size * 1.3
 }
 
-#[allow(clippy::too_many_arguments)]
-fn draw_values(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
+/// Places the `items` of a part from `x` to `end`, with `gap`s between
+/// them: what is not text whole or not at all, a gauge without its
+/// percentage where only the gauge fits, the longest text shortened
+/// where they do not all fit.
+fn place<'a>(
+    out: &mut Vec<Laid<'a>>,
     font: &FontHandle<'_>,
-    area: Rect,
-    values: &[StatusValue],
-    (mut x, end): (f32, f32),
     (size, gap, with_percent): (f32, f32, bool),
-    color: Color,
+    items: Vec<Listed<'a>>,
+    (mut x, end): (f32, f32),
 ) {
-    // The gap the line was laid out with (narrower in a crowded line).
-    let metrics = font.line_metrics(size);
-    let baseline = i32::from(area.y)
-        + ((f32::from(area.height) + metrics.ascent - metrics.descent) / 2.0) as i32;
-    let widths: Vec<f32> = values
-        .iter()
-        .map(|v| value_width(env, font, size, v, with_percent))
-        .collect();
-    let texts: Vec<bool> = values
-        .iter()
-        .map(|v| matches!(v, StatusValue::Text(_)))
-        .collect();
+    let widths: Vec<f32> = items.iter().map(|item| item.width(with_percent)).collect();
+    let texts: Vec<bool> = items.iter().map(Listed::text).collect();
     let shrunk = shrink(&widths, &texts, gap, end - x);
     let budget = |i: usize| match shrunk {
         Some((at, width)) if at == i => width,
         _ => f32::MAX,
     };
-    for (i, value) in values.iter().enumerate() {
+    for (i, item) in items.into_iter().enumerate() {
         if x >= end {
             break;
         }
-        // What is not text is drawn whole or not at all: a gauge without
-        // its percentage where only the gauge fits, else nothing more. A
-        // pixel of slack for rounding, as for texts.
+        // A pixel of slack for rounding, as for texts.
         let fits = |width: f32| x + width <= end + 1.0;
-        let with_percent = with_percent && fits(widths[i]);
-        if !matches!(value, StatusValue::Text(_))
-            && !fits(value_width(env, font, size, value, with_percent))
-        {
-            break;
-        }
-        match value {
+        let percent = with_percent && fits(widths[i]);
+        let (value, width) = match item.value {
             StatusValue::Text(text) => {
                 // A pixel of slack for rounding: the parts were measured to fit.
                 let room = (end - x + 1.0).min(budget(i));
-                let text = crate::ui::fit(font, size, text, room);
-                x += font.draw(canvas, size, x, baseline, &text, color);
+                let text = crate::ui::fit(font, size, &text, room);
+                let width = font.measure(size, &text).max(item.least.min(room));
+                (StatusValue::Text(text), width)
             }
-            StatusValue::Icon(name) => {
-                x += crate::ui::draw_icon(canvas, env, name, size, x, area, color);
-            }
-            StatusValue::Level { percent, charging } => {
-                let height = (metrics.ascent * 0.75) as i32;
-                let top = baseline - height;
-                let battery = Rect::new(
-                    x as u16,
-                    top.max(0) as u16,
-                    battery_width(size) as u16,
-                    height as u16,
-                );
-                draw_battery(canvas, battery, size, *percent, *charging, color);
-                x += battery_width(size);
-                if with_percent {
-                    x += size * 0.3;
-                    x += font.draw(canvas, size, x, baseline, &level_text(*percent), color);
+            value => {
+                let width = item.widths[usize::from(!percent)];
+                if !fits(width) {
+                    break;
                 }
+                (value, width)
             }
-            StatusValue::Bar { permille } => {
-                // As thick as the line of the book's progress bar, on the
-                // middle of the text's capitals.
-                let thickness = (size * 0.3).max(3.0) as u32;
-                let line = (size / 12.0).max(1.0) as u32;
-                let middle = baseline - (metrics.ascent * 0.35) as i32;
-                let top = middle - thickness as i32 / 2;
-                let width = bar_width(size);
-                canvas.stroke_rect(x as i32, top, width as u32, thickness, line, color);
-                let filled = width * f32::from((*permille).min(1000)) / 1000.0;
-                canvas.fill_rect(x as i32, top, filled as u32, thickness, color);
-                x += width;
+        };
+        out.push(Laid {
+            id: item.id,
+            value,
+            x,
+            width,
+            percent,
+        });
+        x += width + gap;
+    }
+}
+
+/// Draws an item where the line placed it.
+fn draw_value(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    font: &FontHandle<'_>,
+    line: &StatusLine<'_>,
+    laid: &Laid<'_>,
+    baseline: i32,
+) {
+    let (area, size, color) = (line.area, line.size, line.color);
+    let metrics = font.line_metrics(size);
+    let x = laid.x;
+    match &laid.value {
+        StatusValue::Text(text) => {
+            font.draw(canvas, size, x, baseline, text, color);
+        }
+        StatusValue::Icon(name) => {
+            crate::ui::draw_icon(canvas, env, name, size, x, area, color);
+        }
+        StatusValue::Level { percent, charging } => {
+            let height = (metrics.ascent * 0.75) as i32;
+            let top = baseline - height;
+            let battery = Rect::new(
+                x as u16,
+                top.max(0) as u16,
+                battery_width(size) as u16,
+                height as u16,
+            );
+            draw_battery(canvas, battery, size, *percent, *charging, color);
+            if laid.percent {
+                let at = x + battery_width(size) + size * 0.3;
+                font.draw(canvas, size, at, baseline, &level_text(*percent), color);
             }
         }
-        x += gap;
+        StatusValue::Bar { permille } => {
+            // As thick as the line of the book's progress bar, on the
+            // middle of the text's capitals.
+            let thickness = (size * 0.3).max(3.0) as u32;
+            let stroke = (size / 12.0).max(1.0) as u32;
+            let middle = baseline - (metrics.ascent * 0.35) as i32;
+            let top = middle - thickness as i32 / 2;
+            let width = bar_width(size);
+            canvas.stroke_rect(x as i32, top, width as u32, thickness, stroke, color);
+            let filled = width * f32::from((*permille).min(1000)) / 1000.0;
+            canvas.fill_rect(x as i32, top, filled as u32, thickness, color);
+        }
+        StatusValue::Labelled { icon, text } => {
+            let icon_width = crate::ui::draw_icon(canvas, env, icon, size, x, area, color);
+            let at = x + icon_width + label_gap(size);
+            font.draw(canvas, size, at, baseline, text, color);
+        }
     }
 }
 

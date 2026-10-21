@@ -35,6 +35,10 @@ pub mod actions {
     pub const TOGGLE_NIGHT_MODE: Id = Id::new_static("core.toggle-night-mode");
     /// Opens the library slot.
     pub const LIBRARY: Id = Id::new_static("core.library");
+    /// *Open with…* in the book menu ([`menus::BOOK`](super::menus::BOOK)):
+    /// asks which reading app opens the book this time
+    /// ([`readers::ask_once`](crate::readers::ask_once)).
+    pub const OPEN_WITH: Id = Id::new_static("core.open-with");
     /// Opens the settings slot.
     pub const SETTINGS: Id = Id::new_static("core.settings");
     /// Saves what the screen shows as a picture, in `Screenshots` beside
@@ -240,6 +244,13 @@ pub mod menus {
     /// chosen, the library sends [`events::BOOK_CHOSEN`](super::events::BOOK_CHOSEN)
     /// with the book, then runs it.
     pub const BOOK: Id = Id::new_static("core.book-menu");
+    /// Other ways to open a book, listed with the reading apps where the
+    /// reader chooses one (*Open with…*, see
+    /// [`readers::ask_once`](crate::readers::ask_once)): plugins add their
+    /// actions (open it in a browser, send it to a computer); when one is
+    /// chosen, [`events::BOOK_CHOSEN`](super::events::BOOK_CHOSEN) is sent
+    /// with the book, then it runs, as in [`BOOK`].
+    pub const OPEN_WITH: Id = Id::new_static("core.open-with-menu");
 }
 
 /// The roles of decorations every reader draws (see
@@ -688,6 +699,11 @@ pub mod events {
             pub path: String,
             pub folder: bool,
         }
+        optional {
+            /// Only to open the book this time, not kept
+            /// ([`readers::ask_once`](crate::readers::ask_once)).
+            pub once: bool,
+        }
     }
 
     crate::event_data! {
@@ -951,9 +967,6 @@ pub mod screens {
     pub const STATUS_ITEMS: Id = Id::new_static("core.status-items");
     /// Chooses the status lines a setting lists.
     pub const STATUS_LINES: Id = Id::new_static("core.status-lines");
-    /// The list of reading apps to choose from (see
-    /// [`readers::ask`](crate::readers::ask)).
-    pub const READING_APPS: Id = Id::new_static("core.reading-apps");
     /// The kernel's choice of a few options
     /// ([`ui::choice::Choice`](crate::ui::choice::Choice)), bound to slot
     /// [`CHOICE`](super::slots::CHOICE) unless another screen is.

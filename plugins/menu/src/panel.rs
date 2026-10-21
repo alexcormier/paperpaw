@@ -943,6 +943,20 @@ impl Screen for PanelScreen {
             self.redraw(cx);
             return Handled::Yes;
         }
+        // An item of the head that does something when tapped.
+        if gesture.kind == GestureKind::Tap && self.top && self.head.contains(gesture.start) {
+            let env = *cx.env();
+            if let Some(font) = UiStyle::new(&env).font(&env) {
+                let target = head_line(&env, self.head)
+                    .targets(&env, &font, &Params::new())
+                    .into_iter()
+                    .find(|t| t.area.contains(gesture.start));
+                if let Some(target) = target {
+                    cx.command(target.command);
+                    return Handled::Yes;
+                }
+            }
+        }
         if gesture.kind == GestureKind::Tap {
             let env = *cx.env();
             let control = self
@@ -1069,18 +1083,23 @@ fn draw_head(
     font: &paperpaw_sdk::FontHandle<'_>,
     area: Rect,
 ) {
-    let lists = QUICK_PARTS.map(|id| env.settings.text(id.as_str()));
-    let line = paperpaw_sdk::status::StatusLine {
-        area,
-        lists,
-        size: env
-            .metrics
-            .pt(env.settings.read(&QUICK_SIZE).clamp(6, 24) as f32),
-        color: Color::BLACK,
-        percent: true,
-    };
-    line.draw(canvas, env, font, &Params::new());
+    head_line(env, area).draw(canvas, env, font, &Params::new());
 }
+
+/// The quick panel's head as a status line in `area`.
+fn head_line<'e>(env: &Env<'e>, area: Rect) -> paperpaw_sdk::status::StatusLine<'e> {
+    let size = env
+        .metrics
+        .pt(env.settings.read(&QUICK_SIZE).clamp(6, 24) as f32);
+    QUICK_PLACE.line(env, area, size, Color::BLACK)
+}
+
+/// Where the quick panel's head shows status items.
+pub(crate) const QUICK_PLACE: paperpaw_sdk::status::Place = paperpaw_sdk::status::Place::new(
+    Id::new_static("menu.quick"),
+    "menu.quick.section",
+    QUICK_PARTS,
+);
 
 /// What the quick panel's head shows at its left, centre and right.
 pub(crate) const QUICK_PARTS: [Id; 3] = [QUICK_LEFT, QUICK_CENTER, QUICK_RIGHT];

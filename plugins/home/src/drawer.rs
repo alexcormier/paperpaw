@@ -8,6 +8,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
+use paperpaw_sdk::widgets::grid;
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, Screen,
 };
@@ -72,9 +73,11 @@ impl Screen for DrawerScreen {
         for (slot, index) in (first..len).take(list.rows()).enumerate() {
             let rect = list.row_rect(slot);
             let focused = list.shown() && index == list.focus();
+            // Named after its action, also where its name is not shown.
+            let name = grid::What::Tool(tools[index].clone()).title(env);
             canvas.describe(
                 paperpaw_sdk::semantics::Role::Button,
-                "",
+                &name,
                 rect,
                 focused,
                 None,

@@ -216,7 +216,7 @@ mod tests {
             loaded[0].values,
             [
                 (Id::new_static("core.night-mode"), String::from("on")),
-                (Id::new_static("reader.font-size"), String::from("12")),
+                (Id::new_static("core.font-size"), String::from("12")),
             ]
         );
         assert_eq!(loaded[1].name, "Large print");

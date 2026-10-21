@@ -24,7 +24,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{fonts, params, screens};
-use paperpaw_sdk::status::{StatusFrame, StatusLine, StatusValue, context, item_ids};
+use paperpaw_sdk::status::{
+    Place, StatusFrame, StatusLine, StatusTarget, StatusValue, context, item_ids,
+};
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::{
     Arg, Canvas, Env, Id, Params, RegisterError, Registrar, SettingExtra, SettingKind, SettingSpec,
@@ -52,6 +54,21 @@ const BOTTOM_LINES: Id = Id::new_static("reader.status.bottom-lines");
 /// The settings' sections: the line above and the line below.
 const SECTION_TOP: &str = "reader.status.section.top";
 const SECTION_BOTTOM: &str = "reader.status.section.bottom";
+const TOP_PLACE: &str = "reader.status.top";
+const BOTTOM_PLACE: &str = "reader.status.bottom";
+/// Where status items show: above the text and below it.
+pub const PLACES: [Place; 2] = [
+    Place::new(
+        Id::new_static(TOP_PLACE),
+        SECTION_TOP,
+        [TOP_LEFT, TOP_CENTER, TOP_RIGHT],
+    ),
+    Place::new(
+        Id::new_static(BOTTOM_PLACE),
+        SECTION_BOTTOM,
+        [BOTTOM_LEFT, BOTTOM_CENTER, BOTTOM_RIGHT],
+    ),
+];
 
 /// The reader's status lines.
 pub mod lines {
@@ -210,25 +227,26 @@ static SETTINGS: [SettingSpec; 11] = [
 
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
+    for place in PLACES {
+        r.add_status_place(place)?;
+    }
     r.add_status_line(
         StatusLineSpec::new(
             lines::ITEMS,
             "reader.status.line.items",
             Box::new(|canvas, env, frame| {
-                let Some(font) = env.fonts.role(fonts::STATUS.as_str()) else {
+                let Some(font) = env.fonts.role(frame.font) else {
                     return;
                 };
-                let line = StatusLine {
-                    area: frame.area,
-                    lists: lists(env, frame.top),
-                    size: frame.size,
-                    color: frame.color,
-                    percent: env.settings.read(&PERCENT),
-                };
-                line.draw(canvas, env, &font, frame.context);
+                items_line(env, frame).draw(canvas, env, &font, frame.context);
             }),
         )
-        .signature(Box::new(items_signature)),
+        .signature(Box::new(items_signature))
+        .targets(Box::new(|env, frame| {
+            env.fonts.role(frame.font).map_or_else(Vec::new, |font| {
+                items_line(env, frame).targets(env, &font, frame.context)
+            })
+        })),
     )?;
     r.add_status_line(
         StatusLineSpec::new(
@@ -254,16 +272,24 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         .signature(Box::new(|_, _| String::new())),
     )?;
     let text = |value: Option<&str>| value.map(|v| StatusValue::Text(v.to_string()));
-    r.add_status_item(StatusItemSpec::new(
-        items::TITLE,
-        "reader.status.item.title",
-        Box::new(move |_, cx| text(cx.get(params::TITLE))),
-    ))?;
-    r.add_status_item(StatusItemSpec::new(
-        items::CHAPTER,
-        "reader.status.item.chapter",
-        Box::new(move |_, cx| text(cx.get(context::CHAPTER).or(cx.get(params::TITLE)))),
-    ))?;
+    // The book's and the chapter's titles give way first where a line
+    // has no room, the page last.
+    r.add_status_item(
+        StatusItemSpec::new(
+            items::TITLE,
+            "reader.status.item.title",
+            Box::new(move |_, cx| text(cx.get(params::TITLE))),
+        )
+        .priority(64),
+    )?;
+    r.add_status_item(
+        StatusItemSpec::new(
+            items::CHAPTER,
+            "reader.status.item.chapter",
+            Box::new(move |_, cx| text(cx.get(context::CHAPTER).or(cx.get(params::TITLE)))),
+        )
+        .priority(64),
+    )?;
     r.add_status_item(StatusItemSpec::new(
         items::ALOUD,
         "reader.status.item.aloud",
@@ -316,11 +342,14 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             )))
         }),
     ))?;
-    r.add_status_item(StatusItemSpec::new(
-        items::PAGE,
-        "reader.status.item.page",
-        Box::new(move |_, cx| text(cx.get(context::PAGE))),
-    ))?;
+    r.add_status_item(
+        StatusItemSpec::new(
+            items::PAGE,
+            "reader.status.item.page",
+            Box::new(move |_, cx| text(cx.get(context::PAGE))),
+        )
+        .priority(224),
+    )?;
     r.add_status_item(StatusItemSpec::new(
         items::PROGRESS,
         "reader.status.item.progress",
@@ -342,6 +371,34 @@ fn chapter_pages(cx: &Params) -> Option<(i64, i64)> {
         number(CHAPTER_PAGE_CONTEXT)?,
         number(CHAPTER_PAGES_CONTEXT)?,
     ))
+}
+
+/// The line of items drawn in `frame`: its place's items (the reader's
+/// above or below the text where it names none).
+fn items_line<'e>(env: &Env<'e>, frame: &StatusFrame<'_>) -> StatusLine<'e> {
+    let place = frame.place.and_then(|id| env.status_items.place(id));
+    let lists = match place {
+        Some(place) => place.lists(env),
+        None => lists(env, frame.top),
+    };
+    StatusLine::new(frame.area, lists, frame.size, frame.color).percent(env.settings.read(&PERCENT))
+}
+
+/// The frame of the line at the top (or bottom) in `area`, in its place.
+pub(crate) fn frame<'a>(
+    env: &Env<'_>,
+    area: paperpaw_sdk::Rect,
+    top: bool,
+    context: &'a Params,
+) -> StatusFrame<'a> {
+    let place = if top { TOP_PLACE } else { BOTTOM_PLACE };
+    StatusFrame::new(area, top, size(env), color(env), context).place(place)
+}
+
+/// Where a tap on the line shown at the top (or bottom) in `frame` does
+/// something.
+pub(crate) fn targets(env: &Env<'_>, id: &str, frame: &StatusFrame<'_>) -> Vec<StatusTarget> {
+    env.status_items.line_targets(id, env, frame)
 }
 
 /// The item lists of a line's parts: `top` or bottom.
@@ -491,15 +548,8 @@ pub(crate) fn signature(env: &Env<'_>, context: &Params, chosen: &[String; 2]) -
 
 /// What the items of both lines show now.
 fn items_signature(env: &Env<'_>, context: &Params) -> String {
-    let mut out = String::new();
-    for list in lists(env, true).iter().chain(&lists(env, false)) {
-        for id in item_ids(list) {
-            if let Some(value) = env.status_items.value(id, env, context) {
-                out.push_str(&format!("{value:?}|"));
-            }
-        }
-    }
-    out
+    let both = [lists(env, true), lists(env, false)].concat();
+    paperpaw_sdk::status::signature(env, &both, context)
 }
 
 #[cfg(test)]
