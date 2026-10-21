@@ -3,7 +3,8 @@
 //!
 //! Colours go through the global or local colour table, to gray or, for
 //! a sink that wants colour, to RGB; transparent pixels and the screen
-//! around the picture are white. The
+//! around the picture are white, or clear for a sink that wants
+//! transparency ([`ImageSink::wants_alpha`]). The
 //! LZW codes are decoded as they come, with a table of at most 4096
 //! entries (about 20 KiB). Pictures stored in order come out row by row;
 //! of interlaced ones the part on the screen is gathered in a buffer of
@@ -279,12 +280,24 @@ fn picture(
     if let Some(index) = transparent {
         colors[usize::from(index)] = [WHITE; 3];
     }
-    let color = sink.wants_color();
-    let channels = if color { 3 } else { 1 };
+    // Transparency where the picture has it and the sink wants it; then
+    // colour.
+    let alpha = transparent.is_some() && sink.wants_alpha();
+    let color = !alpha && sink.wants_color();
+    let channels = if alpha {
+        2
+    } else if color {
+        3
+    } else {
+        1
+    };
     let grays = colors.map(|[r, g, b]| luma(u32::from(r), u32::from(g), u32::from(b)));
     // Pixel `x` of a row in colour `index`.
     let paint = |row: &mut [u8], x: usize, index: u8| {
-        if color {
+        if alpha {
+            let opacity = if Some(index) == transparent { 0 } else { 255 };
+            row[x * 2..x * 2 + 2].copy_from_slice(&[grays[usize::from(index)], opacity]);
+        } else if color {
             row[x * 3..x * 3 + 3].copy_from_slice(&colors[usize::from(index)]);
         } else {
             row[x] = grays[usize::from(index)];
@@ -309,6 +322,12 @@ fn picture(
     sink.start(scaler.out_width(), scaler.out_height())?;
     let mut row: Vec<u8> = zeroed(width as usize * channels)?;
     row.fill(WHITE);
+    // The screen around the picture: white, or clear.
+    if alpha {
+        for pixel in row.as_chunks_mut::<2>().0 {
+            pixel[1] = 0;
+        }
+    }
     let blank = row.clone();
     // Interlaced: every row of the picture first, as far as it shows.
     let mut gathered: Vec<u8> = if interlaced {

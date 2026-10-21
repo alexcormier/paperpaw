@@ -626,9 +626,11 @@ impl Downscaler {
     }
 }
 
-/// A decoded image in storage, gray ([`GrayFile`]) or colour
-/// ([`ColorFile`]), whichever the file is.
+/// A decoded image in storage, gray ([`GrayFile`]), colour
+/// ([`ColorFile`]) or gray with transparency ([`AlphaFile`]), whichever
+/// the file is.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ImageFile {
     pub path: alloc::string::String,
     pub width: u32,
@@ -639,33 +641,101 @@ pub struct ImageFile {
 }
 
 impl ImageFile {
-    /// Opens a decoded image of either kind, checking its size.
+    /// Made of its parts.
+    pub fn new(path: &str, width: u32, height: u32, color: bool, alpha: bool) -> Self {
+        Self {
+            path: alloc::string::String::from(path),
+            width,
+            height,
+            color,
+            alpha,
+        }
+    }
+
+    /// Opens a decoded image of any kind, checking its size.
     pub fn open(storage: &dyn paperpaw_platform::Storage, path: &str) -> Option<ImageFile> {
-        if let Some(gray) = GrayFile::open(storage, path) {
-            return Some(ImageFile {
-                path: gray.path,
-                width: gray.width,
-                height: gray.height,
-                color: false,
-                alpha: false,
-            });
-        }
-        if let Some(file) = AlphaFile::open(storage, path) {
-            return Some(ImageFile {
-                path: file.path,
-                width: file.width,
-                height: file.height,
-                color: false,
-                alpha: true,
-            });
-        }
-        ColorFile::open(storage, path).map(|file| ImageFile {
-            path: file.path,
-            width: file.width,
-            height: file.height,
-            color: true,
-            alpha: false,
+        Some(match Decoded::open(storage, path)? {
+            Decoded::Gray(file) => {
+                ImageFile::new(&file.path, file.width, file.height, false, false)
+            }
+            Decoded::Color(file) => {
+                ImageFile::new(&file.path, file.width, file.height, true, false)
+            }
+            Decoded::Alpha(file) => {
+                ImageFile::new(&file.path, file.width, file.height, false, true)
+            }
         })
+    }
+}
+
+/// A decoded image in storage, of the kind its first bytes name.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum Decoded {
+    Gray(GrayFile),
+    Color(ColorFile),
+    Alpha(AlphaFile),
+}
+
+impl Decoded {
+    /// Opens a decoded image of any kind: its header read once, its size
+    /// checked.
+    pub fn open(storage: &dyn paperpaw_platform::Storage, path: &str) -> Option<Decoded> {
+        let (decoded, bytes) = Self::header(storage, path)?;
+        let (width, height) = decoded.size();
+        let expected = (u64::from(width) * u64::from(height))
+            .checked_mul(bytes)?
+            .checked_add(12)?;
+        (storage.size(path).ok()? == expected).then_some(decoded)
+    }
+
+    /// The image whose header is at `path`, trusting it, its size not
+    /// checked: for drawing band by band, where one read is all it may
+    /// take (a file cut short only reads short).
+    pub fn peek(storage: &dyn paperpaw_platform::Storage, path: &str) -> Option<Decoded> {
+        Self::header(storage, path).map(|(decoded, _)| decoded)
+    }
+
+    /// The image the header names, and its bytes a pixel.
+    fn header(storage: &dyn paperpaw_platform::Storage, path: &str) -> Option<(Decoded, u64)> {
+        let mut header = [0u8; 12];
+        if !gray::read_all(storage, path, 0, &mut header) {
+            return None;
+        }
+        let width = u32::from_le_bytes([header[4], header[5], header[6], header[7]]);
+        let height = u32::from_le_bytes([header[8], header[9], header[10], header[11]]);
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let path = alloc::string::String::from(path);
+        Some(match &header[..4] {
+            b"PPGI" => (
+                Decoded::Gray(GrayFile {
+                    path,
+                    width,
+                    height,
+                }),
+                1,
+            ),
+            b"PPCI" => (
+                Decoded::Color(ColorFile {
+                    path,
+                    width,
+                    height,
+                }),
+                3,
+            ),
+            b"PPGA" => (Decoded::Alpha(AlphaFile::new(&path, width, height)), 2),
+            _ => return None,
+        })
+    }
+
+    /// Its width and height.
+    pub fn size(&self) -> (u32, u32) {
+        match self {
+            Decoded::Gray(f) => (f.width, f.height),
+            Decoded::Color(f) => (f.width, f.height),
+            Decoded::Alpha(f) => (f.width, f.height),
+        }
     }
 }
 

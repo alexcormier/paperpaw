@@ -121,7 +121,7 @@ pub use plugins::{PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, R
 pub use replies::{Chosen, HttpReply, ServerNotice, SocketNotice, Typed};
 pub use screen::{
     CloseCause, Cx, Handled, Hint, Hints, Output, Outside, Screen, ScreenFactory, ScreenKey,
-    ScreenSpec, StackEntry,
+    ScreenSpec, ShowsThrough, StackEntry,
 };
 pub use setting::{Setting, Text};
 pub use settings::{
@@ -191,7 +191,7 @@ pub mod xml {
 /// `paperpaw-image`).
 pub mod image {
     pub use paperpaw_image::{
-        AlphaFile, AlphaWriter, ColorFile, ColorWriter, Downscaler, Fit, Format, GrayFile,
+        AlphaFile, AlphaWriter, ColorFile, ColorWriter, Decoded, Downscaler, Fit, Format, GrayFile,
         GrayWriter, ImageError, ImageFile, ImageSink, PngWriter, Source, decode, dimensions, luma,
         over_white,
     };
@@ -222,30 +222,33 @@ pub mod image {
     /// ([`AlphaFile`]; others are opaque), for
     /// [`ui::draw_image_over`](crate::ui::draw_image_over): a picture over
     /// what is drawn (a page under a sleep picture, a sticker on a
-    /// widget). `None` if it is no image PaperPaw reads.
+    /// widget). Why not where it is no image PaperPaw reads (another
+    /// format, an interlaced PNG, a damaged file).
     pub fn picture_with_alpha(
         storage: &dyn Storage,
         from: &str,
         to: &str,
         fit: Fit,
-    ) -> Option<ImageRef> {
+    ) -> Result<ImageRef, ImageError> {
         let mut head = [0u8; 8];
-        let n = storage.read_at(from, 0, &mut head).ok()?;
-        let format = Format::detect(&head[..n])?;
+        let n = storage
+            .read_at(from, 0, &mut head)
+            .map_err(|_| ImageError::Io)?;
+        let format = Format::detect(&head[..n]).ok_or(ImageError::Unsupported("format"))?;
         let mut source = FileSource {
             storage,
             path: from,
             offset: 0,
         };
         let mut writer = AlphaWriter::new(storage, to);
-        decode(format, &mut source, fit, &mut writer)
-            .and_then(|()| writer.finish())
-            .ok()?;
-        AlphaFile::open(storage, to).map(|file| ImageRef {
-            path: file.path,
-            width: file.width,
-            height: file.height,
-        })
+        decode(format, &mut source, fit, &mut writer).and_then(|()| writer.finish())?;
+        AlphaFile::open(storage, to)
+            .map(|file| ImageRef {
+                path: file.path,
+                width: file.width,
+                height: file.height,
+            })
+            .ok_or(ImageError::Io)
     }
 
     /// Decodes the JPEG or PNG file `from` into the gray file `to`, no

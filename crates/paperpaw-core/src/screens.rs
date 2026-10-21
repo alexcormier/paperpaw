@@ -219,6 +219,7 @@ impl Kernel {
                 let overlay = active.screen.region(&env).is_some();
                 let key = paperpaw_sdk::ScreenKey::new(active.serial);
                 paperpaw_sdk::StackEntry::new(active.id.clone(), active.slot.clone(), overlay, key)
+                    .guarding(active.screen.guards())
             })
             .collect();
         self.shared.stack.clear();

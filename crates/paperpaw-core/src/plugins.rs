@@ -304,6 +304,12 @@ impl Kernel {
                 .drain(..)
                 .map(|(id, value)| (plugin.clone(), id, value)),
         );
+        self.plugin_choices.extend(
+            staging
+                .choices
+                .drain(..)
+                .map(|(id, value)| (plugin.clone(), id, value)),
+        );
         for entry in staging.menu_entries.drain(..) {
             self.shared.menus.add(entry);
         }

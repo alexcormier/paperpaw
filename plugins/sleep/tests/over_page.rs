@@ -1,8 +1,12 @@
 //! *The page with a picture*: the page read stays while the device
 //! sleeps, a picture over it whose clear parts show it, nothing else
-//! changed; as see-through as asked; only where it is to be used, the
-//! cover or the message otherwise; and pictures that other plugins offer
-//! as presets chosen in its picker.
+//! changed; as see-through as asked; below on the right and clear of the
+//! status lines unless asked otherwise; over the page, not a menu left
+//! open; never over a lock; only where it is to be used, the cover or the
+//! message otherwise; decoded once while it stays the same; a widget in
+//! its place; pictures that other plugins offer as presets chosen in its
+//! picker, which says why the last one did not show; and sleep modes of
+//! other plugins.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -14,9 +18,10 @@ use paperpaw_platform::{
 use paperpaw_plugin_sleep::{Sleep, overlay};
 use paperpaw_sdk::builtin::{actions, slots};
 use paperpaw_sdk::presets::Preset;
+use paperpaw_sdk::widgets::{Drawn, WidgetSpec};
 use paperpaw_sdk::{
-    Canvas, Cx, Env, Handled, Id, Manifest, MemoryStorage, Params, Plugin, Priority, RegisterError,
-    Registrar, Screen, ScreenSpec, Version,
+    Canvas, Cx, Env, Handled, Id, Manifest, MemoryStorage, Params, Plugin, Priority, Rect,
+    RegisterError, Registrar, Screen, ScreenSpec, Version,
 };
 
 const X4: DeviceInfo = DeviceInfo {
@@ -44,6 +49,8 @@ const SCREEN: &str = "sleep.screen";
 const RING: &[u8] = include_bytes!("data/ring.png");
 /// Where the ring goes in the middle at half the width: 240 × 240.
 const BOX: (usize, usize, usize) = (120, 280, 240);
+/// The picture in the middle, half the width large.
+const MIDDLE: &str = "overlay-position = sleep.position.center\noverlay-size = 50";
 
 /// A page of black lines, every eighth row, bound as the reader.
 struct Page;
@@ -64,6 +71,45 @@ impl Screen for Lines {
     }
 }
 
+/// A menu over the lower part of the page: black.
+struct Menu;
+
+impl Screen for Menu {
+    fn region(&self, _: &Env<'_>) -> Option<Rect> {
+        Some(Rect::new(0, 600, 480, 200))
+    }
+
+    fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
+        canvas.clear(Color::BLACK);
+    }
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+}
+
+/// A lock: it guards the device.
+struct Guard;
+
+impl Screen for Guard {
+    fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
+        canvas.clear(Color::WHITE);
+    }
+
+    /// It lets the device sleep, as the lock does.
+    fn on_action(&mut self, action: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        if *action == actions::SLEEP {
+            Handled::No
+        } else {
+            Handled::Yes
+        }
+    }
+
+    fn guards(&self) -> bool {
+        true
+    }
+}
+
 impl Plugin for Page {
     fn manifest(&self) -> Manifest {
         Manifest::new(Id::new_static("page"), "Page", Version::new(0, 1, 0))
@@ -76,6 +122,16 @@ impl Plugin for Page {
             "Page",
             Box::new(|_, _| Box::new(Lines)),
         ))?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("page.menu"),
+            "Menu",
+            Box::new(|_, _| Box::new(Menu)),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("page.lock"),
+            "Lock",
+            Box::new(|_, _| Box::new(Guard)),
+        ))?;
         r.bind_slot(
             slots::READER,
             Id::new_static("page.screen"),
@@ -84,8 +140,21 @@ impl Plugin for Page {
     }
 }
 
-/// Offers its owl as a picture over the page, in a corner.
+/// Offers its owl as a picture over the page, in a corner; a moon widget
+/// (a black square); and a sleep mode of its own, a night all black.
 struct Owls;
+
+struct Night;
+
+impl Screen for Night {
+    fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
+        canvas.clear(Color::BLACK);
+    }
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+}
 
 static OWL: [Preset; 1] = [Preset::fixed(
     "owls.owl",
@@ -102,7 +171,23 @@ impl Plugin for Owls {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_presets(&OWL)
+        r.add_presets(&OWL)?;
+        r.add_widget(WidgetSpec::drawn(
+            Id::new_static("owls.moon"),
+            "Moon",
+            Drawn::new(
+                |_, _| 40,
+                |canvas, _, area| canvas.fill(Rect::new(area.x, area.y, 40, 40), Color::BLACK),
+            ),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("owls.night"),
+            "owls.night",
+            Box::new(|_, _| Box::new(Night)),
+        ))?;
+        r.add_choice(paperpaw_plugin_sleep::SHOW, "owls.night")?;
+        // Not its own value: refused.
+        r.add_choice(paperpaw_plugin_sleep::SHOW, "elsewhere.mode")
     }
 }
 
@@ -164,6 +249,29 @@ impl Device {
         }
     }
 
+    /// The power button: the sleep screen; what it brought.
+    fn sleep(&mut self) -> Effects {
+        self.now += 100;
+        let effects = self.kernel.run_action(Instant(self.now), actions::SLEEP);
+        self.settle(effects);
+        effects
+    }
+
+    fn wake(&mut self) {
+        self.now += 60_000;
+        let effects = self.kernel.resume(Instant(self.now));
+        self.settle(effects);
+    }
+
+    fn set(&mut self, id: &str, value: &str) {
+        self.now += 100;
+        let effects = self
+            .kernel
+            .set_setting(Instant(self.now), id, value)
+            .unwrap();
+        self.settle(effects);
+    }
+
     fn run(&mut self, action: Id) {
         self.now += 100;
         let effects = self.kernel.run_action(Instant(self.now), action);
@@ -204,7 +312,7 @@ fn at(shown: &[Color], x: usize, y: usize) -> Color {
 
 #[test]
 fn a_picture_goes_over_the_page_which_shows_around_it() {
-    let mut device = Device::new("", true);
+    let mut device = Device::new(MIDDLE, true);
     let page = device.render().to_vec();
     assert_eq!(at(&page, 0, 8), Color::BLACK);
     assert_eq!(at(&page, 0, 9), Color::WHITE);
@@ -245,7 +353,7 @@ fn a_picture_goes_over_the_page_which_shows_around_it() {
 #[test]
 fn the_page_shows_through_the_picture_as_much_as_asked() {
     let dark_in_ring = |settings: &str| {
-        let mut device = Device::new(settings, true);
+        let mut device = Device::new(&format!("{MIDDLE}\n{settings}"), true);
         device.run(actions::SLEEP);
         let shown = device.render().to_vec();
         let (left, top, _) = BOX;
@@ -281,9 +389,9 @@ fn size_and_place_are_settings() {
     assert!(
         changed
             .iter()
-            .all(|&(x, y)| x >= 480 - 96 - 40 && y >= 800 - 96 - 40)
+            .all(|&(x, y)| x >= 480 - 96 - 40 && y >= 800 - 96 - 100)
     );
-    assert!(changed.iter().all(|&(x, y)| x < 480 - 8 && y < 800 - 8));
+    assert!(changed.iter().all(|&(x, y)| x < 480 - 8 && y < 800 - 30));
 }
 
 #[test]
@@ -351,4 +459,173 @@ fn plugins_offer_pictures_in_the_picker() {
     device.settle(effects);
     device.run(actions::CONFIRM);
     assert_eq!(device.kernel.settings().text(overlay::PICTURE.as_str()), "");
+}
+
+#[test]
+fn by_default_below_on_the_right_clear_of_the_status_lines() {
+    let mut device = Device::new("", true);
+    let page = device.render().to_vec();
+    let effects = device.sleep();
+    // A picture over all of the screen: in grays where the panel has them.
+    assert!(effects.grays());
+    let shown = device.render().to_vec();
+    let changed = changes(&shown, &page);
+    assert!(!changed.is_empty());
+    // A third of the width, more or less.
+    let (left, right) = (
+        changed.iter().map(|c| c.0).min().unwrap(),
+        changed.iter().map(|c| c.0).max().unwrap(),
+    );
+    assert!((120..=200).contains(&(right - left)), "{left}..{right}");
+    assert!(
+        changed.iter().all(|&(x, y)| x > 240 && y > 400),
+        "on the right below"
+    );
+    assert!(
+        changed.iter().all(|&(_, y)| y < 800 - 30),
+        "clear of the status line"
+    );
+}
+
+#[test]
+fn over_the_page_not_a_menu_left_open() {
+    let mut device = Device::new(
+        &format!("{MIDDLE}\noverlay-when = sleep.when.reading"),
+        true,
+    );
+    device.now += 100;
+    let effects = device.kernel.open_screen(
+        Instant(device.now),
+        Id::new_static("page.menu"),
+        Params::new(),
+    );
+    device.settle(effects);
+    let with_menu = device.render().to_vec();
+    assert_eq!(at(&with_menu, 5, 701), Color::BLACK);
+    device.run(actions::SLEEP);
+    assert_eq!(device.kernel.active_screen().map(Id::as_str), Some(SCREEN));
+    // Read below the menu: the picture shows, over the page alone.
+    assert!(!device.says_sleeping());
+    let shown = device.render().to_vec();
+    assert_eq!(at(&shown, 5, 701), Color::WHITE, "the page, not the menu");
+    assert_eq!(at(&shown, 5, 704), Color::BLACK, "a line of the page");
+}
+
+#[test]
+fn never_over_a_lock() {
+    let mut device = Device::new("", true);
+    device.now += 100;
+    let effects = device.kernel.open_screen(
+        Instant(device.now),
+        Id::new_static("page.lock"),
+        Params::new(),
+    );
+    device.settle(effects);
+    device.run(actions::SLEEP);
+    assert_eq!(device.kernel.active_screen().map(Id::as_str), Some(SCREEN));
+    // The cover, of which there is none: the message, nothing of the page.
+    assert!(device.says_sleeping());
+}
+
+#[test]
+fn the_picture_is_decoded_once_while_it_stays_the_same() {
+    let mut device = Device::new(MIDDLE, true);
+    device.run(actions::SLEEP);
+    let decoded = format!("{}/overlay.gray", Env::plugin_dir("sleep"));
+    let kept = device.kernel.storage().size(&decoded).unwrap();
+    assert!(kept > 0);
+    device.wake();
+    // A picture of the same size (64 x 64, never made larger), all
+    // black: kept, not decoded again.
+    let mut black = b"PPGA".to_vec();
+    black.extend_from_slice(&64u32.to_le_bytes());
+    black.extend_from_slice(&64u32.to_le_bytes());
+    black.extend(std::iter::repeat_n([0u8, 255], 64 * 64).flatten());
+    assert_eq!(black.len() as u64, kept);
+    device.kernel.storage().write(&decoded, &black).unwrap();
+    device.run(actions::SLEEP);
+    let shown = device.render().to_vec();
+    let (left, top, _) = BOX;
+    assert_eq!(at(&shown, left + 2, top + 2), Color::BLACK, "the kept one");
+    // Larger: decoded anew, the ring's clear corner showing the page.
+    device.wake();
+    device.set("sleep.overlay-size", "60");
+    device.run(actions::SLEEP);
+    let shown = device.render().to_vec();
+    assert_ne!(at(&shown, 99, 241), Color::BLACK);
+}
+
+#[test]
+fn a_widget_in_place_of_a_picture() {
+    let mut device = Device::new("overlay-widget = owls.moon", true);
+    let page = device.render().to_vec();
+    device.run(actions::SLEEP);
+    assert!(!device.says_sleeping());
+    let shown = device.render().to_vec();
+    let changed = changes(&shown, &page);
+    // The moon, black, on its panel of paper below on the right.
+    let black = changed
+        .iter()
+        .filter(|&&(x, y)| at(&shown, x, y) == Color::BLACK)
+        .count();
+    assert!(black >= 40 * 30, "{black}");
+    assert!(changed.iter().all(|&(x, y)| x > 240 && y > 400));
+}
+
+#[test]
+fn the_picker_says_why_the_last_picture_did_not_show() {
+    let mut device = Device::new("overlay-picture = owls/missing.png", true);
+    device.run(actions::SLEEP);
+    // Not shown: the cover, of which there is none.
+    assert!(device.says_sleeping());
+    device.wake();
+    device.now += 100;
+    let effects = device
+        .kernel
+        .open_screen(Instant(device.now), overlay::PICK, Params::new());
+    device.settle(effects);
+    let texts = device.texts().join(" | ");
+    assert!(texts.contains("Not shown at the last sleep"), "{texts}");
+    assert!(texts.contains("owls/missing.png"), "{texts}");
+    assert!(texts.contains("Widget: Moon"), "{texts}");
+}
+
+#[test]
+fn other_plugins_add_sleep_modes() {
+    let mut device = Device::new("show = owls.night", true);
+    let choices: Vec<String> = match &device.kernel.settings().spec("sleep.show").unwrap().kind {
+        paperpaw_sdk::SettingKind::Choice(choices) => choices.iter().map(String::from).collect(),
+        _ => Vec::new(),
+    };
+    assert_eq!(choices.last().map(String::as_str), Some("owls.night"));
+    assert!(!choices.iter().any(|c| c == "elsewhere.mode"));
+    let warnings: Vec<String> = device
+        .kernel
+        .take_warnings()
+        .iter()
+        .map(ToString::to_string)
+        .collect();
+    assert!(
+        warnings.iter().any(|w| w.contains("elsewhere.mode")),
+        "{warnings:?}"
+    );
+    device.run(actions::SLEEP);
+    assert_eq!(device.kernel.active_screen().map(Id::as_str), Some(SCREEN));
+    let shown = device.render().to_vec();
+    assert_eq!(at(&shown, 240, 400), Color::BLACK);
+    assert_eq!(at(&shown, 5, 9), Color::BLACK);
+    // Asleep as the sleep screen is: it closes as the device wakes.
+    device.wake();
+    assert_ne!(device.kernel.active_screen().map(Id::as_str), Some(SCREEN));
+}
+
+/// The pixels that differ, as `(x, y)`.
+fn changes(shown: &[Color], page: &[Color]) -> Vec<(usize, usize)> {
+    shown
+        .iter()
+        .zip(page)
+        .enumerate()
+        .filter(|(_, (a, b))| a != b)
+        .map(|(i, _)| (i % 480, i / 480))
+        .collect()
 }

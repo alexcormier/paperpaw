@@ -96,17 +96,41 @@ fn clear_parts_show_what_is_below() {
     let storage = MemoryStorage::new();
     let image = flat(&storage, 2, 0);
     let mut frame = frame(16, 16);
-    ui::draw_image_over(
-        &mut frame.canvas(),
-        &storage,
-        &image,
-        Rect::new(0, 0, 16, 16),
-        255,
-    );
+    let area = Rect::new(0, 0, 16, 16);
+    ui::draw_image_over(&mut frame.canvas(), &storage, &image, area, 255);
     assert_eq!(pixel(&frame, 0, 0), PAPER);
-    assert_eq!(pixel(&frame, 7, 9), PAPER);
-    assert_eq!(pixel(&frame, 8, 9), Color::BLACK);
+    assert_eq!(pixel(&frame, 5, 9), PAPER);
+    assert_eq!(pixel(&frame, 10, 9), Color::BLACK);
     assert_eq!(pixel(&frame, 15, 15), Color::BLACK);
+    // Made larger, the edge is blended, not stepped.
+    let edge = pixel(&frame, 7, 9).luma();
+    assert!(edge < PAPER.luma() && edge > 0, "{edge}");
+}
+
+/// A small picture made larger is interpolated: black to white goes
+/// through grays, evenly, rather than in two blocks.
+#[test]
+fn small_pictures_are_made_larger_smoothly() {
+    let storage = MemoryStorage::new();
+    let mut writer = GrayWriter::new(&storage, "two.gray");
+    writer.start(2, 1).unwrap();
+    writer.row(&[0, 255]).unwrap();
+    writer.finish().unwrap();
+    let image = ImageRef {
+        path: "two.gray".into(),
+        width: 2,
+        height: 1,
+    };
+    let mut frame =
+        paperpaw_graphics::Framebuffer::new(8, 1, paperpaw_sdk::PixelFormat::Gray8).unwrap();
+    ui::draw_image(&mut frame.canvas(), &storage, &image, Rect::new(0, 0, 8, 1));
+    let lumas: Vec<u8> = (0..8).map(|x| pixel(&frame, x, 0).luma()).collect();
+    assert_eq!((lumas[0], lumas[7]), (0, 255), "{lumas:?}");
+    assert!(lumas.windows(2).all(|w| w[0] <= w[1]), "{lumas:?}");
+    assert!(
+        lumas.iter().filter(|&&l| l > 0 && l < 255).count() >= 4,
+        "{lumas:?}"
+    );
 }
 
 #[test]
@@ -150,7 +174,10 @@ fn transparency_is_kept_from_a_png() {
     );
     assert_eq!(pixel(&frame, 0, 0), Color::BLACK);
     assert_eq!(pixel(&frame, 1, 0), PAPER);
-    assert!(image::picture_with_alpha(&storage, "gone.png", "b", image::Fit::side(10)).is_none());
+    assert!(image::picture_with_alpha(&storage, "gone.png", "b", image::Fit::side(10)).is_err());
+    storage.write("text.png", b"not a picture").unwrap();
+    let why = image::picture_with_alpha(&storage, "text.png", "b", image::Fit::side(10));
+    assert!(why.unwrap_err().to_string().contains("format"));
 }
 
 fn crc32(data: &[u8]) -> u32 {

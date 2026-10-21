@@ -49,9 +49,18 @@ impl Kernel {
         let requested = set.or(self.output.refresh.take());
         self.output.refresh.take();
         let told = self.output.refresh_cause.take();
-        // The screen on top, nothing over it, best in grays.
+        // The screen on top, nothing over it (or all of the screen its
+        // own, what is below showing through), best in grays.
+        let bounds = self.framebuffer.bounds();
         let grays = self.stack.last().is_some_and(|top| {
-            top.screen.region(&self.shared.env(self.now)).is_none() && top.screen.grays()
+            let whole = match top.screen.region(&self.shared.env(self.now)) {
+                None => true,
+                Some(region) => {
+                    top.screen.shows_through() != ShowsThrough::Nothing
+                        && region.intersection(&bounds) == Some(bounds)
+                }
+            };
+            whole && top.screen.grays()
         });
         let mut effects = Effects {
             restart: mem::take(&mut self.restart),

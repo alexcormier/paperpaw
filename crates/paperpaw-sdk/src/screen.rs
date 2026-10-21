@@ -137,6 +137,22 @@ impl ScreenKey {
     }
 }
 
+/// What an overlay lets show through it ([`Screen::shows_through`]).
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum ShowsThrough {
+    /// Nothing: it paints all of its region.
+    #[default]
+    Nothing,
+    /// Every screen below it, the overlays among them too (a sticker over
+    /// a menu).
+    All,
+    /// The topmost full screen below it alone: the overlays between are
+    /// not drawn under its region (a picture over the page read, not over
+    /// the reader's menu left open).
+    FullScreen,
+}
+
 /// An open screen, as [`Env::stack`](crate::Env::stack) lists them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -150,6 +166,9 @@ pub struct StackEntry {
     pub overlay: bool,
     /// This opening of it.
     pub key: ScreenKey,
+    /// It guards the device ([`Screen::guards`], a lock): what is below
+    /// it is not to be seen.
+    pub guards: bool,
 }
 
 impl StackEntry {
@@ -160,7 +179,14 @@ impl StackEntry {
             slot,
             overlay,
             key,
+            guards: false,
         }
+    }
+
+    /// The same, guarding the device or not ([`StackEntry::guards`]).
+    pub fn guarding(mut self, guards: bool) -> Self {
+        self.guards = guards;
+        self
     }
 
     /// Whether it is screen `id`, or the screen of slot `id`.
@@ -251,14 +277,14 @@ pub trait Screen {
         false
     }
 
-    /// For an overlay: whether what lies below it shows through it, as
-    /// it draws only parts of its region or blends over it (a picture with
-    /// transparency over the page read, see
-    /// [`ui::draw_image_over`](crate::ui::draw_image_over)). The screens
-    /// below are drawn first, under all of its region. By default an
-    /// overlay paints all of its region, and what lies below is not drawn.
-    fn see_through(&self) -> bool {
-        false
+    /// For an overlay: what lies below it shows through it
+    /// ([`ShowsThrough`]), as it draws only parts of its region or blends
+    /// over it (a picture with transparency over the page read, see
+    /// [`ui::draw_image_over`](crate::ui::draw_image_over)); what shows is
+    /// drawn first, under all of its region. By default an overlay paints
+    /// all of its region, and what lies below is not drawn.
+    fn shows_through(&self) -> ShowsThrough {
+        ShowsThrough::Nothing
     }
 
     /// Reacts to an action. Unhandled actions go to the action's global

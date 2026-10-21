@@ -12,8 +12,12 @@
 //!   edited with the home screen's editor), e.g. the book being read and
 //!   today's reading, in the middle of the screen;
 //! - *Page*: the screen stays as it is;
-//! - *Page with a picture*: the page stays, a picture over it, its clear
-//!   parts showing the page (see [`overlay`]).
+//! - *Page with a picture*: the page stays, a picture or a widget over
+//!   it, its clear parts showing the page (see [`overlay`]);
+//! - a mode of another plugin: it offers a screen of its own among the
+//!   choices (`Registrar::add_choice(sleep::SHOW, "my.sleep-screen")`, the
+//!   value the screen's id and the translation key of its name), which
+//!   the sleep screen shows in its place, sleeping as it does.
 //!
 //! Without a cover or a picture the message shows. Where the device is
 //! off while it sleeps (the X4), this is also what shows as it starts.
@@ -44,12 +48,14 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::Widget;
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Handled, Id, Manifest, MenuNeed, Params, Plugin, Priority,
-    Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, Version,
+    Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, ShowsThrough,
+    Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("sleep");
 /// What the sleep screen shows: one of [`COVER`], [`PICTURE`],
-/// [`MESSAGE`], [`PAGE`].
+/// [`OVERLAY`], [`WIDGETS`], [`MESSAGE`], [`PAGE`], or a screen another
+/// plugin offers ([`paperpaw_sdk::Registrar::add_choice`]).
 pub const SHOW: Setting<Text> = Setting::new("sleep.show");
 pub const COVER: &str = "sleep.show.cover";
 pub const PICTURE: &str = "sleep.show.picture";
@@ -69,7 +75,7 @@ const SECTION: &str = "sleep.section";
 /// The folder chooser of the `files` plugin, if installed.
 const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 
-fn data(name: &str) -> String {
+pub(crate) fn data(name: &str) -> String {
     format!("{}/{name}", Env::plugin_dir(PLUGIN.as_str()))
 }
 
@@ -97,7 +103,7 @@ static PERCENT: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
 
 /// What the sleep screen shows, the folder of its pictures, its widgets
 /// and its picture over the page.
-static SETTINGS: [SettingSpec; 8] = [
+static SETTINGS: [SettingSpec; 9] = [
     SettingSpec::fixed_choice(
         SHOW.static_str(),
         "sleep.setting.show",
@@ -134,11 +140,19 @@ static SETTINGS: [SettingSpec; 8] = [
     )
     .with_extra(&PICKED_EXTRA)
     .described("sleep.setting.overlay-picture.help"),
+    SettingSpec::fixed_text(
+        overlay::WIDGET.static_str(),
+        "sleep.setting.overlay-widget",
+        "",
+        groups::DISPLAY,
+    )
+    .with_extra(&PICKED_EXTRA)
+    .described("sleep.setting.overlay-widget.help"),
     SettingSpec::fixed_choice(
         overlay::POSITION.static_str(),
         "sleep.setting.overlay-position",
         &overlay::POSITIONS,
-        overlay::POSITIONS[0],
+        overlay::DEFAULT_POSITION,
         groups::DISPLAY,
     )
     .with_extra(&IN_SLEEP)
@@ -148,7 +162,7 @@ static SETTINGS: [SettingSpec; 8] = [
         "sleep.setting.overlay-size",
         10,
         100,
-        50,
+        overlay::DEFAULT_SIZE,
         groups::DISPLAY,
     )
     .with_extra(&PERCENT)
@@ -185,17 +199,18 @@ impl Plugin for Sleep {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
-        for item in [
-            SHOW,
-            FOLDER,
-            WIDGET_LIST,
-            overlay::PICTURE,
-            overlay::POSITION,
-            overlay::USED,
-        ] {
-            r.set_menu_need(item, MenuNeed::Sleep)?;
-        }
-        for item in [overlay::SIZE, overlay::SEE_THROUGH] {
+        let items: [Id; 9] = [
+            SHOW.into(),
+            FOLDER.into(),
+            WIDGET_LIST.into(),
+            overlay::PICTURE.into(),
+            overlay::WIDGET.into(),
+            overlay::POSITION.into(),
+            overlay::SIZE.into(),
+            overlay::SEE_THROUGH.into(),
+            overlay::USED.into(),
+        ];
+        for item in items {
             r.set_menu_need(item, MenuNeed::Sleep)?;
         }
         r.add_screen(ScreenSpec::new(
@@ -340,8 +355,10 @@ fn place_widgets(env: &Env<'_>) -> Vec<(Box<dyn Widget>, Rect)> {
 struct SleepScreen {
     show: String,
     image: Option<ImageRef>,
-    /// Where the picture over the page goes, how opaque it is.
-    over_page: Option<(Rect, u8)>,
+    /// What goes over the page, where, how opaque.
+    over_page: Option<(overlay::Over, Rect, u8)>,
+    /// Another plugin's screen shown in its place (its mode).
+    shown: Option<Box<dyn Screen>>,
     /// The widgets shown, where they go.
     widgets: Vec<(Box<dyn Widget>, Rect)>,
     /// The logo above the message, when the message shows.
@@ -353,23 +370,32 @@ struct SleepScreen {
 impl SleepScreen {
     fn new(env: &Env<'_>) -> Self {
         let mut show = env.settings.read(&SHOW).to_string();
-        // The picture over the page where it is used now, and there is
-        // one; else the cover.
+        // What goes over the page where it is used now, and there is
+        // something; else the cover. Why not is kept for the picker.
         let mut over_page = None;
-        let mut image = None;
         if show == OVERLAY {
-            image = overlay::used(env)
-                .then(|| overlay::picture(env, &data("overlay.gray")))
-                .flatten();
-            match &image {
-                Some(picture) => {
-                    over_page = Some((overlay::place(env, picture), overlay::opacity(env)));
+            if overlay::used(env) {
+                match overlay::over(env) {
+                    Ok(mut over) => {
+                        let area = overlay::place(env, &mut over);
+                        over_page = Some((over, area, overlay::opacity(env)));
+                        overlay::remember_failure(env, None);
+                    }
+                    Err(why) => overlay::remember_failure(env, Some(&why)),
                 }
-                None => show = COVER.to_string(),
+            }
+            if over_page.is_none() {
+                show = COVER.to_string();
             }
         }
+        // A mode of another plugin: its screen.
+        let shown = (!BUILT_IN.contains(&show.as_str()))
+            .then(|| Id::parse(&show).ok())
+            .flatten()
+            .and_then(|id| env.make_screen(&id, &Params::new()));
         let image = match show.as_str() {
-            OVERLAY => image,
+            _ if shown.is_some() => None,
+            OVERLAY => None,
             PICTURE => picture(env),
             MESSAGE | PAGE | WIDGETS => None,
             _ => cover(env),
@@ -379,7 +405,11 @@ impl SleepScreen {
         } else {
             Vec::new()
         };
-        let message = image.is_none() && widgets.is_empty() && show != PAGE;
+        let message = image.is_none()
+            && widgets.is_empty()
+            && show != PAGE
+            && over_page.is_none()
+            && shown.is_none();
         let logo = message.then(|| {
             let side = logo_side(env);
             Logo::read(env, side, side)
@@ -388,6 +418,7 @@ impl SleepScreen {
             show,
             image,
             over_page,
+            shown,
             widgets,
             logo,
             woke: false,
@@ -397,8 +428,11 @@ impl SleepScreen {
 
 impl Screen for SleepScreen {
     fn region(&self, env: &Env<'_>) -> Option<Rect> {
+        if let Some(shown) = &self.shown {
+            return shown.region(env);
+        }
         // The page stays: nothing is drawn over it, or the picture over
-        // all of it, the page drawn below (`see_through`).
+        // all of it, the page drawn below (`shows_through`).
         let display = env.device.display;
         match self.show.as_str() {
             PAGE => Some(Rect::new(0, 0, 0, 0)),
@@ -407,16 +441,27 @@ impl Screen for SleepScreen {
         }
     }
 
-    fn see_through(&self) -> bool {
-        self.over_page.is_some()
+    fn shows_through(&self) -> ShowsThrough {
+        if let Some(shown) = &self.shown {
+            return shown.shows_through();
+        }
+        // The page, not a menu left open over it.
+        if self.over_page.is_some() {
+            ShowsThrough::FullScreen
+        } else {
+            ShowsThrough::Nothing
+        }
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        if let Some(shown) = &mut self.shown {
+            return shown.draw(canvas, env);
+        }
         if self.show == PAGE {
             return;
         }
-        if let (Some((area, opacity)), Some(image)) = (self.over_page, &self.image) {
-            ui::draw_image_over(canvas, env.storage, image, area, opacity);
+        if let Some((over, area, opacity)) = &self.over_page {
+            overlay::draw(canvas, env, over, *area, *opacity);
             return;
         }
         let display = env.device.display;
@@ -468,9 +513,14 @@ impl Screen for SleepScreen {
         }
     }
 
-    /// A cover or a picture: in grays where the panel can.
+    /// A cover or a picture (also over the page): in grays where the
+    /// panel can.
     fn grays(&self) -> bool {
-        self.show != PAGE && self.image.is_some() && self.widgets.is_empty()
+        if let Some(shown) = &self.shown {
+            return shown.grays();
+        }
+        let picture_over = matches!(self.over_page, Some((overlay::Over::Picture(_), ..)));
+        picture_over || (self.show != PAGE && self.image.is_some() && self.widgets.is_empty())
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -500,6 +550,9 @@ impl Screen for SleepScreen {
         }
     }
 }
+
+/// The modes of this plugin; others name another plugin's screen.
+const BUILT_IN: [&str; 6] = [COVER, PICTURE, OVERLAY, WIDGETS, MESSAGE, PAGE];
 
 /// The logo's size on the sleep screen: a third of the screen across.
 fn logo_side(env: &Env<'_>) -> u16 {

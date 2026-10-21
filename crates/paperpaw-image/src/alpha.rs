@@ -17,6 +17,7 @@ const FLUSH: usize = 8192;
 
 /// A decoded image with transparency in storage.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct AlphaFile {
     pub path: String,
     pub width: u32,
@@ -24,6 +25,15 @@ pub struct AlphaFile {
 }
 
 impl AlphaFile {
+    /// Made of its parts.
+    pub fn new(path: &str, width: u32, height: u32) -> Self {
+        Self {
+            path: String::from(path),
+            width,
+            height,
+        }
+    }
+
     /// Opens a decoded image with transparency, checking its size.
     pub fn open(storage: &dyn Storage, path: &str) -> Option<AlphaFile> {
         let mut header = [0u8; HEADER as usize];

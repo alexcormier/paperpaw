@@ -66,6 +66,13 @@ pub enum Contribution {
         setting: Id,
         value: Cow<'static, str>,
     },
+    /// Another value of any plugin's choice setting (see
+    /// [`Registrar::add_choice`]).
+    #[non_exhaustive]
+    Choice {
+        setting: Id,
+        value: Cow<'static, str>,
+    },
     /// Default key bindings (see [`Registrar::add_keymap`]).
     Keymap(Cow<'static, str>),
     #[non_exhaustive]
@@ -207,6 +214,7 @@ impl Contribution {
             Contribution::Setting(_) | Contribution::FixedSettings(_) => "setting",
             Contribution::SettingGroup(_) => "setting-group",
             Contribution::SettingDefault { .. } => "setting-default",
+            Contribution::Choice { .. } => "choice",
             Contribution::Keymap(_) => "keymap",
             Contribution::KeymapPreset { .. } => "keymap-preset",
             Contribution::KeymapWhen { .. } => "keymap-when",
@@ -934,6 +942,23 @@ impl Registrar {
         value: Cow<'static, str>,
     ) -> Result<(), RegisterError> {
         self.add(Contribution::SettingDefault { setting, value })
+    }
+
+    /// Offers `value` among the choices of any plugin's choice setting,
+    /// after its own: e.g. a sleep mode of one's own in `sleep.show`. The
+    /// value is in this plugin's namespace and the translation key of its
+    /// name; what it means is the setting's plugin's to say (the sleep
+    /// screen shows the screen of that id). Settings that are no choice,
+    /// or keep the device safe, take none.
+    pub fn add_choice(
+        &mut self,
+        setting: impl Into<Id>,
+        value: impl Into<Cow<'static, str>>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::Choice {
+            setting: setting.into(),
+            value: value.into(),
+        })
     }
 }
 

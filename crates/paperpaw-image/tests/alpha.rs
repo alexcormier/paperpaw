@@ -12,7 +12,7 @@ mod common;
 use std::cell::RefCell;
 use std::collections::BTreeMap;
 
-use common::{Jpeg, PNG_KINDS, Png, decoded, png_channels};
+use common::{Gif, Jpeg, PNG_KINDS, Png, decoded, png_channels};
 use paperpaw_image::{
     AlphaFile, AlphaWriter, Fit, Format, ImageFile, ImageSink, decode, over_white,
 };
@@ -232,4 +232,103 @@ fn alpha_files_are_laid_out_as_documented() {
     gray[..4].copy_from_slice(b"PPGI");
     storage.put("b", &gray);
     assert!(AlphaFile::open(&storage, "b").is_none());
+}
+
+#[test]
+fn a_colour_key_makes_gray_and_rgb_pixels_clear() {
+    for (color, depth) in [(0, 1), (0, 4), (0, 8), (0, 16), (2, 8), (2, 16)] {
+        let what = format!("type {color} depth {depth}");
+        let mut png = Png::new(9, 3, color, depth, u64::from(depth) * 5 + u64::from(color));
+        let channels = png_channels(color);
+        let key: Vec<u16> = png.samples[1][..channels].to_vec();
+        if depth == 16 {
+            // The same high byte, another low one: not the key.
+            let mut near = key.clone();
+            near[0] ^= 1;
+            png.samples[2][..channels].copy_from_slice(&near);
+        }
+        png.trns = Some(key.iter().flat_map(|v| v.to_be_bytes()).collect());
+        let (_, pixels) = with_alpha(&png.encode(), Fit::side(1000));
+        let flat = decoded(&png.encode(), Fit::side(1000), false);
+        let mut cleared = 0;
+        for (i, p) in pixels.chunks(2).enumerate() {
+            let (x, y) = (i % 9, i / 9);
+            let sample = &png.samples[y][x * channels..(x + 1) * channels];
+            let clear = sample == key.as_slice();
+            assert_eq!(p[1] == 0, clear, "{what}: pixel {x},{y}");
+            assert!(p[1] == 0 || p[1] == 255, "{what}");
+            if clear {
+                cleared += 1;
+                assert_eq!(flat.pixels[i], 255, "{what}: over white");
+            }
+        }
+        assert!(cleared >= 1, "{what}");
+        if depth == 16 {
+            assert_eq!(pixels[9 * 2 * 2 + 1], 255, "{what}: the low byte counts");
+        }
+    }
+}
+
+#[test]
+fn the_kind_of_a_decoded_file_is_read_from_its_header_once() {
+    use paperpaw_image::Decoded;
+    let storage = Files::default();
+    for (magic, bytes) in [(b"PPGI", 1), (b"PPCI", 3), (b"PPGA", 2)] {
+        let mut data = magic.to_vec();
+        data.extend_from_slice(&2u32.to_le_bytes());
+        data.extend_from_slice(&3u32.to_le_bytes());
+        data.extend(std::iter::repeat_n(7u8, 6 * bytes));
+        storage.put("f", &data);
+        let opened = Decoded::open(&storage, "f").unwrap();
+        assert_eq!(opened.size(), (2, 3));
+        let kind = match &opened {
+            Decoded::Gray(_) => 1,
+            Decoded::Color(_) => 3,
+            Decoded::Alpha(_) => 2,
+        };
+        assert_eq!(kind, bytes);
+        let file = ImageFile::open(&storage, "f").unwrap();
+        assert_eq!((file.color, file.alpha), (bytes == 3, bytes == 2));
+        // Cut short: refused when opened, trusted when peeked at.
+        storage.put("f", &data[..data.len() - 1]);
+        assert!(Decoded::open(&storage, "f").is_none());
+        assert_eq!(Decoded::peek(&storage, "f"), Some(opened));
+    }
+    storage.put("f", b"PPXX\x01\0\0\0\x01\0\0\0\0");
+    assert!(Decoded::peek(&storage, "f").is_none());
+}
+
+#[test]
+fn a_gifs_transparent_colour_and_its_screen_are_clear() {
+    for interlaced in [false, true] {
+        let mut gif = Gif::new(12, 10, 16, 9);
+        gif.left = 2;
+        gif.top = 1;
+        gif.frame_width = 8;
+        gif.frame_height = 7;
+        gif.indices = (0..8 * 7).map(|i| (i % 16) as u8).collect();
+        gif.interlaced = interlaced;
+        gif.transparent = Some(3);
+        let (file, pixels) = with_alpha(&gif.encode(), Fit::side(1000));
+        assert_eq!((file.width, file.height), (12, 10));
+        let flat = decoded(&gif.encode(), Fit::side(1000), false);
+        for y in 0..10usize {
+            for x in 0..12usize {
+                let at = y * 12 + x;
+                let inside = (2..10).contains(&x) && (1..8).contains(&y);
+                let index = inside.then(|| ((y - 1) * 8 + (x - 2)) % 16);
+                let clear = index.is_none_or(|i| i == 3);
+                assert_eq!(
+                    pixels[at * 2 + 1] == 0,
+                    clear,
+                    "{x},{y} interlaced {interlaced}"
+                );
+                if clear {
+                    assert_eq!(flat.pixels[at], 255);
+                } else {
+                    assert_eq!(pixels[at * 2], flat.pixels[at]);
+                }
+            }
+        }
+    }
 }

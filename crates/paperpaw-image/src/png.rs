@@ -54,6 +54,9 @@ struct Rows<'s> {
     colors: [[u8; 3]; 256],
     /// Gray and opacity of each palette entry, for transparency.
     see_through: [[u8; 2]; 256],
+    /// The colour shown as clear in a gray or RGB image (`tRNS`), its raw
+    /// samples (gray in the first).
+    key: Option<[u16; 3]>,
     color: bool,
     alpha: bool,
     previous: Vec<u8>,
@@ -142,6 +145,33 @@ impl Rows<'_> {
         Ok(())
     }
 
+    /// Sample `index` of the row as stored, all 16 bits of 16-bit images.
+    fn raw(row: &[u8], depth: u8, index: usize) -> u16 {
+        match depth {
+            8 => u16::from(row[index]),
+            16 => u16::from_be_bytes([row[index * 2], row[index * 2 + 1]]),
+            bits => {
+                let bit = index * usize::from(bits);
+                let shift = 8 - usize::from(bits) - bit % 8;
+                u16::from(row[bit / 8] >> shift) & ((1 << bits) - 1)
+            }
+        }
+    }
+
+    /// Whether pixel `x` of the row is the clear colour (`tRNS` of a gray
+    /// or RGB image).
+    fn keyed(&self, row: &[u8], x: usize) -> bool {
+        let Some(key) = self.key else {
+            return false;
+        };
+        let h = &self.header;
+        match h.color {
+            0 => Self::raw(row, h.depth, x) == key[0],
+            2 => (0..3).all(|c| Self::raw(row, h.depth, x * 3 + c) == key[c]),
+            _ => false,
+        }
+    }
+
     /// Sample `index` of the row, scaled to 0 to 255.
     fn sample(row: &[u8], depth: u8, index: usize) -> u32 {
         match depth {
@@ -165,6 +195,10 @@ impl Rows<'_> {
         for x in 0..h.width as usize {
             let s = |c: usize| Self::sample(row, h.depth, x * channels + c);
             let over_white = |v: u32, alpha: u32| (v * alpha + 255 * (255 - alpha)) / 255;
+            if self.keyed(row, x) {
+                self.gray[x] = 255;
+                continue;
+            }
             self.gray[x] = match h.color {
                 0 => s(0),
                 2 => luma(s(0), s(1), s(2)),
@@ -194,9 +228,10 @@ impl Rows<'_> {
         let channels = h.channels();
         for x in 0..h.width as usize {
             let s = |c: usize| Self::sample(row, h.depth, x * channels + c);
+            let keyed = self.keyed(row, x);
             let pixel = match h.color {
-                0 => [s(0) as u8, 255],
-                2 => [luma(s(0), s(1), s(2)) as u8, 255],
+                0 => [s(0) as u8, if keyed { 0 } else { 255 }],
+                2 => [luma(s(0), s(1), s(2)) as u8, if keyed { 0 } else { 255 }],
                 3 => {
                     let index = if h.depth == 8 {
                         usize::from(row[x])
@@ -223,6 +258,10 @@ impl Rows<'_> {
         for x in 0..h.width as usize {
             let s = |c: usize| Self::sample(row, h.depth, x * channels + c);
             let over_white = |v: u32, alpha: u32| ((v * alpha + 255 * (255 - alpha)) / 255) as u8;
+            if self.keyed(row, x) {
+                self.gray[x * 3..x * 3 + 3].fill(255);
+                continue;
+            }
             let rgb = match h.color {
                 0 => [s(0) as u8; 3],
                 2 => [s(0) as u8, s(1) as u8, s(2) as u8],
@@ -267,6 +306,7 @@ pub(crate) fn decode(
     let mut header: Option<Header> = None;
     let mut palette = [255u8; 256];
     let mut alpha = [255u8; 256];
+    let mut key: Option<[u16; 3]> = None;
     let mut colors = [(0u8, 0u8, 0u8); 256];
     let mut rows: Option<Rows<'_>> = None;
     let mut sink = Some(sink);
@@ -324,6 +364,24 @@ pub(crate) fn decode(
                 }
                 reader.skip(len.saturating_sub(256))?;
             }
+            // The one colour of a gray or RGB image shown as clear.
+            b"tRNS" if header.as_ref().is_some_and(|h| matches!(h.color, 0 | 2)) => {
+                let samples = if header.as_ref().is_some_and(|h| h.color == 0) {
+                    1
+                } else {
+                    3
+                };
+                if len >= samples * 2 {
+                    let mut value = [0u16; 3];
+                    for sample in value.iter_mut().take(samples) {
+                        *sample = u16::from_be_bytes([reader.byte()?, reader.byte()?]);
+                    }
+                    key = Some(value);
+                    reader.skip(len - samples * 2)?;
+                } else {
+                    reader.skip(len)?;
+                }
+            }
             b"IDAT" => {
                 if rows.is_none() {
                     let h = header
@@ -344,7 +402,8 @@ pub(crate) fn decode(
                     // Transparency where the image has it and the sink
                     // wants it; then colour.
                     let has_alpha = matches!(h.color, 4 | 6)
-                        || (h.color == 3 && alpha.iter().any(|&a| a < 255));
+                        || (h.color == 3 && alpha.iter().any(|&a| a < 255))
+                        || key.is_some();
                     let with_alpha = has_alpha && sink.wants_alpha();
                     let color = !with_alpha && sink.wants_color();
                     let channels = if with_alpha {
@@ -361,6 +420,7 @@ pub(crate) fn decode(
                         palette,
                         colors: rgb,
                         see_through,
+                        key,
                         color,
                         alpha: with_alpha,
                         previous: zeroed(row_len)?,
