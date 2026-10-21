@@ -302,9 +302,15 @@ pub(crate) fn at_start(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command
         }
     };
     // Installed meanwhile (from the card) or no longer newer: nothing
-    // waits; nor where what it waits for is no longer in use.
+    // waits, nor is the answer kept; nor does it wait where what it waits
+    // for is no longer in use.
+    if !compare_versions(&waiting.version, &firmware.version).is_gt() {
+        clear(storage);
+        online::clear_offer(storage);
+        return false;
+    }
     let holding = waiting.holding.still(env, firmware);
-    if !compare_versions(&waiting.version, &firmware.version).is_gt() || holding.is_empty() {
+    if holding.is_empty() {
         clear(storage);
         return false;
     }

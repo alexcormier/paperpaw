@@ -378,6 +378,10 @@ fn an_update_installed_meanwhile_waits_no_more() {
     let mut device = with_code_plugin(storage, "0.5.0", "");
     device.no_request();
     assert!(device.storage.0.get(WAITING).is_none());
+    assert!(
+        device.storage.0.get(OFFER).is_none(),
+        "the answer let go too"
+    );
 }
 
 /// A dictionary of one's own with code, built for the firmware running.

@@ -74,6 +74,8 @@ enum View {
         offer: Offer,
         leaves: Vec<String>,
         stopping: String,
+        /// Chosen anyway while it waits (and it still does).
+        anyway: bool,
     },
     /// An update the server named that waits for plugins: their names,
     /// and those of the crates that cannot come along in any case.
@@ -272,6 +274,8 @@ impl UpdatePage {
                     offer,
                     leaves,
                     stopping,
+                    // Waiting no more, it is offered as any update.
+                    anyway: self.anyway && !holding.is_empty(),
                 }
             }
             (Err(InstallFailure::Unreadable) | Ok(_), None) => View::Nothing,
@@ -291,7 +295,11 @@ impl UpdatePage {
         // Why each is missing; not after choosing anyway, where they are
         // all gone alike (said once for all of them).
         let offer = match &self.view {
-            View::Offer { offer, .. } if !self.anyway => Some(offer),
+            View::Offer {
+                offer,
+                anyway: false,
+                ..
+            } => Some(offer),
             _ => None,
         };
         let names: Vec<String> = crates
@@ -319,7 +327,7 @@ impl UpdatePage {
         // Before a download, the choice is to download without them;
         // chosen anyway while it waits, they are gone after it.
         let key = match self.view {
-            View::Offer { .. } if self.anyway => "update.leaves.anyway",
+            View::Offer { anyway: true, .. } => "update.leaves.anyway",
             View::Offer { .. } => "update.leaves.download",
             _ => "update.leaves",
         };
@@ -351,7 +359,7 @@ impl UpdatePage {
             View::Ready { .. } => alloc::vec![Button::Install, Button::Close],
             // Chosen anyway while it waits: not downloading is the safe
             // way on, which a second press does not pass by.
-            View::Offer { .. } if self.anyway => alloc::vec![Button::Close, Button::Download],
+            View::Offer { anyway: true, .. } => alloc::vec![Button::Close, Button::Download],
             View::Offer { .. } => alloc::vec![Button::Download, Button::Close],
             // Waiting is the way on; updating anyway, or asking again, the
             // others.
@@ -392,7 +400,7 @@ impl UpdatePage {
             }
             (Button::Install, _) => "update.install",
             // Chosen anyway: right whether plugins stay off or are gone.
-            (Button::Download, View::Offer { .. }) if self.anyway => "update.download-anyway",
+            (Button::Download, View::Offer { anyway: true, .. }) => "update.download-anyway",
             (Button::Download, View::Offer { leaves, .. }) if !leaves.is_empty() => {
                 "update.download-without"
             }
@@ -481,6 +489,7 @@ impl UpdatePage {
                 offer,
                 leaves,
                 stopping,
+                anyway,
             } => {
                 let size = files::size(offer.size, env.i18n.tr("update.decimal"));
                 let help = with(
@@ -494,7 +503,7 @@ impl UpdatePage {
                 // Chosen anyway, what it costs is what counts: what stops
                 // working first (cut short, the end goes), then what is
                 // gone; not the size, which leaves no room for them.
-                let mut help = if self.anyway { String::new() } else { help };
+                let mut help = if *anyway { String::new() } else { help };
                 if !stopping.is_empty() {
                     help.push(' ');
                     help.push_str(&with("update.stopping", &[("plugins", Arg::Str(stopping))]));
