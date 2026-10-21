@@ -49,7 +49,10 @@ sends `{ type: "ready", version }` (PaperPaw's version and the commit
 the module was built from). A panic stops a WebAssembly module for good:
 the frame then makes a fresh instance, starts the device as it was last
 started with the data plugins it had, and sends
-`{ type: "restarted", reason }`.
+`{ type: "restarted", reason }`. Where the device runs out of its
+memory (the X4's heap budget), the browser goes on all the same and the
+frame sends `{ type: "out-of-memory", count, device }`: the device would
+have stopped there.
 
 | Message to the frame | Effect | Answer |
 |---|---|---|

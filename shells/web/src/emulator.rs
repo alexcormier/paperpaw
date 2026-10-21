@@ -287,6 +287,14 @@ impl Emulator {
         Ok(report?.json())
     }
 
+    /// How often the device ran out of its memory (the X4's heap budget)
+    /// since the emulator started: in a browser such allocations are made
+    /// all the same and counted (`budget::set_soft`), where the device
+    /// would have stopped.
+    pub fn out_of_memory(&self) -> usize {
+        budget::stats().failed
+    }
+
     /// The device as the page shows it, as JSON: its name, screen size,
     /// grays and dpi, whether it has touch, its buttons and those in a
     /// row below the screen.

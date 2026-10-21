@@ -32,6 +32,8 @@ static FAILED: AtomicUsize = AtomicUsize::new(0);
 static TRACE: AtomicUsize = AtomicUsize::new(usize::MAX);
 /// Whether live allocations are recorded with their call site.
 static PROFILE: AtomicBool = AtomicBool::new(false);
+/// Allocations past the budget are counted but made (see [`set_soft`]).
+static SOFT: AtomicBool = AtomicBool::new(false);
 /// Live tracked allocations: address → (size, where it was made).
 static SITES: Mutex<Option<HashMap<usize, (usize, Backtrace)>>> = Mutex::new(None);
 
@@ -92,7 +94,9 @@ unsafe impl GlobalAlloc for BudgetAllocator {
         let charge = layout.size() + HEADER;
         if LIVE.load(Ordering::Relaxed) + charge > LIMIT.load(Ordering::Relaxed) {
             FAILED.fetch_add(1, Ordering::Relaxed);
-            return std::ptr::null_mut();
+            if !SOFT.load(Ordering::Relaxed) {
+                return std::ptr::null_mut();
+            }
         }
         // SAFETY: same contract as the caller's.
         let ptr = unsafe { alloc_marked(layout, true) };
@@ -196,6 +200,13 @@ pub fn set_limit(limit: Option<usize>) {
 pub fn override_limit(limit: Option<usize>) {
     LIMIT.store(limit.unwrap_or(usize::MAX), Ordering::Relaxed);
     OVERRIDDEN.store(true, Ordering::Relaxed);
+}
+
+/// Makes allocations past the budget all the same, counted as refused
+/// ([`Stats::failed`]): where running out would stop everything (a
+/// browser's module traps for good) and saying so is better.
+pub fn set_soft(soft: bool) {
+    SOFT.store(soft, Ordering::Relaxed);
 }
 
 /// Ends [`override_limit`]: the budget is `limit` again, and the next

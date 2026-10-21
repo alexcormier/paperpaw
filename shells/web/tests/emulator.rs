@@ -137,3 +137,37 @@ fn the_plugin_is_checked_and_the_device_keeps_going() {
     emulator.advance(20_000);
     assert!(!emulator.shown().is_empty());
 }
+
+/// A picture on the sleep screen of an X4 (256 KiB of heap): what the
+/// kernel writes to the card in memory is no heap of the device's.
+#[test]
+fn a_sleep_picture_fits_the_x4s_heap() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let picture = include_bytes!("data/stripes-480x800-2bit.png");
+    let mut emulator = Emulator::new("xteink-x4", "en", false).unwrap();
+    let plugin = [
+        (
+            "plugin.ini",
+            &b"[plugin]\nid = nights\nname = Nights\nversion = 1.0.0\n"[..],
+        ),
+        (
+            "settings.ini",
+            b"[sleep]\nshow = sleep.show.picture\nfolder = plugins/nights/sleep\n",
+        ),
+        ("sleep/stripes.png", picture),
+    ];
+    for (path, bytes) in plugin {
+        emulator.put_file("nights", path, bytes).unwrap();
+    }
+    emulator.start().unwrap();
+    emulator.advance(5_000);
+    let before = paperpaw_emulator::budget::stats().failed;
+    assert!(emulator.button("power", true));
+    assert!(emulator.button("power", false));
+    emulator.advance(10_000);
+    assert_eq!(
+        paperpaw_emulator::budget::stats().failed,
+        before,
+        "ran out of memory"
+    );
+}

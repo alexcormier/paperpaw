@@ -22,6 +22,8 @@ let last = null;
 let plugins = {};
 let timer = null;
 let drawing = false;
+/// How often the device had run out of memory when last looked.
+let outOfMemory = 0;
 
 const loading = PaperPawDevice.load(new URL("paperpaw-web.wasm", import.meta.url));
 
@@ -89,6 +91,10 @@ function step() {
   clearTimeout(timer);
   if (!device) return;
   const next = guarded(() => device.advance(now()));
+  // Past the device's memory: where the device would have stopped.
+  const over = device.outOfMemory();
+  if (over > outOfMemory) tell({ type: "out-of-memory", count: over, device: info?.id });
+  outOfMemory = over;
   requestDraw();
   if (next !== null) timer = setTimeout(step, Math.max(next, 1));
 }

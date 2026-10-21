@@ -156,6 +156,12 @@ export class PaperPawDevice {
     return [this.exports.pp_width(), this.exports.pp_height()];
   }
 
+  /// How often the device ran out of its memory (the X4's heap budget):
+  /// in a browser it goes on, where the device would have stopped.
+  outOfMemory() {
+    return this.exports.pp_out_of_memory();
+  }
+
   /// Whether the panel still changes by itself (a full refresh flashing).
   animating() {
     return this.exports.pp_animating() === 1;

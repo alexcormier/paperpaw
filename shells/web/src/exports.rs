@@ -171,6 +171,8 @@ pub unsafe extern "C" fn pp_new(
 ) -> u32 {
     std::panic::set_hook(Box::new(|info| log(&info.to_string())));
     paperpaw_emulator::host::set_random(random);
+    // Past the device's memory: said, rather than a trap that stops all.
+    paperpaw_emulator::budget::set_soft(true);
     // SAFETY: as the caller promises.
     let (profile, language) = unsafe {
         (
@@ -321,6 +323,13 @@ pub extern "C" fn pp_shown() -> *const u8 {
         state.shown.as_ptr()
     })
     .unwrap_or(std::ptr::null())
+}
+
+/// How often the device ran out of its memory since the module started
+/// (see [`Emulator::out_of_memory`]).
+#[unsafe(no_mangle)]
+pub extern "C" fn pp_out_of_memory() -> u32 {
+    read(0, |e| e.out_of_memory() as u32)
 }
 
 /// 1 while the panel still changes by itself (a full refresh flashing).

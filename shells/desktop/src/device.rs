@@ -66,56 +66,63 @@ pub enum Card {
 }
 
 impl Card {
-    fn get(&self) -> &dyn Storage {
+    /// `f` on the storage. The files of a card in memory are the card's,
+    /// not the device's heap: what keeping them takes is not counted
+    /// against the budget (a decoded picture would fill an X4's).
+    fn on<R>(&self, f: impl FnOnce(&dyn Storage) -> R) -> R {
         match self {
-            Card::Dir(storage) => storage,
-            Card::Memory(files) => &**files,
+            Card::Dir(storage) => f(storage),
+            Card::Memory(files) => budget::untracked(|| f(&**files)),
         }
     }
 }
 
 impl Storage for Card {
     fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
-        self.get().read_at(path, offset, buf)
+        self.on(|s| s.read_at(path, offset, buf))
     }
     fn size(&self, path: &str) -> Result<u64, StorageError> {
-        self.get().size(path)
+        self.on(|s| s.size(path))
     }
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
-        self.get().write(path, data)
+        self.on(|s| s.write(path, data))
     }
     fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
-        self.get().append(path, data)
+        self.on(|s| s.append(path, data))
     }
     fn sync(&self) -> Result<(), StorageError> {
-        self.get().sync()
+        self.on(|s| s.sync())
     }
     fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
-        self.get().list(dir, visit)
+        // What the visitor keeps is the kernel's: counted.
+        match self {
+            Card::Dir(storage) => storage.list(dir, visit),
+            Card::Memory(files) => files.list(dir, visit),
+        }
     }
     fn remove(&self, path: &str) -> Result<(), StorageError> {
-        self.get().remove(path)
+        self.on(|s| s.remove(path))
     }
     fn exists(&self, path: &str) -> bool {
-        self.get().exists(path)
+        self.on(|s| s.exists(path))
     }
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
-        self.get().rename(from, to)
+        self.on(|s| s.rename(from, to))
     }
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
-        self.get().create_dir(path)
+        self.on(|s| s.create_dir(path))
     }
     fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
-        self.get().remove_dir_all(path)
+        self.on(|s| s.remove_dir_all(path))
     }
     fn ignores_case(&self) -> bool {
-        self.get().ignores_case()
+        self.on(|s| s.ignores_case())
     }
     fn free_space(&self) -> Option<u64> {
-        self.get().free_space()
+        self.on(|s| s.free_space())
     }
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
-        self.get().local_path(path, with);
+        self.on(|s| s.local_path(path, with));
     }
 }
 

@@ -71,6 +71,20 @@ fn a_tracked_allocation_past_the_budget_is_refused_and_counted() {
 }
 
 #[test]
+fn soft_a_tracked_allocation_past_the_budget_is_made_and_counted() {
+    let _alone = alone();
+    let before = stats();
+    set_limit(Some(before.live + 2048));
+    set_soft(true);
+    let made = track(|| Vec::<u8>::new().try_reserve_exact(4096));
+    set_soft(false);
+    let after = stats();
+    set_limit(None);
+    assert!(made.is_ok(), "made all the same");
+    assert_eq!(after.failed, before.failed + 1, "counted as past it");
+}
+
+#[test]
 fn untracked_allocations_are_never_refused() {
     let _alone = alone();
     set_limit(Some(live()));
