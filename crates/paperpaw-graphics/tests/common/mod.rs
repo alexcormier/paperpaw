@@ -64,6 +64,8 @@ pub enum Op {
     Pixel(Point, Color),
     GrayRow(i32, i32, Vec<u8>),
     RgbRow(i32, i32, Vec<u8>),
+    /// Gray and opacity a pixel, and the row's opacity.
+    GrayAlphaRow(i32, i32, Vec<u8>, u8),
     /// A mask whose coverage is a pattern of its seed.
     Mask(i32, i32, u32, u32, u8, Color),
     SmallPictures(Vec<u8>),
@@ -96,6 +98,7 @@ pub fn draw(canvas: &mut Canvas<'_>, op: &Op) {
         Op::Pixel(p, color) => canvas.set_pixel(p, color),
         Op::GrayRow(x, y, row) => canvas.draw_gray_row(x, y, &row),
         Op::RgbRow(x, y, row) => canvas.draw_rgb_row(x, y, &row),
+        Op::GrayAlphaRow(x, y, row, opacity) => canvas.draw_gray_alpha_row(x, y, &row, opacity),
         Op::Mask(x, y, w, h, seed, color) => canvas.draw_mask(x, y, w, h, color, |dx, dy| {
             (dx.wrapping_mul(31) ^ dy.wrapping_mul(17) ^ u32::from(seed)) as u8
         }),
@@ -157,6 +160,13 @@ pub fn op(rgb: bool) -> impl Strategy<Value = Op> {
             .prop_map(|(x, y, row)| Op::GrayRow(x, y, row)),
         (xy(), xy(), proptest::collection::vec(any::<u8>(), 0..360))
             .prop_map(|(x, y, row)| Op::RgbRow(x, y, row)),
+        (
+            xy(),
+            xy(),
+            proptest::collection::vec(any::<u8>(), 0..240),
+            any::<u8>()
+        )
+            .prop_map(|(x, y, row, o)| Op::GrayAlphaRow(x, y, row, o)),
         (xy(), xy(), 0u32..90, 0u32..60, any::<u8>(), c())
             .prop_map(|(x, y, w, h, s, c)| Op::Mask(x, y, w, h, s, c)),
         proptest::collection::vec(any::<u8>(), 0..80).prop_map(Op::SmallPictures),

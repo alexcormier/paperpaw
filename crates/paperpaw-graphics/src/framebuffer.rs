@@ -476,6 +476,48 @@ impl Framebuffer {
         self.store(x, y, value);
     }
 
+    /// Puts the pixel of a picture with transparency at `(x, y)` (inside
+    /// the band): gray `gray` as opaque as `alpha` says (0 to 255) over
+    /// what is drawn there, the mix dithered where the format has few
+    /// grays, as pictures are.
+    pub(crate) fn put_gray_over(&mut self, x: u16, y: u16, gray: u8, alpha: u8) {
+        if alpha == 0 || self.blind {
+            return;
+        }
+        if alpha == 255 {
+            return self.put_gray(x, y, gray);
+        }
+        self.pictured = self.pictured.saturating_add(u32::from(self.counting));
+        // What shows there now, as the page means it (not inverted).
+        let under = match self.format.gray_levels() {
+            Some(levels) if self.format.bits_per_pixel() <= 8 => {
+                let level = self.load(x, y) * 255 / u32::from(levels - 1);
+                if self.inverted { 255 - level } else { level }
+            }
+            _ => {
+                let stored = self.view().pixel(x, y - self.top);
+                let below = if self.inverted {
+                    stored.inverted()
+                } else {
+                    stored
+                };
+                u32::from(below.luma())
+            }
+        };
+        // The picture's gray as `put_gray` would show it: kept as it is
+        // where pictures keep their tones in night mode.
+        let over = u32::from(if self.inverted && self.pictures_kept {
+            255 - gray
+        } else {
+            gray
+        });
+        let a = u32::from(alpha);
+        let mixed = ((over * a + under * (255 - a) + 127) / 255) as u8;
+        let mixed = self.dithered(x, y, mixed);
+        let value = self.encode(Color::gray(mixed));
+        self.store(x, y, value);
+    }
+
     /// A row of grays from `(x, y)` on, as [`Framebuffer::put_gray`] puts
     /// each, the dither's offsets worked out once for the row rather than
     /// for every pixel (a division each, slow on chips without one: a

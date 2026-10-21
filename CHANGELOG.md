@@ -64,6 +64,39 @@ change the plugin SDK.
   the live ones. New slot `core.edit-widgets` (`slots::EDIT_WIDGETS`)
   edits a list of widgets; the home screen binds it, and the sleep
   screen's list opens it instead of a screen of the home screen's.
+- SDK: pictures with transparency, drawn over what is drawn. PNG and
+  GIF decoding keeps a picture's transparency (alpha, a palette's, a
+  colour key of gray and RGB images) for sinks that want it
+  (`ImageSink::wants_alpha`, `row_alpha`; `Downscaler` with two
+  channels weights the gray by opacity), kept in files of gray and
+  opacity (`image::AlphaFile`, `AlphaWriter`, `ImageFile::alpha`;
+  `image::picture_with_alpha`, which says why a picture cannot be
+  read). `image::Decoded` opens a decoded file of any kind from one
+  read of its header. `ui::draw_image_over` blends any decoded picture
+  over what is below, through its clear parts and as see-through as
+  asked, dithered on panels of few grays and read a row at a time;
+  `Canvas::draw_gray_alpha_row` does it for a row. Pictures drawn larger
+  than decoded are interpolated (bilinear) instead of blocky. An overlay
+  says what shows through it (`Screen::shows_through`,
+  `ShowsThrough`): everything below it, or the full screen alone, menus
+  left open not drawn; one covering the screen so is drawn in grays as
+  full screens are. `StackEntry::guards` marks a screen guarding the
+  device. `Registrar::add_choice` offers a value of one's own among
+  another plugin's choices. Breaking: `ImageFile` has the field
+  `alpha` and, as `AlphaFile`, is `#[non_exhaustive]` (made with
+  `new`).
+- Sleep screen: *The page with a picture*. The page being read stays
+  and a picture or a widget goes over it, its clear parts showing the
+  page: from the pictures folder or offered by any plugin as a preset of
+  kind `sleep.overlay` (also in a data plugin's `presets.ini`). Where it
+  goes (below on the right at first, clear of the status lines), how
+  large it is (a third of the width), how much of the page shows through
+  it and when it is used (always, while reading, or elsewhere; the cover
+  otherwise, and always where a lock is open) are settings. The
+  picture is decoded once while it stays the same; the picker says why
+  the last one did not show. Other plugins add sleep modes of their
+  own: a screen offered among the choices of `sleep.show`.
+
 - SDK: status items run an action of their own plugin when tapped
   (`StatusItemSpec::tap`, with the line's context; bindable to buttons
   too), say how much they matter (`StatusItemSpec::priority`,

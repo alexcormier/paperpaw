@@ -86,7 +86,7 @@ use paperpaw_sdk::{
     Actions, Capabilities, Command, Contribution, Cx, Direction, Env, EnvParts, EventHandler,
     Fonts, Formats, Gesture, GestureKind, Handled, Hints, Hyphenation, Id, Manifest, Menus,
     Metrics, Output, Params, Plugin, PluginInfo, PluginState, Plugins, RegisterError, RequiredFor,
-    SDK_VERSION, Screen, Settings, StatusItems,
+    SDK_VERSION, Screen, Settings, ShowsThrough, StatusItems,
 };
 
 pub use crate::builder::KernelBuilder;
@@ -394,6 +394,9 @@ pub struct Kernel {
     /// Setting defaults from plugins, applied once all are registered:
     /// `(plugin, setting, value)`.
     plugin_defaults: Vec<(Id, Id, Cow<'static, str>)>,
+    /// Values plugins offer among other plugins' choices, added once all
+    /// are registered: `(plugin, setting, value)`.
+    plugin_choices: Vec<(Id, Id, Cow<'static, str>)>,
     now: Instant,
     input: gestures::InputState,
     io: network::IoState,
