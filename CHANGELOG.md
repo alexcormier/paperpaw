@@ -6,6 +6,71 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4 Pro: dragging and sizing a widget by touch keeps up with the finger.
+  The firmware queues touch readings while it refreshes the panel; a
+  finger's moves while the last one still waits now take its place
+  (`paperpaw_x4::changes::Queue`). Before, every reading was handled
+  with a refresh of its own and a drag overflowed the queue, so the lift
+  was lost: a 0.6 s drag kept the device busy for 7 s and the widget
+  stayed where it was; now it is done 2.7 s after the finger came down,
+  the widget where the finger left it. The remote control's `drag`
+  plays a finger as the touch controller reads it.
+
+- SDK: pictures with transparency, drawn over what is drawn. PNG and
+  GIF decoding keeps a picture's transparency (alpha, a palette's, a
+  colour key of gray and RGB images) for sinks that want it
+  (`ImageSink::wants_alpha`, `row_alpha`; `Downscaler` with two
+  channels weights the gray by opacity), kept in files of gray and
+  opacity (`image::AlphaFile`, `AlphaWriter`, `ImageFile::alpha`;
+  `image::picture_with_alpha`, which says why a picture cannot be
+  read). `image::Decoded` opens a decoded file of any kind from one
+  read of its header. `ui::draw_image_over` blends any decoded picture
+  over what is below, through its clear parts and as see-through as
+  asked, dithered on panels of few grays and read a row at a time;
+  `Canvas::draw_gray_alpha_row` does it for a row. Pictures drawn larger
+  than decoded are interpolated (bilinear) instead of blocky. An overlay
+  says what shows through it (`Screen::shows_through`,
+  `ShowsThrough`): everything below it, or the full screen alone, menus
+  left open not drawn; one covering the screen so is drawn in grays as
+  full screens are. `StackEntry::guards` marks a screen guarding the
+  device. `Registrar::add_choice` offers a value of one's own among
+  another plugin's choices. Breaking: `ImageFile` has the field
+  `alpha` and, as `AlphaFile`, is `#[non_exhaustive]` (made with
+  `new`).
+- Sleep screen: *The page with a picture*. The page being read stays
+  and a picture or a widget goes over it, its clear parts showing the
+  page: from the pictures folder or offered by any plugin as a preset of
+  kind `sleep.overlay` (also in a data plugin's `presets.ini`). Where it
+  goes (below on the right at first, clear of the status lines), how
+  large it is (a third of the width), how much of the page shows through
+  it and when it is used (always, while reading, or elsewhere; the cover
+  otherwise, and always where a lock is open) are settings. The
+  picture is decoded once while it stays the same; the picker says why
+  the last one did not show. Other plugins add sleep modes of their
+  own: a screen offered among the choices of `sleep.show`.
+- The web emulator (`shells/web`): the standard app in a browser as
+  WebAssembly, on an emulated X4, X4 Pro or Boox Go 7 drawn into a
+  canvas, with buttons, keys and touch; a page hands in a data plugin's
+  files, which show after a restart, and asks `paperpaw-dev`'s checks of
+  them, through the emulator frame's messages
+  ([docs/web-emulator.md](docs/web-emulator.md)). `paperpaw-emulator`
+  builds without its window (feature `window`) and for `wasm32`: its
+  storage a folder or kept in memory (`device::Library`,
+  `Device::in_memory`), time and random numbers from the page where
+  there is no operating system (`host`). `paperpaw-dev` checks data
+  plugins handed in as files (`target::DataPlugin` holds them,
+  `data::check`), and plugins with code added to the app (a module of
+  their own around `paperpaw-web` as a library: `set_plugins`, called
+  from its `pp_plugins`; `check` with `plugins` runs `lint`, `visual`,
+  `reach` and `perf` on them), its libraries kept in memory where asked
+  (`Context::in_memory`). The frame says when the device ran out of its
+  memory (`out-of-memory`, once the module stopped, before it starts again;
+  `budget::last_refused` and `budget::clear_last_refused` tell the size
+  refused), names the build in `ready` and `version`, holds buttons
+  for long presses (`hold`), and takes screenshots of another device,
+  night mode or the sleep screen. Releases carry the module and its
+  pages as `paperpaw-web-<version>.zip`.
+
 - SDK: status items run an action of their own plugin when tapped
   (`StatusItemSpec::tap`, with the line's context; bindable to buttons
   too), say how much they matter (`StatusItemSpec::priority`,

@@ -538,6 +538,7 @@ impl KernelBuilder {
             config_unreadable: false,
             secrets_unreadable: false,
             plugin_defaults: Vec::new(),
+            plugin_choices: Vec::new(),
             now: Instant::default(),
         })
     }
@@ -689,6 +690,7 @@ impl Kernel {
     /// reading fonts, page frames and voices; speech where the system or
     /// a plugin speaks.
     pub(crate) fn offer_choices(&mut self) {
+        self.add_plugin_choices();
         let mut presets: Vec<Cow<'static, str>> =
             alloc::vec![Cow::Borrowed(keymap_presets::STANDARD_NAME)];
         presets.extend(
@@ -745,6 +747,48 @@ impl Kernel {
         self.offer_reading_apps();
         self.shared.caps.speech = self.io.speech.system || !self.shared.voices.is_empty();
         self.shared.menus.set_capabilities(self.shared.caps);
+    }
+
+    /// The values plugins offer among other plugins' choices
+    /// ([`paperpaw_sdk::Registrar::add_choice`]), after the setting's own.
+    pub(crate) fn add_plugin_choices(&mut self) {
+        for (plugin, id, value) in mem::take(&mut self.plugin_choices) {
+            let refused = match self.shared.settings.spec(id.as_str()) {
+                None => Some("no such setting"),
+                Some(spec) if spec.guarded => Some("it keeps the device safe"),
+                Some(spec) => match &spec.kind {
+                    paperpaw_sdk::SettingKind::Choice(choices) if choices.contains(&value) => {
+                        Some("it has that choice already")
+                    }
+                    paperpaw_sdk::SettingKind::Choice(_)
+                        if Id::parse(&value).is_ok_and(|v| v.namespace() == plugin.as_str()) =>
+                    {
+                        None
+                    }
+                    paperpaw_sdk::SettingKind::Choice(_) => {
+                        Some("the value is not in the plugin's namespace")
+                    }
+                    _ => Some("it is no choice"),
+                },
+            };
+            if let Some(why) = refused {
+                self.warn(
+                    WarningSource::Plugin(plugin),
+                    None,
+                    format!("choice `{value}` for `{id}`: {why}; not added"),
+                );
+                continue;
+            }
+            let Some(paperpaw_sdk::SettingKind::Choice(choices)) =
+                self.shared.settings.spec(id.as_str()).map(|s| &s.kind)
+            else {
+                continue;
+            };
+            let mut values: Vec<Cow<'static, str>> =
+                choices.iter().map(|v| Cow::Owned(v.to_string())).collect();
+            values.push(value);
+            self.shared.settings.set_choices(id.as_str(), values);
+        }
     }
 
     /// The reading apps to choose: the default one, and one for each

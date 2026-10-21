@@ -1,4 +1,12 @@
 pub mod paperpaw_image
+#[non_exhaustive] pub enum paperpaw_image::Decoded
+pub paperpaw_image::Decoded::Alpha(paperpaw_image::AlphaFile)
+pub paperpaw_image::Decoded::Color(paperpaw_image::ColorFile)
+pub paperpaw_image::Decoded::Gray(paperpaw_image::GrayFile)
+impl paperpaw_image::Decoded
+pub fn paperpaw_image::Decoded::open(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_image::Decoded>
+pub fn paperpaw_image::Decoded::peek(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_image::Decoded>
+pub fn paperpaw_image::Decoded::size(&self) -> (u32, u32)
 pub enum paperpaw_image::Format
 pub paperpaw_image::Format::Gif
 pub paperpaw_image::Format::Jpeg
@@ -13,6 +21,27 @@ pub paperpaw_image::ImageError::Stopped
 pub paperpaw_image::ImageError::Unsupported(&'static str)
 impl core::fmt::Display for paperpaw_image::ImageError
 pub fn paperpaw_image::ImageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct paperpaw_image::AlphaFile
+pub paperpaw_image::AlphaFile::height: u32
+pub paperpaw_image::AlphaFile::path: alloc::string::String
+pub paperpaw_image::AlphaFile::width: u32
+impl paperpaw_image::AlphaFile
+pub fn paperpaw_image::AlphaFile::new(&str, u32, u32) -> Self
+pub fn paperpaw_image::AlphaFile::open(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_image::AlphaFile>
+pub fn paperpaw_image::AlphaFile::read_rows(&self, &dyn paperpaw_platform::storage::Storage, u32, &mut [u8]) -> u32
+pub struct paperpaw_image::AlphaWriter<'a>
+impl<'a> paperpaw_image::AlphaWriter<'a>
+pub fn paperpaw_image::AlphaWriter<'a>::finish(self) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::AlphaWriter<'a>::new(&'a dyn paperpaw_platform::storage::Storage, &'a str) -> Self
+impl core::fmt::Debug for paperpaw_image::AlphaWriter<'_>
+pub fn paperpaw_image::AlphaWriter<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl paperpaw_image::ImageSink for paperpaw_image::AlphaWriter<'_>
+pub fn paperpaw_image::AlphaWriter<'_>::row(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::AlphaWriter<'_>::row_alpha(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::AlphaWriter<'_>::row_rgb(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::AlphaWriter<'_>::start(&mut self, u32, u32) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::AlphaWriter<'_>::wants_alpha(&self) -> bool
+pub fn paperpaw_image::AlphaWriter<'_>::wants_color(&self) -> bool
 pub struct paperpaw_image::ColorFile
 pub paperpaw_image::ColorFile::height: u32
 pub paperpaw_image::ColorFile::path: alloc::string::String
@@ -29,8 +58,10 @@ impl core::fmt::Debug for paperpaw_image::ColorWriter<'_>
 pub fn paperpaw_image::ColorWriter<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl paperpaw_image::ImageSink for paperpaw_image::ColorWriter<'_>
 pub fn paperpaw_image::ColorWriter<'_>::row(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::ColorWriter<'_>::row_alpha(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
 pub fn paperpaw_image::ColorWriter<'_>::row_rgb(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
 pub fn paperpaw_image::ColorWriter<'_>::start(&mut self, u32, u32) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::ColorWriter<'_>::wants_alpha(&self) -> bool
 pub fn paperpaw_image::ColorWriter<'_>::wants_color(&self) -> bool
 pub struct paperpaw_image::Downscaler
 impl paperpaw_image::Downscaler
@@ -63,15 +94,19 @@ impl core::fmt::Debug for paperpaw_image::GrayWriter<'_>
 pub fn paperpaw_image::GrayWriter<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 impl paperpaw_image::ImageSink for paperpaw_image::GrayWriter<'_>
 pub fn paperpaw_image::GrayWriter<'_>::row(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::GrayWriter<'_>::row_alpha(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
 pub fn paperpaw_image::GrayWriter<'_>::row_rgb(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
 pub fn paperpaw_image::GrayWriter<'_>::start(&mut self, u32, u32) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::GrayWriter<'_>::wants_alpha(&self) -> bool
 pub fn paperpaw_image::GrayWriter<'_>::wants_color(&self) -> bool
-pub struct paperpaw_image::ImageFile
+#[non_exhaustive] pub struct paperpaw_image::ImageFile
+pub paperpaw_image::ImageFile::alpha: bool
 pub paperpaw_image::ImageFile::color: bool
 pub paperpaw_image::ImageFile::height: u32
 pub paperpaw_image::ImageFile::path: alloc::string::String
 pub paperpaw_image::ImageFile::width: u32
 impl paperpaw_image::ImageFile
+pub fn paperpaw_image::ImageFile::new(&str, u32, u32, bool, bool) -> Self
 pub fn paperpaw_image::ImageFile::open(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_image::ImageFile>
 pub struct paperpaw_image::PngWriter
 impl paperpaw_image::PngWriter
@@ -80,18 +115,31 @@ pub fn paperpaw_image::PngWriter::new(&dyn paperpaw_platform::storage::Storage, 
 pub fn paperpaw_image::PngWriter::row(&mut self, &dyn paperpaw_platform::storage::Storage, &str, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
 pub trait paperpaw_image::ImageSink
 pub fn paperpaw_image::ImageSink::row(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::ImageSink::row_alpha(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
 pub fn paperpaw_image::ImageSink::row_rgb(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
 pub fn paperpaw_image::ImageSink::start(&mut self, u32, u32) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::ImageSink::wants_alpha(&self) -> bool
 pub fn paperpaw_image::ImageSink::wants_color(&self) -> bool
+impl paperpaw_image::ImageSink for paperpaw_image::AlphaWriter<'_>
+pub fn paperpaw_image::AlphaWriter<'_>::row(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::AlphaWriter<'_>::row_alpha(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::AlphaWriter<'_>::row_rgb(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::AlphaWriter<'_>::start(&mut self, u32, u32) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::AlphaWriter<'_>::wants_alpha(&self) -> bool
+pub fn paperpaw_image::AlphaWriter<'_>::wants_color(&self) -> bool
 impl paperpaw_image::ImageSink for paperpaw_image::ColorWriter<'_>
 pub fn paperpaw_image::ColorWriter<'_>::row(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::ColorWriter<'_>::row_alpha(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
 pub fn paperpaw_image::ColorWriter<'_>::row_rgb(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
 pub fn paperpaw_image::ColorWriter<'_>::start(&mut self, u32, u32) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::ColorWriter<'_>::wants_alpha(&self) -> bool
 pub fn paperpaw_image::ColorWriter<'_>::wants_color(&self) -> bool
 impl paperpaw_image::ImageSink for paperpaw_image::GrayWriter<'_>
 pub fn paperpaw_image::GrayWriter<'_>::row(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::GrayWriter<'_>::row_alpha(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
 pub fn paperpaw_image::GrayWriter<'_>::row_rgb(&mut self, &[u8]) -> core::result::Result<(), paperpaw_image::ImageError>
 pub fn paperpaw_image::GrayWriter<'_>::start(&mut self, u32, u32) -> core::result::Result<(), paperpaw_image::ImageError>
+pub fn paperpaw_image::GrayWriter<'_>::wants_alpha(&self) -> bool
 pub fn paperpaw_image::GrayWriter<'_>::wants_color(&self) -> bool
 pub trait paperpaw_image::Source
 pub fn paperpaw_image::Source::read(&mut self, &mut [u8]) -> core::result::Result<usize, paperpaw_image::ImageError>
@@ -100,3 +148,4 @@ pub fn &[u8]::read(&mut self, &mut [u8]) -> core::result::Result<usize, paperpaw
 pub fn paperpaw_image::decode(paperpaw_image::Format, &mut dyn paperpaw_image::Source, paperpaw_image::Fit, &mut dyn paperpaw_image::ImageSink) -> core::result::Result<(), paperpaw_image::ImageError>
 pub fn paperpaw_image::dimensions(&[u8]) -> core::option::Option<(u32, u32)>
 pub fn paperpaw_image::luma(u32, u32, u32) -> u8
+pub fn paperpaw_image::over_white(u8, u8) -> u8

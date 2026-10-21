@@ -30,6 +30,7 @@
 
 pub mod cases;
 pub mod cli;
+pub mod data;
 pub mod flows;
 pub mod gallery;
 pub mod image;

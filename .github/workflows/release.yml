@@ -10,8 +10,10 @@ name: Release
 # on it (ADR 0024); their checksums. PaperPaw's own plugins that the store
 # offers (tools/plugin-files) come as files for each device, signed with
 # the first-party plugin key, with their folders and their entries for
-# the plugin library (`paperpaw-<version>-catalogue.zip`). The release
-# notes come from CHANGELOG.md.
+# the plugin library (`paperpaw-<version>-catalogue.zip`). The web
+# emulator (shells/web) comes as its module and its pages
+# (`paperpaw-web-<version>.zip`), for pages that show PaperPaw in a
+# browser. The release notes come from CHANGELOG.md.
 on:
   push:
     tags: ["v*"]
@@ -73,6 +75,28 @@ jobs:
         with:
           name: android
           path: dist/paperpaw-*.apk*
+
+  web:
+    name: Web emulator
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+      - name: Build the module, its size kept in bounds
+        run: python3 shells/web/build.py --limit-mb 14
+      - name: The module and its pages
+        run: |
+          version="${GITHUB_REF_NAME#v}"
+          mkdir -p dist
+          (cd shells/web/www && zip -q -X "../../../dist/paperpaw-web-$version.zip" \
+            paperpaw-web.wasm paperpaw-web.js frame.js frame.html index.html)
+          (cd dist && sha256sum "paperpaw-web-$version.zip" > "paperpaw-web-$version.zip.sha256")
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: dist/paperpaw-web-*
 
   firmware:
     name: Firmware (${{ matrix.device }})
@@ -183,7 +207,7 @@ jobs:
 
   release:
     name: Release
-    needs: [android, firmware]
+    needs: [android, firmware, web]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -234,5 +258,7 @@ jobs:
           # folders, the catalogue entries, their checksums.
           assets+=(dist/plugins/*.ppn dist/plugins/*.zip \
             "dist/paperpaw-$VERSION-catalogue.zip" "dist/paperpaw-$VERSION-plugins.sha256")
+          # The web emulator: its module and pages.
+          assets+=("dist/paperpaw-web-$VERSION.zip" "dist/paperpaw-web-$VERSION.zip.sha256")
           gh release create "$GITHUB_REF_NAME" "${prerelease[@]}" \
             --title "PaperPaw $VERSION" --notes-file dist/notes.md "${assets[@]}"

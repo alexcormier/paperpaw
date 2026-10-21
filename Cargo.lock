@@ -2172,6 +2172,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-web"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-dev",
+ "paperpaw-emulator",
+ "paperpaw-platform",
+ "paperpaw-sample-hello",
+]
+
+[[package]]
 name = "paperpaw-x4"
 version = "0.4.0-dev"
 dependencies = [

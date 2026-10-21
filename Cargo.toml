@@ -78,6 +78,7 @@ members = [
     "plugins/hyphenation",
     "plugins/keyboard",
     "shells/desktop",
+    "shells/web",
     "shells/android",
     "tools/fontgen",
     "tools/sign",
@@ -188,6 +189,12 @@ opt-level = "s"
 lto = "fat"
 codegen-units = 1
 panic = "abort"
+
+# The web emulator's module (`shells/web/build.py`): as release, without
+# the names of its functions, a sixth of its size.
+[profile.web]
+inherits = "release"
+strip = true
 
 [profile.dev]
 # Keep debug builds usable on slow machines and in the emulator.

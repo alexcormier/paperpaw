@@ -84,6 +84,7 @@ fn context_for(context: &Context) -> Context {
         context.out.clone(),
     );
     own.keep = context.keep;
+    own.in_memory = context.in_memory;
     own.settings.clone_from(&context.settings);
     own
 }
@@ -140,7 +141,13 @@ fn install(
 ) -> Result<Vec<Finding>, String> {
     let mut out = Vec::new();
     let staging = format!("plugins/.{id}.part");
-    session::copy_dir(&plugin.folder, &session.root().join(&staging))?;
+    for (path, bytes) in &plugin.files {
+        let file = format!("{staging}/{path}");
+        session
+            .storage()
+            .write(&file, bytes)
+            .map_err(|e| format!("{file}: {e:?}"))?;
+    }
     let event = INSTALL.id().clone();
     let params = Params::new()
         .with("plugin", id.to_string())
@@ -412,13 +419,14 @@ pub fn code_plugins(
     release: Option<&Release>,
     report: &mut Report,
 ) -> Result<(), String> {
-    let own = Context::new(
+    let mut own = Context::new(
         Target {
             add: context.target.add,
             ..Target::default()
         },
         context.out.clone(),
     );
+    own.in_memory = context.in_memory;
     let session = Session::new(&own, &Variant::x4())?;
     for id in ids {
         let info = session

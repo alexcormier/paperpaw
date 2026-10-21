@@ -185,6 +185,7 @@ pub(crate) struct Staging {
     pub(crate) screen_hints: Vec<(Id, paperpaw_sdk::Hints)>,
     pub(crate) keymap_presets: Vec<(Id, Cow<'static, str>)>,
     pub(crate) setting_defaults: Vec<(Id, Cow<'static, str>)>,
+    pub(crate) choices: Vec<(Id, Cow<'static, str>)>,
     pub(crate) status_items: Vec<StatusItemSpec>,
     pub(crate) status_lines: Vec<StatusLineSpec>,
     pub(crate) status_places: Vec<paperpaw_sdk::status::Place>,
@@ -285,6 +286,9 @@ pub(crate) fn stage(
             Contribution::SettingGroup(group) => staging.setting_groups.push(group),
             Contribution::SettingDefault { setting, value, .. } => {
                 staging.setting_defaults.push((setting, value));
+            }
+            Contribution::Choice { setting, value, .. } => {
+                staging.choices.push((setting, value));
             }
             Contribution::Keymap(source) => {
                 validate_keymap(&source)?;

@@ -538,6 +538,27 @@ impl<'a> Canvas<'a> {
         self.framebuffer.mark_dirty(rect);
     }
 
+    /// Draws a row of gray pixels with transparency (an image row, two
+    /// bytes a pixel: gray, and how opaque it is) starting at `(x, y)`,
+    /// blended over what is drawn there and dithered as pictures are;
+    /// `opacity` (0 to 255) makes the whole row more see-through, e.g. a
+    /// picture over a page that is to show through it.
+    pub fn draw_gray_alpha_row(&mut self, x: i32, y: i32, gray_alpha: &[u8], opacity: u8) {
+        let width = u32::try_from(gray_alpha.len() / 2).unwrap_or(u32::MAX);
+        let Some(rect) = self.clip_signed(x, y, width, 1) else {
+            return;
+        };
+        let x = x + self.origin.0;
+        let opacity = u32::from(opacity);
+        for px in rect.x..rect.right() as u16 {
+            let at = (i32::from(px) - x) as usize * 2;
+            let alpha = (u32::from(gray_alpha[at + 1]) * opacity + 127) / 255;
+            self.framebuffer
+                .put_gray_over(px, rect.y, gray_alpha[at], alpha as u8);
+        }
+        self.framebuffer.mark_dirty(rect);
+    }
+
     /// Draws a row of RGB pixels (an image row, three bytes a pixel)
     /// starting at `(x, y)`: as they are on colour frames, as gray
     /// (dithered like gray rows) on gray ones.

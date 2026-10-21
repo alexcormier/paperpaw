@@ -44,61 +44,302 @@ pub fn draw_qr(canvas: &mut Canvas<'_>, qr: &crate::qr::QrCode, area: Rect) -> O
 /// rows inside the canvas clip are read. Grays are dithered on two-level
 /// panels; colour shows as colour on colour screens, as gray elsewhere.
 pub fn draw_image(canvas: &mut Canvas<'_>, storage: &dyn Storage, image: &ImageRef, area: Rect) {
+    draw_image_over(canvas, storage, image, area, 255);
+}
+
+/// Draws a decoded image over what is drawn in `area`, as
+/// [`draw_image`]: a picture with transparency
+/// ([`image::picture_with_alpha`](crate::image::picture_with_alpha))
+/// shows what is below through its clear parts, blended at its edges and
+/// dithered as pictures are; `opacity` (0 to 255) lets what is below show
+/// through all of it, e.g. a picture over the page read. Any screen,
+/// widget or overlay may draw so; rows are read and blended one at a
+/// time, so little memory is taken.
+pub fn draw_image_over(
+    canvas: &mut Canvas<'_>,
+    storage: &dyn Storage,
+    image: &ImageRef,
+    area: Rect,
+    opacity: u8,
+) {
     // Frames are drawn in bands: nothing read for those it is not in, nor
     // where it is only described.
-    if canvas.is_blind() || area.intersection(&canvas.clip()).is_none() {
+    if canvas.is_blind() || area.intersection(&canvas.clip()).is_none() || opacity == 0 {
         return;
     }
-    if let Some(file) = crate::image::ColorFile::open(storage, &image.path) {
-        return draw_color_image(canvas, storage, &file, area);
-    }
-    let file = GrayFile {
-        path: image.path.clone(),
-        width: image.width,
-        height: image.height,
+    // Its kind from one read of its header, band by band.
+    let source = match crate::image::Decoded::peek(storage, &image.path) {
+        Some(crate::image::Decoded::Alpha(file)) => ImageSource::Alpha(file),
+        Some(crate::image::Decoded::Color(file)) if opacity == 255 => {
+            return draw_color_image(canvas, storage, &file, area);
+        }
+        Some(crate::image::Decoded::Color(file)) => ImageSource::Color(file),
+        _ => ImageSource::Gray(GrayFile {
+            path: image.path.clone(),
+            width: image.width,
+            height: image.height,
+        }),
     };
+    draw_source(canvas, storage, &source, area, opacity);
+}
+
+/// Where the rows of a picture drawn as gray come from.
+enum ImageSource {
+    Gray(GrayFile),
+    /// A colour picture drawn as gray (to be seen through).
+    Color(crate::image::ColorFile),
+    Alpha(crate::image::AlphaFile),
+}
+
+impl ImageSource {
+    fn size(&self) -> (usize, usize) {
+        let (w, h) = match self {
+            ImageSource::Gray(f) => (f.width, f.height),
+            ImageSource::Color(f) => (f.width, f.height),
+            ImageSource::Alpha(f) => (f.width, f.height),
+        };
+        (w as usize, h as usize)
+    }
+
+    /// Bytes a pixel in its rows.
+    fn bytes(&self) -> usize {
+        match self {
+            ImageSource::Gray(_) => 1,
+            ImageSource::Color(_) => 3,
+            ImageSource::Alpha(_) => 2,
+        }
+    }
+
+    fn read_rows(&self, storage: &dyn Storage, y: u32, out: &mut [u8]) -> u32 {
+        match self {
+            ImageSource::Gray(f) => f.read_rows(storage, y, out),
+            ImageSource::Color(f) => f.read_rows(storage, y, out),
+            ImageSource::Alpha(f) => f.read_rows(storage, y, out),
+        }
+    }
+
+    /// A row of it as gray and opacity, two bytes a pixel, into `out`.
+    fn gray_alpha(&self, row: &[u8], out: &mut [u8]) {
+        match self {
+            ImageSource::Alpha(_) => out.copy_from_slice(row),
+            ImageSource::Gray(_) => {
+                for (pixel, &g) in out.as_chunks_mut::<2>().0.iter_mut().zip(row) {
+                    *pixel = [g, 255];
+                }
+            }
+            ImageSource::Color(_) => {
+                let rgb = row.as_chunks::<3>().0;
+                for (pixel, c) in out.as_chunks_mut::<2>().0.iter_mut().zip(rgb) {
+                    let luma = crate::image::luma(c[0].into(), c[1].into(), c[2].into());
+                    *pixel = [luma, 255];
+                }
+            }
+        }
+    }
+}
+
+/// Where output pixel `i` of `out` takes its source from when an image
+/// of `source` pixels is made larger: the two pixels around it and how
+/// far towards the second (in 256ths), as the pixels' centres lie.
+fn between(i: usize, out: usize, source: usize) -> (usize, usize, u32) {
+    let at = ((2 * i + 1) * source * 128 / out).saturating_sub(128);
+    let first = (at >> 8).min(source - 1);
+    (first, (first + 1).min(source - 1), (at & 255) as u32)
+}
+
+/// [`draw_image_over`] for a picture drawn as gray, each axis on its
+/// own: made smaller, each pixel the mean of the columns it covers (one
+/// row read for it), its gray weighted by how opaque each is; made
+/// larger, interpolated between the pixels around it (bilinear, in whole
+/// numbers). Opaque and not to be seen through, it is drawn as gray
+/// rows.
+fn draw_source(
+    canvas: &mut Canvas<'_>,
+    storage: &dyn Storage,
+    source: &ImageSource,
+    area: Rect,
+    opacity: u8,
+) {
     let (left, top) = (i32::from(area.x), i32::from(area.y));
-    let (w, h) = (i32::from(area.width), i32::from(area.height));
-    if w <= 0 || h <= 0 || file.width == 0 || file.height == 0 {
+    let (w, h) = (usize::from(area.width), usize::from(area.height));
+    let (sw, sh) = source.size();
+    if w == 0 || h == 0 || sw == 0 || sh == 0 {
         return;
     }
     let clip = canvas.clip();
     let first = top.max(i32::from(clip.y));
-    let last = (top + h).min(clip.bottom() as i32);
+    let last = (top + h as i32).min(clip.bottom() as i32);
     if first >= last {
         return;
     }
-    let mut rows = RowChunk::new(file.width as usize);
-    let mut row = alloc::vec![0u8; w as usize];
-    // Where each column's pixels start in a source row, worked out once
-    // (not two divisions a pixel a row); the last is the row's end.
-    let sw = file.width as usize;
-    let starts: Vec<u16> = (0..=w as usize)
-        .map(|x| (x * sw / w as usize).min(sw) as u16)
-        .collect();
-    let mut loaded = None;
+    // An axis made larger interpolates, one made smaller averages.
+    let (wider, taller) = (w > sw, h > sh);
+    let blended = opacity < 255 || matches!(source, ImageSource::Alpha(_));
+    let mut rows = RowChunk::new(sw * source.bytes());
+    // The source row a screen row comes from, as gray and opacity; made
+    // taller, the one below it too, and the two mixed.
+    let mut upper = alloc::vec![0u8; sw * 2];
+    let mut lower = alloc::vec![0u8; if taller { sw * 2 } else { 0 }];
+    let mut mixed = alloc::vec![0u8; if taller { sw * 2 } else { 0 }];
+    let (mut held_upper, mut held_lower) = (None, None);
+    let mut row = alloc::vec![0u8; w * if blended { 2 } else { 1 }];
+    let columns = Columns::new(w, sw, wider);
+    let mut made = None;
     for y in first..last {
-        let sy = ((y - top) as u64 * u64::from(file.height) / h as u64) as u32;
-        if loaded != Some(sy) {
-            let Some(source) = rows.get(sy, |y, out| file.read_rows(storage, y, out)) else {
+        let oy = (y - top) as usize;
+        let (above, below, ty) = if taller {
+            between(oy, h, sh)
+        } else {
+            let sy = oy * sh / h;
+            (sy, sy, 0)
+        };
+        if made != Some((above, below, ty)) {
+            if !load(
+                &mut rows,
+                source,
+                storage,
+                above,
+                &mut upper,
+                &mut held_upper,
+            ) {
                 return;
-            };
-            loaded = Some(sy);
-            if sw <= w as usize {
-                // As large or larger: a source pixel each.
-                for (out, &from) in row.iter_mut().zip(&starts) {
-                    *out = source[usize::from(from).min(sw - 1)];
-                }
-            } else {
-                for (x, out) in row.iter_mut().enumerate() {
-                    let from = usize::from(starts[x]);
-                    let to = usize::from(starts[x + 1]).max(from + 1).min(sw);
-                    let sum: u32 = source[from..to].iter().map(|&v| u32::from(v)).sum();
-                    *out = (sum / (to - from) as u32) as u8;
-                }
             }
+            let between_rows = ty > 0 && below != above;
+            if between_rows {
+                if !load(
+                    &mut rows,
+                    source,
+                    storage,
+                    below,
+                    &mut lower,
+                    &mut held_lower,
+                ) {
+                    return;
+                }
+                mix(&upper, &lower, ty, &mut mixed);
+            }
+            let line: &[u8] = if between_rows { &mixed } else { &upper };
+            made_row(line, &columns, blended, &mut row);
+            made = Some((above, below, ty));
         }
-        canvas.draw_gray_row(left, y, &row);
+        draw_row(canvas, left, y, &row, blended, opacity);
+    }
+}
+
+/// Reads source row `y` into `into` as gray and opacity, unless it holds
+/// it already (`held`); whether it could be read.
+fn load(
+    rows: &mut RowChunk,
+    source: &ImageSource,
+    storage: &dyn Storage,
+    y: usize,
+    into: &mut [u8],
+    held: &mut Option<usize>,
+) -> bool {
+    if *held == Some(y) {
+        return true;
+    }
+    let Some(read) = rows.get(y as u32, |y, out| source.read_rows(storage, y, out)) else {
+        return false;
+    };
+    source.gray_alpha(read, into);
+    *held = Some(y);
+    true
+}
+
+/// `upper` and `lower` (gray and opacity) mixed into `out`, `t` (in
+/// 256ths) towards `lower`, the gray weighted by opacity.
+fn mix(upper: &[u8], lower: &[u8], t: u32, out: &mut [u8]) {
+    let pairs = upper
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .zip(lower.as_chunks::<2>().0);
+    for (pixel, (&[g0, a0], &[g1, a1])) in out.as_chunks_mut::<2>().0.iter_mut().zip(pairs) {
+        let (a0, a1) = (u32::from(a0) * (256 - t), u32::from(a1) * t);
+        let opaque = a0 + a1;
+        let weighted = u32::from(g0) * a0 + u32::from(g1) * a1;
+        let gray = weighted
+            .checked_div(opaque)
+            .map_or(255, |g| g.min(255) as u8);
+        *pixel = [gray, (opaque / 256).min(255) as u8];
+    }
+}
+
+/// Where each screen column takes its pixels from in a source row, worked
+/// out once a picture (not divisions a pixel a row, slow on chips
+/// without them): made wider, the two around it and how far towards the
+/// second (256ths); else the first of those it covers, the last entry the
+/// row's end.
+enum Columns {
+    Between(Vec<(u16, u16, u16)>),
+    Covers(Vec<u16>),
+}
+
+impl Columns {
+    fn new(w: usize, sw: usize, wider: bool) -> Self {
+        if wider {
+            Columns::Between(
+                (0..w)
+                    .map(|x| {
+                        let (x0, x1, t) = between(x, w, sw);
+                        (x0 as u16, x1 as u16, t as u16)
+                    })
+                    .collect(),
+            )
+        } else {
+            Columns::Covers((0..=w).map(|x| (x * sw / w).min(sw) as u16).collect())
+        }
+    }
+}
+
+/// A screen row `out` made of the source row `line` (gray and opacity):
+/// interpolated between columns where it is made wider, each pixel the
+/// mean of the columns it covers where it is not (see [`Columns`]).
+fn made_row(line: &[u8], columns: &Columns, blended: bool, out: &mut [u8]) {
+    let w = out.len() / if blended { 2 } else { 1 };
+    let sw = line.len() / 2;
+    let pixel = |i: usize| (u32::from(line[i * 2]), u32::from(line[i * 2 + 1]));
+    for x in 0..w {
+        let (weighted, opaque, count) = match columns {
+            Columns::Between(at) => {
+                let (x0, x1, tx) = at[x];
+                let ((g0, a0), (g1, a1)) = (pixel(usize::from(x0)), pixel(usize::from(x1)));
+                let tx = u32::from(tx);
+                let (a0, a1) = (a0 * (256 - tx), a1 * tx);
+                (g0 * a0 + g1 * a1, a0 + a1, 256)
+            }
+            Columns::Covers(starts) => {
+                let from = usize::from(starts[x]);
+                let to = usize::from(starts[x + 1]).max(from + 1).min(sw);
+                let (mut weighted, mut opaque) = (0u32, 0u32);
+                for i in from..to {
+                    let (g, a) = pixel(i);
+                    weighted += g * a;
+                    opaque += a;
+                }
+                (weighted, opaque, (to - from) as u32)
+            }
+        };
+        let gray = weighted
+            .checked_div(opaque)
+            .map_or(255, |g| g.min(255) as u8);
+        if blended {
+            out[x * 2] = gray;
+            out[x * 2 + 1] = (opaque / count).min(255) as u8;
+        } else {
+            out[x] = gray;
+        }
+    }
+}
+
+/// A row of [`draw_source`]: gray, or gray and opacity blended over what
+/// is drawn.
+fn draw_row(canvas: &mut Canvas<'_>, left: i32, y: i32, row: &[u8], blended: bool, opacity: u8) {
+    if blended {
+        canvas.draw_gray_alpha_row(left, y, row, opacity);
+    } else {
+        canvas.draw_gray_row(left, y, row);
     }
 }
 
