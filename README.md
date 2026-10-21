@@ -1,7 +1,8 @@
 # PaperPaw
 
 **A lean, fast and endlessly customisable e-reader for e-ink devices, from a
-380 KB microcontroller to Linux and Android e-readers, from one codebase.**
+microcontroller with 400 KB of RAM to Linux and Android e-readers, from one
+codebase.**
 
 PaperPaw was called QuireInk up to version 0.3.
 
@@ -10,10 +11,9 @@ PaperPaw was called QuireInk up to version 0.3.
 > Markdown, text, comics and PDF, colour pictures on colour screens,
 > reading positions, bookmarks and highlights shared with KOReader,
 > Calibre's wireless connection, OPDS catalogs and much more; see the
-> [changelog](CHANGELOG.md). The firmware for the
-> Xteink X4 is built but has not run on a device yet. The
-> [project plan](docs/PLANNING.md) has the
-> [roadmap](docs/PLANNING.md#12-roadmap).
+> [changelog](CHANGELOG.md). The firmware for the Xteink X4 and X4 Pro
+> runs on both readers and comes with its first release; the X4
+> Classic's is built but not yet tried on one.
 
 <p align="center">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="24%" alt="The home screen: the date, the book to continue and the one read before">
@@ -37,7 +37,7 @@ menu at the top, then turn the switch on. Where that menu has no such
 entry, a computer with `adb` lifts the restriction:
 
 ```sh
-adb shell appops set --user 0 io.github.hthoene.paperpaw ACCESS_RESTRICTED_SETTINGS allow
+adb shell appops set --user 0 org.paperpaw.app ACCESS_RESTRICTED_SETTINGS allow
 ```
 
 For updates as they are released, [Obtainium](https://github.com/ImranR98/Obtainium)
@@ -45,9 +45,9 @@ installs new versions from the releases page.
 
 ## Why PaperPaw?
 
-- **Runs where others can't.** The smallest target is the Xteink X4 with an
-  ESP32-C3 and no PSRAM. Everything is designed for that budget, so larger
-  devices get a fast, battery-friendly reader for free.
+- **400 KB of RAM is enough.** The smallest target is the Xteink X4, an
+  ESP32-C3 with 400 KB of RAM and no PSRAM. PaperPaw runs there in a heap
+  of 256 KB, and its firmware takes 6.5 MB of the 16 MB of flash.
 - **Everything is a plugin.** The core is a small kernel. The home screen,
   library, reader, menus, file formats, themes, key maps and translations are
   plugins. First-party ones use exactly the same SDK as community plugins.
@@ -62,7 +62,7 @@ installs new versions from the releases page.
 
 PaperPaw is a one-person project. Much of its code and documentation is
 written with the help of an AI model (Claude, by Anthropic); its maker
-decides what goes in, every change has to pass more than 400 tests,
+decides what goes in, every change has to pass about 4,000 tests,
 snapshot tests of its screens and the other checks before it is merged,
 and releases are built reproducibly and tried on a real reader first.
 PaperPaw is young and may have rough edges; issues and wishes are welcome.
@@ -99,8 +99,7 @@ some-plugin = off
 
 Plugins contribute screens, actions, settings, key maps and translations
 through the [`paperpaw-sdk`](crates/paperpaw-sdk) crate. See
-[docs/PLANNING.md §7](docs/PLANNING.md#7-extensibility) for the full
-extension model.
+[docs/plugins.md](docs/plugins.md) for the full extension model.
 
 ### Plugins without code
 
@@ -194,7 +193,7 @@ cargo run -p paperpaw-emulator -- --headless --profile boox-go-7 --set core.lang
 | `shells/android` | Android app for e-readers such as Boox ([build and install](shells/android/README.md)) |
 | `shells/xteink` | Firmware for the Xteink X4 ([build, save the stock firmware, flash](shells/xteink/README.md)) |
 | `samples/` | Emulator library with public-domain books, sample plugins |
-| `docs/` | [Plan](docs/PLANNING.md), [writing plugins](docs/plugins.md) and [architecture decisions](docs/adr/) |
+| `docs/` | [Writing plugins](docs/plugins.md) and [architecture decisions](docs/adr/) |
 
 ## Contributing
 

@@ -6,7 +6,7 @@
 //! unread or finished ones, the shelves) is chosen above the books: from
 //! one row on small screens, from pills on larger ones. Series, folders
 //! (collections), favourites, authors and tags open as lists of their
-//! own; "Find" picks a book by a letter without a keyboard. See [`list`].
+//! own; "Find" picks a book by a letter without a keyboard. See `list`.
 //!
 //! The library folder is a setting; its editor (`files.choose-folder`)
 //! browses the device's folders, so no path has to be typed.
@@ -30,9 +30,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ask;
-use paperpaw_sdk::builtin::{
-    actions as core_actions, events, groups, menus as core_menus, params, slots,
-};
+use paperpaw_sdk::builtin::{actions as core_actions, events, groups, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::files;
 use paperpaw_sdk::replies::Typed;
@@ -76,8 +74,6 @@ pub const SEARCH: Id = Id::new_static("files.search");
 const SEARCH_ENTERED: Event<Typed> = Event::new("files.search-entered");
 /// Book information; parameter `path`.
 pub const INFO_SCREEN: Id = Id::new_static("files.info");
-/// A book's details, as an entry of the book menu (`menus::BOOK`).
-pub const BOOK_INFO: Id = Id::new_static("files.book-info");
 /// The submenu with the views above ("Shelves").
 pub const SHELVES_MENU: Id = Id::new_static("files.shelves");
 const SHELF_SCREEN: Id = Id::new_static("files.shelf");
@@ -86,19 +82,13 @@ const SHELF_SCREEN: Id = Id::new_static("files.shelf");
 #[derive(Debug, Default)]
 pub struct Files;
 
-/// Folders chosen on the folder chooser.
-static FOLDER: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_FOLDER);
+/// Folders chosen with the folder chooser, whichever plugin fills it.
+static FOLDER: paperpaw_sdk::SettingExtra =
+    paperpaw_sdk::SettingExtra::new().editor(paperpaw_sdk::builtin::screens::FOLDER_EDITOR);
 
-/// Where the books and the archive are, and how the library shows them.
-static SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_text(
-        ROOT.static_str(),
-        "files.setting.root",
-        "books",
-        groups::LIBRARY,
-    )
-    .with_extra(&FOLDER)
-    .described("files.setting.root.help"),
+/// Where the archive is, and how the library shows the books (the
+/// library folder is the kernel's, [`ROOT`]).
+static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::fixed_text(
         ARCHIVE.static_str(),
         "files.setting.archive",
@@ -134,16 +124,10 @@ impl Plugin for Files {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        // When the shelves' catalog was made, for the screens and the
-        // handlers below.
-        let catalog = shelves::CatalogMade::default();
         r.add_screen(ScreenSpec::new(
             SCREEN,
             "files.title",
-            Box::new({
-                let catalog = catalog.clone();
-                move |env, params| list::screen(env, params, catalog.clone())
-            }),
+            Box::new(list::screen),
         ))?;
         list::register(r)?;
         r.add_screen(ScreenSpec::new(
@@ -159,10 +143,7 @@ impl Plugin for Files {
         r.add_screen(ScreenSpec::new(
             SHELF_SCREEN,
             "files.title",
-            Box::new({
-                let catalog = catalog.clone();
-                move |env, params| Box::new(shelves::ShelfScreen::new(env, params, catalog.clone()))
-            }),
+            Box::new(|env, params| Box::new(shelves::ShelfScreen::new(env, params))),
         ))?;
         for (action, mode, title, icon) in [
             (BY_AUTHOR, shelves::MODE_AUTHORS, "files.by-author", "user"),
@@ -196,22 +177,6 @@ impl Plugin for Files {
         r.add_icon(FAVOURITES, Cow::Borrowed("star"))?;
         r.bind_slot(slots::CHOOSE_FOLDER, CHOOSE_FOLDER, Priority::DEFAULT)?;
         r.bind_slot(slots::BOOK_INFO, INFO_SCREEN, Priority::DEFAULT)?;
-        // A book's details, in every view's book menu: shown for the book
-        // chosen (the action itself only names the entry).
-        r.add_action(
-            paperpaw_sdk::ActionSpec::new(BOOK_INFO, "files.option.info")
-                .handler(|_: &Env<'_>, _: &mut Vec<Command>| {}),
-        )?;
-        r.add_menu_entry(paperpaw_sdk::MenuEntry::new(core_menus::BOOK, BOOK_INFO).order(10))?;
-        r.add_icon(BOOK_INFO, Cow::Borrowed("info-circle"))?;
-        r.on(events::BOOK_CHOSEN, |_, chosen, out| {
-            if chosen.action == BOOK_INFO {
-                out.push(Command::OpenScreen(
-                    INFO_SCREEN,
-                    Params::new().with(params::PATH, chosen.path.clone()),
-                ));
-            }
-        })?;
         r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
         r.bind_slot(slots::LIBRARY, SCREEN, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
@@ -233,18 +198,6 @@ impl Plugin for Files {
         ] {
             r.add_icon(setting, Cow::Borrowed(icon))?;
         }
-        // The catalog of the shelves is made anew when they show next.
-        let made = catalog.clone();
-        r.on(events::LIBRARY_CHANGED, move |_, _, _| made.outdated())?;
-        let made = catalog.clone();
-        r.on(events::BOOK_MOVED, move |_, _, _| made.outdated())?;
-        let made = catalog.clone();
-        r.on(events::BOOK_REMOVED, move |_, _, _| made.outdated())?;
-        r.on(events::SETTING_CHANGED, move |_, changed, _| {
-            if changed.id == *ROOT.id() {
-                catalog.outdated();
-            }
-        })?;
         r.on(SEARCH_ENTERED, |_, typed, out| {
             let text = typed.text.trim();
             if !text.is_empty() {

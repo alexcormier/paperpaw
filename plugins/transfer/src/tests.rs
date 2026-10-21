@@ -296,7 +296,7 @@ fn files_come_and_go() {
     );
     assert_eq!(status, 200);
     // What is there is kept.
-    assert_eq!(done, Some(Done::Received(String::from("a (2).epub"))));
+    assert_eq!(done, Some(Done::Received(String::from("Books/a (2).epub"))));
     assert_eq!(read_file(&storage, "Books/a (2).epub", 16).unwrap(), b"new");
     assert_eq!(read_file(&storage, "Books/a.epub", 16).unwrap(), b"old");
     assert!(!storage.exists(".paperpaw/tmp/request-1"));
@@ -312,7 +312,7 @@ fn files_come_and_go() {
     let (status, .., done) = ask(&storage, "POST", delete, None);
     assert_eq!(
         (status, done),
-        (200, Some(Done::Deleted(String::from("a.epub"))))
+        (200, Some(Done::Deleted(String::from("Books/a.epub"))))
     );
     assert!(!storage.exists("Books/a.epub"));
     // Not everything at once.

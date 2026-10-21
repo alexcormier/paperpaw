@@ -333,28 +333,328 @@ fn add_handled<const N: usize>(
     Ok(())
 }
 
+/// The work that makes the library's catalog anew or catches it up
+/// ([`library::catalog`]).
+const CATALOG_WORK: Id = Id::new_static("core.catalog");
+
+/// What the kernel does to the catalog: walk the library, or catch up.
+enum CatalogJob {
+    Walk(library::catalog::Walk),
+    Rewrite(library::catalog::Rewrite),
+}
+
+impl CatalogJob {
+    fn step(&mut self, env: &Env<'_>) -> Result<bool, paperpaw_sdk::StorageError> {
+        match self {
+            CatalogJob::Walk(walk) => walk.step(env),
+            CatalogJob::Rewrite(rewrite) => rewrite.step(env),
+        }
+    }
+
+    fn abort(self, storage: &dyn paperpaw_sdk::Storage) {
+        match self {
+            CatalogJob::Walk(walk) => walk.abort(storage),
+            CatalogJob::Rewrite(rewrite) => rewrite.abort(storage),
+        }
+    }
+
+    fn pause(&mut self) {
+        match self {
+            CatalogJob::Walk(walk) => walk.pause(),
+            CatalogJob::Rewrite(rewrite) => rewrite.pause(),
+        }
+    }
+}
+
+/// The making of the catalog, shared by the kernel's handlers and its
+/// job: the only writer of the catalog, one change at a time.
+#[derive(Default)]
+struct Catalog {
+    job: core::cell::RefCell<Option<CatalogJob>>,
+    /// A walk is wanted (else catching up, for `fresh` or a long log).
+    walk: core::cell::Cell<bool>,
+    /// A walk was wanted anew while one is under way: it starts again.
+    restart: core::cell::Cell<bool>,
+    /// Books to take from their details: they came, moved here, changed.
+    fresh: core::cell::RefCell<Vec<String>>,
+    /// What the job under way took of `fresh`, given back where it fails.
+    taken: core::cell::RefCell<Vec<String>>,
+    /// Wanted at once.
+    urgent: core::cell::Cell<bool>,
+    /// The library was walked since PaperPaw started.
+    walked: core::cell::Cell<bool>,
+}
+
+/// Whether the catalog's job waits (paused, it goes on where it was):
+/// while a book is read (the reader is the screen shown, overlays over it
+/// aside), its memory and time are the reader's; on a device of little
+/// memory (the X4), a walk waits while the library is open (shown, or
+/// under the screens it opened: finding, a shelf, a book's information),
+/// whose index takes the memory. Catching up, which takes little, goes on
+/// beside the library; a library with no catalog yet holds no index.
+fn waits(env: &Env<'_>, walk: bool) -> bool {
+    let shown = env.stack.iter().rev().find(|entry| !entry.overlay);
+    let reading = shown.is_some_and(|entry| entry.slot.as_ref() == Some(&slots::READER));
+    let library_open = env
+        .stack
+        .iter()
+        .any(|entry| entry.slot.as_ref() == Some(&slots::LIBRARY));
+    reading
+        || (walk
+            && env.device.memory == paperpaw_sdk::MemoryClass::Small
+            && library_open
+            && matches!(
+                library::catalog::state(env.storage),
+                library::catalog::State::Ready { .. }
+            ))
+}
+
+impl Catalog {
+    /// Wants the library walked: `now`, or at a calm moment.
+    /// Wants the library walked: `now`, or at a calm moment; `anew`
+    /// where what a walk under way met may have changed (it starts again),
+    /// else one under way, paused or not, goes on.
+    fn want_walk(&self, now: bool, anew: bool, out: &mut Vec<Command>) {
+        let walking = matches!(*self.job.borrow(), Some(CatalogJob::Walk(_)));
+        if walking && !anew {
+            self.declare(now, out);
+            return;
+        }
+        self.restart.set(self.job.borrow().is_some());
+        self.walk.set(true);
+        self.declare(now, out);
+    }
+
+    /// Wants the catalog caught up, with the book at `path` taken from its
+    /// details: `now`, or at a calm moment (books coming one after the
+    /// other, from Calibre say, caught up once).
+    fn want_catch_up(&self, path: Option<&str>, now: bool, out: &mut Vec<Command>) {
+        if let Some(path) = path {
+            let mut fresh = self.fresh.borrow_mut();
+            if !fresh.iter().any(|p| p == path) {
+                fresh.push(path.into());
+            }
+        }
+        self.declare(now, out);
+    }
+
+    /// Declares the work: at once, or at a calm moment (no input for a
+    /// while, a book closed, the device plugged in; within a minute at the
+    /// latest), never while the device goes to sleep or opens a book. A
+    /// calm request does not put off one at once.
+    fn declare(&self, now: bool, out: &mut Vec<Command>) {
+        use paperpaw_sdk::work::{Moments, Work};
+        self.urgent.set(self.urgent.get() || now);
+        let calm = Moments::IDLE | Moments::BOOK_CLOSED | Moments::CHARGING;
+        let within = if self.urgent.get() { 0 } else { 60 };
+        out.push(Command::Work(
+            Work::new(CATALOG_WORK)
+                .at_moments(calm)
+                .within(core::time::Duration::from_secs(within)),
+        ));
+    }
+
+    /// Gives what the job under way took back, for the next.
+    fn give_back(&self, walk: bool) {
+        let taken = core::mem::take(&mut *self.taken.borrow_mut());
+        let mut fresh = self.fresh.borrow_mut();
+        for path in taken {
+            if !fresh.contains(&path) {
+                fresh.push(path);
+            }
+        }
+        self.walk.set(self.walk.get() || walk);
+    }
+
+    /// One step of the job.
+    fn step(&self, env: &Env<'_>, out: &mut Vec<Command>) -> paperpaw_sdk::work::Step {
+        use paperpaw_sdk::work::Step;
+        let storage = env.storage;
+        let mut job = self.job.borrow_mut();
+        let walk_next = match &*job {
+            Some(running) => matches!(running, CatalogJob::Walk(_)),
+            None => self.walk.get(),
+        };
+        if waits(env, walk_next) {
+            // Goes on where it was once another screen shows.
+            if let Some(running) = job.as_mut() {
+                running.pause();
+            }
+            return Step::WaitFor(events::SCREEN_SHOWN.id().clone());
+        }
+        if self.restart.replace(false)
+            && let Some(stopped) = job.take()
+        {
+            let walk = matches!(stopped, CatalogJob::Walk(_));
+            stopped.abort(storage);
+            self.give_back(walk);
+        }
+        if job.is_none() {
+            let fresh = core::mem::take(&mut *self.fresh.borrow_mut());
+            let walk = self.walk.replace(false);
+            let started = if walk {
+                library::catalog::Walk::start(env, fresh.clone()).map(CatalogJob::Walk)
+            } else if !fresh.is_empty() || library::catalog::log_is_long(storage) {
+                library::catalog::Rewrite::start(env, fresh.clone()).map(CatalogJob::Rewrite)
+            } else {
+                self.urgent.set(false);
+                return Step::Done;
+            };
+            *self.taken.borrow_mut() = fresh;
+            match started {
+                Ok(started) => *job = Some(started),
+                Err(error) => {
+                    self.give_back(walk);
+                    return Step::Failed(alloc::format!("catalog: {error:?}"));
+                }
+            }
+        }
+        let walk = matches!(*job, Some(CatalogJob::Walk(_)));
+        let result = job.as_mut().map_or(Ok(true), |job| job.step(env));
+        match result {
+            Ok(false) => Step::Continue,
+            Ok(true) => {
+                *job = None;
+                self.taken.borrow_mut().clear();
+                self.walked.set(self.walked.get() || walk);
+                out.push(events::CATALOG_CHANGED.emit(()));
+                if self.walk.get() || !self.fresh.borrow().is_empty() {
+                    Step::Continue
+                } else {
+                    self.urgent.set(false);
+                    Step::Done
+                }
+            }
+            Err(error) => {
+                // The old catalog stays; tried again after a while.
+                *job = None;
+                self.give_back(walk);
+                Step::Failed(alloc::format!("catalog: {error:?}"))
+            }
+        }
+    }
+}
+
 /// The library service and what plugins keep for books, which follow
 /// the books.
 fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
+    use alloc::rc::Rc;
+    use paperpaw_sdk::work::WorkSpec;
+
+    // The catalog, made anew or caught up as a job: a few books a step,
+    // after the frame and while no input waits; views hear
+    // CATALOG_CHANGED.
+    let catalog = Rc::new(Catalog::default());
+    {
+        let catalog = Rc::clone(&catalog);
+        r.add_work(WorkSpec::new(
+            CATALOG_WORK,
+            "core.work.catalog",
+            move |env, _, out| catalog.step(env, out),
+        ))?;
+    }
+    // Walked when a view of the library first shows after a start (books
+    // may have been copied meanwhile) or asks for it anew, for another
+    // library folder, and when books came or went without saying which
+    // (`LIBRARY_CHANGED`): at once, taking the books whose files did not
+    // change from the old catalog. Never at every start: on the X4 every
+    // wake is one. Without a format nothing is a book.
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::CATALOG_WANTED, move |env, wanted, out| {
+            let missing = library::catalog::state(env.storage) == library::catalog::State::Missing;
+            if !env.formats.is_empty() && (wanted.anew || missing || !catalog.walked.get()) {
+                catalog.want_walk(true, wanted.anew, out);
+            }
+        })?;
+    }
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::LIBRARY_CHANGED, move |_, _, out| {
+            catalog.want_walk(true, true, out);
+        })?;
+    }
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::SETTING_CHANGED, move |_, changed, out| {
+            if changed.id == *library::FOLDER.id() {
+                catalog.want_walk(true, true, out);
+            }
+        })?;
+    }
+    // A book came, or changed what the catalog keeps of it: caught up at
+    // a calm moment, without walking the library.
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::BOOK_ADDED, move |_, added, out| {
+            catalog.want_catch_up(Some(&added.path), false, out);
+        })?;
+    }
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::BOOK_CHANGED, move |env, changed, out| {
+            let kept = env.book_fields.iter().any(|f| f.in_catalog);
+            if changed.what & library::what::FIELDS != 0 && kept {
+                catalog.want_catch_up(Some(&changed.path), false, out);
+            }
+        })?;
+    }
     // The library service follows the reading, whichever plugins
-    // show it.
-    r.on(events::BOOK_OPENED, |env, reading, _| {
+    // show it: how far a book is read, in its details and, when it is
+    // opened, closed or finished, beside the catalog (folded into it at a
+    // calm moment once the log is long).
+    r.on(events::BOOK_OPENED, |env, reading, out| {
         library::record(env, reading, true);
+        out.push(library::changed_book(
+            &reading.path,
+            library::what::PROGRESS,
+        ));
     })?;
     r.on(events::PAGE_TURNED, |env, reading, _| {
         library::record(env, reading, false);
     })?;
-    // What plugins keep for a book follows it: moved, removed.
-    r.on(events::BOOK_MOVED, |env, moved, _| {
-        library::moved(env.storage, &moved.from, &moved.path);
-        library::move_data(env.storage, env.book_data, &moved.from, &moved.path);
-    })?;
-    r.on(events::BOOK_REMOVED, |env, removed, _| {
-        library::removed(env.storage, &removed.path);
-        library::remove_data(env.storage, env.book_data, &removed.path);
-    })?;
+    for event in [events::BOOK_CLOSED, events::BOOK_FINISHED] {
+        let catalog = Rc::clone(&catalog);
+        r.on(event, move |env, reading, out| {
+            library::record(env, reading, false);
+            library::note_status(env.storage, &reading.path);
+            out.push(library::changed_book(
+                &reading.path,
+                library::what::PROGRESS,
+            ));
+            if library::catalog::log_is_long(env.storage) {
+                catalog.want_catch_up(None, false, out);
+            }
+        })?;
+    }
+    // What plugins keep for a book follows it: moved, removed. The catalog
+    // leaves it out at once (noted beside it); a book moved is caught up
+    // where it is now, at once (the book is not where views show it).
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::BOOK_MOVED, move |env, moved, out| {
+            library::moved(env.storage, &moved.from, &moved.path);
+            library::move_data(env.storage, env.book_data, &moved.from, &moved.path);
+            let _ = library::catalog::forget(env.storage, &moved.from);
+            catalog.fresh.borrow_mut().retain(|p| *p != moved.from);
+            catalog.want_catch_up(Some(&moved.path), true, out);
+        })?;
+    }
+    {
+        let catalog = Rc::clone(&catalog);
+        r.on(events::BOOK_REMOVED, move |env, removed, out| {
+            library::removed(env.storage, &removed.path);
+            library::remove_data(env.storage, env.book_data, &removed.path);
+            let _ = library::catalog::forget(env.storage, &removed.path);
+            catalog.fresh.borrow_mut().retain(|p| *p != removed.path);
+            if library::catalog::log_is_long(env.storage) {
+                catalog.want_catch_up(None, false, out);
+            }
+        })?;
+    }
     // The notes of books are the kernel's.
     r.add_book_data(paperpaw_sdk::data_path!("annotations"), "")?;
+    r.add_book_data(paperpaw_sdk::positions::DIR, "")?;
     r.add_book_data(alloc::format!("{}/books", library::DIR), "")?;
     r.add_book_data(alloc::format!("{}/covers", library::DIR), "")?;
     // In the device's part of the settings, before *About*.
@@ -406,7 +706,38 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
         "core.screen.placeholder",
         Box::new(|_, _| Box::new(PlaceholderScreen)),
     ))?;
+    // A folder for a setting: the folder chooser's, whichever plugin
+    // fills its slot.
+    r.add_screen(ScreenSpec::new(
+        screens::FOLDER_EDITOR,
+        "core.setting.library-folder",
+        Box::new(|_, params| {
+            Box::new(FolderEditor {
+                params: params.clone(),
+            })
+        }),
+    ))?;
     Ok(())
+}
+
+/// Opens the folder chooser in its own place, with what it was given
+/// ([`screens::FOLDER_EDITOR`]).
+struct FolderEditor {
+    params: paperpaw_sdk::Params,
+}
+
+impl Screen for FolderEditor {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+
+    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        cx.command(Command::Back);
+        let params = core::mem::take(&mut self.params);
+        cx.command(Command::OpenSlot(slots::CHOOSE_FOLDER, params));
+    }
 }
 
 /// The main menu, the tools, the quick panel and the settings' sections
@@ -430,6 +761,22 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     // stays the same however many there are.
     r.add_menu_entry(MenuEntry::new(menus::TOOLS, actions::SCREENSHOT).order(95))?;
     r.add_icon(actions::SCREENSHOT, Cow::Borrowed("camera"))?;
+    // What there is to open, a submenu of the tools (an action named like
+    // its menu) where plugins put something there: reached with the
+    // buttons too, however full the home screen is.
+    r.add_action(ActionSpec::new(menus::APPS, "core.action.apps").handler(
+        |_: &Env<'_>, out: &mut Vec<Command>| {
+            out.push(Command::OpenSlot(
+                slots::MENU,
+                Params::new().with(params::MENU, menus::APPS.as_str()),
+            ));
+        },
+    ))?;
+    r.add_menu_entry(MenuEntry::new(menus::TOOLS, menus::APPS).order(90))?;
+    r.add_icon(menus::APPS, Cow::Borrowed("apps"))?;
+    r.set_item_state(menus::APPS, |env| {
+        paperpaw_sdk::ItemState::new().shown(!env.menus.items(menus::APPS.as_str()).is_empty())
+    })?;
     for (action, order, icon) in [
         (actions::HOME, 10, "home"),
         (actions::LIBRARY, 20, "books"),
@@ -525,9 +872,36 @@ static FONT_PT: SettingExtra = SettingExtra::new()
     .section(setting_sections::FONT)
     .unit("core.unit.pt")
     .slider();
+static LINES_KEPT: SettingExtra = SettingExtra::new()
+    .unit("core.unit.lines")
+    .section(setting_sections::PAGE);
+static WEIGHT: SettingExtra = SettingExtra::new()
+    .unit("core.unit.weight")
+    .section(setting_sections::FONT);
+static WORDS: SettingExtra = SettingExtra::new()
+    .unit("core.unit.percent")
+    .step(10)
+    .section(setting_sections::FONT)
+    .slider();
+static LINES: SettingExtra = SettingExtra::new()
+    .unit("core.unit.percent")
+    .step(5)
+    .section(setting_sections::PAGE)
+    .slider();
+static MARGINS: SettingExtra = SettingExtra::new()
+    .unit("core.unit.mm")
+    .section(setting_sections::PAGE)
+    .slider();
+static MARGINS_ENDS: SettingExtra = SettingExtra::new()
+    .unit("core.unit.mm")
+    .section(setting_sections::PAGE)
+    .slider()
+    .follows(settings::MARGIN.static_str());
+static IN_PAGE: SettingExtra = SettingExtra::new().section(setting_sections::PAGE);
+static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(setting_sections::BEHAVIOUR);
 
 /// The language, night mode, speech and the edges for swipes.
-static GENERAL: [SettingSpec; 8] = [
+static GENERAL: [SettingSpec; 9] = [
     SettingSpec::fixed_switch(
         settings::DEVELOPER.static_str(),
         "core.setting.developer",
@@ -573,6 +947,14 @@ static GENERAL: [SettingSpec; 8] = [
         groups::SYSTEM,
     )
     .described("core.setting.speak-focus.help"),
+    SettingSpec::fixed_choice(
+        settings::VOICE.static_str(),
+        "core.setting.voice",
+        &[settings::VOICE_SYSTEM],
+        settings::VOICE_SYSTEM,
+        groups::SYSTEM,
+    )
+    .described("core.setting.voice.help"),
     SettingSpec::fixed_number(
         settings::EDGE_ENDS.static_str(),
         "core.setting.edge-ends",
@@ -597,10 +979,23 @@ static GENERAL: [SettingSpec; 8] = [
     .described("core.setting.edge.help"),
 ];
 
+/// The library folder, chosen with the folder chooser.
+static FOLDER_EDITOR: SettingExtra = SettingExtra::new().editor(screens::FOLDER_EDITOR);
+static LIBRARY: [SettingSpec; 1] = [SettingSpec::fixed_text(
+    settings::LIBRARY_FOLDER.static_str(),
+    "core.setting.library-folder",
+    "books",
+    groups::LIBRARY,
+)
+.with_extra(&FOLDER_EDITOR)
+.described("core.setting.library-folder.help")];
+
 fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&GENERAL)?;
+    r.add_settings(&LIBRARY)?;
     r.set_menu_need(settings::MONO_TEXT, paperpaw_sdk::MenuNeed::BlackAndWhite)?;
     r.set_menu_need(settings::SPEAK_FOCUS, paperpaw_sdk::MenuNeed::Speech)?;
+    r.set_menu_need(settings::VOICE, paperpaw_sdk::MenuNeed::Speech)?;
     Ok(())
 }
 
@@ -756,7 +1151,7 @@ fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// Buttons, the panel's refresh, sleep, rotation, notices and long
 /// presses.
-static DEVICE: [SettingSpec; 9] = [
+static DEVICE: [SettingSpec; 14] = [
     SettingSpec::fixed_choice(
         settings::KEYMAP_PRESET.static_str(),
         "core.setting.keymap-preset",
@@ -839,6 +1234,59 @@ static DEVICE: [SettingSpec; 9] = [
     .advanced()
     .with_extra(&MS)
     .described("core.setting.long-press-ms.help"),
+    SettingSpec::fixed_number(
+        settings::DOUBLE_TAP_MS.static_str(),
+        "core.setting.double-tap-ms",
+        150,
+        1000,
+        300,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .with_extra(&MS)
+    .described("core.setting.double-tap-ms.help"),
+    SettingSpec::fixed_number(
+        settings::TAP_SLOP.static_str(),
+        "core.setting.tap-slop",
+        1,
+        20,
+        3,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .with_extra(&MM)
+    .described("core.setting.tap-slop.help"),
+    SettingSpec::fixed_number(
+        settings::SWIPE_DISTANCE.static_str(),
+        "core.setting.swipe-distance",
+        2,
+        50,
+        8,
+        groups::CONTROLS,
+    )
+    .advanced()
+    .with_extra(&MM)
+    .described("core.setting.swipe-distance.help"),
+    SettingSpec::fixed_number(
+        settings::FRONTLIGHT.static_str(),
+        "core.setting.frontlight",
+        0,
+        100,
+        0,
+        groups::DISPLAY,
+    )
+    .with_extra(&PERCENT_5)
+    .described("core.setting.frontlight.help"),
+    SettingSpec::fixed_number(
+        settings::FRONTLIGHT_WARMTH.static_str(),
+        "core.setting.frontlight-warmth",
+        0,
+        100,
+        50,
+        groups::DISPLAY,
+    )
+    .with_extra(&PERCENT_5)
+    .described("core.setting.frontlight-warmth.help"),
 ];
 
 fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
@@ -846,8 +1294,17 @@ fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.set_menu_need(settings::SLEEP_AFTER, paperpaw_sdk::MenuNeed::Sleep)?;
     r.set_menu_need(settings::ROTATION, paperpaw_sdk::MenuNeed::Rotation)?;
     r.set_menu_need(settings::BUTTON_HINTS, paperpaw_sdk::MenuNeed::ButtonRow)?;
-    for edge in [settings::EDGE_ENDS, settings::EDGE_SIDES] {
-        r.set_menu_need(edge, paperpaw_sdk::MenuNeed::Touch)?;
+    let touch = [
+        settings::EDGE_ENDS,
+        settings::EDGE_SIDES,
+        settings::TAP_SLOP,
+        settings::SWIPE_DISTANCE,
+    ];
+    for setting in touch {
+        r.set_menu_need(setting, paperpaw_sdk::MenuNeed::Touch)?;
+    }
+    for light in [settings::FRONTLIGHT, settings::FRONTLIGHT_WARMTH] {
+        r.set_menu_need(light, paperpaw_sdk::MenuNeed::Frontlight)?;
     }
     Ok(())
 }
@@ -906,7 +1363,7 @@ fn register_colors(r: &mut Registrar) -> Result<(), RegisterError> {
 /// The reading font, and whether a book's settings are its own. The
 /// status lines' font: the menus', the book's or one of its own (the
 /// families are offered once all fonts are known).
-static READING: [SettingSpec; 4] = [
+static READING: [SettingSpec; 18] = [
     SettingSpec::fixed_choice(
         settings::STATUS_FONT.static_str(),
         "core.setting.status-font",
@@ -936,6 +1393,151 @@ static READING: [SettingSpec; 4] = [
     .with_extra(&FONT_PT)
     .scoped()
     .described("core.setting.font-size.help"),
+    SettingSpec::fixed_number(
+        settings::LINE_SPACING.static_str(),
+        "core.setting.line-spacing",
+        80,
+        250,
+        135,
+        groups::READING,
+    )
+    .with_extra(&LINES)
+    .scoped()
+    .described("core.setting.line-spacing.help"),
+    SettingSpec::fixed_number(
+        settings::FONT_WEIGHT.static_str(),
+        "core.setting.font-weight",
+        0,
+        4,
+        0,
+        groups::READING,
+    )
+    .with_extra(&WEIGHT)
+    .scoped()
+    .described("core.setting.font-weight.help"),
+    SettingSpec::fixed_number(
+        settings::WORD_SPACING.static_str(),
+        "core.setting.word-spacing",
+        50,
+        200,
+        100,
+        groups::READING,
+    )
+    .with_extra(&WORDS)
+    .scoped()
+    .described("core.setting.word-spacing.help"),
+    SettingSpec::fixed_number(
+        settings::MARGIN.static_str(),
+        "core.setting.margin",
+        0,
+        30,
+        4,
+        groups::READING,
+    )
+    .with_extra(&MARGINS)
+    .scoped()
+    .described("core.setting.margin.help"),
+    SettingSpec::fixed_number(
+        settings::MARGIN_ENDS.static_str(),
+        "core.setting.margin-ends",
+        0,
+        30,
+        4,
+        groups::READING,
+    )
+    .with_extra(&MARGINS_ENDS)
+    .advanced()
+    .scoped()
+    .described("core.setting.margin-ends.help"),
+    SettingSpec::fixed_switch(
+        settings::JUSTIFY.static_str(),
+        "core.setting.justify",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.justify.help"),
+    SettingSpec::fixed_switch(
+        settings::HYPHENATE.static_str(),
+        "core.setting.hyphenate",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.hyphenate.help"),
+    SettingSpec::fixed_switch(
+        settings::PUBLISHER_STYLES.static_str(),
+        "core.setting.publisher-styles",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.publisher-styles.help"),
+    SettingSpec::fixed_switch(
+        settings::INDENT.static_str(),
+        "core.setting.indent",
+        true,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.indent.help"),
+    SettingSpec::fixed_switch(
+        settings::PARAGRAPH_SPACING.static_str(),
+        "core.setting.paragraph-spacing",
+        false,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.paragraph-spacing.help"),
+    SettingSpec::fixed_number(
+        settings::WIDOWS.static_str(),
+        "core.setting.widows",
+        1,
+        4,
+        1,
+        groups::READING,
+    )
+    .advanced()
+    .scoped()
+    .with_extra(&LINES_KEPT)
+    .described("core.setting.widows.help"),
+    SettingSpec::fixed_number(
+        settings::ORPHANS.static_str(),
+        "core.setting.orphans",
+        1,
+        4,
+        1,
+        groups::READING,
+    )
+    .advanced()
+    .scoped()
+    .with_extra(&LINES_KEPT)
+    .described("core.setting.orphans.help"),
+    SettingSpec::fixed_choice(
+        settings::FOOTNOTES.static_str(),
+        "core.setting.footnotes",
+        &[settings::FOOTNOTES_POPUP, settings::FOOTNOTES_JUMP],
+        settings::FOOTNOTES_POPUP,
+        groups::READING,
+    )
+    .advanced()
+    .with_extra(&IN_BEHAVIOUR)
+    .described("core.setting.footnotes.help"),
+    SettingSpec::fixed_choice(
+        settings::PAGE_FRAME.static_str(),
+        "core.setting.page-frame",
+        &[settings::PAGE_FRAME_SINGLE],
+        settings::PAGE_FRAME_SINGLE,
+        groups::READING,
+    )
+    .scoped()
+    .with_extra(&IN_PAGE)
+    .described("core.setting.page-frame.help"),
     SettingSpec::fixed_switch(
         settings::SCOPE_ONLY.static_str(),
         "core.setting.scope-only",

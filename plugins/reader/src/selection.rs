@@ -348,11 +348,13 @@ mod tests {
 
     #[test]
     fn a_cursor_past_the_words_moves_without_panicking() {
-        let word = |x: u16, y: u16| WordBox {
-            area: Rect::new(x, y, 10, 10),
-            text: String::from("word"),
-            start: Locator::START,
-            end: Locator::START,
+        let word = |x: u16, y: u16| {
+            WordBox::new(
+                Rect::new(x, y, 10, 10),
+                "word",
+                Locator::START,
+                Locator::START,
+            )
         };
         let words = [word(0, 0), word(20, 0), word(0, 20)];
         // Chosen on a page with more words than this one.

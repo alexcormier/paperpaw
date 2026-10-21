@@ -94,6 +94,12 @@ impl Recognizer {
         }
     }
 
+    /// Stops following button `name`: its press is over, its release
+    /// makes nothing.
+    pub(crate) fn forget_button(&mut self, name: &str) {
+        self.buttons.retain(|b| b.name != name);
+    }
+
     /// Whether button `name` is held: pressed and not let go yet.
     pub(crate) fn holds(&self, name: &str) -> bool {
         self.buttons.iter().any(|b| b.name == name)
@@ -172,9 +178,10 @@ impl Recognizer {
                 if pointer.long_fired || pointer.paired || pointer.edge.is_some() {
                     return None;
                 }
-                // Two fingers: a pinch if they moved apart or together;
-                // the other one then makes no gesture of its own. Not
-                // with one at an edge, whose lift is the edge's.
+                // Two fingers: a tap if neither moved, a pinch if they
+                // moved apart or together; the other one then makes no
+                // gesture of its own. Not with one at an edge, whose lift
+                // is the edge's.
                 if let Some(other) = self
                     .pointers
                     .iter_mut()
@@ -183,7 +190,9 @@ impl Recognizer {
                     other.paired = true;
                     let before = distance(pointer.start, other.start).max(1);
                     let now = distance(pointer.last, other.last);
-                    let kind = if now * 4 >= before * 5 {
+                    let kind = if !pointer.moved && !other.moved {
+                        GestureKind::TwoFingerTap
+                    } else if now * 4 >= before * 5 {
                         GestureKind::Pinch { out: true }
                     } else if now * 5 <= before * 4 {
                         GestureKind::Pinch { out: false }
@@ -491,15 +500,26 @@ mod tests {
                 None
             );
         }
-        // Two fingers that barely moved: nothing.
+        // Two fingers that did not move: a tap of two.
         r.pointer(&finger(1, PointerPhase::Down, 100, 300), Instant(0), &T);
         r.pointer(&finger(2, PointerPhase::Down, 300, 300), Instant(0), &T);
-        assert_eq!(
+        assert!(matches!(
             r.pointer(&finger(1, PointerPhase::Up, 102, 300), Instant(80), &T),
-            None
-        );
+            Some(Recognized::Gesture(Gesture {
+                kind: GestureKind::TwoFingerTap,
+                ..
+            }))
+        ));
         assert_eq!(
             r.pointer(&finger(2, PointerPhase::Up, 300, 300), Instant(90), &T),
+            None
+        );
+        // Two fingers, one moved a little: nothing.
+        r.pointer(&finger(1, PointerPhase::Down, 100, 300), Instant(0), &T);
+        r.pointer(&finger(2, PointerPhase::Down, 300, 300), Instant(0), &T);
+        r.pointer(&finger(2, PointerPhase::Move, 320, 300), Instant(40), &T);
+        assert_eq!(
+            r.pointer(&finger(1, PointerPhase::Up, 100, 300), Instant(80), &T),
             None
         );
     }

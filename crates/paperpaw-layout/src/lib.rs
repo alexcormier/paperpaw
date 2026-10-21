@@ -48,7 +48,7 @@ pub struct Face {
 
 /// Changes whenever the same input is laid out differently, so readers
 /// rebuild page indexes they cached.
-pub const VERSION: u32 = 5;
+pub const VERSION: u32 = 6;
 
 /// Measures text for the layout engine; readers implement it with their
 /// fonts.
@@ -75,6 +75,15 @@ pub struct Style {
     /// The reader's choice wins over a book's justified text; centred and
     /// right-aligned blocks keep their alignment.
     pub justify: bool,
+    /// The fewest lines of a paragraph left alone at the top of a page (a
+    /// widow): lines that would leave fewer take more along to the next
+    /// page. 1 lets lines fall where they fall.
+    pub widows: u8,
+    /// The fewest lines of a paragraph left alone at the bottom of a page
+    /// (an orphan): a paragraph that would leave fewer goes to the next
+    /// page whole, with a heading just before it. 1 lets lines fall where
+    /// they fall.
+    pub orphans: u8,
 }
 
 impl Style {
@@ -85,7 +94,17 @@ impl Style {
             indent,
             em,
             justify,
+            widows: 1,
+            orphans: 1,
         }
+    }
+
+    /// The same, keeping at least `widows` lines of a paragraph at the top
+    /// of a page and `orphans` at the bottom (see [`Style::widows`]).
+    pub const fn lines_kept(mut self, widows: u8, orphans: u8) -> Self {
+        self.widows = widows;
+        self.orphans = orphans;
+        self
     }
 }
 
@@ -384,6 +403,10 @@ pub fn layout_page(
     let mut at = start;
     let mut y = 0.0f32;
     let body_line = typesetter.line(Face::default()).1.max(MIN_LINE_HEIGHT);
+    // The heading laid out last, while nothing else followed it on the
+    // page: the lines before it, where it starts, and whether anything
+    // came before it. A paragraph that goes on whole takes it along.
+    let mut heading_before: Option<(usize, Locator, bool)> = None;
 
     loop {
         let Some(block) = document.block_at(storage, at)? else {
@@ -413,6 +436,8 @@ pub fn layout_page(
         if page.is_past_end() && from == 0 && at.offset < block.start {
             page.start = Locator::new(at.section, block.start);
         }
+        // What follows a heading, if this block does.
+        let after_heading = heading_before.take();
         if block.kind == BlockKind::Image
             && let Some(image) = &block.image
         {
@@ -487,8 +512,40 @@ pub fn layout_page(
         for (n, line) in lines.iter().enumerate() {
             let fits = y + line_height <= height;
             if !fits && !page.is_past_end() {
-                let end = block.source_offset(from + line.range.start);
-                return ended(page, Locator::new(at.section, end));
+                // Widows and orphans: as many lines go on as the next page
+                // needs, or the paragraph goes whole where too few would
+                // stay here.
+                let left = lines.len() - n;
+                let back = usize::from(style.widows).saturating_sub(left).min(n);
+                let stay = n - back;
+                let orphans = usize::from(style.orphans.max(1));
+                let alone = stay < orphans;
+                let line_start = |i: usize| {
+                    Locator::new(at.section, block.source_offset(from + lines[i].range.start))
+                };
+                if alone && had_content {
+                    match after_heading {
+                        // The heading just before goes along.
+                        Some((kept, start, true)) => {
+                            page.lines.truncate(kept);
+                            return ended(page, start);
+                        }
+                        // The paragraph goes whole.
+                        None => {
+                            page.lines.truncate(page.lines.len() - n);
+                            return ended(page, line_start(0));
+                        }
+                        // Under a heading that starts the page nothing can
+                        // go: it stays as it falls.
+                        Some(_) => {}
+                    }
+                } else if back > 0 && !alone {
+                    page.lines.truncate(page.lines.len() - back);
+                    return ended(page, line_start(stay));
+                }
+                // Starting the page, it cannot go whole: then it stays as it
+                // falls rather than leaving an orphan here.
+                return ended(page, line_start(n));
             }
             let first_x = if n == 0 { indent } else { 0.0 };
             let available = if n == 0 { width - indent } else { width };
@@ -527,9 +584,13 @@ pub fn layout_page(
             y += line_height;
         }
         // A heading needs at least one line of what follows on its page.
+        let heading_start = Locator::new(at.section, block.source_offset(from));
         if heading > 0 && had_content && y + body_line > height {
             page.lines.truncate(lines_before);
-            return ended(page, Locator::new(at.section, block.source_offset(from)));
+            return ended(page, heading_start);
+        }
+        if heading > 0 {
+            heading_before = Some((lines_before, heading_start, had_content));
         }
         at = Locator::new(at.section, block.end);
     }
@@ -658,7 +719,59 @@ mod tests {
         indent: 0.0,
         em: 10.0,
         justify: false,
+        widows: 1,
+        orphans: 1,
     };
+
+    #[test]
+    fn widows_and_orphans_move_lines_on() {
+        // A line, then a paragraph of three; pages of three lines.
+        let doc = Text::new("aaaa bbbb\ncccc dddd eeee ffff gggg hhhh\n");
+        let page = |style: &Style| {
+            let first = layout(&doc, 0, 30.0, style);
+            let next = layout(&doc, first.end.offset, 30.0, style);
+            (texts(&first).len(), texts(&next).len())
+        };
+        // As they fall: the paragraph's last line alone on the next page.
+        assert_eq!(page(&STYLE), (3, 1));
+        // Two at the top: a line more goes on.
+        assert_eq!(page(&STYLE.lines_kept(2, 1)), (2, 2));
+        // And two at the bottom: the paragraph goes whole.
+        assert_eq!(page(&STYLE.lines_kept(2, 2)), (1, 3));
+        // A paragraph that starts the page stays, whatever it leaves.
+        let long = Text::new("aaaa bbbb cccc dddd eeee ffff gggg hhhh\n");
+        let first = layout(&long, 0, 30.0, &STYLE.lines_kept(3, 3));
+        assert_eq!(texts(&first).len(), 3);
+    }
+
+    #[test]
+    fn a_heading_goes_on_with_the_paragraph_after_it() {
+        // A line, a heading, a paragraph of two; pages 50 high.
+        let doc = Text::new(
+            "aaaa bbbb
+#Hd
+cccc dddd eeee ffff
+",
+        );
+        let page = |style: &Style| {
+            let first = layout(&doc, 0, 50.0, style);
+            let next = layout(&doc, first.end.offset, 50.0, style);
+            (texts(&first).len(), texts(&next).len())
+        };
+        // As they fall: the paragraph's last line on the next page.
+        assert_eq!(page(&STYLE), (3, 1));
+        // The paragraph goes whole, and its heading with it.
+        assert_eq!(page(&STYLE.lines_kept(2, 1)), (1, 3));
+        assert_eq!(page(&STYLE.lines_kept(2, 2)), (1, 3));
+        // Under a heading that starts the page, it stays as it falls.
+        let top = Text::new(
+            "#Hd
+cccc dddd eeee ffff
+",
+        );
+        let first = layout(&top, 0, 35.0, &STYLE.lines_kept(2, 2));
+        assert_eq!(texts(&first).len(), 2);
+    }
 
     fn texts(page: &Page) -> Vec<&str> {
         page.lines.iter().map(|l| l.text.as_str()).collect()

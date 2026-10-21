@@ -205,3 +205,95 @@ fn a_themes_defaults_win_over_the_devices() {
     assert_eq!(kernel.settings().int("core.ui-size"), 14);
     assert_eq!(kernel.settings().int("core.font-size"), 12, "the user's");
 }
+
+/// A data plugin marks words by patterns: its `marks.ini` makes roles,
+/// their looks settings, and a decorator.
+#[test]
+fn a_data_plugin_marks_words_by_patterns() {
+    let storage = MemoryStorage::new()
+        .with(
+            "plugins/tale/plugin.ini",
+            "[plugin]\nname = Tale\nformats = 2\n",
+        )
+        .with(
+            "plugins/tale/marks.ini",
+            "[names]\ntitle = Names\npattern = \\bAlice\\b\nbackground = yellow\n",
+        );
+    let kernel = Kernel::builder(DEVICE).storage(storage).build().unwrap();
+    assert_eq!(
+        kernel.settings().text("tale.names.background"),
+        "core.tone.yellow"
+    );
+    let decorators = &kernel.shared.decorators;
+    assert!(decorators.get(&Id::new_static("tale.marks")).is_some());
+}
+
+/// A data plugin of formats 3: actions made of steps, a menu of its own
+/// with entries placed after others and taken out, icons, lines for a
+/// point, a step of the first-run setup.
+#[test]
+fn data_plugins_bring_actions_menus_icons_points_and_steps() {
+    let log = log();
+    let storage = MemoryStorage::new()
+        .with(
+            "plugins/cosy/plugin.ini",
+            "[plugin]\nname = Cosy\nformats = 3\n",
+        )
+        .with(
+            "plugins/cosy/actions.ini",
+            "[night]\ntitle = Night reading\nicon = moon\nrun = a.level=4, notify:Good night, core.confirm, a.level=nonsense\n",
+        )
+        .with(
+            "plugins/cosy/menus.ini",
+            "[cosy.tools]\ntitle = Tools\nentries = cosy.night, a.special, core.confirm\nadd = core.home after cosy.night\nhide = a.special\n",
+        )
+        .with("plugins/cosy/icons.ini", "a.special = star\n")
+        .with(
+            "plugins/cosy/points/core.about.txt",
+            "Made with care\n# not a line\n\nSecond line\n",
+        )
+        .with(
+            "plugins/cosy/setup.ini",
+            "[size]\nsetting = a.level\norder = 35\ntitle = How large\n",
+        );
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(TestPlugin::new("a", &log))
+        .storage(storage)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let warnings = kernel.take_warnings();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    let menus = &kernel.shared.menus;
+    let tools: Vec<&str> = menus
+        .default_ids("cosy.tools")
+        .into_iter()
+        .map(Id::as_str)
+        .collect();
+    assert_eq!(tools, ["cosy.night", "core.home", "core.confirm"]);
+    assert_eq!(menus.icon("cosy.night"), Some("moon"));
+    assert_eq!(menus.icon("a.special"), Some("star"));
+    let about: Vec<&str> = kernel
+        .shared
+        .services
+        .contributions("core.about")
+        .map(|(_, line)| line)
+        .collect();
+    assert_eq!(about, ["Made with care", "Second line"]);
+    let env = kernel.shared.env(Instant(0));
+    let steps: Vec<&str> = kernel
+        .shared
+        .setup
+        .applying(&env)
+        .iter()
+        .map(|step| step.id.as_str())
+        .collect();
+    assert!(steps.contains(&"cosy.size"), "{steps:?}");
+    log.borrow_mut().clear();
+    kernel.run_action(Instant(10), Id::new_static("cosy.night"));
+    assert_eq!(
+        kernel.settings().get("a.level"),
+        Some(&SettingValue::Int(4))
+    );
+    assert_eq!(*log.borrow(), ["a:cosy.night", "a:core.confirm"]);
+}

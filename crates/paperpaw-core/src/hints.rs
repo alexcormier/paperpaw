@@ -12,7 +12,7 @@ use paperpaw_sdk::builtin::settings as core_settings;
 use paperpaw_sdk::{ActionHint, Hint, Hints, Id};
 
 use crate::keymap::InputKey;
-use crate::{HINTS_MS, Kernel};
+use crate::{ActiveScreen, HINTS_MS, Kernel};
 
 /// What the row is, and what it shows.
 #[derive(Debug)]
@@ -50,12 +50,10 @@ impl Kernel {
     /// over the bottom of one that has it on a press, for a while.
     pub(crate) fn hint_row(&self) -> Option<Rect> {
         let panel = self.framebuffer.bounds();
-        let top = self.shared.device.display.height;
-        if top < panel.height {
-            return Some(Rect::new(0, top, panel.width, panel.height - top));
-        }
         let height = self.hint.height.min(panel.height / 2);
-        (height > 0 && self.hint.until.is_some_and(|until| self.now < until))
+        let below = self.stack.last().is_some_and(|top| top.hinted);
+        let pressed = self.hint.until.is_some_and(|until| self.now < until);
+        (height > 0 && (below || pressed))
             .then(|| Rect::new(0, panel.height - height, panel.width, height))
     }
 
@@ -66,7 +64,16 @@ impl Kernel {
             .iter()
             .rev()
             .find(|s| s.screen.region(&env).is_none())
-            .map_or(Hints::Shown, |s| self.registry.hints_of(&s.id))
+            .map_or(Hints::Shown, |s| self.hints_of(s))
+    }
+
+    /// When open screen `active` shows the row: as it says, else as its
+    /// plugin said for it.
+    pub(crate) fn hints_of(&self, active: &ActiveScreen) -> Hints {
+        active
+            .screen
+            .hints()
+            .unwrap_or_else(|| self.shared.registry.hints_of(&active.id))
     }
 
     /// Shows the row for a while over a screen that has it on a press.

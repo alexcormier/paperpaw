@@ -7,7 +7,7 @@ extern crate std;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_sdk::{MemoryStorage, Storage};
+use crate::{MemoryStorage, Storage};
 use proptest::prelude::*;
 
 use super::*;

@@ -4,7 +4,9 @@
 //! sliders, such as the frontlight, are sliders across the screen, as on
 //! the settings pages), choices with few options become segments, other
 //! choices open their list, actions become buttons. Changes apply at
-//! once and the panel stays open. On touch screens its buttons are as
+//! once and the panel stays open. Entries show the label, switch and
+//! badge their plugin gives them now; a faint one is passed by the focus
+//! and does nothing. On touch screens its buttons are as
 //! large as a fingertip.
 //!
 //! Bound to the `core.panel` slot with the parameter `menu`; what the
@@ -51,6 +53,25 @@ enum Control {
     Open(Id),
     /// Runs an action or opens a submenu.
     Run(Id),
+}
+
+impl Control {
+    /// The menu entry it is part of.
+    fn id(&self) -> &Id {
+        match self {
+            Control::Toggle(id)
+            | Control::Step(id, _)
+            | Control::Slide(id)
+            | Control::Option(id, _)
+            | Control::Open(id)
+            | Control::Run(id) => id,
+        }
+    }
+
+    /// It can be used now: its entry is not shown faint.
+    fn enabled(&self, env: &Env<'_>) -> bool {
+        env.menus.state(env, self.id().as_str()).enabled
+    }
 }
 
 /// A row: an optional label on the left, then its controls.
@@ -281,7 +302,7 @@ impl PanelScreen {
         let display = env.device.display;
         let width = display.width;
         let margin = style.margin as u16;
-        let mut items = env.menus.items(menu);
+        let mut items = env.menus.shown_items(env, menu);
         // A setting shown only while another has a value.
         items.retain(|item| {
             env.settings
@@ -328,13 +349,20 @@ impl PanelScreen {
             style,
         };
         let layout = layout(&lines(env, &style, &items, geometry), geometry);
+        // With buttons, on the first control that can be used.
+        let first = layout
+            .rows
+            .iter()
+            .flat_map(|row| row.controls.iter())
+            .position(|(c, _)| c.enabled(env))
+            .unwrap_or(0);
         Self {
             rows: layout.rows,
             style,
             region: layout.region,
             top,
             head: layout.head,
-            focus: (!touch).then_some(0),
+            focus: (!touch).then_some(first),
             editing: None,
             drag: ui::SliderDrag::default(),
             dragged: None,
@@ -355,15 +383,9 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
     let label_of = |control: &Control| -> String {
         match control {
             Control::Toggle(id) => spec(env, id).map_or(String::new(), |s| {
-                alloc::format!("• {}", env.i18n.tr(&s.title))
+                alloc::format!("• {}", button_text(env, id, env.i18n.tr(&s.title)))
             }),
-            Control::Run(id) => {
-                let title = env
-                    .actions
-                    .get(id.as_str())
-                    .map_or(id.as_str(), |a| a.title.as_ref());
-                env.i18n.tr(title).to_string()
-            }
+            Control::Run(id) => button_text(env, id, &action_title(env, id)),
             _ => String::new(),
         }
     };
@@ -548,6 +570,10 @@ impl PanelScreen {
 
     fn activate(&mut self, control: &Control, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        // Shown faint by its plugin: nothing to do now.
+        if !control.enabled(&env) {
+            return;
+        }
         let set = |cx: &mut Cx<'_, '_>, id: &Id, value: SettingValue| {
             if env.settings.get(id.as_str()) != Some(&value) {
                 cx.command(Command::SetSetting(id.clone(), value));
@@ -605,6 +631,7 @@ impl PanelScreen {
         focused: bool,
     ) {
         let style = self.style;
+        let state = env.menus.state(env, control.id().as_str());
         let (on, label): (bool, String) = match control {
             Control::Toggle(id) => {
                 let name = spec(env, id).map_or("", |s| env.i18n.tr(&s.title));
@@ -614,8 +641,10 @@ impl PanelScreen {
                     ""
                 };
                 (
-                    env.settings.bool(id.as_str()),
-                    alloc::format!("{mark}{name}"),
+                    state
+                        .checked
+                        .unwrap_or_else(|| env.settings.bool(id.as_str())),
+                    alloc::format!("{mark}{}", state.text(name)),
                 )
             }
             Control::Step(_, step) => (false, String::from(if *step < 0 { "−" } else { "+" })),
@@ -640,19 +669,20 @@ impl PanelScreen {
                     ui::draw_focus(canvas, &style, rect);
                 }
                 let value = alloc::format!("{} ›", ui::setting_value(env, spec));
-                let title = env.i18n.tr(&spec.title);
-                ui::draw_value_row(canvas, env, &style, rect, focused, title, &value);
+                let title = state.text(env.i18n.tr(&spec.title));
+                ui::draw_value_row(canvas, env, &style, rect, focused, &title, &value);
                 return;
             }
-            Control::Run(id) => {
-                let title = env
-                    .actions
-                    .get(id.as_str())
-                    .map_or(id.as_str(), |a| a.title.as_ref());
-                (false, env.i18n.tr(title).to_string())
-            }
+            Control::Run(id) => (
+                state.checked.unwrap_or(false),
+                button_text(env, id, &action_title(env, id)),
+            ),
         };
-        ui::draw_button(canvas, env, &style, rect, &label, on, focused);
+        if state.enabled {
+            ui::draw_button(canvas, env, &style, rect, &label, on, focused);
+        } else {
+            ui::draw_faint_button(canvas, env, &style, rect, &label, focused);
+        }
     }
 }
 
@@ -678,6 +708,21 @@ fn draw_slider(
         .title(env.i18n.tr(&spec.title))
         .focus(focus);
     slider.draw_row(canvas, env, style, &view);
+}
+
+/// The title of action `id`, translated.
+fn action_title(env: &Env<'_>, id: &Id) -> String {
+    let title = env
+        .actions
+        .get(id.as_str())
+        .map_or(id.as_str(), |a| a.title.as_ref());
+    env.i18n.tr(title).to_string()
+}
+
+/// What the button of entry `id` titled `title` says now: the label and
+/// badge its plugin gives it.
+fn button_text(env: &Env<'_>, id: &Id, title: &str) -> String {
+    env.menus.state(env, id.as_str()).text(title)
 }
 
 /// Shows `value` for setting `id` without keeping it yet.
@@ -854,8 +899,28 @@ impl Screen for PanelScreen {
             return Handled::No;
         };
         if count > 0 {
+            let env = *cx.env();
             let current = self.focus.map_or(-1, |f| f as isize);
-            let focus = (current + delta).rem_euclid(count as isize) as usize;
+            let step = |from: isize| (from + delta).rem_euclid(count as isize) as usize;
+            // Past controls shown faint, unless all are.
+            let mut focus = step(current);
+            for _ in 0..count {
+                if self
+                    .controls()
+                    .nth(focus)
+                    .is_none_or(|(c, _)| c.enabled(&env))
+                {
+                    break;
+                }
+                focus = step(focus as isize);
+            }
+            if self
+                .controls()
+                .nth(focus)
+                .is_some_and(|(c, _)| !c.enabled(&env))
+            {
+                focus = step(current);
+            }
             self.focus = Some(focus);
             self.page = self.page_of(focus);
             self.redraw(cx);
@@ -913,6 +978,8 @@ impl Screen for PanelScreen {
                 return None;
             };
             let slider = spec(&env, id).and_then(ui::Slider::of)?;
+            // Shown faint by its plugin: not moved.
+            Control::Slide(id.clone()).enabled(&env).then_some(())?;
             Some((index, id.clone(), slider, *area))
         }) else {
             return Handled::No;

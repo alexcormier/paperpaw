@@ -350,7 +350,7 @@ impl Fetch {
         let id = reply.context.get(ARTICLE).unwrap_or_default();
         if Self::ok(reply).is_some() {
             self.archived += 1;
-            remove_article(env, id);
+            remove_article(env, id, out);
         } else {
             self.failed += 1;
         }
@@ -393,7 +393,7 @@ impl Fetch {
             _ => None,
         };
         match gone {
-            Some(true) => remove_article(env, id),
+            Some(true) => remove_article(env, id, out),
             Some(false) => {}
             None => self.failed += 1,
         }
@@ -418,6 +418,7 @@ impl Fetch {
                 path = format!("{dir}/{name} ({id}).epub");
             }
             env.storage.rename(&tmp, &path).ok()?;
+            out.push(paperpaw_sdk::library::added(&path, PLUGIN.as_str()));
             list.push(Article {
                 id: id.to_string(),
                 path,
@@ -491,13 +492,15 @@ fn is_id(id: &str) -> bool {
 }
 
 /// Removes an article's book and what is noted about it (nothing from a
-/// list that cannot be read).
-fn remove_article(env: &Env<'_>, id: &str) {
+/// list that cannot be read); the book's removal is told.
+fn remove_article(env: &Env<'_>, id: &str, out: &mut Vec<Command>) {
     if let Ok(mut list) = articles(env.storage)
         && let Some(at) = list.iter().position(|a| a.id == id)
     {
         let article = list.remove(at);
-        let _ = env.storage.remove(&article.path);
+        if env.storage.remove(&article.path).is_ok() {
+            out.push(events::BOOK_REMOVED.emit(events::BookRemoved::new(article.path)));
+        }
         save_articles(env, &list);
     }
     if let Ok(mut ids) = finished(env.storage)

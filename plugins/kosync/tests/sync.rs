@@ -636,3 +636,28 @@ proptest! {
         }
     }
 }
+
+/// The reader says where a closed book is as an XPointer: it is sent as
+/// it is, the book not opened again to find it.
+#[test]
+fn the_xpointer_the_reader_gives_when_closing_is_sent() {
+    use paperpaw_sdk::event::EventData;
+    let mut sync = with_books();
+    opened(&mut sync, BOOK, 10.0);
+    let xpointer = "/body/DocFragment[3]/body/p[9]/text()[1].4";
+    let closed = events::Reading::new(
+        BOOK.to_string(),
+        String::new(),
+        30.0,
+        0,
+        3000,
+        String::new(),
+    )
+    .xpointer(xpointer.to_string());
+    let now = sync.later(1000);
+    sync.kernel
+        .send_event(now, events::BOOK_CLOSED.id().clone(), closed.to_params());
+    let calls = sync.calls();
+    let sent = paperpaw_sdk::json::object(&body(sending(&calls)));
+    assert_eq!(paperpaw_sdk::json::text(&sent, "progress"), Some(xpointer));
+}

@@ -6,24 +6,19 @@
 //! to the buttons below the bar, confirm presses the one moved to (with
 //! none, stays) and back returns to where one was.
 //!
-//! It asks the reader to move with the event [`crate::SKIM`] and is told
-//! where the book is with [`crate::SKIMMED`].
+//! It fills the slot `core.skim`: it asks the reader to move with the
+//! event `core.skim` and is told where the book is with `core.skimmed`.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::builtin::{actions, events, params};
+use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
     Screen,
 };
-
-/// Parameters: where the book is (thousandths), where its chapters
-/// begin (thousandths, comma-separated), what to do.
-pub(crate) const AT: &str = "at";
-pub(crate) const MARKS: &str = "marks";
-pub(crate) const TO: &str = "to";
 
 /// The buttons: chapter back, where one was, chapter on, page number.
 const BUTTONS: [&str; 4] = [
@@ -85,8 +80,8 @@ impl SkimScreen {
             label: String::new(),
             chapter: String::new(),
             at: 0,
-            marks: params
-                .get(MARKS)
+            marks: events::Skimmed::from_params(params)
+                .and_then(|s| s.marks)
                 .unwrap_or_default()
                 .split(',')
                 .filter_map(|m| m.trim().parse().ok())
@@ -94,28 +89,21 @@ impl SkimScreen {
             bar,
             buttons,
         };
-        screen.update(params);
+        if let Some(skimmed) = events::Skimmed::from_params(params) {
+            screen.update(&skimmed);
+        }
         screen
     }
 
     /// Takes over where the book is now.
-    fn update(&mut self, params: &Params) {
-        self.label = params.get(params::PAGE).unwrap_or_default().to_string();
-        self.chapter = params.get(params::TEXT).unwrap_or_default().to_string();
-        self.at = params
-            .get(AT)
-            .and_then(|a| a.parse().ok())
-            .unwrap_or(0)
-            .min(1000);
+    fn update(&mut self, skimmed: &events::Skimmed) {
+        self.label.clone_from(&skimmed.page);
+        self.chapter.clone_from(&skimmed.chapter);
+        self.at = skimmed.permille.min(1000);
     }
 
     fn go(&self, to: &str, cx: &mut Cx<'_, '_>) {
-        cx.command(Command::Emit(
-            crate::SKIM,
-            Params::new()
-                .with(params::PATH, self.path.clone())
-                .with(TO, to.to_string()),
-        ));
+        cx.command(events::SKIM.emit(events::Skim::new(self.path.clone(), to.to_string())));
     }
 
     fn press(&self, index: usize, cx: &mut Cx<'_, '_>) {
@@ -291,8 +279,10 @@ impl Screen for SkimScreen {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
-        if *event == crate::SKIMMED && params.get(params::PATH) == Some(self.path.as_str()) {
-            self.update(params);
+        if let Some(skimmed) = events::SKIMMED.read(event, params)
+            && skimmed.path == self.path
+        {
+            self.update(&skimmed);
             cx.request_redraw_area(self.region);
             cx.request_refresh(RefreshMode::Fast);
         }

@@ -38,9 +38,9 @@ USB debugging*.
   versions); PaperPaw restarts and shows the shared `Books` folder, where
   Boox and most e-readers keep books. Any other folder can be chosen under
   *Settings → Library → Library folder*. Until access is allowed, the
-  library is `Android/data/io.github.hthoene.paperpaw/files/books` with the
+  library is `Android/data/org.paperpaw.app/files/books` with the
   sample books. `paperpaw.ini` and all caches stay in
-  `Android/data/io.github.hthoene.paperpaw/files`; passwords and keys
+  `Android/data/org.paperpaw.app/files`; passwords and keys
   in the app's private folder, which no other app reads.
 - **Plugins without code:** copy plugin folders into `PaperPaw/plugins` on
   the device's storage (created once access is allowed) and restart.

@@ -130,7 +130,9 @@ impl ConfirmScreen {
         let Some((path, xpointer, percentage)) = &self.offer else {
             return;
         };
-        let Ok(document) = env.formats.open(env.storage, path) else {
+        // As the reader opens it, so the place found is one of its.
+        let options = paperpaw_sdk::reading::open_options(&env);
+        let Ok(document) = env.formats.open_with(env.storage, path, &options) else {
             return;
         };
         let at = Some(xpointer)

@@ -329,7 +329,7 @@ impl BrowserScreen {
             message,
             &[("name", Arg::Str(&name)), ("folder", Arg::Str(dir))],
         );
-        if book && env.formats.supports(&target) {
+        if book && env.formats.supports_file(env.storage, &target) {
             self.message = None;
             cx.command(
                 paperpaw_sdk::ask::choice(&text, &CHOSEN)

@@ -24,7 +24,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ask;
-use paperpaw_sdk::builtin::{actions, events, groups, menus, params, slots};
+use paperpaw_sdk::builtin::{actions, events, groups, menus, params, screens, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::choice;
@@ -338,7 +338,7 @@ impl Browser {
         let path = ops::join(&self.dir, &entry.name);
         let env = *cx.env();
         let mut options = Vec::new();
-        if !entry.is_dir && env.formats.supports(&path) {
+        if !entry.is_dir && env.formats.supports_file(env.storage, &path) {
             options.push("open");
         }
         options.extend(["rename", "move", "copy", "delete"]);
@@ -841,7 +841,9 @@ fn follow_folders(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
             .as_ref()
             .is_some_and(|editor| match editor {
                 paperpaw_sdk::Editor::Slot(slot) => *slot == slots::CHOOSE_FOLDER,
-                paperpaw_sdk::Editor::Screen(screen) => *screen == CHOOSE_FOLDER,
+                paperpaw_sdk::Editor::Screen(screen) => {
+                    [CHOOSE_FOLDER, screens::FOLDER_EDITOR].contains(screen)
+                }
                 _ => false,
             });
         if !folder {

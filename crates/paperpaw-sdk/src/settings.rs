@@ -171,6 +171,10 @@ pub struct SettingSpec {
     pub description: Option<Cow<'static, str>>,
     /// May differ per scope, e.g. per book (see [`Settings::scope`]).
     pub scoped: bool,
+    /// It keeps the device safe (a lock's): changed by its own plugin and
+    /// the settings editor alone, never by another plugin's defaults,
+    /// presets or commands ([`SettingSpec::guarded`]).
+    pub guarded: bool,
     /// What few settings have ([`SettingSpec::extra`]), kept apart: the
     /// others take less memory.
     extra: Option<Extra>,
@@ -388,6 +392,7 @@ impl SettingSpec {
             level: Level::Basic,
             description: None,
             scoped: false,
+            guarded: false,
             extra: None,
         }
     }
@@ -430,6 +435,7 @@ impl SettingSpec {
             level: Level::Basic,
             description: None,
             scoped: false,
+            guarded: false,
             extra: None,
         }
     }
@@ -664,6 +670,14 @@ impl SettingSpec {
     /// May be set per scope, e.g. for one book only.
     pub const fn scoped(mut self) -> Self {
         self.scoped = true;
+        self
+    }
+
+    /// It keeps the device safe: only its own plugin and the settings
+    /// editor (the plugin of the settings slot) change it; other plugins'
+    /// defaults, presets and commands are refused.
+    pub const fn guarded(mut self) -> Self {
+        self.guarded = true;
         self
     }
 

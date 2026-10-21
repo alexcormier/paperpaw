@@ -168,8 +168,11 @@ impl Plugin for Flash {
             "flash",
             Box::new(move |_, refresh| {
                 seen.set(seen.get() + 1);
-                (seen.get() == 2 && refresh.mode == RefreshMode::Partial)
-                    .then_some(RefreshMode::Full)
+                if seen.get() == 2 && refresh.mode == RefreshMode::Partial {
+                    paperpaw_sdk::filters::RefreshVerdict::Mode(RefreshMode::Full)
+                } else {
+                    paperpaw_sdk::filters::RefreshVerdict::Keep
+                }
             }),
         ))
     }

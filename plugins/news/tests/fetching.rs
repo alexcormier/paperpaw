@@ -162,7 +162,7 @@ impl Harness {
         let notices = Rc::new(RefCell::new(Vec::new()));
         let mut kernel = Kernel::builder(device(memory))
             .storage(storage.clone())
-            .user_config(format!("[core]\nlanguage = en\n{config}"))
+            .user_config(format!("[core]\nlanguage = en\nlibrary-folder =\n{config}"))
             .network(network)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(News)

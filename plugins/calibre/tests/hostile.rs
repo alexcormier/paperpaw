@@ -15,9 +15,8 @@ use paperpaw_plugin_calibre::Calibre;
 use paperpaw_plugin_calibre::protocol::{self, frame, op};
 use paperpaw_sdk::secrets::{FILE, SecretChange, Secrets};
 use paperpaw_sdk::{
-    DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, Manifest, MemoryClass,
-    MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SettingSpec, Storage,
-    StorageError, Version,
+    DeviceInfo, DirEntry, DisplayInfo, Id, InputCaps, Instant, MemoryClass, MemoryStorage, Params,
+    PixelFormat, Storage, StorageError,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -74,31 +73,9 @@ impl Storage for Shared {
     }
 }
 
-/// The library folder's setting, as the `files` plugin has it.
-struct Library;
-
-static ROOT: [SettingSpec; 1] = [SettingSpec::fixed_text(
-    "files.root",
-    "files.setting.root",
-    "books",
-    paperpaw_sdk::builtin::groups::LIBRARY,
-)];
-
-impl Plugin for Library {
-    fn manifest(&self) -> Manifest {
-        Manifest::new(Id::new_static("files"), "Library", Version::new(0, 1, 0))
-            .description("")
-            .uses(paperpaw_sdk::Uses::NETWORK)
-    }
-
-    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_settings(&ROOT)
-    }
-}
-
 /// The library is `books` unless the configuration says otherwise.
 const CONFIG: &str = "[keymap.global]\nbutton.calibre = calibre.open\n\
-    [calibre]\naddress = 10.0.0.2\n[files]\nroot = books\n";
+    [calibre]\naddress = 10.0.0.2\n[core]\nlibrary-folder = books\n";
 
 /// A device with the Calibre screen open, and Calibre's side of the
 /// connection.
@@ -135,7 +112,6 @@ fn open(storage: &Shared, config: &str, network: bool) -> Kernel {
         .user_config(config)
         .network(network)
         .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
-        .plugin(Library)
         // Calibre writes only books of formats PaperPaw reads.
         .plugin(paperpaw_plugin_format_epub::EpubFormat)
         .plugin(Calibre)
@@ -422,7 +398,7 @@ fn books_with_paths_out_of_the_library_are_dropped() {
     let storage = Shared::default();
     storage.write("outside.epub", b"keep me").unwrap();
     storage
-        .write("paperpaw.ini", b"[files]\nroot = books\n")
+        .write("paperpaw.ini", b"[core]\nlibrary-folder = books\n")
         .unwrap();
     let mut s = Session::connected(storage, CONFIG);
     for lpath in [
@@ -438,7 +414,7 @@ fn books_with_paths_out_of_the_library_are_dropped() {
     assert_eq!(s.storage.0.get("outside.epub").unwrap(), b"keep me");
     assert_eq!(
         s.storage.0.get("paperpaw.ini").unwrap(),
-        b"[files]\nroot = books\n"
+        b"[core]\nlibrary-folder = books\n"
     );
     assert!(!s.storage.exists(".paperpaw/plugins/calibre/dropped.part"));
     assert!(!s.shown().contains("received"));
@@ -451,14 +427,14 @@ fn books_with_paths_out_of_the_library_are_dropped() {
 /// must not overwrite PaperPaw's own data.
 #[test]
 fn books_never_land_in_paperpaws_data_folder() {
-    // The library folder may be the storage's top (`files.root` empty);
+    // The library folder may be the storage's top (`core.library-folder` empty);
     // whoever answers the broadcast can then name any hidden path.
     let storage = Shared::default();
     let mut secrets = Secrets::default();
     secrets.apply(SecretChange::keep("other.key", "", "kept"));
     storage.write(FILE, secrets.encode().as_bytes()).unwrap();
     let config = "[keymap.global]\nbutton.calibre = calibre.open\n\
-        [calibre]\naddress = 10.0.0.2\n[files]\nroot =\n";
+        [calibre]\naddress = 10.0.0.2\n[core]\nlibrary-folder =\n";
     let mut s = Session::connected(storage, config);
     s.book(".paperpaw/secrets.txt", b"overwritten");
     assert_eq!(

@@ -331,9 +331,9 @@ impl Reading {
         (value("section"), value("offset"))
     }
 
-    /// Where the reader keeps the position of the book.
+    /// Where the position of the book is kept.
     pub fn progress_path(&self) -> String {
-        format!("{}/progress.ini", paperpaw_plugin_reader_dir(&self.book))
+        paperpaw_sdk::positions::file(&self.book)
     }
 
     /// Where the reader said the book is, last: opened or turned to.
@@ -597,6 +597,12 @@ pub fn paperpaw_plugin_reader_dir(path: &str) -> String {
 /// An EPUB with `chapters` (file name and the body's HTML) in this
 /// order, and a table of contents of `toc` (title and link).
 pub fn epub(chapters: &[(&str, String)], toc: &[(&str, &str)]) -> Vec<u8> {
+    epub_with(chapters, toc, "")
+}
+
+/// The same, with `spine` the spine's attributes (e.g. its pages going
+/// right to left).
+pub fn epub_with(chapters: &[(&str, String)], toc: &[(&str, &str)], spine_attrs: &str) -> Vec<u8> {
     use paperpaw_zip::testing::ZipBuilder;
     let container = r#"<?xml version="1.0"?>
 <container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">
@@ -619,7 +625,7 @@ pub fn epub(chapters: &[(&str, String)], toc: &[(&str, &str)]) -> Vec<u8> {
     <dc:title>Test Book</dc:title><dc:creator>A. Writer</dc:creator><dc:language>en</dc:language>
   </metadata>
   <manifest>{manifest}</manifest>
-  <spine>{spine}</spine>
+  <spine{spine_attrs}>{spine}</spine>
 </package>"#
     );
     let entries: String = toc

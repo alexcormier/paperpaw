@@ -33,6 +33,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{CONFIG_FILE, GLOBAL_KEYMAP_LAYER, actions, menus, params, slots};
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::keys::{EDGES, PINCHES, POLICIES, SWIPES, ZONES};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
@@ -59,11 +60,6 @@ const SEARCHED: Event<Typed> = Event::new("keys.searched");
 const INPUT: &str = "input";
 /// How a place takes gestures, as written in key maps.
 const POLICY: &str = "gestures.policy";
-const POLICIES: [&str; 3] = [
-    "core.gestures.standard",
-    "core.gestures.own",
-    "core.gestures.off",
-];
 
 const BUTTONS: [&str; 10] = [
     "page-forward",
@@ -77,19 +73,6 @@ const BUTTONS: [&str; 10] = [
     "up",
     "down",
 ];
-const ZONES: [&str; 9] = [
-    "top-left",
-    "top",
-    "top-right",
-    "left",
-    "center",
-    "right",
-    "bottom-left",
-    "bottom",
-    "bottom-right",
-];
-const SWIPES: [&str; 4] = ["left", "right", "up", "down"];
-const EDGES: [&str; 4] = ["bottom", "top", "left", "right"];
 
 /// What buttons alone cannot do without, each with the message that a
 /// change taking its last button away is refused with: choosing, going
@@ -207,7 +190,8 @@ fn tell_apart(places: &mut [Place]) {
     }
 }
 
-/// The inputs of the buttons this device has, short and held.
+/// The inputs of the buttons this device has: short, held and pressed
+/// twice.
 fn button_inputs(env: &Env<'_>) -> Vec<String> {
     let keys = env.device.input.keys;
     let has: Vec<&str> = BUTTONS
@@ -217,7 +201,8 @@ fn button_inputs(env: &Env<'_>) -> Vec<String> {
         .collect();
     let short = has.iter().map(|b| format!("button.{b}"));
     let held = has.iter().map(|b| format!("long.{b}"));
-    short.chain(held).collect()
+    let twice = has.iter().map(|b| format!("double.{b}"));
+    short.chain(held).chain(twice).collect()
 }
 
 /// Why binding `input` to `action` in `layers` is refused, if it is: on a
@@ -307,7 +292,10 @@ fn rows(env: &Env<'_>, everywhere: bool) -> Vec<Row> {
         gestures.push(("keys.section.swipes", each("swipe", &SWIPES)));
         gestures.push(("keys.section.taps", each("tap", &ZONES)));
         gestures.push(("keys.section.held-taps", each("long-tap", &ZONES)));
-        gestures.push(("keys.section.fingers", each("pinch", &["out", "in"])));
+        gestures.push(("keys.section.double-taps", each("double-tap", &ZONES)));
+        let mut fingers = Vec::from([String::from("tap2")]);
+        fingers.extend(each("pinch", &PINCHES));
+        gestures.push(("keys.section.fingers", fingers));
     }
     let mut buttons: Vec<(&'static str, Vec<String>)> = Vec::new();
     if input.buttons {
@@ -324,6 +312,10 @@ fn rows(env: &Env<'_>, everywhere: bool) -> Vec<Row> {
             "keys.section.held-buttons",
             has.iter().map(|b| format!("long.{b}")).collect(),
         ));
+        buttons.push((
+            "keys.section.double-buttons",
+            has.iter().map(|b| format!("double.{b}")).collect(),
+        ));
     }
     let (first, then) = if input.touch {
         (gestures, buttons)
@@ -333,6 +325,9 @@ fn rows(env: &Env<'_>, everywhere: bool) -> Vec<Row> {
     for (heading, inputs) in first.into_iter().chain(then) {
         section(&mut rows, heading, inputs);
     }
+    // Plugins' inputs and gestures, those this device can make.
+    let own = env.inputs.iter().map(paperpaw_sdk::keys::InputSpec::key);
+    section(&mut rows, "keys.section.own", own.collect());
     rows.push(Row::Reset);
     rows
 }
@@ -346,9 +341,23 @@ fn input_name(env: &Env<'_>, input: &str) -> String {
         "long" => env
             .i18n
             .format("keys.long", &[("input", Arg::Str(&part("button")))]),
+        "double" => env
+            .i18n
+            .format("keys.double", &[("input", Arg::Str(&part("button")))]),
         "tap" => env
             .i18n
             .format("keys.tap", &[("zone", Arg::Str(&part("zone")))]),
+        "double-tap" => env
+            .i18n
+            .format("keys.double-tap", &[("zone", Arg::Str(&part("zone")))]),
+        "tap2" => env.i18n.tr("keys.tap2").to_string(),
+        "input" | "gesture" => env
+            .inputs
+            .iter()
+            .find(|spec| spec.key() == input)
+            .map_or(input.to_string(), |spec| {
+                env.i18n.tr(&spec.title).to_string()
+            }),
         "long-tap" => env
             .i18n
             .format("keys.long-tap", &[("zone", Arg::Str(&part("zone")))]),
@@ -629,7 +638,8 @@ impl Screen for ListScreen {
                         // Tap zones as a small picture of the screen.
                         let zone = input
                             .strip_prefix("tap.")
-                            .or_else(|| input.strip_prefix("long-tap."));
+                            .or_else(|| input.strip_prefix("long-tap."))
+                            .or_else(|| input.strip_prefix("double-tap."));
                         let rect = match zone {
                             Some(zone) => {
                                 let band = ui::title_area(&style, rect);
