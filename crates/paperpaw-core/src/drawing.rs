@@ -385,13 +385,8 @@ impl Kernel {
     /// clip it was drawn in, e.g. for checks of text cut at a cell's edge.
     pub fn described(&mut self) -> Vec<paperpaw_sdk::semantics::Described> {
         let bounds = self.framebuffer.bounds();
-        let Ok(mut aside) = Framebuffer::new(
-            bounds.width,
-            bounds.height,
-            paperpaw_platform::PixelFormat::Mono1,
-        ) else {
-            return Vec::new();
-        };
+        // Described, not drawn: no pixels kept.
+        let mut aside = Framebuffer::blind(bounds.width, bounds.height);
         let env = self.shared.env(self.now);
         let regions: Vec<Option<Rect>> = self.stack.iter().map(|s| s.screen.region(&env)).collect();
         let base = regions.iter().rposition(Option::is_none).unwrap_or(0);
@@ -434,13 +429,8 @@ impl Kernel {
     /// focus through its parts. Draws it once, aside.
     pub fn described_active(&mut self) -> Vec<paperpaw_sdk::semantics::Described> {
         let bounds = self.framebuffer.bounds();
-        let Ok(mut aside) = Framebuffer::new(
-            bounds.width,
-            bounds.height,
-            paperpaw_platform::PixelFormat::Mono1,
-        ) else {
-            return Vec::new();
-        };
+        // Described, not drawn: no pixels kept.
+        let mut aside = Framebuffer::blind(bounds.width, bounds.height);
         let env = self.shared.env(self.now);
         let Some(active) = self.stack.last_mut() else {
             return Vec::new();

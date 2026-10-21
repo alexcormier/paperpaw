@@ -184,8 +184,7 @@ impl Typing {
     fn field(&mut self) -> String {
         self.parts()
             .into_iter()
-            .filter(|p| p.role == Role::Text)
-            .nth(1)
+            .find(|p| p.role == Role::Field)
             .map(|p| p.label)
             .unwrap_or_default()
     }

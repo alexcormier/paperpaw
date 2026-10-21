@@ -467,6 +467,7 @@ impl KernelBuilder {
                 network_waiting: None,
                 network_busy: false,
                 focus_spoken: false,
+                focus_told: None,
             },
             keys: plugins::KeySources::default(),
             stylesheet_owners: Vec::new(),

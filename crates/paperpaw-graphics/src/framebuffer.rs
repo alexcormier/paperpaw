@@ -41,6 +41,9 @@ pub struct Framebuffer {
     /// Pictures drawn now count there (not small ones, see
     /// [`Canvas::small_pictures`](crate::Canvas::small_pictures)).
     counting: bool,
+    /// Holds no pixels: what is drawn is only described (see
+    /// [`Framebuffer::blind`]).
+    blind: bool,
 }
 
 impl Framebuffer {
@@ -83,7 +86,33 @@ impl Framebuffer {
             saturation: 100,
             pictured: 0,
             counting: true,
+            blind: false,
         })
+    }
+
+    /// A framebuffer for a `width`×`height` screen that holds no pixels:
+    /// drawing on it costs no memory and draws nothing, but a canvas of
+    /// it describes what is drawn ([`Canvas::describing`]) as on the
+    /// screen, e.g. to say what a screen shows (48 KB less on a
+    /// 800×480 screen in black and white).
+    pub fn blind(width: u16, height: u16) -> Self {
+        Self {
+            width,
+            height,
+            format: PixelFormat::Mono1,
+            stride: 0,
+            top: 0,
+            rows: height.max(1),
+            data: Vec::new(),
+            dirty: None,
+            inverted: false,
+            pictures_kept: false,
+            mono_coverage: MONO_COVERAGE,
+            saturation: 100,
+            pictured: 0,
+            counting: true,
+            blind: true,
+        }
     }
 
     pub fn width(&self) -> u16 {
@@ -128,6 +157,9 @@ impl Framebuffer {
     /// screen row `top`) into this framebuffer, e.g. to keep a copy of the
     /// whole screen from bands. Rows outside the current band are skipped.
     pub fn write_rows(&mut self, top: u16, rows: FrameView<'_>) {
+        if self.blind {
+            return;
+        }
         if rows.format != self.format || rows.width != self.width {
             return;
         }
@@ -159,6 +191,15 @@ impl Framebuffer {
     /// The held rows that `region` covers, as full-width rows starting at
     /// screen row `region.y` (clamped to the band).
     pub fn view_rows(&self, region: Rect) -> FrameView<'_> {
+        if self.blind {
+            return FrameView {
+                width: self.width,
+                height: 0,
+                format: self.format,
+                stride: self.stride,
+                data: &[],
+            };
+        }
         let band = self.band();
         let first = region.y.clamp(band.y, band.bottom() as u16);
         let last = region.bottom().clamp(u32::from(first), band.bottom()) as u16;
@@ -237,6 +278,9 @@ impl Framebuffer {
 
     /// Fills `rect`, which must lie inside the framebuffer.
     pub(crate) fn fill_clipped(&mut self, rect: Rect, color: Color) {
+        if self.blind {
+            return;
+        }
         if rect.is_empty() {
             return;
         }
@@ -290,6 +334,9 @@ impl Framebuffer {
     /// than [`Canvas::fill_tint`](crate::Canvas::fill_tint)'s, so tinted
     /// lines stay).
     pub(crate) fn wash_clipped(&mut self, rect: Rect) {
+        if self.blind {
+            return;
+        }
         if rect.is_empty() {
             return;
         }
@@ -341,6 +388,9 @@ impl Framebuffer {
     /// `(x, y)`, which must lie inside the framebuffer. Does not mark the
     /// pixel dirty; callers mark whole areas.
     pub(crate) fn blend_pixel(&mut self, x: u16, y: u16, color: Color, alpha: u8) {
+        if self.blind {
+            return;
+        }
         // In black and white, a pixel at an edge takes the colour from a
         // part covered (somewhat less than half at first): thin strokes
         // of small text keep their weight instead of breaking up.
@@ -406,6 +456,9 @@ impl Framebuffer {
     /// dithered for formats with few gray levels, so photos and
     /// illustrations keep their tones.
     pub(crate) fn put_gray(&mut self, x: u16, y: u16, gray: u8) {
+        if self.blind {
+            return;
+        }
         self.pictured = self.pictured.saturating_add(u32::from(self.counting));
         let gray = self.dithered(x, y, gray);
         // Inverted once more to stay as it is, where pictures are kept.
@@ -442,6 +495,9 @@ impl Framebuffer {
     /// pattern rather than turning white); colour formats get the colour.
     /// It is no picture (see [`Framebuffer::take_pictured`]).
     pub(crate) fn shade_clipped(&mut self, rect: Rect, color: Color) {
+        if self.blind {
+            return;
+        }
         if !matches!(self.format.gray_levels(), Some(2..=16)) {
             return self.fill_clipped(rect, color);
         }
@@ -461,6 +517,9 @@ impl Framebuffer {
     /// Sets the pixel at `(x, y)` (inside the band) to `rgb` on colour
     /// formats; on gray ones to its gray, as [`Framebuffer::put_gray`].
     pub(crate) fn put_rgb(&mut self, x: u16, y: u16, rgb: [u8; 3]) {
+        if self.blind {
+            return;
+        }
         if self.format.is_color() {
             self.pictured = self.pictured.saturating_add(u32::from(self.counting));
             let rgb = saturate(rgb, self.saturation);

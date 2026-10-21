@@ -555,3 +555,82 @@ fn kernel_with(harness: &Harness, plugin: impl Plugin + 'static) -> Kernel {
     harness.take();
     kernel
 }
+
+/// Two buttons, the focus on one of them, moved by *Down*; and the parts
+/// where the focus goes, heard.
+struct Focused {
+    heard: Rc<std::cell::RefCell<Vec<String>>>,
+}
+
+struct TwoButtons(usize);
+
+impl paperpaw_core::sdk::Screen for TwoButtons {
+    fn draw(
+        &mut self,
+        canvas: &mut paperpaw_core::sdk::Canvas<'_>,
+        _: &paperpaw_core::sdk::Env<'_>,
+    ) {
+        use paperpaw_core::sdk::semantics::Role;
+        for (i, label) in ["First", "Second"].iter().enumerate() {
+            let area = paperpaw_core::sdk::Rect::new(0, 40 * i as u16, 100, 40);
+            canvas.describe(Role::Button, label, area, self.0 == i, None);
+        }
+    }
+
+    fn on_action(
+        &mut self,
+        action: &paperpaw_core::sdk::Id,
+        cx: &mut paperpaw_core::sdk::Cx<'_, '_>,
+    ) -> paperpaw_core::sdk::Handled {
+        if *action == paperpaw_core::sdk::builtin::actions::DOWN {
+            self.0 = (self.0 + 1) % 2;
+            cx.request_redraw();
+            return paperpaw_core::sdk::Handled::Yes;
+        }
+        paperpaw_core::sdk::Handled::No
+    }
+}
+
+impl Plugin for Focused {
+    fn manifest(&self) -> Manifest {
+        common::manifest("focused")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let screen = paperpaw_core::sdk::Id::new_static("focused.home");
+        r.add_screen(paperpaw_core::sdk::ScreenSpec::new(
+            screen.clone(),
+            "focused.home",
+            Box::new(|_, _| Box::new(TwoButtons(0))),
+        ))?;
+        r.bind_slot(slots::HOME, screen, paperpaw_core::sdk::Priority(1000))?;
+        let heard = self.heard.clone();
+        r.on(events::FOCUS_CHANGED, move |_, focus, _| {
+            heard
+                .borrow_mut()
+                .push(format!("{} {} {}", focus.role, focus.label, focus.y));
+        })
+    }
+}
+
+/// A plugin that listens hears where the focus goes, once each time.
+#[test]
+fn plugins_hear_where_the_focus_goes() {
+    let heard = Rc::new(std::cell::RefCell::new(Vec::new()));
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(Focused {
+            heard: heard.clone(),
+        })
+        .storage(MemoryStorage::new())
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    common::render(&mut kernel);
+    common::press(&mut kernel, 100, "down");
+    common::press(&mut kernel, 300, "down");
+    assert_eq!(
+        *heard.borrow(),
+        ["button Second 40", "button First 0"],
+        "the start's focus is told with the first move"
+    );
+}

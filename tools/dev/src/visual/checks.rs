@@ -50,6 +50,13 @@ fn role_name(role: Role) -> &'static str {
         Role::Switch => "switch",
         Role::Slider => "slider",
         Role::Text => "text",
+        Role::Check => "check box",
+        Role::Radio => "option",
+        Role::Field => "field",
+        Role::Image => "picture",
+        Role::Link => "link",
+        Role::Dialog => "dialog",
+        Role::Progress => "progress bar",
         _ => "part",
     }
 }

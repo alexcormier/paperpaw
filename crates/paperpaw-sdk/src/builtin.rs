@@ -328,6 +328,27 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// What has the focus of the buttons now ([`FOCUS_CHANGED`]), as
+        /// the screen describes it (see [`semantics`](crate::semantics)).
+        pub struct FocusChanged {
+            /// Its role's name ([`semantics::role_name`](crate::semantics::role_name)),
+            /// e.g. `row` or `button`.
+            pub role: String,
+            /// What it says, e.g. a row's title and value.
+            pub label: String,
+            /// Where it is on the screen.
+            pub x: u16,
+            pub y: u16,
+            pub width: u16,
+            pub height: u16,
+        }
+        optional {
+            /// For switches and buttons that are on or off.
+            pub on: bool,
+        }
+    }
+
+    crate::event_data! {
         /// Which setting changed ([`SETTING_CHANGED`]).
         pub struct SettingChanged {
             pub id: Id,
@@ -528,6 +549,10 @@ pub mod events {
     /// [`ID`](super::params::ID) (as [`ui::setting_opens`](crate::ui::setting_opens)
     /// asks): the kernel sets the setting to it, trimmed.
     pub const SETTING_TYPED: Event<crate::replies::Typed> = Event::new("core.setting-typed");
+    /// The focus of the buttons moved to another part of the screen
+    /// ([`FocusChanged`]): for screen readers of one's own. Worked out
+    /// only while a plugin listens or the focus is spoken.
+    pub const FOCUS_CHANGED: Event<FocusChanged> = Event::new("core.focus-changed");
     /// A book was opened for reading ([`Reading`]). Every reader plugin
     /// emits it, so home screens, statistics or sync plugins work with any
     /// reader. Not for documents in hidden folders

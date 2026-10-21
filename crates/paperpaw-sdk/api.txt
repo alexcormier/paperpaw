@@ -154,6 +154,20 @@ pub fn paperpaw_sdk::builtin::events::DecorationTapped::new(paperpaw_sdk::Id, pa
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::DecorationTapped
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::builtin::events::FocusChanged
+pub paperpaw_sdk::builtin::events::FocusChanged::height: u16
+pub paperpaw_sdk::builtin::events::FocusChanged::label: alloc::string::String
+pub paperpaw_sdk::builtin::events::FocusChanged::on: core::option::Option<bool>
+pub paperpaw_sdk::builtin::events::FocusChanged::role: alloc::string::String
+pub paperpaw_sdk::builtin::events::FocusChanged::width: u16
+pub paperpaw_sdk::builtin::events::FocusChanged::x: u16
+pub paperpaw_sdk::builtin::events::FocusChanged::y: u16
+impl paperpaw_sdk::builtin::events::FocusChanged
+pub fn paperpaw_sdk::builtin::events::FocusChanged::new(alloc::string::String, alloc::string::String, u16, u16, u16, u16) -> Self
+pub fn paperpaw_sdk::builtin::events::FocusChanged::on(self, impl core::convert::Into<core::option::Option<bool>>) -> Self
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::FocusChanged
+pub fn paperpaw_sdk::builtin::events::FocusChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::FocusChanged::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::builtin::events::Goto
 pub paperpaw_sdk::builtin::events::Goto::end_offset: core::option::Option<u32>
 pub paperpaw_sdk::builtin::events::Goto::end_section: core::option::Option<u32>
@@ -269,6 +283,7 @@ pub const paperpaw_sdk::builtin::events::BOOK_OPENED: paperpaw_sdk::event::Event
 pub const paperpaw_sdk::builtin::events::BOOK_REMOVED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::BookRemoved>
 pub const paperpaw_sdk::builtin::events::DECORATION_TAPPED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::DecorationTapped>
 pub const paperpaw_sdk::builtin::events::FIRMWARE_CHANGED: paperpaw_sdk::event::Event<()>
+pub const paperpaw_sdk::builtin::events::FOCUS_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::FocusChanged>
 pub const paperpaw_sdk::builtin::events::GOTO: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::Goto>
 pub const paperpaw_sdk::builtin::events::LIBRARY_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::MENU_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::MenuChanged>
@@ -843,6 +858,9 @@ pub fn paperpaw_sdk::builtin::events::BookRemoved::to_params(&self) -> paperpaw_
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::DecorationTapped
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::FocusChanged
+pub fn paperpaw_sdk::builtin::events::FocusChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::FocusChanged::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Goto
 pub fn paperpaw_sdk::builtin::events::Goto::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Goto::to_params(&self) -> paperpaw_sdk::Params
@@ -1613,6 +1631,7 @@ pub paperpaw_sdk::semantics::Part::role: paperpaw_graphics::canvas::Role
 pub fn paperpaw_sdk::semantics::find<'a>(&'a [paperpaw_sdk::semantics::Part], &str) -> core::option::Option<&'a paperpaw_sdk::semantics::Part>
 pub fn paperpaw_sdk::semantics::focused(&[paperpaw_sdk::semantics::Part]) -> core::option::Option<&paperpaw_sdk::semantics::Part>
 pub fn paperpaw_sdk::semantics::parts(alloc::vec::Vec<paperpaw_graphics::canvas::Described>) -> alloc::vec::Vec<paperpaw_sdk::semantics::Part>
+pub fn paperpaw_sdk::semantics::role_name(paperpaw_graphics::canvas::Role) -> &'static str
 pub mod paperpaw_sdk::server_params
 pub const paperpaw_sdk::server_params::ADDRESS: &str
 pub const paperpaw_sdk::server_params::BODY_FILE: &str
@@ -3947,6 +3966,9 @@ pub fn paperpaw_sdk::builtin::events::BookRemoved::to_params(&self) -> paperpaw_
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::DecorationTapped
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::DecorationTapped::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::FocusChanged
+pub fn paperpaw_sdk::builtin::events::FocusChanged::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::FocusChanged::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Goto
 pub fn paperpaw_sdk::builtin::events::Goto::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Goto::to_params(&self) -> paperpaw_sdk::Params

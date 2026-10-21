@@ -46,7 +46,16 @@ pub fn parts(described: Vec<Described>) -> Vec<Part> {
     for d in described {
         // Inside the last part drawn around it.
         let container = parts.iter().rposition(|p| {
-            matches!(p.role, Role::Row | Role::Heading | Role::Button) && inside(d.area, p.area)
+            matches!(
+                p.role,
+                Role::Row
+                    | Role::Heading
+                    | Role::Button
+                    | Role::Field
+                    | Role::Check
+                    | Role::Radio
+                    | Role::Link
+            ) && inside(d.area, p.area)
         });
         // Arrows and marks say nothing.
         if d.role == Role::Text && !d.label.chars().any(char::is_alphanumeric) {
@@ -86,6 +95,27 @@ pub fn parts(described: Vec<Described>) -> Vec<Part> {
 }
 
 /// The part with the focus, if any.
+/// The name of `role`, e.g. `button` (as [`events::FocusChanged`](crate::builtin::events::FocusChanged)
+/// says it).
+pub fn role_name(role: Role) -> &'static str {
+    match role {
+        Role::Heading => "heading",
+        Role::Row => "row",
+        Role::Button => "button",
+        Role::Switch => "switch",
+        Role::Slider => "slider",
+        Role::Text => "text",
+        Role::Check => "check",
+        Role::Radio => "radio",
+        Role::Field => "field",
+        Role::Image => "image",
+        Role::Link => "link",
+        Role::Dialog => "dialog",
+        Role::Progress => "progress",
+        _ => "part",
+    }
+}
+
 pub fn focused(parts: &[Part]) -> Option<&Part> {
     parts.iter().rev().find(|p| p.focused)
 }

@@ -29,6 +29,8 @@ pub(crate) struct IoState {
     /// What is spoken is the kernel's own word of the focus
     /// (`Kernel::speak_focus`), which the next replaces.
     pub(crate) focus_spoken: bool,
+    /// The focus last told to plugins (`events::FOCUS_CHANGED`).
+    pub(crate) focus_told: Option<paperpaw_sdk::semantics::Part>,
 }
 
 impl Kernel {

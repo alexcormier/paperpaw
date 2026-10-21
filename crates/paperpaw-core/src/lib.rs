@@ -617,16 +617,43 @@ impl Kernel {
     /// the focus before, if that is still spoken; not while a plugin
     /// reads aloud.
     fn speak_focus(&mut self) {
-        if !self.shared.caps.speech
-            || !self
+        let listened = self
+            .subscriptions
+            .iter()
+            .any(|(event, ..)| *event == events::FOCUS_CHANGED);
+        let spoken = self.shared.caps.speech
+            && self
                 .shared
                 .settings
                 .bool(core_settings::SPEAK_FOCUS.as_str())
-            || (self.io.speech.speaking() && !self.io.focus_spoken)
-        {
+            && !(self.io.speech.speaking() && !self.io.focus_spoken);
+        if !listened && !spoken {
             return;
         }
         let parts = self.describe();
+        // Plugins that listen are told where it went.
+        let focus = paperpaw_sdk::semantics::focused(&parts).cloned();
+        if listened && focus != self.io.focus_told {
+            if let Some(part) = &focus {
+                let mut told = events::FocusChanged::new(
+                    String::from(paperpaw_sdk::semantics::role_name(part.role)),
+                    part.label.clone(),
+                    part.area.x,
+                    part.area.y,
+                    part.area.width,
+                    part.area.height,
+                );
+                told.on = part.on;
+                self.io.focus_told = focus;
+                self.output.commands.push(events::FOCUS_CHANGED.emit(told));
+                self.run_commands();
+            } else {
+                self.io.focus_told = None;
+            }
+        }
+        if !spoken {
+            return;
+        }
         let said = paperpaw_sdk::semantics::focused(&parts).map(|part| {
             let state = match part.on {
                 Some(true) => self.shared.translator.tr("core.state.on"),

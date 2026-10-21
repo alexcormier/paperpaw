@@ -53,6 +53,21 @@ pub enum Role {
     Slider,
     /// Text.
     Text,
+    /// A box ticked or not, of several that may each be; `on` says which.
+    Check,
+    /// One of several of which one is chosen; `on` says whether it is.
+    Radio,
+    /// Where text is typed; its text is that typed so far.
+    Field,
+    /// A picture; its text says what it shows, where known.
+    Image,
+    /// Leads elsewhere when chosen, e.g. a link in a book.
+    Link,
+    /// A question over the screen, e.g. a choice of a few options; its
+    /// text is the question.
+    Dialog,
+    /// How far something has come; its text the share done, e.g. `42%`.
+    Progress,
 }
 
 /// Rings are drawn at most this many pixels across their radius, far

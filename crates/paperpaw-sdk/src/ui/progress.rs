@@ -17,9 +17,17 @@ pub fn draw_progress(
     permille: u16,
     ink: Color,
 ) {
+    let done = permille.min(1000);
+    canvas.describe(
+        Role::Progress,
+        &format!("{}%", done / 10),
+        area,
+        false,
+        None,
+    );
     let part = super::look::ProgressPart {
         area,
-        permille: permille.min(1000),
+        permille: done,
         ink,
     };
     if style.look.progress(canvas, style, part) {

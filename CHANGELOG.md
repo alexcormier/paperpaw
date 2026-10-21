@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: accessibility. `events::FOCUS_CHANGED` (`FocusChanged`: role,
+  label, area, on) tells plugins where the focus of the buttons went,
+  worked out only while one listens or the focus is spoken. The kernel
+  describes screens on a framebuffer that keeps no pixels
+  (`Framebuffer::blind`; 48 KB less on the X4). New roles `Check`,
+  `Radio`, `Field`, `Image`, `Link`, `Dialog` and `Progress`
+  (`semantics::role_name` names them); progress bars and the keyboard's
+  field describe themselves so.
 - SDK: `ui::setting_opens` says what choosing a setting opens (its
   editor, the keyboard for text, the list of a choice's values), the
   same on the settings pages, in menus, the quick panel and the setup;
