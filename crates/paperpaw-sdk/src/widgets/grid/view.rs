@@ -110,8 +110,8 @@ struct Edit {
 /// What a target does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Target {
-    /// What a tap runs, and a long press where it says.
-    Run(Command, Option<Command>),
+    /// What a tap runs, and a long press where it says (boxed: rare).
+    Run(Command, Option<Box<Command>>),
     /// An item, when editing: its index.
     Item(usize),
     /// One of the screen's own buttons.
@@ -269,8 +269,10 @@ impl GridView {
                             if target.touch {
                                 self.touch.push((target.area, target.command));
                             } else {
-                                self.targets
-                                    .push((target.area, Target::Run(target.command, target.hold)));
+                                self.targets.push((
+                                    target.area,
+                                    Target::Run(target.command, target.hold.map(Box::new)),
+                                ));
                             }
                         }
                     }
@@ -1081,7 +1083,9 @@ impl GridView {
             // A target's own long press, else editing.
             GestureKind::LongPress if self.edit.is_none() => {
                 let hold = self.targets.iter().find_map(|(r, target)| match target {
-                    Target::Run(_, Some(hold)) if r.contains(gesture.start) => Some(hold.clone()),
+                    Target::Run(_, Some(hold)) if r.contains(gesture.start) => {
+                        Some((**hold).clone())
+                    }
                     _ => None,
                 });
                 if let Some(hold) = hold {
