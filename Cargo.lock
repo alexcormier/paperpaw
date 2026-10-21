@@ -2180,6 +2180,7 @@ dependencies = [
  "paperpaw-emulator",
  "paperpaw-platform",
  "paperpaw-sample-hello",
+ "paperpaw-x4",
 ]
 
 [[package]]

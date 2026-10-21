@@ -212,6 +212,22 @@ export class PaperPawDevice {
     return new ImageData(bytes, width, height);
   }
 
+  /// The remote control's command (a line as tools/x4-remote.py sends it,
+  /// e.g. `run calibre.open`, `describe`) at `now` (as `advance` takes
+  /// it); its answer, from JSON.
+  command(line, now) {
+    needsTime(now);
+    this.#check(this.#with([line], (p, l) => this.exports.pp_command(p, l, now)));
+    return JSON.parse(this.#result());
+  }
+
+  /// Whether the screen shown is `text` (its id) or shows it.
+  shows(text) {
+    const status = this.#with([text], (p, l) => this.exports.pp_shows(p, l));
+    if (status === STOPPED) this.#check(status);
+    return status === 1;
+  }
+
   /// paperpaw-dev's report of the data plugins on the card (`commands`:
   /// some of package, lint, visual, reach; none: all).
   check(commands = [], plugins = []) {

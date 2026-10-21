@@ -726,6 +726,31 @@ impl Firmware {
     }
 
     /// Carries out a command over USB that changes the X4's state.
+    /// Opens a slot (`slot`) or a screen by its id, with parameters, over
+    /// USB.
+    fn open_remote(
+        &mut self,
+        id: &str,
+        params: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>,
+        slot: bool,
+    ) {
+        let Ok(id) = paperpaw_sdk::Id::parse(id) else {
+            return crate::remote::error(id);
+        };
+        let mut with = paperpaw_sdk::Params::new();
+        for (key, value) in params {
+            with.set(key, value);
+        }
+        let at = self.kernel_now();
+        let effects = if slot {
+            self.kernel.open_slot(at, id, with)
+        } else {
+            self.kernel.open_screen(at, id, with)
+        };
+        self.apply(effects);
+        crate::remote::ok();
+    }
+
     fn remote_command(&mut self, command: paperpaw_x4::remote::Command) {
         use crate::remote;
         use paperpaw_x4::remote::Command;
@@ -781,6 +806,8 @@ impl Firmware {
                 let refresh = if full { Refresh::Full } else { Refresh::Fast };
                 remote::refreshed(self.panel.refresh(refresh, false));
             }
+            Command::Slot { id, params } => self.open_remote(&id, params, true),
+            Command::Show { id, params } => self.open_remote(&id, params, false),
             Command::Emit { event, params } => {
                 let Ok(id) = paperpaw_sdk::Id::parse(&event) else {
                     return remote::error(&event);

@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The web emulator takes the remote control's commands, as
+  `tools/x4-remote.py` sends them to an X4 and parsed the same
+  (`paperpaw_x4::remote`): screens and slots opened by id with
+  parameters, actions run, settings set and read, events sent, what is
+  shown described, the card's files and the clock, answered as JSON
+  (`Emulator::command`, `pp_command`, the frame's `command`, `describe`,
+  `run`, `slot`, `show`, `open`, `set`, `emit`), and waits until a screen
+  or a text shows (`Emulator::shows`, `until`, `expect`). The remote
+  control has `slot` and `show` on the X4 too.
+
 - Library: a book is deleted from its sheet (*Delete …*, last of its
   actions). The sheet asks in place, the book still in sight and the
   focus on *Keep it*; Back keeps it too. Deleted, the book goes with what

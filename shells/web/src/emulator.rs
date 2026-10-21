@@ -14,6 +14,8 @@ use paperpaw_dev::target::{DataPlugin, Target};
 use paperpaw_emulator::device::{AddPlugins, Device};
 use paperpaw_emulator::profiles::{self, Profile};
 use paperpaw_emulator::{budget, panel, trace};
+mod commands;
+
 use paperpaw_platform::{
     ButtonState, InputEvent, PixelFormat, Point, PointerEvent, PointerPhase, PointerTool,
 };

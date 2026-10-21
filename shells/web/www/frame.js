@@ -237,7 +237,54 @@ function check({ commands, plugins }) {
   return { report: device.check(commands ?? [], plugins ?? []) };
 }
 
-const HANDLERS = { start, files, input, screenshot, check };
+/// Text as the remote's lines carry it: hexadecimal, `-` for none.
+function hex(text) {
+  const bytes = new TextEncoder().encode(String(text ?? ""));
+  return bytes.length ? Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("") : "-";
+}
+
+/// Parameters as the remote's lines carry them: `key=hex` words.
+function pairs(params) {
+  return Object.entries(params ?? {}).map(([key, value]) => `${key}=${hex(value)}`);
+}
+
+/// The remote control's command, an x4-remote line (see
+/// docs/web-emulator.md); its answer.
+function command({ line }) {
+  const answer = guarded(() => device.command(line, now()));
+  step();
+  return { answer };
+}
+
+/// The same, built from a message's fields.
+const line = (words) => command({ line: words.join(" ") });
+const commands = {
+  command,
+  describe: () => command({ line: "describe" }).answer,
+  run: ({ action }) => line(["run", action]),
+  slot: ({ slot, params }) => line(["slot", slot, ...pairs(params)]),
+  show: ({ screen, params }) => line(["show", screen, ...pairs(params)]),
+  open: ({ path }) => line(["open", hex(path)]),
+  set: ({ setting, value }) => line(["set", setting, hex(value)]),
+  emit: ({ event, params }) => line(["emit", event, ...pairs(params)]),
+  /// Waits until the screen is `text` (its id) or shows it, at most
+  /// `timeout` ms of the page's time, the device running meanwhile.
+  until: async ({ text, timeout = 30000 }) => {
+    const end = now() + timeout;
+    for (;;) {
+      step();
+      if (guarded(() => device.shows(text))) return {};
+      if (now() >= end) throw new Error(`not shown in ${timeout} ms: ${text}`);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  },
+  expect: ({ text }) => {
+    if (!guarded(() => device.shows(text))) throw new Error(`not shown: ${text}`);
+    return {};
+  },
+};
+
+const HANDLERS = { start, files, input, screenshot, check, ...commands };
 
 window.addEventListener("message", async (event) => {
   if (event.source !== window.parent || event.source === window) return;

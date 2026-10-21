@@ -32,6 +32,8 @@ STEPS, separated by commas:
   open:books/a.epub  open a book in the reader
   run:calibre.open   run an action, as a button bound to it would (e.g. a
                      tool's, to open it at once)
+  slot:core.settings:id=reader   open a slot, with parameters (key=value)
+  show:calibre.screen   open a screen by its id (also :key=value …)
   set:core.night-mode=on   set a setting, as the settings screen would (the
                      value as configuration files write it; `\,` for a
                      comma in it, e.g. a home page's widgets)
@@ -502,6 +504,13 @@ def run(x4, step):
             x4.touch("up", x, y)
         case ["swipe", x1, y1, x2, y2, *ms]:
             x4.swipe(int(x1), int(y1), int(x2), int(y2), int(ms[0]) if ms else 300)
+        case ["slot" | "show" as kind, ident, *pairs]:
+            # Parameters as key=value, sent hexadecimal.
+            sent = []
+            for pair in pairs:
+                key, _, value = pair.partition("=")
+                sent.append(f"{key}={value.encode().hex() or '-'}")
+            x4.ask(" ".join([kind, ident, *sent]), "OK")
         case ["drag", x1, y1, x2, y2, steps, ms]:
             x4.ask(f"drag {x1} {y1} {x2} {y2} {steps} {ms}", "OK")
             # Down, the moves and the lift, each read on the interrupt's

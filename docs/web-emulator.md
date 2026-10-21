@@ -61,6 +61,42 @@ stops the device too), the frame says so before it starts again:
 | `{ type: "input", event }` | `event`: `{ kind: "button", name, pressed }`, `{ kind: "button", name, hold }` (a long press, held `hold` ms), `{ kind: "key", key, pressed }` (the keyboard's keys as the desktop emulator maps them), `{ kind: "pointer", phase: "down" \| "move" \| "up" \| "cancel", x, y }` (the screen's pixels) | `{}` |
 | `{ type: "screenshot", profile?, dark?, asleep? }` | The panel as it shows, at the device's resolution; with `profile`, `dark` or `asleep`, what that device, night mode or the sleep screen would show with the same card, made apart (what is shown stays) | `{ png }` (bytes) |
 | `{ type: "check", commands?, plugins? }` | `paperpaw-dev`'s checks of the data plugins on the card, on this device: `package`, `lint`, `visual`, `reach` (all if none named), the libraries in memory; with `plugins`, the ids of plugins with code the module adds (see below), checked too, `perf` among the commands | `{ report }` (as `report.json`) |
+| `{ type: "command", line }` | The remote control's command, as `tools/x4-remote.py` sends it to an X4 (see below), e.g. `run calibre.open` | `{ answer }` (the command's JSON) |
+| `{ type: "describe" }` | What the screen shows, part by part | `{ screen, parts: [{ role, x, y, width, height, state, label }] }` |
+| `{ type: "run", action }` | Runs an action, as a button bound to it would | `{ answer: {} }` |
+| `{ type: "slot", slot, params? }` | Opens a slot (`core.settings`, `core.home`, `core.library` …) with parameters (`{ id: "reader" }`) | `{ answer: {} }` |
+| `{ type: "show", screen, params? }` | Opens a screen by its id, with parameters | `{ answer: {} }` |
+| `{ type: "open", path }` | Opens a book of the card in the reader | `{ answer: {} }` |
+| `{ type: "set", setting, value }` | Sets a setting, the value as configuration files write it (`"on"`, `"14"`) | `{ answer: {} }`, or `error` with why |
+| `{ type: "emit", event, params? }` | Sends an event, as a plugin would | `{ answer: {} }` |
+| `{ type: "until", text, timeout? }` | Waits until the screen is `text` (its id) or shows it in a part's label, the device running meanwhile; at most `timeout` ms (30000) | `{}`, or `error` (`not shown in … ms`) |
+| `{ type: "expect", text }` | The same, now | `{}`, or `error` (`not shown`) |
+
+**Commands.** `command` takes the remote control's lines, parsed as on
+an X4 (`paperpaw_x4::remote`) and carried out with the same kernel
+calls; texts that may hold spaces are hexadecimal (`-` for none), as on
+the device, which `slot`, `show`, `open`, `set` and `emit` do for a page.
+They answer in JSON:
+
+| Line | Answer |
+|---|---|
+| `run <action>`, `slot <slot> [<key>=<hex> …]`, `show <screen> [<key>=<hex> …]`, `open <hex path>`, `set <setting> <hex value>`, `emit <event> [<key>=<hex> …]`, `press <button>`, `hold <button> <ms>`, `touch <down\|move\|up> <x> <y>`, `time set <unix ms>`, `mkdir <path>`, `rm <path>`, `mv <hex> <hex>` | `{}` |
+| `screen` | `{ "screen": id }` |
+| `screens` | `{ "screens": [ids, the one shown last] }` |
+| `describe` | `{ "screen": id, "parts": [{ "role", "x", "y", "width", "height", "state", "label" }] }`; `state` is `focused`, `on`, `off` joined by `+`, or `-` |
+| `setting <id>` | `{ "value": text }` |
+| `settings [<prefix>]` | `{ "values": { id: text } }` |
+| `actions [<prefix>]` | `{ "actions": [ids] }` |
+| `plugins` | `{ "plugins": [{ "id", "on", "version", "kind" }] }` |
+| `version` | `{ "version", "device" }` |
+| `time` | `{ "unix_ms", "ms" }` (the wall clock, the device's own time) |
+| `usage` | `{ "refreshes": [fast, partial, full], "pixels", "inputs" }` |
+| `ls [<path>]` | `{ "entries": [{ "name", "dir", "size" }] }` |
+| `stat <path>` | `{ "kind": "f" \| "d" \| "-", "size" }` |
+
+Secrets are never said (`•`), and while a PIN or a password is entered
+`describe` gives where the parts are, not what they say. What only a
+device has (its panel, radio, flash, sleep) answers with `error`.
 
 The frame draws at the device's resolution: each of its pixels a whole
 number of the screen's (devicePixelRatio counted), crisp, where it fits
@@ -94,6 +130,8 @@ device.create({ profile: "xteink-x4", language: "en" });
 device.putFile("dusk", "plugin.ini", bytes);
 device.start();
 device.button("right", true, performance.now());
+device.command("run calibre.open", performance.now()); // {}
+device.shows("calibre.screen"); // true
 const next = device.advance(performance.now()); // ms until due, or null
 canvas.getContext("2d").putImageData(device.frame(), 0, 0);
 const report = device.check(["package", "lint"]);

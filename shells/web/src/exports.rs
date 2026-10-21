@@ -431,6 +431,49 @@ pub extern "C" fn pp_device() -> u32 {
     failed
 }
 
+/// Carries out the remote control's command (an x4-remote line, see
+/// [`Emulator::command`]) at `now_ms` (as [`pp_advance`]); its answer as
+/// JSON into the result buffer.
+///
+/// # Safety
+///
+/// The line is memory the script wrote ([`pp_alloc`]).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pp_command(line_ptr: *const u8, line_len: usize, now_ms: f64) -> u32 {
+    // SAFETY: as the caller promises.
+    let line = unsafe { text(line_ptr, line_len) };
+    let mut json = String::new();
+    let failed = with(|emulator| {
+        json = emulator.command(line, now_ms.max(0.0) as u64)?;
+        Ok(())
+    });
+    if failed == 0 {
+        answer(json);
+    }
+    failed
+}
+
+/// Whether the screen shown is `text` (its id) or shows it (see
+/// [`Emulator::shows`]): 1 if so, 0 if not, [`STOPPED`].
+///
+/// # Safety
+///
+/// The text is memory the script wrote ([`pp_alloc`]).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pp_shows(text_ptr: *const u8, text_len: usize) -> u32 {
+    // SAFETY: as the caller promises.
+    let wanted = unsafe { text(text_ptr, text_len) };
+    let mut shown = false;
+    let status = with(|emulator| {
+        shown = emulator.shows(wanted);
+        Ok(())
+    });
+    if status == STOPPED {
+        return STOPPED;
+    }
+    u32::from(shown)
+}
+
 /// Checks the data plugins and the plugins with code named with
 /// `paperpaw-dev` (see [`Emulator::check`]): the commands and the code
 /// plugins' ids, each separated by commas (no commands: all for data
