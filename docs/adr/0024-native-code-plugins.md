@@ -13,8 +13,8 @@ built for each reader's choice (a build service) was ruled out (waiting
 time, GitHub's terms, a signing key on a server), and building every
 plugin into the firmware does not scale.
 
-So a code plugin must be a file the device loads. ADR 0004 and
-PLANNING P5 planned WebAssembly for that. A spike measured both ways
+So a code plugin must be a file the device loads. ADR 0004
+planned WebAssembly for that. A spike measured both ways
 (its report and prototype are kept on the branch `spike/native-plugins`,
 not merged: the prototype is reference, not the implementation):
 
@@ -241,8 +241,8 @@ and the plugin manager says why.
   1.0 on, plugins survive minor releases; the versioned plugin API is a
   blocker for 1.0.
 - A Play build of the Android app has no code plugins.
-- ADR 0004's "sandboxed WebAssembly modules (larger devices)" and
-  PLANNING P5 change to native plugin files.
+- ADR 0004's "sandboxed WebAssembly modules (larger devices)"
+  changes to native plugin files.
 
 ## Open points
 

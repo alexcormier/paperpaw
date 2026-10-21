@@ -47,7 +47,7 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 - **Code plugins** are built into the firmware (or the app) and run with
   the kernel's rights: all of the card, the network, the passwords
   through the SDK. They are trusted as the firmware is; a plugin store
-  will deliver them only in signed firmware (§12.8 of the planning).
+  will deliver them only in signed firmware.
   Planned WebAssembly plugins would run without these rights unless
   granted ([ADR 0004](adr/0004-everything-is-a-plugin.md)).
 - **Data plugins** (folders with `plugin.ini`) carry no code: translations,

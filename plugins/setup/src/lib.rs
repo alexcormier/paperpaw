@@ -1,6 +1,6 @@
 //! The first-run setup: on the first start, a short guide through the
 //! settings that matter, one a page, each with a sensible default already
-//! chosen, so *Next* is always right (PLANNING §12.7, E1).
+//! chosen, so *Next* is always right.
 //!
 //! - The steps come from the plugins ([`paperpaw_sdk::setup`]): the
 //!   language, the buttons, the text size, the time zone, Wi-Fi, the

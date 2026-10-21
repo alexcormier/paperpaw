@@ -35,7 +35,7 @@ pay for colour in flash or RAM.
 - **Drawing**: the canvas takes RGB rows (`Canvas::draw_rgb_row`) and
   writes them as they are on colour frames and as gray on gray ones
   (dithered like gray rows on panels with few grays). The colours of
-  text and paper ([C22](../PLANNING.md)) tint grays only: a colour pixel
+  text and paper tint grays only: a colour pixel
   keeps its colour; night mode inverts both.
 - **Colour e-ink** gets a profile per panel (`ColorPanel`): stronger
   saturation where the colour filter mutes it. Dithering for the filter
