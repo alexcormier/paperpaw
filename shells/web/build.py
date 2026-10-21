@@ -13,6 +13,7 @@ Needs the target: rustup target add wasm32-unknown-unknown
 
 import gzip
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -28,7 +29,11 @@ def main():
     profile = "dev" if debug else "web"
     command = ["cargo", "build", "-p", "paperpaw-web", "--target", "wasm32-unknown-unknown",
                "--profile", profile]
-    subprocess.run(command, cwd=HERE, check=True)
+    # The commit it is built from, for its version (`device.version`).
+    commit = subprocess.run(["git", "rev-parse", "--short", "HEAD"], cwd=HERE,
+                            capture_output=True, text=True).stdout.strip()
+    env = dict(os.environ, PAPERPAW_COMMIT=commit)
+    subprocess.run(command, cwd=HERE, check=True, env=env)
     metadata = json.loads(
         subprocess.run(
             ["cargo", "metadata", "--format-version", "1", "--no-deps"],

@@ -178,8 +178,13 @@ function files({ id, files: given }) {
   return {};
 }
 
-function input({ event }) {
-  if (event.kind === "button") {
+async function input({ event }) {
+  if (event.kind === "button" && event.hold) {
+    // A long press: held `hold` milliseconds, then let go.
+    press(event.name, true);
+    await new Promise((resolve) => setTimeout(resolve, event.hold));
+    press(event.name, false);
+  } else if (event.kind === "button") {
     press(event.name, event.pressed);
   } else if (event.kind === "key") {
     const name = KEYS[event.key];
@@ -224,7 +229,7 @@ window.addEventListener("message", async (event) => {
 
 // Ready for messages once the module is loaded.
 loading.then(
-  () => tell({ type: "ready" }),
+  (loaded) => tell({ type: "ready", version: loaded.version() }),
   (error) => console.error("paperpaw:", error),
 );
 

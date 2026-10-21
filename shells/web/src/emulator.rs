@@ -34,6 +34,15 @@ const BOOKS: &[(&str, &[u8])] = &[
 /// them.
 pub const PROFILES: [&str; 3] = ["xteink-x4", "xteink-x4-pro", "boox-go-7"];
 
+/// PaperPaw's version, and the commit the module was built from where
+/// the build said (`PAPERPAW_COMMIT`, set by `build.py`).
+pub fn version() -> String {
+    match option_env!("PAPERPAW_COMMIT") {
+        Some(commit) if !commit.is_empty() => format!("{} ({commit})", env!("CARGO_PKG_VERSION")),
+        _ => env!("CARGO_PKG_VERSION").to_string(),
+    }
+}
+
 /// Wake-ups handled in one call of [`Emulator::advance`], at most.
 const MAX_TICKS: usize = 100;
 
@@ -128,7 +137,12 @@ impl Emulator {
         }
         // Dark as asked; else as the defaults have it (a theme's too).
         let night = if self.dark { "night-mode = on\n" } else { "" };
-        let config = format!("[core]\nlanguage = {}\n{night}", self.language);
+        // Started as the first-run setup left it, and without the tips on
+        // gestures a new reader sees once.
+        let config = format!(
+            "[core]\nlanguage = {}\n{night}[home]\ngesture-tips = false\n",
+            self.language
+        );
         let mut device =
             Device::in_memory(self.profile, Some(config), self.files.clone(), true, None)
                 .map_err(|e| e.to_string())?;
@@ -293,7 +307,7 @@ impl Emulator {
                 .join(",")
         };
         format!(
-            "{{\"id\":{},\"name\":{},\"width\":{width},\"height\":{height},\"dpi\":{},\"grays\":{grays},\"color\":{},\"touch\":{},\"buttons\":[{}],\"row\":[{}]}}",
+            "{{\"id\":{},\"name\":{},\"width\":{width},\"height\":{height},\"dpi\":{},\"grays\":{grays},\"color\":{},\"touch\":{},\"buttons\":[{}],\"row\":[{}],\"version\":{}}}",
             json_string(device.id),
             json_string(device.name),
             device.display.dpi,
@@ -301,6 +315,7 @@ impl Emulator {
             device.input.touch,
             list(self.profile.buttons),
             list(self.profile.button_row),
+            json_string(&version()),
         )
     }
 }

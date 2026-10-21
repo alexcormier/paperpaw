@@ -59,6 +59,10 @@ impl Http {
 
     /// An answer that has arrived, if any; waits up to `wait`.
     pub fn next(&mut self, wait: Option<Duration>) -> Option<HttpResponse> {
+        // In a browser nothing is waited for: there is no clock to wait
+        // by, and answers come at once (see `start`).
+        #[cfg(target_arch = "wasm32")]
+        let wait: Option<Duration> = wait.and(None);
         let response = match wait {
             Some(wait) => self.receiver.recv_timeout(wait).ok(),
             None => self.receiver.try_recv().ok(),

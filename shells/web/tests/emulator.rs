@@ -88,11 +88,8 @@ fn buttons_and_touch_are_taken() {
     let mut boox = started("boox-go-7");
     let before = boox.shown();
     let (width, height) = boox.size();
-    // A tap on the first tool of the home screen (the library) opens it.
-    let (x, y) = (
-        i32::from(width) * 145 / 1000,
-        i32::from(height) * 105 / 1000,
-    );
+    // A tap on the home screen's card (start reading) opens the library.
+    let (x, y) = (i32::from(width) / 2, i32::from(height) * 34 / 100);
     boox.pointer(PointerPhase::Down, x, y);
     boox.advance(5_050);
     boox.pointer(PointerPhase::Up, x, y);

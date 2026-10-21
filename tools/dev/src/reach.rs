@@ -1022,7 +1022,8 @@ pub fn check(
     limits: &Limits,
     report: &mut Report,
 ) -> Result<(), String> {
-    let started = std::time::Instant::now();
+    // The emulator's clock: a browser's too (std's has none there).
+    let started = paperpaw_emulator::host::micros();
     let mut driver = Driver::new(context, variant)?;
     let screens = cases::screens(&driver.session, &context.target);
     let home = driver.session.stack().first().cloned().unwrap_or_default();
@@ -1167,7 +1168,7 @@ pub fn check(
                 } else {
                     ""
                 },
-                started.elapsed().as_secs_f32(),
+                (paperpaw_emulator::host::micros() - started) as f32 / 1e6,
                 searched,
                 driver.steps,
                 driver.fresh

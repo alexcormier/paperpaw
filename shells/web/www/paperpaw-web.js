@@ -6,6 +6,9 @@
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
+/// What a call returns once a panic stopped the module.
+const STOPPED = 2;
+
 /// The phases of a finger on the screen, as the module numbers them.
 export const PHASES = { down: 0, move: 1, up: 2, cancel: 3 };
 
@@ -87,8 +90,10 @@ export class PaperPawDevice {
     return decoder.decode(new Uint8Array(this.memory.buffer, ptr, len).slice());
   }
 
-  /// Throws the module's error when `status` says it failed.
+  /// Throws the module's error when `status` says it failed; once a
+  /// panic stopped it (2), as the trap did: start a fresh one.
   #check(status) {
+    if (status === STOPPED) throw new WebAssembly.RuntimeError("the device stopped after a panic");
     if (status !== 0) throw new Error(this.#result());
   }
 
@@ -113,8 +118,14 @@ export class PaperPawDevice {
     this.#check(this.exports.pp_start());
   }
 
+  /// PaperPaw's version, and the commit the module was built from.
+  version() {
+    this.exports.pp_version();
+    return this.#result();
+  }
+
   /// The device: `{ id, name, width, height, dpi, grays, color, touch,
-  /// buttons, row }`.
+  /// buttons, row, version }`.
   device() {
     this.#check(this.exports.pp_device());
     return JSON.parse(this.#result());
@@ -122,7 +133,9 @@ export class PaperPawDevice {
 
   /// A button pressed or let go; false if the device has none so named.
   button(name, pressed) {
-    return this.#with([name], (p, l) => this.exports.pp_button(p, l, pressed ? 1 : 0)) === 0;
+    const status = this.#with([name], (p, l) => this.exports.pp_button(p, l, pressed ? 1 : 0));
+    if (status === STOPPED) this.#check(status);
+    return status === 0;
   }
 
   /// A finger on the screen (`phase` of PHASES) at the screen's pixel.
@@ -134,6 +147,7 @@ export class PaperPawDevice {
   /// something is due, or null.
   advance(now) {
     const next = this.exports.pp_advance(now);
+    if (next === -2) throw new WebAssembly.RuntimeError("the device stopped after a panic");
     return next < 0 ? null : next;
   }
 
@@ -148,6 +162,7 @@ export class PaperPawDevice {
   }
 
   #image(ptr) {
+    if (ptr === 0) throw new WebAssembly.RuntimeError("the device stopped after a panic");
     const [width, height] = this.size();
     const bytes = new Uint8ClampedArray(this.memory.buffer, ptr, width * height * 4).slice();
     return new ImageData(bytes, width, height);

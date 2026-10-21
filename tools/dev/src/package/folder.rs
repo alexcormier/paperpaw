@@ -494,14 +494,24 @@ fn read_as(folder: &Folder, path: &str, id: &str) -> Option<&'static str> {
             return Some("font");
         }
     }
-    let named_by_settings = folder
-        .settings
-        .iter()
-        .any(|l| l.value.trim() == format!("plugins/{id}/{path}"));
+    // A picture settings.ini names, or one in a folder it names (the
+    // sleep screen's pictures).
+    let own = format!("plugins/{id}/{path}");
+    let picture = ["png", "jpg", "jpeg", "gif"].contains(&ext.as_str());
+    let named_by_settings = folder.settings.iter().any(|l| {
+        let value = l.value.trim().trim_end_matches('/');
+        value == own || (picture && own.starts_with(&format!("{value}/")))
+    });
     if named_by_settings {
         return Some("picture");
     }
     None
+}
+
+/// Whether `path` is a folder of `folder` (a file is in it).
+fn is_folder(folder: &Folder, path: &str) -> bool {
+    let inside = format!("{}/", path.trim_end_matches('/'));
+    folder.files.iter().any(|f| f.path.starts_with(&inside))
 }
 
 /// Every file: a path the installer takes, a kind the website takes, one
@@ -660,11 +670,13 @@ fn pictures(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Finding)) 
         };
         let at = format!("settings.ini:{}", line.line);
         match value.strip_prefix(&own) {
-            Some(path) if folder.file(path).is_none() => add(Finding::error(
-                "package.pictures",
-                at,
-                format!("`{}` names {path}, which is not in the folder.", line.key),
-            )),
+            Some(path) if folder.file(path).is_none() && !is_folder(folder, path) => {
+                add(Finding::error(
+                    "package.pictures",
+                    at,
+                    format!("`{}` names {path}, which is not in the folder.", line.key),
+                ))
+            }
             Some(_) => {}
             None => add(Finding::warning(
                 "package.pictures",
@@ -753,6 +765,29 @@ mod tests {
             .into_iter()
             .map(|f| (f.level, f.check, f.place, f.message))
             .collect()
+    }
+
+    #[test]
+    fn a_folder_of_pictures_named_by_settings_is_read() {
+        let plugin = folder(
+            "nights",
+            &[
+                (
+                    "plugin.ini",
+                    b"[plugin]\nid = nights\nname = Nights\nversion = 1.0.0\n",
+                ),
+                ("settings.ini", b"[sleep]\nfolder = plugins/nights/sleep\n"),
+                ("sleep/moon.png", b"\x89PNG\r\n\x1a\nrest"),
+                ("sleep/stars.png", b"\x89PNG\r\n\x1a\nrest"),
+            ],
+        );
+        let found = findings(&plugin);
+        assert!(
+            !found
+                .iter()
+                .any(|f| f.1 == "package.pictures" || f.3.contains("does not read")),
+            "{found:#?}"
+        );
     }
 
     #[test]

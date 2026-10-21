@@ -7,6 +7,11 @@
 //! The module imports two functions from `paperpaw`: `random(ptr, len)`,
 //! which fills memory with random bytes and returns 1, and `log(ptr,
 //! len)`, which shows a text (a panic's message).
+//!
+//! A panic stops a call in its middle (a trap): the module's memory stays
+//! as it was, its state held. Every call after that says so ([`STOPPED`],
+//! a size of 0, no picture, -2 from [`pp_advance`]) instead of panicking
+//! again; the page makes a fresh instance.
 
 use std::cell::RefCell;
 
@@ -71,14 +76,21 @@ unsafe fn text<'a>(ptr: *const u8, len: usize) -> &'a str {
     std::str::from_utf8(unsafe { bytes(ptr, len) }).unwrap_or_default()
 }
 
+/// What a call returns once a panic stopped the module (see above).
+pub const STOPPED: u32 = 2;
+
+/// Runs `f` on the state; `None` where a panic left it held.
+fn state<R>(f: impl FnOnce(&mut State) -> R) -> Option<R> {
+    STATE.with(|state| state.try_borrow_mut().ok().map(|mut held| f(&mut held)))
+}
+
 /// Runs `f` on the emulator, if there is one; 0 if it went well, else 1
-/// with the error in the result buffer.
+/// with the error in the result buffer ([`STOPPED`] after a panic).
 fn with(f: impl FnOnce(&mut Emulator) -> Result<(), String>) -> u32 {
-    STATE.with(|state| {
-        let mut state = state.borrow_mut();
+    state(|state| {
         let State {
             emulator, result, ..
-        } = &mut *state;
+        } = state;
         let outcome = match emulator {
             Some(emulator) => f(emulator),
             None => Err("no device yet (pp_new)".to_string()),
@@ -91,11 +103,19 @@ fn with(f: impl FnOnce(&mut Emulator) -> Result<(), String>) -> u32 {
             }
         }
     })
+    .unwrap_or(STOPPED)
 }
 
 /// Puts `text` into the result buffer.
 fn answer(text: String) {
-    STATE.with(|state| state.borrow_mut().result = text.into_bytes());
+    let _ = state(|state| state.result = text.into_bytes());
+}
+
+/// The emulator's `f`, `none` where there is none or the module stopped.
+fn read<R>(none: R, f: impl FnOnce(&mut Emulator) -> R) -> R {
+    state(|state| state.emulator.as_mut().map(f))
+        .flatten()
+        .unwrap_or(none)
 }
 
 /// Memory for the script to write `len` bytes into; given back with
@@ -125,13 +145,13 @@ pub unsafe extern "C" fn pp_free(ptr: *mut u8, len: usize) {
 /// Where the result buffer's text is.
 #[unsafe(no_mangle)]
 pub extern "C" fn pp_result_ptr() -> *const u8 {
-    STATE.with(|state| state.borrow().result.as_ptr())
+    state(|state| state.result.as_ptr()).unwrap_or(std::ptr::null())
 }
 
 /// How long the result buffer's text is.
 #[unsafe(no_mangle)]
 pub extern "C" fn pp_result_len() -> usize {
-    STATE.with(|state| state.borrow().result.len())
+    state(|state| state.result.len()).unwrap_or(0)
 }
 
 /// A device of the profile named (see [`crate::emulator::PROFILES`]),
@@ -158,22 +178,22 @@ pub unsafe extern "C" fn pp_new(
             text(language_ptr, language_len),
         )
     };
+    // The device before goes first: one device's memory at a time.
+    if state(|state| state.emulator = None).is_none() {
+        return STOPPED;
+    }
     let made = Emulator::new(profile, language, dark == 1);
-    STATE.with(|state| {
-        let mut state = state.borrow_mut();
-        // The device before goes first: one device's memory at a time.
-        state.emulator = None;
-        match made {
-            Ok(emulator) => {
-                state.emulator = Some(emulator);
-                0
-            }
-            Err(error) => {
-                state.result = error.into_bytes();
-                1
-            }
+    state(|state| match made {
+        Ok(emulator) => {
+            state.emulator = Some(emulator);
+            0
+        }
+        Err(error) => {
+            state.result = error.into_bytes();
+            1
         }
     })
+    .unwrap_or(STOPPED)
 }
 
 /// Puts a file of a data plugin on the card (`plugins/<plugin>/<path>`).
@@ -258,80 +278,63 @@ pub extern "C" fn pp_pointer(phase: u32, x: i32, y: i32) -> u32 {
 }
 
 /// Lets time pass to `now_ms` (`performance.now()` since the page
-/// started); milliseconds until something is due, -1 if nothing is.
+/// started); milliseconds until something is due, -1 if nothing is, -2
+/// once the module stopped.
 #[unsafe(no_mangle)]
 pub extern "C" fn pp_advance(now_ms: f64) -> f64 {
     let mut next = -1.0;
-    with(|emulator| {
+    let status = with(|emulator| {
         if let Some(ms) = emulator.advance(now_ms.max(0.0) as u64) {
             next = ms as f64;
         }
         Ok(())
     });
-    next
+    if status == STOPPED { -2.0 } else { next }
 }
 
 /// The screen's width in pixels.
 #[unsafe(no_mangle)]
 pub extern "C" fn pp_width() -> u32 {
-    STATE.with(|state| {
-        state
-            .borrow()
-            .emulator
-            .as_ref()
-            .map_or(0, |e| u32::from(e.size().0))
-    })
+    read(0, |e| u32::from(e.size().0))
 }
 
 /// The screen's height in pixels.
 #[unsafe(no_mangle)]
 pub extern "C" fn pp_height() -> u32 {
-    STATE.with(|state| {
-        state
-            .borrow()
-            .emulator
-            .as_ref()
-            .map_or(0, |e| u32::from(e.size().1))
-    })
+    read(0, |e| u32::from(e.size().1))
 }
 
 /// What the panel shows, RGBA, width × height × 4 bytes; valid until
 /// the next call.
 #[unsafe(no_mangle)]
 pub extern "C" fn pp_frame() -> *const u8 {
-    STATE.with(|state| {
-        let mut state = state.borrow_mut();
-        match &mut state.emulator {
-            Some(emulator) => emulator.frame().as_ptr(),
-            None => std::ptr::null(),
-        }
-    })
+    read(std::ptr::null(), |e| e.frame().as_ptr())
 }
 
 /// What the panel shows once a full refresh has flashed, RGBA, width ×
 /// height × 4 bytes: for screenshots. Valid until the next call.
 #[unsafe(no_mangle)]
 pub extern "C" fn pp_shown() -> *const u8 {
-    STATE.with(|state| {
-        let mut state = state.borrow_mut();
+    state(|state| {
         let shown = state.emulator.as_ref().map(Emulator::shown);
         state.shown = shown.unwrap_or_default();
         state.shown.as_ptr()
     })
+    .unwrap_or(std::ptr::null())
 }
 
 /// 1 while the panel still changes by itself (a full refresh flashing).
 #[unsafe(no_mangle)]
 pub extern "C" fn pp_animating() -> u32 {
-    STATE.with(|state| {
-        u32::from(
-            state
-                .borrow()
-                .emulator
-                .as_ref()
-                .is_some_and(Emulator::animating),
-        )
-    })
+    read(0, |e| u32::from(e.animating()))
+}
+
+/// PaperPaw's version into the result buffer (see
+/// [`crate::emulator::version`]).
+#[unsafe(no_mangle)]
+pub extern "C" fn pp_version() -> u32 {
+    answer(crate::emulator::version());
+    0
 }
 
 /// The device as JSON into the result buffer (see

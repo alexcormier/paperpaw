@@ -98,3 +98,19 @@ fn only_checks_of_data_plugins_are_run() {
     let error = data::check(Vec::new(), Vec::new(), &["perf"]).unwrap_err();
     assert!(error.contains("perf"));
 }
+
+/// A data plugin adds no screens: it is seen on the standard ones.
+#[test]
+fn a_data_plugin_is_seen_on_the_standard_screens() {
+    use paperpaw_dev::cli::Context;
+    use paperpaw_dev::session::Session;
+    use paperpaw_dev::target::Target;
+    use paperpaw_dev::variant::Variant;
+    let mut target = Target::default();
+    target.take_data(sample("theme-paw"));
+    let mut context = Context::new(target, std::path::PathBuf::new());
+    context.in_memory = true;
+    let session = Session::new(&context, &Variant::x4()).unwrap();
+    let screens = paperpaw_dev::cases::screens(&session, &context.target);
+    assert_eq!(screens, ["files.browser", "home.dashboard", "settings.list"]);
+}
