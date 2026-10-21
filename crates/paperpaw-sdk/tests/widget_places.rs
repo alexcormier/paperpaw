@@ -201,3 +201,20 @@ fn areas_have_a_size_class() {
         SizeClass::Large
     );
 }
+
+/// A plugin's own kind of widgets comes after the kernel's, with its
+/// icon; a kind nobody added shows a puzzle piece.
+#[test]
+fn plugins_add_kinds_of_widgets_with_their_icons() {
+    use paperpaw_sdk::widgets::{WidgetCategory, categories};
+    let mut h = harness();
+    h.widgets
+        .add_category(WidgetCategory::new(Id::new_static("t.games"), "dice"));
+    let env = h.env();
+    let kinds: Vec<&str> = env.widgets.kinds().collect();
+    assert_eq!(kinds.first(), Some(&categories::TIME));
+    assert_eq!(kinds.last(), Some(&"t.games"));
+    assert_eq!(env.widgets.category_icon("t.games"), "dice");
+    assert_eq!(env.widgets.category_icon(categories::BOOKS), "books");
+    assert_eq!(env.widgets.category_icon("t.unknown"), "puzzle");
+}

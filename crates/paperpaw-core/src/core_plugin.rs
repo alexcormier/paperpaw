@@ -807,6 +807,23 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
             Box::new(paperpaw_sdk::ui::items::ItemsScreen::open(env, &params))
         }),
     ))?;
+    // Lists of widgets above each other (the sleep screen's) edited,
+    // unless a plugin fills the slot.
+    r.add_screen(ScreenSpec::new(
+        screens::WIDGET_LIST,
+        "core.widgets.edit.screen",
+        Box::new(|env, params| {
+            Box::new(paperpaw_sdk::ui::widget_list::ListScreen::open(env, params))
+        }),
+    ))?;
+    r.add_screen(ScreenSpec::new(
+        screens::ADD_WIDGET,
+        "core.widgets.edit.add",
+        Box::new(|env, params| {
+            Box::new(paperpaw_sdk::ui::widget_list::AddScreen::open(env, params))
+        }),
+    ))?;
+    r.bind_slot(slots::EDIT_WIDGETS, screens::WIDGET_LIST, Priority::DEFAULT)?;
     // The choice every plugin asks (`ask::choice`), unless another
     // screen fills the slot.
     r.add_screen(ScreenSpec::new(

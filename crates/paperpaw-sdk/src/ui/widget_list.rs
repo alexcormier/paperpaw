@@ -1,43 +1,47 @@
-//! Editing a list of widgets, as a list that buttons work as well as
-//! taps: the widgets (dragged by their grip to move them; choosing one
-//! offers to move it up or down, its own settings where it has some, or
-//! to remove it), then *Add a widget*.
-//! Every change is kept at once.
+//! Editing a list of widgets shown above each other (a
+//! [`WidgetPlace`](crate::widgets::WidgetPlace) of kind
+//! [`Stack`](crate::widgets::PlaceKind::Stack)), as a list that buttons
+//! work as well as taps: the widgets (dragged by their grip to move them;
+//! choosing one offers to move it up or down, its own settings where it
+//! has some, or to remove it), then *Add a widget*. Every change is kept
+//! at once.
 //!
-//! It edits a setting that is a list of widgets (parameter `id`), e.g.
-//! the sleep screen's: such settings name this screen as their editor.
-//! The home screen's pages are grids, edited in place.
+//! The kernel shows these screens
+//! ([`screens::WIDGET_LIST`](crate::builtin::screens::WIDGET_LIST), bound
+//! to slot [`EDIT_WIDGETS`](crate::builtin::slots::EDIT_WIDGETS), and
+//! [`screens::ADD_WIDGET`](crate::builtin::screens::ADD_WIDGET)) for a
+//! setting that lists widgets (parameter
+//! [`ID`](crate::builtin::params::ID)), e.g. the sleep screen's: such
+//! settings name the slot as their editor.
 
 use alloc::borrow::Cow;
 use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, events, params, slots};
-use paperpaw_sdk::event::Event;
-use paperpaw_sdk::status::item_ids;
-use paperpaw_sdk::ui::choice;
-use paperpaw_sdk::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
-use paperpaw_sdk::widgets;
-use paperpaw_sdk::{
+use crate::builtin::{actions, events, params, screens, slots};
+use crate::event::Event;
+use crate::status::item_ids;
+use crate::ui::choice;
+use crate::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
+use crate::widgets;
+use crate::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, PointerEvent, Rect,
     RefreshMode, Screen, SettingValue,
 };
 
-use crate::LIST_ADD_SCREEN;
-
 /// A widget's options were chosen.
-const CHOSEN: Event<choice::Picked> = Event::new("home.edit-chosen");
-const OPTION_LABELS: &str = "home.edit.";
+const CHOSEN: Event<choice::Picked> = Event::new("core.widget-list-chosen");
+const OPTION_LABELS: &str = "core.widgets.edit.";
 
 /// What is edited: a setting that lists widgets.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub(crate) enum Target {
+enum Target {
     Setting(String),
 }
 
 /// What the parameters ask to edit.
-pub(crate) fn target_of(params: &Params) -> Target {
+fn target_of(params: &Params) -> Target {
     Target::Setting(params.get(params::ID).unwrap_or_default().to_string())
 }
 
@@ -88,7 +92,9 @@ enum Row {
     Add,
 }
 
-pub(crate) struct EditScreen {
+/// The list of widgets of a setting, edited.
+#[derive(Debug)]
+pub struct ListScreen {
     style: UiStyle,
     header: ui::Header,
     list: ListView,
@@ -96,8 +102,9 @@ pub(crate) struct EditScreen {
     target: Target,
 }
 
-impl EditScreen {
-    pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
+impl ListScreen {
+    /// The list of the setting `params` name.
+    pub fn open(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
@@ -157,13 +164,16 @@ impl EditScreen {
                     .title(id)
                     .map_or(id.as_str(), |t| env.i18n.tr(t));
                 cx.command(
-                    paperpaw_sdk::ask::choice(title, &CHOSEN)
+                    crate::ask::choice(title, &CHOSEN)
                         .about(format!("{at}"))
                         .options(OPTION_LABELS, &options)
                         .command(),
                 );
             }
-            Row::Add => cx.command(Command::OpenScreen(LIST_ADD_SCREEN, self.target.params())),
+            Row::Add => cx.command(Command::OpenScreen(
+                screens::ADD_WIDGET,
+                self.target.params(),
+            )),
         }
     }
 
@@ -198,7 +208,7 @@ impl EditScreen {
     }
 }
 
-impl Screen for EditScreen {
+impl Screen for ListScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let rows = self.rows(env);
@@ -225,7 +235,11 @@ impl Screen for EditScreen {
                         let name = env.widgets.title(id).map_or(id, |t| env.i18n.tr(t));
                         (None, name.to_string(), "")
                     }
-                    Row::Add => (Some("plus"), env.i18n.tr("home.edit.add").to_string(), "›"),
+                    Row::Add => (
+                        Some("plus"),
+                        env.i18n.tr("core.widgets.edit.add").to_string(),
+                        "›",
+                    ),
                 };
                 let rect = if matches!(rows[index], Row::Widget(_)) {
                     Reorder::draw_grip(canvas, env, &style, rect, focused);
@@ -316,7 +330,8 @@ impl Screen for EditScreen {
 
 /// Adding a widget: every widget not in the list yet (spaces always);
 /// choosing one adds it at the end and goes back.
-pub(crate) struct AddScreen {
+#[derive(Debug)]
+pub struct AddScreen {
     style: UiStyle,
     header: ui::Header,
     list: ListView,
@@ -326,7 +341,8 @@ pub(crate) struct AddScreen {
 }
 
 impl AddScreen {
-    pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
+    /// What can be added to the list of the setting `params` name.
+    pub fn open(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
@@ -385,7 +401,7 @@ impl Screen for AddScreen {
             canvas,
             env,
             &style,
-            env.i18n.tr("home.edit.add"),
+            env.i18n.tr("core.widgets.edit.add"),
             None,
             self.list.paging(len),
         );
@@ -395,7 +411,7 @@ impl Screen for AddScreen {
                 env,
                 &style,
                 self.list.area(),
-                env.i18n.tr("home.edit.all-shown"),
+                env.i18n.tr("core.widgets.edit.all-shown"),
             );
             return;
         }

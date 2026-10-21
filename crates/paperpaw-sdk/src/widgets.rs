@@ -105,6 +105,44 @@ pub mod categories {
     pub const ALL: &[&str] = &[
         TIME, BOOKS, READING, WORDS, PERSONAL, WORLD, DEVICE, LAYOUT, OTHER,
     ];
+
+    /// The icon of kind `kind` among these, if it is one.
+    pub fn icon(kind: &str) -> Option<&'static str> {
+        Some(match kind {
+            TIME => "clock",
+            BOOKS => "books",
+            READING => "chart-bar",
+            WORDS => "letter-case",
+            PERSONAL => "note",
+            WORLD => "world",
+            DEVICE => "device-tablet",
+            LAYOUT => "layout",
+            OTHER => "puzzle",
+            _ => return None,
+        })
+    }
+}
+
+/// A kind of widgets of a plugin's own
+/// ([`Registrar::add_widget_category`](crate::Registrar::add_widget_category)),
+/// beside [`categories`]: its id, the translation key of its name, and
+/// its icon. Screens offering widgets list such kinds after the
+/// kernel's.
+#[derive(Debug, Clone)]
+#[non_exhaustive]
+pub struct WidgetCategory {
+    pub id: Id,
+    pub icon: Cow<'static, str>,
+}
+
+impl WidgetCategory {
+    /// Kind `id` (its name's translation key), shown with `icon`.
+    pub fn new(id: Id, icon: impl Into<Cow<'static, str>>) -> Self {
+        Self {
+            id,
+            icon: icon.into(),
+        }
+    }
 }
 
 /// A widget as a screen shows it: made for that screen by its spec
@@ -683,6 +721,7 @@ pub fn next_minute(env: &Env<'_>) -> crate::Instant {
 pub struct Widgets {
     widgets: Vec<WidgetSpec>,
     places: Vec<WidgetPlace>,
+    categories: Vec<WidgetCategory>,
 }
 
 impl Widgets {
@@ -701,6 +740,36 @@ impl Widgets {
     pub fn shrink_to_fit(&mut self) {
         self.widgets.shrink_to_fit();
         self.places.shrink_to_fit();
+        self.categories.shrink_to_fit();
+    }
+
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn add_category(&mut self, category: WidgetCategory) {
+        self.categories.push(category);
+    }
+
+    /// Every kind of widgets, in the order screens show them: the
+    /// kernel's ([`categories::ALL`]), then plugins' own in the order they
+    /// were added.
+    pub fn kinds(&self) -> impl Iterator<Item = &str> {
+        categories::ALL
+            .iter()
+            .copied()
+            .chain(self.categories.iter().map(|c| c.id.as_str()))
+    }
+
+    /// The icon of kind `kind`: the kernel's, a plugin's own, or a puzzle
+    /// piece for a kind nobody added.
+    pub fn category_icon(&self, kind: &str) -> &str {
+        categories::icon(kind)
+            .or_else(|| {
+                self.categories
+                    .iter()
+                    .find(|c| c.id.as_str() == kind)
+                    .map(|c| c.icon.as_ref())
+            })
+            .unwrap_or("puzzle")
     }
 
     #[cfg(any(test, feature = "kernel"))]

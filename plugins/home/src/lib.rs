@@ -40,7 +40,6 @@ mod add;
 mod blocks;
 mod covers;
 mod drawer;
-mod edit;
 mod layouts;
 mod pages;
 mod recent;
@@ -67,12 +66,8 @@ pub const PLUGIN: Id = Id::new_static("home");
 pub const SCREEN: Id = Id::new_static("home.dashboard");
 /// Shortcuts at the head of the home screen's grid of tools.
 pub const ACTIONS: Id = Id::new_static("home.actions");
-/// Editing a list of widgets (e.g. the sleep screen's).
-pub(crate) const EDIT_SCREEN: Id = Id::new_static("home.edit");
 /// Adding a widget or tool to a page.
 pub(crate) const ADD_SCREEN: Id = Id::new_static("home.add-widget");
-/// Adding a widget to a list of widgets.
-pub(crate) const LIST_ADD_SCREEN: Id = Id::new_static("home.add-to-list");
 /// Every tool at once (swipe up on the home screen).
 pub const ALL_TOOLS: Id = Id::new_static("home.all-tools");
 /// Edits the home screen's pages: in the main menu, so that buttons alone
@@ -113,23 +108,11 @@ impl Plugin for Home {
             Box::new(|env, params| Box::new(Dashboard::new(env, params))),
         ))?;
         r.add_screen(ScreenSpec::new(
-            EDIT_SCREEN,
-            "home.edit.screen",
-            Box::new(|env, params| Box::new(edit::EditScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
             ADD_SCREEN,
             "home.edit.add",
             Box::new(|env, params| Box::new(add::AddScreen::new(env, params))),
         ))?;
-        r.add_screen(ScreenSpec::new(
-            LIST_ADD_SCREEN,
-            "home.edit.add",
-            Box::new(|env, params| Box::new(edit::AddScreen::new(env, params))),
-        ))?;
         r.bind_slot(slots::HOME, SCREEN, Priority::DEFAULT)?;
-        // Lists of widgets above each other (the sleep screen's) edited.
-        r.bind_slot(slots::EDIT_WIDGETS, EDIT_SCREEN, Priority::DEFAULT)?;
         r.add_screen(ScreenSpec::new(
             layouts::SCREEN,
             "home.layouts.title",

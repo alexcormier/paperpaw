@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: the editor of lists of widgets is the kernel's
+  (`ui::widget_list`, screens `core.widget-list` and `core.add-widget`,
+  `screens::WIDGET_LIST`, `screens::ADD_WIDGET`), bound to slot
+  `core.edit-widgets`: the sleep screen's widgets are edited without the
+  home screen, which no longer brings its own copy (`home.edit` and
+  `home.add-to-list` are gone). Plugins add kinds of widgets of their
+  own with their icon (`Registrar::add_widget_category`,
+  `widgets::WidgetCategory`); `Widgets::kinds` and
+  `Widgets::category_icon` list them after the kernel's, as the home
+  screen's gallery shows them.
 - SDK: widgets take more than taps. `Widget::on_input` hears a swipe
   that started on it and the buttons' focus coming to its targets and
   leaving them (`widgets::WidgetInput`); `WidgetTarget::hold` runs

@@ -18,6 +18,7 @@ mod rows;
 pub mod sections;
 mod setting_rows;
 pub mod slider;
+pub mod widget_list;
 mod style;
 mod text;
 mod thumbnail;
