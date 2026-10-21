@@ -523,9 +523,11 @@ pub fn draw_empty(
     };
     // Twice the margin at the sides, less in a small area (a card on a
     // page with wide margins), so that the text keeps room for a few
-    // words a line.
+    // words a line; at least half a gap, where letters reaching past
+    // their start (an accent) stay inside.
     let least = style.text * 8.0;
-    let margin = (style.margin as f32 * 2.0).min(((f32::from(area.width) - least) / 2.0).max(0.0));
+    let pad = style.gap as f32 / 2.0;
+    let margin = (style.margin as f32 * 2.0).min(((f32::from(area.width) - least) / 2.0).max(pad));
     let width = (f32::from(area.width) - 2.0 * margin).max(1.0);
     let icon_size = style.title * 2.4;
     let gap = style.gap as f32;

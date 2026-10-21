@@ -971,9 +971,10 @@ fn setting_titles_are_never_cut_for_their_control() {
                 let height = ui::setting_height(&env, &style, spec, 480, "", row, noted);
                 assert!(height > side, "{} noted {noted}", spec.id);
                 let rect = Rect::new(0, 100, 480, height as u16);
-                let lines = ui::row_lines(&env, &style, spec, rect, "", noted);
+                let lines = ui::row_lines(&env, &style, spec, 480, "", row, noted).at(rect);
                 assert!(lines.stacked(), "{} noted {noted}", spec.id);
-                assert!(lines.title.bottom() <= lines.control.y.into());
+                assert_eq!(u32::from(lines.height), height);
+                assert!(lines.title.y >= rect.y && lines.title.bottom() <= lines.control.y.into());
                 assert!(lines.control.bottom() <= rect.bottom());
                 let title = spec.title.as_ref();
                 let (described, _) = describe(480, 800, |c| match spec.kind {
@@ -990,8 +991,58 @@ fn setting_titles_are_never_cut_for_their_control() {
             }
             let side = ui::setting_row(&style, &short, row, noted);
             assert_eq!(ui::setting_height(&env, &style, &short, 480, "", row, noted), side);
-            let rect = Rect::new(0, 100, 480, side as u16);
-            assert!(!ui::row_lines(&env, &style, &short, rect, "", noted).stacked());
+            assert!(!ui::row_lines(&env, &style, &short, 480, "", row, noted).stacked());
         }
+    }
+}
+
+/// A row is laid out for every value it may show: a choice of two that
+/// switches in place stacks (or not) whichever of them is set, so the
+/// row never grows past its place nor leaves a line empty.
+#[test]
+fn a_rows_lines_hold_for_every_value_it_may_show() {
+    use paperpaw_sdk::builtin::groups;
+    use paperpaw_sdk::{Choices, SettingSpec, SettingValue};
+    const OPTIONS: [&str; 2] = ["Off", "Only while the device is charging"];
+    let mut h = Harness::new(Device::TOUCH);
+    let spec = SettingSpec::fixed_choice("t.when", "Sync", &OPTIONS, "Off", groups::OTHER);
+    assert!(matches!(spec.kind, paperpaw_sdk::SettingKind::Choice(Choices::Fixed(_))));
+    h.settings.define(spec.clone()).unwrap();
+    let mut seen = Vec::new();
+    for value in OPTIONS {
+        h.settings.set("t.when", SettingValue::Text(value.into())).unwrap();
+        let env = h.env();
+        let style = UiStyle::new(&env);
+        seen.push(ui::row_lines(&env, &style, &spec, 480, "", style.row, false));
+    }
+    assert_eq!(seen[0], seen[1]);
+    assert!(seen[0].stacked(), "the long option does not fit beside the title");
+}
+
+/// A switch without a note on a page of noted rows is measured where it
+/// is drawn (the whole row, a larger switch): its title is not cut.
+#[test]
+fn a_switch_without_a_note_is_measured_as_drawn() {
+    use paperpaw_sdk::SettingSpec;
+    use paperpaw_sdk::builtin::groups;
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let row = style.noted_row();
+    // Titles from short to long: whichever the row keeps side by side,
+    // drawn there it is whole.
+    for title in ["Night", "Night mode", "Pictures in night", "Pictures in night mode"] {
+        let spec = SettingSpec::fixed_switch("t.switch", title, false, groups::OTHER);
+        assert!(spec.description.is_none());
+        let lines = ui::row_lines(&env, &style, &spec, 480, "", row, true);
+        let rect = Rect::new(0, 100, 480, lines.height);
+        let lines = lines.at(rect);
+        let (described, _) = describe(480, 800, |c| {
+            ui::draw_switch_lines(c, &env, &style, rect, lines, false, title, "", true);
+        });
+        assert!(
+            described.iter().any(|d| d.label == title),
+            "{title}: {described:?}"
+        );
     }
 }

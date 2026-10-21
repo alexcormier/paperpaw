@@ -143,6 +143,8 @@ pub(super) struct GroupPage {
     pub(super) noted: bool,
     /// The widest value of the page's numbers, so their − and + line up.
     pub(super) number_room: String,
+    /// How each setting's row is laid out (none for sliders and others).
+    lines: Vec<Option<ui::RowLines>>,
     /// What the settings do, shown above them, where the group has it.
     pub(super) preview: Option<Preview>,
     /// Covered by a full screen, and settings changed meanwhile.
@@ -234,18 +236,26 @@ impl GroupPage {
             }),
         );
         // A title that does not fit beside its control gets a line of its
-        // own, the control below it: titles are never cut.
-        let height = |spec: &SettingSpec| {
-            let (width, row) = (area.width, u32::from(row));
-            ui::setting_height(env, &style, spec, width, &number_room, row, noted) as u16
-        };
-        let heights = entries
+        // own, the control below it: titles are never cut. Decided here,
+        // for every value a row may show, not each time it is drawn.
+        let lines: Vec<Option<ui::RowLines>> = entries
             .iter()
             .map(|e| match e {
-                Row::Heading(_) => heading,
-                Row::Setting(spec) if ui::slider::shows(env, spec) => slider_row,
-                Row::Setting(spec) => height(spec),
-                Row::Reset | Row::Theme(_) => style.row as u16,
+                Row::Setting(spec) if !ui::slider::shows(env, spec) => {
+                    let (width, row) = (area.width, u32::from(row));
+                    Some(ui::row_lines(env, &style, spec, width, &number_room, row, noted))
+                }
+                _ => None,
+            })
+            .collect();
+        let heights = entries
+            .iter()
+            .zip(&lines)
+            .map(|(e, lines)| match (e, lines) {
+                (Row::Heading(_), _) => heading,
+                (Row::Setting(_), Some(lines)) => lines.height,
+                (Row::Setting(_), None) => slider_row,
+                (Row::Reset | Row::Theme(_), _) => style.row as u16,
             })
             .collect();
         let headings = entries
@@ -265,6 +275,7 @@ impl GroupPage {
             dragged: None,
             noted,
             number_room,
+            lines,
             preview,
             covered: Covered::default(),
         }
@@ -379,8 +390,11 @@ impl GroupPage {
             &self.number_room
         };
         // Its line, as high as − and + need.
-        let lines = ui::row_lines(env, &self.style, spec, rect, &self.number_room, self.noted);
-        ui::stepper(env, &self.style, lines.control, room)
+        let line = match self.lines.get(index).copied().flatten() {
+            Some(lines) => lines.at(rect).control,
+            None => rect,
+        };
+        ui::stepper(env, &self.style, line, room)
     }
 
     /// Redraws row `index` where it is (a value shown that changed).
@@ -435,6 +449,7 @@ impl Screen for GroupPage {
         let editing = self.editing.is_some();
         let noted = self.noted;
         let room = self.number_room.as_str();
+        let all_lines = &self.lines;
         let touch = env.device.input.touch;
         self.rows
             .draw(canvas, &style, self.keys, |canvas, index, rect, focused| {
@@ -477,7 +492,10 @@ impl Screen for GroupPage {
                     slider.draw_row(canvas, env, &style, &view);
                     return;
                 }
-                let lines = ui::row_lines(env, &style, spec, rect, room, noted);
+                let lines = match all_lines.get(index).copied().flatten() {
+                    Some(lines) => lines.at(rect),
+                    None => ui::RowLines::one(rect),
+                };
                 match spec.kind {
                     SettingKind::Int { .. } if focused => {
                         ui::draw_stepper_lines(

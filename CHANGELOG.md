@@ -12,7 +12,11 @@ change the plugin SDK.
   wide for a line wraps onto a second (`ui::RowLines`, `ui::row_lines`,
   `ui::setting_height`; drawn with `ui::draw_number_lines`,
   `ui::draw_stepper_lines`, `ui::draw_switch_lines`,
-  `ui::draw_setting_row`, `ui::draw_lines_note`). The settings use it:
+  `ui::draw_setting_row`, `ui::draw_lines_note`). It is decided once,
+  when the list is made, for every value a row may show (a choice's
+  widest option, a number's least and greatest), so a value changed in
+  place never makes a row overlap the next; `RowLines::at` moves it to
+  the row's place. The settings use it:
   on the X4 Pro *Saving below (%)* and *Offline below (%)* showed as
   *Saving bel…*, as their buttons are a fingertip wide. Touch targets
   and the focus by the buttons stay as they were.
@@ -103,7 +107,9 @@ change the plugin SDK.
   buttons, the page buttons are a swipe to the widget that has the focus
   (the screen's own page where it takes none); Left and Right always go
   on through the targets, out of a widget after its last, so one that
-  pages without end never keeps the focus (the X4 has no Up and Down);
+  pages without end never keeps the focus (the X4 has no Up and Down).
+  Where its targets are the only ones on the page, the page buttons are
+  the screen's and Left and Right page it at its first and last target;
   Up and Down go to the target above or below. After a swipe it took,
   its targets are asked anew: where it had the focus, the focus goes to
   its first target and it is told; elsewhere the focus stays where it

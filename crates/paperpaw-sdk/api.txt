@@ -3270,8 +3270,10 @@ pub fn paperpaw_sdk::ui::reorder::Reorder::grip(paperpaw_platform::geometry::Rec
 pub fn paperpaw_sdk::ui::reorder::Reorder::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::ListView, usize) -> core::option::Option<paperpaw_sdk::ui::reorder::ReorderStep>
 pub struct paperpaw_sdk::ui::RowLines
 pub paperpaw_sdk::ui::RowLines::control: paperpaw_platform::geometry::Rect
+pub paperpaw_sdk::ui::RowLines::height: u16
 pub paperpaw_sdk::ui::RowLines::title: paperpaw_platform::geometry::Rect
 impl paperpaw_sdk::ui::RowLines
+pub fn paperpaw_sdk::ui::RowLines::at(self, paperpaw_platform::geometry::Rect) -> Self
 pub fn paperpaw_sdk::ui::RowLines::bottom(&self) -> u16
 pub const fn paperpaw_sdk::ui::RowLines::one(paperpaw_platform::geometry::Rect) -> Self
 pub fn paperpaw_sdk::ui::RowLines::stacked(&self) -> bool
@@ -3459,7 +3461,7 @@ pub fn paperpaw_sdk::ui::number_room<'a>(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::
 pub fn paperpaw_sdk::ui::number_title_area(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::opens_screen(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> bool
 pub fn paperpaw_sdk::ui::option_name(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, &str) -> alloc::string::String
-pub fn paperpaw_sdk::ui::row_lines(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::SettingSpec, paperpaw_platform::geometry::Rect, &str, bool) -> paperpaw_sdk::ui::RowLines
+pub fn paperpaw_sdk::ui::row_lines(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::SettingSpec, u16, &str, u32, bool) -> paperpaw_sdk::ui::RowLines
 pub fn paperpaw_sdk::ui::setting_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::SettingSpec, u16, &str, u32, bool) -> u32
 pub fn paperpaw_sdk::ui::setting_opens(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> core::option::Option<paperpaw_sdk::Command>
 pub fn paperpaw_sdk::ui::setting_row(&paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::SettingSpec, u32, bool) -> u32

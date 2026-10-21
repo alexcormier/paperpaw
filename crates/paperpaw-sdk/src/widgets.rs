@@ -225,7 +225,9 @@ pub trait Widget {
     /// widget refuses a swipe it cannot do (at its last page): the screen
     /// then turns its own page. Left and Right always move the focus on,
     /// out of the widget after its last target, so a widget that pages
-    /// without end never keeps it.
+    /// without end never keeps it. Where its targets are the only ones,
+    /// the page buttons are the screen's and Left and Right are the
+    /// swipes, at its first and last target.
     fn on_input(
         &mut self,
         env: &Env<'_>,

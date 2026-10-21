@@ -166,24 +166,29 @@ pub fn setting_row(style: &UiStyle, spec: &SettingSpec, row: u32, noted: bool) -
     }
 }
 
-/// Where a setting's row puts its title and its control (a value, or
-/// `−` value `+`): side by side, or, where the title would be cut, the
-/// control on a line of its own below the title, at the right. A title is
-/// never cut for a control (see [`row_lines`]).
+/// Where a setting's row puts its title and its control (a value, a
+/// switch or `−` value `+`): side by side, or, where the title would be
+/// cut, the control on a line of its own below the title, at the right. A
+/// title is never cut for a control. Decided once, when the row is laid
+/// out ([`row_lines`]), for every value it may show (a choice's widest
+/// option), and moved to where the row is drawn ([`RowLines::at`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct RowLines {
     /// The line of the title.
     pub title: Rect,
     /// The line of the control: the title's where both fit side by side.
     pub control: Rect,
+    /// The whole row's height, its note included.
+    pub height: u16,
 }
 
 impl RowLines {
-    /// Title and control side by side in `line`.
+    /// Title and control side by side in `line`, a row as high.
     pub const fn one(line: Rect) -> Self {
         Self {
             title: line,
             control: line,
+            height: line.height,
         }
     }
 
@@ -196,10 +201,23 @@ impl RowLines {
     pub fn bottom(&self) -> u16 {
         self.control.bottom() as u16
     }
+
+    /// The lines of a row laid out at the top left moved to the row's
+    /// place `rect`.
+    pub fn at(self, rect: Rect) -> Self {
+        let moved = |r: Rect| Rect::new(r.x + rect.x, r.y + rect.y, r.width, r.height);
+        Self {
+            title: moved(self.title),
+            control: moved(self.control),
+            height: self.height,
+        }
+    }
 }
 
-/// The first line of setting `spec`'s row in `rect`, as the row is laid
-/// out side by side: a number's as high as its − and + need.
+/// The line of a row in `rect` that holds its title and its control side
+/// by side, as they are drawn: a number's as high as its − and + need, a
+/// switch's the whole row where it has no note (as [`draw_switch_row`]
+/// draws it).
 fn first_line(style: &UiStyle, spec: &SettingSpec, rect: Rect, noted: bool) -> Rect {
     let number = matches!(spec.kind, SettingKind::Int { .. });
     let line = match (number, noted) {
@@ -211,14 +229,35 @@ fn first_line(style: &UiStyle, spec: &SettingSpec, rect: Rect, noted: bool) -> R
     Rect::new(rect.x, rect.y, rect.width, (line as u16).min(rect.height))
 }
 
-/// The value a setting's row shows at its right: with "›" where a tap
+/// Whether setting `spec` shows a switch (else a value or a number).
+fn is_switch(spec: &SettingSpec) -> bool {
+    matches!(spec.kind, SettingKind::Bool) && spec.extra().editor.is_none()
+}
+
+/// The widest a setting's value at the right of its row is drawn: a
+/// choice's widest option, else the value it has; with the mark of a
+/// value set for a scope where it may have one, and "›" where a tap
 /// opens a screen for it.
-fn shown_value(env: &Env<'_>, spec: &SettingSpec) -> String {
-    let mut value = setting_value(env, spec);
-    if opens_screen(env, spec) {
-        value.push_str(" ›");
-    }
-    value
+fn widest_value(env: &Env<'_>, style: &UiStyle, font: &FontHandle<'_>, spec: &SettingSpec) -> f32 {
+    let size = style.text;
+    let value = match &spec.kind {
+        SettingKind::Choice(choices) => choices
+            .iter()
+            .map(|option| font.measure(size, env.i18n.tr(option)))
+            .fold(0.0, f32::max),
+        _ => font.measure(size, &plain_setting_value(env, spec)),
+    };
+    let scoped = if spec.scoped {
+        font.measure(size, "• ")
+    } else {
+        0.0
+    };
+    let opens = if opens_screen(env, spec) {
+        font.measure(size, " ›")
+    } else {
+        0.0
+    };
+    value + scoped + opens
 }
 
 /// Whether setting `spec`'s title fits beside its control on `line`
@@ -232,22 +271,21 @@ fn fits_beside(env: &Env<'_>, style: &UiStyle, spec: &SettingSpec, line: Rect, r
     let margin = style.margin as f32;
     let room_for_title = match spec.kind {
         SettingKind::Int { .. } => {
-            let value = setting_value(env, spec);
-            let room = wider(&font, style.text, room, &value);
+            // Its least and greatest: the − and + stay where they are
+            // while it changes.
+            let own = number_room(env, style, core::iter::once(spec));
+            let room = wider(&font, style.text, room, &own);
             let Some((minus, _)) = stepper(env, style, line, room) else {
                 return true;
             };
             f32::from(minus.x) - f32::from(line.x) - 2.0 * margin
         }
-        SettingKind::Bool if spec.extra().editor.is_none() => {
+        _ if is_switch(spec) => {
             // The title ends a gap before the switch.
             let switch = switch_rect(style, line);
             f32::from(switch.x) - f32::from(line.x) - margin - style.gap as f32
         }
-        _ => {
-            let value = shown_value(env, spec);
-            f32::from(line.width) - 3.0 * margin - font.measure(style.text, &value)
-        }
+        _ => f32::from(line.width) - 3.0 * margin - widest_value(env, style, &font, spec),
     };
     // A pixel of slack for rounding, as in [`draw_label`].
     font.measure(style.text, title) <= room_for_title + 1.0
@@ -265,6 +303,9 @@ fn own_title_height(env: &Env<'_>, style: &UiStyle, width: u16, title: &str) -> 
         return band;
     };
     let room = f32::from(width) - 2.0 * style.margin as f32;
+    if font.measure(style.text, title) <= room + 1.0 {
+        return band;
+    }
     let lines = font.wrap(style.text, title, room).len().clamp(1, TITLE_LINES);
     let line = font.line_metrics(style.text).line_height as u16;
     band + line * (lines as u16 - 1)
@@ -284,15 +325,15 @@ fn draw_own_title(
     let margin = style.margin as f32;
     let room = f32::from(line.width) - 2.0 * margin;
     let left = f32::from(line.x) + margin;
-    let wrapped = font.wrap(style.text, title, room);
-    if wrapped.len() <= 1 {
-        let title = fit(font, style.text, title, room);
-        draw_label(canvas, font, style.text, left, line, &title, ink);
+    // One line, as most are: nothing to wrap.
+    if font.measure(style.text, title) <= room + 1.0 {
+        draw_label(canvas, font, style.text, left, line, title, ink);
         return;
     }
+    let wrapped = font.wrap(style.text, title, room);
     canvas.describe(Role::Text, title, line, false, None);
     let metrics = font.line_metrics(style.text);
-    let count = wrapped.len().min(TITLE_LINES);
+    let count = wrapped.len().clamp(1, TITLE_LINES);
     // The lines centred in the line's height, as one line is.
     let total = metrics.line_height * count as f32;
     let top = f32::from(line.y) + (f32::from(line.height) - total) / 2.0;
@@ -307,31 +348,52 @@ fn draw_own_title(
     }
 }
 
-/// The lines of setting `spec`'s row in `rect`, which is as high as
-/// [`setting_height`] made it: its title and its control side by side, or
-/// the control below the title where they do not fit (`room` for a
-/// number's value, see [`number_room`]; `noted` rows or not).
+/// How setting `spec`'s row `width` wide is laid out in a list of rows
+/// `row` high (`room` for a number's value, see [`number_room`]; `noted`
+/// rows or not): its title and its control side by side, or the control
+/// below the title where they do not fit, for every value it may show,
+/// and how high it is. At the top left: drawn at its place with
+/// [`RowLines::at`]. Made once with the list (it measures, and wraps a
+/// long title), not each time the row is drawn.
+#[allow(clippy::too_many_arguments)]
 pub fn row_lines(
     env: &Env<'_>,
     style: &UiStyle,
     spec: &SettingSpec,
-    rect: Rect,
+    width: u16,
     room: &str,
+    row: u32,
     noted: bool,
 ) -> RowLines {
+    let height = setting_row(style, spec, row, noted) as u16;
+    let rect = Rect::new(0, 0, width, height);
     let line = first_line(style, spec, rect, noted);
-    if fits_beside(env, style, spec, line, room) {
-        return RowLines::one(line);
+    // A switch without a note takes the whole row, as it is drawn.
+    let beside = if is_switch(spec) && !(noted && spec.description.is_some()) {
+        rect
+    } else {
+        line
+    };
+    if fits_beside(env, style, spec, beside, room) {
+        return RowLines {
+            height,
+            ..RowLines::one(line)
+        };
     }
-    let high = own_title_height(env, style, line.width, env.i18n.tr(&spec.title));
+    let high = own_title_height(env, style, width, env.i18n.tr(&spec.title));
     let title = Rect::new(line.x, line.y, line.width, high);
     let control = Rect::new(line.x, title.bottom() as u16, line.width, line.height);
-    RowLines { title, control }
+    RowLines {
+        title,
+        control,
+        height: height + high,
+    }
 }
 
 /// The height of the row of setting `spec` `width` pixels wide in a list
 /// of rows `row` high: as [`setting_row`], and a title's line more where
-/// the title does not fit beside its control ([`row_lines`]).
+/// the title does not fit beside its control (see [`row_lines`], which
+/// tells both).
 #[allow(clippy::too_many_arguments)]
 pub fn setting_height(
     env: &Env<'_>,
@@ -342,13 +404,7 @@ pub fn setting_height(
     row: u32,
     noted: bool,
 ) -> u32 {
-    let height = setting_row(style, spec, row, noted);
-    let rect = Rect::new(0, 0, width, height as u16);
-    if fits_beside(env, style, spec, first_line(style, spec, rect, noted), room) {
-        height
-    } else {
-        height + u32::from(own_title_height(env, style, width, env.i18n.tr(&spec.title)))
-    }
+    u32::from(row_lines(env, style, spec, width, room, row, noted).height)
 }
 
 /// A setting's row with a value: `title` and `value` on [`RowLines`]
