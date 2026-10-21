@@ -230,17 +230,16 @@ impl Emulator {
     }
 
     /// What the panel shows now, four bytes a pixel (RGBA), row by row:
-    /// its grays as the panel shows them, a full refresh flashing.
+    /// its grays as the panel shows them, a full refresh flashing, in the
+    /// tones of e-ink on a gray panel ([`eink`]).
     pub fn frame(&mut self) -> &[u8] {
         self.frame.clear();
+        let gray = self.profile.device.display.color.is_none();
         if let Some(device) = &self.device {
             for pixel in device.panel.compose() {
-                self.frame.extend_from_slice(&[
-                    (pixel >> 16) as u8,
-                    (pixel >> 8) as u8,
-                    pixel as u8,
-                    255,
-                ]);
+                let rgb = [(pixel >> 16) as u8, (pixel >> 8) as u8, pixel as u8];
+                let [r, g, b] = if gray { rgb.map(eink) } else { rgb };
+                self.frame.extend_from_slice(&[r, g, b, 255]);
             }
         }
         &self.frame
@@ -368,6 +367,24 @@ impl Emulator {
             json_string(&version()),
         )
     }
+}
+
+/// The darkest a gray e-ink panel shows: its black reflects about a
+/// twelfth of what its paper does, where a screen's black reflects
+/// almost nothing (the panel model's ink, `0x1e`).
+const EINK_BLACK: u8 = 0x48;
+/// The panel model's ink and paper (the darkest and the lightest level
+/// it draws).
+const MODEL_INK: u8 = 0x1e;
+
+/// A channel of the panel model's colour in the tones of e-ink: the range
+/// from its ink to paper narrowed to that from e-ink's black, so that text
+/// is as dark as on the device, not darker (it looks bolder on a screen
+/// than on the panel otherwise). Paper stays as it is.
+pub fn eink(value: u8) -> u8 {
+    let (value, ink) = (u32::from(value.max(MODEL_INK)), u32::from(MODEL_INK));
+    let (black, white) = (u32::from(EINK_BLACK), 255);
+    (black + (value - ink) * (white - black) / (white - ink)) as u8
 }
 
 /// Every file under `dir` of `storage` (`""` the whole card), by its

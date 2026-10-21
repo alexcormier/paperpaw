@@ -8,9 +8,9 @@
   html, body { margin: 0; height: 100%; background: #3a3a3c; }
   body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 12px; box-sizing: border-box; }
   #screen {
-    /* The device's own pixels, scaled to fit, never blurred. */
-    max-width: 100%; max-height: calc(100% - 56px); object-fit: contain;
-    image-rendering: pixelated; background: #e9e6dd; border-radius: 4px;
+    /* Sized by frame.js: a whole number of screen pixels for each of the
+       device's where it fits (crisp), smoothed where it is made smaller. */
+    background: #e9e6dd; border-radius: 4px;
     box-shadow: 0 0 0 10px #1d1d1f; touch-action: none; outline: none;
   }
   #buttons { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }

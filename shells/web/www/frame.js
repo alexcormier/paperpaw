@@ -64,6 +64,22 @@ function tell(message) {
   if (window.parent !== window) window.parent.postMessage(message, "*");
 }
 
+/// Sizes the canvas on the page: each of the device's pixels as a whole
+/// number of the screen's own (devicePixelRatio counted), drawn crisp,
+/// where it fits at least once; smoothed where it has to be made smaller,
+/// as dropping rows and columns would make strokes look bolder or vanish.
+function fit() {
+  const ratio = window.devicePixelRatio || 1;
+  const room = [window.innerWidth - 40, window.innerHeight - 40 - row.offsetHeight - 12];
+  const scale = Math.min((room[0] * ratio) / canvas.width, (room[1] * ratio) / canvas.height);
+  const whole = scale >= 1 ? Math.floor(scale) : scale;
+  canvas.style.width = `${(canvas.width * whole) / ratio}px`;
+  canvas.style.height = `${(canvas.height * whole) / ratio}px`;
+  canvas.style.imageRendering = scale >= 1 ? "pixelated" : "auto";
+}
+
+window.addEventListener("resize", () => canvas.width && fit());
+
 /// Draws what the panel shows, and keeps drawing while it changes.
 function draw() {
   drawing = false;
@@ -73,6 +89,7 @@ function draw() {
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
       canvas.height = height;
+      fit();
     }
     context.putImageData(device.frame(), 0, 0);
     if (device.animating()) requestDraw();

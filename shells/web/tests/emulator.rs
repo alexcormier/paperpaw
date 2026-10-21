@@ -192,3 +192,13 @@ fn snapshots_of_other_devices_leave_what_is_shown() {
     assert!(x4.shown() == shown);
     assert!(x4.button("right", true));
 }
+
+#[test]
+fn the_frame_is_in_the_tones_of_e_ink() {
+    use paperpaw_web::emulator::eink;
+    // Paper stays; ink is e-ink's black, not a screen's; between, in order.
+    assert_eq!(eink(255), 255);
+    assert_eq!(eink(0x1e), 0x48);
+    assert_eq!(eink(0), 0x48);
+    assert!((0x1e..=255).map(eink).collect::<Vec<_>>().windows(2).all(|w| w[0] <= w[1]));
+}

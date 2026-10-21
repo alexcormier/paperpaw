@@ -62,8 +62,12 @@ have stopped there.
 | `{ type: "screenshot", profile?, dark?, asleep? }` | The panel as it shows, at the device's resolution; with `profile`, `dark` or `asleep`, what that device, night mode or the sleep screen would show with the same card, made apart (what is shown stays) | `{ png }` (bytes) |
 | `{ type: "check", commands? }` | `paperpaw-dev`'s checks of the data plugins on the card, on this device: `package`, `lint`, `visual`, `reach` (all if none named), the libraries in memory | `{ report }` (as `report.json`) |
 
-The frame draws at the device's resolution, scaled to fit without
-blurring, in the grays the panel shows, a full refresh flashing; the
+The frame draws at the device's resolution: each of its pixels a whole
+number of the screen's (devicePixelRatio counted), crisp, where it fits
+at least once, smoothed where it has to be made smaller; in the grays
+the panel shows, in e-ink's tones on gray panels (its black lighter than
+a screen's), a full refresh flashing; screenshots are the panel model's
+own colours; the
 device's buttons are below it, its keys on the keyboard, and the screen
 takes touch where the device has a touch screen.
 
