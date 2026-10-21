@@ -1046,3 +1046,16 @@ fn a_switch_without_a_note_is_measured_as_drawn() {
         );
     }
 }
+
+/// An empty screen in an area too small for its margins keeps its ink
+/// inside: a letter reaching past its start (an accent) too.
+#[test]
+fn an_empty_screen_in_a_small_area_draws_inside_it() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let area = Rect::new(1, 0, 149, 60);
+    let mut frame = frame(480, 800);
+    ui::draw_empty(&mut frame.canvas(), &env, &style, area, "books", "Ὕ\u{dd6}#🀰a\"", "");
+    assert_eq!(drawn_outside(&mut frame, area), None);
+}
