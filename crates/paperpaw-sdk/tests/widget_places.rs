@@ -257,9 +257,37 @@ fn one_frame_for_all_widgets_unless_one_has_its_own() {
         .set("t.three.frame", SettingValue::Text(FRAMES[1].into()))
         .unwrap();
     assert_eq!(frame(&h, "t.three"), Frame::Line, "its own, chosen");
-    let covered = paperpaw_sdk::presets::widget_look_settings(&h.settings);
+    // Its own shown while chosen, and a placement's own, win too.
+    h.settings.set_preview(vec![(
+        Id::new_static("t.one.frame"),
+        Some(SettingValue::Text(FRAMES[3].into())),
+    )]);
+    assert_eq!(frame(&h, "t.one"), Frame::Dark, "shown while chosen");
+    h.settings.set_preview(Vec::new());
+    h.settings
+        .set("t.one@2.frame", SettingValue::Text(FRAMES[1].into()))
+        .unwrap();
+    let placed = h
+        .settings
+        .with_placement(Some("t.one@2"), || frame(&h, "t.one"));
+    assert_eq!(placed, Frame::Line, "a placement's own");
+    // Not a setting that ends so but is no widget's (a status line's
+    // size), nor the frame of all in a theme.
+    let size: paperpaw_sdk::setting::Setting<i64> =
+        paperpaw_sdk::setting::Setting::new("t.status.size");
+    h.settings
+        .define(SettingSpec::number(&size, "t.size", 5, 16, 6))
+        .unwrap();
+    let covered = paperpaw_sdk::presets::widget_look_settings(&h.settings, &h.widgets);
     let covered: Vec<&str> = covered.iter().map(Id::as_str).collect();
     assert!(covered.contains(&WIDGET_FRAME.static_str()), "{covered:?}");
     assert!(covered.contains(&"t.one.frame"), "{covered:?}");
     assert!(!covered.contains(&"t.list"), "{covered:?}");
+    assert!(!covered.contains(&"t.status.size"), "{covered:?}");
+    let themed = paperpaw_sdk::presets::theme_settings(&h.settings);
+    assert!(
+        !themed
+            .iter()
+            .any(|id| id.as_str() == WIDGET_FRAME.static_str())
+    );
 }

@@ -155,6 +155,9 @@ pub struct StatusLineSpec {
     /// Where a tap on it does something; without them a tap does what
     /// the screen does with it (the reader shows its next line).
     pub targets: Option<StatusTargetsFn>,
+    /// An id it had before, which lines chosen may still name; lists of
+    /// lines show it once, under its own.
+    pub also: Option<Id>,
 }
 
 impl StatusLineSpec {
@@ -166,7 +169,14 @@ impl StatusLineSpec {
             draw,
             signature: None,
             targets: None,
+            also: None,
         }
+    }
+
+    /// It answers to `id` too, which it had before.
+    pub fn also(mut self, id: Id) -> Self {
+        self.also = Some(id);
+        self
     }
 
     pub fn signature(mut self, signature: StatusSignatureFn) -> Self {
@@ -451,6 +461,14 @@ impl StatusItems {
         self.lines.iter().map(|l| (&l.id, l.title.as_ref()))
     }
 
+    /// Status line `id`, also by an id it had before
+    /// ([`StatusLineSpec::also`]).
+    fn line(&self, id: &str) -> Option<&StatusLineSpec> {
+        self.lines
+            .iter()
+            .find(|l| l.id.as_str() == id || l.also.as_ref().is_some_and(|a| a.as_str() == id))
+    }
+
     /// Draws status line `id`; `false` if there is none.
     pub fn draw_line(
         &self,
@@ -459,7 +477,7 @@ impl StatusItems {
         env: &Env<'_>,
         frame: &StatusFrame<'_>,
     ) -> bool {
-        match self.lines.iter().find(|l| l.id.as_str() == id) {
+        match self.line(id) {
             Some(line) => {
                 (line.draw)(canvas, env, frame);
                 true
@@ -475,8 +493,7 @@ impl StatusItems {
         env: &Env<'_>,
         frame: &StatusFrame<'_>,
     ) -> Vec<StatusTarget> {
-        let line = self.lines.iter().find(|l| l.id.as_str() == id);
-        match line.and_then(|l| l.targets.as_ref()) {
+        match self.line(id).and_then(|l| l.targets.as_ref()) {
             Some(targets) => targets(env, frame),
             None => Vec::new(),
         }
@@ -484,8 +501,7 @@ impl StatusItems {
 
     /// What status line `id` shows now (see [`StatusSignatureFn`]).
     pub fn line_signature(&self, id: &str, env: &Env<'_>, context: &Params) -> String {
-        let line = self.lines.iter().find(|l| l.id.as_str() == id);
-        match line.and_then(|l| l.signature.as_ref()) {
+        match self.line(id).and_then(|l| l.signature.as_ref()) {
             Some(signature) => signature(env, context),
             None => alloc::format!("{context:?}"),
         }
@@ -502,12 +518,7 @@ impl StatusItems {
             .iter()
             .find(|i| i.id.as_str() == id)
             .map(|i| i.title.as_ref())
-            .or_else(|| {
-                self.lines
-                    .iter()
-                    .find(|l| l.id.as_str() == id)
-                    .map(|l| l.title.as_ref())
-            })
+            .or_else(|| self.line(id).map(|l| l.title.as_ref()))
     }
 
     /// The value of item `id` now.

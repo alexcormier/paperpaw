@@ -1845,6 +1845,8 @@ fn register_time_and_battery(r: &mut Registrar) -> Result<(), RegisterError> {
                 .collect();
             paperpaw_sdk::status::signature(env, &lists, context)
         }))
+        // The reader's line of items before it was the kernel's.
+        .also(Id::new_static("reader.status-line.items"))
         .targets(Box::new(|env, frame| {
             match (items_line(env, frame), env.fonts.role(frame.font)) {
                 (Some(line), Some(font)) => line.targets(env, &font, frame.context),

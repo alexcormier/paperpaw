@@ -148,6 +148,27 @@ struct Owls;
 
 struct Night;
 
+thread_local! {
+    /// Whether the moon shows in a place of widgets, as last asked.
+    static MOON_SHOWN: std::cell::Cell<Option<bool>> = const { std::cell::Cell::new(None) };
+}
+
+/// Asks, as it shows, whether the moon shows in any place of widgets.
+struct Ask;
+
+impl Screen for Ask {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+
+    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        MOON_SHOWN.with(|m| m.set(Some(env.widgets.shown(&env, "owls.moon"))));
+    }
+}
+
 /// How often the night was shown, and woken.
 static NIGHT_SHOWN: AtomicUsize = AtomicUsize::new(0);
 static NIGHT_WOKEN: AtomicUsize = AtomicUsize::new(0);
@@ -195,6 +216,11 @@ impl Plugin for Owls {
                 |_, _| 40,
                 |canvas, _, area| canvas.fill(Rect::new(area.x, area.y, 40, 40), Color::BLACK),
             ),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            Id::new_static("owls.ask"),
+            "Ask",
+            Box::new(|_, _| Box::new(Ask)),
         ))?;
         r.add_screen(ScreenSpec::new(
             Id::new_static("owls.night"),
@@ -659,4 +685,25 @@ fn changes(shown: &[Color], page: &[Color]) -> Vec<(usize, usize)> {
         .filter(|(_, (a, b))| a != b)
         .map(|(i, _)| (i % 480, i / 480))
         .collect()
+}
+
+/// A widget over the page shows in a place of widgets: a plugin asking
+/// whether its widget shows (to fetch what it shows) is told so.
+#[test]
+fn a_widget_over_the_page_counts_as_shown() {
+    for (settings, shown) in [("overlay-widget = owls.moon", true), ("", false)] {
+        let mut device = Device::new(settings, false);
+        device.now += 100;
+        let effects = device.kernel.open_screen(
+            Instant(device.now),
+            Id::new_static("owls.ask"),
+            Params::new(),
+        );
+        device.settle(effects);
+        assert_eq!(
+            MOON_SHOWN.with(std::cell::Cell::get),
+            Some(shown),
+            "{settings:?}"
+        );
+    }
 }

@@ -65,14 +65,14 @@ impl Chooser {
     fn covered(self, env: &Env<'_>) -> Vec<Id> {
         match self {
             Chooser::Theme => presets::theme_settings(env.settings),
-            Chooser::Widgets => presets::widget_look_settings(env.settings),
+            Chooser::Widgets => presets::widget_look_settings(env.settings, env.widgets),
         }
     }
 
     fn changes_of(self, env: &Env<'_>, preset: &Preset) -> Vec<(Id, Option<SettingValue>)> {
         match self {
             Chooser::Theme => presets::theme_changes(env.settings, preset),
-            Chooser::Widgets => presets::widget_look_changes(env.settings, preset),
+            Chooser::Widgets => presets::widget_look_changes(env.settings, env.widgets, preset),
         }
     }
 }

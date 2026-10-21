@@ -317,7 +317,7 @@ pub fn frame(env: &Env<'_>, widget: &str) -> Frame {
     let all = env
         .settings
         .text(crate::builtin::settings::WIDGET_FRAME.static_str());
-    if all != OWN_FRAME && FRAMES.contains(&all) && !env.settings.is_set(&own) {
+    if all != OWN_FRAME && FRAMES.contains(&all) && !env.settings.is_chosen(&own) {
         return Frame::of(all);
     }
     Frame::of(env.settings.text(&own))

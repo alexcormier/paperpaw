@@ -823,11 +823,17 @@ impl Widget for Lively {
     ) -> bool {
         use paperpaw_sdk::widgets::WidgetInput;
         match input {
-            WidgetInput::Swipe(direction) => tell(format!("swipe {direction:?}")),
-            WidgetInput::Focus(at) => tell(format!("focus {}", at.is_some())),
-            _ => {}
+            // Its pages go one way only.
+            WidgetInput::Swipe(paperpaw_sdk::Direction::Left) => {
+                tell("swipe Left".into());
+                true
+            }
+            WidgetInput::Focus(at) => {
+                tell(format!("focus {}", at.is_some()));
+                false
+            }
+            _ => false,
         }
-        true
     }
 
     fn draw_focus(&self, _: &mut Canvas<'_>, _: &Env<'_>, _: Rect) -> bool {
@@ -884,10 +890,19 @@ fn widgets_take_swipes_holds_and_the_focus() {
         [Command::RunAction(Id::new_static("t.hold"))]
     );
     assert!(!view.editing());
-    // The focus to the tool and back: told each time; drawn its own way.
+    // By the buttons: Right swipes it (it takes that), its long press is
+    // Select held (the menu); Left, which it does not take, moves the
+    // focus to the tool, and back: told each time; drawn its own way.
     press(&mut view, &env, &actions::RIGHT);
-    assert_eq!(told(), ["focus false"]);
+    assert_eq!(told(), ["swipe Left"]);
+    let (_, output) = with_cx(&env, |cx| view.on_action(&actions::MENU, cx));
+    assert_eq!(
+        output.commands,
+        [Command::RunAction(Id::new_static("t.hold"))]
+    );
     press(&mut view, &env, &actions::LEFT);
+    assert_eq!(told(), ["focus false"]);
+    press(&mut view, &env, &actions::RIGHT);
     assert_eq!(told(), ["focus true"]);
     let mut frame = support::frame(480, 800);
     view.draw(&mut frame.canvas(), &env);
@@ -928,4 +943,50 @@ fn the_screen_adds_options_and_vetoes_drops() {
     assert_eq!(placed(&env, &view)[0].1, Cells::new(0, 1, 1, 1));
     press(&mut view, &env, &actions::DOWN);
     assert_eq!(placed(&env, &view)[0].1, Cells::new(0, 2, 1, 1));
+}
+
+/// A target tapped only keeps its long press.
+struct Touchy;
+
+impl Widget for Touchy {
+    fn height(&self, _: &Env<'_>, _: u16) -> u16 {
+        90
+    }
+
+    fn draw(&self, _: &mut Canvas<'_>, _: &Env<'_>, _: Rect) {}
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        vec![
+            WidgetTarget::touch(area, Command::RunAction(OPEN))
+                .hold(Command::RunAction(Id::new_static("t.hold"))),
+        ]
+    }
+}
+
+#[test]
+fn a_touch_target_keeps_its_long_press() {
+    let mut h = harness(Device::TOUCH);
+    h.widgets.add(WidgetSpec::new(
+        Id::new_static("t.touchy"),
+        "t.touchy",
+        |_| Box::new(Touchy),
+    ));
+    let env = h.env();
+    let items = [Item::placed(widget("t.touchy"), Cells::new(0, 0, 2, 2))];
+    let view = &mut GridView::asking(&env, CHOSEN);
+    view.layout(&env, geometry(), &items, &[]);
+    let m = middle(geometry().rect(Cells::new(0, 0, 2, 2)));
+    let hold = paperpaw_sdk::Gesture::new(
+        paperpaw_sdk::GestureKind::LongPress,
+        m,
+        m,
+        paperpaw_platform::PointerTool::Finger,
+    );
+    let (response, output) = with_cx(&env, |cx| view.on_gesture(hold, cx));
+    assert_eq!(response, GridResponse::Handled);
+    assert_eq!(
+        output.commands,
+        [Command::RunAction(Id::new_static("t.hold"))]
+    );
+    assert!(!view.editing());
 }

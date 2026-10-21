@@ -97,6 +97,14 @@ const PLACE: WidgetPlace = WidgetPlace::new(
     PlaceKind::Stack,
 );
 const PLACE_SETTINGS: &[Id] = &[Id::new_static(WIDGET_LIST.static_str())];
+/// The widget shown over the page, where one is (see [`overlay`]).
+const OVERLAY_PLACE: WidgetPlace = WidgetPlace::new(
+    Id::new_static("sleep.overlay"),
+    "sleep.title",
+    OVERLAY_SETTINGS,
+    PlaceKind::Stack,
+);
+const OVERLAY_SETTINGS: &[Id] = &[Id::new_static(overlay::WIDGET.static_str())];
 static PICKED_EXTRA: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
     .section(SECTION)
     .editor(overlay::PICK);
@@ -232,6 +240,7 @@ impl Plugin for Sleep {
         ))?;
         r.bind_slot(slots::SLEEP, SCREEN, Priority::DEFAULT)?;
         r.add_widget_place(PLACE)?;
+        r.add_widget_place(OVERLAY_PLACE)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())

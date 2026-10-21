@@ -64,7 +64,7 @@ use alloc::vec::Vec;
 use crate::ui::UiStyle;
 use crate::{Canvas, Color, Env, Id, Point, Rect};
 
-pub use view::{GridResponse, GridView};
+pub use view::{DropCheck, GridResponse, GridView};
 
 /// Columns at most, and rows at most.
 pub const MAX_COLUMNS: u8 = 6;

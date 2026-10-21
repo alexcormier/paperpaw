@@ -1108,6 +1108,17 @@ impl Settings {
         self.values.contains_key(id)
     }
 
+    /// Whether setting `id` has a value of the reader's choosing now: kept
+    /// ([`Settings::is_set`]), shown while one is chosen
+    /// ([`Command::PreviewSettings`](crate::Command::PreviewSettings)), or
+    /// set by the placement whose values are active
+    /// ([`Settings::with_placement`]). Not its default alone.
+    pub fn is_chosen(&self, id: &str) -> bool {
+        self.placed_value(id).is_some()
+            || self.preview.get(id).is_some_and(Option::is_some)
+            || self.values.contains_key(id)
+    }
+
     /// Registers a group of settings.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]

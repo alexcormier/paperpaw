@@ -5,10 +5,11 @@
 //! the choice is kept. Lines come from any plugin
 //! (`Registrar::add_status_line`); the reader brings three:
 //!
-//! - *Text and symbols* ([`lines::ITEMS`]): a left, centre and right part,
-//!   each with the status items chosen for it (`core.status-items`: the
-//!   kernel's time and battery, the reader's title, chapter, page and
-//!   progress, and whatever other plugins add);
+//! - *Text and symbols* (the kernel's `core.status-line.items`, which
+//!   answers to the reader's `reader.status-line.items` too): a left,
+//!   centre and right part, each with the status items chosen for it
+//!   (`core.status-items`: the kernel's time and battery, the reader's
+//!   title, chapter, page and progress, and whatever other plugins add);
 //! - *Progress bar* ([`lines::PROGRESS`]): the book as a bar, with a mark
 //!   where each chapter begins, and the page;
 //! - *Empty* ([`lines::EMPTY`]): nothing, until the next tap.
@@ -72,20 +73,10 @@ pub const PLACES: [Place; 2] = [
 pub mod lines {
     use paperpaw_sdk::Id;
 
-    pub const ITEMS: Id = Id::new_static("reader.status-line.items");
     pub const PROGRESS: Id = Id::new_static("reader.status-line.progress");
     pub const EMPTY: Id = Id::new_static("reader.status-line.empty");
 }
 
-/// The parts: top left, centre, right, then bottom left, centre, right.
-pub const PARTS: [Id; 6] = [
-    TOP_LEFT,
-    TOP_CENTER,
-    TOP_RIGHT,
-    BOTTOM_LEFT,
-    BOTTOM_CENTER,
-    BOTTOM_RIGHT,
-];
 const TOP_LEFT: Id = Id::new_static("reader.status.top-left");
 const TOP_CENTER: Id = Id::new_static("reader.status.top-center");
 const TOP_RIGHT: Id = Id::new_static("reader.status.top-right");
@@ -189,7 +180,7 @@ static SETTINGS: [SettingSpec; 11] = [
     list(
         BOTTOM_LINES,
         "reader.status.bottom-lines",
-        "reader.status-line.items, reader.status-line.progress, reader.status-line.empty",
+        "core.status-line.items, reader.status-line.progress, reader.status-line.empty",
         &BOTTOM_LINES_EXTRA,
     )
     .described("reader.status.lines.help"),
@@ -228,21 +219,6 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     for place in PLACES {
         r.add_status_place(place)?;
     }
-    r.add_status_line(
-        StatusLineSpec::new(
-            lines::ITEMS,
-            "reader.status.line.items",
-            Box::new(|canvas, env, frame| {
-                let frame = frame.percent(env.settings.read(&PERCENT));
-                env.status_items.draw_line(ITEMS_LINE, canvas, env, &frame);
-            }),
-        )
-        .signature(Box::new(items_signature))
-        .targets(Box::new(|env, frame| {
-            let frame = frame.percent(env.settings.read(&PERCENT));
-            env.status_items.line_targets(ITEMS_LINE, env, &frame)
-        })),
-    )?;
     r.add_status_line(
         StatusLineSpec::new(
             lines::PROGRESS,
@@ -368,11 +344,6 @@ fn chapter_pages(cx: &Params) -> Option<(i64, i64)> {
     ))
 }
 
-/// The kernel's line of the items of the place it is drawn in: the
-/// reader's own ([`lines::ITEMS`]) is it, its id kept for the lines the
-/// reader chose.
-const ITEMS_LINE: &str = paperpaw_sdk::builtin::status_lines::ITEMS.static_str();
-
 /// The frame of the line at the top (or bottom) in `area`, in its place.
 pub(crate) fn frame<'a>(
     env: &Env<'_>,
@@ -381,19 +352,15 @@ pub(crate) fn frame<'a>(
     context: &'a Params,
 ) -> StatusFrame<'a> {
     let place = if top { TOP_PLACE } else { BOTTOM_PLACE };
-    StatusFrame::new(area, top, size(env), color(env), context).place(place)
+    StatusFrame::new(area, top, size(env), color(env), context)
+        .place(place)
+        .percent(env.settings.read(&PERCENT))
 }
 
 /// Where a tap on the line shown at the top (or bottom) in `frame` does
 /// something.
 pub(crate) fn targets(env: &Env<'_>, id: &str, frame: &StatusFrame<'_>) -> Vec<StatusTarget> {
     env.status_items.line_targets(id, env, frame)
-}
-
-/// The item lists of a line's parts: `top` or bottom.
-pub(crate) fn lists<'e>(env: &Env<'e>, top: bool) -> [&'e str; 3] {
-    let offset = if top { 0 } else { 3 };
-    core::array::from_fn(|i| env.settings.text(PARTS[offset + i].as_str()))
 }
 
 /// The text size of status lines in pixels.
@@ -533,12 +500,6 @@ pub(crate) fn signature(env: &Env<'_>, context: &Params, chosen: &[String; 2]) -
         out.push('|');
     }
     out
-}
-
-/// What the items of both lines show now.
-fn items_signature(env: &Env<'_>, context: &Params) -> String {
-    let both = [lists(env, true), lists(env, false)].concat();
-    paperpaw_sdk::status::signature(env, &both, context)
 }
 
 #[cfg(test)]

@@ -8,7 +8,9 @@ change the plugin SDK.
 
 - SDK: any place of status items shows a whole status line of the
   reader's choice. The line of a place's items is the kernel's
-  (`status_lines::ITEMS`, the reader's `reader.status-line.items` is it);
+  (`status_lines::ITEMS`); it answers to the reader's
+  `reader.status-line.items` too (`StatusLineSpec::also`) and is listed
+  once, the reader's choice of the battery's percentage kept;
   `Place::with_line` names the setting that chooses the line, and
   `Place::draw`, `Place::targets` and `Place::signature` draw it, tap it
   and tell when it changed. The home screen's status line
@@ -19,7 +21,9 @@ change the plugin SDK.
   (`ui::look::Painters::frame`, `FramePart`, through `set_ui_look`);
   *Frames of widgets* (`core.widgets.frame`, `settings::WIDGET_FRAME`)
   gives every widget whose own frame is not chosen one of the line, card
-  or dark card (each its own at first); presets of the kind
+  or dark card (each its own at first), where a widget has none of its
+  own (kept, shown while chosen, or its placement's; `Settings::is_chosen`);
+  presets of the kind
   `core.widget-look` (`presets::WIDGET_LOOK`, `widget_look_settings`,
   `widget_look_changes`) give widgets a look as a whole, chosen under
   *Widget look* at the top of the appearance settings, as themes are.
@@ -40,8 +44,9 @@ change the plugin SDK.
   (`ui::widget_list`, screens `core.widget-list` and `core.add-widget`,
   `screens::WIDGET_LIST`, `screens::ADD_WIDGET`), bound to slot
   `core.edit-widgets`: the sleep screen's widgets are edited without the
-  home screen, which no longer brings its own copy (`home.edit` and
-  `home.add-to-list` are gone). Plugins add kinds of widgets of their
+  home screen, which no longer brings its own copy. Breaking: the home
+  screen's screens `home.edit` and `home.add-to-list` are gone; open the
+  slot `core.edit-widgets` instead. Plugins add kinds of widgets of their
   own with their icon (`Registrar::add_widget_category`,
   `widgets::WidgetCategory`); `Widgets::kinds` and
   `Widgets::category_icon` list them after the kernel's, as the home
@@ -53,7 +58,9 @@ change the plugin SDK.
   before); `Widget::draw_focus` draws the focus its own way; and
   `Widget::context` tells it where it shows (`widgets::WidgetContext`:
   its placement, so a widget placed twice tells its taps apart, the
-  screen showing it, `GridView::set_host`, and its `SizeClass`).
+  screen showing it, `GridView::set_host`, and its `SizeClass`). With the
+  buttons, Left and Right are a swipe to the focused widget first, and
+  holding Select (the menu) runs its long press.
 - SDK: a widget says how many cells of a grid it takes
   (`WidgetSpec::cells`, `widgets::CellsHint`: its size, its least, square
   or not): added, it gets them without being made to be measured;

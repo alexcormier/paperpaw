@@ -137,8 +137,10 @@ pub struct GridView {
     buttons: Vec<(Rect, u16)>,
     /// Where taps and the buttons' focus go, in order.
     targets: Vec<(Rect, Target)>,
-    /// Where taps alone go ([`WidgetTarget::touch`](crate::widgets::WidgetTarget::touch)).
-    touch: Vec<(Rect, Command)>,
+    /// Where taps alone go
+    /// ([`WidgetTarget::touch`](crate::widgets::WidgetTarget::touch)), and
+    /// what a long press there runs, where it says.
+    touch: Vec<(Rect, Command, Option<Box<Command>>)>,
     /// The item each target is of (none for the screen's own buttons).
     owners: Vec<Option<usize>>,
     /// The screen showing it, told to its widgets
@@ -267,7 +269,8 @@ impl GridView {
                     (What::Widget(_), Some(widget)) => {
                         for target in widget.targets(env, shown.area) {
                             if target.touch {
-                                self.touch.push((target.area, target.command));
+                                let hold = target.hold.map(Box::new);
+                                self.touch.push((target.area, target.command, hold));
                             } else {
                                 self.targets.push((
                                     target.area,
@@ -862,6 +865,17 @@ impl GridView {
             self.set_editing(false);
             return GridResponse::Editing(false);
         }
+        // With the buttons as by touch: a long press of Select (the menu,
+        // as the key map binds it) runs the focused target's own long
+        // press where it has one.
+        if *a == actions::MENU
+            && self.focus_shown
+            && self.edit.is_none()
+            && let Some((_, Target::Run(_, Some(hold)))) = self.targets.get(self.focus)
+        {
+            cx.command((**hold).clone());
+            return GridResponse::Handled;
+        }
         let moves = [
             actions::UP,
             actions::DOWN,
@@ -878,6 +892,22 @@ impl GridView {
             // The first press shows where the focus is.
             self.focus_shown = true;
             self.focus_on(self.focus, cx);
+            return GridResponse::Handled;
+        }
+        // Left and right are a swipe to the focused widget first (a list
+        // turning its page): the next as by a swipe to the left. Where it
+        // takes none, they move the focus.
+        let swipe = if *a == actions::RIGHT {
+            Some(crate::gesture::Direction::Left)
+        } else if *a == actions::LEFT {
+            Some(crate::gesture::Direction::Right)
+        } else {
+            None
+        };
+        if let (Some(direction), None) = (swipe, &self.edit)
+            && let Some(item) = self.owners.get(self.focus).copied().flatten()
+            && self.tell(item, WidgetInput::Swipe(direction), cx)
+        {
             return GridResponse::Handled;
         }
         let len = self.targets.len();
@@ -1072,8 +1102,8 @@ impl GridView {
                     self.focus = index;
                     self.run(index, cx)
                 }
-                None => match self.touch.iter().find(|(r, _)| r.contains(gesture.start)) {
-                    Some((_, command)) => {
+                None => match self.touch.iter().find(|(r, ..)| r.contains(gesture.start)) {
+                    Some((_, command, _)) => {
                         cx.command(command.clone());
                         GridResponse::Handled
                     }
@@ -1082,12 +1112,20 @@ impl GridView {
             },
             // A target's own long press, else editing.
             GestureKind::LongPress if self.edit.is_none() => {
-                let hold = self.targets.iter().find_map(|(r, target)| match target {
-                    Target::Run(_, Some(hold)) if r.contains(gesture.start) => {
-                        Some((**hold).clone())
-                    }
-                    _ => None,
-                });
+                let on = |r: &Rect| r.contains(gesture.start);
+                let hold = self
+                    .targets
+                    .iter()
+                    .find_map(|(r, target)| match target {
+                        Target::Run(_, Some(hold)) if on(r) => Some((**hold).clone()),
+                        _ => None,
+                    })
+                    .or_else(|| {
+                        self.touch
+                            .iter()
+                            .find(|(r, _, hold)| on(r) && hold.is_some())
+                            .and_then(|(_, _, hold)| hold.as_deref().cloned())
+                    });
                 if let Some(hold) = hold {
                     cx.command(hold);
                     return GridResponse::Handled;

@@ -2315,8 +2315,8 @@ pub fn paperpaw_sdk::presets::applied(&paperpaw_sdk::Settings, &[(paperpaw_sdk::
 pub fn paperpaw_sdk::presets::commands(&paperpaw_sdk::Settings, &[(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)]) -> alloc::vec::Vec<paperpaw_sdk::Command>
 pub fn paperpaw_sdk::presets::theme_changes(&paperpaw_sdk::Settings, &paperpaw_sdk::presets::Preset) -> alloc::vec::Vec<(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)>
 pub fn paperpaw_sdk::presets::theme_settings(&paperpaw_sdk::Settings) -> alloc::vec::Vec<paperpaw_sdk::Id>
-pub fn paperpaw_sdk::presets::widget_look_changes(&paperpaw_sdk::Settings, &paperpaw_sdk::presets::Preset) -> alloc::vec::Vec<(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)>
-pub fn paperpaw_sdk::presets::widget_look_settings(&paperpaw_sdk::Settings) -> alloc::vec::Vec<paperpaw_sdk::Id>
+pub fn paperpaw_sdk::presets::widget_look_changes(&paperpaw_sdk::Settings, &paperpaw_sdk::widgets::Widgets, &paperpaw_sdk::presets::Preset) -> alloc::vec::Vec<(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)>
+pub fn paperpaw_sdk::presets::widget_look_settings(&paperpaw_sdk::Settings, &paperpaw_sdk::widgets::Widgets) -> alloc::vec::Vec<paperpaw_sdk::Id>
 pub mod paperpaw_sdk::qr
 pub use paperpaw_sdk::qr::QrCode
 pub mod paperpaw_sdk::random
@@ -2802,12 +2802,14 @@ pub fn paperpaw_sdk::status::StatusLine<'a>::new(paperpaw_platform::geometry::Re
 pub fn paperpaw_sdk::status::StatusLine<'a>::percent(self, bool) -> Self
 pub fn paperpaw_sdk::status::StatusLine<'a>::targets(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::FontHandle<'_>, &paperpaw_sdk::Params) -> alloc::vec::Vec<paperpaw_sdk::status::StatusTarget>
 #[non_exhaustive] pub struct paperpaw_sdk::status::StatusLineSpec
+pub paperpaw_sdk::status::StatusLineSpec::also: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::status::StatusLineSpec::draw: paperpaw_sdk::status::StatusLineFn
 pub paperpaw_sdk::status::StatusLineSpec::id: paperpaw_sdk::Id
 pub paperpaw_sdk::status::StatusLineSpec::signature: core::option::Option<paperpaw_sdk::status::StatusSignatureFn>
 pub paperpaw_sdk::status::StatusLineSpec::targets: core::option::Option<paperpaw_sdk::status::StatusTargetsFn>
 pub paperpaw_sdk::status::StatusLineSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::status::StatusLineSpec
+pub fn paperpaw_sdk::status::StatusLineSpec::also(self, paperpaw_sdk::Id) -> Self
 pub fn paperpaw_sdk::status::StatusLineSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::status::StatusLineFn) -> Self
 pub fn paperpaw_sdk::status::StatusLineSpec::signature(self, paperpaw_sdk::status::StatusSignatureFn) -> Self
 pub fn paperpaw_sdk::status::StatusLineSpec::targets(self, paperpaw_sdk::status::StatusTargetsFn) -> Self
@@ -3579,7 +3581,7 @@ pub fn paperpaw_sdk::widgets::grid::GridView::on_gesture(&mut self, paperpaw_sdk
 pub fn paperpaw_sdk::widgets::grid::GridView::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::widgets::grid::GridResponse
 pub fn paperpaw_sdk::widgets::grid::GridView::release(&mut self)
 pub fn paperpaw_sdk::widgets::grid::GridView::reset_focus(&mut self)
-pub fn paperpaw_sdk::widgets::grid::GridView::set_drop_check(&mut self, fn(&paperpaw_sdk::Env<'_>, &[paperpaw_sdk::widgets::grid::Item], &paperpaw_sdk::widgets::grid::Item, paperpaw_sdk::widgets::grid::Cells) -> bool)
+pub fn paperpaw_sdk::widgets::grid::GridView::set_drop_check(&mut self, paperpaw_sdk::widgets::grid::DropCheck)
 pub fn paperpaw_sdk::widgets::grid::GridView::set_editing(&mut self, bool)
 pub fn paperpaw_sdk::widgets::grid::GridView::set_focus_shown(&mut self, bool)
 pub fn paperpaw_sdk::widgets::grid::GridView::set_host(&mut self, paperpaw_sdk::Id)
@@ -3603,6 +3605,7 @@ pub fn paperpaw_sdk::widgets::grid::free_place(&paperpaw_sdk::widgets::grid::Geo
 pub fn paperpaw_sdk::widgets::grid::parse(&str) -> alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>
 pub fn paperpaw_sdk::widgets::grid::place(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item]) -> alloc::vec::Vec<(paperpaw_sdk::widgets::grid::Item, paperpaw_sdk::widgets::grid::Cells)>
 pub fn paperpaw_sdk::widgets::grid::write(&[paperpaw_sdk::widgets::grid::Item]) -> alloc::string::String
+pub type paperpaw_sdk::widgets::grid::DropCheck = fn(&paperpaw_sdk::Env<'_>, &[paperpaw_sdk::widgets::grid::Item], &paperpaw_sdk::widgets::grid::Item, paperpaw_sdk::widgets::grid::Cells) -> bool
 pub mod paperpaw_sdk::widgets::look
 #[non_exhaustive] pub enum paperpaw_sdk::widgets::look::Frame
 pub paperpaw_sdk::widgets::look::Frame::Card
@@ -5251,6 +5254,7 @@ pub fn paperpaw_sdk::Settings::governs(&self, &str) -> bool
 pub fn paperpaw_sdk::Settings::group_of(&self, &paperpaw_sdk::SettingSpec) -> paperpaw_sdk::Id
 pub fn paperpaw_sdk::Settings::groups(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::SettingGroupSpec>
 pub fn paperpaw_sdk::Settings::int(&self, &str) -> i64
+pub fn paperpaw_sdk::Settings::is_chosen(&self, &str) -> bool
 pub fn paperpaw_sdk::Settings::is_scoped(&self, &str) -> bool
 pub fn paperpaw_sdk::Settings::is_set(&self, &str) -> bool
 pub fn paperpaw_sdk::Settings::is_worn(&self, &str) -> bool
@@ -5339,12 +5343,14 @@ pub fn paperpaw_sdk::status::StatusItems::tap(&self, &str, &paperpaw_sdk::Params
 pub fn paperpaw_sdk::status::StatusItems::title(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::status::StatusItems::value(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::status::StatusValue>
 #[non_exhaustive] pub struct paperpaw_sdk::StatusLineSpec
+pub paperpaw_sdk::StatusLineSpec::also: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::StatusLineSpec::draw: paperpaw_sdk::status::StatusLineFn
 pub paperpaw_sdk::StatusLineSpec::id: paperpaw_sdk::Id
 pub paperpaw_sdk::StatusLineSpec::signature: core::option::Option<paperpaw_sdk::status::StatusSignatureFn>
 pub paperpaw_sdk::StatusLineSpec::targets: core::option::Option<paperpaw_sdk::status::StatusTargetsFn>
 pub paperpaw_sdk::StatusLineSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::status::StatusLineSpec
+pub fn paperpaw_sdk::status::StatusLineSpec::also(self, paperpaw_sdk::Id) -> Self
 pub fn paperpaw_sdk::status::StatusLineSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::status::StatusLineFn) -> Self
 pub fn paperpaw_sdk::status::StatusLineSpec::signature(self, paperpaw_sdk::status::StatusSignatureFn) -> Self
 pub fn paperpaw_sdk::status::StatusLineSpec::targets(self, paperpaw_sdk::status::StatusTargetsFn) -> Self
