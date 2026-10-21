@@ -245,18 +245,23 @@ pub extern "C" fn pp_start() -> u32 {
     with(Emulator::start)
 }
 
-/// A button pressed (`pressed` 1) or let go; 1 if the device has none
-/// of that name.
+/// A button pressed (`pressed` 1) or let go at `now_ms` (as
+/// [`pp_advance`]); 1 if the device has none of that name.
 ///
 /// # Safety
 ///
 /// The name is memory the script wrote ([`pp_alloc`]).
 #[unsafe(no_mangle)]
-pub unsafe extern "C" fn pp_button(name_ptr: *const u8, name_len: usize, pressed: u32) -> u32 {
+pub unsafe extern "C" fn pp_button(
+    name_ptr: *const u8,
+    name_len: usize,
+    pressed: u32,
+    now_ms: f64,
+) -> u32 {
     // SAFETY: as the caller promises.
     let name = unsafe { text(name_ptr, name_len) };
     with(|emulator| {
-        if emulator.button(name, pressed == 1) {
+        if emulator.button(name, pressed == 1, now_ms.max(0.0) as u64) {
             Ok(())
         } else {
             Err(format!("no button `{name}`"))
@@ -265,9 +270,10 @@ pub unsafe extern "C" fn pp_button(name_ptr: *const u8, name_len: usize, pressed
 }
 
 /// A finger on the screen: `phase` 0 down, 1 moved, 2 lifted, 3
-/// cancelled, at `(x, y)` in the screen's pixels.
+/// cancelled, at `(x, y)` in the screen's pixels, at `now_ms` (as
+/// [`pp_advance`]).
 #[unsafe(no_mangle)]
-pub extern "C" fn pp_pointer(phase: u32, x: i32, y: i32) -> u32 {
+pub extern "C" fn pp_pointer(phase: u32, x: i32, y: i32, now_ms: f64) -> u32 {
     let phase = match phase {
         0 => PointerPhase::Down,
         1 => PointerPhase::Move,
@@ -275,7 +281,7 @@ pub extern "C" fn pp_pointer(phase: u32, x: i32, y: i32) -> u32 {
         _ => PointerPhase::Cancel,
     };
     with(|emulator| {
-        emulator.pointer(phase, x, y);
+        emulator.pointer(phase, x, y, now_ms.max(0.0) as u64);
         Ok(())
     })
 }

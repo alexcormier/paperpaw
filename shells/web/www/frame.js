@@ -86,7 +86,7 @@ window.addEventListener("resize", () => canvas.width && fit());
 function draw() {
   drawing = false;
   if (!device) return;
-  guarded(() => {
+  const animating = guarded(() => {
     const [width, height] = device.size();
     if (canvas.width !== width || canvas.height !== height) {
       canvas.width = width;
@@ -94,8 +94,11 @@ function draw() {
       fit();
     }
     context.putImageData(device.frame(), 0, 0);
-    if (device.animating()) requestDraw();
+    return device.animating();
   });
+  // A full refresh flashing goes by the clock: it moves on with it (and
+  // draws again), not only when the device next has work.
+  if (animating) step();
 }
 
 function requestDraw() {
@@ -131,7 +134,7 @@ function buttons() {
 }
 
 function press(name, pressed) {
-  if (device && guarded(() => device.button(name, pressed))) step();
+  if (device && guarded(() => device.button(name, pressed, now()))) step();
 }
 
 /// Where a pointer event is on the device's screen, in its pixels.
@@ -149,7 +152,7 @@ for (const [type, phase] of [
   canvas.addEventListener(type, (event) => {
     if (!device || !info.touch || (phase === "move" && !event.buttons)) return;
     if (phase === "down") canvas.setPointerCapture(event.pointerId);
-    guarded(() => device.pointer(phase, ...at(event)));
+    guarded(() => device.pointer(phase, ...at(event), now()));
     step();
   });
 }
@@ -211,7 +214,7 @@ async function input({ event }) {
     const name = KEYS[event.key];
     if (name) press(name, event.pressed ?? true);
   } else if (event.kind === "pointer") {
-    device.pointer(event.phase, event.x, event.y);
+    guarded(() => device.pointer(event.phase, event.x, event.y, now()));
     step();
   }
   return {};

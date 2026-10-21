@@ -131,16 +131,18 @@ export class PaperPawDevice {
     return JSON.parse(this.#result());
   }
 
-  /// A button pressed or let go; false if the device has none so named.
-  button(name, pressed) {
-    const status = this.#with([name], (p, l) => this.exports.pp_button(p, l, pressed ? 1 : 0));
+  /// A button pressed or let go at `now` (ms since the page started, as
+  /// `advance` takes it); false if the device has none so named.
+  button(name, pressed, now) {
+    const status = this.#with([name], (p, l) => this.exports.pp_button(p, l, pressed ? 1 : 0, now));
     if (status === STOPPED) this.#check(status);
     return status === 0;
   }
 
-  /// A finger on the screen (`phase` of PHASES) at the screen's pixel.
-  pointer(phase, x, y) {
-    this.exports.pp_pointer(PHASES[phase] ?? PHASES.cancel, Math.round(x), Math.round(y));
+  /// A finger on the screen (`phase` of PHASES) at the screen's pixel,
+  /// at `now` (as `button`).
+  pointer(phase, x, y, now) {
+    this.#check(this.exports.pp_pointer(PHASES[phase] ?? PHASES.cancel, Math.round(x), Math.round(y), now));
   }
 
   /// Lets time pass to `now` (ms since the page started); ms until

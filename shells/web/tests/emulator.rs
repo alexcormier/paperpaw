@@ -78,10 +78,10 @@ fn buttons_and_touch_are_taken() {
     let before = x4.shown();
     assert!(x4.has_button("right"));
     assert!(!x4.has_button("down"));
-    assert!(!x4.button("no-such-button", true));
+    assert!(!x4.button("no-such-button", true, 5_000));
     // The home screen's focus moves.
-    assert!(x4.button("right", true));
-    assert!(x4.button("right", false));
+    assert!(x4.button("right", true, 5_000));
+    assert!(x4.button("right", false, 5_050));
     x4.advance(10_000);
     assert!(x4.shown() != before, "the press changed nothing");
 
@@ -90,11 +90,83 @@ fn buttons_and_touch_are_taken() {
     let (width, height) = boox.size();
     // A tap on the home screen's card (start reading) opens the library.
     let (x, y) = (i32::from(width) / 2, i32::from(height) * 34 / 100);
-    boox.pointer(PointerPhase::Down, x, y);
-    boox.advance(5_050);
-    boox.pointer(PointerPhase::Up, x, y);
+    boox.pointer(PointerPhase::Down, x, y, 5_000);
+    boox.pointer(PointerPhase::Up, x, y, 5_050);
     boox.advance(8_000);
     assert!(boox.shown() != before, "the tap changed nothing");
+}
+
+/// The settings open on each device the ways a reader would open them:
+/// on the X4 from the menu by its buttons, on the Boox from the menu and
+/// from the quick panel by touch (a home screen's tool runs the same
+/// action as the menu's entry). Each time after a minute in which the
+/// device had nothing to do: a short press stays short.
+#[test]
+fn the_settings_open_from_the_menu_and_the_quick_panel() {
+    let _one = ONE_AT_A_TIME.lock().unwrap_or_else(|e| e.into_inner());
+    let now = std::cell::Cell::new(5_000);
+    let later = |millis: u64| {
+        now.set(now.get() + millis);
+        now.get()
+    };
+    let shows = |emulator: &Emulator, prefix: &str| {
+        let screen = emulator.screen();
+        assert!(
+            screen.as_deref().is_some_and(|s| s.starts_with(prefix)),
+            "{screen:?}, not {prefix}"
+        );
+    };
+
+    // The X4: the menu held open on confirm, Settings its sixth entry.
+    let mut x4 = started("xteink-x4");
+    x4.button("confirm", true, later(60_000));
+    x4.button("confirm", false, later(1_500));
+    x4.advance(later(2_000));
+    shows(&x4, "menu.");
+    for _ in 0..5 {
+        x4.button("right", true, later(60_000));
+        x4.button("right", false, later(100));
+    }
+    x4.button("confirm", true, later(60_000));
+    x4.button("confirm", false, later(100));
+    x4.advance(later(2_000));
+    shows(&x4, "settings.");
+
+    // The Boox: a tap in the middle opens the menu, Settings its last
+    // entry; a swipe down from the top the quick panel, with Settings.
+    let mut boox = started("boox-go-7");
+    let (width, height) = boox.size();
+    let at = |x: u32, y: u32| {
+        (
+            i32::try_from(u32::from(width) * x / 1000).unwrap(),
+            i32::try_from(u32::from(height) * y / 1000).unwrap(),
+        )
+    };
+    let tap = |boox: &mut Emulator, (x, y): (i32, i32)| {
+        boox.pointer(PointerPhase::Down, x, y, later(60_000));
+        boox.pointer(PointerPhase::Up, x, y, later(100));
+        boox.advance(later(2_000));
+    };
+    tap(&mut boox, at(500, 714));
+    shows(&boox, "menu.");
+    tap(&mut boox, at(142, 960));
+    shows(&boox, "settings.");
+    boox.button("back", true, later(60_000));
+    boox.button("back", false, later(100));
+    boox.advance(later(2_000));
+    shows(&boox, "home.dashboard");
+
+    let (x, top) = at(500, 2);
+    boox.pointer(PointerPhase::Down, x, top, later(60_000));
+    for step in 1..=8 {
+        let y = top + step * i32::from(height) / 16;
+        boox.pointer(PointerPhase::Move, x, y, later(16));
+    }
+    boox.pointer(PointerPhase::Up, x, top + i32::from(height) / 2, later(16));
+    boox.advance(later(2_000));
+    shows(&boox, "menu.");
+    tap(&mut boox, at(734, 574));
+    shows(&boox, "settings.");
 }
 
 #[test]
@@ -133,7 +205,7 @@ fn the_plugin_is_checked_and_the_device_keeps_going() {
     assert!(json.contains("package.size"), "{json}");
     assert!(emulator.check(&["perf"]).is_err());
     // The device runs on after the check.
-    assert!(emulator.button("right", true));
+    assert!(emulator.button("right", true, 5_000));
     emulator.advance(20_000);
     assert!(!emulator.shown().is_empty());
 }
@@ -162,8 +234,8 @@ fn a_sleep_picture_fits_the_x4s_heap() {
     emulator.start().unwrap();
     emulator.advance(5_000);
     let before = paperpaw_emulator::budget::stats().failed;
-    assert!(emulator.button("power", true));
-    assert!(emulator.button("power", false));
+    assert!(emulator.button("power", true, 5_000));
+    assert!(emulator.button("power", false, 5_050));
     emulator.advance(10_000);
     assert_eq!(
         paperpaw_emulator::budget::stats().failed,
@@ -190,7 +262,7 @@ fn snapshots_of_other_devices_leave_what_is_shown() {
     assert!(asleep != shown, "the sleep screen");
     // This one as it was, and still running.
     assert!(x4.shown() == shown);
-    assert!(x4.button("right", true));
+    assert!(x4.button("right", true, 5_000));
 }
 
 #[test]

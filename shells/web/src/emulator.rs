@@ -164,12 +164,15 @@ impl Emulator {
         self.profile.buttons.contains(&name)
     }
 
-    /// A button pressed or let go; `false` if the device has no such
-    /// button.
-    pub fn button(&mut self, name: &str, pressed: bool) -> bool {
+    /// A button pressed or let go at `now_ms` (as [`Emulator::advance`]
+    /// counts); `false` if the device has no such button. Time passes to
+    /// then first: a press is as long as it was held, also where the
+    /// device had nothing to do for a while before.
+    pub fn button(&mut self, name: &str, pressed: bool, now_ms: u64) -> bool {
         let Some(&name) = self.profile.buttons.iter().find(|b| **b == name) else {
             return false;
         };
+        self.advance(now_ms);
         let state = if pressed {
             ButtonState::Pressed
         } else {
@@ -181,12 +184,14 @@ impl Emulator {
         true
     }
 
-    /// A finger put down, moved or lifted at `(x, y)` of the screen;
+    /// A finger put down, moved or lifted at `(x, y)` of the screen at
+    /// `now_ms`, time passed to then first (as [`Emulator::button`]);
     /// nothing where the device has no touch screen.
-    pub fn pointer(&mut self, phase: PointerPhase, x: i32, y: i32) {
+    pub fn pointer(&mut self, phase: PointerPhase, x: i32, y: i32, now_ms: u64) {
         if !self.profile.device.input.touch {
             return;
         }
+        self.advance(now_ms);
         if let Some(device) = &mut self.device {
             device.input(InputEvent::Pointer(PointerEvent {
                 id: 0,
@@ -223,6 +228,12 @@ impl Emulator {
         }
         let now = device.now().millis();
         device.next_wake().map(|at| at.millis().saturating_sub(now))
+    }
+
+    /// The id of the screen shown, `None` before the device started.
+    pub fn screen(&self) -> Option<String> {
+        let device = self.device.as_ref()?;
+        device.kernel.active_screen().map(ToString::to_string)
     }
 
     /// The screen's size in pixels (turned as the reader turned it).

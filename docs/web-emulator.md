@@ -88,11 +88,16 @@ const device = await PaperPawDevice.load("paperpaw-web.wasm");
 device.create({ profile: "xteink-x4", language: "en" });
 device.putFile("dusk", "plugin.ini", bytes);
 device.start();
-device.button("right", true);
+device.button("right", true, performance.now());
 const next = device.advance(performance.now()); // ms until due, or null
 canvas.getContext("2d").putImageData(device.frame(), 0, 0);
 const report = device.check(["package", "lint"]);
 ```
+
+Buttons and touch take the time they happen at, as `advance` does: the
+device lets time pass to then first, so that a press is as long as it
+was held, also after a while in which nothing was due. While a full
+refresh flashes (`animating()`), `advance` moves it on.
 
 The module imports `paperpaw.random(ptr, len)` (fills memory with random
 bytes, returns 1) and `paperpaw.log(ptr, len)` (a panic's message).
