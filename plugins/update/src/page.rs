@@ -562,20 +562,22 @@ impl UpdatePage {
         }
     }
 
-    /// The button areas, the first one above the second, at the bottom.
+    /// The button areas, the first one above the second, at the bottom:
+    /// each in a row as other screens' buttons, within the side margin,
+    /// the lowest keeping it from the bottom edge too.
     fn button_rects(&self, env: &Env<'_>, count: usize) -> Vec<Rect> {
         let style = &self.style;
         let display = env.device.display;
-        let margin = style.margin as u16 * 2;
-        let gap = style.gap as u16;
+        let margin = style.margin as u16;
         let width = display.width.saturating_sub(2 * margin);
-        let height = style.row as u16;
-        let mut bottom = display.height.saturating_sub(margin);
+        let row = style.touch_row(style.row) as u16;
+        let height = ui::button_height(style, Rect::new(0, 0, width, row));
+        let mut bottom = display.height.saturating_sub(ui::edge_room(style, row));
         let mut rects: Vec<Rect> = (0..count)
             .map(|_| {
-                let rect = Rect::new(margin, bottom.saturating_sub(height), width, height);
-                bottom = rect.y.saturating_sub(gap * 2);
-                rect
+                let top = bottom.saturating_sub(row);
+                bottom = top;
+                Rect::new(margin, top + (row - height) / 2, width, height)
             })
             .collect();
         rects.reverse();
@@ -746,11 +748,13 @@ impl Screen for UpdatePage {
         let style = self.style;
         self.header
             .draw(canvas, env, &style, env.i18n.tr("update.title"), None, None);
-        let margin = style.margin as u16 * 2;
+        // Within the margins other pages keep, below the header as their
+        // content.
+        let margin = style.margin as u16;
         let gap = style.gap as u16;
         let width = env.device.display.width.saturating_sub(2 * margin);
         let (title, help) = self.texts(env);
-        let mut y = self.header.area.height + gap * 4;
+        let mut y = self.header.area.height + gap;
         let area = Rect::new(
             margin,
             y,
@@ -762,7 +766,7 @@ impl Screen for UpdatePage {
             env,
             &style,
             area,
-            style.title * 1.3,
+            style.title,
             &title,
             3,
             Color::BLACK,
@@ -782,8 +786,8 @@ impl Screen for UpdatePage {
             style.small,
             &help,
             HELP_LINES,
-            style.faint(60),
-        ) + gap * 4;
+            style.ink(ui::Ink::Note),
+        ) + gap * 2;
         if let View::Installing { done, total } = self.view {
             let bar = Rect::new(margin, y, width, gap * 3);
             self.draw_progress(canvas, env, bar, done, total);
