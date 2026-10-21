@@ -1017,6 +1017,46 @@ fn a_rows_lines_hold_for_every_value_it_may_show() {
     }
     assert_eq!(seen[0], seen[1]);
     assert!(seen[0].stacked(), "the long option does not fit beside the title");
+    // On and off shown as a value (a switch with an editor of its own).
+    static EDITED: paperpaw_sdk::SettingExtra =
+        paperpaw_sdk::SettingExtra::new().editor(paperpaw_sdk::Id::new_static("t.editor"));
+    let spec = SettingSpec::fixed_switch("t.on", "Sync", false, groups::OTHER).with_extra(&EDITED);
+    h.settings.define(spec.clone()).unwrap();
+    // At every width, where one of them fits beside the title and the
+    // other not as well.
+    for width in (100..=480).step_by(2) {
+        let mut seen = Vec::new();
+        for on in [false, true] {
+            h.settings.set("t.on", SettingValue::Bool(on)).unwrap();
+            let env = h.env();
+            let style = UiStyle::new(&env);
+            seen.push(ui::row_lines(&env, &style, &spec, width, "", style.row, false));
+        }
+        assert_eq!(seen[0], seen[1], "{width} px");
+    }
+}
+
+/// The hit areas of a number's − and + are where they are drawn, also
+/// with a value wider than the room in bytes but not as drawn (the mark
+/// of a scope, "•", takes three bytes).
+#[test]
+fn a_numbers_steps_are_hit_where_they_are_drawn() {
+    let h = Harness::new(Device::TOUCH);
+    let env = h.env();
+    let style = UiStyle::new(&env);
+    let rect = Rect::new(0, 100, 480, style.touch_row(style.row) as u16);
+    for (room, value) in [("000 %", "• 20 %"), ("100 %", "• 9"), ("", "12345 px")] {
+        let (described, _) = describe(480, 800, |c| {
+            ui::draw_number(c, &env, &style, rect, "Size", value, room, None);
+        });
+        let drawn: Vec<Rect> = described
+            .iter()
+            .filter(|d| d.role == Role::Button)
+            .map(|d| d.area)
+            .collect();
+        let (minus, plus) = ui::value_stepper(&env, &style, rect, room, value).unwrap();
+        assert_eq!(drawn, [minus, plus], "{room:?} {value:?}");
+    }
 }
 
 /// A switch without a note on a page of noted rows is measured where it

@@ -384,17 +384,12 @@ impl GroupPage {
             return Some((parts.minus, parts.plus));
         }
         let value = ui::setting_value(env, spec);
-        let room = if self.number_room.len() < value.len() {
-            &value
-        } else {
-            &self.number_room
-        };
         // Its line, as high as − and + need.
         let line = match self.lines.get(index).copied().flatten() {
             Some(lines) => lines.at(rect).control,
             None => rect,
         };
-        ui::stepper(env, &self.style, line, room)
+        ui::value_stepper(env, &self.style, line, &self.number_room, &value)
     }
 
     /// Redraws row `index` where it is (a value shown that changed).

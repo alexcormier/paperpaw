@@ -234,17 +234,21 @@ fn is_switch(spec: &SettingSpec) -> bool {
     matches!(spec.kind, SettingKind::Bool) && spec.extra().editor.is_none()
 }
 
-/// The widest a setting's value at the right of its row is drawn: a
-/// choice's widest option, else the value it has; with the mark of a
-/// value set for a scope where it may have one, and "›" where a tap
-/// opens a screen for it.
+/// The widest a setting's value at the right of its row is drawn, of
+/// all it may show in place: a choice's widest option, the widest
+/// language, the wider of on and off; else (a text, a list, changed on a
+/// screen of their own) the value it has. With the mark of a value set
+/// for a scope where it may have one, and "›" where a tap opens a screen
+/// for it.
 fn widest_value(env: &Env<'_>, style: &UiStyle, font: &FontHandle<'_>, spec: &SettingSpec) -> f32 {
     let size = style.text;
+    let widest = |names: &mut dyn Iterator<Item = &str>| {
+        names.map(|name| font.measure(size, name)).fold(0.0, f32::max)
+    };
     let value = match &spec.kind {
-        SettingKind::Choice(choices) => choices
-            .iter()
-            .map(|option| font.measure(size, env.i18n.tr(option)))
-            .fold(0.0, f32::max),
+        SettingKind::Choice(choices) => widest(&mut choices.iter().map(|o| env.i18n.tr(o))),
+        SettingKind::Language => widest(&mut env.i18n.languages().into_iter().map(|(_, n)| n)),
+        SettingKind::Bool => widest(&mut ["core.on", "core.off"].into_iter().map(|k| env.i18n.tr(k))),
         _ => font.measure(size, &plain_setting_value(env, spec)),
     };
     let scoped = if spec.scoped {
@@ -471,6 +475,20 @@ pub fn draw_lines_note(
     note: &str,
 ) {
     draw_note_below(canvas, env, style, rect, lines.bottom(), focused, note);
+}
+
+/// The − and + of a number row showing `value`, exactly where
+/// [`draw_number`] and [`draw_stepper`] (and their `_lines` forms) draw
+/// them with `room`: for the hit areas of a screen of its own.
+pub fn value_stepper(
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    room: &str,
+    value: &str,
+) -> Option<(Rect, Rect)> {
+    let font = style.font(env)?;
+    stepper(env, style, rect, wider(&font, style.text, room, value))
 }
 
 /// The − and + buttons of a number row, with room for `room` between

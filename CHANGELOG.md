@@ -13,10 +13,12 @@ change the plugin SDK.
   `ui::setting_height`; drawn with `ui::draw_number_lines`,
   `ui::draw_stepper_lines`, `ui::draw_switch_lines`,
   `ui::draw_setting_row`, `ui::draw_lines_note`). It is decided once,
-  when the list is made, for every value a row may show (a choice's
-  widest option, a number's least and greatest), so a value changed in
-  place never makes a row overlap the next; `RowLines::at` moves it to
-  the row's place. The settings use it:
+  when the list is made, for every value a row may show in place (a
+  choice's widest option, the widest language, the wider of on and off,
+  a number's least and greatest), so a value changed in place never
+  makes a row overlap the next; `RowLines::at` moves it to the row's
+  place, `ui::value_stepper` tells where its − and + are drawn (for the
+  hit areas). The settings use it:
   on the X4 Pro *Saving below (%)* and *Offline below (%)* showed as
   *Saving bel…*, as their buttons are a fingertip wide. Touch targets
   and the focus by the buttons stay as they were.
