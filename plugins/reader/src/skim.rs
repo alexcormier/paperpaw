@@ -50,7 +50,10 @@ impl SkimScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let (margin, gap, row) = (style.margin as u16, style.gap as u16, style.row as u16);
-        let height = gap * 2 + row * 3;
+        // The buttons' row grows with them on touch screens.
+        let button_row = style.touch_row(u32::from(row)) as u16;
+        // Its buttons keep the side margin from the bottom edge too.
+        let height = gap + row * 2 + button_row + ui::edge_room(&style, button_row);
         let region = Rect::new(
             0,
             display.height.saturating_sub(height),
@@ -66,7 +69,7 @@ impl SkimScreen {
                 margin + i as u16 * (button_width + gap),
                 buttons_y,
                 button_width,
-                row,
+                button_row,
             )
         });
         let mut screen = Self {
@@ -203,7 +206,7 @@ impl Screen for SkimScreen {
         canvas.fill(Rect::new(kx, ky, knob, knob), Color::BLACK);
         // The buttons.
         for (i, (rect, key)) in self.buttons.iter().zip(BUTTONS).enumerate() {
-            let h = ui::button_height(*rect);
+            let h = ui::button_height(&style, *rect);
             let button = Rect::new(rect.x, rect.y + (rect.height - h) / 2, rect.width, h);
             ui::draw_button(
                 canvas,

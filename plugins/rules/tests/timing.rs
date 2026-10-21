@@ -225,10 +225,7 @@ fn a_rules_file_that_cannot_be_read_is_not_saved_over() {
         Id::new_static("rules.effect-chosen"),
         picked("message"),
     );
-    let typed = paperpaw_sdk::replies::Typed {
-        text: "Hello".to_string(),
-        context: Params::new(),
-    };
+    let typed = paperpaw_sdk::replies::Typed::new("Hello".to_string(), Params::new());
     test.kernel.send_event(
         Instant(1300),
         Id::new_static("rules.message-entered"),

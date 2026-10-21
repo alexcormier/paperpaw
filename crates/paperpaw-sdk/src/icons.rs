@@ -18,22 +18,59 @@
 
 include!("icon_table.rs");
 
+/// What an icon says rather than which it is: drawn with the icon a
+/// plugin names for it ([`Registrar::add_icon`](crate::Registrar::add_icon),
+/// e.g. `r.add_icon(icons::BACK, "arrow-big-left".into())`), else with
+/// its default ([`default_of`]), else as PaperPaw draws it itself (the
+/// arrows of headers and the keyboard's keys).
+pub const BACK: &str = "core.icon.back";
+pub const PREV: &str = "core.icon.prev";
+pub const NEXT: &str = "core.icon.next";
+/// Beside a button's hint where holding it does something too.
+pub const HOLD: &str = "core.icon.hold";
+/// In a button's hint while its press is being worked on.
+pub const BUSY: &str = "core.icon.busy";
+/// The keyboard's keys.
+pub const SHIFT: &str = "core.icon.shift";
+pub const DELETE: &str = "core.icon.delete";
+pub const SPACE: &str = "core.icon.space";
+
+/// The icon a semantic icon ([`BACK`] and the others) is drawn with
+/// unless a plugin names another; `None` where PaperPaw draws it itself.
+pub fn default_of(name: &str) -> Option<&'static str> {
+    match name {
+        HOLD => Some("hand-click"),
+        BUSY => Some("paw"),
+        _ => None,
+    }
+}
+
 /// The name of icon `index` (in the order of [`ICONS`]).
 fn name(index: usize) -> &'static str {
     let start = index.checked_sub(1).map_or(0, |i| ICONS[i].0 as usize);
     &NAMES[start..ICONS[index].0 as usize]
 }
 
-/// The character of icon `name` in the icon font.
+/// The character of icon `name` in the icon font; a name `U+F8000` is
+/// that code point, for icons of one's own outside the Tabler names.
 #[cfg(not(all(paperpaw_plugin, target_os = "none")))]
 pub fn char(name: &str) -> Option<char> {
-    by_name(name)
+    code_point(name).or_else(|| by_name(name))
+}
+
+/// The character a name `U+` and hexadecimal digits names.
+fn code_point(name: &str) -> Option<char> {
+    let hex = name.strip_prefix("U+")?;
+    u32::from_str_radix(hex, 16).ok().and_then(char::from_u32)
 }
 
 /// The character of icon `name` in the icon font, as the firmware that
 /// loaded this plugin file knows it.
 #[cfg(all(paperpaw_plugin, target_os = "none"))]
 pub fn char(name: &str) -> Option<char> {
+    if let Some(ch) = code_point(name) {
+        return Some(ch);
+    }
     unsafe extern "C" {
         /// The firmware's table: `paperpaw-plugin.x` makes the word, the
         /// loader writes its address before the plugin's code runs.
@@ -88,6 +125,10 @@ mod tests {
         assert_eq!(char(all[all.len() - 1]), Some(ICONS[ICONS.len() - 1].1));
         assert_eq!(char("no-such-icon"), None);
         assert_eq!(char(""), None);
+        // Icons of one's own by their code point.
+        assert_eq!(char("U+F8000"), Some('\u{f8000}'));
+        assert_eq!(char("U+ZZ"), None);
+        assert_eq!(char("U+D800"), None);
         assert_eq!(by_name("home"), char("home"));
         assert!(all.len() > 5000);
     }

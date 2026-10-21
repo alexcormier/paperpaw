@@ -44,6 +44,8 @@ pub(crate) struct BookSheet {
     /// The part with the cover, title, author and progress.
     head: Rect,
     list: ListView,
+    /// Below the actions, where more come than the sheet holds.
+    pager: Option<ui::Pager>,
     book: Loaded,
     actions: Vec<(Action, String)>,
     /// Plugins' actions of the book menu ([`Action::Plugin`]).
@@ -109,8 +111,20 @@ impl BookSheet {
         let gap = style.gap as u16;
         let head_h = sizes.cover.1 + 2 * gap;
         let row = style.touch_row(style.row) as u16;
-        let rows_h = row * actions.len() as u16;
-        let height = (head_h + rows_h + gap).min(display.height);
+        // As high as its actions need, the header of the screen below
+        // still in sight; more actions (plugins add to the book menu) go
+        // on pages, with a pager below them.
+        let most = display
+            .height
+            .saturating_sub(style.header as u16 + head_h + gap);
+        let all = row * actions.len() as u16;
+        let pager_h = ui::Pager::height(&style);
+        let (rows_h, paged) = if all <= most {
+            (all, false)
+        } else {
+            (most.saturating_sub(pager_h) / row.max(1) * row, true)
+        };
+        let height = head_h + rows_h + if paged { pager_h } else { 0 } + gap;
         let region = Rect::new(0, display.height - height, display.width, height);
         let head = Rect::new(0, region.y + gap / 2, display.width, head_h);
         let list = ListView::new(
@@ -118,12 +132,17 @@ impl BookSheet {
             u32::from(row),
         )
         .focus_on_keys(env);
+        let pager = paged.then(|| {
+            let area = Rect::new(0, head.y + head.height + rows_h, display.width, pager_h);
+            ui::Pager::new(env, area)
+        });
         Self {
             style,
             sizes,
             region,
             head,
             list,
+            pager,
             book,
             actions,
             plugins,
@@ -216,6 +235,9 @@ impl Screen for BookSheet {
                 ui::draw_value_row(canvas, env, &style, rect, focused, label, "");
             },
         );
+        if let (Some(pager), Some(page)) = (&self.pager, self.list.paging(actions.len())) {
+            pager.draw(canvas, env, &style, page);
+        }
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
@@ -255,7 +277,21 @@ impl Screen for BookSheet {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        if let Some(index) = self.list.hit(gesture.start, self.actions.len()) {
+        let len = self.actions.len();
+        if let Some(action) = self.pager.and_then(|pager| pager.tap(gesture.start)) {
+            // The first entry of the page before or after.
+            let rows = self.list.rows();
+            let page = self.list.page();
+            let to = if action == actions::NEXT_PAGE {
+                ((page + 1) * rows).min(len.saturating_sub(1))
+            } else {
+                page.saturating_sub(1) * rows
+            };
+            let change = self.list.set_focus(to);
+            self.list.request(change, cx);
+            return Handled::Yes;
+        }
+        if let Some(index) = self.list.hit(gesture.start, len) {
             self.choose(index, cx);
         } else if self.head.contains(gesture.start) {
             // The book itself: open it.

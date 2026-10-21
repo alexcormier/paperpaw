@@ -24,7 +24,7 @@ use paperpaw_sdk::{
     RefreshMode, Screen, SettingValue,
 };
 
-use crate::{CHOICE, LIST_ADD_SCREEN};
+use crate::LIST_ADD_SCREEN;
 
 /// A widget's options were chosen.
 const CHOSEN: Event<choice::Picked> = Event::new("home.edit-chosen");
@@ -156,14 +156,12 @@ impl EditScreen {
                     .widgets
                     .title(id)
                     .map_or(id.as_str(), |t| env.i18n.tr(t));
-                cx.command(choice::open(
-                    CHOICE,
-                    &CHOSEN,
-                    title,
-                    &format!("{at}"),
-                    OPTION_LABELS,
-                    &options,
-                ));
+                cx.command(
+                    paperpaw_sdk::ask::choice(title, &CHOSEN)
+                        .about(format!("{at}"))
+                        .options(OPTION_LABELS, &options)
+                        .command(),
+                );
             }
             Row::Add => cx.command(Command::OpenScreen(LIST_ADD_SCREEN, self.target.params())),
         }

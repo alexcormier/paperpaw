@@ -119,7 +119,7 @@ fn show(app: &mut App, option: &str) {
         }
         app.run(actions::CONFIRM);
     }
-    assert_eq!(app.screen(), "files.list.show", "{}", app.described());
+    assert_eq!(app.screen(), "core.choice-dialog", "{}", app.described());
     choose(app, option);
     assert_eq!(app.screen(), "files.browser", "{}", app.described());
 }
@@ -376,7 +376,7 @@ fn the_row_above_the_books_chooses_what_shows_and_the_title_opens_the_menu() {
     app.run(actions::UP);
     assert_eq!(app.focused().as_deref(), Some(ALL_BOOKS));
     app.run(actions::CONFIRM);
-    assert_eq!(app.screen(), "files.list.show");
+    assert_eq!(app.screen(), "core.choice-dialog");
     app.run(actions::BACK);
     assert_eq!(app.screen(), "files.browser");
     // Down from it, the first book again.
@@ -393,7 +393,7 @@ fn the_row_above_the_books_chooses_what_shows_and_the_title_opens_the_menu() {
     assert_eq!(app.screen(), "menu.list");
     app.run(actions::BACK);
     app.tap_on(ALL_BOOKS);
-    assert_eq!(app.screen(), "files.list.show");
+    assert_eq!(app.screen(), "core.choice-dialog");
 }
 
 #[test]
@@ -619,4 +619,81 @@ fn many_books_in_many_folders_show_at_once_and_their_folders_on_the_shelves() {
     let shelves = every_row(&mut app, false);
     let folders = shelves.iter().filter(|s| s.starts_with("Shelf ")).count();
     assert_eq!(folders, 20, "{shelves:?}");
+}
+
+/// Adds a dozen entries to the book menu, as many plugins might.
+struct Senders;
+
+impl paperpaw_sdk::Plugin for Senders {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest::new(
+            paperpaw_sdk::Id::new_static("senders"),
+            "Senders",
+            paperpaw_sdk::Version::new(1, 0, 0),
+        )
+    }
+
+    fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        for n in 1..=12 {
+            let id = paperpaw_sdk::Id::parse(&format!("senders.to-{n:02}")).unwrap();
+            r.add_action(
+                paperpaw_sdk::ActionSpec::new(id.clone(), format!("Send to {n:02}"))
+                    .handler(|_: &paperpaw_sdk::Env<'_>, _: &mut Vec<paperpaw_sdk::Command>| {}),
+            )?;
+            r.add_menu_entry(
+                paperpaw_sdk::MenuEntry::new(paperpaw_sdk::builtin::menus::BOOK, id).order(50),
+            )?;
+        }
+        Ok(())
+    }
+}
+
+/// With many entries in the book menu the sheet stays on the screen and
+/// goes on pages: every entry is reached, by buttons and by touch.
+#[test]
+fn a_long_book_menu_goes_on_pages() {
+    let _turn = turn();
+    for device in DEVICES {
+        let mut app = App::with(device, storage_of("", &many(1)), Senders);
+        app.run(actions::LIBRARY);
+        sheet_of(&mut app, "Book 01");
+        let height = i64::from(device.display.height);
+        for part in app.parts() {
+            assert!(
+                i64::from(part.area.y) + i64::from(part.area.height) <= height,
+                "{:?} below the screen:\n{}",
+                part.label,
+                app.described()
+            );
+        }
+        assert!(
+            !app.shows("Send to 12"),
+            "all on one page:\n{}",
+            app.described()
+        );
+        if device.input.touch {
+            // The pager's arrow to the next page, right of its number.
+            let pager = app
+                .parts()
+                .into_iter()
+                .find(|p| p.label.contains(" / "))
+                .unwrap_or_else(|| panic!("no pager:\n{}", app.described()));
+            let y = i32::from(pager.area.y) + i32::from(pager.area.height) / 2;
+            let x = i32::from(device.display.width) * 3 / 4;
+            for _ in 0..5 {
+                if app.shows("Send to 12") {
+                    break;
+                }
+                app.tap(Point::new(x, y));
+            }
+        } else {
+            for _ in 0..30 {
+                if app.focused().is_some_and(|f| f.starts_with("Send to 12")) {
+                    break;
+                }
+                app.run(actions::DOWN);
+            }
+        }
+        assert!(app.shows("Send to 12"), "{}", app.described());
+    }
 }

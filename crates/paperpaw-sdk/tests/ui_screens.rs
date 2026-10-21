@@ -14,7 +14,7 @@ use std::borrow::Cow;
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::setting::Setting;
-use paperpaw_sdk::ui::choice::{self, Choice, Picked};
+use paperpaw_sdk::ui::choice::{Choice, Picked};
 use paperpaw_sdk::ui::items::ItemsScreen;
 use paperpaw_sdk::ui::{Reorder, UiStyle};
 use paperpaw_sdk::{
@@ -24,22 +24,18 @@ use paperpaw_sdk::{
 
 use support::{Device, Harness, describe, drawn_outside, middle, pointer, tap};
 
-const SCREEN: Id = Id::new_static("t.choice");
 const CHOSEN: Event<Picked> = Event::new("t.chosen");
 
-/// The parameters `choice::open` gives the screen.
+/// The parameters `ask::choice` gives the screen of slot `core.choice`.
 fn opened(options: &[&str]) -> Params {
-    let Command::OpenScreen(screen, params) = choice::open(
-        SCREEN,
-        &CHOSEN,
-        "Delete “a.epub”?",
-        "books/a.epub",
-        "t.option.",
-        options,
-    ) else {
-        panic!("not a screen");
+    let Command::OpenSlot(slot, params) = paperpaw_sdk::ask::choice("Delete “a.epub”?", &CHOSEN)
+        .about("books/a.epub")
+        .options("t.option.", options)
+        .command()
+    else {
+        panic!("not a slot");
     };
-    assert_eq!(screen, SCREEN);
+    assert_eq!(slot, paperpaw_sdk::builtin::slots::CHOICE);
     params
 }
 

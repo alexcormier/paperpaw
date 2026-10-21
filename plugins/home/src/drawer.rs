@@ -173,7 +173,9 @@ impl TipsScreen {
         let display = env.device.display;
         let line = style.row as u16;
         let width = display.width.saturating_sub(4 * style.margin as u16);
-        let height = style.row as u16 * 2 + line * TIPS.len() as u16 + style.gap as u16 * 2;
+        // OK grows on touch screens, and its row with it.
+        let ok_row = style.touch_row(style.row) as u16;
+        let height = style.row as u16 + ok_row + line * TIPS.len() as u16 + style.gap as u16 * 2;
         let region = Rect::new(
             (display.width - width) / 2,
             display.height.saturating_sub(height) / 2,
@@ -183,9 +185,9 @@ impl TipsScreen {
         let button_w = width / 3;
         let ok = Rect::new(
             region.x + (width - button_w) / 2,
-            region.y + height - style.row as u16 - style.gap as u16 / 2,
+            region.y + height - ok_row - style.gap as u16 / 2,
             button_w,
-            ui::button_height(Rect::new(0, 0, 0, style.row as u16)),
+            ui::button_height(&style, Rect::new(0, 0, 0, ok_row)),
         );
         Self { style, region, ok }
     }

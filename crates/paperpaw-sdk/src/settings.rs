@@ -187,6 +187,31 @@ enum Extra {
     Owned(Box<SettingExtra>),
 }
 
+/// Where a setting is edited (see [`SettingExtra::editor`]), opened with
+/// the parameter [`ID`](crate::builtin::params::ID), the setting's id.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum Editor {
+    /// A screen of a plugin's, e.g. one that asks for a code.
+    Screen(Id),
+    /// Whatever screen fills a slot, e.g.
+    /// [`CHOOSE_FOLDER`](crate::builtin::slots::CHOOSE_FOLDER), so that a
+    /// plugin taking the slot's place edits the setting too.
+    Slot(Id),
+}
+
+impl Editor {
+    /// The command that opens it for setting `setting`.
+    pub fn open(&self, setting: &Id) -> crate::Command {
+        let params =
+            crate::Params::new().with(crate::builtin::params::ID, String::from(setting.as_str()));
+        match self {
+            Editor::Screen(screen) => crate::Command::OpenScreen(screen.clone(), params),
+            Editor::Slot(slot) => crate::Command::OpenSlot(slot.clone(), params),
+        }
+    }
+}
+
 /// What few settings have (see [`SettingSpec::extra`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -194,9 +219,9 @@ pub struct SettingExtra {
     /// Translation key that formats a number with its unit, with plural
     /// forms, e.g. `core.unit.pt.other = {count} pt`.
     pub unit: Option<Cow<'static, str>>,
-    /// A screen that edits the value, opened with the parameter `id` (the
-    /// setting's id), e.g. a folder chooser for a path.
-    pub editor: Option<Id>,
+    /// Where the value is edited instead of on the settings page, e.g.
+    /// a folder chooser for a path ([`Editor::open`] opens it).
+    pub editor: Option<Editor>,
     /// How much one step changes a number (e.g. 10 for percentages).
     pub step: i64,
     /// A number better set by eye than by its value, such as the line
@@ -208,8 +233,9 @@ pub struct SettingExtra {
     /// [`setting_sections::FONT`](crate::builtin::setting_sections::FONT)),
     /// shown as a heading above it in large groups.
     pub section: Option<Cow<'static, str>>,
-    /// A secret such as an API key: shown as dots, and entered afresh
-    /// rather than edited.
+    /// A secret such as an API key: shown as dots, entered afresh rather
+    /// than edited, and kept with the secrets, not the settings: read it
+    /// with `env.secrets.get(id)` (see [`secrets`](crate::secrets)).
     pub secret: bool,
     /// Another setting of the same kind whose value this one has until it
     /// is set itself, e.g. the margins at the top and bottom those at the
@@ -219,7 +245,33 @@ pub struct SettingExtra {
     /// that is not installed now, such as a reading app): kept as they
     /// are, without a warning, for whoever reads it to pass over.
     pub keeps_unknown: bool,
+    /// Shown only while another setting has a value, e.g. the server's
+    /// address while syncing is on (see [`Settings::shows`]): the
+    /// setting's id and the value, as written in `paperpaw.ini`.
+    pub shown_if: Option<(&'static str, &'static str)>,
+    /// What a value must be: a value it refuses is not set, and the
+    /// reader is told why (see [`SettingCheck`]).
+    pub check: Option<SettingCheck>,
 }
+
+/// Checks a value before it is set: `Err` with the translation key of
+/// why it is refused (see [`SettingExtra::check`]).
+#[derive(Clone, Copy)]
+pub struct SettingCheck(pub fn(&Settings, &SettingValue) -> Result<(), &'static str>);
+
+impl fmt::Debug for SettingCheck {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str("SettingCheck")
+    }
+}
+
+impl PartialEq for SettingCheck {
+    fn eq(&self, other: &Self) -> bool {
+        self.0 as usize == other.0 as usize
+    }
+}
+
+impl Eq for SettingCheck {}
 
 /// The extra of settings without one.
 static NO_EXTRA: SettingExtra = SettingExtra::new();
@@ -248,6 +300,8 @@ impl SettingExtra {
             secret: false,
             follows: None,
             keeps_unknown: false,
+            shown_if: None,
+            check: None,
         }
     }
 
@@ -266,7 +320,15 @@ impl SettingExtra {
 
     /// Edited on screen `screen` ([`SettingExtra::editor`]).
     pub const fn editor(mut self, screen: Id) -> Self {
-        core::mem::forget(self.editor.replace(screen));
+        core::mem::forget(self.editor.replace(Editor::Screen(screen)));
+        self
+    }
+
+    /// Edited on whatever screen fills slot `slot`
+    /// ([`SettingExtra::editor`]), e.g.
+    /// [`CHOOSE_FOLDER`](crate::builtin::slots::CHOOSE_FOLDER).
+    pub const fn editor_slot(mut self, slot: Id) -> Self {
+        core::mem::forget(self.editor.replace(Editor::Slot(slot)));
         self
     }
 
@@ -298,6 +360,22 @@ impl SettingExtra {
     /// ([`SettingExtra::follows`]).
     pub const fn follows(mut self, id: &'static str) -> Self {
         self.follows = Some(id);
+        self
+    }
+
+    /// Shown only while setting `id` has `value` ([`SettingExtra::shown_if`]).
+    pub const fn shown_if(mut self, id: &'static str, value: &'static str) -> Self {
+        self.shown_if = Some((id, value));
+        self
+    }
+
+    /// Values are checked with `check` before they are set
+    /// ([`SettingExtra::check`]).
+    pub const fn check(
+        mut self,
+        check: fn(&Settings, &SettingValue) -> Result<(), &'static str>,
+    ) -> Self {
+        self.check = Some(SettingCheck(check));
         self
     }
 }
@@ -662,9 +740,16 @@ impl SettingSpec {
         self
     }
 
-    /// Edited on its own screen (see [`SettingSpec::editor`]).
+    /// Edited on its own screen (see [`SettingExtra::editor`]).
     pub fn editor(mut self, screen: Id) -> Self {
-        self.extra_mut().editor = Some(screen);
+        self.extra_mut().editor = Some(Editor::Screen(screen));
+        self
+    }
+
+    /// Edited on whatever screen fills slot `slot` (see
+    /// [`SettingExtra::editor_slot`]).
+    pub fn editor_slot(mut self, slot: Id) -> Self {
+        self.extra_mut().editor = Some(Editor::Slot(slot));
         self
     }
 }
@@ -727,6 +812,9 @@ pub enum SettingError {
     /// No place is left to keep a changed spec (more than 32,768
     /// settings of a kind).
     Full,
+    /// The setting's check refused the value: the translation key of why
+    /// (see [`SettingExtra::check`]).
+    Refused(&'static str),
 }
 
 impl fmt::Display for SettingError {
@@ -735,6 +823,7 @@ impl fmt::Display for SettingError {
             SettingError::Unknown => "unknown setting",
             SettingError::InvalidValue => "invalid value for this setting",
             SettingError::Full => "no place left to change this setting",
+            SettingError::Refused(why) => why,
         })
     }
 }
@@ -1138,6 +1227,31 @@ impl Settings {
         }
     }
 
+    /// Whether the showing of another setting depends on setting `id`
+    /// ([`SettingExtra::shown_if`]): screens listing settings make
+    /// themselves anew when it changes.
+    pub fn governs(&self, id: &str) -> bool {
+        self.specs()
+            .any(|spec| spec.extra().shown_if.is_some_and(|(of, _)| of == id))
+    }
+
+    /// Whether `spec` shows now: not while the setting its
+    /// [`SettingExtra::shown_if`] names has another value.
+    pub fn shows(&self, spec: &SettingSpec) -> bool {
+        let Some((id, value)) = spec.extra().shown_if else {
+            return true;
+        };
+        // The value read as that setting reads it (`on`, `true` …); a
+        // setting not there does not hide this one.
+        let Some(condition) = self.spec(id) else {
+            return true;
+        };
+        condition
+            .kind
+            .parse(value)
+            .is_some_and(|value| self.get(id) == Some(&value))
+    }
+
     /// Sets a value after validating it.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
@@ -1145,6 +1259,9 @@ impl Settings {
         let spec = self.spec(id).ok_or(SettingError::Unknown)?;
         if !spec.accepts(&value) {
             return Err(SettingError::InvalidValue);
+        }
+        if let Some(SettingCheck(check)) = spec.extra().check {
+            check(self, &value).map_err(SettingError::Refused)?;
         }
         let id = self.value_id(id)?;
         // The reader's change wins over a mode's value until the next mode.

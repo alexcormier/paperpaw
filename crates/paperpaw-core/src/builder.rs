@@ -449,6 +449,7 @@ impl KernelBuilder {
                 storage,
                 recall,
                 keymap: Keymap::default(),
+                look: (paperpaw_sdk::ui::look::Look::none(), None),
             },
             frame: drawing::FrameState {
                 pending: None,
@@ -493,6 +494,7 @@ impl KernelBuilder {
                 network_waiting: None,
                 network_busy: false,
                 focus_spoken: false,
+                focus_told: None,
             },
             keys: plugins::KeySources::default(),
             chromes: Vec::new(),

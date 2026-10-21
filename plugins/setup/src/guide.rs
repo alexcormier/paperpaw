@@ -16,21 +16,19 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, params};
+use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setup::SetupPage;
-use paperpaw_sdk::ui::choice::{self, Picked};
+use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Point, Rect,
     RefreshMode, Screen, SettingKind, SettingSpec, SettingValue,
 };
 
-use crate::{CHOICE, mark_done};
+use crate::mark_done;
 
-/// The settings plugin's list of choices, opened for a setting.
-const CHOOSE: Id = Id::new_static("settings.choose");
 /// Whether to skip the setup, asked by *Back* on the first page.
 const SKIP_CHOSEN: Event<Picked> = Event::new("setup.skip-chosen");
 /// Lines of the explanation at most; at the end, with no card, more.
@@ -63,7 +61,8 @@ struct Layout {
 }
 
 pub(crate) struct Guide {
-    /// The steps asked on this device, as they were when it opened.
+    /// The steps asked on this device: as they were when it opened, and
+    /// anew where a step's setting shows only while another has a value.
     steps: Vec<Id>,
     /// The page shown; one past the last step is the end.
     page: usize,
@@ -119,16 +118,27 @@ fn paragraph(
     }
 }
 
+/// The steps asked on this device now: not those of a setting shown
+/// only while another has another value.
+fn steps(env: &Env<'_>) -> Vec<Id> {
+    env.setup
+        .applying(env)
+        .into_iter()
+        .filter(|s| match &s.page {
+            paperpaw_sdk::setup::SetupPage::Setting(id) => env
+                .settings
+                .spec(id.as_str())
+                .is_none_or(|spec| env.settings.shows(spec)),
+            _ => true,
+        })
+        .map(|s| s.id.clone())
+        .collect()
+}
+
 impl Guide {
     pub(crate) fn new(env: &Env<'_>) -> Self {
-        let steps = env
-            .setup
-            .applying(env)
-            .into_iter()
-            .map(|s| s.id.clone())
-            .collect();
         let mut guide = Self {
-            steps,
+            steps: steps(env),
             page: 0,
             focus: Target::Next,
             shown: !env.device.input.touch,
@@ -349,14 +359,11 @@ impl Guide {
     /// Asks whether to skip the setup: going on comes first.
     fn ask_skip(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        cx.command(choice::open(
-            CHOICE,
-            &SKIP_CHOSEN,
-            env.i18n.tr("setup.skip-question"),
-            "",
-            "setup.option.",
-            &["stay", "skip"],
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(env.i18n.tr("setup.skip-question"), &SKIP_CHOSEN)
+                .options("setup.option.", &["stay", "skip"])
+                .command(),
+        );
     }
 
     /// Changes the number by `step`.
@@ -388,18 +395,12 @@ impl Guide {
                 let Some(spec) = self.setting(&env) else {
                     return;
                 };
-                let with_id = || Params::new().with(params::ID, spec.id.as_str().to_string());
-                if let Some(editor) = &spec.extra().editor {
-                    cx.command(Command::OpenScreen(editor.clone(), with_id()));
-                } else if matches!(spec.kind, SettingKind::Bool) || ui::two_options(&env, spec) {
-                    self.change(1, cx);
-                } else if matches!(spec.kind, SettingKind::Choice(_) | SettingKind::Language) {
-                    // The settings plugin's list; without it, the next.
-                    if env.screens.iter().any(|(id, _)| *id == CHOOSE) {
-                        cx.command(Command::OpenScreen(CHOOSE, with_id()));
-                    } else {
-                        self.change(1, cx);
-                    }
+                // Its editor, the keyboard, the list of its values; else
+                // the next value.
+                match ui::setting_opens(&env, spec) {
+                    Some(command) => cx.command(command),
+                    None if !matches!(spec.kind, SettingKind::Int { .. }) => self.change(1, cx),
+                    None => {}
                 }
             }
         }
@@ -657,6 +658,21 @@ impl Screen for Guide {
     }
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
+        // A step that shows only while an earlier one has a value comes
+        // or goes with it; the page shown stays.
+        if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
+            let env = *cx.env();
+            if env.settings.governs(changed.id.as_str()) {
+                let shown = self.steps.get(self.page).cloned();
+                self.steps = steps(&env);
+                self.page = shown
+                    .and_then(|id| self.steps.iter().position(|s| *s == id))
+                    .unwrap_or(self.page.min(self.steps.len()));
+                self.layout = self.layout(&env);
+                cx.request_redraw();
+            }
+            return;
+        }
         if SKIP_CHOSEN
             .read(event, params)
             .is_some_and(|p| p.option == "skip")

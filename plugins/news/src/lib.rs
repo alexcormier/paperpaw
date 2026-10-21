@@ -27,7 +27,7 @@ use paperpaw_sdk::builtin::{actions, groups, menus};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::setting::Setting;
-use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::web::{clean_name, host};
 use paperpaw_sdk::{
@@ -46,7 +46,6 @@ pub const ARTICLES: Setting<i64> = Setting::new("news.articles");
 const SCREEN: Id = Id::new_static("news.list");
 /// Declared work: a fetch no reader waits for (a rule's).
 const FETCH_DUE: Event = Event::new("news.fetch-due");
-const CHOICE: Id = Id::new_static("news.choice");
 const CHOSEN: Event<choice::Picked> = Event::new("news.chosen");
 /// A feed's answer.
 const FETCHED: Event<HttpReply> = Event::new("news.fetched");
@@ -401,11 +400,6 @@ impl Plugin for News {
             "news.title",
             Box::new(|env, _| Box::new(FeedsScreen::new(env))),
         ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "news.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
-        ))?;
         r.add_action(ActionSpec::new(OPEN, "news.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
@@ -512,14 +506,12 @@ impl FeedsScreen {
         let Some(feed) = row.checked_sub(1).and_then(|i| self.feeds.get(i)) else {
             return;
         };
-        cx.command(choice::open(
-            CHOICE,
-            &CHOSEN,
-            &feed.shown(),
-            &format!("{}", row - 1),
-            OPTION_LABELS,
-            &["open", "fetch", "remove"],
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(feed.shown(), &CHOSEN)
+                .about(format!("{}", row - 1))
+                .options(OPTION_LABELS, &["open", "fetch", "remove"])
+                .command(),
+        );
     }
 }
 

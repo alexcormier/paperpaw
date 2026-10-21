@@ -332,10 +332,7 @@ fn searches_by_template_encode_the_words() {
     assert!(h.requests().is_empty(), "the words are asked for first");
     h.send(
         "opds.terms",
-        Typed {
-            text: String::from("  Jane & \"Austen\"/../ ü  "),
-            context: Params::new(),
-        },
+        Typed::new(String::from("  Jane & \"Austen\"/../ ü  "), Params::new()),
     );
     assert_eq!(
         h.request().url,
@@ -343,13 +340,7 @@ fn searches_by_template_encode_the_words() {
     );
     // Nothing typed: nothing searched.
     h.run(actions::BACK);
-    h.send(
-        "opds.terms",
-        Typed {
-            text: String::from("   "),
-            context: Params::new(),
-        },
-    );
+    h.send("opds.terms", Typed::new(String::from("   "), Params::new()));
     assert!(h.requests().iter().all(|c| !c.url.contains("search")));
 }
 
@@ -370,10 +361,7 @@ fn searches_by_description_first_ask_where_to_search() {
     h.answer(&described, 200, osd.as_bytes());
     h.send(
         "opds.terms",
-        Typed {
-            text: String::from("Kafka"),
-            context: Params::new(),
-        },
+        Typed::new(String::from("Kafka"), Params::new()),
     );
     assert_eq!(
         h.request().url,

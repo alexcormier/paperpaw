@@ -13,6 +13,29 @@ pub fn title_area(style: &UiStyle, rect: Rect) -> Rect {
     Rect::new(rect.x, rect.y + style.gap as u16 / 2, rect.width, band)
 }
 
+/// The part of a noted row of a number that holds its title and its
+/// `−` and `+`: as [`title_area`], on touch screens as much higher as the
+/// buttons grow to a fingertip ([`UiStyle::touch_row`]); the note goes
+/// below it ([`draw_number_note`]).
+pub fn number_title_area(style: &UiStyle, rect: Rect) -> Rect {
+    let band = (style.touch_row(style.title_band()) as u16).min(rect.height);
+    Rect::new(rect.x, rect.y + style.gap as u16 / 2, rect.width, band)
+}
+
+/// Draws the note of a noted row of a number, below its
+/// [`number_title_area`].
+pub fn draw_number_note(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    focused: bool,
+    note: &str,
+) {
+    let below = number_title_area(style, rect).bottom() as u16;
+    draw_note_below(canvas, env, style, rect, below, focused, note);
+}
+
 /// Draws a row with `title` and `value` on its first line and `note` in
 /// small text below, wrapped to [`NOTE_LINES`] lines and shortened with
 /// "…" if longer. Rows are always fully readable before they are tapped,
@@ -127,13 +150,29 @@ pub fn draw_value_row(
 /// buttons of rows above each other line up.
 pub(super) const STEPPER_VALUE: &str = "000 %";
 
+/// The height of the row of setting `spec` in a list of rows `row` high,
+/// `noted` ones ([`UiStyle::noted_row`]) or not: a number's row, which
+/// holds its − and +, grows on touch screens with its buttons
+/// ([`UiStyle::touch_row`]; in a noted row its first line,
+/// [`number_title_area`]), the others stay as they are.
+pub fn setting_row(style: &UiStyle, spec: &SettingSpec, row: u32, noted: bool) -> u32 {
+    match spec.kind {
+        SettingKind::Int { .. } if noted => {
+            let band = style.title_band();
+            row + style.touch_row(band) - band
+        }
+        SettingKind::Int { .. } => style.touch_row(row),
+        _ => row,
+    }
+}
+
 /// The − and + buttons of a number row, with room for `room` between
 /// them (at least for "000 %"): the value, or the widest of the
 /// numbers in rows above each other (see [`number_room`]), so their
 /// buttons line up.
 pub fn stepper(env: &Env<'_>, style: &UiStyle, rect: Rect, room: &str) -> Option<(Rect, Rect)> {
     let font = style.font(env)?;
-    let size = button_height(rect);
+    let size = button_height(style, rect);
     let y = rect.y + (rect.height - size) / 2;
     let margin = style.margin as u16;
     let gap = style.gap as u16;
@@ -337,7 +376,18 @@ pub(super) fn plain_setting_value(env: &Env<'_>, spec: &SettingSpec) -> String {
             Some(unit) => env.i18n.plural(unit, *v, &[]),
             None => format!("{v}"),
         },
-        Some(SettingValue::Text(v)) if spec.extra().secret && !v.is_empty() => "••••••".to_string(),
+        // Kept with the secrets: dots where there is one.
+        _ if spec.extra().secret => {
+            if env
+                .secrets
+                .get(spec.id.as_str())
+                .is_some_and(|s| !s.is_empty())
+            {
+                "••••••".to_string()
+            } else {
+                String::new()
+            }
+        }
         Some(SettingValue::Text(v)) => option_name(env, spec, v),
         None => String::new(),
     }
@@ -383,6 +433,40 @@ pub fn two_options(env: &Env<'_>, spec: &SettingSpec) -> bool {
         SettingKind::Choice(options) => options.len() == 2,
         SettingKind::Language => env.i18n.languages().len() == 2,
         _ => false,
+    }
+}
+
+/// What choosing a setting (confirm or a tap) opens, the same on every
+/// screen that lists settings: its editor ([`SettingExtra::editor`](crate::SettingExtra::editor)),
+/// the keyboard for text (a secret entered afresh), the values of a
+/// choice of more than two on the screen of slot
+/// [`CHOOSE_VALUE`](crate::builtin::slots::CHOOSE_VALUE). `None` where
+/// the screen changes it itself: a switch, a number, a choice of two
+/// (see [`next_value`]), or a choice where no screen fills that slot.
+pub fn setting_opens(env: &Env<'_>, spec: &SettingSpec) -> Option<crate::Command> {
+    if let Some(editor) = &spec.extra().editor {
+        return Some(editor.open(&spec.id));
+    }
+    match spec.kind {
+        SettingKind::Text => {
+            let question = crate::ask::text(
+                env.i18n.tr(&spec.title),
+                &crate::builtin::events::SETTING_TYPED,
+            )
+            .with(crate::builtin::params::ID, spec.id.as_str().to_string());
+            let question = if spec.extra().secret {
+                question.password()
+            } else {
+                question.initial(setting_value(env, spec))
+            };
+            Some(question.command())
+        }
+        SettingKind::Choice(_) | SettingKind::Language
+            if !two_options(env, spec) && env.has_slot(&crate::builtin::slots::CHOOSE_VALUE) =>
+        {
+            Some(crate::Editor::Slot(crate::builtin::slots::CHOOSE_VALUE).open(&spec.id))
+        }
+        _ => None,
     }
 }
 

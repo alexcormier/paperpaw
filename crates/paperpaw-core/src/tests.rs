@@ -1876,10 +1876,20 @@ fn secrets_are_kept_apart_and_read_at_start() {
             "a.key", "a.label", "hunter2",
         )));
     kernel.run_commands();
-    assert_eq!(
-        kernel.shared.env(Instant(0)).secrets.get("a.key"),
-        Some("hunter2")
-    );
+    // Its plugin sees it; another, or the kernel's own code, not.
+    assert_eq!(kernel.shared.env(Instant(0)).secrets.get("a.key"), None);
+    {
+        let _other = kernel.shared.meter.enter("b");
+        assert_eq!(kernel.shared.env(Instant(0)).secrets.get("a.key"), None);
+        assert_eq!(kernel.shared.env(Instant(0)).secrets.listed().count(), 1);
+    }
+    {
+        let _own = kernel.shared.meter.enter("a");
+        assert_eq!(
+            kernel.shared.env(Instant(0)).secrets.get("a.key"),
+            Some("hunter2")
+        );
+    }
     let data = paperpaw_sdk::read_file(kernel.shared.storage.as_ref(), FILE, 4096).unwrap();
     assert!(!String::from_utf8_lossy(&data).contains("hunter2"));
     // Read again at the next start.
@@ -1888,17 +1898,14 @@ fn secrets_are_kept_apart_and_read_at_start() {
         .build()
         .unwrap();
     kernel.start(Instant(0));
-    assert_eq!(
-        kernel.shared.env(Instant(0)).secrets.get("a.key"),
-        Some("hunter2")
-    );
+    assert_eq!(kernel.shared.secrets.get("a.key"), Some("hunter2"));
     // The last one removed, the file goes.
     kernel
         .output
         .commands
         .push(Command::SetSecret(SecretChange::remove("a.key")));
     kernel.run_commands();
-    assert!(kernel.shared.env(Instant(0)).secrets.is_empty());
+    assert!(kernel.shared.secrets.is_empty());
     assert!(!kernel.shared.storage.exists(FILE));
 }
 

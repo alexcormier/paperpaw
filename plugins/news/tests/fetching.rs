@@ -302,10 +302,7 @@ fn atom(title: &str, entries: &[&str]) -> String {
 }
 
 fn typed(text: &str) -> Typed {
-    Typed {
-        text: String::from(text),
-        context: Params::new(),
-    }
+    Typed::new(String::from(text), Params::new())
 }
 
 #[test]

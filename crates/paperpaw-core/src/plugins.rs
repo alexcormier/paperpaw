@@ -274,6 +274,12 @@ impl Kernel {
         for (role, font, priority) in staging.font_roles.drain(..) {
             self.shared.fonts.propose(role, font, priority);
         }
+        // The highest priority, of equal ones the later.
+        for (painters, priority) in staging.ui_looks.drain(..) {
+            if self.shared.look.1.is_none_or(|p| priority >= p) {
+                self.shared.look = (paperpaw_sdk::ui::look::Look::of(painters), Some(priority));
+            }
+        }
         for format in staging.formats.drain(..) {
             // Cannot fail: checked above.
             let _ = self.shared.formats.add(format);

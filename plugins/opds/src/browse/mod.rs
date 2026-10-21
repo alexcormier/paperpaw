@@ -30,7 +30,7 @@ use crate::catalogs::{self, Catalog};
 use crate::feed::{self, Feed, Search};
 use crate::sync::book_name;
 use crate::temp::{self, TempFiles};
-use crate::{CHOICE, ID, OPTION_LABELS, PLUGIN, URL, request};
+use crate::{ID, OPTION_LABELS, PLUGIN, URL, request};
 
 use self::covers::*;
 use self::downloads::*;

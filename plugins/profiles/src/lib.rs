@@ -29,7 +29,7 @@ use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, menus, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::Typed;
-use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
@@ -44,7 +44,6 @@ pub const OPEN: Id = Id::new_static("profiles.open");
 /// Applies the profile after the one applied last.
 pub const NEXT: Id = Id::new_static("profiles.next");
 const LIST_SCREEN: Id = Id::new_static("profiles.list");
-const CHOICE: Id = Id::new_static("profiles.choice");
 /// Replies: a name for a new profile, a new name, an option.
 const NAMED: Event<Typed> = Event::new("profiles.named");
 const RENAMED: Event<Typed> = Event::new("profiles.renamed");
@@ -76,11 +75,6 @@ impl Plugin for Profiles {
             LIST_SCREEN,
             "profiles.title",
             Box::new(|env, _| Box::new(ListScreen::new(env))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "profiles.title",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "profiles.title").handler(
             |_: &Env<'_>, out: &mut Vec<Command>| {
@@ -212,14 +206,12 @@ impl ListScreen {
         let Some(Row::Profile(i)) = self.rows().get(index).copied() else {
             return self.activate(index, cx);
         };
-        cx.command(choice::open(
-            CHOICE,
-            &CHOSEN,
-            &self.profiles[i].name,
-            &i.to_string(),
-            "profiles.option.",
-            &["update", "rename", "remove"],
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(&self.profiles[i].name, &CHOSEN)
+                .about(i.to_string())
+                .options("profiles.option.", &["update", "rename", "remove"])
+                .command(),
+        );
     }
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {

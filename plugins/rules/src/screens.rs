@@ -26,7 +26,7 @@ use paperpaw_sdk::{
 };
 
 use crate::rule::{self, Condition, EVERY_DAY, Effect, Rule, Trigger, WEEKDAYS, WEEKENDS};
-use crate::{CHOICE, PICK_SCREEN, Shared, effect_text, trigger_text, when_text};
+use crate::{PICK_SCREEN, Shared, effect_text, trigger_text, when_text};
 
 /// Replies: a trigger, a time, an effect, an action or switch picked, a
 /// rule's option.
@@ -216,14 +216,11 @@ impl RulesScreen {
             }
             Some(Row::Add) => {
                 self.draft = Draft::default();
-                cx.command(choice::open(
-                    CHOICE,
-                    &TRIGGER_CHOSEN,
-                    env.i18n.tr("rules.when"),
-                    "",
-                    "rules.trigger.",
-                    &TRIGGERS,
-                ));
+                cx.command(
+                    paperpaw_sdk::ask::choice(env.i18n.tr("rules.when"), &TRIGGER_CHOSEN)
+                        .options("rules.trigger.", &TRIGGERS)
+                        .command(),
+                );
             }
             None => {}
         }
@@ -235,14 +232,12 @@ impl RulesScreen {
             return self.activate(index, cx);
         };
         let title = trigger_text(&env, &self.rules[i].trigger);
-        cx.command(choice::open(
-            CHOICE,
-            &OPTION_CHOSEN,
-            &title,
-            &i.to_string(),
-            "rules.option.",
-            &["condition", "remove"],
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(&title, &OPTION_CHOSEN)
+                .about(i.to_string())
+                .options("rules.option.", &["condition", "remove"])
+                .command(),
+        );
     }
 
     /// Adds the rule drafted, doing `effect`.
@@ -275,14 +270,11 @@ impl RulesScreen {
     /// Asks what the new rule does.
     fn ask_effect(&self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        cx.command(choice::open(
-            CHOICE,
-            &EFFECT_CHOSEN,
-            env.i18n.tr("rules.what"),
-            "",
-            "rules.effect.",
-            &EFFECTS,
-        ));
+        cx.command(
+            paperpaw_sdk::ask::choice(env.i18n.tr("rules.what"), &EFFECT_CHOSEN)
+                .options("rules.effect.", &EFFECTS)
+                .command(),
+        );
     }
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
@@ -446,14 +438,11 @@ impl RulesScreen {
                 "battery" => return ask_text(cx, "rules.battery-title", "20", &BATTERY_ENTERED),
                 // Which level, with what to know about it.
                 "battery-at" => {
-                    cx.command(choice::open(
-                        CHOICE,
-                        &LEVEL_CHOSEN,
-                        env.i18n.tr("rules.level-title"),
-                        "",
-                        "rules.level.",
-                        &LEVELS,
-                    ));
+                    cx.command(
+                        paperpaw_sdk::ask::choice(env.i18n.tr("rules.level-title"), &LEVEL_CHOSEN)
+                            .options("rules.level.", &LEVELS)
+                            .command(),
+                    );
                     return;
                 }
                 "switch-on" | "switch-off" => {
@@ -473,14 +462,11 @@ impl RulesScreen {
             match rule::parse_time(text) {
                 Some(minute) => {
                     self.draft.minute = Some(minute);
-                    cx.command(choice::open(
-                        CHOICE,
-                        &DAYS_CHOSEN,
-                        env.i18n.tr("rules.days-title"),
-                        "",
-                        "rules.days.",
-                        &DAYS,
-                    ));
+                    cx.command(
+                        paperpaw_sdk::ask::choice(env.i18n.tr("rules.days-title"), &DAYS_CHOSEN)
+                            .options("rules.days.", &DAYS)
+                            .command(),
+                    );
                 }
                 None => cx.command(Command::Notify(env.i18n.tr("rules.bad-time").to_string())),
             }
@@ -621,14 +607,11 @@ impl RulesScreen {
                     editing: Some(i),
                     ..Draft::default()
                 };
-                cx.command(choice::open(
-                    CHOICE,
-                    &CONDITION_CHOSEN,
-                    env.i18n.tr("rules.only-if"),
-                    "",
-                    "rules.condition.",
-                    &CONDITIONS,
-                ));
+                cx.command(
+                    paperpaw_sdk::ask::choice(env.i18n.tr("rules.only-if"), &CONDITION_CHOSEN)
+                        .options("rules.condition.", &CONDITIONS)
+                        .command(),
+                );
             }
         } else if *event == CONDITION_CHOSEN {
             let condition = match option {

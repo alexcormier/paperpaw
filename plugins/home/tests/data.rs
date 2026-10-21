@@ -68,11 +68,11 @@ fn what_the_current_writer_keeps_is_read_back_the_same() {
             app.repeat(actions::RIGHT, 2);
             for step in [actions::LEFT, actions::RIGHT] {
                 app.run(actions::CONFIRM);
-                if app.screen() != "home.choice" {
+                if app.screen() != "core.choice-dialog" {
                     // Back on the page, the first press shows the focus.
                     app.run(actions::CONFIRM);
                 }
-                assert_eq!(app.screen(), "home.choice", "{}", app.described());
+                assert_eq!(app.screen(), "core.choice-dialog", "{}", app.described());
                 // Move is the first option.
                 app.run(actions::CONFIRM);
                 let left = step == actions::LEFT;

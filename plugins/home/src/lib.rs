@@ -53,7 +53,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params, slots};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::ui::choice::{self, Choice};
+use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item, What};
@@ -73,7 +73,6 @@ pub(crate) const EDIT_SCREEN: Id = Id::new_static("home.edit");
 pub(crate) const ADD_SCREEN: Id = Id::new_static("home.add-widget");
 /// Adding a widget to a list of widgets.
 pub(crate) const LIST_ADD_SCREEN: Id = Id::new_static("home.add-to-list");
-pub(crate) const CHOICE: Id = Id::new_static("home.choice");
 /// Every tool at once (swipe up on the home screen).
 pub const ALL_TOOLS: Id = Id::new_static("home.all-tools");
 /// Edits the home screen's pages: in the main menu, so that buttons alone
@@ -127,11 +126,6 @@ impl Plugin for Home {
             LIST_ADD_SCREEN,
             "home.edit.add",
             Box::new(|env, params| Box::new(edit::AddScreen::new(env, params))),
-        ))?;
-        r.add_screen(ScreenSpec::new(
-            CHOICE,
-            "home.edit.screen",
-            Box::new(|env, params| Box::new(Choice::new(env, params))),
         ))?;
         r.bind_slot(slots::HOME, SCREEN, Priority::DEFAULT)?;
         r.add_screen(ScreenSpec::new(
@@ -290,7 +284,7 @@ impl Dashboard {
         });
         // Opened by *Edit home screen*.
         let editing = page_set.or_else(|| (params.get(params::MODE) == Some("edit")).then_some(0));
-        let mut grid = GridView::new(env, CHOICE, CHOSEN);
+        let mut grid = GridView::asking(env, CHOSEN);
         grid.set_editing(editing.is_some());
         let (status, _, footer) = frame(env, None);
         Self {

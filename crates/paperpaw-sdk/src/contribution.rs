@@ -203,6 +203,12 @@ pub enum Contribution {
     },
     /// A translation catalog (see `paperpaw-i18n`).
     Translations(Cow<'static, str>),
+    /// A look for the parts of screens (see [`Registrar::set_ui_look`]).
+    #[non_exhaustive]
+    UiLook {
+        painters: &'static crate::ui::look::Painters,
+        priority: Priority,
+    },
 }
 
 impl Contribution {
@@ -265,6 +271,7 @@ impl Contribution {
             Contribution::Point(_) => "point",
             Contribution::EventDeclared(_) => "event",
             Contribution::Translations(_) => "translations",
+            Contribution::UiLook { .. } => "ui-look",
         }
     }
 
@@ -432,6 +439,18 @@ impl Registrar {
 
     pub fn add_slot(&mut self, slot: SlotSpec) -> Result<(), RegisterError> {
         self.add(Contribution::Slot(slot))
+    }
+
+    /// Gives the parts of every screen (switches, the focus, buttons,
+    /// headers, …) the look `painters` paint (see
+    /// [`ui::look`](crate::ui::look)). Of several looks the one with the
+    /// highest priority is used, of equal ones the later.
+    pub fn set_ui_look(
+        &mut self,
+        painters: &'static crate::ui::look::Painters,
+        priority: Priority,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::UiLook { painters, priority })
     }
 
     /// Proposes `screen` for `slot`. The binding with the highest priority
