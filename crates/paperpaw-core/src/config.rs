@@ -61,11 +61,25 @@ pub(crate) struct Scope {
 }
 
 impl Kernel {
+    /// Setting `id`'s value now, as written in `paperpaw.ini`, where a
+    /// plugin hears [`events::SETTING_CHANGED`] (it is not made for
+    /// nobody).
+    pub(crate) fn setting_text_if_heard(&self, id: &Id) -> Option<String> {
+        let heard = !self.event_observers.is_empty()
+            || self
+                .subscriptions
+                .iter()
+                .any(|(event, ..)| *event == events::SETTING_CHANGED);
+        let value = self.shared.settings.get(id.as_str()).filter(|_| heard)?;
+        Some(value.to_config_text())
+    }
+
     /// Forgets a setting's value (see [`Command::ResetSetting`]): from the
     /// active scope, or from the configuration file.
     pub(crate) fn reset_setting(&mut self, id: &Id) {
         let scoped = self.shared.settings.goes_to_scope(id.as_str());
         let before = self.scoped_values();
+        let old = self.setting_text_if_heard(id);
         if let Err(error) = self.shared.settings.reset(id.as_str()) {
             return self.warn_runtime(format!("`{id}`: {error}"));
         }
@@ -80,9 +94,10 @@ impl Kernel {
             });
         }
         self.setting_changed(id);
+        let changed = events::SettingChanged::new(id.clone()).old(old);
         self.output
             .commands
-            .push(events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())));
+            .push(events::SETTING_CHANGED.emit(changed));
     }
 
     /// Writes a changed setting to the configuration file on the device,
@@ -117,9 +132,11 @@ impl Kernel {
         for (id, old) in before {
             if self.shared.settings.get(id.as_str()) != old.as_ref() {
                 self.setting_changed(&id);
+                let old = old.map(|value| value.to_config_text());
+                let changed = events::SettingChanged::new(id.clone()).old(old);
                 self.output
                     .commands
-                    .push(events::SETTING_CHANGED.emit(events::SettingChanged::new(id.clone())));
+                    .push(events::SETTING_CHANGED.emit(changed));
             }
         }
     }
@@ -422,7 +439,7 @@ impl Kernel {
             let value = entry.value.as_str();
             match entry.section {
                 "plugins" => {}
-                section if section.starts_with("keymap.") => {}
+                section if section.starts_with("keymap.") || section.starts_with("zones.") => {}
                 "fonts" => match (Id::parse(entry.key), Id::parse(&value)) {
                     (Ok(role), Ok(font)) if self.shared.fonts.contains(font.as_str()) => {
                         self.shared.fonts.bind_user(role, font);
@@ -451,7 +468,7 @@ impl Kernel {
                     }
                 }
                 "slots" => match (Id::parse(entry.key), Id::parse(&value)) {
-                    (Ok(slot), Ok(screen)) => self.registry.bind_user(slot, screen),
+                    (Ok(slot), Ok(screen)) => self.shared.registry.bind_user(slot, screen),
                     _ => self.warn(
                         WarningSource::UserConfig,
                         line,
@@ -490,10 +507,10 @@ impl Kernel {
     /// Reports references to contributions that do not exist.
     pub(crate) fn validate(&mut self) {
         let mut messages = Vec::new();
-        for (slot, screen) in self.registry.user_bindings() {
-            if !self.registry.slots.contains_key(slot) {
+        for (slot, screen) in self.shared.registry.user_bindings() {
+            if !self.shared.registry.slots.contains_key(slot) {
                 messages.push(format!("unknown slot `{slot}`"));
-            } else if !self.registry.screens.contains_key(screen) {
+            } else if !self.shared.registry.screens.contains_key(screen) {
                 messages.push(format!("unknown screen `{screen}` for slot `{slot}`"));
             }
         }
