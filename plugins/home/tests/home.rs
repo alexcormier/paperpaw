@@ -85,6 +85,11 @@ impl Plugin for Probe {
         // Something to open, listed with the tools.
         r.add_action(ActionSpec::new(APP, "probe.app").handler(|_, _| {}))?;
         r.add_menu_entry(MenuEntry::new(menus::APPS, APP))?;
+        // Below the page, beside the pencil.
+        r.add_menu_entry(MenuEntry::new(
+            paperpaw_plugin_home::FOOTER,
+            Id::new_static("probe.switch"),
+        ))?;
         r.add_icon(APP, "puzzle".into())?;
         // A status item that switches `OTHER` on when tapped.
         r.add_status_item(
@@ -503,5 +508,15 @@ fn a_tapped_status_item_above_the_grid_does_what_it_says() {
     );
     assert!(!home.kernel.settings().bool("probe.other"));
     home.tap(Point::new(36, 24));
+    assert!(home.kernel.settings().bool("probe.other"));
+}
+
+/// An action a plugin adds below the page shows beside the pencil, and
+/// runs when tapped.
+#[test]
+fn an_action_below_the_page_runs_when_tapped() {
+    let mut home = Home::new(true, "");
+    assert!(home.says("probe.switch"), "{:?}", home.shown());
+    home.tap_on("probe.switch");
     assert!(home.kernel.settings().bool("probe.other"));
 }

@@ -3495,6 +3495,9 @@ pub paperpaw_sdk::widgets::grid::GridResponse::Changed(alloc::vec::Vec<paperpaw_
 pub paperpaw_sdk::widgets::grid::GridResponse::Editing(bool)
 pub paperpaw_sdk::widgets::grid::GridResponse::Handled
 pub paperpaw_sdk::widgets::grid::GridResponse::Ignored
+pub paperpaw_sdk::widgets::grid::GridResponse::Option
+pub paperpaw_sdk::widgets::grid::GridResponse::Option::item: paperpaw_sdk::widgets::grid::Item
+pub paperpaw_sdk::widgets::grid::GridResponse::Option::option: alloc::string::String
 impl paperpaw_sdk::widgets::grid::GridResponse
 pub fn paperpaw_sdk::widgets::grid::GridResponse::handled(&self) -> paperpaw_sdk::Handled
 #[non_exhaustive] pub enum paperpaw_sdk::widgets::grid::What
@@ -3543,9 +3546,11 @@ pub fn paperpaw_sdk::widgets::grid::GridView::on_gesture(&mut self, paperpaw_sdk
 pub fn paperpaw_sdk::widgets::grid::GridView::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::widgets::grid::GridResponse
 pub fn paperpaw_sdk::widgets::grid::GridView::release(&mut self)
 pub fn paperpaw_sdk::widgets::grid::GridView::reset_focus(&mut self)
+pub fn paperpaw_sdk::widgets::grid::GridView::set_drop_check(&mut self, fn(&paperpaw_sdk::Env<'_>, &[paperpaw_sdk::widgets::grid::Item], &paperpaw_sdk::widgets::grid::Item, paperpaw_sdk::widgets::grid::Cells) -> bool)
 pub fn paperpaw_sdk::widgets::grid::GridView::set_editing(&mut self, bool)
 pub fn paperpaw_sdk::widgets::grid::GridView::set_focus_shown(&mut self, bool)
 pub fn paperpaw_sdk::widgets::grid::GridView::set_host(&mut self, paperpaw_sdk::Id)
+pub fn paperpaw_sdk::widgets::grid::GridView::set_options(&mut self, &[&'static str])
 pub fn paperpaw_sdk::widgets::grid::GridView::set_tool_labels(&mut self, bool)
 pub fn paperpaw_sdk::widgets::grid::GridView::update_live(&mut self, &paperpaw_sdk::Env<'_>, &mut paperpaw_sdk::Cx<'_, '_>) -> bool
 pub fn paperpaw_sdk::widgets::grid::GridView::update_widget(&mut self, &str, &paperpaw_sdk::Env<'_>, &mut paperpaw_sdk::Cx<'_, '_>) -> bool

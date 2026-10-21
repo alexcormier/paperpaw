@@ -66,6 +66,9 @@ pub const PLUGIN: Id = Id::new_static("home");
 pub const SCREEN: Id = Id::new_static("home.dashboard");
 /// Shortcuts at the head of the home screen's grid of tools.
 pub const ACTIONS: Id = Id::new_static("home.actions");
+/// Actions below the page, as icons left of the pencil: any plugin adds
+/// its own (`Registrar::add_menu_entry`); none at first.
+pub const FOOTER: Id = Id::new_static("home.footer");
 /// Adding a widget or tool to a page.
 pub(crate) const ADD_SCREEN: Id = Id::new_static("home.add-widget");
 /// Every tool at once (swipe up on the home screen).
@@ -163,9 +166,11 @@ impl Plugin for Home {
     }
 }
 
-/// The home screen's own buttons below the grid.
+/// The home screen's own buttons below the grid; the footer's actions
+/// from [`FOOTER_BASE`] on.
 const PENCIL: u16 = 0;
 const ADD: u16 = 1;
+const FOOTER_BASE: u16 = 16;
 
 #[derive(Debug)]
 struct Dashboard {
@@ -179,6 +184,8 @@ struct Dashboard {
     footer: Rect,
     pencil: Rect,
     plus: Rect,
+    /// The footer's actions ([`FOOTER`]), each where its icon is.
+    actions: Vec<(Rect, Id)>,
     /// Recent books whose covers are to be looked up, one a tick.
     missing: Vec<String>,
     /// How many of the recent books the page's widgets show.
@@ -279,6 +286,7 @@ impl Dashboard {
             footer,
             pencil: Rect::default(),
             plus: Rect::default(),
+            actions: Vec::new(),
             missing: Vec::new(),
             books: 0,
             shown: Vec::new(),
@@ -328,6 +336,29 @@ impl Dashboard {
         self.plus = Rect::new(margin, footer.y, side, side);
         let editing = self.grid.editing();
         let mut buttons = Vec::new();
+        // The footer's actions left of the pencil, from the right, as many
+        // as leave the dots of the pages their room in the middle.
+        self.actions.clear();
+        if self.chooser.is_none() && !editing {
+            let pencil = env.settings.read(&pages::FOOTER_PENCIL);
+            let mut right = if pencil {
+                self.pencil.x
+            } else {
+                self.pencil.x + side
+            };
+            let least = display.width / 2 + side;
+            for item in env.menus.shown_items(env, FOOTER.as_str()) {
+                if item.section || right < least + side {
+                    continue;
+                }
+                right -= side;
+                self.actions
+                    .push((Rect::new(right, footer.y, side, side), item.id.clone()));
+            }
+            for (at, (area, _)) in self.actions.iter().enumerate().rev() {
+                buttons.push((*area, FOOTER_BASE + at as u16));
+            }
+        }
         if let Some(chooser) = &mut self.chooser {
             // Shown, not used: no focus, nothing to tap but the sheet.
             self.page = 0;
@@ -396,6 +427,11 @@ impl Dashboard {
                 ADD_SCREEN,
                 Params::new().with(add::PAGE, format!("{}", self.page)),
             )),
+            GridResponse::Button(n) if n >= FOOTER_BASE => {
+                if let Some((_, action)) = self.actions.get(usize::from(n - FOOTER_BASE)) {
+                    cx.command(Command::RunAction(action.clone()));
+                }
+            }
             _ => {}
         }
         handled
@@ -470,6 +506,25 @@ impl Dashboard {
             icon("check", self.pencil, Color::BLACK);
         } else if env.settings.read(&pages::FOOTER_PENCIL) {
             icon("pencil", self.pencil, style.faint(60));
+        }
+        if !editing {
+            for (area, action) in &self.actions {
+                let name = env.menus.icon(action.as_str()).unwrap_or("puzzle");
+                let w = ui::icon_width(env, name, size);
+                let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
+                ui::draw_icon(canvas, env, name, size, x, *area, style.faint(60));
+                let title = env
+                    .menus
+                    .title(action.as_str())
+                    .map_or(action.as_str(), |t| env.i18n.tr(t));
+                canvas.describe(
+                    paperpaw_sdk::semantics::Role::Button,
+                    title,
+                    *area,
+                    false,
+                    None,
+                );
+            }
         }
     }
 }

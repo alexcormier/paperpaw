@@ -152,7 +152,7 @@ fn with_cx<R>(env: &Env<'_>, f: impl FnOnce(&mut Cx<'_, '_>) -> R) -> (R, Output
 
 /// Chooses `option` for item `index`, as the choice screen answers.
 fn choose(view: &mut GridView, env: &Env<'_>, index: usize, option: &str) -> GridResponse {
-    let picked = Picked::new(index.to_string(), option.to_string());
+    let picked = Picked::new(index.to_string(), format!("core.grid.{option}"));
     let event = Id::parse(CHOSEN.as_str()).unwrap();
     with_cx(env, |cx| view.on_event(&event, &picked.to_params(), cx)).0
 }
@@ -892,4 +892,40 @@ fn widgets_take_swipes_holds_and_the_focus() {
     let mut frame = support::frame(480, 800);
     view.draw(&mut frame.canvas(), &env);
     assert_eq!(told(), ["own focus"]);
+}
+
+/// Never onto the top row: the screen's veto.
+fn not_on_top(_: &Env<'_>, _: &[Item], _: &Item, to: Cells) -> bool {
+    to.row > 0
+}
+
+/// The screen's own options come after the grid's and are answered to
+/// it; the screen's check keeps an item from going where it says no.
+#[test]
+fn the_screen_adds_options_and_vetoes_drops() {
+    let h = harness(Device::BUTTONS);
+    let env = h.env();
+    let items = [Item::placed(tool("t.a"), Cells::new(0, 1, 1, 1))];
+    let mut view = GridView::asking(&env, CHOSEN);
+    view.set_options(&["t.duplicate"]);
+    view.set_drop_check(not_on_top);
+    view.set_editing(true);
+    view.layout(&env, geometry(), &items, &[]);
+    // Its own option, answered with the item.
+    let picked = Picked::new("0".to_string(), "t.duplicate".to_string());
+    let event = Id::parse(CHOSEN.as_str()).unwrap();
+    let (response, _) = with_cx(&env, |cx| view.on_event(&event, &picked.to_params(), cx));
+    assert_eq!(
+        response,
+        GridResponse::Option {
+            item: Item::placed(tool("t.a"), Cells::new(0, 1, 1, 1)),
+            option: "t.duplicate".to_string()
+        }
+    );
+    // Moved up by the buttons: vetoed, it stays; down it goes.
+    choose(&mut view, &env, 0, "move");
+    press(&mut view, &env, &actions::UP);
+    assert_eq!(placed(&env, &view)[0].1, Cells::new(0, 1, 1, 1));
+    press(&mut view, &env, &actions::DOWN);
+    assert_eq!(placed(&env, &view)[0].1, Cells::new(0, 2, 1, 1));
 }

@@ -39,7 +39,16 @@ pub enum GridResponse {
     /// One of the screen's own buttons was chosen (see
     /// [`GridView::layout`]).
     Button(u16),
+    /// One of the screen's own options for an item was chosen (see
+    /// [`GridView::set_options`]): the item, and the option's translation
+    /// key.
+    Option { item: Item, option: String },
 }
+
+/// Whether an item may go to the cells it is dropped on, among the items
+/// as they are (see [`GridView::set_drop_check`]); `false` keeps it where
+/// it was.
+pub type DropCheck = fn(&Env<'_>, &[Item], &Item, Cells) -> bool;
 
 impl GridResponse {
     /// Whether the input was used.
@@ -138,6 +147,10 @@ pub struct GridView {
     /// The screen showing it, told to its widgets
     /// ([`WidgetContext::host`](crate::widgets::WidgetContext::host)).
     host: Option<Id>,
+    /// The screen's own options for items, as translation keys.
+    extra: Vec<alloc::borrow::Cow<'static, str>>,
+    /// Whether an item may go where it is dropped.
+    drop_check: Option<DropCheck>,
     /// What each target is called, as told to screen readers while it
     /// has the focus: its item's name; empty for the screen's own
     /// buttons, which tell theirs.
@@ -177,6 +190,8 @@ impl GridView {
             touch: Vec::new(),
             owners: Vec::new(),
             host: None,
+            extra: Vec::new(),
+            drop_check: None,
             names: Vec::new(),
             focus: 0,
             focus_shown: !env.device.input.touch,
@@ -451,7 +466,8 @@ impl GridView {
         }) = &self.edit
             && drag.moved
         {
-            let width = if self.free(drag.index, drag.to) {
+            let width = if self.free(drag.index, drag.to) && self.allowed(env, drag.index, drag.to)
+            {
                 self.style.line * 4
             } else {
                 self.style.line
@@ -586,6 +602,24 @@ impl GridView {
         self.host = Some(host);
     }
 
+    /// The screen's own options for items while editing, after the grid's
+    /// (move, size, settings, remove), as translation keys of their names
+    /// (no commas): chosen, the grid answers
+    /// [`GridResponse::Option`].
+    pub fn set_options(&mut self, options: &[&'static str]) {
+        self.extra = options
+            .iter()
+            .map(|o| alloc::borrow::Cow::Borrowed(*o))
+            .collect();
+    }
+
+    /// Asks `check` before an item goes where it is dragged or moved by
+    /// the buttons: `false` keeps it where it was, as where another item
+    /// is in the way.
+    pub fn set_drop_check(&mut self, check: DropCheck) {
+        self.drop_check = Some(check);
+    }
+
     /// The target nearest below (or above) the focused one.
     fn vertical(&self, down: bool) -> Option<usize> {
         let (from, _) = self.targets.get(self.focus)?;
@@ -645,17 +679,20 @@ impl GridView {
         let Some(shown) = self.items.get(index) else {
             return;
         };
-        let mut options = alloc::vec!["move", "resize"];
+        let mut options: Vec<String> =
+            alloc::vec![format!("{OPTIONS}move"), format!("{OPTIONS}resize")];
         if let What::Widget(id) = &shown.item.what
             && crate::widgets::has_settings(&env, id)
         {
-            options.push("settings");
+            options.push(format!("{OPTIONS}settings"));
         }
-        options.push("remove");
+        options.push(format!("{OPTIONS}remove"));
+        options.extend(self.extra.iter().map(|o| String::from(o.as_ref())));
+        let options: Vec<&str> = options.iter().map(String::as_str).collect();
         cx.command(
             crate::ask::choice(shown.item.what.title(&env), &self.chosen)
                 .about(format!("{index}"))
-                .options(OPTIONS, &options)
+                .options("", &options)
                 .command(),
         );
     }
@@ -670,9 +707,21 @@ impl GridView {
                 .any(|(i, s)| i != index && s.cells.overlaps(&to))
     }
 
+    /// Whether the screen lets item `index` go to `to` (see
+    /// [`GridView::set_drop_check`]).
+    fn allowed(&self, env: &Env<'_>, index: usize, to: Cells) -> bool {
+        let Some(check) = self.drop_check else {
+            return true;
+        };
+        let Some(shown) = self.items.get(index) else {
+            return false;
+        };
+        check(env, &self.items(), &shown.item, to)
+    }
+
     /// Puts item `index` at `to` if it may go there; `true` if it did.
     fn set_cells(&mut self, index: usize, to: Cells, cx: &mut Cx<'_, '_>) -> bool {
-        if !self.free(index, to) {
+        if !self.free(index, to) || !self.allowed(cx.env(), index, to) {
             return false;
         }
         let Some(shown) = self.items.get(index) else {
@@ -735,7 +784,15 @@ impl GridView {
             return GridResponse::Handled;
         };
         let env = *cx.env();
-        match picked.option.as_str() {
+        // The screen's own: its answer.
+        if self.extra.iter().any(|o| *o == picked.option.as_str()) {
+            return GridResponse::Option {
+                item: self.items[index].item.clone(),
+                option: picked.option,
+            };
+        }
+        let option = picked.option.strip_prefix(OPTIONS).unwrap_or_default();
+        match option {
             option @ ("move" | "resize") => {
                 if let Some(edit) = &mut self.edit {
                     edit.mode = if option == "move" {

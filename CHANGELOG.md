@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: screens with a grid of widgets say more about it.
+  `GridView::set_options` adds options of their own to an item's, after
+  move, size, settings and remove, answered as `GridResponse::Option`
+  (Breaking: the item options asked are their translation keys whole);
+  `GridView::set_drop_check` refuses where an item is dragged or moved
+  by the buttons (`grid::DropCheck`). The home screen has eight pages
+  (four before), and actions any plugin adds to the menu `home.footer`
+  show as icons beside the pencil, tapped or reached by the buttons.
 - SDK: the editor of lists of widgets is the kernel's
   (`ui::widget_list`, screens `core.widget-list` and `core.add-widget`,
   `screens::WIDGET_LIST`, `screens::ADD_WIDGET`), bound to slot
