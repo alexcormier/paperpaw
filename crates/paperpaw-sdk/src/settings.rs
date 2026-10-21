@@ -215,6 +215,10 @@ pub struct SettingExtra {
     /// is set itself, e.g. the margins at the top and bottom those at the
     /// sides (one step only: what that one follows is not followed).
     pub follows: Option<&'static str>,
+    /// A choice that keeps values its options lack (one a plugin offered
+    /// that is not installed now, such as a reading app): kept as they
+    /// are, without a warning, for whoever reads it to pass over.
+    pub keeps_unknown: bool,
 }
 
 /// The extra of settings without one.
@@ -243,7 +247,15 @@ impl SettingExtra {
             section: None,
             secret: false,
             follows: None,
+            keeps_unknown: false,
         }
+    }
+
+    /// A choice keeping values its options lack
+    /// ([`SettingExtra::keeps_unknown`]).
+    pub const fn keeps_unknown(mut self) -> Self {
+        self.keeps_unknown = true;
+        self
     }
 
     /// With the translation key of its unit ([`SettingExtra::unit`]).
@@ -569,6 +581,32 @@ impl SettingSpec {
     pub fn section(mut self, key: impl Into<Cow<'static, str>>) -> Self {
         self.extra_mut().section = Some(key.into());
         self
+    }
+
+    /// A choice keeping values its options lack (see
+    /// [`SettingExtra::keeps_unknown`]).
+    pub fn keeps_unknown(mut self) -> Self {
+        self.extra_mut().keeps_unknown = true;
+        self
+    }
+
+    /// Whether it takes `value`: one of its kind, or for a choice keeping
+    /// unknown values ([`SettingExtra::keeps_unknown`]) any word.
+    pub fn accepts(&self, value: &SettingValue) -> bool {
+        self.kind.accepts(value)
+            || (self.extra().keeps_unknown
+                && matches!((&self.kind, value),
+                    (SettingKind::Choice(_), SettingValue::Text(v)) if !v.is_empty()))
+    }
+
+    /// Parses a value as written in a configuration file, as
+    /// [`SettingSpec::accepts`] takes it.
+    pub fn parse(&self, text: &str) -> Option<SettingValue> {
+        let value = match self.kind.parse(text) {
+            Some(value) => value,
+            None => SettingValue::Text(Cow::Owned(String::from(text))),
+        };
+        self.accepts(&value).then_some(value)
     }
 
     /// A number set with a slider (see [`SettingExtra::slider`]).
@@ -899,7 +937,7 @@ impl Settings {
         for (id, value) in values {
             let fits = self
                 .spec(id.as_str())
-                .is_some_and(|spec| value.as_ref().is_none_or(|value| spec.kind.accepts(value)));
+                .is_some_and(|spec| value.as_ref().is_none_or(|value| spec.accepts(value)));
             if fits {
                 self.preview.insert(id, value);
             }
@@ -927,7 +965,7 @@ impl Settings {
         for (id, value) in values {
             if self
                 .spec(id.as_str())
-                .is_some_and(|spec| spec.kind.accepts(&value))
+                .is_some_and(|spec| spec.accepts(&value))
             {
                 touched.push(id.clone());
                 self.worn.insert(id, value);
@@ -937,7 +975,7 @@ impl Settings {
             let value = SettingValue::Int(limit);
             if self
                 .spec(id.as_str())
-                .is_some_and(|spec| spec.kind.accepts(&value))
+                .is_some_and(|spec| spec.accepts(&value))
             {
                 touched.push(id.clone());
                 self.limits.insert(id, value);
@@ -1076,7 +1114,7 @@ impl Settings {
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_default_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
         let spec = self.specs.get_mut(id)?;
-        spec.default = spec.kind.parse(text).ok_or(SettingError::InvalidValue)?;
+        spec.default = spec.parse(text).ok_or(SettingError::InvalidValue)?;
         Ok(())
     }
 
@@ -1105,7 +1143,7 @@ impl Settings {
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set(&mut self, id: &str, value: SettingValue) -> Result<(), SettingError> {
         let spec = self.spec(id).ok_or(SettingError::Unknown)?;
-        if !spec.kind.accepts(&value) {
+        if !spec.accepts(&value) {
             return Err(SettingError::InvalidValue);
         }
         let id = self.value_id(id)?;
@@ -1184,7 +1222,7 @@ impl Settings {
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_from_text(&mut self, id: &str, text: &str) -> Result<(), SettingError> {
         let spec = self.spec(id).ok_or(SettingError::Unknown)?;
-        let value = spec.kind.parse(text).ok_or(SettingError::InvalidValue)?;
+        let value = spec.parse(text).ok_or(SettingError::InvalidValue)?;
         let id = self.value_id(id)?;
         self.values.insert(id, value);
         Ok(())
@@ -1285,7 +1323,7 @@ impl Settings {
             let ids: Vec<Id> = values.keys().cloned().collect();
             for id in ids {
                 let valid = match (self.specs.get(id.as_str()), values.get(id.as_str())) {
-                    (Some(spec), Some(value)) => spec.scoped && spec.kind.accepts(value),
+                    (Some(spec), Some(value)) => spec.scoped && spec.accepts(value),
                     _ => false,
                 };
                 if !valid {
@@ -1303,7 +1341,7 @@ impl Settings {
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn set_in_scope(&mut self, id: &str, value: SettingValue) -> Result<(), SettingError> {
         let spec = self.specs.get(id).ok_or(SettingError::Unknown)?;
-        if !spec.scoped || !spec.kind.accepts(&value) {
+        if !spec.scoped || !spec.accepts(&value) {
             return Err(SettingError::InvalidValue);
         }
         let id = spec.id.clone();

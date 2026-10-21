@@ -227,10 +227,7 @@ impl BrowserScreen {
         self.session.borrow_mut().pages.push(entry);
         self.showing = true;
         self.message = None;
-        cx.command(Command::OpenSlot(
-            slots::READER,
-            Params::new().with(params::PATH, path),
-        ));
+        cx.command(paperpaw_sdk::readers::open(path));
     }
 
     /// An answer arrived for `url`.
@@ -394,10 +391,7 @@ impl BrowserScreen {
         };
         if list == "read" {
             if option == "read" {
-                cx.command(Command::OpenSlot(
-                    slots::READER,
-                    Params::new().with(params::PATH, rest.to_string()),
-                ));
+                cx.command(paperpaw_sdk::readers::open(rest));
             }
             return;
         }

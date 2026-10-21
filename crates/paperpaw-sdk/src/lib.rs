@@ -76,6 +76,7 @@ pub mod positions;
 pub mod power;
 pub mod presets;
 pub mod random;
+pub mod readers;
 pub mod reading;
 pub mod replies;
 mod screen;
