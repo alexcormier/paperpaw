@@ -848,7 +848,7 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     /// With the disk shared ([`FatStorage::with_disk`], as on the
     /// devices): at first what the card says of itself (FAT32), counted
     /// exactly a part of the FAT at each ask, then followed as files are
-    /// written and removed; never all of the FAT at once (see [`free`]).
+    /// written and removed; never all of the FAT at once (see `free`).
     /// Without it, rust-fatfs's count (which may read all of the FAT).
     fn free_space(&self) -> Option<u64> {
         match &self.read {
