@@ -1,7 +1,8 @@
 # PaperPaw
 
 **A lean, fast and endlessly customisable e-reader for e-ink devices, from a
-380 KB microcontroller to Linux and Android e-readers, from one codebase.**
+microcontroller with 400 KB of RAM to Linux and Android e-readers, from one
+codebase.**
 
 PaperPaw was called QuireInk up to version 0.3.
 
@@ -10,8 +11,9 @@ PaperPaw was called QuireInk up to version 0.3.
 > Markdown, text, comics and PDF, colour pictures on colour screens,
 > reading positions, bookmarks and highlights shared with KOReader,
 > Calibre's wireless connection, OPDS catalogs and much more; see the
-> [changelog](CHANGELOG.md). The firmware for the
-> Xteink X4 is built but has not run on a device yet.
+> [changelog](CHANGELOG.md). The firmware for the Xteink X4 and X4 Pro
+> runs on both readers and comes with its first release; the X4
+> Classic's is built but not yet tried on one.
 
 <p align="center">
   <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="24%" alt="The home screen: the date, the book to continue and the one read before">
@@ -43,9 +45,9 @@ installs new versions from the releases page.
 
 ## Why PaperPaw?
 
-- **Runs where others can't.** The smallest target is the Xteink X4 with an
-  ESP32-C3 and no PSRAM. Everything is designed for that budget, so larger
-  devices get a fast, battery-friendly reader for free.
+- **400 KB of RAM is enough.** The smallest target is the Xteink X4, an
+  ESP32-C3 with 400 KB of RAM and no PSRAM. PaperPaw runs there in a heap
+  of 256 KB, and its firmware takes 6.5 MB of the 16 MB of flash.
 - **Everything is a plugin.** The core is a small kernel. The home screen,
   library, reader, menus, file formats, themes, key maps and translations are
   plugins. First-party ones use exactly the same SDK as community plugins.
@@ -60,7 +62,7 @@ installs new versions from the releases page.
 
 PaperPaw is a one-person project. Much of its code and documentation is
 written with the help of an AI model (Claude, by Anthropic); its maker
-decides what goes in, every change has to pass more than 400 tests,
+decides what goes in, every change has to pass about 4,000 tests,
 snapshot tests of its screens and the other checks before it is merged,
 and releases are built reproducibly and tried on a real reader first.
 PaperPaw is young and may have rough edges; issues and wishes are welcome.
