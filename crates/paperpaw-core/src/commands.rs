@@ -44,7 +44,11 @@ impl Kernel {
         {
             self.invalidate(area);
         }
-        let requested = self.output.refresh.take();
+        // Set exactly, it wins over what was requested.
+        let set = self.output.refresh_set.take();
+        let requested = set.or(self.output.refresh.take());
+        self.output.refresh.take();
+        let told = self.output.refresh_cause.take();
         // The screen on top, nothing over it, best in grays.
         let grays = self.stack.last().is_some_and(|top| {
             top.screen.region(&self.shared.env(self.now)).is_none() && top.screen.grays()
@@ -56,6 +60,12 @@ impl Kernel {
         };
         if let Some(dirty) = self.frame.pending.take() {
             self.frame.unrendered = Some(self.frame.unrendered.map_or(dirty, |u| u.union(&dirty)));
+            // What a filter deferred goes with this refresh.
+            let dirty = self
+                .frame
+                .deferred
+                .take()
+                .map_or(dirty, |d| d.union(&dirty));
             let interval = self
                 .shared
                 .settings
@@ -63,28 +73,44 @@ impl Kernel {
                 .clamp(0, i64::from(u32::MAX)) as u32;
             let screen = self.framebuffer.bounds();
             let mut requested = requested.unwrap_or(RefreshMode::Partial);
-            // Leaving large pictures: a fast refresh would keep their ghost.
+            // Leaving large pictures: a fast refresh would keep their ghost
+            // (not where the mode was set exactly).
             let area = |r: Rect| u32::from(r.width) * u32::from(r.height);
-            if self.frame.pictures_shown && area(dirty) * 2 >= area(screen) {
+            if set.is_none() && self.frame.pictures_shown && area(dirty) * 2 >= area(screen) {
                 requested = RefreshMode::Full;
             }
             let (mode, region) = self
                 .frame
                 .refresh
                 .decide(requested, dirty, screen, interval);
-            let on_top = self.stack.last().map(|top| top.id.clone());
-            let refresh = paperpaw_sdk::filters::Refresh::new(mode, region, on_top);
+            let top = self.stack.last();
+            let mut refresh =
+                paperpaw_sdk::filters::Refresh::new(mode, region, top.map(|t| t.id.clone()));
+            refresh.slot = top.and_then(|t| t.slot.clone());
+            refresh.cause = told.unwrap_or(if self.screens_changed {
+                paperpaw_sdk::filters::RefreshCause::Screens
+            } else {
+                paperpaw_sdk::filters::RefreshCause::Other
+            });
+            refresh.since_full = self.frame.refresh.since_full();
+            refresh.periodic = mode != requested;
+            refresh.grays = grays;
+            refresh.pictures = self.frame.pictures_shown;
             let env = self.shared.env(self.now);
-            let refresh = self.shared.refresh_filters.apply(&env, refresh, screen);
-            // Counted as done, after the filters.
-            self.frame.refresh.done(refresh.mode);
-            effects.refresh = Some((refresh.region, refresh.mode));
-            effects.grays = grays;
-            self.shared.usage.refreshed(refresh.mode, refresh.region);
-            let top = self.stack.last().map_or(meter::CORE, |s| s.id.namespace());
-            self.shared
-                .meter
-                .refreshed(top, refresh.mode, refresh.region);
+            match self.shared.refresh_filters.apply(&env, refresh, screen) {
+                Some(refresh) => {
+                    // Counted as done, after the filters.
+                    self.frame.refresh.done(refresh.mode);
+                    effects.refresh = Some((refresh.region, refresh.mode));
+                    effects.grays = refresh.grays;
+                    self.shared.usage.refreshed(refresh.mode, refresh.region);
+                    let top = self.stack.last().map_or(meter::CORE, |s| s.id.namespace());
+                    self.shared
+                        .meter
+                        .refreshed(top, refresh.mode, refresh.region);
+                }
+                None => self.frame.deferred = Some(dirty),
+            }
         }
         let input = [
             self.input.recognizer.next_deadline(&self.thresholds()),

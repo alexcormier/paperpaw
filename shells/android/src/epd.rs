@@ -70,8 +70,8 @@ impl Epd {
             return;
         }
         let code = match mode {
-            RefreshMode::Full => FULL,
-            RefreshMode::Fast => FAST,
+            RefreshMode::Full | RefreshMode::Clear => FULL,
+            RefreshMode::Fast | RefreshMode::Mono => FAST,
             // Partial, and modes to come between fast and full.
             _ => PARTIAL,
         };

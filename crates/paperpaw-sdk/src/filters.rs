@@ -286,6 +286,24 @@ impl InputFilters {
     }
 }
 
+/// Why the panel is refreshed, as the kernel or the screen that drew
+/// tells ([`Cx::refresh_cause`](crate::Cx::refresh_cause)).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
+pub enum RefreshCause {
+    /// Anything else, or not told.
+    #[default]
+    Other,
+    /// A page turned (the reader tells).
+    PageTurn,
+    /// A screen opened or closed.
+    Screens,
+    /// A notice came or went.
+    Notice,
+    /// What a status line or a bar shows changed (a clock, the battery).
+    Status,
+}
+
 /// A refresh about to be made, as the kernel decided it.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
@@ -295,26 +313,66 @@ pub struct Refresh {
     pub region: Rect,
     /// The screen shown on top.
     pub screen: Option<Id>,
+    /// The slot it was opened for.
+    pub slot: Option<Id>,
+    /// Why.
+    pub cause: RefreshCause,
+    /// How many refreshes that leave ghosting were made since the panel
+    /// was last cleaned by one that flashes.
+    pub since_full: u32,
+    /// The kernel made it full to clean the panel, as every
+    /// [`core.full-refresh-interval`](crate::builtin::settings::FULL_REFRESH_INTERVAL)-th
+    /// is: a filter that keeps its own count may make it partial again.
+    pub periodic: bool,
+    /// Shown in grays where the panel needs a refresh of its own for
+    /// them (the X4).
+    pub grays: bool,
+    /// Large pictures are shown, or were before.
+    pub pictures: bool,
 }
 
 impl Refresh {
-    /// A refresh of `region` in `mode`, `screen` on top.
+    /// A refresh of `region` in `mode`, `screen` on top; the rest as
+    /// nothing is known of it.
     pub fn new(mode: RefreshMode, region: Rect, screen: Option<Id>) -> Self {
         Self {
             mode,
             region,
             screen,
+            slot: None,
+            cause: RefreshCause::Other,
+            since_full: 0,
+            periodic: false,
+            grays: false,
+            pictures: false,
         }
     }
 }
 
-/// Changes how the panel is refreshed: another mode, or `None` to leave it.
-pub type RefreshFilterFn = Box<dyn Fn(&Env<'_>, &Refresh) -> Option<RefreshMode>>;
+/// What a refresh filter makes of a refresh.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum RefreshVerdict {
+    /// As it is, for the filters after it.
+    Keep,
+    /// In this mode (one that flashes covers the whole screen).
+    Mode(RefreshMode),
+    /// Shown in grays, or not, where the panel needs a refresh of its own
+    /// for them.
+    Grays(bool),
+    /// Not now: what changed is refreshed with the next refresh (no
+    /// refresh for a clock that ticked on a page shown in grays).
+    Defer,
+}
+
+/// Changes how the panel is refreshed.
+pub type RefreshFilterFn = Box<dyn Fn(&Env<'_>, &Refresh) -> RefreshVerdict>;
 
 /// A refresh filter contribution: it sees every refresh the kernel
-/// decided (after the periodic full refresh) and may change its mode;
-/// later filters see the change. A full refresh then covers the whole
-/// screen.
+/// decided (after the periodic full refresh, [`Refresh::periodic`]) and
+/// may change it; later filters see the change. A refresh that flashes
+/// then covers the whole screen. The kernel counts the refreshes as they
+/// are made, after the filters.
 #[non_exhaustive]
 pub struct RefreshFilterSpec {
     pub id: Id,
@@ -366,16 +424,22 @@ impl RefreshFilters {
         self.filters.shrink_to_fit();
     }
 
-    /// `refresh` as the filters change it; a full one covers `screen`.
-    pub fn apply(&self, env: &Env<'_>, mut refresh: Refresh, screen: Rect) -> Refresh {
+    /// `refresh` as the filters change it, `None` where one defers it; one
+    /// that flashes covers `screen`.
+    pub fn apply(&self, env: &Env<'_>, mut refresh: Refresh, screen: Rect) -> Option<Refresh> {
         for filter in &self.filters {
-            if let Some(mode) = (filter.filter)(env, &refresh) {
-                refresh.mode = mode;
-                if mode == RefreshMode::Full {
-                    refresh.region = screen;
+            match (filter.filter)(env, &refresh) {
+                RefreshVerdict::Mode(mode) => {
+                    refresh.mode = mode;
+                    if mode.cleans() {
+                        refresh.region = screen;
+                    }
                 }
+                RefreshVerdict::Grays(grays) => refresh.grays = grays,
+                RefreshVerdict::Defer => return None,
+                _ => {}
             }
         }
-        refresh
+        Some(refresh)
     }
 }

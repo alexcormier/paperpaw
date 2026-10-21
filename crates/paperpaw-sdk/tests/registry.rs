@@ -15,8 +15,8 @@ use std::rc::Rc;
 use paperpaw_sdk::builtin::groups;
 use paperpaw_sdk::document::DocumentError;
 use paperpaw_sdk::filters::{
-    InputFilterSpec, InputFilters, InputVerdict, Refresh, RefreshFilterSpec, RefreshFilters,
-    TextFilterSpec, TextFilters,
+    InputFilterSpec, InputFilters, InputVerdict, Refresh, RefreshCause, RefreshFilterSpec,
+    RefreshFilters, RefreshVerdict, TextFilterSpec, TextFilters,
 };
 use paperpaw_sdk::presets::Preset;
 use paperpaw_sdk::services::{Service, Services};
@@ -329,15 +329,22 @@ fn refresh_filters_change_the_mode_in_turn_and_full_covers_the_screen() {
         part,
         Some(Id::new_static("core.reader")),
     );
-    assert_eq!(filters.apply(&env, refresh.clone(), screen), refresh);
+    assert_eq!(
+        filters.apply(&env, refresh.clone(), screen),
+        Some(refresh.clone())
+    );
     filters.add(RefreshFilterSpec::new(
         Id::new_static("f.full"),
         "",
         Box::new(|_, r| {
-            (r.screen
+            if r.screen
                 .as_ref()
-                .is_some_and(|s| s.as_str() == "core.reader"))
-            .then_some(RefreshMode::Full)
+                .is_some_and(|s| s.as_str() == "core.reader")
+            {
+                RefreshVerdict::Mode(RefreshMode::Full)
+            } else {
+                RefreshVerdict::Keep
+            }
         }),
     ));
     // A later filter sees the change and may take it back; the region
@@ -345,13 +352,37 @@ fn refresh_filters_change_the_mode_in_turn_and_full_covers_the_screen() {
     filters.add(RefreshFilterSpec::new(
         Id::new_static("f.fast"),
         "",
-        Box::new(|_, r| (r.mode == RefreshMode::Full).then_some(RefreshMode::Fast)),
+        Box::new(|_, r| match r.mode {
+            RefreshMode::Full => RefreshVerdict::Mode(RefreshMode::Fast),
+            _ => RefreshVerdict::Keep,
+        }),
     ));
-    let changed = filters.apply(&env, refresh.clone(), screen);
+    let changed = filters.apply(&env, refresh.clone(), screen).unwrap();
     assert_eq!((changed.mode, changed.region), (RefreshMode::Fast, screen));
     let mut elsewhere = refresh.clone();
     elsewhere.screen = None;
-    assert_eq!(filters.apply(&env, elsewhere.clone(), screen), elsewhere);
+    assert_eq!(
+        filters.apply(&env, elsewhere.clone(), screen),
+        Some(elsewhere.clone())
+    );
+    // A filter shows it in grays, another defers what a clock changed.
+    filters.add(RefreshFilterSpec::new(
+        Id::new_static("f.grays"),
+        "",
+        Box::new(|_, _| RefreshVerdict::Grays(true)),
+    ));
+    let grays = filters.apply(&env, elsewhere.clone(), screen).unwrap();
+    assert!(grays.grays);
+    filters.add(RefreshFilterSpec::new(
+        Id::new_static("f.clock"),
+        "",
+        Box::new(|_, r| match r.cause {
+            RefreshCause::Status => RefreshVerdict::Defer,
+            _ => RefreshVerdict::Keep,
+        }),
+    ));
+    elsewhere.cause = RefreshCause::Status;
+    assert_eq!(filters.apply(&env, elsewhere, screen), None);
 }
 
 #[test]

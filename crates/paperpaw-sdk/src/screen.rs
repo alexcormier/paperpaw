@@ -34,6 +34,10 @@ pub struct ScreenSpec {
     /// Translation key of the screen's display name.
     pub title: Cow<'static, str>,
     pub factory: ScreenFactory,
+    /// How the panel is refreshed when it opens, in place of the kernel's
+    /// choice (a full refresh, or a partial one where the user turned
+    /// flashing off): e.g. [`RefreshMode::Fast`] for a quick sheet.
+    pub refresh_on_open: Option<RefreshMode>,
 }
 
 impl ScreenSpec {
@@ -43,7 +47,14 @@ impl ScreenSpec {
             id,
             title: title.into(),
             factory,
+            refresh_on_open: None,
         }
+    }
+
+    /// How the panel is refreshed when it opens.
+    pub fn refresh_on_open(mut self, mode: RefreshMode) -> Self {
+        self.refresh_on_open = Some(mode);
+        self
     }
 }
 
@@ -370,6 +381,10 @@ pub struct Output {
     pub commands: Vec<Command>,
     /// Requested refresh mode for the region drawn during the event.
     pub refresh: Option<RefreshMode>,
+    /// The mode set exactly ([`Cx::set_refresh`]): it wins over requests.
+    pub refresh_set: Option<RefreshMode>,
+    /// Why the panel is refreshed ([`Cx::refresh_cause`]).
+    pub refresh_cause: Option<crate::filters::RefreshCause>,
     /// Whether the whole screen should be redrawn.
     pub redraw: bool,
     /// Part of the screen to redraw, from the corner of the part of the
@@ -456,6 +471,20 @@ impl<'a, 'e> Cx<'a, 'e> {
     /// an event wins.
     pub fn request_refresh(&mut self, mode: RefreshMode) {
         self.output.request_refresh(mode);
+    }
+
+    /// Sets the refresh mode for what was drawn exactly, over the requests
+    /// of the event (the last one set wins): e.g. [`RefreshMode::Fast`]
+    /// for an overlay opening, where the kernel would choose more. Refresh
+    /// filters still see it.
+    pub fn set_refresh(&mut self, mode: RefreshMode) {
+        self.output.refresh_set = Some(mode);
+    }
+
+    /// Says why the panel is refreshed, for refresh filters (the reader
+    /// tells [`RefreshCause::PageTurn`](crate::filters::RefreshCause::PageTurn)).
+    pub fn refresh_cause(&mut self, cause: crate::filters::RefreshCause) {
+        self.output.refresh_cause = Some(cause);
     }
 
     /// Requests a complete redraw via [`Screen::draw`].

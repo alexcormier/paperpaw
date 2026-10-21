@@ -6,6 +6,20 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: refreshes (gap F1). A refresh filter sees why the panel is
+  refreshed (`filters::RefreshCause`: a page turned, screens, a notice,
+  a status line; told with `Cx::refresh_cause`), the slot, how many
+  partial refreshes were made since the panel was cleaned
+  (`since_full`), whether the kernel made it full for that (`periodic`,
+  so a filter keeping its own count replaces the policy), grays and
+  pictures. Breaking: filters answer with `RefreshVerdict` (`Keep`,
+  `Mode`, `Grays`, `Defer`: refreshed with the next one) and
+  `RefreshFilters::apply` gives `None` for a refresh deferred.
+  `Cx::set_refresh` sets the mode exactly, over the event's requests;
+  `ScreenSpec::refresh_on_open` sets it for a screen opening.
+  `RefreshMode` has `Mono`, `Gray` and `Clear` (a transition through
+  white), mapped by the shells; `RefreshMode::cleans` says whether a mode
+  removes ghosting.
 - SDK: actions with params, overrides and observers (gap E2).
   `Command::RunActionWith(id, params)` runs an action with params, which
   a handler made with `ActionSpec::handler_with` gets (a rule applying

@@ -14,6 +14,7 @@ impl Kernel {
         let Some(spec) = self.shared.registry.screens.get(&id) else {
             return self.warn_runtime(format!("unknown screen `{id}`"));
         };
+        let on_open = spec.refresh_on_open;
         let serial = self.next_serial;
         self.next_serial = serial.wrapping_add(1);
         let key = paperpaw_sdk::ScreenKey::new(serial);
@@ -73,6 +74,10 @@ impl Kernel {
         let top = self.stack.len() - 1;
         let overlay = self.overlay(top);
         self.screen_changed(self.changed_region(top), overlay.is_some());
+        // As the screen asks, where it does.
+        if let Some(mode) = on_open {
+            self.output.refresh_set = Some(mode);
+        }
     }
 
     /// The topmost screen that guards the device ([`Screen::guards`]).
@@ -146,6 +151,7 @@ impl Kernel {
         self.notice = Some((screen, self.now.add_millis(u64::from(seconds) * 1000)));
         self.invalidate(region);
         self.output.request_refresh(RefreshMode::Fast);
+        self.notice_cause();
     }
 
     /// Binds an input for the user (see [`Command::Bind`]).
@@ -177,6 +183,13 @@ impl Kernel {
         let region = notice_area(screen.as_ref(), &env);
         self.invalidate(region);
         self.output.request_refresh(RefreshMode::Fast);
+        self.notice_cause();
+    }
+
+    /// The refresh is for the notice, where nothing else said why.
+    fn notice_cause(&mut self) {
+        let cause = &mut self.output.refresh_cause;
+        cause.get_or_insert(paperpaw_sdk::filters::RefreshCause::Notice);
     }
 
     /// Closes the screens from `index` on, the top one first, telling

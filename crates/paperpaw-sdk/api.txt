@@ -1092,6 +1092,17 @@ pub paperpaw_sdk::filters::InputVerdict::Pass
 pub paperpaw_sdk::filters::InputVerdict::Replace(paperpaw_platform::input::InputEvent)
 pub paperpaw_sdk::filters::InputVerdict::Run(paperpaw_sdk::Id)
 pub paperpaw_sdk::filters::InputVerdict::Take
+#[non_exhaustive] pub enum paperpaw_sdk::filters::RefreshCause
+pub paperpaw_sdk::filters::RefreshCause::Notice
+pub paperpaw_sdk::filters::RefreshCause::Other
+pub paperpaw_sdk::filters::RefreshCause::PageTurn
+pub paperpaw_sdk::filters::RefreshCause::Screens
+pub paperpaw_sdk::filters::RefreshCause::Status
+#[non_exhaustive] pub enum paperpaw_sdk::filters::RefreshVerdict
+pub paperpaw_sdk::filters::RefreshVerdict::Defer
+pub paperpaw_sdk::filters::RefreshVerdict::Grays(bool)
+pub paperpaw_sdk::filters::RefreshVerdict::Keep
+pub paperpaw_sdk::filters::RefreshVerdict::Mode(paperpaw_platform::display::RefreshMode)
 #[non_exhaustive] pub enum paperpaw_sdk::filters::Verdict
 pub paperpaw_sdk::filters::Verdict::Drop
 pub paperpaw_sdk::filters::Verdict::Keep
@@ -1115,9 +1126,15 @@ pub fn paperpaw_sdk::filters::InputFilters::apply(&self, &paperpaw_sdk::Env<'_>,
 pub fn paperpaw_sdk::filters::InputFilters::filter(&self, &paperpaw_sdk::Env<'_>, &paperpaw_platform::input::InputEvent) -> (paperpaw_sdk::filters::InputVerdict, paperpaw_platform::input::InputEvent)
 pub fn paperpaw_sdk::filters::InputFilters::new() -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::filters::Refresh
+pub paperpaw_sdk::filters::Refresh::cause: paperpaw_sdk::filters::RefreshCause
+pub paperpaw_sdk::filters::Refresh::grays: bool
 pub paperpaw_sdk::filters::Refresh::mode: paperpaw_platform::display::RefreshMode
+pub paperpaw_sdk::filters::Refresh::periodic: bool
+pub paperpaw_sdk::filters::Refresh::pictures: bool
 pub paperpaw_sdk::filters::Refresh::region: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::filters::Refresh::screen: core::option::Option<paperpaw_sdk::Id>
+pub paperpaw_sdk::filters::Refresh::since_full: u32
+pub paperpaw_sdk::filters::Refresh::slot: core::option::Option<paperpaw_sdk::Id>
 impl paperpaw_sdk::filters::Refresh
 pub fn paperpaw_sdk::filters::Refresh::new(paperpaw_platform::display::RefreshMode, paperpaw_platform::geometry::Rect, core::option::Option<paperpaw_sdk::Id>) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::filters::RefreshFilterSpec
@@ -1130,7 +1147,7 @@ impl core::fmt::Debug for paperpaw_sdk::filters::RefreshFilterSpec
 pub fn paperpaw_sdk::filters::RefreshFilterSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::filters::RefreshFilters
 impl paperpaw_sdk::filters::RefreshFilters
-pub fn paperpaw_sdk::filters::RefreshFilters::apply(&self, &paperpaw_sdk::Env<'_>, paperpaw_sdk::filters::Refresh, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::filters::Refresh
+pub fn paperpaw_sdk::filters::RefreshFilters::apply(&self, &paperpaw_sdk::Env<'_>, paperpaw_sdk::filters::Refresh, paperpaw_platform::geometry::Rect) -> core::option::Option<paperpaw_sdk::filters::Refresh>
 pub fn paperpaw_sdk::filters::RefreshFilters::new() -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::filters::TextFilterSpec
 pub paperpaw_sdk::filters::TextFilterSpec::block: core::option::Option<paperpaw_sdk::filters::BlockFilterFn>
@@ -1151,7 +1168,7 @@ pub fn paperpaw_sdk::filters::TextFilters::new() -> Self
 pub fn paperpaw_sdk::filters::TextFilters::signature(&self, &paperpaw_sdk::Env<'_>) -> alloc::string::String
 pub type paperpaw_sdk::filters::BlockFilterFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::filters::FilterContext<'_>, &mut paperpaw_document::Block) -> paperpaw_sdk::filters::Verdict>
 pub type paperpaw_sdk::filters::InputFilterFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_platform::input::InputEvent) -> paperpaw_sdk::filters::InputVerdict>
-pub type paperpaw_sdk::filters::RefreshFilterFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::filters::Refresh) -> core::option::Option<paperpaw_platform::display::RefreshMode>>
+pub type paperpaw_sdk::filters::RefreshFilterFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::filters::Refresh) -> paperpaw_sdk::filters::RefreshVerdict>
 pub type paperpaw_sdk::filters::TextFilterFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &mut paperpaw_document::Block)>
 pub type paperpaw_sdk::filters::TextFilterSignatureFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>) -> alloc::string::String>
 pub mod paperpaw_sdk::firmware
@@ -3479,10 +3496,12 @@ pub fn paperpaw_sdk::Cx<'a, 'e>::env(&self) -> &paperpaw_sdk::Env<'e>
 pub fn paperpaw_sdk::Cx<'a, 'e>::for_screen(self, paperpaw_sdk::ScreenKey) -> Self
 pub fn paperpaw_sdk::Cx<'a, 'e>::key(&self) -> core::option::Option<paperpaw_sdk::ScreenKey>
 pub fn paperpaw_sdk::Cx<'a, 'e>::new(&'a paperpaw_sdk::Env<'e>, &'a mut paperpaw_sdk::Output) -> Self
+pub fn paperpaw_sdk::Cx<'a, 'e>::refresh_cause(&mut self, paperpaw_sdk::filters::RefreshCause)
 pub fn paperpaw_sdk::Cx<'a, 'e>::request_redraw(&mut self)
 pub fn paperpaw_sdk::Cx<'a, 'e>::request_redraw_area(&mut self, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::Cx<'a, 'e>::request_refresh(&mut self, paperpaw_platform::display::RefreshMode)
 pub fn paperpaw_sdk::Cx<'a, 'e>::screen_id(&self) -> core::option::Option<&paperpaw_sdk::Id>
+pub fn paperpaw_sdk::Cx<'a, 'e>::set_refresh(&mut self, paperpaw_platform::display::RefreshMode)
 pub fn paperpaw_sdk::Cx<'a, 'e>::slot(&self) -> core::option::Option<&paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Cx<'a, 'e>::wake_at(&mut self, paperpaw_platform::input::Instant)
 #[non_exhaustive] pub struct paperpaw_sdk::Env<'a>
@@ -3835,6 +3854,8 @@ pub paperpaw_sdk::Output::commands: alloc::vec::Vec<paperpaw_sdk::Command>
 pub paperpaw_sdk::Output::redraw: bool
 pub paperpaw_sdk::Output::redraw_area: core::option::Option<paperpaw_platform::geometry::Rect>
 pub paperpaw_sdk::Output::refresh: core::option::Option<paperpaw_platform::display::RefreshMode>
+pub paperpaw_sdk::Output::refresh_cause: core::option::Option<paperpaw_sdk::filters::RefreshCause>
+pub paperpaw_sdk::Output::refresh_set: core::option::Option<paperpaw_platform::display::RefreshMode>
 pub paperpaw_sdk::Output::wake_at: core::option::Option<paperpaw_platform::input::Instant>
 impl paperpaw_sdk::Output
 pub fn paperpaw_sdk::Output::request_refresh(&mut self, paperpaw_platform::display::RefreshMode)
@@ -3943,9 +3964,11 @@ pub const fn paperpaw_sdk::ScreenKey::new(u32) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::ScreenSpec
 pub paperpaw_sdk::ScreenSpec::factory: paperpaw_sdk::ScreenFactory
 pub paperpaw_sdk::ScreenSpec::id: paperpaw_sdk::Id
+pub paperpaw_sdk::ScreenSpec::refresh_on_open: core::option::Option<paperpaw_platform::display::RefreshMode>
 pub paperpaw_sdk::ScreenSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::ScreenSpec
 pub fn paperpaw_sdk::ScreenSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::ScreenFactory) -> Self
+pub fn paperpaw_sdk::ScreenSpec::refresh_on_open(self, paperpaw_platform::display::RefreshMode) -> Self
 impl core::fmt::Debug for paperpaw_sdk::ScreenSpec
 pub fn paperpaw_sdk::ScreenSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::ServerResponse
