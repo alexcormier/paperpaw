@@ -38,6 +38,10 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 - **The internet.** The device connects out only (catalogs, sync,
   updates, news), over TLS where the address says `https`, with the
   certificates checked against the clock (set over the network first).
+  An update search sends the version, the plugin crates built in and the
+  code plugins installed with their versions, no identifier: when the
+  reader asks, and once a day while an update found waits for plugins
+  ([ADR 0022](adr/0022-plugins-in-updates.md)).
 - **Files.** Books, fonts, pictures and catalogs are untrusted input: the
   parsers bound their memory and time, reject what they cannot read, and
   are fuzzed in CI (EPUB, text, XML, hyphenation, images, Lua).

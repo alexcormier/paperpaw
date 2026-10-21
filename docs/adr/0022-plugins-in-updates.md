@@ -40,7 +40,8 @@ version yet) must say so before anything changes, never fail half way.
   a list, say nothing.
 - **Updates from the update server**, only when the reader asks (the
   page's *Search online*, or the action `update.check`, e.g. from a
-  rule). The setting `update.server` (developers) names the server,
+  rule), and once a day while an update so found waits for its plugins
+  (below). The setting `update.server` (developers) names the server,
   `https://paperpaw.org` unless set. The device sends
   `POST <server>/api/v1/updates`:
 
@@ -69,6 +70,28 @@ version yet) must say so before anything changes, never fail half way.
   the file into `updates` (as `updates/.download` until it is whole),
   and installs it as one copied there: its own list, its signature and
   its device are checked again then.
+- **An update waits for its plugins** (2026-10-21). The answer may
+  name code plugins of the question with no build for the update yet,
+  `"waiting": ["chess 1.2.0"]`. With one of them still in use (installed,
+  switched on, of that version), or with a crate built in now `missing`
+  as `not-ready`, a search in the background does not offer the update:
+  it is kept, shown on the update page (*PaperPaw 0.5.0 waits for
+  plugins*, which ones, *Keep waiting*, *Update anyway* or *Check
+  again*), and asked for again once a day at a cheap moment until it
+  waits no more; each question counts, answered or not, so a device
+  without the network does not try at every wake. If the reader has not
+  opened the page a week after it began to wait, the page opens once at a
+  start, never again for that version. Data plugins never wait: a newer
+  PaperPaw reads those made for an older SDK.
+
+  *Update anyway* offers the update first, saying what it costs (*Not
+  now* first): code plugins with no build for it stay installed and
+  switched on, but do not run, their code built for another build
+  (`PluginProblem::OtherBuild`), until a build for it is installed;
+  crates built in now that it lacks are gone after it and come back only
+  with an update that has them. The question sends every code plugin
+  installed, switched off ones too, so that builds come along for them;
+  only those switched on hold an update.
 - **The web flasher** reads which app partition runs (the OTA data),
   then the list at 0x120 of that partition, and offers the same plugins
   for the image it writes.
@@ -79,8 +102,10 @@ version yet) must say so before anything changes, never fail half way.
   running.
 - The device never trusts the server's word alone: what it installs is
   what the signed file lists.
-- The server learns the device's version and plugin crates when the
-  reader asks for an update, nothing else; no account, no identifier.
+- The server learns the device's version, its plugin crates and its code
+  plugins with their versions when the reader asks for an update, and
+  once a day while an update waits for plugins; nothing else, no
+  account, no identifier.
 - Plugins are named by their crates. First-party crates
   (`paperpaw-plugin-<id>`) show their plugin's translated name; others
   their crate's name.

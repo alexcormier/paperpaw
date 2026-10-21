@@ -4,8 +4,10 @@
 //! `updates`, where it is installed as one copied there would be.
 //!
 //! Nothing is sent unless the reader asks: on the update page, or through
-//! the action `update.check` (e.g. from a rule). The request is a `POST`
-//! to `<server>/api/v1/updates` with what the device runs:
+//! the action `update.check` (e.g. from a rule); and, once an update so
+//! found waits for plugins, once a day at a cheap moment until it no
+//! longer waits ([`waiting`]). The request is a `POST` to
+//! `<server>/api/v1/updates` with what the device runs:
 //!
 //! ```json
 //! {"project": "paperpaw-xteink", "chip": 5, "version": "0.4.0",
@@ -28,6 +30,11 @@
 //! ```
 //!
 //! `url` may be a path on the server (`/api/v1/updates/…`).
+//! `waiting` may name code plugins of the question (`id version`) that
+//! have no build for the update yet: with one of them still in use, or
+//! with a crate built in now `missing` as `not-ready`, the update waits
+//! for its plugins ([`waiting`]): a search in the background does not
+//! offer it, the update page says so.
 //! `plugins` are those the update has built in; what the device has and
 //! they lack cannot come along, and `missing` may say why (`unknown`: not
 //! in the plugin library; `not-ready`: not built for that version yet).
@@ -51,7 +58,7 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, PluginKind, Storage, files};
 
 use crate::fetch::{self, Build};
-use crate::{OFFERED, PAGE, file, read_pair, write_pair};
+use crate::{OFFERED, PAGE, file, read_pair, waiting, write_pair};
 
 /// Where updates are asked for.
 pub const SERVER: Setting<Text> = Setting::new("update.server");
@@ -82,6 +89,9 @@ pub(crate) struct Offer {
     pub plugins: Plugins,
     /// Why plugins it lacks are missing: a crate and a word a line.
     pub missing: String,
+    /// The code plugins of this device with no build for it yet: an id
+    /// and a version a line.
+    pub waiting: String,
     /// The builds for it of the code plugins this device has, and of
     /// plugins built in now that it has as files ([`fetch`]).
     pub builds: Vec<Build>,
@@ -120,8 +130,15 @@ impl Offer {
             size: paperpaw_sdk::json::number(&members, "size").map_or(0, |n| n.max(0.0) as u64),
             plugins: Plugins::new(lines("plugins")),
             missing: lines("missing"),
+            waiting: lines("waiting"),
             builds: fetch::parse(body),
         })
+    }
+
+    /// What it waits for here: code plugins in use with no build for it,
+    /// crates built in now not built for it yet ([`waiting`]).
+    pub(crate) fn holding(&self, env: &Env<'_>, firmware: &Firmware) -> waiting::Holding {
+        waiting::of_offer(self, env, firmware)
     }
 
     /// The plugin crates the running firmware has that this update lacks
@@ -159,6 +176,9 @@ impl Offer {
         for line in self.missing.lines() {
             text.push_str(&format!("missing {line}\n"));
         }
+        for line in self.waiting.lines() {
+            text.push_str(&format!("waiting {line}\n"));
+        }
         text.push_str(&fetch::to_text(&self.builds));
         text
     }
@@ -171,15 +191,19 @@ impl Offer {
         if !is_version(&version) {
             return None;
         }
-        let (mut plugins, mut missing) = (String::new(), String::new());
+        let (mut plugins, mut missing, mut waiting) = (String::new(), String::new(), String::new());
         for line in lines {
-            if let Some(rest) = line.strip_prefix("plugin ") {
-                plugins.push_str(rest.trim());
-                plugins.push('\n');
+            let (list, rest) = if let Some(rest) = line.strip_prefix("plugin ") {
+                (&mut plugins, rest)
             } else if let Some(rest) = line.strip_prefix("missing ") {
-                missing.push_str(rest.trim());
-                missing.push('\n');
-            }
+                (&mut missing, rest)
+            } else if let Some(rest) = line.strip_prefix("waiting ") {
+                (&mut waiting, rest)
+            } else {
+                continue;
+            };
+            list.push_str(rest.trim());
+            list.push('\n');
         }
         Some(Self {
             version,
@@ -187,6 +211,7 @@ impl Offer {
             size,
             plugins: Plugins::new(plugins),
             missing,
+            waiting,
             builds: fetch::from_lines(text.lines()),
         })
     }
@@ -208,6 +233,11 @@ pub(crate) fn is_version(version: &str) -> bool {
         && rest
             .bytes()
             .all(|b| b.is_ascii_alphanumeric() || b"-+.".contains(&b))
+}
+
+/// Whether an update the server named is kept.
+pub(crate) fn has_offer(storage: &dyn Storage) -> bool {
+    storage.exists(&file(OFFER))
 }
 
 /// Removes what a download cut off (by a restart, a failure) left in
@@ -297,6 +327,8 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Vec<Command>) {
         .map(|p| (p.manifest.id.as_str(), p.manifest.version.to_string()))
         .collect();
     request.body = Some(question(firmware, env.native, &code));
+    // Asked: an update waiting is asked for again not before a day.
+    waiting::tried(env.storage, paperpaw_sdk::time::unix_seconds(env));
     if quiet {
         request.params.set(QUIET, "1");
     }
@@ -309,16 +341,35 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) 
     let Some(firmware) = env.firmware else {
         return;
     };
+    let storage = env.storage;
     if !(200..300).contains(&reply.status) {
+        // An update waiting: tried (see `check`), the next day again,
+        // also where the device stays on that long.
+        if waiting::read(storage).is_some() {
+            waiting::later(out);
+        }
         return;
     }
-    let storage = env.storage;
     let Some(offer) = Offer::from_answer(&reply.body, firmware) else {
         let _ = storage.remove(&file(OFFER));
+        waiting::clear(storage);
         return;
     };
     let _ = storage.create_dir(&Env::plugin_dir(crate::PLUGIN.as_str()));
     let _ = storage.write(&file(OFFER), offer.to_text().as_bytes());
+    // Waiting for plugins: kept and asked for again, offered once ready.
+    let holding = offer.holding(env, firmware);
+    if !holding.is_empty() {
+        let now = paperpaw_sdk::time::unix_seconds(env);
+        waiting::answered(storage, &offer.version, holding, now);
+        waiting::later(out);
+        // Asked for by the reader (the action): shown where it waits.
+        if reply.context.get(QUIET).is_some() && env.reader {
+            out.push(Command::OpenScreen(PAGE, Params::new()));
+        }
+        return;
+    }
+    waiting::clear(storage);
     let quiet = reply.context.get(QUIET).is_some();
     let key = (String::from("online"), offer.version.clone());
     if quiet && read_pair(storage, OFFERED) != Some(key.clone()) {
