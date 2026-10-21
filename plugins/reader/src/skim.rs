@@ -57,7 +57,8 @@ impl SkimScreen {
         let (margin, gap, row) = (style.margin as u16, style.gap as u16, style.row as u16);
         // The buttons' row grows with them on touch screens.
         let button_row = style.touch_row(u32::from(row)) as u16;
-        let height = gap * 2 + row * 2 + button_row;
+        // Its buttons keep the side margin from the bottom edge too.
+        let height = gap + row * 2 + button_row + ui::edge_room(&style, button_row);
         let region = Rect::new(
             0,
             display.height.saturating_sub(height),

@@ -1001,11 +1001,12 @@ pub fn touch_targets(scene: &Scene<'_>) -> Vec<Issue> {
 
 // ---- Room around buttons ------------------------------------------------
 
-/// Buttons keep their room as they grow: the margin from the screen's
-/// sides, and half a gap (the room a button has in its row) from the
-/// screen's top and bottom, from the edges of the row they are in and
-/// from each other. A button grown into the room around it (a bar that
-/// did not grow with it, `UiStyle::touch_row`) is found.
+/// Buttons keep their room as they grow: the margin of the screen's
+/// sides from every edge of the screen (a bar of buttons along its top
+/// or bottom keeps it too, `ui::edge_bar_height`), and half a gap (the
+/// room a button has in its row) from the edges of the row they are in
+/// and from each other. A button grown into the room around it (a bar
+/// that did not grow with it, `UiStyle::touch_row`) is found.
 pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
     let ui = scene.ui;
     let tolerance = i32::from(ui.tolerance());
@@ -1017,6 +1018,12 @@ pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
         .filter(|b| b.area.width > 0 && b.area.height > 0)
         .collect();
     let rows: Vec<Rect> = scene.parts(&[Role::Row]).map(|r| r.area).collect();
+    // A header's note or arrows follow the header's own layout.
+    let headers: Vec<Rect> = scene.parts(&[Role::Heading]).map(|h| h.area).collect();
+    let buttons: Vec<&Described> = buttons
+        .into_iter()
+        .filter(|b| !headers.iter().any(|h| inside(b.area, *h)))
+        .collect();
     let mut found: Vec<(String, Rect, String)> = Vec::new();
     let (left, right) = (i32::from(screen.x), screen.right() as i32);
     let (top, bottom) = (i32::from(screen.y), screen.bottom() as i32);
@@ -1033,8 +1040,12 @@ pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
             ));
         }
         let edge = (y0 - top).min(bottom - y1);
-        if edge < half - tolerance {
-            found.push((named(b), a, format!("{edge} px from the screen's edge")));
+        if edge < margin - tolerance {
+            found.push((
+                named(b),
+                a,
+                format!("{edge} px from the screen's top or bottom (margin {margin} px)"),
+            ));
         }
         // Its row: room above and below it.
         if let Some(row) = rows.iter().find(|r| inside(a, **r) && **r != a) {
@@ -1057,8 +1068,10 @@ pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
             } else {
                 continue;
             };
-            // Overlapping ones are the overlap check's.
-            if (0..half - tolerance).contains(&gap) {
+            // Tiles of a grid, each cell the target, lie edge to edge;
+            // overlapping ones are the overlap check's.
+            let tiles = gap == 0 && p.width == q.width && p.height == q.height;
+            if !tiles && (0..half - tolerance).contains(&gap) {
                 found.push((
                     format!("{} and {}", named(a), named(b)),
                     p.union(&q),
@@ -1085,7 +1098,7 @@ pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
         BUTTON_ROOM,
         area,
         format!(
-            "buttons without their room (the margin at the sides, half a gap, {half} px, elsewhere; rows and bars grow with their buttons, UiStyle::touch_row): {}",
+            "buttons without their room (the margin from every edge of the screen, half a gap, {half} px, in rows and between them; rows and bars grow with their buttons, UiStyle::touch_row, ui::edge_bar_height): {}",
             names.join(", ")
         ),
     )]

@@ -141,8 +141,9 @@ impl Browser {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        // The bar of buttons grows with them on touch screens.
-        let bar_height = style.touch_row(style.row) as u16;
+        // The bar of buttons along the bottom: they keep the side margin
+        // from the edge too.
+        let bar_height = ui::edge_bar_height(&style);
         let top = header.area.height + style.gap as u16;
         // The bar, and a line for messages above it.
         let bottom = bar_height + style.row as u16 + style.gap as u16;
@@ -262,12 +263,12 @@ impl Browser {
         let margin = self.style.margin as u16;
         let gap = self.style.gap as u16 * 2;
         let width = (self.bar.width - 2 * margin - gap * (count - 1)) / count;
-        let height = ui::button_height(&self.style, self.bar);
+        let band = ui::edge_bar_band(&self.style, self.bar, false);
         Rect::new(
             margin + index as u16 * (width + gap),
-            self.bar.y + (self.bar.height - height) / 2,
+            band.y,
             width,
-            height,
+            band.height,
         )
     }
 

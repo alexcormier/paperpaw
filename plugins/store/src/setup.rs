@@ -89,8 +89,9 @@ impl OfferScreen {
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area.height + style.gap as u16;
-        // Its button grows on touch screens, and the bar with it.
-        let bar_height = style.touch_row(style.row) as u16 + style.gap as u16;
+        // A bar along the bottom: its button keeps the side margin from
+        // the edge too.
+        let bar_height = ui::edge_bar_height(&style);
         let bar = Rect::new(
             0,
             display.height.saturating_sub(bar_height),
@@ -134,12 +135,12 @@ impl OfferScreen {
         let label = env.i18n.tr("store.offer.add");
         let pad = self.style.margin as u16;
         let width = font.measure(self.style.text, label) as u16 + 2 * pad;
-        let height = ui::button_height(&self.style, self.bar);
+        let band = ui::edge_bar_band(&self.style, self.bar, false);
         Some(Rect::new(
             self.bar.width.saturating_sub(width + pad),
-            self.bar.y + (self.bar.height - height) / 2,
+            band.y,
             width,
-            height,
+            band.height,
         ))
     }
 

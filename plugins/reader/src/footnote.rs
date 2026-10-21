@@ -63,7 +63,9 @@ impl FootnoteScreen {
         };
         // The buttons' row grows with them on touch screens.
         let button_row = style.touch_row(u32::from(row)) as u16;
-        let height = gap * 3 + line_height * lines.len() as u16 + button_row;
+        // Its buttons keep the side margin from the bottom edge too.
+        let room = ui::edge_room(&style, button_row);
+        let height = gap * 3 - gap / 2 + line_height * lines.len() as u16 + button_row + room;
         let region = Rect::new(
             0,
             display.height.saturating_sub(height),
@@ -71,7 +73,7 @@ impl FootnoteScreen {
             height,
         );
         let half = display.width / 2;
-        let buttons_y = region.y + height - button_row - gap / 2;
+        let buttons_y = region.y + height - button_row - room;
         let buttons = [
             Rect::new(
                 margin,

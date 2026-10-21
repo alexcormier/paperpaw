@@ -78,7 +78,8 @@ impl ConfirmScreen {
                 (text, Vec::from(["kosync.ok"]), None)
             }
         };
-        let height = (style.row * 3 + style.touch_row(style.row)) as u16;
+        let buttons_row = style.touch_row(style.row) as u16;
+        let height = (style.row * 3) as u16 + buttons_row + ui::edge_room(&style, buttons_row);
         let region = Rect::new(
             0,
             display.height.saturating_sub(height),
@@ -100,9 +101,10 @@ impl ConfirmScreen {
     fn button_row(&self) -> Rect {
         let r = self.region;
         let row = self.style.touch_row(self.style.row) as u16;
+        // Its buttons keep the side margin from the bottom edge too.
         Rect::new(
             r.x,
-            r.y + r.height - row - self.style.gap as u16,
+            r.y + r.height - row - ui::edge_room(&self.style, row),
             r.width,
             row,
         )

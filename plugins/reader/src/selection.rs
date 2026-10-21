@@ -168,8 +168,9 @@ pub(crate) fn translates(env: &Env<'_>) -> bool {
 /// Where the bar is: over the status line at the bottom.
 pub(crate) fn bar_area(env: &Env<'_>, style: &UiStyle) -> Rect {
     let display = env.device.display;
-    // Its buttons grow on touch screens, and the bar with them.
-    let height = style.touch_row(style.row) as u16;
+    // Its buttons grow on touch screens, and keep the side margin from
+    // the bottom edge too.
+    let height = ui::edge_bar_height(style);
     Rect::new(0, display.height - height, display.width, height)
 }
 
@@ -197,7 +198,15 @@ fn natural_widths(env: &Env<'_>, style: &UiStyle, items: &[Item]) -> Vec<f32> {
 /// The rectangles of the bar's items: each as wide as its label needs,
 /// the rest of the bar shared equally.
 fn item_areas(env: &Env<'_>, style: &UiStyle, items: &[Item]) -> Vec<Rect> {
-    let bar = bar_area(env, style);
+    // Between the margins, the buttons' own room in their parts included.
+    let full = bar_area(env, style);
+    let side = (style.margin as u16).saturating_sub(button_pad(style));
+    let bar = Rect::new(
+        full.x + side,
+        full.y,
+        full.width.saturating_sub(2 * side),
+        full.height,
+    );
     let natural = natural_widths(env, style, items);
     let spare =
         (f32::from(bar.width) - natural.iter().sum::<f32>()).max(0.0) / items.len().max(1) as f32;
@@ -236,13 +245,13 @@ pub(crate) fn draw_bar(
     let areas = item_areas(env, &style, items);
     for (index, (item, &area)) in items.iter().zip(&areas).enumerate() {
         // Buttons as everywhere; the whole part stays the target of taps.
-        let h = ui::button_height(&style, area);
+        let band = ui::edge_bar_band(&style, bar, false);
         let pad = button_pad(&style);
         let button = Rect::new(
             area.x + pad,
-            area.y + (area.height - h) / 2,
+            band.y,
             area.width.saturating_sub(2 * pad),
-            h,
+            band.height,
         );
         let label = env.i18n.tr(&item.title);
         ui::draw_button(

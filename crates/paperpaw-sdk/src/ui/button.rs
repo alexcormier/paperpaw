@@ -13,6 +13,40 @@ pub fn button_height(style: &UiStyle, row: Rect) -> u16 {
     (height * 7 / 10).max(style.finger).min(height) as u16
 }
 
+/// The height of a bar of buttons along the top or bottom edge of the
+/// screen: its buttons as in a row made with [`UiStyle::touch_row`], the
+/// room of such a row toward the content, and toward the edge the margin
+/// the screen's sides have, so the buttons keep it from every edge.
+pub fn edge_bar_height(style: &UiStyle) -> u16 {
+    let row = style.touch_row(style.row) as u16;
+    let button = button_height(style, Rect::new(0, 0, 0, row));
+    let room = (row - button) / 2;
+    button + room + style.margin as u16
+}
+
+/// Where the buttons of `bar`, a bar along the screen's bottom edge (or
+/// its top, `at_top`) made [`edge_bar_height`] high, go: a band as high as
+/// they are, the side margin from the edge (see [`edge_bar_height`]).
+pub fn edge_bar_band(style: &UiStyle, bar: Rect, at_top: bool) -> Rect {
+    let row = style.touch_row(style.row) as u16;
+    let button = button_height(style, Rect::new(0, 0, 0, row));
+    let margin = style.margin as u16;
+    let y = if at_top {
+        bar.y + margin
+    } else {
+        (bar.y + bar.height).saturating_sub(margin + button)
+    };
+    Rect::new(bar.x, y, bar.width, button)
+}
+
+/// The room to leave between a row of buttons `row` high and the edge of
+/// the screen it lies along, so that its buttons, centred in it, keep the
+/// side margin from that edge as well.
+pub fn edge_room(style: &UiStyle, row: u16) -> u16 {
+    let button = button_height(style, Rect::new(0, 0, 0, row));
+    (style.margin as u16).saturating_sub((row - button) / 2)
+}
+
 /// The width of buttons' and boxes' borders.
 pub fn button_border(style: &UiStyle) -> u32 {
     style.line.max(2)

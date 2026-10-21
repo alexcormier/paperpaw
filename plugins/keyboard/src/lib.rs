@@ -297,12 +297,14 @@ impl KeyboardScreen {
         let field_height = (style.small * 1.5) as u16 + key_height;
         let keys_height = key_height * rows.len().max(4) as u16;
         let gap = style.gap as u16 / 2;
-        let height = (field_height + keys_height + gap * 3).min(display.height);
+        // The last row's keys keep the side margin from the bottom edge.
+        let room = ui::edge_room(&style, key_height);
+        let height = (field_height + keys_height + gap * 2 + room).min(display.height);
         let region = Rect::new(0, display.height - height, display.width, height);
         let field = Rect::new(0, region.y + gap, display.width, field_height);
         let keys = Rect::new(
             0,
-            region.y + region.height - keys_height - gap,
+            region.y + region.height - keys_height - room,
             display.width,
             keys_height,
         );

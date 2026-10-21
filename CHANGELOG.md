@@ -11,7 +11,12 @@ change the plugin SDK.
   that hold buttons are made with `UiStyle::touch_row`, which grows them
   by as much as their buttons grow, so the room above and below them,
   the margin to the screen's sides and the gaps between them stay as
-  they were. `ui::setting_row` gives a number's row its height. The
+  they were. A bar of buttons along the top or bottom edge keeps the
+  side margin from that edge too (`ui::edge_bar_height`,
+  `ui::edge_bar_band`, `ui::edge_room`): the file manager's, the
+  store's and the plugin manager's bars, the sync question, the
+  reader's footnote, selection and skim bars, the keyboard and the home
+  screen's layouts. `ui::setting_row` gives a number's row its height. The
   shipped screens with buttons follow; `paperpaw-dev` finds buttons
   without their room (`visual.button-room`).
 - SDK: accessibility. `events::FOCUS_CHANGED` (`FocusChanged`: role,
