@@ -35,7 +35,7 @@ pub struct Queue<T, const N: usize> {
     /// Where the finger came down, and how far from there it went (the
     /// square of the distance), of the changes pushed.
     down: Option<(u16, u16)>,
-    farthest: u32,
+    farthest: u64,
 }
 
 impl<T: Reading, const N: usize> Default for Queue<T, N> {
@@ -61,14 +61,6 @@ impl<T: Reading, const N: usize> Queue<T, N> {
     /// taken.
     pub fn push(&mut self, change: T) -> bool {
         let finger = change.finger();
-        match finger {
-            Some(Finger::Down(x, y)) => {
-                self.down = Some((x, y));
-                self.farthest = 0;
-            }
-            Some(Finger::Up) => self.down = None,
-            _ => {}
-        }
         if let Some(Finger::Move(x, y)) = finger {
             let away = self.away(x, y);
             let last = (self.head + self.len + N - 1) % N;
@@ -83,22 +75,31 @@ impl<T: Reading, const N: usize> Queue<T, N> {
                     return true;
                 }
             }
-            self.farthest = self.farthest.max(away);
         }
         if self.len == N {
             return false;
         }
         self.items[(self.head + self.len) % N] = Some(change);
         self.len += 1;
+        // Of what is kept only: a change dropped did not happen.
+        match finger {
+            Some(Finger::Down(x, y)) => {
+                self.down = Some((x, y));
+                self.farthest = 0;
+            }
+            Some(Finger::Move(x, y)) => self.farthest = self.farthest.max(self.away(x, y)),
+            Some(Finger::Up) => self.down = None,
+            None => {}
+        }
         true
     }
 
     /// How far `(x, y)` is from where the finger came down (squared).
-    fn away(&self, x: u16, y: u16) -> u32 {
+    fn away(&self, x: u16, y: u16) -> u64 {
         let Some((dx, dy)) = self.down else {
             return 0;
         };
-        let (a, b) = (u32::from(x.abs_diff(dx)), u32::from(y.abs_diff(dy)));
+        let (a, b) = (u64::from(x.abs_diff(dx)), u64::from(y.abs_diff(dy)));
         a * a + b * b
     }
 
@@ -204,6 +205,31 @@ mod tests {
                 F(Move(30, 0)),
                 F(Move(40, 0))
             ]
+        );
+    }
+
+    #[test]
+    fn a_change_dropped_leaves_where_the_finger_is() {
+        let mut queue = Queue::<Change, 2>::new();
+        queue.push(F(Down(0, 0)));
+        queue.push(F(Move(50, 0)));
+        // Full: the next finger's coming down is dropped, so the moves
+        // still count from the first one's place.
+        assert!(!queue.push(F(Down(1000, 1000))));
+        assert_eq!(queue.pop(), Some(F(Down(0, 0))));
+        assert!(queue.push(F(Move(40, 0))));
+        assert_eq!(drained(&mut queue), [F(Move(50, 0)), F(Move(40, 0))]);
+    }
+
+    #[test]
+    fn the_whole_screen_apart_is_measured() {
+        let mut queue = Queue::<Change, 4>::new();
+        queue.push(F(Down(0, 0)));
+        queue.push(F(Move(u16::MAX, u16::MAX)));
+        queue.push(F(Move(1, 1)));
+        assert_eq!(
+            drained(&mut queue),
+            [F(Down(0, 0)), F(Move(u16::MAX, u16::MAX)), F(Move(1, 1))]
         );
     }
 
