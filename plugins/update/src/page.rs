@@ -577,7 +577,8 @@ fn paragraph(
         let row = Rect::new(area.x, top, area.width, height);
         let line = if cut && n + 1 == max {
             let rest = text[range.start..].trim_end();
-            alloc::borrow::Cow::Owned(ui::fit(&font, size, &alloc::format!("{rest} …"), width))
+            // The rest is longer than the line: shortened, it ends in "…".
+            alloc::borrow::Cow::Owned(ui::fit(&font, size, rest, width))
         } else {
             alloc::borrow::Cow::Borrowed(&text[range])
         };

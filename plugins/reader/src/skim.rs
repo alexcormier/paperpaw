@@ -5,8 +5,8 @@
 //! page buttons go ten pages, left and right a chapter, up and down move
 //! to the buttons below the bar and back to the bar, confirm presses the
 //! one moved to (on the bar, stays) and back returns to where one was. While no button has
-//! the focus, the bar has it: a frame around it says that left and right
-//! move along it and confirm stays.
+//! the focus, the bar has it (shown as the style shows a focus): left and
+//! right move along it and confirm stays.
 //!
 //! It fills the slot `core.skim`: it asks the reader to move with the
 //! event `core.skim` and is told where the book is with `core.skimmed`.
@@ -188,15 +188,27 @@ impl Screen for SkimScreen {
                 style.faint(80),
             );
         }
+        // The bar has the focus while no button has it, shown as the
+        // style shows a focus (its own row widened by what the focus takes
+        // in, so that it ends where the buttons do).
+        let on_bar = self.keys && self.focus.is_none();
+        if on_bar {
+            let side = style.margin as u16 / 2;
+            let around = Rect::new(
+                self.bar.x.saturating_sub(side),
+                self.bar.y,
+                self.bar.width + 2 * side,
+                self.bar.height,
+            );
+            ui::draw_focus(canvas, &style, around);
+        }
+        let ink = style.focus_ink(on_bar);
         // The bar: read up to here, chapters as ticks, a knob where one is.
         let track = self.track();
         let width = u32::from(track.width);
         let done = (width * self.at / 1000) as u16;
         canvas.fill_tint(track, Color::gray(170));
-        canvas.fill(
-            Rect::new(track.x, track.y, done, track.height),
-            Color::BLACK,
-        );
+        canvas.fill(Rect::new(track.x, track.y, done, track.height), ink);
         let tick = track.height * 3;
         for &mark in self.marks.iter().filter(|&&m| m > 0 && m < 1000) {
             let tx = track.x + (width * mark / 1000) as u16;
@@ -207,19 +219,13 @@ impl Screen for SkimScreen {
                     (style.line as u16).max(1),
                     tick,
                 ),
-                Color::BLACK,
+                ink,
             );
         }
         let knob = self.knob();
         let kx = (track.x + done).saturating_sub(knob / 2);
         let ky = self.bar.y + (self.bar.height - knob) / 2;
-        canvas.fill(Rect::new(kx, ky, knob, knob), Color::BLACK);
-        // The bar has the focus while no button has it.
-        let on_bar = self.keys && self.focus.is_none();
-        if on_bar {
-            let border = ui::button_border(&style);
-            ui::stroke_round(canvas, &style, self.bar, border, Color::BLACK);
-        }
+        canvas.fill(Rect::new(kx, ky, knob, knob), ink);
         canvas.describe(
             paperpaw_sdk::semantics::Role::Slider,
             &self.label,
@@ -245,10 +251,17 @@ impl Screen for SkimScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
-        // A direction after touching shows the focus; turning pages (also
-        // by swiping) does not.
-        let turning = [actions::PREV_PAGE, actions::NEXT_PAGE].contains(a);
-        if !self.keys && !turning {
+        // A direction after touching shows the focus (turning pages, also
+        // by swiping, does not; nor what closes the screen).
+        let directions = [
+            actions::PREVIOUS,
+            actions::NEXT,
+            actions::LEFT,
+            actions::RIGHT,
+            actions::UP,
+            actions::DOWN,
+        ];
+        if !self.keys && directions.contains(a) {
             self.keys = true;
             cx.request_redraw_area(self.region);
             cx.request_refresh(RefreshMode::Fast);

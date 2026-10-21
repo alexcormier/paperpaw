@@ -432,3 +432,25 @@ fn the_focus_on_the_home_screen_is_told() {
     home.run(actions::NEXT);
     assert_eq!(focused(&mut home).as_deref(), Some("Library"));
 }
+
+/// Every tool is a button named after its action, its name shown or not,
+/// so that each can be told apart and followed; the focus on one of them.
+#[test]
+fn every_tool_is_told_by_its_name() {
+    for labels in ["on", "off"] {
+        let mut home = Home::new(
+            false,
+            &format!(
+                "tool-labels = {labels}\npage-1 = tool:core.settings 0/0 1x1, tool:core.library 1/0 1x1\n"
+            ),
+        );
+        home.run(actions::NEXT);
+        let buttons = home.buttons();
+        for name in ["Settings", "Library"] {
+            let found: Vec<_> = buttons.iter().filter(|(n, _)| n == name).collect();
+            assert_eq!(found.len(), 1, "{labels}: {name} in {buttons:?}");
+        }
+        let focused: Vec<_> = buttons.iter().filter(|(_, f)| *f).collect();
+        assert_eq!(focused, [&(String::from("Settings"), true)], "{labels}");
+    }
+}

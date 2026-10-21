@@ -7,15 +7,20 @@ change the plugin SDK.
 ## [Unreleased]
 
 - Buttons alone: skimming shows where the focus is. The bar has it at
-  first (left and right go along it, Confirm stays), a frame around it
-  says so, and up and down go from it to the buttons below and back to
-  it.
+  first (left and right go along it, Confirm stays), shown as the style
+  shows a focus, and up and down go from it to the buttons below and
+  back to it. Every tool on the home screen and in the drawer is told
+  as a button by its name, its name shown or not, the focus on one.
+- Pictures over the whole screen (a cover while sleeping) are drawn in
+  half the time: a row's dither worked out once rather than for every
+  pixel, and a picture's columns once rather than for every row.
 - Texts: the statistics' tiles fit their values at one size (the week's
   time was cut on the X4), the update page's explanation gets smaller
   before it is cut and then ends in "…", the picture widget says in
   fewer words where pictures go, the menu above the plugins' list has a
   name (*Plugins: above the list*), and screens of the same name are
-  told apart by a number in the buttons' places rather than by their id.
+  told apart by the kind of screen each is in the buttons' places
+  (*Buttons and gestures (list)*) rather than by their id.
 - Adding to a menu takes 17 KiB of heap on the X4 (it took 94 KiB): a
   few bytes a candidate, its name among all the others' in one text.
 - The sample plugin *Large print* sets `core.font-size` and

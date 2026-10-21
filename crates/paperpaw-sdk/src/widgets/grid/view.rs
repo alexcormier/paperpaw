@@ -367,6 +367,18 @@ impl GridView {
         }
         let line = self.style.line.max(1);
         let clip = canvas.clip();
+        // The target with the focus where it is a tool's (told with the
+        // tool below, as every tool is).
+        let focused_tool = self
+            .targets
+            .get(self.focus)
+            .filter(|(_, target)| self.focus_shown && matches!(target, Target::Run(_)))
+            .map(|(area, _)| *area)
+            .filter(|area| {
+                self.items
+                    .iter()
+                    .any(|s| s.area == *area && matches!(s.item.what, What::Tool(_)))
+            });
         for shown in &self.items {
             // Those outside the part drawn are left (e.g. under a menu).
             if shown.area.intersection(&clip).is_none() {
@@ -378,6 +390,13 @@ impl GridView {
                 (What::Widget(_), None) => {}
                 (What::Tool(action), _) => {
                     draw_tool(canvas, env, shown.area, action, self.labels);
+                    // A button named after its action, also where its
+                    // name is not shown (told after its name, which stays
+                    // a text of its own).
+                    let name = shown.item.what.title(env);
+                    let focused = !editing && focused_tool == Some(shown.area);
+                    let button = crate::semantics::Role::Button;
+                    canvas.describe(button, &name, shown.area, focused, None);
                 }
             }
             if editing {
@@ -412,6 +431,7 @@ impl GridView {
         // button: what a screen reader says, and tools follow, as the
         // buttons move the focus.
         if self.focus_shown
+            && focused_tool.is_none()
             && let Some((area, _)) = self.targets.get(self.focus)
         {
             let name = self.names.get(self.focus).map_or("", String::as_str);

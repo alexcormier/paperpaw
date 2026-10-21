@@ -208,8 +208,8 @@ fn screens_of_the_same_name_are_each_a_place() {
     let mut test = Test::new(false);
     // *Applies*: the places, then every screen.
     test.press("confirm");
-    // The list, its picker and its question share the name; each shows,
-    // told apart by a number (never by its id).
+    // The list, its picker and its choice share the name; each shows,
+    // told apart by the kind of screen it is (never by its id).
     let labels = test.labels();
     let alike: Vec<&String> = labels
         .iter()
@@ -218,9 +218,9 @@ fn screens_of_the_same_name_are_each_a_place() {
     assert_eq!(
         alike,
         [
-            "Buttons and gestures",
-            "Buttons and gestures (2)",
-            "Buttons and gestures (3)"
+            "Buttons and gestures (choice)",
+            "Buttons and gestures (list)",
+            "Buttons and gestures (picker)"
         ],
         "{labels:?}"
     );
