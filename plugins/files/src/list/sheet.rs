@@ -1,7 +1,10 @@
 //! What can be done with a book: a sheet from the bottom with its cover,
 //! title, author and how far it is read, then the actions (go on reading
 //! or open, its series, finished or unread, favourite, information), and
-//! those plugins add to the book menu ([`menus::BOOK`]).
+//! those plugins add to the book menu ([`menus::BOOK`]); last, deleting
+//! it, which the sheet asks about in place (the book still in sight, the
+//! focus on keeping it) before the library deletes it
+//! ([`library::Library::delete`]).
 //!
 //! The book's details and small cover are read when the sheet opens.
 //! What changes goes through the library service, which tells every view
@@ -13,6 +16,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, events, menus, params, slots};
 use paperpaw_sdk::library::{self, catalog};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::widgets;
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
     RefreshMode, Screen,
@@ -34,8 +38,14 @@ enum Action {
     Archive,
     /// Plugins' action `n` of the book menu.
     Plugin(usize),
+    /// Deleting: asks first.
+    Delete,
     Menu,
 }
+
+/// The answers when deleting is asked about: their text, and whether
+/// they delete.
+const ANSWERS: [(&str, bool); 2] = [("files.delete.yes", true), ("files.delete.keep", false)];
 
 pub(crate) struct BookSheet {
     style: UiStyle,
@@ -50,6 +60,9 @@ pub(crate) struct BookSheet {
     actions: Vec<(Action, String)>,
     /// Plugins' actions of the book menu ([`Action::Plugin`]).
     plugins: Vec<Id>,
+    /// While deleting is asked about: the answers, at the bottom of the
+    /// actions' place, the question above them.
+    asking: Option<ListView>,
 }
 
 impl BookSheet {
@@ -106,6 +119,9 @@ impl BookSheet {
             actions.push((Action::Plugin(plugins.len()), label));
             plugins.push(item.id.clone());
         }
+        if library::service(env).can_delete(env, &path) {
+            actions.push((Action::Delete, tr("files.option.delete")));
+        }
         if !env.device.input.touch {
             actions.push((Action::Menu, tr("files.option.menu")));
         }
@@ -149,13 +165,57 @@ impl BookSheet {
             book,
             actions,
             plugins,
+            asking: None,
         }
     }
 
-    fn choose(&self, index: usize, cx: &mut Cx<'_, '_>) {
+    /// Asks whether to delete the book, in place of the actions: the
+    /// answers in their last two rows, the focus on keeping it.
+    fn ask(&mut self, cx: &mut Cx<'_, '_>) {
+        let area = self.list.area();
+        // As high as the actions' rows.
+        let row = self.style.touch_row(self.style.row) as u16;
+        let bottom = area.y + area.height;
+        let rows = Rect::new(area.x, bottom.saturating_sub(2 * row), area.width, 2 * row);
+        let mut answers = ListView::new(rows, u32::from(row)).focus_on_keys(cx.env());
+        answers.set_focus(1);
+        self.asking = Some(answers);
+        cx.request_redraw_area(self.region);
+        cx.request_refresh(RefreshMode::Fast);
+    }
+
+    /// The answer `index` to asking about deleting.
+    fn answer(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
+        let Some((_, delete)) = ANSWERS.get(index) else {
+            return;
+        };
+        if !delete {
+            self.asking = None;
+            cx.request_redraw_area(self.region);
+            cx.request_refresh(RefreshMode::Fast);
+            return;
+        }
+        let env = *cx.env();
+        cx.command(Command::Back);
+        let deleted = library::service(&env).delete(&env, &[self.book.path.as_str()]);
+        let key = if deleted.failed.is_empty() {
+            "files.deleted"
+        } else {
+            "files.delete-failed"
+        };
+        for command in deleted.commands {
+            cx.command(command);
+        }
+        cx.command(Command::Notify(env.i18n.tr(key).to_string()));
+    }
+
+    fn choose(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         let Some((action, _)) = self.actions.get(index) else {
             return;
         };
+        if *action == Action::Delete {
+            return self.ask(cx);
+        }
         let env = *cx.env();
         let path = self.book.path.as_str();
         cx.command(Command::Back);
@@ -191,6 +251,7 @@ impl BookSheet {
                 cx.command(Command::RunAction(id.clone()));
             }
             Action::Menu => super::open_menu(cx),
+            Action::Delete => {}
         }
     }
 }
@@ -228,6 +289,34 @@ impl Screen for BookSheet {
             false,
         );
         ui::draw_separator(canvas, &style, self.head, 0);
+        if let Some(answers) = &self.asking {
+            // The question right below the book, above the answers, as
+            // long as the room allows (smaller where it needs more).
+            let area = self.list.area();
+            let (margin, gap) = (style.margin as u16, style.gap as u16);
+            let width = area.width.saturating_sub(2 * margin);
+            let room = answers.area().y.saturating_sub(area.y + 2 * gap);
+            let text = env.i18n.tr("files.delete.question");
+            let (most, least) = (style.text, style.small);
+            let question = widgets::Wrapped::fitting(env, text, most, least, width, room);
+            // Told as the heading over the answers, across its room (not
+            // as a text, which a row of the list below would take in).
+            let heading = paperpaw_sdk::semantics::Role::Heading;
+            let room_rect = Rect::new(margin, area.y, width, room + 2 * gap);
+            canvas.describe(heading, text, room_rect, false, None);
+            let at = Rect::new(margin, area.y + gap, width, question.height(env).min(room));
+            question.draw(canvas, env, at, widgets::Align::Left, Color::BLACK);
+            answers.draw(
+                canvas,
+                &style,
+                ANSWERS.len(),
+                |canvas, index, rect, focused| {
+                    let label = env.i18n.tr(ANSWERS[index].0);
+                    ui::draw_value_row(canvas, env, &style, rect, focused, label, "");
+                },
+            );
+            return;
+        }
         let actions = &self.actions;
         self.list.draw(
             canvas,
@@ -245,6 +334,44 @@ impl Screen for BookSheet {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
+        if let Some(answers) = &mut self.asking {
+            // Back keeps the book, as the answer does.
+            if *a == actions::BACK {
+                self.asking = None;
+                cx.request_redraw_area(self.region);
+                cx.request_refresh(RefreshMode::Fast);
+                return Handled::Yes;
+            }
+            if *a == actions::CONFIRM {
+                let focus = answers.focus();
+                self.answer(focus, cx);
+                return Handled::Yes;
+            }
+            let back = [
+                actions::UP,
+                actions::LEFT,
+                actions::PREVIOUS,
+                actions::PREV_PAGE,
+            ];
+            let on = [
+                actions::DOWN,
+                actions::RIGHT,
+                actions::NEXT,
+                actions::NEXT_PAGE,
+            ];
+            let delta = if back.contains(a) {
+                -1
+            } else if on.contains(a) {
+                1
+            } else {
+                return Handled::No;
+            };
+            if answers.move_focus(delta, ANSWERS.len()) != ListChange::None {
+                cx.request_redraw_area(answers.area());
+                cx.request_refresh(RefreshMode::Fast);
+            }
+            return Handled::Yes;
+        }
         let delta = if [
             actions::UP,
             actions::LEFT,
@@ -279,6 +406,12 @@ impl Screen for BookSheet {
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
+        }
+        if let Some(answers) = &self.asking {
+            if let Some(index) = answers.hit(gesture.start, ANSWERS.len()) {
+                self.answer(index, cx);
+            }
+            return Handled::Yes;
         }
         let len = self.actions.len();
         if let Some(action) = self.pager.and_then(|pager| pager.tap(gesture.start)) {

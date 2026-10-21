@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Library: a book is deleted from its sheet (*Delete …*, last of its
+  actions). The sheet asks in place, the book still in sight and the
+  focus on *Keep it*; Back keeps it too. Deleted, the book goes with what
+  is kept for it (its place, bookmarks, notes, details, covers and what
+  plugins keep), by touch and by buttons alike. SDK: `Library::delete`
+  and `Library::can_delete` (`library::Deleted`), so a library of one's
+  own deletes its own way; the kernel's removes the files and says each
+  is gone (`BOOK_REMOVED`).
 - SDK: a setting's title is never cut for its control. Where it does not
   fit beside its `−` value `+`, its switch or its value, the control goes
   on a line of its own below the title, at the right, and a title too

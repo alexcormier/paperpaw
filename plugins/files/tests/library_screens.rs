@@ -697,3 +697,84 @@ fn a_long_book_menu_goes_on_pages() {
         assert!(app.shows("Send to 12"), "{}", app.described());
     }
 }
+
+/// Touch and buttons both, as the X4 Pro has them.
+const BOTH: DeviceInfo = DeviceInfo {
+    id: "test-x4-pro",
+    name: "Test X4 Pro",
+    input: paperpaw_platform::InputCaps {
+        buttons: true,
+        touch: true,
+        pen: false,
+        keys: &["back", "confirm", "left", "right", "up", "down", "power"],
+    },
+    ..X4
+};
+
+/// The sheet's question about deleting, asked by choosing *Delete …*;
+/// the focus (with buttons) on keeping the book.
+fn ask_to_delete(app: &mut App, title: &str) {
+    sheet_of(app, title);
+    choose(app, "Delete …");
+    assert_eq!(app.screen(), "files.list.sheet", "{}", app.described());
+    assert!(app.shows("cannot be undone"), "{}", app.described());
+    if !app.kernel.device().input.touch {
+        assert_eq!(app.focused().as_deref(), Some("Keep it"));
+    }
+}
+
+#[test]
+fn a_book_deleted_from_its_sheet_goes_with_what_is_kept_for_it() {
+    let _turn = turn();
+    for device in [X4, TOUCH, BOTH] {
+        let mut app = library(device, "[files]\nsort = files.sort.name\n", &many(3));
+        let path = "books/Book 02.txt";
+        // What is kept for it: its details, a favourite, its place.
+        paperpaw_sdk::library::set_finished(&app.storage, path, true);
+        paperpaw_sdk::library::set_favourite(&app.storage, path, true);
+        let place = paperpaw_sdk::positions::file(path);
+        app.storage.write(&place, b"place").unwrap();
+        ask_to_delete(&mut app, "Book 02");
+        // Deleted: by buttons up to the answer, by touch a tap on it.
+        if app.kernel.device().input.touch {
+            app.tap_on("Delete");
+        } else {
+            app.run(actions::UP);
+            assert_eq!(app.focused().as_deref(), Some("Delete"));
+            app.run(actions::CONFIRM);
+        }
+        assert_eq!(app.screen(), "files.browser", "{}", app.described());
+        assert!(!app.storage.exists(path));
+        assert!(paperpaw_sdk::library::favourites(&app.storage).is_empty());
+        assert!(paperpaw_sdk::library::book(&app.storage, path).is_none());
+        assert!(!app.storage.exists(&place), "its place is kept");
+        // Gone from the list at once, the others there.
+        assert_eq!(rows(&mut app), ["Book 01", "Book 03"], "{}", device.id);
+    }
+}
+
+#[test]
+fn a_book_asked_about_is_kept_by_the_answer_or_back() {
+    let _turn = turn();
+    for device in [X4, TOUCH, BOTH] {
+        let mut app = library(device, "[files]\nsort = files.sort.name\n", &many(2));
+        ask_to_delete(&mut app, "Book 01");
+        if app.kernel.device().input.touch {
+            app.tap_on("Keep it");
+        } else {
+            app.run(actions::CONFIRM);
+        }
+        // The sheet's actions again, the book there.
+        assert_eq!(app.screen(), "files.list.sheet");
+        assert!(app.shows("Delete …"), "{}", app.described());
+        assert!(!app.shows("cannot be undone"), "{}", app.described());
+        // Back while asked: kept too, the sheet stays.
+        choose(&mut app, "Delete …");
+        app.run(actions::BACK);
+        assert_eq!(app.screen(), "files.list.sheet");
+        assert!(app.shows("Delete …"), "{}", app.described());
+        app.run(actions::BACK);
+        assert!(app.storage.exists("books/Book 01.txt"));
+        assert_eq!(rows(&mut app), ["Book 01", "Book 02"], "{}", device.id);
+    }
+}

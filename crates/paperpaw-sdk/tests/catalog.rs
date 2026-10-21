@@ -409,3 +409,31 @@ fn a_line_too_long_in_the_old_catalog_is_passed_over() {
     assert_eq!(walk.from_old(), 5);
     assert_eq!(walk.found(), 5);
 }
+
+#[test]
+fn the_kernels_library_deletes_books_and_says_which_are_gone() {
+    let storage = MemoryStorage::new()
+        .with("books/a.txt", "a")
+        .with("books/b.txt", "b");
+    let h = harness(MemoryStorage::new());
+    let env = h.env_on(&storage);
+    let library = library::service(&env);
+    assert!(library.can_delete(&env, "books/a.txt"));
+    assert!(!library.can_delete(&env, "books/gone.txt"));
+    let deleted = library.delete(&env, &["books/a.txt", "books/gone.txt", "books/b.txt"]);
+    assert!(!storage.exists("books/a.txt") && !storage.exists("books/b.txt"));
+    // One gone already is forgotten as well; none failed.
+    assert!(deleted.failed.is_empty());
+    // Each one gone said so: the kernel then forgets it and what is kept.
+    let removed: Vec<String> = deleted
+        .commands
+        .iter()
+        .filter_map(|command| match command {
+            paperpaw_sdk::Command::Emit(id, params) => paperpaw_sdk::builtin::events::BOOK_REMOVED
+                .read(id, params)
+                .map(|r| r.path),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(removed, ["books/a.txt", "books/gone.txt", "books/b.txt"]);
+}

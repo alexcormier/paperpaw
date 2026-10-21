@@ -14,6 +14,7 @@
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
+use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -122,6 +123,42 @@ pub trait Library {
         super::set_favourite(env.storage, path, favourite);
         super::changed_book(path, what::FAVOURITE)
     }
+
+    /// Whether the book at `path` can be deleted (views offer it only
+    /// then): the kernel's library, where its file is there.
+    fn can_delete(&self, env: &Env<'_>, path: &str) -> bool {
+        env.storage.exists(path)
+    }
+
+    /// Deletes the books at `paths`: the kernel's library removes each
+    /// file and says it is gone ([`BOOK_REMOVED`](crate::builtin::events::BOOK_REMOVED)),
+    /// on which the kernel forgets it and removes what is kept for it
+    /// (its place, notes, details, covers, what plugins keep); a book
+    /// whose file is gone already is forgotten as well. Asking first is
+    /// the view's.
+    fn delete(&self, env: &Env<'_>, paths: &[&str]) -> Deleted {
+        let mut deleted = Deleted::default();
+        for path in paths {
+            match env.storage.remove(path) {
+                Ok(()) => {
+                    let removed = crate::builtin::events::BookRemoved::new(String::from(*path));
+                    let command = crate::builtin::events::BOOK_REMOVED.emit(removed);
+                    deleted.commands.push(command);
+                }
+                Err(_) => deleted.failed.push(String::from(*path)),
+            }
+        }
+        deleted
+    }
+}
+
+/// What [`Library::delete`] did: the commands that tell everyone, and the
+/// books it could not delete (they stay as they were).
+#[derive(Debug, Default)]
+#[non_exhaustive]
+pub struct Deleted {
+    pub commands: Vec<Command>,
+    pub failed: Vec<String>,
 }
 
 /// The kernel's library.

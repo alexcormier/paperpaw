@@ -12,7 +12,7 @@
 <p><b>Books and more</b></p>
 <ul>
 <li>A home screen of widgets: date, battery, continue reading, recently read, statistics</li>
-<li>A library by folders, authors, series and tags, and a file manager</li>
+<li>A library by folders, authors, series and tags, where books are marked finished, kept as favourites, archived or deleted, and a file manager</li>
 <li>OPDS catalogs and WebDAV folders (e.g. Nextcloud), kept in sync</li>
 <li>News feeds as books, transfers from a computer or phone over Wi-Fi</li>
 </ul>
