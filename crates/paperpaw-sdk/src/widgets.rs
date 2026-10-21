@@ -74,9 +74,9 @@ pub use stack::Stack;
 
 pub use look::{
     Frame, Look, Padding, Size, Wrapped, caption_height, choice, draw_caption, draw_frame,
-    draw_line, draw_message, draw_wrapped, fit_line, frame, frame_setting, frame_spec,
-    ink_baseline, largest_size, line_height, padding, padding_setting, padding_spec, part_setting,
-    part_spec, setting_id, shows, size, size_setting, size_spec,
+    draw_line, draw_message, draw_wrapped, fit_line, frame, frame_height, frame_setting,
+    frame_spec, ink_baseline, largest_size, line_height, padding, padding_setting, padding_spec,
+    part_setting, part_spec, setting_id, shows, size, size_setting, size_spec,
 };
 
 /// The kinds of widgets ([`WidgetSpec::category`]), each the translation
@@ -964,6 +964,22 @@ pub const SPACE_SIZE: crate::setting::Setting<crate::setting::Text> =
     crate::setting::Setting::new("core.space.size");
 /// The values of [`SPACE_SIZE`]: small, medium, large.
 pub const SPACE_SIZES: &[&str] = &["core.space.small", "core.space.medium", "core.space.large"];
+
+/// A placement of widget `id` (`id@n`, see [`Id::placement`]) that
+/// `used` does not name and that has no values set, for a widget added
+/// again with settings of its own; `id` itself where the first 256 all
+/// are.
+pub fn free_placement(env: &Env<'_>, id: &str, used: impl Fn(&str) -> bool) -> String {
+    let Ok(plain) = Id::parse(base(id)) else {
+        return String::from(id);
+    };
+    (1..=256)
+        .map(|n| plain.placement(n))
+        .find(|placed| {
+            !used(placed.as_str()) && env.settings.placement_values(placed.as_str()).is_empty()
+        })
+        .map_or_else(|| String::from(id), |placed| String::from(placed.as_str()))
+}
 
 /// Whether a list of widgets may hold `id` more than once.
 pub fn repeatable(id: &str) -> bool {

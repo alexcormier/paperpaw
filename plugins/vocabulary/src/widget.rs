@@ -127,10 +127,9 @@ fn line(font: &FontHandle<'_>, size: f32) -> u16 {
     font.line_metrics(size).line_height as u16
 }
 
-/// The height `widget`'s frame takes around its content.
+/// The height `widget`'s frame takes (the SDK's).
 fn frame_height(env: &Env<'_>, widget: &str) -> u16 {
-    let probe = Rect::new(0, 0, 1000, 1000);
-    1000 - widgets::look::look(env, widget, probe).area.height
+    paperpaw_sdk::widgets::frame_height(env, widget)
 }
 
 /// The caption's height, if `widget` shows it.

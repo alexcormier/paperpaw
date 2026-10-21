@@ -19,9 +19,6 @@ use crate::{
 
 /// Translation keys of an item's options: this, then the option.
 const OPTIONS: &str = "core.grid.";
-/// Placements of a widget tried at most for one of its own: more than a
-/// grid has cells, on many pages.
-const PLACEMENTS: u32 = 256;
 
 /// What a [`GridView`] did with an input, for its screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -660,17 +657,11 @@ impl GridView {
     /// A placement of widget `id` (`id@n`) no item here and no values set
     /// so far use; `id` itself where the first [`PLACEMENTS`] all are.
     fn place(&self, env: &Env<'_>, id: &str) -> alloc::string::String {
-        let base = Id::parse(id).unwrap_or_else(|_| Id::new_static("core"));
-        (1..=PLACEMENTS)
-            .map(|n| base.placement(n))
-            .find(|placed| {
-                let used = self
-                    .items
-                    .iter()
-                    .any(|i| matches!(&i.item.what, What::Widget(w) if w == placed.as_str()));
-                !used && env.settings.placement_values(placed.as_str()).is_empty()
-            })
-            .map_or_else(|| id.into(), |placed| placed.as_str().into())
+        crate::widgets::free_placement(env, id, |placed| {
+            self.items
+                .iter()
+                .any(|i| matches!(&i.item.what, What::Widget(w) if w == placed))
+        })
     }
 
     /// Offers what can be done with item `index`.
@@ -1340,7 +1331,7 @@ mod tests {
     fn pick(grid: &mut GridView, env: &Env<'_>, index: usize, option: &str) -> GridResponse {
         let picked = Picked {
             path: format!("{index}"),
-            option: option.into(),
+            option: format!("{OPTIONS}{option}"),
         };
         let Command::Emit(event, params) = CHOSEN.emit(picked) else {
             unreachable!("an event is emitted");
@@ -1770,7 +1761,7 @@ mod tests {
         let grid = laid_out(&env, &[at(widget, 0, 0, 1, 1)], &[]);
         assert_eq!(grid.place(&env, "test.w"), "test.w@3");
         // Every placement tried is used: the widget's own id.
-        let many = kit(PLACEMENTS);
+        let many = kit(256);
         let env = many.env();
         let grid = laid_out(&env, &[], &[]);
         assert_eq!(grid.place(&env, "test.w"), "test.w");

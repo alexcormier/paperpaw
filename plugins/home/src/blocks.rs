@@ -230,10 +230,9 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     Ok(())
 }
 
-/// The height `widget`'s frame takes above and below its content.
+/// The height `widget`'s frame takes (the SDK's).
 fn frame_height(env: &Env<'_>, widget: &str) -> u16 {
-    let probe = Rect::new(0, 0, 100, 100);
-    100 - widgets::look::look(env, widget, probe).area.height
+    paperpaw_sdk::widgets::frame_height(env, widget)
 }
 
 /// `height` pixels placed in the middle of `area`, top to bottom.

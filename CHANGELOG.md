@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: widgets' frames. A look restyles every widget's frame
+  (`ui::look::Painters::frame`, `FramePart`, through `set_ui_look`);
+  *Frames of widgets* (`core.widgets.frame`, `settings::WIDGET_FRAME`)
+  gives every widget whose own frame is not chosen one of the line, card
+  or dark card (each its own at first); presets of the kind
+  `core.widget-look` (`presets::WIDGET_LOOK`, `widget_look_settings`,
+  `widget_look_changes`) give widgets a look as a whole, chosen under
+  *Widget look* at the top of the appearance settings, as themes are.
+  `widgets::frame_height` and `widgets::free_placement` are the SDK's
+  (five and two plugins had their own). An empty state (`ui::draw_empty`,
+  e.g. the home screen's card before a book is read) gets smaller before
+  its title or text is cut, and keeps less margin in a small area: on
+  the X4 with wide margins the card said *Start readi…*.
 - SDK: screens with a grid of widgets say more about it.
   `GridView::set_options` adds options of their own to an item's, after
   move, size, settings and remove, answered as `GridResponse::Option`

@@ -95,18 +95,12 @@ fn addable(env: &Env<'_>, page: usize) -> Vec<(String, What, String)> {
 /// no values set: each widget added gets one, so that its settings are
 /// its own.
 fn placement(env: &Env<'_>, pages: &[pages::Page], id: &str) -> String {
-    let base = Id::parse(id).unwrap_or(Id::new_static("home"));
-    let used = |placed: &str| {
+    widgets::free_placement(env, id, |placed| {
         pages
             .iter()
             .flat_map(|p| &p.items)
             .any(|i| matches!(&i.what, What::Widget(w) if w == placed))
-            || !env.settings.placement_values(placed).is_empty()
-    };
-    (1..)
-        .map(|n| base.placement(n))
-        .find(|placed| !used(placed.as_str()))
-        .map_or_else(|| id.to_string(), |placed| placed.as_str().to_string())
+    })
 }
 
 /// The kinds that have something to add, in the order of

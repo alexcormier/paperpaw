@@ -1170,6 +1170,10 @@ pub mod settings {
     pub const HEADER_DARK: &str = "core.header.dark";
     pub const HEADER_LIGHT: &str = "core.header.light";
     pub const HEADER_PLAIN: &str = "core.header.plain";
+    /// The frame of every widget whose own the reader did not choose: one
+    /// of [`widgets::look::ALL_FRAMES`](crate::widgets::look::ALL_FRAMES)
+    /// (each widget its own at first).
+    pub const WIDGET_FRAME: Setting<Text> = Setting::new("core.widgets.frame");
     /// Corners of highlights, buttons and boxes: one of [`CORNERS`].
     pub const UI_CORNERS: Setting<Text> = Setting::new("core.ui-corners");
     /// The values of [`UI_CORNERS`]: square, slightly rounded, round,

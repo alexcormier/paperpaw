@@ -22,8 +22,7 @@ mod draw_tests;
 #[cfg(test)]
 mod harness;
 
-use paperpaw_sdk::widgets;
-use paperpaw_sdk::{Env, Id, Manifest, Plugin, Rect, RegisterError, Registrar};
+use paperpaw_sdk::{Env, Id, Manifest, Plugin, RegisterError, Registrar};
 
 pub const PLUGIN: Id = Id::new_static("widgets");
 
@@ -46,10 +45,9 @@ impl Plugin for Widgets {
     }
 }
 
-/// The height widget `id`'s frame takes above and below its content.
+/// The height `id`'s frame takes (the SDK's).
 pub(crate) fn frame_height(env: &Env<'_>, id: &str) -> u16 {
-    let probe = Rect::new(0, 0, 100, 100);
-    100 - widgets::look::look(env, id, probe).area.height
+    paperpaw_sdk::widgets::frame_height(env, id)
 }
 
 /// Today as days since 1970 in the local time zone; 0 where the device

@@ -613,6 +613,7 @@ pub const paperpaw_sdk::builtin::settings::UI_TITLE: paperpaw_sdk::setting::Sett
 pub const paperpaw_sdk::builtin::settings::VOICE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::VOICE_SYSTEM: &str
 pub const paperpaw_sdk::builtin::settings::WEEK_START: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub const paperpaw_sdk::builtin::settings::WIDGET_FRAME: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::WIDOWS: paperpaw_sdk::setting::Setting<i64>
 pub const paperpaw_sdk::builtin::settings::WORD_SPACING: paperpaw_sdk::setting::Setting<i64>
 pub fn paperpaw_sdk::builtin::settings::parse_rgb(&str) -> core::option::Option<[u8; 3]>
@@ -2298,10 +2299,13 @@ pub fn paperpaw_sdk::presets::Presets::of_kind<'a>(&'a self, &'a str) -> impl co
 pub fn paperpaw_sdk::presets::Presets::remove_plugin(&mut self, &str)
 pub fn paperpaw_sdk::presets::Presets::shrink_to_fit(&mut self)
 pub const paperpaw_sdk::presets::THEME: &str
+pub const paperpaw_sdk::presets::WIDGET_LOOK: &str
 pub fn paperpaw_sdk::presets::applied(&paperpaw_sdk::Settings, &[(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)]) -> bool
 pub fn paperpaw_sdk::presets::commands(&paperpaw_sdk::Settings, &[(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)]) -> alloc::vec::Vec<paperpaw_sdk::Command>
 pub fn paperpaw_sdk::presets::theme_changes(&paperpaw_sdk::Settings, &paperpaw_sdk::presets::Preset) -> alloc::vec::Vec<(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)>
 pub fn paperpaw_sdk::presets::theme_settings(&paperpaw_sdk::Settings) -> alloc::vec::Vec<paperpaw_sdk::Id>
+pub fn paperpaw_sdk::presets::widget_look_changes(&paperpaw_sdk::Settings, &paperpaw_sdk::presets::Preset) -> alloc::vec::Vec<(paperpaw_sdk::Id, core::option::Option<paperpaw_sdk::SettingValue>)>
+pub fn paperpaw_sdk::presets::widget_look_settings(&paperpaw_sdk::Settings) -> alloc::vec::Vec<paperpaw_sdk::Id>
 pub mod paperpaw_sdk::qr
 pub use paperpaw_sdk::qr::QrCode
 pub mod paperpaw_sdk::random
@@ -2924,6 +2928,11 @@ pub paperpaw_sdk::ui::look::ButtonPart::on: bool
 pub paperpaw_sdk::ui::look::ButtonPart::rect: paperpaw_platform::geometry::Rect
 #[non_exhaustive] pub struct paperpaw_sdk::ui::look::FocusPart
 pub paperpaw_sdk::ui::look::FocusPart::rect: paperpaw_platform::geometry::Rect
+#[non_exhaustive] pub struct paperpaw_sdk::ui::look::FramePart
+pub paperpaw_sdk::ui::look::FramePart::area: paperpaw_platform::geometry::Rect
+pub paperpaw_sdk::ui::look::FramePart::frame: paperpaw_sdk::widgets::look::Frame
+impl paperpaw_sdk::ui::look::FramePart
+pub fn paperpaw_sdk::ui::look::FramePart::new(paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::look::Frame) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::ui::look::HeaderPart
 pub paperpaw_sdk::ui::look::HeaderPart::area: paperpaw_platform::geometry::Rect
 #[non_exhaustive] pub struct paperpaw_sdk::ui::look::HintsPart
@@ -2941,6 +2950,7 @@ pub struct paperpaw_sdk::ui::look::Painters
 impl paperpaw_sdk::ui::look::Painters
 pub const fn paperpaw_sdk::ui::look::Painters::button(self, paperpaw_sdk::ui::look::InkPainter<paperpaw_sdk::ui::look::ButtonPart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::focus(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::FocusPart>) -> Self
+pub const fn paperpaw_sdk::ui::look::Painters::frame(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::FramePart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::header(self, paperpaw_sdk::ui::look::InkPainter<paperpaw_sdk::ui::look::HeaderPart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::hints(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::HintsPart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::new() -> Self
@@ -3616,7 +3626,9 @@ pub fn paperpaw_sdk::widgets::look::Wrapped::lines(&self) -> &[alloc::string::St
 pub fn paperpaw_sdk::widgets::look::Wrapped::new(&paperpaw_sdk::Env<'_>, &str, f32, u16, u16) -> Self
 pub fn paperpaw_sdk::widgets::look::Wrapped::size(&self) -> f32
 pub fn paperpaw_sdk::widgets::look::Wrapped::whole(&self) -> bool
+pub const paperpaw_sdk::widgets::look::ALL_FRAMES: &[&str]
 pub const paperpaw_sdk::widgets::look::FRAMES: &[&str]
+pub const paperpaw_sdk::widgets::look::OWN_FRAME: &str
 pub const paperpaw_sdk::widgets::look::PADDINGS: &[&str]
 pub const paperpaw_sdk::widgets::look::SIZES: &[&str]
 pub fn paperpaw_sdk::widgets::look::caption_height(&paperpaw_sdk::Env<'_>) -> u16
@@ -3628,6 +3640,7 @@ pub fn paperpaw_sdk::widgets::look::draw_message(&mut paperpaw_graphics::canvas:
 pub fn paperpaw_sdk::widgets::look::draw_wrapped(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Align, f32, &str, paperpaw_platform::pixel::Color) -> u16
 pub fn paperpaw_sdk::widgets::look::fit_line(&paperpaw_sdk::FontHandle<'_>, f32, f32, &str, f32) -> (f32, alloc::string::String)
 pub fn paperpaw_sdk::widgets::look::frame(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::widgets::look::Frame
+pub fn paperpaw_sdk::widgets::look::frame_height(&paperpaw_sdk::Env<'_>, &str) -> u16
 pub fn paperpaw_sdk::widgets::look::frame_setting(&paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Frame) -> paperpaw_sdk::SettingSpec
 pub const fn paperpaw_sdk::widgets::look::frame_spec(&'static str, paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Frame) -> paperpaw_sdk::SettingSpec
 pub fn paperpaw_sdk::widgets::look::ink_baseline(&paperpaw_sdk::FontHandle<'_>, f32, &str, paperpaw_platform::geometry::Rect) -> i32
@@ -3840,8 +3853,10 @@ pub fn paperpaw_sdk::widgets::draw_wrapped(&mut paperpaw_graphics::canvas::Canva
 pub fn paperpaw_sdk::widgets::fill_height(u32, u32, usize) -> u16
 pub fn paperpaw_sdk::widgets::fit_line(&paperpaw_sdk::FontHandle<'_>, f32, f32, &str, f32) -> (f32, alloc::string::String)
 pub fn paperpaw_sdk::widgets::frame(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::widgets::look::Frame
+pub fn paperpaw_sdk::widgets::frame_height(&paperpaw_sdk::Env<'_>, &str) -> u16
 pub fn paperpaw_sdk::widgets::frame_setting(&paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Frame) -> paperpaw_sdk::SettingSpec
 pub const fn paperpaw_sdk::widgets::frame_spec(&'static str, paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Frame) -> paperpaw_sdk::SettingSpec
+pub fn paperpaw_sdk::widgets::free_placement(&paperpaw_sdk::Env<'_>, &str, impl core::ops::function::Fn(&str) -> bool) -> alloc::string::String
 pub fn paperpaw_sdk::widgets::has_settings(&paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::widgets::ink_baseline(&paperpaw_sdk::FontHandle<'_>, f32, &str, paperpaw_platform::geometry::Rect) -> i32
 pub fn paperpaw_sdk::widgets::largest_size(f32, f32, impl core::ops::function::FnMut(f32) -> bool) -> core::option::Option<f32>

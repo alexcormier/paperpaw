@@ -218,3 +218,48 @@ fn plugins_add_kinds_of_widgets_with_their_icons() {
     assert_eq!(env.widgets.category_icon(categories::BOOKS), "books");
     assert_eq!(env.widgets.category_icon("t.unknown"), "puzzle");
 }
+
+/// One frame for every widget whose own the reader did not choose, and
+/// the settings a widget look covers.
+#[test]
+fn one_frame_for_all_widgets_unless_one_has_its_own() {
+    use paperpaw_sdk::builtin::settings::WIDGET_FRAME;
+    use paperpaw_sdk::widgets::Frame;
+    use paperpaw_sdk::widgets::look::{ALL_FRAMES, FRAMES, OWN_FRAME};
+    let mut h = harness();
+    h.settings
+        .define(SettingSpec::fixed_choice(
+            WIDGET_FRAME.static_str(),
+            "t.all",
+            ALL_FRAMES,
+            OWN_FRAME,
+            Id::new_static("t.group"),
+        ))
+        .unwrap();
+    for widget in ["t.one", "t.three"] {
+        h.settings
+            .define(widgets::frame_setting(
+                &Id::parse(widget).unwrap(),
+                Frame::None,
+            ))
+            .unwrap();
+    }
+    let frame = |h: &Harness, widget| widgets::frame(&h.env(), widget);
+    assert_eq!(frame(&h, "t.one"), Frame::None);
+    h.settings
+        .set(
+            WIDGET_FRAME.static_str(),
+            SettingValue::Text(FRAMES[2].into()),
+        )
+        .unwrap();
+    assert_eq!(frame(&h, "t.one"), Frame::Card);
+    h.settings
+        .set("t.three.frame", SettingValue::Text(FRAMES[1].into()))
+        .unwrap();
+    assert_eq!(frame(&h, "t.three"), Frame::Line, "its own, chosen");
+    let covered = paperpaw_sdk::presets::widget_look_settings(&h.settings);
+    let covered: Vec<&str> = covered.iter().map(Id::as_str).collect();
+    assert!(covered.contains(&WIDGET_FRAME.static_str()), "{covered:?}");
+    assert!(covered.contains(&"t.one.frame"), "{covered:?}");
+    assert!(!covered.contains(&"t.list"), "{covered:?}");
+}

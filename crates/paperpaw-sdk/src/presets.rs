@@ -172,6 +172,36 @@ pub fn theme_changes(settings: &Settings, theme: &Preset) -> Vec<(Id, Option<Set
     changes
 }
 
+/// The kind of presets that give widgets a look as a whole: their
+/// frames, room, text sizes and alignment, and the frame of all
+/// ([`widget_look_settings`]). The settings plugin offers them at the top
+/// of the appearance settings, as themes.
+pub const WIDGET_LOOK: &str = "core.widget-look";
+
+/// The settings a widget look covers: each widget's frame, padding, size
+/// and alignment (`<widget>.frame` …), and the frame of all
+/// ([`WIDGET_FRAME`](crate::builtin::settings::WIDGET_FRAME)).
+pub fn widget_look_settings(settings: &Settings) -> Vec<Id> {
+    const PARTS: [&str; 4] = [".frame", ".padding", ".size", ".align"];
+    let all = crate::builtin::settings::WIDGET_FRAME.static_str();
+    settings
+        .specs()
+        .filter(|spec| {
+            let id = spec.id.as_str();
+            id == all || PARTS.iter().any(|part| id.ends_with(part))
+        })
+        .map(|spec| spec.id.clone())
+        .collect()
+}
+
+/// What `look` changes among [`widget_look_settings`].
+pub fn widget_look_changes(settings: &Settings, look: &Preset) -> Vec<(Id, Option<SettingValue>)> {
+    let covered = widget_look_settings(settings);
+    let mut changes = look.changes(settings, &covered);
+    changes.retain(|(id, _)| covered.contains(id));
+    changes
+}
+
 /// The commands that give the settings the values of `changes` (see
 /// [`Preset::changes`]): those that have them already are left alone, and
 /// a setting's default is not written down but the setting reset.

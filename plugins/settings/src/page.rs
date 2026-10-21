@@ -115,9 +115,10 @@ pub(super) enum Row {
     Setting(Box<SettingSpec>),
     /// Resets the page's settings to their defaults, at its end.
     Reset,
-    /// The theme in use, at the top of the appearance settings where
-    /// there are themes (see [`themes`](super::themes)).
-    Theme,
+    /// The theme (or look of widgets) in use, at the top of the
+    /// appearance settings where there are such presets (see
+    /// [`themes`](super::themes)).
+    Theme(super::themes::Chooser),
 }
 
 #[derive(Debug)]
@@ -191,8 +192,13 @@ impl GroupPage {
         // Headings only where there is more than one part.
         let headed = sections.len() > 1;
         let mut entries = Vec::new();
-        if *of == groups::LOOK && own.is_none() && super::themes::themes(env).next().is_some() {
-            entries.push(Row::Theme);
+        if *of == groups::LOOK && own.is_none() {
+            use super::themes::{Chooser, themes};
+            for chooser in [Chooser::Theme, Chooser::Widgets] {
+                if themes(env, chooser).next().is_some() {
+                    entries.push(Row::Theme(chooser));
+                }
+            }
         }
         for section in &sections {
             if let Some(key) = section.filter(|_| headed) {
@@ -225,7 +231,7 @@ impl GroupPage {
                 Row::Heading(_) => heading,
                 Row::Setting(spec) if ui::slider::shows(env, spec) => slider_row,
                 Row::Setting(spec) => ui::setting_row(&style, spec, u32::from(row), noted) as u16,
-                Row::Reset | Row::Theme => style.row as u16,
+                Row::Reset | Row::Theme(_) => style.row as u16,
             })
             .collect();
         let headings = entries
@@ -237,7 +243,7 @@ impl GroupPage {
             &style,
             entries.iter().filter_map(|e| match e {
                 Row::Setting(spec) => Some(&**spec),
-                Row::Heading(_) | Row::Reset | Row::Theme => None,
+                Row::Heading(_) | Row::Reset | Row::Theme(_) => None,
             }),
         );
         Self {
@@ -390,8 +396,8 @@ impl GroupPage {
                 cx.command(ask_reset(env, Some((&self.group, &self.title))));
                 return;
             }
-            Some(Row::Theme) => {
-                cx.command(Command::OpenScreen(super::themes::SCREEN, Params::new()));
+            Some(Row::Theme(chooser)) => {
+                cx.command(Command::OpenScreen(super::themes::SCREEN, chooser.params()));
                 return;
             }
             _ => {}
@@ -441,10 +447,10 @@ impl Screen for GroupPage {
                         ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
                         return;
                     }
-                    Row::Theme => {
-                        let title = env.i18n.tr("settings.theme");
+                    Row::Theme(chooser) => {
+                        let title = env.i18n.tr(chooser.title());
                         let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
-                        let name = super::themes::applied_name(env);
+                        let name = super::themes::applied_name(env, *chooser);
                         ui::draw_value_row(canvas, env, &style, rect, focused, title, &name);
                         return;
                     }
