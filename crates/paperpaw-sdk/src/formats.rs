@@ -143,7 +143,7 @@ pub struct FormatSpec {
     /// reader says so meanwhile. `None`: always at once.
     pub prepared: Option<FormatPrepared>,
     /// Whether a file whose extension no format has is of this format,
-    /// from its first bytes (at most [`SNIFF_BYTES`]), e.g. a book
+    /// from its first bytes (at most `SNIFF_BYTES`), e.g. a book
     /// downloaded without one.
     pub sniff: Option<FormatSniff>,
 }
