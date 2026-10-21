@@ -1031,6 +1031,8 @@ struct Shared {
     text_filters: paperpaw_sdk::filters::TextFilters,
     /// Marks on the words of book pages, from every plugin.
     decorators: paperpaw_sdk::decorations::Decorators,
+    /// Layers on book pages and frames of their text, from every plugin.
+    page_layers: paperpaw_sdk::layers::PageLayers,
     /// Filters of every input and of every refresh, from every plugin.
     input_filters: paperpaw_sdk::filters::InputFilters,
     refresh_filters: paperpaw_sdk::filters::RefreshFilters,
@@ -1114,6 +1116,7 @@ impl Shared {
             services: &self.services,
             text_filters: &self.text_filters,
             decorators: &self.decorators,
+            page_layers: &self.page_layers,
             stylesheets: &self.stylesheets,
             book_data: &self.book_data,
             caps: self.caps,

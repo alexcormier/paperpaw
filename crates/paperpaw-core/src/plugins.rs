@@ -332,6 +332,12 @@ impl Kernel {
         for decorator in staging.decorators.drain(..) {
             self.shared.decorators.add(decorator);
         }
+        for layer in staging.page_layers.drain(..) {
+            self.shared.page_layers.add(layer);
+        }
+        for frame in staging.page_frames.drain(..) {
+            self.shared.page_layers.add_frame(frame);
+        }
         for filter in staging.input_filters.drain(..) {
             self.shared.input_filters.add(filter);
         }
@@ -792,6 +798,7 @@ impl Kernel {
         shared.services.shrink_to_fit();
         shared.text_filters.shrink_to_fit();
         shared.decorators.shrink_to_fit();
+        shared.page_layers.shrink_to_fit();
         shared.input_filters.shrink_to_fit();
         shared.refresh_filters.shrink_to_fit();
         shared.stylesheets.shrink_to_fit();
