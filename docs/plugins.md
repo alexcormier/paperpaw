@@ -498,7 +498,13 @@ formats only registers as a reading app instead (`readers::ReaderSpec`,
 whatever opens a book opens it with `readers::open(path)` (never by
 opening `slots::READER` itself). The reader chooses with
 `readers::ask` (*Open with*, a folder's reading app) and in the reading
-settings (`settings::READING_APP` and one per format).
+settings (`settings::READING_APP`, and one per format that more than one
+app reads). A reading app's screen is its own; one that cannot open a
+book after all answers `readers::cannot_open` instead of an error of
+its own, and the next app in that order opens it. One reading app is
+open at a time. What moves folders calls `readers::folder_moved`, so
+that their choices go along; a shell opens a book with
+`Kernel::open_book`.
 
 | What | Standard | |
 |---|---|---|

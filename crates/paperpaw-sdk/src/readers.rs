@@ -18,8 +18,15 @@
 //!   see [`format_setting`]), else the default one (`settings::READING_APP`),
 //!   else the screen bound to `slots::READER`. [`open_with`] opens it with
 //!   a reader named.
+//! - A reader that cannot open a book after all (a file it does not know)
+//!   says so with [`cannot_open`]: the kernel opens it with the next
+//!   reader in that order, at last the slot's own screen, which shows why
+//!   it cannot. Opening a book closes another reading app open in the
+//!   slot, so that one book is held at a time.
 //! - The choices for a book and for a folder are kept ([`remember`]): the
-//!   book's moved and removed with it, the folders' in one small file.
+//!   book's moved and removed with it, the folders' in one small file
+//!   (moved with [`folder_moved`] by whatever moves a folder).
+//!   A choice of a reader no longer installed is passed over silently.
 //!   They are read when a book opens, never kept in memory. [`ask`] lets
 //!   the reader choose (*Open with*, a folder's reading app): the kernel
 //!   lists the readers that fit, keeps the one chosen and, for a book,
@@ -143,6 +150,15 @@ pub const FOLDERS: &str = crate::data_path!("readers-folders.txt");
 /// The largest file of choices read.
 const LIMIT: usize = 16 * 1024;
 
+/// The parameter of a book's opening with the readers that could not
+/// open it ([`cannot_open`]), comma-separated.
+const PAST: &str = "readers-past";
+
+/// A path as choices are kept by: without `/` at its ends.
+fn plain(path: &str) -> &str {
+    path.trim_matches('/')
+}
+
 /// What a choice is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -154,24 +170,43 @@ pub enum Choice<'a> {
 }
 
 fn book_file(book: &str) -> String {
-    format!("{DIR}/{}.txt", crate::library::key(book))
+    format!("{DIR}/{}.txt", crate::library::key(plain(book)))
 }
 
-/// The folders' choices: (reader, folder).
-fn folders(storage: &dyn Storage) -> Vec<(String, String)> {
-    let Ok(data) = crate::read_file(storage, FOLDERS, LIMIT) else {
-        return Vec::new();
+/// The folders' choices: (reader, folder); none where there is no file.
+/// A line for no folder (the whole card) is left out: it would decide
+/// for every book unseen.
+fn folders(storage: &dyn Storage) -> Result<Vec<(String, String)>, StorageError> {
+    let data = match crate::read_file(storage, FOLDERS, LIMIT) {
+        Ok(data) => data,
+        Err(StorageError::NotFound) => return Ok(Vec::new()),
+        Err(error) => return Err(error),
     };
     let text = String::from_utf8_lossy(&data);
-    text.lines()
+    Ok(text
+        .lines()
         .filter_map(|line| {
             let (reader, folder) = line.split_once('\t')?;
-            Some((reader.to_string(), folder.trim_matches('/').to_string()))
+            let folder = plain(folder);
+            (!folder.is_empty()).then(|| (reader.to_string(), folder.to_string()))
         })
-        .collect()
+        .collect())
+}
+
+/// Writes the folders' choices.
+fn write_folders(storage: &dyn Storage, all: &[(String, String)]) -> Result<(), StorageError> {
+    let text: String = all
+        .iter()
+        .map(|(reader, folder)| format!("{reader}\t{folder}\n"))
+        .collect();
+    let _ = storage.create_dir(crate::data::DIR);
+    storage.write(FOLDERS, text.as_bytes())
 }
 
 /// Keeps `reader` as the one for `choice` (`None` forgets the choice).
+/// The choices kept for folders are read first and never overwritten
+/// unread: where they cannot be read (too many), this fails. A folder
+/// must be one (not the whole card: [`StorageError::InvalidPath`]).
 pub fn remember(
     storage: &dyn Storage,
     choice: Choice<'_>,
@@ -190,21 +225,43 @@ pub fn remember(
             }
         }
         Choice::Folder(folder) => {
-            let folder = folder.trim_matches('/');
-            let mut all: Vec<(String, String)> = folders(storage)
+            let folder = plain(folder);
+            if folder.is_empty() {
+                return Err(StorageError::InvalidPath);
+            }
+            let mut all: Vec<(String, String)> = folders(storage)?
                 .into_iter()
                 .filter(|(_, f)| f != folder)
                 .collect();
             if let Some(reader) = reader {
                 all.push((reader.as_str().to_string(), folder.to_string()));
             }
-            let text: String = all
-                .iter()
-                .map(|(reader, folder)| format!("{reader}\t{folder}\n"))
-                .collect();
-            let _ = storage.create_dir(crate::data::DIR);
-            storage.write(FOLDERS, text.as_bytes())
+            write_folders(storage, &all)
         }
+    }
+}
+
+/// The folder `from` is now at `to` (moved or renamed): the choices kept
+/// for it and the folders in it go along. Whatever moves folders (a file
+/// manager) calls it; the choices for books go along with the books.
+pub fn folder_moved(storage: &dyn Storage, from: &str, to: &str) -> Result<(), StorageError> {
+    let (from, to) = (plain(from), plain(to));
+    if from.is_empty() || to.is_empty() || from == to {
+        return Ok(());
+    }
+    let mut all = folders(storage)?;
+    let mut moved = false;
+    for (_, folder) in &mut all {
+        let rest = match folder.strip_prefix(from) {
+            Some(rest) if rest.is_empty() || rest.starts_with('/') => rest.to_string(),
+            _ => continue,
+        };
+        *folder = format!("{to}{rest}");
+        moved = true;
+    }
+    match moved {
+        true => write_folders(storage, &all),
+        false => Ok(()),
     }
 }
 
@@ -217,8 +274,9 @@ pub fn remembered(storage: &dyn Storage, choice: Choice<'_>) -> Option<String> {
             (!reader.is_empty()).then_some(reader)
         }
         Choice::Folder(folder) => {
-            let folder = folder.trim_matches('/');
+            let folder = plain(folder);
             folders(storage)
+                .ok()?
                 .into_iter()
                 .find(|(_, f)| f == folder)
                 .map(|(reader, _)| reader)
@@ -229,25 +287,34 @@ pub fn remembered(storage: &dyn Storage, choice: Choice<'_>) -> Option<String> {
 /// The reader chosen for the book at `path`: for the book, else for the
 /// nearest folder it is in, else for its format, else the default; one
 /// there that reads its format. `None`: the screen bound to
-/// `slots::READER`.
+/// `slots::READER`. A choice of a reader not installed (any more) is
+/// passed over.
 pub fn chosen<'e>(env: &'e Env<'_>, path: &str) -> Option<&'e ReaderSpec> {
+    chosen_past(env, path, &[])
+}
+
+/// As [`chosen`], passing over the readers in `past` (those that could
+/// not open the book).
+fn chosen_past<'e>(env: &'e Env<'_>, path: &str, past: &[&str]) -> Option<&'e ReaderSpec> {
+    let path = plain(path);
     let format = env
         .formats
         .for_file(env.storage, path)
         .map(|f| f.id.clone());
-    let fits = |id: &str| env.readers.get(id).filter(|r| r.reads(format.as_ref()));
+    let fits = |id: &str| {
+        env.readers
+            .get(id)
+            .filter(|r| r.reads(format.as_ref()) && !past.contains(&r.id.as_str()))
+    };
     if let Some(reader) = remembered(env.storage, Choice::Book(path)).and_then(|id| fits(&id)) {
         return Some(reader);
     }
     // The nearest folder with a choice.
-    let mut kept = folders(env.storage);
+    let mut kept = folders(env.storage).unwrap_or_default();
     kept.sort_by_key(|(_, folder)| core::cmp::Reverse(folder.len()));
-    let path_trimmed = path.trim_matches('/');
     let in_folder = kept.iter().find(|(_, folder)| {
-        folder.is_empty()
-            || path_trimmed
-                .strip_prefix(folder.as_str())
-                .is_some_and(|rest| rest.starts_with('/'))
+        path.strip_prefix(folder.as_str())
+            .is_some_and(|rest| rest.starts_with('/'))
     });
     if let Some(reader) = in_folder.and_then(|(id, _)| fits(id)) {
         return Some(reader);
@@ -265,17 +332,48 @@ pub fn chosen<'e>(env: &'e Env<'_>, path: &str) -> Option<&'e ReaderSpec> {
 /// Opens the book at `path` with the reader chosen for it (see
 /// [`chosen`]), in the reader's slot: nothing is read before it runs.
 pub fn open(path: impl Into<String>) -> Command {
-    Command::OpenBook(path.into())
+    Command::OpenBook(Params::new().with(params::PATH, path.into()))
 }
 
-/// What opening the book at `path` is now: the reader chosen for it in
-/// the reader's slot, or the slot's own screen (the kernel runs
-/// [`Command::OpenBook`] so).
-pub fn resolve(env: &Env<'_>, path: &str) -> Command {
-    let params = Params::new().with(params::PATH, path.to_string());
-    match chosen(env, path) {
-        Some(reader) => Command::OpenInSlot(slots::READER, reader.screen.clone(), params),
-        None => Command::OpenSlot(slots::READER, params),
+/// What a reader that cannot open a book after all answers (instead of
+/// showing an error of its own): `params` are those it was opened with,
+/// `reader` its own id. The kernel opens the book with the next reader
+/// for it, at last the slot's own screen; past that, nothing.
+pub fn cannot_open(params: &Params, reader: &Id) -> Command {
+    let mut past = String::from(params.get(PAST).unwrap_or_default());
+    if !past.split(',').any(|p| p == reader.as_str()) {
+        if !past.is_empty() {
+            past.push(',');
+        }
+        past.push_str(reader.as_str());
+    }
+    let path = params.get(params::PATH).unwrap_or_default().to_string();
+    Command::OpenBook(Params::new().with(params::PATH, path).with(PAST, past))
+}
+
+/// The readers that could not open the book opened with `params`.
+pub fn past(params: &Params) -> impl Iterator<Item = &str> {
+    params
+        .get(PAST)
+        .unwrap_or_default()
+        .split(',')
+        .filter(|p| !p.is_empty())
+}
+
+/// What opening a book (`params` of [`Command::OpenBook`]) is now: the
+/// reader chosen for it in the reader's slot, or the slot's own screen
+/// (the kernel runs [`Command::OpenBook`] so), passing over the readers
+/// that could not open it.
+pub fn resolve(env: &Env<'_>, params: &Params) -> Command {
+    let path = params.get(params::PATH).unwrap_or_default();
+    let past: Vec<&str> = past(params).collect();
+    let mut opened = Params::new().with(params::PATH, path.to_string());
+    if !past.is_empty() {
+        opened = opened.with(PAST, params.get(PAST).unwrap_or_default().to_string());
+    }
+    match chosen_past(env, path, &past) {
+        Some(reader) => Command::OpenInSlot(slots::READER, reader.screen.clone(), opened),
+        None => Command::OpenSlot(slots::READER, opened),
     }
 }
 
@@ -339,6 +437,60 @@ mod tests {
         );
         remember(&storage, Choice::Book("books/a.cbz"), None).unwrap();
         assert_eq!(remembered(&storage, Choice::Book("books/a.cbz")), None);
+        // A book is the same with `/` at its ends or without.
+        remember(&storage, Choice::Book("/books/a.cbz"), Some(&comics)).unwrap();
+        assert!(remembered(&storage, Choice::Book("books/a.cbz")).is_some());
+        // Not the whole card.
+        assert_eq!(
+            remember(&storage, Choice::Folder("/"), Some(&comics)),
+            Err(StorageError::InvalidPath)
+        );
+    }
+
+    #[test]
+    fn folder_choices_follow_their_folders() {
+        let storage = MemoryStorage::new();
+        let comics = Id::new_static("comics.reader");
+        remember(&storage, Choice::Folder("manga"), Some(&comics)).unwrap();
+        remember(&storage, Choice::Folder("manga/old"), Some(&comics)).unwrap();
+        remember(&storage, Choice::Folder("mangaka"), Some(&comics)).unwrap();
+        folder_moved(&storage, "/manga/", "comics/manga").unwrap();
+        assert!(remembered(&storage, Choice::Folder("comics/manga")).is_some());
+        assert!(remembered(&storage, Choice::Folder("comics/manga/old")).is_some());
+        assert!(remembered(&storage, Choice::Folder("manga")).is_none());
+        // Only the folder, not one whose name starts alike.
+        assert!(remembered(&storage, Choice::Folder("mangaka")).is_some());
+    }
+
+    #[test]
+    fn choices_that_cannot_be_read_are_not_overwritten() {
+        let big = "x\tfolder\n".repeat(LIMIT / 8);
+        let storage = MemoryStorage::new().with(FOLDERS, big.as_str());
+        let comics = Id::new_static("comics.reader");
+        assert_eq!(
+            remember(&storage, Choice::Folder("manga"), Some(&comics)),
+            Err(StorageError::TooLarge)
+        );
+        let kept = crate::read_file(&storage, FOLDERS, 2 * LIMIT).unwrap();
+        assert_eq!(kept.len(), big.len());
+    }
+
+    #[test]
+    fn a_reader_that_cannot_open_is_passed_over() {
+        let comics = Id::new_static("comics.reader");
+        let other = Id::new_static("other.reader");
+        let opened = Params::new().with(params::PATH, "a.cbz");
+        let Command::OpenBook(again) = cannot_open(&opened, &comics) else {
+            panic!("not opened again");
+        };
+        assert_eq!(again.get(params::PATH), Some("a.cbz"));
+        let Command::OpenBook(again) = cannot_open(&again, &other) else {
+            panic!("not opened again");
+        };
+        assert_eq!(
+            past(&again).collect::<Vec<_>>(),
+            ["comics.reader", "other.reader"]
+        );
     }
 
     #[test]

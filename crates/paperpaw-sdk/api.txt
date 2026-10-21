@@ -2278,14 +2278,17 @@ pub const paperpaw_sdk::readers::DEFAULT: &str
 pub const paperpaw_sdk::readers::DIR: &str
 pub const paperpaw_sdk::readers::FOLDERS: &str
 pub fn paperpaw_sdk::readers::ask(paperpaw_sdk::readers::Choice<'_>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::readers::cannot_open(&paperpaw_sdk::Params, &paperpaw_sdk::Id) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::readers::chosen<'e>(&'e paperpaw_sdk::Env<'_>, &str) -> core::option::Option<&'e paperpaw_sdk::readers::ReaderSpec>
+pub fn paperpaw_sdk::readers::folder_moved(&dyn paperpaw_platform::storage::Storage, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::readers::format_setting(&paperpaw_sdk::Id) -> alloc::string::String
 pub fn paperpaw_sdk::readers::name<'e>(&'e paperpaw_sdk::Env<'_>, &'e paperpaw_sdk::readers::ReaderSpec) -> alloc::borrow::Cow<'e, str>
 pub fn paperpaw_sdk::readers::open(impl core::convert::Into<alloc::string::String>) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::readers::open_with(&str, &paperpaw_sdk::readers::ReaderSpec) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::readers::past(&paperpaw_sdk::Params) -> impl core::iter::traits::iterator::Iterator<Item = &str>
 pub fn paperpaw_sdk::readers::remember(&dyn paperpaw_platform::storage::Storage, paperpaw_sdk::readers::Choice<'_>, core::option::Option<&paperpaw_sdk::Id>) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::readers::remembered(&dyn paperpaw_platform::storage::Storage, paperpaw_sdk::readers::Choice<'_>) -> core::option::Option<alloc::string::String>
-pub fn paperpaw_sdk::readers::resolve(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::readers::resolve(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> paperpaw_sdk::Command
 pub mod paperpaw_sdk::reading
 pub struct paperpaw_sdk::reading::DroppedRuns
 impl paperpaw_sdk::reading::DroppedRuns
@@ -3751,7 +3754,7 @@ pub paperpaw_sdk::Command::InstallPlugin(paperpaw_sdk::Id, alloc::string::String
 pub paperpaw_sdk::Command::LoadPlugin(alloc::string::String)
 pub paperpaw_sdk::Command::NoNetwork
 pub paperpaw_sdk::Command::Notify(alloc::string::String)
-pub paperpaw_sdk::Command::OpenBook(alloc::string::String)
+pub paperpaw_sdk::Command::OpenBook(paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::OpenInSlot(paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::OpenScreen(paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::OpenSlot(paperpaw_sdk::Id, paperpaw_sdk::Params)
@@ -4715,6 +4718,7 @@ pub fn paperpaw_sdk::setting::Setting<T>::fmt(&self, &mut core::fmt::Formatter<'
 #[non_exhaustive] pub struct paperpaw_sdk::SettingExtra
 pub paperpaw_sdk::SettingExtra::editor: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::SettingExtra::follows: core::option::Option<&'static str>
+pub paperpaw_sdk::SettingExtra::keeps_unknown: bool
 pub paperpaw_sdk::SettingExtra::secret: bool
 pub paperpaw_sdk::SettingExtra::section: core::option::Option<alloc::borrow::Cow<'static, str>>
 pub paperpaw_sdk::SettingExtra::slider: bool
@@ -4723,6 +4727,7 @@ pub paperpaw_sdk::SettingExtra::unit: core::option::Option<alloc::borrow::Cow<'s
 impl paperpaw_sdk::SettingExtra
 pub const fn paperpaw_sdk::SettingExtra::editor(self, paperpaw_sdk::Id) -> Self
 pub const fn paperpaw_sdk::SettingExtra::follows(self, &'static str) -> Self
+pub const fn paperpaw_sdk::SettingExtra::keeps_unknown(self) -> Self
 pub const fn paperpaw_sdk::SettingExtra::new() -> Self
 pub const fn paperpaw_sdk::SettingExtra::secret(self) -> Self
 pub const fn paperpaw_sdk::SettingExtra::section(self, &'static str) -> Self
@@ -4751,6 +4756,7 @@ pub paperpaw_sdk::SettingSpec::level: paperpaw_sdk::Level
 pub paperpaw_sdk::SettingSpec::scoped: bool
 pub paperpaw_sdk::SettingSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::SettingSpec
+pub fn paperpaw_sdk::SettingSpec::accepts(&self, &paperpaw_sdk::SettingValue) -> bool
 pub const fn paperpaw_sdk::SettingSpec::advanced(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::choice(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::Choices, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub const fn paperpaw_sdk::SettingSpec::described(self, &'static str) -> Self
@@ -4765,10 +4771,12 @@ pub const fn paperpaw_sdk::SettingSpec::fixed_text(&'static str, &'static str, &
 pub const fn paperpaw_sdk::SettingSpec::for_advanced(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::group(self, paperpaw_sdk::Id) -> Self
 pub const fn paperpaw_sdk::SettingSpec::guarded(self) -> Self
+pub fn paperpaw_sdk::SettingSpec::keeps_unknown(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::language(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::SettingSpec::list(&paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::SettingSpec::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::SettingKind, paperpaw_sdk::SettingValue) -> Self
 pub fn paperpaw_sdk::SettingSpec::number(&paperpaw_sdk::setting::Setting<i64>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, i64, i64, i64) -> Self
+pub fn paperpaw_sdk::SettingSpec::parse(&self, &str) -> core::option::Option<paperpaw_sdk::SettingValue>
 pub const fn paperpaw_sdk::SettingSpec::scoped(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::secret(self) -> Self
 pub fn paperpaw_sdk::SettingSpec::section(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self

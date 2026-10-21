@@ -2,7 +2,9 @@
 //! chosen for the book, else for its folder, else for its format, else
 //! the default one, else the shipped reader; a reader is offered only
 //! for the formats it reads; the choices outlast a restart; chosen with
-//! the buttons of an X4 or by touch.
+//! the buttons of an X4 or by touch. One reading app is open at a time;
+//! one that cannot open a book passes it on; a choice of a reader that
+//! is gone is passed over silently.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -124,6 +126,69 @@ impl Plugin for Plain {
     }
 }
 
+/// A reader of plain text that cannot open any after all.
+struct Picky;
+
+const PICKY: Id = Id::new_static("picky.app");
+const PICKY_SCREEN: Id = Id::new_static("picky.screen");
+
+/// Says at once that it cannot open the book it was opened with.
+struct Refusing(paperpaw_sdk::Params);
+
+impl Screen for Refusing {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
+    }
+
+    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        cx.command(readers::cannot_open(&self.0, &PICKY));
+    }
+}
+
+impl Plugin for Picky {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("picky"), "Picky", SDK_VERSION)
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_screen(ScreenSpec::new(
+            PICKY_SCREEN,
+            "picky.screen",
+            Box::new(|_, params| Box::new(Refusing(params.clone()))),
+        ))?;
+        r.add_reader(
+            ReaderSpec::new(PICKY, PICKY_SCREEN).formats(&[Id::new_static("format-txt.txt")]),
+        )
+    }
+}
+
+/// Tries readers whose screens are not its own, or not there.
+struct Borrower;
+
+impl Plugin for Borrower {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("borrower"), "Borrower", SDK_VERSION)
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        let other = r.add_reader(ReaderSpec::new(
+            Id::new_static("borrower.app"),
+            PLAIN_SCREEN,
+        ));
+        assert!(matches!(other, Err(RegisterError::Namespace { .. })));
+        let missing = r.add_reader(ReaderSpec::new(
+            Id::new_static("borrower.app"),
+            Id::new_static("borrower.screen"),
+        ));
+        assert!(matches!(missing, Err(RegisterError::Invalid { .. })));
+        Ok(())
+    }
+}
+
 struct App {
     kernel: Kernel,
     now: u64,
@@ -141,6 +206,18 @@ impl App {
 
     /// The same on `device`.
     fn on(device: DeviceInfo, storage: MemoryStorage, config: &str, plain: bool) -> Self {
+        Self::of(device, storage, config, |b| {
+            if plain { b.plugin(Plain) } else { b }
+        })
+    }
+
+    /// The same, with the plugins `more` adds.
+    fn of(
+        device: DeviceInfo,
+        storage: MemoryStorage,
+        config: &str,
+        more: impl FnOnce(paperpaw_core::KernelBuilder) -> paperpaw_core::KernelBuilder,
+    ) -> Self {
         let storage = storage.with(".paperpaw/plugins/setup/done", "");
         let builder = Kernel::builder(device)
             .storage(storage)
@@ -148,11 +225,8 @@ impl App {
             .user_config(format!(
                 "[home]\ngesture-tips = false\n[core]\nlanguage = en\n{config}"
             ));
-        let mut builder = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs);
-        if plain {
-            builder = builder.plugin(Plain);
-        }
-        let mut kernel = builder.build().unwrap();
+        let builder = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs);
+        let mut kernel = more(builder).build().unwrap();
         let effects = kernel.start(Instant(0));
         let mut app = Self { kernel, now: 0 };
         app.settle(effects);
@@ -215,6 +289,17 @@ impl App {
                 self.kernel.tick(Instant(self.now));
             }
         }
+        self.kernel
+            .active_screen()
+            .map(|id| id.to_string())
+            .unwrap_or_default()
+    }
+
+    /// The screen the book at `path` opens in, as a shell opens it.
+    fn book(&mut self, path: &str) -> String {
+        self.now += 100;
+        let effects = self.kernel.open_book(Instant(self.now), path);
+        self.settle(effects);
         self.kernel
             .active_screen()
             .map(|id| id.to_string())
@@ -301,8 +386,9 @@ fn the_settings_offer_the_readers_of_each_format() {
     };
     // Text: the default, the shipped reader, the plain one.
     assert_eq!(choices("core.reading-app.format-txt.txt"), 3);
-    // EPUB: only the shipped reader reads it, nothing to choose.
-    assert_eq!(choices("core.reading-app.format-epub.epub"), 1);
+    // EPUB: only the shipped reader reads it, nothing to choose: no
+    // setting at all.
+    assert!(settings.spec("core.reading-app.format-epub.epub").is_none());
     assert_eq!(choices("core.reading-app"), 3);
 }
 
@@ -416,11 +502,7 @@ fn focus_on(app: &mut App, name: &str) {
     for _ in 0..40 {
         app.kernel.render(&mut |_, _| {});
         // The topmost focus: an overlay's, not the screen's below it.
-        let focused = app
-            .kernel
-            .describe()
-            .into_iter()
-            .rfind(|p| p.focused);
+        let focused = app.kernel.describe().into_iter().rfind(|p| p.focused);
         if focused.is_some_and(|p| p.label.starts_with(name)) {
             return;
         }
@@ -526,4 +608,65 @@ fn shots() {
         }
         shot(&mut app, &dir, &format!("boox-reading-settings-{when}"));
     }
+}
+
+/// The screens open in the reader's slot (one of the reading apps').
+fn reading(app: &App) -> Vec<String> {
+    app.kernel
+        .screens()
+        .map(ToString::to_string)
+        .filter(|s| s == SHIPPED || s == "plain.screen" || s == "picky.screen")
+        .collect()
+}
+
+#[test]
+fn one_reading_app_is_open_at_a_time() {
+    let mut app = App::new(books(), "");
+    app.opens("plain.ask-book");
+    app.opens("core.down");
+    assert_eq!(app.opens("core.confirm"), "plain.screen");
+    // Another book, in the shipped reader: the plain one closes.
+    assert_eq!(app.opens("plain.epub"), SHIPPED);
+    assert_eq!(reading(&app), [SHIPPED]);
+    assert_eq!(app.opens("plain.text"), "plain.screen");
+    assert_eq!(reading(&app), ["plain.screen"]);
+}
+
+#[test]
+fn a_reader_that_cannot_open_a_book_passes_it_on() {
+    let config = "reading-app.format-txt.txt = picky.app\n";
+    let mut app = App::of(DEVICE, books(), config, |b| b.plugin(Plain).plugin(Picky));
+    // Picky first, which passes it on: by the order the next is the
+    // default (none), then the shipped reader.
+    assert_eq!(app.opens("plain.text"), SHIPPED);
+    assert_eq!(reading(&app), [SHIPPED]);
+}
+
+#[test]
+fn a_reading_app_that_is_gone_is_passed_over_silently() {
+    let config = "reading-app = gone.app\nreading-app.format-txt.txt = gone.app\n";
+    let mut app = App::with(books(), config, false);
+    let warnings = app.kernel.take_warnings();
+    assert!(warnings.is_empty(), "{warnings:?}");
+    assert_eq!(app.book(TEXT), SHIPPED);
+    // With the plain reader: the per-format choice of the gone one, kept,
+    // is passed over too.
+    let mut app = App::with(books(), config, true);
+    assert!(app.kernel.take_warnings().is_empty());
+    assert_eq!(app.opens("plain.text"), SHIPPED);
+}
+
+#[test]
+fn a_book_is_the_same_with_slashes_at_its_ends() {
+    let storage = books();
+    readers::remember(&storage, Choice::Book("/books/notes.txt"), Some(&PLAIN)).unwrap();
+    let mut app = App::new(storage, "");
+    assert_eq!(app.opens("plain.text"), "plain.screen");
+}
+
+#[test]
+fn readers_read_in_screens_of_their_own() {
+    // Borrower's tries are refused (it asserts so).
+    let mut app = App::of(DEVICE, books(), "", |b| b.plugin(Borrower));
+    assert_eq!(app.book(TEXT), SHIPPED);
 }

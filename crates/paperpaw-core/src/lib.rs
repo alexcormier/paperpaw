@@ -1021,6 +1021,18 @@ impl Kernel {
         self.finish()
     }
 
+    /// Opens the book at `path` with the reading app chosen for it (see
+    /// `paperpaw_sdk::readers`): for a shell asked to open a file.
+    pub fn open_book(&mut self, now: Instant, path: &str) -> Effects {
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.shared.reader = true;
+        self.now = now;
+        self.last_activity = now;
+        self.output.commands.push(paperpaw_sdk::readers::open(path));
+        self.run_commands();
+        self.finish()
+    }
+
     /// Opens the screen `screen` with `params`, as a plugin would, e.g.
     /// asked by a shell's remote control or a test.
     pub fn open_screen(&mut self, now: Instant, screen: Id, params: Params) -> Effects {
@@ -1059,7 +1071,7 @@ impl Kernel {
     ) -> Result<Effects, &'static str> {
         // A placement's too (`widgets.clock@2.face`).
         let spec = self.shared.settings.spec(id).ok_or("no such setting")?;
-        let value = spec.kind.parse(text).ok_or("not a value of this setting")?;
+        let value = spec.parse(text).ok_or("not a value of this setting")?;
         let id = Id::parse(id).map_err(|_| "no such setting")?;
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;

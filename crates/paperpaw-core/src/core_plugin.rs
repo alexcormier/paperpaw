@@ -149,7 +149,10 @@ fn register_reading_apps(r: &mut Registrar) -> Result<(), RegisterError> {
             "f" => Choice::Folder(path),
             _ => Choice::Book(path),
         };
-        let _ = readers::remember(env.storage, choice, reader.as_ref());
+        if readers::remember(env.storage, choice, reader.as_ref()).is_err() {
+            let text = env.i18n.tr("core.reading-app.not-kept");
+            out.push(Command::Notify(String::from(text)));
+        }
         if kind == "b" {
             out.push(readers::open(path));
         }
@@ -936,7 +939,10 @@ static MARGINS_ENDS: SettingExtra = SettingExtra::new()
 static IN_PAGE: SettingExtra = SettingExtra::new().section(setting_sections::PAGE);
 /// The reading apps' part of the reading settings: the default one and
 /// one for each format (registered once the formats are known).
-static IN_APPS: SettingExtra = SettingExtra::new().section("core.section.reading-apps");
+/// A reading app chosen whose plugin is gone is kept, and passed over.
+static IN_APPS: SettingExtra = SettingExtra::new()
+    .section("core.section.reading-apps")
+    .keeps_unknown();
 static IN_BEHAVIOUR: SettingExtra = SettingExtra::new().section(setting_sections::BEHAVIOUR);
 
 /// The language, night mode, speech and the edges for swipes.

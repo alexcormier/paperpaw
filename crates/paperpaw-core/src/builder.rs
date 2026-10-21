@@ -777,12 +777,18 @@ impl Kernel {
                 .reading(Some(&format))
                 .map(|r| Cow::Owned(r.id.as_str().to_string()))
                 .collect();
-            if reading.len() > 1 {
+            let several = reading.len() > 1;
+            if several {
                 choices.extend(reading);
             }
             let id = paperpaw_sdk::readers::format_setting(&format);
             if self.shared.settings.spec(&id).is_some() {
                 self.shared.settings.set_choices(&id, choices);
+                continue;
+            }
+            // Nothing to choose where one reader reads it: no setting
+            // (memory on small devices), until another comes.
+            if !several {
                 continue;
             }
             let Ok(setting) = Id::parse(&id) else {
@@ -796,7 +802,8 @@ impl Kernel {
             )
             .group(paperpaw_sdk::builtin::groups::READING)
             .section("core.section.reading-apps")
-            .described("core.setting.reading-app.format.help");
+            .described("core.setting.reading-app.format.help")
+            .keeps_unknown();
             let _ = self.shared.settings.define(spec);
         }
     }

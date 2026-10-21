@@ -808,6 +808,8 @@ const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 /// follow it. Says so where the data of some books could not go along.
 fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) -> Option<String> {
     follow_folders(env, from, to, cx);
+    // The reading apps chosen for the folder and those in it go along.
+    let _ = paperpaw_sdk::readers::folder_moved(env.storage, from, to);
     let (from, to) = (from.trim_matches('/'), to.trim_matches('/'));
     let mut told = 0;
     let mut more = false;

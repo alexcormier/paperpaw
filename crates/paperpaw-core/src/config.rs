@@ -182,7 +182,7 @@ impl Kernel {
                     .settings
                     .specs()
                     .find(|spec| spec.id.as_str() == id)
-                    .and_then(|spec| Some((spec.id.clone(), spec.kind.parse(&value)?)));
+                    .and_then(|spec| Some((spec.id.clone(), spec.parse(&value)?)));
                 if let Some((id, value)) = parsed {
                     values.insert(id, value);
                 }
@@ -493,8 +493,19 @@ impl Kernel {
                         None if MOVED.iter().any(|(old, _)| *old == id) => continue,
                         None => (id, value),
                     };
-                    if let Err(error) = self.shared.settings.set_from_text(&id, &value) {
-                        self.warn(WarningSource::UserConfig, line, format!("`{id}`: {error}"));
+                    match self.shared.settings.set_from_text(&id, &value) {
+                        // The reading app of a format with one reader now
+                        // (another was removed): nothing to choose, nothing
+                        // to tell.
+                        Err(paperpaw_sdk::SettingError::Unknown)
+                            if id.starts_with(&format!(
+                                "{}.",
+                                paperpaw_sdk::builtin::settings::READING_APP.as_str()
+                            )) => {}
+                        Err(error) => {
+                            self.warn(WarningSource::UserConfig, line, format!("`{id}`: {error}"));
+                        }
+                        Ok(()) => {}
                     }
                 }
             }

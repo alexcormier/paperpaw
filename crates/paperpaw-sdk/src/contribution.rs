@@ -823,7 +823,24 @@ impl Registrar {
     /// Adds a reading app: a screen of the plugin that shows books of
     /// some formats, offered where books open (see
     /// [`readers`](crate::readers)).
+    /// Its screen is one the plugin added before.
     pub fn add_reader(&mut self, reader: crate::readers::ReaderSpec) -> Result<(), RegisterError> {
+        if !reader.screen.is_owned_by(&self.plugin) {
+            return Err(RegisterError::Namespace { id: reader.screen });
+        }
+        let added = self
+            .contributions
+            .iter()
+            .any(|c| matches!(c, Contribution::Screen(s) if s.id == reader.screen));
+        if !added {
+            return Err(RegisterError::Invalid {
+                message: Cow::Owned(alloc::format!(
+                    "`{}` reads in `{}`, a screen not added",
+                    reader.id,
+                    reader.screen
+                )),
+            });
+        }
         self.add(Contribution::Reader(reader))
     }
 
