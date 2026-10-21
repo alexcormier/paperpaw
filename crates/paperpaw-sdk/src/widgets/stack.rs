@@ -23,6 +23,9 @@ pub struct Stack {
     widgets: Vec<Shown>,
 }
 
+/// A widget made for a stack, with its id and its height.
+type Made = (String, Box<dyn Widget>, u16);
+
 /// A widget of a stack, with its id and where it goes.
 struct Shown {
     id: String,
@@ -45,7 +48,7 @@ impl Stack {
         let gap = style.gap as u16;
         let width = area.width.saturating_sub(2 * margin);
         // Free spaces (`None`) share the room the others leave.
-        let mut made: Vec<Option<(String, Box<dyn Widget>, u16)>> = Vec::new();
+        let mut made: Vec<Option<Made>> = Vec::new();
         let mut total = 0u16;
         let mut shown = 0;
         for id in crate::status::item_ids(list) {

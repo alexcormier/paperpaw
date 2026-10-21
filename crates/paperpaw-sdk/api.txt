@@ -623,6 +623,7 @@ pub const paperpaw_sdk::builtin::slots::BROWSER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::CHOICE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::CHOOSE_FOLDER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::CHOOSE_VALUE: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::slots::EDIT_WIDGETS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::FOOTNOTE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::HOME: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::KEYBOARD: paperpaw_sdk::Id
@@ -813,6 +814,7 @@ pub paperpaw_sdk::contribution::Contribution::UiLook::painters: &'static paperpa
 pub paperpaw_sdk::contribution::Contribution::UiLook::priority: paperpaw_sdk::Priority
 pub paperpaw_sdk::contribution::Contribution::Voice(alloc::boxed::Box<paperpaw_sdk::voices::VoiceSpec>)
 pub paperpaw_sdk::contribution::Contribution::Widget(alloc::boxed::Box<paperpaw_sdk::widgets::WidgetSpec>)
+pub paperpaw_sdk::contribution::Contribution::WidgetPlace(alloc::boxed::Box<paperpaw_sdk::widgets::WidgetPlace>)
 pub paperpaw_sdk::contribution::Contribution::Work(alloc::boxed::Box<paperpaw_sdk::work::WorkSpec>)
 impl paperpaw_sdk::contribution::Contribution
 pub fn paperpaw_sdk::contribution::Contribution::id(&self) -> core::option::Option<&paperpaw_sdk::Id>
@@ -866,6 +868,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_text_filter(&mut self, paperpa
 pub fn paperpaw_sdk::contribution::Registrar::add_translations(&mut self, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_voice(&mut self, paperpaw_sdk::voices::VoiceSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_widget(&mut self, paperpaw_sdk::widgets::WidgetSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_widget_place(&mut self, paperpaw_sdk::widgets::WidgetPlace) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_work(&mut self, paperpaw_sdk::work::WorkSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::bind_font(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::bind_slot(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -2732,14 +2735,14 @@ pub fn paperpaw_sdk::status::StatusFrame<'a>::place(self, &'a str) -> Self
 pub paperpaw_sdk::status::StatusItemSpec::id: paperpaw_sdk::Id
 pub paperpaw_sdk::status::StatusItemSpec::min_width: f32
 pub paperpaw_sdk::status::StatusItemSpec::priority: u8
-pub paperpaw_sdk::status::StatusItemSpec::tap: core::option::Option<paperpaw_sdk::status::StatusTapFn>
+pub paperpaw_sdk::status::StatusItemSpec::tap: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::status::StatusItemSpec::title: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::status::StatusItemSpec::value: paperpaw_sdk::status::StatusFn
 impl paperpaw_sdk::status::StatusItemSpec
 pub fn paperpaw_sdk::status::StatusItemSpec::min_width(self, f32) -> Self
 pub fn paperpaw_sdk::status::StatusItemSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::status::StatusFn) -> Self
 pub fn paperpaw_sdk::status::StatusItemSpec::priority(self, u8) -> Self
-pub fn paperpaw_sdk::status::StatusItemSpec::tap(self, paperpaw_sdk::status::StatusTapFn) -> Self
+pub fn paperpaw_sdk::status::StatusItemSpec::tap(self, paperpaw_sdk::Id) -> Self
 impl core::fmt::Debug for paperpaw_sdk::status::StatusItemSpec
 pub fn paperpaw_sdk::status::StatusItemSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::status::StatusItems
@@ -2749,12 +2752,11 @@ pub fn paperpaw_sdk::status::StatusItems::iter(&self) -> impl core::iter::traits
 pub fn paperpaw_sdk::status::StatusItems::line_signature(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> alloc::string::String
 pub fn paperpaw_sdk::status::StatusItems::line_targets(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>) -> alloc::vec::Vec<paperpaw_sdk::status::StatusTarget>
 pub fn paperpaw_sdk::status::StatusItems::lines(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
-pub fn paperpaw_sdk::status::StatusItems::min_width(&self, &str) -> f32
 pub fn paperpaw_sdk::status::StatusItems::new() -> Self
 pub fn paperpaw_sdk::status::StatusItems::place(&self, &str) -> core::option::Option<&paperpaw_sdk::status::Place>
 pub fn paperpaw_sdk::status::StatusItems::places(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::status::Place>
 pub fn paperpaw_sdk::status::StatusItems::priority(&self, &str) -> u8
-pub fn paperpaw_sdk::status::StatusItems::tap(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::Command>
+pub fn paperpaw_sdk::status::StatusItems::tap(&self, &str, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::Command>
 pub fn paperpaw_sdk::status::StatusItems::title(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::status::StatusItems::value(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::status::StatusValue>
 #[non_exhaustive] pub struct paperpaw_sdk::status::StatusLine<'a>
@@ -2792,7 +2794,6 @@ pub fn paperpaw_sdk::status::signature(&paperpaw_sdk::Env<'_>, &[&str], &paperpa
 pub type paperpaw_sdk::status::StatusFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::status::StatusValue>>
 pub type paperpaw_sdk::status::StatusLineFn = alloc::boxed::Box<dyn core::ops::function::Fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>)>
 pub type paperpaw_sdk::status::StatusSignatureFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> alloc::string::String>
-pub type paperpaw_sdk::status::StatusTapFn = fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::Command>
 pub type paperpaw_sdk::status::StatusTargetsFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>) -> alloc::vec::Vec<paperpaw_sdk::status::StatusTarget>>
 pub mod paperpaw_sdk::text
 pub use paperpaw_sdk::text::OUTLINES
@@ -3601,6 +3602,15 @@ impl paperpaw_sdk::widgets::look::Padding
 pub fn paperpaw_sdk::widgets::look::Padding::of(&str) -> Self
 pub fn paperpaw_sdk::widgets::look::Padding::pixels(self, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::widgets::look::Frame) -> u16
 pub const fn paperpaw_sdk::widgets::look::Padding::value(self) -> &'static str
+#[non_exhaustive] pub enum paperpaw_sdk::widgets::PlaceKind
+pub paperpaw_sdk::widgets::PlaceKind::Grid
+pub paperpaw_sdk::widgets::PlaceKind::Stack
+#[non_exhaustive] pub enum paperpaw_sdk::widgets::Refresh
+pub paperpaw_sdk::widgets::Refresh::Live
+pub paperpaw_sdk::widgets::Refresh::Nothing
+pub paperpaw_sdk::widgets::Refresh::Read
+pub paperpaw_sdk::widgets::Refresh::ReadOne(paperpaw_sdk::Id)
+pub paperpaw_sdk::widgets::Refresh::Remake
 #[non_exhaustive] pub enum paperpaw_sdk::widgets::Size
 pub paperpaw_sdk::widgets::Size::Fit
 pub paperpaw_sdk::widgets::Size::Large
@@ -3630,6 +3640,26 @@ pub paperpaw_sdk::widgets::Look::paper: paperpaw_platform::pixel::Color
 impl paperpaw_sdk::widgets::look::Look
 pub fn paperpaw_sdk::widgets::look::Look::new(paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color, paperpaw_platform::pixel::Color, paperpaw_platform::pixel::Color, paperpaw_sdk::widgets::look::Frame) -> Self
 pub fn paperpaw_sdk::widgets::look::Look::within(self, paperpaw_platform::geometry::Rect) -> Self
+pub struct paperpaw_sdk::widgets::Stack
+impl paperpaw_sdk::widgets::Stack
+pub fn paperpaw_sdk::widgets::Stack::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
+pub fn paperpaw_sdk::widgets::Stack::ids(&self) -> alloc::vec::Vec<alloc::string::String>
+pub fn paperpaw_sdk::widgets::Stack::is_empty(&self) -> bool
+pub fn paperpaw_sdk::widgets::Stack::new(&paperpaw_sdk::Env<'_>, &str, paperpaw_platform::geometry::Rect) -> Self
+pub fn paperpaw_sdk::widgets::Stack::targets(&self, &paperpaw_sdk::Env<'_>) -> alloc::vec::Vec<paperpaw_sdk::widgets::WidgetTarget>
+pub fn paperpaw_sdk::widgets::Stack::update(&mut self, &paperpaw_sdk::Env<'_>) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::widgets::Stack::update_live(&mut self, &paperpaw_sdk::Env<'_>) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::widgets::Stack::update_one(&mut self, &paperpaw_sdk::Env<'_>, &str) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>
+impl core::fmt::Debug for paperpaw_sdk::widgets::Stack
+pub fn paperpaw_sdk::widgets::Stack::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct paperpaw_sdk::widgets::WidgetPlace
+pub paperpaw_sdk::widgets::WidgetPlace::id: paperpaw_sdk::Id
+pub paperpaw_sdk::widgets::WidgetPlace::kind: paperpaw_sdk::widgets::PlaceKind
+pub paperpaw_sdk::widgets::WidgetPlace::settings: alloc::borrow::Cow<'static, [paperpaw_sdk::Id]>
+pub paperpaw_sdk::widgets::WidgetPlace::title: alloc::borrow::Cow<'static, str>
+impl paperpaw_sdk::widgets::WidgetPlace
+pub const fn paperpaw_sdk::widgets::WidgetPlace::new(paperpaw_sdk::Id, &'static str, &'static [paperpaw_sdk::Id], paperpaw_sdk::widgets::PlaceKind) -> Self
+pub fn paperpaw_sdk::widgets::WidgetPlace::widgets<'e>(&self, &paperpaw_sdk::Env<'e>) -> alloc::vec::Vec<&'e str>
 #[non_exhaustive] pub struct paperpaw_sdk::widgets::WidgetSpec
 pub paperpaw_sdk::widgets::WidgetSpec::category: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::widgets::WidgetSpec::factory: paperpaw_sdk::widgets::WidgetFactory
@@ -3646,8 +3676,10 @@ pub fn paperpaw_sdk::widgets::WidgetSpec::fmt(&self, &mut core::fmt::Formatter<'
 #[non_exhaustive] pub struct paperpaw_sdk::widgets::WidgetTarget
 pub paperpaw_sdk::widgets::WidgetTarget::area: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::widgets::WidgetTarget::command: paperpaw_sdk::Command
+pub paperpaw_sdk::widgets::WidgetTarget::touch: bool
 impl paperpaw_sdk::widgets::WidgetTarget
 pub fn paperpaw_sdk::widgets::WidgetTarget::new(paperpaw_platform::geometry::Rect, paperpaw_sdk::Command) -> Self
+pub fn paperpaw_sdk::widgets::WidgetTarget::touch(paperpaw_platform::geometry::Rect, paperpaw_sdk::Command) -> Self
 pub struct paperpaw_sdk::widgets::Widgets
 impl paperpaw_sdk::widgets::Widgets
 pub fn paperpaw_sdk::widgets::Widgets::category(&self, &str) -> core::option::Option<&str>
@@ -3655,7 +3687,10 @@ pub fn paperpaw_sdk::widgets::Widgets::has(&self, &str) -> bool
 pub fn paperpaw_sdk::widgets::Widgets::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
 pub fn paperpaw_sdk::widgets::Widgets::make(&self, &str, &paperpaw_sdk::Env<'_>) -> core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::widgets::Widget>>
 pub fn paperpaw_sdk::widgets::Widgets::new() -> Self
+pub fn paperpaw_sdk::widgets::Widgets::place(&self, &str) -> core::option::Option<&paperpaw_sdk::widgets::WidgetPlace>
+pub fn paperpaw_sdk::widgets::Widgets::places(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::widgets::WidgetPlace>
 pub fn paperpaw_sdk::widgets::Widgets::preview(&self, &str) -> core::option::Option<&paperpaw_sdk::Id>
+pub fn paperpaw_sdk::widgets::Widgets::shown(&self, &paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::widgets::Widgets::title(&self, &str) -> core::option::Option<&str>
 pub struct paperpaw_sdk::widgets::Wrapped
 impl paperpaw_sdk::widgets::look::Wrapped
@@ -3700,11 +3735,13 @@ pub fn paperpaw_sdk::widgets::has_settings(&paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::widgets::ink_baseline(&paperpaw_sdk::FontHandle<'_>, f32, &str, paperpaw_platform::geometry::Rect) -> i32
 pub fn paperpaw_sdk::widgets::largest_size(f32, f32, impl core::ops::function::FnMut(f32) -> bool) -> core::option::Option<f32>
 pub fn paperpaw_sdk::widgets::line_height(&paperpaw_sdk::Env<'_>, f32) -> u16
+pub fn paperpaw_sdk::widgets::next_minute(&paperpaw_sdk::Env<'_>) -> paperpaw_platform::input::Instant
 pub fn paperpaw_sdk::widgets::padding(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::widgets::look::Padding
 pub fn paperpaw_sdk::widgets::padding_setting(&paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Padding) -> paperpaw_sdk::SettingSpec
 pub const fn paperpaw_sdk::widgets::padding_spec(&'static str, paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Padding) -> paperpaw_sdk::SettingSpec
 pub fn paperpaw_sdk::widgets::part_setting(&paperpaw_sdk::Id, &str, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, bool) -> paperpaw_sdk::SettingSpec
 pub const fn paperpaw_sdk::widgets::part_spec(&'static str, paperpaw_sdk::Id, &'static str, bool) -> paperpaw_sdk::SettingSpec
+pub fn paperpaw_sdk::widgets::refresh(&paperpaw_sdk::Id, &paperpaw_sdk::Params, &str, &[alloc::string::String]) -> paperpaw_sdk::widgets::Refresh
 pub fn paperpaw_sdk::widgets::repeatable(&str) -> bool
 pub fn paperpaw_sdk::widgets::setting_id(&paperpaw_sdk::Id, &str) -> paperpaw_sdk::Id
 pub fn paperpaw_sdk::widgets::settings_group(&paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> paperpaw_sdk::SettingGroupSpec
@@ -4135,6 +4172,7 @@ pub paperpaw_sdk::Contribution::UiLook::painters: &'static paperpaw_sdk::ui::loo
 pub paperpaw_sdk::Contribution::UiLook::priority: paperpaw_sdk::Priority
 pub paperpaw_sdk::Contribution::Voice(alloc::boxed::Box<paperpaw_sdk::voices::VoiceSpec>)
 pub paperpaw_sdk::Contribution::Widget(alloc::boxed::Box<paperpaw_sdk::widgets::WidgetSpec>)
+pub paperpaw_sdk::Contribution::WidgetPlace(alloc::boxed::Box<paperpaw_sdk::widgets::WidgetPlace>)
 pub paperpaw_sdk::Contribution::Work(alloc::boxed::Box<paperpaw_sdk::work::WorkSpec>)
 impl paperpaw_sdk::contribution::Contribution
 pub fn paperpaw_sdk::contribution::Contribution::id(&self) -> core::option::Option<&paperpaw_sdk::Id>
@@ -4884,6 +4922,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_text_filter(&mut self, paperpa
 pub fn paperpaw_sdk::contribution::Registrar::add_translations(&mut self, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_voice(&mut self, paperpaw_sdk::voices::VoiceSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_widget(&mut self, paperpaw_sdk::widgets::WidgetSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_widget_place(&mut self, paperpaw_sdk::widgets::WidgetPlace) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_work(&mut self, paperpaw_sdk::work::WorkSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::bind_font(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::bind_slot(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -5112,14 +5151,14 @@ pub fn paperpaw_sdk::status::StatusFrame<'a>::place(self, &'a str) -> Self
 pub paperpaw_sdk::StatusItemSpec::id: paperpaw_sdk::Id
 pub paperpaw_sdk::StatusItemSpec::min_width: f32
 pub paperpaw_sdk::StatusItemSpec::priority: u8
-pub paperpaw_sdk::StatusItemSpec::tap: core::option::Option<paperpaw_sdk::status::StatusTapFn>
+pub paperpaw_sdk::StatusItemSpec::tap: core::option::Option<paperpaw_sdk::Id>
 pub paperpaw_sdk::StatusItemSpec::title: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::StatusItemSpec::value: paperpaw_sdk::status::StatusFn
 impl paperpaw_sdk::status::StatusItemSpec
 pub fn paperpaw_sdk::status::StatusItemSpec::min_width(self, f32) -> Self
 pub fn paperpaw_sdk::status::StatusItemSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::status::StatusFn) -> Self
 pub fn paperpaw_sdk::status::StatusItemSpec::priority(self, u8) -> Self
-pub fn paperpaw_sdk::status::StatusItemSpec::tap(self, paperpaw_sdk::status::StatusTapFn) -> Self
+pub fn paperpaw_sdk::status::StatusItemSpec::tap(self, paperpaw_sdk::Id) -> Self
 impl core::fmt::Debug for paperpaw_sdk::status::StatusItemSpec
 pub fn paperpaw_sdk::status::StatusItemSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::StatusItems
@@ -5129,12 +5168,11 @@ pub fn paperpaw_sdk::status::StatusItems::iter(&self) -> impl core::iter::traits
 pub fn paperpaw_sdk::status::StatusItems::line_signature(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> alloc::string::String
 pub fn paperpaw_sdk::status::StatusItems::line_targets(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::status::StatusFrame<'_>) -> alloc::vec::Vec<paperpaw_sdk::status::StatusTarget>
 pub fn paperpaw_sdk::status::StatusItems::lines(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
-pub fn paperpaw_sdk::status::StatusItems::min_width(&self, &str) -> f32
 pub fn paperpaw_sdk::status::StatusItems::new() -> Self
 pub fn paperpaw_sdk::status::StatusItems::place(&self, &str) -> core::option::Option<&paperpaw_sdk::status::Place>
 pub fn paperpaw_sdk::status::StatusItems::places(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::status::Place>
 pub fn paperpaw_sdk::status::StatusItems::priority(&self, &str) -> u8
-pub fn paperpaw_sdk::status::StatusItems::tap(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::Command>
+pub fn paperpaw_sdk::status::StatusItems::tap(&self, &str, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::Command>
 pub fn paperpaw_sdk::status::StatusItems::title(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::status::StatusItems::value(&self, &str, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::status::StatusValue>
 #[non_exhaustive] pub struct paperpaw_sdk::StatusLineSpec

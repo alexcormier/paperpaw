@@ -309,7 +309,7 @@ impl Book {
         let context = self.status_context(env);
         let frame = status::frame(env, area, top, &context);
         let id = status::current(env, top, &self.status_lines[usize::from(!top)]);
-        let x = i32::from(point.x);
+        let x = point.x;
         status::targets(env, id, &frame)
             .into_iter()
             .find(|t| (i32::from(t.area.x)..t.area.right() as i32).contains(&x))
