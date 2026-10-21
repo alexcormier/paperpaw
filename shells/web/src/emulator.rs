@@ -143,9 +143,14 @@ impl Emulator {
             "[core]\nlanguage = {}\n{night}[home]\ngesture-tips = false\n",
             self.language
         );
-        let mut device =
-            Device::in_memory(self.profile, Some(config), self.files.clone(), true, added())
-                .map_err(|e| e.to_string())?;
+        let mut device = Device::in_memory(
+            self.profile,
+            Some(config),
+            self.files.clone(),
+            true,
+            added(),
+        )
+        .map_err(|e| e.to_string())?;
         device.start();
         self.device = Some(device);
         Ok(())
@@ -288,7 +293,12 @@ impl Emulator {
             let add = added().ok_or("no plugin with code was added (`set_plugins`)")?;
             let device = self.device.as_ref().ok_or("the device has not started")?;
             for id in code {
-                if !device.kernel.plugins().iter().any(|p| p.manifest.id.as_str() == *id) {
+                if !device
+                    .kernel
+                    .plugins()
+                    .iter()
+                    .any(|p| p.manifest.id.as_str() == *id)
+                {
                     return Err(format!("no plugin `{id}` in the app"));
                 }
                 target.plugins.push((*id).to_string());
@@ -402,12 +412,16 @@ static PLUGINS: std::sync::Mutex<Option<AddPlugins>> = std::sync::Mutex::new(Non
 ///
 /// Its checks name the plugin's id ([`Emulator::check`]).
 pub fn set_plugins(add: AddPlugins) {
-    *PLUGINS.lock().unwrap_or_else(std::sync::PoisonError::into_inner) = Some(add);
+    *PLUGINS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(add);
 }
 
 /// The plugins with code added ([`set_plugins`]).
 fn added() -> Option<AddPlugins> {
-    *PLUGINS.lock().unwrap_or_else(std::sync::PoisonError::into_inner)
+    *PLUGINS
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 /// The darkest a gray e-ink panel shows: its black reflects about a

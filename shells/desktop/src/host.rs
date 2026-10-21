@@ -2,7 +2,7 @@
 //! that passes and random numbers. On a computer with an operating system
 //! they come from it; in a browser (`wasm32`), where neither is reachable
 //! from Rust alone, the shell hands in where to read them
-//! ([`set_clock`], [`set_random`]).
+//! (`set_clock`, [`set_random`]).
 
 /// Random bytes into the buffer; `false` where there are none.
 pub type Random = fn(&mut [u8]) -> bool;

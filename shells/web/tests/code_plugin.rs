@@ -25,7 +25,9 @@ fn a_plugin_with_code_is_added_and_checked() {
     let mut emulator = Emulator::new("xteink-x4", "en", false).unwrap();
     emulator.start().unwrap();
     emulator.advance(10_000);
-    let json = emulator.check(&["lint", "reach", "perf"], &["hello"]).unwrap();
+    let json = emulator
+        .check(&["lint", "reach", "perf"], &["hello"])
+        .unwrap();
     // Each check ran, perf with the app's heap alone (this device's own
     // is no part of it).
     for ran in ["lint.pseudo", "reach.searched", "perf.calibration"] {

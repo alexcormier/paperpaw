@@ -22,7 +22,6 @@ fn sample(name: &str) -> DataPlugin {
     DataPlugin::new(&read.id, read.files)
 }
 
-
 /// What is looked at: the data plugins `plugins`.
 fn of(plugins: Vec<DataPlugin>) -> Target {
     let mut target = Target::default();
@@ -122,5 +121,8 @@ fn a_data_plugin_is_seen_on_the_standard_screens() {
     context.in_memory = true;
     let session = Session::new(&context, &Variant::x4()).unwrap();
     let screens = paperpaw_dev::cases::screens(&session, &context.target);
-    assert_eq!(screens, ["files.browser", "home.dashboard", "settings.list"]);
+    assert_eq!(
+        screens,
+        ["files.browser", "home.dashboard", "settings.list"]
+    );
 }
