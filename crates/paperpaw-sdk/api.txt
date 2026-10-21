@@ -596,6 +596,7 @@ pub paperpaw_sdk::contribution::Contribution::ActionOverride(alloc::boxed::Box<p
 pub paperpaw_sdk::contribution::Contribution::BookData(paperpaw_sdk::library::BookData)
 pub paperpaw_sdk::contribution::Contribution::Chrome(alloc::boxed::Box<paperpaw_sdk::chrome::ChromeSpec>)
 pub paperpaw_sdk::contribution::Contribution::Decorator(alloc::boxed::Box<paperpaw_sdk::decorations::DecoratorSpec>)
+pub paperpaw_sdk::contribution::Contribution::EventDeclared(alloc::boxed::Box<paperpaw_sdk::services::EventSpec>)
 pub paperpaw_sdk::contribution::Contribution::EventObserver(alloc::boxed::Box<paperpaw_sdk::ObserverSpec>)
 pub paperpaw_sdk::contribution::Contribution::FixedPresets(&'static [paperpaw_sdk::presets::Preset])
 pub paperpaw_sdk::contribution::Contribution::FixedSettings(&'static [paperpaw_sdk::SettingSpec])
@@ -639,6 +640,7 @@ pub paperpaw_sdk::contribution::Contribution::MenuPlacement::after: paperpaw_sdk
 pub paperpaw_sdk::contribution::Contribution::MenuPlacement::item: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::MenuPlacement::menu: paperpaw_sdk::Id
 pub paperpaw_sdk::contribution::Contribution::MenuSection(paperpaw_sdk::MenuSection)
+pub paperpaw_sdk::contribution::Contribution::Point(alloc::boxed::Box<paperpaw_sdk::services::PointSpec>)
 pub paperpaw_sdk::contribution::Contribution::Preset(alloc::boxed::Box<paperpaw_sdk::presets::Preset>)
 #[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::Published
 pub paperpaw_sdk::contribution::Contribution::Published::id: paperpaw_sdk::Id
@@ -702,6 +704,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_keymap_preset(&mut self, paper
 pub fn paperpaw_sdk::contribution::Registrar::add_keymap_when(&mut self, &paperpaw_sdk::setting::Setting<bool>, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_entry(&mut self, paperpaw_sdk::MenuEntry) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_section(&mut self, paperpaw_sdk::MenuSection) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_point(&mut self, paperpaw_sdk::services::PointSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_preset(&mut self, paperpaw_sdk::presets::Preset) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_presets(&mut self, &'static [paperpaw_sdk::presets::Preset]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_refresh_filter(&mut self, paperpaw_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -723,6 +726,7 @@ pub fn paperpaw_sdk::contribution::Registrar::bind_font(&mut self, paperpaw_sdk:
 pub fn paperpaw_sdk::contribution::Registrar::bind_slot(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::contribute(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::contributions(&self) -> &[paperpaw_sdk::contribution::Contribution]
+pub fn paperpaw_sdk::contribution::Registrar::declare_event(&mut self, paperpaw_sdk::services::EventSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::hide_menu_entry(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<paperpaw_sdk::Id>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::into_contributions(self) -> alloc::vec::Vec<paperpaw_sdk::contribution::Contribution>
 pub fn paperpaw_sdk::contribution::Registrar::new(paperpaw_sdk::Id) -> Self
@@ -732,6 +736,7 @@ pub fn paperpaw_sdk::contribution::Registrar::on<P: paperpaw_sdk::event::EventDa
 pub fn paperpaw_sdk::contribution::Registrar::override_action(&mut self, paperpaw_sdk::Id, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>) + 'static, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::place_menu_entry(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<paperpaw_sdk::Id>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::plugin(&self) -> &paperpaw_sdk::Id
+pub fn paperpaw_sdk::contribution::Registrar::provide<T: paperpaw_sdk::services::ServiceType>(&mut self, paperpaw_sdk::Id, T, paperpaw_sdk::Version) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::publish<T: core::any::Any>(&mut self, paperpaw_sdk::Id, T) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_menu_need(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::MenuNeed) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_screen_hints(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Hints) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -1364,6 +1369,11 @@ pub use paperpaw_sdk::json::string_array
 pub use paperpaw_sdk::json::text
 pub use paperpaw_sdk::json::unquote
 pub mod paperpaw_sdk::keys
+#[non_exhaustive] pub enum paperpaw_sdk::keys::BindingOrigin
+pub paperpaw_sdk::keys::BindingOrigin::Device
+pub paperpaw_sdk::keys::BindingOrigin::Plugin
+pub paperpaw_sdk::keys::BindingOrigin::Preset
+pub paperpaw_sdk::keys::BindingOrigin::User
 #[non_exhaustive] pub enum paperpaw_sdk::keys::InputKind
 pub paperpaw_sdk::keys::InputKind::Gesture
 pub paperpaw_sdk::keys::InputKind::Input
@@ -1406,6 +1416,7 @@ pub fn paperpaw_sdk::keys::GestureRecognizer::next_tick(&self) -> core::option::
 pub fn paperpaw_sdk::keys::GestureRecognizer::pointer(&mut self, &paperpaw_platform::input::PointerEvent, paperpaw_platform::input::Instant) -> paperpaw_sdk::keys::PointerVerdict
 pub fn paperpaw_sdk::keys::GestureRecognizer::tick(&mut self, paperpaw_platform::input::Instant) -> paperpaw_sdk::keys::Recognition
 pub trait paperpaw_sdk::keys::KeyBindings
+pub fn paperpaw_sdk::keys::KeyBindings::bindings(&self, &str) -> alloc::vec::Vec<(alloc::string::String, core::option::Option<paperpaw_sdk::Id>, paperpaw_sdk::keys::BindingOrigin)>
 pub fn paperpaw_sdk::keys::KeyBindings::bound(&self, &[&str], &str) -> core::option::Option<paperpaw_sdk::Id>
 pub fn paperpaw_sdk::keys::inputs(&paperpaw_platform::input::InputCaps) -> alloc::vec::Vec<alloc::string::String>
 pub type paperpaw_sdk::keys::RecognizerFactory = alloc::boxed::Box<dyn core::ops::function::Fn() -> alloc::boxed::Box<dyn paperpaw_sdk::keys::GestureRecognizer>>
@@ -1933,20 +1944,43 @@ pub const paperpaw_sdk::server_params::STARTED: &str
 pub const paperpaw_sdk::server_params::STOPPED: &str
 pub const paperpaw_sdk::server_params::TARGET: &str
 pub mod paperpaw_sdk::services
+#[non_exhaustive] pub struct paperpaw_sdk::services::EventSpec
+pub paperpaw_sdk::services::EventSpec::id: paperpaw_sdk::Id
+pub paperpaw_sdk::services::EventSpec::params: &'static [&'static str]
+pub paperpaw_sdk::services::EventSpec::title: alloc::borrow::Cow<'static, str>
+impl paperpaw_sdk::services::EventSpec
+pub fn paperpaw_sdk::services::EventSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub fn paperpaw_sdk::services::EventSpec::params(self, &'static [&'static str]) -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::services::PointSpec
+pub paperpaw_sdk::services::PointSpec::doc: alloc::borrow::Cow<'static, str>
+pub paperpaw_sdk::services::PointSpec::id: paperpaw_sdk::Id
+pub paperpaw_sdk::services::PointSpec::title: alloc::borrow::Cow<'static, str>
+impl paperpaw_sdk::services::PointSpec
+pub fn paperpaw_sdk::services::PointSpec::doc(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub fn paperpaw_sdk::services::PointSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub struct paperpaw_sdk::services::Service
 impl paperpaw_sdk::services::Service
 pub fn paperpaw_sdk::services::Service::any(alloc::boxed::Box<dyn core::any::Any>) -> Self
 pub fn paperpaw_sdk::services::Service::new<T: core::any::Any>(T) -> Self
+pub fn paperpaw_sdk::services::Service::typed<T: paperpaw_sdk::services::ServiceType>(T, paperpaw_sdk::Version) -> Self
+pub fn paperpaw_sdk::services::Service::version(&self) -> core::option::Option<paperpaw_sdk::Version>
 impl core::fmt::Debug for paperpaw_sdk::services::Service
 pub fn paperpaw_sdk::services::Service::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::services::Services
 impl paperpaw_sdk::services::Services
 pub fn paperpaw_sdk::services::Services::contributions<'a>(&'a self, &'a str) -> impl core::iter::traits::iterator::Iterator<Item = (&'a paperpaw_sdk::Id, &'a str)>
+pub fn paperpaw_sdk::services::Services::events(&self) -> &[paperpaw_sdk::services::EventSpec]
 pub fn paperpaw_sdk::services::Services::get<T: core::any::Any>(&self, &str) -> core::option::Option<&T>
+pub fn paperpaw_sdk::services::Services::get_typed<T: paperpaw_sdk::services::ServiceType>(&self, &str) -> core::option::Option<&T>
+pub fn paperpaw_sdk::services::Services::get_versioned<T: paperpaw_sdk::services::ServiceType>(&self, &str, paperpaw_sdk::Version) -> core::option::Option<&T>
 pub fn paperpaw_sdk::services::Services::has(&self, &str) -> bool
+pub fn paperpaw_sdk::services::Services::ids(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::Id>
 pub fn paperpaw_sdk::services::Services::new() -> Self
+pub fn paperpaw_sdk::services::Services::points(&self) -> &[paperpaw_sdk::services::PointSpec]
 impl core::fmt::Debug for paperpaw_sdk::services::Services
 pub fn paperpaw_sdk::services::Services::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub trait paperpaw_sdk::services::ServiceType: core::any::Any
+pub const paperpaw_sdk::services::ServiceType::KEY: &'static str
 pub mod paperpaw_sdk::setting
 pub enum paperpaw_sdk::setting::Text
 impl paperpaw_sdk::setting::SettingType for paperpaw_sdk::setting::Text
@@ -3210,6 +3244,7 @@ pub paperpaw_sdk::Contribution::ActionOverride(alloc::boxed::Box<paperpaw_sdk::A
 pub paperpaw_sdk::Contribution::BookData(paperpaw_sdk::library::BookData)
 pub paperpaw_sdk::Contribution::Chrome(alloc::boxed::Box<paperpaw_sdk::chrome::ChromeSpec>)
 pub paperpaw_sdk::Contribution::Decorator(alloc::boxed::Box<paperpaw_sdk::decorations::DecoratorSpec>)
+pub paperpaw_sdk::Contribution::EventDeclared(alloc::boxed::Box<paperpaw_sdk::services::EventSpec>)
 pub paperpaw_sdk::Contribution::EventObserver(alloc::boxed::Box<paperpaw_sdk::ObserverSpec>)
 pub paperpaw_sdk::Contribution::FixedPresets(&'static [paperpaw_sdk::presets::Preset])
 pub paperpaw_sdk::Contribution::FixedSettings(&'static [paperpaw_sdk::SettingSpec])
@@ -3253,6 +3288,7 @@ pub paperpaw_sdk::Contribution::MenuPlacement::after: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::MenuPlacement::item: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::MenuPlacement::menu: paperpaw_sdk::Id
 pub paperpaw_sdk::Contribution::MenuSection(paperpaw_sdk::MenuSection)
+pub paperpaw_sdk::Contribution::Point(alloc::boxed::Box<paperpaw_sdk::services::PointSpec>)
 pub paperpaw_sdk::Contribution::Preset(alloc::boxed::Box<paperpaw_sdk::presets::Preset>)
 #[non_exhaustive] pub paperpaw_sdk::Contribution::Published
 pub paperpaw_sdk::Contribution::Published::id: paperpaw_sdk::Id
@@ -3589,6 +3625,8 @@ pub fn paperpaw_sdk::Env<'_>::plugin_usage(&self) -> alloc::vec::Vec<paperpaw_sd
 pub fn paperpaw_sdk::Env<'_>::top(&self) -> core::option::Option<&paperpaw_sdk::StackEntry>
 impl<'a> paperpaw_sdk::Env<'a>
 pub fn paperpaw_sdk::Env<'a>::device_within(&self, paperpaw_platform::geometry::Rect) -> paperpaw_platform::DeviceInfo
+pub fn paperpaw_sdk::Env<'a>::slot_screen(&self, &str) -> core::option::Option<&'a paperpaw_sdk::Id>
+pub fn paperpaw_sdk::Env<'a>::slot_screens(&self, &str) -> alloc::vec::Vec<&'a paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Env<'a>::within<'b>(&self, &'b paperpaw_platform::DeviceInfo, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::Env<'b> where 'a: 'b
 impl core::fmt::Debug for paperpaw_sdk::Env<'_>
 pub fn paperpaw_sdk::Env<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -3954,6 +3992,7 @@ pub fn paperpaw_sdk::contribution::Registrar::add_keymap_preset(&mut self, paper
 pub fn paperpaw_sdk::contribution::Registrar::add_keymap_when(&mut self, &paperpaw_sdk::setting::Setting<bool>, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_entry(&mut self, paperpaw_sdk::MenuEntry) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_menu_section(&mut self, paperpaw_sdk::MenuSection) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_point(&mut self, paperpaw_sdk::services::PointSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_preset(&mut self, paperpaw_sdk::presets::Preset) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_presets(&mut self, &'static [paperpaw_sdk::presets::Preset]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_refresh_filter(&mut self, paperpaw_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -3975,6 +4014,7 @@ pub fn paperpaw_sdk::contribution::Registrar::bind_font(&mut self, paperpaw_sdk:
 pub fn paperpaw_sdk::contribution::Registrar::bind_slot(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Id, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::contribute(&mut self, paperpaw_sdk::Id, alloc::borrow::Cow<'static, str>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::contributions(&self) -> &[paperpaw_sdk::contribution::Contribution]
+pub fn paperpaw_sdk::contribution::Registrar::declare_event(&mut self, paperpaw_sdk::services::EventSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::hide_menu_entry(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<paperpaw_sdk::Id>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::into_contributions(self) -> alloc::vec::Vec<paperpaw_sdk::contribution::Contribution>
 pub fn paperpaw_sdk::contribution::Registrar::new(paperpaw_sdk::Id) -> Self
@@ -3984,6 +4024,7 @@ pub fn paperpaw_sdk::contribution::Registrar::on<P: paperpaw_sdk::event::EventDa
 pub fn paperpaw_sdk::contribution::Registrar::override_action(&mut self, paperpaw_sdk::Id, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut alloc::vec::Vec<paperpaw_sdk::Command>) + 'static, paperpaw_sdk::Priority) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::place_menu_entry(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<paperpaw_sdk::Id>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::plugin(&self) -> &paperpaw_sdk::Id
+pub fn paperpaw_sdk::contribution::Registrar::provide<T: paperpaw_sdk::services::ServiceType>(&mut self, paperpaw_sdk::Id, T, paperpaw_sdk::Version) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::publish<T: core::any::Any>(&mut self, paperpaw_sdk::Id, T) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_menu_need(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, paperpaw_sdk::MenuNeed) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::set_screen_hints(&mut self, paperpaw_sdk::Id, paperpaw_sdk::Hints) -> core::result::Result<(), paperpaw_sdk::RegisterError>

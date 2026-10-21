@@ -112,6 +112,21 @@ impl paperpaw_sdk::ScreenMaker for Registry {
         let spec = self.screens.get(id)?;
         Some((spec.factory)(env, params))
     }
+
+    fn slot_screen(&self, slot: &str) -> Option<&Id> {
+        self.resolve_slot(slot)
+    }
+
+    fn slot_screens(&self, slot: &str) -> Vec<&Id> {
+        let mut screens: Vec<&Id> = Vec::new();
+        for candidate in self.candidates.iter().filter(|c| c.slot.as_str() == slot) {
+            if self.screens.contains_key(&candidate.screen) && !screens.contains(&&candidate.screen)
+            {
+                screens.push(&candidate.screen);
+            }
+        }
+        screens
+    }
 }
 
 /// A plugin's setting before it is defined: built at start, or kept in
@@ -159,6 +174,8 @@ pub(crate) struct Staging {
     pub(crate) menu_entries: Vec<MenuEntry>,
     pub(crate) menu_sections: Vec<paperpaw_sdk::MenuSection>,
     pub(crate) menu_placements: Vec<(Id, Id, Id)>,
+    pub(crate) points: Vec<paperpaw_sdk::services::PointSpec>,
+    pub(crate) events: Vec<paperpaw_sdk::services::EventSpec>,
     pub(crate) menu_hidden: Vec<(Id, Id)>,
     pub(crate) icons: Vec<(Id, Cow<'static, str>)>,
     pub(crate) menu_needs: Vec<(Id, paperpaw_sdk::MenuNeed)>,
@@ -338,6 +355,8 @@ pub(crate) fn stage(
                 .push((id, paperpaw_sdk::services::Service::any(service))),
             Contribution::Published { id, service, .. } => staging.services.push((id, service)),
             Contribution::ToPoint { point, text, .. } => staging.contributions.push((point, text)),
+            Contribution::Point(point) => staging.points.push(*point),
+            Contribution::EventDeclared(event) => staging.events.push(*event),
             Contribution::Translations(source) => staging.catalogs.push(catalog(source)?),
             // A kind of a newer SDK than this kernel knows: said, not lost.
             other => {

@@ -25,6 +25,18 @@ pub trait ScreenMaker {
     /// Screen `id` made with `params` for `env`, `None` where no plugin
     /// added it.
     fn make(&self, id: &Id, env: &Env<'_>, params: &Params) -> Option<Box<dyn Screen>>;
+
+    /// The screen slot `slot` shows, as the user or the plugins bound it.
+    fn slot_screen(&self, slot: &str) -> Option<&Id> {
+        let _ = slot;
+        None
+    }
+
+    /// Every screen offered for slot `slot`, in the order offered.
+    fn slot_screens(&self, slot: &str) -> Vec<&Id> {
+        let _ = slot;
+        Vec::new()
+    }
 }
 
 /// A screen contribution.

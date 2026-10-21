@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: services and introspection (gap J1). A service type names its
+  contract in a key (`services::ServiceType`, `"weather.forecast/1"`),
+  published with a version (`Registrar::provide`) and found by it, its
+  size and alignment checked (`Services::get_typed`,
+  `get_versioned`), so native plugins built apart find it safely.
+  `Registrar::add_point` and `declare_event` declare points and events
+  (`Services::points`, `events`, `ids`) for editors and authors.
+  `Env::slot_screen` and `slot_screens` say which screen a slot shows
+  and which are offered; `KeyBindings::bindings` lists a layer's
+  bindings with their origin (`keys::BindingOrigin`).
 - Data plugins (gap I1, formats 3, `DATA_FORMATS` is 3): `menus.ini`
   adds entries to any menu, places one after another and takes entries
   out, and makes menus of one's own (`title`, `entries`); `actions.ini`

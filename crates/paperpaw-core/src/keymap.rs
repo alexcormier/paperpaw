@@ -1,6 +1,7 @@
 //! Layered key maps: raw input → action id.
 
 use alloc::borrow::Cow;
+use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
@@ -149,6 +150,27 @@ impl Policy {
 }
 
 impl InputKey {
+    /// Its name as written in key maps, as [`InputKey::parse`] reads it.
+    pub(crate) fn name(&self) -> String {
+        match self {
+            InputKey::Button(name) => format!("button.{name}"),
+            InputKey::LongButton(name) => format!("long.{name}"),
+            InputKey::DoubleButton(name) => format!("double.{name}"),
+            InputKey::Tap(zone) => format!("tap.{}", zone.id()),
+            InputKey::LongTap(zone) => format!("long-tap.{}", zone.id()),
+            InputKey::DoubleTap(zone) => format!("double-tap.{}", zone.id()),
+            InputKey::Swipe(direction) => format!("swipe.{}", direction.id()),
+            InputKey::Edge(side) => format!("edge.{}", side_id(*side)),
+            InputKey::Pinch(out) => String::from(if *out { "pinch.out" } else { "pinch.in" }),
+            InputKey::Tap2 => String::from("tap2"),
+            InputKey::ZoneTap(false, name) => format!("tap.{name}"),
+            InputKey::ZoneTap(true, name) => format!("long-tap.{name}"),
+            InputKey::Named(id) => format!("input.{id}"),
+            InputKey::Gesture(id) => format!("gesture.{id}"),
+            InputKey::Policy => String::from("gestures.policy"),
+        }
+    }
+
     pub(crate) fn parse(key: &str) -> Option<InputKey> {
         if key == "tap2" {
             return Some(InputKey::Tap2);
@@ -217,6 +239,28 @@ pub(crate) fn is_input(key: &str) -> bool {
 impl paperpaw_sdk::keys::KeyBindings for Keymap {
     fn bound(&self, layers: &[&str], input: &str) -> Option<Id> {
         self.resolve(layers, &InputKey::parse(input)?).cloned()
+    }
+
+    fn bindings(
+        &self,
+        layer: &str,
+    ) -> Vec<(String, Option<Id>, paperpaw_sdk::keys::BindingOrigin)> {
+        use paperpaw_sdk::keys::BindingOrigin;
+        let Some(bindings) = self.layers.get(layer) else {
+            return Vec::new();
+        };
+        bindings
+            .iter()
+            .map(|(key, binding)| {
+                let origin = match binding.origin {
+                    Origin::Plugin => BindingOrigin::Plugin,
+                    Origin::Device => BindingOrigin::Device,
+                    Origin::Preset => BindingOrigin::Preset,
+                    Origin::User => BindingOrigin::User,
+                };
+                (key.name(), binding.action.clone(), origin)
+            })
+            .collect()
     }
 }
 
@@ -538,5 +582,30 @@ mod tests {
         );
         let lines: Vec<u32> = problems.iter().map(|p| p.line).collect();
         assert_eq!(lines, [2, 4, 5, 6, 7]);
+    }
+
+    /// Every input's name reads back as the same input.
+    #[test]
+    fn names_read_back() {
+        for name in [
+            "button.menu",
+            "long.confirm",
+            "double.back",
+            "tap.center",
+            "long-tap.top-left",
+            "double-tap.bottom",
+            "swipe.left",
+            "edge.top",
+            "pinch.out",
+            "pinch.in",
+            "tap2",
+            "tap.corner",
+            "long-tap.corner",
+            "input.my.chord",
+            "gesture.my.flick",
+            "gestures.policy",
+        ] {
+            assert_eq!(InputKey::parse(name).unwrap().name(), name);
+        }
     }
 }

@@ -3254,6 +3254,7 @@ mod kernel_calls;
 mod plugins_loaded;
 mod refreshes;
 mod screen_life;
+mod services_declared;
 mod settings_files;
 mod stack;
 mod storage;

@@ -346,6 +346,12 @@ impl Kernel {
         for (id, service) in staging.services.drain(..) {
             self.shared.services.insert(id, service);
         }
+        for point in staging.points.drain(..) {
+            self.shared.services.declare_point(point);
+        }
+        for event in staging.events.drain(..) {
+            self.shared.services.declare_event(event);
+        }
         for (point, contribution) in staging.contributions.drain(..) {
             self.shared
                 .services

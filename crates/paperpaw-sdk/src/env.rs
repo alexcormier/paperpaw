@@ -385,6 +385,32 @@ impl<'a> Env<'a> {
         env
     }
 
+    /// The screen slot `slot` shows now: the user's choice, else the
+    /// plugins' of the highest priority.
+    pub fn slot_screen(&self, slot: &str) -> Option<&'a crate::Id> {
+        #[cfg(any(test, feature = "kernel"))]
+        return self.screen_maker?.slot_screen(slot);
+        #[cfg(not(any(test, feature = "kernel")))]
+        {
+            let _ = slot;
+            None
+        }
+    }
+
+    /// Every screen offered for slot `slot` (to choose another, e.g. a
+    /// launcher of several).
+    pub fn slot_screens(&self, slot: &str) -> alloc::vec::Vec<&'a crate::Id> {
+        #[cfg(any(test, feature = "kernel"))]
+        return self
+            .screen_maker
+            .map_or_else(alloc::vec::Vec::new, |maker| maker.slot_screens(slot));
+        #[cfg(not(any(test, feature = "kernel")))]
+        {
+            let _ = slot;
+            alloc::vec::Vec::new()
+        }
+    }
+
     /// This environment with `maker` making the screens
     /// [`Env::make_screen`] asks for: the kernel's.
     #[cfg(any(test, feature = "kernel"))]

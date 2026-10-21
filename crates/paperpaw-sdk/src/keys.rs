@@ -232,4 +232,27 @@ pub trait KeyBindings {
     /// specific (a screen, its slot) to `global`, as input is; `None` if
     /// it runs none.
     fn bound(&self, layers: &[&str], input: &str) -> Option<Id>;
+
+    /// The bindings of layer `layer` alone: each input as key maps name
+    /// it, the action (`None`: bound to nothing on purpose) and where the
+    /// binding comes from.
+    fn bindings(&self, layer: &str) -> Vec<(String, Option<Id>, BindingOrigin)> {
+        let _ = layer;
+        Vec::new()
+    }
+}
+
+/// Where a binding comes from ([`KeyBindings::bindings`]); later ones
+/// win.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord)]
+#[non_exhaustive]
+pub enum BindingOrigin {
+    /// A plugin's key map.
+    Plugin,
+    /// The device's (its shell's).
+    Device,
+    /// The button layout the user chose.
+    Preset,
+    /// The user's own.
+    User,
 }

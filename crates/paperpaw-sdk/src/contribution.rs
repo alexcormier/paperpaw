@@ -179,6 +179,10 @@ pub enum Contribution {
         id: Id,
         service: crate::services::Service,
     },
+    /// A point declared to contribute to ([`Registrar::add_point`]).
+    Point(Box<crate::services::PointSpec>),
+    /// An event declared ([`Registrar::declare_event`]).
+    EventDeclared(Box<crate::services::EventSpec>),
     /// Text for a point another plugin defined (see
     /// [`services`](crate::services)).
     #[non_exhaustive]
@@ -239,6 +243,8 @@ impl Contribution {
             Contribution::Preset(_) | Contribution::FixedPresets(_) => "preset",
             Contribution::Service { .. } | Contribution::Published { .. } => "service",
             Contribution::ToPoint { .. } => "to-point",
+            Contribution::Point(_) => "point",
+            Contribution::EventDeclared(_) => "event",
             Contribution::Translations(_) => "translations",
         }
     }
@@ -277,6 +283,8 @@ impl Contribution {
             Contribution::SetupStep(s) => &s.id,
             Contribution::Preset(p) => &p.id,
             Contribution::Service { id, .. } | Contribution::Published { id, .. } => id,
+            Contribution::Point(p) => &p.id,
+            Contribution::EventDeclared(e) => &e.id,
             _ => return None,
         })
     }
@@ -828,6 +836,37 @@ impl Registrar {
             id,
             service: crate::services::Service::new(service),
         })
+    }
+
+    /// Publishes `service` for other plugins as `id` in `version`, a type
+    /// with a contract ([`services::ServiceType`](crate::services::ServiceType)):
+    /// found by its key also by native plugins built apart, and by the
+    /// version others need ([`Services::get_versioned`](crate::services::Services::get_versioned)).
+    pub fn provide<T: crate::services::ServiceType>(
+        &mut self,
+        id: Id,
+        service: T,
+        version: crate::Version,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::Published {
+            id,
+            service: crate::services::Service::typed(service, version),
+        })
+    }
+
+    /// Declares a point of one's own that others contribute to (see
+    /// [`services`](crate::services)), with what a contribution there is.
+    pub fn add_point(&mut self, point: crate::services::PointSpec) -> Result<(), RegisterError> {
+        self.add(Contribution::Point(Box::new(point)))
+    }
+
+    /// Declares an event of one's own, with the params it carries: rules
+    /// and macro editors offer it.
+    pub fn declare_event(
+        &mut self,
+        event: crate::services::EventSpec,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::EventDeclared(Box::new(event)))
     }
 
     /// Adds `contribution` to `point`, a point another plugin defined
