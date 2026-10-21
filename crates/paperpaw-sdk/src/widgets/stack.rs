@@ -95,6 +95,10 @@ impl Stack {
             }
             let at = Rect::new(area.x + margin, y, width, height);
             widget.place(env, at);
+            widget.context(
+                env,
+                &super::WidgetContext::new(super::SizeClass::of(env, at)),
+            );
             widgets.push(Shown {
                 id,
                 widget,

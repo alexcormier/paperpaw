@@ -284,6 +284,7 @@ impl Dashboard {
         // Opened by *Edit home screen*.
         let editing = page_set.or_else(|| (params.get(params::MODE) == Some("edit")).then_some(0));
         let mut grid = GridView::asking(env, CHOSEN);
+        grid.set_host(SCREEN);
         grid.set_editing(editing.is_some());
         let (status, _, footer) = frame(env, None);
         Self {

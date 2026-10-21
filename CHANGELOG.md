@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: widgets take more than taps. `Widget::on_input` hears a swipe
+  that started on it and the buttons' focus coming to its targets and
+  leaving them (`widgets::WidgetInput`); `WidgetTarget::hold` runs
+  something of its own on a long press (else the page is edited, as
+  before); `Widget::draw_focus` draws the focus its own way; and
+  `Widget::context` tells it where it shows (`widgets::WidgetContext`:
+  its placement, so a widget placed twice tells its taps apart, the
+  screen showing it, `GridView::set_host`, and its `SizeClass`).
 - SDK: a widget says how many cells of a grid it takes
   (`WidgetSpec::cells`, `widgets::CellsHint`: its size, its least, square
   or not): added, it gets them without being made to be measured;

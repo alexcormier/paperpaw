@@ -774,3 +774,122 @@ fn the_grid_draws_inside_its_area_while_edited() {
     let bound = Rect::new(0, g.area.y - reach, g.area.width, g.area.height + 2 * reach);
     assert_eq!(drawn_outside(&mut frame, bound), None);
 }
+
+thread_local! {
+    /// What the lively widget was told.
+    static TOLD: std::cell::RefCell<Vec<String>> = const { std::cell::RefCell::new(Vec::new()) };
+}
+
+fn told() -> Vec<String> {
+    TOLD.with(|t| t.borrow_mut().drain(..).collect())
+}
+
+fn tell(what: String) {
+    TOLD.with(|t| t.borrow_mut().push(what));
+}
+
+/// A widget that takes swipes, runs something of its own on a long
+/// press, draws its own focus and notes where it is shown.
+struct Lively;
+
+impl Widget for Lively {
+    fn height(&self, _: &Env<'_>, _: u16) -> u16 {
+        90
+    }
+
+    fn draw(&self, _: &mut Canvas<'_>, _: &Env<'_>, _: Rect) {}
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        vec![
+            WidgetTarget::new(area, Command::RunAction(OPEN))
+                .hold(Command::RunAction(Id::new_static("t.hold"))),
+        ]
+    }
+
+    fn context(&mut self, _: &Env<'_>, context: &paperpaw_sdk::widgets::WidgetContext<'_>) {
+        tell(format!(
+            "context {} {}",
+            context.placement.unwrap_or("-"),
+            context.host.unwrap_or("-")
+        ));
+    }
+
+    fn on_input(
+        &mut self,
+        _: &Env<'_>,
+        input: paperpaw_sdk::widgets::WidgetInput,
+        _: Rect,
+        _: &mut Vec<Command>,
+    ) -> bool {
+        use paperpaw_sdk::widgets::WidgetInput;
+        match input {
+            WidgetInput::Swipe(direction) => tell(format!("swipe {direction:?}")),
+            WidgetInput::Focus(at) => tell(format!("focus {}", at.is_some())),
+            _ => {}
+        }
+        true
+    }
+
+    fn draw_focus(&self, _: &mut Canvas<'_>, _: &Env<'_>, _: Rect) -> bool {
+        tell("own focus".into());
+        true
+    }
+}
+
+/// A widget is told where it shows, takes swipes that start on it, runs
+/// its own long press, hears the focus come and go, and draws its own.
+#[test]
+fn widgets_take_swipes_holds_and_the_focus() {
+    let mut h = harness(Device::BUTTONS);
+    h.widgets.add(WidgetSpec::new(
+        Id::new_static("t.lively"),
+        "t.lively",
+        |_| Box::new(Lively),
+    ));
+    let env = h.env();
+    let items = [
+        Item::placed(widget("t.lively@2"), Cells::new(0, 0, 2, 2)),
+        Item::placed(tool("t.a"), Cells::new(2, 0, 1, 1)),
+    ];
+    let mut view = GridView::asking(&env, CHOSEN);
+    view.set_host(Id::new_static("t.screen"));
+    view.layout(&env, geometry(), &items, &[]);
+    assert_eq!(told(), ["context t.lively@2 t.screen"]);
+    let area = geometry().rect(Cells::new(0, 0, 2, 2));
+    let m = middle(area);
+    let gesture = |kind| {
+        paperpaw_sdk::Gesture::new(
+            kind,
+            m,
+            Point::new(m.x - 100, m.y),
+            paperpaw_platform::PointerTool::Finger,
+        )
+    };
+    let (response, _) = with_cx(&env, |cx| {
+        view.on_gesture(
+            gesture(paperpaw_sdk::GestureKind::Swipe(
+                paperpaw_sdk::Direction::Left,
+            )),
+            cx,
+        )
+    });
+    assert_eq!(response, GridResponse::Handled);
+    assert_eq!(told(), ["swipe Left"]);
+    let (response, output) = with_cx(&env, |cx| {
+        view.on_gesture(gesture(paperpaw_sdk::GestureKind::LongPress), cx)
+    });
+    assert_eq!(response, GridResponse::Handled);
+    assert_eq!(
+        output.commands,
+        [Command::RunAction(Id::new_static("t.hold"))]
+    );
+    assert!(!view.editing());
+    // The focus to the tool and back: told each time; drawn its own way.
+    press(&mut view, &env, &actions::RIGHT);
+    assert_eq!(told(), ["focus false"]);
+    press(&mut view, &env, &actions::LEFT);
+    assert_eq!(told(), ["focus true"]);
+    let mut frame = support::frame(480, 800);
+    view.draw(&mut frame.canvas(), &env);
+    assert_eq!(told(), ["own focus"]);
+}

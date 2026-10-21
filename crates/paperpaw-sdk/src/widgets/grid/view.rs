@@ -11,7 +11,7 @@ use crate::builtin::{actions, params, slots};
 use crate::event::Event;
 use crate::ui::choice::Picked;
 use crate::ui::{self, UiStyle};
-use crate::widgets::Widget;
+use crate::widgets::{SizeClass, Widget, WidgetContext, WidgetInput};
 use crate::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Params, Point,
     PointerEvent, PointerPhase, Rect, RefreshMode,
@@ -104,7 +104,8 @@ struct Edit {
 /// What a target does.
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Target {
-    Run(Command),
+    /// What a tap runs, and a long press where it says.
+    Run(Command, Option<Command>),
     /// An item, when editing: its index.
     Item(usize),
     /// One of the screen's own buttons.
@@ -132,6 +133,11 @@ pub struct GridView {
     targets: Vec<(Rect, Target)>,
     /// Where taps alone go ([`WidgetTarget::touch`](crate::widgets::WidgetTarget::touch)).
     touch: Vec<(Rect, Command)>,
+    /// The item each target is of (none for the screen's own buttons).
+    owners: Vec<Option<usize>>,
+    /// The screen showing it, told to its widgets
+    /// ([`WidgetContext::host`](crate::widgets::WidgetContext::host)).
+    host: Option<Id>,
     /// What each target is called, as told to screen readers while it
     /// has the focus: its item's name; empty for the screen's own
     /// buttons, which tell theirs.
@@ -169,6 +175,8 @@ impl GridView {
             buttons: Vec::new(),
             targets: Vec::new(),
             touch: Vec::new(),
+            owners: Vec::new(),
+            host: None,
             names: Vec::new(),
             focus: 0,
             focus_shown: !env.device.input.touch,
@@ -208,9 +216,12 @@ impl GridView {
             .map(|(index, cells)| {
                 let item = items[index].clone();
                 let area = geometry.rect(cells);
+                let host = self.host.as_ref().map(Id::as_str);
                 let widget = match &item.what {
                     What::Widget(id) => env.widgets.make(id, env).map(|mut widget| {
                         widget.place(env, area);
+                        let context = WidgetContext::new(SizeClass::of(env, area)).host(host);
+                        widget.context(env, &context);
                         widget
                     }),
                     What::Tool(_) => None,
@@ -232,6 +243,7 @@ impl GridView {
     fn target(&mut self, env: &Env<'_>) {
         self.targets.clear();
         self.touch.clear();
+        self.owners.clear();
         self.names.clear();
         let editing = self.edit.is_some();
         for (index, shown) in self.items.iter().enumerate() {
@@ -246,23 +258,26 @@ impl GridView {
                                 self.touch.push((target.area, target.command));
                             } else {
                                 self.targets
-                                    .push((target.area, Target::Run(target.command)));
+                                    .push((target.area, Target::Run(target.command, target.hold)));
                             }
                         }
                     }
                     (What::Widget(_), None) => {}
-                    (What::Tool(action), _) => self
-                        .targets
-                        .push((shown.area, Target::Run(Command::RunAction(action.clone())))),
+                    (What::Tool(action), _) => self.targets.push((
+                        shown.area,
+                        Target::Run(Command::RunAction(action.clone()), None),
+                    )),
                 }
             }
             let name = shown.item.what.title(env);
             let added = self.targets.len() - before;
             self.names.extend(core::iter::repeat_n(name, added));
+            self.owners.extend(core::iter::repeat_n(Some(index), added));
         }
         for (area, button) in &self.buttons {
             self.targets.push((*area, Target::Button(*button)));
             self.names.push(String::new());
+            self.owners.push(None);
         }
         self.focus = self.focus.min(self.targets.len().saturating_sub(1));
     }
@@ -389,7 +404,7 @@ impl GridView {
         let focused_tool = self
             .targets
             .get(self.focus)
-            .filter(|(_, target)| self.focus_shown && matches!(target, Target::Run(_)))
+            .filter(|(_, target)| self.focus_shown && matches!(target, Target::Run(..)))
             .map(|(area, _)| *area)
             .filter(|area| {
                 self.items
@@ -454,7 +469,19 @@ impl GridView {
             let name = self.names.get(self.focus).map_or("", String::as_str);
             canvas.describe(crate::semantics::Role::Button, name, *area, true, None);
         }
+        // The widget's own focus where it draws one.
+        let own = self.focus_shown
+            && self
+                .owners
+                .get(self.focus)
+                .copied()
+                .flatten()
+                .and_then(|item| self.items.get(item))
+                .and_then(|shown| shown.widget.as_ref())
+                .zip(self.targets.get(self.focus))
+                .is_some_and(|(widget, (area, _))| widget.draw_focus(canvas, env, *area));
         if self.focus_shown
+            && !own
             && let Some((area, _)) = self.targets.get(self.focus)
         {
             // Round as the style's corners, a little rounder outside.
@@ -489,14 +516,27 @@ impl GridView {
         area.grow((self.style.line * 4) as u16)
     }
 
-    /// Moves the focus to `to`, redrawing both targets.
+    /// Moves the focus to `to`, redrawing both targets; their widgets are
+    /// told ([`WidgetInput::Focus`]).
     fn focus_on(&mut self, to: usize, cx: &mut Cx<'_, '_>) {
         if let Some((area, _)) = self.targets.get(self.focus) {
             cx.request_redraw_area(self.around(*area));
         }
+        let from = self.focus;
         self.focus = to;
         if let Some((area, _)) = self.targets.get(to) {
             cx.request_redraw_area(self.around(*area));
+        }
+        let owner = |at: usize| self.owners.get(at).copied().flatten();
+        let (left, came) = (owner(from), owner(to));
+        if from != to {
+            if let Some(item) = left {
+                self.tell(item, WidgetInput::Focus(None), cx);
+            }
+            if let Some(item) = came {
+                let area = self.targets.get(to).map(|(area, _)| *area);
+                self.tell(item, WidgetInput::Focus(area), cx);
+            }
         }
         cx.request_refresh(RefreshMode::Fast);
     }
@@ -516,6 +556,34 @@ impl GridView {
             Some(hint) => hint.keep(cells, wide),
             None => cells,
         }
+    }
+
+    /// Tells item `index`'s widget of `input`: `true` if it took it, then
+    /// drawn again, with what it asks.
+    fn tell(&mut self, index: usize, input: WidgetInput, cx: &mut Cx<'_, '_>) -> bool {
+        let env = *cx.env();
+        let Some(shown) = self.items.get_mut(index) else {
+            return false;
+        };
+        let Some(widget) = &mut shown.widget else {
+            return false;
+        };
+        let mut out = Vec::new();
+        let taken = widget.on_input(&env, input, shown.area, &mut out);
+        if taken {
+            cx.request_redraw_area(shown.area);
+            cx.request_refresh(RefreshMode::Fast);
+        }
+        for command in out {
+            cx.command(command);
+        }
+        taken
+    }
+
+    /// Says which screen shows the grid, for its widgets
+    /// ([`WidgetContext::host`](crate::widgets::WidgetContext::host)).
+    pub fn set_host(&mut self, host: Id) {
+        self.host = Some(host);
     }
 
     /// The target nearest below (or above) the focused one.
@@ -546,9 +614,9 @@ impl GridView {
         };
         match target {
             // A tool shown faint by its plugin: nothing to do now.
-            Target::Run(Command::RunAction(action))
+            Target::Run(Command::RunAction(action), _)
                 if !cx.env().menus.state(cx.env(), action.as_str()).enabled => {}
-            Target::Run(command) => cx.command(command),
+            Target::Run(command, _) => cx.command(command),
             Target::Item(item) => self.options(item, cx),
             Target::Button(button) => return GridResponse::Button(button),
         }
@@ -619,6 +687,9 @@ impl GridView {
         if let Some(widget) = &mut shown.widget {
             let env = *cx.env();
             widget.place(&env, area);
+            let host = self.host.as_ref().map(Id::as_str);
+            let context = WidgetContext::new(SizeClass::of(&env, area)).host(host);
+            widget.context(&env, &context);
         }
         if let Some(target) = self.targets.get_mut(index) {
             target.0 = area;
@@ -959,9 +1030,31 @@ impl GridView {
                     None => GridResponse::Ignored,
                 },
             },
+            // A target's own long press, else editing.
             GestureKind::LongPress if self.edit.is_none() => {
+                let hold = self.targets.iter().find_map(|(r, target)| match target {
+                    Target::Run(_, Some(hold)) if r.contains(gesture.start) => Some(hold.clone()),
+                    _ => None,
+                });
+                if let Some(hold) = hold {
+                    cx.command(hold);
+                    return GridResponse::Handled;
+                }
                 self.set_editing(true);
                 GridResponse::Editing(true)
+            }
+            // A swipe that starts on a widget that takes it.
+            GestureKind::Swipe(direction) if self.edit.is_none() => {
+                let index = self
+                    .items
+                    .iter()
+                    .position(|s| s.widget.is_some() && s.area.contains(gesture.start));
+                match index {
+                    Some(index) if self.tell(index, WidgetInput::Swipe(direction), cx) => {
+                        GridResponse::Handled
+                    }
+                    _ => GridResponse::Ignored,
+                }
             }
             _ => GridResponse::Ignored,
         }

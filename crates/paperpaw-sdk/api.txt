@@ -3487,6 +3487,7 @@ pub fn paperpaw_sdk::widgets::grid::GridView::release(&mut self)
 pub fn paperpaw_sdk::widgets::grid::GridView::reset_focus(&mut self)
 pub fn paperpaw_sdk::widgets::grid::GridView::set_editing(&mut self, bool)
 pub fn paperpaw_sdk::widgets::grid::GridView::set_focus_shown(&mut self, bool)
+pub fn paperpaw_sdk::widgets::grid::GridView::set_host(&mut self, paperpaw_sdk::Id)
 pub fn paperpaw_sdk::widgets::grid::GridView::set_tool_labels(&mut self, bool)
 pub fn paperpaw_sdk::widgets::grid::GridView::update_live(&mut self, &paperpaw_sdk::Env<'_>, &mut paperpaw_sdk::Cx<'_, '_>) -> bool
 pub fn paperpaw_sdk::widgets::grid::GridView::update_widget(&mut self, &str, &paperpaw_sdk::Env<'_>, &mut paperpaw_sdk::Cx<'_, '_>) -> bool
@@ -3630,6 +3631,9 @@ pub paperpaw_sdk::widgets::SizeClass::Medium
 pub paperpaw_sdk::widgets::SizeClass::Small
 impl paperpaw_sdk::widgets::SizeClass
 pub fn paperpaw_sdk::widgets::SizeClass::of(&paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect) -> Self
+#[non_exhaustive] pub enum paperpaw_sdk::widgets::WidgetInput
+pub paperpaw_sdk::widgets::WidgetInput::Focus(core::option::Option<paperpaw_platform::geometry::Rect>)
+pub paperpaw_sdk::widgets::WidgetInput::Swipe(paperpaw_sdk::Direction)
 #[non_exhaustive] pub struct paperpaw_sdk::widgets::CellsHint
 pub paperpaw_sdk::widgets::CellsHint::h: u8
 pub paperpaw_sdk::widgets::CellsHint::min_h: u8
@@ -3673,6 +3677,14 @@ pub fn paperpaw_sdk::widgets::Stack::update_live(&mut self, &paperpaw_sdk::Env<'
 pub fn paperpaw_sdk::widgets::Stack::update_one(&mut self, &paperpaw_sdk::Env<'_>, &str) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>
 impl core::fmt::Debug for paperpaw_sdk::widgets::Stack
 pub fn paperpaw_sdk::widgets::Stack::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct paperpaw_sdk::widgets::WidgetContext<'a>
+pub paperpaw_sdk::widgets::WidgetContext::host: core::option::Option<&'a str>
+pub paperpaw_sdk::widgets::WidgetContext::placement: core::option::Option<&'a str>
+pub paperpaw_sdk::widgets::WidgetContext::size: paperpaw_sdk::widgets::SizeClass
+impl<'a> paperpaw_sdk::widgets::WidgetContext<'a>
+pub fn paperpaw_sdk::widgets::WidgetContext<'a>::host(self, core::option::Option<&'a str>) -> Self
+pub fn paperpaw_sdk::widgets::WidgetContext<'a>::new(paperpaw_sdk::widgets::SizeClass) -> Self
+pub fn paperpaw_sdk::widgets::WidgetContext<'a>::placement(self, core::option::Option<&'a str>) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::widgets::WidgetPlace
 pub paperpaw_sdk::widgets::WidgetPlace::id: paperpaw_sdk::Id
 pub paperpaw_sdk::widgets::WidgetPlace::kind: paperpaw_sdk::widgets::PlaceKind
@@ -3699,8 +3711,10 @@ pub fn paperpaw_sdk::widgets::WidgetSpec::fmt(&self, &mut core::fmt::Formatter<'
 #[non_exhaustive] pub struct paperpaw_sdk::widgets::WidgetTarget
 pub paperpaw_sdk::widgets::WidgetTarget::area: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::widgets::WidgetTarget::command: paperpaw_sdk::Command
+pub paperpaw_sdk::widgets::WidgetTarget::hold: core::option::Option<paperpaw_sdk::Command>
 pub paperpaw_sdk::widgets::WidgetTarget::touch: bool
 impl paperpaw_sdk::widgets::WidgetTarget
+pub fn paperpaw_sdk::widgets::WidgetTarget::hold(self, paperpaw_sdk::Command) -> Self
 pub fn paperpaw_sdk::widgets::WidgetTarget::new(paperpaw_platform::geometry::Rect, paperpaw_sdk::Command) -> Self
 pub fn paperpaw_sdk::widgets::WidgetTarget::touch(paperpaw_platform::geometry::Rect, paperpaw_sdk::Command) -> Self
 pub struct paperpaw_sdk::widgets::Widgets
@@ -3731,10 +3745,13 @@ pub const paperpaw_sdk::widgets::SPACE: &str
 pub const paperpaw_sdk::widgets::SPACE_SIZE: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::widgets::SPACE_SIZES: &[&str]
 pub trait paperpaw_sdk::widgets::Widget
+pub fn paperpaw_sdk::widgets::Widget::context(&mut self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::WidgetContext<'_>)
 pub fn paperpaw_sdk::widgets::Widget::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect)
+pub fn paperpaw_sdk::widgets::Widget::draw_focus(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect) -> bool
 pub fn paperpaw_sdk::widgets::Widget::height(&self, &paperpaw_sdk::Env<'_>, u16) -> u16
 pub fn paperpaw_sdk::widgets::Widget::live(&self) -> bool
 pub fn paperpaw_sdk::widgets::Widget::min_height(&self, &paperpaw_sdk::Env<'_>, u16) -> u16
+pub fn paperpaw_sdk::widgets::Widget::on_input(&mut self, &paperpaw_sdk::Env<'_>, paperpaw_sdk::widgets::WidgetInput, paperpaw_platform::geometry::Rect, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> bool
 pub fn paperpaw_sdk::widgets::Widget::place(&mut self, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::widgets::Widget::targets(&self, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect) -> alloc::vec::Vec<paperpaw_sdk::widgets::WidgetTarget>
 pub fn paperpaw_sdk::widgets::Widget::update(&mut self, &paperpaw_sdk::Env<'_>) -> bool

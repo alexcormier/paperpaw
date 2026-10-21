@@ -166,6 +166,82 @@ pub trait Widget {
         let _ = (env, area);
         Vec::new()
     }
+
+    /// Where it is shown, told once it is placed (after
+    /// [`place`](Self::place)): its placement (a to-do list's `@2`, to
+    /// tell its own taps from another's), the screen showing it, how
+    /// large it is drawn.
+    fn context(&mut self, env: &Env<'_>, context: &WidgetContext<'_>) {
+        let _ = (env, context);
+    }
+
+    /// Input on it beside taps on its targets: a swipe that started on it
+    /// (a list turning its page), the buttons' focus coming to one of its
+    /// targets or leaving it. `true` if it took it, the commands it asks
+    /// for in `out`: the screen draws it again. Widgets that take none
+    /// keep the default.
+    fn on_input(
+        &mut self,
+        env: &Env<'_>,
+        input: WidgetInput,
+        area: Rect,
+        out: &mut Vec<crate::Command>,
+    ) -> bool {
+        let _ = (env, input, area, out);
+        false
+    }
+
+    /// Draws the focus on its target `target` its own way; `false` (the
+    /// default) for the screen's frame round it.
+    fn draw_focus(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, target: Rect) -> bool {
+        let _ = (canvas, env, target);
+        false
+    }
+}
+
+/// Where a widget is shown ([`Widget::context`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct WidgetContext<'a> {
+    /// Its placement, e.g. `notes.todo@2`, where it is one; `None` for
+    /// the widget itself.
+    pub placement: Option<&'a str>,
+    /// The screen showing it, where the screen says.
+    pub host: Option<&'a str>,
+    /// How large it is drawn.
+    pub size: SizeClass,
+}
+
+impl<'a> WidgetContext<'a> {
+    /// Drawn `size` large; the rest as set with its methods.
+    pub fn new(size: SizeClass) -> Self {
+        Self {
+            placement: None,
+            host: None,
+            size,
+        }
+    }
+
+    /// Shown by screen `host`.
+    pub fn host(self, host: Option<&'a str>) -> Self {
+        Self { host, ..self }
+    }
+
+    /// As placement `placement`.
+    pub fn placement(self, placement: Option<&'a str>) -> Self {
+        Self { placement, ..self }
+    }
+}
+
+/// Input a widget may take beside taps ([`Widget::on_input`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum WidgetInput {
+    /// A swipe that started on it, this way.
+    Swipe(crate::gesture::Direction),
+    /// The buttons' focus came to its target in this area, or (`None`)
+    /// left it.
+    Focus(Option<Rect>),
 }
 
 /// Makes a widget for a screen that shows it.
@@ -182,6 +258,9 @@ pub struct WidgetTarget {
     /// Tapped only: the buttons' focus does not stop there (what it does
     /// is reached otherwise, e.g. by an action bound to a button).
     pub touch: bool,
+    /// What a long press on it runs, if anything (else a long press does
+    /// what it does on the screen, e.g. editing the page).
+    pub hold: Option<crate::Command>,
 }
 
 impl WidgetTarget {
@@ -191,6 +270,15 @@ impl WidgetTarget {
             area,
             command,
             touch: false,
+            hold: None,
+        }
+    }
+
+    /// A long press on it runs `command`.
+    pub fn hold(self, command: crate::Command) -> Self {
+        Self {
+            hold: Some(command),
+            ..self
         }
     }
 
@@ -767,6 +855,33 @@ impl Widget for Placed {
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         self.with(env, || self.inner.targets(env, area))
+    }
+
+    fn context(&mut self, env: &Env<'_>, context: &WidgetContext<'_>) {
+        let placement = core::mem::take(&mut self.placement);
+        let own = context.placement(Some(&placement));
+        env.settings
+            .with_placement(Some(&placement), || self.inner.context(env, &own));
+        self.placement = placement;
+    }
+
+    fn on_input(
+        &mut self,
+        env: &Env<'_>,
+        input: WidgetInput,
+        area: Rect,
+        out: &mut Vec<crate::Command>,
+    ) -> bool {
+        let placement = core::mem::take(&mut self.placement);
+        let taken = env.settings.with_placement(Some(&placement), || {
+            self.inner.on_input(env, input, area, out)
+        });
+        self.placement = placement;
+        taken
+    }
+
+    fn draw_focus(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, target: Rect) -> bool {
+        self.with(env, || self.inner.draw_focus(canvas, env, target))
     }
 }
 
