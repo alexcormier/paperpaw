@@ -225,19 +225,6 @@ impl GroupPage {
         let heading = ui::heading_height(env, &style);
         let row = if noted { style.noted_row() } else { style.row } as u16;
         let slider_row = ui::slider::row_height(&style, noted);
-        let heights = entries
-            .iter()
-            .map(|e| match e {
-                Row::Heading(_) => heading,
-                Row::Setting(spec) if ui::slider::shows(env, spec) => slider_row,
-                Row::Setting(spec) => ui::setting_row(&style, spec, u32::from(row), noted) as u16,
-                Row::Reset | Row::Theme(_) => style.row as u16,
-            })
-            .collect();
-        let headings = entries
-            .iter()
-            .map(|e| matches!(e, Row::Heading(_)))
-            .collect();
         let number_room = ui::number_room(
             env,
             &style,
@@ -246,6 +233,25 @@ impl GroupPage {
                 Row::Heading(_) | Row::Reset | Row::Theme(_) => None,
             }),
         );
+        // A title that does not fit beside its control gets a line of its
+        // own, the control below it: titles are never cut.
+        let height = |spec: &SettingSpec| {
+            let (width, row) = (area.width, u32::from(row));
+            ui::setting_height(env, &style, spec, width, &number_room, row, noted) as u16
+        };
+        let heights = entries
+            .iter()
+            .map(|e| match e {
+                Row::Heading(_) => heading,
+                Row::Setting(spec) if ui::slider::shows(env, spec) => slider_row,
+                Row::Setting(spec) => height(spec),
+                Row::Reset | Row::Theme(_) => style.row as u16,
+            })
+            .collect();
+        let headings = entries
+            .iter()
+            .map(|e| matches!(e, Row::Heading(_)))
+            .collect();
         Self {
             group,
             title,
@@ -372,13 +378,9 @@ impl GroupPage {
         } else {
             &self.number_room
         };
-        // Its first line, as high as − and + need.
-        let area = if self.noted {
-            ui::number_title_area(&self.style, rect)
-        } else {
-            rect
-        };
-        ui::stepper(env, &self.style, area, room)
+        // Its line, as high as − and + need.
+        let lines = ui::row_lines(env, &self.style, spec, rect, &self.number_room, self.noted);
+        ui::stepper(env, &self.style, lines.control, room)
     }
 
     /// Redraws row `index` where it is (a value shown that changed).
@@ -475,35 +477,30 @@ impl Screen for GroupPage {
                     slider.draw_row(canvas, env, &style, &view);
                     return;
                 }
+                let lines = ui::row_lines(env, &style, spec, rect, room, noted);
                 match spec.kind {
                     SettingKind::Int { .. } if focused => {
-                        let area = if noted {
-                            ui::number_title_area(&style, rect)
-                        } else {
-                            rect
-                        };
-                        ui::draw_stepper(canvas, env, &style, area, title, &value, room, editing);
+                        ui::draw_stepper_lines(
+                            canvas, env, &style, lines, title, &value, room, editing,
+                        );
                         if !note.is_empty() {
-                            ui::draw_number_note(canvas, env, &style, rect, true, note);
+                            ui::draw_lines_note(canvas, env, &style, rect, lines, true, note);
                         }
                         return;
                     }
                     // On touch screens − and + are always there.
                     SettingKind::Int { .. } if touch => {
-                        let area = if noted {
-                            ui::number_title_area(&style, rect)
-                        } else {
-                            rect
-                        };
-                        ui::draw_number(canvas, env, &style, area, title, &value, room, None);
+                        ui::draw_number_lines(canvas, env, &style, lines, title, &value, room, None);
                         if !note.is_empty() {
-                            ui::draw_number_note(canvas, env, &style, rect, false, note);
+                            ui::draw_lines_note(canvas, env, &style, rect, lines, false, note);
                         }
                         return;
                     }
                     SettingKind::Bool if spec.extra().editor.is_none() => {
                         let on = env.settings.bool(spec.id.as_str());
-                        ui::draw_switch_row(canvas, env, &style, rect, focused, title, note, on);
+                        ui::draw_switch_lines(
+                            canvas, env, &style, rect, lines, focused, title, note, on,
+                        );
                         return;
                     }
                     _ => {}
@@ -511,7 +508,7 @@ impl Screen for GroupPage {
                 if ui::opens_screen(env, spec) {
                     value.push_str(" ›");
                 }
-                ui::draw_noted_row(canvas, env, &style, rect, focused, title, &value, note);
+                ui::draw_setting_row(canvas, env, &style, rect, lines, focused, title, &value, note);
             });
     }
 

@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: a setting's title is never cut for its control. Where it does not
+  fit beside its `−` value `+`, its switch or its value, the control goes
+  on a line of its own below the title, at the right, and a title too
+  wide for a line wraps onto a second (`ui::RowLines`, `ui::row_lines`,
+  `ui::setting_height`; drawn with `ui::draw_number_lines`,
+  `ui::draw_stepper_lines`, `ui::draw_switch_lines`,
+  `ui::draw_setting_row`, `ui::draw_lines_note`). The settings use it:
+  on the X4 Pro *Saving below (%)* and *Offline below (%)* showed as
+  *Saving bel…*, as their buttons are a fingertip wide. Touch targets
+  and the focus by the buttons stay as they were.
 - Headers centre their titles by the capitals (the baseline to the top
   of an *H*) rather than by each title's own ink: a title with a *g* or
   *y* stood higher than one without and above the back arrow, by up to

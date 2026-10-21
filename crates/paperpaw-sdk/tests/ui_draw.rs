@@ -944,3 +944,54 @@ fn a_theme_gives_the_arrows_and_marks_icons_of_its_own() {
     assert!(!icon.is_empty());
     assert_ne!(icon, chevron);
 }
+
+/// A setting's title is never cut for its control: where it does not fit
+/// beside `−` value `+` (or a switch), it gets a line of its own with the
+/// control below it at the right, the row a line higher; a short one
+/// stays beside it. By touch (buttons a fingertip wide) and with buttons.
+#[test]
+fn setting_titles_are_never_cut_for_their_control() {
+    use paperpaw_sdk::SettingSpec;
+    use paperpaw_sdk::builtin::groups;
+    const NUMBER: &str = "Offline below (%)";
+    const SWITCH: &str = "Pictures in night mode too";
+    let specs = [
+        SettingSpec::fixed_number("t.long", NUMBER, 0, 100, 20, groups::OTHER),
+        SettingSpec::fixed_switch("t.switch", SWITCH, false, groups::OTHER),
+    ];
+    let short = SettingSpec::fixed_number("t.short", "Size", 0, 100, 20, groups::OTHER);
+    for device in [Device::TOUCH, Device::BUTTONS] {
+        let h = Harness::new(device);
+        let env = h.env();
+        let style = UiStyle::new(&env);
+        for noted in [false, true] {
+            let row = if noted { style.noted_row() } else { style.row };
+            for spec in &specs {
+                let side = ui::setting_row(&style, spec, row, noted);
+                let height = ui::setting_height(&env, &style, spec, 480, "", row, noted);
+                assert!(height > side, "{} noted {noted}", spec.id);
+                let rect = Rect::new(0, 100, 480, height as u16);
+                let lines = ui::row_lines(&env, &style, spec, rect, "", noted);
+                assert!(lines.stacked(), "{} noted {noted}", spec.id);
+                assert!(lines.title.bottom() <= lines.control.y.into());
+                assert!(lines.control.bottom() <= rect.bottom());
+                let title = spec.title.as_ref();
+                let (described, _) = describe(480, 800, |c| match spec.kind {
+                    paperpaw_sdk::SettingKind::Int { .. } => {
+                        ui::draw_number_lines(c, &env, &style, lines, title, "20", "", None);
+                    }
+                    _ => ui::draw_switch_lines(c, &env, &style, rect, lines, false, title, "", true),
+                });
+                assert!(
+                    described.iter().any(|d| d.label == title),
+                    "{} noted {noted}: {described:?}",
+                    spec.id
+                );
+            }
+            let side = ui::setting_row(&style, &short, row, noted);
+            assert_eq!(ui::setting_height(&env, &style, &short, 480, "", row, noted), side);
+            let rect = Rect::new(0, 100, 480, side as u16);
+            assert!(!ui::row_lines(&env, &style, &short, rect, "", noted).stacked());
+        }
+    }
+}
