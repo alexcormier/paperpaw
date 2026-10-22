@@ -1,11 +1,28 @@
-# PaperPaw
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/banner-dark.png">
+    <img src="docs/images/readme/banner.png" width="720" alt="A cat on a cushion, reading on an e-reader beside a pile of books">
+  </picture>
+</p>
 
-**E-reader software made of plugins, for e-ink devices from a
-microcontroller with 400 KB of RAM to Android e-readers.** Swap the home
-screen, add a vocabulary trainer, remap every gesture: a folder of text
-files is enough, no fork, no rebuild.
+<h1 align="center">PaperPaw</h1>
 
-PaperPaw was called QuireInk up to version 0.3.
+<p align="center">
+  <b>E-reader software made of plugins</b><br>
+  for e-ink devices, from a microcontroller with 400 KB of RAM to Android e-readers
+</p>
+
+<p align="center">
+  <a href="https://github.com/hthoene/paperpaw/releases"><img alt="Latest release" src="https://img.shields.io/github/v/release/hthoene/paperpaw?include_prereleases&label=release"></a>
+  <a href="https://github.com/hthoene/paperpaw/actions/workflows/ci.yml"><img alt="CI" src="https://github.com/hthoene/paperpaw/actions/workflows/ci.yml/badge.svg"></a>
+  <a href="https://crates.io/crates/paperpaw-sdk"><img alt="paperpaw-sdk on crates.io" src="https://img.shields.io/crates/v/paperpaw-sdk?label=paperpaw-sdk"></a>
+  <a href="LICENSE"><img alt="Licence: Apache-2.0" src="https://img.shields.io/badge/licence-Apache--2.0-blue"></a>
+</p>
+
+Swap the home screen, add a vocabulary trainer, remap every gesture: a
+folder of text files is enough, no fork, no rebuild. PaperPaw runs as an
+app on Android e-readers and as firmware of its own on the Xteink X4 and
+X4 Pro. Free and open source: no account, no ads, no tracking.
 
 > **Status: early releases (0.3).** PaperPaw runs on Android e-readers
 > (tested on a Boox Go 7) and in the desktop emulator: EPUB, FB2,
@@ -16,13 +33,99 @@ PaperPaw was called QuireInk up to version 0.3.
 > runs on both readers today; its first release is still to come. The X4
 > Classic's is built but not yet tried on one.
 
-<p align="center">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="24%" alt="The home screen: the date, the book to continue and the one read before">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width="24%" alt="A page of Alice's Adventures in Wonderland">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.png" width="24%" alt="The reading menu over the page: contents, search, listen, notes, font, night">
-  <img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5.png" width="24%" alt="The settings, with a search at the top">
-</p>
-<p align="center"><sub>As on a Boox Go 7 (in the emulator): home screen, reading, the reading menu, the settings.</sub></p>
+PaperPaw was called QuireInk up to version 0.3.
+
+## Three ways in
+
+| I just want to read | I want to tinker | I want to develop |
+|---|---|---|
+| Install it and open a book. Night mode, gestures and a home screen with your current book are there from the start, by touch or with buttons. **[Get it](#get-it)** | A plugin can be a folder of text files: a key map, new defaults, a theme, a translation. *Large print* is three files. **[Plugins without code](#plugins-without-code)** | A Rust crate against `paperpaw-sdk` adds screens, formats or services, or replaces the home screen outright. On the X4 it is a signed file from the plugin store. **[Writing plugins](docs/plugins.md)** |
+
+## On the devices
+
+<table>
+  <tr>
+    <td align="center" width="25%"><img src="docs/images/readme/x4-pro-home.png" width="200" alt="The home screen: the clock, the flash cards due, the book to continue"><br><sub>Home screen</sub></td>
+    <td align="center" width="25%"><img src="docs/images/readme/x4-pro-goal.png" width="200" alt="The home screen with a happy reading cat: 10 of 10 minutes read today"><br><sub>Reading goal</sub></td>
+    <td align="center" width="25%"><img src="docs/images/readme/x4-pro-card.png" width="200" alt="A flash card: to arrive, ankommen, with its sentence, and Again, Hard, Good, Easy"><br><sub>Flash cards</sub></td>
+    <td align="center" width="25%"><img src="docs/images/readme/x4-pro-sleep.png" width="200" alt="The sleep screen: a sleeping cat"><br><sub>Sleep screen</sub></td>
+  </tr>
+  <tr><td colspan="4" align="center"><sub>As on an Xteink X4 Pro (in the emulator).</sub></td></tr>
+  <tr>
+    <td align="center"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="200" alt="The home screen: the date, the book to continue and the one read before"><br><sub>Home screen</sub></td>
+    <td align="center"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width="200" alt="A page of Alice's Adventures in Wonderland"><br><sub>Reading</sub></td>
+    <td align="center"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.png" width="200" alt="The reading menu over the page: contents, search, listen, notes, font, night"><br><sub>Reading menu</sub></td>
+    <td align="center"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5.png" width="200" alt="The settings, with a search at the top"><br><sub>Settings</sub></td>
+  </tr>
+  <tr><td colspan="4" align="center"><sub>As on a Boox Go 7 (in the emulator).</sub></td></tr>
+</table>
+
+## What it does
+
+### Everything is a plugin
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/plugins-dark.png">
+  <img align="right" width="160" src="docs/images/readme/plugins.png" alt="A cat arranging puzzle pieces">
+</picture>
+
+The core is a small kernel. The home screen, library, reader, menus, file
+formats, themes, key maps and translations are plugins, and first-party
+ones use exactly the same SDK as community plugins. Anything can be
+added, replaced, reconfigured or removed. On the X4, a plugin with code
+is a signed file from the plugin store: no firmware rebuild.
+
+<br clear="right">
+
+### Wi-Fi set up with a phone
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/phone-dark.png">
+  <img align="left" width="160" src="docs/images/readme/phone.png" alt="A cat tapping a phone beside an e-reader">
+</picture>
+
+Join a network by scanning a code and typing the password on your phone.
+Books go over from a phone or a computer, with or without a router; Calibre
+sends them over Wi-Fi as to any wireless reader.
+
+<br clear="left">
+
+### Vocabulary
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/cards-dark.png">
+  <img align="right" width="160" src="docs/images/readme/cards.png" alt="A cat looking at a flash card, a pile of cards beside it">
+</picture>
+
+Every word you look up is kept with its sentence. Learn them as flash
+cards, edit them on a phone, or bring an Anki deck along; a card that is
+due can show while the reader sleeps.
+
+<br clear="right">
+
+### Reading goal
+
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/goal-dark.png">
+  <img align="left" width="160" src="docs/images/readme/goal.png" alt="A content cat beside an open book and an alarm clock">
+</picture>
+
+Minutes to read a day, and a cat on the home screen whose mood follows
+today's reading: sad, so-so, content or happy.
+
+<br clear="left">
+
+### Small and simple
+
+- **Runs in 262 KB of heap.** On the Xteink X4, an ESP32-C3 with 400 KB
+  of RAM and no PSRAM, opening a book takes at most 179 KB of its heap;
+  the firmware is 6.4 MB of the 16 MB of flash.
+- **Simple by default.** Turn it on and keep reading. Every function is at
+  most two steps away, and it works with buttons only or with touch.
+- **One codebase, many devices.** Today: Boox and other Android
+  e-readers, the Xteink X4 and X4 Pro, and the desktop emulator, in
+  grayscale and colour e-ink. Planned: the Xteink X3 and X4 Classic, Kobo,
+  Kindle (jailbroken), PocketBook and reMarkable.
 
 ## Get it
 
@@ -43,24 +146,6 @@ adb shell appops set --user 0 org.paperpaw.app ACCESS_RESTRICTED_SETTINGS allow
 
 For updates as they are released, [Obtainium](https://github.com/ImranR98/Obtainium)
 installs new versions from the releases page.
-
-## Why PaperPaw?
-
-- **Runs in 262 KB of heap.** On the Xteink X4, an ESP32-C3 with 400 KB
-  of RAM and no PSRAM, opening a book takes at most 179 KB of its heap;
-  the firmware is 6.4 MB of the 16 MB of flash.
-- **Everything is a plugin.** The core is a small kernel. The home screen,
-  library, reader, menus, file formats, themes, key maps and translations are
-  plugins. First-party ones use exactly the same SDK as community plugins.
-  Anything can be added, replaced, reconfigured or removed. On the X4, a
-  plugin with code is a signed file from the plugin store: no firmware
-  rebuild.
-- **Simple by default.** Turn it on and keep reading. Every function is at
-  most two steps away, and it works with buttons only or with touch.
-- **One codebase, many devices.** Today: Boox and other Android
-  e-readers, the Xteink X4 and X4 Pro, and the desktop emulator, in
-  grayscale and colour e-ink. Planned: the Xteink X3 and X4 Classic, Kobo,
-  Kindle (jailbroken), PocketBook and reMarkable.
 
 ## How it's made
 
