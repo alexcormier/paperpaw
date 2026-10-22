@@ -38,9 +38,9 @@ change the plugin SDK.
   `presets.ini`) are no longer offered anywhere; they are left unread.
   Presets stay for other kinds (the power modes).
 - X4, X4 Pro and X4 Classic: calm status lines by default. While
-  reading, the time and the page (and the mark of reading aloud while it
-  reads); on the home screen, the time and the battery. Every item can
-  still be chosen.
+  reading, the time at the left edge and the page at the right (the mark
+  of reading aloud beside the time while it reads); on the home screen,
+  the time and the battery. Every item can still be chosen.
 - The keyboard on narrow screens (the X4 and X4 Pro): a row too wide for
   keys at least 6 mm wide is split in two in its order ("qwert" above
   "yuiop"), so the keys are about twice as wide; by touch and with the
