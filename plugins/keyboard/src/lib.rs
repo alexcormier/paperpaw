@@ -71,6 +71,18 @@ const REMOTE_TEXT: Event<Typed> = Event::new("keyboard.remote-text");
 /// Longest text the keyboard accepts, in characters: room for long web
 /// addresses and keys; what goes past it is cut, and the keyboard says so.
 const MAX_CHARS: usize = 2000;
+/// What moves the focus between the keys.
+const MOVES: [Id; 8] = [
+    actions::UP,
+    actions::DOWN,
+    actions::LEFT,
+    actions::RIGHT,
+    actions::NEXT,
+    actions::PREVIOUS,
+    actions::PREV_PAGE,
+    actions::NEXT_PAGE,
+];
+
 /// What passes the keyboard while a password is typed.
 const PASSING: [Id; 3] = [
     actions::SLEEP,
@@ -686,7 +698,9 @@ impl KeyboardScreen {
 
     /// Moves the button focus.
     fn move_focus(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> bool {
-        if held(action) {
+        // Only a move (or Select, where no key has the focus yet): others,
+        // such as Home, are not the keyboard's even before it has a focus.
+        if held(action) || !(MOVES.contains(action) || *action == actions::CONFIRM) {
             return false;
         }
         let Some((row, index)) = self.focus else {

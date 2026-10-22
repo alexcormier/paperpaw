@@ -1,6 +1,6 @@
 ---
 name: paperpaw-plugin-development
-description: "Helps write a plugin for PaperPaw as it is, without changing PaperPaw (a community plugin, usually in its own repository): code plugins in Rust against the released paperpaw-sdk and data plugins without code; trying them in the desktop emulator and on a real Xteink X4; measuring speed, heap and stack; keeping within the memory of small devices. Use when someone writes, ports, debugs, tests or profiles such a plugin. Not for work on PaperPaw itself (its kernel, SDK, firmware or its own plugins in plugins/), where extending the SDK is the rule: that follows CONTRIBUTING.md."
+description: "Helps write a plugin for PaperPaw as it is, without changing PaperPaw (a community plugin, usually in its own repository): code plugins in Rust against the released paperpaw-sdk and data plugins without code; trying them in the desktop emulator and on a real Xteink X4; measuring speed, heap and stack; keeping within the memory of small devices; publishing it in the plugin store on paperpaw.org (the upload form, signing code plugins, reproducible builds, updates). Use when someone writes, ports, debugs, tests, profiles or publishes such a plugin. Not for work on PaperPaw itself (its kernel, SDK, firmware or its own plugins in plugins/), where extending the SDK is the rule: that follows CONTRIBUTING.md."
 ---
 
 # Developing PaperPaw plugins
@@ -134,6 +134,21 @@ section of `docs/plugins.md`. A plugin that should run there:
 - Screens can be checked as text (what a screen describes, part by part)
   and as pictures in the emulator; the repository's snapshot tests show
   how, and say how to update a snapshot when a change is meant.
+- Write a flow for every action of the plugin, as the main test of what
+  it does: each thing a user does with it (a setting switched, an entry
+  made, a sync started), from where they start to what should be true
+  after, by touch and with buttons alone (`docs/plugins.md`, "Flows";
+  `paperpaw-emu --record` writes the steps). Keep them in `tests/flows`
+  of the plugin's repository and run `paperpaw-dev flows --flow
+  tests/flows` (the templates in `tools/dev/templates` set it up, CI
+  included): every step's heap and frame time is held against the X4's
+  budgets with the step named, and each flow is played again at the
+  edges (steps repeated, *Back*, *Home* and sleep in the middle, the
+  network failing, slow, empty or huge, the pseudo-language, long data,
+  little storage). Fix what a variation finds rather than leaving the
+  flow out; `paperpaw-dev explore` is only a cheap baseline beside them.
+- Flows and their pictures stay out of the plugin's package (a data
+  plugin's folder): `paperpaw-dev package` warns of any it finds.
 
 ## 5. The desktop emulator
 
@@ -236,3 +251,18 @@ report the numbers; never claim a speed-up from reading code alone.
   memory, and how it looks in the emulator.
 - When the user must decide (what the plugin should do, anything hard
   to undo), lay out the options with a recommendation and ask.
+
+## 9. Publishing
+
+When the user wants the plugin in the store (on paperpaw.org and in
+every device's *More plugins*), follow
+[`publishing.md`](publishing.md) in this folder, step by step, with the
+site's guide for authors (<https://paperpaw.org/authors>) as the
+reference for the site's names: what to upload (the folder with
+`store/store.ini`, a code plugin's signed builds and source), the
+author's signing key, builds the site can rebuild to compare, the
+upload form, updates, every check code with
+its fix, and a final checklist. Its rules for the
+assistant come first: the secret key is never shown, copied or
+committed, nothing is uploaded, pushed or submitted without the user's
+yes, and no field or address is invented.

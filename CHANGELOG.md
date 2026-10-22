@@ -6,15 +6,106 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Vocabulary: flash cards with spaced repetition (FSRS, Anki's
+  scheduler), in *Tools*, *Flash cards*. A review shows each due card's
+  front, then its back and example and four answers (*Again*, *Hard*,
+  *Good*, *Easy*) with when the card would come again; with the buttons
+  alone the focus starts on *Good*, by touch a tap answers. New cards a
+  day (20) and the retention wanted (90 %) can be set. *Edit with your
+  phone* serves a page on the local network while it is open (a QR code,
+  a key of its own each time): decks and cards are made, changed and
+  deleted there, a list pasted as CSV or TSV, or an Anki deck (`.apkg`,
+  exported for older versions) read in the phone's browser. A widget says
+  how many cards are due. *A flash card due* can be the sleep screen: the
+  front of the next card, answered on waking, as the review opens with
+  it; *Review on waking* (off at first) opens the review on waking with
+  any sleep screen. With *Words looked up become cards* (off at first)
+  each word looked up goes into the deck *Looked up*, its sentence the
+  example, when the flash cards open next. The sleep screen now closes
+  itself on waking wherever it is, so what opened as the device woke
+  stays. Only the due cards' state is held during a review; decks
+  are text files in the plugin's folder, versioned.
+- SDK: `paperpaw_sdk::served`, for pages served to a phone or computer
+  on the local network: the key in the address (`key`), a `Guard` that
+  counts wrong keys and turns requests away for a while after a few,
+  `param` (a query's parameter, decoded) and `json_string`; and
+  `ui::draw_address`, the address as a QR code and as text with a hint.
+  The transfer plugin uses them.
+- X4 Pro: the battery no longer shows 0 % after it was cut off (run flat
+  or taken out). Its fuel gauge then starts asleep and forgets the
+  battery's profile; PaperPaw gives it the profile again at the start
+  and wakes it, as the stock firmware did.
+- Reading goal, a plugin of its own (in the store on the X4s): the daily
+  goal of the reading statistics (one goal for both; 20 minutes where
+  this plugin is), and a cat whose mood follows today's reading: sad
+  while nothing was read, so-so after a little, content from half the
+  goal, happy once it is reached (both shares are settings). The widget
+  *Reading cat* shows it with the minutes read and the goal, on the home
+  screen or the sleep screen's widgets; a tap opens the goal, or, where
+  the statistics are off or missing, offers to switch them on or get
+  them from the store. *Today's
+  reading cat* is a sleep screen too. One's own pictures can take the
+  cats' place (a folder with `sad`, `meh`, `content` and `happy`), also
+  a data plugin's. The minutes come from the reading statistics. SDK:
+  `events::READ_TODAY` (`ReadToday`: the day and the seconds read), which
+  the statistics send as they record reading.
+- The sleep screen shows a sleeping cat by default: PaperPaw's own
+  drawing, in the middle of the screen with even margins, in grays where
+  the screen can. It also shows where the cover or the pictures chosen
+  are missing. The cover, the pictures, the message and the others can
+  still be chosen. SDK: `image::picture_from_bytes` decodes a picture a
+  plugin carries in its code, as `picture_from_file` decodes a file.
+- Wi-Fi transfer without a router (X4, X4 Pro): *Without a router* on
+  the transfer screen opens the reader's own network and shows codes to
+  join it and to open the transfer page there; closing the screen (or
+  ten minutes without a request) closes the network.
+- Wi-Fi set up with a phone (X4, X4 Pro): the reader opens a network of
+  its own and shows two QR codes, to join it and to open a page there
+  that lists the networks found and takes the password with the phone's
+  keyboard; the reader then joins that network and keeps the password.
+  A `wifi.ini` on the card (`ssid = …`, `password = …`) is read once at a
+  start, kept with the passwords and removed. SDK: `WifiCommand::Host`,
+  `WifiState::Hosting` (servers serve on the own network).
+- X4 and X4 Pro save power (ADR 0025): the radio sleeps between the
+  network's beacons while connected and no data moves; on battery the
+  processor sleeps while the panel refreshes instead of watching it; the
+  panel's power goes off after a refresh once nothing follows (soon on
+  the X4, after 30 s on the X4 Pro, whose next refresh takes longer
+  then); going to sleep lets requests under way finish first, 15 s at
+  the longest, a press keeping it awake (`Kernel::holds_sleep`). A
+  press is counted as soon as it holds (the device stays awake while it
+  settles); *Button response* (Controls) set to *Faster* reads the
+  buttons more often on battery and keeps the X4 Pro's screen powered,
+  for a little more battery.
+
+- In Offline mode the store, an OPDS catalog, Calibre and Wi-Fi
+  transfer offer to go online once, inline ("Offline mode. Go online for
+  it?" with *Go online* and *Not now*), instead of failing. SDK:
+  `ui::OfflineOffer` (sends `Command::GoOnline`).
+- Plugin authors: `paperpaw-dev flows` is the main test of a plugin's
+  actions. Every step of a flow is measured on the X4's budgets, the
+  costliest one named (`flows.heap`, `flows.frame-time`), and each flow
+  is played again at the edges (`flows.varied`): every step repeated,
+  *Back*, *Home* or sleep and waking in the middle, network answers that
+  fail, come late, are empty or huge, the pseudo-language, long data and
+  an almost full storage. `paperpaw-dev explore` uses every target of
+  every screen once, each from a fresh start, as a cheap baseline.
+  `--flow` takes a folder of flows; `package` warns of flows and test
+  pictures in a data plugin's folder (`package.tests`). The templates
+  for a plugin's repository have a flow and run them in CI.
+- The on-screen keyboard on touch screens no longer takes *Home* (or any
+  other action that is no move) as the press that shows its focus: *Home*
+  leaves a text field at once. While a password is typed it still keeps
+  every button but *Sleep*, refresh and night mode.
 - The home screen's ready-made layouts are gone: no chooser, no row in
   *Add*, no step in the first-run setup; the home screen has one default
   layout. Breaking: presets of the kind `home.layout` (a data plugin's
   `presets.ini`) are no longer offered anywhere; they are left unread.
   Presets stay for other kinds (the power modes).
 - X4, X4 Pro and X4 Classic: calm status lines by default. While
-  reading, the time and the page (and the mark of reading aloud while it
-  reads); on the home screen, the time and the battery. Every item can
-  still be chosen.
+  reading, the time at the left edge and the page at the right (the mark
+  of reading aloud beside the time while it reads); on the home screen,
+  the time and the battery. Every item can still be chosen.
 - The keyboard on narrow screens (the X4 and X4 Pro): a row too wide for
   keys at least 6 mm wide is split in two in its order ("qwert" above
   "yuiop"), so the keys are about twice as wide; by touch and with the

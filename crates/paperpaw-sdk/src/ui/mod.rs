@@ -4,6 +4,7 @@
 //! setting, so every plugin's UI looks consistent and scales together when
 //! the user chooses larger text.
 
+mod address;
 mod button;
 pub mod choice;
 mod header;
@@ -12,6 +13,7 @@ mod image;
 pub mod items;
 mod list;
 pub mod look;
+pub mod offline;
 mod progress;
 pub mod reorder;
 mod rows;
@@ -23,11 +25,13 @@ mod text;
 mod thumbnail;
 pub mod widget_list;
 
+pub use address::*;
 pub use button::*;
 pub use header::*;
 pub use hints::*;
 pub use image::*;
 pub use list::*;
+pub use offline::{Offer, OfflineOffer};
 pub use progress::*;
 pub use reorder::{Reorder, ReorderStep};
 pub use rows::Rows;

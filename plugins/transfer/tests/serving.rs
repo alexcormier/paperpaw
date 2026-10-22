@@ -443,3 +443,204 @@ fn closing_the_screen_stops_the_server() {
     });
     assert!(device.calls().is_empty());
 }
+
+/// Where PaperPaw runs Wi-Fi, the transfer goes without a router too:
+/// the reader opens its own network, serves the page there and closes
+/// the network with the screen (or after ten minutes left alone).
+#[test]
+fn a_transfer_without_a_router_opens_the_readers_own_network() {
+    use paperpaw_core::WifiEvent;
+    use paperpaw_sdk::wifi::{WifiCommand, WifiState};
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(Shared::default())
+        .user_config("[core]\nlanguage = en\n")
+        .network(true)
+        .wifi(true)
+        .random(fill)
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Transfer)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.run_action(Instant(100), Id::new_static("transfer.open"));
+    let _ = kernel.take_io();
+    kernel.render(&mut |_, _| {});
+    let parts = kernel.describe();
+    let button = parts
+        .iter()
+        .find(|p| p.label == "Without a router")
+        .unwrap_or_else(|| panic!("{parts:?}"));
+    let at = paperpaw_platform::Point::new(
+        i32::from(button.area.x + button.area.width / 2),
+        i32::from(button.area.y + button.area.height / 2),
+    );
+    for (t, phase) in [
+        (200, paperpaw_platform::PointerPhase::Down),
+        (260, paperpaw_platform::PointerPhase::Up),
+    ] {
+        kernel.handle(
+            Instant(t),
+            paperpaw_platform::InputEvent::Pointer(paperpaw_platform::PointerEvent {
+                id: 0,
+                phase,
+                point: at,
+                tool: paperpaw_platform::PointerTool::Finger,
+                pressure: 1000,
+            }),
+        );
+    }
+    kernel.tick(Instant(1000));
+    let radio: Vec<WifiCommand> = kernel
+        .take_io()
+        .into_iter()
+        .filter_map(|io| match io {
+            Io::Wifi(command) => Some(command),
+            _ => None,
+        })
+        .collect();
+    let Some(WifiCommand::Host { ssid, password }) = radio.last().cloned() else {
+        panic!("{radio:?}");
+    };
+    kernel.wifi_event(
+        Instant(1200),
+        WifiEvent::State(WifiState::Hosting {
+            ssid: ssid.clone(),
+            address: "192.168.4.1".into(),
+        }),
+    );
+    // The server waiting for a network goes; the one in the own network
+    // listens.
+    let io = kernel.take_io();
+    let Some(server) = io.iter().rev().find_map(|io| match io {
+        Io::Server(ServerCall::Listen { server, .. }) => Some(*server),
+        _ => None,
+    }) else {
+        panic!("{io:?}");
+    };
+    kernel.server_event(
+        Instant(1300),
+        ServerEvent::Started {
+            server,
+            address: "192.168.4.1:8080".into(),
+        },
+    );
+    kernel.render(&mut |_, _| {});
+    let shown: Vec<String> = kernel.describe().into_iter().map(|p| p.label).collect();
+    assert!(shown.iter().any(|l| l.contains(&password)), "{shown:?}");
+    assert!(shown.iter().any(|l| l.contains("192.168.4.1")), "{shown:?}");
+    // Left alone ten minutes: the own network closes.
+    kernel.tick(Instant(1300 + 11 * 60 * 1000));
+    let radio: Vec<WifiCommand> = kernel
+        .take_io()
+        .into_iter()
+        .filter_map(|io| match io {
+            Io::Wifi(command) => Some(command),
+            _ => None,
+        })
+        .collect();
+    assert!(radio.contains(&WifiCommand::Leave), "{radio:?}");
+}
+
+/// A mode whose level is Offline, worn at the start.
+static OFFLINE: [paperpaw_sdk::presets::Preset; 1] = [paperpaw_sdk::presets::Preset::fixed(
+    "unplugged.mode",
+    "core.power-mode",
+    "Unplugged",
+    "",
+    "power.level = offline",
+)];
+
+struct Unplugged;
+
+impl paperpaw_sdk::Plugin for Unplugged {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest::new(
+            Id::new_static("unplugged"),
+            "Unplugged",
+            paperpaw_sdk::Version::new(0, 1, 0),
+        )
+        .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        r.add_presets(&OFFLINE)?;
+        r.subscribe(
+            paperpaw_sdk::builtin::events::STARTED.id().clone(),
+            Box::new(|_, _, out| {
+                out.push(paperpaw_sdk::Command::Wear(paperpaw_sdk::power::Wear::new(
+                    Id::new_static("unplugged.mode"),
+                )));
+            }),
+        )
+    }
+}
+
+/// In Offline mode the screen offers to go online first, inline; going
+/// online starts the server, not now says there is no network.
+#[test]
+fn offline_mode_offers_to_go_online_first() {
+    for go in [true, false] {
+        let mut kernel = Kernel::builder(DEVICE)
+            .storage(Shared::default())
+            .user_config("[core]\nlanguage = en\n")
+            .network(true)
+            .random(fill)
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(Unplugged)
+            .plugin(Transfer)
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        kernel.run_action(Instant(100), Id::new_static("transfer.open"));
+        let listens = |kernel: &mut Kernel| {
+            kernel
+                .take_io()
+                .iter()
+                .any(|io| matches!(io, Io::Server(ServerCall::Listen { .. })))
+        };
+        assert!(!listens(&mut kernel), "not before asking");
+        let shown = |kernel: &mut Kernel| {
+            kernel.render(&mut |_, _| {});
+            kernel
+                .describe()
+                .into_iter()
+                .map(|p| (p.label, p.area))
+                .collect::<Vec<_>>()
+        };
+        let parts = shown(&mut kernel);
+        let label = if go { "Go online" } else { "Not now" };
+        let (_, area) = parts
+            .iter()
+            .find(|(l, _)| l == label)
+            .unwrap_or_else(|| panic!("{parts:?}"))
+            .clone();
+        let at = paperpaw_platform::Point::new(
+            i32::from(area.x + area.width / 2),
+            i32::from(area.y + area.height / 2),
+        );
+        for (t, phase) in [
+            (200, paperpaw_platform::PointerPhase::Down),
+            (260, paperpaw_platform::PointerPhase::Up),
+        ] {
+            kernel.handle(
+                Instant(t),
+                paperpaw_platform::InputEvent::Pointer(paperpaw_platform::PointerEvent {
+                    id: 0,
+                    phase,
+                    point: at,
+                    tool: paperpaw_platform::PointerTool::Finger,
+                    pressure: 1000,
+                }),
+            );
+        }
+        kernel.tick(Instant(1000));
+        assert_eq!(listens(&mut kernel), go);
+        if !go {
+            let parts = shown(&mut kernel);
+            assert!(
+                parts.iter().any(|(l, _)| l.contains("No Wi-Fi")),
+                "{parts:?}"
+            );
+        }
+    }
+}

@@ -54,6 +54,7 @@ mod network;
 mod ota;
 mod power;
 mod probe;
+mod provision;
 #[cfg(feature = "remote")]
 mod remote;
 mod roots;
@@ -270,6 +271,9 @@ fn main() -> ! {
     let board = Board::take(p);
 
     let storage = card::mount(board.card);
+    // Wi-Fi the web flasher wrote with the firmware: to the card, for the
+    // kernel to keep at its start.
+    provision::take(&flash, storage.as_ref());
     // For bug reports: on the card, and said over USB.
     if let Some(message) = &panicked {
         crash::keep(storage.as_ref(), message);
@@ -389,23 +393,25 @@ fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
     CodePlugins::Load(native::Loader::new(place))
 }
 
-/// The kernel with the standard app, as the X4 wants it.
-#[expect(
-    clippy::expect_used,
-    reason = "the plugins are built in: a kernel that cannot be built is a bug to see at once"
-)]
-
 /// The status lines of the X4s by default (see `setting_default_text`):
 /// fewer items than on large screens.
 const CALM_STATUS: [(&str, &str); 6] = [
-    ("reader.status.bottom-left", "reader.status.aloud"),
-    ("reader.status.bottom-center", "core.status.clock"),
+    (
+        "reader.status.bottom-left",
+        "core.status.clock, reader.status.aloud",
+    ),
+    ("reader.status.bottom-center", ""),
     ("reader.status.bottom-right", "reader.status.page"),
     ("home.status.left", "core.status.clock"),
     ("home.status.center", ""),
     ("home.status.right", "core.status.battery"),
 ];
 
+/// The kernel with the standard app, as the X4 wants it.
+#[expect(
+    clippy::expect_used,
+    reason = "the plugins are built in: a kernel that cannot be built is a bug to see at once"
+)]
 fn kernel(
     storage: Box<dyn Storage>,
     ota: Option<&ota::Ota>,

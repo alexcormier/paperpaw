@@ -3,7 +3,7 @@
 //!
 //! Every request carries the key shown on the device (`k=`); without it
 //! the answer is *403*, and after a few wrong keys *429* for a while (see
-//! [`access`](crate::access)). Paths are relative to the top of the
+//! [`served`](paperpaw_sdk::served)). Paths are relative to the top of the
 //! storage and found part by part in the folders' listings ([`find`]):
 //! hidden ones (e.g. PaperPaw's own data) are out of reach, by any
 //! spelling. The settings file can be fetched but not changed
@@ -17,7 +17,7 @@ use paperpaw_sdk::builtin::CONFIG_FILE;
 use paperpaw_sdk::files;
 use paperpaw_sdk::{Instant, ServerResponse, Storage, StorageError};
 
-use crate::access::{Access, Guard};
+use paperpaw_sdk::served::{Access, Guard, json_string, param};
 
 /// What a request changed, to tell on the device: the name of what was
 /// sent or made, the path of what was received or deleted (for the
@@ -321,56 +321,6 @@ pub fn find(storage: &dyn Storage, path: &str, new: bool) -> Result<Found, Refus
         };
     }
     Ok(found)
-}
-
-/// Parameter `name` of a query (`a=1&b=x%20y`), decoded.
-pub fn param(query: &str, name: &str) -> Option<String> {
-    query
-        .split('&')
-        .filter_map(|pair| pair.split_once('=').or(Some((pair, ""))))
-        .find(|(key, _)| *key == name)
-        .map(|(_, value)| decode(value))
-}
-
-/// Decodes `%XX` and `+` of a query value.
-fn decode(value: &str) -> String {
-    let bytes = value.as_bytes();
-    let mut out = Vec::with_capacity(bytes.len());
-    let hex = |b: u8| char::from(b).to_digit(16).map(|d| d as u8);
-    let mut i = 0;
-    while i < bytes.len() {
-        let escaped = (bytes[i] == b'%')
-            .then(|| Some((hex(*bytes.get(i + 1)?)?, hex(*bytes.get(i + 2)?)?)))
-            .flatten();
-        match (bytes[i], escaped) {
-            (_, Some((high, low))) => {
-                out.push(high << 4 | low);
-                i += 3;
-                continue;
-            }
-            (b'+', _) => out.push(b' '),
-            (byte, _) => out.push(byte),
-        }
-        i += 1;
-    }
-    String::from_utf8_lossy(&out).into_owned()
-}
-
-/// `text` as a JSON string.
-pub fn json_string(text: &str) -> String {
-    let mut out = String::with_capacity(text.len() + 2);
-    out.push('"');
-    for c in text.chars() {
-        match c {
-            '"' => out.push_str("\\\""),
-            '\\' => out.push_str("\\\\"),
-            '<' => out.push_str("\\u003c"),
-            c if (c as u32) < 0x20 => out.push_str(&format!("\\u{:04x}", c as u32)),
-            c => out.push(c),
-        }
-    }
-    out.push('"');
-    out
 }
 
 #[cfg(test)]

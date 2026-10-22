@@ -270,6 +270,14 @@ impl Board {
         .with_scl(p.GPIO38);
         let mut i2c = i2c;
         let clock_ms = bm8563::read(&mut i2c).map(|t| t.unix_ms());
+        // The fuel gauge forgets its profile when the battery was cut off,
+        // and measures nothing then: given it again, and woken.
+        let mut wait = delay;
+        match cw2017::start(&mut i2c, &cw2017::X4_PRO_PROFILE, &mut wait) {
+            Some(cw2017::Started::Running) => {}
+            Some(cw2017::Started::Woken) => log::info!("gauge: profile given, woken"),
+            None => log::warn!("gauge: does not run"),
+        }
 
         // The card's power, on (low) for good.
         let _ = Output::new(p.GPIO5, Level::Low, OutputConfig::default());

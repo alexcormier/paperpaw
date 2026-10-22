@@ -13,7 +13,10 @@ from:
 | `.cargo/config.toml` | how a plugin is linked, for both chips, and the aliases `x4` and `x4pro` |
 | `rust-toolchain.toml` | the compiler for the X4 (the X4 Pro's comes from espup) |
 | `plugin/plugin.ini` | the plugin's folder, to which `code.ppn` is added |
-| `.github/workflows/build.yml` | a CI job for a plugin's repository: both files, packed and signed |
+| `plugin/store/store.ini` | what the plugin store shows of it, for the upload form; readers never install `store/` |
+| `build.sh` | builds both files, packs and signs them, zips the folder, into `dist/` |
+| `.github/workflows/build.yml` | a CI job for a plugin's repository: `build.sh` on every tag, its files as a release |
+| `.gitignore` | keeps `target/`, `dist/` and any `*.key` out of the repository |
 | `examples/second.rs` | a second plugin, to try several at once |
 | `examples/crash.rs` | a plugin that panics at every start, to try safe mode |
 

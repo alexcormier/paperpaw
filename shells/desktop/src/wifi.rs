@@ -19,6 +19,9 @@ const JOIN_MS: u64 = 1000;
 
 /// The address the emulated device gets.
 const ADDRESS: &str = "192.168.1.42";
+/// The address of the emulated device's own network (`WifiCommand::Host`):
+/// its servers listen on this computer.
+const HOST_ADDRESS: &str = "127.0.0.1";
 
 fn networks() -> Vec<WifiNetwork> {
     let net = |ssid: &str, signal, secured| WifiNetwork {
@@ -96,6 +99,18 @@ impl Wifi {
                 self.set(now, WifiState::On);
             }
             WifiCommand::Leave => {}
+            // The device's own network: its pages served on this computer.
+            WifiCommand::Host { ssid, .. } if self.state.is_on() => {
+                self.due.retain(|(_, e)| !matches!(e, WifiEvent::State(_)));
+                self.set(
+                    after(START_MS),
+                    WifiState::Hosting {
+                        ssid,
+                        address: String::from(HOST_ADDRESS),
+                    },
+                );
+            }
+            WifiCommand::Host { .. } => {}
         }
     }
 

@@ -8,7 +8,11 @@
 //! - *Words saved* (`vocabulary.widget.saved`): how many words are kept,
 //!   from how many books and in how many languages, and the newest.
 //!
-//! A tap on either opens the list of words. They read the words when
+//! - *Cards due* (`vocabulary.widget.due`): how many flash cards are due
+//!   now, new ones to show today counted (see [`cards`](crate::cards)).
+//!
+//! A tap on either of the first two opens the list of words, on the
+//! third the flash cards. They read the words when
 //! they are updated (when shown and after events), never as they are
 //! drawn: one pass over the file, keeping a word.
 
@@ -35,6 +39,9 @@ const WORD_NAME: &str = "vocabulary.widget.word";
 /// The words saved.
 pub(crate) const SAVED: Id = Id::new_static(SAVED_NAME);
 const SAVED_NAME: &str = "vocabulary.widget.saved";
+/// The cards due.
+pub(crate) const DUE: Id = Id::new_static(DUE_NAME);
+const DUE_NAME: &str = "vocabulary.widget.due";
 /// Which word the word of the day is: another each day, or the newest.
 const PICKS: [&str; 2] = ["vocabulary.pick.daily", "vocabulary.pick.newest"];
 
@@ -50,7 +57,8 @@ static WORD_SETTINGS: [SettingSpec; 8] = [
         &PICKS,
         PICKS[0],
         WORD,
-    ),
+    )
+    .described("vocabulary.setting.pick.help"),
     widgets::part_spec(
         "vocabulary.widget.word.caption",
         WORD,
@@ -103,6 +111,20 @@ static SAVED_SETTINGS: [SettingSpec; 8] = [
     ),
 ];
 
+/// The cards due's settings, kept in the program.
+static DUE_SETTINGS: [SettingSpec; 5] = [
+    widgets::frame_spec("vocabulary.widget.due.frame", DUE, Frame::None),
+    widgets::padding_spec("vocabulary.widget.due.padding", DUE, Padding::Auto),
+    widgets::size_spec("vocabulary.widget.due.size", DUE, Size::Medium, true),
+    widgets::align_spec("vocabulary.widget.due.align", DUE, Align::Left),
+    widgets::part_spec(
+        "vocabulary.widget.due.caption",
+        DUE,
+        "vocabulary.part.caption",
+        true,
+    ),
+];
+
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_setting_group(widgets::settings_group(&WORD, "vocabulary.widget.word"))?;
     r.add_settings(&WORD_SETTINGS)?;
@@ -119,6 +141,12 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             Box::new(Saved::default())
         })
         .category(widgets::categories::WORDS),
+    )?;
+    r.add_setting_group(widgets::settings_group(&DUE, "vocabulary.widget.due"))?;
+    r.add_settings(&DUE_SETTINGS)?;
+    r.add_widget(
+        WidgetSpec::new(DUE, "vocabulary.widget.due", |_| Box::new(Due::default()))
+            .category(widgets::categories::WORDS),
     )
 }
 
@@ -145,6 +173,8 @@ fn caption_room(env: &Env<'_>, widget: &str) -> u16 {
 fn caption_text<'e>(env: &Env<'e>, widget: &str) -> &'e str {
     if widget == SAVED_NAME {
         env.i18n.tr("vocabulary.title")
+    } else if widget == DUE_NAME {
+        env.i18n.tr("vocabulary.cards.title")
     } else if env.settings.text(&format!("{WORD_NAME}.pick")) == PICKS[1] {
         env.i18n.tr("vocabulary.widget.newest")
     } else {
@@ -245,12 +275,20 @@ fn empty(env: &Env<'_>, widget: &str, area: Rect) -> Wrapped {
     let (width, height) = (inner.width, (inner.height + area.height) / 2);
     // The sentence inside the spacing, the short form where it does not
     // fit whole.
-    let long = env.i18n.tr("vocabulary.widget.empty");
+    let (long, short) = if widget == DUE_NAME {
+        (
+            "vocabulary.widget.due.empty",
+            "vocabulary.widget.due.empty.short",
+        )
+    } else {
+        ("vocabulary.widget.empty", "vocabulary.widget.empty.short")
+    };
+    let long = env.i18n.tr(long);
     let wrapped = Wrapped::fitting(env, long, style.text, style.small, width, inner.height);
     if wrapped.whole() {
         return wrapped;
     }
-    let short = env.i18n.tr("vocabulary.widget.empty.short");
+    let short = env.i18n.tr(short);
     Wrapped::fitting(env, short, style.text, style.small, width, height)
 }
 
@@ -680,6 +718,103 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, summary: &Sum
     }
 }
 
+/// How many flash cards are due; without decks, a word on how to make
+/// some.
+#[derive(Default)]
+struct Due {
+    /// `None` without decks.
+    count: Option<usize>,
+    area: Option<Rect>,
+    empty: Option<(Rect, Wrapped)>,
+}
+
+impl Due {
+    fn lay_out(&mut self, env: &Env<'_>) {
+        self.empty = match self.area {
+            Some(area) if self.count.is_none() => Some((area, empty(env, DUE_NAME, area))),
+            _ => None,
+        };
+    }
+}
+
+impl Widget for Due {
+    fn update(&mut self, env: &Env<'_>) -> bool {
+        let count =
+            (!crate::cards::decks(env.storage).is_empty()).then(|| crate::decks::due_now(env));
+        let changed = count != self.count;
+        self.count = count;
+        if changed {
+            self.lay_out(env);
+        }
+        changed
+    }
+
+    fn place(&mut self, env: &Env<'_>, area: Rect) {
+        if self.area != Some(area) {
+            self.area = Some(area);
+            self.lay_out(env);
+        }
+    }
+
+    fn live(&self) -> bool {
+        false
+    }
+
+    fn height(&self, env: &Env<'_>, _: u16) -> u16 {
+        let style = UiStyle::new(env);
+        let Some(font) = style.font(env) else {
+            return 0;
+        };
+        let size = widgets::size(env, DUE_NAME).text(&style);
+        frame_height(env, DUE_NAME) + caption_room(env, DUE_NAME) + line(&font, size)
+    }
+
+    fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
+        let look = widgets::draw_frame(canvas, env, DUE_NAME, area);
+        let Some(count) = self.count else {
+            let at = (DUE_NAME, &look, area);
+            draw_empty(canvas, env, at, self.empty.as_ref());
+            return;
+        };
+        let style = UiStyle::new(env);
+        let Some(font) = style.font(env) else {
+            return;
+        };
+        let inner = look.area;
+        let room = inner
+            .height
+            .saturating_sub(caption_in(env, DUE_NAME, inner));
+        let headline = env
+            .i18n
+            .plural("vocabulary.widget.due.count", count as i64, &[]);
+        let width = f32::from(inner.width);
+        // Too wide: the number alone.
+        let size = text_size(env, &font, DUE_NAME, &headline, (inner.width, room));
+        let headline = if font.measure(size, &headline) > width {
+            format!("{count}")
+        } else {
+            headline
+        };
+        let big = line(&font, size);
+        let block = captioned(
+            canvas,
+            env,
+            DUE_NAME,
+            &look,
+            caption_text(env, DUE_NAME),
+            big,
+        );
+        let headline = ui::fit(&font, size, &headline, width);
+        let x = widgets::align(env, DUE_NAME).x(inner, font.measure(size, &headline));
+        let at = Rect::new(inner.x, block.y, inner.width, big);
+        ui::draw_label(canvas, &font, size, x, at, &headline, look.ink);
+    }
+
+    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        alloc::vec![WidgetTarget::new(area, Command::RunAction(crate::CARDS))]
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -688,7 +823,12 @@ mod tests {
     /// it reads them.
     #[test]
     fn settings_are_the_widgets() {
-        for (settings, widget) in [(&WORD_SETTINGS, WORD_NAME), (&SAVED_SETTINGS, SAVED_NAME)] {
+        let all: [(&[SettingSpec], &str); 3] = [
+            (&WORD_SETTINGS, WORD_NAME),
+            (&SAVED_SETTINGS, SAVED_NAME),
+            (&DUE_SETTINGS, DUE_NAME),
+        ];
+        for (settings, widget) in all {
             for spec in settings {
                 let prefix = format!("{widget}.");
                 assert!(spec.id.as_str().starts_with(&prefix), "{}", spec.id);

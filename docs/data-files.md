@@ -51,6 +51,9 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/profiles/last.txt` | profiles | the profile applied last | version 1 |
 | `.paperpaw/plugins/rules/rules.txt` | rules | a rule per line: trigger, effect, target, on, condition (tab separated) | version 1 |
 | `.paperpaw/plugins/vocabulary/words.txt` | vocabulary | a word per line: word, language, place, book, title, sentence (tab separated) | version 1 |
+| `.paperpaw/plugins/vocabulary/cards/decks.txt`, `deck-<id>.txt` | vocabulary | `paperpaw-decks 1` / `paperpaw-cards 1`, then a deck per line (id, name) or a card per line (id, due, last, stability, difficulty, reps, lapses, front, back, example; tab separated, texts escaped) | version 1 |
+| `.paperpaw/plugins/vocabulary/cards/answers.txt`, `due.txt`, `state.txt` | vocabulary | answers not yet written into their decks; when each deck's cards are due, by quarter hour; the time last known and the new cards shown that day | version 1 |
+| `.paperpaw/plugins/vocabulary/cards/looked-up.txt`, `adding.txt`, `asleep.txt` | vocabulary | words looked up waiting to become cards (word, sentence); the deck cards are being added to; the card the sleep screen showed (deck, id) | version 1 |
 | `.paperpaw/plugins/opds/catalogs.txt` | opds | a catalog per line: name, address, user, (password, empty), folder, `sync`, `webdav` | version 1 |
 | `.paperpaw/plugins/news/feeds.txt` | news | a feed per line: address, name | version 1 |
 | `.paperpaw/plugins/browser/bookmarks.txt`, `history.txt` | browser | a page per line: title, address | version 1 |
@@ -61,6 +64,9 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/crashes.txt` | X4 firmware | a line per panic: the version and why, written for bug reports, never read back | |
 | `.paperpaw/plugins/battery/plugins.csv` | battery | CSV with a header, written for reading on a computer, never read back | |
 | `.paperpaw/plugins/sleep/next.txt` | sleep | the next picture, counted | version 1 |
+| `.paperpaw/plugins/reading-goal/today.txt` | reading-goal | the day (days since 1970, local time) and the seconds read on it, as the statistics told them | version 1 |
+| `.paperpaw/plugins/reading-goal/cat-<mood>-<size>.gray`, `own-<mood>-<size>.gray` | reading-goal | the mood's picture decoded (a cache: made again where it is missing) | version 1 |
+| `.paperpaw/plugins/sleep/cat-<side>.gray` | sleep | the sleeping cat decoded for a screen (a cache: made again where it is missing) | version 1 |
 | `.paperpaw/plugins/setup/done` | setup | its presence | version 1 (the app's screen tests) |
 | `.paperpaw/plugins/update/installing.txt`, `offered.txt` | update | a path and a version, a line each (`offered.txt`: `online` and the version for an update the server named) | version 1 |
 | `.paperpaw/plugins/update/waiting.txt` | update | an update that waits for plugins: its version, `since <unix seconds or ->`, `checked <unix seconds or ->`, `asked`, `seen` and `told` lines where set, then what it waits for, `plugin <id> <version>` and `crate <name>` lines | version 1 |

@@ -34,6 +34,7 @@ store-plugins = [
     "dep:paperpaw-plugin-aids",
     "dep:paperpaw-plugin-translate",
     "dep:paperpaw-plugin-battery",
+    "dep:paperpaw-plugin-reading-goal",
     "dep:paperpaw-plugin-browser",
     "dep:paperpaw-plugin-readwise",
     "dep:paperpaw-plugin-joplin",
@@ -66,6 +67,7 @@ paperpaw-plugin-kosync = { workspace = true, optional = true }
 paperpaw-plugin-calibre = { workspace = true, optional = true }
 paperpaw-plugin-stats = { workspace = true, optional = true }
 paperpaw-plugin-battery = { workspace = true, optional = true }
+paperpaw-plugin-reading-goal = { workspace = true, optional = true }
 paperpaw-plugin-widgets = { workspace = true, optional = true }
 paperpaw-plugin-wifi.workspace = true
 paperpaw-plugin-power.workspace = true

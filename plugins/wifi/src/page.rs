@@ -1,6 +1,7 @@
 //! The Wi-Fi page (the settings group's own page): the radio's switch
 //! with where it is, the networks in reach (choose one to join; the menu
-//! button forgets a saved one), and the plugin's settings.
+//! button forgets a saved one), the setup with a phone, and the
+//! plugin's settings.
 
 use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
@@ -20,6 +21,8 @@ use crate::{IDLE_OFF, IDLE_OFF_CHOICES, ON_DEMAND, PASSWORD_ENTERED, Shared, WHI
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Row {
     Radio,
+    /// Setting it up with a phone.
+    Phone,
     Network(WifiNetwork),
     Search,
     OnDemand,
@@ -107,6 +110,7 @@ impl WifiPage {
             rows.extend(wifi.networks.iter().cloned().map(Row::Network));
             rows.push(Row::Search);
         }
+        rows.push(Row::Phone);
         rows.extend([Row::OnDemand, Row::IdleOff, Row::WhileCharging]);
         rows
     }
@@ -176,6 +180,10 @@ impl WifiPage {
             Row::Search => {
                 drop(policy);
                 self.search(cx);
+            }
+            Row::Phone => {
+                cx.command(Command::OpenScreen(crate::PHONE, Params::new()));
+                return;
             }
             Row::OnDemand | Row::WhileCharging => {
                 let id = if row == Row::OnDemand {
@@ -301,6 +309,16 @@ impl Screen for WifiPage {
                             env.settings.bool(id.as_str()),
                         );
                     }
+                    Row::Phone => ui::draw_noted_row(
+                        canvas,
+                        env,
+                        &style,
+                        rect,
+                        focused,
+                        tr("wifi.phone.title"),
+                        "›",
+                        tr("wifi.phone.note"),
+                    ),
                     Row::IdleOff => ui::draw_noted_row(
                         canvas,
                         env,

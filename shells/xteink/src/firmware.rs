@@ -29,8 +29,21 @@ const POLL_MS: u64 = 10;
 /// How often the battery is read.
 const STATUS_MS: u64 = 60_000;
 /// On battery, the longest the processor sleeps between readings of the
-/// buttons (a press lasts 80 ms and more).
+/// buttons (a press lasts 80 ms and more); less with the button response
+/// *Faster*.
 const IDLE_MS: u64 = 30;
+const IDLE_FAST_MS: u64 = 10;
+/// How often the buttons are read while awake (`input`'s timer): the
+/// rest while a press settles.
+const SAMPLE_MS: u64 = 5;
+/// How long after the last refresh the panel's power goes off: soon
+/// where powering up again costs nothing; where it makes the next
+/// refresh slower, once refreshes do not follow each other (menus,
+/// sliders) and reading goes on.
+const PANEL_IDLE_MS: u64 = 1_000;
+const PANEL_IDLE_SLOW_MS: u64 = 60_000;
+/// How long going to sleep waits for work under way (a position pushed).
+const SLEEP_WAIT_MS: u64 = 15_000;
 /// How long after the last work what was written is written back to the
 /// card (not at once: a download writes in many pieces).
 const SYNC_MS: u64 = 2_000;
@@ -84,6 +97,12 @@ pub struct State {
     /// [`SYNC_MS`] after, so nothing is lost when the X4 is cut off
     /// (reset, flashed, an empty battery).
     unsynced: Option<u64>,
+    /// When the panel's power goes off, after the last refresh.
+    panel_idle_at: Option<u64>,
+    /// How long fast, half and full refreshes take, in milliseconds (the
+    /// shortest seen, see [`Firmware::refresh`]): the processor sleeps
+    /// about that long while the next one goes (on battery).
+    refresh_ms: [u64; 3],
 }
 
 impl Firmware {
@@ -138,6 +157,7 @@ impl Firmware {
         }
         self.firmware_step();
         let light = self.light();
+        self.panel_idle();
         // Not while the radio is on: its tasks run in between. Nor while
         // the X4 Pro's light is on: its PWM stops in a light sleep.
         let battery = !self.network.radio_on()
@@ -152,6 +172,33 @@ impl Firmware {
         self.remote();
         self.tick();
         self.rest(battery, installing);
+    }
+
+    /// Whether the button response is *Faster* (see `device`).
+    fn faster(&self) -> bool {
+        self.kernel.settings().read(&device::BUTTON_RESPONSE) == device::RESPONSE_FASTER
+    }
+
+    /// How long after a refresh the panel's power goes off: never where
+    /// that slows the next refresh and the response is *Faster*.
+    fn panel_idle_ms(&self) -> u64 {
+        match self.panel.power_up_ms() {
+            0 => PANEL_IDLE_MS,
+            _ if self.faster() => u64::MAX / 2,
+            _ => PANEL_IDLE_SLOW_MS,
+        }
+    }
+
+    /// The panel's power off once no refresh followed for a while.
+    fn panel_idle(&mut self) {
+        if self.state.panel_idle_at.is_some_and(|at| now().0 >= at) {
+            self.state.panel_idle_at = None;
+            if self.panel.powered()
+                && let Err(e) = self.panel.power_down()
+            {
+                warn!("display: {e:?}");
+            }
+        }
     }
 
     /// Shows the front light as its settings say; whether it is on.
@@ -368,9 +415,16 @@ impl Firmware {
             power::mark(power::at::TRIED);
             esp_hal::system::software_reset();
         }
+        // A press under way: read again soon, awake (the readings stop in
+        // a light sleep), so that it counts at once.
+        if input::settling() {
+            self.delay.delay_millis(SAMPLE_MS as u32);
+            return;
+        }
+        let idle = if self.faster() { IDLE_FAST_MS } else { IDLE_MS };
         let mut until = now().0
             + if battery {
-                IDLE_MS
+                idle
             } else if self.network.moving() || installing {
                 // Data on the way, or an update: on at once.
                 0
@@ -393,6 +447,9 @@ impl Firmware {
         }
         if let Some(read) = self.state.status_read {
             until = until.min(read.0 + STATUS_MS);
+        }
+        if let Some(at) = self.state.panel_idle_at {
+            until = until.min(at);
         }
         if !power::nap_until(until) {
             self.delay
@@ -423,6 +480,16 @@ impl Firmware {
         self.pause_trial();
         let effects = self.kernel.suspend(now());
         self.apply(effects);
+        if !self.finish_work() {
+            // A press meanwhile: awake after all.
+            info!("sleep: a press, awake");
+            self.state.sleep = false;
+            if let Some(ota) = &mut self.ota {
+                ota.resume_trial(now().0);
+            }
+            let effects = self.kernel.resume(now());
+            return self.apply(effects);
+        }
         let _ = self.panel.sleep();
         #[cfg(feature = "x4-pro")]
         if let Some(light) = self.light.as_mut() {
@@ -443,6 +510,30 @@ impl Firmware {
         power.listen(Event::LowLevel);
         let _ = power.apply_wakeup_config(&WakeupConfig::default().with_low_power_path(true));
         power::deep();
+    }
+
+    /// Before sleeping: requests under way (a position pushed) go on until
+    /// they are answered, [`SLEEP_WAIT_MS`] at the longest; the radio goes
+    /// with the power then. `false` if a press came meanwhile (it waits
+    /// for the main loop): no sleep then.
+    fn finish_work(&mut self) -> bool {
+        let until = now().0 + SLEEP_WAIT_MS;
+        if self.kernel.holds_sleep() {
+            info!("sleep: finishing work first");
+        }
+        while self.kernel.holds_sleep() && now().0 < until {
+            power::feed();
+            if input::waiting() {
+                return false;
+            }
+            self.io();
+            for effects in self.network.step(&mut self.kernel, now()) {
+                self.apply(effects);
+            }
+            self.tick();
+            self.delay.delay_millis(POLL_MS as u32);
+        }
+        true
     }
 
     fn wait_for_power_release(&self) {
@@ -553,6 +644,41 @@ impl Firmware {
         }
     }
 
+    /// Refreshes the panel: on battery the processor sleeps lightly for
+    /// as long as the last refresh of the kind took, instead of watching
+    /// the panel's busy line all along; then waits for the rest. The
+    /// panel's power goes off a while after.
+    fn refresh(&mut self, refresh: Refresh) -> Result<(), paperpaw_x4::display::Error> {
+        let kind = match refresh {
+            Refresh::Fast => 0,
+            Refresh::Half => 1,
+            Refresh::Full => 2,
+        };
+        let started = now();
+        self.panel.start_refresh(refresh, false)?;
+        // A little early: the rest is watched.
+        let expected = self.state.refresh_ms[kind].saturating_sub(20);
+        if expected > 0 {
+            power::nap_until(started.0 + expected);
+        }
+        let woke = now();
+        let waited = self.panel.wait();
+        let took = now().since(started);
+        let slot = &mut self.state.refresh_ms[kind];
+        if now().since(woke) > 1 || expected == 0 {
+            // Still busy after the nap: what it took is its time. The
+            // shortest one counts (one after the panel's power was off,
+            // or the first after a start, takes longer).
+            *slot = if *slot == 0 { took } else { (*slot).min(took) };
+        } else {
+            // Done before the nap ended: it took less, by how much is not
+            // known; sleep less next time.
+            *slot = slot.saturating_sub(50);
+        }
+        self.state.panel_idle_at = Some(now().0 + self.panel_idle_ms());
+        waited
+    }
+
     /// Shows the busy mark in `area` and lets the kernel work while the
     /// panel refreshes; what the work brought.
     fn show_busy(&mut self, area: Rect) -> Effects {
@@ -572,6 +698,7 @@ impl Firmware {
         if refreshing && let Err(e) = self.panel.wait() {
             warn!("display: {e:?}");
         }
+        self.state.panel_idle_at = Some(now().0 + self.panel_idle_ms());
         // As after every refresh, both memories hold what is shown.
         let panel = &mut self.panel;
         let kept = sent.replay(&mut |top, rows| {
@@ -615,6 +742,7 @@ impl Firmware {
         if let Err(e) = self.panel.refresh_gray() {
             failed = Some(e);
         }
+        self.state.panel_idle_at = Some(now().0 + self.panel_idle_ms());
         let shown = now();
         self.kernel.panel_busy(shown.since(written));
         self.kernel.shown(shown);
@@ -660,7 +788,7 @@ impl Firmware {
             sent.keep(top, &rows);
         });
         let drawn = now();
-        if let Err(e) = self.panel.refresh(refresh, false) {
+        if let Err(e) = self.refresh(refresh) {
             failed = Some(e);
         }
         let shown = now();
@@ -824,6 +952,7 @@ impl Firmware {
             Command::Refresh { full } => {
                 let refresh = if full { Refresh::Full } else { Refresh::Fast };
                 remote::refreshed(self.panel.refresh(refresh, false));
+                self.state.panel_idle_at = Some(now().0 + self.panel_idle_ms());
             }
             Command::Slot { id, params } => self.open_remote(&id, params, true),
             Command::Show { id, params } => self.open_remote(&id, params, false),

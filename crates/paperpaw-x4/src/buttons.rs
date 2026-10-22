@@ -165,12 +165,35 @@ impl Debouncer {
     pub fn is_down(&self, button: &str) -> bool {
         self.state.is_down(button)
     }
+
+    /// Whether a press or a release is under way: the last reading is not
+    /// what counts as down yet (it has to hold first). The reader waits
+    /// for it: read again soon, not after a long sleep.
+    pub fn settling(&self) -> bool {
+        self.reading != self.state
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
     use alloc::vec::Vec;
+
+    #[test]
+    fn a_press_is_settling_until_it_counts() {
+        let mut debouncer = Debouncer::new();
+        let mut changes = Vec::new();
+        let down = State::read(0, 4095, false);
+        let up = State::read(4095, 4095, false);
+        assert!(!debouncer.settling());
+        debouncer.update(down, 0, &mut |b, d| changes.push((b, d)));
+        assert!(debouncer.settling(), "seen once, not counted yet");
+        debouncer.update(down, DEBOUNCE_MS, &mut |b, d| changes.push((b, d)));
+        assert!(!debouncer.settling());
+        assert_eq!(changes, [(buttons::RIGHT, true)]);
+        debouncer.update(up, 100, &mut |b, d| changes.push((b, d)));
+        assert!(debouncer.settling(), "a release too");
+    }
 
     #[test]
     fn readings_name_buttons() {

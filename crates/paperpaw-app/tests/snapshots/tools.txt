@@ -3,6 +3,7 @@ Text "Start reading"
 Text "Choose a book from your library."
 Row "Reading statistics" (focused)
 Row "Vocabulary"
+Row "Flash cards"
 Row "Battery"
 Row "News"
 Row "Files"

@@ -51,9 +51,14 @@ struct Device {
 
 impl Device {
     fn new(storage: MemoryStorage, show: &str) -> Self {
+        Self::with(storage, &format!("[sleep]\nshow = {show}\n"))
+    }
+
+    /// A device with the settings of `config` (sections and lines).
+    fn with(storage: MemoryStorage, config: &str) -> Self {
         let kernel = Kernel::builder(X4)
             .storage(storage)
-            .user_config(format!("[core]\nlanguage = en\n[sleep]\nshow = {show}\n"))
+            .user_config(format!("[core]\nlanguage = en\n{config}"))
             .sleep(true)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(Sleep)
@@ -108,6 +113,12 @@ impl Device {
         self.texts().iter().any(|t| t == "Sleeping")
     }
 
+    /// The sleeping cat shows: chosen, or where there is no cover or no
+    /// picture.
+    fn shows_cat(&mut self) -> bool {
+        self.texts().iter().any(|t| t == "A sleeping cat")
+    }
+
     fn next(&self) -> Option<String> {
         let data = paperpaw_sdk::read_file(self.kernel.storage(), &next_file(), 64).ok()?;
         Some(String::from_utf8(data).unwrap())
@@ -115,12 +126,12 @@ impl Device {
 }
 
 #[test]
-fn without_a_cover_the_message_shows_and_waking_closes_it() {
+fn without_a_cover_the_cat_shows_and_waking_closes_it() {
     let mut device = Device::new(MemoryStorage::new(), "sleep.show.cover");
     let effects = device.sleep();
     assert!(effects.sleep());
     assert_eq!(device.on_top(), Some(SCREEN));
-    assert!(device.says_sleeping());
+    assert!(device.shows_cat());
     device.wake();
     assert_ne!(device.on_top(), Some(SCREEN));
 }
@@ -136,7 +147,7 @@ fn the_message_shows_when_asked_for() {
 }
 
 #[test]
-fn no_pictures_in_the_folder_shows_the_message() {
+fn no_pictures_in_the_folder_shows_the_cat() {
     // Hidden files, folders and other files are no pictures; no folder
     // at all neither.
     let storage = MemoryStorage::new()
@@ -145,26 +156,26 @@ fn no_pictures_in_the_folder_shows_the_message() {
         .with("sleep/folder.png/inside.png", PNG);
     let mut device = Device::new(storage, "sleep.show.picture");
     device.sleep();
-    assert!(device.says_sleeping());
+    assert!(device.shows_cat());
     assert_eq!(device.next(), None);
 
     let mut device = Device::new(MemoryStorage::new(), "sleep.show.picture");
     device.sleep();
-    assert!(device.says_sleeping());
+    assert!(device.shows_cat());
 }
 
 #[test]
-fn a_picture_shows_instead_of_the_message() {
+fn a_picture_shows_instead_of_the_cat() {
     let storage = MemoryStorage::new().with("sleep/Cat.PNG", PNG);
     let mut device = Device::new(storage, "sleep.show.picture");
     device.sleep();
     assert_eq!(device.on_top(), Some(SCREEN));
-    assert!(!device.says_sleeping());
+    assert!(!device.shows_cat());
     assert_eq!(device.next().as_deref(), Some("1"));
 }
 
 #[test]
-fn a_broken_picture_shows_the_message() {
+fn a_broken_picture_shows_the_cat() {
     let mut truncated = PNG.to_vec();
     truncated.truncate(PNG.len() / 2);
     for data in [b"not a picture at all".to_vec(), truncated, Vec::new()] {
@@ -172,7 +183,7 @@ fn a_broken_picture_shows_the_message() {
         let mut device = Device::new(storage, "sleep.show.picture");
         device.sleep();
         assert_eq!(device.on_top(), Some(SCREEN));
-        assert!(device.says_sleeping());
+        assert!(device.shows_cat());
     }
 }
 
@@ -186,7 +197,7 @@ fn pictures_take_turns_in_name_order() {
     let mut shown = Vec::new();
     for _ in 0..4 {
         device.sleep();
-        shown.push(!device.says_sleeping());
+        shown.push(!device.shows_cat());
         device.wake();
     }
     // a, b, then the broken c (the message), then a again.
@@ -201,7 +212,7 @@ fn the_folder_is_the_setting_with_slashes_around_it_or_not() {
         let storage = MemoryStorage::new().with("Pictures/Night/a.png", PNG);
         let mut device = Device::new(storage, &config(folder));
         device.sleep();
-        assert!(!device.says_sleeping(), "{folder}");
+        assert!(!device.shows_cat(), "{folder}");
     }
 }
 
@@ -213,7 +224,7 @@ fn a_damaged_count_starts_again_at_the_first_picture() {
             .with(&next_file(), count);
         let mut device = Device::new(storage, "sleep.show.picture");
         device.sleep();
-        assert!(!device.says_sleeping(), "{count:?}");
+        assert!(!device.shows_cat(), "{count:?}");
         assert_eq!(device.next().as_deref(), Some("1"), "{count:?}");
     }
     // Version 1 of the count is read.
@@ -235,7 +246,7 @@ fn the_largest_count_does_not_overflow() {
         .with(&next_file(), usize::MAX.to_string());
     let mut device = Device::new(storage, "sleep.show.picture");
     device.sleep();
-    assert!(!device.says_sleeping());
+    assert!(!device.shows_cat());
 }
 
 #[test]
@@ -279,10 +290,43 @@ fn buttons_do_nothing_while_asleep_but_home() {
 }
 
 #[test]
-fn an_unknown_choice_shows_the_cover_or_the_message() {
+fn an_unknown_choice_shows_the_cover_or_the_cat() {
     let mut device = Device::new(MemoryStorage::new(), "sleep.show.from-the-future");
     device.sleep();
-    assert!(device.says_sleeping());
+    assert!(device.shows_cat());
     // Storage untouched by it.
     assert!(!device.kernel.storage().exists(&next_file()));
+}
+
+/// Nothing chosen: the sleeping cat, in the middle of the screen with
+/// even margins, decoded once for the screen and drawn from that file
+/// the next times.
+#[test]
+fn the_sleeping_cat_is_the_default() {
+    let mut device = Device::with(MemoryStorage::new(), "");
+    device.sleep();
+    device.kernel.render(&mut |_, _| {});
+    let cat = device
+        .kernel
+        .describe()
+        .into_iter()
+        .find(|p| p.label == "A sleeping cat")
+        .expect("the cat");
+    let a = cat.area;
+    assert!(a.width >= 400 && a.width < 480, "{a:?}");
+    assert_eq!(480 - (a.x + a.width), a.x, "even side margins");
+    assert!(
+        (i32::from(800 - (a.y + a.height)) - i32::from(a.y)).abs() <= 1,
+        "{a:?}"
+    );
+    let decoded = format!("{}/cat-{}.gray", Env::plugin_dir("sleep"), 480 - 2 * a.x);
+    assert!(device.kernel.storage().exists(&decoded));
+    device.wake();
+    // Asleep again: drawn from that file, which is not written anew (a
+    // file that marks it as read stays as it was put there).
+    let marked = paperpaw_sdk::read_file(device.kernel.storage(), &decoded, 1 << 20).unwrap();
+    device.sleep();
+    assert!(device.shows_cat());
+    let again = paperpaw_sdk::read_file(device.kernel.storage(), &decoded, 1 << 20).unwrap();
+    assert_eq!(marked, again);
 }

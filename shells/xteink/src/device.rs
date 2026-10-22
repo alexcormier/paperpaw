@@ -13,6 +13,14 @@ use paperpaw_sdk::{Id, Manifest, Plugin, RegisterError, Registrar, SettingSpec, 
 pub const PLUGIN: Id = Id::new_static("x4");
 /// The processor sleeps lightly while idle on battery (see `power`).
 pub const LIGHT_SLEEP: Setting<bool> = Setting::new("x4.light-sleep");
+/// How quickly presses are answered on battery: the processor sleeps less
+/// between readings of the buttons, and the X4 Pro's panel stays powered
+/// (see `firmware`).
+pub const BUTTON_RESPONSE: Setting<paperpaw_sdk::setting::Text> =
+    Setting::new("x4.button-response");
+/// The choices of [`BUTTON_RESPONSE`].
+pub const RESPONSE_NORMAL: &str = "x4.button-response.normal";
+pub const RESPONSE_FASTER: &str = "x4.button-response.faster";
 /// The X4 Pro's front light: how bright, in percent (0 off).
 #[cfg_attr(
     not(feature = "x4-pro"),
@@ -29,14 +37,25 @@ pub const WARMTH: Setting<i64> = Setting::new("x4.warmth");
 #[derive(Debug, Default)]
 pub struct X4;
 
-/// Whether it sleeps lightly between button reads.
-static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
-    LIGHT_SLEEP.static_str(),
-    "x4.light-sleep",
-    true,
-    groups::DEVELOPER,
-)
-.described("x4.light-sleep.help")];
+/// How quickly presses are answered; whether it sleeps lightly between
+/// button reads.
+static SETTINGS: [SettingSpec; 2] = [
+    SettingSpec::fixed_choice(
+        BUTTON_RESPONSE.static_str(),
+        "x4.button-response",
+        &[RESPONSE_NORMAL, RESPONSE_FASTER],
+        RESPONSE_NORMAL,
+        groups::CONTROLS,
+    )
+    .described("x4.button-response.help"),
+    SettingSpec::fixed_switch(
+        LIGHT_SLEEP.static_str(),
+        "x4.light-sleep",
+        true,
+        groups::DEVELOPER,
+    )
+    .described("x4.light-sleep.help"),
+];
 
 /// The X4 Pro's front light, set with sliders: how bright in single
 /// percents, so that `−` and `+` set the dim end finely (see `light`), its

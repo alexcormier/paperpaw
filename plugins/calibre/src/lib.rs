@@ -148,6 +148,8 @@ enum State {
     Password,
     /// It ended: why (a translated text).
     Ended(String),
+    /// Offline mode: the offer to go online shows.
+    Offline,
 }
 
 /// The books listed to Calibre (`GET_BOOK_COUNT`): a part each turn
@@ -182,6 +184,8 @@ struct CalibreScreen {
     started: bool,
     /// The *Type the password* row, where it shows.
     password_row: Option<Rect>,
+    /// Offline mode: the offer to go online.
+    offer: ui::OfflineOffer,
 }
 
 impl CalibreScreen {
@@ -199,6 +203,26 @@ impl CalibreScreen {
             received: 0,
             started: false,
             password_row: None,
+            offer: ui::OfflineOffer::new(),
+        }
+    }
+
+    /// What the reader chose on the offer to go online: Calibre found
+    /// now, or said to need the network.
+    fn offered(&mut self, chosen: Option<ui::Offer>, cx: &mut Cx<'_, '_>) {
+        match chosen {
+            Some(ui::Offer::Online) => self.start(cx),
+            Some(ui::Offer::NotNow) => {
+                let env = *cx.env();
+                let key = if env.wifi.is_some() {
+                    "calibre.no-network"
+                } else {
+                    "calibre.no-network.system"
+                };
+                self.state = State::Ended(env.i18n.tr(key).to_string());
+                self.redraw(cx);
+            }
+            None => {}
         }
     }
 
@@ -608,6 +632,10 @@ impl Screen for CalibreScreen {
             None,
             None,
         );
+        if self.state == State::Offline {
+            let area = self.content(env);
+            return self.offer.draw(canvas, env, &style, area);
+        }
         let Some(font) = style.font(env) else {
             return;
         };
@@ -652,6 +680,7 @@ impl Screen for CalibreScreen {
             ),
             State::Password => env.i18n.tr("calibre.password-needed").to_string(),
             State::Ended(text) => text.clone(),
+            State::Offline => String::new(),
         };
         line(canvas, style.title, &status, Color::BLACK);
         if let Some(library) = &self.library {
@@ -713,6 +742,11 @@ impl Screen for CalibreScreen {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         if !self.started {
             self.started = true;
+            // Offline mode: asked first, once.
+            if self.offer.shows(cx.env()) {
+                self.state = State::Offline;
+                return self.redraw(cx);
+            }
             self.start(cx);
         }
     }
@@ -768,6 +802,11 @@ impl Screen for CalibreScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        if self.state == State::Offline && *action != actions::BACK {
+            let chosen = self.offer.on_action(action, cx);
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         if *action == actions::CONFIRM {
             match self.state {
                 State::Password => self.type_password(cx),
@@ -787,6 +826,11 @@ impl Screen for CalibreScreen {
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
             cx.command(Command::RunAction(action));
+            return Handled::Yes;
+        }
+        if self.state == State::Offline {
+            let chosen = self.offer.on_tap(gesture.start, cx);
+            self.offered(chosen, cx);
             return Handled::Yes;
         }
         if self.password_row.is_some_and(|r| r.contains(gesture.start)) {

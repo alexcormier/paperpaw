@@ -40,10 +40,14 @@ const X4_SETTINGS: [(&str, &str); 10] = [
     ("core.flash-screens", "false"),
     // On USB the radio stays on in a network joined before.
     ("wifi.while-charging", "true"),
-    // A small screen: calm status lines, the time and the page while
-    // reading, the time and the battery elsewhere.
-    ("reader.status.bottom-left", "reader.status.aloud"),
-    ("reader.status.bottom-center", "core.status.clock"),
+    // A small screen: calm status lines, the time and the battery at the
+    // edges; while reading the time at the left, the page at the right
+    // (and the mark of reading aloud beside the time while it reads).
+    (
+        "reader.status.bottom-left",
+        "core.status.clock, reader.status.aloud",
+    ),
+    ("reader.status.bottom-center", ""),
     ("reader.status.bottom-right", "reader.status.page"),
     ("home.status.left", "core.status.clock"),
     ("home.status.center", ""),

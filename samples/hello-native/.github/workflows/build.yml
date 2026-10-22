@@ -1,8 +1,11 @@
 # A CI job for a native PaperPaw plugin's own repository (copy this
 # folder's files to start one): on every tag it builds the plugin for the
-# Xteink X4 and the X4 Pro, packs both files and signs them with the
-# author's key, and attaches them to the tag's release for the plugin
-# library. Nothing here runs in PaperPaw's own repository.
+# Xteink X4 and the X4 Pro with ./build.sh, packs both files and signs
+# them with the author's key, and attaches them, the plugin's folder as
+# ZIPs and their SHA-256 sums to the tag's release, for the upload form
+# of the plugin library. build.sh writes paths as the same in any folder,
+# as the library's rebuild does, so the files can be verified against
+# their source. Nothing here runs in PaperPaw's own repository.
 #
 # The author's key: `paperpaw-sign key author.key` once, then its contents
 # as the repository's secret PAPERPAW_PLUGIN_KEY. Keep the file safe:
@@ -62,17 +65,9 @@ jobs:
             # A pull request from a fork has no secrets: unsigned files.
             sign=()
           fi
-          if [[ "$GITHUB_REF" == refs/tags/* ]]; then
-            version="${GITHUB_REF_NAME#v}"
-          else
-            version=dev
-          fi
-          paperpaw-sign pack "target/riscv32imc-unknown-none-elf/release/$PLUGIN" \
-            "dist/$PLUGIN-$version-x4.ppn" "${sign[@]}"
-          paperpaw-sign pack "target/xtensa-esp32s3-none-elf/release/$PLUGIN" \
-            "dist/$PLUGIN-$version-x4-pro.ppn" "${sign[@]}"
-          rm -f "$key"
-          (cd dist && sha256sum ./*.ppn > SHA256SUMS)
+          for ppn in dist/*.ppn; do
+            if [ -n "$PAPERPAW_PLUGIN_KEY" ]; then paperpaw-sign check-plugin "$ppn"; else paperpaw-sign plugin "$ppn"; fi
+          done
       - uses: actions/upload-artifact@v4
         with:
           name: plugin

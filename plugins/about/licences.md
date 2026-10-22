@@ -20,6 +20,8 @@ Bundled hyphenation patterns (plugins/hyphenation/patterns) come from the hyph-u
 
 Their notices are in plugins/hyphenation/patterns/README.md.
 
+The cats (the sleeping cat in plugins/sleep/pictures, the reading cats in plugins/reading-goal/pictures) are PaperPaw artwork, generated with an AI image model (Google Nano Banana) for the project, and licensed under the Apache License, Version 2.0, as the rest of PaperPaw.
+
 ## PaperPaw: Apache License 2.0
 
 Apache License Version 2.0, January 2004 http://www.apache.org/licenses/

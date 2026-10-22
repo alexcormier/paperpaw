@@ -1316,6 +1316,7 @@ dependencies = [
  "paperpaw-plugin-power",
  "paperpaw-plugin-profiles",
  "paperpaw-plugin-reader",
+ "paperpaw-plugin-reading-goal",
  "paperpaw-plugin-readwise",
  "paperpaw-plugin-rules",
  "paperpaw-plugin-settings",
@@ -1873,6 +1874,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "paperpaw-plugin-reading-goal"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-core",
+ "paperpaw-i18n",
+ "paperpaw-platform",
+ "paperpaw-plugin-fonts-default",
+ "paperpaw-plugin-home",
+ "paperpaw-plugin-sleep",
+ "paperpaw-plugin-stats",
+ "paperpaw-sdk",
+]
+
+[[package]]
 name = "paperpaw-plugin-readwise"
 version = "0.4.0-dev"
 dependencies = [
@@ -2006,6 +2021,7 @@ dependencies = [
  "paperpaw-platform",
  "paperpaw-plugin-fonts-default",
  "paperpaw-plugin-home",
+ "paperpaw-plugin-sleep",
  "paperpaw-sdk",
  "proptest",
 ]

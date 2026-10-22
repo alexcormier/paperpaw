@@ -16,14 +16,14 @@ use paperpaw_qr::QrCode;
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::replies::{ServerNotice, Typed};
+use paperpaw_sdk::served::{self, Access, Guard};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Instant, Params, Rect,
     RefreshMode, Screen, ServerResponse, Storage,
 };
 
-use crate::access::{self, Access, Guard};
-use crate::{PORT, no_random, web};
+use crate::{PORT, no_random};
 
 const SERVER: Id = Id::new_static("transfer.phone-server");
 const SERVER_EVENT: Event<ServerNotice> = Event::new("transfer.phone-server-event");
@@ -76,7 +76,7 @@ impl PhoneScreen {
         let env = *cx.env();
         match notice {
             ServerNotice::Started { address, .. } => {
-                self.state = match access::key(&env.random) {
+                self.state = match served::key(&env.random) {
                     Some(key) => {
                         let url = format!("http://{address}/?k={key}");
                         self.guard = Some(Guard::new(key));
@@ -162,7 +162,7 @@ pub(crate) fn answer(
         .unwrap_or((request.target, ""));
     let response =
         |status, kind: &str, body: &[u8]| ServerResponse::new(number, status, kind, body.to_vec());
-    match guard.check(web::param(query, "k").as_deref(), request.at) {
+    match guard.check(served::param(query, "k").as_deref(), request.at) {
         Access::Granted => {}
         Access::Denied => {
             let text = b"The key is missing or wrong: scan the code shown on the device.";
@@ -214,7 +214,10 @@ fn page(env: &Env<'_>, params: &Params) -> String {
     ];
     let mut json = String::from("{");
     for (name, key) in texts {
-        json.push_str(&format!("{name}:{},", web::json_string(env.i18n.tr(key))));
+        json.push_str(&format!(
+            "{name}:{},",
+            served::json_string(env.i18n.tr(key))
+        ));
     }
     let title = params.get(params::TITLE).unwrap_or_default();
     let title = if title.is_empty() {
@@ -225,8 +228,8 @@ fn page(env: &Env<'_>, params: &Params) -> String {
     let password = params.get(params::MODE) == Some("password");
     json.push_str(&format!(
         "title:{},text:{},password:{password}}}",
-        web::json_string(title),
-        web::json_string(if password {
+        served::json_string(title),
+        served::json_string(if password {
             ""
         } else {
             params.get(params::TEXT).unwrap_or_default()
@@ -253,7 +256,7 @@ impl Screen for PhoneScreen {
             State::Failed(message) => ui::draw_message(canvas, env, &style, area, message),
             State::Serving { url, qr } => {
                 let hint = env.i18n.tr("transfer.phone.hint");
-                crate::draw_address(canvas, env, &style, area, url, qr.as_ref(), hint, None);
+                ui::draw_address(canvas, env, &style, area, url, qr.as_ref(), hint, None);
             }
         }
     }

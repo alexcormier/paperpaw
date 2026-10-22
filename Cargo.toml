@@ -46,6 +46,7 @@ members = [
     "plugins/calibre",
     "plugins/stats",
     "plugins/battery",
+    "plugins/reading-goal",
     "plugins/wifi",
     "plugins/power",
     "plugins/file-manager",
@@ -129,6 +130,7 @@ paperpaw-plugin-kosync = { path = "plugins/kosync", version = "0.4.0-dev" }
 paperpaw-plugin-calibre = { path = "plugins/calibre", version = "0.4.0-dev" }
 paperpaw-plugin-stats = { path = "plugins/stats", version = "0.4.0-dev" }
 paperpaw-plugin-battery = { path = "plugins/battery", version = "0.4.0-dev" }
+paperpaw-plugin-reading-goal = { path = "plugins/reading-goal", version = "0.4.0-dev" }
 paperpaw-plugin-wifi = { path = "plugins/wifi", version = "0.4.0-dev" }
 paperpaw-plugin-power = { path = "plugins/power", version = "0.4.0-dev" }
 paperpaw-plugin-file-manager = { path = "plugins/file-manager", version = "0.4.0-dev" }
