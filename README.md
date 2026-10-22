@@ -1,8 +1,9 @@
 # PaperPaw
 
-**A lean, fast and endlessly customisable e-reader for e-ink devices, from a
-microcontroller with 400 KB of RAM to Linux and Android e-readers, from one
-codebase.**
+**E-reader software made of plugins, for e-ink devices from a
+microcontroller with 400 KB of RAM to Android e-readers.** Swap the home
+screen, add a vocabulary trainer, remap every gesture: a folder of text
+files is enough, no fork, no rebuild.
 
 PaperPaw was called QuireInk up to version 0.3.
 
@@ -12,7 +13,7 @@ PaperPaw was called QuireInk up to version 0.3.
 > reading positions, bookmarks and highlights shared with KOReader,
 > Calibre's wireless connection, OPDS catalogs and much more; see the
 > [changelog](CHANGELOG.md). The firmware for the Xteink X4 and X4 Pro
-> runs on both readers and comes with its first release; the X4
+> runs on both readers today; its first release is still to come. The X4
 > Classic's is built but not yet tried on one.
 
 <p align="center">
@@ -45,24 +46,27 @@ installs new versions from the releases page.
 
 ## Why PaperPaw?
 
-- **400 KB of RAM is enough.** The smallest target is the Xteink X4, an
-  ESP32-C3 with 400 KB of RAM and no PSRAM. PaperPaw runs there in a heap
-  of 256 KB, and its firmware takes 6.5 MB of the 16 MB of flash.
+- **Runs in 262 KB of heap.** On the Xteink X4, an ESP32-C3 with 400 KB
+  of RAM and no PSRAM, opening a book takes at most 179 KB of its heap;
+  the firmware is 6.4 MB of the 16 MB of flash.
 - **Everything is a plugin.** The core is a small kernel. The home screen,
   library, reader, menus, file formats, themes, key maps and translations are
   plugins. First-party ones use exactly the same SDK as community plugins.
-  Anything can be added, replaced, reconfigured or removed.
+  Anything can be added, replaced, reconfigured or removed. On the X4, a
+  plugin with code is a signed file from the plugin store: no firmware
+  rebuild.
 - **Simple by default.** Turn it on and keep reading. Every function is at
   most two steps away, and it works with buttons only or with touch.
-- **One codebase, many devices.** Xteink X4/X3/X4 Pro, Kobo, Kindle (jailbroken),
-  PocketBook, reMarkable, Boox and other Android e-readers, desktop and web.
-  Grayscale and colour e-ink.
+- **One codebase, many devices.** Today: Boox and other Android
+  e-readers, the Xteink X4 and X4 Pro, and the desktop emulator, in
+  grayscale and colour e-ink. Planned: the Xteink X3 and X4 Classic, Kobo,
+  Kindle (jailbroken), PocketBook and reMarkable.
 
 ## How it's made
 
 PaperPaw is a one-person project. Much of its code and documentation is
 written with the help of an AI model (Claude, by Anthropic); its maker
-decides what goes in, every change has to pass about 4,000 tests,
+decides what goes in, every change has to pass over 4,000 tests,
 snapshot tests of its screens and the other checks before it is merged,
 and releases are built reproducibly and tried on a real reader first.
 PaperPaw is young and may have rough edges; issues and wishes are welcome.
