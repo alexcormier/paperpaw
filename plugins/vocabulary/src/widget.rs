@@ -208,7 +208,7 @@ fn captioned(
 }
 
 /// The size of `widget`'s main text: as its setting says ("as large as
-/// fits": up to three times a title's size), smaller where it is wider
+/// fits": as large as its place holds), smaller where it is wider
 /// than `width` (down to the body's size; then it is shortened) or a
 /// line of it higher than `height` (down to the small size), measured
 /// as drawn.
@@ -221,7 +221,7 @@ fn text_size(
 ) -> f32 {
     let style = UiStyle::new(env);
     let max = match widgets::size(env, widget) {
-        Size::Fit => style.title * 3.0,
+        Size::Fit => f32::from(height).max(style.text),
         size => size.text(&style),
     };
     let wide = f32::from(width);

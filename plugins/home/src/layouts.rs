@@ -81,6 +81,7 @@ stats.widget.today@1 2/1 2x2, stats.widget.streak@1 0/3 4x1, home.continue@1 0/4
 home.page-2 = home.tools
 home.columns = 4
 home.rows = 6
+home.clock.size = core.size.fit
 stats.widget.goal@1.frame = core.frame.line
 stats.widget.today@1.frame = core.frame.line
 stats.widget.streak@1.frame = core.frame.line

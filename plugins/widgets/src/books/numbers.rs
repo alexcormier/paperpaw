@@ -309,7 +309,8 @@ fn inks(font: &FontHandle<'_>, style: &UiStyle, labels: &str) -> (f32, (i32, u16
 /// as makes them largest, the bar kept where it costs little.
 fn lay_out(env: &Env<'_>, area: Rect, numbers: &Numbers) -> Option<Laid> {
     let style = UiStyle::new(env);
-    let font = style.font(env)?;
+    // Numbers drawn large alone: at a pack's large sizes for digits too.
+    let font = style.font(env)?.display();
     let id = WIDGET;
     let gap = style.gap as u16;
     let parts = parts(env);
@@ -322,7 +323,8 @@ fn lay_out(env: &Env<'_>, area: Rect, numbers: &Numbers) -> Option<Laid> {
     let bar_room = (style.line as u16 * 3).max(4) + gap;
     let wanted_bar = widgets::shows(env, id, "bar") && numbers.books > 0;
     let max = match widgets::size(env, id) {
-        Size::Fit => style.title * 3.0,
+        // As large as the place holds, its height checked below.
+        Size::Fit => f32::from(area.height).max(style.small),
         other => other.text(&style) * 1.4,
     };
     let mut best: Option<(f32, Laid)> = None;
@@ -406,7 +408,7 @@ fn draw(
     laid: &Laid,
 ) {
     let style = UiStyle::new(env);
-    let Some(font) = style.font(env) else {
+    let Some(font) = style.font(env).map(|font| font.display()) else {
         return;
     };
     let id = WIDGET;

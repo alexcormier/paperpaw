@@ -561,3 +561,42 @@ status.right =
     home.tap(Point::new(36, 24));
     assert!(home.kernel.settings().bool("probe.other"));
 }
+
+/// The clock's sizes are told apart, and as large as fits fills its place:
+/// in a cell of 4 by 2 its time is larger than at the largest size set,
+/// drawn from the packs as the X4 draws (whose text sizes end at 48
+/// pixels, the clock's digits having larger ones of their own).
+#[test]
+fn the_clocks_sizes_differ_and_as_large_as_fits_fills_its_place() {
+    let height = |size: &str| {
+        let settings = format!(
+            "page-1 = home.clock 0/0 4x2, home.continue 0/2 4x2
+clock.size = core.size.{size}
+"
+        );
+        let mut home = Home::new(false, &settings);
+        // 10:41 in the morning.
+        let clock = paperpaw_sdk::WallClock {
+            at: Instant(home.now),
+            unix_millis: 1_760_438_460_000,
+            utc_offset_minutes: Some(0),
+        };
+        let status = paperpaw_sdk::SystemStatus {
+            clock: Some(clock),
+            battery: None,
+        };
+        let effects = home.kernel.set_status(Instant(home.now), status);
+        home.settle(effects);
+        let texts = home.texts();
+        let (_, at) = texts
+            .iter()
+            .find(|(text, _)| text.contains(':'))
+            .unwrap_or_else(|| panic!("no time in {texts:?}"));
+        at.height
+    };
+    let sizes = ["small", "medium", "large", "fit"].map(height);
+    assert!(sizes.windows(2).all(|w| w[0] < w[1]), "{sizes:?}");
+    // The time alone, as large as its cell's width allows: well over the
+    // 48 pixels text has at most.
+    assert!(sizes[3] > 60, "{sizes:?}");
+}

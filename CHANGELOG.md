@@ -53,6 +53,28 @@ change the plugin SDK.
   or a text shows (`Emulator::shows`, `until`, `expect`). The remote
   control has `slot` and `show` on the X4 too.
 
+- The home screen's clock: *as large as fits* fills its place (a cell
+  of the grid, or the width where it is listed without one), the date
+  below it in proportion, and *small*, *medium* and *large* are clearly
+  apart: the time a share of the screen's width (15, 21 and 32 %),
+  wherever it is placed as far as the place holds it. Medium, as large
+  as the clock was on every device, is now the default. On the X4 and
+  X4 Pro every size above 48 pixels looked the same: their fonts are
+  bitmap packs whose text sizes end there. The UI font's pack keeps the
+  digits, the colon and the dash at sizes from 56 to 164 pixels too
+  (about 150 KB of flash, no memory), and the clock draws its time from
+  them; "AM" or "PM" stands beside the digits at the date's size. The
+  spacing setting shows as it should: the clock fills what is left.
+- SDK: `FontHandle::display` draws a text of a few characters drawn
+  large alone (a time, a number) at a pack's large sizes made for those
+  characters; any other text stays at the sizes that have every
+  character, one size for the whole text (`FontHandle::size_for`). Font
+  packs may hold strikes of a few characters (`BitmapFont::size_for`),
+  and a character a strike lacks comes from the nearest that has it.
+- Widgets: *as large as fits* is as large as the place holds for the
+  library's numbers (its digits from the large sizes too), today's
+  reading, the vocabulary's words and the greeting; it stopped at three
+  times a title's size before.
 - Library: a book is deleted from its sheet (*Delete …*, last of its
   actions). The sheet asks in place, the book still in sight and the
   focus on *Keep it*; Back keeps it too. Deleted, the book goes with what

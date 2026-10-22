@@ -166,8 +166,58 @@ impl BitmapFont {
             .is_some_and(|strike| self.record(&strike, ch).is_some())
     }
 
-    /// The glyph for `ch` at the strike nearest to `size`. Missing
-    /// characters fall back to U+FFFD, then `?`.
+    /// The size `text` is drawn at when asked for `size`, at a strike
+    /// that has every character of the pack (the sizes text is drawn at),
+    /// or, for a `display` (a clock's time, a number, drawn large alone),
+    /// also at a large strike made for a few characters where it has all
+    /// of `text`'s: the nearest of those, one size for the whole text.
+    pub fn size_for(&self, size: f32, text: &str, display: bool) -> f32 {
+        let Some(nearest) = self.nearest_index(size) else {
+            return size;
+        };
+        let count = |i: usize| self.tables(i).map_or(0, |t| t.glyphs);
+        let full = (0..usize::from(self.strikes)).map(count).max().unwrap_or(0);
+        // Most strikes have every character: nothing to look up.
+        if count(nearest) >= full {
+            return size;
+        }
+        let has_all = |i: usize| {
+            display
+                && self.tables(i).is_some_and(|tables| {
+                    text.chars()
+                        .all(|ch| ch == ' ' || self.record(&tables, ch).is_some())
+                })
+        };
+        if has_all(nearest) {
+            return size;
+        }
+        let wanted = (size * 4.0) as i32;
+        (0..usize::from(self.strikes))
+            .filter(|&i| has_all(i) || count(i) >= full)
+            .filter_map(|i| Some((i, i32::from(u16_at(&self.data, HEADER + i * STRIKE)?))))
+            .min_by_key(|&(_, quarters)| quarters.abs_diff(wanted))
+            .map_or(size, |(_, quarters)| quarters as f32 / 4.0)
+    }
+
+    /// The strike nearest to `size` that has `ch`, and its record: for a
+    /// character a large strike made for a few characters lacks (a
+    /// clock's digits, drawn large alone).
+    fn nearest_with(&self, size: f32, ch: char) -> Option<(Tables, usize)> {
+        let wanted = (size * 4.0) as i32;
+        (0..usize::from(self.strikes))
+            .filter_map(|i| {
+                let quarters = i32::from(u16_at(&self.data, HEADER + i * STRIKE)?);
+                let tables = self.tables(i)?;
+                let record = self.record(&tables, ch)?;
+                Some((quarters.abs_diff(wanted), tables, record))
+            })
+            .min_by_key(|(distance, ..)| *distance)
+            .map(|(_, tables, record)| (tables, record))
+    }
+
+    /// The glyph for `ch` at the strike nearest to `size`; where that
+    /// strike lacks it (a large one made for digits), at the nearest that
+    /// has it. Missing characters fall back to U+FFFD, then `?`.
     pub fn glyph(&self, ch: char, size: f32) -> GlyphRef<'_> {
         let empty = GlyphRef {
             left: 0,
@@ -177,13 +227,19 @@ impl BitmapFont {
             advance: 0.0,
             data: &[],
         };
-        let Some(strike) = self.nearest_index(size).and_then(|i| self.tables(i)) else {
+        let Some(nearest) = self.nearest_index(size).and_then(|i| self.tables(i)) else {
             return empty;
         };
-        let Some(offset) = [ch, '\u{fffd}', '?']
-            .into_iter()
-            .find_map(|c| self.record(&strike, c))
-        else {
+        let found = match self.record(&nearest, ch) {
+            Some(record) => Some((nearest, record)),
+            None => self.nearest_with(size, ch).or_else(|| {
+                let fallback = ['\u{fffd}', '?']
+                    .into_iter()
+                    .find_map(|c| self.nearest_with(size, c))?;
+                Some(fallback)
+            }),
+        };
+        let Some((strike, offset)) = found else {
             return empty;
         };
         let d = &self.data;
@@ -329,6 +385,42 @@ fn i32_at(data: &[u8], at: usize) -> Option<i32> {
 mod tests {
     use super::*;
     use crate::glyph::pack_coverage;
+
+    /// A pack with every character at 10 and 20 px, and digits alone at a
+    /// large 80 px, as the UI font's are made for a clock.
+    fn display_pack() -> BitmapFont {
+        let metrics = |size: f32| LineMetrics {
+            ascent: size * 0.8,
+            descent: size * 0.2,
+            line_height: size * 1.25,
+        };
+        let mut builder = PackBuilder::new();
+        for size in [10.0, 20.0] {
+            let glyphs = "12:Ab".chars().map(|c| (c, glyph(2, 255, size / 2.0))).collect();
+            builder.add_strike(size, metrics(size), glyphs);
+        }
+        let digits = "12:".chars().map(|c| (c, glyph(2, 255, 40.0))).collect();
+        builder.add_strike(80.0, metrics(80.0), digits);
+        BitmapFont::new(builder.build()).unwrap()
+    }
+
+    #[test]
+    fn large_sizes_for_a_few_characters_draw_a_display_of_those_alone() {
+        let font = display_pack();
+        // Text at the sizes with every character, as before.
+        assert_eq!(font.size_for(80.0, "12:21", false), 20.0);
+        assert_eq!(font.size_for(80.0, "Ab", false), 20.0);
+        assert_eq!(font.size_for(20.0, "12", false), 20.0);
+        // A display of digits at the large size, one with letters not.
+        assert_eq!(font.size_for(80.0, "12:21", true), 80.0);
+        assert_eq!(font.size_for(70.0, "1 2", true), 70.0);
+        assert_eq!(font.size_for(80.0, "12 Ab", true), 20.0);
+        // A character a large strike lacks comes from the nearest that has
+        // it, not as a question mark.
+        assert_eq!(font.glyph('A', 80.0).advance, 10.0);
+        assert_eq!(font.glyph('1', 80.0).advance, 40.0);
+        assert_eq!(font.glyph('€', 80.0).width, 0);
+    }
 
     fn glyph(width: u16, value: u8, advance: f32) -> Glyph {
         let coverage = alloc::vec![value; usize::from(width) * 2];

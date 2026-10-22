@@ -89,6 +89,17 @@ impl Font {
         }
     }
 
+    /// The size `text` is drawn at when asked for `size`: of a pack, the
+    /// nearest size that has all its characters, the large ones made for a
+    /// few only for a `display` (see [`BitmapFont::size_for`]); else
+    /// `size`.
+    pub fn size_for(&self, size: f32, text: &str, display: bool) -> f32 {
+        match self {
+            Font::Bitmap(font) => font.size_for(size, text, display),
+            _ => size,
+        }
+    }
+
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
         match self {
             Font::Bitmap(font) => font.line_metrics(size),
