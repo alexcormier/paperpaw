@@ -1,8 +1,6 @@
 //! The home screen on a real kernel: the grid stays on the screen with no
-//! margin, pages are edited and added where their settings are, the
-//! layout chooser fits the screen and offers only layouts whose widgets
-//! are there, and widgets are made anew only when what makes them
-//! changed.
+//! margin, pages are edited and added where their settings are, and
+//! widgets are made anew only when what makes them changed.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -321,37 +319,6 @@ fn an_added_page_shows_until_it_is_removed() {
     let settings = home.kernel.settings();
     assert_eq!(settings.text("home.page-2"), "home.tools");
     assert_eq!(settings.text("home.page-3"), paperpaw_sdk::widgets::SPACE);
-}
-
-#[test]
-fn the_layout_chooser_fits_a_screen_without_touch() {
-    // Wide enough for what each layout is to fit on a line.
-    let mut home = Home::on(device(false, 1200), "");
-    home.open("home.layouts", Params::new());
-    let shown = home.shown();
-    assert!(
-        shown.iter().any(|(l, _)| l.contains("as PaperPaw comes")),
-        "{shown:?}"
-    );
-    on_screen(&home, &shown);
-}
-
-#[test]
-fn layouts_with_widgets_not_there_are_not_offered() {
-    let mut home = Home::new(true, "");
-    home.open("home.layouts", Params::new());
-    let mut seen = Vec::new();
-    for _ in 0..8 {
-        let shown = home.shown();
-        for name in ["Calm", "Covers", "At a glance", "Clock", "Minimal"] {
-            if shown.iter().any(|(l, _)| l == name) && !seen.contains(&name) {
-                seen.push(name);
-            }
-        }
-        home.run(actions::RIGHT);
-    }
-    // Statistics, the file manager and the widget pack are not there.
-    assert_eq!(seen, ["Calm", "Minimal"]);
 }
 
 #[test]

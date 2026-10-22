@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The home screen's ready-made layouts are gone: no chooser, no row in
+  *Add*, no step in the first-run setup; the home screen has one default
+  layout. Breaking: presets of the kind `home.layout` (a data plugin's
+  `presets.ini`) are no longer offered anywhere; they are left unread.
+  Presets stay for other kinds (the power modes).
 - Fewer columns or rows on the home screen no longer leave a page empty:
   an item whose cells lie outside the grid now is moved inside it as
   little as can be (narrower or lower where it was wider or higher than

@@ -364,7 +364,7 @@ fn a_tool_is_added_into_the_first_free_cell() {
         let mut app = App::new(device, Shared::memory(PAGE, &[]));
         edit(&mut app);
         open_add(&mut app);
-        assert!(app.shows("Home screen layouts"), "{}", app.described());
+        assert!(app.shows("Tools"), "{}", app.described());
         choose(&mut app, "Tools");
         // Those on the page already are not offered.
         assert!(!app.shows("Library"), "{}", app.described());
