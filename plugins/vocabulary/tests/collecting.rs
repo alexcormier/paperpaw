@@ -276,18 +276,30 @@ fn without_words_the_list_says_where_they_come_from() {
 }
 
 /// With `cards-from-lookups` on, each word looked up becomes a card of
-/// the deck *Looked up*, once, its sentence the example; off at first.
+/// the deck *Looked up*, once, its sentence the example; off at first. A
+/// lookup only notes the word; the flash cards, opened, make the cards.
 #[test]
 fn words_looked_up_become_cards_when_wanted() {
     let decks = ".paperpaw/plugins/vocabulary/cards/decks.txt";
+    let waiting = ".paperpaw/plugins/vocabulary/cards/looked-up.txt";
     let mut off = Vocabulary::new("");
     off.looked_up("curious", "Curiouser and curiouser!");
-    assert!(!off.card.0.exists(decks));
+    assert!(!off.card.0.exists(waiting));
 
     let mut on = Vocabulary::new("[vocabulary]\ncards-from-lookups = true\n");
     on.looked_up("curious", "Curiouser and curiouser!");
     on.looked_up("Curious", "Again.");
+    assert_eq!(on.card.text(waiting).lines().count(), 2);
+    assert!(
+        !on.card.0.exists(decks),
+        "no deck read nor made by a lookup"
+    );
+    on.press(Id::new_static("vocabulary.flash-cards"));
     on.looked_up("rabbit", "A white rabbit.");
+    on.looked_up("curious", "Once more.");
+    on.press(actions::BACK);
+    on.press(Id::new_static("vocabulary.flash-cards"));
+    assert!(!on.card.0.exists(waiting));
     assert!(
         on.card.text(decks).contains("Looked up"),
         "{}",

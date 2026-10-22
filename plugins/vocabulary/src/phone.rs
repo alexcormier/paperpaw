@@ -45,8 +45,10 @@ const SERVER: Id = Id::new_static("vocabulary.phone-server");
 const SERVER_EVENT: Event<ServerNotice> = Event::new("vocabulary.phone-server-event");
 /// The port served on.
 const PORT: u16 = 8080;
-/// Cards listed at a time.
+/// Cards listed at a time, at most.
 pub(crate) const PAGE: usize = 50;
+/// Bytes of a page of cards, about: fewer cards where they are long.
+const PAGE_BYTES: usize = 12 * 1024;
 /// The longest form taken (a card's texts at their longest).
 const MAX_FORM: usize = 16 * 1024;
 /// The longest import taken, in bytes.
@@ -75,8 +77,10 @@ pub(crate) struct PhoneScreen {
 impl PhoneScreen {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let style = UiStyle::new(env);
-        // The decks as they are, the answers given in them.
+        // The decks as they are: the answers given in them, the words
+        // looked up as cards.
         let _ = cards::fold(env.storage);
+        crate::take_lookups(env);
         Self {
             header: ui::Header::new(env, &style, true),
             style,
@@ -288,7 +292,12 @@ pub(crate) fn answer(
         _ => return (respond(404, PLAIN, b"not found"), None),
     };
     match result {
-        Ok((body, done)) => (respond(200, JSON, body.as_bytes()), done),
+        // The body as made, not copied (a page of cards is large for a
+        // small device's memory).
+        Ok((body, done)) => (
+            ServerResponse::new(number, 200, JSON, body.into_bytes()),
+            done,
+        ),
         Err(problem) => {
             let (status, text): (u16, &[u8]) = match problem {
                 Problem::Missing => (404, b"No such deck or card: reload the page."),
@@ -317,23 +326,30 @@ fn decks_json(storage: &dyn Storage) -> String {
     format!("{{\"decks\":[{}]}}", decks.join(","))
 }
 
+/// A page of `deck`'s cards from number `from`: at most [`PAGE`] cards
+/// and about [`PAGE_BYTES`], written straight into the answer.
 fn cards_json(storage: &dyn Storage, deck: u32, from: usize) -> String {
-    let (cards, total) = cards::page(storage, deck, from, PAGE);
-    let cards: Vec<String> = cards
-        .iter()
-        .map(|c| {
-            format!(
-                "{{\"id\":{},\"front\":{},\"back\":{},\"example\":{},\"due\":{},\"reps\":{}}}",
-                c.state.id,
-                json_string(&c.front),
-                json_string(&c.back),
-                json_string(&c.example),
-                c.state.due,
-                c.state.reps
-            )
-        })
-        .collect();
-    format!("{{\"total\":{total},\"cards\":[{}]}}", cards.join(","))
+    let mut out = String::from("{\"cards\":[");
+    let mut shown = 0;
+    let total = cards::visit_page(storage, deck, from, |c| {
+        if shown > 0 {
+            out.push(',');
+        }
+        out.push_str(&format!("{{\"id\":{},\"front\":", c.state.id));
+        out.push_str(&json_string(&c.front));
+        out.push_str(",\"back\":");
+        out.push_str(&json_string(&c.back));
+        out.push_str(",\"example\":");
+        out.push_str(&json_string(&c.example));
+        out.push_str(&format!(
+            ",\"due\":{},\"reps\":{}}}",
+            c.state.due, c.state.reps
+        ));
+        shown += 1;
+        shown < PAGE && out.len() < PAGE_BYTES
+    });
+    out.push_str(&format!("],\"total\":{total}}}"));
+    out
 }
 
 /// The keys of the page's texts, as it names them.
@@ -557,9 +573,10 @@ mod tests {
         );
         let (_, list, _) = ask(&storage, "GET", "/api/cards?k=abc&deck=1&from=2", None);
         assert!(
-            list.starts_with("{\"total\":3,\"cards\":[{\"id\":3,\"front\":\"Maus\""),
+            list.starts_with("{\"cards\":[{\"id\":3,\"front\":\"Maus\""),
             "{list}"
         );
+        assert!(list.ends_with("],\"total\":3}"), "{list}");
 
         let edit = "id=1&front=Hund&back=the+dog";
         assert_eq!(

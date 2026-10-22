@@ -292,11 +292,13 @@ pub(crate) fn interval_days(stability: Fx, retention: Fx) -> i64 {
 }
 
 /// The answer `grade` to a card whose memory is `before` (`None`: a new
-/// card) and that was last seen `elapsed` seconds ago: its memory after,
-/// and in how many seconds it comes again, for `retention` wanted.
+/// card) and that was last seen `elapsed` seconds ago (`same_day`: on the
+/// same local day, as Anki counts days): its memory after, and in how many
+/// seconds it comes again, for `retention` wanted.
 pub(crate) fn answer(
     before: Option<Memory>,
     elapsed: i64,
+    same_day: bool,
     grade: Grade,
     retention: Fx,
 ) -> (Memory, i64) {
@@ -305,7 +307,7 @@ pub(crate) fn answer(
             stability: W[grade as usize - 1],
             difficulty: initial_difficulty(grade),
         },
-        Some(memory) if elapsed < DAY_SECONDS => Memory {
+        Some(memory) if same_day => Memory {
             stability: stability_same_day(memory.stability, grade),
             difficulty: next_difficulty(memory.difficulty, grade),
         },
@@ -365,7 +367,7 @@ mod tests {
         // Reference values from FSRS-5's formulas in floating point.
         let difficulties = [7.194_9, 6.488_305, 5.282_434, 3.224_502];
         for (grade, d) in Grade::ALL.into_iter().zip(difficulties) {
-            let (memory, due) = answer(None, 0, grade, Fx::hundredths(90));
+            let (memory, due) = answer(None, 0, false, grade, Fx::hundredths(90));
             near(memory.difficulty, d, 0.05);
             assert_eq!(memory.stability, W[grade as usize - 1]);
             let days = match grade {
@@ -382,10 +384,10 @@ mod tests {
 
     #[test]
     fn reviews_change_the_memory_as_fsrs_says() {
-        let (good, _) = answer(None, 0, Grade::Good, Fx::hundredths(90));
+        let (good, _) = answer(None, 0, false, Grade::Good, Fx::hundredths(90));
         let three_days = 3 * DAY_SECONDS;
         near(retrievability(Fx::int(3), good.stability), 0.904_698, 0.01);
-        let review = |grade| answer(Some(good), three_days, grade, Fx::hundredths(90));
+        let review = |grade| answer(Some(good), three_days, false, grade, Fx::hundredths(90));
         let (after, due) = review(Grade::Good);
         near(after.stability, 10.738_926, 0.1);
         near(after.difficulty, 5.272_968, 0.05);
@@ -399,13 +401,14 @@ mod tests {
         let (later, _) = answer(
             Some(after),
             10 * DAY_SECONDS,
+            false,
             Grade::Good,
             Fx::hundredths(90),
         );
         near(later.stability, 32.615_222, 0.2);
         // The same day, after Again: the short-term formula.
-        let (again, _) = answer(None, 0, Grade::Again, Fx::hundredths(90));
-        let (same_day, due) = answer(Some(again), 600, Grade::Good, Fx::hundredths(90));
+        let (again, _) = answer(None, 0, false, Grade::Again, Fx::hundredths(90));
+        let (same_day, due) = answer(Some(again), 600, true, Grade::Good, Fx::hundredths(90));
         near(same_day.stability, 0.566_698, 0.1);
         assert_eq!(due, DAY_SECONDS, "at least a day");
     }
@@ -424,7 +427,13 @@ mod tests {
         // Whatever comes, the memory stays in its bounds.
         let mut memory = None;
         for (elapsed, grade) in [(0, Grade::Easy), (1 << 40, Grade::Easy), (1, Grade::Again)] {
-            let (after, due) = answer(memory, elapsed, grade, Fx::hundredths(97));
+            let (after, due) = answer(
+                memory,
+                elapsed,
+                elapsed < DAY_SECONDS,
+                grade,
+                Fx::hundredths(97),
+            );
             assert!(after.stability >= LEAST_STABILITY && after.stability <= Fx::int(MOST_DAYS));
             assert!(after.difficulty >= Fx::ONE && after.difficulty <= Fx::int(10));
             assert!(due > 0);

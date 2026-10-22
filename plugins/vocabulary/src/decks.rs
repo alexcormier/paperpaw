@@ -62,6 +62,7 @@ impl DecksScreen {
     }
 
     fn load(&mut self, env: &Env<'_>) {
+        crate::take_lookups(env);
         let sizes = cards::sizes(env.storage);
         self.decks = cards::decks(env.storage)
             .into_iter()

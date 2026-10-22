@@ -88,15 +88,27 @@ struct Reader {
 
 impl Reader {
     fn new(device: DeviceInfo, storage: MemoryStorage, config: &str) -> Self {
+        Self::built(device, storage, config, false)
+    }
+
+    /// A reader that sleeps, with the sleep screen.
+    fn sleeping(storage: MemoryStorage, config: &str) -> Self {
+        Self::built(BUTTONS, storage, config, true)
+    }
+
+    fn built(device: DeviceInfo, storage: MemoryStorage, config: &str, sleeps: bool) -> Self {
         let user = format!("[core]\nlanguage = en\n[home]\ngesture-tips = false\n{config}\n");
-        let mut kernel = Kernel::builder(device)
+        let mut builder = Kernel::builder(device)
             .storage(storage)
             .user_config(user)
+            .sleep(sleeps)
             .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(paperpaw_plugin_home::Home)
-            .plugin(paperpaw_plugin_vocabulary::Vocabulary)
-            .build()
-            .unwrap();
+            .plugin(paperpaw_plugin_vocabulary::Vocabulary);
+        if sleeps {
+            builder = builder.plugin(paperpaw_plugin_sleep::Sleep);
+        }
+        let mut kernel = builder.build().unwrap();
         kernel.set_status(
             Instant(0),
             SystemStatus {
@@ -286,4 +298,51 @@ fn flash_cards_show_what_is_due_and_the_decks() {
     assert!(shown.contains("3 cards due"), "{shown}");
     assert!(shown.contains("Edit with your phone"), "{shown}");
     assert!(shown.contains("Words, 3 cards"), "{shown}");
+}
+
+impl Reader {
+    fn sleep_and_wake(&mut self) -> String {
+        self.run(actions::SLEEP);
+        let asleep = self.shown();
+        self.now += 60_000;
+        let effects = self.kernel.resume(Instant(self.now));
+        self.settle(effects);
+        asleep
+    }
+
+    fn on_top(&self) -> String {
+        self.kernel
+            .active_screen()
+            .map(|id| id.as_str().to_string())
+            .unwrap_or_default()
+    }
+}
+
+/// A flash card due as the sleep screen: its front while asleep, and on
+/// waking the review with that card, its back on Select.
+#[test]
+fn a_card_due_is_the_sleep_screen_and_answered_on_waking() {
+    let mut reader = Reader::sleeping(card(), "[sleep]\nshow = vocabulary.sleep-card");
+    let asleep = reader.sleep_and_wake();
+    assert!(asleep.contains("Maus\n"), "{asleep}");
+    assert!(asleep.contains("3 cards due: wake to answer"), "{asleep}");
+    assert_eq!(reader.on_top(), "vocabulary.review");
+    assert!(reader.shown().contains("Maus\n"));
+    reader.run(actions::CONFIRM);
+    assert!(reader.shown().contains("mouse"));
+}
+
+/// Reviewing on waking is a setting, off at first.
+#[test]
+fn the_review_opens_on_waking_where_wanted() {
+    let mut reader = Reader::sleeping(card(), "");
+    reader.sleep_and_wake();
+    assert_ne!(reader.on_top(), "vocabulary.review");
+    let mut reader = Reader::sleeping(card(), "[vocabulary]\nreview-on-wake = true");
+    reader.sleep_and_wake();
+    assert_eq!(reader.on_top(), "vocabulary.review");
+    // Nothing due: nothing opens.
+    let mut reader = Reader::sleeping(MemoryStorage::new(), "[vocabulary]\nreview-on-wake = true");
+    reader.sleep_and_wake();
+    assert_ne!(reader.on_top(), "vocabulary.review");
 }

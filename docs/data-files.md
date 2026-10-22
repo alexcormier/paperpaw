@@ -52,7 +52,8 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/rules/rules.txt` | rules | a rule per line: trigger, effect, target, on, condition (tab separated) | version 1 |
 | `.paperpaw/plugins/vocabulary/words.txt` | vocabulary | a word per line: word, language, place, book, title, sentence (tab separated) | version 1 |
 | `.paperpaw/plugins/vocabulary/cards/decks.txt`, `deck-<id>.txt` | vocabulary | `paperpaw-decks 1` / `paperpaw-cards 1`, then a deck per line (id, name) or a card per line (id, due, last, stability, difficulty, reps, lapses, front, back, example; tab separated, texts escaped) | version 1 |
-| `.paperpaw/plugins/vocabulary/cards/answers.txt`, `due.txt`, `state.txt` | vocabulary | answers not yet written into their decks; when each deck's cards are due, by hour; the time last known and the new cards shown that day | version 1 |
+| `.paperpaw/plugins/vocabulary/cards/answers.txt`, `due.txt`, `state.txt` | vocabulary | answers not yet written into their decks; when each deck's cards are due, by quarter hour; the time last known and the new cards shown that day | version 1 |
+| `.paperpaw/plugins/vocabulary/cards/looked-up.txt`, `adding.txt`, `asleep.txt` | vocabulary | words looked up waiting to become cards (word, sentence); the deck cards are being added to; the card the sleep screen showed (deck, id) | version 1 |
 | `.paperpaw/plugins/opds/catalogs.txt` | opds | a catalog per line: name, address, user, (password, empty), folder, `sync`, `webdav` | version 1 |
 | `.paperpaw/plugins/news/feeds.txt` | news | a feed per line: address, name | version 1 |
 | `.paperpaw/plugins/browser/bookmarks.txt`, `history.txt` | browser | a page per line: title, address | version 1 |

@@ -20,7 +20,11 @@
 //! when it comes again. Decks and cards are made on a phone (*Edit with
 //! your phone*: a page served on the local network while that screen is
 //! open, see `phone`), typed, pasted as CSV or TSV, or taken from an Anki
-//! deck. A widget says how many cards are due; with
+//! deck. A widget says how many cards are due. *A flash card due* can be
+//! the sleep screen (among its choices): the front of the next card,
+//! answered on waking, as the review opens then with it; with
+//! `vocabulary.review-on-wake` (off at first) the review opens on waking
+//! whatever the sleep screen showed, where cards are due. With
 //! `vocabulary.cards-from-lookups` (off at first) each word looked up
 //! becomes a card of the deck *Looked up*, its sentence the example.
 //!
@@ -37,6 +41,7 @@ mod fsrs;
 mod marks;
 mod phone;
 mod review;
+mod sleep;
 mod store;
 mod widget;
 
@@ -73,6 +78,12 @@ pub const CARDS: Id = Id::new_static("vocabulary.flash-cards");
 pub const RETENTION: Setting<i64> = Setting::new("vocabulary.retention");
 /// Setting: new cards shown a day at most.
 pub const NEW_PER_DAY: Setting<i64> = Setting::new("vocabulary.new-per-day");
+/// Setting: the review opens as the device wakes, where cards are due.
+pub const REVIEW_ON_WAKE: Setting<bool> = Setting::new("vocabulary.review-on-wake");
+/// The sleep screen's mode of this plugin: a flash card due.
+pub const SLEEP_CARD: &str = "vocabulary.sleep-card";
+/// What the sleep screen shows (the `sleep` plugin's setting).
+const SLEEP_SHOW: &str = "sleep.show";
 /// Setting: each word looked up becomes a flash card.
 pub const FROM_LOOKUPS: Setting<bool> = Setting::new("vocabulary.cards-from-lookups");
 /// The role of the words marked in books.
@@ -114,7 +125,7 @@ static IN_CARDS_PERCENT: SettingExtra = SettingExtra::new()
 
 /// How the flash cards are reviewed, and whether words looked up become
 /// cards.
-static CARD_SETTINGS: [SettingSpec; 3] = [
+static CARD_SETTINGS: [SettingSpec; 4] = [
     SettingSpec::fixed_number(
         NEW_PER_DAY.static_str(),
         "vocabulary.setting.new-per-day",
@@ -144,6 +155,14 @@ static CARD_SETTINGS: [SettingSpec; 3] = [
     )
     .with_extra(&IN_CARDS)
     .described("vocabulary.setting.cards-from-lookups.help"),
+    SettingSpec::fixed_switch(
+        REVIEW_ON_WAKE.static_str(),
+        "vocabulary.setting.review-on-wake",
+        false,
+        groups::READING,
+    )
+    .with_extra(&IN_CARDS)
+    .described("vocabulary.setting.review-on-wake.help"),
 ];
 
 /// How the words being learnt look in books.
@@ -217,6 +236,13 @@ impl Plugin for Vocabulary {
             Box::new(|env, params| Box::new(review::ReviewScreen::new(env, params))),
         ))?;
         r.add_screen(ScreenSpec::new(
+            Id::new_static(SLEEP_CARD),
+            "vocabulary.sleep-card",
+            Box::new(|env, _| Box::new(sleep::SleepCard::new(env))),
+        ))?;
+        r.add_choice(Id::new_static(SLEEP_SHOW), SLEEP_CARD)?;
+        r.on(events::RESUME, |env, _, out| wake(env, out))?;
+        r.add_screen(ScreenSpec::new(
             phone::SCREEN,
             "vocabulary.phone.title",
             Box::new(|env, _| Box::new(phone::PhoneScreen::new(env))),
@@ -261,33 +287,37 @@ fn record(
         },
     );
     changes.changed();
-    result.and(if env.settings.read(&FROM_LOOKUPS) {
-        card_of(env, word, &looked_up.text)
-    } else {
-        Ok(())
-    })
+    // A card to be: a line appended, the deck not read now (see
+    // `take_lookups`); the word is kept whether or not that works.
+    if env.settings.read(&FROM_LOOKUPS) {
+        let _ = cards::queue_lookup(env.storage, word, &looked_up.text);
+    }
+    result
 }
 
-/// The word looked up as a card of the deck *Looked up* (made where
-/// there is none), its sentence the example; once.
-fn card_of(env: &Env<'_>, word: &str, sentence: &str) -> Result<(), StorageError> {
-    let failed = |problem: cards::Problem| match problem {
-        cards::Problem::Storage(e) => e,
-        _ => StorageError::Full,
-    };
-    let name = env.i18n.tr("vocabulary.cards.looked-up");
-    let deck = cards::deck_named(env.storage, name).map_err(failed)?;
-    if cards::has_front(env.storage, deck, word) {
-        return Ok(());
+/// Waking: the review, with the card shown asleep first where the sleep
+/// screen showed one (*A flash card due*), or where wanted
+/// ([`REVIEW_ON_WAKE`]) and cards are due. Below a lock, as it opens
+/// (the kernel keeps what others open below a screen that guards).
+fn wake(env: &Env<'_>, out: &mut Vec<Command>) {
+    let asleep = env.settings.text(SLEEP_SHOW) == SLEEP_CARD;
+    let shown = asleep.then(|| sleep::shown(env)).flatten();
+    if shown.is_none() && !(env.settings.read(&REVIEW_ON_WAKE) && decks::due_now(env) > 0) {
+        return;
     }
-    let texts = cards::Texts {
-        front: word.to_string(),
-        back: String::new(),
-        example: sentence.to_string(),
+    let params = match shown {
+        Some((deck, id)) => Params::new().with(review::FIRST, format!("{deck} {id}")),
+        None => Params::new(),
     };
-    cards::add(env.storage, deck, [texts])
-        .map(|_| ())
-        .map_err(failed)
+    out.push(Command::OpenScreen(review::SCREEN, params));
+}
+
+/// The words looked up waiting to become cards: cards of the deck
+/// *Looked up* now (each front once, its sentence the example). Where
+/// there is no room (no more decks, a full deck) they wait on.
+pub(crate) fn take_lookups(env: &Env<'_>) {
+    let name = env.i18n.tr("vocabulary.cards.looked-up");
+    let _ = cards::take_lookups(env.storage, name);
 }
 
 /// The folder exports go to: `Notes` beside the library folder.

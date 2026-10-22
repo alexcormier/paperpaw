@@ -16,9 +16,14 @@ change the plugin SDK.
   a key of its own each time): decks and cards are made, changed and
   deleted there, a list pasted as CSV or TSV, or an Anki deck (`.apkg`,
   exported for older versions) read in the phone's browser. A widget says
-  how many cards are due. With *Words looked up become cards* (off at
-  first) each word looked up goes into the deck *Looked up*, its sentence
-  the example. Only the due cards' state is held during a review; decks
+  how many cards are due. *A flash card due* can be the sleep screen: the
+  front of the next card, answered on waking, as the review opens with
+  it; *Review on waking* (off at first) opens the review on waking with
+  any sleep screen. With *Words looked up become cards* (off at first)
+  each word looked up goes into the deck *Looked up*, its sentence the
+  example, when the flash cards open next. The sleep screen now closes
+  itself on waking wherever it is, so what opened as the device woke
+  stays. Only the due cards' state is held during a review; decks
   are text files in the plugin's folder, versioned.
 - SDK: `paperpaw_sdk::served`, for pages served to a phone or computer
   on the local network: the key in the address (`key`), a `Guard` that

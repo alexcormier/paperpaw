@@ -28,6 +28,8 @@ use crate::{NEW_PER_DAY, RETENTION};
 pub(crate) const SCREEN: Id = Id::new_static("vocabulary.review");
 /// The deck to review.
 pub(crate) const DECK: &str = "deck";
+/// The card to show first, `<deck> <id>` (the one shown asleep).
+pub(crate) const FIRST: &str = "first";
 /// Cards due taken into a review at most.
 const MOST: usize = 200;
 /// Cards shown before one answered *Again* comes again.
@@ -65,8 +67,20 @@ impl ReviewScreen {
         let now = cards::now(env);
         let day = Day::now(env, now);
         let per_day = env.settings.read(&NEW_PER_DAY).clamp(0, 1000) as u32;
+        crate::take_lookups(env);
         let new = cards::new_left(env.storage, day, per_day);
-        let queue = cards::due(env.storage, day.end, new, MOST, deck).into();
+        let mut queue: VecDeque<Due> = cards::due(env.storage, day.end, new, MOST, deck).into();
+        // The card shown asleep first, if it is among them.
+        let first = params.get(FIRST).and_then(|f| {
+            let (deck, id) = f.split_once(' ')?;
+            Some((deck.parse::<u32>().ok()?, id.parse::<u32>().ok()?))
+        });
+        if let Some(at) =
+            first.and_then(|(d, id)| queue.iter().position(|q| q.deck == d && q.state.id == id))
+            && let Some(card) = queue.remove(at)
+        {
+            queue.push_front(card);
+        }
         let retention = env.settings.read(&RETENTION).clamp(70, 99);
         let mut screen = Self {
             header: ui::Header::new(env, &style, true),
@@ -159,7 +173,9 @@ impl ReviewScreen {
             return;
         };
         let now = cards::now(&env);
-        let after = due.state.answered(grade, now, self.retention);
+        let after = due
+            .state
+            .answered(grade, now, same_day(&env, &due, now), self.retention);
         if cards::record(env.storage, due.deck, due.state.due, &after).is_err() {
             let message = env.i18n.tr("vocabulary.save-failed").into();
             cx.command(Command::Notify(message));
@@ -190,7 +206,9 @@ impl ReviewScreen {
         };
         let now = cards::now(env);
         Grade::ALL.map(|grade| {
-            let after = due.state.answered(grade, now, self.retention);
+            let after = due
+                .state
+                .answered(grade, now, same_day(env, due, now), self.retention);
             wait_text(env, after.due - now)
         })
     }
@@ -232,6 +250,11 @@ impl ReviewScreen {
             lines(canvas, &mut y, &card.example, style.small, style.faint(60));
         }
     }
+}
+
+/// Whether `due` was last answered on the local day `now` is in.
+fn same_day(env: &Env<'_>, due: &Due, now: i64) -> bool {
+    !due.state.is_new() && Day::now(env, due.state.last).number == Day::now(env, now).number
 }
 
 /// `seconds` as a wait: `10 min`, `3 d`, `5 mo`, `2 y`.

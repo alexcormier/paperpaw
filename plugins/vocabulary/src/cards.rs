@@ -15,18 +15,25 @@
 //!   before. Appended at each answer, so a review writes little; folded
 //!   into the decks ([`fold`]) when a review ends, at a start, and before
 //!   a deck is changed otherwise;
-//! - `due.txt`: `paperpaw-due 1`, then `deck<TAB>new cards<TAB>hour=count …`
-//!   for each deck, the hours (since 1970) its other cards are due in:
-//!   what the widget counts without reading the decks;
+//! - `due.txt`: `paperpaw-due 1`, then `deck<TAB>new cards<TAB>quarter=count …`
+//!   for each deck, the quarter hours (since 1970) its other cards are due
+//!   in: what the widget counts without reading the decks (every time
+//!   zone's day begins on a quarter hour, so the count is exact);
+//! - `looked-up.txt`: words looked up, `word<TAB>sentence`, waiting to
+//!   become cards of the deck *Looked up* when the flash cards open next
+//!   (a lookup only appends a line);
+//! - `adding.txt`: the deck cards are being added to, while they are: an
+//!   addition cut off is counted into the index again at the next start;
 //! - `state.txt`: `clock <seconds>`, the time last known (for a device
 //!   that does not know it now), and `new <day> <count>`, the new cards
 //!   shown that day.
 //!
 //! A deck is only ever streamed, a line at a time. One written anew goes
-//! beside itself (`deck-<id>.tmp`) and takes its place once whole, so a
-//! failed write or a power cut never loses cards. A review holds the due
-//! cards' state and where their lines are, never their texts but the one
-//! shown.
+//! beside itself (`deck-<id>.tmp`) and takes its place once whole, as do
+//! the lists, so a failed write or a power cut never loses cards; lines a
+//! deck holds that are no card are kept as they are. A review holds the
+//! due cards' state and where their lines are, never their texts but the
+//! one shown.
 
 use alloc::collections::BTreeMap;
 use alloc::format;
@@ -50,7 +57,8 @@ pub(crate) const MAX_NAME: usize = 60;
 /// The longest line read: a card's three texts at their longest.
 const MAX_LINE: usize = 8 * 1024;
 const DAY: i64 = 24 * 3600;
-const HOUR: i64 = 3600;
+/// The index counts cards by quarter hour.
+const QUARTER: i64 = 900;
 const CARDS_HEADER: &str = "paperpaw-cards 1";
 const DECKS_HEADER: &str = "paperpaw-decks 1";
 const DUE_HEADER: &str = "paperpaw-due 1";
@@ -71,6 +79,27 @@ fn deck_path(deck: u32) -> String {
 
 fn deck_temporary(deck: u32) -> String {
     path(&format!("deck-{deck}.tmp"))
+}
+
+/// Writes `bytes` as the whole of `file`: beside it first, then in its
+/// place, so a cut never leaves half of it.
+fn write_whole(storage: &dyn Storage, file: &str, bytes: &[u8]) -> Result<(), StorageError> {
+    let part = files::part_path(file);
+    storage.write(&part, bytes)?;
+    files::put_in_place(storage, &part, file)
+}
+
+/// After a cut while `file` was written whole: the new one where the old
+/// one is gone already, else the unfinished one goes.
+fn recover_whole(storage: &dyn Storage, file: &str, part: &str) {
+    if !storage.exists(part) {
+        return;
+    }
+    if storage.exists(file) {
+        let _ = storage.remove(part);
+    } else {
+        let _ = storage.rename(part, file);
+    }
 }
 
 /// What went wrong with a change.
@@ -159,10 +188,11 @@ impl State {
         })
     }
 
-    /// Answered `grade` at `now`, `retention` wanted.
-    pub(crate) fn answered(&self, grade: Grade, now: i64, retention: Fx) -> State {
+    /// Answered `grade` at `now`, `retention` wanted; `same_day` where it
+    /// was last answered on the same local day.
+    pub(crate) fn answered(&self, grade: Grade, now: i64, same_day: bool, retention: Fx) -> State {
         let elapsed = now.saturating_sub(self.last);
-        let (memory, wait) = fsrs::answer(self.memory(), elapsed, grade, retention);
+        let (memory, wait) = fsrs::answer(self.memory(), elapsed, same_day, grade, retention);
         State {
             id: self.id,
             due: now.saturating_add(wait),
@@ -349,7 +379,7 @@ fn write_decks(storage: &dyn Storage, decks: &[Deck]) -> Result<(), StorageError
     for deck in decks {
         text.push_str(&format!("{}\t{}\n", deck.id, escape(&deck.name)));
     }
-    storage.write(&path("decks.txt"), text.as_bytes())
+    write_whole(storage, &path("decks.txt"), text.as_bytes())
 }
 
 /// A new deck named `name`: its id.
@@ -362,10 +392,19 @@ pub(crate) fn add_deck(storage: &dyn Storage, name: &str) -> Result<u32, Problem
     if decks.len() >= MAX_DECKS {
         return Err(Problem::Full);
     }
-    let id = decks.iter().map(|d| d.id).max().map_or(1, |m| m + 1);
+    let mut id = decks.iter().map(|d| d.id).max().map_or(1, |m| m + 1);
+    // Past a deck's file left by a cut (its list not written): never over
+    // its cards.
+    while storage.exists(&deck_path(id)) {
+        id += 1;
+    }
+    write_whole(
+        storage,
+        &deck_path(id),
+        format!("{CARDS_HEADER}\n").as_bytes(),
+    )?;
     decks.push(Deck { id, name });
     write_decks(storage, &decks)?;
-    storage.write(&deck_path(id), format!("{CARDS_HEADER}\n").as_bytes())?;
     Ok(id)
 }
 
@@ -427,38 +466,40 @@ fn each_card(
     })
 }
 
+/// Calls `card` with each card of `deck` from number `from` on, one at a
+/// time, until it says `false`; how many cards the deck has.
+pub(crate) fn visit_page(
+    storage: &dyn Storage,
+    deck: u32,
+    from: usize,
+    mut card: impl FnMut(&Card) -> bool,
+) -> usize {
+    let (mut n, mut wanted) = (0, true);
+    let _ = each_card(storage, deck, |_, c| {
+        if wanted && n >= from {
+            wanted = card(&c);
+        }
+        n += 1;
+        ControlFlow::Continue(())
+    });
+    n
+}
+
 /// The cards of `deck` numbered `from..from + count`, and how many there
 /// are.
+#[cfg(test)]
 pub(crate) fn page(
     storage: &dyn Storage,
     deck: u32,
     from: usize,
     count: usize,
 ) -> (Vec<Card>, usize) {
-    let (mut cards, mut n) = (Vec::new(), 0);
-    let _ = each_card(storage, deck, |_, card| {
-        if (from..from + count).contains(&n) {
-            cards.push(card);
-        }
-        n += 1;
-        ControlFlow::Continue(())
+    let mut cards = Vec::new();
+    let total = visit_page(storage, deck, from, |card| {
+        cards.push(card.clone());
+        cards.len() < count
     });
-    (cards, n)
-}
-
-/// Whether `deck` has a card with the front `front` (in any case).
-pub(crate) fn has_front(storage: &dyn Storage, deck: u32, front: &str) -> bool {
-    let wanted = clean(front, MAX_TEXT).to_lowercase();
-    let mut found = false;
-    let _ = each_card(storage, deck, |_, card| {
-        found = card.front.to_lowercase() == wanted;
-        if found {
-            ControlFlow::Break(())
-        } else {
-            ControlFlow::Continue(())
-        }
-    });
-    found
+    (cards, total)
 }
 
 /// The card whose line begins at `offset` in `deck` (as [`due`] says).
@@ -521,6 +562,16 @@ struct Adder<'a> {
 
 impl<'a> Adder<'a> {
     fn new(storage: &'a dyn Storage, deck: u32) -> Result<Self, Problem> {
+        Self::seeing(storage, deck, |_| {})
+    }
+
+    /// [`Adder::new`], `seen` called with each card the deck has (in the
+    /// one pass over it that counts them).
+    fn seeing(
+        storage: &'a dyn Storage,
+        deck: u32,
+        mut seen: impl FnMut(&Card),
+    ) -> Result<Self, Problem> {
         if !decks(storage).iter().any(|d| d.id == deck) {
             return Err(Problem::Missing);
         }
@@ -528,16 +579,45 @@ impl<'a> Adder<'a> {
         each_card(storage, deck, |_, card| {
             count += 1;
             next = next.max(card.state.id.saturating_add(1));
+            seen(&card);
             ControlFlow::Continue(())
         })?;
+        // A last line cut off is ended first, so no card joins it.
+        let file = deck_path(deck);
+        let size = storage.size(&file).unwrap_or(0);
+        let mut last = *b"\n";
+        if size > 0 {
+            let _ = storage.read_at(&file, size - 1, &mut last);
+        }
+        let out = if last[0] == b'\n' {
+            String::new()
+        } else {
+            String::from("\n")
+        };
         Ok(Self {
             storage,
             deck,
             count,
             next,
             added: 0,
-            out: String::new(),
+            out,
         })
+    }
+
+    /// Writes what is waiting; the first time, says which deck cards are
+    /// added to, until they are counted (see [`recover`]).
+    fn flush(&mut self) -> Result<(), StorageError> {
+        if self.out.is_empty() {
+            return Ok(());
+        }
+        if self.added > 0 && !self.storage.exists(&adding()) {
+            self.storage
+                .write(&adding(), format!("{}\n", self.deck).as_bytes())?;
+        }
+        self.storage
+            .append(&deck_path(self.deck), self.out.as_bytes())?;
+        self.out.clear();
+        Ok(())
     }
 
     /// Adds `texts` (left out without a front); `false` once the deck is
@@ -562,25 +642,26 @@ impl<'a> Adder<'a> {
         self.added += 1;
         self.out.push_str(&card.line());
         if self.out.len() >= CHUNK {
-            self.storage
-                .append(&deck_path(self.deck), self.out.as_bytes())?;
-            self.out.clear();
+            self.flush()?;
         }
         Ok(true)
     }
 
-    fn finish(self) -> Result<usize, Problem> {
-        if !self.out.is_empty() {
-            self.storage
-                .append(&deck_path(self.deck), self.out.as_bytes())?;
-        }
+    fn finish(mut self) -> Result<usize, Problem> {
         if self.added > 0 {
+            self.flush()?;
             add_to_index(self.storage, self.deck, self.added as u32)?;
+            self.storage.remove(&adding())?;
         } else if self.count >= MAX_CARDS {
             return Err(Problem::Full);
         }
         Ok(self.added)
     }
+}
+
+/// Which deck cards are being added to (see [`Adder::flush`]).
+fn adding() -> String {
+    path("adding.txt")
 }
 
 /// Changes the texts of card `id` of `deck`.
@@ -635,12 +716,23 @@ fn rewrite(
     };
     let mut out = String::new();
     let mut written = Ok(());
-    each_card(storage, deck, |_, mut card| {
-        if !change(&mut card) {
-            return ControlFlow::Continue(());
+    each_line(storage, &file, |_, line| {
+        match Card::parse(line) {
+            Some(mut card) => {
+                if !change(&mut card) {
+                    return ControlFlow::Continue(());
+                }
+                index.count(&card.state);
+                out.push_str(&card.line());
+            }
+            // The version line is written above; empty lines go; what is
+            // no card (written by a later version, damaged) stays.
+            None if line == CARDS_HEADER || line.trim().is_empty() => {}
+            None => {
+                out.push_str(line);
+                out.push('\n');
+            }
         }
-        index.count(&card.state);
-        out.push_str(&card.line());
         if out.len() >= CHUNK {
             written = storage.append(&temporary, out.as_bytes());
             out.clear();
@@ -664,6 +756,11 @@ fn rewrite(
 /// the old one is gone already, else the unfinished one goes; and the
 /// answers given are folded in. Called at start.
 pub(crate) fn recover(storage: &dyn Storage) {
+    for name in ["decks.txt", "state.txt", "due.txt"] {
+        let file = path(name);
+        recover_whole(storage, &file, &files::part_path(&file));
+    }
+    recover_whole(storage, &index_file(), &path("due.tmp"));
     for deck in decks(storage) {
         let (file, temporary) = (deck_path(deck.id), deck_temporary(deck.id));
         if !storage.exists(&temporary) {
@@ -675,7 +772,110 @@ pub(crate) fn recover(storage: &dyn Storage) {
             let _ = storage.rename(&temporary, &file);
         }
     }
+    // Cards added while the power went: counted into the index anew.
+    let cut_off = paperpaw_sdk::read_file(storage, &adding(), 32)
+        .ok()
+        .and_then(|d| core::str::from_utf8(&d).ok()?.trim().parse::<u32>().ok());
+    if let Some(deck) = cut_off {
+        let _ = rewrite(storage, deck, |_| true);
+    }
+    let _ = storage.remove(&adding());
     let _ = fold(storage);
+}
+
+// ---- Words looked up ---------------------------------------------------
+
+fn lookups() -> String {
+    path("looked-up.txt")
+}
+
+/// The longest the list of words waiting to become cards grows.
+const MAX_LOOKUPS: u64 = 64 * 1024;
+/// Words taken from that list into the deck at a time.
+const LOOKUPS_AT_ONCE: usize = 64;
+
+/// Keeps `word` looked up in `sentence`, to become a card when the flash
+/// cards open next: a line appended, nothing read.
+pub(crate) fn queue_lookup(
+    storage: &dyn Storage,
+    word: &str,
+    sentence: &str,
+) -> Result<(), StorageError> {
+    if storage.size(&lookups()).unwrap_or(0) >= MAX_LOOKUPS {
+        return Ok(());
+    }
+    let word = clean(word, MAX_TEXT);
+    if word.is_empty() {
+        return Ok(());
+    }
+    let line = format!(
+        "{}\t{}\n",
+        escape(&word),
+        escape(&clean(sentence, MAX_TEXT))
+    );
+    storage.append(&lookups(), line.as_bytes())
+}
+
+/// How many words wait to become cards (some may be there already).
+fn lookups_waiting(storage: &dyn Storage) -> usize {
+    let mut n = 0;
+    let _ = each_line(storage, &lookups(), |_, line| {
+        n += usize::from(!line.is_empty());
+        ControlFlow::Continue(())
+    });
+    n
+}
+
+/// The words looked up as cards of the deck `deck_name` (made where there
+/// is none), each front once, its sentence the example; a part at a time,
+/// one pass over the deck each. How many became cards.
+pub(crate) fn take_lookups(storage: &dyn Storage, deck_name: &str) -> Result<usize, Problem> {
+    let mut added = 0;
+    while storage.exists(&lookups()) {
+        // A part of the list, each word once.
+        let mut part: Vec<Texts> = Vec::new();
+        let mut rest = String::new();
+        each_line(storage, &lookups(), |_, line| {
+            if part.len() >= LOOKUPS_AT_ONCE {
+                rest.push_str(line);
+                rest.push('\n');
+                return ControlFlow::Continue(());
+            }
+            let (word, sentence) = line.split_once('\t').unwrap_or((line, ""));
+            let texts = Texts {
+                front: unescape(word),
+                back: String::new(),
+                example: unescape(sentence),
+            };
+            let lower = texts.front.to_lowercase();
+            if !texts.front.is_empty() && !part.iter().any(|t| t.front.to_lowercase() == lower) {
+                part.push(texts);
+            }
+            ControlFlow::Continue(())
+        })?;
+        let deck = deck_named(storage, deck_name)?;
+        // Those the deck has already are left out, seen in the pass that
+        // counts its cards.
+        let mut there = alloc::vec![false; part.len()];
+        let mut adder = Adder::seeing(storage, deck, |card| {
+            let lower = card.front.to_lowercase();
+            if let Some(at) = part.iter().position(|t| t.front.to_lowercase() == lower) {
+                there[at] = true;
+            }
+        })?;
+        for (texts, there) in part.into_iter().zip(there) {
+            if !there && !adder.push(texts)? {
+                break;
+            }
+        }
+        added += adder.finish()?;
+        if rest.is_empty() {
+            storage.remove(&lookups())?;
+        } else {
+            write_whole(storage, &lookups(), rest.as_bytes())?;
+        }
+    }
+    Ok(added)
 }
 
 // ---- Answers -----------------------------------------------------------
@@ -781,7 +981,7 @@ pub(crate) fn due(
                 if fresh.len() < new {
                     fresh.push(due);
                 }
-            } else if state.due <= until {
+            } else if state.due < until {
                 reviews.push(due);
                 // Keep those due longest, without holding more than twice
                 // as many at a time.
@@ -807,23 +1007,26 @@ pub(crate) fn due_count(storage: &dyn Storage, until: i64, new: usize) -> usize 
     let mut fresh: i64 = 0;
     each_index(storage, |part| {
         fresh += i64::from(part.new);
+        // A quarter hour all before `until`: every day begins on one.
         reviews += part
             .hours
             .iter()
-            .filter(|(hour, _)| hour * HOUR <= until)
+            .filter(|(quarter, _)| (quarter + 1) * QUARTER <= until)
             .map(|(_, n)| i64::from(*n))
             .sum::<i64>();
     });
     for (state, before) in answered(storage).values() {
         match *before {
             0 => fresh -= 1,
-            b if b <= until => reviews -= 1,
+            b if b < until => reviews -= 1,
             _ => {}
         }
-        if state.due <= until {
+        if state.due < until {
             reviews += 1;
         }
     }
+    // Words looked up that become cards when the flash cards open.
+    fresh += lookups_waiting(storage) as i64;
     reviews.max(0) as usize + (fresh.max(0) as usize).min(new)
 }
 
@@ -832,8 +1035,8 @@ pub(crate) fn due_count(storage: &dyn Storage, until: i64, new: usize) -> usize 
 pub(crate) fn next_due(storage: &dyn Storage, after: i64) -> Option<i64> {
     let mut next: Option<i64> = None;
     each_index(storage, |part| {
-        for (hour, _) in &part.hours {
-            let at = hour * HOUR;
+        for (quarter, _) in &part.hours {
+            let at = quarter * QUARTER;
             if at > after && next.is_none_or(|n| at < n) {
                 next = Some(at);
             }
@@ -855,7 +1058,7 @@ pub(crate) fn sizes(storage: &dyn Storage) -> BTreeMap<u32, usize> {
 // ---- The index ---------------------------------------------------------
 
 /// When a deck's cards are due (or a part of that, a line of `due.txt`):
-/// its new ones, and the others by hour. A deck's lines add up.
+/// its new ones, and the others by quarter hour. A deck's lines add up.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct Index {
     deck: u32,
@@ -872,10 +1075,10 @@ impl Index {
             self.new += 1;
             return;
         }
-        let hour = state.due.div_euclid(HOUR);
-        match self.hours.binary_search_by_key(&hour, |(h, _)| *h) {
+        let quarter = state.due.div_euclid(QUARTER);
+        match self.hours.binary_search_by_key(&quarter, |(q, _)| *q) {
             Ok(at) => self.hours[at].1 += 1,
-            Err(at) => self.hours.insert(at, (hour, 1)),
+            Err(at) => self.hours.insert(at, (quarter, 1)),
         }
     }
 
@@ -1007,7 +1210,7 @@ fn kept(storage: &dyn Storage) -> Kept {
 
 fn write_kept(storage: &dyn Storage, kept: Kept) {
     let text = format!("clock {}\nnew {} {}\n", kept.clock, kept.day, kept.new);
-    let _ = storage.write(&state_file(), text.as_bytes());
+    let _ = write_whole(storage, &state_file(), text.as_bytes());
 }
 
 fn remember_clock(storage: &dyn Storage, now: i64) {

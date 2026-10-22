@@ -23,8 +23,8 @@
 //! Without a cover or a picture the message shows. Where the device is
 //! off while it sleeps (the X4), this is also what shows as it starts.
 //! Asleep, the screen takes every button but *Sleep* and *Home*. It
-//! closes when the device wakes or, where a screen opened above it as the
-//! device woke (a lock), as soon as that one closes. Only where PaperPaw
+//! closes when the device wakes, wherever it is: what opened above it as
+//! the device woke (a lock, a review of flash cards) stays. Only where PaperPaw
 //! shows the sleep screen itself (the X4, not Android): elsewhere its
 //! settings are hidden.
 
@@ -514,11 +514,10 @@ impl Screen for SleepScreen {
             shown.on_event(event, params, cx);
         }
         if *event == events::RESUME {
-            // Awake: gone, if on top. A screen that opened as the device
-            // woke (a lock) is above it now; this one goes when it shows
-            // again.
+            // Awake: gone, wherever it is. What opened above it as the
+            // device woke (a lock, a review) stays where it is.
             self.woke = true;
-            cx.command(Command::Back);
+            cx.close();
             if self.show != PAGE {
                 cx.request_refresh(RefreshMode::Full);
             }
