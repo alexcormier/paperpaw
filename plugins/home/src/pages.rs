@@ -282,6 +282,44 @@ pub(crate) fn store_all(pages: &[Page]) -> Vec<Command> {
         .collect()
 }
 
+/// The pages fitted to `geometry` once its columns or rows changed: every
+/// item where the grid now shows it (moved inside it as little as can
+/// be), and what a page has no room for on the next page (a page added
+/// where there is none), so that nothing is lost or hidden; `None`
+/// where nothing moved. The tools and the spaces stay as they are.
+pub(crate) fn reflow(env: &Env<'_>, geometry: &grid::Geometry) -> Option<Vec<Page>> {
+    let kept = |item: &Item| match &item.what {
+        What::Widget(id) => id == TOOLS || id == widgets::SPACE || id == widgets::FILL,
+        _ => false,
+    };
+    let mut pages = pages(env);
+    let mut carried: Vec<Item> = Vec::new();
+    let mut changed = false;
+    let mut index = 0;
+    while index < pages.len() || (!carried.is_empty() && pages.len() < MAX_PAGES) {
+        if index == pages.len() {
+            pages.push(Page {
+                slot: index,
+                items: Vec::new(),
+            });
+        }
+        let page = &mut pages[index];
+        let (special, mut movable): (Vec<Item>, Vec<Item>) =
+            page.items.iter().cloned().partition(|item| kept(item));
+        // What did not fit before comes first, so it finds room here.
+        movable.splice(0..0, carried.drain(..).map(|item| Item::new(item.what)));
+        let (mut placed, left) = grid::fit(env, geometry, &movable);
+        placed.extend(special);
+        if placed != page.items {
+            page.items = placed;
+            changed = true;
+        }
+        carried = left;
+        index += 1;
+    }
+    changed.then_some(pages)
+}
+
 /// The setting `id` is, if it keeps a page: 0 for `home.page-1`.
 pub(crate) fn slot_of(id: &str) -> Option<usize> {
     (0..MAX_PAGES).find(|&i| setting(i).as_str() == id)

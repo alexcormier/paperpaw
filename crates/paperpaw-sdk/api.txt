@@ -3643,6 +3643,7 @@ pub const paperpaw_sdk::widgets::grid::MAX_ROWS: u8
 pub fn paperpaw_sdk::widgets::grid::add(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item], paperpaw_sdk::widgets::grid::What) -> core::option::Option<alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>>
 pub fn paperpaw_sdk::widgets::grid::dragged(&paperpaw_sdk::widgets::grid::Geometry, paperpaw_sdk::widgets::grid::Cells, paperpaw_platform::geometry::Point, paperpaw_platform::geometry::Point, bool) -> core::option::Option<paperpaw_sdk::widgets::grid::Cells>
 pub fn paperpaw_sdk::widgets::grid::draw_tool(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, &paperpaw_sdk::Id, bool)
+pub fn paperpaw_sdk::widgets::grid::fit(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item]) -> (alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>, alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>)
 pub fn paperpaw_sdk::widgets::grid::free_place(&paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Cells], u8, u8) -> core::option::Option<paperpaw_sdk::widgets::grid::Cells>
 pub fn paperpaw_sdk::widgets::grid::parse(&str) -> alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>
 pub fn paperpaw_sdk::widgets::grid::place(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item]) -> alloc::vec::Vec<(paperpaw_sdk::widgets::grid::Item, paperpaw_sdk::widgets::grid::Cells)>

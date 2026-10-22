@@ -600,3 +600,54 @@ clock.size = core.size.{size}
     // 48 pixels text has at most.
     assert!(sizes[3] > 60, "{sizes:?}");
 }
+
+/// Fewer columns than the page was arranged for: every item still shows,
+/// moved inside the grid (narrower where it was wider than the grid),
+/// none lost; what a page has no more room for goes to the next page.
+#[test]
+fn fewer_columns_keep_every_item_in_sight() {
+    let mut home = Home::new(
+        false,
+        "columns = 4\nrows = 6\n\
+         page-1 = tool:core.library 0/0 1x1, tool:core.settings 3/0 1x1, home.date 0/1 4x1\n",
+    );
+    home.set("home.columns", "3");
+    let texts = home.texts();
+    for name in ["Library", "Settings"] {
+        assert!(texts.iter().any(|(t, _)| t == name), "{name}: {texts:?}");
+    }
+    let page = paperpaw_sdk::widgets::grid::parse(home.kernel.settings().text("home.page-1"));
+    assert_eq!(page.len(), 3, "{page:?}");
+    for item in &page {
+        let at = item.at.expect("placed");
+        assert!(at.fits(3, 6), "{item:?}");
+    }
+    // A full page: what has no room goes on to the next one.
+    let full = (0..4)
+        .flat_map(|row| (0..4).map(move |col| alloc_free(col, row)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut home = Home::new(false, &format!("columns = 4\nrows = 4\npage-1 = {full}\n"));
+    home.set("home.columns", "3");
+    let settings = home.kernel.settings();
+    let first = paperpaw_sdk::widgets::grid::parse(settings.text("home.page-1"));
+    let second = paperpaw_sdk::widgets::grid::parse(settings.text("home.page-2"));
+    let tools = |page: &[paperpaw_sdk::widgets::grid::Item]| {
+        page.iter()
+            .filter(|i| matches!(i.what, paperpaw_sdk::widgets::grid::What::Tool(_)))
+            .count()
+    };
+    assert_eq!(tools(&first) + tools(&second), 16, "{first:?} {second:?}");
+    assert_eq!(first.len(), 12);
+}
+
+/// A tool in cell `col`/`row`, one of 16 apart.
+fn alloc_free(col: u8, row: u8) -> String {
+    let tools = [
+        "core.library", "core.settings", "core.home", "core.tools",
+        "core.back", "core.menu", "core.sleep", "core.refresh-screen",
+        "core.next-page", "core.prev-page", "core.night-mode", "core.screenshot",
+        "core.quick-panel", "core.up", "core.down", "core.left",
+    ];
+    format!("tool:{} {col}/{row} 1x1", tools[usize::from(row * 4 + col)])
+}

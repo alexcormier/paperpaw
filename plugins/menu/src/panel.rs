@@ -1068,10 +1068,9 @@ impl Screen for PanelScreen {
                 cx.request_redraw_area(before.union(&self.region));
                 self.redraw(cx);
             } else if let Some(rows) = self.rows_of(&changed.id) {
-                // Its rows alone (and the head, which may show it): a
-                // step of a slider or a number shows quickly.
-                let head = (self.top && self.head.height > 0).then_some(self.head);
-                cx.request_redraw_area(head.map_or(rows, |head| rows.union(&head)));
+                // Its rows alone: a step of a slider or a number shows
+                // quickly.
+                cx.request_redraw_area(rows);
                 cx.request_refresh(RefreshMode::Fast);
             } else {
                 self.redraw(cx);
