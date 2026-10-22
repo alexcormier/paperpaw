@@ -1320,6 +1320,22 @@ fn focus(
     findings
 }
 
+/// The setting that offers `screen` among its choices, if one does: a
+/// mode of another screen, shown in its place (the sleep screen's).
+fn chosen_by(session: &Session, screen: &str) -> Option<String> {
+    use paperpaw_core::sdk::SettingKind;
+    session
+        .device
+        .kernel
+        .settings()
+        .specs()
+        .find(|spec| match &spec.kind {
+            SettingKind::Choice(choices) => choices.iter().any(|value| value == screen),
+            _ => false,
+        })
+        .map(|spec| spec.id.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1382,20 +1398,4 @@ mod tests {
         assert_eq!(seen(1).state(), "a.list|Row \"Light\"|Back");
         assert_eq!(seen(1).view(), seen(2).view());
     }
-}
-
-/// The setting that offers `screen` among its choices, if one does: a
-/// mode of another screen, shown in its place (the sleep screen's).
-fn chosen_by(session: &Session, screen: &str) -> Option<String> {
-    use paperpaw_core::sdk::SettingKind;
-    session
-        .device
-        .kernel
-        .settings()
-        .specs()
-        .find(|spec| match &spec.kind {
-            SettingKind::Choice(choices) => choices.iter().any(|value| value == screen),
-            _ => false,
-        })
-        .map(|spec| spec.id.to_string())
 }
