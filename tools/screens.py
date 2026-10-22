@@ -109,7 +109,7 @@ def main():
             shot = out / f"{profile}-{name}.png"
             command = [str(EMULATOR), "--profile", profile, "--headless",
                        "--library", str(dir), "--screenshot", str(shot),
-                       "--set", "home.gesture-tips=false"]
+                       "--set", "help.show=false"]
             if not book:
                 command += ["--set", "reader.open-last=false"]
             if lang:

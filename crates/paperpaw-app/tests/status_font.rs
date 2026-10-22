@@ -51,7 +51,9 @@ fn role(kernel: &Kernel, role: &paperpaw_sdk::Id) -> String {
 #[test]
 fn the_status_lines_follow_their_setting() {
     let storage = MemoryStorage::new().with(".paperpaw/plugins/setup/done", "");
-    let builder = Kernel::builder(DEVICE).storage(storage);
+    let builder = Kernel::builder(DEVICE)
+        .storage(storage)
+        .user_config("[help]\nshow = false\n");
     let mut kernel = paperpaw_app::install(builder, fonts()).build().unwrap();
     let _ = kernel.start(Instant(0));
     // As the menus at first.

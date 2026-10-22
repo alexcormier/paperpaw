@@ -82,7 +82,7 @@ fn flows_pass_and_fail_where_they_should() {
     assert_eq!(failed.len(), 1, "{}", report.text(Level::Info));
     let failure = failed[0];
     assert!(
-        failure.place.ends_with("battery.flow:17"),
+        failure.place.ends_with("battery.flow:14"),
         "{}",
         failure.place
     );

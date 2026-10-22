@@ -35,6 +35,21 @@ change the plugin SDK.
   or taken out). Its fuel gauge then starts asleep and forgets the
   battery's profile; PaperPaw gives it the profile again at the start
   and wakes it, as the stock firmware did.
+- Hints: the first time a screen opens, a short note over it says what
+  its controls do, the parts a tap goes to framed, for touch or for
+  buttons as the device has them. A tap or any button closes it for
+  good; *No more hints* switches them all off, as does a setting under
+  System, where *Show hints again* has them shown once more. The home
+  screen's gesture tips are now its hints; the reader, the library, the
+  quick panel have theirs. SDK: `help` (`help::add` for a screen's
+  hints, `help::hints` to read them, `help::wait` and `help::ready` for
+  a screen that prepares first), the `help` plugin shows them.
+- How it works: a plugin's own longer text (`<id>.plugin.how` in its
+  translations; `description` in the store's catalogue), to read paged
+  from the plugin manager (hold a plugin) and the store's page of a
+  plugin. `paperpaw-dev` warns where a plugin with code has none or a
+  short one (`lint.how-it-works`). SDK: `PluginInfo::how`,
+  `readers::show_text`.
 - Reading goal, a plugin of its own (in the store on the X4s): the daily
   goal of the reading statistics (one goal for both; 20 minutes where
   this plugin is), and a cat whose mood follows today's reading: sad

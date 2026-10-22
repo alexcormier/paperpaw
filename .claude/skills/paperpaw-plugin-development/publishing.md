@@ -92,7 +92,13 @@ Ask the user for each, and suggest values from the plugin where you can
   own, not another author's, not one taken down (look at
   `https://paperpaw.org/api/v1/plugins.json`). It cannot change later.
 - **name** (at most 60), **summary** (one sentence, at most 160),
-  **description** (optional, at most 2000).
+  **description** (at most 2000): *How it works*, a few sentences on
+  what the plugin does, where it is found and how it is used, shown on
+  its page in the store on the device and the site. A plugin with code
+  should give it, and the same text as `<id>.plugin.how` in its
+  translations, which the plugin manager shows once it is installed
+  (paragraphs apart by `\n\n` in a quoted value); `paperpaw-dev` warns
+  where that is missing or short.
 - **group**: `reading`, `formats`, `library`, `sync`, `home`, `look` or
   `system`.
 - **tags**: up to five, lower-case letters, digits and hyphens, at most

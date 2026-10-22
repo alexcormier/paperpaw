@@ -253,7 +253,12 @@ pub(crate) struct More {
     /// placed (`latest.builds[].image_len`), where the library says.
     pub image_len: Option<u64>,
     pub shots: Vec<Shot>,
+    /// How it works, at length (`description`), where the library says.
+    pub description: String,
 }
+
+/// The longest *How it works* kept, in characters.
+const MAX_DESCRIPTION: usize = 4000;
 
 /// `yyyymmdd` of a date written `YYYY-MM-DD` (or a year alone), 0 for
 /// anything else.
@@ -316,6 +321,7 @@ impl Item {
                     self.more.source = cut(value, 200);
                 }
                 "author_since" => self.more.author_since = date(value),
+                "description" => self.more.description = cut(value, MAX_DESCRIPTION),
                 "author_plugins" => self.more.author_plugins = value.parse().unwrap_or(0),
                 _ => {}
             },

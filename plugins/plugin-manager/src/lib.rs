@@ -5,6 +5,9 @@
 //!   kernel), *Required* (it alone provides e.g. the settings or the menu,
 //!   so switching it off would leave no way back; once another plugin
 //!   provides them too, it can be switched off) or *Error*.
+//! - Holding a row (or *Select*) shows how the plugin works, where it
+//!   says ([`PluginInfo::how`](paperpaw_sdk::PluginInfo::how)): paged, as
+//!   a book.
 //! - Confirming or tapping a row switches the plugin. The choice is saved
 //!   to `paperpaw.ini` (`[plugins] id = off`) and applies after a restart:
 //!   the bar at the bottom then offers *Restart now*. The bar is always
@@ -204,6 +207,30 @@ impl PluginList {
         }
     }
 
+    /// How the plugin of row `index` works, to read, where it says; a
+    /// notice where it does not.
+    fn explain(&mut self, env: &Env<'_>, index: usize, cx: &mut Cx<'_, '_>) {
+        let Some(info) = index
+            .checked_sub(self.more.len())
+            .and_then(|i| self.plugins.get(i))
+            .and_then(|id| env.plugins.get(id.as_str()))
+        else {
+            return;
+        };
+        let Some(how) = info.how(env.i18n) else {
+            let text = env.i18n.tr("plugin-manager.no-how").to_string();
+            cx.command(Command::Notify(text));
+            return;
+        };
+        let text = alloc::format!("{}\n\n{how}\n", info.name(env.i18n));
+        match paperpaw_sdk::readers::show_text(env.storage, &how_file(), &text) {
+            Ok(open) => cx.command(open),
+            Err(_) => cx.command(Command::Notify(
+                env.i18n.tr("plugin-manager.how-failed").into(),
+            )),
+        }
+    }
+
     /// Switches the plugin `id`.
     fn switch(&mut self, env: &Env<'_>, id: &Id, cx: &mut Cx<'_, '_>) {
         let Some(info) = env.plugins.get(id.as_str()) else {
@@ -385,6 +412,11 @@ fn slot_key(slot: &Id) -> &'static str {
     }
 }
 
+/// Where *How it works* is written to be read.
+fn how_file() -> String {
+    alloc::format!("{}/how.txt", Env::plugin_dir("plugin-manager"))
+}
+
 impl Screen for PluginList {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
@@ -507,6 +539,9 @@ impl Screen for PluginList {
         } else if *a == actions::CONFIRM {
             self.activate(&env, self.list.focus(), cx);
             return Handled::Yes;
+        } else if *a == actions::LONG_CONFIRM || *a == actions::MENU {
+            self.explain(&env, self.list.focus(), cx);
+            return Handled::Yes;
         } else {
             return Handled::No;
         };
@@ -515,6 +550,15 @@ impl Screen for PluginList {
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        if gesture.kind == GestureKind::LongPress {
+            let Some(index) = self.list.hit(gesture.start, self.len()) else {
+                return Handled::No;
+            };
+            let env = *cx.env();
+            self.list.set_focus(index);
+            self.explain(&env, index, cx);
+            return Handled::Yes;
+        }
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }

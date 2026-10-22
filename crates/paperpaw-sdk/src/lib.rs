@@ -51,6 +51,7 @@ pub mod firmware;
 mod fonts;
 mod formats;
 mod gesture;
+pub mod help;
 pub mod host;
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]

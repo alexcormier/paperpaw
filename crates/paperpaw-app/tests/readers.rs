@@ -244,9 +244,9 @@ impl App {
         let storage = storage.with(".paperpaw/plugins/setup/done", "");
         let builder = Kernel::builder(device)
             .storage(storage)
-            // On touch screens without the tips on gestures over it all.
+            // On touch screens without the hints over it all.
             .user_config(format!(
-                "[home]\ngesture-tips = false\n[core]\nlanguage = en\n{config}"
+                "[help]\nshow = false\n[core]\nlanguage = en\n{config}"
             ));
         let builder = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs);
         let mut kernel = more(builder).build().unwrap();

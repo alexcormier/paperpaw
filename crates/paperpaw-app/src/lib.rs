@@ -224,6 +224,7 @@ pub fn install_with(
         .plugin(paperpaw_plugin_update::Update)
         .plugin(paperpaw_plugin_about::About)
         .plugin(paperpaw_plugin_setup::Setup)
+        .plugin(paperpaw_plugin_help::Help)
 }
 
 /// Adds `plugin`, one the store offers as a file too, as `store` says.

@@ -95,7 +95,9 @@ impl Session {
             .map(|(path, bytes)| (path.clone(), bytes.as_slice()))
             .chain(plugin_files)
             .collect();
-        let mut settings: Vec<(&str, &str)> = variant.settings();
+        // No first-time hints over the screens looked at, unless asked.
+        let mut settings: Vec<(&str, &str)> = vec![("help.show", "false")];
+        settings.extend(variant.settings());
         settings.extend(start.settings.iter().map(|(k, v)| (k.as_str(), v.as_str())));
         let config = variant::config(settings);
         // The budget is compared after (see `perf`), rather than making

@@ -423,6 +423,8 @@ impl Screen for ReaderScreen {
             if !book.web() {
                 cx.command(events::BOOK_OPENED.emit(book.reading(cx.env())));
             }
+            // The book shows: its hints may, the first time.
+            cx.command(paperpaw_sdk::help::ready(&crate::SCREEN));
             let now = cx.env().now;
             cx.wake_at(now);
         }
