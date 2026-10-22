@@ -186,9 +186,38 @@ enum Key {
 /// A key and its width in units (a letter is 2).
 type Slot = (Key, u8);
 
+/// The least width of a letter's key, in millimetres: on a narrow screen
+/// (the X4) its rows are split rather than their keys made narrower.
+const LEAST_KEY_MM: u32 = 6;
+
+/// `row` in rows of at most `most` units, as even as can be and in their
+/// order ("qwert" above "yuiop"); as it is where it fits.
+fn split(row: Vec<Slot>, most: u32) -> Vec<Vec<Slot>> {
+    let total: u32 = row.iter().map(|(_, w)| u32::from(*w)).sum();
+    if most == 0 || total <= most {
+        return alloc::vec![row];
+    }
+    let parts = total.div_ceil(most);
+    let mut out: Vec<Vec<Slot>> = Vec::with_capacity(parts as usize);
+    let mut used = 0;
+    for slot in row {
+        // A new row once this one holds its share.
+        let part = (used * parts / total) as usize;
+        if out.len() <= part {
+            out.push(Vec::new());
+        }
+        used += u32::from(slot.1);
+        if let Some(last) = out.last_mut() {
+            last.push(slot);
+        }
+    }
+    out
+}
+
 /// The rows of a layer; `letters` are the rows of the layout, `switch`
-/// adds the key for the next layout.
-fn rows(letters: &str, layer: Layer, switch: bool) -> Vec<Vec<Slot>> {
+/// adds the key for the next layout; rows wider than `most` units are
+/// split (see [`split`]; 0 for none).
+fn rows(letters: &str, layer: Layer, switch: bool, most: u32) -> Vec<Vec<Slot>> {
     let chars = |row: &str| -> Vec<Slot> { row.chars().map(|c| (Key::Char(c), 2)).collect() };
     match layer {
         Layer::Letters | Layer::Symbols => {
@@ -203,6 +232,7 @@ fn rows(letters: &str, layer: Layer, switch: bool) -> Vec<Vec<Slot>> {
                 }
                 last.push((Key::Delete, 3));
             }
+            let mut rows: Vec<Vec<Slot>> = rows.into_iter().flat_map(|row| split(row, most)).collect();
             let other = if layer == Layer::Letters {
                 Layer::Symbols
             } else {
@@ -282,6 +312,8 @@ struct KeyboardScreen {
     field: Rect,
     keys: Rect,
     key_height: u16,
+    /// The most units a row of keys holds (see [`rows`]).
+    most: u32,
 }
 
 impl KeyboardScreen {
@@ -296,8 +328,20 @@ impl KeyboardScreen {
         if current.get() >= layouts.len() {
             current.set(0);
         }
-        let rows = rows(&layouts[current.get()].1, layer, layouts.len() > 1);
         let display = env.device.display;
+        // As many units in a row as leave a letter (2 units) its least
+        // width.
+        let unit = (env.metrics.mm(LEAST_KEY_MM) / 2).max(1);
+        let most = (u32::from(display.width) - 2 * style.margin) / unit;
+        let letters = &layouts[current.get()].1;
+        // As high as the layer with the most rows needs, so that turning
+        // to the other keeps the keys where they are.
+        let other = match layer {
+            Layer::Letters => rows(letters, Layer::Symbols, false, most).len(),
+            _ => 0,
+        };
+        let rows = rows(letters, layer, layouts.len() > 1, most);
+        let count = rows.len().max(other).max(4);
         // Keys and the field's buttons grow on touch screens, and their
         // rows with them.
         let key_height = style.touch_row(style.row) as u16;
@@ -306,12 +350,10 @@ impl KeyboardScreen {
         // The last row's keys keep the side margin from the bottom edge.
         let room = ui::edge_room(&style, key_height);
         // On the screen whatever the rows: keys get smaller first.
-        let most = display
+        let room_for_keys = display
             .height
             .saturating_sub(field_height.saturating_add(gap * 2 + room));
-        let keys_height = key_height
-            .saturating_mul(rows.len().max(4) as u16)
-            .min(most);
+        let keys_height = key_height.saturating_mul(count as u16).min(room_for_keys);
         let height = (field_height + keys_height + gap * 2 + room).min(display.height);
         let region = Rect::new(0, display.height - height, display.width, height);
         let field = Rect::new(0, region.y + gap, display.width, field_height);
@@ -338,7 +380,9 @@ impl KeyboardScreen {
             region,
             field,
             keys,
-            key_height,
+            // Smaller where the screen holds the rows only so.
+            key_height: keys_height / count as u16,
+            most,
         };
         screen.buttons = screen.field_buttons(env);
         screen
@@ -534,7 +578,7 @@ impl KeyboardScreen {
         let _ = env;
         self.shift = false;
         let letters = self.layouts[self.current.get()].1.clone();
-        self.rows = rows(&letters, self.layer, self.layouts.len() > 1);
+        self.rows = rows(&letters, self.layer, self.layouts.len() > 1, self.most);
         if let Some((row, index)) = self.focus.filter(|(row, _)| *row != PASTE_ROW) {
             let row = row.min(self.rows.len() - 1);
             self.focus = Some((row, index.min(self.rows[row].len() - 1)));
@@ -1088,8 +1132,8 @@ mod tests {
     #[test]
     fn several_layouts_get_a_key_to_switch() {
         let letters = "abc def ghi";
-        let one = rows(letters, Layer::Letters, false);
-        let two = rows(letters, Layer::Letters, true);
+        let one = rows(letters, Layer::Letters, false, 0);
+        let two = rows(letters, Layer::Letters, true, 0);
         let has = |rows: &Vec<Vec<Slot>>| rows.iter().flatten().any(|(k, _)| *k == Key::NextLayout);
         assert!(!has(&one));
         assert!(has(&two));
@@ -1103,6 +1147,35 @@ mod tests {
         };
         assert_eq!(width(&one), width(&two));
         // Not on the symbols.
-        assert!(!has(&rows(letters, Layer::Symbols, true)));
+        assert!(!has(&rows(letters, Layer::Symbols, true, 0)));
+    }
+}
+
+#[cfg(test)]
+mod split_tests {
+    use super::*;
+
+    /// A row too wide for a narrow screen in two as even as can be, in
+    /// its order; one that fits as it is.
+    #[test]
+    fn rows_too_wide_are_split_evenly_in_order() {
+        let row = rows("qwertyuiop asdfghjkl zxcvbnm", Layer::Letters, false, 16);
+        let names = |r: &[Slot]| {
+            r.iter()
+                .map(|(k, _)| match k {
+                    Key::Char(c) => *c,
+                    Key::Shift => '^',
+                    Key::Delete => '<',
+                    _ => '_',
+                })
+                .collect::<String>()
+        };
+        let shown: Vec<String> = row.iter().map(|r| names(r)).collect();
+        assert_eq!(&shown[..6], ["qwert", "yuiop", "asdfg", "hjkl", "^zxcv", "bnm<"]);
+        assert!(row[..6]
+            .iter()
+            .all(|r| r.iter().map(|(_, w)| u32::from(*w)).sum::<u32>() <= 16));
+        // Wide enough: the rows as they are.
+        assert_eq!(rows("qwertyuiop asdfghjkl zxcvbnm", Layer::Letters, false, 40).len(), 4);
     }
 }
