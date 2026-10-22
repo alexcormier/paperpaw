@@ -40,7 +40,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
 fn random(buf: &mut [u8]) -> bool {
     buf.iter_mut()
         .enumerate()
-        .for_each(|(i, b)| *b = i as u8 * 37);
+        .for_each(|(i, b)| *b = (i as u8).wrapping_mul(37));
     true
 }
 
@@ -181,6 +181,22 @@ fn a_network_chosen_on_the_phone_is_joined_and_kept() {
         page.contains("value=\"Home\"") && page.contains("value=\"Cafe\""),
         "{page}"
     );
+    let token = token(&page);
+    // A form from another page, without the token: refused.
+    t.server(ServerEvent::Request {
+        server,
+        request: 9,
+        method: String::from("POST"),
+        target: String::from("/join"),
+        body: true,
+    });
+    let io = t.server(ServerEvent::Body {
+        request: 9,
+        data: b"ssid=Evil&password=x".to_vec(),
+        last: true,
+    });
+    assert_eq!(answered(&io).0, 403);
+    assert!(Test::radio(&t.tick(2000)).is_empty());
     // Chosen: answered first, then the own network closes for that one.
     t.server(ServerEvent::Request {
         server,
@@ -191,7 +207,7 @@ fn a_network_chosen_on_the_phone_is_joined_and_kept() {
     });
     let io = t.server(ServerEvent::Body {
         request: 2,
-        data: b"ssid=Home&other=&password=s3cret".to_vec(),
+        data: format!("t={token}&ssid=Home&other=&password=s3cret").into_bytes(),
         last: true,
     });
     let (status, page) = answered(&io);
@@ -238,6 +254,14 @@ fn a_password_not_taken_opens_the_own_network_again() {
     let Some(Io::Server(ServerCall::Listen { server, .. })) = io.first().cloned() else {
         panic!("{io:?}");
     };
+    let io = t.server(ServerEvent::Request {
+        server,
+        request: 7,
+        method: String::from("GET"),
+        target: String::from("/"),
+        body: false,
+    });
+    let token = token(&answered(&io).1);
     t.server(ServerEvent::Request {
         server,
         request: 1,
@@ -247,7 +271,7 @@ fn a_password_not_taken_opens_the_own_network_again() {
     });
     t.server(ServerEvent::Body {
         request: 1,
-        data: b"ssid=Home&password=wrong".to_vec(),
+        data: format!("t={token}&ssid=Home&password=wrong").into_bytes(),
         last: true,
     });
     t.tick(2000);
@@ -260,11 +284,36 @@ fn a_password_not_taken_opens_the_own_network_again() {
 }
 
 #[test]
+fn the_own_network_left_alone_closes_after_ten_minutes() {
+    let mut t = Test::new(MemoryStorage::new());
+    let now = t.now(100);
+    t.kernel.open_screen(now, PHONE, Params::new());
+    t.io();
+    t.wifi(WifiEvent::State(WifiState::On));
+    let io = t.wifi(WifiEvent::Scanned(vec![network("Home")]));
+    let Some(WifiCommand::Host { ssid, .. }) = Test::radio(&io).pop() else {
+        panic!("{io:?}");
+    };
+    t.wifi(WifiEvent::State(WifiState::Hosting {
+        ssid,
+        address: String::from("192.168.4.1"),
+    }));
+    assert!(Test::radio(&t.tick(9 * 60 * 1000)).is_empty());
+    let io = t.tick(2 * 60 * 1000);
+    assert_eq!(Test::radio(&io), [WifiCommand::Leave]);
+}
+
+#[test]
 fn networks_on_the_card_are_kept_and_the_file_goes() {
-    let storage = MemoryStorage::new().with(
-        "wifi.ini",
-        "# from the flasher\nssid = Home Net\npassword = pw 1\n\nssid = Cafe\n",
-    );
+    // Known before with a password: a line without one keeps it.
+    let mut secrets = Secrets::default();
+    secrets.apply(wifi::keep("Office", "kept"));
+    let storage = MemoryStorage::new()
+        .with(FILE, secrets.encode().into_bytes())
+        .with(
+            "wifi.ini",
+            "# from the flasher\nssid = Home Net\npassword = pw 1\n\nssid = Cafe\nssid = Office\n",
+        );
     let t = Test::new(storage);
     let storage = t.kernel.storage();
     assert!(!storage.exists("wifi.ini"));
@@ -272,6 +321,21 @@ fn networks_on_the_card_are_kept_and_the_file_goes() {
     let known = wifi::known(secrets.iter());
     assert!(known.contains(&(String::from("Home Net"), String::from("pw 1"))));
     assert!(known.contains(&(String::from("Cafe"), String::new())));
+    assert!(known.contains(&(String::from("Office"), String::from("kept"))));
+}
+
+#[test]
+fn a_wifi_file_too_large_to_read_goes_unread() {
+    let storage = MemoryStorage::new().with("wifi.ini", "x".repeat(20_000));
+    let t = Test::new(storage);
+    assert!(!t.kernel.storage().exists("wifi.ini"));
+}
+
+/// The token in the page's form.
+fn token(page: &str) -> String {
+    let mark = "name=\"t\" value=\"";
+    let at = page.find(mark).unwrap() + mark.len();
+    page[at..].split('"').next().unwrap().to_string()
 }
 
 trait ReadAll {

@@ -38,8 +38,11 @@ const LEAVE_MS: u64 = 1500;
 const DONE_MS: u64 = 2500;
 /// Longest form taken, in bytes.
 const MAX_FORM: usize = 1024;
+/// Without a request from the phone this long, the own network closes
+/// (and the screen with it): it is not left open by mistake.
+const IDLE_MS: u64 = 10 * 60 * 1000;
 
-#[derive(Debug)]
+/// Not `Debug`: it holds a password.
 enum State {
     /// Looking for networks, to list them on the page.
     Searching,
@@ -78,6 +81,11 @@ pub(crate) struct PhoneScreen {
     /// while this screen is open).
     manual: bool,
     started: bool,
+    /// Drawn anew each time, in the page's form: a form sent from another
+    /// page in the phone's browser does not have it.
+    token: String,
+    /// When the phone asked last (or the own network opened).
+    active: paperpaw_sdk::Instant,
 }
 
 impl PhoneScreen {
@@ -102,7 +110,16 @@ impl PhoneScreen {
             problem: None,
             manual,
             started: false,
+            token: env.random.token(13).unwrap_or_default(),
+            active: env.now,
         }
+    }
+
+    /// The phone did something (or the own network opened): the idle
+    /// time counts from now.
+    fn touched(&mut self, cx: &mut Cx<'_, '_>) {
+        self.active = cx.env().now;
+        cx.wake_at(self.active.add_millis(IDLE_MS));
     }
 
     fn redraw(cx: &mut Cx<'_, '_>) {
@@ -131,6 +148,7 @@ impl PhoneScreen {
             (State::Opening, WifiState::Hosting { .. }) => {
                 self.state = State::Hosting { page: None };
                 cx.command(Command::serve(SERVER, PORT, SERVER_EVENT.into()));
+                self.touched(cx);
             }
             (State::Joining(ssid), WifiState::Online { ssid: joined, .. }) if ssid == joined => {
                 self.state = State::Joined(joined.clone());
@@ -166,12 +184,22 @@ impl PhoneScreen {
                 body_file,
                 ..
             } => {
+                self.touched(cx);
                 let path = target.split_once('?').map_or(target.as_str(), |(p, _)| p);
                 let form = body_file
                     .as_deref()
                     .and_then(|file| paperpaw_sdk::read_file(env.storage, file, MAX_FORM).ok())
                     .map(|bytes| String::from_utf8_lossy(&bytes).into_owned());
+                let token = self.token.as_str();
                 let (status, body, chosen) = match (method.as_str(), path) {
+                    // Only the page's own form: not one another page sent.
+                    ("POST", "/join")
+                        if token.is_empty()
+                            || form.as_deref().and_then(|f| field(f, "t")).as_deref()
+                                != Some(token) =>
+                    {
+                        (403, choose_page(&env, true, token), None)
+                    }
                     ("POST", "/join") => match form.as_deref().and_then(chosen) {
                         Some((ssid, password)) => {
                             let text = env
@@ -180,9 +208,9 @@ impl PhoneScreen {
                             let body = format!("<h1>{}</h1>", escape(&text));
                             (200, page(&env, &body), Some((ssid, password)))
                         }
-                        None => (400, choose_page(&env, true), None),
+                        None => (400, choose_page(&env, true, token), None),
                     },
-                    ("GET", "/") => (200, choose_page(&env, false), None),
+                    ("GET", "/") => (200, choose_page(&env, false, token), None),
                     _ => (404, page(&env, "<h1>404</h1>"), None),
                 };
                 cx.command(Command::Respond(ServerResponse::new(
@@ -208,10 +236,18 @@ impl PhoneScreen {
         reason: paperpaw_sdk::wifi::JoinFailure,
         cx: &mut Cx<'_, '_>,
     ) {
+        let env = *cx.env();
+        // The own network could not open.
+        if matches!(self.state, State::Opening)
+            && self.own.as_ref().is_some_and(|own| own.ssid == ssid)
+        {
+            self.state = State::Failed(env.i18n.tr("wifi.phone.not-opened").into());
+            self.touched(cx);
+            return Self::redraw(cx);
+        }
         if !matches!(&self.state, State::Joining(joining) if joining == ssid) {
             return;
         }
-        let env = *cx.env();
         self.problem = Some(crate::failure_text(&env, ssid, reason));
         self.host(cx);
         Self::redraw(cx);
@@ -313,15 +349,18 @@ impl PhoneScreen {
     }
 }
 
+/// Field `name` of a form sent, decoded.
+fn field(form: &str, name: &str) -> Option<String> {
+    form.split('&')
+        .filter_map(|pair| pair.split_once('='))
+        .find(|(key, _)| *key == name)
+        .map(|(_, value)| paperpaw_sdk::web::percent_decode(&value.replace('+', " ")))
+}
+
 /// The network and password sent from the page: a network listed, or
 /// one named in the field below them.
 fn chosen(form: &str) -> Option<(String, String)> {
-    let field = |name: &str| {
-        form.split('&')
-            .filter_map(|pair| pair.split_once('='))
-            .find(|(key, _)| *key == name)
-            .map(|(_, value)| paperpaw_sdk::web::percent_decode(&value.replace('+', " ")))
-    };
+    let field = |name: &str| field(form, name);
     let other = field("other").unwrap_or_default();
     let ssid = if other.trim().is_empty() {
         field("ssid")?
@@ -348,7 +387,7 @@ fn page(env: &Env<'_>, body: &str) -> String {
 /// The page to choose a network: those found, the strongest first, a
 /// field for another one, the password. `again` after a form without a
 /// network.
-fn choose_page(env: &Env<'_>, again: bool) -> String {
+fn choose_page(env: &Env<'_>, again: bool, token: &str) -> String {
     let tr = |key| escape(env.i18n.tr(key));
     let mut body = format!("<h1>{}</h1>", tr("wifi.phone.title"));
     if again {
@@ -357,7 +396,10 @@ fn choose_page(env: &Env<'_>, again: bool) -> String {
             tr("wifi.phone.choose-one")
         ));
     }
-    body.push_str("<form method=\"post\" action=\"/join\">");
+    body.push_str(&format!(
+        "<form method=\"post\" action=\"/join\"><input type=\"hidden\" name=\"t\" value=\"{}\">",
+        escape(token)
+    ));
     let networks = env.wifi.map(|w| w.networks.as_slice()).unwrap_or_default();
     for network in networks {
         let lock = if network.secured { "" } else { " ·" };
@@ -440,6 +482,14 @@ impl Screen for PhoneScreen {
 
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
+        // Left alone: closed.
+        let waiting = matches!(
+            self.state,
+            State::Opening | State::Hosting { .. } | State::Failed(_)
+        );
+        if waiting && env.now >= self.active.add_millis(IDLE_MS) {
+            return self.close(cx);
+        }
         match core::mem::replace(&mut self.state, State::Searching) {
             State::Leaving { ssid, password } => {
                 cx.command(Command::StopServing(SERVER));
@@ -459,6 +509,13 @@ impl Screen for PhoneScreen {
                 self.close(cx);
             }
             state => self.state = state,
+        }
+        // The screen's one timer: the idle time again, where it counts.
+        if matches!(
+            self.state,
+            State::Opening | State::Hosting { .. } | State::Failed(_)
+        ) {
+            cx.wake_at(self.active.add_millis(IDLE_MS));
         }
     }
 

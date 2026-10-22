@@ -66,7 +66,10 @@ enum Outcome {
     Joined(Result<(), JoinFailure>),
     Left,
     /// The device's own network named so is open, or could not be.
-    Hosted(Option<String>),
+    Hosted {
+        ssid: String,
+        opened: bool,
+    },
 }
 
 type Task = Pin<Box<dyn Future<Output = (Outcome, Controller)>>>;
@@ -274,17 +277,33 @@ impl Radio {
                 on.linked = false;
                 on.ssid = None;
             }
-            Outcome::Hosted(Some(ssid)) => {
-                match Net::hosted(esp_radio::wifi::Interface::access_point(), HOST_ADDRESS) {
+            Outcome::Hosted { ssid, opened } => {
+                let net = opened
+                    .then(|| Net::hosted(esp_radio::wifi::Interface::access_point(), HOST_ADDRESS))
+                    .flatten();
+                match net {
                     Some(net) => {
                         log::info!("wifi: hosting {ssid}");
                         on.net = net;
                         on.hosting = Some(ssid);
                     }
-                    None => log::warn!("wifi: no memory for the own network"),
+                    None => {
+                        // Not left open without a network on it: a
+                        // station again, and said.
+                        log::warn!("wifi: the own network could not open");
+                        if let Work::Idle(controller) = &mut on.work
+                            && let Err(e) =
+                                controller.set_config(&Config::Station(StationConfig::default()))
+                        {
+                            log::warn!("wifi: station: {e:?}");
+                        }
+                        events.push(WifiEvent::Failed {
+                            ssid,
+                            reason: JoinFailure::Other,
+                        });
+                    }
                 }
             }
-            Outcome::Hosted(None) => log::warn!("wifi: the own network could not open"),
         }
     }
 
@@ -405,13 +424,10 @@ impl Radio {
                             .with_max_connections(HOST_CLIENTS))
                     });
                 Box::pin(async move {
-                    let opened = config
-                        .ok()
-                        .is_some_and(|config| {
-                            controller.set_config(&Config::AccessPoint(config)).is_ok()
-                        })
-                        .then_some(ssid);
-                    (Outcome::Hosted(opened), controller)
+                    let opened = config.ok().is_some_and(|config| {
+                        controller.set_config(&Config::AccessPoint(config)).is_ok()
+                    });
+                    (Outcome::Hosted { ssid, opened }, controller)
                 })
             }
             WifiCommand::On | WifiCommand::Off => {

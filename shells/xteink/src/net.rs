@@ -278,7 +278,8 @@ impl Net {
         let socket = self.sockets.get_mut::<udp::Socket<'_>>(*handle);
         let mut answers = Vec::new();
         while let Ok((request, _)) = socket.recv() {
-            if let Some(answer) = server.answer(request) {
+            let seconds = u64::try_from(now().total_millis() / 1000).unwrap_or(0);
+            if let Some(answer) = server.answer(request, seconds) {
                 answers.push(answer);
             }
         }

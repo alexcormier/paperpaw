@@ -50,6 +50,10 @@ pub const PHONE: Id = Id::new_static("wifi.phone");
 /// with the passwords and removed (e.g. written by the flasher): lines
 /// `ssid = …` and `password = …`, a pair for each network.
 pub const WIFI_FILE: &str = "wifi.ini";
+/// The largest [`WIFI_FILE`] read; a larger one is removed, unread.
+const WIFI_FILE_MOST: usize = 16 * 1024;
+/// The networks of the [`WIFI_FILE`] are kept: it goes.
+const WIFI_FILE_KEPT: Id = Id::new_static("wifi.file-kept");
 /// The status item: the Wi-Fi sign while the device is in a network.
 pub const STATUS: Id = Id::new_static("wifi.status");
 /// The radio comes on by itself when a plugin wants the network.
@@ -151,10 +155,33 @@ pub(crate) fn failure_text(env: &Env<'_>, ssid: &str, reason: JoinFailure) -> St
 /// The networks in [`WIFI_FILE`], to keep, and the file removed; nothing
 /// where there is none. A password goes with the `ssid` line before it.
 fn read_wifi_file(env: &Env<'_>) -> Vec<Command> {
-    let Ok(bytes) = paperpaw_sdk::read_file(env.storage, WIFI_FILE, 16 * 1024) else {
-        return Vec::new();
+    let bytes = match paperpaw_sdk::read_file(env.storage, WIFI_FILE, WIFI_FILE_MOST) {
+        Ok(bytes) => bytes,
+        // No file has that many networks: gone, so that no password stays
+        // on the card, and said.
+        Err(paperpaw_sdk::StorageError::TooLarge) => {
+            let _ = env.storage.remove(WIFI_FILE);
+            return alloc::vec![Command::Notify(env.i18n.tr("wifi.file-too-large").into())];
+        }
+        Err(_) => return Vec::new(),
     };
-    let text = String::from_utf8_lossy(&bytes);
+    let networks = wifi_file_networks(&bytes);
+    let known = wifi::known(env.secrets.iter());
+    let mut out: Vec<Command> = networks
+        .iter()
+        // A network without a password does not take the password kept.
+        .filter(|(ssid, password)| !password.is_empty() || !known.iter().any(|(k, _)| k == ssid))
+        .map(|(ssid, password)| Command::SetSecret(wifi::keep(ssid, password)))
+        .collect();
+    // Removed once kept (the commands before it carried out).
+    out.push(Command::Emit(WIFI_FILE_KEPT, Params::new()));
+    out
+}
+
+/// The networks of a [`WIFI_FILE`]: a password goes with the `ssid` line
+/// before it.
+fn wifi_file_networks(bytes: &[u8]) -> Vec<(String, String)> {
+    let text = String::from_utf8_lossy(bytes);
     let mut networks: Vec<(String, String)> = Vec::new();
     for line in text.lines().map(str::trim) {
         let Some((key, value)) = line.split_once('=') else {
@@ -171,12 +198,7 @@ fn read_wifi_file(env: &Env<'_>) -> Vec<Command> {
             _ => {}
         }
     }
-    // Kept now: the file must not stay on the card with the passwords.
-    let _ = env.storage.remove(WIFI_FILE);
     networks
-        .iter()
-        .map(|(ssid, password)| Command::SetSecret(wifi::keep(ssid, password)))
-        .collect()
 }
 
 /// The Wi-Fi plugin.
@@ -273,12 +295,28 @@ impl Plugin for Wifi {
             "wifi.phone.title",
             Box::new(move |env, _| Box::new(phone::PhoneScreen::new(env, p.clone()))),
         ))?;
-        // Networks put on the card: kept, the file removed.
+        // Networks put on the card: kept, the file removed once they are.
         r.on(events::STARTED, |env, (), out| {
             if env.wifi.is_some() {
                 out.extend(read_wifi_file(env));
             }
         })?;
+        r.subscribe(
+            WIFI_FILE_KEPT,
+            Box::new(|env, _, _| {
+                let Ok(bytes) = paperpaw_sdk::read_file(env.storage, WIFI_FILE, WIFI_FILE_MOST)
+                else {
+                    return;
+                };
+                let known = wifi::known(env.secrets.iter());
+                let kept = wifi_file_networks(&bytes)
+                    .iter()
+                    .all(|(ssid, _)| known.iter().any(|(k, _)| k == ssid));
+                if kept {
+                    let _ = env.storage.remove(WIFI_FILE);
+                }
+            }),
+        )?;
 
         // A plugin wants the network.
         let p = policy.clone();
@@ -373,6 +411,9 @@ impl Plugin for Wifi {
             // The setup with a phone says it, and opens its network again.
             if policy.phone {
                 policy.goal = Goal::Nothing;
+                if policy.pending.as_ref().is_some_and(|(p, _)| p == ssid) {
+                    policy.pending = None;
+                }
                 return;
             }
             let chosen = matches!(policy.goal, Goal::Chosen { .. });

@@ -1,7 +1,8 @@
 //! Handing out addresses in the device's own network (the setup with a
 //! phone, `WifiCommand::Host`): the few messages of a DHCP server (RFC
 //! 2131) a phone needs to join, an address from a small range for each
-//! device that asks, kept by its hardware address.
+//! device that asks, kept by its hardware address. An address offered and
+//! not taken is free again after a minute, one taken after its lease.
 //!
 //! The device is the network's router too, so phones treat it as a
 //! network of its own (without a way out, which they say); no name
@@ -16,6 +17,8 @@ pub const CLIENT_PORT: u16 = 68;
 const LEASES: usize = 4;
 /// How long an address is given for, in seconds.
 const LEASE_SECONDS: u32 = 3600;
+/// How long an address offered is kept for its device to take it.
+const OFFER_SECONDS: u64 = 60;
 /// Where the options begin, after the fixed part and the magic cookie.
 const OPTIONS: usize = 240;
 const COOKIE: [u8; 4] = [99, 130, 83, 99];
@@ -28,12 +31,19 @@ const ACK: u8 = 5;
 const NAK: u8 = 6;
 const RELEASE: u8 = 7;
 
+/// An address given (or offered) to a device, until a time (seconds).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Lease {
+    hardware: [u8; 6],
+    until: u64,
+}
+
 /// The server: its own address (the network is its /24) and the
 /// addresses given.
 #[derive(Debug, Clone)]
 pub struct Server {
     address: [u8; 4],
-    leases: [Option<[u8; 6]>; LEASES],
+    leases: [Option<Lease>; LEASES],
 }
 
 impl Server {
@@ -45,10 +55,10 @@ impl Server {
     }
 
     /// The answer to `request`, a message a client sent to the server's
-    /// port: an offer, an acknowledgement or a refusal, to broadcast to
-    /// [`CLIENT_PORT`]; `None` for what needs none (a release, another
-    /// server's business, not DHCP).
-    pub fn answer(&mut self, request: &[u8]) -> Option<Vec<u8>> {
+    /// port, at `now` (seconds, any start): an offer, an acknowledgement
+    /// or a refusal, to broadcast to [`CLIENT_PORT`]; `None` for what
+    /// needs none (a release, another server's business, not DHCP).
+    pub fn answer(&mut self, request: &[u8], now: u64) -> Option<Vec<u8>> {
         // A request from a client with an Ethernet address and the cookie.
         if request.len() < OPTIONS || request[0] != 1 || request[1] != 1 || request[2] != 6 {
             return None;
@@ -61,7 +71,7 @@ impl Server {
         let kind = option(request, 53).and_then(|v| v.first().copied())?;
         match kind {
             DISCOVER => {
-                let given = self.lease(hardware)?;
+                let given = self.lease(hardware, now, OFFER_SECONDS)?;
                 Some(self.reply(request, OFFER, given))
             }
             REQUEST => {
@@ -78,13 +88,17 @@ impl Server {
                         renewing.copy_from_slice(&request[12..16]);
                         renewing
                     });
-                match self.lease(hardware) {
+                match self.lease(hardware, now, u64::from(LEASE_SECONDS)) {
                     Some(given) if given == wanted => Some(self.reply(request, ACK, given)),
                     _ => Some(self.reply(request, NAK, [0; 4])),
                 }
             }
             RELEASE => {
-                if let Some(slot) = self.leases.iter_mut().find(|l| **l == Some(hardware)) {
+                if let Some(slot) = self
+                    .leases
+                    .iter_mut()
+                    .find(|l| l.is_some_and(|l| l.hardware == hardware))
+                {
                     *slot = None;
                 }
                 None
@@ -93,17 +107,30 @@ impl Server {
         }
     }
 
-    /// The address of device `hardware`: the one it has, or the next one
-    /// free; `None` when all are given.
-    fn lease(&mut self, hardware: [u8; 6]) -> Option<[u8; 4]> {
-        let slot = match self.leases.iter().position(|l| *l == Some(hardware)) {
+    /// The address of device `hardware`, kept for it `seconds` from
+    /// `now`: the one it has, or the next one free (never given, or no
+    /// longer); `None` when all are given. An offer does not shorten a
+    /// lease taken.
+    fn lease(&mut self, hardware: [u8; 6], now: u64, seconds: u64) -> Option<[u8; 4]> {
+        let until = now + seconds;
+        let slot = match self
+            .leases
+            .iter()
+            .position(|l| l.is_some_and(|l| l.hardware == hardware))
+        {
             Some(slot) => slot,
-            None => {
-                let free = self.leases.iter().position(Option::is_none)?;
-                self.leases[free] = Some(hardware);
-                free
-            }
+            None => self
+                .leases
+                .iter()
+                .position(|l| l.is_none_or(|l| l.until <= now))?,
         };
+        let kept = self.leases[slot]
+            .filter(|l| l.hardware == hardware)
+            .map_or(0, |l| l.until);
+        self.leases[slot] = Some(Lease {
+            hardware,
+            until: until.max(kept),
+        });
         let [a, b, c, _] = self.address;
         Some([a, b, c, 2 + slot as u8])
     }
@@ -182,6 +209,13 @@ mod tests {
         m
     }
 
+    impl Server {
+        /// An answer at time 0.
+        fn answer_at(&mut self, request: &[u8]) -> Option<Vec<u8>> {
+            self.answer(request, 0)
+        }
+    }
+
     fn kind(answer: &[u8]) -> u8 {
         option(answer, 53).unwrap()[0]
     }
@@ -190,7 +224,7 @@ mod tests {
     fn a_phone_is_offered_an_address_and_gets_it() {
         let mut server = Server::new(SERVER);
         let phone = [1, 1, 1, 1, 1, 1];
-        let offer = server.answer(&message(DISCOVER, phone, &[])).unwrap();
+        let offer = server.answer_at(&message(DISCOVER, phone, &[])).unwrap();
         assert_eq!(kind(&offer), OFFER);
         assert_eq!(offer[16..20], [192, 168, 4, 2]);
         // Its transaction, flags and hardware address as it sent them.
@@ -202,7 +236,7 @@ mod tests {
         assert_eq!(option(&offer, 1), Some(&[255, 255, 255, 0][..]));
         assert!(offer.len() >= 300);
         let ack = server
-            .answer(&message(
+            .answer_at(&message(
                 REQUEST,
                 phone,
                 &[50, 4, 192, 168, 4, 2, 54, 4, 192, 168, 4, 1],
@@ -215,15 +249,15 @@ mod tests {
     #[test]
     fn each_device_has_its_own_address_and_keeps_it() {
         let mut server = Server::new(SERVER);
-        let a = server.answer(&message(DISCOVER, [1; 6], &[])).unwrap();
-        let b = server.answer(&message(DISCOVER, [2; 6], &[])).unwrap();
+        let a = server.answer_at(&message(DISCOVER, [1; 6], &[])).unwrap();
+        let b = server.answer_at(&message(DISCOVER, [2; 6], &[])).unwrap();
         assert_eq!(a[16..20], [192, 168, 4, 2]);
         assert_eq!(b[16..20], [192, 168, 4, 3]);
-        let again = server.answer(&message(DISCOVER, [1; 6], &[])).unwrap();
+        let again = server.answer_at(&message(DISCOVER, [1; 6], &[])).unwrap();
         assert_eq!(again[16..20], [192, 168, 4, 2]);
         // Given back, its address goes to the next.
-        assert!(server.answer(&message(RELEASE, [1; 6], &[])).is_none());
-        let c = server.answer(&message(DISCOVER, [3; 6], &[])).unwrap();
+        assert!(server.answer_at(&message(RELEASE, [1; 6], &[])).is_none());
+        let c = server.answer_at(&message(DISCOVER, [3; 6], &[])).unwrap();
         assert_eq!(c[16..20], [192, 168, 4, 2]);
     }
 
@@ -231,27 +265,51 @@ mod tests {
     fn a_wrong_address_is_refused_and_others_are_passed_over() {
         let mut server = Server::new(SERVER);
         let nak = server
-            .answer(&message(REQUEST, [1; 6], &[50, 4, 10, 0, 0, 9]))
+            .answer_at(&message(REQUEST, [1; 6], &[50, 4, 10, 0, 0, 9]))
             .unwrap();
         assert_eq!(kind(&nak), NAK);
         // Another server chosen, or not DHCP.
         assert!(
             server
-                .answer(&message(REQUEST, [1; 6], &[54, 4, 10, 0, 0, 1]))
+                .answer_at(&message(REQUEST, [1; 6], &[54, 4, 10, 0, 0, 1]))
                 .is_none()
         );
-        assert!(server.answer(&[1, 2, 3]).is_none());
+        assert!(server.answer_at(&[1, 2, 3]).is_none());
         let mut reply = message(DISCOVER, [1; 6], &[]);
         reply[0] = 2;
-        assert!(server.answer(&reply).is_none());
+        assert!(server.answer_at(&reply).is_none());
         // All addresses given (one already to the device refused).
         for n in 1..LEASES as u8 {
             assert!(
                 server
-                    .answer(&message(DISCOVER, [10 + n; 6], &[]))
+                    .answer_at(&message(DISCOVER, [10 + n; 6], &[]))
                     .is_some()
             );
         }
-        assert!(server.answer(&message(DISCOVER, [99; 6], &[])).is_none());
+        assert!(server.answer_at(&message(DISCOVER, [99; 6], &[])).is_none());
+        // Offers not taken are free again after a minute.
+        let later = server.answer(&message(DISCOVER, [99; 6], &[]), OFFER_SECONDS + 1);
+        assert!(later.is_some());
+    }
+
+    #[test]
+    fn a_lease_taken_is_kept_until_it_ends() {
+        let mut server = Server::new(SERVER);
+        let phone = [1; 6];
+        server.answer(&message(DISCOVER, phone, &[]), 0).unwrap();
+        let take = &[50, 4, 192, 168, 4, 2];
+        server.answer(&message(REQUEST, phone, take), 0).unwrap();
+        for n in 2..=LEASES as u8 {
+            assert!(server.answer(&message(DISCOVER, [n; 6], &[]), 0).is_some());
+        }
+        // Long after the offers, before the lease ends: its address stays.
+        let late = u64::from(LEASE_SECONDS) - 1;
+        let other = server
+            .answer(&message(DISCOVER, [50; 6], &[]), late)
+            .unwrap();
+        assert_ne!(other[16..20], [192, 168, 4, 2]);
+        let after = u64::from(LEASE_SECONDS) + 1;
+        let next = server.answer(&message(DISCOVER, [51; 6], &[]), after);
+        assert!(next.is_some());
     }
 }
