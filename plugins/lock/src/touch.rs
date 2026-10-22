@@ -124,12 +124,14 @@ pub(crate) fn register(r: &mut Registrar, state: Shared) -> Result<(), RegisterE
         Box::new(|env, _| {
             env.settings
                 .read(&LOCKED)
-                .then(|| StatusValue::Icon(Cow::Borrowed("lock")))
+                .then_some(StatusValue::Icon(Cow::Borrowed("lock")))
         }),
     ))?;
-    for menu in [menus::QUICK, menus::READER] {
-        r.add_menu_entry(MenuEntry::new(menu, LOCKED.id().clone()).order(60))?;
+    // Beside night mode in the quick panel.
+    for (menu, order) in [(menus::QUICK, 11), (menus::READER, 60)] {
+        r.add_menu_entry(MenuEntry::new(menu, LOCKED.id().clone()).order(order))?;
     }
+    r.add_icon(LOCKED.id().clone(), Cow::Borrowed("lock"))?;
     // Only where there is touch to lock.
     r.set_menu_need(LOCKED.id().clone(), MenuNeed::Touch)?;
     r.set_menu_need(TOGGLE, MenuNeed::Touch)?;
