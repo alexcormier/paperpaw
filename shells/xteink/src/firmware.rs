@@ -31,8 +31,6 @@ const STATUS_MS: u64 = 60_000;
 /// On battery, the longest the processor sleeps between readings of the
 /// buttons (a press lasts 80 ms and more).
 const IDLE_MS: u64 = 30;
-/// The same in the power level Saving: fewer wakes, a press still seen.
-const IDLE_SAVING_MS: u64 = 60;
 /// How long after the last refresh the panel's power goes off: soon
 /// where powering up again costs nothing; where it makes the next
 /// refresh slower, once refreshes do not follow each other (menus,
@@ -96,10 +94,10 @@ pub struct State {
     unsynced: Option<u64>,
     /// When the panel's power goes off, after the last refresh.
     panel_idle_at: Option<u64>,
-    /// How long the last fast and the last full refresh took, in
-    /// milliseconds: the processor sleeps that long while the next one
-    /// goes (on battery).
-    refresh_ms: [u64; 2],
+    /// How long fast, half and full refreshes take, in milliseconds (the
+    /// shortest seen, see [`Firmware::refresh`]): the processor sleeps
+    /// about that long while the next one goes (on battery).
+    refresh_ms: [u64; 3],
 }
 
 impl Firmware {
@@ -406,11 +404,8 @@ impl Firmware {
             power::mark(power::at::TRIED);
             esp_hal::system::software_reset();
         }
-        let saving = self.kernel.power().level == paperpaw_core::sdk::power::PowerLevel::Saving;
         let mut until = now().0
-            + if battery && saving {
-                IDLE_SAVING_MS
-            } else if battery {
+            + if battery {
                 IDLE_MS
             } else if self.network.moving() || installing {
                 // Data on the way, or an update: on at once.
@@ -467,7 +462,16 @@ impl Firmware {
         self.pause_trial();
         let effects = self.kernel.suspend(now());
         self.apply(effects);
-        self.finish_work();
+        if !self.finish_work() {
+            // A press meanwhile: awake after all.
+            info!("sleep: a press, awake");
+            self.state.sleep = false;
+            if let Some(ota) = &mut self.ota {
+                ota.resume_trial(now().0);
+            }
+            let effects = self.kernel.resume(now());
+            return self.apply(effects);
+        }
         let _ = self.panel.sleep();
         #[cfg(feature = "x4-pro")]
         if let Some(light) = self.light.as_mut() {
@@ -490,16 +494,20 @@ impl Firmware {
         power::deep();
     }
 
-    /// Before sleeping: the work under way (a position pushed, a job)
-    /// goes on until it is done, [`SLEEP_WAIT_MS`] at the longest; the
-    /// radio goes with the power then.
-    fn finish_work(&mut self) {
+    /// Before sleeping: requests under way (a position pushed) go on until
+    /// they are answered, [`SLEEP_WAIT_MS`] at the longest; the radio goes
+    /// with the power then. `false` if a press came meanwhile (it waits
+    /// for the main loop): no sleep then.
+    fn finish_work(&mut self) -> bool {
         let until = now().0 + SLEEP_WAIT_MS;
         if self.kernel.holds_sleep() {
             info!("sleep: finishing work first");
         }
         while self.kernel.holds_sleep() && now().0 < until {
             power::feed();
+            if input::waiting() {
+                return false;
+            }
             self.io();
             for effects in self.network.step(&mut self.kernel, now()) {
                 self.apply(effects);
@@ -507,6 +515,7 @@ impl Firmware {
             self.tick();
             self.delay.delay_millis(POLL_MS as u32);
         }
+        true
     }
 
     fn wait_for_power_release(&self) {
@@ -622,7 +631,11 @@ impl Firmware {
     /// the panel's busy line all along; then waits for the rest. The
     /// panel's power goes off a while after.
     fn refresh(&mut self, refresh: Refresh) -> Result<(), paperpaw_x4::display::Error> {
-        let kind = usize::from(refresh != Refresh::Fast);
+        let kind = match refresh {
+            Refresh::Fast => 0,
+            Refresh::Half => 1,
+            Refresh::Full => 2,
+        };
         let started = now();
         self.panel.start_refresh(refresh, false)?;
         // A little early: the rest is watched.
@@ -630,8 +643,20 @@ impl Firmware {
         if expected > 0 {
             power::nap_until(started.0 + expected);
         }
+        let woke = now();
         let waited = self.panel.wait();
-        self.state.refresh_ms[kind] = now().since(started);
+        let took = now().since(started);
+        let slot = &mut self.state.refresh_ms[kind];
+        if now().since(woke) > 1 || expected == 0 {
+            // Still busy after the nap: what it took is its time. The
+            // shortest one counts (one after the panel's power was off,
+            // or the first after a start, takes longer).
+            *slot = if *slot == 0 { took } else { (*slot).min(took) };
+        } else {
+            // Done before the nap ended: it took less, by how much is not
+            // known; sleep less next time.
+            *slot = slot.saturating_sub(50);
+        }
         self.state.panel_idle_at = Some(now().0 + self.panel_idle_ms());
         waited
     }
@@ -699,6 +724,7 @@ impl Firmware {
         if let Err(e) = self.panel.refresh_gray() {
             failed = Some(e);
         }
+        self.state.panel_idle_at = Some(now().0 + self.panel_idle_ms());
         let shown = now();
         self.kernel.panel_busy(shown.since(written));
         self.kernel.shown(shown);
@@ -908,6 +934,7 @@ impl Firmware {
             Command::Refresh { full } => {
                 let refresh = if full { Refresh::Full } else { Refresh::Fast };
                 remote::refreshed(self.panel.refresh(refresh, false));
+                self.state.panel_idle_at = Some(now().0 + self.panel_idle_ms());
             }
             Command::Slot { id, params } => self.open_remote(&id, params, true),
             Command::Show { id, params } => self.open_remote(&id, params, false),

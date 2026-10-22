@@ -250,8 +250,6 @@ fn a_job_steps_in_ticks_until_done() {
     assert!(!log.borrow().iter().any(|l| l.starts_with("step")));
     assert_eq!(effects.wake_at(), Some(Instant(5)));
     kernel.tick(Instant(6));
-    // Going to sleep waits for it while it runs.
-    assert!(kernel.holds_sleep());
     assert!(matches!(
         kernel.shared.work_states.get(&JOB),
         Some(WorkState::Running {
@@ -269,7 +267,6 @@ fn a_job_steps_in_ticks_until_done() {
     assert_eq!(steps, ["step 1", "step 2", "step 3"]);
     assert!(log.borrow().iter().any(|l| l == "changed wk.job"));
     assert_eq!(kernel.shared.work_states.get(&JOB), None, "done");
-    assert!(!kernel.holds_sleep());
 }
 
 #[test]

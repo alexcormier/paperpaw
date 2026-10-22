@@ -168,13 +168,6 @@ pub(crate) struct Queue {
 }
 
 impl Queue {
-    /// Whether a job is under way (not one waiting for a time).
-    pub(crate) fn running(&self) -> bool {
-        self.entries
-            .iter()
-            .any(|e| matches!(e.job, Some(Job::Ready | Job::For(_))))
-    }
-
     pub(crate) fn new(per_plugin: usize) -> Self {
         Self {
             per_plugin,

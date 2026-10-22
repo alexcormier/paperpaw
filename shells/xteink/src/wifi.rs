@@ -75,6 +75,8 @@ struct On {
     linked: bool,
     /// What to do once the task going on is done.
     queued: Vec<WifiCommand>,
+    /// The power saving set (none yet: the driver's, off).
+    saving: Option<bool>,
 }
 
 pub struct Radio {
@@ -200,11 +202,6 @@ impl Radio {
             log::warn!("wifi: station: {e:?}");
             return;
         }
-        // Between the network's beacons the radio sleeps: it listens all
-        // the time without (ADR 0025).
-        if let Err(e) = controller.set_power_saving(PowerSaveMode::Minimum) {
-            log::warn!("wifi: power saving: {e:?}");
-        }
         mark(at::RADIO_STARTED);
         log::info!("wifi: on");
         self.on = Some(On {
@@ -213,6 +210,7 @@ impl Radio {
             ssid: None,
             linked: false,
             queued: Vec::new(),
+            saving: None,
         });
         self.stopping = false;
     }
@@ -377,6 +375,30 @@ impl Radio {
         }
         self.stopping = false;
         log::info!("wifi: off");
+    }
+
+    /// The radio's power saving: between the network's beacons it sleeps
+    /// (ADR 0025), unless data moves (a download, a server's answer), which
+    /// it would slow by as long as it sleeps.
+    pub fn save_power(&mut self, saving: bool) {
+        let Some(on) = &mut self.on else {
+            return;
+        };
+        if on.saving == Some(saving) {
+            return;
+        }
+        let Work::Idle(controller) = &mut on.work else {
+            return;
+        };
+        let mode = if saving {
+            PowerSaveMode::Minimum
+        } else {
+            PowerSaveMode::None
+        };
+        match controller.set_power_saving(mode) {
+            Ok(()) => on.saving = Some(saving),
+            Err(e) => log::warn!("wifi: power saving: {e:?}"),
+        }
     }
 
     /// Reports the state when it changed.

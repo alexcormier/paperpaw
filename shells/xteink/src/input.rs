@@ -263,6 +263,16 @@ pub fn sample_now() {
     });
 }
 
+/// Whether a press or release waits for the main loop.
+pub fn waiting() -> bool {
+    critical_section::with(|cs| {
+        SAMPLER
+            .borrow_ref(cs)
+            .as_ref()
+            .is_some_and(|s| !s.queue.is_empty())
+    })
+}
+
 /// The next press or release, oldest first.
 pub fn next() -> Option<Change> {
     critical_section::with(|cs| {
