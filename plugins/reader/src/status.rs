@@ -202,7 +202,7 @@ static SETTINGS: [SettingSpec; 11] = [
     part(
         BOTTOM_RIGHT,
         "reader.status.bottom-right",
-        "wifi.status, power.status, core.status.battery, reader.status.page",
+        "lock.touch-status, wifi.status, power.status, core.status.battery, reader.status.page",
         &BOTTOM_ITEMS,
     ),
     SettingSpec::fixed_switch(

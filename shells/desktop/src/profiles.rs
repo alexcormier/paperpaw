@@ -45,13 +45,13 @@ const X4_SETTINGS: [(&str, &str); 10] = [
     // (and the mark of reading aloud beside the time while it reads).
     (
         "reader.status.bottom-left",
-        "core.status.clock, reader.status.aloud",
+        "core.status.clock, reader.status.aloud, lock.touch-status",
     ),
     ("reader.status.bottom-center", ""),
     ("reader.status.bottom-right", "reader.status.page"),
     ("home.status.left", "core.status.clock"),
     ("home.status.center", ""),
-    ("home.status.right", "core.status.battery"),
+    ("home.status.right", "lock.touch-status, core.status.battery"),
 ];
 
 /// The firmware's memory for glyphs of font packs on the card.
