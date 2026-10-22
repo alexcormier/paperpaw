@@ -9,7 +9,7 @@
 
 <p align="center">
   <b>E-reader software made of plugins</b><br>
-  for e-ink devices, from a microcontroller with 400 KB of RAM to Android e-readers
+  for e-ink readers, first the Xteink X4 and X4 Pro: a microcontroller with 400 KB of RAM
 </p>
 
 <p align="center">
@@ -20,18 +20,19 @@
 </p>
 
 Swap the home screen, add a vocabulary trainer, remap every gesture: a
-folder of text files is enough, no fork, no rebuild. PaperPaw runs as an
-app on Android e-readers and as firmware of its own on the Xteink X4 and
-X4 Pro. Free and open source: no account, no ads, no tracking.
+folder of text files is enough, no fork, no rebuild. PaperPaw runs as
+firmware of its own on the Xteink X4 and X4 Pro; an app for Android
+e-readers follows later. Free and open source: no account, no ads, no
+tracking.
 
-> **Status: early releases (0.3).** PaperPaw runs on Android e-readers
-> (tested on a Boox Go 7) and in the desktop emulator: EPUB, FB2,
-> Markdown, text, comics and PDF, colour pictures on colour screens,
-> reading positions, bookmarks and highlights shared with KOReader,
-> Calibre's wireless connection, OPDS catalogs and much more; see the
-> [changelog](CHANGELOG.md). The firmware for the Xteink X4 and X4 Pro
-> runs on both readers today; its first release is still to come. The X4
-> Classic's is built but not yet tried on one.
+> **Status: early releases (0.3).** The firmware for the Xteink X4 and
+> X4 Pro runs on both readers today, and in the desktop emulator; its
+> first release is still to come. EPUB, plain text and XTC, more formats
+> as plugins, reading positions, bookmarks and highlights shared with
+> KOReader, Calibre's wireless connection, OPDS catalogs and much more;
+> see the [changelog](CHANGELOG.md). The X4 Classic's firmware is built
+> but not yet tried on one. The app for Android e-readers follows after
+> the first release.
 
 PaperPaw was called QuireInk up to version 0.3.
 
@@ -121,30 +122,20 @@ today's reading: sad, so-so, content or happy.
   the firmware is 6.4 MB of the 16 MB of flash.
 - **Simple by default.** Turn it on and keep reading. Every function is at
   most two steps away, and it works with buttons only or with touch.
-- **One codebase, many devices.** Today: Boox and other Android
-  e-readers, the Xteink X4 and X4 Pro, and the desktop emulator, in
-  grayscale and colour e-ink. Planned: the Xteink X3 and X4 Classic, Kobo,
-  Kindle (jailbroken), PocketBook and reMarkable.
+- **One codebase, many devices.** Today: the Xteink X4 and X4 Pro, and
+  the desktop emulator. Planned: Android e-readers such as Boox, in
+  grayscale and colour e-ink, the Xteink X3 and X4 Classic, Kobo, Kindle
+  (jailbroken), PocketBook and reMarkable.
 
 ## Get it
 
-The Android app (arm64, Android 8 or later) is attached to each
-[release](https://github.com/hthoene/paperpaw/releases); F-Droid is to
-follow. To build it yourself, see [shells/android](shells/android/README.md).
+PaperPaw replaces the firmware of the Xteink X4 and X4 Pro. With its
+first release it is installed from the browser, at
+[paperpaw.org/flash](https://paperpaw.org/flash), which first saves the
+reader's own firmware so it can go back. Until then it is built and
+flashed as [shells/xteink](shells/xteink/README.md) describes.
 
-To read your books, PaperPaw needs *All files access*; the home screen
-asks for it. Android 13 and later may grey out that switch for apps
-installed from a browser or a file manager (a "restricted setting"). Open
-*Settings, Apps, PaperPaw*, choose *Allow restricted settings* in the
-menu at the top, then turn the switch on. Where that menu has no such
-entry, a computer with `adb` lifts the restriction:
-
-```sh
-adb shell appops set --user 0 org.paperpaw.app ACCESS_RESTRICTED_SETTINGS allow
-```
-
-For updates as they are released, [Obtainium](https://github.com/ImranR98/Obtainium)
-installs new versions from the releases page.
+The app for Android e-readers follows after the first release.
 
 ## How it's made
 
@@ -192,8 +183,7 @@ through the [`paperpaw-sdk`](crates/paperpaw-sdk) crate. See
 ### Plugins without code
 
 A folder with a few text files is a plugin too. Copy it into the `plugins`
-folder of the device (on Android: `PaperPaw/plugins` on the device's
-storage) and restart; it shows up in *Settings → Plugins*, where it can be
+folder of the device and restart; it shows up in *Settings → Plugins*, where it can be
 switched off again. These work on every device, including the Xteink X4.
 
 ```text
