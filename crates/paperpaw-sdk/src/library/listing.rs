@@ -110,6 +110,10 @@ impl Listing<'_> {
             let first = done == 0;
             let mut unknown: Vec<(String, u64)> = Vec::new();
             let mut seen = 0;
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "a folder that cannot be listed shows as empty"
+            )]
             let _ = self.storage.list(self.dir, &mut |entry| {
                 if !entry.is_dir
                     && !self.folders_only

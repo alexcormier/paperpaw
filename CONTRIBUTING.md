@@ -111,8 +111,12 @@ may exceed them. Existing code is not reworked for them in bulk.
 4. **Errors on the user's data are never discarded.** Handle them or
    tell the user; where one truly does not matter, say why in
    `#[expect(clippy::let_underscore_must_use, reason = "...")]`. Check:
-   the crates that keep user data (storage, the library, the reader,
-   sync, settings) deny `let_underscore_must_use`.
+   the code that keeps user data denies `let_underscore_must_use`:
+   storage (`paperpaw-fs`, `paperpaw-fat`, `paperpaw-sqlite`), the SDK's
+   library, the reader, the files, sync (`kosync`, `koreader`), the
+   statistics and settings. The check sees only `let _ = ...;`: an
+   error dropped with `_ = ...;` or `.ok();` passes it unseen, so do not
+   write those for user data either.
 5. **Every `allow` and `expect` says why** (`reason = "..."`). Check:
    clippy's `allow_attributes_without_reason`.
 6. **Names and paths are constants**, not the same literal written in
