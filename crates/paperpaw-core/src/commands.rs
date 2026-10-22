@@ -58,7 +58,8 @@ impl Kernel {
         // The screen on top, nothing over it (or all of the screen its
         // own, what is below showing through), best in grays.
         let bounds = self.framebuffer.bounds();
-        let grays = self.stack.last().is_some_and(|top| {
+        // Whether it is shown whole, best in grays, its pictures may be.
+        let (whole, grays, pictures) = self.stack.last().map_or((false, false, false), |top| {
             let whole = match top.screen.region(&self.shared.env(self.now)) {
                 None => true,
                 Some(region) => {
@@ -66,8 +67,10 @@ impl Kernel {
                         && region.intersection(&bounds) == Some(bounds)
                 }
             };
-            whole && top.screen.grays()
+            (whole, top.screen.grays(), top.screen.pictures_in_grays())
         });
+        let grays = whole && grays;
+        let again = mem::take(&mut self.frame.again);
         let mut effects = Effects {
             restart: mem::take(&mut self.restart),
             sleep: mem::take(&mut self.sleep),
@@ -94,6 +97,20 @@ impl Kernel {
             if set.is_none() && self.frame.pictures_shown && area(dirty) * 2 >= area(screen) {
                 requested = RefreshMode::Full;
             }
+            // A screen with pictures drawn whole, or most of it, in grays
+            // too where asked; not when drawn again after grays, and not
+            // what changes on it after.
+            let grays = grays
+                || (whole
+                    && pictures
+                    && !again
+                    && area(dirty) * 2 >= area(screen)
+                    && self.shared.device.display.format.gray_levels() == Some(2)
+                    && self
+                        .shared
+                        .settings
+                        .bool(core_settings::PICTURES_IN_GRAYS.as_str())
+                    && self.pictures_drawn());
             let (mode, region) = self
                 .frame
                 .refresh

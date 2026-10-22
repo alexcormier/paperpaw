@@ -8,8 +8,8 @@ use std::time::{Duration, Instant as StdInstant};
 use paperpaw_core::{Effects, Io, Kernel, KernelBuilder, KernelError, SpeechCall, Warning};
 use paperpaw_graphics::Framebuffer;
 use paperpaw_platform::{
-    Battery, ButtonState, DeviceInfo, InputEvent, Instant, Rotation, SystemStatus, WallClock,
-    buttons,
+    Battery, ButtonState, DeviceInfo, InputEvent, Instant, PixelFormat, RefreshMode, Rotation,
+    SystemStatus, WallClock, buttons,
 };
 
 use crate::budget;
@@ -151,6 +151,10 @@ pub struct Device {
     /// the device.
     controller: Framebuffer,
     pub panel: Panel,
+    /// The panel shows a frame in grays (see `Effects::grays`): the next
+    /// change shows the whole screen again in black and white, as on the
+    /// X4.
+    gray_shown: bool,
     /// When the kernel wants to be ticked.
     pub wake_at: Option<Instant>,
     clock: Clock,
@@ -254,6 +258,7 @@ impl Device {
             add,
             controller,
             panel: Panel::new(display.width, display.height, display.color),
+            gray_shown: false,
             wake_at: None,
             http: crate::http::Http::new(),
             servers: servers(),
@@ -504,6 +509,34 @@ impl Device {
         }
     }
 
+    /// Shows the whole screen in four grays, as the X4 does (see
+    /// `Effects::grays`); where there is no memory for it, as it was.
+    fn show_gray(&mut self) {
+        let screen = self.controller.bounds();
+        let Ok(mut gray) = Framebuffer::new(screen.width, screen.height, PixelFormat::Gray2) else {
+            return;
+        };
+        let kernel = &mut self.kernel;
+        let mut frame = crate::trace::Frame::start();
+        let drawn = budget::track(|| {
+            kernel.render_gray(&mut |top, rows| {
+                gray.write_rows(top, rows);
+                if let Some(frame) = &mut frame {
+                    frame.band();
+                }
+            })
+        });
+        if let Some(frame) = frame {
+            let screen = self.kernel.active_screen().map(ToString::to_string);
+            frame.done(screen.as_deref().unwrap_or_default());
+        }
+        if drawn {
+            self.panel
+                .refresh(gray.view(), screen, RefreshMode::Full, None);
+            self.gray_shown = true;
+        }
+    }
+
     /// Whether `name` is a button of this device.
     pub fn has_button(&self, name: &str) -> bool {
         self.profile.buttons.contains(&name)
@@ -518,7 +551,23 @@ impl Device {
         if effects.restart() {
             return self.restart();
         }
-        if let Some((region, mode)) = effects.refresh() {
+        // Pictures in grays, as the X4 shows them: the whole screen, small
+        // changes over it waiting; after them, the whole screen again in
+        // black and white.
+        let grays = effects.grays() && self.controller.format() == PixelFormat::Mono1;
+        if let Some((area, _)) = effects.refresh().filter(|_| grays) {
+            let screen = self.controller.bounds();
+            let small = u32::from(area.width) * u32::from(area.height) * 4
+                < u32::from(screen.width) * u32::from(screen.height);
+            if !(self.gray_shown && small) {
+                self.show_gray();
+            }
+        } else if self.gray_shown && effects.refresh().is_some() {
+            self.gray_shown = false;
+            let now = self.now();
+            let again = budget::track(|| self.kernel.draw_again(now));
+            return self.execute(effects.and(again));
+        } else if let Some((region, mode)) = effects.refresh() {
             let (kernel, controller) = (&mut self.kernel, &mut self.controller);
             let mut frame = crate::trace::Frame::start();
             budget::track(|| {
@@ -536,14 +585,14 @@ impl Device {
             let colors = self.profile.colors.then(|| self.kernel.colors());
             self.panel
                 .refresh(self.controller.view(), region, mode, colors);
-            // Slow work ahead: its mark shows first, as on the X4 (whose
-            // panel refreshes it while the kernel works on), then what the
-            // work brought.
-            if effects.proceed() {
-                let now = self.now();
-                let effects = budget::track(|| self.kernel.proceed(now));
-                return self.execute(effects);
-            }
+        }
+        // Slow work ahead: its mark shows first, as on the X4 (whose panel
+        // refreshes it while the kernel works on), then what the work
+        // brought.
+        if effects.refresh().is_some() && effects.proceed() {
+            let now = self.now();
+            let effects = budget::track(|| self.kernel.proceed(now));
+            return self.execute(effects);
         }
         self.wake_at = effects.wake_at();
         if effects.sleep() && !self.asleep {

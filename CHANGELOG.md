@@ -19,6 +19,35 @@ change the plugin SDK.
 - How it works: every plugin of PaperPaw says what it does, where it is
   and how it is used, read from the plugin manager. The vocabulary
   review has its first-time hints. Hyphenation has English texts.
+- *Pictures in grays* (*Settings*, *Display*; on by default, on panels
+  of black and white alone): a screen with pictures, such as the
+  library's covers, the home screen's or a sleep screen's picture, is
+  shown in four grays when it opens or changes whole, as pages with
+  pictures already are. What changes on it after (the focus moving) is
+  shown in black and white. The kernel counts the pictures of the
+  screen drawn aside, where nothing is drawn or read. Covers kept small
+  on such panels (thumbnails) keep four grays beside black and white
+  for it (2.7 KB for a cover of 70 by 100 pixels instead of 0.9 KB), and
+  those kept on the card are made anew. The emulator shows frames in
+  grays as the X4 does.
+- SDK: `Screen::pictures_in_grays` (yes by default) lets a screen say
+  no to being shown in grays for its pictures (the reader decides
+  itself, with `Screen::grays`); the setting is
+  `settings::PICTURES_IN_GRAYS`.
+- Pictures on panels with few grays (the X4s in black and white, four
+  grays) are dithered by error diffusion (after Atkinson's, seven eighths
+  of the error passed on) instead of a 4×4 ordered pattern: line drawings
+  such as the cats stay clean, without the grid that made them look
+  pixelated, and covers and photos keep their tones. A picture is
+  diffused from its first row each time it is drawn, so bands and parts
+  drawn again (a notice closing over it) show the same pixels. Each band
+  takes it up where the band above left it, so its rows are still read
+  once a frame; it takes two rows of error while it is drawn, nothing
+  after the frame. Covers and
+  pictures kept small in black and white (thumbnails) are diffused when
+  they are made, and those kept on the card are made anew. Flat shades
+  of the interface, and pictures with transparency, keep the calm
+  ordered pattern.
 - Vocabulary: flash cards with spaced repetition (FSRS, Anki's
   scheduler), in *Tools*, *Flash cards*. A review shows each due card's
   front, then its back and example and four answers (*Again*, *Hard*,
