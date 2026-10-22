@@ -443,3 +443,107 @@ fn closing_the_screen_stops_the_server() {
     });
     assert!(device.calls().is_empty());
 }
+
+/// A mode whose level is Offline, worn at the start.
+static OFFLINE: [paperpaw_sdk::presets::Preset; 1] = [paperpaw_sdk::presets::Preset::fixed(
+    "unplugged.mode",
+    "core.power-mode",
+    "Unplugged",
+    "",
+    "power.level = offline",
+)];
+
+struct Unplugged;
+
+impl paperpaw_sdk::Plugin for Unplugged {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest::new(
+            Id::new_static("unplugged"),
+            "Unplugged",
+            paperpaw_sdk::Version::new(0, 1, 0),
+        )
+        .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        r.add_presets(&OFFLINE)?;
+        r.subscribe(
+            paperpaw_sdk::builtin::events::STARTED.id().clone(),
+            Box::new(|_, _, out| {
+                out.push(paperpaw_sdk::Command::Wear(paperpaw_sdk::power::Wear::new(
+                    Id::new_static("unplugged.mode"),
+                )));
+            }),
+        )
+    }
+}
+
+/// In Offline mode the screen offers to go online first, inline; going
+/// online starts the server, not now says there is no network.
+#[test]
+fn offline_mode_offers_to_go_online_first() {
+    for go in [true, false] {
+        let mut kernel = Kernel::builder(DEVICE)
+            .storage(Shared::default())
+            .user_config("[core]\nlanguage = en\n")
+            .network(true)
+            .random(fill)
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(Unplugged)
+            .plugin(Transfer)
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        kernel.run_action(Instant(100), Id::new_static("transfer.open"));
+        let listens = |kernel: &mut Kernel| {
+            kernel
+                .take_io()
+                .iter()
+                .any(|io| matches!(io, Io::Server(ServerCall::Listen { .. })))
+        };
+        assert!(!listens(&mut kernel), "not before asking");
+        let shown = |kernel: &mut Kernel| {
+            kernel.render(&mut |_, _| {});
+            kernel
+                .describe()
+                .into_iter()
+                .map(|p| (p.label, p.area))
+                .collect::<Vec<_>>()
+        };
+        let parts = shown(&mut kernel);
+        let label = if go { "Go online" } else { "Not now" };
+        let (_, area) = parts
+            .iter()
+            .find(|(l, _)| l == label)
+            .unwrap_or_else(|| panic!("{parts:?}"))
+            .clone();
+        let at = paperpaw_platform::Point::new(
+            i32::from(area.x + area.width / 2),
+            i32::from(area.y + area.height / 2),
+        );
+        for (t, phase) in [
+            (200, paperpaw_platform::PointerPhase::Down),
+            (260, paperpaw_platform::PointerPhase::Up),
+        ] {
+            kernel.handle(
+                Instant(t),
+                paperpaw_platform::InputEvent::Pointer(paperpaw_platform::PointerEvent {
+                    id: 0,
+                    phase,
+                    point: at,
+                    tool: paperpaw_platform::PointerTool::Finger,
+                    pressure: 1000,
+                }),
+            );
+        }
+        kernel.tick(Instant(1000));
+        assert_eq!(listens(&mut kernel), go);
+        if !go {
+            let parts = shown(&mut kernel);
+            assert!(
+                parts.iter().any(|(l, _)| l.contains("No Wi-Fi")),
+                "{parts:?}"
+            );
+        }
+    }
+}

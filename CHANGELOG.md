@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- In Offline mode the store, an OPDS catalog, Calibre and Wi-Fi
+  transfer offer to go online once, inline ("Offline mode. Go online for
+  it?" with *Go online* and *Not now*), instead of failing. SDK:
+  `ui::OfflineOffer` (sends `Command::GoOnline`).
+
 - Fewer columns or rows on the home screen no longer leave a page empty:
   an item whose cells lie outside the grid now is moved inside it as
   little as can be (narrower or lower where it was wider or higher than

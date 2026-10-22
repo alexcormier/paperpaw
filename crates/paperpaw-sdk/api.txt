@@ -3025,6 +3025,17 @@ pub paperpaw_sdk::ui::look::SwitchPart::on: bool
 pub paperpaw_sdk::ui::look::SwitchPart::rect: paperpaw_platform::geometry::Rect
 pub type paperpaw_sdk::ui::look::InkPainter<P> = fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, &P) -> core::option::Option<paperpaw_platform::pixel::Color>
 pub type paperpaw_sdk::ui::look::Painter<P> = fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, &P) -> bool
+pub mod paperpaw_sdk::ui::offline
+pub enum paperpaw_sdk::ui::offline::Offer
+pub paperpaw_sdk::ui::offline::Offer::NotNow
+pub paperpaw_sdk::ui::offline::Offer::Online
+pub struct paperpaw_sdk::ui::offline::OfflineOffer
+impl paperpaw_sdk::ui::offline::OfflineOffer
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect)
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::new() -> Self
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> core::option::Option<paperpaw_sdk::ui::offline::Offer>
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_tap(&mut self, paperpaw_platform::geometry::Point, &mut paperpaw_sdk::Cx<'_, '_>) -> core::option::Option<paperpaw_sdk::ui::offline::Offer>
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::shows(&self, &paperpaw_sdk::Env<'_>) -> bool
 pub mod paperpaw_sdk::ui::reorder
 #[non_exhaustive] pub enum paperpaw_sdk::ui::reorder::ReorderStep
 pub paperpaw_sdk::ui::reorder::ReorderStep::Changed
@@ -3203,6 +3214,9 @@ pub paperpaw_sdk::ui::ListChange::None
 pub paperpaw_sdk::ui::ListChange::Page
 impl paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::ListChange::request(self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub enum paperpaw_sdk::ui::Offer
+pub paperpaw_sdk::ui::Offer::NotNow
+pub paperpaw_sdk::ui::Offer::Online
 #[non_exhaustive] pub enum paperpaw_sdk::ui::ReorderStep
 pub paperpaw_sdk::ui::ReorderStep::Changed
 pub paperpaw_sdk::ui::ReorderStep::Dropped
@@ -3268,6 +3282,13 @@ pub fn paperpaw_sdk::ui::ListView::set_focus(&mut self, usize) -> paperpaw_sdk::
 pub fn paperpaw_sdk::ui::ListView::set_len(&mut self, usize)
 pub fn paperpaw_sdk::ui::ListView::set_shown(&mut self, bool)
 pub fn paperpaw_sdk::ui::ListView::shown(&self) -> bool
+pub struct paperpaw_sdk::ui::OfflineOffer
+impl paperpaw_sdk::ui::offline::OfflineOffer
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect)
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::new() -> Self
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> core::option::Option<paperpaw_sdk::ui::offline::Offer>
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_tap(&mut self, paperpaw_platform::geometry::Point, &mut paperpaw_sdk::Cx<'_, '_>) -> core::option::Option<paperpaw_sdk::ui::offline::Offer>
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::shows(&self, &paperpaw_sdk::Env<'_>) -> bool
 pub struct paperpaw_sdk::ui::Pager
 pub paperpaw_sdk::ui::Pager::area: paperpaw_platform::geometry::Rect
 impl paperpaw_sdk::ui::Pager
