@@ -109,11 +109,13 @@ pub(super) struct ValueLines {
     pub value_width: f32,
     /// Whether the value is on a line of its own below the title.
     pub below: bool,
-    /// A line's height.
+    /// The size of both, and a line's height.
+    pub size: f32,
     pub line: u16,
 }
 
 impl ValueLines {
+    /// In the text's size.
     pub fn new(
         font: &FontHandle<'_>,
         style: &UiStyle,
@@ -121,8 +123,19 @@ impl ValueLines {
         title: &str,
         value: &str,
     ) -> Self {
+        Self::sized(font, style, style.text, width, title, value)
+    }
+
+    /// In `size`.
+    pub fn sized(
+        font: &FontHandle<'_>,
+        style: &UiStyle,
+        size: f32,
+        width: u16,
+        title: &str,
+        value: &str,
+    ) -> Self {
         let margin = style.margin as f32;
-        let size = style.text;
         let inner = (f32::from(width) - 2.0 * margin).max(1.0);
         let line = font.line_metrics(size).line_height as u16;
         let value_width = font.measure(size, value);
@@ -133,6 +146,7 @@ impl ValueLines {
             value: value.to_string(),
             value_width,
             below: false,
+            size,
             line,
         };
         if font.measure(size, title) <= room + 1.0 {
@@ -150,6 +164,7 @@ impl ValueLines {
             value_width: font.measure(size, &value),
             below: !value.is_empty(),
             value,
+            size,
             line,
         }
     }
@@ -343,20 +358,12 @@ pub fn draw_value_row(
         .then(|| ValueLines::new(&font, style, rect.width, title, value))
         .filter(|lines| lines.height() > lines.line && lines.height() <= rect.height);
     let draw_lines = |canvas: &mut Canvas<'_>, lines: ValueLines| {
-        let (height, line) = (lines.height(), lines.line);
+        let (height, line, size) = (lines.height(), lines.line, lines.size);
         let top = rect.y + (rect.height - height) / 2;
         let count = lines.title.len() as u16;
         for (i, range) in lines.title.into_iter().enumerate() {
             let at = Rect::new(rect.x, top + i as u16 * line, rect.width, line);
-            draw_label(
-                canvas,
-                &font,
-                style.text,
-                title_x,
-                at,
-                title[range].trim(),
-                color,
-            );
+            draw_label(canvas, &font, size, title_x, at, title[range].trim(), color);
         }
         let at = if lines.below {
             Rect::new(rect.x, top + count * line, rect.width, line)
@@ -364,7 +371,7 @@ pub fn draw_value_row(
             rect
         };
         let x = value_at(lines.value_width);
-        draw_label(canvas, &font, style.text, x, at, &lines.value, color);
+        draw_label(canvas, &font, size, x, at, &lines.value, color);
     };
     // Too long side by side: the title's words on as many lines as the
     // row holds (as [`value_row_height`] made it), the value whole beside
@@ -395,6 +402,17 @@ pub fn draw_value_row(
         return;
     }
     if let Some(lines) = below {
+        return draw_lines(canvas, lines);
+    }
+    // A row too short for that (a list's): both smaller, from the small
+    // size down to seven tenths of it (at the largest text still larger
+    // than text at the default), on as many lines as the row holds.
+    if (title_text != title || shown != value)
+        && let Some(size) = crate::widgets::largest_size(style.small, style.small * 0.7, |size| {
+            ValueLines::sized(&font, style, size, rect.width, title, value).height() <= rect.height
+        })
+    {
+        let lines = ValueLines::sized(&font, style, size, rect.width, title, value);
         return draw_lines(canvas, lines);
     }
     draw_label(
