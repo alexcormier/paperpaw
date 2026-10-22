@@ -536,11 +536,31 @@ impl PanelScreen {
         }
         self.editing = None;
         let value = env.settings.int(id.as_str());
-        done(&env, cx, id, (keep && value != before).then_some(value));
+        let row = self.rows_of(&id).unwrap_or(self.region);
+        done(
+            &env,
+            cx,
+            id,
+            (keep && value != before).then_some(value),
+            row,
+        );
         Handled::Yes
     }
 
     /// Every control in reading order.
+    /// Where the rows on the page shown that show setting `id` are, all
+    /// of them in one rectangle; `None` if none does.
+    fn rows_of(&self, id: &Id) -> Option<Rect> {
+        self.rows
+            .iter()
+            .filter(|row| row.page == self.page)
+            .filter(|row| {
+                row.label.as_ref() == Some(id) || row.controls.iter().any(|(c, _)| c.id() == id)
+            })
+            .map(|row| row.area)
+            .reduce(|a, b| a.union(&b))
+    }
+
     fn controls(&self) -> impl Iterator<Item = &(Control, Rect)> {
         self.rows.iter().flat_map(|row| row.controls.iter())
     }
@@ -734,16 +754,23 @@ fn show(cx: &mut Cx<'_, '_>, id: Id, value: i64) {
 }
 
 /// A slider is let go: `id` set to `value` if one is chosen, the value
-/// shown meanwhile gone, and the panel drawn cleanly.
-fn done(env: &Env<'_>, cx: &mut Cx<'_, '_>, id: Id, value: Option<i64>) {
+/// shown meanwhile gone, and its `row` drawn again: cleanly after it was
+/// moved (its quick steps leave ghosts), quickly after a step (a tap on
+/// its `+`).
+fn done(env: &Env<'_>, cx: &mut Cx<'_, '_>, id: Id, value: Option<i64>, row: Rect) {
     if let Some(value) = value {
         cx.command(Command::SetSetting(id, SettingValue::Int(value)));
     }
-    if env.settings.previewing() {
+    let moved = env.settings.previewing();
+    if moved {
         cx.command(Command::PreviewSettings(Vec::new()));
     }
-    cx.request_redraw();
-    cx.request_refresh(RefreshMode::Partial);
+    cx.request_redraw_area(row);
+    cx.request_refresh(if moved {
+        RefreshMode::Partial
+    } else {
+        RefreshMode::Fast
+    });
 }
 
 /// Whether a choice's options fit side by side in `area`, readably.
@@ -964,7 +991,10 @@ impl Screen for PanelScreen {
                 .find(|(_, rect)| rect.contains(gesture.start))
                 .map(|(c, _)| c);
             if let Some(control) = control {
-                self.focus = None;
+                // The focus shown goes.
+                if self.focus.take().is_some() {
+                    self.redraw(cx);
+                }
                 self.activate(&control, cx);
             }
         }
@@ -1023,11 +1053,13 @@ impl Screen for PanelScreen {
             ui::SliderStep::Same => {}
             ui::SliderStep::Chosen(value) => {
                 self.dragged = None;
-                done(&env, cx, id, (value != before).then_some(value));
+                let row = self.rows[row].area;
+                done(&env, cx, id, (value != before).then_some(value), row);
             }
             ui::SliderStep::Cancelled => {
                 self.dragged = None;
-                done(&env, cx, id, None);
+                let row = self.rows[row].area;
+                done(&env, cx, id, None, row);
             }
             _ => {}
         }
@@ -1061,8 +1093,16 @@ impl Screen for PanelScreen {
                 self.page = page.min(self.pages().saturating_sub(1));
                 // What it covered before too, should it have shrunk.
                 cx.request_redraw_area(before.union(&self.region));
+                self.redraw(cx);
+            } else if let Some(rows) = self.rows_of(&changed.id) {
+                // Its rows alone (and the head, which may show it): a
+                // step of a slider or a number shows quickly.
+                let head = (self.top && self.head.height > 0).then_some(self.head);
+                cx.request_redraw_area(head.map_or(rows, |head| rows.union(&head)));
+                cx.request_refresh(RefreshMode::Fast);
+            } else {
+                self.redraw(cx);
             }
-            self.redraw(cx);
         } else if *event == events::PREVIEW_CHANGED
             && let Some(area) = self.moving_row()
         {

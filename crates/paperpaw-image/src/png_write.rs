@@ -57,7 +57,7 @@ impl PngWriter {
         chunk(&mut head, b"IHDR", &ihdr);
         // The zlib header: deflate, no dictionary, fastest.
         chunk(&mut head, b"IDAT", &[0x78, 0x01]);
-        storage.write(path, &head).map_err(|_| ImageError::Io)?;
+        storage.write(path, &head).map_err(ImageError::Storage)?;
         Ok(Self {
             width,
             rows_left: height,
@@ -98,7 +98,7 @@ impl PngWriter {
         if last {
             chunk(&mut out, b"IEND", &[]);
         }
-        storage.append(path, &out).map_err(|_| ImageError::Io)
+        storage.append(path, &out).map_err(ImageError::Storage)
     }
 
     /// Whether every row was written.

@@ -615,8 +615,27 @@ impl Kernel {
             if index == top {
                 self.output.redraw = true;
             } else if (index + 1..=top).all(|i| self.overlay(i).is_some()) {
+                // Less what the overlays above it cover: they paint all
+                // of their region (as `redraw` draws them), so only the
+                // rest of it changes on the screen. Not where one shows
+                // the full screen through, which leaves those below it
+                // undrawn.
+                let through: Vec<ShowsThrough> = (index + 1..=top)
+                    .map(|i| self.stack[i].screen.shows_through())
+                    .collect();
                 let region = self.region_of(index);
-                self.invalidate(region);
+                let shown = if through.contains(&ShowsThrough::FullScreen) {
+                    Some(region)
+                } else {
+                    (index + 1..=top)
+                        .zip(through)
+                        .filter(|&(_, t)| t == ShowsThrough::Nothing)
+                        .filter_map(|(i, _)| self.overlay(i))
+                        .try_fold(region, uncovered)
+                };
+                if let Some(shown) = shown {
+                    self.invalidate(shown);
+                }
             }
         }
         handled
