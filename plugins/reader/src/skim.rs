@@ -75,10 +75,11 @@ impl SkimScreen {
         };
         let columns: u16 = [4, 2].into_iter().find(|&n| fits(n)).unwrap_or(1);
         let lines = 4 / columns;
-        // Each line a touch row high, one below the other a line higher
-        // for each more line a long name takes.
+        // Each line a touch row high; one below the other (the largest
+        // text) each as high as its button, a line higher for each more
+        // line a long name takes.
         let slots: [u16; 4] = if columns == 1 {
-            BUTTONS.map(|key| ui::button_slot_height(env, &style, width, env.i18n.tr(key)))
+            BUTTONS.map(|key| ui::button_height_for(env, &style, width, env.i18n.tr(key)))
         } else {
             [button_row; 4]
         };
