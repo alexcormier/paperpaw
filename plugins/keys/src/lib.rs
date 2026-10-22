@@ -408,6 +408,12 @@ fn action_name(env: &Env<'_>, id: &Id) -> String {
 #[derive(Debug, Default)]
 pub struct Keys;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Keys {
     fn manifest(&self) -> Manifest {
         Manifest::new(
@@ -416,6 +422,7 @@ impl Plugin for Keys {
             paperpaw_sdk::package_version!(),
         )
         .description("What every button, tap zone and swipe does, changed on the device.")
+        .how(&HOW)
         .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

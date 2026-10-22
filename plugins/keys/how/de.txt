@@ -1,0 +1,5 @@
+Tasten und Gesten zeigt, was jede Taste, Tippzone und Wischgeste tut, und lässt dich es auf dem Gerät ändern.
+
+Du findest es in den Einstellungen unter Gerät. Wähle zuerst, wo eine Änderung gilt: Überall, Beim Lesen, Auf der Startseite, In der Bibliothek oder in einem Tool. Dann wählst du eine Eingabe, etwa eine gehaltene Taste oder ein Wischen vom Rand, und eine Aktion aus der Liste, die du durchsuchen kannst. Wie vorgegeben stellt wieder her, was die Plugins und die Tastenbelegung festlegen.
+
+Auf dem X4 wird eine Änderung abgelehnt, nach der keine Taste mehr zum Auswählen, Zurückgehen oder Weiterkommen bliebe. Tasten und Gesten zurücksetzen am Ende nimmt alle Änderungen zurück.

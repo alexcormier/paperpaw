@@ -136,10 +136,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed(
 .with_extra(&CHOSEN)
 .described("keyboard.setting.layouts.help")];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Keyboard {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Keyboard", Version::new(0, 1, 0))
             .description("Enters text on the screen, by touch or with the buttons.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

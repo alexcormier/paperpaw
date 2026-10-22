@@ -1,0 +1,5 @@
+Nachrichten macht aus RSS- oder Atom-Feeds Bücher. Jeder Feed wird ein Buch im Ordner News der Bibliothek, mit seinen neuesten Artikeln als schlichtem Text, zu lesen wie jedes andere Buch.
+
+Öffne Nachrichten im Menü Werkzeuge und wähle Feed hinzufügen; die Adresse steht auf der Website der Zeitung oder des Blogs. Nachrichten abrufen holt alle Feeds und ersetzt die früheren Bücher. Einen Feed lange drücken (mit Tasten: Wählen halten) ruft ihn allein ab oder entfernt ihn.
+
+Abrufen braucht ein Netzwerk. Die Einstellung Nachrichten-Artikel je Feed legt fest, wie viele Artikel ein Buch enthält. Das Widget Schlagzeilen zeigt sie auf der Startseite.

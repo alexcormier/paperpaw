@@ -100,10 +100,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
 .described("calibre.setting.address.help")
 .advanced()];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Calibre {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Calibre", paperpaw_sdk::package_version!())
             .description("Receive books from Calibre over the network, as its wireless device.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

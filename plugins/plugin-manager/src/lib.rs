@@ -60,10 +60,17 @@ pub const MORE: Id = Id::new_static("plugin-manager.more");
 #[derive(Debug, Default)]
 pub struct PluginManager;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for PluginManager {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Plugin manager", Version::new(0, 1, 0))
             .description("Lists the plugins and switches them on and off.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

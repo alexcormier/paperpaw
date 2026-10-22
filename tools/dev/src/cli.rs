@@ -38,6 +38,8 @@ COMMANDS:
     package     A data plugin as the installer and the website take it, a .ppn
                 file's header, fingerprint, signature and sizes, compatibility
     snapshots   Compares screens with the pictures in --snapshots (--bless writes them)
+    ui-kit      Every building block of the SDK's `ui` module, as the gallery shows
+                screens: on every device, in every look, light and dark
 
 PATHS:
     A data plugin folder (with plugin.ini) or a .ppn file. A plugin with code
@@ -219,6 +221,14 @@ pub fn run(args: impl Iterator<Item = String>, add: Option<AddPlugins>) -> Resul
         return Ok(true);
     };
     context.target.add = add;
+    // The kit's pages, drawn as the gallery draws a plugin's screens.
+    let command = if command == "ui-kit" {
+        context.target.plugins = vec![crate::ui_kit::PLUGIN.to_string()];
+        context.target.add = Some(crate::ui_kit::add);
+        String::from("gallery")
+    } else {
+        command
+    };
     let mut report = Report::default();
     let commands: Vec<&str> = if command == "check" {
         COMMANDS.to_vec()
@@ -400,7 +410,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<(String, Conte
 }
 
 fn is_command(word: &str) -> bool {
-    word == "check" || COMMANDS.contains(&word)
+    word == "check" || word == "ui-kit" || COMMANDS.contains(&word)
 }
 
 #[cfg(test)]

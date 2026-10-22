@@ -21,11 +21,37 @@ expect from contributions.
    cargo fmt --all --check
    cargo clippy --workspace --all-targets -- -D warnings
    cargo test --workspace
-   cargo build --release --target riscv32imc-unknown-none-elf -p paperpaw-core -p paperpaw-plugin-diagnostics
+   cargo build --release --target riscv32imc-unknown-none-elf -p paperpaw-app --no-default-features --features packs,store-plugins,diagnostics
    ```
+
+   The last builds the kernel and every first-party plugin for the X4's
+   chip (`no_std`). The firmware itself (`shells/xteink`) is a workspace
+   of its own; its README says how to build it.
 
 3. Try your change in the emulator:
    `cargo run -p paperpaw-emulator -- --profile xteink-x4`.
+   A change to what a screen shows is checked by the snapshot tests of
+   `shells/desktop/tests/snapshots.rs`, which say how to write the
+   pictures anew when the change is meant.
+
+## Tools
+
+- **Emulators.** `shells/desktop` (`paperpaw-emulator`, the binary
+  `paperpaw-emu`) runs the kernel and plugins on an emulated device, in
+  a window or headless (`--help` lists the options, `--list-profiles` the
+  devices); `shells/web` builds the same device model for a browser
+  ([docs/web-emulator.md](docs/web-emulator.md)).
+- **`paperpaw-dev`** (`tools/dev`) checks plugins on emulated devices:
+  texts, layout, reach with buttons alone, memory and frame time, flows
+  ([docs/plugins.md](docs/plugins.md#checking-your-plugin)):
+  `cargo run -p paperpaw-dev -- check --plugin <id> --quick`.
+- **`paperpaw-sign`** (`tools/sign`) signs firmware updates, makes
+  signing keys, and packs and signs plugin files (`--help`).
+- **`tools/plugin-files`** builds PaperPaw's own plugins that the X4s
+  install from the store as files, for every release (its README).
+- **`tools/x4-remote.py`** drives an X4 over USB with firmware built
+  with the `remote` feature: buttons, screenshots, files, the log, the
+  heap (`--help`).
 
 ## Architecture rules
 
@@ -37,8 +63,9 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
    First-party plugins have no special access.
 3. **If a community plugin could not build a feature, extend the SDK first.**
 4. **Core crates are `no_std`.** They must build for
-   `riscv32imc-unknown-none-elf` (ESP32-C3, ~380 KB RAM). Avoid hidden
-   allocations in hot paths and never load whole files into memory.
+   `riscv32imc-unknown-none-elf` (the X4's ESP32-C3, with 256 KiB of
+   heap). Avoid hidden allocations in hot paths and never load whole
+   files into memory.
 5. **Namespaced ids** (`plugin-id.name`) for every contribution; `core.*` is
    reserved for the kernel.
 6. **No panics on bad input.** Configuration, books and plugins can be
@@ -62,15 +89,21 @@ Significant decisions are recorded as [Architecture Decision Records](docs/adr/)
 
 ## Adding a translation
 
-Each plugin keeps its catalogs in `i18n/<language>.ini`. To add a language:
+The kernel, each plugin and the shells keep their catalogs in
+`i18n/<language>.ini` (the kernel's in `crates/paperpaw-core/i18n`, the
+shells' in `shells/xteink/i18n` and `shells/android/i18n`). To add a
+language:
 
-1. Copy `i18n/en.ini` of the kernel (`crates/paperpaw-core/i18n/`) and of each
-   plugin to `i18n/<language>.ini`.
+1. Copy each `i18n/en.ini` to `i18n/<language>.ini`.
 2. Set `language`, `name` and `plural` in `[meta]` (see `PluralRule` in
    `crates/paperpaw-i18n/src/plural.rs` for the available rules).
 3. Translate the messages; keep `{placeholders}` unchanged.
-4. Register the catalog in the plugin's `register` function and run
-   `cargo test`: the tests report missing, unknown and mismatched messages.
+4. Register the catalog where the others are registered (the plugin's
+   `register`, `r.add_translations(...)`) and run `cargo test`: the
+   tests report missing, unknown and mismatched messages.
+
+A language can also come as a data plugin, without changing PaperPaw
+([docs/plugins.md](docs/plugins.md#plugins-without-code)).
 
 ## Adding a device profile
 

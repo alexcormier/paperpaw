@@ -306,10 +306,17 @@ static SETTINGS: [SettingSpec; 9] = [
     .described("reader.setting.aloud-timer.help"),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Reader {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Reader", Version::new(0, 1, 0))
             .description("Shows books page by page, with table of contents and reading settings.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

@@ -1,0 +1,5 @@
+Plain text files (.txt) open from the library like any book, with nothing to set up. The plugin reads UTF-8, UTF-16 and Windows-1252 text and finds the encoding itself.
+
+Paragraphs follow the blank lines in the file; if a file has none, each line is a paragraph. In Project Gutenberg files the licence text at the start and the end is left out, and the title and author are taken from the header.
+
+The file is never loaded whole, so very large texts open on small devices too.

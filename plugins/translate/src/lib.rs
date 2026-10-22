@@ -185,10 +185,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
 .with_extra(&IN_TRANSLATION)
 .described("translate.setting.to.help")];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Translate {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Translation", paperpaw_sdk::package_version!())
             .description("Translates selected text online, with DeepL.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

@@ -6,6 +6,19 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Building blocks for plugin screens, so positions are not computed by
+  hand: `ui::Stack` (parts one below the other, from the top and the
+  bottom), `ui::columns` (equal columns that end flush with their area),
+  `ui::Grid` (cells, what a tap hits, the focus moved by the buttons),
+  `ui::draw_card` and `ui::card_inside` (a group on a card or in a frame,
+  painted as the look paints widget frames), `ui::Segments` (a row of
+  options, one chosen, also as tabs) and `ui::Dialog` (a box with a title,
+  text and buttons, one space all round). The quick panel, the setup
+  guide and the hints use them. `paperpaw-dev ui-kit` draws every
+  building block on every device, in every look, light and dark.
+- How it works: every plugin of PaperPaw says what it does, where it is
+  and how it is used, read from the plugin manager. The vocabulary
+  review has its first-time hints. Hyphenation has English texts.
 - Vocabulary: flash cards with spaced repetition (FSRS, Anki's
   scheduler), in *Tools*, *Flash cards*. A review shows each due card's
   front, then its back and example and four answers (*Again*, *Hard*,
@@ -44,12 +57,12 @@ change the plugin SDK.
   quick panel have theirs. SDK: `help` (`help::add` for a screen's
   hints, `help::hints` to read them, `help::wait` and `help::ready` for
   a screen that prepares first), the `help` plugin shows them.
-- How it works: a plugin's own longer text (`<id>.plugin.how` in its
-  translations; `description` in the store's catalogue), to read paged
-  from the plugin manager (hold a plugin) and the store's page of a
-  plugin. `paperpaw-dev` warns where a plugin with code has none or a
-  short one (`lint.how-it-works`). SDK: `PluginInfo::how`,
-  `readers::show_text`.
+- How it works: a plugin's own longer text (plain text files named by
+  its manifest, a data plugin's `<id>.plugin.how`; `description` in the
+  store's catalogue), to read paged from the plugin manager (hold a
+  plugin) and the store's page of a plugin. `paperpaw-dev` warns where a
+  plugin with code has none or a short one (`lint.how-it-works`). SDK:
+  `Manifest::how`, `PluginInfo::how`, `readers::show_text`.
 - Reading goal, a plugin of its own (in the store on the X4s): the daily
   goal of the reading statistics (one goal for both; 20 minutes where
   this plugin is), and a cat whose mood follows today's reading: sad

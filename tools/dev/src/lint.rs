@@ -13,7 +13,7 @@
 //! `lint.setting-help`, `lint.untranslated`, `lint.id`, `lint.catalog`,
 //! `lint.unknown-setting`, `lint.dash`, `lint.register`,
 //! `lint.pseudo-overflow`, `lint.hardcoded`, `lint.how-it-works` (a plugin
-//! with code that says not, or hardly, how it works: `<id>.plugin.how`).
+//! with code that says not, or hardly, how it works: `Manifest::how`).
 
 mod catalogs;
 mod drawn;
@@ -239,13 +239,13 @@ fn how_it_works(id: &str, how: Option<&str>) -> Option<Finding> {
     }
     let message = match how {
         None => format!(
-            "It says nothing of how it works: give `{id}.plugin.how` in its English \
-             translations, a few sentences (paragraphs apart by an empty line) on what it \
-             does, where it is found and how it is used. The plugin manager and the store \
-             show it as How it works."
+            "It says nothing of how it works: give its manifest `how` (`how/en.txt` and a \
+             file per other language, see Manifest::how), a few sentences (paragraphs apart \
+             by an empty line) on what it does, where it is found and how it is used. The \
+             plugin manager and the store show it as How it works."
         ),
         Some(text) if text.chars().count() < LEAST_HOW => format!(
-            "`{id}.plugin.how` says little ({} characters): a few sentences on what it does, \
+            "How it works says little ({} characters): a few sentences on what it does, \
              where it is found and how it is used, at least {LEAST_HOW} characters.",
             text.chars().count()
         ),
@@ -598,7 +598,7 @@ mod tests {
     fn a_code_plugin_says_how_it_works_at_some_length() {
         let missing = how_it_works("apple", None).unwrap();
         assert_eq!(missing.check, "lint.how-it-works");
-        assert!(missing.message.contains("`apple.plugin.how`"));
+        assert!(missing.message.contains("Manifest::how"));
         let short = how_it_works("apple", Some("Shows apples.")).unwrap();
         assert!(short.message.contains("13 characters"), "{}", short.message);
         assert!(how_it_works("apple", Some(&"Shows apples. ".repeat(10))).is_none());

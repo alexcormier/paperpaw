@@ -80,12 +80,19 @@ const CHOSEN: Event<choice::Picked> = Event::new("home.item-chosen");
 #[derive(Debug, Default)]
 pub struct Home;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Home {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Home screen", Version::new(0, 1, 0))
             .description(
                 "The start page: pages of widgets, such as the book being read and the tools.",
             )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

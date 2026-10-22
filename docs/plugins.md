@@ -9,13 +9,16 @@ There are two kinds:
 
 - **Data plugins**: a folder with a `plugin.ini` and data files, no code.
   They bring translations (also whole new languages), key maps, new
-  defaults for any setting, and fonts. They work on every device as they
-  are; see [Plugins without code](#plugins-without-code).
+  defaults for any setting, presets (themes, pictures for the sleep
+  screen), menus and actions made of steps, marks in the text,
+  stylesheets and fonts.
+  They work on every device as they are; see
+  [Plugins without code](#plugins-without-code).
 - **Code plugins**: Rust crates against the SDK (`paperpaw-sdk`). They
   bring screens, actions, settings, formats, widgets, services, anything.
   They are compiled into a build of PaperPaw, or built into a file that
-  the Xteink X4 and X4 Pro load at their start, without a new firmware
-  (see [Plugins as files](#plugins-as-files)).
+  the Xteink X4, X4 Pro and X4 Classic load at their start, without a
+  new firmware (see [Plugins as files](#plugins-as-files)).
 
 This guide walks through a code plugin, then lists what plugins can
 contribute. Working with an AI assistant: the skill in
@@ -37,8 +40,8 @@ books opened since the start. Try it in the emulator:
 cargo run -p paperpaw-emulator --features hello -- --profile boox-go-7 --set hello.name=Ada
 ```
 
-Open the main menu (a tap at the bottom of the home screen), then
-*Tools*, then *Hello*.
+*Hello* is among the tools: open *Tools* in the main menu, then
+*Hello*.
 
 ### The plugin
 
@@ -171,6 +174,69 @@ focused, on)`, with the role of what it is (`Row`, `Button`, `Switch`,
 `Check`, `Radio`, `Field`, `Image`, `Link`, `Dialog`, `Progress` …). A
 screen reader of one's own hears where the focus of the buttons goes
 (`events::FOCUS_CHANGED`: its role, label and area).
+
+### Which building block for what
+
+A plugin's screens are drawn with the SDK's `ui` module, so they look
+like PaperPaw's own, follow the reader's text size and the look chosen
+(a theme paints switches, the focus, buttons, headers, frames and more),
+and work by touch and with the buttons alone. Sizes come from
+`UiStyle::new(env)`: `margin`, `gap`, `row`, `header`, the text sizes
+(`style.size(TextRole::Body)` and the others). `paperpaw-dev ui-kit`
+draws every block below on every device, in every look, light and dark.
+
+| For | Use |
+|---|---|
+| The bar at the top, a title and a note (a page count) | `ui::draw_header`, `ui::Header` (with its arrows) |
+| Parts one below the other, from the top and the bottom | `ui::Stack` (`take`, `take_bottom`, `rest`) |
+| Equal columns side by side, e.g. two buttons | `ui::columns(area, count, gap)` |
+| A list that pages and holds the focus | `ui::ListView`, `ui::list_step` |
+| Rows of a list or of settings | `ui::draw_value_row`, `ui::draw_noted_row`, `ui::draw_switch_row`, `ui::draw_setting_row`, `ui::draw_stepper`, `ui::Slider` |
+| Sections with headings | `ui::Sections`, `ui::draw_heading` |
+| A grid of cells (covers, tiles) | `ui::Grid` (`cell`, `hit`, `step`) |
+| A group on a card or in a frame | `ui::draw_card(canvas, &style, area, Frame::Card)` returns where its parts go |
+| A button, on, focused, faint, with an icon | `ui::draw_button`, `ui::draw_faint_button`, `ui::draw_icon_button` |
+| A few options to pick at a glance, or tabs | `ui::Segments` |
+| A box over the screen with a title, text and buttons | `ui::Dialog` |
+| Asking for text, a folder or one of several options | `ask::text`, `ask::folder`, `ask::choice` (screens of their own) |
+| A message where content would be, an empty list | `ui::draw_message`, `ui::draw_empty` |
+| Progress | `ui::draw_progress` |
+| An address to open on a phone, with its QR code | `ui::draw_address`, `ui::draw_qr` |
+| Offering to go online where something needs the network | `ui::OfflineOffer` |
+| What the buttons do, at the bottom | the screen's `hint` (the kernel draws the row) |
+| First-time hints over a screen | `help::add` (see [Hints for a screen](#hints-for-a-screen)) |
+| A widget's frame | `widgets::draw_frame` |
+
+Two buttons side by side, a margin from the screen's sides and bottom:
+
+```rust
+use paperpaw_sdk::ui::{self, Stack, UiStyle};
+
+let style = UiStyle::new(env);
+let margin = style.margin as u16;
+let screen = Rect::new(margin, 0, display.width - 2 * margin, display.height - margin);
+let row = Stack::new(screen, margin).take_bottom(ui::Segments::height(&style));
+let [ok, cancel] = ui::columns(row, 2, margin)[..] else { return };
+ui::draw_button(canvas, env, &style, ok, "OK", false, focus == 0);
+ui::draw_button(canvas, env, &style, cancel, "Cancel", false, focus == 1);
+```
+
+Tabs over a page, the chosen one on, moved with left and right:
+
+```rust
+let tabs = ui::Segments::new(&style, Rect::new(margin, top, width, ui::Segments::height(&style)), 3);
+tabs.draw(canvas, env, &style, &["Books", "Shelves", "Notes"], self.tab, self.focus_on_tabs.then_some(self.tab));
+// on_action: if let Some(tab) = tabs.step(self.tab, action) { self.tab = tab; }
+// on_gesture: if let Some(tab) = tabs.hit(gesture.start) { self.tab = tab; }
+```
+
+A dialog in the middle of the screen:
+
+```rust
+let mut dialog = ui::Dialog::new(env, &style, "Delete the book?", &["It goes for good."], &["Delete", "Keep"]);
+dialog.place((display.height - dialog.height()) / 2);
+dialog.draw(canvas, env, &style, Some(self.focus));
+```
 
 ### Settings
 
@@ -312,18 +378,27 @@ translates, `format` fills `{placeholders}`, `plural` picks the form for
 a number. A test that all languages have the same keys belongs in every
 plugin (see the sample).
 
-Three messages say what a plugin is: `<id>.plugin.name`,
-`<id>.plugin.description` (a line, shown in the lists) and
-`<id>.plugin.how`, *How it works*: a few sentences on what it does, where
-it is found and how it is used. The plugin manager shows it when a
-plugin is held, as a text to read paged; paragraphs are apart by an empty
-line, written `\n\n` in a quoted value:
+Two messages say what a plugin is in the lists: `<id>.plugin.name` and
+`<id>.plugin.description` (a line). *How it works* says more: a few
+sentences on what it does, where it is found and how it is used, plain
+text with paragraphs apart by an empty line, one file per language
+beside the catalogs (`how/en.txt`, `how/de.txt`). The manifest names
+them; as a table in the program they take no memory until the plugin
+manager shows one (a plugin held), paged like a book:
 
-```ini
-hello.plugin.how = "Greets you by name when PaperPaw starts.\n\nThe name is set in the settings, under Hello."
+```rust
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+// In `manifest`: Manifest::new(…).description(…).how(&HOW)
 ```
 
-`paperpaw-dev` warns where a plugin with code has none or a short one.
+The same text is the `description` of the plugin's entry in the store
+(see [Publishing](#publishing)), shown on its page there. A data plugin
+gives it as `<id>.plugin.how` in its catalogs, quoted, paragraphs apart
+by `\n\n`. `paperpaw-dev` warns where a plugin with code has none or a
+short one.
 
 ### Testing
 
@@ -399,6 +474,7 @@ the default look. `--set <id>=<value>` sets a setting for every run.
 | `flows` | Scripted flows with assertions (`--flow a.flow`): each step's heap and frame time against the X4's budgets, and each flow played again at the edges; see below. |
 | `package` | A data plugin as the device's installer and the plugin library take it (id, paths, file count and sizes, file kinds, `formats`, settings and presets that exist), installed on each device as the store does; a `.ppn` file checked as the device checks it (header, digest, the author's signature), with its fingerprint and sizes; flows and test pictures left in a data plugin's folder, which would ship with it (`package.tests`). `--release <version>` (for a `.ppn`, the release's fingerprint) tells whether that release takes it. |
 | `snapshots` | Screens and widgets compared with reference pictures (`--snapshots <dir>`, `tests/snapshots` by default); `--bless` writes them anew. |
+| `ui-kit` | Every building block of the SDK's `ui` module (see [Which building block for what](#which-building-block-for-what)), drawn as the gallery draws screens: on every device, in every look, light and dark, with and without the focus. Not part of `check`. |
 
 The pseudo-language makes every English text about a third longer and
 accents its letters (`[Šéţţîñĝš ~~]`); with `--language pseudo` the
@@ -502,9 +578,10 @@ profile = boox-go-7
 core.night-mode = true
 ```
 
-The CI job (`.github/workflows/paperpaw-dev.yml`) runs the tests and
-`check --plugin my-plugin --quick`, and keeps the report as the run's
-artifact, also when a check failed.
+The CI job (`.github/workflows/paperpaw-dev.yml`) runs the tests,
+`check --plugin my-plugin --quick` and the flows of `tests/flows`
+(`flows --flow tests/flows`, varied at the edges), and keeps the report
+as the run's artifact, also when a check failed.
 
 ## What plugins contribute
 
@@ -544,7 +621,12 @@ artifact, also when a check failed.
 
 Slots are how a plugin replaces another: bind your screen to
 `core.home` and it is the home screen; the user's
-`[slots]` configuration has the final word. Built-in slots are in
+`[slots]` configuration has the final word. Where several plugins offer
+a screen for a slot, *Settings, Plugins, Screens* lets the reader choose
+one (or *Automatic*, the plugins' order), and a plugin newly installed
+that offers one asks once whether to use it now. `Env::slot_choice`,
+`slot_title` and `screen_title` tell a screen of one's own the same.
+Built-in slots are in
 `builtin::slots`, built-in menus in `builtin::menus`: the main menu
 (`core.main`), its tools (`core.tools`) and the settings' pages
 (`core.settings-pages`).
@@ -574,7 +656,8 @@ The documentation of `builtin::slots` says the same for every slot.
 
 ### Which one wins
 
-- **Slots.** The screen the user chose in `[slots]`; else the binding
+- **Slots.** The screen the user chose in `[slots]` (*Screens*,
+  above); else the binding
   with the highest `Priority` (`FALLBACK`, `DEFAULT`, `PREFERRED`, or
   any number); between equal priorities, the one registered later,
   that is of the plugin loaded later.
@@ -948,11 +1031,12 @@ pictures for it are offered as presets (below).
 A setting's choices are open to other plugins: `Registrar::add_choice`
 offers a value of one's own among them (in one's namespace, the
 translation key of its name), after the setting's own. The sleep screen
-takes a screen of another plugin as a mode so:
+takes a screen of another plugin as a mode so (the flash card due and
+the reading cat are such modes):
 
 ```rust
 r.add_screen(ScreenSpec::new(Id::new_static("aquarium.sleep"), "aquarium.sleep", factory))?;
-r.add_choice(paperpaw_plugin_sleep::SHOW, "aquarium.sleep")?;
+r.add_choice(Id::new_static("sleep.show"), "aquarium.sleep")?;
 ```
 
 ### Widgets
@@ -1039,42 +1123,35 @@ widget, a gap; `widgets::FILL` has no height of its own and takes its
 share of the room the others leave (`widgets::fill_height`). Both may
 be in a list more than once (`widgets::repeatable`).
 
-### Presets and home screen layouts
+### Presets
 
 A preset is a ready-made set of setting values chosen as a whole
-(`paperpaw_sdk::presets`), such as a layout of the home screen. It has a
-kind, named by the plugin that offers such presets: the home screen
-offers those of `home.layout` in its chooser (in the first-run setup,
-and under *Add* while editing it), shows each on itself before it is
-kept, and applies the one chosen. Add presets kept in the program with
-`Registrar::add_presets` (a `static` list of `Preset::fixed`), for your
-own kind or another plugin's:
+(`paperpaw_sdk::presets`). It has a kind, named by the plugin that
+offers such presets: that plugin lists those of its kind
+(`env.settings.presets().of_kind(kind)`), works out what one changes
+(`Preset::changes` with the settings it covers), shows it
+(`Command::PreviewSettings`: the values show on every screen without
+being kept, until the screen that asked closes) and keeps it
+(`presets::commands`); the settings of its kind that a preset leaves
+out go back to their defaults. The kinds PaperPaw's own plugins offer
+are themes (`core.theme`, below), pictures over the page for the sleep
+screen (`sleep.overlay`, see [Plugins without code](#plugins-without-code))
+and the power modes (`core.power-mode`, which the kernel wears). Add
+presets kept in the program with `Registrar::add_presets` (a `static`
+list of `Preset::fixed`), for your own kind or another plugin's:
 
 ```rust
-static LAYOUTS: [Preset; 1] = [Preset::fixed(
-    "my.nook",
-    "home.layout",
-    "my.nook",      // translation keys of its name
-    "my.nook.help", // and of a sentence on it
-    "home.page-1 = widgets.word-clock@1 0/0 4x2, home.continue@1 0/2 4x2
-home.rows = 6",
+static THEMES: [Preset; 1] = [Preset::fixed(
+    "my.dusk",
+    presets::THEME,
+    "my.dusk",      // translation keys of its name
+    "my.dusk.help", // and of a sentence on it
+    "core.ui-focus = core.focus.ring
+core.ui-separators = core.separators.none",
 )];
 
-r.add_presets(&LAYOUTS)?;
+r.add_presets(&THEMES)?;
 ```
-
-A layout sets the pages (`home.page-1` to `home.page-8`, as
-`widgets::grid` writes them) and whatever of the home screen's look it
-wants (`home.columns`, `home.rows`, `home.status-bar`,
-`home.footer.dots` ...); what it leaves out goes back to its default.
-Widgets placed as `id@1` have settings of their own in it
-(`home.recent@1.count = 8`), so a layout gives them their looks without
-touching the widget's other placements. To offer presets of a kind of
-your own, list them (`env.settings.presets().of_kind(kind)`), work out
-what one changes (`Preset::changes` with the settings it covers), show
-it (`Command::PreviewSettings`: the values show on every screen without
-being kept, until the screen that asked closes) and keep it
-(`presets::commands`).
 
 A theme is a preset of the kind `core.theme` (`presets::THEME`): values
 for the appearance settings. Where any plugin brings one, the
@@ -1116,7 +1193,7 @@ help::add(r, SCREEN.as_str(), &[
 The texts are keys of the plugin's translations; the screen is any
 screen's id, so a plugin can add hints to another's. A screen that first
 prepares what it shows (the reader, opening a book) has its hints wait
-with `help::wait(r, SCREEN)` and says when it is ready,
+with `help::wait(r, SCREEN.as_str())` and says when it is ready,
 `cx.command(help::ready(&SCREEN))`: screens below another get no timers,
 so it would not get ready under them. The note is the
 `help` plugin's; another plugin can show them its own way, from
@@ -1180,12 +1257,28 @@ between frames. `env.work` says where a work stands, for the plugin's
 own page; background work never shows a notice over reading. The power
 mode (`env.power`) makes deadlines longer or holds network work back;
 most plugins need not read it.
-Read large JSON answers as they stream with `paperpaw_json::stream`
-(the crate `paperpaw-json`), so they
-need little memory. `Command::Serve` serves HTTP to the local network,
-e.g. for transfers from a computer or typing on a phone; what happens
-to it comes as `ServerNotice`s, and to sockets (`Command::Connect`,
-`Command::Broadcast`) as `SocketNotice`s.
+Read large JSON answers as they stream with
+`paperpaw_sdk::json::stream`, so they need little memory.
+`Command::Serve` serves HTTP to the local network, e.g. for transfers
+from a computer or typing on a phone; what happens to it comes as
+`ServerNotice`s. Serve only while the screen showing the
+address is open, and guard it as `paperpaw_sdk::served` does: a key
+drawn anew each time in the address (`served::key`), checked by a
+`served::Guard`, which turns requests away for a while after a few
+wrong keys. Where PaperPaw runs Wi-Fi itself (the X4s),
+`paperpaw_sdk::wifi` says the radio's state, and
+`WifiCommand::Host` opens a network of the device's own for a phone to
+join, as the Wi-Fi transfer does without a router.
+
+Other protocols go over sockets ([ADR 0014](adr/0014-sockets-for-plugins.md)):
+`Command::Connect` opens a TCP connection, `Command::SocketSend` sends,
+and `Command::SocketRead` asks for what comes next, as text
+(`SocketRead::Text`) or as a file of a known length written to storage as
+it comes (`SocketRead::File`), so files of any size never need to fit in
+memory. `Command::Broadcast` finds services in the local network by a
+UDP datagram and their answers. Everything comes back as events
+(`SocketNotice`s, `socket_params`); a socket closes when the screen
+showing as it was opened is closed.
 
 ### Firmware updates
 
@@ -1206,7 +1299,10 @@ there.
 ## Memory
 
 The smallest device, the Xteink X4, has 256 KiB of heap for everything.
-A plugin that should run there:
+PaperPaw's standard app holds some 168 KiB of it once it has started
+with the sample books, 201 KiB at its peak (the emulator, `--profile
+xteink-x4 --headless --script wait:500`). A plugin that should run
+there:
 
 - keeps little in memory: lists in files, read as they are needed;
 - reads files a piece at a time (`Storage::read_at`), never whole books;
@@ -1220,19 +1316,26 @@ where memory goes.
 ## Plugins as files
 
 A code plugin can also be a file, `code.ppn`, in a plugin's folder on
-the card, which the X4 and the X4 Pro load at their start (ADR 0024):
-from the plugin store or from the web flasher with the firmware. Only
-code installed runs: an installer names the file by its digest
-(`native::remember_code`, kept in `.paperpaw` where neither the Wi-Fi
-transfer nor plugins' folders reach), and a file put into a plugin's
-folder otherwise is not run (the plugin manager says why); an author
-trying their own build names it over USB
-(`tools/x4-remote.py --trust-code <id>`). Its code is the same as that of a plugin built in, and it runs
-as part of PaperPaw, at full speed and without a sandbox: it can do
-whatever PaperPaw can, also past the SDK. The X4 Pro runs it from its
-PSRAM; the X4 writes it once into flash behind its firmware (about 1.8
-MB for all its plugins together) and runs it from there, for some
-hundred bytes of RAM.
+the card, which the X4, the X4 Pro and the X4 Classic load at their
+start (ADR 0024): from the plugin store or from the web flasher with
+the firmware. Only code installed runs: an installer names the file by
+its digest (`native::remember_code`, kept in `.paperpaw` where neither
+the Wi-Fi transfer nor plugins' folders reach), and a file put into a
+plugin's folder otherwise is not run (the plugin manager says why); an
+author trying their own build names it over USB
+(`tools/x4-remote.py --trust-code <id>`). Its code is the same as that
+of a plugin built in, and it runs as part of PaperPaw, at full speed
+and without a sandbox: it can do
+whatever PaperPaw can, also past the SDK. The X4 Pro and the X4 Classic
+run it from their PSRAM; the X4 writes it once into the flash behind its
+firmware and runs it from there, not from its RAM.
+
+PaperPaw's own plugins that not every reader needs (statistics, widgets,
+Calibre, the syncs and the others of
+[`tools/plugin-files/plugins.txt`](../tools/plugin-files/plugins.txt))
+come this way on the X4s: their firmware leaves them out, and each
+release builds them as files, signed with PaperPaw's plugin key, which
+readers install from the store.
 
 [`samples/hello-native`](../samples/hello-native) is the sample plugin
 above as a file, in a workspace of its own as a plugin's own repository
@@ -1263,7 +1366,7 @@ by name). Build it for both chips:
 
 ```sh
 cargo x4                  # riscv32imc-unknown-none-elf, the X4
-cargo +esp x4pro          # xtensa-esp32s3-none-elf, the X4 Pro (espup's toolchain)
+cargo +esp x4pro          # xtensa-esp32s3-none-elf, the X4 Pro and X4 Classic (espup's toolchain)
 ```
 
 ### Which build fits
@@ -1272,11 +1375,12 @@ Until PaperPaw 1.0 a plugin file runs only on the PaperPaw it was built
 for: the same compiler for the same chip from the same SDK with the same
 features (but `kernel` and `unstable`, which only add functions). Its
 fingerprint says so, and a device loads only files with its own;
-*About* shows the device's fingerprint and the compiler to build with. Build against the SDK of the release (`paperpaw-sdk = "0.5"`)
-with the toolchain that release names, and build again for every
-release; the store and the update check show which plugins wait for a
-build. From 1.0 on, plugins will be built against a versioned interface
-and keep working across minor releases.
+*About* shows the device's fingerprint and the compiler to build with.
+Build against the SDK of the release (`paperpaw-sdk = "0.4"`) with the
+toolchain that release names, and build again for every release, until
+1.0: the fingerprint holds the SDK's version, so a release loads no file
+built for another. The
+store and the update check show which plugins wait for a build.
 
 ### Packing and signing
 
@@ -1294,7 +1398,8 @@ paperpaw-sign plugin my-plugin-x4.ppn             # what it holds, and who signe
 closures), symbols it cannot find, and code that reaches an address
 fixed in the firmware or ROM directly. The signature goes into the file
 itself, so it travels with it; a device remembers the author's key at
-the first install and warns when an update is signed by another.
+the first install (from the store, the key the plugin library names for
+its author) and warns when an update is signed by another.
 
 ### Trying it on a device
 
@@ -1318,20 +1423,22 @@ A panic's calls inside a plugin are kept with its name and the offset
 into its file, e.g. `4261a402 (my-plugin+0x452)`: its function lies at
 `0x42000000 + offset - 80` in the plugin's ELF. A plugin that crashes
 before PaperPaw shows its first frame is switched off: after two such
-starts PaperPaw starts without plugins with code and says so (holding
-*Back* on the X4, *Home* on the X4 Pro, while switching it on does the
-same). The plugins it switched off are switched on again in the plugin
-manager, one at a time.
+starts PaperPaw starts without the plugin the crash was in (without all
+plugins with code where that is not known) and says so; holding *Back*
+on the X4 and the X4 Classic, *Home* on the X4 Pro, while switching it
+on starts without them too. The plugins it switched off are switched on
+again in the plugin manager, one at a time.
 
 ### Keeping it small
 
 On the X4 every plugin's file takes room in flash. A plugin carries its
-own copy of the SDK code it uses, which is most of a small plugin: of
-the sample's 63 KB on the X4, its own code is some 9 KB.
+own copy of the SDK code it uses, which is most of a small plugin: the
+sample's file for the X4 is 78 KB (76 KB of code and constant data),
+though the plugin itself is a screen, an action and a setting.
 
-- Build with `opt-level = "s"` (as PaperPaw) or `"z"` (some 5 % smaller
-  on the X4, a little slower), `lto = "fat"`, `codegen-units = 1`,
-  `panic = "abort"`, as the sample does.
+- Build with `opt-level = "s"` (as PaperPaw) or `"z"` (smaller, a little
+  slower), `lto = "fat"`, `codegen-units = 1`, `panic = "abort"`, as the
+  sample does.
 - Leave out what pulls in large parts of `core`: parsing floats from
   text (`str::parse::<f32>()`, 16 KB of tables), `{:?}` of strings.
 - Keep translations and other text in the folder's files rather than in
@@ -1369,7 +1476,7 @@ plugins/large-print/
                  regular, bold, italic, bold-italic (packs, or .ttf/.otf
                  where scalable fonts are drawn)
   styles.css     a stylesheet for books, after a book's own (EPUB)
-  presets.ini    ready-made sets of settings, e.g. home screen layouts
+  presets.ini    ready-made sets of settings, e.g. themes
   marks.ini      words marked on book pages by patterns (formats 2)
   menus.ini      entries of menus, a menu of one's own (formats 3)
   actions.ini    actions made of steps (formats 3)
@@ -1481,12 +1588,14 @@ PaperPaw, switched off in the plugin manager.
 The fonts browser (`plugins/fonts-browser`) downloads fonts as such
 plugins from paperpaw.org: font files for devices with scalable fonts
 and the memory for them, packs for the others. The store
-(`plugins/store`, *More plugins*) lists every other data plugin of the
-plugin library made for the device and installs, updates and removes it
-([ADR 0023](adr/0023-plugin-store.md)). Both build on the SDK's
-`install` module: an `Installer` downloads a `Package`'s files one after
-another into `plugins/.<id>.part`, checks each by its size and SHA-1,
-then has the kernel install it (`Command::InstallPlugin`) in place of
+(`plugins/store`, *More plugins*) lists the other plugins of the plugin
+library made for the device, data plugins and, where PaperPaw loads
+them and a build fits, plugins with code, and installs, updates and
+removes them ([ADR 0023](adr/0023-plugin-store.md)). Both build on the
+SDK's `install` module: an `Installer` downloads a `Package`'s files one
+after another into `plugins/.<id>.part`, checks each by its size and
+digest (SHA-1 or SHA-256), then has the kernel install it
+(`Command::InstallPlugin`) in place of
 every version of it before, what was chosen from it still chosen; the
 job is kept on the storage, so it goes on with no screen open.
 
@@ -1500,22 +1609,11 @@ code add theirs with `Registrar::add_stylesheet`.
 
 A `presets.ini` holds presets (see above), a section each: its `kind`,
 its `name` and `description` (translation keys from its `i18n`, or the
-text itself), then the settings it sets by their whole id:
-
-```ini
-[nook]
-kind = home.layout
-name = reading-nook.nook
-description = reading-nook.nook.help
-home.page-1 = widgets.word-clock@1 0/0 4x2, home.continue@1 0/2 4x2, home.recent@1 0/4 4x2
-home.rows = 6
-```
-
-So anyone can make a home screen layout and share it: it is offered
-with the home screen's own. Pictures over the page for the sleep screen
-are presets of `sleep.overlay` the same way: the picture (or a widget,
-`sleep.overlay-widget`), and where it goes and how large it is if the
-preset likes (what it leaves out stays as the reader set it).
+text itself), then the settings it sets by their whole id. Themes are
+such presets (`kind = core.theme`, above). Pictures over the page for
+the sleep screen are presets of `sleep.overlay`: the picture (or a
+widget, `sleep.overlay-widget`), and where it goes and how large it is
+if the preset likes (what it leaves out stays as the reader set it).
 
 ```ini
 [owl]
@@ -1527,9 +1625,8 @@ sleep.overlay-size = 40
 ```
 
 The picture's clear parts show the page, so a PNG with transparency
-looks best. [`samples/plugins`](../samples/plugins) has
-five: large print, three themes (airy, paw, calm ink) and a layout
-(reading nook).
+looks best. [`samples/plugins`](../samples/plugins) has large print and
+three themes (airy, paw, calm ink).
 
 ## Publishing
 
@@ -1573,7 +1670,7 @@ group = home
 tags = clock, widget
 licence = MIT
 source = https://codeberg.org/your-name/clock
-sdk = 0.5
+sdk = 0.4
 
 [source]
 repository = https://codeberg.org/your-name/clock
@@ -1635,7 +1732,8 @@ built with the plugin, as `/rust`. So:
 - commit `Cargo.lock`;
 - keep the release's compilers pinned (`rust-toolchain.toml`, the job's
   `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`) and its SDK
-  (`paperpaw-sdk = "0.5"`);
+  (`paperpaw-sdk = "0.4"`), and build again for every release until 1.0
+  (see [Which build fits](#which-build-fits));
 - never set `RUSTFLAGS`, which would replace the flags that link the
   plugin, and never publish a build made without the remapped paths;
 - put nothing of the moment or the computer into the code (a build
@@ -1655,14 +1753,4 @@ comparing the files with `cmp` shows that the build holds.
 [`Command`]: ../crates/paperpaw-sdk/src/command.rs
 [`Screen`]: ../crates/paperpaw-sdk/src/screen.rs
 [`Widget`]: ../crates/paperpaw-sdk/src/widgets.rs
-
-Other protocols go over sockets ([ADR 0014](adr/0014-sockets-for-plugins.md)):
-`Command::Connect` opens a TCP connection, `Command::SocketSend` sends,
-and `Command::SocketRead` asks for what comes next, as text
-(`SocketRead::Text`) or as a file of a known length written to storage as
-it comes (`SocketRead::File`), so files of any size never need to fit in
-memory. `Command::Broadcast` finds services in the local network by a
-UDP datagram and their answers. Everything comes back as events
-(`socket_params`); a socket closes when the screen showing as it was
-opened is closed.
 

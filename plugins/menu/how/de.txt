@@ -1,0 +1,5 @@
+Das Menü zeigt, was du tun und einstellen kannst. Es öffnet sich am unteren Bildschirmrand über dem, was gerade offen ist: beim Lesen mit einem Tipp in die Mitte des Bildschirms oder mit Wählen. Einen Eintrag antippen oder wählen führt ihn aus.
+
+Einstellungen im Menü zeigen ihren Wert und ändern sich an Ort und Stelle, das Menü bleibt offen. Ein Eintrag mit weiteren Einträgen öffnet ein Untermenü.
+
+Vom oberen Rand nach unten wischen öffnet den Schnellzugriff: was du oft änderst, als Tasten. Antippen zum Schalten, lange drücken für die Einstellungen. Nur mit Tasten wählen die Pfeiltasten, Wählen schaltet, Zurück schließt. Unter Darstellung zeigt Menüs die Menüs als Liste oder als Kacheln.

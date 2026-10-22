@@ -33,7 +33,9 @@ Read, in this order, and skim what is relevant to the task:
 2. `CONTRIBUTING.md`: the architecture rules reviews check, and the
    checks CI runs.
 3. `samples/hello-plugin`: a complete small plugin with a test; the best
-   template. `samples/plugins` holds data plugins.
+   template. `samples/hello-native` builds it as a plugin file for the
+   X4s, in a workspace of its own as a plugin's repository is, with a CI
+   job. `samples/plugins` holds data plugins.
 4. The SDK's API: `cargo doc -p paperpaw-sdk --open`, and
    `crates/paperpaw-sdk/api.txt` (every public item, kept current).
 5. `CHANGELOG.md`, its top section: what changed lately (renamed or
@@ -76,6 +78,21 @@ Read, in this order, and skim what is relevant to the task:
   (an issue saying what the plugin needs and why); changing PaperPaw
   itself is a contribution to it, under its own rules
   (`CONTRIBUTING.md`), not part of writing a plugin.
+
+- **Screens are drawn with the SDK's `ui` building blocks**, never with
+  positions computed by hand: `ui::Stack` (parts one below the other),
+  `ui::columns` (equal columns, e.g. two buttons), `ui::Grid` (cells
+  with taps and focus), `ui::draw_card` (a group on a card or in a
+  frame), `ui::Segments` (a few options or tabs), `ui::Dialog` (a box
+  with a title, text and buttons), `ui::ListView` and the row functions
+  (`draw_value_row`, `draw_switch_row`, `Slider`, ...), `ui::draw_button`,
+  `ui::draw_header`, `ui::draw_message`, `ui::draw_empty`, `ask::text`
+  and `ask::choice`. Sizes come from `UiStyle::new(env)` (`margin`,
+  `gap`, `row`, text sizes), so the screen follows the reader's text size
+  and look and works by touch and with buttons alone. The table "Which
+  building block for what" in `docs/plugins.md` says which for what;
+  `paperpaw-dev ui-kit` shows them all. Use those the SDK release you
+  build against has.
 
 ## 3. Rules that matter on small devices
 
@@ -127,7 +144,10 @@ section of `docs/plugins.md`. A plugin that should run there:
   done.
 - Build against a released SDK version and say it in the manifest
   (`sdk`): the kernel loads the plugin only where its SDK fits. When
-  moving to a newer SDK, read the CHANGELOG for what changed.
+  moving to a newer SDK, read the CHANGELOG for what changed. Until
+  PaperPaw 1.0, a plugin file (`.ppn`) runs only on the release it was
+  built for (its fingerprint holds the SDK's version and the compiler):
+  build it again, and publish it again, for every release.
 - Test plugins with the real kernel and in-memory storage, as the sample
   does: build a kernel with the plugin, send input, look at the screen
   shown, the settings, the files, the network requests, and answer them.
@@ -149,6 +169,13 @@ section of `docs/plugins.md`. A plugin that should run there:
   flow out; `paperpaw-dev explore` is only a cheap baseline beside them.
 - Flows and their pictures stay out of the plugin's package (a data
   plugin's folder): `paperpaw-dev package` warns of any it finds.
+- Say how the plugin works: `how/en.txt` (and one per other language),
+  named by the manifest with `Manifest::how` (`docs/plugins.md`,
+  Translations), a few sentences on what it does, where it is found and
+  how it is used
+  (the plugin manager and the store show it; `lint.how-it-works` warns
+  where it is missing or short). Give its screens first-time hints with
+  `help::add` (`docs/plugins.md`, "Hints for a screen").
 
 ## 5. The desktop emulator
 
@@ -174,6 +201,10 @@ section of `docs/plugins.md`. A plugin that should run there:
   add yours as the sample is added (a Cargo feature of the emulator), to
   try it. Data plugins need no build: copy the folder into the storage
   folder's `plugins`.
+- `paperpaw-dev` (`tools/dev`, `docs/plugins.md` "Checking your plugin")
+  runs the same device model on every profile and checks what the
+  plugin adds; `shells/web` is the same in a browser
+  (`docs/web-emulator.md`).
 
 ## 6. A real Xteink X4
 
@@ -182,11 +213,17 @@ Only if the user has one and wants it used. Its README is
 
 - **Save the stock firmware first** (the README says how), so the device
   can always go back. Flashing replaces the firmware.
-- Build and flash from `shells/xteink` (its own workspace). Plugins with
-  code are compiled in: in a local checkout, find where the firmware
-  installs its plugins and add yours there. That is a test build for
-  trying the plugin, not a change to PaperPaw; keep it out of the
-  plugin.
+- Build and flash from `shells/xteink` (its own workspace); a test
+  build has the remote control below, released firmware does not.
+- A plugin with code is tried as a file, without building it into the
+  firmware: build it as `samples/hello-native` does (`cargo x4`, or
+  `cargo +esp x4pro` for the X4 Pro and the X4 Classic) against the SDK
+  of the firmware on the device, pack it with `paperpaw-sign pack`, put
+  its folder with the file as `code.ppn` onto the card and name it as
+  installed (`python tools/x4-remote.py --push <folder>
+  plugins/<id>`, then `--trust-code <id>`), and restart. The plugin
+  manager says why a file does not run (another fingerprint, damaged,
+  no room); `docs/plugins.md`, "Plugins as files", has the details.
 - `tools/x4-remote.py` drives a test build over USB (see its docstring
   and `--help`): presses buttons, runs actions, opens books, prints the
   screen's id and what it shows, takes screenshots, puts files onto the

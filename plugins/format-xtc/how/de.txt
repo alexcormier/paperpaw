@@ -1,0 +1,5 @@
+XTC- und XTCH-Dateien sind Bücher, deren Seiten schon als Bilder vorliegen, erzeugt von Konvertern für die Xteink-Reader. Sie öffnen sich aus der Bibliothek wie jedes Buch.
+
+Weil jede Seite ein festes Bild ist, lassen sich Textgröße und Schrift nicht ändern. Die Seiten sind schwarzweiß oder haben vier Graustufen. Jede Seite wird erst beim Zeigen aufbereitet, daher braucht sie wenig Speicher, auch auf dem X4.
+
+Titel, Autor und Kapitel kommen aus der Datei, wenn sie welche enthält.

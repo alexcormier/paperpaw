@@ -440,30 +440,8 @@ pub fn look(env: &Env<'_>, widget: &str, area: Rect) -> Look {
 pub fn draw_frame(canvas: &mut Canvas<'_>, env: &Env<'_>, widget: &str, area: Rect) -> Look {
     let style = UiStyle::new(env);
     let look = look(env, widget, area);
-    // A look of a plugin's own draws it (`ui::look::Painters::frame`).
-    let part = crate::ui::look::FramePart::new(area, look.frame);
-    if look.frame != Frame::None && style.look.frame(canvas, &style, part) {
-        return look;
-    }
-    match look.frame {
-        Frame::None => {}
-        Frame::Line => ui::stroke_round(
-            canvas,
-            &style,
-            area,
-            ui::button_border(&style),
-            Color::BLACK,
-        ),
-        Frame::Card if style.grays <= 2 => {
-            // A light gray would be a heavy pattern on black and white:
-            // the sparsest there is, in a thin line as cards in lists.
-            canvas.fill_round_shaded(area, style.corner, style.ink(ui::Ink::CardPattern));
-            let line = (style.line / 2).max(1);
-            canvas.stroke_round(area, line, style.corner, Color::BLACK);
-        }
-        Frame::Card => canvas.fill_round_shaded(area, style.corner, style.ink(ui::Ink::Card)),
-        Frame::Dark => ui::fill_round(canvas, &style, area, Color::BLACK),
-    }
+    // As cards are: a look of a plugin's own paints it, else the usual.
+    crate::ui::layout::paint_frame(canvas, &style, area, look.frame);
     look
 }
 

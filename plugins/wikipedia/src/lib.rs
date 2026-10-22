@@ -151,10 +151,17 @@ fn provided(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
 #[derive(Debug, Default)]
 pub struct Wikipedia;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Wikipedia {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Wikipedia", Version::new(0, 1, 0))
             .description("Looks words up online, beside the dictionaries.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

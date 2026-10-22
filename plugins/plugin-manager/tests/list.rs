@@ -118,25 +118,23 @@ impl Plugin for Explained {
     }
 }
 
-/// Holding each row of the list in turn, until one says how it works:
-/// the text it was shown in, if any.
-fn hold_each(kernel: &mut Kernel) -> Option<String> {
-    for step in 0..40 {
+/// Holding each of the first rows of the list in turn: the text each
+/// was shown in, the first line (the plugin's name) of each, where one was.
+fn hold_each(kernel: &mut Kernel) -> Vec<String> {
+    const HOW: &str = ".paperpaw/plugins/plugin-manager/how.txt";
+    let mut shown = Vec::new();
+    for step in 0..8 {
         let at = Instant(1000 + step * 100);
         kernel.run_action(at, paperpaw_sdk::builtin::actions::LONG_CONFIRM);
-        let text = paperpaw_sdk::read_file(
-            kernel.storage(),
-            ".paperpaw/plugins/plugin-manager/how.txt",
-            1 << 16,
-        )
-        .ok()
-        .map(|data| String::from_utf8(data).unwrap());
-        if text.is_some() {
-            return text;
+        if let Ok(data) = paperpaw_sdk::read_file(kernel.storage(), HOW, 1 << 16) {
+            shown.push(String::from_utf8(data).unwrap());
+            kernel.storage().remove(HOW).unwrap();
+            // Back from the page it opened, where a reader opened it.
+            kernel.run_action(at, paperpaw_sdk::builtin::actions::BACK);
         }
         kernel.run_action(at, paperpaw_sdk::builtin::actions::DOWN);
     }
-    None
+    shown
 }
 
 #[test]
@@ -150,8 +148,9 @@ fn holding_a_plugin_shows_how_it_works() {
         .unwrap();
     kernel.start(Instant(0));
     kernel.run_action(Instant(100), OPEN);
-    let text = hold_each(&mut kernel).expect("how it works was shown");
-    assert_eq!(text, "Explained\n\nFirst this.\n\nThen that.\n");
+    let shown = hold_each(&mut kernel);
+    let explained = String::from("Explained\n\nFirst this.\n\nThen that.\n");
+    assert!(shown.contains(&explained), "{shown:?}");
 }
 
 #[test]
@@ -165,9 +164,17 @@ fn holding_a_plugin_that_says_nothing_more_keeps_the_list() {
         .unwrap();
     kernel.start(Instant(0));
     kernel.run_action(Instant(100), OPEN);
-    // None of these says how it works: a hold tells so (a notice) and
-    // the list stays.
-    assert_eq!(hold_each(&mut kernel), None);
+    // The installer says nothing of how it works: a hold tells so (a
+    // notice) and the list stays; the default fonts do.
+    let texts = hold_each(&mut kernel);
+    assert!(
+        texts.iter().all(|s| !s.starts_with("Installer")),
+        "{texts:?}"
+    );
+    assert!(
+        texts.iter().any(|s| s.starts_with("Default fonts")),
+        "{texts:?}"
+    );
     let shown = shown(&mut kernel);
     assert!(shown.starts_with("Plugins"), "{shown}");
 }

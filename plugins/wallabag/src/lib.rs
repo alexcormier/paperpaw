@@ -543,10 +543,17 @@ static SETTINGS: [SettingSpec; 3] = [
     .described("wallabag.client-id.help"),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Wallabag {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Wallabag", paperpaw_sdk::package_version!())
             .description("Articles saved in Wallabag, fetched as books.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

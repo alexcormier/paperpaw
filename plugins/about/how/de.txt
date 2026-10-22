@@ -1,0 +1,5 @@
+Über zeigt dir, welche Version von PaperPaw du hast, wo der Quellcode liegt und unter welchen Lizenzen es steht.
+
+Du findest es am Ende der Einstellungen, als Über PaperPaw. Wähle eine Zeile mit den Pfeiltasten und Wählen, oder tippe sie an. Eingebaute Plugins und, auf Geräten, die Plugins mit Code laden, der Fingerabdruck, für den solche Plugins gebaut sein müssen, stehen ebenfalls dort.
+
+Lizenzen öffnet sich als Text im Leser, du blätterst also wie in einem Buch. Er enthält die Lizenz von PaperPaw und die der Schriften, Symbole und Silbentrennmuster, die mitgeliefert werden. Plugins können eine eigene Zeile hinzufügen, etwa den Urheber eines Themes.

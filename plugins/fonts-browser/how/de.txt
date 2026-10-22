@@ -1,0 +1,5 @@
+Mehr Schriften listet Schriften aus einer Schriftbibliothek im Internet, jeden Namen in seiner eigenen Schrift, und lädt die herunter, mit denen du lesen willst.
+
+Du findest es am Ende der Schriftenliste dort, wo die Schrift zum Lesen gewählt wird: in den Einstellungen unter Lesen bei Schriftart; für die Schrift der Statuszeilen gibt es denselben Eintrag. Tippe eine Schrift an (mit Tasten: Wählen drücken), um sie größer mit einem Beispielsatz zu sehen, und wähle Herunterladen. Während des Ladens kannst du die Seite verlassen. Danach wählst du Mit (Name der Schrift) lesen oder Für die Statuszeilen verwenden. Aktualisieren holt eine neuere Version, Entfernen löscht die Schrift vom Gerät.
+
+Es braucht WLAN.

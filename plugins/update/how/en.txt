@@ -1,0 +1,5 @@
+Update installs new firmware, on devices where PaperPaw is the firmware, such as the X4. You find it in the settings, as Update.
+
+Search online asks the update server for a newer PaperPaw and downloads it, which takes a few minutes over Wi-Fi. Or copy an update file (ending in .bin, from paperpaw.org) into the folder updates on the card, for example with Wi-Fi transfer. Install then takes about a minute and the device restarts; books, settings and reading positions stay.
+
+If plugins you use have no version for the new release yet, you can wait for them or update without them. An older version installs only if you choose it.

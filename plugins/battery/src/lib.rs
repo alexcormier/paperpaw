@@ -151,12 +151,19 @@ static SETTINGS: [SettingSpec; 2] = [
     .described("battery.setting.by-plugin.help"),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Battery {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Battery use", paperpaw_sdk::package_version!())
             .description(
                 "Records the battery while the device is awake and shows how long it lasts.",
             )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

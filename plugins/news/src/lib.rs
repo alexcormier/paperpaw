@@ -386,10 +386,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
 .advanced()
 .described("news.setting.articles.help")];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for News {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "News", paperpaw_sdk::package_version!())
             .description("Fetches news feeds (RSS, Atom) as books to read.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

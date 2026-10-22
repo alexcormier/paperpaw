@@ -70,10 +70,17 @@ struct Session {
 #[derive(Debug, Default)]
 pub struct Browser;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Browser {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Browser", paperpaw_sdk::package_version!())
             .description("Reads web pages like books and fetches books and fonts from the web.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

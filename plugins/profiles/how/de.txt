@@ -1,0 +1,5 @@
+Ein Profil merkt sich deine Leseeinstellungen, Anzeige-Einstellungen und Statusleisten unter einem Namen, etwa Nacht oder Große Schrift, und stellt sie mit einem Tipp wieder her.
+
+Profile findest du im Lesemenü unter Weitere und in den Einstellungen unter Anpassen. Ein Profil antippen nutzt es, das aktive ist markiert. Lange drücken (mit Tasten: Wählen halten) speichert die aktuellen Einstellungen darin, benennt es um oder entfernt es. Als neues Profil speichern merkt sich, was gerade eingestellt ist.
+
+Nächstes Profil wechselt zum folgenden in der Liste; leg es auf eine Taste oder in eine Regel.

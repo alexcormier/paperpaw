@@ -1,0 +1,5 @@
+Vokabeln behält die Wörter, die du beim Lesen nachschlägst, jedes mit seinem Satz. Die Liste findest du unter Werkzeuge, neueste zuerst; wähle ein Wort, um es noch einmal nachzuschlagen. Exportieren am Ende speichert sie für Karteikarten-Apps wie Anki.
+
+Karteikarten, ebenfalls unter Werkzeuge, fragen dich mit verteilter Wiederholung ab: Nach Antwort zeigen bewertest du jede Karte mit Nochmal, Schwer, Gut oder Leicht, und das bestimmt, wann sie wiederkommt. Stapel legst du mit Mit dem Handy bearbeiten an.
+
+Nachgeschlagene Wörter als Karten (Einstellungen, Lesen) macht aus jedem nachgeschlagenen Wort eine Karte.

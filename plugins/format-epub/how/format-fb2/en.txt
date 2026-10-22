@@ -1,0 +1,3 @@
+Opens FictionBook books (.fb2), common for Russian and other books, also zipped (.fb2.zip), with their title, authors, cover and chapters.
+
+Put them into the library folder; they show in the library and open like any other book.

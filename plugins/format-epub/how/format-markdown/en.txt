@@ -1,0 +1,3 @@
+Opens Markdown files (.md), such as notes, as books: headings, lists, quotes and emphasis as they are meant, not as signs.
+
+Put the files into the library folder and open them from the library. The first heading is its title; pictures beside the file show where the text names them.

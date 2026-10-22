@@ -1,0 +1,5 @@
+XTC and XTCH files are books whose pages are already rendered as pictures, as made by converters for the Xteink readers. They open from the library like any book.
+
+Because every page is a fixed picture, the text cannot be resized or set in another font. Pages are black and white or have four grays. Each page is decoded when it is shown, so little memory is needed, also on the X4.
+
+Title, author and chapters are taken from the file when it has them.

@@ -710,10 +710,17 @@ fn moved_book(env: &Env<'_>, from: &str, to: &str) {
 #[derive(Debug, Default)]
 pub struct KoReader;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for KoReader {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "KOReader", paperpaw_sdk::package_version!())
             .description("Shares bookmarks and highlights with KOReader for books read in both.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

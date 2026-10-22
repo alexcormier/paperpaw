@@ -643,12 +643,19 @@ static SETTINGS: [SettingSpec; 3] = [
     .described("kosync.setting.server.help"),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Kosync {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Progress sync", paperpaw_sdk::package_version!())
             .description(
                 "Syncs the reading position with KOReader's sync server, also with KOReader.",
             )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

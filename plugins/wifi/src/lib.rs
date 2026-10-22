@@ -242,10 +242,17 @@ static SETTINGS: [SettingSpec; 3] = [
     .described("wifi.setting.while-charging.help"),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Wifi {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Wi-Fi", Version::new(0, 1, 0))
             .description("Joins Wi-Fi networks when needed and switches the radio off after.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

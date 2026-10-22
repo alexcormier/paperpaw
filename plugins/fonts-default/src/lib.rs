@@ -130,9 +130,16 @@ pub struct DefaultFonts;
 #[derive(Debug, Default)]
 pub struct DefaultFontPacks;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 fn manifest() -> Manifest {
     Manifest::new(PLUGIN, "Default fonts", Version::new(0, 1, 0))
         .description("Literata for reading and Source Sans for menus.")
+        .how(&HOW)
         .uses(paperpaw_sdk::Uses::NOTHING)
 }
 

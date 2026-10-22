@@ -1,0 +1,5 @@
+Die WLAN-Übertragung bringt Bücher und andere Dateien aus einem Browser im selben Netzwerk aufs Gerät, ohne Kabel und ohne App. Du kannst auch Dateien herunterladen, Ordner anlegen und löschen.
+
+Öffne sie unter Werkzeuge. Der Bildschirm zeigt eine Adresse als Text und als QR-Code: Öffne sie in einem Browser auf Handy oder Computer oder scanne den Code. Die Adresse enthält einen Schlüssel, der jedes Mal neu entsteht, andere im Netz kommen also nicht an deine Dateien. Die Übertragung läuft, solange die Seite offen ist.
+
+Wo PaperPaw das WLAN selbst verwaltet, wie beim X4, öffnet Ohne Router unten ein eigenes Netz des Geräts, dem das Handy per Code beitritt.
