@@ -450,7 +450,9 @@ fn kernel(
     // and the battery elsewhere. Every item stays to be chosen.
     let builder = CALM_STATUS
         .iter()
-        .fold(builder, |builder, (id, value)| builder.setting_default_text(id, value))
+        .fold(builder, |builder, (id, value)| {
+            builder.setting_default_text(id, value)
+        })
         // PaperPaw switches the radio (`network`); on USB it stays on in a
         // network joined before, for transfers and for trying things.
         .wifi(true)

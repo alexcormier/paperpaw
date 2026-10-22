@@ -457,10 +457,7 @@ fn odd_network_names_are_listed_strongest_first_each_once() {
         ["Home", UNICODE, "spaced"],
         "{rows:?}"
     );
-    assert!(
-        names[2].starts_with("abcdefghijklmnop"),
-        "{rows:?}"
-    );
+    assert!(names[2].starts_with("abcdefghijklmnop"), "{rows:?}");
     assert!(rows[1].contains("Excellent signal"), "{rows:?}");
     assert!(rows[3].contains("Open, no password"), "{rows:?}");
 }

@@ -110,11 +110,19 @@ fn a_slot_offered_twice_is_chosen_and_kept() {
     // Automatic, First, Second: the first plugin chosen.
     run(&mut kernel, actions::DOWN);
     run(&mut kernel, actions::CONFIRM);
-    assert!(config(&kernel).contains("first.home"), "{}", config(&kernel));
+    assert!(
+        config(&kernel).contains("first.home"),
+        "{}",
+        config(&kernel)
+    );
     let listed = shown(&mut kernel);
     assert!(listed.contains("First"), "{listed}");
     // Back to automatic: the choice is gone.
     run(&mut kernel, actions::CONFIRM);
     run(&mut kernel, actions::CONFIRM);
-    assert!(!config(&kernel).contains("first.home"), "{}", config(&kernel));
+    assert!(
+        !config(&kernel).contains("first.home"),
+        "{}",
+        config(&kernel)
+    );
 }

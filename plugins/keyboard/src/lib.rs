@@ -232,7 +232,8 @@ fn rows(letters: &str, layer: Layer, switch: bool, most: u32) -> Vec<Vec<Slot>> 
                 }
                 last.push((Key::Delete, 3));
             }
-            let mut rows: Vec<Vec<Slot>> = rows.into_iter().flat_map(|row| split(row, most)).collect();
+            let mut rows: Vec<Vec<Slot>> =
+                rows.into_iter().flat_map(|row| split(row, most)).collect();
             let other = if layer == Layer::Letters {
                 Layer::Symbols
             } else {
@@ -1171,11 +1172,19 @@ mod split_tests {
                 .collect::<String>()
         };
         let shown: Vec<String> = row.iter().map(|r| names(r)).collect();
-        assert_eq!(&shown[..6], ["qwert", "yuiop", "asdfg", "hjkl", "^zxcv", "bnm<"]);
-        assert!(row[..6]
-            .iter()
-            .all(|r| r.iter().map(|(_, w)| u32::from(*w)).sum::<u32>() <= 16));
+        assert_eq!(
+            &shown[..6],
+            ["qwert", "yuiop", "asdfg", "hjkl", "^zxcv", "bnm<"]
+        );
+        assert!(
+            row[..6]
+                .iter()
+                .all(|r| r.iter().map(|(_, w)| u32::from(*w)).sum::<u32>() <= 16)
+        );
         // Wide enough: the rows as they are.
-        assert_eq!(rows("qwertyuiop asdfghjkl zxcvbnm", Layer::Letters, false, 40).len(), 4);
+        assert_eq!(
+            rows("qwertyuiop asdfghjkl zxcvbnm", Layer::Letters, false, 40).len(),
+            4
+        );
     }
 }

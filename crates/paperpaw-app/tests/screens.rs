@@ -335,4 +335,3 @@ fn home_shows_the_book_read_last() {
     assert!(shown.contains("Continue reading"), "{shown}");
     assert!(shown.contains("Alice"), "{shown}");
 }
-

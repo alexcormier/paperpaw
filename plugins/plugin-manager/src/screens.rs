@@ -84,7 +84,10 @@ fn choosable<'e>(env: &Env<'e>) -> Vec<&'e Id> {
 fn name(env: &Env<'_>, screen: &Id) -> String {
     match env.plugins.owner(screen) {
         Some(plugin) => String::from(plugin.name(env.i18n)),
-        None => String::from(env.i18n.tr(env.screen_title(screen).unwrap_or(screen.as_str()))),
+        None => String::from(
+            env.i18n
+                .tr(env.screen_title(screen).unwrap_or(screen.as_str())),
+        ),
     }
 }
 
@@ -116,12 +119,15 @@ fn offer(env: &Env<'_>, out: &mut Vec<Command>) {
     let Some(known) = known else {
         return;
     };
-    let new = now.iter().filter(|line| !known.contains(line)).find(|line| {
-        line.split_once(' ').is_some_and(|(slot, screen)| {
-            env.slot_choice(slot).is_none()
-                && env.slot_screen(slot).map(Id::as_str) != Some(screen)
-        })
-    });
+    let new = now
+        .iter()
+        .filter(|line| !known.contains(line))
+        .find(|line| {
+            line.split_once(' ').is_some_and(|(slot, screen)| {
+                env.slot_choice(slot).is_none()
+                    && env.slot_screen(slot).map(Id::as_str) != Some(screen)
+            })
+        });
     let Some((slot, screen)) = new.and_then(|line| line.split_once(' ')) else {
         return;
     };
@@ -170,12 +176,8 @@ impl Screens {
         let header = ui::Header::new(env, &style, true);
         let top = header.area.height + style.gap as u16;
         let display = env.device.display;
-        let area = paperpaw_sdk::Rect::new(
-            0,
-            top,
-            display.width,
-            display.height.saturating_sub(top),
-        );
+        let area =
+            paperpaw_sdk::Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let list = ListView::new(area, style.noted_row()).focus_on_keys(env);
         let slot = params.get(SLOT).and_then(|s| Id::parse(s).ok());
         let rows = match &slot {
@@ -265,7 +267,11 @@ impl Screen for Screens {
                             Some(screen) => name(env, screen),
                             None => env.i18n.tr("plugin-manager.screens.automatic").to_string(),
                         };
-                        (place.to_string(), alloc::format!("{value} ›"), String::new())
+                        (
+                            place.to_string(),
+                            alloc::format!("{value} ›"),
+                            String::new(),
+                        )
                     }
                     Row::ReadingApp => {
                         let Some(spec) = env.settings.spec(settings::READING_APP.as_str()) else {
