@@ -22,6 +22,9 @@ pub(crate) struct FrameState {
     pub(crate) band: Option<u32>,
     /// The frame shown has large pictures (see [`PICTURES_PERCENT`]).
     pub(crate) pictures_shown: bool,
+    /// The whole screen is drawn again as it was ([`Kernel::draw_again`]),
+    /// in black and white after grays: not in grays for its pictures.
+    pub(crate) again: bool,
     /// A screenshot to save with the next frame drawn: its path.
     pub(crate) screenshot: Option<String>,
     /// The mark shown while slow work waits, and the hint cell it is.
@@ -451,13 +454,32 @@ impl Kernel {
         let bounds = self.framebuffer.bounds();
         // Described, not drawn: no pixels kept.
         let mut aside = Framebuffer::blind(bounds.width, bounds.height);
+        let mut described = Vec::new();
+        self.draw_aside(&mut aside.canvas().describing(&mut described));
+        described
+    }
+
+    /// Whether the screen as it is now has pictures enough to be shown in
+    /// grays ([`PICTURES_GRAY_PERCENT`] of it): drawn aside, where only
+    /// pictures are counted, nothing drawn and nothing read.
+    pub(crate) fn pictures_drawn(&mut self) -> bool {
+        let bounds = self.framebuffer.bounds();
+        let mut aside = Framebuffer::blind(bounds.width, bounds.height);
+        self.draw_aside(&mut aside.canvas());
+        let screen = u32::from(bounds.width) * u32::from(bounds.height);
+        aside.take_all_pictured().saturating_mul(100)
+            >= screen.saturating_mul(PICTURES_GRAY_PERCENT)
+    }
+
+    /// Draws everything on the screen into `canvas`, aside: the screens
+    /// from the last one seen whole, the chrome, the row of hints and a
+    /// notice over them.
+    fn draw_aside(&mut self, canvas: &mut paperpaw_sdk::Canvas<'_>) {
         let regions: Vec<Option<Rect>> = (0..self.stack.len()).map(|i| self.overlay(i)).collect();
         let row = self.hint_row();
         let env = self.shared.env(self.now);
         let base = regions.iter().rposition(Option::is_none).unwrap_or(0);
-        let mut described = Vec::new();
         {
-            let mut canvas = aside.canvas().describing(&mut described);
             for (active, own) in self.stack[base..].iter_mut().zip(&regions[base..]) {
                 let area = own.unwrap_or(active.area);
                 let device = env.device_within(active.area);
@@ -493,7 +515,6 @@ impl Kernel {
                 notice.draw(&mut canvas.clipped(area).offset(corner.0, corner.1), &env);
             }
         }
-        described
     }
 
     /// What the screen shown tells as it draws (see
@@ -580,6 +601,7 @@ impl Kernel {
         let _running = self.shared.meter.enter(meter::CORE);
         self.now = now;
         self.apply(Command::Redraw(RefreshMode::Full));
+        self.frame.again = true;
         self.finish()
     }
 

@@ -6,6 +6,22 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- *Pictures in grays* (*Settings*, *Display*; on by default, on panels
+  of black and white alone): a screen with pictures, such as the
+  library's covers, the home screen's or a sleep screen's picture, is
+  shown in four grays when it opens or changes whole, as pages with
+  pictures already are. What changes on it after (the focus moving) is
+  shown in black and white. The kernel counts the pictures of the
+  screen drawn aside, where nothing is drawn or read. Covers kept small
+  on such panels (thumbnails) keep four grays beside black and white
+  for it (2.7 KB for a cover of 70 by 100 pixels instead of 0.9 KB), and
+  those kept on the card are made anew. The emulator shows frames in
+  grays as the X4 does.
+- SDK: `Screen::pictures_in_grays` (yes by default) lets a screen say
+  no to being shown in grays for its pictures (the reader decides
+  itself, with `Screen::grays`); the setting is
+  `settings::PICTURES_IN_GRAYS`.
+
 - Pictures on panels with few grays (the X4s in black and white, four
   grays) are dithered by error diffusion (after Atkinson's, seven eighths
   of the error passed on) instead of a 4×4 ordered pattern: line drawings

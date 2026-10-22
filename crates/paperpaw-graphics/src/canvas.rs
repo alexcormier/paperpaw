@@ -141,6 +141,22 @@ impl<'a> Canvas<'a> {
         self.framebuffer.is_blind()
     }
 
+    /// Tells that a picture lies at `area` where nothing is drawn
+    /// ([`Canvas::is_blind`]), for
+    /// [`Framebuffer::take_all_pictured`](crate::Framebuffer::take_all_pictured);
+    /// its pixels count where they are drawn.
+    pub fn note_picture(&mut self, area: Rect) {
+        if !self.framebuffer.is_blind() {
+            return;
+        }
+        let (x, y) = (i32::from(area.x), i32::from(area.y));
+        let (w, h) = (u32::from(area.width), u32::from(area.height));
+        if let Some(shown) = self.clip_signed(x, y, w, h) {
+            let pixels = u32::from(shown.width) * u32::from(shown.height);
+            self.framebuffer.count_picture(pixels);
+        }
+    }
+
     /// Whether anyone asks what is drawn (see [`Canvas::describe`]).
     pub fn is_describing(&self) -> bool {
         self.described.is_some()

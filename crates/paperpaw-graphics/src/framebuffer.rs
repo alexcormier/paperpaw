@@ -42,6 +42,9 @@ pub struct Framebuffer {
     /// Pictures drawn now count there (not small ones, see
     /// [`Canvas::small_pictures`](crate::Canvas::small_pictures)).
     counting: bool,
+    /// Pixels of all pictures drawn since
+    /// [`Framebuffer::take_all_pictured`], small ones too.
+    all_pictured: u32,
     /// Holds no pixels: what is drawn is only described (see
     /// [`Framebuffer::blind`]).
     blind: bool,
@@ -94,6 +97,7 @@ impl Framebuffer {
             mono_coverage: MONO_COVERAGE,
             saturation: 100,
             pictured: 0,
+            all_pictured: 0,
             counting: true,
             blind: false,
             diffusions: Vec::new(),
@@ -120,6 +124,7 @@ impl Framebuffer {
             mono_coverage: MONO_COVERAGE,
             saturation: 100,
             pictured: 0,
+            all_pictured: 0,
             counting: true,
             blind: true,
             diffusions: Vec::new(),
@@ -494,6 +499,23 @@ impl Framebuffer {
         core::mem::take(&mut self.pictured)
     }
 
+    /// Pixels of all pictures drawn since the last call, small ones too
+    /// (covers in a list), also where they are only described
+    /// ([`Framebuffer::blind`]): whether a frame is best shown in grays.
+    pub fn take_all_pictured(&mut self) -> u32 {
+        core::mem::take(&mut self.all_pictured)
+    }
+
+    /// `pixels` of a picture drawn: they count as
+    /// [`Framebuffer::take_pictured`] and
+    /// [`Framebuffer::take_all_pictured`] say.
+    pub(crate) fn count_picture(&mut self, pixels: u32) {
+        self.pictured = self
+            .pictured
+            .saturating_add(pixels * u32::from(self.counting));
+        self.all_pictured = self.all_pictured.saturating_add(pixels);
+    }
+
     /// Whether pictures drawn from now count as pictures
     /// ([`Framebuffer::take_pictured`]); the earlier setting.
     pub(crate) fn set_counting(&mut self, counting: bool) -> bool {
@@ -507,7 +529,7 @@ impl Framebuffer {
         if self.blind {
             return;
         }
-        self.pictured = self.pictured.saturating_add(u32::from(self.counting));
+        self.count_picture(1);
         let gray = self.dithered(x, y, gray);
         // Inverted once more to stay as it is, where pictures are kept.
         let gray = if self.inverted && self.pictures_kept {
@@ -530,7 +552,7 @@ impl Framebuffer {
         if alpha == 255 {
             return self.put_gray(x, y, gray);
         }
-        self.pictured = self.pictured.saturating_add(u32::from(self.counting));
+        self.count_picture(1);
         // What shows there now, as the page means it (not inverted).
         let under = match self.format.gray_levels() {
             Some(levels) if self.format.bits_per_pixel() <= 8 => {
@@ -569,10 +591,7 @@ impl Framebuffer {
         if self.blind {
             return;
         }
-        let count = u32::try_from(grays.len()).unwrap_or(u32::MAX);
-        self.pictured = self
-            .pictured
-            .saturating_add(count * u32::from(self.counting));
+        self.count_picture(u32::try_from(grays.len()).unwrap_or(u32::MAX));
         let offsets: [i32; 4] = core::array::from_fn(|column| self.offset(column as u16, y));
         let keep = self.inverted && self.pictures_kept;
         for (px, &gray) in (x..).zip(grays) {
@@ -638,7 +657,7 @@ impl Framebuffer {
             return;
         }
         if self.format.is_color() {
-            self.pictured = self.pictured.saturating_add(u32::from(self.counting));
+            self.count_picture(1);
             let rgb = saturate(rgb, self.saturation);
             let color = Color::rgb(rgb[0], rgb[1], rgb[2]);
             // Inverted once more to stay as it is, where pictures are kept.

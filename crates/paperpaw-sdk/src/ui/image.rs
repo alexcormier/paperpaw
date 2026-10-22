@@ -69,8 +69,11 @@ pub fn draw_image_over(
 ) {
     // Frames are drawn in bands: nothing read for those it is not in, nor
     // where it is only described.
-    if canvas.is_blind() || area.intersection(&canvas.clip()).is_none() || opacity == 0 {
+    if area.intersection(&canvas.clip()).is_none() || opacity == 0 {
         return;
+    }
+    if canvas.is_blind() {
+        return canvas.note_picture(area);
     }
     // Its kind from one read of its header, band by band.
     let source = match crate::image::Decoded::peek(storage, &image.path) {

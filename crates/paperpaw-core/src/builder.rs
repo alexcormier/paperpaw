@@ -460,6 +460,7 @@ impl KernelBuilder {
                     .frame_rows
                     .map(|rows| u32::from(rows) * u32::from(display.width)),
                 pictures_shown: false,
+                again: false,
                 screenshot: None,
                 mark: None,
                 refresh: RefreshPolicy::default(),
