@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4 Pro: the battery no longer shows 0 % after it was cut off (run flat
+  or taken out). Its fuel gauge then starts asleep and forgets the
+  battery's profile; PaperPaw gives it the profile again at the start
+  and wakes it, as the stock firmware did.
 - Reading goal, a plugin of its own (in the store on the X4s): the daily
   goal of the reading statistics (one goal for both; 20 minutes where
   this plugin is), and a cat whose mood follows today's reading: sad
