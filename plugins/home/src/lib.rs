@@ -121,6 +121,17 @@ impl Plugin for Home {
             "home.layouts.title",
             Box::new(|env, _| Box::new(Dashboard::chooser(env))),
         ))?;
+        // The grid's columns or rows changed: the pages fitted to it,
+        // what has no room moved to the next page, nothing lost.
+        r.on(events::SETTING_CHANGED, |env, changed, out| {
+            let grid = [pages::COLUMNS.static_str(), pages::ROWS.static_str()];
+            if !grid.contains(&changed.id.as_str()) {
+                return;
+            }
+            if let Some(fitted) = pages::reflow(env, &frame(env, None).1) {
+                out.extend(pages::store_all(&fitted));
+            }
+        })?;
         r.add_screen(ScreenSpec::new(
             DRAWER_SCREEN,
             "home.drawer",

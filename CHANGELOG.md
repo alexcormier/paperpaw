@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Fewer columns or rows on the home screen no longer leave a page empty:
+  an item whose cells lie outside the grid now is moved inside it as
+  little as can be (narrower or lower where it was wider or higher than
+  the grid), else to the first free cells, and what a page has no room
+  for any more goes on to the next page (`widgets::grid::fit`). Before,
+  such items were kept but not shown: with 3 columns instead of 4 the
+  first page of the X4 Pro showed nothing.
 - About PaperPaw is a settings page with rows (version, source, plugins
   built in, code plugins); the licences, a chapter each and in full, and
   the list of the plugins built in open in the reader. The reader offers
