@@ -911,6 +911,14 @@ fn register_screens(r: &mut Registrar) -> Result<(), RegisterError> {
         Box::new(|env, params| Box::new(paperpaw_sdk::ui::choice::Choice::new(env, params))),
     ))?;
     r.bind_slot(slots::CHOICE, screens::CHOICE, Priority::FALLBACK)?;
+    // The yes or no question every plugin asks (`ask::confirm`), unless
+    // another screen fills the slot.
+    r.add_screen(ScreenSpec::new(
+        screens::CONFIRM,
+        "core.confirm.screen",
+        Box::new(|env, params| Box::new(paperpaw_sdk::ui::confirm::Confirm::new(env, params))),
+    ))?;
+    r.bind_slot(slots::CONFIRM, screens::CONFIRM, Priority::FALLBACK)?;
     r.add_screen(ScreenSpec::new(
         screens::PLACEHOLDER,
         "core.screen.placeholder",

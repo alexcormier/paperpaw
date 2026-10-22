@@ -238,11 +238,11 @@ fn how_it_works(id: &str, how: Option<&str>) -> Option<Finding> {
         return None;
     }
     let message = match how {
-        None => format!(
+        None => String::from(
             "It says nothing of how it works: give its manifest `how` (`how/en.txt` and a \
              file per other language, see Manifest::how), a few sentences (paragraphs apart \
              by an empty line) on what it does, where it is found and how it is used. The \
-             plugin manager and the store show it as How it works."
+             plugin manager and the store show it as How it works.",
         ),
         Some(text) if text.chars().count() < LEAST_HOW => format!(
             "How it works says little ({} characters): a few sentences on what it does, \

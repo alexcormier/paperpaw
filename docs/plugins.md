@@ -197,8 +197,13 @@ draws every block below on every device, in every look, light and dark.
 | A group on a card or in a frame | `ui::draw_card(canvas, &style, area, Frame::Card)` returns where its parts go |
 | A button, on, focused, faint, with an icon | `ui::draw_button`, `ui::draw_faint_button`, `ui::draw_icon_button` |
 | A few options to pick at a glance, or tabs | `ui::Segments` |
+| Filters or tags in a row, each as wide as its word | `ui::Chips` |
+| A one-line text in a row, typed on the keyboard | `ui::draw_text_field`, `ui::edit_text` |
+| A list where several may be ticked | `ui::draw_check_row` (the box alone: `ui::draw_check`) |
+| Text longer than its room, scrolled by buttons and touch | `ui::TextView` |
+| A date or a time | `ui::DatePicker`, `ui::TimePicker` |
 | A box over the screen with a title, text and buttons | `ui::Dialog` |
-| Asking for text, a folder or one of several options | `ask::text`, `ask::folder`, `ask::choice` (screens of their own) |
+| Asking for text, a folder, one of several options or yes or no | `ask::text`, `ask::folder`, `ask::choice`, `ask::confirm` (screens of their own) |
 | A message where content would be, an empty list | `ui::draw_message`, `ui::draw_empty` |
 | Progress | `ui::draw_progress` |
 | An address to open on a phone, with its QR code | `ui::draw_address`, `ui::draw_qr` |
@@ -650,6 +655,7 @@ it with and answers as they expect, so that every plugin works with it:
 | `core.menu` | `params::MENU`, the menu; `params::HIDE`, entries to leave out this time | shows `env.menus.items(menu)`; for an entry chosen it closes (`Command::Back`) and runs its action (`Command::RunAction`); a setting listed there it changes, or opens its editor. |
 | `core.choose-folder`, `core.choose-value` | `params::ID`, the setting | writes the folder, or the value, chosen to the setting. Name the slot as the editor (`SettingExtra::editor_slot`) to have it edited there by whichever plugin fills it. |
 | `core.choice` | `params::TITLE`, `PATH` (what it is about), the options, `REPLY`; asked with `ask::choice` | shows the options; for one chosen it closes and emits the reply as a `Picked` with the option and `path`; *Back* or a tap outside closes without one. |
+| `core.confirm` | `params::TITLE` (the question), `TEXT`, `ui::confirm::YES_LABEL`, `NO_LABEL`, `FOCUS_YES`, `REPLY`; asked with `ask::confirm` | asks yes or no, the focus on no unless `FOCUS_YES`; for an answer it closes and emits the reply as a `Confirmed` with all of its parameters; *Back* or a tap outside closes without one. |
 | `core.keyboard` | `params::TITLE`, `TEXT` (to start from), `MODE` (`text`, `number`, `password`), `REPLY`, `LIVE` | on confirming, closes and emits the event named by `reply` as a `Typed` with all of its parameters; with `live`, on each change too, with `Typed::typing` set; *Back* closes without an answer. `ask::text` asks this way. |
 
 The documentation of `builtin::slots` says the same for every slot.

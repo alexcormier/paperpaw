@@ -34,8 +34,8 @@ use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{CONFIG_FILE, GLOBAL_KEYMAP_LAYER, actions, menus, params, slots};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::keys::{EDGES, PINCHES, POLICIES, SWIPES, ZONES};
+use paperpaw_sdk::replies::Confirmed;
 use paperpaw_sdk::replies::Typed;
-use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListChange, ListView, Rows, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
@@ -49,7 +49,7 @@ const LIST_SCREEN: Id = Id::new_static("keys.list");
 const PICK_SCREEN: Id = Id::new_static("keys.pick");
 const PLACE_SCREEN: Id = Id::new_static("keys.place");
 /// The answer.
-const RESET_CHOSEN: Event<Picked> = Event::new("keys.reset-chosen");
+const RESET_CHOSEN: Event<Confirmed> = Event::new("keys.reset-chosen");
 /// The action picked for an input: parameters `input` and `id` (empty
 /// for *As standard*).
 const PICKED: Id = Id::new_static("keys.picked");
@@ -590,8 +590,9 @@ impl ListScreen {
             Some(Row::Reset) => {
                 let question = env.i18n.tr("keys.reset.question");
                 cx.command(
-                    paperpaw_sdk::ask::choice(question, &RESET_CHOSEN)
-                        .options("keys.option.", &["reset", "cancel"])
+                    paperpaw_sdk::ask::confirm(question, &RESET_CHOSEN)
+                        .yes(env.i18n.tr("keys.option.reset"))
+                        .no(env.i18n.tr("keys.option.cancel"))
                         .command(),
                 );
             }
@@ -745,8 +746,8 @@ impl Screen for ListScreen {
 
     fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        if let Some(picked) = RESET_CHOSEN.read(event, params) {
-            if picked.option == "reset" {
+        if let Some(answer) = RESET_CHOSEN.read(event, params) {
+            if answer.yes {
                 Self::reset(&env, cx);
             }
             return;

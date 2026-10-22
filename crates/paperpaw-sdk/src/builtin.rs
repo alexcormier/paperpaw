@@ -157,6 +157,13 @@ pub mod slots {
     /// [`Picked`](crate::ui::choice::Picked). Every plugin's questions
     /// come here, so a screen bound here asks them all another way.
     pub const CHOICE: Id = Id::new_static("core.choice");
+    /// Asks yes or no, e.g. whether to delete a book (a box in the middle
+    /// of the screen): asked with [`ask::confirm`](crate::ask::confirm),
+    /// answered with a [`Confirmed`](crate::replies::Confirmed), nothing
+    /// on *Back* or a tap outside. Every plugin's yes or no questions come
+    /// here, so a screen bound here asks them all another way (see
+    /// [`ui::confirm`](crate::ui::confirm) for its parameters).
+    pub const CONFIRM: Id = Id::new_static("core.confirm");
     /// Shows what is known of a book: parameter [`PATH`](super::params::PATH).
     pub const BOOK_INFO: Id = Id::new_static("core.book-info");
     /// The contents of the book being read: parameters
@@ -1017,6 +1024,10 @@ pub mod screens {
     /// ([`ui::choice::Choice`](crate::ui::choice::Choice)), bound to slot
     /// [`CHOICE`](super::slots::CHOICE) unless another screen is.
     pub const CHOICE: Id = Id::new_static("core.choice-dialog");
+    /// The kernel's yes or no question
+    /// ([`ui::confirm::Confirm`](crate::ui::confirm::Confirm)), bound to
+    /// slot [`CONFIRM`](super::slots::CONFIRM) unless another screen is.
+    pub const CONFIRM: Id = Id::new_static("core.confirm-dialog");
     /// Chooses a folder for a setting with the folder chooser
     /// ([`slots::CHOOSE_FOLDER`](super::slots::CHOOSE_FOLDER)), whichever
     /// plugin fills it: name it as a text setting's editor.

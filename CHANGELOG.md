@@ -6,6 +6,23 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- `ask::confirm` asks yes or no on the screen of the new slot
+  `core.confirm` (the kernel's `ui::confirm::Confirm`, a `ui::Dialog` in
+  the middle of the screen, unless a plugin binds another): the question,
+  an optional text, two buttons (*Yes* and *No* unless given words of
+  their own), the focus on no unless `focus_yes`. The answer is a
+  `replies::Confirmed` with `yes` and the question's context; *Back* or a
+  tap outside answers nothing. Removing a font and resetting the keys ask
+  this way.
+- More building blocks for plugin screens: `ui::Chips` (filters or tags
+  as wide as their words, one chosen; the library's filters use them),
+  `ui::draw_text_field` with `ui::edit_text` (a one-line text in a row,
+  typed on the keyboard's screen), `ui::draw_check_row` and
+  `ui::draw_check` (lists where several may be ticked; looks may paint
+  the box, `Painters::check`), `ui::TextView` (text longer than its room,
+  scrolled by buttons, swipes and taps) and `ui::DatePicker` /
+  `ui::TimePicker` (fields stepped with the buttons or by touch, months
+  and leap years right). All are in `paperpaw-dev ui-kit`.
 - Building blocks for plugin screens, so positions are not computed by
   hand: `ui::Stack` (parts one below the other, from the top and the
   bottom), `ui::columns` (equal columns that end flush with their area),

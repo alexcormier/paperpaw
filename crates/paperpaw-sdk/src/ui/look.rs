@@ -1,7 +1,7 @@
 //! Another look for the parts every screen draws with this module: a
-//! plugin gives switches, the focus, separators, buttons, headers, the
-//! row of button hints, progress bars and sliders a look of its own,
-//! for all plugins at once.
+//! plugin gives switches, ticked boxes, the focus, separators, buttons,
+//! headers, the row of button hints, progress bars and sliders a look
+//! of its own, for all plugins at once.
 //!
 //! The SDK keeps where a part goes, what it says to screen readers and
 //! how it is touched; a look only paints the part's rectangle. A painter
@@ -47,6 +47,18 @@ use super::UiStyle;
 #[non_exhaustive]
 pub struct SwitchPart {
     /// Where the switch goes ([`switch_rect`](super::switch_rect)).
+    pub rect: Rect,
+    pub on: bool,
+    /// On a focused (black) row: drawn in white.
+    pub inverted: bool,
+}
+
+/// The box of a row that is ticked or not, of a list where several may
+/// be ([`draw_check`](super::draw_check)).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct CheckPart {
+    /// Where the box goes.
     pub rect: Rect,
     pub on: bool,
     /// On a focused (black) row: drawn in white.
@@ -149,6 +161,7 @@ pub type InkPainter<P> = fn(&mut Canvas<'_>, &UiStyle, &P) -> Option<Color>;
 #[derive(Clone, Copy)]
 pub struct Painters {
     switch: Option<Painter<SwitchPart>>,
+    check: Option<Painter<CheckPart>>,
     focus: Option<Painter<FocusPart>>,
     separator: Option<Painter<SeparatorPart>>,
     button: Option<InkPainter<ButtonPart>>,
@@ -163,6 +176,7 @@ impl fmt::Debug for Painters {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("Painters")
             .field("switch", &self.switch.is_some())
+            .field("check", &self.check.is_some())
             .field("focus", &self.focus.is_some())
             .field("separator", &self.separator.is_some())
             .field("button", &self.button.is_some())
@@ -186,6 +200,7 @@ impl Painters {
     pub const fn new() -> Self {
         Self {
             switch: None,
+            check: None,
             focus: None,
             separator: None,
             button: None,
@@ -199,6 +214,12 @@ impl Painters {
 
     pub const fn switch(mut self, painter: Painter<SwitchPart>) -> Self {
         self.switch = Some(painter);
+        self
+    }
+
+    /// The boxes of lists where several may be ticked.
+    pub const fn check(mut self, painter: Painter<CheckPart>) -> Self {
+        self.check = Some(painter);
         self
     }
 
@@ -272,6 +293,12 @@ impl Look {
     ) -> bool {
         self.0
             .and_then(|p| p.switch)
+            .is_some_and(|paint| paint(canvas, style, &part))
+    }
+
+    pub(super) fn check(&self, canvas: &mut Canvas<'_>, style: &UiStyle, part: CheckPart) -> bool {
+        self.0
+            .and_then(|p| p.check)
             .is_some_and(|paint| paint(canvas, style, &part))
     }
 

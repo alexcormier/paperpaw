@@ -164,44 +164,45 @@ impl Dialog {
     ) {
         canvas.fill(self.panel, Color::WHITE);
         let inside = super::draw_card(canvas, style, self.panel, Frame::Line);
-        let Some(font) = style.font(env) else {
-            return;
-        };
-        let mut stack = super::Stack::new(inside, style.margin as u16);
-        if self.title_line > 0 {
-            let row = stack.take(self.title_line);
-            let x = f32::from(row.x)
-                + (f32::from(row.width) - font.measure(style.title, &self.title)).max(0.0) / 2.0;
-            super::draw_label(
-                canvas,
-                &font,
-                style.title,
-                x,
-                row,
-                &self.title,
-                Color::BLACK,
-            );
-        }
-        if !self.lines.is_empty() {
-            let text = stack.take(self.text_line * self.lines.len() as u16);
-            for (i, line) in self.lines.iter().enumerate() {
-                let row = Rect::new(
-                    text.x,
-                    text.y + i as u16 * self.text_line,
-                    text.width,
-                    self.text_line,
-                );
+        if let Some(font) = style.font(env) {
+            let mut stack = super::Stack::new(inside, style.margin as u16);
+            if self.title_line > 0 {
+                let row = stack.take(self.title_line);
+                let x = f32::from(row.x)
+                    + (f32::from(row.width) - font.measure(style.title, &self.title)).max(0.0)
+                        / 2.0;
                 super::draw_label(
                     canvas,
                     &font,
-                    style.text,
-                    f32::from(row.x),
+                    style.title,
+                    x,
                     row,
-                    line,
+                    &self.title,
                     Color::BLACK,
                 );
             }
+            if !self.lines.is_empty() {
+                let text = stack.take(self.text_line * self.lines.len() as u16);
+                for (i, line) in self.lines.iter().enumerate() {
+                    let row = Rect::new(
+                        text.x,
+                        text.y + i as u16 * self.text_line,
+                        text.width,
+                        self.text_line,
+                    );
+                    super::draw_label(
+                        canvas,
+                        &font,
+                        style.text,
+                        f32::from(row.x),
+                        row,
+                        line,
+                        Color::BLACK,
+                    );
+                }
+            }
         }
+        // The buttons are there (and told) without a font too.
         for (i, (rect, label)) in self.buttons.iter().zip(&self.labels).enumerate() {
             super::draw_button(canvas, env, style, *rect, label, false, focus == Some(i));
         }

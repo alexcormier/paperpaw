@@ -4,7 +4,7 @@
 //! confirm or one tap; below it every book with its cover, title, author
 //! and how far it is read. What is shown (all books, those being read,
 //! unread or finished ones, the shelves) is chosen above the books: from
-//! one row on small screens, from pills on larger ones. Series, folders
+//! one row on small screens, from chips on larger ones. Series, folders
 //! (collections), favourites, authors and tags open as lists of their
 //! own; "Find" picks a book by a letter without a keyboard. See `list`.
 //!

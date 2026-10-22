@@ -1,5 +1,6 @@
-//! Asking the reader for text or a folder, with the answer as a typed
-//! event ([`Typed`], [`Chosen`]) the plugin hears with
+//! Asking the reader for text, a folder, one of a few options or yes or
+//! no, with the answer as a typed event ([`Typed`], [`Chosen`],
+//! [`Picked`], [`Confirmed`]) the plugin hears with
 //! [`Registrar::on`](crate::Registrar::on):
 //!
 //! ```
@@ -18,10 +19,11 @@
 //! # let _ = command;
 //! ```
 //!
-//! The keyboard (slot [`KEYBOARD`](crate::builtin::slots::KEYBOARD)) and
-//! the folder chooser ([`CHOOSE_FOLDER`](crate::builtin::slots::CHOOSE_FOLDER))
-//! are plugins another can replace: they answer every question asked this
-//! way.
+//! The keyboard (slot [`KEYBOARD`](crate::builtin::slots::KEYBOARD)),
+//! the folder chooser ([`CHOOSE_FOLDER`](crate::builtin::slots::CHOOSE_FOLDER)),
+//! the choice ([`CHOICE`](crate::builtin::slots::CHOICE)) and the yes or
+//! no question ([`CONFIRM`](crate::builtin::slots::CONFIRM)) are screens
+//! another plugin can replace: they answer every question asked this way.
 
 use alloc::borrow::Cow;
 use alloc::string::String;
@@ -30,7 +32,7 @@ use crate::builtin::{params, slots};
 use crate::command::Command;
 use crate::event::Event;
 use crate::params::Params;
-use crate::replies::{Chosen, Typed};
+use crate::replies::{Chosen, Confirmed, Typed};
 use crate::ui::choice::Picked;
 
 /// A question for text (see [`text`]).
@@ -190,5 +192,89 @@ impl ChoiceQuestion {
     /// The command that asks.
     pub fn command(self) -> Command {
         Command::OpenSlot(slots::CHOICE, self.params)
+    }
+}
+
+/// A yes or no question (see [`confirm`]).
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[must_use = "a question is asked with its command()"]
+pub struct ConfirmQuestion {
+    params: Params,
+}
+
+/// Asks yes or no, with `question` (already translated) as the title; the
+/// answer comes as `reply`, a [`Confirmed`], nothing when the reader goes
+/// back or taps outside. The buttons say *Yes* and *No* unless given
+/// words of their own; the focus starts on no, the safe answer, unless
+/// [`focus_yes`](ConfirmQuestion::focus_yes). Asked on the screen of slot
+/// [`CONFIRM`](crate::builtin::slots::CONFIRM):
+///
+/// ```
+/// use paperpaw_sdk::ask;
+/// use paperpaw_sdk::event::Event;
+/// use paperpaw_sdk::replies::Confirmed;
+///
+/// const DELETE: Event<Confirmed> = Event::new("demo.delete");
+/// let command = ask::confirm("Delete “a.epub”?", &DELETE)
+///     .text("It goes for good.")
+///     .yes("Delete")
+///     .no("Keep")
+///     .with("path", "books/a.epub")
+///     .command();
+/// // r.on(DELETE, |env, answer, out| if answer.yes { answer.context.get("path") … })
+/// # let _ = command;
+/// ```
+pub fn confirm(question: impl Into<String>, reply: &Event<Confirmed>) -> ConfirmQuestion {
+    ConfirmQuestion {
+        params: Params::new()
+            .with(params::TITLE, question)
+            .with(params::REPLY, reply.as_str()),
+    }
+}
+
+impl ConfirmQuestion {
+    /// A line of text below the question, e.g. what the answer does
+    /// (already translated; each line break starts a paragraph).
+    pub fn text(mut self, text: impl Into<String>) -> Self {
+        self.params.set(params::TEXT, text);
+        self
+    }
+
+    /// The word on the yes button (already translated), e.g. *Delete*.
+    pub fn yes(mut self, label: impl Into<String>) -> Self {
+        self.params.set(crate::ui::confirm::YES_LABEL, label);
+        self
+    }
+
+    /// The word on the no button (already translated), e.g. *Keep*.
+    pub fn no(mut self, label: impl Into<String>) -> Self {
+        self.params.set(crate::ui::confirm::NO_LABEL, label);
+        self
+    }
+
+    /// The focus starts on yes, where that is the answer to expect and
+    /// does no harm.
+    pub fn focus_yes(mut self) -> Self {
+        self.params.set(crate::ui::confirm::FOCUS_YES, "1");
+        self
+    }
+
+    /// Passes `value` along: it comes back in the answer's context.
+    pub fn with(mut self, key: impl Into<Cow<'static, str>>, value: impl Into<String>) -> Self {
+        self.params.set(key, value);
+        self
+    }
+
+    /// Passes all of `context` along (see [`ConfirmQuestion::with`]).
+    pub fn context(mut self, context: &Params) -> Self {
+        for (key, value) in context.iter() {
+            self.params.set(String::from(key), value);
+        }
+        self
+    }
+
+    /// The command that asks.
+    pub fn command(self) -> Command {
+        Command::OpenSlot(slots::CONFIRM, self.params)
     }
 }

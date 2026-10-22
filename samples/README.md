@@ -24,8 +24,9 @@ with its name translated to German. To try it, copy it into
 `plugins/airy-theme` is a theme as a data plugin: new defaults for the
 appearance settings.
 
-`plugins/reading-nook` is a home screen layout as a data plugin: a
-preset in `presets.ini`, offered with the home screen's own layouts.
+`plugins/reading-nook` is a home screen as a data plugin: new defaults
+for the home screen's settings in `settings.ini`, shown until the reader
+arranges it.
 
 `hello-plugin` is a plugin with code to start from: an action in the
 tools, a screen for touch and buttons, a setting, an event and

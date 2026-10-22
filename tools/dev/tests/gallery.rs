@@ -108,7 +108,7 @@ fn the_ui_kit_shows_every_page() {
     gallery::run(&context, &mut report).unwrap();
     let screens = out.join("gallery/ui-kit/screens");
     for page in [
-        "text", "rows", "controls", "layout", "share", "dialog", "choice",
+        "text", "rows", "controls", "layout", "share", "dialog", "inputs", "pickers", "choice", "confirm",
     ] {
         let page = screens.join(format!("ui-kit.{page}.html"));
         assert!(page.is_file(), "{}", page.display());

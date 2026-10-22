@@ -195,7 +195,8 @@ fn every_change_is_taken_back_with_the_buttons() {
     // Up from the first row: the last, *Reset buttons and gestures*.
     test.press("up");
     test.press("confirm");
-    // *Reset* is the first choice.
+    // The focus on *Cancel*, the safe answer: left to *Reset*.
+    test.press("left");
     test.press("confirm");
     let config = test.config();
     assert!(!config.contains("button.menu"), "{config}");

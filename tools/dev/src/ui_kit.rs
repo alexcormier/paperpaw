@@ -4,8 +4,9 @@
 //! focus on some and not on others.
 //!
 //! Each screen is a page of the kit: text and messages, rows, buttons and
-//! segments, layout and cards, an address and an offer, a dialog, a
-//! choice. The
+//! segments, layout and cards, an address and an offer, a dialog,
+//! fields, ticks, chips and long text, date and time, a choice, a yes/no
+//! question. The
 //! texts are the kit's own (English alone): what each part is called.
 
 use std::borrow::Cow;
@@ -29,14 +30,17 @@ pub fn add(app: KernelBuilder) -> KernelBuilder {
 }
 
 /// The pages, by screen id and title key.
-const PAGES: [(&str, &str); 7] = [
+const PAGES: [(&str, &str); 10] = [
     ("ui-kit.text", "ui-kit.text"),
     ("ui-kit.rows", "ui-kit.rows"),
     ("ui-kit.controls", "ui-kit.controls"),
     ("ui-kit.layout", "ui-kit.layout"),
     ("ui-kit.share", "ui-kit.share"),
     ("ui-kit.dialog", "ui-kit.dialog"),
+    ("ui-kit.inputs", "ui-kit.inputs"),
+    ("ui-kit.pickers", "ui-kit.pickers"),
     ("ui-kit.choice", "ui-kit.choice"),
+    ("ui-kit.confirm", "ui-kit.confirm"),
 ];
 
 const TEXTS: &str = "[meta]
@@ -53,7 +57,10 @@ ui-kit.controls = Buttons and segments
 ui-kit.layout = Layout and cards
 ui-kit.share = Address and offers
 ui-kit.dialog = Dialog
+ui-kit.inputs = Fields, ticks, chips, long text
+ui-kit.pickers = Date and time
 ui-kit.choice = Choice
+ui-kit.confirm = Delete the book?
 ui-kit.option.light = A light
 ui-kit.option.calm = Calm
 ui-kit.option.dark = Dark
@@ -71,10 +78,10 @@ impl Plugin for UiKit {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_translations(Cow::Borrowed(TEXTS))?;
         for (index, (id, title)) in PAGES.into_iter().enumerate() {
-            let factory: paperpaw_sdk::ScreenFactory = if index == PAGES.len() - 1 {
-                Box::new(|env, _| Box::new(choice(env)))
-            } else {
-                Box::new(move |env, _| Box::new(Page::new(env, index)))
+            let factory: paperpaw_sdk::ScreenFactory = match id {
+                "ui-kit.choice" => Box::new(|env, _| Box::new(choice(env))),
+                "ui-kit.confirm" => Box::new(|env, _| Box::new(confirm(env))),
+                _ => Box::new(move |env, _| Box::new(Page::new(env, index))),
             };
             r.add_screen(ScreenSpec::new(Id::new_static(id), title, factory))?;
         }
@@ -89,6 +96,16 @@ fn choice(env: &Env<'_>) -> ui::choice::Choice {
         .with("labels", "ui-kit.option.")
         .with("options", "light,calm,dark");
     ui::choice::Choice::new(env, &params)
+}
+
+/// The confirm page: the SDK's yes/no question, the focus on No.
+fn confirm(env: &Env<'_>) -> ui::confirm::Confirm {
+    let params = Params::new()
+        .with(params::TITLE, env.i18n.tr("ui-kit.confirm"))
+        .with(params::TEXT, "It goes from the library and the card.")
+        .with(ui::confirm::YES_LABEL, "Delete")
+        .with(ui::confirm::NO_LABEL, "Keep");
+    ui::confirm::Confirm::new(env, &params)
 }
 
 /// A page of the kit.
@@ -145,7 +162,14 @@ impl Screen for Page {
             2 => controls(canvas, env, &style, body),
             3 => layout(canvas, env, &style, body),
             4 => share(canvas, env, &style, body),
-            _ => dialog(canvas, env, &style),
+            5 => dialog(canvas, env, &style),
+            6 => inputs(
+                canvas,
+                env,
+                &style,
+                Rect::new(0, rest.y, display.width, rest.height),
+            ),
+            _ => pickers(canvas, env, &style, body),
         }
     }
 }
@@ -382,6 +406,71 @@ fn dialog(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle) {
     let room = env.device.display.height.saturating_sub(dialog.height());
     dialog.place(room / 2);
     dialog.draw(canvas, env, style, Some(0));
+}
+
+/// Text fields, ticked rows, chips and text longer than its room.
+fn inputs(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+    let row = style.row as u16;
+    let margin = style.margin as u16;
+    let mut stack = ui::Stack::new(area, 0);
+    let focused = stack.take(row);
+    ui::draw_focus(canvas, style, focused);
+    ui::draw_text_field(
+        canvas,
+        env,
+        style,
+        focused,
+        true,
+        "A field, focused",
+        "Ada",
+        "",
+    );
+    let empty = stack.take(row);
+    ui::draw_text_field(canvas, env, style, empty, false, "A field", "", "Your name");
+    for (on, focus, title) in [
+        (true, true, "Ticked, focused"),
+        (true, false, "Ticked"),
+        (false, false, "Not ticked"),
+    ] {
+        let at = stack.take(row);
+        if focus {
+            ui::draw_focus(canvas, style, at);
+        }
+        ui::draw_check_row(canvas, env, style, at, focus, title, "", on);
+    }
+    let chips_row = stack.take(ui::Chips::height(style) + 2 * margin);
+    let inside = Rect::new(
+        margin,
+        chips_row.y + margin,
+        chips_row.width.saturating_sub(2 * margin),
+        ui::Chips::height(style),
+    );
+    let labels = ["All", "Reading", "Unread", "Finished"];
+    ui::Chips::new(env, style, inside, &labels).draw(canvas, env, style, &labels, 1, Some(2));
+    let rest = stack.rest();
+    let text_area = Rect::new(
+        margin,
+        rest.y + margin,
+        rest.width.saturating_sub(2 * margin),
+        rest.height.saturating_sub(2 * margin),
+    );
+    let text = "A text longer than its room scrolls: up and down a few lines, the page buttons a page, by touch a swipe or a tap in the upper or lower half.\nA bar on the right says where the lines shown are in the whole.\nThis line and those after it come into view as it scrolls.\nOne more.\nAnd the last.";
+    let mut view = ui::TextView::new(env, style, text_area, text);
+    view.scroll(1);
+    view.draw(canvas, env, style, text);
+}
+
+/// A date and a time, the day and the minutes focused.
+fn pickers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+    let mut stack = ui::Stack::new(area, style.margin as u16 * 2);
+    let date = stack.take(ui::DatePicker::height(style));
+    let mut picker = ui::DatePicker::new(style, date, (2026, 10, 22));
+    picker.set_focus(0);
+    picker.draw(canvas, env, style);
+    let time = stack.take(ui::TimePicker::height(style));
+    let mut picker = ui::TimePicker::new(style, time, (22, 30));
+    picker.set_focus(1);
+    picker.draw(canvas, env, style);
 }
 
 /// `area` in two halves one above the other, `gap` apart.

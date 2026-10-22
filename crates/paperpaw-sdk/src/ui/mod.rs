@@ -6,8 +6,11 @@
 
 mod address;
 mod button;
+mod chips;
 pub mod choice;
+pub mod confirm;
 mod dialog;
+mod fields;
 mod header;
 mod hints;
 mod image;
@@ -16,6 +19,7 @@ pub(crate) mod layout;
 mod list;
 pub mod look;
 pub mod offline;
+mod picker;
 mod progress;
 pub mod reorder;
 mod rows;
@@ -29,13 +33,16 @@ pub mod widget_list;
 
 pub use address::*;
 pub use button::*;
+pub use chips::Chips;
 pub use dialog::Dialog;
+pub use fields::*;
 pub use header::*;
 pub use hints::*;
 pub use image::*;
 pub use layout::*;
 pub use list::*;
 pub use offline::{Offer, OfflineOffer};
+pub use picker::{DateOrder, DatePicker, PickerPart, TimePicker};
 pub use progress::*;
 pub use reorder::{Reorder, ReorderStep};
 pub use rows::Rows;
