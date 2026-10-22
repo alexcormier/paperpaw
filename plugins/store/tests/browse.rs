@@ -283,6 +283,35 @@ fn a_plugins_page_says_where_its_source_is() {
     shopping.request(&format!("{BASE}/shots/apple-1.png"));
 }
 
+#[test]
+fn a_plugins_page_says_how_it_works() {
+    let mut shopping = Shopping::new(&fruit());
+    shopping.choose("Reading");
+    shopping.choose("Apple");
+    let more = r#""description": "First this.\n\nThen \"that\".","#;
+    shopping.serve(&page_url("apple"), page("apple", "1.0.0", more).as_bytes());
+    // Shown as a text to read paged.
+    shopping.choose("How it works");
+    let text = paperpaw_sdk::read_file(
+        shopping.kernel.storage(),
+        ".paperpaw/plugins/store/how.txt",
+        1 << 16,
+    )
+    .map(|data| String::from_utf8(data).unwrap())
+    .unwrap();
+    assert_eq!(text, "Apple\n\nFirst this.\n\nThen \"that\".\n");
+}
+
+#[test]
+fn a_plugin_that_says_nothing_more_has_no_how_it_works() {
+    let mut shopping = Shopping::new(&fruit());
+    shopping.choose("Reading");
+    shopping.choose("Apple");
+    shopping.serve(&page_url("apple"), page("apple", "1.0.0", "").as_bytes());
+    let shown = shopping.shown();
+    assert!(!shown.contains("How it works"), "{shown}");
+}
+
 fn many(count: usize) -> String {
     let entries: Vec<String> = (0..count)
         .map(|n| {

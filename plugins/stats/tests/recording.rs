@@ -187,7 +187,6 @@ impl Device {
             "[core]
 language = en
 [home]
-gesture-tips = false
 page-1 = \"{page_1}\"
 "
         );

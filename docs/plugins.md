@@ -312,6 +312,19 @@ translates, `format` fills `{placeholders}`, `plural` picks the form for
 a number. A test that all languages have the same keys belongs in every
 plugin (see the sample).
 
+Three messages say what a plugin is: `<id>.plugin.name`,
+`<id>.plugin.description` (a line, shown in the lists) and
+`<id>.plugin.how`, *How it works*: a few sentences on what it does, where
+it is found and how it is used. The plugin manager shows it when a
+plugin is held, as a text to read paged; paragraphs are apart by an empty
+line, written `\n\n` in a quoted value:
+
+```ini
+hello.plugin.how = "Greets you by name when PaperPaw starts.\n\nThe name is set in the settings, under Hello."
+```
+
+`paperpaw-dev` warns where a plugin with code has none or a short one.
+
 ### Testing
 
 Plugins are tested with the real kernel and an in-memory storage, as the
@@ -379,7 +392,7 @@ the default look. `--set <id>=<value>` sets a setting for every run.
 |---|---|
 | `gallery` | Contact sheets: every screen the plugin adds and every widget in every size it can take, in every variant, as HTML pages (`gallery/index.html`) and one PNG sheet a plugin and device. |
 | `visual` | What is drawn, checked: text cut at its box or the screen (`visual.text-cut`), shortened (`visual.ellipsis`) or broken where it should not be (`visual.wrap`); ink outside a widget's cell (`visual.outside-cell`) or the screen (`visual.off-screen`); parts over each other (`visual.overlap`); margins off the interface's (`visual.margin`) and rows out of line (`visual.align`); labels and icons off centre by their ink (`visual.ink-centre`); touch targets under 7 mm (`visual.touch-target`); a focus that does not show with buttons (`visual.focus`); text that dithers away on black and white or is too light on grays (`visual.contrast`). |
-| `lint` | Texts and ids: translations missing or left over, placeholders and plural forms; keys shown as they are because English has no text for them (`lint.missing-key`); settings without help (`lint.setting-help`); ids outside the plugin's namespace; dashes (`lint.dash`); and in the pseudo-language, text that fits in English but not once it is longer (`lint.pseudo-overflow`) and text drawn without going through the catalogs (`lint.hardcoded`). |
+| `lint` | Texts and ids: translations missing or left over, placeholders and plural forms; keys shown as they are because English has no text for them (`lint.missing-key`); settings without help (`lint.setting-help`); plugins with code that say nothing or little of how they work (`lint.how-it-works`); ids outside the plugin's namespace; dashes (`lint.dash`); and in the pseudo-language, text that fits in English but not once it is longer (`lint.pseudo-overflow`) and text drawn without going through the catalogs (`lint.hardcoded`). |
 | `reach` | With buttons alone: every screen the plugin adds can be reached from the home screen (`reach.unreachable`) and closed with *Back* (`reach.no-close`), the focus visits every row and button (`reach.focus-skips`) and does not get stuck (`reach.focus-trap`); a screen whose focus moves but which tells nothing of its rows (`reach.undescribed`). |
 | `explore` | A cheap baseline beside the flows: every target of every screen the plugin adds (at most 20 a screen, 200 a device) used once, each from a fresh start, by touch or with the buttons; then the home screen must be reached again. A panic, an allocation the device would refuse or no way back home is an error (`explore.failed`). |
 | `perf` | Budgets on the X4: storage read while drawing (`perf.draw-io`, the rule of `crates/paperpaw-app/tests/draw.rs`), the heap a screen takes against what the X4 has free (`perf.heap`), heap kept after it closes (`perf.leak`), frames estimated slow on an X4 (`perf.frame-time`), many reads before the first frame (`perf.open-io`); the top costs in `perf/index.html`. |
@@ -1079,6 +1092,35 @@ core.ui-corners = core.corners.soft
 core.ui-focus = core.focus.ring
 core.ui-separators = core.separators.none
 ```
+
+### Hints for a screen
+
+The first time a screen opens, a short note over it says what its
+controls do: the hints its plugin gives with `help::add`, each a text
+and, where it is about a part of the screen, that part (in thousandths
+of the screen's width and height), framed. A hint is for touch, for
+buttons or for both; a device shows those that fit its input. A tap or
+any button closes the note, and it does not come again for that screen;
+*No more hints* and the settings switch them all off.
+
+```rust
+use paperpaw_sdk::help::{self, Hint, Zone};
+
+help::add(r, SCREEN.as_str(), &[
+    Hint::touch("hello.help.tap").zone(Zone::new(0, 0, 1000, 120)),
+    Hint::buttons("hello.help.confirm"),
+    Hint::any("hello.help.back"),
+])?;
+```
+
+The texts are keys of the plugin's translations; the screen is any
+screen's id, so a plugin can add hints to another's. A screen that first
+prepares what it shows (the reader, opening a book) has its hints wait
+with `help::wait(r, SCREEN)` and says when it is ready,
+`cx.command(help::ready(&SCREEN))`: screens below another get no timers,
+so it would not get ready under them. The note is the
+`help` plugin's; another plugin can show them its own way, from
+`help::hints(env, screen)` when `events::SCREEN_SHOWN` comes.
 
 ### Passwords and keys
 

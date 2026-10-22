@@ -150,6 +150,15 @@ impl PluginInfo {
             .unwrap_or(&self.manifest.description)
     }
 
+    /// How it works, at length, in the current language: the plugin's
+    /// translation of `<id>.plugin.how` (plain text, paragraphs apart by
+    /// an empty line), if it has one: shown by the plugin manager and the
+    /// store as *How it works*.
+    pub fn how<'a>(&self, i18n: &'a Translator) -> Option<&'a str> {
+        i18n.get(&format!("{}.plugin.how", self.manifest.id))
+            .filter(|text| !text.trim().is_empty())
+    }
+
     /// Whether the user may switch the plugin off.
     pub fn can_switch_off(&self) -> bool {
         self.manifest.id != crate::builtin::CORE_PLUGIN && self.required_for.is_empty()

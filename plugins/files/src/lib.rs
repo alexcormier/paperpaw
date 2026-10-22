@@ -179,6 +179,17 @@ impl Plugin for Files {
         r.bind_slot(slots::BOOK_INFO, INFO_SCREEN, Priority::DEFAULT)?;
         r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
         r.bind_slot(slots::LIBRARY, SCREEN, Priority::DEFAULT)?;
+        paperpaw_sdk::help::add(
+            r,
+            SCREEN.as_str(),
+            &[
+                paperpaw_sdk::help::Hint::touch("files.help.open"),
+                paperpaw_sdk::help::Hint::touch("files.help.hold"),
+                paperpaw_sdk::help::Hint::touch("files.help.pages"),
+                paperpaw_sdk::help::Hint::buttons("files.help.choose"),
+                paperpaw_sdk::help::Hint::buttons("files.help.more"),
+            ],
+        )?;
         r.add_settings(&SETTINGS)?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(SEARCH, "files.search").handler(

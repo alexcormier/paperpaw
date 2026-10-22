@@ -125,7 +125,10 @@ impl Test {
     fn new(device: DeviceInfo) -> Self {
         RAN.with(|r| r.borrow_mut().clear());
         let storage = MemoryStorage::new().with(".paperpaw/plugins/setup/done", "");
-        let builder = Kernel::builder(device).storage(storage);
+        // Without the hints over it all.
+        let builder = Kernel::builder(device)
+            .storage(storage)
+            .user_config("[help]\nshow = false\n");
         let mut kernel = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs)
             .plugin(Probe)
             .build()

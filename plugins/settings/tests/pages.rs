@@ -427,9 +427,10 @@ ui-size = 14
             )
         };
         app.open_slot(slots::SETTINGS, look());
+        // The text size is not a theme's: the appearance is as it comes.
         let first = rows(&mut app)[0].clone();
         assert!(
-            first.starts_with("Theme") && first.contains("Your own"),
+            first.starts_with("Theme") && first.contains("None"),
             "{first}"
         );
         choose(&mut app, "Theme");
