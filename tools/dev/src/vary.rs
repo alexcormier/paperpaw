@@ -77,7 +77,7 @@ pub enum Interruption {
 /// A variation of a flow.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Change {
-    /// Every step done [`REPEATS`] times.
+    /// Every step done `REPEATS` times.
     Repeat,
     /// The interruption before the step at this index.
     Interrupt(Interruption, usize),
@@ -86,7 +86,7 @@ pub enum Change {
     Pseudo,
     /// A book with a very long name in the library.
     LongData,
-    /// [`LITTLE`] bytes free on the storage.
+    /// `LITTLE` bytes free on the storage.
     LittleStorage,
 }
 
