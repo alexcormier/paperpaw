@@ -56,22 +56,37 @@ impl SkimScreen {
         let (margin, gap, row) = (style.margin as u16, style.gap as u16, style.row as u16);
         // The buttons' row grows with them on touch screens.
         let button_row = style.touch_row(u32::from(row)) as u16;
+        // Four in a row where their names fit whole, else two rows of two:
+        // a name is never cut for the room.
+        let width = display.width.saturating_sub(2 * margin);
+        let fits = |columns: u16| {
+            let room = width.saturating_sub((columns - 1) * gap) / columns;
+            style.font(env).is_none_or(|font| {
+                BUTTONS.iter().all(|key| {
+                    font.measure(style.text, env.i18n.tr(key)) + 2.0 * style.gap as f32
+                        <= f32::from(room)
+                })
+            })
+        };
+        let columns: u16 = if fits(4) { 4 } else { 2 };
+        let lines = 4 / columns;
+        let buttons_height = button_row * lines + gap * (lines - 1);
         // Its buttons keep the side margin from the bottom edge too.
-        let height = gap + row * 2 + button_row + ui::edge_room(&style, button_row);
+        let height = gap + row * 2 + buttons_height + ui::edge_room(&style, button_row);
         let region = Rect::new(
             0,
             display.height.saturating_sub(height),
             display.width,
             height,
         );
-        let width = display.width.saturating_sub(2 * margin);
         let bar = Rect::new(margin, region.y + gap + row, width, row);
-        let button_width = (width.saturating_sub(3 * gap)) / 4;
+        let button_width = width.saturating_sub((columns - 1) * gap) / columns;
         let buttons_y = region.y + gap + row * 2;
         let buttons = core::array::from_fn(|i| {
+            let (column, line) = (i as u16 % columns, i as u16 / columns);
             Rect::new(
-                margin + i as u16 * (button_width + gap),
-                buttons_y,
+                margin + column * (button_width + gap),
+                buttons_y + line * (button_row + gap),
                 button_width,
                 button_row,
             )

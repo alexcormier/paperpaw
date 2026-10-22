@@ -1,8 +1,6 @@
 //! The home screen on a real kernel: the grid stays on the screen with no
-//! margin, pages are edited and added where their settings are, the
-//! layout chooser fits the screen and offers only layouts whose widgets
-//! are there, and widgets are made anew only when what makes them
-//! changed.
+//! margin, pages are edited and added where their settings are, and
+//! widgets are made anew only when what makes them changed.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -283,7 +281,8 @@ fn on_screen(home: &Home, shown: &[(String, Rect)]) {
 fn without_margins_the_grid_stays_on_the_screen() {
     let mut home = Home::new(
         true,
-        "page-1 = tool:core.settings 0/0 1x1, tool:core.settings 3/0 1x1\n\
+        "columns = 4\n\
+         page-1 = tool:core.settings 0/0 1x1, tool:core.settings 3/0 1x1\n\
          [core]\nui-margin = 0\n",
     );
     let shown = home.shown();
@@ -323,39 +322,8 @@ fn an_added_page_shows_until_it_is_removed() {
 }
 
 #[test]
-fn the_layout_chooser_fits_a_screen_without_touch() {
-    // Wide enough for what each layout is to fit on a line.
-    let mut home = Home::on(device(false, 1200), "");
-    home.open("home.layouts", Params::new());
-    let shown = home.shown();
-    assert!(
-        shown.iter().any(|(l, _)| l.contains("as PaperPaw comes")),
-        "{shown:?}"
-    );
-    on_screen(&home, &shown);
-}
-
-#[test]
-fn layouts_with_widgets_not_there_are_not_offered() {
-    let mut home = Home::new(true, "");
-    home.open("home.layouts", Params::new());
-    let mut seen = Vec::new();
-    for _ in 0..8 {
-        let shown = home.shown();
-        for name in ["Calm", "Covers", "At a glance", "Clock", "Minimal"] {
-            if shown.iter().any(|(l, _)| l == name) && !seen.contains(&name) {
-                seen.push(name);
-            }
-        }
-        home.run(actions::RIGHT);
-    }
-    // Statistics, the file manager and the widget pack are not there.
-    assert_eq!(seen, ["Calm", "Minimal"]);
-}
-
-#[test]
 fn widgets_are_made_anew_only_when_what_makes_them_changes() {
-    let mut home = Home::new(true, "page-1 = probe.widget 0/0 4x1\n");
+    let mut home = Home::new(true, "columns = 4\npage-1 = probe.widget 0/0 4x1\n");
     home.shown();
     let made = MADE.load(Ordering::SeqCst);
     assert_eq!(made, 1, "made once as the home screen showed");
@@ -559,4 +527,106 @@ status.right =
     );
     home.tap(Point::new(36, 24));
     assert!(home.kernel.settings().bool("probe.other"));
+}
+
+/// The clock's sizes are told apart, and as large as fits fills its place:
+/// in a cell of 4 by 2 its time is larger than at the largest size set,
+/// drawn from the packs as the X4 draws (whose text sizes end at 48
+/// pixels, the clock's digits having larger ones of their own).
+#[test]
+fn the_clocks_sizes_differ_and_as_large_as_fits_fills_its_place() {
+    let height = |size: &str| {
+        let settings = format!(
+            "page-1 = home.clock 0/0 4x2, home.continue 0/2 4x2
+clock.size = core.size.{size}
+"
+        );
+        let mut home = Home::new(false, &settings);
+        // 10:41 in the morning.
+        let clock = paperpaw_sdk::WallClock {
+            at: Instant(home.now),
+            unix_millis: 1_760_438_460_000,
+            utc_offset_minutes: Some(0),
+        };
+        let status = paperpaw_sdk::SystemStatus {
+            clock: Some(clock),
+            battery: None,
+        };
+        let effects = home.kernel.set_status(Instant(home.now), status);
+        home.settle(effects);
+        let texts = home.texts();
+        let (_, at) = texts
+            .iter()
+            .find(|(text, _)| text.contains(':'))
+            .unwrap_or_else(|| panic!("no time in {texts:?}"));
+        at.height
+    };
+    let sizes = ["small", "medium", "large", "fit"].map(height);
+    assert!(sizes.windows(2).all(|w| w[0] < w[1]), "{sizes:?}");
+    // The time alone, as large as its cell's width allows: well over the
+    // 48 pixels text has at most.
+    assert!(sizes[3] > 60, "{sizes:?}");
+}
+
+/// Fewer columns than the page was arranged for: every item still shows,
+/// moved inside the grid (narrower where it was wider than the grid),
+/// none lost; what a page has no more room for goes to the next page.
+#[test]
+fn fewer_columns_keep_every_item_in_sight() {
+    let mut home = Home::new(
+        false,
+        "columns = 4\nrows = 6\n\
+         page-1 = tool:core.library 0/0 1x1, tool:core.settings 3/0 1x1, home.date 0/1 4x1\n",
+    );
+    home.set("home.columns", "3");
+    let texts = home.texts();
+    for name in ["Library", "Settings"] {
+        assert!(texts.iter().any(|(t, _)| t == name), "{name}: {texts:?}");
+    }
+    let page = paperpaw_sdk::widgets::grid::parse(home.kernel.settings().text("home.page-1"));
+    assert_eq!(page.len(), 3, "{page:?}");
+    for item in &page {
+        let at = item.at.expect("placed");
+        assert!(at.fits(3, 6), "{item:?}");
+    }
+    // A full page: what has no room goes on to the next one.
+    let full = (0..4)
+        .flat_map(|row| (0..4).map(move |col| alloc_free(col, row)))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let mut home = Home::new(false, &format!("columns = 4\nrows = 4\npage-1 = {full}\n"));
+    home.set("home.columns", "3");
+    let settings = home.kernel.settings();
+    let first = paperpaw_sdk::widgets::grid::parse(settings.text("home.page-1"));
+    let second = paperpaw_sdk::widgets::grid::parse(settings.text("home.page-2"));
+    let tools = |page: &[paperpaw_sdk::widgets::grid::Item]| {
+        page.iter()
+            .filter(|i| matches!(i.what, paperpaw_sdk::widgets::grid::What::Tool(_)))
+            .count()
+    };
+    assert_eq!(tools(&first) + tools(&second), 16, "{first:?} {second:?}");
+    assert_eq!(first.len(), 12);
+}
+
+/// A tool in cell `col`/`row`, one of 16 apart.
+fn alloc_free(col: u8, row: u8) -> String {
+    let tools = [
+        "core.library",
+        "core.settings",
+        "core.home",
+        "core.tools",
+        "core.back",
+        "core.menu",
+        "core.sleep",
+        "core.refresh-screen",
+        "core.next-page",
+        "core.prev-page",
+        "core.night-mode",
+        "core.screenshot",
+        "core.quick-panel",
+        "core.up",
+        "core.down",
+        "core.left",
+    ];
+    format!("tool:{} {col}/{row} 1x1", tools[usize::from(row * 4 + col)])
 }

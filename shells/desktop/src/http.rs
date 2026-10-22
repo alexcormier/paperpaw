@@ -1,7 +1,10 @@
 //! HTTP for the emulator: each request runs the system's `curl` on a
 //! thread of its own (Windows, macOS and Linux ship it), so the emulator
-//! needs no TLS library.
+//! needs no TLS library. A shell may route requests elsewhere instead
+//! ([`set_route`]): the browser's emulator answers them from the page's
+//! recorded answers, or has the page fetch them.
 
+use std::cell::RefCell;
 use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Duration;
 // `curl` on a thread, where there are processes and threads.
@@ -13,6 +16,28 @@ use std::{
 };
 
 use paperpaw_core::{HttpCall, HttpResponse};
+
+/// Where requests go instead of the system's network ([`set_route`]).
+pub trait Route {
+    /// Takes a request: its answer now, or `None` where it comes later
+    /// ([`Route::later`]).
+    fn start(&mut self, call: HttpCall) -> Option<HttpResponse>;
+    /// An answer that came later than its request (a delayed or fetched
+    /// one), if one is ready: the route's own, so that answers reach the
+    /// device that asked.
+    fn later(&mut self) -> Option<HttpResponse>;
+}
+
+thread_local! {
+    /// The route set, the thread's (a device runs on one thread).
+    static ROUTE: RefCell<Option<Box<dyn Route>>> = const { RefCell::new(None) };
+}
+
+/// Sends this thread's requests to `route` (`None`: the system's network
+/// again, where there is one).
+pub fn set_route(route: Option<Box<dyn Route>>) {
+    ROUTE.with_borrow_mut(|set| *set = route);
+}
 
 /// Requests in flight and their answers.
 #[derive(Debug)]
@@ -38,11 +63,26 @@ impl Http {
         }
     }
 
-    /// Starts a request.
-    #[cfg(not(target_arch = "wasm32"))]
+    /// Starts a request: on the route set, else on the system's network.
     pub fn start(&mut self, call: HttpCall) {
-        let sender = self.sender.clone();
         self.in_flight += 1;
+        let mut call = Some(call);
+        // Taken by the route, if one is set: its answer now, or later.
+        let routed = ROUTE.with_borrow_mut(|route| Some(route.as_mut()?.start(call.take()?)));
+        match (routed, call) {
+            (Some(Some(answer)), _) => {
+                let _ = self.sender.send(answer);
+            }
+            (Some(None), _) => {}
+            (None, Some(call)) => self.system(call),
+            (None, None) => {}
+        }
+    }
+
+    /// Runs a request with `curl` on a thread of its own.
+    #[cfg(not(target_arch = "wasm32"))]
+    fn system(&mut self, call: HttpCall) {
+        let sender = self.sender.clone();
         thread::spawn(move || {
             let _ = sender.send(run(call));
         });
@@ -51,8 +91,7 @@ impl Http {
     /// Answers a request at once as failed: in a browser the emulator
     /// has no network of its own.
     #[cfg(target_arch = "wasm32")]
-    pub fn start(&mut self, call: HttpCall) {
-        self.in_flight += 1;
+    fn system(&mut self, call: HttpCall) {
         let failed = HttpResponse::failed(call.id, "no network in the browser's emulator");
         let _ = self.sender.send(failed);
     }
@@ -63,10 +102,11 @@ impl Http {
         // by, and answers come at once (see `start`).
         #[cfg(target_arch = "wasm32")]
         let wait: Option<Duration> = wait.and(None);
-        let response = match wait {
+        let later = ROUTE.with_borrow_mut(|route| route.as_mut()?.later());
+        let response = later.or_else(|| match wait {
             Some(wait) => self.receiver.recv_timeout(wait).ok(),
             None => self.receiver.try_recv().ok(),
-        };
+        });
         if response.is_some() {
             self.in_flight -= 1;
         }

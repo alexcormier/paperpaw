@@ -241,11 +241,35 @@ fn packs_hold_the_latin_set_at_every_size() {
         let Font::Bitmap(pack) = face else {
             panic!("{id} is a pack");
         };
+        // The sizes text is drawn at; the UI font's large ones are for a
+        // clock's digits alone.
+        let text_sizes: Vec<f32> = pack
+            .sizes()
+            .filter(|&size| pack.size_for(size, "A", false) == size)
+            .collect();
         if std::env::var_os("PAPERPAW_FONT_SIZES").is_none() {
-            let sizes: Vec<f32> = pack.sizes().collect();
-            assert_eq!(sizes, [20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 48.0], "{id}");
+            assert_eq!(
+                text_sizes,
+                [20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 48.0],
+                "{id}"
+            );
         }
-        for size in pack.sizes().collect::<Vec<_>>() {
+        if *id == paperpaw_sdk::builtin::fonts::UI {
+            let large: Vec<f32> = pack.sizes().filter(|s| !text_sizes.contains(s)).collect();
+            assert!(large.iter().any(|&s| s > 150.0), "{large:?}");
+            for size in large {
+                assert_eq!(pack.size_for(size, "12:30", true), size);
+                assert!(pack.size_for(size, "12:30", false) <= 48.0);
+                for digit in "0123456789:".chars() {
+                    assert_ne!(
+                        pack.glyph(digit, size),
+                        pack.glyph('?', 48.0),
+                        "{digit} at {size}"
+                    );
+                }
+            }
+        }
+        for size in text_sizes {
             // A character a strike lacks is drawn as its '?' (the
             // replacement character on purpose); others as themselves or
             // their stand-ins.

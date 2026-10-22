@@ -4,6 +4,9 @@
 //! them. Nothing here knows the browser: the exports (browser builds only)
 //! pass its calls on, and the tests drive it directly.
 
+mod commands;
+
+use std::cell::RefCell;
 use std::collections::{BTreeMap, BTreeSet};
 use std::rc::Rc;
 
@@ -13,10 +16,12 @@ use paperpaw_dev::report::json_string;
 use paperpaw_dev::target::{DataPlugin, Target};
 use paperpaw_emulator::device::{AddPlugins, Device};
 use paperpaw_emulator::profiles::{self, Profile};
-use paperpaw_emulator::{budget, panel, trace};
+use paperpaw_emulator::{budget, http, panel, trace};
 use paperpaw_platform::{
     ButtonState, InputEvent, PixelFormat, Point, PointerEvent, PointerPhase, PointerTool,
 };
+
+use crate::network::{self, Fixture, Network, Routed};
 
 /// The books every library starts with (from `samples/library`).
 const BOOKS: &[(&str, &[u8])] = &[
@@ -60,6 +65,9 @@ pub struct Emulator {
     device: Option<Device>,
     /// What the panel shows, four bytes a pixel (RGBA), for a canvas.
     frame: Vec<u8>,
+    /// Plugins' requests: recorded answers, the page's fetches (see
+    /// [`crate::network`]).
+    network: Rc<RefCell<Network>>,
 }
 
 impl Emulator {
@@ -94,6 +102,7 @@ impl Emulator {
             plugins: BTreeSet::new(),
             device: None,
             frame: Vec::new(),
+            network: Network::shared(),
         })
     }
 
@@ -151,8 +160,67 @@ impl Emulator {
             added(),
         )
         .map_err(|e| e.to_string())?;
+        self.route();
         device.start();
         self.device = Some(device);
+        Ok(())
+    }
+
+    /// Sends the thread's requests to this device's network, of the page's
+    /// making.
+    fn route(&self) {
+        http::set_route(Some(Box::new(Routed(self.network.clone()))));
+    }
+
+    /// The recorded answers plugins' requests get (see
+    /// [`crate::network`]); those before are let go.
+    pub fn set_fixtures(&mut self, fixtures: Vec<Fixture>) {
+        self.network.borrow_mut().set_fixtures(fixtures);
+    }
+
+    /// Adds a recorded answer after those there are.
+    pub fn add_fixture(&mut self, fixture: Fixture) {
+        self.network.borrow_mut().add_fixture(fixture);
+    }
+
+    /// Lets the page fetch what no recorded answer answers (`true`), or
+    /// fails it as without a network.
+    pub fn set_real_network(&mut self, real: bool) {
+        self.network.borrow_mut().set_real(real);
+    }
+
+    /// The requests plugins made since asked last, as JSON (see
+    /// [`network::seen_json`]).
+    pub fn requests(&mut self) -> String {
+        network::seen_json(&self.network.borrow_mut().take_seen())
+    }
+
+    /// The requests for the page to fetch since asked last, as JSON (see
+    /// [`network::outbox_json`]).
+    pub fn outbox(&mut self) -> String {
+        network::outbox_json(&self.network.borrow_mut().take_outbox())
+    }
+
+    /// The page's answer to request `id` it fetched (status 0: failed,
+    /// the reason in `body`), from the address `url` (after redirects;
+    /// empty: the one asked), at `now_ms`: given to the device.
+    pub fn fetched(
+        &mut self,
+        id: u32,
+        status: u16,
+        headers: &str,
+        body: Vec<u8>,
+        url: &str,
+        now_ms: u64,
+    ) -> Result<(), String> {
+        if !self
+            .network
+            .borrow_mut()
+            .fetched(id, status, headers, body, url)
+        {
+            return Err(format!("no request {id} waits for an answer"));
+        }
+        self.advance(now_ms);
         Ok(())
     }
 
@@ -212,6 +280,8 @@ impl Emulator {
     /// browser counts it) and does what is due; how many milliseconds
     /// until something is due next, `None` if nothing is.
     pub fn advance(&mut self, now_ms: u64) -> Option<u64> {
+        // Recorded answers due by then.
+        self.network.borrow_mut().tick(now_ms);
         let device = self.device.as_mut()?;
         let now = device.now().millis();
         device.advance(now_ms.saturating_sub(now));
@@ -223,7 +293,14 @@ impl Emulator {
             }
         }
         let now = device.now().millis();
-        device.next_wake().map(|at| at.millis().saturating_sub(now))
+        let wake = device.next_wake().map(|at| at.millis());
+        // A recorded answer coming later is something due too.
+        let answer = self.network.borrow().next_due();
+        let next = match (wake, answer) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        next.map(|at| at.saturating_sub(now))
     }
 
     /// The id of the screen shown, `None` before the device started.
@@ -330,6 +407,9 @@ impl Emulator {
     ) -> Result<(u16, u16, Vec<u8>), String> {
         let profile = profile.unwrap_or(self.profile.device.id);
         let mut other = Emulator::new(profile, &self.language, dark.unwrap_or(self.dark))?;
+        // The same recorded answers, in a network of its own: its answers
+        // reach it alone, and the page fetches nothing for it.
+        other.set_fixtures(self.network.borrow().fixtures());
         // The same card, copied: what the other device writes stays its.
         for (path, bytes) in files_under(&*self.files, "") {
             other
@@ -356,6 +436,10 @@ impl Emulator {
             (width, height, other.shown())
         });
         drop(other);
+        // This device's requests to its own network again.
+        if self.device.is_some() {
+            self.route();
+        }
         budget::end_override(self.profile.heap_budget);
         made
     }

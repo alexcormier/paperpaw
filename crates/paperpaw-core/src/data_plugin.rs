@@ -15,9 +15,9 @@
 //!                  Fredoka, regular = fredoka.ppfp, bold, italic,
 //!                  bold-italic (packs, or .ttf/.otf where those are drawn)
 //!   styles.css     a stylesheet for books, after a book's own
-//!   presets.ini    ready-made sets of settings, e.g. home screen layouts,
-//!                  a section each: [nook] kind = home.layout, name,
-//!                  description, then the values (home.page-1 = …)
+//!   presets.ini    ready-made sets of settings, e.g. power modes, a
+//!                  section each: [night] kind = core.power-mode, name,
+//!                  description, then the values (power.level = …)
 //!   marks.ini      words marked on book pages by patterns, a section each:
 //!                  [names] title, pattern (one or more), the look
 //!                  (background = yellow, line = wavy …); formats 2

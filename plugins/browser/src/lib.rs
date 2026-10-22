@@ -221,7 +221,7 @@ impl BrowserScreen {
         self.session.borrow_mut().pages.push(entry);
         self.showing = true;
         self.message = None;
-        cx.command(paperpaw_sdk::readers::open(path));
+        cx.command(paperpaw_sdk::readers::open_page(path));
     }
 
     /// An answer arrived for `url`.

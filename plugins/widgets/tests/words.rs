@@ -99,6 +99,8 @@ impl Home {
             storage,
             now: 0,
         };
+        // The cells as these tests were made for: 4 across.
+        home.set("home.columns", "4");
         home.set("home.page-1", page);
         for (id, value) in settings {
             home.set(id, value);

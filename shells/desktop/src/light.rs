@@ -90,14 +90,10 @@ impl Plugin for Emulated {
             r.add_setting(number(&WARMTH, "emulator.warmth", default, step))?;
             items.push(WARMTH);
         }
-        // First in the reader's panel, in the quick panel, and with the
-        // device's settings in the main menu, as on the devices.
+        // First in the reader's panel, and in the quick panel, as on the
+        // devices.
         for (n, item) in items.into_iter().enumerate() {
-            for (menu, order) in [
-                (menus::READER_PANEL, -10),
-                (menus::MAIN, 82),
-                (menus::QUICK, 20),
-            ] {
+            for (menu, order) in [(menus::READER_PANEL, -10), (menus::QUICK, 20)] {
                 r.add_menu_entry(
                     MenuEntry::new(menu, item.clone().into()).order(order + n as i16),
                 )?;

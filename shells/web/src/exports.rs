@@ -20,6 +20,7 @@ use std::cell::RefCell;
 use paperpaw_platform::PointerPhase;
 
 use crate::emulator::Emulator;
+use crate::network::Fixture;
 
 #[link(wasm_import_module = "paperpaw")]
 unsafe extern "C" {
@@ -429,6 +430,178 @@ pub extern "C" fn pp_device() -> u32 {
         answer(json);
     }
     failed
+}
+
+/// Lets go of the recorded answers (see [`crate::network`]).
+#[unsafe(no_mangle)]
+pub extern "C" fn pp_fixtures_clear() -> u32 {
+    with(|emulator| {
+        emulator.set_fixtures(Vec::new());
+        Ok(())
+    })
+}
+
+/// Adds a recorded answer: the method (empty: any) and the address
+/// pattern (`*` for any text) it answers, its status, headers (`name:
+/// value` lines), body and delay (ms of the device's time).
+///
+/// # Safety
+///
+/// The texts and the body are memory the script wrote ([`pp_alloc`]).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pp_fixture_add(
+    method_ptr: *const u8,
+    method_len: usize,
+    url_ptr: *const u8,
+    url_len: usize,
+    status: u32,
+    headers_ptr: *const u8,
+    headers_len: usize,
+    body_ptr: *const u8,
+    body_len: usize,
+    delay_ms: f64,
+) -> u32 {
+    // SAFETY: as the caller promises.
+    let (method, url, headers, body) = unsafe {
+        (
+            text(method_ptr, method_len),
+            text(url_ptr, url_len),
+            text(headers_ptr, headers_len),
+            bytes(body_ptr, body_len),
+        )
+    };
+    let fixture = Fixture {
+        method: (!method.is_empty()).then(|| method.to_string()),
+        url: url.to_string(),
+        status: u16::try_from(status).unwrap_or(0),
+        headers: headers
+            .lines()
+            .filter_map(|line| line.split_once(':'))
+            .map(|(n, v)| (n.trim().to_string(), v.trim().to_string()))
+            .collect(),
+        body: std::rc::Rc::from(body),
+        delay_ms: delay_ms.max(0.0) as u64,
+    };
+    with(|emulator| {
+        emulator.add_fixture(fixture);
+        Ok(())
+    })
+}
+
+/// Lets the page fetch what no recorded answer answers (`real` 1), or
+/// not (0).
+#[unsafe(no_mangle)]
+pub extern "C" fn pp_network(real: u32) -> u32 {
+    with(|emulator| {
+        emulator.set_real_network(real == 1);
+        Ok(())
+    })
+}
+
+/// The requests plugins made since asked last, as JSON into the result
+/// buffer (see [`Emulator::requests`]).
+#[unsafe(no_mangle)]
+pub extern "C" fn pp_requests() -> u32 {
+    let mut json = String::new();
+    let failed = with(|emulator| {
+        json = emulator.requests();
+        Ok(())
+    });
+    if failed == 0 {
+        answer(json);
+    }
+    failed
+}
+
+/// The requests for the page to fetch since asked last, as JSON into the
+/// result buffer (see [`Emulator::outbox`]).
+#[unsafe(no_mangle)]
+pub extern "C" fn pp_outbox() -> u32 {
+    let mut json = String::new();
+    let failed = with(|emulator| {
+        json = emulator.outbox();
+        Ok(())
+    });
+    if failed == 0 {
+        answer(json);
+    }
+    failed
+}
+
+/// The page's answer to the request `id` it fetched: its status (0:
+/// failed, the reason as the body), headers (`name: value` lines), body
+/// and the address it came from after redirects (empty: the one asked),
+/// at `now_ms` (as [`pp_advance`]).
+///
+/// # Safety
+///
+/// The texts and the body are memory the script wrote ([`pp_alloc`]).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pp_fetched(
+    id: u32,
+    status: u32,
+    headers_ptr: *const u8,
+    headers_len: usize,
+    body_ptr: *const u8,
+    body_len: usize,
+    url_ptr: *const u8,
+    url_len: usize,
+    now_ms: f64,
+) -> u32 {
+    // SAFETY: as the caller promises.
+    let (headers, body, url) = unsafe {
+        (
+            text(headers_ptr, headers_len),
+            bytes(body_ptr, body_len),
+            text(url_ptr, url_len),
+        )
+    };
+    let status = u16::try_from(status).unwrap_or(0);
+    let now = now_ms.max(0.0) as u64;
+    with(|emulator| emulator.fetched(id, status, headers, body.to_vec(), url, now))
+}
+
+/// Carries out the remote control's command (an x4-remote line, see
+/// [`Emulator::command`]) at `now_ms` (as [`pp_advance`]); its answer as
+/// JSON into the result buffer.
+///
+/// # Safety
+///
+/// The line is memory the script wrote ([`pp_alloc`]).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pp_command(line_ptr: *const u8, line_len: usize, now_ms: f64) -> u32 {
+    // SAFETY: as the caller promises.
+    let line = unsafe { text(line_ptr, line_len) };
+    let mut json = String::new();
+    let failed = with(|emulator| {
+        json = emulator.command(line, now_ms.max(0.0) as u64)?;
+        Ok(())
+    });
+    if failed == 0 {
+        answer(json);
+    }
+    failed
+}
+
+/// Whether the screen shown is `text` (its id) or shows it (see
+/// [`Emulator::shows`]): 1 if so, 0 if not, [`STOPPED`].
+///
+/// # Safety
+///
+/// The text is memory the script wrote ([`pp_alloc`]).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn pp_shows(text_ptr: *const u8, text_len: usize) -> u32 {
+    // SAFETY: as the caller promises.
+    let wanted = unsafe { text(text_ptr, text_len) };
+    let mut shown = false;
+    let status = with(|emulator| {
+        shown = emulator.shows(wanted);
+        Ok(())
+    });
+    if status == STOPPED {
+        return STOPPED;
+    }
+    u32::from(shown)
 }
 
 /// Checks the data plugins and the plugins with code named with

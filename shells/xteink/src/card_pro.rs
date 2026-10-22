@@ -1,4 +1,4 @@
-//! The microSD card of the X4 Pro and the X4 Classic, on the ESP32-S3's
+﻿//! The microSD card of the X4 Pro and the X4 Classic, on the ESP32-S3's
 //! SD host (SDMMC, one data line), for PaperPaw's FAT storage: started as
 //! the SD specification says, then read and written block by block
 //! through a buffer in the chip's own RAM (its DMA does not reach the
@@ -28,6 +28,9 @@ const AT_ONCE: usize = 16;
 /// How long a card may take to write blocks (the SD specification allows
 /// SDXC cards 500 ms), with room.
 const WRITE_MS: u64 = 1000;
+/// Times a write is tried, the card ready again between: one the host
+/// gave up on while the card was still busy goes through the next time.
+const WRITE_TRIES: u32 = 3;
 /// Between polls of a card that is still writing, in microseconds.
 const POLL_US: u32 = 20;
 
@@ -193,9 +196,9 @@ fn blocks_of(csd: [u32; 4]) -> u32 {
     let bit = |n: u32| (csd[(n / 32) as usize] >> (n % 32)) & 1;
     let bits = |high: u32, low: u32| (low..=high).rev().fold(0u32, |v, n| (v << 1) | bit(n));
     match bits(127, 126) {
-        // CSD 2.0: (C_SIZE + 1) × 512 KiB.
+        // CSD 2.0: (C_SIZE + 1) Ã— 512 KiB.
         1 => (bits(69, 48) + 1).saturating_mul(1024),
-        // CSD 1.0: (C_SIZE + 1) × 2^(C_SIZE_MULT + 2) × 2^READ_BL_LEN bytes.
+        // CSD 1.0: (C_SIZE + 1) Ã— 2^(C_SIZE_MULT + 2) Ã— 2^READ_BL_LEN bytes.
         _ => {
             let c_size = bits(73, 62);
             let mult = bits(49, 47);
@@ -245,13 +248,43 @@ impl Blocks for Card {
             let count = chunk.len() / BLOCK;
             let command = if count == 1 { 24 } else { 25 };
             let address = self.address(at);
-            let mut aligned = self.buffer.get_mut();
-            aligned[..chunk.len()].copy_from_slice(chunk);
-            let from = DmaAlignedMut::new(&mut aligned[..chunk.len()]).map_err(|_| DiskError)?;
-            self.slot
-                .write_blocks_blocking(command, address, from, BLOCK as u16, count as u32)
-                .map_err(|_| DiskError)?;
-            self.ready()?;
+            let mut tries = 0;
+            loop {
+                let written = {
+                    let mut aligned = self.buffer.get_mut();
+                    aligned[..chunk.len()].copy_from_slice(chunk);
+                    let from =
+                        DmaAlignedMut::new(&mut aligned[..chunk.len()]).map_err(|_| DiskError)?;
+                    self.slot.write_blocks_blocking(
+                        command,
+                        address,
+                        from,
+                        BLOCK as u16,
+                        count as u32,
+                    )
+                };
+                // Cut short in the middle of blocks: the card is told
+                // the transfer ended.
+                if written.is_err() && count > 1 {
+                    let busy = CommandFlags { busy: true, ..NONE };
+                    let _ = self
+                        .slot
+                        .command_blocking(12, 0, ResponseLen::Short, true, busy);
+                }
+                // Written, or not: the card may still be busy writing
+                // (some take longer than the host waits for them), and
+                // takes nothing new until it is done.
+                let ready = self.ready();
+                match written {
+                    Ok(_) if ready.is_ok() => break,
+                    Ok(_) => warn!("card: not ready after writing {count} blocks at {at}"),
+                    Err(e) => warn!("card: writing {count} blocks at {at}: {e:?}"),
+                }
+                tries += 1;
+                if tries == WRITE_TRIES {
+                    return Err(DiskError);
+                }
+            }
             at += count as u32;
         }
         Ok(())

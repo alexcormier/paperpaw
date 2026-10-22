@@ -147,7 +147,7 @@ static SETTINGS: [SettingSpec; 21] = {
         align_spec("home.clock.align", CLOCK_ID, Align::Center),
         frame_spec("home.clock.frame", CLOCK_ID, Frame::None),
         padding_spec("home.clock.padding", CLOCK_ID, Padding::Auto),
-        size_spec("home.clock.size", CLOCK_ID, Size::Fit, true),
+        size_spec("home.clock.size", CLOCK_ID, Size::Medium, true),
         part_spec("home.clock.date", CLOCK_ID, "home.setting.clock-date", true),
         align_spec("home.continue.align", CONTINUE_ID, Align::Left),
         frame_spec("home.continue.frame", CONTINUE_ID, Frame::Line),
@@ -425,38 +425,135 @@ fn clock_shows(env: &Env<'_>) -> String {
     )
 }
 
-/// The clock's size for `clock` in `width` pixels with `height` pixels
-/// for its digits: as set, or as large as fits; smaller where the width
-/// needs it, down to the body's size.
-fn clock_size(
-    env: &Env<'_>,
-    style: &UiStyle,
-    font: &FontHandle<'_>,
-    clock: &str,
-    width: f32,
-    height: f32,
-) -> f32 {
-    let want = match widgets::size(env, CLOCK) {
-        // The digits about half the height (their line about 0.7).
-        Size::Fit => (height * 0.7).max(style.text),
-        size => size.text(style) * 1.4,
-    };
-    widgets::largest_size(want, style.text, |size| font.measure(size, clock) <= width)
-        .unwrap_or(style.text)
+/// How wide the time is by the clock's size setting, as a share of the
+/// screen's width: small, medium (the first home screen's, on every
+/// device) and large clearly apart, the same wherever it is placed (as
+/// far as the place holds it); as large as fits ([`Size::Fit`]) fills
+/// the place instead.
+fn set_share(size: Size) -> f32 {
+    match size {
+        Size::Small => 0.15,
+        Size::Large => 0.32,
+        _ => 0.21,
+    }
 }
 
-fn clock_height(env: &Env<'_>, _: u16) -> u16 {
+/// The date's share of the time's size: it grows with the time, never
+/// smaller than small text.
+const DATE_SHARE: f32 = 0.24;
+
+/// Where the time's digits end and what follows them begins ("AM"): the
+/// digits (or the dashes of a clock not yet set) are drawn large, from a
+/// pack's large sizes where it has them (see [`FontHandle::display`]),
+/// the rest beside them at the date's size.
+fn split_time(clock: &str) -> (&str, &str) {
+    let end = clock
+        .find(|c: char| !(c.is_ascii_digit() || c == ':' || c == '-'))
+        .unwrap_or(clock.len());
+    (&clock[..end], clock[end..].trim())
+}
+
+/// How the clock is laid out in `width` by `height` pixels: the time's
+/// size, and the date's with its text where it shows.
+struct ClockLayout {
+    size: f32,
+    /// The size of the date and of what follows the digits ("AM").
+    small: f32,
+    date: Option<String>,
+    /// The ink of the digits and of the date, from their baselines.
+    digits_ink: (i32, i32),
+    date_ink: (i32, i32),
+}
+
+impl ClockLayout {
+    /// The time as large as its size setting says and the place holds: as
+    /// large as fits by [`Size::Fit`], at most that else; the date below
+    /// it in proportion (in short words where the full ones do not fit),
+    /// left out only where not even the time at the body's size and the
+    /// date at the small size fit together.
+    fn of(env: &Env<'_>, style: &UiStyle, font: &FontHandle<'_>, width: f32, height: f32) -> Self {
+        let clock = time::clock_text(env).unwrap_or_else(|| String::from("--:--"));
+        let (digits, rest) = split_time(&clock);
+        let display = font.display();
+        let gap = style.gap as i32;
+        let wants_date = env.settings.read(&CLOCK_DATE) && time::local_time(env).is_some();
+        // The most it may be: as set, or (as large as fits) up to the
+        // width's, its height checked as it is laid out.
+        let size_for = |wide: f32| 100.0 * wide / display.measure(100.0, digits).max(1.0);
+        let most = match widgets::size(env, CLOCK) {
+            Size::Fit => size_for(width),
+            size => size_for(set_share(size) * f32::from(env.device.display.width)),
+        };
+        let lay = |size: f32, with_date: bool| {
+            // In proportion to the size the digits are drawn at (a pack's
+            // largest at most), so the date never outgrows them.
+            let small = (display.size_for(size, digits) * DATE_SHARE).max(style.small);
+            let rest_width = if rest.is_empty() {
+                0.0
+            } else {
+                font.measure(small, " ") + font.measure(small, rest)
+            };
+            let wide = display.measure(size, digits) + rest_width;
+            let digits_ink = ink_of(&display, size, digits);
+            let date = with_date
+                .then(|| fitting_date(env, font, small, style.small, width))
+                .flatten();
+            let date_ink = date
+                .as_ref()
+                .map_or((0, 0), |(size, text)| ink_of(font, *size, text));
+            let high = digits_ink.1 - digits_ink.0
+                + date.as_ref().map_or(0, |_| gap + date_ink.1 - date_ink.0);
+            let layout = ClockLayout {
+                size,
+                small: date.as_ref().map_or(small, |(size, _)| *size),
+                date: date.map(|(_, text)| text),
+                digits_ink,
+                date_ink,
+            };
+            (wide <= width + 1.0 && high <= height as i32, layout)
+        };
+        let fitting = |with_date: bool| {
+            let mut found = None;
+            widgets::largest_size(most, style.text.min(most), |size| {
+                let (fits, layout) = lay(size, with_date);
+                if fits {
+                    found = Some(layout);
+                }
+                fits
+            });
+            found
+        };
+        fitting(wants_date)
+            .or_else(|| fitting(false))
+            .unwrap_or_else(|| lay(style.text, false).1)
+    }
+
+    /// The height of its ink, the date's and the gap between included.
+    fn height(&self, gap: i32) -> i32 {
+        let date = match self.date {
+            Some(_) => gap + self.date_ink.1 - self.date_ink.0,
+            None => 0,
+        };
+        self.digits_ink.1 - self.digits_ink.0 + date
+    }
+}
+
+fn clock_height(env: &Env<'_>, width: u16) -> u16 {
     let style = UiStyle::new(env);
-    let date = if env.settings.read(&CLOCK_DATE) {
-        line_height(env, style.small)
-    } else {
-        0
+    let Some(font) = style.font(env) else {
+        return line_height(env, style.title) + frame_height(env, CLOCK);
     };
-    let size = match widgets::size(env, CLOCK) {
-        Size::Fit => style.title * 2.2,
-        size => size.text(&style) * 1.4,
-    };
-    line_height(env, size) + date + style.gap as u16 + frame_height(env, CLOCK)
+    // As high as the time and the date need at their size: as large as
+    // fits, that is as wide as the place.
+    let frame = widgets::frame(env, CLOCK);
+    let pad = widgets::padding(env, CLOCK)
+        .pixels(&style, frame)
+        .min(width / 4);
+    let inner = f32::from(width.saturating_sub(2 * pad));
+    let layout = ClockLayout::of(env, &style, &font, inner, f32::MAX);
+    // The room above and below the ink a line of text has.
+    let room = line_height(env, style.small) / 2;
+    layout.height(style.gap as i32) as u16 + 2 * room + 2 * pad + frame_height(env, CLOCK)
 }
 
 /// The top and bottom of the ink of `text` at `size` from its baseline
@@ -477,50 +574,41 @@ fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let area = look.area;
     let width = f32::from(area.width);
     let clock = time::clock_text(env).unwrap_or_else(|| String::from("--:--"));
+    let (digits, rest) = split_time(&clock);
+    let display = font.display();
     // A gap from ink to ink: the date's small letters need the room a
     // gap between lines of text has, or they cling to the digits.
     let gap = style.gap as i32;
-    // The date below where it fits whole (in short words where the full
-    // ones do not), small; the time in the rest.
-    let mut date = if env.settings.read(&CLOCK_DATE) {
-        fitting_date(env, &font, style.small, style.small, width).map(|(size, text)| {
-            let (top, bottom) = ink_of(&font, size, &text);
-            (size, text, top, bottom)
-        })
-    } else {
-        None
-    };
-    let date_height = |date: &Option<(f32, String, i32, i32)>| {
-        date.as_ref()
-            .map_or(0, |(_, _, top, bottom)| bottom - top + gap)
-    };
-    let digits = |date: &Option<(f32, String, i32, i32)>| {
-        let room = (i32::from(area.height) - date_height(date)).max(0) as f32;
-        let size = clock_size(env, &style, &font, &clock, width, room);
-        let (top, bottom) = ink_of(&font, size, &clock);
-        (size, top, bottom)
-    };
-    let (mut size, mut top, mut bottom) = digits(&date);
-    // Both do not fit: the time alone.
-    if date.is_some() && bottom - top + date_height(&date) > i32::from(area.height) {
-        date = None;
-        (size, top, bottom) = digits(&date);
-    }
+    let layout = ClockLayout::of(env, &style, &font, width, f32::from(area.height));
+    let size = layout.size;
+    let (top, bottom) = layout.digits_ink;
     // Together in the middle by their ink.
-    let total = bottom - top + date_height(&date);
+    let total = layout.height(gap);
     let y = i32::from(area.y) + (i32::from(area.height) - total) / 2;
     let align = widgets::align(env, CLOCK);
+    let rest_width = if rest.is_empty() {
+        0.0
+    } else {
+        font.measure(layout.small, " ") + font.measure(layout.small, rest)
+    };
     // Shortened only where not even the body's size fits (a sliver).
-    let shown = ui::fit(&font, size, &clock, width);
-    let x = align.x(area, font.measure(size, &shown));
+    let shown = ui::fit(&display, size, digits, width - rest_width);
+    let digits_width = display.measure(size, &shown);
+    let x = align.x(area, digits_width + rest_width);
     let high = (bottom - top) as u16;
     let at = Rect::new(x.max(0.0) as u16, y.max(0) as u16, area.width, high);
     canvas.describe(paperpaw_sdk::semantics::Role::Text, &clock, at, false, None);
-    font.draw(canvas, size, x, y - top, &shown, look.ink);
-    if let Some((small, text, date_top, date_bottom)) = &date {
+    let baseline = y - top;
+    display.draw(canvas, size, x, baseline, &shown, look.ink);
+    if !rest.is_empty() {
+        let x = x + digits_width + font.measure(layout.small, " ");
+        font.draw(canvas, layout.small, x, baseline, rest, look.ink);
+    }
+    if let Some(text) = &layout.date {
+        let (date_top, date_bottom) = layout.date_ink;
         let y = y + (bottom - top) + gap;
-        let x = align.x(area, font.measure(*small, text));
-        font.draw(canvas, *small, x, y - date_top, text, look.faint);
+        let x = align.x(area, font.measure(layout.small, text));
+        font.draw(canvas, layout.small, x, y - date_top, text, look.faint);
         let high = (date_bottom - date_top) as u16;
         let at = Rect::new(x.max(0.0) as u16, y.max(0) as u16, area.width, high);
         canvas.describe(paperpaw_sdk::semantics::Role::Text, text, at, false, None);

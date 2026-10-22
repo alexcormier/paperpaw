@@ -26,10 +26,9 @@ impl Kernel {
         self.check_network();
         self.run_commands();
         if let Some(row) = self.hint_row() {
-            let (hints, held) = (self.current_hints(), self.current_holds());
-            if hints != self.hint.shown || held != self.hint.held {
+            let hints = self.current_hints();
+            if hints != self.hint.shown {
                 self.hint.shown = hints;
-                self.hint.held = held;
                 self.invalidate(row);
             }
         }
@@ -436,6 +435,7 @@ impl Kernel {
         if *event == events::PAGE_TURNED {
             self.last_activity = self.now;
         }
+        self.tasks_follow_books(event, params);
         let guarded = self.guarded_screens();
         if let Some(screens) = guarded {
             return self.emit_to_guard(event, params, &screens);

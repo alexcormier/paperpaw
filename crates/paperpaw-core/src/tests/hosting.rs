@@ -2,6 +2,8 @@
 //! way back.
 
 use super::*;
+use paperpaw_sdk::builtin::events;
+use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::host::ScreenHost;
 use paperpaw_sdk::{Gesture, Params};
 
@@ -172,4 +174,85 @@ fn tasks_keep_their_own_way_back() {
     kernel.apply(Command::SwitchTask(slots::LIBRARY));
     kernel.finish();
     assert_eq!(ids(&kernel), ["host.list", "host.page"]);
+}
+
+/// A task kept follows its book: moved, its screen opens the book where
+/// it is now; deleted, the screens from the one that shows it are let go
+/// and those below it stay, so switching back opens no file that is gone.
+#[test]
+fn tasks_kept_follow_their_books() {
+    let log = log();
+    let mut kernel = Kernel::builder(DEVICE)
+        .plugin(HostPlugin(log.clone()))
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let path = paperpaw_sdk::builtin::params::PATH;
+    // Two books one over the other, and a screen of neither over them.
+    kernel.open_screen(
+        Instant(1),
+        PAGE,
+        Params::new().with(path, "books/kept.epub"),
+    );
+    kernel.open_screen(Instant(1), PAGE, Params::new().with(path, "books/a.epub"));
+    kernel.open_screen(Instant(1), PAGE, Params::new().with("n", "over it"));
+    let ids = |kernel: &Kernel| -> Vec<String> {
+        kernel.screens().map(|id| id.as_str().into()).collect()
+    };
+    let shown = |kernel: &Kernel| -> Vec<Option<String>> {
+        kernel
+            .stack
+            .iter()
+            .map(|s| s.params.get(path).map(String::from))
+            .collect()
+    };
+    kernel.apply(Command::SwitchTask(slots::LIBRARY));
+    kernel.finish();
+    let moved = events::BookMoved::new("books/a.epub".into(), "books/b.epub".into());
+    kernel.send_event(
+        Instant(2),
+        events::BOOK_MOVED.id().clone(),
+        moved.to_params(),
+    );
+    kernel.apply(Command::SwitchTask(slots::HOME));
+    kernel.finish();
+    assert_eq!(
+        ids(&kernel),
+        ["host.tabs", "host.page", "host.page", "host.page"]
+    );
+    assert_eq!(
+        shown(&kernel),
+        [
+            None,
+            Some("books/kept.epub".into()),
+            Some("books/b.epub".into()),
+            None
+        ]
+    );
+    kernel.apply(Command::SwitchTask(slots::LIBRARY));
+    kernel.finish();
+    let removed = events::BookRemoved::new("books/b.epub".into());
+    kernel.send_event(
+        Instant(3),
+        events::BOOK_REMOVED.id().clone(),
+        removed.to_params(),
+    );
+    kernel.apply(Command::SwitchTask(slots::HOME));
+    kernel.finish();
+    // The other book's screen stays; the deleted one's and what was over
+    // it go.
+    assert_eq!(ids(&kernel), ["host.tabs", "host.page"]);
+    assert_eq!(shown(&kernel), [None, Some("books/kept.epub".into())]);
+    // Its book deleted too: only the task's first screen is left.
+    kernel.apply(Command::SwitchTask(slots::LIBRARY));
+    kernel.finish();
+    let removed = events::BookRemoved::new("books/kept.epub".into());
+    kernel.send_event(
+        Instant(4),
+        events::BOOK_REMOVED.id().clone(),
+        removed.to_params(),
+    );
+    kernel.apply(Command::SwitchTask(slots::HOME));
+    kernel.finish();
+    assert_eq!(ids(&kernel), ["host.tabs"]);
 }

@@ -4,8 +4,12 @@
 //!
 //! Sessions add it besides the plugins being checked (see [`add`]); the
 //! checks leave its namespace, [`PLUGIN`], out.
+//!
+//! What it keeps is the thread's: a session builds and runs its devices
+//! on one thread, and sessions on other threads (tests run side by side)
+//! must not change which plugins a device gets or the area it notes.
 
-use std::sync::Mutex;
+use std::cell::Cell;
 
 use paperpaw_core::KernelBuilder;
 use paperpaw_platform::Rect;
@@ -20,23 +24,22 @@ pub const PLUGIN: &str = "paperpaw-dev";
 /// The widget that notes its area.
 pub const WIDGET: Id = Id::new_static("paperpaw-dev.probe");
 
-/// The area the probe was last drawn in.
-static AREA: Mutex<Option<Rect>> = Mutex::new(None);
+thread_local! {
+    /// The area the probe was last drawn in.
+    static AREA: Cell<Option<Rect>> = const { Cell::new(None) };
+    /// The plugins of the target, added after the probe (see [`add`]).
+    static TARGET: Cell<Option<AddPlugins>> = const { Cell::new(None) };
+}
 
-/// The plugins of the target, added after the probe (see [`add`]).
-static TARGET: Mutex<Option<AddPlugins>> = Mutex::new(None);
-
-/// Sets what [`add`] adds besides the probe.
+/// Sets what [`add`] adds besides the probe, on this thread.
 pub fn set_target(add: Option<AddPlugins>) {
-    if let Ok(mut target) = TARGET.lock() {
-        *target = add;
-    }
+    TARGET.set(add);
 }
 
 /// Adds the probe and the target's plugins (see [`set_target`]).
 pub fn add(builder: KernelBuilder) -> KernelBuilder {
     let builder = builder.plugin(Probe);
-    match TARGET.lock().ok().and_then(|t| *t) {
+    match TARGET.get() {
         Some(add) => add(builder),
         None => builder,
     }
@@ -44,14 +47,12 @@ pub fn add(builder: KernelBuilder) -> KernelBuilder {
 
 /// Forgets the area noted, before the probe is drawn anew.
 pub fn forget() {
-    if let Ok(mut area) = AREA.lock() {
-        *area = None;
-    }
+    AREA.set(None);
 }
 
 /// The area the probe was drawn in since [`forget`].
 pub fn area() -> Option<Rect> {
-    AREA.lock().ok().and_then(|a| *a)
+    AREA.get()
 }
 
 #[derive(Debug)]
@@ -87,8 +88,6 @@ impl Widget for Noting {
     }
 
     fn draw(&self, _: &mut Canvas<'_>, _: &Env<'_>, area: Rect) {
-        if let Ok(mut noted) = AREA.lock() {
-            *noted = Some(area);
-        }
+        AREA.set(Some(area));
     }
 }

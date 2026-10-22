@@ -16,7 +16,9 @@
 //!
 //! Buttons work as in every list: the focus moves a book at a time, the
 //! page buttons turn pages, confirm opens, holding confirm (the menu
-//! button) offers what can be done with the focused book. Above the first
+//! button) offers what can be done with the focused book (its sheet:
+//! open, finished, favourite, information, archive, the book menu's
+//! actions, delete, asked about first). Above the first
 //! book (and after the last) the focus reaches the filter's row.
 //! Touch: tap the filter's row or a pill, a book, the search button (for
 //! "Find"); hold a book for its actions; tap the title for the library's

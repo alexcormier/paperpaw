@@ -22,7 +22,7 @@ pub mod index;
 pub mod listing;
 pub mod service;
 
-pub use service::{Badge, BookBadge, BookField, Library, service};
+pub use service::{Badge, BookBadge, BookField, Deleted, Library, is_book_path, service};
 
 /// What changed of a book ([`events::BookChanged::what`](crate::builtin::events::BookChanged)):
 /// bits, any together.

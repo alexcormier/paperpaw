@@ -370,13 +370,35 @@ fn room_of(geometry: &Geometry, taken: &[Cells], w: u8, h: u8, least: u8) -> Opt
 }
 
 /// Every item with its place: those placed where they are (if they fit
-/// the grid and nothing before took the cells), the others in the first
-/// free cells. Items without room are left out.
+/// the grid and nothing before took the cells); those whose place lies
+/// outside the grid (fewer columns or rows than when they were placed)
+/// as near it as the grid allows, narrower or lower where they must be,
+/// else in the first free cells; the others in the first free cells.
+/// Items without any room are left out.
 pub fn place(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> Vec<(Item, Cells)> {
     places(env, geometry, items)
         .into_iter()
         .map(|(index, c)| (items[index].clone(), c))
         .collect()
+}
+
+/// `items` fitted to `geometry` (see [`place`]): each placed where it
+/// shows, and those without room, as they were. A screen keeps the first
+/// and moves the others on (to its next page) once its grid changed, so
+/// that nothing is lost or hidden.
+pub fn fit(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> (Vec<Item>, Vec<Item>) {
+    let placed = places(env, geometry, items);
+    let left = items
+        .iter()
+        .enumerate()
+        .filter(|(index, _)| !placed.iter().any(|(p, _)| p == index))
+        .map(|(_, item)| item.clone())
+        .collect();
+    let placed = placed
+        .into_iter()
+        .map(|(index, cells)| Item::placed(items[index].what.clone(), cells))
+        .collect();
+    (placed, left)
 }
 
 /// [`place`], each item by its index in `items` (equal items apart).
@@ -390,6 +412,34 @@ fn places(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> Vec<(usize, Cel
         if let Some(c) = item.at
             && fits(&c, &placed)
         {
+            placed.push((index, c));
+        }
+    }
+    // Those whose place the grid no longer holds (it has fewer columns or
+    // rows now): moved inside it as little as can be, narrower or lower
+    // where they are wider or higher than it, else where there is room.
+    for (index, item) in items.iter().enumerate() {
+        let Some(c) = item.at.filter(|c| !c.fits(geometry.columns, geometry.rows)) else {
+            continue;
+        };
+        let (w, h) = (
+            c.w.min(geometry.columns).max(1),
+            c.h.min(geometry.rows.max(1)).max(1),
+        );
+        let near = Cells {
+            col: c.col.min(geometry.columns.saturating_sub(w)),
+            row: c.row.min(geometry.rows.saturating_sub(h)),
+            w,
+            h,
+        };
+        let taken: Vec<Cells> = placed.iter().map(|(_, c)| *c).collect();
+        let found = if fits(&near, &placed) {
+            Some(near)
+        } else {
+            let (_, _, least) = geometry.sizes_of(env, &item.what);
+            room_of(geometry, &taken, w, h, least)
+        };
+        if let Some(c) = found {
             placed.push((index, c));
         }
     }

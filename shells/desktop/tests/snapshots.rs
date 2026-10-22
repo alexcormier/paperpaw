@@ -136,25 +136,6 @@ const CASES: &[Case] = &[
         script: "",
         colour: 0,
     },
-    // The ready-made layouts, each shown on the home screen before it is
-    // kept, a book read: a look at one's reading on the X4, the clock on
-    // the Boox.
-    Case {
-        name: "x4-home-layouts",
-        profile: "xteink-x4",
-        book: Some("books/alice-in-wonderland.epub"),
-        sets: &[],
-        script: "run:core.home,run:home.choose-layout,page-forward,page-forward,wait:300",
-        colour: 0,
-    },
-    Case {
-        name: "boox-home-layouts",
-        profile: "boox-go-7",
-        book: Some("books/alice-in-wonderland.epub"),
-        sets: &[],
-        script: "run:core.home,run:home.choose-layout,run:core.next-page,run:core.next-page,                 run:core.next-page,wait:300",
-        colour: 0,
-    },
     Case {
         name: "boox-reader-epub",
         profile: "boox-go-7",
@@ -363,9 +344,17 @@ const CASES: &[Case] = &[
         profile: "xteink-x4",
         book: None,
         sets: &[],
+        script: "run:about.open,wait:500",
+        colour: 0,
+    },
+    Case {
+        name: "x4-licences",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
         // Long enough for its pages to be counted (on the X4 with rests
         // between), so the status line shows the page, not a percentage.
-        script: "run:about.open,wait:40000",
+        script: "run:about.open,left,confirm,wait:40000",
         colour: 0,
     },
     Case {

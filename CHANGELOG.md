@@ -6,6 +6,126 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The home screen's ready-made layouts are gone: no chooser, no row in
+  *Add*, no step in the first-run setup; the home screen has one default
+  layout. Breaking: presets of the kind `home.layout` (a data plugin's
+  `presets.ini`) are no longer offered anywhere; they are left unread.
+  Presets stay for other kinds (the power modes).
+- X4, X4 Pro and X4 Classic: calm status lines by default. While
+  reading, the time and the page (and the mark of reading aloud while it
+  reads); on the home screen, the time and the battery. Every item can
+  still be chosen.
+- The keyboard on narrow screens (the X4 and X4 Pro): a row too wide for
+  keys at least 6 mm wide is split in two in its order ("qwert" above
+  "yuiop"), so the keys are about twice as wide; by touch and with the
+  buttons as before. Wide screens keep their rows.
+- Settings, Plugins, *Screens*: for every place several plugins offer a
+  screen for (the home screen, the library, the reader, the quick panel,
+  the lock, the keyboard, the sleep screen, …) the plugin that shows it,
+  *Automatic* by default; kept in `paperpaw.ini` (`[slots]`), a choice
+  whose plugin is gone counts as *Automatic*. The reading app books open
+  with is chosen there too. When a plugin comes that offers a screen for
+  such a place, it asks once: use it now?
+- SDK: `Env::slot_choice` (the user's choice for a slot), `Env::slot_title`
+  and `Env::screen_title`.
+- *Clean up storage* is on the System page of the settings, and runs by
+  itself, silently, while the device charges: a day after the first
+  start, then at most once a week (where there is a clock). A settings
+  group's page lists the actions plugins add to the menu named by the
+  group's id.
+
+- Fewer columns or rows on the home screen no longer leave a page empty:
+  an item whose cells lie outside the grid now is moved inside it as
+  little as can be (narrower or lower where it was wider or higher than
+  the grid), else to the first free cells, and what a page has no room
+  for any more goes on to the next page (`widgets::grid::fit`). Before,
+  such items were kept but not shown: with 3 columns instead of 4 the
+  first page of the X4 Pro showed nothing.
+- About PaperPaw is a settings page with rows (version, source, plugins
+  built in, code plugins); the licences, a chapter each and in full, and
+  the list of the plugins built in open in the reader. The reader offers
+  *Back* always only on a plugin's pages opened with the SDK's new
+  `readers::open_page` (the browser's), no more on every document a
+  plugin keeps, and draws it as the interface's buttons.
+
+- The quick panel leaves the screen's status line as it is: it has no
+  line of its own at its top any more (its settings *Top line*, *Top
+  left*, *Top centre*, *Top right* and *Text size at the top* are gone;
+  saved values of them are left unread).
+- The home screen has 3 columns by default (was 4), so the tools' names
+  fit; a layout placing things 4 wide keeps 4.
+- The front light and its warmth are no longer in the main menu: they
+  are in the quick panel and the reader's panel.
+- No title is cut for a control any more: menus lay out a setting's row
+  as the settings pages do (its control below its title where both do
+  not fit); a header's title gets smaller beside its arrows, down to the
+  body's size, before it is shortened, and so does a row's title beside
+  its value, down to the small size; the skim bar puts its buttons in two
+  rows where their names do not fit in one.
+- No paws beside symbols: the row of hints shows each button's label
+  alone (no mark for holding, no paw while a press is worked on), and an
+  empty screen its icon alone. SDK, Breaking: `ui::draw_button_hints`
+  takes no `held` any more.
+- Web emulator: plugins' requests get the page's recorded answers
+  (method and address pattern to status, headers, body and a delay of
+  the device's time; redirects followed through them), offline and the
+  same each time; one that no answer matches fails as without a network,
+  and each request is told to the page (`request`). Served on the
+  computer itself, the frame may fetch the rest (`network` `"real"`);
+  nothing goes through paperpaw.org. The frame serves the page that
+  wrote to it first, and tells that page alone. Frame messages
+  `fixtures` and `network`; `Emulator::set_fixtures`,
+  `set_real_network`, `requests`, `outbox`, `fetched`. A shell can send
+  the emulator's requests elsewhere (`http::Route`, `http::set_route`).
+
+- The web emulator takes the remote control's commands, as
+  `tools/x4-remote.py` sends them to an X4 and parsed the same
+  (`paperpaw_x4::remote`): screens and slots opened by id with
+  parameters, actions run, settings set and read, events sent, what is
+  shown described, the card's files and the clock, answered as JSON
+  (`Emulator::command`, `pp_command`, the frame's `command`, `describe`,
+  `run`, `slot`, `show`, `open`, `set`, `emit`), and waits until a screen
+  or a text shows (`Emulator::shows`, `until`, `expect`). The remote
+  control has `slot` and `show` on the X4 too.
+
+- The home screen's clock: *as large as fits* fills its place (a cell
+  of the grid, or the width where it is listed without one), the date
+  below it in proportion, and *small*, *medium* and *large* are clearly
+  apart: the time a share of the screen's width (15, 21 and 32 %),
+  wherever it is placed as far as the place holds it. Medium, as large
+  as the clock was on every device, is now the default. On the X4 and
+  X4 Pro every size above 48 pixels looked the same: their fonts are
+  bitmap packs whose text sizes end there. The UI font's pack keeps the
+  digits, the colon and the dash at sizes from 56 to 164 pixels too
+  (about 150 KB of flash, no memory), and the clock draws its time from
+  them; "AM" or "PM" stands beside the digits at the date's size. The
+  spacing setting shows as it should: the clock fills what is left.
+- SDK: `FontHandle::display` draws a text of a few characters drawn
+  large alone (a time, a number) at a pack's large sizes made for those
+  characters; any other text stays at the sizes that have every
+  character, one size for the whole text (`FontHandle::size_for`). Font
+  packs may hold strikes of a few characters (`BitmapFont::size_for`),
+  and a character a strike lacks comes from the nearest that has it.
+- Widgets: *as large as fits* is as large as the place holds for the
+  library's numbers (its digits from the large sizes too), today's
+  reading, the vocabulary's words and the greeting; it stopped at three
+  times a title's size before.
+- Library: a book is deleted from its sheet (*Delete …*, last of its
+  actions). The sheet asks in place, the book still in sight and the
+  focus on *Keep it*; Back keeps it too. Deleted, the book goes with what
+  is kept for it (its place, bookmarks, notes, details, covers and what
+  plugins keep), by touch and by buttons alike. SDK: `Library::delete`
+  and `Library::can_delete` (`library::Deleted`), so a library of one's
+  own deletes its own way; the kernel's removes the files and says each
+  is gone (`BOOK_REMOVED`). Only books are deleted: of a format known
+  (by extension, or by the first bytes of a file without one), never in
+  PaperPaw's own folder (`library::is_book_path`); what is not a book is
+  refused (`Deleted::refused`), what the storage cannot delete says why
+  (`Deleted::failed`), and the sheet tells which. On a sheet of pages
+  the answers sit at its bottom edge. Tasks kept follow their books:
+  switching back no longer opens a book deleted (its screens and those
+  over them go, the others stay), and a book moved opens where it is
+  now.
 - SDK: a setting's title is never cut for its control. Where it does not
   fit beside its `−` value `+`, its switch or its value, the control goes
   on a line of its own below the title, at the right, and a title too

@@ -1887,10 +1887,16 @@ pub paperpaw_sdk::library::service::BookField::title: alloc::borrow::Cow<'static
 impl paperpaw_sdk::library::service::BookField
 pub fn paperpaw_sdk::library::service::BookField::in_catalog(self) -> Self
 pub fn paperpaw_sdk::library::service::BookField::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::library::service::Deleted
+pub paperpaw_sdk::library::service::Deleted::commands: alloc::vec::Vec<paperpaw_sdk::Command>
+pub paperpaw_sdk::library::service::Deleted::failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>
+pub paperpaw_sdk::library::service::Deleted::refused: alloc::vec::Vec<alloc::string::String>
 pub struct paperpaw_sdk::library::service::Kept
 impl paperpaw_sdk::library::service::Library for paperpaw_sdk::library::service::Kept
 pub fn paperpaw_sdk::library::service::Kept::book(&self, &paperpaw_sdk::Env<'_>, &str) -> core::option::Option<paperpaw_sdk::library::Book>
+pub fn paperpaw_sdk::library::service::Kept::can_delete(&self, &paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::library::service::Kept::catalog_state(&self, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::library::catalog::State
+pub fn paperpaw_sdk::library::service::Kept::delete(&self, &paperpaw_sdk::Env<'_>, &[&str]) -> paperpaw_sdk::library::service::Deleted
 pub fn paperpaw_sdk::library::service::Kept::each(&self, &paperpaw_sdk::Env<'_>, &mut dyn core::ops::function::FnMut(u64, paperpaw_sdk::library::catalog::Record))
 pub fn paperpaw_sdk::library::service::Kept::found(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::catalog::Query) -> usize
 pub fn paperpaw_sdk::library::service::Kept::index(&self, &paperpaw_sdk::Env<'_>, usize, &str) -> paperpaw_sdk::library::index::Index
@@ -1907,7 +1913,9 @@ pub fn paperpaw_sdk::library::service::Kept::version(&self, &paperpaw_sdk::Env<'
 pub const paperpaw_sdk::library::service::SERVICE: &str
 pub trait paperpaw_sdk::library::service::Library
 pub fn paperpaw_sdk::library::service::Library::book(&self, &paperpaw_sdk::Env<'_>, &str) -> core::option::Option<paperpaw_sdk::library::Book>
+pub fn paperpaw_sdk::library::service::Library::can_delete(&self, &paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::library::service::Library::catalog_state(&self, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::library::catalog::State
+pub fn paperpaw_sdk::library::service::Library::delete(&self, &paperpaw_sdk::Env<'_>, &[&str]) -> paperpaw_sdk::library::service::Deleted
 pub fn paperpaw_sdk::library::service::Library::each(&self, &paperpaw_sdk::Env<'_>, &mut dyn core::ops::function::FnMut(u64, paperpaw_sdk::library::catalog::Record))
 pub fn paperpaw_sdk::library::service::Library::found(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::catalog::Query) -> usize
 pub fn paperpaw_sdk::library::service::Library::index(&self, &paperpaw_sdk::Env<'_>, usize, &str) -> paperpaw_sdk::library::index::Index
@@ -1923,7 +1931,9 @@ pub fn paperpaw_sdk::library::service::Library::set_finished(&self, &paperpaw_sd
 pub fn paperpaw_sdk::library::service::Library::version(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<u64>
 impl paperpaw_sdk::library::service::Library for paperpaw_sdk::library::service::Kept
 pub fn paperpaw_sdk::library::service::Kept::book(&self, &paperpaw_sdk::Env<'_>, &str) -> core::option::Option<paperpaw_sdk::library::Book>
+pub fn paperpaw_sdk::library::service::Kept::can_delete(&self, &paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::library::service::Kept::catalog_state(&self, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::library::catalog::State
+pub fn paperpaw_sdk::library::service::Kept::delete(&self, &paperpaw_sdk::Env<'_>, &[&str]) -> paperpaw_sdk::library::service::Deleted
 pub fn paperpaw_sdk::library::service::Kept::each(&self, &paperpaw_sdk::Env<'_>, &mut dyn core::ops::function::FnMut(u64, paperpaw_sdk::library::catalog::Record))
 pub fn paperpaw_sdk::library::service::Kept::found(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::catalog::Query) -> usize
 pub fn paperpaw_sdk::library::service::Kept::index(&self, &paperpaw_sdk::Env<'_>, usize, &str) -> paperpaw_sdk::library::index::Index
@@ -1938,6 +1948,7 @@ pub fn paperpaw_sdk::library::service::Kept::set_favourite(&self, &paperpaw_sdk:
 pub fn paperpaw_sdk::library::service::Kept::set_finished(&self, &paperpaw_sdk::Env<'_>, &str, bool) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::library::service::Kept::version(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<u64>
 pub fn paperpaw_sdk::library::service::badges(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::catalog::Record, usize) -> alloc::vec::Vec<paperpaw_sdk::library::service::Badge>
+pub fn paperpaw_sdk::library::service::is_book_path(&paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::library::service::service<'e>(&paperpaw_sdk::Env<'e>) -> &'e dyn paperpaw_sdk::library::service::Library
 pub type paperpaw_sdk::library::service::BadgeFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::catalog::Record) -> core::option::Option<paperpaw_sdk::library::service::Badge>>
 pub mod paperpaw_sdk::library::what
@@ -1998,6 +2009,10 @@ pub paperpaw_sdk::library::BookField::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::library::service::BookField
 pub fn paperpaw_sdk::library::service::BookField::in_catalog(self) -> Self
 pub fn paperpaw_sdk::library::service::BookField::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::library::Deleted
+pub paperpaw_sdk::library::Deleted::commands: alloc::vec::Vec<paperpaw_sdk::Command>
+pub paperpaw_sdk::library::Deleted::failed: alloc::vec::Vec<(alloc::string::String, paperpaw_platform::storage::StorageError)>
+pub paperpaw_sdk::library::Deleted::refused: alloc::vec::Vec<alloc::string::String>
 #[non_exhaustive] pub struct paperpaw_sdk::library::Provided
 pub paperpaw_sdk::library::Provided::author: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::library::Provided::series: core::option::Option<alloc::string::String>
@@ -2015,7 +2030,9 @@ pub const paperpaw_sdk::library::FOLDER: paperpaw_sdk::setting::Setting<paperpaw
 pub const paperpaw_sdk::library::NEW_DAYS: u32
 pub trait paperpaw_sdk::library::Library
 pub fn paperpaw_sdk::library::Library::book(&self, &paperpaw_sdk::Env<'_>, &str) -> core::option::Option<paperpaw_sdk::library::Book>
+pub fn paperpaw_sdk::library::Library::can_delete(&self, &paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::library::Library::catalog_state(&self, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::library::catalog::State
+pub fn paperpaw_sdk::library::Library::delete(&self, &paperpaw_sdk::Env<'_>, &[&str]) -> paperpaw_sdk::library::service::Deleted
 pub fn paperpaw_sdk::library::Library::each(&self, &paperpaw_sdk::Env<'_>, &mut dyn core::ops::function::FnMut(u64, paperpaw_sdk::library::catalog::Record))
 pub fn paperpaw_sdk::library::Library::found(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::catalog::Query) -> usize
 pub fn paperpaw_sdk::library::Library::index(&self, &paperpaw_sdk::Env<'_>, usize, &str) -> paperpaw_sdk::library::index::Index
@@ -2031,7 +2048,9 @@ pub fn paperpaw_sdk::library::Library::set_finished(&self, &paperpaw_sdk::Env<'_
 pub fn paperpaw_sdk::library::Library::version(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<u64>
 impl paperpaw_sdk::library::service::Library for paperpaw_sdk::library::service::Kept
 pub fn paperpaw_sdk::library::service::Kept::book(&self, &paperpaw_sdk::Env<'_>, &str) -> core::option::Option<paperpaw_sdk::library::Book>
+pub fn paperpaw_sdk::library::service::Kept::can_delete(&self, &paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::library::service::Kept::catalog_state(&self, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::library::catalog::State
+pub fn paperpaw_sdk::library::service::Kept::delete(&self, &paperpaw_sdk::Env<'_>, &[&str]) -> paperpaw_sdk::library::service::Deleted
 pub fn paperpaw_sdk::library::service::Kept::each(&self, &paperpaw_sdk::Env<'_>, &mut dyn core::ops::function::FnMut(u64, paperpaw_sdk::library::catalog::Record))
 pub fn paperpaw_sdk::library::service::Kept::found(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::catalog::Query) -> usize
 pub fn paperpaw_sdk::library::service::Kept::index(&self, &paperpaw_sdk::Env<'_>, usize, &str) -> paperpaw_sdk::library::index::Index
@@ -2060,6 +2079,7 @@ pub fn paperpaw_sdk::library::favourites(&dyn paperpaw_platform::storage::Storag
 pub fn paperpaw_sdk::library::folder<'e>(&paperpaw_sdk::Env<'e>) -> &'e str
 pub fn paperpaw_sdk::library::index(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::library::Book
 pub fn paperpaw_sdk::library::indexed(&paperpaw_sdk::Env<'_>, &str) -> paperpaw_sdk::library::Book
+pub fn paperpaw_sdk::library::is_book_path(&paperpaw_sdk::Env<'_>, &str) -> bool
 pub fn paperpaw_sdk::library::is_new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::library::Book, bool) -> bool
 pub fn paperpaw_sdk::library::is_new_on(&paperpaw_sdk::library::Book, bool, core::option::Option<u32>) -> bool
 pub fn paperpaw_sdk::library::key(&str) -> alloc::string::String
@@ -2354,6 +2374,7 @@ pub fn paperpaw_sdk::readers::Readers::reading<'s>(&'s self, core::option::Optio
 pub const paperpaw_sdk::readers::DEFAULT: &str
 pub const paperpaw_sdk::readers::DIR: &str
 pub const paperpaw_sdk::readers::FOLDERS: &str
+pub const paperpaw_sdk::readers::PAGE: &str
 pub fn paperpaw_sdk::readers::ask(paperpaw_sdk::readers::Choice<'_>) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::readers::ask_once(&str) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::readers::cannot_open(&paperpaw_sdk::Params, &paperpaw_sdk::Id) -> paperpaw_sdk::Command
@@ -2362,6 +2383,7 @@ pub fn paperpaw_sdk::readers::folder_moved(&dyn paperpaw_platform::storage::Stor
 pub fn paperpaw_sdk::readers::format_setting(&paperpaw_sdk::Id) -> alloc::string::String
 pub fn paperpaw_sdk::readers::name<'e>(&'e paperpaw_sdk::Env<'_>, &'e paperpaw_sdk::readers::ReaderSpec) -> alloc::borrow::Cow<'e, str>
 pub fn paperpaw_sdk::readers::open(impl core::convert::Into<alloc::string::String>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::readers::open_page(impl core::convert::Into<alloc::string::String>) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::readers::open_with(&str, &paperpaw_sdk::readers::ReaderSpec) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::readers::past(&paperpaw_sdk::Params) -> impl core::iter::traits::iterator::Iterator<Item = &str>
 pub fn paperpaw_sdk::readers::remember(&dyn paperpaw_platform::storage::Storage, paperpaw_sdk::readers::Choice<'_>, core::option::Option<&paperpaw_sdk::Id>) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
@@ -3408,7 +3430,7 @@ pub fn paperpaw_sdk::ui::button_hints_height(&paperpaw_sdk::Env<'_>) -> u16
 pub fn paperpaw_sdk::ui::button_width(&paperpaw_sdk::ui::UiStyle, f32) -> f32
 pub fn paperpaw_sdk::ui::draw_arrow(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, (i32, i32), &str, bool, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::draw_button(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, bool, bool)
-pub fn paperpaw_sdk::ui::draw_button_hints(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, &[paperpaw_sdk::Hint], &[bool], core::option::Option<usize>)
+pub fn paperpaw_sdk::ui::draw_button_hints(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, &[paperpaw_sdk::Hint], core::option::Option<usize>)
 pub fn paperpaw_sdk::ui::draw_chevron(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, i32, i32, bool, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::draw_empty(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, &str, &str)
 pub fn paperpaw_sdk::ui::draw_faint_button(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, bool)
@@ -3621,6 +3643,7 @@ pub const paperpaw_sdk::widgets::grid::MAX_ROWS: u8
 pub fn paperpaw_sdk::widgets::grid::add(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item], paperpaw_sdk::widgets::grid::What) -> core::option::Option<alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>>
 pub fn paperpaw_sdk::widgets::grid::dragged(&paperpaw_sdk::widgets::grid::Geometry, paperpaw_sdk::widgets::grid::Cells, paperpaw_platform::geometry::Point, paperpaw_platform::geometry::Point, bool) -> core::option::Option<paperpaw_sdk::widgets::grid::Cells>
 pub fn paperpaw_sdk::widgets::grid::draw_tool(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, &paperpaw_sdk::Id, bool)
+pub fn paperpaw_sdk::widgets::grid::fit(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item]) -> (alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>, alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>)
 pub fn paperpaw_sdk::widgets::grid::free_place(&paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Cells], u8, u8) -> core::option::Option<paperpaw_sdk::widgets::grid::Cells>
 pub fn paperpaw_sdk::widgets::grid::parse(&str) -> alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>
 pub fn paperpaw_sdk::widgets::grid::place(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::widgets::grid::Geometry, &[paperpaw_sdk::widgets::grid::Item]) -> alloc::vec::Vec<(paperpaw_sdk::widgets::grid::Item, paperpaw_sdk::widgets::grid::Cells)>
@@ -4679,8 +4702,11 @@ pub fn paperpaw_sdk::Env<'_>::plugin_usage(&self) -> alloc::vec::Vec<paperpaw_sd
 pub fn paperpaw_sdk::Env<'_>::top(&self) -> core::option::Option<&paperpaw_sdk::StackEntry>
 impl<'a> paperpaw_sdk::Env<'a>
 pub fn paperpaw_sdk::Env<'a>::device_within(&self, paperpaw_platform::geometry::Rect) -> paperpaw_platform::DeviceInfo
+pub fn paperpaw_sdk::Env<'a>::screen_title(&self, &paperpaw_sdk::Id) -> core::option::Option<&'a str>
+pub fn paperpaw_sdk::Env<'a>::slot_choice(&self, &str) -> core::option::Option<&'a paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Env<'a>::slot_screen(&self, &str) -> core::option::Option<&'a paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Env<'a>::slot_screens(&self, &str) -> alloc::vec::Vec<&'a paperpaw_sdk::Id>
+pub fn paperpaw_sdk::Env<'a>::slot_title(&self, &str) -> core::option::Option<&'a str>
 pub fn paperpaw_sdk::Env<'a>::within<'b>(&self, &'b paperpaw_platform::DeviceInfo, paperpaw_platform::geometry::Rect) -> paperpaw_sdk::Env<'b> where 'a: 'b
 impl core::fmt::Debug for paperpaw_sdk::Env<'_>
 pub fn paperpaw_sdk::Env<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -4719,6 +4745,7 @@ pub fn paperpaw_sdk::FontFace::new(paperpaw_sdk::Id, impl core::convert::Into<al
 pub struct paperpaw_sdk::FontHandle<'a>
 impl<'a> paperpaw_sdk::FontHandle<'a>
 pub fn paperpaw_sdk::FontHandle<'a>::advance(&self, f32, char) -> f32
+pub fn paperpaw_sdk::FontHandle<'a>::display(self) -> Self
 pub fn paperpaw_sdk::FontHandle<'a>::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, f32, f32, i32, &str, paperpaw_platform::pixel::Color) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::draw_bolder(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, f32, f32, i32, &str, paperpaw_platform::pixel::Color, u16) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::has_char(&self, char) -> bool
@@ -4727,6 +4754,7 @@ pub fn paperpaw_sdk::FontHandle<'a>::ink(&self, f32, &str) -> core::option::Opti
 pub fn paperpaw_sdk::FontHandle<'a>::ink_across(&self, f32, &str) -> core::option::Option<(i32, i32)>
 pub fn paperpaw_sdk::FontHandle<'a>::line_metrics(&self, f32) -> paperpaw_text::font::LineMetrics
 pub fn paperpaw_sdk::FontHandle<'a>::measure(&self, f32, &str) -> f32
+pub fn paperpaw_sdk::FontHandle<'a>::size_for(&self, f32, &str) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::wrap(&self, f32, &str, f32) -> alloc::vec::Vec<core::ops::range::Range<usize>>
 impl core::fmt::Debug for paperpaw_sdk::FontHandle<'_>
 pub fn paperpaw_sdk::FontHandle<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

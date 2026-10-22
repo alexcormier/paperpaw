@@ -264,8 +264,11 @@ impl Firmware {
     }
 
     /// The presses and releases that came, before any work in the
-    /// background.
+    /// background. All that waits is handled before a frame shows: what
+    /// came while the last one refreshed (taps on *+*, presses of a
+    /// button) shows in one frame, not a frame each after the other.
     fn buttons(&mut self) {
+        let mut waiting: Option<Effects> = None;
         while let Some(change) = input::next() {
             let (event, at) = match change {
                 input::Change::Button(name, down, at) => {
@@ -294,6 +297,19 @@ impl Firmware {
             if let InputEvent::Button { name, .. } = event {
                 info!("{name}: {} ms", now().since(started));
             }
+            let effects = match waiting.take() {
+                Some(before) => before.and(effects),
+                None => effects,
+            };
+            // What cannot wait for the next input: a restart, sleep, the
+            // busy mark's work, a frame in grays.
+            if effects.restart() || effects.sleep() || effects.proceed() || effects.grays() {
+                self.apply(effects);
+            } else {
+                waiting = Some(effects);
+            }
+        }
+        if let Some(effects) = waiting {
             self.apply(effects);
         }
     }
@@ -476,6 +492,9 @@ impl Firmware {
         // From the first work not written back: work coming again and
         // again does not put it off.
         self.state.unsynced.get_or_insert(now().0);
+        // The light as set (or shown while a slider moves) at once, not
+        // after the frame that shows the setting.
+        self.light();
         loop {
             if effects.restart() {
                 self.restart();
@@ -725,6 +744,31 @@ impl Firmware {
         crate::remote::ok();
     }
 
+    /// Opens a slot (`slot`) or a screen by its id, with parameters, over
+    /// USB.
+    fn open_remote(
+        &mut self,
+        id: &str,
+        params: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>,
+        slot: bool,
+    ) {
+        let Ok(id) = paperpaw_sdk::Id::parse(id) else {
+            return crate::remote::error(id);
+        };
+        let mut with = paperpaw_sdk::Params::new();
+        for (key, value) in params {
+            with.set(key, value);
+        }
+        let at = self.kernel_now();
+        let effects = if slot {
+            self.kernel.open_slot(at, id, with)
+        } else {
+            self.kernel.open_screen(at, id, with)
+        };
+        self.apply(effects);
+        crate::remote::ok();
+    }
+
     /// Carries out a command over USB that changes the X4's state.
     fn remote_command(&mut self, command: paperpaw_x4::remote::Command) {
         use crate::remote;
@@ -781,6 +825,8 @@ impl Firmware {
                 let refresh = if full { Refresh::Full } else { Refresh::Fast };
                 remote::refreshed(self.panel.refresh(refresh, false));
             }
+            Command::Slot { id, params } => self.open_remote(&id, params, true),
+            Command::Show { id, params } => self.open_remote(&id, params, false),
             Command::Emit { event, params } => {
                 let Ok(id) = paperpaw_sdk::Id::parse(&event) else {
                     return remote::error(&event);

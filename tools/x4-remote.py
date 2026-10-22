@@ -32,6 +32,8 @@ STEPS, separated by commas:
   open:books/a.epub  open a book in the reader
   run:calibre.open   run an action, as a button bound to it would (e.g. a
                      tool's, to open it at once)
+  slot:core.settings:id=reader   open a slot, with parameters (key=value)
+  show:calibre.screen   open a screen by its id (also :key=value …)
   set:core.night-mode=on   set a setting, as the settings screen would (the
                      value as configuration files write it; `\,` for a
                      comma in it, e.g. a home page's widgets)
@@ -470,6 +472,17 @@ def write_png(path, width, height, gray_rows):
     Path(path).write_bytes(png)
 
 
+def hex_pairs(text):
+    """`key=value:key=value` (a value may hold colons, as an address does)
+    as the remote's `key=<hex>` words."""
+    pairs = re.split(r":(?=[A-Za-z0-9_.-]+=)", text) if text else []
+    words = []
+    for pair in pairs:
+        key, _, value = pair.partition("=")
+        words.append(f"{key}={value.encode().hex() or '-'}")
+    return words
+
+
 def run(x4, step):
     parts = step.split(":")
     # What follows the step's name, colons and all (paths, texts).
@@ -502,6 +515,10 @@ def run(x4, step):
             x4.touch("up", x, y)
         case ["swipe", x1, y1, x2, y2, *ms]:
             x4.swipe(int(x1), int(y1), int(x2), int(y2), int(ms[0]) if ms else 300)
+        case ["slot" | "show" | "emit" as kind, *_]:
+            # The id, then key=value parameters (values may hold colons).
+            ident, _, given = rest.partition(":")
+            x4.ask(" ".join([kind, ident, *hex_pairs(given)]), "OK")
         case ["drag", x1, y1, x2, y2, steps, ms]:
             x4.ask(f"drag {x1} {y1} {x2} {y2} {steps} {ms}", "OK")
             # Down, the moves and the lift, each read on the interrupt's
@@ -583,12 +600,6 @@ def run(x4, step):
             x4.ask(f"time set {at}", "OK")
         case ["log", level]:
             x4.ask(f"log {level}", "OK")
-        case ["emit", event, *pairs]:
-            hexed = []
-            for pair in pairs:
-                key, value = pair.split("=", 1)
-                hexed.append(f"{key}={value.encode().hex() or '-'}")
-            x4.ask(" ".join(["emit", event, *hexed]), "OK")
         case ["restart"]:
             x4.back_again("restart", "BOOT")
         case ["panic", *_]:

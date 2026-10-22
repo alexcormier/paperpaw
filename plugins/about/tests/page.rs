@@ -1,8 +1,8 @@
-//! *About PaperPaw* with the real kernel: the page is written to the
-//! plugin's folder and opened in the reader, with the version, the
-//! address and the licences, and the logo beside it (or the picture the
-//! logo setting names, where it is there); when the page cannot be
-//! written, nothing is opened.
+//! *About PaperPaw* with the real kernel: the page shows the version and
+//! the address in rows; its last row writes the licences to the plugin's
+//! folder and opens them in the reader, with the version, the address,
+//! and the logo beside them (or the picture the logo setting names, where
+//! it is there); when they cannot be written, nothing is opened.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -41,7 +41,7 @@ const DEVICE: DeviceInfo = DeviceInfo {
     memory: MemoryClass::Large,
 };
 
-const PAGE: &str = ".paperpaw/plugins/about/about.md";
+const PAGE: &str = ".paperpaw/plugins/about/licences.md";
 const LOGO: &str = ".paperpaw/plugins/about/logo.png";
 const BUNDLED: &[u8] = include_bytes!("../logo.png");
 
@@ -106,6 +106,7 @@ impl Device {
         let kernel = Kernel::builder(DEVICE)
             .storage(storage)
             .user_config(format!("[core]\nlanguage = en\n{config}"))
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
             .plugin(About)
             .plugin(Reader(opened.clone()))
             .build()
@@ -133,12 +134,28 @@ impl Device {
         }
     }
 
-    fn open(&mut self) {
+    fn run(&mut self, action: Id) {
         self.now += 100;
-        let effects = self
-            .kernel
-            .run_action(Instant(self.now), Id::new_static("about.open"));
+        let effects = self.kernel.run_action(Instant(self.now), action);
         self.settle(effects);
+    }
+
+    /// The page, then its last row: the licences.
+    fn open(&mut self) {
+        self.run(Id::new_static("about.open"));
+        self.run(paperpaw_sdk::builtin::actions::LEFT);
+        self.run(paperpaw_sdk::builtin::actions::CONFIRM);
+    }
+
+    /// What the screen shows, as one text.
+    fn shown(&mut self) -> String {
+        self.kernel.render(&mut |_, _| {});
+        self.kernel
+            .describe()
+            .into_iter()
+            .map(|p| p.label)
+            .collect::<Vec<_>>()
+            .join(" | ")
     }
 
     fn read(&self, path: &str) -> Option<Vec<u8>> {
@@ -151,9 +168,18 @@ impl Device {
 }
 
 #[test]
-fn the_page_is_written_and_opened_in_the_reader() {
+fn the_page_shows_rows_and_opens_the_licences_in_the_reader() {
     let mut device = Device::new(MemoryStorage::new(), "");
-    device.open();
+    device.run(Id::new_static("about.open"));
+    let shown = device.shown();
+    assert!(shown.contains("About PaperPaw"), "{shown}");
+    assert!(shown.contains(env!("CARGO_PKG_VERSION")), "{shown}");
+    assert!(shown.contains("github.com/hthoene/paperpaw"), "{shown}");
+    assert!(shown.contains("Licences"), "{shown}");
+    // Nothing opened in the reader before a row is chosen.
+    assert!(device.opened.borrow().is_empty());
+    device.run(paperpaw_sdk::builtin::actions::LEFT);
+    device.run(paperpaw_sdk::builtin::actions::CONFIRM);
     assert_eq!(*device.opened.borrow(), [PAGE]);
     let page = device.page();
     assert!(
@@ -173,7 +199,7 @@ fn the_page_is_written_and_opened_in_the_reader() {
         .kernel
         .run_action(Instant(device.now), paperpaw_sdk::builtin::actions::BACK);
     device.settle(effects);
-    device.open();
+    device.run(paperpaw_sdk::builtin::actions::CONFIRM);
     assert_eq!(device.page(), page);
     assert_eq!(*device.opened.borrow(), [PAGE, PAGE]);
 }
@@ -248,6 +274,8 @@ fn nothing_opens_when_the_page_cannot_be_written() {
         .unwrap();
     let _ = kernel.start(Instant(0));
     let _ = kernel.run_action(Instant(100), Id::new_static("about.open"));
+    let _ = kernel.run_action(Instant(200), paperpaw_sdk::builtin::actions::LEFT);
+    let _ = kernel.run_action(Instant(300), paperpaw_sdk::builtin::actions::CONFIRM);
     assert!(opened.borrow().is_empty());
 }
 

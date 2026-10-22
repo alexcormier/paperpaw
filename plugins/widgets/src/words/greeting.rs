@@ -191,6 +191,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let room = f32::from(area.height.saturating_sub(small));
     // The icon is as high as a capital, a space before the text.
     let icon_width = |icon: bool, size: f32| {
+        // At the size the text is drawn at (a pack's largest at most).
+        let size = font.size_for(size, "");
         if icon {
             ui::icon_width(env, part.icon(), size) + size * 0.3
         } else {
@@ -211,12 +213,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     }
     let icon_width = |size: f32| icon_width(icon, size);
     // As large as set, or as fits: on one line as large as the width
-    // allows and most of the height left by the date.
+    // and the height left by the date allow.
     let (max, min) = match widgets::size(env, ID.as_str()) {
-        Size::Fit => (
-            (room * 0.62).clamp(style.small, style.title * 3.0),
-            style.small,
-        ),
+        // As large as the room holds, a line of it checked below.
+        Size::Fit => (room.max(style.small), style.small),
         size => (size.text(&style), size.text(&style).min(style.small)),
     };
     let one_line = widgets::largest_size(max, min, |size| {
@@ -282,7 +282,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let x = align.x(area, total);
         let row = Rect::new(area.x, top + big * n as u16, area.width, big);
         if icon {
-            let icon_size = size * 0.9;
+            let icon_size = font.size_for(size, shown) * 0.9;
             ui::draw_icon(canvas, env, part.icon(), icon_size, x, row, look.ink);
         }
         ui::draw_label(

@@ -206,6 +206,8 @@ impl Kernel {
         self.frame.rendered = Some(region);
         // A screenshot is written as the frame is drawn, a band at a time.
         let shot = self.frame.screenshot.take().filter(|_| region == bounds);
+        // Why it could not be written, where it could not.
+        let mut failed = None;
         let mut writer = shot.as_deref().and_then(|path| {
             paperpaw_sdk::image::PngWriter::new(
                 self.shared.storage.as_ref(),
@@ -213,6 +215,7 @@ impl Kernel {
                 u32::from(bounds.width),
                 u32::from(bounds.height),
             )
+            .map_err(|e| failed = Some(e))
             .ok()
         });
         let mut gray = Vec::new();
@@ -230,15 +233,18 @@ impl Kernel {
                             ((u32::from(c.r) * 77 + u32::from(c.g) * 150 + u32::from(c.b) * 29)
                                 >> 8) as u8
                         }));
-                        if writer
-                            .row(self.shared.storage.as_ref(), path, &gray)
-                            .is_err()
-                        {
+                        if let Err(e) = writer.row(self.shared.storage.as_ref(), path, &gray) {
+                            failed = Some(e);
                             break;
                         }
                     }
                 }
                 out(part.y, view);
+                // A row not written: no more of them, a picture with a
+                // gap is none.
+                if failed.is_some() {
+                    writer = None;
+                }
             }
             top = top.saturating_add(rows);
             if top == u16::MAX {
@@ -253,10 +259,21 @@ impl Kernel {
         let most = u32::from(region.width) * u32::from(region.height) * 2 >= screen;
         self.frame.pictures_shown = big || (self.frame.pictures_shown && !most);
         if let Some(path) = shot {
-            let key = if writer.is_some_and(|w| w.is_complete()) {
-                "core.screenshot-saved"
-            } else {
-                "core.screenshot-failed"
+            let saved = writer.is_some_and(|w| w.is_complete());
+            if !saved {
+                // What was written of it is no picture.
+                let _ = self.shared.storage.remove(&path);
+                let why =
+                    failed.map_or_else(|| String::from("not all of it drawn"), |e| e.to_string());
+                self.warn_runtime(format!("screenshot {path}: {why}"));
+            }
+            let key = match failed {
+                _ if saved => "core.screenshot-saved",
+                Some(paperpaw_sdk::image::ImageError::Storage(StorageError::Full)) => {
+                    "core.screenshot-full"
+                }
+                Some(paperpaw_sdk::image::ImageError::Storage(_)) => "core.screenshot-unwritten",
+                _ => "core.screenshot-failed",
             };
             let text = self
                 .shared
@@ -393,7 +410,6 @@ impl Kernel {
                 &env,
                 row,
                 &self.hint.shown,
-                &self.hint.held,
                 pressed,
             );
         }
@@ -466,7 +482,6 @@ impl Kernel {
                     &env,
                     row,
                     &self.hint.shown,
-                    &self.hint.held,
                     None,
                 );
             }

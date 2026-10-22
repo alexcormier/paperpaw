@@ -22,6 +22,9 @@ let last = null;
 let plugins = {};
 let timer = null;
 let drawing = false;
+/// The recorded answers and whether the page fetches the rest: kept for
+/// every device made after (a restart after a trap too).
+let network = { fixtures: [], mode: "fixtures" };
 
 const loading = PaperPawDevice.load(new URL("paperpaw-web.wasm", import.meta.url));
 
@@ -62,8 +65,21 @@ async function restart(reason) {
 }
 
 /// Tells the page around the frame.
+/// The origin of the page that embeds the frame: the first that wrote to
+/// it. Messages from others are passed over, and what the frame tells
+/// (plugins' requests among it) goes to it alone.
+let embedder = null;
+
+/// Served on this computer: only then may plugins reach the network
+/// through the frame (a local setup; see docs/web-emulator.md).
+const LOCAL =
+  ["localhost", "127.0.0.1", "[::1]"].includes(location.hostname) || location.hostname.endsWith(".localhost");
+
 function tell(message) {
-  if (window.parent !== window) window.parent.postMessage(message, "*");
+  if (window.parent === window) return;
+  // Before any page wrote: only that the module is ready, nothing else.
+  if (embedder) window.parent.postMessage(message, embedder);
+  else if (message.type === "ready") window.parent.postMessage(message, "*");
 }
 
 /// Sizes the canvas on the page: each of the device's pixels as a whole
@@ -115,7 +131,59 @@ function step() {
   if (!device) return;
   const next = guarded(() => device.advance(now()));
   requestDraw();
+  requests();
   if (next !== null) timer = setTimeout(step, Math.max(next, 1));
+}
+
+/// Tells the page every request plugins made, and fetches those it is to.
+function requests() {
+  for (const seen of guarded(() => device.requests())) tell({ type: "request", ...seen });
+  for (const call of guarded(() => device.outbox())) fetchFor(call);
+}
+
+/// Bytes written in hexadecimal.
+function bytesOf(hex) {
+  return Uint8Array.from(hex.match(/../g) ?? [], (pair) => parseInt(pair, 16));
+}
+
+/// Fetches a request for the device (real network allowed, see
+/// docs/web-emulator.md), within the page's own rules (CORS, its
+/// Content-Security-Policy): what it may not reach fails, status 0.
+async function fetchFor(call) {
+  let status = 0;
+  let headers = "";
+  let body = new Uint8Array();
+  const stop = new AbortController();
+  const timeout = setTimeout(() => stop.abort(), call.timeout_ms);
+  let url = "";
+  try {
+    const answer = await fetch(call.url, {
+      method: call.method,
+      headers: call.headers,
+      body: call.body === null ? undefined : bytesOf(call.body),
+      signal: stop.signal,
+      // The page's own cookies and logins are not the plugin's.
+      credentials: "omit",
+    });
+    status = answer.status;
+    headers = [...answer.headers].map(([name, value]) => `${name}: ${value}`).join("\n");
+    url = answer.url;
+    body = new Uint8Array(await answer.arrayBuffer());
+  } catch (error) {
+    body = new TextEncoder().encode(String(error.message ?? error));
+  } finally {
+    clearTimeout(timeout);
+  }
+  if (!device) return;
+  try {
+    guarded(() => device.fetched(call.id, status, headers, body, url, now()));
+  } catch (error) {
+    // The device made anew meanwhile (a start, a restart): its request
+    // is gone with it.
+    if (error instanceof WebAssembly.RuntimeError) throw error;
+    return;
+  }
+  step();
 }
 
 /// The buttons below the screen: the row the device has, else all.
@@ -171,6 +239,8 @@ for (const type of ["keydown", "keyup"]) {
 /// id) on its card and starts it.
 function boot(how, given) {
   device.create(how);
+  device.setFixtures(network.fixtures);
+  device.setNetwork(network.mode);
   plugins = {};
   for (const [id, files] of Object.entries(given)) put(id, files);
   device.start();
@@ -237,16 +307,85 @@ function check({ commands, plugins }) {
   return { report: device.check(commands ?? [], plugins ?? []) };
 }
 
-const HANDLERS = { start, files, input, screenshot, check };
+/// Text as the remote's lines carry it: hexadecimal, `-` for none.
+function hex(text) {
+  const bytes = new TextEncoder().encode(String(text ?? ""));
+  return bytes.length ? Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("") : "-";
+}
+
+/// Parameters as the remote's lines carry them: `key=hex` words.
+function pairs(params) {
+  return Object.entries(params ?? {}).map(([key, value]) => `${key}=${hex(value)}`);
+}
+
+/// The remote control's command, an x4-remote line (see
+/// docs/web-emulator.md); its answer.
+function command({ line }) {
+  const answer = guarded(() => device.command(line, now()));
+  step();
+  return { answer };
+}
+
+/// The same, built from a message's fields.
+const line = (words) => command({ line: words.join(" ") });
+const commands = {
+  command,
+  describe: () => command({ line: "describe" }).answer,
+  run: ({ action }) => line(["run", action]),
+  slot: ({ slot, params }) => line(["slot", slot, ...pairs(params)]),
+  show: ({ screen, params }) => line(["show", screen, ...pairs(params)]),
+  open: ({ path }) => line(["open", hex(path)]),
+  set: ({ setting, value }) => line(["set", setting, hex(value)]),
+  emit: ({ event, params }) => line(["emit", event, ...pairs(params)]),
+  /// Waits until the screen is `text` (its id) or shows it, at most
+  /// `timeout` ms of the page's time, the device running meanwhile.
+  until: async ({ text, timeout = 30000 }) => {
+    const end = now() + timeout;
+    for (;;) {
+      step();
+      if (guarded(() => device.shows(text))) return {};
+      if (now() >= end) throw new Error(`not shown in ${timeout} ms: ${text}`);
+      await new Promise((resolve) => setTimeout(resolve, 100));
+    }
+  },
+  expect: ({ text }) => {
+    if (!guarded(() => device.shows(text))) throw new Error(`not shown: ${text}`);
+    return {};
+  },
+};
+
+/// Recorded answers for plugins' requests, kept for devices made after.
+function fixtures({ fixtures: given = [] }) {
+  network.fixtures = given;
+  device?.setFixtures(given);
+  return {};
+}
+
+/// Whether the page fetches what no recorded answer answers.
+function networkMode({ mode }) {
+  if (mode !== "fixtures" && mode !== "real") throw new Error(`no network mode ${mode}`);
+  if (mode === "real" && !LOCAL) {
+    throw new Error("the real network only where the frame is served on this computer (localhost)");
+  }
+  network.mode = mode;
+  device?.setNetwork(mode);
+  return {};
+}
+
+const HANDLERS = { start, files, input, screenshot, check, fixtures, network: networkMode, ...commands };
 
 window.addEventListener("message", async (event) => {
   if (event.source !== window.parent || event.source === window) return;
+  // The page that wrote first is the one the frame serves.
+  embedder ??= event.origin;
+  if (event.origin !== embedder) return;
   const message = event.data ?? {};
   const handler = HANDLERS[message.type];
   // `request` pairs the answer with the message (`id` names a plugin).
   const reply = (answer) => event.source.postMessage({ type: message.type, request: message.request, ...answer }, event.origin);
   if (!handler) return reply({ error: `unknown message type ${message.type}` });
-  if (message.type !== "start" && !device) return reply({ error: "no device started yet" });
+  const before = ["start", "fixtures", "network"];
+  if (!before.includes(message.type) && !device) return reply({ error: "no device started yet" });
   try {
     reply(await handler(message));
   } catch (error) {

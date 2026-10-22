@@ -409,3 +409,125 @@ fn a_line_too_long_in_the_old_catalog_is_passed_over() {
     assert_eq!(walk.from_old(), 5);
     assert_eq!(walk.found(), 5);
 }
+
+#[test]
+fn the_kernels_library_deletes_books_and_says_which_are_gone() {
+    let storage = MemoryStorage::new()
+        .with("books/a.txt", "a")
+        .with("books/b.txt", "b");
+    let h = harness(MemoryStorage::new());
+    let env = h.env_on(&storage);
+    let library = library::service(&env);
+    assert!(library.can_delete(&env, "books/a.txt"));
+    assert!(!library.can_delete(&env, "books/gone.txt"));
+    let deleted = library.delete(&env, &["books/a.txt", "books/gone.txt", "books/b.txt"]);
+    assert!(!storage.exists("books/a.txt") && !storage.exists("books/b.txt"));
+    // One gone already is forgotten as well; none failed.
+    assert!(deleted.failed.is_empty());
+    // Each one gone said so: the kernel then forgets it and what is kept.
+    let removed: Vec<String> = deleted
+        .commands
+        .iter()
+        .filter_map(|command| match command {
+            paperpaw_sdk::Command::Emit(id, params) => paperpaw_sdk::builtin::events::BOOK_REMOVED
+                .read(id, params)
+                .map(|r| r.path),
+            _ => None,
+        })
+        .collect();
+    assert_eq!(removed, ["books/a.txt", "books/gone.txt", "books/b.txt"]);
+}
+
+/// A card that cannot be written: what is there reads, nothing goes.
+struct ReadOnly(MemoryStorage);
+
+impl Storage for ReadOnly {
+    fn read_at(&self, path: &str, at: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.0.read_at(path, at, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.0.size(path)
+    }
+    fn write(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+        Err(StorageError::Unsupported)
+    }
+    fn append(&self, _: &str, _: &[u8]) -> Result<(), StorageError> {
+        Err(StorageError::Unsupported)
+    }
+    fn list(&self, dir: &str, visit: &mut dyn FnMut(DirEntry<'_>)) -> Result<(), StorageError> {
+        self.0.list(dir, visit)
+    }
+    fn remove(&self, _: &str) -> Result<(), StorageError> {
+        Err(StorageError::Unsupported)
+    }
+}
+
+#[test]
+fn only_books_are_deleted_and_what_fails_says_why() {
+    let storage = MemoryStorage::new()
+        .with("books/a.txt", "a")
+        .with("books/notes.md", "not of a format known")
+        .with("paperpaw.ini", "[core]")
+        .with(".paperpaw/library/x.txt", "kept");
+    let h = harness(MemoryStorage::new());
+    let env = h.env_on(&storage);
+    let library = library::service(&env);
+    // Not a book: of no format known, in PaperPaw's own folder (also by
+    // another spelling, or climbing up to it).
+    for path in [
+        "books/notes.md",
+        "paperpaw.ini",
+        ".paperpaw/library/x.txt",
+        ".PaperPaw/library/x.txt",
+        "books/../.paperpaw/library/x.txt",
+    ] {
+        assert!(!library.can_delete(&env, path), "{path}");
+        let deleted = library.delete(&env, &[path]);
+        assert!(
+            deleted.commands.is_empty() && deleted.failed.is_empty(),
+            "{path}"
+        );
+        assert_eq!(deleted.refused, [path]);
+    }
+    assert!(storage.exists("books/notes.md") && storage.exists(".paperpaw/library/x.txt"));
+    // A card that cannot be written: the book stays, and why is said.
+    let locked = ReadOnly(MemoryStorage::new().with("books/a.txt", "a"));
+    let env = h.env_on(&locked);
+    let deleted = library::service(&env).delete(&env, &["books/a.txt"]);
+    assert!(deleted.commands.is_empty());
+    assert_eq!(
+        deleted.failed,
+        [("books/a.txt".to_string(), StorageError::Unsupported)]
+    );
+    assert!(locked.exists("books/a.txt"));
+}
+
+#[test]
+fn a_book_without_an_extension_known_by_its_first_bytes_is_deleted() {
+    let storage = MemoryStorage::new()
+        .with("books/Story", "%STORY and the rest of it")
+        .with("books/README", "plain words, of no format");
+    let mut h = harness(MemoryStorage::new());
+    let mut formats = Formats::new();
+    formats
+        .add(
+            FormatSpec::new(
+                Id::new_static("test.story"),
+                "Story",
+                vec![Cow::Borrowed("story")],
+                Box::new(|_, _, _| Err(DocumentError::UnsupportedFormat)),
+            )
+            .sniff(|bytes| bytes.starts_with(b"%STORY")),
+        )
+        .unwrap();
+    h.formats = formats;
+    let env = h.env_on(&storage);
+    let library = library::service(&env);
+    assert!(library.can_delete(&env, "books/Story"));
+    assert!(!library.can_delete(&env, "books/README"));
+    let deleted = library.delete(&env, &["books/Story", "books/README"]);
+    assert!(!storage.exists("books/Story"));
+    assert!(storage.exists("books/README"));
+    assert_eq!(deleted.refused, ["books/README"]);
+    assert_eq!(deleted.commands.len(), 1);
+}

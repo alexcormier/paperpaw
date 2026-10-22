@@ -388,6 +388,30 @@ impl Kernel {
         self.screen_changed(bounds, false);
     }
 
+    /// Tasks kept follow their books. A book deleted (`BOOK_REMOVED`):
+    /// a task's screens from the first that shows it are let go (those
+    /// above it were opened over it, e.g. its menu), those below stay,
+    /// and a task with none left goes; so switching back never opens a
+    /// file that is gone. A book moved (`BOOK_MOVED`): its screens open
+    /// it where it is now.
+    pub(crate) fn tasks_follow_books(&mut self, event: &Id, params: &Params) {
+        let path = builtin_params::PATH;
+        if let Some(removed) = events::BOOK_REMOVED.read(event, params) {
+            let gone = Some(removed.path.as_str());
+            for (_, screens) in &mut self.tasks {
+                if let Some(at) = screens.iter().position(|(_, _, p)| p.get(path) == gone) {
+                    screens.truncate(at);
+                }
+            }
+            self.tasks.retain(|(_, screens)| !screens.is_empty());
+        } else if let Some(moved) = events::BOOK_MOVED.read(event, params) {
+            let screens = self.tasks.iter_mut().flat_map(|(_, screens)| screens);
+            for (_, _, p) in screens.filter(|(_, _, p)| p.get(path) == Some(moved.from.as_str())) {
+                p.set(path, moved.path.clone());
+            }
+        }
+    }
+
     /// Closes all screens above `index`.
     pub(crate) fn close_above(&mut self, index: usize) {
         let mut region: Option<Rect> = None;
@@ -591,8 +615,27 @@ impl Kernel {
             if index == top {
                 self.output.redraw = true;
             } else if (index + 1..=top).all(|i| self.overlay(i).is_some()) {
+                // Less what the overlays above it cover: they paint all
+                // of their region (as `redraw` draws them), so only the
+                // rest of it changes on the screen. Not where one shows
+                // the full screen through, which leaves those below it
+                // undrawn.
+                let through: Vec<ShowsThrough> = (index + 1..=top)
+                    .map(|i| self.stack[i].screen.shows_through())
+                    .collect();
                 let region = self.region_of(index);
-                self.invalidate(region);
+                let shown = if through.contains(&ShowsThrough::FullScreen) {
+                    Some(region)
+                } else {
+                    (index + 1..=top)
+                        .zip(through)
+                        .filter(|&(_, t)| t == ShowsThrough::Nothing)
+                        .filter_map(|(i, _)| self.overlay(i))
+                        .try_fold(region, uncovered)
+                };
+                if let Some(shown) = shown {
+                    self.invalidate(shown);
+                }
             }
         }
         handled

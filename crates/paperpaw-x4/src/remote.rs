@@ -9,6 +9,10 @@
 //!   (`PP:OK`);
 //! - `run <action>`: runs an action as a button bound to it would, e.g.
 //!   `run calibre.open` to open a tool at once (`PP:OK`);
+//! - `slot <slot> [<key>=<hex value> …]`: opens a slot (`core.settings`,
+//!   `core.home` …) with parameters, as a plugin would (`PP:OK`);
+//! - `show <screen> [<key>=<hex value> …]`: opens a screen by its id with
+//!   parameters (`PP:OK`);
 //! - `set <setting> <value>`: sets a setting as the settings screen would,
 //!   the value as configuration files write it, in hexadecimal (`PP:OK`,
 //!   or `PP:ERR` and why);
@@ -218,6 +222,16 @@ pub enum Command {
         event: String,
         params: Vec<(String, String)>,
     },
+    /// A slot opened, with parameters.
+    Slot {
+        id: String,
+        params: Vec<(String, String)>,
+    },
+    /// A screen opened by its id, with parameters.
+    Show {
+        id: String,
+        params: Vec<(String, String)>,
+    },
     /// A finger down, moved or up at a point.
     Touch {
         phase: Touch,
@@ -359,18 +373,24 @@ pub fn parse(line: &str) -> Option<Command> {
             x: words.next()?.parse().ok()?,
             y: words.next()?.parse().ok()?,
         },
-        "emit" => {
-            let event = String::from(words.next()?);
-            let mut params = Vec::new();
-            for pair in words.by_ref() {
-                let (key, value) = pair.split_once('=')?;
-                params.push((String::from(key), unhex(value)?));
-            }
-            Command::Emit { event, params }
-        }
+        "emit" => Command::Emit {
+            event: String::from(words.next()?),
+            params: pairs(&mut words)?,
+        },
+        "slot" => Command::Slot {
+            id: String::from(words.next()?),
+            params: pairs(&mut words)?,
+        },
+        "show" => Command::Show {
+            id: String::from(words.next()?),
+            params: pairs(&mut words)?,
+        },
         // A path, the rest of the line.
         "ls" | "stat" | "md5" | "rm" | "mkdir" => {
-            let path = line.split_once(' ').map_or("", |(_, rest)| rest.trim());
+            // Paths on the card are named from its root, `/` or not.
+            let path = line
+                .split_once(' ')
+                .map_or("", |(_, rest)| rest.trim().trim_matches('/'));
             let path = String::from(path);
             return match line.split_ascii_whitespace().next()? {
                 "ls" => Some(Command::List(path)),
@@ -454,6 +474,16 @@ pub fn hex_bytes(hex: &[u8]) -> Option<Vec<u8>> {
         .map(|pair| {
             let digit = |c: u8| char::from(c).to_digit(16);
             Some((digit(pair[0])? << 4 | digit(pair[1])?) as u8)
+        })
+        .collect()
+}
+
+/// The rest of a line's `key=hex value` pairs, if all are.
+fn pairs<'a>(words: &mut impl Iterator<Item = &'a str>) -> Option<Vec<(String, String)>> {
+    words
+        .map(|pair| {
+            let (key, value) = pair.split_once('=')?;
+            Some((String::from(key), unhex(value)?))
         })
         .collect()
 }
@@ -610,6 +640,11 @@ mod tests {
     #[test]
     fn the_storage() {
         assert_eq!(parse("ls"), Some(Command::List(String::new())));
+        assert_eq!(parse("ls /"), Some(Command::List(String::new())));
+        assert_eq!(
+            parse("stat /books/a.epub"),
+            Some(Command::Stat(String::from("books/a.epub")))
+        );
         assert_eq!(
             parse("ls books/my books"),
             Some(Command::List(String::from("books/my books")))
@@ -679,6 +714,22 @@ mod tests {
             })
         );
         assert_eq!(parse("emit e path"), None);
+        assert_eq!(
+            parse("slot core.settings id=726561646572"),
+            Some(Command::Slot {
+                id: String::from("core.settings"),
+                params: alloc::vec![(String::from("id"), String::from("reader"))]
+            })
+        );
+        assert_eq!(
+            parse("show calibre.screen"),
+            Some(Command::Show {
+                id: String::from("calibre.screen"),
+                params: alloc::vec![]
+            })
+        );
+        assert_eq!(parse("slot"), None);
+        assert_eq!(parse("show s key=zz"), None);
         assert_eq!(
             parse("panic 6f68"),
             Some(Command::Panic(String::from("oh")))

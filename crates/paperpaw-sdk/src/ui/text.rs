@@ -585,21 +585,6 @@ pub fn draw_empty(
             at,
             style.ink(Ink::Faint),
         );
-        // A small paw beside the icon, as if it had just walked past;
-        // the icon stays in the middle.
-        let size = icon_size * 0.4;
-        let below = Rect::new(
-            area.x,
-            (y + icon_size - size) as u16,
-            area.width,
-            size as u16,
-        );
-        let x = centre(w) + w + gap / 2.0;
-        // Only where it fits beside the icon (not in a narrow area).
-        let right = f32::from(area.x) + f32::from(area.width);
-        if x + icon_width(env, PAW_ICON, size) <= right {
-            draw_icon(canvas, env, PAW_ICON, size, x, below, style.ink(Ink::Faint));
-        }
         y += icon_room;
     }
     if !title.is_empty() {

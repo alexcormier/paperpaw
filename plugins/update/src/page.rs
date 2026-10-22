@@ -74,6 +74,8 @@ enum View {
         offer: Offer,
         leaves: Vec<String>,
         stopping: String,
+        /// Chosen anyway while it waits (and it still does).
+        anyway: bool,
     },
     /// An update the server named that waits for plugins: their names,
     /// and those of the crates that cannot come along in any case.
@@ -272,6 +274,8 @@ impl UpdatePage {
                     offer,
                     leaves,
                     stopping,
+                    // Waiting no more, it is offered as any update.
+                    anyway: self.anyway && !holding.is_empty(),
                 }
             }
             (Err(InstallFailure::Unreadable) | Ok(_), None) => View::Nothing,
@@ -291,7 +295,11 @@ impl UpdatePage {
         // Why each is missing; not after choosing anyway, where they are
         // all gone alike (said once for all of them).
         let offer = match &self.view {
-            View::Offer { offer, .. } if !self.anyway => Some(offer),
+            View::Offer {
+                offer,
+                anyway: false,
+                ..
+            } => Some(offer),
             _ => None,
         };
         let names: Vec<String> = crates
@@ -319,7 +327,7 @@ impl UpdatePage {
         // Before a download, the choice is to download without them;
         // chosen anyway while it waits, they are gone after it.
         let key = match self.view {
-            View::Offer { .. } if self.anyway => "update.leaves.anyway",
+            View::Offer { anyway: true, .. } => "update.leaves.anyway",
             View::Offer { .. } => "update.leaves.download",
             _ => "update.leaves",
         };
@@ -351,7 +359,7 @@ impl UpdatePage {
             View::Ready { .. } => alloc::vec![Button::Install, Button::Close],
             // Chosen anyway while it waits: not downloading is the safe
             // way on, which a second press does not pass by.
-            View::Offer { .. } if self.anyway => alloc::vec![Button::Close, Button::Download],
+            View::Offer { anyway: true, .. } => alloc::vec![Button::Close, Button::Download],
             View::Offer { .. } => alloc::vec![Button::Download, Button::Close],
             // Waiting is the way on; updating anyway, or asking again, the
             // others.
@@ -392,7 +400,7 @@ impl UpdatePage {
             }
             (Button::Install, _) => "update.install",
             // Chosen anyway: right whether plugins stay off or are gone.
-            (Button::Download, View::Offer { .. }) if self.anyway => "update.download-anyway",
+            (Button::Download, View::Offer { anyway: true, .. }) => "update.download-anyway",
             (Button::Download, View::Offer { leaves, .. }) if !leaves.is_empty() => {
                 "update.download-without"
             }
@@ -481,6 +489,7 @@ impl UpdatePage {
                 offer,
                 leaves,
                 stopping,
+                anyway,
             } => {
                 let size = files::size(offer.size, env.i18n.tr("update.decimal"));
                 let help = with(
@@ -494,7 +503,7 @@ impl UpdatePage {
                 // Chosen anyway, what it costs is what counts: what stops
                 // working first (cut short, the end goes), then what is
                 // gone; not the size, which leaves no room for them.
-                let mut help = if self.anyway { String::new() } else { help };
+                let mut help = if *anyway { String::new() } else { help };
                 if !stopping.is_empty() {
                     help.push(' ');
                     help.push_str(&with("update.stopping", &[("plugins", Arg::Str(stopping))]));
@@ -553,20 +562,22 @@ impl UpdatePage {
         }
     }
 
-    /// The button areas, the first one above the second, at the bottom.
+    /// The button areas, the first one above the second, at the bottom:
+    /// each in a row as other screens' buttons, within the side margin,
+    /// the lowest keeping it from the bottom edge too.
     fn button_rects(&self, env: &Env<'_>, count: usize) -> Vec<Rect> {
         let style = &self.style;
         let display = env.device.display;
-        let margin = style.margin as u16 * 2;
-        let gap = style.gap as u16;
+        let margin = style.margin as u16;
         let width = display.width.saturating_sub(2 * margin);
-        let height = style.row as u16;
-        let mut bottom = display.height.saturating_sub(margin);
+        let row = style.touch_row(style.row) as u16;
+        let height = ui::button_height(style, Rect::new(0, 0, width, row));
+        let mut bottom = display.height.saturating_sub(ui::edge_room(style, row));
         let mut rects: Vec<Rect> = (0..count)
             .map(|_| {
-                let rect = Rect::new(margin, bottom.saturating_sub(height), width, height);
-                bottom = rect.y.saturating_sub(gap * 2);
-                rect
+                let top = bottom.saturating_sub(row);
+                bottom = top;
+                Rect::new(margin, top + (row - height) / 2, width, height)
             })
             .collect();
         rects.reverse();
@@ -737,11 +748,13 @@ impl Screen for UpdatePage {
         let style = self.style;
         self.header
             .draw(canvas, env, &style, env.i18n.tr("update.title"), None, None);
-        let margin = style.margin as u16 * 2;
+        // Within the margins other pages keep, below the header as their
+        // content.
+        let margin = style.margin as u16;
         let gap = style.gap as u16;
         let width = env.device.display.width.saturating_sub(2 * margin);
         let (title, help) = self.texts(env);
-        let mut y = self.header.area.height + gap * 4;
+        let mut y = self.header.area.height + gap;
         let area = Rect::new(
             margin,
             y,
@@ -753,7 +766,7 @@ impl Screen for UpdatePage {
             env,
             &style,
             area,
-            style.title * 1.3,
+            style.title,
             &title,
             3,
             Color::BLACK,
@@ -773,8 +786,8 @@ impl Screen for UpdatePage {
             style.small,
             &help,
             HELP_LINES,
-            style.faint(60),
-        ) + gap * 4;
+            style.ink(ui::Ink::Note),
+        ) + gap * 2;
         if let View::Installing { done, total } = self.view {
             let bar = Rect::new(margin, y, width, gap * 3);
             self.draw_progress(canvas, env, bar, done, total);

@@ -154,6 +154,9 @@ pub struct Device {
     /// When the kernel wants to be ticked.
     pub wake_at: Option<Instant>,
     clock: Clock,
+    /// The wall clock set (`set_time`): at this time it was so many
+    /// milliseconds since 1970, in the time zone it had.
+    wall: Option<(Instant, i64, Option<i32>)>,
     /// HTTP requests in flight.
     pub http: crate::http::Http,
     /// Plugins' servers.
@@ -260,6 +263,7 @@ impl Device {
             warnings: Vec::new(),
             asleep: false,
             rotation,
+            wall: None,
             clock: if simulated_time {
                 Clock::Simulated(0)
             } else {
@@ -303,6 +307,11 @@ impl Device {
     /// battery at 80 %.
     fn status(&self, now: Instant) -> SystemStatus {
         let clock = match self.clock {
+            _ if let Some((at, unix_millis, utc_offset_minutes)) = self.wall => WallClock {
+                at,
+                unix_millis,
+                utc_offset_minutes,
+            },
             #[cfg(not(target_arch = "wasm32"))]
             Clock::Real(_) => {
                 let local = chrono::Local::now();
@@ -328,6 +337,24 @@ impl Device {
                 millivolts: None,
             }),
         }
+    }
+
+    /// Sets the wall clock to `unix_millis` milliseconds since 1970 (UTC)
+    /// now (the remote's `time set`); kept over restarts.
+    pub fn set_time(&mut self, unix_millis: i64) {
+        let now = self.now();
+        // The time zone stays as it was.
+        let offset = self.status(now).clock.and_then(|c| c.utc_offset_minutes);
+        self.wall = Some((now, unix_millis, offset));
+        let status = self.status(now);
+        let effects = budget::track(|| self.kernel.set_status(now, status));
+        self.execute(effects);
+    }
+
+    /// The wall clock now, in milliseconds since 1970 (UTC).
+    pub fn unix_millis(&self) -> Option<i64> {
+        let now = self.now();
+        self.status(now).clock.map(|c| c.unix_millis_at(now))
     }
 
     /// Runs an action as a button bound to it would (scripts' `run:`).

@@ -25,7 +25,6 @@ use paperpaw_sdk::{
 };
 
 use crate::{choose, is_menu};
-use paperpaw_sdk::setting::Setting;
 
 /// Most switches or buttons in one row.
 const PER_ROW: usize = 3;
@@ -89,8 +88,6 @@ pub(crate) struct PanelScreen {
     rows: Vec<Row>,
     /// It hangs from the top of the screen.
     top: bool,
-    /// Where the time, the date and the battery are, hanging from the top.
-    head: Rect,
     style: UiStyle,
     region: Rect,
     /// The control chosen with buttons: its place in reading order.
@@ -143,8 +140,8 @@ struct Geometry {
     border: u16,
     /// The labels of settings, on the left of their rows.
     label: u16,
-    /// The head with the time, the date and the battery (hanging from
-    /// the top only).
+    /// The band above it the screen's status line keeps (hanging from
+    /// the top only): the panel leaves it as it is.
     head: u16,
     /// The bar that turns pages, where there are several.
     pager: u16,
@@ -166,7 +163,6 @@ impl Geometry {
 struct Layout {
     rows: Vec<Row>,
     region: Rect,
-    head: Rect,
     pager: Option<Rect>,
 }
 
@@ -202,18 +198,15 @@ fn layout(lines: &[Line], g: Geometry) -> Layout {
         used += h;
         tallest = tallest.max(used);
     }
-    let height = g.border + 2 * gap + head + tallest.max(g.row) + bar;
+    let height = g.border + 2 * gap + tallest.max(g.row) + bar;
+    // From the top below the screen's status line, which stays as it is.
     let region = if g.top {
-        Rect::new(0, 0, g.width, height)
+        Rect::new(0, head, g.width, height)
     } else {
         Rect::new(0, g.height - height, g.width, height)
     };
     // The border on the side towards the rest of the screen.
-    let inner_top = if g.top {
-        region.y + head
-    } else {
-        region.y + g.border
-    };
+    let inner_top = if g.top { region.y } else { region.y + g.border };
     let rows = lines
         .iter()
         .zip(heights)
@@ -233,12 +226,6 @@ fn layout(lines: &[Line], g: Geometry) -> Layout {
     Layout {
         rows,
         region,
-        head: Rect::new(
-            g.margin(),
-            region.y + gap / 2,
-            g.width.saturating_sub(2 * g.margin()),
-            head,
-        ),
         pager,
     }
 }
@@ -322,11 +309,10 @@ impl PanelScreen {
         let label =
             ((longest as u16).saturating_add(style.gap as u16 * 2)).min((width - 2 * margin) / 2);
         let gap = style.gap as u16;
+        // As high as a status line at the top of a screen (the home
+        // screen's): it stays in sight above the panel.
         let head = if top {
-            let size = env
-                .metrics
-                .pt(env.settings.read(&QUICK_SIZE).clamp(6, 24) as f32);
-            (size * 1.6) as u16 + style.gap as u16
+            paperpaw_sdk::widgets::line_height(env, style.small) + style.gap as u16 / 2
         } else {
             0
         };
@@ -361,7 +347,6 @@ impl PanelScreen {
             style,
             region: layout.region,
             top,
-            head: layout.head,
             focus: (!touch).then_some(first),
             editing: None,
             drag: ui::SliderDrag::default(),
@@ -536,11 +521,31 @@ impl PanelScreen {
         }
         self.editing = None;
         let value = env.settings.int(id.as_str());
-        done(&env, cx, id, (keep && value != before).then_some(value));
+        let row = self.rows_of(&id).unwrap_or(self.region);
+        done(
+            &env,
+            cx,
+            id,
+            (keep && value != before).then_some(value),
+            row,
+        );
         Handled::Yes
     }
 
     /// Every control in reading order.
+    /// Where the rows on the page shown that show setting `id` are, all
+    /// of them in one rectangle; `None` if none does.
+    fn rows_of(&self, id: &Id) -> Option<Rect> {
+        self.rows
+            .iter()
+            .filter(|row| row.page == self.page)
+            .filter(|row| {
+                row.label.as_ref() == Some(id) || row.controls.iter().any(|(c, _)| c.id() == id)
+            })
+            .map(|row| row.area)
+            .reduce(|a, b| a.union(&b))
+    }
+
     fn controls(&self) -> impl Iterator<Item = &(Control, Rect)> {
         self.rows.iter().flat_map(|row| row.controls.iter())
     }
@@ -734,16 +739,23 @@ fn show(cx: &mut Cx<'_, '_>, id: Id, value: i64) {
 }
 
 /// A slider is let go: `id` set to `value` if one is chosen, the value
-/// shown meanwhile gone, and the panel drawn cleanly.
-fn done(env: &Env<'_>, cx: &mut Cx<'_, '_>, id: Id, value: Option<i64>) {
+/// shown meanwhile gone, and its `row` drawn again: cleanly after it was
+/// moved (its quick steps leave ghosts), quickly after a step (a tap on
+/// its `+`).
+fn done(env: &Env<'_>, cx: &mut Cx<'_, '_>, id: Id, value: Option<i64>, row: Rect) {
     if let Some(value) = value {
         cx.command(Command::SetSetting(id, SettingValue::Int(value)));
     }
-    if env.settings.previewing() {
+    let moved = env.settings.previewing();
+    if moved {
         cx.command(Command::PreviewSettings(Vec::new()));
     }
-    cx.request_redraw();
-    cx.request_refresh(RefreshMode::Partial);
+    cx.request_redraw_area(row);
+    cx.request_refresh(if moved {
+        RefreshMode::Partial
+    } else {
+        RefreshMode::Fast
+    });
 }
 
 /// Whether a choice's options fit side by side in `area`, readably.
@@ -803,9 +815,6 @@ impl Screen for PanelScreen {
         let Some(font) = style.font(env) else {
             return;
         };
-        if self.top && self.head.height > 0 {
-            draw_head(canvas, env, self.head);
-        }
         if self.rows.is_empty() {
             ui::draw_message(canvas, env, &style, r, env.i18n.tr("menu.empty"));
             return;
@@ -943,19 +952,6 @@ impl Screen for PanelScreen {
             self.redraw(cx);
             return Handled::Yes;
         }
-        // An item of the head that does something when tapped.
-        if gesture.kind == GestureKind::Tap && self.top && self.head.contains(gesture.start) {
-            let env = *cx.env();
-            let context = Params::new();
-            let target = QUICK_PLACE
-                .targets(&env, &head_frame(&env, self.head, &context))
-                .into_iter()
-                .find(|t| t.area.contains(gesture.start));
-            if let Some(target) = target {
-                cx.command(target.command);
-                return Handled::Yes;
-            }
-        }
         if gesture.kind == GestureKind::Tap {
             let env = *cx.env();
             let control = self
@@ -964,7 +960,10 @@ impl Screen for PanelScreen {
                 .find(|(_, rect)| rect.contains(gesture.start))
                 .map(|(c, _)| c);
             if let Some(control) = control {
-                self.focus = None;
+                // The focus shown goes.
+                if self.focus.take().is_some() {
+                    self.redraw(cx);
+                }
                 self.activate(&control, cx);
             }
         }
@@ -1023,11 +1022,13 @@ impl Screen for PanelScreen {
             ui::SliderStep::Same => {}
             ui::SliderStep::Chosen(value) => {
                 self.dragged = None;
-                done(&env, cx, id, (value != before).then_some(value));
+                let row = self.rows[row].area;
+                done(&env, cx, id, (value != before).then_some(value), row);
             }
             ui::SliderStep::Cancelled => {
                 self.dragged = None;
-                done(&env, cx, id, None);
+                let row = self.rows[row].area;
+                done(&env, cx, id, None, row);
             }
             _ => {}
         }
@@ -1061,8 +1062,15 @@ impl Screen for PanelScreen {
                 self.page = page.min(self.pages().saturating_sub(1));
                 // What it covered before too, should it have shrunk.
                 cx.request_redraw_area(before.union(&self.region));
+                self.redraw(cx);
+            } else if let Some(rows) = self.rows_of(&changed.id) {
+                // Its rows alone: a step of a slider or a number shows
+                // quickly.
+                cx.request_redraw_area(rows);
+                cx.request_refresh(RefreshMode::Fast);
+            } else {
+                self.redraw(cx);
             }
-            self.redraw(cx);
         } else if *event == events::PREVIEW_CHANGED
             && let Some(area) = self.moving_row()
         {
@@ -1072,43 +1080,6 @@ impl Screen for PanelScreen {
         }
     }
 }
-
-/// The quick panel's head: the status line chosen for it, else a line of
-/// the items chosen for its left, centre and right ([`QUICK_PARTS`]), as
-/// large as set.
-fn draw_head(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
-    let context = Params::new();
-    QUICK_PLACE.draw(canvas, env, &head_frame(env, area, &context));
-}
-
-/// The frame of the quick panel's head in `area`, as large as set.
-fn head_frame<'a>(env: &Env<'_>, area: Rect, context: &'a Params) -> paperpaw_sdk::StatusFrame<'a> {
-    let size = env
-        .metrics
-        .pt(env.settings.read(&QUICK_SIZE).clamp(6, 24) as f32);
-    paperpaw_sdk::StatusFrame::new(area, true, size, Color::BLACK, context)
-        .font(paperpaw_sdk::builtin::fonts::UI.static_str())
-}
-
-/// Where the quick panel's head shows status items, or the status line
-/// chosen for it ([`QUICK_LINE`]).
-pub(crate) const QUICK_PLACE: paperpaw_sdk::status::Place = paperpaw_sdk::status::Place::new(
-    Id::new_static("menu.quick"),
-    "menu.quick.section",
-    QUICK_PARTS,
-)
-.with_line(QUICK_LINE);
-/// The status line of the quick panel's head: its items unless another
-/// is chosen.
-pub(crate) const QUICK_LINE: Id = Id::new_static("menu.quick.line");
-
-/// What the quick panel's head shows at its left, centre and right.
-pub(crate) const QUICK_PARTS: [Id; 3] = [QUICK_LEFT, QUICK_CENTER, QUICK_RIGHT];
-pub(crate) const QUICK_LEFT: Id = Id::new_static("menu.quick.left");
-pub(crate) const QUICK_CENTER: Id = Id::new_static("menu.quick.center");
-pub(crate) const QUICK_RIGHT: Id = Id::new_static("menu.quick.right");
-/// The size of the quick panel's head, in points.
-pub(crate) const QUICK_SIZE: Setting<i64> = Setting::new("menu.quick.size");
 
 #[cfg(test)]
 mod layout_tests {
@@ -1153,16 +1124,17 @@ mod layout_tests {
         assert_eq!(first.label, Some(id("a.size")));
     }
 
+    /// From the top, below the band of the screen's status line, which
+    /// it leaves as it is.
     #[test]
-    fn from_the_top_the_head_comes_first() {
+    fn from_the_top_the_status_line_stays_in_sight() {
         let g = Geometry {
             top: true,
             ..geometry()
         };
         let layout = layout(&[Line::Open(id("a.font"))], g);
-        assert_eq!(layout.region.y, 0);
-        assert_eq!(layout.head.height, 40);
-        assert!(layout.rows[0].area.y >= layout.head.y + layout.head.height);
+        assert_eq!(layout.region.y, 40);
+        assert!(layout.rows[0].area.y >= 40);
     }
 
     #[test]

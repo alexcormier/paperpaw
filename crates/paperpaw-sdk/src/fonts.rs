@@ -585,6 +585,7 @@ impl Fonts {
             describing: &self.describing,
             index: index as u16,
             others,
+            display: false,
         }
     }
 
@@ -716,6 +717,7 @@ impl FontSet {
             describing: &self.describing,
             index: index as u16,
             others: [None; OTHERS],
+            display: false,
         })
     }
 }
@@ -734,6 +736,9 @@ pub struct FontHandle<'a> {
     /// Fonts for the characters this one lacks, asked in turn, and their
     /// numbers in the same cache.
     others: [Option<(&'a Font, u16)>; OTHERS],
+    /// Draws at a pack's large sizes made for a few characters too (see
+    /// [`FontHandle::display`]).
+    display: bool,
 }
 
 impl fmt::Debug for FontHandle<'_> {
@@ -751,9 +756,12 @@ impl<'a> FontHandle<'a> {
         self.font
     }
 
-    /// Ascent, descent and line height at `size` pixels.
+    /// Ascent, descent and line height at `size` pixels: of the size text
+    /// is drawn at (see [`FontHandle::size_for`]; for a display, the size
+    /// asked).
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
-        self.font().line_metrics(size)
+        self.font()
+            .line_metrics(self.font().size_for(size, "", self.display))
     }
 
     /// The font that draws `ch` and its number in the cache: this one,
@@ -781,13 +789,37 @@ impl<'a> FontHandle<'a> {
                 .any(|(font, _)| font.has_char(ch))
     }
 
-    /// Horizontal advance of one character in pixels.
+    /// Horizontal advance of one character in pixels, at the size it is
+    /// drawn at alone (see [`FontHandle::size_for`]).
     pub fn advance(&self, size: f32, ch: char) -> f32 {
+        let mut buffer = [0u8; 4];
+        let size = self.size_for(size, ch.encode_utf8(&mut buffer));
         self.pick(ch).0.advance(ch, size)
+    }
+
+    /// This font for a text of a few characters drawn large alone, a
+    /// clock's time or a number: where its pack keeps large sizes only for
+    /// some characters (the digits and the colon, on devices that draw
+    /// from packs), a text of those is drawn at them; any other text at
+    /// the sizes that have every character, as by the font itself.
+    pub fn display(self) -> Self {
+        Self {
+            display: true,
+            ..self
+        }
+    }
+
+    /// The size `text` is drawn at when asked for `size`: the nearest size
+    /// of a pack that has all of its characters (see
+    /// [`FontHandle::display`]), one for the whole text; `size` where the
+    /// font is scalable. Measuring, inking and drawing use it.
+    pub fn size_for(&self, size: f32, text: &str) -> f32 {
+        self.font.size_for(size, text, self.display)
     }
 
     /// Width of a single line of text in pixels.
     pub fn measure(&self, size: f32, text: &str) -> f32 {
+        let size = self.size_for(size, text);
         if self.others[0].is_none() {
             paperpaw_text::measure(self.font(), size, text)
         } else {
@@ -808,6 +840,7 @@ impl<'a> FontHandle<'a> {
             let metrics = self.line_metrics(size);
             return Some((-(metrics.ascent as i32), -(metrics.descent as i32)));
         }
+        let size = self.size_for(size, text);
         let mut cache = self.cache.borrow_mut();
         let mut ink: Option<(i32, i32)> = None;
         for ch in text.chars() {
@@ -837,6 +870,7 @@ impl<'a> FontHandle<'a> {
         if self.describing.get() {
             return Some((0, self.measure(size, text) as i32));
         }
+        let size = self.size_for(size, text);
         let mut cache = self.cache.borrow_mut();
         let mut ink: Option<(i32, i32)> = None;
         let mut pen = 0.0f32;
@@ -893,6 +927,7 @@ impl<'a> FontHandle<'a> {
         if canvas.is_blind() || self.describing.get() {
             return self.measure(size, text);
         }
+        let size = self.size_for(size, text);
         let mut cache = self.cache.borrow_mut();
         let mut pen = x;
         // Runs of characters drawn by the same font.

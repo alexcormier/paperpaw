@@ -173,8 +173,12 @@ thread_local! {
 
 /// The keyboard: shown, it answers with the next text the test typed
 /// ([`App::will_type`]), as the real one does when its text is done; with
-/// nothing typed it stays open, as if the reader were still typing.
+/// nothing typed it stays open, as if the reader were still typing. Also
+/// a page of the guide that opens a screen of its own ([`PAGE_STEP`]).
 pub struct TestKeyboard;
+
+/// The question of the guide's page that opens a screen of its own.
+pub const PAGE_STEP: &str = "A page of its own";
 
 const KEYBOARD_SCREEN: Id = Id::new_static("test-keyboard.screen");
 
@@ -201,6 +205,24 @@ impl Plugin for TestKeyboard {
             }),
         ))?;
         r.bind_slot(slots::KEYBOARD, KEYBOARD_SCREEN, Priority(100))?;
+        let page = Id::new_static("test-keyboard.page");
+        r.add_screen(ScreenSpec::new(
+            page.clone(),
+            "test-keyboard",
+            Box::new(|_, params| {
+                Box::new(Keyboard {
+                    params: params.clone(),
+                })
+            }),
+        ))?;
+        r.add_setup_step(
+            paperpaw_sdk::setup::SetupStepSpec::new(
+                Id::new_static("test-keyboard.step"),
+                PAGE_STEP,
+                paperpaw_sdk::setup::SetupPage::Screen(page),
+            )
+            .order(50),
+        )?;
         Ok(())
     }
 }
