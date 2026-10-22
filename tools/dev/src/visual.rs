@@ -206,8 +206,8 @@ pub struct Looker {
     buttons: bool,
     /// Every shortened label reported ([`Scene::labels_whole`]).
     pub labels_whole: bool,
-    /// The texts of the language looked at that end with "…" of
-    /// themselves ("Loading…"): not shortened ([`Scene::ellipses`]).
+    /// The texts of the language looked at that hold a "…" of their own
+    /// ("Loading…"): not shortened there ([`Scene::ellipses`]).
     ellipses: Vec<String>,
 }
 
@@ -215,12 +215,21 @@ impl Looker {
     pub fn new(session: &mut Session) -> Self {
         let variant = session.variant.clone();
         let display = session.device.kernel.device().display;
-        let ellipses = crate::lint::catalogs::languages(session.device.kernel.translator())
-            .into_iter()
-            .filter(|l| l.code == variant.language)
-            .flat_map(|l| l.messages.into_values())
-            .filter(|text| text.trim_end().ends_with('…'))
-            .collect();
+        // The pseudo-language is English made long: its texts so made.
+        let ellipses: Vec<String> = if variant.language == crate::lint::PSEUDO {
+            crate::lint::pseudo::english(session)
+                .into_values()
+                .filter(|text| text.contains('…'))
+                .map(|text| crate::lint::pseudo::pseudo(&text))
+                .collect()
+        } else {
+            crate::lint::catalogs::languages(session.device.kernel.translator())
+                .into_iter()
+                .filter(|l| l.code == variant.language)
+                .flat_map(|l| l.messages.into_values())
+                .filter(|text| text.contains('…'))
+                .collect()
+        };
         cases::home(session);
         Looker {
             ui: ui(session, &variant),
@@ -254,12 +263,32 @@ impl Looker {
         if self.buttons {
             issues.extend(focus(session, id, &scene, &self.home));
         }
+        issues.extend(self.hints(&shown.image, &shown.described));
         let inset = checks::content_inset(&scene);
         Ok(Some(Looked {
             image: shown.image,
             issues,
             inset,
         }))
+    }
+
+    /// The row of hints below the screen (what is described below its
+    /// area): its words are never shortened either.
+    fn hints(&self, image: &Image, described: &[Described]) -> Vec<Issue> {
+        let row: Vec<Described> = described
+            .iter()
+            .filter(|d| u32::from(d.clip.y) >= self.screen.bottom())
+            .cloned()
+            .collect();
+        if row.is_empty() {
+            return Vec::new();
+        }
+        let whole = Rect::new(0, 0, image.width as u16, image.height as u16);
+        let scene = Scene::new(image, row, whole, self.ui)
+            .panel(self.panel)
+            .labels_whole(self.labels_whole)
+            .ellipses(&self.ellipses);
+        checks::ellipsis(&scene)
     }
 
     /// Places widget `id` alone on the home screen in `size` and checks

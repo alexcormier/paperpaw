@@ -102,8 +102,8 @@ pub struct Scene<'a> {
     /// Every label shortened with "…" is reported, wherever it ends (the
     /// UI kit: no block may shorten one).
     pub labels_whole: bool,
-    /// Texts of the language drawn that end with "…" of themselves
-    /// ("Loading…"): a line that ends one is not shortened.
+    /// Texts of the language drawn that hold a "…" of their own
+    /// ("Loading…"): a line that ends at it is not shortened.
     pub ellipses: &'a [String],
 }
 
