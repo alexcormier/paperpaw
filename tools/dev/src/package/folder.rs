@@ -204,6 +204,10 @@ fn parse(source: &str, path: &str, add: &mut dyn FnMut(Finding)) -> Vec<Line> {
 
 /// `plugin.ini`: present, readable, its `[plugin]` section as the kernel
 /// and the plugin library want it.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn manifest(plugin: &DataPlugin, folder: &mut Folder, add: &mut dyn FnMut(Finding)) {
     let place = "plugin.ini";
     if folder.file(place).is_none() {

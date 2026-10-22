@@ -2,7 +2,10 @@
 //! (see [`paperpaw_sdk::chrome`]): the part of the screen they leave to a
 //! screen, making and letting go of them, their input.
 
-#[allow(unused_imports)]
+#[allow(
+    unused_imports,
+    reason = "a part of the kernel, which sees all of it; not every part uses every name"
+)]
 use super::*;
 use paperpaw_sdk::chrome::{ChromeSpec, Edge};
 use paperpaw_sdk::{Gesture, StackEntry};

@@ -3,7 +3,11 @@
 //! fails with a warning or a failure the plugin hears, never a panic, and
 //! what was on the card before stays as it was.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 mod common;

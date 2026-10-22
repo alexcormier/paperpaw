@@ -25,6 +25,9 @@
 //!
 //! Needs a device with network ([`Capabilities::network`](paperpaw_sdk::Capabilities)).
 
+// What goes wrong with the user's data is told, never dropped unseen:
+// a result left unread says why (see CONTRIBUTING.md).
+#![deny(clippy::let_underscore_must_use)]
 #![no_std]
 
 extern crate alloc;
@@ -208,6 +211,10 @@ fn move_key(env: &Env<'_>, out: &mut Vec<Command>) {
     if !old.is_empty() && key(env).is_none() {
         out.push(save_key(Some(&old)));
     }
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "the file of an earlier version: where it stays, the key is moved again at the next start"
+    )]
     let _ = env.storage.remove(&file);
 }
 
@@ -231,6 +238,10 @@ impl State {
                 let seed = format!("{}{}{:p}", env.now.millis(), env.device.id, &*probe);
                 let id = md5::of(&seed).to_uppercase();
                 let text = format!("[device]\nid = {id}\n");
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "not kept, another id is made at the next start, and the sync server sees another device"
+                )]
                 let _ = env.storage.write(&device, text.as_bytes());
                 id
             }
@@ -659,6 +670,10 @@ impl Plugin for Kosync {
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
         r.add_setting_group(SettingGroupSpec::new(GROUP, "kosync.group").order(28))?;

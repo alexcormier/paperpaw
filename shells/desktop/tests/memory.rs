@@ -16,8 +16,11 @@
 //! A budget too small stops a run as the device would, and the heap
 //! report lists what is live by call site.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::fs;
 use std::path::{Path, PathBuf};

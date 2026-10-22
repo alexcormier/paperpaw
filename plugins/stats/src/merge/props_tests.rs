@@ -4,6 +4,11 @@
 //! by their fingerprint, never by their title; a database from the other
 //! side that cannot be read leaves this device's statistics as they were.
 
+#![allow(
+    clippy::let_underscore_must_use,
+    reason = "tests read what they check; what they leave out does not matter"
+)]
+
 extern crate std;
 
 use alloc::collections::BTreeMap;

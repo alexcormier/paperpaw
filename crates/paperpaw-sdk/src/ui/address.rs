@@ -1,7 +1,10 @@
 //! An address to open on a phone (a page served on the local network, see
 //! [`served`](crate::served)): as a QR code, as text, and a hint.
 
-#[allow(clippy::wildcard_imports)]
+#[allow(
+    clippy::wildcard_imports,
+    reason = "a part of the module, which shares its imports"
+)]
 use super::*;
 
 /// The height of what [`draw_address`] writes below the code in an area
@@ -79,7 +82,10 @@ impl<'a> AddressLines<'a> {
 /// top of `area`, below it the address as text (on two lines where it is
 /// too long for one, to be typed), `hint` and `last`, what happened last,
 /// all their words ([`address_height`]); all centred.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_address(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

@@ -321,6 +321,10 @@ impl<'s> Writer<'s> {
             None => self.write_file(schema, user_version),
         };
         // The temporary pages go, whether the file was written or not.
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a temporary file, gone either way; the write's result is the one told"
+        )]
         let _ = self.storage.remove(&self.part);
         result
     }
@@ -387,6 +391,7 @@ impl<'s> Writer<'s> {
                     Err(StorageError::Unsupported) => {
                         let copied = self.assemble(&self.path, &first);
                         if copied.is_err() {
+                            #[expect(clippy::let_underscore_must_use, reason = "cleaning up after a failed write, whose own error is the one told")]
                             let _ = self.storage.remove(&self.path);
                         }
                         copied.map_err(Error::from)
@@ -394,6 +399,10 @@ impl<'s> Writer<'s> {
                     moved => moved.map_err(Error::from),
                 }
             });
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a temporary file, gone either way; the write's result is the one told"
+        )]
         let _ = self.storage.remove(&new);
         written
     }

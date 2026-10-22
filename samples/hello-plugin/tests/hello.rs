@@ -1,8 +1,11 @@
 //! The sample plugin in a kernel, as on a device: its action opens its
 //! screen, a button closes it.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_core::sdk::{

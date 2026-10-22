@@ -141,6 +141,22 @@ impl<'a> Canvas<'a> {
         self.framebuffer.is_blind()
     }
 
+    /// Tells that a picture lies at `area` where nothing is drawn
+    /// ([`Canvas::is_blind`]), for
+    /// [`Framebuffer::take_all_pictured`](crate::Framebuffer::take_all_pictured);
+    /// its pixels count where they are drawn.
+    pub fn note_picture(&mut self, area: Rect) {
+        if !self.framebuffer.is_blind() {
+            return;
+        }
+        let (x, y) = (i32::from(area.x), i32::from(area.y));
+        let (w, h) = (u32::from(area.width), u32::from(area.height));
+        if let Some(shown) = self.clip_signed(x, y, w, h) {
+            let pixels = u32::from(shown.width) * u32::from(shown.height);
+            self.framebuffer.count_picture(pixels);
+        }
+    }
+
     /// Whether anyone asks what is drawn (see [`Canvas::describe`]).
     pub fn is_describing(&self) -> bool {
         self.described.is_some()
@@ -166,6 +182,41 @@ impl<'a> Canvas<'a> {
                 on,
                 clip,
             });
+        }
+    }
+
+    /// The grays a picture is shown in where the frame has few (2 to 16:
+    /// black and white, four grays, sixteen), for those who draw pictures
+    /// to dither them themselves ([`diffuse`](crate::diffuse)), from the
+    /// picture's first row so that every band and every part drawn again
+    /// comes out the same; none where the frame has many grays or colour.
+    pub fn picture_levels(&self) -> Option<u8> {
+        match self.framebuffer.format().gray_levels() {
+            Some(levels @ 2..=16) => u8::try_from(levels).ok(),
+            _ => None,
+        }
+    }
+
+    /// The error of a picture diffused from its first row ([`Atkinson`]),
+    /// as the band above left it at row `y`
+    /// ([`Canvas::keep_diffusion`]): the picture goes on from there
+    /// without reading its rows above again. `key` says which picture,
+    /// where and how large (the same everywhere it is drawn so). Taken:
+    /// a band drawn again starts from the first row.
+    ///
+    /// [`Atkinson`]: crate::diffuse::Atkinson
+    pub fn take_diffusion(&mut self, key: u64, y: i32) -> Option<crate::diffuse::Atkinson> {
+        let row = u16::try_from(y + self.origin.1).ok()?;
+        self.framebuffer.take_diffusion(key, row)
+    }
+
+    /// Keeps the error of picture `key` at row `y` for the next band
+    /// ([`Canvas::take_diffusion`]), where this band ends there. Freed
+    /// when the next band begins elsewhere or the frame ends
+    /// ([`Framebuffer::end_frame`](crate::Framebuffer::end_frame)).
+    pub fn keep_diffusion(&mut self, key: u64, y: i32, atkinson: crate::diffuse::Atkinson) {
+        if let Ok(row) = u16::try_from(y + self.origin.1) {
+            self.framebuffer.keep_diffusion(key, row, atkinson);
         }
     }
 
@@ -382,7 +433,10 @@ impl<'a> Canvas<'a> {
 
     /// Draws the outline of a rectangle with corners rounded by `radius`
     /// pixels, `thickness` wide, growing inwards.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "its inputs are separate things; a struct of them would serve this call alone"
+    )]
     pub fn stroke_round_rect(
         &mut self,
         x: i32,

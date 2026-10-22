@@ -1,6 +1,9 @@
 //! The header of screens and the pager below lists, with their arrows.
 
-#[allow(clippy::wildcard_imports)]
+#[allow(
+    clippy::wildcard_imports,
+    reason = "a part of the module, which shares its imports"
+)]
 use super::*;
 
 /// A black header bar with a title and an optional right-aligned note.

@@ -2,7 +2,11 @@
 //! `firmware::compare_versions` for update files and offers (pre-releases,
 //! build metadata, garbage).
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cmp::Ordering;
 

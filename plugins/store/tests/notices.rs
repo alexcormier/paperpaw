@@ -2,8 +2,11 @@
 //! on the X4 and the X4 Pro: a notice has three lines, and a reason cut
 //! off is a reason the reader does not get.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_i18n::Arg;

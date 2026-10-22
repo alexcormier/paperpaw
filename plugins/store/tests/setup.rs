@@ -3,8 +3,11 @@
 //! the plugin library and installed, said once at the end; one that
 //! cannot come is named, and the store has it later.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

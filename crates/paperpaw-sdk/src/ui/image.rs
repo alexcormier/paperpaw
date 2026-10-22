@@ -1,6 +1,9 @@
 //! QR codes and pictures (covers, illustrations) drawn into an area.
 
-#[allow(clippy::wildcard_imports)]
+#[allow(
+    clippy::wildcard_imports,
+    reason = "a part of the module, which shares its imports"
+)]
 use super::*;
 
 // ---- QR codes ----------------------------------------------------------
@@ -40,9 +43,14 @@ pub fn draw_qr(canvas: &mut Canvas<'_>, qr: &crate::qr::QrCode, area: Rect) -> O
 
 /// Draws a decoded image (e.g. a book's cover or an illustration), gray
 /// or in colour, scaled into `area`: each screen row reads one source row
-/// from storage, columns are averaged when the image is reduced, and only
-/// rows inside the canvas clip are read. Grays are dithered on two-level
-/// panels; colour shows as colour on colour screens, as gray elsewhere.
+/// from storage, and columns are averaged when the image is reduced.
+/// Colour shows as colour on colour screens, as gray elsewhere. Where the
+/// frame has few grays, an opaque picture is diffused into them
+/// ([`Atkinson`](paperpaw_graphics::diffuse::Atkinson)) from its first
+/// row on, so that each band and each part drawn again shows the same
+/// pixels. A band goes on where the band above left it; a part drawn
+/// again reads its rows above the clip for that, but does not draw them.
+/// Elsewhere only the rows inside the clip are read.
 pub fn draw_image(canvas: &mut Canvas<'_>, storage: &dyn Storage, image: &ImageRef, area: Rect) {
     draw_image_over(canvas, storage, image, area, 255);
 }
@@ -64,13 +72,19 @@ pub fn draw_image_over(
 ) {
     // Frames are drawn in bands: nothing read for those it is not in, nor
     // where it is only described.
-    if canvas.is_blind() || area.intersection(&canvas.clip()).is_none() || opacity == 0 {
+    if area.intersection(&canvas.clip()).is_none() || opacity == 0 {
         return;
+    }
+    if canvas.is_blind() {
+        return canvas.note_picture(area);
     }
     // Its kind from one read of its header, band by band.
     let source = match crate::image::Decoded::peek(storage, &image.path) {
         Some(crate::image::Decoded::Alpha(file)) => ImageSource::Alpha(file),
-        Some(crate::image::Decoded::Color(file)) if opacity == 255 => {
+        // On gray frames a colour picture is drawn as gray rows.
+        Some(crate::image::Decoded::Color(file))
+            if opacity == 255 && canvas.picture_levels().is_none() =>
+        {
             return draw_color_image(canvas, storage, &file, area);
         }
         Some(crate::image::Decoded::Color(file)) => ImageSource::Color(file),
@@ -167,14 +181,33 @@ fn draw_source(
         return;
     }
     let clip = canvas.clip();
-    let first = top.max(i32::from(clip.y));
+    let shown = top.max(i32::from(clip.y));
     let last = (top + h as i32).min(clip.bottom() as i32);
-    if first >= last {
+    if shown >= last {
         return;
     }
     // An axis made larger interpolates, one made smaller averages.
     let (wider, taller) = (w > sw, h > sh);
     let blended = opacity < 255 || matches!(source, ImageSource::Alpha(_));
+    // Diffused into the frame's few grays from the first row on, where
+    // what it blends with is not its own (see `draw_image`), or from
+    // where the band above left it; a frame dithers in place where memory
+    // for it is short.
+    let levels = canvas.picture_levels().filter(|_| !blended);
+    let key = levels.map_or(0, |levels| {
+        picture_key(source, canvas.origin(), area, levels)
+    });
+    let (first, mut diffusion) = match levels {
+        None => (shown, None),
+        Some(levels) => match canvas.take_diffusion(key, shown) {
+            Some(atkinson) if atkinson.width() == w => (shown, Some((atkinson, levels))),
+            _ => match paperpaw_graphics::diffuse::Atkinson::new(w) {
+                Some(atkinson) => (top, Some((atkinson, levels))),
+                None => (shown, None),
+            },
+        },
+    };
+    let mut diffused = alloc::vec![0u8; if diffusion.is_some() { w } else { 0 }];
     let mut rows = RowChunk::new(sw * source.bytes());
     // The source row a screen row comes from, as gray and opacity; made
     // taller, the one below it too, and the two mixed.
@@ -222,8 +255,41 @@ fn draw_source(
             made_row(line, &columns, blended, &mut row);
             made = Some((above, below, ty));
         }
-        draw_row(canvas, left, y, &row, blended, opacity);
+        match &mut diffusion {
+            Some((atkinson, levels)) => {
+                atkinson.row(&row, *levels, |x, gray| diffused[x] = gray);
+                if y >= shown {
+                    canvas.draw_gray_row(left, y, &diffused);
+                }
+            }
+            None => draw_row(canvas, left, y, &row, blended, opacity),
+        }
     }
+    if let Some((atkinson, _)) = diffusion
+        && last < top + h as i32
+    {
+        canvas.keep_diffusion(key, last, atkinson);
+    }
+}
+
+/// Which picture is diffused where (see [`Canvas::take_diffusion`]): the
+/// same file in the same place on the screen, as large and in as many
+/// grays.
+fn picture_key(source: &ImageSource, origin: Point, area: Rect, levels: u8) -> u64 {
+    let path = match source {
+        ImageSource::Gray(f) => &f.path,
+        ImageSource::Color(f) => &f.path,
+        ImageSource::Alpha(f) => &f.path,
+    };
+    let mut bytes = [0u8; 17];
+    bytes[..2].copy_from_slice(&area.x.to_le_bytes());
+    bytes[2..4].copy_from_slice(&area.y.to_le_bytes());
+    bytes[4..6].copy_from_slice(&area.width.to_le_bytes());
+    bytes[6..8].copy_from_slice(&area.height.to_le_bytes());
+    bytes[8..12].copy_from_slice(&origin.x.to_le_bytes());
+    bytes[12..16].copy_from_slice(&origin.y.to_le_bytes());
+    bytes[16] = levels;
+    paperpaw_digest::fnv1a64(path.as_bytes()) ^ paperpaw_digest::fnv1a64(bytes).rotate_left(1)
 }
 
 /// Reads source row `y` into `into` as gray and opacity, unless it holds

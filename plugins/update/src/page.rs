@@ -417,6 +417,10 @@ impl UpdatePage {
     }
 
     /// The large line and the words below it.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn texts(&self, env: &Env<'_>) -> (String, String) {
         let current = env.firmware.map_or("", |f| f.version.as_str());
         let tr = |key: &str| env.i18n.tr(key).to_string();
@@ -697,7 +701,10 @@ impl UpdatePage {
 /// Draws `text` left-aligned in `area`, wrapped, at most `max` lines and
 /// as many as `area` holds: a little smaller where it needs more, only
 /// then cut, the last line ending in "…"; returns the height used.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn paragraph(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

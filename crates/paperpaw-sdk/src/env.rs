@@ -202,7 +202,10 @@ pub struct Env<'a> {
 /// The fields of an [`Env`], for the kernel to make one (plugins get it
 /// made).
 #[doc(hidden)]
-#[allow(missing_debug_implementations)]
+#[allow(
+    missing_debug_implementations,
+    reason = "the parts an environment is made of, for the kernel alone; their references print nothing useful"
+)]
 pub struct EnvParts<'a> {
     pub device: &'a DeviceInfo,
     /// Time of the event being handled.

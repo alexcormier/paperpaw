@@ -3,8 +3,11 @@
 //! the mix of both, dithered so that its lightness holds on panels of two
 //! or four grays; how see-through the whole row is counts too.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

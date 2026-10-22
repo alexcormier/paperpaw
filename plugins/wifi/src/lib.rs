@@ -256,6 +256,10 @@ impl Plugin for Wifi {
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let policy: Shared = Rc::new(RefCell::new(Policy::default()));
 

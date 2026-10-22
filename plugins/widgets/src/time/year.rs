@@ -217,7 +217,14 @@ enum Notes {
 /// ink; where they have no room together, a second line of notes, the
 /// percent, the caption and the notes are left out in turn (the notes
 /// shortened before they go), never drawn over each other.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn draw_bar(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

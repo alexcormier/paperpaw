@@ -1,6 +1,9 @@
 //! Buttons drawn in rows and dialogs.
 
-#[allow(clippy::wildcard_imports)]
+#[allow(
+    clippy::wildcard_imports,
+    reason = "a part of the module, which shares its imports"
+)]
 use super::*;
 
 /// The height of buttons in a row of height `row.height`: the `−` and `+`
@@ -56,7 +59,10 @@ pub fn button_border(style: &UiStyle) -> u32 {
 /// A button: outlined, or filled when `on`; `focused` (chosen with
 /// buttons) draws a frame around it. Labels of one character (e.g. `+`)
 /// are set larger.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_button(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

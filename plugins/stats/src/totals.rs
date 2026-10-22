@@ -64,6 +64,10 @@ pub(crate) fn of_book(
     let mut totals = BookTotals::default();
     // Pages read, as bits.
     let mut read: Vec<u8> = Vec::new();
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "a log that cannot be read to the end counts what could be"
+    )]
     let _ = store::scan(storage, |stat: &PageStat| {
         if stat.book != book.id {
             return;
@@ -89,6 +93,10 @@ pub(crate) fn of_book(
 /// log cannot be read to the end, that of what could be.
 pub(crate) fn seconds_per_book(storage: &dyn Storage, books: &[Book]) -> Vec<u64> {
     let mut seconds = vec![0u64; books.len()];
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "a log that cannot be read to the end counts what could be, as said above"
+    )]
     let _ = store::scan(storage, |stat| {
         if let Ok(i) = books.binary_search_by_key(&stat.book, |b| b.id) {
             seconds[i] += u64::from(stat.duration);

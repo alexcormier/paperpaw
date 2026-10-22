@@ -1,7 +1,10 @@
 //! Settings drawn as rows: values, notes, numbers and steppers, and
 //! stepping a setting's value.
 
-#[allow(clippy::wildcard_imports)]
+#[allow(
+    clippy::wildcard_imports,
+    reason = "a part of the module, which shares its imports"
+)]
 use super::*;
 
 // ---- Settings as rows --------------------------------------------------
@@ -41,7 +44,10 @@ pub fn draw_number_note(
 /// "…" if longer. Rows are always fully readable before they are tapped,
 /// so a description never needs a tap that would change a setting.
 /// Without a note, the row looks like [`draw_value_row`].
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_noted_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -333,7 +339,10 @@ pub(super) fn draw_note_below(
 }
 
 /// Draws a row: `title` on the left, `value` right-aligned.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_value_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -667,7 +676,10 @@ fn draw_own_title(
 /// and how high it is. At the top left: drawn at its place with
 /// [`RowLines::at`]. Made once with the list (it measures, and wraps a
 /// long title), not each time the row is drawn.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn row_lines(
     env: &Env<'_>,
     style: &UiStyle,
@@ -706,7 +718,10 @@ pub fn row_lines(
 /// of rows `row` high: as [`setting_row`], and a title's line more where
 /// the title does not fit beside its control (see [`row_lines`], which
 /// tells both).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn setting_height(
     env: &Env<'_>,
     style: &UiStyle,
@@ -721,7 +736,10 @@ pub fn setting_height(
 
 /// A setting's row with a value: `title` and `value` on [`RowLines`]
 /// (side by side, or the value below at the right), `note` below them.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_setting_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -755,7 +773,10 @@ pub fn draw_setting_row(
 /// A setting's row with a switch: as [`draw_switch_row`], on
 /// [`RowLines`] (the switch below the title, at the right, where the
 /// title would not fit beside it).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_switch_lines(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -877,7 +898,10 @@ pub fn number_room<'a>(
 /// A number on a light row: its title, then `[−] value [+]` exactly as in
 /// menus, with `room` for the value (see [`stepper`]); `focus` frames the
 /// `−` (`Some(false)`) or the `+` (`Some(true)`).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_number(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -894,7 +918,10 @@ pub fn draw_number(
 
 /// [`draw_number`] on [`RowLines`]: the `−` value `+` below the title
 /// where they are stacked.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_number_lines(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -954,7 +981,10 @@ pub(super) fn centred(
 /// A focused number: title, then `[−] value [+]`, with `room` for the
 /// value (see [`stepper`]). While editing with buttons the boxes are
 /// filled.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_stepper(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -1006,7 +1036,10 @@ pub fn stepper_lines(
 
 /// [`draw_stepper`] on [`RowLines`]: the `−` value `+` below the title
 /// where they are stacked.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_stepper_lines(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

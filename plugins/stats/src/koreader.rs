@@ -186,10 +186,18 @@ pub(crate) fn write(
 ) -> Result<(), Error> {
     let keys = alloc::format!("{temp}.keys");
     let result = write_with(storage, path, books, stats, &keys, temp);
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "a temporary file left behind is written over the next time"
+    )]
     let _ = storage.remove(&keys);
     result
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn write_with(
     storage: &dyn Storage,
     path: &str,

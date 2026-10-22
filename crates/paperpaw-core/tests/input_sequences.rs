@@ -5,7 +5,11 @@
 //! never leave a button stuck down; and the cases they are made of, one
 //! by one.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 mod common;

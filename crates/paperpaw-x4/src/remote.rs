@@ -283,6 +283,10 @@ pub enum Ask {
 }
 
 /// The command a line says, if it is one.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn parse(line: &str) -> Option<Command> {
     let line = line.trim();
     let mut words = line.split_ascii_whitespace();

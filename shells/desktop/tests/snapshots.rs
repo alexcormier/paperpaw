@@ -19,8 +19,11 @@
 //! and look at the changed pictures before committing them. A failing
 //! test leaves what it drew in `target/snapshots`.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::fs::{self, File};
 use std::io::BufWriter;

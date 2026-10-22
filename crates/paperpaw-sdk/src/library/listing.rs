@@ -110,6 +110,10 @@ impl Listing<'_> {
             let first = done == 0;
             let mut unknown: Vec<(String, u64)> = Vec::new();
             let mut seen = 0;
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "a folder that cannot be listed shows as empty"
+            )]
             let _ = self.storage.list(self.dir, &mut |entry| {
                 if !entry.is_dir
                     && !self.folders_only
@@ -314,6 +318,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn pages_follow_the_full_sort_order() {
         let mut storage = MemoryStorage::new();
         // Folders first, case-insensitive, unsupported and hidden skipped.

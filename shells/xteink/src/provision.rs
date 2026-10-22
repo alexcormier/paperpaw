@@ -24,7 +24,7 @@ const WIFI_FILE: &str = "wifi.ini";
 pub fn take(flash: &Flash, storage: &dyn Storage) {
     let mut flash = flash.borrow_mut();
     let mut table = Box::new([0u8; PARTITION_TABLE_MAX_LEN]);
-    let Some(offset) = partitions::read_partition_table(&mut *flash, &mut table[..])
+    let Some(offset) = partitions::read_partition_table(&mut flash, &mut table[..])
         .ok()
         .and_then(|pt| {
             pt.find_partition(PartitionType::Data(DataPartitionSubType::Nvs))

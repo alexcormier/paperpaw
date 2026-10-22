@@ -2,8 +2,11 @@
 //! one), constructs left unclosed, HTML read as browsers forgive it, and
 //! files changed after they were converted.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

@@ -4,7 +4,11 @@
 //! events are recorded; listings page through any folder in one order;
 //! the catalog reads back what it wrote.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

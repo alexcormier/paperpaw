@@ -3,7 +3,11 @@
 //! notices, typed and chosen answers come back as sent, with the
 //! request's own parameters; malformed parameters are refused.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_sdk::event::{Event, EventData, ParamValue};
 use paperpaw_sdk::{

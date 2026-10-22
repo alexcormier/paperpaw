@@ -192,6 +192,10 @@ struct Line {
 }
 
 /// The lines below the temperature and the caption above it, as set.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> Vec<Line> {
     let style = UiStyle::new(env);
     let part = |name: &str| widgets::shows(env, ID.as_str(), name);
@@ -366,7 +370,10 @@ fn text_height(env: &Env<'_>, size: f32, lines: &[Line]) -> u16 {
 
 /// The largest temperature that fits `width` and `height` with `lines`,
 /// as set or as large as fits (at most `most`).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn fitting(
     env: &Env<'_>,
     font: &FontHandle<'_>,
@@ -593,6 +600,10 @@ fn plan_for(
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn draw_now(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

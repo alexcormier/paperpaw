@@ -4,8 +4,11 @@
 //! all on small devices or when switched off, and an answer that comes
 //! too late for the feed shown.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 #[path = "harness/mod.rs"]
 mod common;

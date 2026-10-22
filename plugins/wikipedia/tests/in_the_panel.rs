@@ -6,8 +6,11 @@
 //! With `PAPERPAW_SHOTS` set to a folder, the screens are written there
 //! as PGM images.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{HttpCall, HttpResponse, Io, Kernel};
 use paperpaw_platform::{InputEvent, PointerEvent, PointerPhase, PointerTool, Rotation};

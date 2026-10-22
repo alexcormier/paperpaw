@@ -99,7 +99,7 @@ static STATUS_SETTINGS: [SettingSpec; 4] = [
     status_part(
         STATUS_RIGHT.static_str(),
         "home.status.right",
-        "wifi.status, power.status, core.status.battery",
+        "lock.touch-status, wifi.status, power.status, core.status.battery",
     ),
 ];
 

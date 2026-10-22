@@ -7,8 +7,11 @@
 //! `PROPFIND`, and passwords go with the requests but never into the
 //! list in clear.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 #[path = "harness/mod.rs"]
 mod common;

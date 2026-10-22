@@ -3,8 +3,11 @@
 //! own, and a faint one that the focus passes and that does nothing when
 //! tapped.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::RefCell;
 

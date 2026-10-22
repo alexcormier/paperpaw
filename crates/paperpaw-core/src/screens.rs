@@ -1,7 +1,10 @@
 //! The stack of screens: opening and closing them, overlays and the parts
 //! of the screen they take, the notice, and calls into the screens.
 
-#[allow(unused_imports)]
+#[allow(
+    unused_imports,
+    reason = "a part of the kernel, which sees all of it; not every part uses every name"
+)]
 use super::*;
 
 /// How many tasks not shown are kept ([`Command::SwitchTask`]).

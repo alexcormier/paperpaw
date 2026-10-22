@@ -3,8 +3,11 @@
 //! and choices of many open the settings plugin's list, or step on where
 //! there is none, in the bar, the list and the panel alike.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::borrow::Cow;
 

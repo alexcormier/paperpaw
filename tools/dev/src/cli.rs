@@ -311,6 +311,10 @@ fn flows_at(path: PathBuf) -> Result<Vec<PathBuf>, String> {
     Ok(flows)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<(String, Context)>, String> {
     let mut command = None;
     let mut target = Target::default();

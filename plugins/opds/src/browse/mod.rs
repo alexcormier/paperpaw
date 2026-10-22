@@ -341,6 +341,34 @@ impl BrowseScreen {
             _ => {}
         }
     }
+
+    /// The message below the list: without rows it takes the room it
+    /// needs above its line.
+    fn draw_status(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, empty: bool) {
+        let style = self.style;
+        let text = match &self.message {
+            Some(message) => message.clone(),
+            None if empty && self.loading.is_none() => env.i18n.tr("opds.empty").to_string(),
+            None => String::new(),
+        };
+        // Without rows the message takes the room it needs above its line.
+        let status = if empty {
+            let s = self.status;
+            let top = self.list.area().y;
+            let needed = ui::note_line_height(env, &style, s.width, &text)
+                .clamp(s.height, s.bottom().saturating_sub(u32::from(top)) as u16);
+            Rect::new(
+                s.x,
+                (s.bottom() as u16).saturating_sub(needed),
+                s.width,
+                needed,
+            )
+        } else {
+            self.status
+        };
+        canvas.fill(status, Color::WHITE);
+        ui::draw_note_line(canvas, env, &style, status, &text);
+    }
 }
 
 impl Screen for BrowseScreen {
@@ -426,30 +454,7 @@ impl Screen for BrowseScreen {
                 ui::draw_noted_row(canvas, env, &style, rect, focused, &title, &value, &note);
             },
         );
-        let text = match &self.message {
-            Some(message) => message.clone(),
-            None if rows.is_empty() && self.loading.is_none() => {
-                env.i18n.tr("opds.empty").to_string()
-            }
-            None => String::new(),
-        };
-        // Without rows the message takes the room it needs above its line.
-        let status = if rows.is_empty() {
-            let s = self.status;
-            let top = self.list.area().y;
-            let needed = ui::note_line_height(env, &style, s.width, &text)
-                .clamp(s.height, s.bottom().saturating_sub(u32::from(top)) as u16);
-            Rect::new(
-                s.x,
-                (s.bottom() as u16).saturating_sub(needed),
-                s.width,
-                needed,
-            )
-        } else {
-            self.status
-        };
-        canvas.fill(status, Color::WHITE);
-        ui::draw_note_line(canvas, env, &style, status, &text);
+        self.draw_status(canvas, env, rows.is_empty());
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

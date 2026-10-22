@@ -3,8 +3,11 @@
 //! panic, members of hostile JSON, book paths that would leave the library
 //! folder, and Calibre's answers to the broadcast.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_plugin_calibre::protocol::{
     Framing, Message, frame, member, name_of_answer, number, op, parse, port_of_answer, safe_path,

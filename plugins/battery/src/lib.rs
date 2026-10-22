@@ -117,7 +117,7 @@ fn record(env: &Env<'_>, state: &mut State, kind: Kind) {
         append(
             env,
             log::PLUGINS,
-            "plugins.old.csv",
+            log::PLUGINS_OLD,
             log::PLUGINS_HEADER,
             &log::plugin_lines(now.ms, &env.plugin_usage()),
         );

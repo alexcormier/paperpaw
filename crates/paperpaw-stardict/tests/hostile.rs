@@ -2,8 +2,11 @@
 //! hold much more memory than its budget: on the X4 a failed allocation
 //! stops the device. The tests measure the most memory each step holds.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::alloc::{GlobalAlloc, Layout, System};
 use std::cell::Cell;

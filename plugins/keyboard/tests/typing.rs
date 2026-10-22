@@ -5,8 +5,11 @@
 //! layouts (and the next keyboard keeping the layout), cancelling, and
 //! text that comes from elsewhere (a phone) cleaned to one line.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::RefCell;
 use std::rc::Rc;

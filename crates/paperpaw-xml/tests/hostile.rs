@@ -5,8 +5,11 @@
 //! document in chunks of any size gives the same tokens as feeding it
 //! whole; escaped text and attribute values decode to what was escaped.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_xml::{Token, Tokenizer, decode, escape};
 use proptest::prelude::*;

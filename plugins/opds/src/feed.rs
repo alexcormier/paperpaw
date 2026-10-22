@@ -385,6 +385,10 @@ struct Response {
 /// Reads the WebDAV listing (`PROPFIND`, depth 1) of the folder `base`
 /// in file `path`: subfolders lead further, files are books named by
 /// their file names. Folders first, then by name.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub(crate) fn read_webdav(storage: &dyn Storage, path: &str, base: &str) -> Feed {
     let mut feed = Feed::default();
     let mut current: Option<Response> = None;

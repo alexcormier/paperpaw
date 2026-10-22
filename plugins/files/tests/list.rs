@@ -2,8 +2,11 @@
 //! moved elsewhere (by the file manager, to the archive), settings
 //! changed while it shows, and where the focus is when it shows again.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

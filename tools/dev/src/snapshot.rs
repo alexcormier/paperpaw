@@ -336,6 +336,10 @@ pub fn blessing() -> bool {
 
 /// Draws every case and compares it with `<dir>/<name>.png` (writes it
 /// if `bless`); findings and a page with the differences into `report`.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn compare(
     context: &Context,
     cases: &[Case],

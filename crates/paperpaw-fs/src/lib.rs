@@ -1,6 +1,10 @@
 //! Storage backed by a directory of the host file system: the emulated SD
 //! card of the desktop emulator, or an app's folder on Android.
 
+// What goes wrong with the user's data is told, never dropped unseen:
+// a result left unread says why (see CONTRIBUTING.md).
+#![deny(clippy::let_underscore_must_use)]
+
 use std::cell::RefCell;
 use std::fs::{self, File, OpenOptions};
 use std::io::{self, Read, Seek, SeekFrom, Write};
@@ -95,6 +99,10 @@ fn error(e: io::Error) -> StorageError {
 fn sync_dir(path: &Path) {
     #[cfg(unix)]
     if let Some(dir) = path.parent() {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a file system that cannot sync a folder keeps the file all the same; only a power cut right after may lose the rename"
+        )]
         let _ = File::open(dir).and_then(|dir| dir.sync_all());
     }
     #[cfg(not(unix))]
@@ -227,6 +235,10 @@ impl Storage for DirStorage {
             file.sync_all()
         });
         if let Err(e) = written.and_then(|()| fs::rename(&temp, &target)) {
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "cleaning up after a failed write, whose own error is the one told"
+            )]
             let _ = fs::remove_file(&temp);
             return Err(error(e));
         }
@@ -340,7 +352,10 @@ fn free_space(dir: &Path) -> Option<u64> {
     if unsafe { libc::statvfs(path.as_ptr(), &mut stats) } != 0 {
         return None;
     }
-    #[allow(clippy::unnecessary_cast)]
+    #[allow(
+        clippy::unnecessary_cast,
+        reason = "the fields' types differ by platform: a cast on one is none on another"
+    )]
     Some(stats.f_bavail as u64 * stats.f_frsize as u64)
 }
 
@@ -483,7 +498,15 @@ mod tests {
             assert!(read.is_err(), "{other}: {read:?}");
             // Made anew where the system keeps no short names, refused
             // where it does: what is there stays as it was.
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "the attempt is what is tested; whether it works depends on the system"
+            )]
             let _ = storage.write(other, b"stolen");
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "the attempt is what is tested; whether it works depends on the system"
+            )]
             let _ = storage.append(other, b"stolen");
             assert_ne!(storage.size(own), Ok(6 + 6), "{other}");
             let n = storage.read_at(own, 0, &mut buf).unwrap();

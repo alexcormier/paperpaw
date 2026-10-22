@@ -4,8 +4,11 @@
 //! wrong is said. The catalog's password goes to the catalog only, and a
 //! list that cannot be read is never saved over.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

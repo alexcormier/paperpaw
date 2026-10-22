@@ -70,9 +70,12 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
    reserved for the kernel.
 6. **No panics on bad input.** Configuration, books and plugins can be
    broken; report a warning and carry on with defaults.
-7. **SDK APIs must work over a message boundary** (serializable arguments,
-   no borrowed host state kept across calls), so WebAssembly plugins can use
-   them too.
+7. **The SDK is shared as native code** ([ADR 0024](docs/adr/0024-native-code-plugins.md)):
+   until 1.0 a plugin file is built by the same compiler from the same
+   SDK as the firmware, its fingerprint says so, and Rust types cross
+   unchanged. From 1.0 only plain values are to cross (numbers, text,
+   slices, handles), so new APIs take such arguments and keep no
+   borrowed host state across calls.
 8. **The SDK changes visibly and compatibly** ([ADR 0020](docs/adr/0020-sdk-compatibility.md)):
    a change to its public API comes with `crates/paperpaw-sdk/api.txt`
    brought up to date
@@ -86,6 +89,55 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
    (`ADDING_ONLY` in `crates/paperpaw-sdk/build.rs`).
 
 Significant decisions are recorded as [Architecture Decision Records](docs/adr/).
+
+## Code guidelines
+
+How PaperPaw's code is written, beside the architecture rules. Where a
+check enforces a rule, it says which; clippy and the tests run them with
+everything else (`cargo clippy --workspace --all-targets`, `cargo test
+--workspace`). The length limits are a ratchet: what was longer before
+stays listed until it is changed, the lists only shrink, and nothing new
+may exceed them. Existing code is not reworked for them in bulk.
+
+1. **Functions of at most 100 lines.** Check: clippy's
+   `too_many_lines`, the limit in `clippy.toml`. A longer one from
+   before carries `#[expect(clippy::too_many_lines, reason = "...")]`;
+   split it when you change it, and the `expect` goes.
+2. **Files of at most 1500 lines.** Check: `tools/checks`. The longer
+   ones from before are in `tools/checks/big-files.txt` with their
+   length; none may grow, and one split below the limit leaves the list.
+3. **No control characters in source files** but tabs and line ends:
+   write `\0` and the like as escapes. Check: `tools/checks`.
+4. **Errors on the user's data are never discarded.** Handle them or
+   tell the user; where one truly does not matter, say why in
+   `#[expect(clippy::let_underscore_must_use, reason = "...")]`. Check:
+   the code that keeps user data denies `let_underscore_must_use`:
+   storage (`paperpaw-fs`, `paperpaw-fat`, `paperpaw-sqlite`), the SDK's
+   library, the reader, the files, sync (`kosync`, `koreader`), the
+   statistics and settings. The check sees only `let _ = ...;`: an
+   error dropped with `_ = ...;` or `.ok();` passes it unseen, so do not
+   write those for user data either.
+5. **Every `allow` and `expect` says why** (`reason = "..."`). Check:
+   clippy's `allow_attributes_without_reason`.
+6. **Names and paths are constants**, not the same literal written in
+   two places: a file a plugin keeps, a setting's id, an action's.
+7. **Memory is the limit on the X4** (a heap of 262 KB, of which opening
+   a book takes up to 179 KB): no hidden allocations in paths that run
+   for every page or frame, nothing kept in memory while it is not used,
+   large buffers allocated fallibly. Measure new features on the
+   `xteink-x4` profile of the emulator.
+8. **No panics on bad input**: see architecture rule 6.
+9. **Comments in plain English**, written for readers whose first
+   language is not English. English comes first everywhere, other
+   languages in their translation files.
+   - Short sentences: subject, verb, object.
+   - Say the why directly. The code shows what it does; a comment says
+     what it cannot.
+   - At most one parenthesis in a sentence, and no aside inside another.
+   - No em or en dashes: a colon, a semicolon, a comma or a new sentence
+     does it.
+   - Old comments are not rewritten in bulk; mend those you touch.
+     Reviews check new comments against these rules.
 
 ## Adding a translation
 

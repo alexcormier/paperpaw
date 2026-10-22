@@ -5,8 +5,11 @@
 //! `paperpaw.ini` and read by a new kernel; text typed for a setting;
 //! advanced settings; resetting a page and everything.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

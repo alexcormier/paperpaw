@@ -3,8 +3,11 @@
 //! page, the chapter and the pages left in it, and the time they take at
 //! the speed read.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::Cell;
 use std::rc::Rc;
