@@ -134,7 +134,9 @@ impl Wheels {
             Some(PickerPart::Value(i)) => (i, 0),
             None => return,
         };
+        // The tapped field focused, the focus shown.
         self.focus = field as u8;
+        self.shown = true;
         if by != 0 {
             step(field, by);
         }
@@ -316,6 +318,9 @@ enum DateField {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct DatePicker {
     wheels: Wheels,
+    /// The date it was made with, kept until its years are known
+    /// ([`DatePicker::years`]).
+    given: (i32, u8, u8),
     year: i32,
     month: u8,
     day: u8,
@@ -331,6 +336,7 @@ impl DatePicker {
     pub fn new(style: &UiStyle, area: Rect, (year, month, day): (i32, u8, u8)) -> Self {
         let mut picker = Self {
             wheels: Wheels::new(style, area, 3),
+            given: (year, month, day),
             year,
             month,
             day,
@@ -344,6 +350,8 @@ impl DatePicker {
     /// The years to pick from, `min` to `max` (no less than `min`).
     pub fn years(mut self, min: i32, max: i32) -> Self {
         self.years = (min, max.max(min));
+        // The date given, not the one made to fit the years before.
+        (self.year, self.month, self.day) = self.given;
         self.clamp();
         self
     }
@@ -781,6 +789,31 @@ mod tests {
         assert_eq!(time.value(), (7, 30));
         assert!(time.on_action(&actions::UP));
         assert_eq!(time.value(), (8, 30));
+    }
+
+    #[test]
+    fn a_tap_on_a_touch_screen_shows_the_focus_of_its_field() {
+        let touch = UiStyle {
+            finger: 50,
+            ..STYLE
+        };
+        let mut date = DatePicker::new(&touch, area(), (2026, 10, 22));
+        assert!(!date.wheels.shown);
+        let (_, month, _) = date.wheels.parts(1);
+        assert!(date.on_tap(middle(month)));
+        assert!(date.wheels.shown);
+        assert_eq!(date.focus(), 1);
+    }
+
+    #[test]
+    fn years_keep_a_date_outside_the_default_range() {
+        let date = DatePicker::new(&STYLE, area(), (1850, 6, 15)).years(1800, 1900);
+        assert_eq!(date.value(), (1850, 6, 15));
+        // Clamped once the range is known.
+        let date = DatePicker::new(&STYLE, area(), (1850, 6, 15)).years(1870, 1900);
+        assert_eq!(date.value(), (1870, 6, 15));
+        let leap = DatePicker::new(&STYLE, area(), (1896, 2, 29)).years(1800, 1900);
+        assert_eq!(leap.value(), (1896, 2, 29));
     }
 
     #[test]
