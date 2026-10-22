@@ -62,7 +62,7 @@ fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
 /// [`home`], with the black pixels of each row of the screen.
 fn screen(storage: MemoryStorage, page: &str, config: &str) -> (String, Vec<usize>) {
     let user = format!(
-        "[core]\nlanguage = en\n[home]\ngesture-tips = false\npage-1 = \"{page}\"\n[news]\n{config}\n"
+        "[core]\nlanguage = en\n[home]\ngesture-tips = false\ncolumns = 4\npage-1 = \"{page}\"\n[news]\n{config}\n"
     );
     let mut kernel = Kernel::builder(DEVICE)
         .storage(storage)

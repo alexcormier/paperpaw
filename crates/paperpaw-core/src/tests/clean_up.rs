@@ -51,3 +51,43 @@ fn cleaning_up_keeps_books_by_every_spelling_of_their_folder() {
     );
     assert!(storage.exists(&annotations("Books/a.txt")), "as the card");
 }
+
+/// With a clock, the storage is cleaned up by itself while charging, a
+/// day after it was first seen and then weekly; not before.
+#[test]
+fn cleaning_up_runs_by_itself_while_charging_now_and_then() {
+    use paperpaw_platform::{Battery, SystemStatus, WallClock};
+    let annotations = |path: &str| alloc::format!(".paperpaw/annotations/{}", key(path));
+    let storage = MemoryStorage::new().with(&annotations("Books/gone.txt"), "a note");
+    let mut kernel = Kernel::builder(DEVICE).storage(storage).build().unwrap();
+    let status = |charging: bool| SystemStatus {
+        clock: Some(WallClock {
+            at: Instant(0),
+            unix_millis: 1_800_000_000_000,
+            utc_offset_minutes: None,
+        }),
+        battery: Some(Battery {
+            percent: 50,
+            charging,
+            millivolts: None,
+        }),
+    };
+    kernel.set_status(Instant(0), status(false));
+    kernel.start(Instant(0));
+    let gone = annotations("Books/gone.txt");
+    // Charging at once: too early.
+    kernel.set_status(Instant(1000), status(true));
+    kernel.tick(Instant(2000));
+    assert!(kernel.storage().exists(&gone));
+    // A day later, charging: cleaned up, and the time noted.
+    let day = 24 * 3600 * 1000;
+    kernel.set_status(Instant(day + 1000), status(false));
+    kernel.set_status(Instant(day + 2000), status(true));
+    for at in [day + 3000, day + 4000, day + 5000] {
+        kernel.tick(Instant(at));
+    }
+    assert!(!kernel.storage().exists(&gone));
+    let noted = paperpaw_sdk::read_file(kernel.storage(), ".paperpaw/cleaned-up.txt", 32).unwrap();
+    // At the first tick after charging began.
+    assert_eq!(noted, b"1800086403\n");
+}

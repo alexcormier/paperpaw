@@ -586,4 +586,3 @@ fn a_tap_at_the_bottom_of_a_page_opens_the_panel_directly() {
     app.tap(Point::new(240, 650));
     assert_eq!(app.screen(), PANEL, "{}", app.described());
 }
-

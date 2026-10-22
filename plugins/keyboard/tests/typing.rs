@@ -586,17 +586,18 @@ fn the_answer_carries_the_question_context() {
 fn buttons_move_round_the_rows() {
     let mut typing = Typing::new(BUTTONS);
     typing.open(&[]);
+    // On this narrow screen the rows are split ("qwert" above "yuiop").
     // Left from the first key wraps to the end of the row.
     typing.run(actions::LEFT);
-    assert_eq!(typing.focused().as_deref(), Some("p"));
+    assert_eq!(typing.focused().as_deref(), Some("t"));
     typing.run(actions::RIGHT);
     assert_eq!(typing.focused().as_deref(), Some("q"));
     // Down to the row below, near the same place.
     typing.run(actions::DOWN);
-    assert_eq!(typing.focused().as_deref(), Some("a"));
+    assert_eq!(typing.focused().as_deref(), Some("y"));
     // Previous from the first key of a row: the end of the row above.
     typing.run(actions::PREVIOUS);
-    assert_eq!(typing.focused().as_deref(), Some("p"));
+    assert_eq!(typing.focused().as_deref(), Some("t"));
     // Up from the first row: the bottom row, below (no buttons in the
     // field without a clipboard or network).
     typing.run(actions::UP);
@@ -784,7 +785,7 @@ fn paste_by_buttons_from_above_the_first_row() {
     typing.run(actions::CONFIRM);
     // Down again to the key below it, at the right of the first row.
     typing.run(actions::DOWN);
-    assert_eq!(typing.focused().as_deref(), Some("o"));
+    assert_eq!(typing.focused().as_deref(), Some("t"));
     typing.press_by_buttons("OK");
     assert_eq!(typing.answer(), "pasted line end");
 }
@@ -933,4 +934,20 @@ fn layouts_named_as_others_are_left_out() {
         .filter(|l| l.starts_with("dutch.layout"))
         .count();
     assert!(german <= 1 && dutch <= 1, "{labels:?}");
+}
+
+/// On a touch screen, before any key has the focus, an action that is no
+/// move (such as Home, or another plugin's) passes the keyboard: it is not
+/// taken as the first press that shows the focus.
+#[test]
+fn other_actions_pass_before_a_key_has_the_focus() {
+    let mut typing = Typing::new(TOUCH);
+    typing.open(&[]);
+    assert_eq!(typing.focused(), None);
+    typing.run(COPY);
+    assert_eq!(typing.focused(), None);
+    // It ran: what it copied is there to paste the next time.
+    typing.run(actions::BACK);
+    typing.open(&[]);
+    assert!(typing.part("Paste").is_some());
 }

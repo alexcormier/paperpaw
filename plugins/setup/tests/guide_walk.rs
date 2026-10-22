@@ -244,12 +244,12 @@ fn a_choice_of_many_opens_its_list_and_the_guide_shows_what_was_chosen() {
 fn a_page_that_opens_a_screen_comes_back_to_the_guide() {
     for device in DEVICES {
         let mut app = first_start(device);
-        page_of(&mut app, "How should your home screen look?");
+        page_of(&mut app, PAGE_STEP);
         card(&mut app, "Open");
         assert_ne!(app.screen(), GUIDE);
         app.run(actions::BACK);
         assert_eq!(app.screen(), GUIDE, "{}", app.described());
-        assert_eq!(question(&mut app), "How should your home screen look?");
+        assert_eq!(question(&mut app), PAGE_STEP);
     }
 }
 

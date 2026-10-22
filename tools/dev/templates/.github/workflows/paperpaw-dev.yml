@@ -34,6 +34,12 @@ jobs:
         # One variant a device (English, light, the default look); leave
         # out --quick for every language, dark and every look.
         run: cargo run --example paperpaw-dev -- check --plugin "$PLUGIN" --quick
+      - name: Flows, varied at the edges
+        if: ${{ !cancelled() }}
+        # Every flow of tests/flows on every device, each step against the
+        # X4's budgets, then played again at the edges (Back, Home and sleep
+        # in the middle, the network failing, little storage, ...).
+        run: cargo run --example paperpaw-dev -- flows --plugin "$PLUGIN" --flow tests/flows --language en --light --out target/paperpaw-dev/flows
       - uses: actions/upload-artifact@v7
         # The report also when a check failed: that is when it is read.
         if: always()

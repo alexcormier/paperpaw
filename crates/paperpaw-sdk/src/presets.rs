@@ -1,9 +1,8 @@
 //! Presets: ready-made sets of setting values, chosen as a whole, such as
-//! a layout of the home screen (its pages, its columns, what shows above
-//! and below them).
+//! a power mode (how long work may wait, how soon the device sleeps).
 //!
 //! A preset has a kind, which the plugin that offers them names (e.g.
-//! `home.layout`): that plugin lists the presets of its kind
+//! `core.power-mode`): that plugin lists the presets of its kind
 //! ([`Presets::of_kind`], through `env.settings.presets()`), shows each
 //! as it would look ([`Command::PreviewSettings`] with
 //! [`Preset::changes`]) and applies the one chosen ([`commands`]). Any
@@ -13,12 +12,12 @@
 //! `presets.ini`, so that anyone can make one and share it:
 //!
 //! ```ini
-//! [reading-nook]
-//! kind = home.layout
-//! name = Reading nook
-//! description = The book being read, large, and the clock.
-//! home.page-1 = home.continue 0/0 4x3, home.clock 0/3 4x1
-//! home.rows = 4
+//! [night-train]
+//! kind = core.power-mode
+//! name = Night train
+//! description = Offline, the light low, asleep soon.
+//! power.level = offline
+//! core.sleep-after <= 3
 //! ```
 //!
 //! The name and the description are translation keys or, where no
@@ -44,7 +43,7 @@ pub struct Preset {
     /// In the namespace of the plugin that adds it.
     pub id: Id,
     /// What it is for, named by the plugin that offers such presets (e.g.
-    /// `home.layout`).
+    /// `core.power-mode`).
     pub kind: Id,
     /// Translation key (or text) of its name.
     pub title: Cow<'static, str>,
