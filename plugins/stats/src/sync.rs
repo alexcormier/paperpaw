@@ -443,7 +443,8 @@ impl SyncScreen {
             rows.push(Row::Import);
         }
         let top = header.area.height + style.gap as u16;
-        let height = style.row as u16 * rows.len() as u16;
+        // No longer than the screen: the list pages where its rows are tall.
+        let height = (style.row as u16 * rows.len() as u16).min(display.height.saturating_sub(top));
         let note_top = top + height + style.gap as u16;
         Self {
             list: ListView::new(Rect::new(0, top, display.width, height), style.row)

@@ -325,6 +325,41 @@ const CASES: &[Case] = &[
         script: "page-forward,page-forward,run:stats.open,wait:300",
         colour: 0,
     },
+    // Buttons in slots of a touch row: the footnote's side by side, the
+    // skim screen's four, the transfer's and the update page's one below
+    // the other.
+    Case {
+        name: "x4-footnote",
+        profile: "xteink-x4",
+        book: Some("books/alice-in-wonderland.epub"),
+        sets: &[],
+        script: "open:reader.footnote:text=A note at the foot of the page.,wait:300",
+        colour: 0,
+    },
+    Case {
+        name: "x4-skim",
+        profile: "xteink-x4",
+        book: Some("books/alice-in-wonderland.epub"),
+        sets: &[],
+        script: "page-forward,open:reader.skim-screen,wait:300",
+        colour: 0,
+    },
+    Case {
+        name: "x4-transfer",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
+        script: "run:transfer.open,wait:300",
+        colour: 0,
+    },
+    Case {
+        name: "x4-update",
+        profile: "xteink-x4",
+        book: None,
+        sets: &[],
+        script: "run:update.open,wait:300",
+        colour: 0,
+    },
     Case {
         name: "x4-file-manager",
         profile: "xteink-x4",

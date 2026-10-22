@@ -29,26 +29,21 @@ pub fn add(app: KernelBuilder) -> KernelBuilder {
     app.plugin(UiKit)
 }
 
-/// The pages of the blocks that keep every label whole at every text
-/// size: drawn without the header (whose titles are not yet so), checked
-/// strictly by `ui-kit` ([`crate::cli::Context::strict_screens`]).
-pub const STRICT: [&str; 6] = [
-    "ui-kit.inputs",
-    "ui-kit.ticks",
-    "ui-kit.chips",
-    "ui-kit.pickers",
-    "ui-kit.dialog",
-    "ui-kit.confirm",
-];
-
 /// The pages, by screen id and title key.
-const PAGES: [(&str, &str); 13] = [
+const PAGES: [(&str, &str); 20] = [
     ("ui-kit.text", "ui-kit.text"),
     ("ui-kit.messages", "ui-kit.messages"),
+    ("ui-kit.empties", "ui-kit.empties"),
     ("ui-kit.rows", "ui-kit.rows"),
+    ("ui-kit.values", "ui-kit.values"),
+    ("ui-kit.noted-rows", "ui-kit.noted-rows"),
+    ("ui-kit.numbers", "ui-kit.numbers"),
+    ("ui-kit.sliders", "ui-kit.sliders"),
     ("ui-kit.controls", "ui-kit.controls"),
+    ("ui-kit.segments", "ui-kit.segments"),
     ("ui-kit.layout", "ui-kit.layout"),
     ("ui-kit.share", "ui-kit.share"),
+    ("ui-kit.offer", "ui-kit.offer"),
     ("ui-kit.dialog", "ui-kit.dialog"),
     ("ui-kit.inputs", "ui-kit.inputs"),
     ("ui-kit.ticks", "ui-kit.ticks"),
@@ -67,12 +62,19 @@ plural = one-other
 ui-kit.plugin.name = UI kit
 ui-kit.plugin.description = Every building block of the SDK's user interface.
 ui-kit.text = Text and messages
-ui-kit.rows = Rows
-ui-kit.controls = Buttons and segments
+ui-kit.rows = Switch rows
+ui-kit.values = Value rows
+ui-kit.noted-rows = Rows with a note
+ui-kit.numbers = Numbers
+ui-kit.sliders = Sliders
+ui-kit.controls = Buttons
+ui-kit.segments = Segments
 ui-kit.layout = Layout and cards
-ui-kit.share = Address and offers
+ui-kit.share = Address to open on a phone
+ui-kit.offer = Offer to go online
 ui-kit.dialog = Dialog
 ui-kit.messages = Headings and messages
+ui-kit.empties = Empty states
 ui-kit.inputs = Text fields
 ui-kit.ticks = Ticked rows
 ui-kit.chips = Chips and long text
@@ -143,12 +145,19 @@ plural = one-other
 ui-kit.plugin.name = UI-Baukasten
 ui-kit.plugin.description = Jeder Baustein der Benutzeroberfläche des SDK.
 ui-kit.text = Text und Meldungen
-ui-kit.rows = Zeilen
-ui-kit.controls = Schaltflächen und Segmente
+ui-kit.rows = Schalterzeilen
+ui-kit.values = Wertzeilen
+ui-kit.noted-rows = Zeilen mit Hinweis
+ui-kit.numbers = Zahlen
+ui-kit.sliders = Schieberegler
+ui-kit.controls = Schaltflächen
+ui-kit.segments = Segmente
 ui-kit.layout = Anordnung und Karten
-ui-kit.share = Adresse und Angebote
+ui-kit.share = Adresse zum Öffnen am Handy
+ui-kit.offer = Angebot, online zu gehen
 ui-kit.dialog = Dialog
 ui-kit.messages = Überschriften und Meldungen
+ui-kit.empties = Leere Zustände
 ui-kit.inputs = Textfelder
 ui-kit.ticks = Häkchen-Zeilen
 ui-kit.chips = Chips und langer Text
@@ -283,16 +292,12 @@ impl Screen for Page {
         let display = env.device.display;
         let screen = Rect::new(0, 0, display.width, display.height);
         canvas.fill(screen, Color::WHITE);
-        let (id, title) = PAGES[self.index];
+        let title = PAGES[self.index].1;
         let mut stack = ui::Stack::new(screen, 0);
         let margin = style.margin as u16;
-        if STRICT.contains(&id) {
-            stack.take(margin);
-        } else {
-            let header = stack.take(style.header as u16);
-            let page = format!("{} / {}", self.index + 1, PAGES.len());
-            ui::draw_header(canvas, env, &style, header, env.i18n.tr(title), Some(&page));
-        }
+        let header = stack.take(style.header as u16);
+        let page = format!("{} / {}", self.index + 1, PAGES.len());
+        ui::draw_header(canvas, env, &style, header, env.i18n.tr(title), Some(&page));
         let rest = stack.rest();
         let body = Rect::new(
             margin,
@@ -304,10 +309,17 @@ impl Screen for Page {
         match PAGES[self.index].0 {
             "ui-kit.text" => text(canvas, env, &style, body),
             "ui-kit.messages" => messages(canvas, env, &style, body),
+            "ui-kit.empties" => empty(canvas, env, &style, body),
             "ui-kit.rows" => rows(canvas, env, &style, whole),
+            "ui-kit.values" => values(canvas, env, &style, whole),
+            "ui-kit.noted-rows" => noted(canvas, env, &style, whole),
+            "ui-kit.numbers" => numbers(canvas, env, &style, whole),
+            "ui-kit.sliders" => sliders(canvas, env, &style, whole),
             "ui-kit.controls" => controls(canvas, env, &style, body),
+            "ui-kit.segments" => segments(canvas, env, &style, body),
             "ui-kit.layout" => layout(canvas, env, &style, body),
             "ui-kit.share" => share(canvas, env, &style, body),
+            "ui-kit.offer" => offer(canvas, env, &style, body),
             "ui-kit.dialog" => dialog(canvas, env, &style),
             "ui-kit.inputs" => inputs(canvas, env, &style, whole),
             "ui-kit.ticks" => ticks(canvas, env, &style, whole),
@@ -350,80 +362,77 @@ fn text(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
 
 /// A heading, a note line, a message and an empty state.
 fn messages(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-    let Some(font) = style.font(env) else {
-        return;
-    };
+    let width = area.width;
     let mut stack = ui::Stack::new(area, style.gap as u16);
     let heading = stack.take(ui::heading_height(env, style));
     ui::draw_heading(canvas, env, style, heading, env.i18n.tr("ui-kit.heading"));
-    let note = stack.take(font.line_metrics(style.small).line_height as u16);
-    ui::draw_note_line(canvas, env, style, note, env.i18n.tr("ui-kit.note"));
-    let message = stack.take(font.line_metrics(style.text).line_height as u16 * 4);
-    let empty = stack.rest();
-    ui::draw_message(canvas, env, style, message, env.i18n.tr("ui-kit.message"));
+    // Each as high as all its words need.
+    let text = env.i18n.tr("ui-kit.note");
+    let note = stack.take(ui::note_line_height(env, style, width, text));
+    ui::draw_note_line(canvas, env, style, note, text);
+    let text = env.i18n.tr("ui-kit.message");
+    let message = stack.take(ui::message_height(env, style, width, text));
+    ui::draw_message(canvas, env, style, message, text);
+}
+
+/// An empty state across the page.
+fn empty(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     ui::draw_empty(
         canvas,
         env,
         style,
-        empty,
+        area,
         "books",
         env.i18n.tr("ui-kit.empty"),
         env.i18n.tr("ui-kit.empty.text"),
     );
 }
 
-/// Setting rows: switches on and off, a value, a note, a stepper, a
-/// slider, a progress bar; the second of each kind focused.
+/// Switch rows, on (focused) and off.
 fn rows(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+    let width = area.width;
+    let tr = |key: &'static str| env.i18n.tr(key);
+    let mut stack = ui::Stack::new(area, 0);
+    // Each row as tall as its title needs: titles are never shortened.
+    let title = tr("ui-kit.switch.focused");
+    let focused = stack.take(ui::switch_row_height(env, style, width, title, ""));
+    ui::draw_focus(canvas, style, focused);
+    ui::draw_switch_row(canvas, env, style, focused, true, title, "", true);
+    let title = tr("ui-kit.switch");
+    let plain = stack.take(ui::switch_row_height(env, style, width, title, ""));
+    ui::draw_switch_row(canvas, env, style, plain, false, title, "", false);
+    ui::draw_separator(canvas, style, plain, 0);
+}
+
+/// A value row.
+fn values(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+    let width = area.width;
+    let tr = |key: &'static str| env.i18n.tr(key);
+    let mut stack = ui::Stack::new(area, 0);
+    let (title, value) = (tr("ui-kit.value"), tr("ui-kit.value.value"));
+    let row = stack.take(ui::value_row_height(env, style, width, title, value));
+    ui::draw_value_row(canvas, env, style, row, false, title, value);
+    ui::draw_separator(canvas, style, row, 0);
+}
+
+/// A row with a note below its title and value.
+fn noted(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+    let width = area.width;
+    let tr = |key: &'static str| env.i18n.tr(key);
+    let mut stack = ui::Stack::new(area, 0);
+    let (title, value, note) = (
+        tr("ui-kit.noted"),
+        tr("ui-kit.noted.value"),
+        tr("ui-kit.noted.note"),
+    );
+    let noted = stack.take(ui::noted_row_height(env, style, width, title, value, note));
+    ui::draw_noted_row(canvas, env, style, noted, false, title, value, note);
+}
+
+/// A stepper and a progress bar.
+fn numbers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     let row = style.row as u16;
     let mut stack = ui::Stack::new(area, 0);
-    let focused = stack.take(row);
-    ui::draw_focus(canvas, style, focused);
-    ui::draw_switch_row(
-        canvas,
-        env,
-        style,
-        focused,
-        true,
-        env.i18n.tr("ui-kit.switch.focused"),
-        "",
-        true,
-    );
-    let plain = stack.take(row);
-    ui::draw_switch_row(
-        canvas,
-        env,
-        style,
-        plain,
-        false,
-        env.i18n.tr("ui-kit.switch"),
-        "",
-        false,
-    );
-    ui::draw_separator(canvas, style, plain, 0);
-    let value = stack.take(row);
-    ui::draw_value_row(
-        canvas,
-        env,
-        style,
-        value,
-        false,
-        env.i18n.tr("ui-kit.value"),
-        env.i18n.tr("ui-kit.value.value"),
-    );
-    ui::draw_separator(canvas, style, value, 0);
-    let noted = stack.take(row + row / 2);
-    ui::draw_noted_row(
-        canvas,
-        env,
-        style,
-        noted,
-        false,
-        env.i18n.tr("ui-kit.noted"),
-        env.i18n.tr("ui-kit.noted.value"),
-        env.i18n.tr("ui-kit.noted.note"),
-    );
-    ui::draw_separator(canvas, style, noted, 0);
     // Its title beside the − and +, or above them where it needs the room.
     let title = env.i18n.tr("ui-kit.stepper");
     let lines = ui::stepper_lines(env, style, area.width, row, title, "100");
@@ -438,12 +447,6 @@ fn rows(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         "100",
         false,
     );
-    let slider = stack.take(ui::slider::row_height(style, false));
-    let view = SliderView::new(slider, 40, "40 %")
-        .title(env.i18n.tr("ui-kit.slider"))
-        .focus(SliderFocus::Focused);
-    ui::draw_focus(canvas, style, slider);
-    ui::Slider::new(0, 100).draw_row(canvas, env, style, &view);
     let margin = style.margin as u16;
     let progress = stack.take(row);
     let bar = Rect::new(
@@ -455,68 +458,71 @@ fn rows(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     ui::draw_progress(canvas, style, bar, 620, Color::BLACK);
 }
 
-/// Buttons in each state, an icon button, segments as tabs and as a
-/// choice.
+/// A slider, focused.
+fn sliders(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+    let title = env.i18n.tr("ui-kit.slider");
+    let height = ui::slider::row_height_for(env, style, area.width, title, "100 %", false);
+    let slider = ui::Stack::new(area, 0).take(height);
+    let view = SliderView::new(slider, 40, "40 %")
+        .title(title)
+        .room("100 %")
+        .focus(SliderFocus::Focused);
+    ui::draw_focus(canvas, style, slider);
+    ui::Slider::new(0, 100).draw_row(canvas, env, style, &view);
+}
+
+/// Buttons in each state, a faint one and icon buttons.
 fn controls(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-    let gap = style.gap as u16;
-    let height = ui::Segments::height(style);
+    let (gap, width) = (style.gap as u16, area.width);
+    let tr = |key: &'static str| env.i18n.tr(key);
     let mut stack = ui::Stack::new(area, style.margin as u16);
-    let tabs = stack.take(height);
-    ui::Segments::new(style, tabs, 3).draw(
-        canvas,
-        env,
-        style,
-        &[
-            env.i18n.tr("ui-kit.tab.books"),
-            env.i18n.tr("ui-kit.tab.shelves"),
-            env.i18n.tr("ui-kit.tab.notes"),
-        ],
-        0,
-        None,
-    );
-    let buttons = stack.take(height);
+    // Side by side where every word fits, else in more rows: never cut.
     let labels = [
-        env.i18n.tr("ui-kit.button.plain"),
-        env.i18n.tr("ui-kit.button.on"),
-        env.i18n.tr("ui-kit.button.focused"),
+        tr("ui-kit.button.plain"),
+        tr("ui-kit.button.on"),
+        tr("ui-kit.button.focused"),
     ];
-    for (i, (cell, label)) in ui::columns(buttons, 3, gap)
+    let row = stack.take(ui::button_cells_height(env, style, width, &labels, gap));
+    for (i, (cell, label)) in ui::button_cells(env, style, row, &labels, gap)
         .into_iter()
         .zip(labels)
         .enumerate()
     {
         ui::draw_button(canvas, env, style, cell, label, i == 1, i == 2);
     }
-    let more = stack.take(height);
-    if let [faint, icon, icon_on] = ui::columns(more, 3, gap)[..] {
-        ui::draw_faint_button(
-            canvas,
-            env,
-            style,
-            faint,
-            env.i18n.tr("ui-kit.button.faint"),
-            false,
+    // A faint button, then two icon buttons (no words of their own).
+    let faint = [tr("ui-kit.button.faint")];
+    let row = stack.take(ui::button_cells_height(env, style, width, &faint, gap));
+    ui::draw_faint_button(canvas, env, style, row, faint[0], false);
+    let side = ui::Segments::height(style);
+    let row = stack.take(side);
+    for (i, (name, on)) in [("books", false), ("folder", true)].into_iter().enumerate() {
+        let button = Rect::new(row.x + i as u16 * (side + gap), row.y, side, side);
+        let ink = ui::draw_icon_button(canvas, style, button, name, on, on);
+        let centre = (
+            i32::from(button.x + side / 2),
+            i32::from(button.y + side / 2),
         );
-        let side = icon.height;
-        for (cell, name, on) in [(icon, "books", false), (icon_on, "folder", true)] {
-            let button = Rect::new(cell.x, cell.y, side, side);
-            let ink = ui::draw_icon_button(canvas, style, button, name, on, on);
-            let centre = (
-                i32::from(button.x + side / 2),
-                i32::from(button.y + side / 2),
-            );
-            ui::draw_icon_at(canvas, env, name, style.text, centre, ink);
-        }
+        ui::draw_icon_at(canvas, env, name, style.text, centre, ink);
     }
-    let segments = stack.take(height);
-    ui::Segments::new(style, segments, 4).draw(
-        canvas,
-        env,
-        style,
-        &["S", "M", "L", "XL"],
-        1,
-        Some(3),
-    );
+}
+
+/// Segments as tabs and as a choice of sizes, one focused.
+fn segments(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+    let width = area.width;
+    let tr = |key: &'static str| env.i18n.tr(key);
+    let mut stack = ui::Stack::new(area, style.margin as u16);
+    // Side by side where every word fits, else in more rows: never cut.
+    let tabs = [
+        tr("ui-kit.tab.books"),
+        tr("ui-kit.tab.shelves"),
+        tr("ui-kit.tab.notes"),
+    ];
+    let row = stack.take(ui::Segments::height_for(env, style, width, &tabs));
+    ui::Segments::fitted(env, style, row, &tabs).draw(canvas, env, style, &tabs, 0, None);
+    let sizes = ["S", "M", "L", "XL"];
+    let row = stack.take(ui::Segments::height_for(env, style, width, &sizes));
+    ui::Segments::fitted(env, style, row, &sizes).draw(canvas, env, style, &sizes, 1, Some(3));
 }
 
 /// Cards in each frame, and a grid with the focus on one cell.
@@ -577,20 +583,23 @@ fn layout(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
 
 /// An address with its code, and the offer to go online.
 fn share(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-    let [top, bottom] = halves(area, style.margin as u16);
     let url = "http://192.168.4.1:8080/?key=3f9a";
     let qr = paperpaw_sdk::qr::QrCode::new(url.as_bytes());
     ui::draw_address(
         canvas,
         env,
         style,
-        top,
+        area,
         url,
         qr.as_ref(),
         env.i18n.tr("ui-kit.address.hint"),
         Some(env.i18n.tr("ui-kit.address.last")),
     );
-    ui::OfflineOffer::new().draw(canvas, env, style, bottom);
+}
+
+/// The offer to go online, as a screen for the network shows it.
+fn offer(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+    ui::OfflineOffer::new().draw(canvas, env, style, area);
 }
 
 /// A dialog in the middle of the screen, its first button focused.
@@ -689,11 +698,4 @@ fn pickers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) 
     let mut picker = ui::TimePicker::new(style, time, (22, 30));
     picker.set_focus(1);
     picker.draw(canvas, env, style);
-}
-
-/// `area` in two halves one above the other, `gap` apart.
-fn halves(area: Rect, gap: u16) -> [Rect; 2] {
-    let mut stack = ui::Stack::new(area, gap);
-    let top = stack.take(area.height.saturating_sub(gap) / 2);
-    [top, stack.rest()]
 }

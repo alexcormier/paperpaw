@@ -114,8 +114,9 @@ enum Line {
     /// Switches or buttons side by side.
     Buttons(Vec<Control>),
     /// A number set with a slider across the screen, its title and
-    /// value above it.
-    Slider(Id),
+    /// value above it; the more its title needs than a line (see
+    /// [`ui::slider::title_extra`]).
+    Slider(Id, u16),
     /// A number's `−` and `+`, placed by its value when drawn.
     Stepper(Id),
     /// A choice's options side by side.
@@ -169,7 +170,7 @@ struct Layout {
 /// The height of `line`'s row.
 fn height(line: &Line, g: Geometry) -> u16 {
     match line {
-        Line::Slider(_) => g.slider,
+        Line::Slider(_, extra) => g.slider + extra,
         _ => g.row,
     }
 }
@@ -245,7 +246,7 @@ fn place(line: &Line, area: Rect, g: Geometry) -> Row {
             (None, controls.iter().cloned().zip(cells).collect())
         }
         // Drawn as the settings pages draw it, across the row.
-        Line::Slider(id) => (
+        Line::Slider(id, _) => (
             Some(id.clone()),
             alloc::vec![(Control::Slide(id.clone()), area)],
         ),
@@ -432,7 +433,9 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
         flush(&mut group, &mut lines);
         let line = match spec(env, &id).map(|s| &s.kind) {
             Some(SettingKind::Int { .. }) if setting.is_some_and(|s| ui::slider::shows(env, s)) => {
-                Line::Slider(id)
+                // A long title on more lines: the row grows, never cut.
+                let extra = setting.map_or(0, |s| slider_extra(env, style, g.width, s));
+                Line::Slider(id, extra)
             }
             Some(SettingKind::Int { .. }) if setting.is_some() => Line::Stepper(id),
             Some(SettingKind::Choice(options))
@@ -709,10 +712,20 @@ fn draw_slider(
         ui::draw_focus(canvas, style, rect);
     }
     let shown = ui::setting_value(env, spec);
+    let room = ui::number_room(env, style, [spec]);
     let view = ui::SliderView::new(rect, env.settings.int(id.as_str()), &shown)
         .title(env.i18n.tr(&spec.title))
+        .room(&room)
         .focus(focus);
     slider.draw_row(canvas, env, style, &view);
+}
+
+/// How much higher than its line a slider's title is in a row `width`
+/// wide ([`ui::slider::title_extra`]), beside the widest value it shows:
+/// the same for every value, so its band stays where it was laid out.
+fn slider_extra(env: &Env<'_>, style: &UiStyle, width: u16, spec: &SettingSpec) -> u16 {
+    let room = ui::number_room(env, style, [spec]);
+    ui::slider::title_extra(env, style, width, env.i18n.tr(&spec.title), &room)
 }
 
 /// The title of action `id`, translated.
@@ -987,7 +1000,8 @@ impl Screen for PanelScreen {
         }) else {
             return Handled::No;
         };
-        let band = ui::slider::band(&self.style, area);
+        let extra = spec(&env, &id).map_or(0, |s| slider_extra(&env, &self.style, area.width, s));
+        let band = ui::slider::band_below(&self.style, area, extra);
         let value = env.settings.int(id.as_str());
         let Some(step) = self
             .drag
@@ -1153,7 +1167,10 @@ mod layout_tests {
         // Two sliders and six rows, 660 high: more than the panel may be
         // (640 less its border and gaps), so pages, the last two rows on
         // the second.
-        let mut lines = alloc::vec![Line::Slider(id("a.light")), Line::Slider(id("a.warmth"))];
+        let mut lines = alloc::vec![
+            Line::Slider(id("a.light"), 0),
+            Line::Slider(id("a.warmth"), 0)
+        ];
         lines.extend((0..6).map(|_| Line::Open(id("a.font"))));
         let layout = layout(&lines, geometry());
         let rows = &layout.rows;
@@ -1185,7 +1202,7 @@ mod layout_tests {
 
         // A slider is its whole row, across the screen.
         let area = Rect::new(0, 0, 480, 150);
-        let slider = place(&Line::Slider(id("a.light")), area, geometry());
+        let slider = place(&Line::Slider(id("a.light"), 0), area, geometry());
         assert_eq!(
             slider.controls,
             [(Control::Slide(id("a.light")), area)].as_slice()

@@ -108,11 +108,9 @@ pub struct Context {
     /// where there is no file system (the browser's emulator).
     pub in_memory: bool,
     /// A label shortened to fit (`visual.ellipsis`) is an error, not a
-    /// warning, and reported wherever it ends: for the UI kit, whose
-    /// blocks must never cut their titles; on the screens named in
-    /// `strict_screens`, or on all where that is empty.
+    /// warning, and reported wherever it ends: labels are never cut (the
+    /// UI kit's blocks always so checked).
     pub labels_whole: bool,
-    pub strict_screens: Vec<String>,
     app_languages: OnceLock<Vec<String>>,
 }
 
@@ -139,7 +137,6 @@ impl Context {
             keep: false,
             in_memory: false,
             labels_whole: false,
-            strict_screens: Vec::new(),
             app_languages: OnceLock::new(),
         }
     }
@@ -239,14 +236,8 @@ pub fn run(args: impl Iterator<Item = String>, add: Option<AddPlugins>) -> Resul
     if kit {
         context.target.plugins = vec![crate::ui_kit::PLUGIN.to_string()];
         context.target.add = Some(crate::ui_kit::add);
-        // Its strict pages, or all of them with `--labels-whole`.
-        if !context.labels_whole {
-            context.labels_whole = true;
-            context.strict_screens = crate::ui_kit::STRICT
-                .iter()
-                .map(|s| s.to_string())
-                .collect();
-        }
+        // Its blocks never cut a label.
+        context.labels_whole = true;
     }
     let mut report = Report::default();
     let commands: Vec<&str> = if command == "check" {

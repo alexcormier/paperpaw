@@ -88,6 +88,9 @@ pub struct SliderView<'a> {
     /// A short help text below it; empty for none.
     pub note: &'a str,
     pub focus: SliderFocus,
+    /// The widest value it shows, which its title keeps clear of (as its
+    /// row was laid out with: [`row_height_for`]); empty: `shown`.
+    pub room: &'a str,
 }
 
 impl<'a> SliderView<'a> {
@@ -101,7 +104,12 @@ impl<'a> SliderView<'a> {
             title: "",
             note: "",
             focus: SliderFocus::None,
+            room: "",
         }
+    }
+
+    pub fn room(self, room: &'a str) -> Self {
+        Self { room, ..self }
     }
 
     pub fn title(self, title: &'a str) -> Self {
@@ -338,9 +346,17 @@ impl Slider {
     ) {
         let row = view.area;
         let focused = view.focus != SliderFocus::None;
+        // A long title on more lines, the band below them: never cut.
+        let room = if view.room.is_empty() {
+            view.shown
+        } else {
+            view.room
+        };
+        let extra = title_extra(env, style, row.width, view.title, room);
         let title = title_area(style, row);
+        let title = Rect::new(title.x, title.y, title.width, title.height + extra);
         draw_value_row(canvas, env, style, title, focused, view.title, view.shown);
-        let band = band(style, row);
+        let band = band_below(style, row, extra);
         let band_view = SliderView {
             area: band,
             ..*view
@@ -389,6 +405,44 @@ pub fn row_height(style: &UiStyle, noted: bool) -> u16 {
         style.title_band() + band + style.gap * 3 / 2
     };
     height as u16
+}
+
+/// How much higher than [`row_height`] a slider's row is where its
+/// `title`, beside its value (as wide as `room`, its widest), takes more
+/// than its line: the band goes as much lower ([`band_below`]).
+pub fn title_extra(env: &Env<'_>, style: &UiStyle, width: u16, title: &str, room: &str) -> u16 {
+    let Some(font) = style.font(env) else {
+        return 0;
+    };
+    let lines = super::setting_rows::ValueLines::new(&font, style, width, title, room);
+    let band = title_area(style, Rect::new(0, 0, width, row_height(style, false))).height;
+    lines.height().saturating_sub(band)
+}
+
+/// [`row_height`] for a slider titled `title` beside its value (as wide
+/// as `room`, its widest), in a row `width` wide: higher by
+/// [`title_extra`] where the title needs more than its line.
+pub fn row_height_for(
+    env: &Env<'_>,
+    style: &UiStyle,
+    width: u16,
+    title: &str,
+    room: &str,
+    noted: bool,
+) -> u16 {
+    row_height(style, noted) + title_extra(env, style, width, title, room)
+}
+
+/// The slider's band in a row whose title takes `extra` more than its
+/// line ([`title_extra`]).
+pub fn band_below(style: &UiStyle, row: Rect, extra: u16) -> Rect {
+    let moved = Rect::new(
+        row.x,
+        row.y + extra,
+        row.width,
+        row.height.saturating_sub(extra),
+    );
+    band(style, moved)
 }
 
 /// The slider's band in a row of [`row_height`]: below its first line.

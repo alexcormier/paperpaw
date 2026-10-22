@@ -41,6 +41,17 @@ pub(crate) struct Calendar {
     day_pages: u32,
 }
 
+/// A month's name shortened to its first three letters and a dot; one
+/// of four letters or fewer as it is.
+fn short_month(name: &str) -> String {
+    if name.chars().count() <= 4 {
+        return String::from(name);
+    }
+    let mut short: String = name.chars().take(3).collect();
+    short.push('.');
+    short
+}
+
 /// Year and month of a day.
 fn month_of(day: i32) -> (i32, u8) {
     let d = fmt::date_of(day);
@@ -235,7 +246,12 @@ impl Calendar {
                 continue;
             }
             let r = self.cell(index);
-            let inner = Rect::new(r.x + pad, r.y + pad, r.width - 2 * pad, r.height - 2 * pad);
+            let inner = Rect::new(
+                r.x + pad,
+                r.y + pad,
+                r.width.saturating_sub(2 * pad),
+                r.height.saturating_sub(2 * pad),
+            );
             let minutes = self.seconds_on(day) / 60;
             // Darker the longer one read.
             let shade = match minutes {
@@ -406,8 +422,47 @@ impl Screen for Calendar {
         if let Some(font) = style.font(env) {
             let (year, month) = month_of(self.day);
             let name = format!("{} {year}", fmt::month(env, month));
-            let x = (f32::from(self.nav.width) - font.measure(style.title, &name)) / 2.0;
-            ui::draw_label(canvas, &font, style.title, x, self.nav, &name, Color::BLACK);
+            // Between the arrows, a gap from each: smaller where it does
+            // not fit there.
+            let gap = style.gap as f32;
+            let from = f32::from(left.x + left.width) + gap;
+            let room = (f32::from(right.x) - gap - from).max(1.0);
+            // On one line, smaller where needed; else month and year on
+            // two; else the month's name shortened ("Oct. 2026") so.
+            let short = format!("{} {year}", short_month(fmt::month(env, month)));
+            let high = font.line_metrics(style.small).line_height as u16;
+            let least = style.small * 0.7;
+            let shown = [&name, &short].into_iter().find_map(|text| {
+                let (size, line) =
+                    paperpaw_sdk::widgets::fit_line(&font, style.title, least, text, room);
+                if line == *text {
+                    return Some((size, alloc::vec![0..text.len()], text));
+                }
+                let lines = font.wrap(style.small, text, room);
+                (lines.len() == 2 && 2 * high <= self.nav.height).then_some((
+                    style.small,
+                    lines,
+                    text,
+                ))
+            });
+            let (size, lines, text) = shown.unwrap_or((least, alloc::vec![0..short.len()], &short));
+            let line = font.line_metrics(size).line_height as u16;
+            let count = lines.len() as u16;
+            let top = if count > 1 {
+                self.nav.y + self.nav.height.saturating_sub(count * line) / 2
+            } else {
+                self.nav.y
+            };
+            for (i, range) in lines.into_iter().enumerate() {
+                let part = ui::fit(&font, size, text[range].trim(), room + 1.0);
+                let x = from + (room - font.measure(size, &part)).max(0.0) / 2.0;
+                let at = if count > 1 {
+                    Rect::new(self.nav.x, top + i as u16 * line, self.nav.width, line)
+                } else {
+                    self.nav
+                };
+                ui::draw_label(canvas, &font, size, x, at, &part, Color::BLACK);
+            }
         }
         self.draw_grid(canvas, env);
         self.draw_detail(canvas, env);

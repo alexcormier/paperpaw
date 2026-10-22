@@ -588,13 +588,15 @@ impl EntryScreen {
     fn open(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let display = env.device.display;
-        let height = (style.row * (OPTIONS.len() as u32 + 1) + style.gap * 2) as u16;
+        // No higher than the screen: the list pages where its rows are tall.
+        let height = (style.row * (OPTIONS.len() as u32 + 1) + style.gap * 2)
+            .min(u32::from(display.height)) as u16;
         let region = Rect::new(0, display.height - height, display.width, height);
         let list_area = Rect::new(
             0,
             region.y + style.row as u16 + style.gap as u16,
             display.width,
-            height - style.row as u16 - style.gap as u16,
+            height.saturating_sub(style.row as u16 + style.gap as u16),
         );
         Self {
             menu: params.get(MENU).unwrap_or_default().to_string(),

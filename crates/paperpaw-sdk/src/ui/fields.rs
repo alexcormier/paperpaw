@@ -211,7 +211,7 @@ pub fn edit_text(title: &str, value: &str, reply: &Event<Typed>) -> Command {
 /// Where the box of a ticked row goes: at the row's left, a margin in,
 /// as a switch in a plain row is tall, beside the row's first line.
 pub fn check_rect(style: &UiStyle, row: Rect) -> Rect {
-    let plain = (style.row as u16).min(row.height);
+    let plain = (style.control_row as u16).min(row.height);
     let side = (plain * 7 / 10 * 3 / 4).max(8);
     Rect::new(
         row.x + style.margin as u16,

@@ -15,7 +15,7 @@
 //! `lint.pseudo-overflow`, `lint.hardcoded`, `lint.how-it-works` (a plugin
 //! with code that says not, or hardly, how it works: `Manifest::how`).
 
-mod catalogs;
+pub(crate) mod catalogs;
 mod drawn;
 mod files;
 pub mod pseudo;

@@ -53,11 +53,16 @@ impl SkimScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let display = env.device.display;
-        let (margin, gap, row) = (style.margin as u16, style.gap as u16, style.row as u16);
+        // Its bar and buttons are controls: as large at every size.
+        let (margin, gap, row) = (
+            style.margin as u16,
+            style.gap as u16,
+            style.control_row as u16,
+        );
         // The buttons' row grows with them on touch screens.
         let button_row = style.touch_row(u32::from(row)) as u16;
-        // Four in a row where their names fit whole, else two rows of two:
-        // a name is never cut for the room.
+        // Four in a row where their names fit whole, else two rows of two,
+        // else one below the other: a name is never cut for the room.
         let width = display.width.saturating_sub(2 * margin);
         let fits = |columns: u16| {
             let room = width.saturating_sub((columns - 1) * gap) / columns;
@@ -68,9 +73,23 @@ impl SkimScreen {
                 })
             })
         };
-        let columns: u16 = if fits(4) { 4 } else { 2 };
+        let columns: u16 = [4, 2].into_iter().find(|&n| fits(n)).unwrap_or(1);
         let lines = 4 / columns;
-        let buttons_height = button_row * lines + gap * (lines - 1);
+        // Each line a touch row high; one below the other (the largest
+        // text) each as high as its button, a line higher for each more
+        // line a long name takes.
+        let slots: [u16; 4] = if columns == 1 {
+            BUTTONS.map(|key| ui::button_height_for(env, &style, width, env.i18n.tr(key)))
+        } else {
+            [button_row; 4]
+        };
+        let line_height = |line: u16| {
+            (0..columns)
+                .map(|c| slots[usize::from(line * columns + c)])
+                .max()
+                .unwrap_or(0)
+        };
+        let buttons_height = (0..lines).map(line_height).sum::<u16>() + gap * (lines - 1);
         // Its buttons keep the side margin from the bottom edge too.
         let height = gap + row * 2 + buttons_height + ui::edge_room(&style, button_row);
         let region = Rect::new(
@@ -84,11 +103,12 @@ impl SkimScreen {
         let buttons_y = region.y + gap + row * 2;
         let buttons = core::array::from_fn(|i| {
             let (column, line) = (i as u16 % columns, i as u16 / columns);
+            let top: u16 = (0..line).map(|l| line_height(l) + gap).sum();
             Rect::new(
                 margin + column * (button_width + gap),
-                buttons_y + line * (button_row + gap),
+                buttons_y + top,
                 button_width,
-                button_row,
+                line_height(line),
             )
         });
         let mut screen = Self {
@@ -259,14 +279,12 @@ impl Screen for SkimScreen {
             None,
         );
         // The buttons.
-        for (i, (rect, key)) in self.buttons.iter().zip(BUTTONS).enumerate() {
-            let h = ui::button_height(&style, *rect);
-            let button = Rect::new(rect.x, rect.y + (rect.height - h) / 2, rect.width, h);
+        for (i, (slot, key)) in self.buttons.iter().zip(BUTTONS).enumerate() {
             ui::draw_button(
                 canvas,
                 env,
                 &style,
-                button,
+                ui::button_in_slot(&style, *slot),
                 env.i18n.tr(key),
                 false,
                 self.focus == Some(i),

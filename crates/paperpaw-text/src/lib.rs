@@ -21,7 +21,13 @@ mod glyph;
 mod layout;
 #[cfg(feature = "outline")]
 mod outline;
-#[cfg_attr(not(feature = "outline"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "outline"),
+    allow(
+        dead_code,
+        reason = "outlines are rastered only with the outline feature"
+    )
+)]
 mod raster;
 pub mod sfnt;
 mod stored;

@@ -68,7 +68,8 @@ impl AccountScreen {
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
         let top = header.area.height + style.gap as u16;
-        let rows = (style.row * 6) as u16;
+        // No longer than the screen: the list pages where its rows are tall.
+        let rows = ((style.row * 6) as u16).min(display.height.saturating_sub(top));
         let list =
             ListView::new(Rect::new(0, top, display.width, rows), style.row).focus_on_keys(env);
         let note_top = top + rows + style.gap as u16;

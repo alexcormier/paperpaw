@@ -26,6 +26,10 @@ pub struct UiStyle {
     pub head: f32,
     /// Height of a list row.
     pub row: u32,
+    /// The row height controls are sized from (buttons, switches, ticks,
+    /// pickers): [`UiStyle::row`], except where rows grow to hold a label
+    /// on two lines at the largest sizes while controls keep their size.
+    pub control_row: u32,
     /// Height of a header bar.
     pub header: u32,
     /// Horizontal margin of content.
@@ -248,6 +252,7 @@ impl UiStyle {
         title: 23.0,
         head: 23.0,
         row: 60,
+        control_row: 60,
         header: 64,
         margin: 12,
         gap: 8,
@@ -270,18 +275,31 @@ impl UiStyle {
         let m = env.metrics;
         let base = env.settings.read(&settings::UI_SIZE).clamp(6, 40) as f32;
         let text = m.pt(base);
-        let line_height = env
-            .fonts
-            .role(fonts::UI.as_str())
+        let font = env.fonts.role(fonts::UI.as_str());
+        let line_height = font
+            .as_ref()
             .map_or(text * 1.25, |f| f.line_metrics(text).line_height);
         let s = env.settings;
         let rows = s.read(&settings::UI_ROW).clamp(120, 300) as f32 / 100.0;
+        let small = m.pt(base * 0.75);
+        // A row holds a label on two lines in the smallest size rows set
+        // it in (see `draw_value_row`): where even that does not fit (at
+        // the largest sizes, whose fonts come in steps), rows are as high
+        // as two lines of small text; at other sizes they stay as they are.
+        let control_row = line_height * rows;
+        let row = match &font {
+            Some(f) if 2.0 * f.line_metrics(small * 0.7).line_height > control_row => {
+                control_row.max(2.0 * f.line_metrics(small).line_height + m.mm(2) as f32)
+            }
+            _ => control_row,
+        };
         Self {
             text,
-            small: m.pt(base * 0.75),
+            small,
             title: m.pt(base * 1.15),
             head: m.pt(base * s.read(&settings::UI_TITLE).clamp(100, 200) as f32 / 100.0),
-            row: (line_height * rows) as u32,
+            row: row as u32,
+            control_row: control_row as u32,
             header: (line_height * (rows + 0.1)) as u32,
             margin: m.mm(s.read(&settings::UI_MARGIN).clamp(0, 15) as u32),
             gap: m.mm(2),

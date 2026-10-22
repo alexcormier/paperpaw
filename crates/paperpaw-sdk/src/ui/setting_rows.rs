@@ -62,8 +62,217 @@ pub fn draw_noted_row(
         return draw_value_row(canvas, env, style, rect, focused, title, value);
     }
     let band = title_area(style, rect);
+    let band = match style.font(env) {
+        Some(font) => {
+            let high = ValueLines::new(&font, style, rect.width, title, value).height();
+            title_band_of(style, rect, band, high)
+        }
+        None => band,
+    };
     draw_value_row(canvas, env, style, band, focused, title, value);
-    draw_note(canvas, env, style, rect, focused, note);
+    let below = band.bottom() as u16;
+    draw_note_below(canvas, env, style, rect, below, focused, note);
+}
+
+/// The band of a noted row's title: as [`title_area`], taller where the
+/// title, beside a control `beside` pixels wide, takes more lines.
+pub(super) fn titled_band(
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    beside: f32,
+    title: &str,
+) -> Rect {
+    let band = title_area(style, rect);
+    let Some(font) = style.font(env) else {
+        return band;
+    };
+    let (lines, line) = title_lines(&font, style, rect.width, beside, title);
+    title_band_of(style, rect, band, line * lines.len() as u16)
+}
+
+/// A noted row's title band, `band` as [`title_area`] gives it, `high`
+/// where its title takes that: as much as the row holds while its note
+/// keeps the room it has in a row [`UiStyle::noted_row`] high.
+fn title_band_of(style: &UiStyle, rect: Rect, band: Rect, high: u16) -> Rect {
+    let noted = style.noted_row() as u16;
+    let note = noted.saturating_sub(title_area(style, Rect::new(0, 0, rect.width, noted)).height);
+    let most = rect.height.saturating_sub(note).max(band.height);
+    Rect::new(band.x, band.y, band.width, high.clamp(band.height, most))
+}
+
+/// How a row `width` wide lays out its `title` and `value` (as
+/// [`draw_value_row`] draws them): side by side where both fit; the title
+/// wrapped beside the whole value where the value takes no more than 60 %
+/// of the row and no word of the title is too long for what is left; else
+/// the title wrapped across the row and the value on a line of its own
+/// below it, at the right.
+pub(super) struct ValueLines {
+    /// The title's lines.
+    pub title: Vec<core::ops::Range<usize>>,
+    /// The value: whole, unless longer than the whole row.
+    pub value: String,
+    pub value_width: f32,
+    /// Whether the value is on a line of its own below the title.
+    pub below: bool,
+    /// The size of both, and a line's height.
+    pub size: f32,
+    pub line: u16,
+}
+
+impl ValueLines {
+    /// In the text's size.
+    pub fn new(
+        font: &FontHandle<'_>,
+        style: &UiStyle,
+        width: u16,
+        title: &str,
+        value: &str,
+    ) -> Self {
+        Self::sized(font, style, style.text, width, title, value)
+    }
+
+    /// In `size`.
+    pub fn sized(
+        font: &FontHandle<'_>,
+        style: &UiStyle,
+        size: f32,
+        width: u16,
+        title: &str,
+        value: &str,
+    ) -> Self {
+        let margin = style.margin as f32;
+        let inner = (f32::from(width) - 2.0 * margin).max(1.0);
+        let line = font.line_metrics(size).line_height as u16;
+        let value_width = font.measure(size, value);
+        let gap = if value.is_empty() { 0.0 } else { margin };
+        let room = inner - gap - value_width;
+        let beside = |title: Vec<core::ops::Range<usize>>| Self {
+            title,
+            value: value.to_string(),
+            value_width,
+            below: false,
+            size,
+            line,
+        };
+        if font.measure(size, title) <= room + 1.0 {
+            return beside(alloc::vec![0..title.len()]);
+        }
+        let words_fit = title
+            .split_whitespace()
+            .all(|word| font.measure(size, word) <= room + 1.0);
+        if value_width <= (inner - gap) * 0.6 && words_fit {
+            return beside(font.wrap(size, title, room.max(1.0)));
+        }
+        let value = fit(font, size, value, inner + 1.0);
+        Self {
+            title: font.wrap(size, title, inner),
+            value_width: font.measure(size, &value),
+            below: !value.is_empty(),
+            value,
+            size,
+            line,
+        }
+    }
+
+    /// The height of its lines.
+    pub fn height(&self) -> u16 {
+        self.line * (self.title.len() + usize::from(self.below)) as u16
+    }
+}
+
+/// The lines of a row's title beside a control `beside` pixels wide (a
+/// value, a switch; 0 for none) in a row `width` wide: one where it fits,
+/// else its words wrapped, in the text size; and a line's height.
+pub(super) fn title_lines(
+    font: &FontHandle<'_>,
+    style: &UiStyle,
+    width: u16,
+    beside: f32,
+    title: &str,
+) -> (Vec<core::ops::Range<usize>>, u16) {
+    let margin = style.margin as f32;
+    let control = if beside > 0.0 { beside + margin } else { 0.0 };
+    let room = (f32::from(width) - 2.0 * margin - control).max(1.0);
+    let line = font.line_metrics(style.text).line_height as u16;
+    if font.measure(style.text, title) <= room + 1.0 {
+        return (alloc::vec![0..title.len()], line);
+    }
+    (font.wrap(style.text, title, room), line)
+}
+
+/// The height of a row `width` wide with `title` and `value` (as
+/// [`draw_value_row`] draws it): a row ([`UiStyle::row`]), taller where
+/// the title takes more lines beside the value. Its title is never
+/// shortened in a row as high.
+pub fn value_row_height(
+    env: &Env<'_>,
+    style: &UiStyle,
+    width: u16,
+    title: &str,
+    value: &str,
+) -> u16 {
+    let row = style.row as u16;
+    let Some(font) = style.font(env) else {
+        return row;
+    };
+    let lines = ValueLines::new(&font, style, width, title, value);
+    row.max(lines.height() + style.margin as u16)
+}
+
+/// The height of a noted row `width` wide with `title`, `value` and
+/// `note` (as [`draw_noted_row`] draws it): a noted row
+/// ([`UiStyle::noted_row`]), taller where the title takes more lines
+/// beside the value; without a note, [`value_row_height`].
+pub fn noted_row_height(
+    env: &Env<'_>,
+    style: &UiStyle,
+    width: u16,
+    title: &str,
+    value: &str,
+    note: &str,
+) -> u16 {
+    if note.is_empty() {
+        return value_row_height(env, style, width, title, value);
+    }
+    let base = style.noted_row() as u16;
+    let Some(font) = style.font(env) else {
+        return base;
+    };
+    let lines = ValueLines::new(&font, style, width, title, value);
+    let band = title_area(style, Rect::new(0, 0, width, base)).height;
+    base + lines.height().saturating_sub(band)
+}
+
+/// The height of a row `width` wide with a switch, `title` and `note` (as
+/// [`draw_switch_row`] draws it): a row ([`UiStyle::row`]) or a noted one
+/// ([`UiStyle::noted_row`]), taller where the title takes more lines
+/// beside the switch. Its title is never shortened in a row as high.
+pub fn switch_row_height(
+    env: &Env<'_>,
+    style: &UiStyle,
+    width: u16,
+    title: &str,
+    note: &str,
+) -> u16 {
+    let plain = Rect::new(0, 0, width, style.control_row as u16);
+    let base = if note.is_empty() {
+        style.row
+    } else {
+        style.noted_row()
+    } as u16;
+    let Some(font) = style.font(env) else {
+        return base;
+    };
+    // The switch and the gap the title keeps before it.
+    let beside = f32::from(switch_rect(style, plain).width + style.gap as u16);
+    let (lines, line) = title_lines(&font, style, width, beside, title);
+    let titles = line * lines.len() as u16;
+    if note.is_empty() {
+        return base.max(titles + style.margin as u16);
+    }
+    let band = title_area(style, Rect::new(0, 0, width, base)).height;
+    base + titles.saturating_sub(band)
 }
 
 /// Draws the note of a noted row below its [`title_area`].
@@ -107,8 +316,11 @@ pub(super) fn draw_note_below(
     let ascent = font.line_metrics(style.small).ascent;
     let top = f32::from(below);
     let lines = font.wrap(style.small, note, width);
-    for (n, range) in lines.iter().take(NOTE_LINES).enumerate() {
-        let last = n + 1 == NOTE_LINES && lines.len() > NOTE_LINES;
+    // Only as many as the row holds below its title: never past its end.
+    let room = (f32::from(at.height) / line) as usize;
+    let most = NOTE_LINES.min(room);
+    for (n, range) in lines.iter().take(most).enumerate() {
+        let last = n + 1 == most && lines.len() > most;
         let text = if last {
             fit(&font, style.small, note[range.start..].trim_end(), width)
         } else {
@@ -148,27 +360,73 @@ pub fn draw_value_row(
     let width = f32::from(rect.width) - 2.0 * margin;
     // At least a margin between them: the value ends at the margin, as
     // the title begins at it.
-    let (title_text, value, value_width) = fit_pair(&font, style.text, title, value, width, margin);
-    let value_x = f32::from(rect.x) + f32::from(rect.width) - margin - value_width;
-    draw_label(canvas, &font, style.text, value_x, rect, &value, color);
+    let (title_text, shown, value_width) = fit_pair(&font, style.text, title, value, width, margin);
     let title_x = f32::from(rect.x) + margin;
-    // A title that would be shortened beside its value smaller, down to
-    // the small size, then on two lines, before it is (the row keeps its
-    // height).
+    let value_at = |width: f32| f32::from(rect.x) + f32::from(rect.width) - margin - width;
+    let lines = (title_text != title || shown != value)
+        .then(|| ValueLines::new(&font, style, rect.width, title, value))
+        .filter(|lines| lines.height() > lines.line && lines.height() <= rect.height);
+    let draw_lines = |canvas: &mut Canvas<'_>, lines: ValueLines| {
+        let (height, line, size) = (lines.height(), lines.line, lines.size);
+        let top = rect.y + (rect.height - height) / 2;
+        let count = lines.title.len() as u16;
+        for (i, range) in lines.title.into_iter().enumerate() {
+            let at = Rect::new(rect.x, top + i as u16 * line, rect.width, line);
+            draw_label(canvas, &font, size, title_x, at, title[range].trim(), color);
+        }
+        let at = if lines.below {
+            Rect::new(rect.x, top + count * line, rect.width, line)
+        } else {
+            rect
+        };
+        let x = value_at(lines.value_width);
+        draw_label(canvas, &font, size, x, at, &lines.value, color);
+    };
+    // Too long side by side: the title's words on as many lines as the
+    // row holds (as [`value_row_height`] made it), the value whole beside
+    // them.
+    let (beside, below) = match lines {
+        Some(lines) if !lines.below => return draw_lines(canvas, lines),
+        lines => (shown == value, lines),
+    };
+    // Else, beside a whole value, the title smaller, down to the small
+    // size; then the value on a line of its own below the title.
     let room = width - margin - value_width;
     if title_text != title
+        && beside
         && let Some(size) = crate::widgets::largest_size(style.text, style.small, |size| {
             font.measure(size, title) <= room + 1.0
         })
     {
+        draw_label(
+            canvas,
+            &font,
+            style.text,
+            value_at(value_width),
+            rect,
+            &shown,
+            color,
+        );
         draw_label(canvas, &font, size, title_x, rect, title, color);
         return;
     }
-    // Still too long: on two lines in the small size where the row holds
-    // them, rather than shortened.
+    if let Some(lines) = below {
+        return draw_lines(canvas, lines);
+    }
+    // Still too long: the title on two lines in the small size where the
+    // row holds them, the value as it is, rather than shortened.
     let lines = font.wrap(style.small, title, room.max(1.0));
     let line = font.line_metrics(style.small).line_height as u16;
     if title_text != title && lines.len() == 2 && 2 * line <= rect.height {
+        draw_label(
+            canvas,
+            &font,
+            style.text,
+            value_at(value_width),
+            rect,
+            &shown,
+            color,
+        );
         let top = rect.y + (rect.height - 2 * line) / 2;
         for (i, range) in lines.into_iter().enumerate() {
             let at = Rect::new(rect.x, top + i as u16 * line, rect.width, line);
@@ -184,6 +442,26 @@ pub fn draw_value_row(
         }
         return;
     }
+    // A row too short even for that (a list's at the largest sizes, whose
+    // fonts come in steps): both smaller, from the small size down to
+    // seven tenths of it, on as many lines as the row holds.
+    if (title_text != title || shown != value)
+        && let Some(size) = crate::widgets::largest_size(style.small, style.small * 0.7, |size| {
+            ValueLines::sized(&font, style, size, rect.width, title, value).height() <= rect.height
+        })
+    {
+        let lines = ValueLines::sized(&font, style, size, rect.width, title, value);
+        return draw_lines(canvas, lines);
+    }
+    draw_label(
+        canvas,
+        &font,
+        style.text,
+        value_at(value_width),
+        rect,
+        &shown,
+        color,
+    );
     draw_label(canvas, &font, style.text, title_x, rect, &title_text, color);
 }
 

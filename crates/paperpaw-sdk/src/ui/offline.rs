@@ -24,7 +24,57 @@ use crate::builtin::actions;
 use crate::power::PowerLevel;
 use crate::{Canvas, Command, Cx, Env, Id, Point, Rect};
 
-use super::{UiStyle, button_height, draw_button, draw_empty};
+use super::{UiStyle, button_height, button_height_for, draw_button, draw_empty, empty_height};
+
+/// The keys of its buttons' words, *Go online* first.
+const BUTTONS: [&str; 2] = ["core.offline.go-online", "core.offline.not-now"];
+
+/// Where the offer's buttons go in an area `width` wide: each in a row
+/// of its own, two margins in from the sides; where a word does not fit
+/// so, one margin in, then a line higher for each more line it takes.
+struct Buttons {
+    /// The touch row each lies in, and a button's height in it.
+    row: u16,
+    height: u16,
+    /// From the area's side, and how wide.
+    inset: u16,
+    width: u16,
+    /// How much higher each is (and its row) for a word on more lines.
+    extra: [u16; 2],
+    /// The room the two take with the gaps around them.
+    room: u16,
+}
+
+impl Buttons {
+    fn new(env: &Env<'_>, style: &UiStyle, width: u16) -> Self {
+        let row = style.touch_row(style.control_row) as u16;
+        let height = button_height(style, Rect::new(0, 0, width, row));
+        let margin = style.margin as u16;
+        let gap = style.gap as u16 * 2;
+        let fits = |width: u16| {
+            BUTTONS
+                .iter()
+                .all(|key| button_height_for(env, style, width, env.i18n.tr(key)) <= height)
+        };
+        let narrow = width.saturating_sub(4 * margin);
+        let (inset, width) = if fits(narrow) {
+            (2 * margin, narrow)
+        } else {
+            (margin, width.saturating_sub(2 * margin))
+        };
+        let extra = BUTTONS.map(|key| {
+            button_height_for(env, style, width, env.i18n.tr(key)).saturating_sub(height)
+        });
+        Buttons {
+            row,
+            height,
+            inset,
+            width,
+            extra,
+            room: 2 * row + extra[0] + extra[1] + gap,
+        }
+    }
+}
 
 /// What the reader chose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,19 +106,25 @@ impl OfflineOffer {
         env.power.level == PowerLevel::Offline && !self.chosen
     }
 
+    /// The height it needs in an area `width` wide for all its words:
+    /// what it is about and its buttons (an area higher shows an icon as
+    /// well).
+    pub fn height(env: &Env<'_>, style: &UiStyle, width: u16) -> u16 {
+        let title = env.i18n.tr("core.offline.title");
+        let text = env.i18n.tr("core.offline.text");
+        empty_height(env, style, width, title, text) + Buttons::new(env, style, width).room
+    }
+
     /// Draws it in `area`: what it is about, as an empty screen says it,
     /// and the two buttons below, *Go online* first.
     pub fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-        let row = style.touch_row(style.row) as u16;
-        let height = button_height(style, Rect::new(0, 0, area.width, row));
+        let buttons = Buttons::new(env, style, area.width);
         let gap = style.gap as u16 * 2;
-        let margin = style.margin as u16 * 2;
-        let room = row * 2 + gap;
         let text = Rect::new(
             area.x,
             area.y,
             area.width,
-            area.height.saturating_sub(room + gap),
+            area.height.saturating_sub(buttons.room + gap),
         );
         draw_empty(
             canvas,
@@ -79,14 +135,17 @@ impl OfflineOffer {
             env.i18n.tr("core.offline.title"),
             env.i18n.tr("core.offline.text"),
         );
-        let width = area.width.saturating_sub(2 * margin);
-        let top = text.y + text.height + gap;
-        for (index, key) in ["core.offline.go-online", "core.offline.not-now"]
-            .into_iter()
-            .enumerate()
-        {
-            let y = top + index as u16 * (row + gap / 2) + (row - height) / 2;
-            let rect = Rect::new(area.x + margin, y, width, height);
+        let mut top = text.y + text.height + gap;
+        for (index, key) in BUTTONS.into_iter().enumerate() {
+            let extra = buttons.extra[index];
+            let y = top + (buttons.row - buttons.height) / 2;
+            let rect = Rect::new(
+                area.x + buttons.inset,
+                y,
+                buttons.width,
+                buttons.height + extra,
+            );
+            top += buttons.row + extra + gap / 2;
             self.buttons[index] = rect;
             let focused = !env.device.input.touch && self.focus == index;
             draw_button(

@@ -147,8 +147,10 @@ pub fn draw_heading(
 
 /// The switch of an on/off setting at the right end of `row`.
 pub fn switch_rect(style: &UiStyle, row: Rect) -> Rect {
-    // A switch is tapped with its whole row: drawn as large as before.
-    let height = (row.height * 7 / 10 * 3 / 4).max(8);
+    // A switch is tapped with its whole row: drawn as large as in a
+    // plain row, also in one a long title makes higher.
+    let plain = row.height.min(style.control_row as u16);
+    let height = (plain * 7 / 10 * 3 / 4).max(8);
     let width = height * 2;
     Rect::new(
         (row.x + row.width).saturating_sub(width + style.margin as u16),
@@ -260,10 +262,18 @@ pub fn draw_switch_row(
     note: &str,
     on: bool,
 ) {
+    let plain = Rect::new(
+        rect.x,
+        rect.y,
+        rect.width,
+        (style.control_row as u16).min(rect.height),
+    );
+    let beside = f32::from(switch_rect(style, plain).width);
     let band = if note.is_empty() {
         rect
     } else {
-        title_area(style, rect)
+        // As high as the title takes beside the switch.
+        super::setting_rows::titled_band(env, style, rect, beside, title)
     };
     let switch = switch_rect(style, band);
     // The title ends a gap before the switch.
@@ -271,7 +281,8 @@ pub fn draw_switch_row(
     let title_rect = Rect::new(band.x, band.y, room, band.height);
     draw_value_row(canvas, env, style, title_rect, focused, title, "");
     if !note.is_empty() {
-        draw_note(canvas, env, style, rect, focused, note);
+        let below = band.bottom() as u16;
+        super::setting_rows::draw_note_below(canvas, env, style, rect, below, focused, note);
     }
     draw_switch(canvas, style, band, on, focused && style.dark_focus());
 }
@@ -401,7 +412,19 @@ pub fn fit_pair(
     (title, value, value_width)
 }
 
-/// Draws wrapped, centred message text in `area`.
+/// The height [`draw_message`] needs for all of `text` in an area
+/// `width` wide.
+pub fn message_height(env: &Env<'_>, style: &UiStyle, width: u16, text: &str) -> u16 {
+    let Some(font) = style.font(env) else {
+        return 0;
+    };
+    let room = (f32::from(width) - 2.0 * style.margin as f32).max(1.0);
+    let lines = font.wrap(style.text, text, room).len().max(1);
+    (font.line_metrics(style.text).line_height * lines as f32) as u16 + 1
+}
+
+/// Draws wrapped, centred message text in `area` ([`message_height`]
+/// high holds all of it).
 pub fn draw_message(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -437,9 +460,22 @@ pub fn draw_message(
     }
 }
 
+/// The height [`draw_note_line`] needs for all of `text` in an area
+/// `width` wide: its light line and the lines of the text.
+pub fn note_line_height(env: &Env<'_>, style: &UiStyle, width: u16, text: &str) -> u16 {
+    let Some(font) = style.font(env) else {
+        return style.line as u16;
+    };
+    let room = f32::from(width.saturating_sub(2 * style.margin as u16)).max(1.0);
+    let lines = font.wrap(style.small, text, room).len().max(1);
+    let line = font.line_metrics(style.small).line_height;
+    style.line as u16 + (line * lines as f32) as u16 + 1
+}
+
 /// A note at the bottom of a screen (what a tap or a hold does there, or
 /// what just happened): a light line above it, then `text` in small gray
-/// letters, wrapped to two lines (the last one shortened if need be).
+/// letters, wrapped on as many lines as `area` holds (the last one
+/// shortened if need be; [`note_line_height`] holds all of it).
 pub fn draw_note_line(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -463,7 +499,7 @@ pub fn draw_note_line(
     let line = font.line_metrics(style.small).line_height;
     let room = f32::from(width);
     let mut lines = font.wrap(style.small, text, room);
-    let fits = ((f32::from(height) / line) as usize).clamp(1, 2);
+    let fits = ((f32::from(height) / line) as usize).max(1);
     let cut = lines.len() > fits;
     lines.truncate(fits);
     let count = lines.len();
@@ -513,6 +549,61 @@ pub fn fit(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> String {
     result
 }
 
+/// How wide an empty state's words are in an area `width` wide: twice
+/// the margin at the sides, less in a small area (a card on a page with
+/// wide margins), so that the text keeps room for a few words a line; at
+/// least half a gap, where letters reaching past their start (an accent)
+/// stay inside.
+fn empty_width(style: &UiStyle, width: u16) -> f32 {
+    let least = style.text * 8.0;
+    let pad = style.gap as f32 / 2.0;
+    let margin = (style.margin as f32 * 2.0).min(((f32::from(width) - least) / 2.0).max(pad));
+    (f32::from(width) - 2.0 * margin).max(1.0)
+}
+
+/// An empty state's `title` in words `width` wide: as large as fits on a
+/// line, down to the text's size, else on more lines in that size; its
+/// size and lines.
+fn empty_title(
+    font: &FontHandle<'_>,
+    style: &UiStyle,
+    width: f32,
+    title: &str,
+) -> (f32, Vec<core::ops::Range<usize>>) {
+    let size = crate::widgets::largest_size(style.title, style.text, |size| {
+        font.measure(size, title) <= width
+    })
+    .unwrap_or(style.text);
+    let lines = if title.is_empty() {
+        Vec::new()
+    } else if font.measure(size, title) <= width {
+        alloc::vec![0..title.len()]
+    } else {
+        font.wrap(size, title, width)
+    };
+    (size, lines)
+}
+
+/// The height [`draw_empty`] needs in an area `width` wide for all of
+/// `title` and `text` in their full sizes, without its icon (which it
+/// shows where there is room for it as well).
+pub fn empty_height(env: &Env<'_>, style: &UiStyle, width: u16, title: &str, text: &str) -> u16 {
+    let Some(font) = style.font(env) else {
+        return 0;
+    };
+    let width = empty_width(style, width);
+    let (size, titles) = empty_title(&font, style, width, title);
+    let words = font.line_metrics(size).line_height * titles.len() as f32;
+    let lines = if text.is_empty() {
+        0
+    } else {
+        font.wrap(style.text, text, width).len()
+    };
+    let text = font.line_metrics(style.text).line_height * lines as f32;
+    let gap = if lines > 0 { style.gap as f32 } else { 0.0 };
+    (words + gap + text) as u16 + 1
+}
+
 /// An empty screen or list, saying what would be here and how it gets
 /// filled: a large `icon` in gray, a short `title`, and `text` below it,
 /// together a little above the middle of `area`. The icon is left out
@@ -537,25 +628,17 @@ pub fn draw_empty(
     let Some(font) = style.font(env) else {
         return;
     };
-    // Twice the margin at the sides, less in a small area (a card on a
-    // page with wide margins), so that the text keeps room for a few
-    // words a line; at least half a gap, where letters reaching past
-    // their start (an accent) stay inside.
-    let least = style.text * 8.0;
-    let pad = style.gap as f32 / 2.0;
-    let margin = (style.margin as f32 * 2.0).min(((f32::from(area.width) - least) / 2.0).max(pad));
-    let width = (f32::from(area.width) - 2.0 * margin).max(1.0);
+    let width = empty_width(style, area.width);
     let icon_size = style.title * 2.4;
     let gap = style.gap as f32;
-    // The title as large as fits, down to the text's size; only then
-    // shortened.
-    let title_size = crate::widgets::largest_size(style.title, style.text, |size| {
-        font.measure(size, title) <= width
-    })
-    .unwrap_or(style.text);
+    let (title_size, mut titles) = empty_title(&font, style, width, title);
     let title_line = font.line_metrics(title_size).line_height;
     let room = f32::from(area.height);
-    let words = if title.is_empty() { 0.0 } else { title_line };
+    // Its lines where the area holds them, else one line, shortened.
+    if title_line * titles.len() as f32 > room {
+        titles = alloc::vec![0..title.len()];
+    }
+    let words = title_line * titles.len() as f32;
     // The text as large as all its lines fit below the title, down to
     // the small size; only then its last line shortened.
     let below = room - words - gap;
@@ -603,8 +686,8 @@ pub fn draw_empty(
         );
         y += icon_room;
     }
-    if !title.is_empty() {
-        let shown = fit(&font, title_size, title, width);
+    for range in &titles {
+        let shown = fit(&font, title_size, title[range.clone()].trim(), width);
         let at = Rect::new(area.x, y as u16, area.width, title_line as u16);
         draw_label(
             canvas,
@@ -615,7 +698,10 @@ pub fn draw_empty(
             &shown,
             Color::BLACK,
         );
-        y += title_line + gap;
+        y += title_line;
+    }
+    if !titles.is_empty() {
+        y += gap;
     }
     if lines.is_empty() {
         return;

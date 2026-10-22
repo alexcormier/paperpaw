@@ -12,7 +12,8 @@ use super::*;
 /// ([`UiStyle::finger`]), no higher than the row (rows made with
 /// [`UiStyle::touch_row`] keep room around them).
 pub fn button_height(style: &UiStyle, row: Rect) -> u16 {
-    let height = u32::from(row.height);
+    // Rows grown for two lines of a label do not make buttons larger.
+    let height = u32::from(row.height).min(style.touch_row(style.control_row));
     (height * 7 / 10).max(style.finger).min(height) as u16
 }
 
@@ -21,7 +22,7 @@ pub fn button_height(style: &UiStyle, row: Rect) -> u16 {
 /// room of such a row toward the content, and toward the edge the margin
 /// the screen's sides have, so the buttons keep it from every edge.
 pub fn edge_bar_height(style: &UiStyle) -> u16 {
-    let row = style.touch_row(style.row) as u16;
+    let row = style.touch_row(style.control_row) as u16;
     let button = button_height(style, Rect::new(0, 0, 0, row));
     let room = (row - button) / 2;
     button + room + style.margin as u16
@@ -31,7 +32,7 @@ pub fn edge_bar_height(style: &UiStyle) -> u16 {
 /// its top, `at_top`) made [`edge_bar_height`] high, go: a band as high as
 /// they are, the side margin from the edge (see [`edge_bar_height`]).
 pub fn edge_bar_band(style: &UiStyle, bar: Rect, at_top: bool) -> Rect {
-    let row = style.touch_row(style.row) as u16;
+    let row = style.touch_row(style.control_row) as u16;
     let button = button_height(style, Rect::new(0, 0, 0, row));
     let margin = style.margin as u16;
     let y = if at_top {
@@ -193,7 +194,57 @@ pub fn button_width(style: &UiStyle, label: f32) -> f32 {
     }
 }
 
-/// A button's word, centred and shortened to fit.
+/// The lines of a button's `label` in a button `width` wide: one where it
+/// fits there (a single character always), else its words wrapped, in the
+/// small size; and a line's height.
+fn label_lines(
+    font: &FontHandle<'_>,
+    style: &UiStyle,
+    width: f32,
+    label: &str,
+) -> (Vec<core::ops::Range<usize>>, u16) {
+    let line = font.line_metrics(style.small).line_height as u16;
+    let room = width - 2.0 * label_pad(style, width);
+    if label.chars().count() <= 1 || font.measure(style.small, label) <= room + 1.0 {
+        return (alloc::vec![0..label.len()], line);
+    }
+    (font.wrap(style.small, label, room.max(1.0)), line)
+}
+
+/// The height of a button `width` wide for `label`, its word whole: a
+/// button's in a row that can be touched ([`Segments::height`]), a line
+/// higher for each more line a word too long for one takes.
+pub fn button_height_for(env: &Env<'_>, style: &UiStyle, width: u16, label: &str) -> u16 {
+    let base = Segments::height(style);
+    let Some(font) = style.font(env) else {
+        return base;
+    };
+    let (lines, line) = label_lines(&font, style, f32::from(width), label);
+    base + line * (lines.len().max(1) as u16 - 1)
+}
+
+/// The height of a button's slot in a column of buttons `width` wide, one
+/// below the other: a row that can be touched ([`UiStyle::touch_row`]),
+/// higher only by the lines more a long `label` takes
+/// ([`button_height_for`]). [`button_in_slot`] places the button in it.
+pub fn button_slot_height(env: &Env<'_>, style: &UiStyle, width: u16, label: &str) -> u16 {
+    let row = style.touch_row(style.control_row) as u16;
+    row + button_height_for(env, style, width, label).saturating_sub(Segments::height(style))
+}
+
+/// The button in `slot` ([`button_slot_height`] high): as high as a
+/// button in a row that can be touched, and as much higher as the slot
+/// is, centred in the row's room.
+pub fn button_in_slot(style: &UiStyle, slot: Rect) -> Rect {
+    let row = (style.touch_row(style.control_row) as u16).min(slot.height);
+    let base = Segments::height(style).min(row);
+    let extra = slot.height - row;
+    Rect::new(slot.x, slot.y + (row - base) / 2, slot.width, base + extra)
+}
+
+/// A button's word, centred: on more lines where it is too long for one
+/// and the button is high enough ([`button_height_for`]), else shortened
+/// to fit.
 pub(super) fn button_label(
     canvas: &mut Canvas<'_>,
     style: &UiStyle,
@@ -220,6 +271,29 @@ pub(super) fn button_label(
     } else {
         f32::from(rect.width) - 2.0 * pad
     };
+    if !single {
+        let (lines, line) = label_lines(font, style, f32::from(rect.width), label);
+        let height = line * lines.len() as u16;
+        if lines.len() > 1 && height <= rect.height {
+            let mut y = rect.y + (rect.height - height) / 2;
+            for range in lines {
+                let part = label[range].trim();
+                let x =
+                    f32::from(rect.x) + (f32::from(rect.width) - font.measure(size, part)) / 2.0;
+                draw_label(
+                    canvas,
+                    font,
+                    size,
+                    x,
+                    Rect::new(rect.x, y, rect.width, line),
+                    part,
+                    ink,
+                );
+                y += line;
+            }
+            return;
+        }
+    }
     let label = fit(font, size, label, room);
     let label_x = f32::from(rect.x) + (f32::from(rect.width) - font.measure(size, &label)) / 2.0;
     draw_label(canvas, font, size, label_x, rect, &label, ink);

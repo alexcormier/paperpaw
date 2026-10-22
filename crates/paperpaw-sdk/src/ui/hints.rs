@@ -94,10 +94,32 @@ pub fn draw_button_hints(
         // The label alone, in the middle: no mark beside it.
         match hint {
             Hint::Text(text) => {
-                let text = fit(&font, style.small, text, room);
-                let width = font.measure(style.small, &text);
+                // Too long for its share: closer to its edges, then
+                // smaller, down to six tenths, then on two lines; only
+                // then shortened.
+                let room = room.max((right - left).saturating_sub(style.gap / 2) as f32);
+                let least = style.small * 0.6;
+                let size = crate::widgets::largest_size(style.small, least, |size| {
+                    font.measure(size, text) <= room + 1.0
+                })
+                .unwrap_or(least);
+                let line = font.line_metrics(size).line_height;
+                let lines = font.wrap(size, text, room.max(1.0));
+                if lines.len() == 2 && 2.0 * line <= f32::from(cell.height) {
+                    let mut y = f32::from(cell.y) + (f32::from(cell.height) - 2.0 * line) / 2.0;
+                    for range in lines {
+                        let part = text[range].trim();
+                        let x = middle - font.measure(size, part) / 2.0;
+                        let at = Rect::new(cell.x, y as u16, cell.width, line as u16);
+                        draw_label(canvas, &font, size, x, at, part, ink);
+                        y += line;
+                    }
+                    continue;
+                }
+                let text = fit(&font, size, text, room + 1.0);
+                let width = font.measure(size, &text);
                 let x = middle - width / 2.0;
-                draw_label(canvas, &font, style.small, x, cell, &text, ink);
+                draw_label(canvas, &font, size, x, cell, &text, ink);
             }
             Hint::Icon(name) => {
                 let width = icon_width(env, name, style.text);
