@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The sleep screen shows a sleeping cat by default: PaperPaw's own
+  drawing, in the middle of the screen with even margins, in grays where
+  the screen can. It also shows where the cover or the pictures chosen
+  are missing. The cover, the pictures, the message and the others can
+  still be chosen. SDK: `image::picture_from_bytes` decodes a picture a
+  plugin carries in its code, as `picture_from_file` decodes a file.
 - Wi-Fi transfer without a router (X4, X4 Pro): *Without a router* on
   the transfer screen opens the reader's own network and shows codes to
   join it and to open the transfer page there; closing the screen (or

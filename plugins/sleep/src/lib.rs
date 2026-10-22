@@ -3,7 +3,9 @@
 //!
 //! Setting `sleep.show`:
 //!
-//! - *Cover* (the default): the cover of the book read last;
+//! - *Sleeping cat* (the default): PaperPaw's drawing of a cat asleep,
+//!   in the middle of the screen on white (see [`cat`]);
+//! - *Cover*: the cover of the book read last;
 //! - *Picture*: the pictures (JPEG, PNG) of a folder (`sleep.folder`,
 //!   `sleep` at first, as on CrossPoint), one after the other;
 //! - *Message*: PaperPaw's logo and "Sleeping" (the logo as set,
@@ -20,7 +22,7 @@
 //!   value the screen's id and the translation key of its name), which
 //!   the sleep screen shows in its place, sleeping as it does.
 //!
-//! Without a cover or a picture the message shows. Where the device is
+//! Without a cover or a picture the cat shows. Where the device is
 //! off while it sleeps (the X4), this is also what shows as it starts.
 //! Asleep, the screen takes every button but *Sleep* and *Home*. It
 //! closes when the device wakes or, where a screen opened above it as the
@@ -44,6 +46,7 @@ use paperpaw_sdk::builtin::{actions, events, groups, slots};
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::library;
 use paperpaw_sdk::logo::Logo;
+use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{PlaceKind, Stack, WidgetPlace};
@@ -54,10 +57,11 @@ use paperpaw_sdk::{
 };
 
 pub const PLUGIN: Id = Id::new_static("sleep");
-/// What the sleep screen shows: one of [`COVER`], [`PICTURE`],
+/// What the sleep screen shows: one of [`CAT`], [`COVER`], [`PICTURE`],
 /// [`OVERLAY`], [`WIDGETS`], [`MESSAGE`], [`PAGE`], or a screen another
 /// plugin offers ([`paperpaw_sdk::Registrar::add_choice`]).
 pub const SHOW: Setting<Text> = Setting::new("sleep.show");
+pub const CAT: &str = "sleep.show.cat";
 pub const COVER: &str = "sleep.show.cover";
 pub const PICTURE: &str = "sleep.show.picture";
 pub const MESSAGE: &str = "sleep.show.message";
@@ -122,8 +126,8 @@ static SETTINGS: [SettingSpec; 9] = [
     SettingSpec::fixed_choice(
         SHOW.static_str(),
         "sleep.setting.show",
-        &[COVER, PICTURE, OVERLAY, WIDGETS, MESSAGE, PAGE],
-        COVER,
+        &[CAT, COVER, PICTURE, OVERLAY, WIDGETS, MESSAGE, PAGE],
+        CAT,
         groups::DISPLAY,
     )
     .with_extra(&IN_SLEEP)
@@ -207,7 +211,7 @@ impl Plugin for Sleep {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Sleep screen", Version::new(0, 1, 0))
             .description(
-                "Shows the book's cover, your pictures or a message while the device sleeps.",
+                "Shows a sleeping cat, the book's cover, your pictures or a message while the device sleeps.",
             )
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
@@ -256,6 +260,51 @@ fn cover(env: &Env<'_>) -> Option<ImageRef> {
     library::indexed(env, &path)
         .cover
         .filter(|image| env.storage.exists(&image.path))
+}
+
+/// PaperPaw's sleeping cat: made for PaperPaw (see `NOTICE`), shipped
+/// in the plugin, decoded once for the screen's size into the plugin's
+/// folder (a few rows at a time, never whole in memory) and drawn from
+/// there. As wide as the screen leaves inside the interface's margins,
+/// never larger than it is drawn.
+pub mod cat {
+    use alloc::format;
+
+    use paperpaw_sdk::Env;
+    use paperpaw_sdk::document::ImageRef;
+    use paperpaw_sdk::image::{Fit, ImageFile};
+    use paperpaw_sdk::ui::UiStyle;
+
+    /// The drawing: 760 × 501 pixels, 16 grays, cropped to the cat.
+    pub const PICTURE: &[u8] = include_bytes!("../pictures/sleeping-cat.png");
+
+    /// The room around the cat on each side, in pixels.
+    pub fn margin(env: &Env<'_>) -> u16 {
+        UiStyle::new(env).margin as u16
+    }
+
+    /// The cat decoded for this screen.
+    pub fn image(env: &Env<'_>) -> Option<ImageRef> {
+        let display = env.device.display;
+        let room = 2 * margin(env);
+        let side = display
+            .width
+            .saturating_sub(room)
+            .min(display.height.saturating_sub(room))
+            .max(1);
+        // A file for each size: decoded once, again only where the screen
+        // turns or its margins change.
+        let file = super::data(&format!("cat-{side}.gray"));
+        if let Some(kept) = ImageFile::open(env.storage, &file) {
+            return Some(ImageRef {
+                path: kept.path,
+                width: kept.width,
+                height: kept.height,
+            });
+        }
+        let fit = Fit::side(u32::from(side));
+        paperpaw_sdk::image::picture_from_bytes(env.storage, PICTURE, &file, fit, false)
+    }
 }
 
 /// The next picture of the folder, decoded to fit the screen.
@@ -311,6 +360,8 @@ pub(crate) fn next_from_folder(env: &Env<'_>) -> Option<String> {
 struct SleepScreen {
     show: String,
     image: Option<ImageRef>,
+    /// The image is the cat: on white, not on black as a cover.
+    cat: bool,
     /// What goes over the page, where, how opaque.
     over_page: Option<(overlay::Over, Rect, u8)>,
     /// Another plugin's screen shown in its place (its mode).
@@ -354,7 +405,15 @@ impl SleepScreen {
             OVERLAY => None,
             PICTURE => picture(env),
             MESSAGE | PAGE | WIDGETS => None,
+            CAT => None,
             _ => cover(env),
+        };
+        // The cat, chosen, or where there is no cover or no picture (also
+        // for a mode no plugin offers any more, which shows the cover).
+        let wants_cat = shown.is_none() && !matches!(show.as_str(), MESSAGE | PAGE | WIDGETS);
+        let (image, cat) = match image {
+            None if wants_cat => (cat::image(env), true),
+            image => (image, false),
         };
         let display = env.device.display;
         let screen = Rect::new(0, 0, display.width, display.height);
@@ -376,6 +435,7 @@ impl SleepScreen {
         Self {
             show,
             image,
+            cat,
             over_page,
             shown,
             widgets,
@@ -430,6 +490,20 @@ impl Screen for SleepScreen {
             return;
         }
         match &self.image {
+            Some(image) if self.cat => {
+                // In the middle, on white: as the drawing was made.
+                canvas.fill(screen, Color::WHITE);
+                let room = 2 * cat::margin(env);
+                let (w, h) = ui::fit_image(
+                    image,
+                    display.width.saturating_sub(room),
+                    display.height.saturating_sub(room),
+                );
+                let area = Rect::new((display.width - w) / 2, (display.height - h) / 2, w, h);
+                ui::draw_image(canvas, env.storage, image, area);
+                let what = env.i18n.tr("sleep.show.cat");
+                canvas.describe(Role::Image, what, area, false, None);
+            }
             Some(image) => {
                 // As large as fits, in the middle, on black.
                 canvas.fill(screen, Color::BLACK);
@@ -527,7 +601,7 @@ impl Screen for SleepScreen {
 }
 
 /// The modes of this plugin; others name another plugin's screen.
-const BUILT_IN: [&str; 6] = [COVER, PICTURE, OVERLAY, WIDGETS, MESSAGE, PAGE];
+const BUILT_IN: [&str; 7] = [CAT, COVER, PICTURE, OVERLAY, WIDGETS, MESSAGE, PAGE];
 
 /// The logo's size on the sleep screen: a third of the screen across.
 fn logo_side(env: &Env<'_>) -> u16 {
