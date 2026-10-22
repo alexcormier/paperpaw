@@ -897,7 +897,10 @@ impl<'a> FontHandle<'a> {
     }
 
     /// Draws one line with its baseline at `baseline`; returns its width.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "its inputs are separate things; a struct of them would serve this call alone"
+    )]
     pub fn draw(
         &self,
         canvas: &mut Canvas<'_>,
@@ -912,7 +915,10 @@ impl<'a> FontHandle<'a> {
 
     /// Like [`FontHandle::draw`], with glyphs widened by `extra` pixels
     /// (e.g. a reader's font weight setting).
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "its inputs are separate things; a struct of them would serve this call alone"
+    )]
     pub fn draw_bolder(
         &self,
         canvas: &mut Canvas<'_>,

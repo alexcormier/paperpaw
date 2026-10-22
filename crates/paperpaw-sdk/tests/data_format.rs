@@ -2,7 +2,11 @@
 //! file names in its first line, upgrades step by step, files of newer
 //! versions left alone, and hostile first lines.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_sdk::data::{self, Error, Format, MARK};
 use paperpaw_sdk::{MemoryStorage, Storage, StorageError};

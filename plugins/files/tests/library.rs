@@ -2,8 +2,11 @@
 //! full screen) covers it, where its focus is when it shows again, and
 //! the folder chooser starting where the setting is.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::Cell;
 use std::rc::Rc;

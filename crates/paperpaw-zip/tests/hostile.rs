@@ -5,8 +5,11 @@
 //! deflate data. Each must give its data or a clean error, within the
 //! reader's bounded buffers; random archives read back byte-identical.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_platform::{DirEntry, Storage, StorageError};
 use paperpaw_zip::{Entry, Method, ZipArchive, ZipError};

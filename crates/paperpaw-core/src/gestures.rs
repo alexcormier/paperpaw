@@ -2,7 +2,10 @@
 //! the key map resolved, presses that came while a frame was not shown
 //! yet dropped.
 
-#[allow(unused_imports)]
+#[allow(
+    unused_imports,
+    reason = "a part of the kernel, which sees all of it; not every part uses every name"
+)]
 use super::*;
 use crate::commands::{Reserved, vet_reserved};
 

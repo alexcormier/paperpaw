@@ -159,6 +159,10 @@ fn crumbs(from: &str, plugin: &str) -> String {
     )
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn index_html(gallery: &Gallery, sheets: &Sheets<'_>) -> String {
     let mut body = String::from(STYLE);
     let _ = write!(

@@ -1,7 +1,10 @@
 //! Building a kernel: what the shell says of its device, the plugins, the
 //! configuration, then the kernel made from them ([`KernelBuilder`]).
 
-#[allow(unused_imports)]
+#[allow(
+    unused_imports,
+    reason = "a part of the kernel, which sees all of it; not every part uses every name"
+)]
 use super::*;
 
 /// Configures and creates a [`Kernel`].
@@ -366,6 +369,10 @@ impl KernelBuilder {
     /// The kernel with nothing registered: its frame, its storage (metered,
     /// and what a call reads kept for the rest of it), what the shell said
     /// it does.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn new_kernel(&mut self) -> Result<Kernel, KernelError> {
         let display = self.device.display;
         let rows = self.frame_rows.unwrap_or(display.height);
@@ -460,6 +467,7 @@ impl KernelBuilder {
                     .frame_rows
                     .map(|rows| u32::from(rows) * u32::from(display.width)),
                 pictures_shown: false,
+                again: false,
                 screenshot: None,
                 mark: None,
                 refresh: RefreshPolicy::default(),

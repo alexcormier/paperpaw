@@ -193,6 +193,10 @@ fn label(env: &Env<'_>, days: &[Shown]) -> alloc::string::String {
 /// The caption, then a bar a day with its weekday below; today's bar in
 /// the ink and the others a shade lighter (if today is marked); the
 /// daily goal, if set, as a dashed line across.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {

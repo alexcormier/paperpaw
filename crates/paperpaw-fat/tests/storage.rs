@@ -3,8 +3,11 @@
 //! many files in one folder, moves that cannot be, reads past the end,
 //! and what a reset finds after `sync`.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

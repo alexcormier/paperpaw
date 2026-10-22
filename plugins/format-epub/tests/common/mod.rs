@@ -3,7 +3,10 @@
 //! reader does.
 
 // Each test file uses some of the helpers.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use std::cell::{Cell, RefCell};
 

@@ -3,7 +3,11 @@
 //! literals, credentials, fragments, header injection through names,
 //! values and addresses, and relative and absolute `Location`s.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 use paperpaw_http::server::parse_request;

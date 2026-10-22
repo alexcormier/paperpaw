@@ -127,6 +127,10 @@ fn session_line(env: &Env<'_>, s: &Session) -> Line {
 }
 
 impl BatteryView {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub(crate) fn new(env: &Env<'_>, now: Reading, dir: &str) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);

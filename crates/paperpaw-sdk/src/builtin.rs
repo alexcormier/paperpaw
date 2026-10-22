@@ -1092,6 +1092,13 @@ pub mod settings {
     /// no traces of the last one, but slow on some panels); else it counts
     /// as a page turn towards [`FULL_REFRESH_INTERVAL`].
     pub const FLASH_SCREENS: Setting<bool> = Setting::new("core.flash-screens");
+    /// Whether a screen with pictures (covers, a sleep screen's picture)
+    /// is shown in grays when it is drawn whole, where the panel shows
+    /// black and white but more grays with a refresh of its own (the X4):
+    /// a little slower to show, the pictures finer. What changes on it
+    /// after (the focus moving) is shown in black and white. A screen may
+    /// say no ([`Screen::pictures_in_grays`](crate::Screen::pictures_in_grays)).
+    pub const PICTURES_IN_GRAYS: Setting<bool> = Setting::new("core.pictures-in-grays");
     /// Minutes without use after which the device goes to sleep by itself
     /// (`0`: never), where PaperPaw puts it to sleep
     /// ([`Capabilities::sleep`](crate::Capabilities)). Turning pages, also by themselves,

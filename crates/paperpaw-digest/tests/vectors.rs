@@ -4,8 +4,11 @@
 //! read less than asked, hex both ways. Properties: a digest is the same
 //! however its input is split; hex decodes what it encodes.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::Cell;
 

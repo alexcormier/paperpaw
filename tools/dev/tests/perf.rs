@@ -3,8 +3,11 @@
 //! `crates/paperpaw-app/tests/draw.rs`), a screen too large for the X4's
 //! heap and one that leaks a little each time it opens.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::sync::Mutex;
 
@@ -34,7 +37,13 @@ impl Screen for Reads {
 }
 
 /// Keeps 200 KiB while it is open: more than the X4 has free.
-struct Big(#[allow(dead_code)] Vec<u8>);
+struct Big(
+    #[allow(
+        dead_code,
+        reason = "shared by the tests; not every test file uses every helper"
+    )]
+    Vec<u8>,
+);
 
 impl Screen for Big {
     fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}

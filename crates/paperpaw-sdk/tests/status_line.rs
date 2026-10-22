@@ -3,8 +3,11 @@
 //! items (the page, the time) kept whole beside a long chapter title;
 //! status items and whole lines found by their ids.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod support;
 

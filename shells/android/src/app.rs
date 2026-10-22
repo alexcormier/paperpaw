@@ -82,6 +82,10 @@ struct Running {
 const STATUS_EVERY_MS: u64 = 60_000;
 
 #[unsafe(no_mangle)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn android_main(app: AndroidApp) {
     android_logger::init_once(
         android_logger::Config::default()
@@ -342,6 +346,10 @@ fn log_panics() {
 }
 
 /// Builds the kernel for the window's size.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn start_kernel(
     app: &AndroidApp,
     window: &NativeWindow,

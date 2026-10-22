@@ -82,7 +82,10 @@ fn line(env: &Env<'_>, style: &UiStyle, size: f32) -> u16 {
 }
 
 /// Draws `text` left-aligned in `area`, wrapped, at most `max` lines.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn paragraph(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

@@ -3,8 +3,11 @@
 //! during a fetch, feeds share a name or two fetches are under way at
 //! once; an answer that is no feed keeps the page there is.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::rc::Rc;
 

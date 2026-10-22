@@ -3,8 +3,11 @@
 //! blobs), payloads around the overflow limits, trees several levels
 //! deep, the schema, and what happens when the card is full.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

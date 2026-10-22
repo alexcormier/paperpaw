@@ -5,7 +5,11 @@
 //! connections at once, and the choice of port. Every server listens on a
 //! free port (port 0) or one found free just before.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 use std::io::{Read, Write};

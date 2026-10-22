@@ -4,8 +4,11 @@
 //! added and removed; each change kept in the page's setting at once, and
 //! a new kernel over the same storage shows the same layout.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

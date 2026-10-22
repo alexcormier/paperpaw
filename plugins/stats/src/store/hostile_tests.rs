@@ -3,6 +3,11 @@
 //! of the longest; `days.bin` broken or stale; `books.ini` with odd
 //! sections; and round trips of both files over arbitrary values.
 
+#![allow(
+    clippy::let_underscore_must_use,
+    reason = "tests read what they check; what they leave out does not matter"
+)]
+
 extern crate std;
 
 use alloc::string::String;

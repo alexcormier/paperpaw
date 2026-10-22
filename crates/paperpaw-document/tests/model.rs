@@ -6,8 +6,11 @@
 //! with the position and stays within 0 to 1; links with a scheme are
 //! external; a document's optional parts default to nothing.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_document::{
     Align, Block, BlockKind, Document, DocumentError, Locator, MAX_FAMILIES, Metadata, NoStorage,
@@ -317,7 +320,10 @@ fn replacing_the_end_of_one_run_and_the_start_of_the_next() {
 #[test]
 fn replacing_outside_the_text_or_inside_a_character_changes_nothing() {
     let (block, _) = decoded(0, &[('a', 1, 0), ('ä', 1, 0), ('b', 1, 0)]);
-    #[allow(clippy::reversed_empty_ranges)]
+    #[allow(
+        clippy::reversed_empty_ranges,
+        reason = "a range the wrong way round, on purpose"
+    )]
     for range in [2..3, 1..2, 9..12, 3..1] {
         let mut changed = block.clone();
         changed.replace(range.clone(), "x");

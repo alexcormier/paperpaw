@@ -5,8 +5,11 @@
 //! entries that show what they are now (a switch, faint, hidden) with a
 //! line under them, said only by the plugin they belong to.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::borrow::Cow;
 

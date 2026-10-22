@@ -4,8 +4,11 @@
 //! clear parts, in their area only; and a PNG's transparency kept by
 //! [`image::picture_with_alpha`].
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod support;
 

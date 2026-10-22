@@ -1,7 +1,10 @@
 //! A small dictionary built here, plain and as dictzip, with synonyms.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_sdk::{MemoryStorage, Storage};
 use paperpaw_stardict::{Dictionary, Error};

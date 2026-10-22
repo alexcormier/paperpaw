@@ -292,7 +292,10 @@ impl Slot {
     }
 
     /// One step of the connection, by its phase.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "its inputs are separate things; a struct of them would serve this call alone"
+    )]
     fn step(
         &mut self,
         server: u32,

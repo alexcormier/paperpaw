@@ -3,8 +3,11 @@
 //! with charging on and off. The rule applies once each time the level is
 //! reached, not again while it wavers around it.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::Cell;
 use std::rc::Rc;

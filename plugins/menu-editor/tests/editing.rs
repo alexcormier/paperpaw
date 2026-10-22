@@ -5,8 +5,11 @@
 //! and read back by a new kernel, whose menu shows it; and the way to
 //! the settings is never removed.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

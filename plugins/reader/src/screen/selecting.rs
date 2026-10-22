@@ -48,6 +48,10 @@ impl ReaderScreen {
 
     /// Does what a bar item stands for. Items of other plugins are
     /// announced with the selected text (event `core.text-chosen`).
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub(super) fn activate(&mut self, item: &Id, cx: &mut Cx<'_, '_>) {
         if *item == crate::actions::READ_FROM
             && let (Ok(book), Some(selection)) = (&self.book, self.selection)

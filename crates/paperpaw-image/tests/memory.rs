@@ -4,8 +4,11 @@
 //! hundred KiB; a decoder that asks for more than it needs fails there,
 //! and elsewhere fills gigabytes for a file of a few bytes.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

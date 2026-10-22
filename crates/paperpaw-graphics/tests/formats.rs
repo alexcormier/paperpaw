@@ -3,8 +3,11 @@
 //! exact inverse of day, a screen drawn band by band is the screen drawn
 //! at once, and the region reported changed is what changed.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

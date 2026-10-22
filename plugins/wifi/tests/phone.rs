@@ -4,8 +4,11 @@
 //! does not take the password opens the own network again. And networks
 //! put on the card in `wifi.ini` are kept, the file removed.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{Io, Kernel, ServerCall, ServerEvent, WifiEvent};
 use paperpaw_platform::Rotation;

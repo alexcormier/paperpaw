@@ -543,7 +543,10 @@ pub fn ink_baseline(font: &FontHandle<'_>, size: f32, text: &str, band: Rect) ->
 /// Draws `text` on one line in `area` ([`fit_line`]: from `max` down to
 /// `min`, then shortened), placed as `align` says and centred by its ink
 /// from top to bottom; returns the size drawn.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_line(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -575,7 +578,10 @@ pub fn draw_line(
 /// "…"). Returns the height drawn. A widget drawing the same text again
 /// and again (in every band of a frame) breaks it once ([`Wrapped`]) and
 /// draws that.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_wrapped(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

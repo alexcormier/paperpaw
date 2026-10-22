@@ -472,6 +472,10 @@ pub fn add(env: &Env<'_>, geometry: &Geometry, items: &[Item], what: What) -> Op
 /// name are placed by their ink, as one group in the middle of `area`,
 /// half a gap apart: the name sits clearly nearer its own icon than the
 /// tool below it, which the room the cells leave keeps apart.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id, label: bool) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {

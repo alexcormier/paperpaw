@@ -3,7 +3,10 @@
 //! the buttons and answered as by the shell.
 
 // Not every test uses every part.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use std::rc::Rc;
 

@@ -173,6 +173,10 @@ impl PageType {
     /// The type of a book in `language` read in `font` (the reading font),
     /// with `status` for the status lines; a book of `whole_pages` (comics)
     /// is shown edge to edge, without margins or status lines.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub fn new(
         env: &Env<'_>,
         font: &FontHandle<'_>,

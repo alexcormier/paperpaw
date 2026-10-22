@@ -535,7 +535,10 @@ impl Matcher<'_, '_> {
     }
 
     /// A repeat of a group: `count` times so far, as many more as fit.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "its inputs are separate things; a struct of them would serve this call alone"
+    )]
     fn repeat(
         &mut self,
         inner: &Node,

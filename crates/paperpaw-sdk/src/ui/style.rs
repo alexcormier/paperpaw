@@ -1,7 +1,10 @@
 //! The sizes and looks every part of the UI is drawn with ([`UiStyle`]),
 //! the focus, separators and rounded fills.
 
-#[allow(clippy::wildcard_imports)]
+#[allow(
+    clippy::wildcard_imports,
+    reason = "a part of the module, which shares its imports"
+)]
 use super::*;
 
 /// Sizes of the standard UI elements, in pixels: made for the device and

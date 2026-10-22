@@ -1,8 +1,11 @@
 //! The plugin manager with the real kernel: its list follows plugins
 //! installed while it is open (e.g. from a store opened from it).
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::Rotation;

@@ -3,7 +3,11 @@
 //! (set back, jumping far ahead, at the end of its range), and what the
 //! kernel asks to be woken for is the earliest of them.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 mod common;

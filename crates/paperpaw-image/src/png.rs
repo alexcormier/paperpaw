@@ -293,6 +293,10 @@ impl Rows<'_> {
 // Not inlined into `decode`: each format's frame on the stack alone,
 // not all three together.
 #[inline(never)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub(crate) fn decode(
     reader: &mut Reader<'_>,
     fit: Fit,

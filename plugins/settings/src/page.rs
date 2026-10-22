@@ -155,6 +155,10 @@ pub(super) struct GroupPage {
 }
 
 impl GroupPage {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub(super) fn new(env: &Env<'_>, group: Id) -> Self {
         // A placement's group (`widgets.clock@2`): the widget's settings,
         // as that placement has them.

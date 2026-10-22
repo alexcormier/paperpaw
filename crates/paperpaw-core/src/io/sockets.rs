@@ -153,6 +153,10 @@ impl Sockets {
     /// Carries out a plugin's socket command, with `network` whether the
     /// device has one and `screens` the screens open now; events to emit
     /// go to `out`.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub fn command(
         &mut self,
         command: Command,

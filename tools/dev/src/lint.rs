@@ -87,6 +87,10 @@ pub fn pseudo_plugin(context: &Context) -> Result<Vec<(String, Vec<u8>)>, String
     pseudo::plugin(context)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
     // Pictures of an earlier run would mislead.
     if !context.in_memory {
@@ -434,6 +438,10 @@ fn known_ids(session: &Session) -> Vec<String> {
 
 /// Draws the screens and widgets of the plugins looked at in English and
 /// in the pseudo-language and compares what is drawn.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn drawn(
     context: &Context,
     looked: &[String],

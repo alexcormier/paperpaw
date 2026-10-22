@@ -9,8 +9,11 @@
 //! single glyph, and breaking from the start of any line gives the same
 //! lines as breaking the whole text.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_text::{Line, wrap, wrap_lines, wrap_lines_hyphenated};
 use proptest::prelude::*;

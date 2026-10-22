@@ -3,8 +3,11 @@
 //! same order, and no item is ever lost or doubled; a finger that does
 //! not start on a grip, or is another finger, leaves the rows alone.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod support;
 

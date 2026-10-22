@@ -4,8 +4,11 @@
 //! the bookmark corner is), draws behind the text and over it while
 //! switched on, and sets pages in two columns or in one narrower one.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::RefCell;
 use std::rc::Rc;

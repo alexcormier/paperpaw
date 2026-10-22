@@ -178,6 +178,10 @@ impl Files {
             &self.merged,
             &self.time,
         ] {
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "a temporary file left behind is written over the next time"
+            )]
             let _ = storage.remove(file);
         }
     }
@@ -201,6 +205,10 @@ pub(crate) fn merge(
     if result.is_err()
         && let Some(out) = out
     {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a merge that failed leaves a file the next merge writes over"
+        )]
         let _ = storage.remove(out);
     }
     result

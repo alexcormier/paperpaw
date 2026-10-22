@@ -381,6 +381,10 @@ pub fn line_start(cx: &LayoutContext<'_>, at: Locator) -> Result<Locator, Docume
 ///
 /// Headings are set in their own face, never indented, justified or
 /// hyphenated, and never left alone at the bottom of a page.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn layout_page(
     cx: &LayoutContext<'_>,
     start: Locator,

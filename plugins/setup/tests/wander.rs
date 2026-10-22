@@ -3,8 +3,11 @@
 //! opens leads back to it, and from wherever it is the page buttons
 //! finish it at the home screen with the setup noted as done.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

@@ -6,8 +6,11 @@
 //! fonts does not. After a change that is meant, the files are written
 //! anew with `PAPERPAW_SNAPSHOTS=update`.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::fmt::Write as _;
 use std::path::PathBuf;

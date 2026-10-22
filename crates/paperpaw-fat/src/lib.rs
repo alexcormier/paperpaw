@@ -47,6 +47,9 @@
 //! takes either, so names are looked up here (`lookup`) and handed to it
 //! only where it cannot take another entry for them.
 
+// What goes wrong with the user's data is told, never dropped unseen:
+// a result left unread says why (see CONTRIBUTING.md).
+#![deny(clippy::let_underscore_must_use)]
 #![no_std]
 
 extern crate alloc;
@@ -432,6 +435,10 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         let mut dirs = alloc::vec![String::from(path)];
         while let Some(dir) = dirs.pop() {
             taken += self.free.borrow().clusters(1) * self.cluster();
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "a folder that cannot be listed counts as empty"
+            )]
             let _ = Storage::list(self, &dir, &mut |entry| {
                 let path = format!("{dir}/{}", entry.name);
                 if entry.is_dir {
@@ -621,6 +628,10 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         });
         if let Err(e) = written {
             // A card that is full keeps no part of the new content.
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "cleaning up after a failed write, whose own error is the one told"
+            )]
             let _ = remove_in(&dir, &temp);
             return Err(e);
         }
