@@ -9,7 +9,7 @@ superseded by a new record that links back.
 | [0001](0001-rust-no-std-core.md) | Rust with a `no_std` core | Accepted |
 | [0002](0002-apache-2-license.md) | Apache License 2.0 | Accepted |
 | [0003](0003-sans-io-kernel.md) | Sans-I/O kernel | Accepted |
-| [0004](0004-everything-is-a-plugin.md) | Kernel plus plugins: everything is a plugin | Accepted |
+| [0004](0004-everything-is-a-plugin.md) | Kernel plus plugins: everything is a plugin | Accepted, partly superseded by [0024](0024-native-code-plugins.md) |
 | [0005](0005-raw-input-and-layered-keymaps.md) | Raw input and layered key maps in the kernel | Accepted |
 | [0006](0006-one-text-config-format.md) | One human-editable text format for configuration and data | Accepted |
 | [0007](0007-content-based-locators.md) | Content-based reading positions | Accepted |
@@ -29,8 +29,8 @@ superseded by a new record that links back.
 | [0021](0021-decorations.md) | Decorations of text | Accepted |
 | [0022](0022-plugins-in-updates.md) | Plugins in updates | Accepted |
 | [0023](0023-plugin-store.md) | The plugin store | Accepted |
-| [0024](0024-native-code-plugins.md) | Native code plugins as files | Accepted |
-| [0025](0025-power-saving.md) | Power saving: efficient by default, declared work, power modes | Accepted |
+| [0024](0024-native-code-plugins.md) | Native code plugins as files | Accepted, supersedes part of [0004](0004-everything-is-a-plugin.md) |
+| [0025](0025-power-saving.md) | Power saving: efficient by default, declared work, power modes | Accepted, partly implemented |
 
 ## Template
 

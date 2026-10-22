@@ -1,5 +1,5 @@
 Default fonts brings the fonts PaperPaw comes with: Literata for reading books, with regular, bold, italic and bold italic, and Source Sans 3 for menus and lists. It also supplies the icons of the menus.
 
-Literata is what books are set in unless you choose another font in Settings, under Reading, as Font in the Text section; a book that brings its own fonts can use them too. Source Sans is used for everything outside the book. The licences of these fonts are in About PaperPaw, under Licences.
+Literata is what books are set in unless you choose another font in Settings, under Reading, as Font in the Text section; on devices that draw scalable fonts (not the X4 and X4 Pro), a book that brings its own fonts can use them too. Source Sans is used for everything outside the book. The licences of these fonts are in About PaperPaw, under Licences.
 
-To read with other fonts, copy .ttf or .otf files into the fonts folder, or download some with More fonts.
+To read with other fonts, download some with More fonts. Devices that draw scalable fonts also read .ttf or .otf files copied into the fonts folder.

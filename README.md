@@ -192,13 +192,14 @@ plugins/large-print/
   i18n/*.ini     translations, also whole new languages
   keymap.ini     key bindings, as in paperpaw.ini
   settings.ini   new defaults for any setting, e.g. [core] font-size = 14
-  fonts/*.ttf    fonts to read with (also .otf, .ttc)
+  fonts/*        fonts to read with: packs (.ppfp), or .ttf, .otf and .ttc
+                 where those are drawn (not on the X4 and X4 Pro)
 ```
 
 [`samples/plugins/large-print`](samples/plugins/large-print) is a complete
-example. Plugins with code are Rust crates using the SDK; they are built
-into the app (a web firmware builder for the X4 is planned) or, on larger
-devices, will be loadable as WebAssembly. [Writing plugins](docs/plugins.md)
+example. Plugins with code are Rust crates using the SDK; on the X4 and
+X4 Pro, those not built into the firmware are signed files from the
+plugin store, with no firmware rebuild. [Writing plugins](docs/plugins.md)
 walks through [`samples/hello-plugin`](samples/hello-plugin/src/lib.rs), a
 small one to start from.
 

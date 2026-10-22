@@ -5,9 +5,10 @@
 //! Pro's touch screen ([`gt911`]), fuel gauge ([`cw2017`]) and clock
 //! ([`bm8563`]). Written against
 //! `embedded-hal`, so all of it is tested on a computer, against
-//! simulated hardware; the firmware only connects the ESP32-C3's pins to
-//! it (which pin does what: the firmware's `board` module,
-//! `shells/xteink/src/board.rs`). Also what any X4 firmware does alike
+//! simulated hardware; the firmware only connects the chip's pins to it
+//! (which pin does what: the firmware's `board` module,
+//! `shells/xteink/src/board.rs` for the X4, `board_pro.rs` for the X4
+//! Pro). Also what any X4 firmware does alike
 //! and can be tested here: remote control over USB ([`remote`]), the
 //! frame kept for the panel ([`sent`]), the clock set over the network
 //! ([`sntp`]), addresses in the device's own network ([`dhcp`]),

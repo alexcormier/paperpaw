@@ -8,12 +8,13 @@ folder. The emulator writes reading positions and page indexes to
 ## Books
 
 Both books are in the public domain and come unchanged from
-[Project Gutenberg](https://www.gutenberg.org), including its licence text:
+[Project Gutenberg](https://www.gutenberg.org), including its licence text,
+each as plain text and as EPUB:
 
-| File | Book | Source |
+| Files | Book | Source |
 |------|------|--------|
-| `library/books/alice-in-wonderland.txt` | Lewis Carroll, *Alice's Adventures in Wonderland* (English) | [eBook #11](https://www.gutenberg.org/ebooks/11) |
-| `library/books/die-verwandlung.txt` | Franz Kafka, *Die Verwandlung* (German) | [eBook #22367](https://www.gutenberg.org/ebooks/22367) |
+| `library/books/alice-in-wonderland.txt`, `.epub` | Lewis Carroll, *Alice's Adventures in Wonderland* (English) | [eBook #11](https://www.gutenberg.org/ebooks/11) |
+| `library/books/die-verwandlung.txt`, `.epub` | Franz Kafka, *Die Verwandlung* (German) | [eBook #22367](https://www.gutenberg.org/ebooks/22367) |
 
 ## Plugins
 
@@ -21,8 +22,8 @@ Both books are in the public domain and come unchanged from
 with its name translated to German. To try it, copy it into
 `library/plugins/` (or the `plugins` folder of a device) and restart.
 
-`plugins/airy-theme` is a theme as a data plugin: new defaults for the
-appearance settings.
+`plugins/airy-theme`, `plugins/theme-calm-ink` and `plugins/theme-paw`
+are themes as data plugins: new defaults for the appearance settings.
 
 `plugins/reading-nook` is a home screen as a data plugin: new defaults
 for the home screen's settings in `settings.ini`, shown until the reader

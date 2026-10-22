@@ -1,6 +1,7 @@
 # 0004. Kernel plus plugins: everything is a plugin
 
-- Status: Accepted
+- Status: Accepted; partly superseded by [ADR 0024](0024-native-code-plugins.md):
+  plugins loaded at runtime are native code files, not WebAssembly modules
 - Date: 2026-10-14
 
 ## Context

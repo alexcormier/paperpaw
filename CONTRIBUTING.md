@@ -59,8 +59,10 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
 
 1. **The kernel contains no product features.** Screens, formats, themes and
    the like are plugins.
-2. **Plugins depend on `paperpaw-sdk` only**, never on `paperpaw-core`.
-   First-party plugins have no special access.
+2. **Plugins depend on `paperpaw-sdk`**, never on `paperpaw-core` (a CI
+   job checks it). They may use PaperPaw's library crates too
+   (`paperpaw-sqlite`, `paperpaw-xml` and the like), as any community
+   plugin can. First-party plugins have no special access.
 3. **If a community plugin could not build a feature, extend the SDK first.**
 4. **Core crates are `no_std`.** They must build for
    `riscv32imc-unknown-none-elf` (the X4's ESP32-C3, with 256 KiB of
@@ -143,8 +145,8 @@ may exceed them. Existing code is not reworked for them in bulk.
 
 The kernel, each plugin and the shells keep their catalogs in
 `i18n/<language>.ini` (the kernel's in `crates/paperpaw-core/i18n`, the
-shells' in `shells/xteink/i18n` and `shells/android/i18n`). To add a
-language:
+Pebble theme's in `crates/paperpaw-app/i18n/pebble`, the shells' in
+`shells/xteink/i18n` and `shells/android/i18n`). To add a language:
 
 1. Copy each `i18n/en.ini` to `i18n/<language>.ini`.
 2. Set `language`, `name` and `plural` in `[meta]` (see `PluralRule` in
