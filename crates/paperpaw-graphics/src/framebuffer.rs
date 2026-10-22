@@ -4,6 +4,7 @@ use paperpaw_platform::{Color, FrameView, PixelFormat, Rect};
 
 use crate::GraphicsError;
 use crate::canvas::Canvas;
+use crate::diffuse::Atkinson;
 
 /// From what coverage (of 255) a pixel at an edge takes the colour drawn
 /// in black and white, at first: three eighths (see
@@ -14,48 +15,37 @@ pub const MONO_COVERAGE: u8 = 96;
 /// ([`Framebuffer::put_gray_row`]); a picture more starts with no error.
 const DIFFUSIONS: usize = 2;
 
-/// Error diffusion (Atkinson's) of one picture's rows: where rows `width`
-/// wide at `x` go on, the error the rows drawn so far leave to the next
-/// two. Atkinson's passes on six eighths of a pixel's error, to the two
-/// pixels after it, the three below and the one below those: line
-/// drawings stay clean (no specks in white paper, no grid as an ordered
-/// dither leaves), photos keep their tones but the lightest.
+/// Error diffusion ([`Atkinson`]) of one picture's rows: where rows
+/// `width` wide at `x` go on, and the error the rows drawn so far leave.
 ///
 /// A screen is drawn in bands, and a band may be drawn more than once:
 /// what the band's first row starts from is kept ([`Diffusion::entry`]),
 /// so every drawing of a band comes out the same, and the next band goes
 /// on where the last one ended, without a seam.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct Diffusion {
     x: u16,
     width: u16,
     /// The row it goes on with.
     next: u16,
-    /// The error left to row `next` (its first) and the one after.
-    rows: [Vec<i16>; 2],
+    error: Atkinson,
     /// The band's first row, where the error went on into the band, and
     /// the error it started from.
     entry: Option<u16>,
-    entry_rows: [Vec<i16>; 2],
+    entry_error: Atkinson,
 }
 
 impl Diffusion {
     /// A diffusion of rows `width` wide at `x`, starting at row `y` with
     /// no error; none where memory is short.
     fn new(x: u16, y: u16, width: u16) -> Option<Self> {
-        let row = || {
-            let mut row = Vec::new();
-            row.try_reserve_exact(usize::from(width)).ok()?;
-            row.resize(usize::from(width), 0i16);
-            Some(row)
-        };
         Some(Self {
             x,
             width,
             next: y,
-            rows: [row()?, row()?],
+            error: Atkinson::new(usize::from(width))?,
             entry: None,
-            entry_rows: [row()?, row()?],
+            entry_error: Atkinson::new(usize::from(width))?,
         })
     }
 
@@ -64,58 +54,22 @@ impl Diffusion {
     fn start(&mut self, y: u16, top: u16) {
         if self.next == y {
             if y == top && self.entry != Some(y) {
-                let [a, b] = &mut self.entry_rows;
-                a.copy_from_slice(&self.rows[0]);
-                b.copy_from_slice(&self.rows[1]);
+                self.entry_error.copy_from(&self.error);
                 self.entry = Some(y);
             }
         } else if self.entry == Some(y) {
-            let [a, b] = &mut self.rows;
-            a.copy_from_slice(&self.entry_rows[0]);
-            b.copy_from_slice(&self.entry_rows[1]);
+            self.error.copy_from(&self.entry_error);
         } else {
-            for row in &mut self.rows {
-                row.fill(0);
-            }
+            self.error.reset();
             self.entry = None;
         }
         self.next = y;
     }
 
-    /// Row `grays` (as wide as the diffusion) as levels of `levels`
-    /// grays, each passed to `put` with its column; then on to the next
-    /// row.
-    fn row(&mut self, grays: &[u8], levels: i32, mut put: impl FnMut(usize, u8)) {
-        let top = levels - 1;
-        // A level's step: whole for 2, 4 and 16 grays (255 = 3 × 5 × 17),
-        // so no division for each pixel.
-        let step = 255 / top;
-        let [here, below] = &mut self.rows;
-        let last = grays.len().saturating_sub(1);
-        // The error left to the two pixels after this one.
-        let mut ahead = (0i32, 0i32);
-        let add = |cell: &mut i16, part: i32| {
-            *cell =
-                (i32::from(*cell) + part).clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
-        };
-        for (column, &gray) in grays.iter().enumerate() {
-            let value = i32::from(gray) + i32::from(here[column]) + ahead.0;
-            let level = (value.clamp(0, 255) * top + 127) / 255;
-            let shown = level * step;
-            let part = (value - shown) / 8;
-            ahead = (ahead.1 + part, part);
-            if column > 0 {
-                add(&mut below[column - 1], part);
-            }
-            add(&mut below[column], part);
-            if column < last {
-                add(&mut below[column + 1], part);
-            }
-            // The row after the next, where this pixel's error is spent.
-            here[column] = part.clamp(i32::from(i16::MIN), i32::from(i16::MAX)) as i16;
-            put(column, shown as u8);
-        }
-        self.rows.swap(0, 1);
+    /// Row `grays` as levels of `levels` grays, each passed to `put` with
+    /// its column; then on to the next row.
+    fn row(&mut self, grays: &[u8], levels: u8, put: impl FnMut(usize, u8)) {
+        self.error.row(grays, levels, put);
         self.next = self.next.saturating_add(1);
     }
 }
@@ -738,7 +692,7 @@ impl Framebuffer {
             }
             return;
         };
-        let levels = i32::from(self.format.gray_levels().unwrap_or(2));
+        let levels = u8::try_from(self.format.gray_levels().unwrap_or(2)).unwrap_or(16);
         diffusion.row(grays, levels, |column, gray| {
             let value = self.encode(Color::gray(invert(gray)));
             self.store(x + column as u16, y, value);

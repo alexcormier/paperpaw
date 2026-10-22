@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 
 use paperpaw_document::ImageRef;
 use paperpaw_graphics::Canvas;
+use paperpaw_graphics::diffuse::Atkinson;
 use paperpaw_graphics::round::corner_inset;
 use paperpaw_image::{ColorFile, Downscaler, GrayFile, ImageError, ImageFile, ImageSink, luma};
 use paperpaw_platform::{PixelFormat, Storage};
@@ -12,15 +13,17 @@ use paperpaw_platform::{PixelFormat, Storage};
 const ROWS_BYTES: usize = 8192;
 /// A thumbnail kept on the storage ([`Thumbnail::keep`]): this, its
 /// width and height (2 bytes each, little-endian), its bits a pixel (1),
-/// its stamp (8), then its pixels.
-const MAGIC: &[u8; 4] = b"QIT2";
+/// its stamp (8), then its pixels. `QIT2` was black and white ordered
+/// dithered: made anew.
+const MAGIC: &[u8; 4] = b"QIT3";
 const HEADER: usize = 17;
 
 /// How a thumbnail keeps its pixels, by the panel it is shown on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Depth {
-    /// Black and white, ordered dithered as such a panel shows it: eight
-    /// pixels a byte, the first in the high bit, set for white.
+    /// Black and white, diffused as such a panel shows pictures
+    /// ([`Atkinson`]): eight pixels a byte, the first in the high bit, set
+    /// for white.
     Mono,
     /// Sixteen grays: two pixels a byte, the first in the high bits.
     Gray,
@@ -108,6 +111,8 @@ impl Thumbnail {
             height: 0,
             rows: 0,
             pixels: Vec::new(),
+            error: None,
+            grays: Vec::new(),
         };
         sink.start(scaler.out_width(), scaler.out_height()).ok()?;
         let row = file.width as usize * channels;
@@ -293,31 +298,47 @@ struct Pack {
     /// Rows packed so far.
     rows: u16,
     pixels: Vec<u8>,
+    /// In black and white, the error the rows leave to the next.
+    error: Option<Atkinson>,
+    /// A row's grays, for the diffusion.
+    grays: Vec<u8>,
 }
 
 impl Pack {
     fn push_gray(&mut self, gray: impl Iterator<Item = u8>) {
         if self.depth == Depth::Mono {
-            /// 4×4 Bayer matrix, as the framebuffer dithers.
-            const BAYER: [[i32; 4]; 4] =
-                [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
-            let y = usize::from(self.rows % 4);
+            self.grays.clear();
+            self.grays.extend(gray);
+            let mut row = core::mem::take(&mut self.grays);
             let mut byte = 0u8;
             let mut n = 0;
-            for (x, g) in gray.enumerate() {
-                let offset = (2 * BAYER[y][x % 4] - 15) * 255 / 32;
-                if i32::from(g) + offset >= 128 {
+            let mut put = |white: bool, pixels: &mut Vec<u8>| {
+                if white {
                     byte |= 0x80 >> n;
                 }
                 n += 1;
                 if n == 8 {
-                    self.pixels.push(byte);
+                    pixels.push(byte);
                     (byte, n) = (0, 0);
+                }
+            };
+            match &mut self.error {
+                Some(error) => {
+                    let pixels = &mut self.pixels;
+                    error.row(&row, 2, |_, gray| put(gray == 255, pixels));
+                }
+                // Without memory for the diffusion, a plain threshold.
+                None => {
+                    for &g in &row {
+                        put(g >= 128, &mut self.pixels);
+                    }
                 }
             }
             if n > 0 {
                 self.pixels.push(byte);
             }
+            row.clear();
+            self.grays = row;
         } else {
             let mut high = None;
             for g in gray {
@@ -345,6 +366,9 @@ impl ImageSink for Pack {
         self.width = w;
         self.height = h;
         let bytes = self.depth.row(w) * usize::from(h);
+        if self.depth == Depth::Mono {
+            self.error = Atkinson::new(usize::from(w));
+        }
         self.pixels
             .try_reserve_exact(bytes)
             .map_err(|_| ImageError::OutOfMemory)

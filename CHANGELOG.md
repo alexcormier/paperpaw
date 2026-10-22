@@ -11,8 +11,10 @@ change the plugin SDK.
   ordered pattern: line drawings such as the cats stay clean, without the
   grid that made them look pixelated, covers and photos keep their
   tones but the lightest. Drawn in bands, a picture shows no seams; it
-  takes two rows of error for each picture (two at once). Flat shades of
-  the interface keep the calm ordered pattern.
+  takes two rows of error for each picture (two at once). Covers and
+  pictures kept small in black and white (thumbnails) are diffused the
+  same way, and those kept on the card are made anew. Flat shades of the
+  interface keep the calm ordered pattern.
 - Vocabulary: flash cards with spaced repetition (FSRS, Anki's
   scheduler), in *Tools*, *Flash cards*. A review shows each due card's
   front, then its back and example and four answers (*Again*, *Hard*,
