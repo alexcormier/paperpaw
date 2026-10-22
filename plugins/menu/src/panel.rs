@@ -434,10 +434,7 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
         let line = match spec(env, &id).map(|s| &s.kind) {
             Some(SettingKind::Int { .. }) if setting.is_some_and(|s| ui::slider::shows(env, s)) => {
                 // A long title on more lines: the row grows, never cut.
-                let extra = setting.map_or(0, |s| {
-                    let shown = ui::setting_value(env, s);
-                    ui::slider::title_extra(env, style, g.width, env.i18n.tr(&s.title), &shown)
-                });
+                let extra = setting.map_or(0, |s| slider_extra(env, style, g.width, s));
                 Line::Slider(id, extra)
             }
             Some(SettingKind::Int { .. }) if setting.is_some() => Line::Stepper(id),
@@ -715,10 +712,20 @@ fn draw_slider(
         ui::draw_focus(canvas, style, rect);
     }
     let shown = ui::setting_value(env, spec);
+    let room = ui::number_room(env, style, [spec]);
     let view = ui::SliderView::new(rect, env.settings.int(id.as_str()), &shown)
         .title(env.i18n.tr(&spec.title))
+        .room(&room)
         .focus(focus);
     slider.draw_row(canvas, env, style, &view);
+}
+
+/// How much higher than its line a slider's title is in a row `width`
+/// wide ([`ui::slider::title_extra`]), beside the widest value it shows:
+/// the same for every value, so its band stays where it was laid out.
+fn slider_extra(env: &Env<'_>, style: &UiStyle, width: u16, spec: &SettingSpec) -> u16 {
+    let room = ui::number_room(env, style, [spec]);
+    ui::slider::title_extra(env, style, width, env.i18n.tr(&spec.title), &room)
 }
 
 /// The title of action `id`, translated.
@@ -993,10 +1000,7 @@ impl Screen for PanelScreen {
         }) else {
             return Handled::No;
         };
-        let extra = spec(&env, &id).map_or(0, |s| {
-            let shown = ui::setting_value(&env, s);
-            ui::slider::title_extra(&env, &self.style, area.width, env.i18n.tr(&s.title), &shown)
-        });
+        let extra = spec(&env, &id).map_or(0, |s| slider_extra(&env, &self.style, area.width, s));
         let band = ui::slider::band_below(&self.style, area, extra);
         let value = env.settings.int(id.as_str());
         let Some(step) = self

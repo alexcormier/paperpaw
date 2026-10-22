@@ -578,19 +578,19 @@ impl UpdatePage {
         let display = env.device.display;
         let margin = style.margin as u16;
         let width = display.width.saturating_sub(2 * margin);
-        let row = style.touch_row(style.row) as u16;
-        let pad = row.saturating_sub(ui::Segments::height(style)) / 2;
+        let row = style.touch_row(style.control_row) as u16;
         let mut bottom = display.height.saturating_sub(ui::edge_room(style, row));
-        // From the bottom up, each as high as its word needs.
+        // From the bottom up, each in a touch row, higher where its word
+        // takes more lines.
         let mut rects: Vec<Rect> = buttons
             .iter()
             .rev()
             .map(|button| {
                 let label = self.label(env, *button);
-                let height = ui::button_height_for(env, style, width, label);
-                let top = bottom.saturating_sub(height + 2 * pad);
+                let slot = ui::button_slot_height(env, style, width, label);
+                let top = bottom.saturating_sub(slot);
                 bottom = top;
-                Rect::new(margin, top + pad, width, height)
+                ui::button_in_slot(style, Rect::new(margin, top, width, slot))
             })
             .collect();
         rects.reverse();

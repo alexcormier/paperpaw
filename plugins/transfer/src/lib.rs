@@ -187,16 +187,13 @@ impl TransferScreen {
         let row = style.touch_row(style.control_row) as u16;
         let margin = style.margin as u16;
         let width = area.width.saturating_sub(2 * margin);
-        // As high as its words need, on more lines where they are long.
+        // A touch row, higher where its words take more lines.
         let label = env.i18n.tr("transfer.without-router");
-        let height = ui::button_height_for(env, style, width, label);
-        let pad = row.saturating_sub(ui::Segments::height(style)) / 2;
+        let slot = ui::button_slot_height(env, style, width, label);
         let bottom = area.y + area.height - ui::edge_room(style, row);
-        Some(Rect::new(
-            margin,
-            bottom.saturating_sub(height + pad),
-            width,
-            height,
+        Some(ui::button_in_slot(
+            style,
+            Rect::new(margin, bottom.saturating_sub(slot), width, slot),
         ))
     }
 

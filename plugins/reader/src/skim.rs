@@ -64,13 +64,33 @@ impl SkimScreen {
         // Four in a row where their names fit whole, else two rows of two,
         // else one below the other: a name is never cut for the room.
         let width = display.width.saturating_sub(2 * margin);
-        let labels = BUTTONS.map(|key| env.i18n.tr(key));
-        let pad = button_row.saturating_sub(ui::Segments::height(&style)) / 2;
-        let at = Rect::new(margin, 0, width, 0);
-        let cells = ui::button_cells(env, &style, at, &labels, gap);
-        let buttons_height = cells.last().map_or(0, |c| c.y + c.height);
+        let fits = |columns: u16| {
+            let room = width.saturating_sub((columns - 1) * gap) / columns;
+            style.font(env).is_none_or(|font| {
+                BUTTONS.iter().all(|key| {
+                    font.measure(style.text, env.i18n.tr(key)) + 2.0 * style.gap as f32
+                        <= f32::from(room)
+                })
+            })
+        };
+        let columns: u16 = [4, 2].into_iter().find(|&n| fits(n)).unwrap_or(1);
+        let lines = 4 / columns;
+        // Each line a touch row high, one below the other a line higher
+        // for each more line a long name takes.
+        let slots: [u16; 4] = if columns == 1 {
+            BUTTONS.map(|key| ui::button_slot_height(env, &style, width, env.i18n.tr(key)))
+        } else {
+            [button_row; 4]
+        };
+        let line_height = |line: u16| {
+            (0..columns)
+                .map(|c| slots[usize::from(line * columns + c)])
+                .max()
+                .unwrap_or(0)
+        };
+        let buttons_height = (0..lines).map(line_height).sum::<u16>() + gap * (lines - 1);
         // Its buttons keep the side margin from the bottom edge too.
-        let height = gap + row * 2 + pad + buttons_height + pad + ui::edge_room(&style, button_row);
+        let height = gap + row * 2 + buttons_height + ui::edge_room(&style, button_row);
         let region = Rect::new(
             0,
             display.height.saturating_sub(height),
@@ -78,11 +98,17 @@ impl SkimScreen {
             height,
         );
         let bar = Rect::new(margin, region.y + gap + row, width, row);
-        let buttons_y = region.y + gap + row * 2 + pad;
+        let button_width = width.saturating_sub((columns - 1) * gap) / columns;
+        let buttons_y = region.y + gap + row * 2;
         let buttons = core::array::from_fn(|i| {
-            cells.get(i).map_or_else(Rect::default, |c| {
-                Rect::new(c.x, buttons_y + c.y, c.width, c.height)
-            })
+            let (column, line) = (i as u16 % columns, i as u16 / columns);
+            let top: u16 = (0..line).map(|l| line_height(l) + gap).sum();
+            Rect::new(
+                margin + column * (button_width + gap),
+                buttons_y + top,
+                button_width,
+                line_height(line),
+            )
         });
         let mut screen = Self {
             focus: None,
@@ -252,12 +278,12 @@ impl Screen for SkimScreen {
             None,
         );
         // The buttons.
-        for (i, (rect, key)) in self.buttons.iter().zip(BUTTONS).enumerate() {
+        for (i, (slot, key)) in self.buttons.iter().zip(BUTTONS).enumerate() {
             ui::draw_button(
                 canvas,
                 env,
                 &style,
-                *rect,
+                ui::button_in_slot(&style, *slot),
                 env.i18n.tr(key),
                 false,
                 self.focus == Some(i),

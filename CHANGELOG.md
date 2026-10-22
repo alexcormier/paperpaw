@@ -38,7 +38,9 @@ change the plugin SDK.
   how far a book is read gives way where its details do not fit beside
   it; the update page scrolls its help where it does not fit even
   smaller. `paperpaw-dev visual` takes a "…" that ends a translated text
-  ("Loading…") for no shortening.
+  ("Loading…") for no shortening. Buttons one below the other sit in
+  slots a touch row high, higher only by the lines a long word takes
+  (`ui::button_slot_height`, `ui::button_in_slot`).
 - `ask::confirm` asks yes or no on the screen of the new slot
   `core.confirm` (the kernel's `ui::confirm::Confirm`, a `ui::Dialog` in
   the middle of the screen, unless a plugin binds another): the question,

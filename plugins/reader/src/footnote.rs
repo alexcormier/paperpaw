@@ -62,31 +62,46 @@ impl FootnoteScreen {
             None => (Vec::new(), row),
         };
         // The buttons' row grows with them on touch screens.
-        let button_row = style.touch_row(u32::from(row)) as u16;
+        let button_row = style.touch_row(style.control_row) as u16;
         // Its buttons keep the side margin from the bottom edge too.
         let room = ui::edge_room(&style, button_row);
-        let pad = button_row.saturating_sub(ui::Segments::height(&style)) / 2;
         // Side by side where their words fit, else one below the other.
         let labels = BUTTONS.map(|key| env.i18n.tr(key));
+        let half = display.width / 2;
+        let half_width = half.saturating_sub(margin + gap / 2);
         let inner = display.width.saturating_sub(2 * margin);
-        let buttons_height = ui::button_cells_height(env, &style, inner, &labels, gap);
-        let height =
-            gap * 3 - gap / 2 + line_height * lines.len() as u16 + buttons_height + 2 * pad + room;
+        let side_by_side = labels
+            .iter()
+            .all(|label| ui::button_slot_height(env, &style, half_width, label) <= button_row);
+        let slots = if side_by_side {
+            [button_row; 2]
+        } else {
+            labels.map(|label| ui::button_slot_height(env, &style, inner, label))
+        };
+        let buttons_height = if side_by_side {
+            button_row
+        } else {
+            slots[0] + gap + slots[1]
+        };
+        let height = gap * 3 - gap / 2 + line_height * lines.len() as u16 + buttons_height + room;
         let region = Rect::new(
             0,
             display.height.saturating_sub(height),
             display.width,
             height,
         );
-        let buttons_y = region.y + height - room - pad - buttons_height;
-        let cells = ui::button_cells(
-            env,
-            &style,
-            Rect::new(margin, buttons_y, inner, 0),
-            &labels,
-            gap,
-        );
-        let buttons = [0, 1].map(|i| cells.get(i).copied().unwrap_or_default());
+        let buttons_y = region.y + height - buttons_height - room;
+        let buttons = if side_by_side {
+            [
+                Rect::new(margin, buttons_y, half_width, button_row),
+                Rect::new(half + gap / 2, buttons_y, half_width, button_row),
+            ]
+        } else {
+            [
+                Rect::new(margin, buttons_y, inner, slots[0]),
+                Rect::new(margin, buttons_y + slots[0] + gap, inner, slots[1]),
+            ]
+        };
         Self {
             focus: (!env.device.input.touch).then_some(0),
             style,
@@ -133,13 +148,13 @@ impl Screen for FootnoteScreen {
             ui::draw_label(canvas, &font, style.text, x, area, line, Color::BLACK);
             y += line_height;
         }
-        for (i, (rect, label)) in self.buttons.iter().zip(BUTTONS).enumerate() {
+        for (i, (slot, label)) in self.buttons.iter().zip(BUTTONS).enumerate() {
             let label = env.i18n.tr(label);
             ui::draw_button(
                 canvas,
                 env,
                 &style,
-                *rect,
+                ui::button_in_slot(&style, *slot),
                 label,
                 false,
                 self.focus == Some(i),

@@ -3684,6 +3684,8 @@ pub fn paperpaw_sdk::ui::button_cells_height(&paperpaw_sdk::Env<'_>, &paperpaw_s
 pub fn paperpaw_sdk::ui::button_height(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> u16
 pub fn paperpaw_sdk::ui::button_height_for(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str) -> u16
 pub fn paperpaw_sdk::ui::button_hints_height(&paperpaw_sdk::Env<'_>) -> u16
+pub fn paperpaw_sdk::ui::button_in_slot(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::button_slot_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str) -> u16
 pub fn paperpaw_sdk::ui::button_width(&paperpaw_sdk::ui::UiStyle, f32) -> f32
 pub fn paperpaw_sdk::ui::card_inside(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::look::Frame) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::check_rect(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect

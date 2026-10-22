@@ -413,9 +413,38 @@ pub fn draw_value_row(
     if let Some(lines) = below {
         return draw_lines(canvas, lines);
     }
-    // A row too short for that (a list's): both smaller, from the small
-    // size down to seven tenths of it (at the largest text still larger
-    // than text at the default), on as many lines as the row holds.
+    // Still too long: the title on two lines in the small size where the
+    // row holds them, the value as it is, rather than shortened.
+    let lines = font.wrap(style.small, title, room.max(1.0));
+    let line = font.line_metrics(style.small).line_height as u16;
+    if title_text != title && lines.len() == 2 && 2 * line <= rect.height {
+        draw_label(
+            canvas,
+            &font,
+            style.text,
+            value_at(value_width),
+            rect,
+            &shown,
+            color,
+        );
+        let top = rect.y + (rect.height - 2 * line) / 2;
+        for (i, range) in lines.into_iter().enumerate() {
+            let at = Rect::new(rect.x, top + i as u16 * line, rect.width, line);
+            draw_label(
+                canvas,
+                &font,
+                style.small,
+                title_x,
+                at,
+                &title[range],
+                color,
+            );
+        }
+        return;
+    }
+    // A row too short even for that (a list's at the largest sizes, whose
+    // fonts come in steps): both smaller, from the small size down to
+    // seven tenths of it, on as many lines as the row holds.
     if (title_text != title || shown != value)
         && let Some(size) = crate::widgets::largest_size(style.small, style.small * 0.7, |size| {
             ValueLines::sized(&font, style, size, rect.width, title, value).height() <= rect.height
@@ -433,26 +462,6 @@ pub fn draw_value_row(
         &shown,
         color,
     );
-    // Still too long: on two lines in the small size where the row holds
-    // them, rather than shortened.
-    let lines = font.wrap(style.small, title, room.max(1.0));
-    let line = font.line_metrics(style.small).line_height as u16;
-    if title_text != title && lines.len() == 2 && 2 * line <= rect.height {
-        let top = rect.y + (rect.height - 2 * line) / 2;
-        for (i, range) in lines.into_iter().enumerate() {
-            let at = Rect::new(rect.x, top + i as u16 * line, rect.width, line);
-            draw_label(
-                canvas,
-                &font,
-                style.small,
-                title_x,
-                at,
-                &title[range],
-                color,
-            );
-        }
-        return;
-    }
     draw_label(canvas, &font, style.text, title_x, rect, &title_text, color);
 }
 

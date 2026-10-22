@@ -223,6 +223,25 @@ pub fn button_height_for(env: &Env<'_>, style: &UiStyle, width: u16, label: &str
     base + line * (lines.len().max(1) as u16 - 1)
 }
 
+/// The height of a button's slot in a column of buttons `width` wide, one
+/// below the other: a row that can be touched ([`UiStyle::touch_row`]),
+/// higher only by the lines more a long `label` takes
+/// ([`button_height_for`]). [`button_in_slot`] places the button in it.
+pub fn button_slot_height(env: &Env<'_>, style: &UiStyle, width: u16, label: &str) -> u16 {
+    let row = style.touch_row(style.control_row) as u16;
+    row + button_height_for(env, style, width, label).saturating_sub(Segments::height(style))
+}
+
+/// The button in `slot` ([`button_slot_height`] high): as high as a
+/// button in a row that can be touched, and as much higher as the slot
+/// is, centred in the row's room.
+pub fn button_in_slot(style: &UiStyle, slot: Rect) -> Rect {
+    let row = (style.touch_row(style.control_row) as u16).min(slot.height);
+    let base = Segments::height(style).min(row);
+    let extra = slot.height - row;
+    Rect::new(slot.x, slot.y + (row - base) / 2, slot.width, base + extra)
+}
+
 /// A button's word, centred: on more lines where it is too long for one
 /// and the button is high enough ([`button_height_for`]), else shortened
 /// to fit.
