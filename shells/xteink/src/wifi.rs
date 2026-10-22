@@ -26,7 +26,7 @@ use esp_radio::wifi::scan::ScanConfig;
 use esp_radio::wifi::sta::{ScanMethod, StationConfig};
 use esp_radio::wifi::{
     AuthenticationMethod, AuthenticationMethodConfig, Config, ConnectionError, ControllerConfig,
-    DisconnectReason, WifiController,
+    DisconnectReason, PowerSaveMode, WifiController,
 };
 use paperpaw_core::{JoinFailure, WifiCommand, WifiEvent, WifiNetwork, WifiState};
 
@@ -199,6 +199,11 @@ impl Radio {
         if let Err(e) = controller.set_config(&Config::Station(StationConfig::default())) {
             log::warn!("wifi: station: {e:?}");
             return;
+        }
+        // Between the network's beacons the radio sleeps: it listens all
+        // the time without (ADR 0025).
+        if let Err(e) = controller.set_power_saving(PowerSaveMode::Minimum) {
+            log::warn!("wifi: power saving: {e:?}");
         }
         mark(at::RADIO_STARTED);
         log::info!("wifi: on");

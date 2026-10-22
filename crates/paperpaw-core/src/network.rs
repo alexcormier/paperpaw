@@ -141,6 +141,15 @@ impl Kernel {
         self.io.network_waiting = None;
     }
 
+    /// Whether work is under way that going to sleep waits for a while
+    /// (ADR 0025): network work waiting for the network or going on (a
+    /// position pushed on suspending), a job not done. A shell that cuts
+    /// the power on sleep keeps going until it is done or a while has
+    /// passed, then sleeps anyway.
+    pub fn holds_sleep(&self) -> bool {
+        self.network_work_waiting() || self.io.http.busy() || self.works.running()
+    }
+
     /// Whether plugins have sockets or broadcasts open, e.g. to keep
     /// polling for what they bring.
     pub fn sockets_open(&self) -> bool {

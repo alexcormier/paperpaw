@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- X4 and X4 Pro save power (ADR 0025): the radio sleeps between the
+  network's beacons while connected; on battery the processor sleeps
+  while the panel refreshes instead of watching it, and reads the
+  buttons half as often in Saving; the panel's power goes off after a
+  refresh once nothing follows (soon on the X4, after 30 s on the X4
+  Pro, whose next refresh takes longer then); going to sleep lets work
+  under way finish first, 15 s at the longest (`Kernel::holds_sleep`).
+
 - In Offline mode the store, an OPDS catalog, Calibre and Wi-Fi
   transfer offer to go online once, inline ("Offline mode. Go online for
   it?" with *Go online* and *Not now*), instead of failing. SDK:
