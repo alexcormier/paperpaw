@@ -224,7 +224,11 @@ impl PhoneScreen {
         if cx.env().wifi.is_some_and(|w| w.state.is_hosting()) {
             cx.command(Command::Wifi(WifiCommand::Leave));
         }
-        self.policy.borrow_mut().manual = self.manual;
+        let mut policy = self.policy.borrow_mut();
+        policy.manual = self.manual;
+        policy.phone = false;
+        policy.goal = crate::policy::Goal::Nothing;
+        drop(policy);
         cx.command(Command::Back);
     }
 
@@ -420,8 +424,13 @@ impl Screen for PhoneScreen {
             Self::redraw(cx);
             return;
         }
-        // On while this screen is open, whatever else wants it.
-        self.policy.borrow_mut().manual = true;
+        // On while this screen is open, whatever else wants it; this
+        // screen says what it does.
+        let mut policy = self.policy.borrow_mut();
+        policy.manual = true;
+        policy.phone = true;
+        policy.goal = crate::policy::Goal::Nothing;
+        drop(policy);
         let on = cx.env().wifi.is_some_and(|w| w.state.is_on());
         if !on {
             cx.command(Command::Wifi(WifiCommand::On));

@@ -286,11 +286,11 @@ impl Plugin for Wifi {
             let Some(wifi) = env.wifi else {
                 return;
             };
-            // Not while the own network is open (the setup with a phone).
-            if !env.settings.read(&ON_DEMAND) || wifi.state.is_hosting() {
+            let mut policy = p.borrow_mut();
+            // Not during the setup with a phone.
+            if !env.settings.read(&ON_DEMAND) || policy.phone {
                 return;
             }
-            let mut policy = p.borrow_mut();
             policy.asked_at = Some(env.now);
             let known = wifi::known(env.secrets.iter());
             if known.is_empty() {
@@ -317,6 +317,10 @@ impl Plugin for Wifi {
                     policy.pending = Some((pending, password));
                 }
             }
+            // The setup with a phone says what the radio does.
+            if policy.phone {
+                return;
+            }
             wifi_commands(out, policy.changed(&wifi.state));
             // On and in no network while charging keeps it on (e.g.
             // switched on again, or a network left): join one.
@@ -341,6 +345,9 @@ impl Plugin for Wifi {
             };
             let known = wifi::known(env.secrets.iter());
             let mut policy = p.borrow_mut();
+            if policy.phone {
+                return;
+            }
             match policy.scanned(&wifi.networks, &known) {
                 Some(commands) => wifi_commands(out, commands),
                 None => {
@@ -363,6 +370,11 @@ impl Plugin for Wifi {
             let (ssid, reason) = (failed.ssid.as_str(), failed.reason);
             let known = wifi::known(env.secrets.iter());
             let mut policy = p.borrow_mut();
+            // The setup with a phone says it, and opens its network again.
+            if policy.phone {
+                policy.goal = Goal::Nothing;
+                return;
+            }
             let chosen = matches!(policy.goal, Goal::Chosen { .. });
             match policy.failed(ssid, &wifi.networks, &known) {
                 Some(commands) if !commands.is_empty() => wifi_commands(out, commands),
@@ -438,7 +450,11 @@ impl Plugin for Wifi {
                 let mut policy = p.borrow_mut();
                 let current = params.get(GENERATION).and_then(|g| g.parse::<u32>().ok())
                     == Some(policy.generation);
-                if !current || wifi.state != WifiState::On || policy.goal != Goal::Nothing {
+                if !current
+                    || wifi.state != WifiState::On
+                    || policy.goal != Goal::Nothing
+                    || policy.phone
+                {
                     return;
                 }
                 if (policy.still_wanted(wifi, env.now) || charging_keeps_it(env))
@@ -466,7 +482,7 @@ impl Plugin for Wifi {
                     // The status changes with every percent of the
                     // battery: only a change of charging counts.
                     let keeps = charging_keeps_it(env);
-                    if keeps == policy.charging_kept && !started {
+                    if (keeps == policy.charging_kept && !started) || policy.phone {
                         return;
                     }
                     policy.charging_kept = keeps;
