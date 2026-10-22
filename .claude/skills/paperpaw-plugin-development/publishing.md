@@ -24,12 +24,12 @@ You MUST NOT:
   chat, a file in a repository, an issue, a pull request, a log, a form
   field or a command line. Refer to it only by its path, as `--key
   <path>`. If its contents appear anywhere they should not, stop and
-  tell the user that the key is compromised (section 10).
+  tell the user that the key is compromised (section 9).
 - **Commit the key.** Before every commit, check that no `*.key` file
   and no 64-digit secret is staged (`git status`, `git diff --cached`).
 - **Act for the user where only they can or should**: signing in to
   paperpaw.org (it takes the link in their mail; you cannot), sending a
-  submission to the moderators, opening a pull request, pushing a branch
+  submission to the moderators, pushing a branch
   or tag, creating a release, setting a repository secret. Do these, or
   have the user do them, only after the user's explicit yes for that
   step, and show what will be sent first.
@@ -39,9 +39,9 @@ You MUST NOT:
   `sha256sum`, and take names from this file or the site's guide.
 - **Get around a check.** Never change an `abi` or `sha256` to fit a
   file, strip or forge a signature, edit a `.ppn` by hand, or put one
-  reader's file in another reader's field. Fix the cause (section 9).
+  reader's file in another reader's field. Fix the cause (section 8).
 - **Sign with another key for an update.** The form refuses it; a key
-  changes only through the site's contact address (section 10).
+  changes only through the site's contact address (section 9).
 - **Publish what the user may not publish**: work under a licence that
   forbids it, someone else's plugin as theirs, secrets (passwords, API
   tokens) inside the plugin's files or code. The site's rules for
@@ -50,8 +50,8 @@ You MUST NOT:
   plugin is published, that it is "Verified". Report what the site or
   the tool said, word for word.
 
-Work through sections 1 to 8 in order, run every check yourself where
-you can, and end with the checklist in section 12.
+Work through sections 1 to 7 in order, run every check yourself where
+you can, and end with the checklist in section 11.
 
 ## 1. What gets published
 
@@ -71,19 +71,14 @@ plugin's source and shows it file by file at
 not match its source**. The public version log (`/log`) lists every
 version published or taken down.
 
-## 2. The two ways in
+## 2. The way in
 
-Both run the same checker with the same check codes.
-
-1. **The upload form** at `https://paperpaw.org/submit`, the main way:
-   the author signs in by a link sent by e-mail, uploads, reads the
-   checks, completes the entry, looks at the preview and sends it to
-   the moderators. They decide; the author gets a mail either way.
-2. **A pull request** to `https://github.com/hthoene/paperpaw.org`,
-   adding `catalogue/<id>.toml`, for developers. A maintainer reviews
-   and merges it.
-
-Without a preference of the user's, use the form.
+**The upload form** at `https://paperpaw.org/submit` is the only way:
+the author signs in by a link sent by e-mail, uploads, reads the
+checks, completes the entry, looks at the preview and sends it to the
+moderators. They decide; the author gets a mail either way. The
+`catalogue/` folder of the paperpaw.org repository holds PaperPaw's own
+plugins only; it is not a way for others to publish.
 
 ## 3. Gather what the listing needs
 
@@ -94,7 +89,7 @@ Ask the user for each, and suggest values from the plugin where you can
   starting or ending with a hyphen. The same in `plugin.ini`, the
   folder's name, the code's manifest and the start of every id in the
   code (`clock.open`). It must be free: not a plugin of the site's
-  catalogue, not another author's, not one taken down (look at
+  own, not another author's, not one taken down (look at
   `https://paperpaw.org/api/v1/plugins.json`). It cannot change later.
 - **name** (at most 60), **summary** (one sentence, at most 160),
   **description** (optional, at most 2000).
@@ -111,7 +106,7 @@ Ask the user for each, and suggest values from the plugin where you can
   the readers it has builds for.
 - **translations** of name and summary, and **screenshots** (up to four,
   of the plugin at work, with what each shows).
-- The author's name is the account's (form) or `author` (pull request).
+- The author's name is the account's.
 
 ## 4. Prepare the plugin's folder
 
@@ -249,8 +244,8 @@ the check `upload` refuses.
 
 A code plugin from the sample: `build.sh` (and the CI job) writes
 `dist/<id>-<version>-upload.zip`, the folder with `store/`, for the
-form, and `dist/<id>-<version>.zip`, without `store/`, for the
-catalogue's `url`.
+form, and `dist/<id>-<version>.zip`, without `store/`: what readers
+install.
 
 ## 5b. A code plugin: key, build, sign, source
 
@@ -269,7 +264,6 @@ files into the plugin's own repository:
 | `build.sh` | builds both readers, packs, signs, zips, writes `dist/` |
 | `.github/workflows/build.yml` | runs `build.sh` on every tag `v*` and attaches the files to the tag's release |
 | `.gitignore` | keeps `target/`, `dist/` and `*.key` out |
-| `catalogue.toml` | the entry for the pull request way |
 
 Set the binary's name in the workflow's `PLUGIN` (and `[source] bin`
 when it differs from the package's name). The plugin's own code stays a
@@ -297,7 +291,7 @@ fingerprint: 3F1C 22A0 9B7D 0E15
   name; without it, no update installs without a warning.
 - The public key (64 digits) is what the store shows as the author's
   and readers remember at the first install. The form reads it from the
-  builds; the catalogue names it in `author_key`.
+  builds.
 - `paperpaw-sign key` never overwrites a file (`error: <file> exists: a
   key is never overwritten`). An author with a key uses it for every
   plugin and every update.
@@ -331,7 +325,7 @@ compiler; each PaperPaw release lists the fingerprints in its files
   firmware of its own: give it a build only with the fingerprint its
   *About* shows.
 - After every release until 1.0, build again with its SDK and compilers
-  and publish a new version (section 8).
+  and publish a new version (section 7).
 
 ### So the rebuild matches
 
@@ -404,11 +398,10 @@ It attaches to the tag's GitHub release (and to its artifact `plugin`):
 
 ```text
 dist/clock-1.0.0-upload.zip      the folder with store/, for the form
-dist/clock-1.0.0.zip             the folder without store/, for the catalogue's url
+dist/clock-1.0.0.zip             the folder without store/, as readers install it
 dist/clock-1.0.0-x4.ppn          the X4's build, signed
 dist/clock-1.0.0-x4-pro.ppn      the X4 Pro's build, signed
 dist/SHA256SUMS                  the SHA-256 of each
-dist/catalogue-versions.toml     the [[versions]] block for the catalogue
 ```
 
 Or on one's own computer (Linux or macOS with both toolchains), the same:
@@ -489,7 +482,7 @@ git archive --format=zip -o clock-1.0.0-source.zip v1.0.0
    The site makes a draft only the author sees, at `/submit/<n>`.
 3. **Read the checks.** Each names its code and says Passed, Warning or
    Failed with a sentence; what failed comes first. Ask the user for the
-   sentences, then fix each failure (section 9) and upload again, or
+   sentences, then fix each failure (section 8) and upload again, or
    save the entry again.
 4. **Complete the entry** on `/submit/<n>`: what `plugin.ini` and
    `store.ini` named is filled in. The form's fields: `name`, `summary`,
@@ -514,94 +507,7 @@ git archive --format=zip -o clock-1.0.0-source.zip v1.0.0
 Limits: ZIP 20 MB (40 MB unpacked), each build 4 MB, source 50 MB, one
 upload 100 MB, 10 submissions in 24 hours.
 
-## 7. Submit by pull request
-
-1. Fork and clone `https://github.com/hthoene/paperpaw.org` (with the
-   user's yes for the fork).
-2. Add `catalogue/<id>.toml` (example below; for a code plugin start
-   from `samples/hello-native/catalogue.toml` and the release's
-   `dist/catalogue-versions.toml`). Unknown keys are refused.
-3. The folder: at `catalogue/packages/<id>/` (with `plugin.ini` at its
-   top, without `store/`), named in `folder = "packages/<id>"`; or a ZIP
-   of it elsewhere, `url` and `sha256`. Screenshots at
-   `catalogue/screenshots/<id>/<file>`.
-4. Code plugins: each build's `device`, `abi` (its fingerprint), and
-   `url` + `sha256` or `file` (a `.ppn` in the repository, relative to
-   `catalogue/`); `devices` names every reader with a build;
-   `author_key` the key all builds are signed with; `[versions.source]`
-   the exact source: `repository` and `revision`, or `archive` and
-   `sha256`, with `path` and `bin` when needed.
-5. Check it, at the top of the clone (needs Rust and the network):
-
-   ```sh
-   git worktree add ../paperpaw.org-main main
-   cargo run -- check --base ../paperpaw.org-main/catalogue
-   ```
-
-   A broken rule stops it at once with `paperpaw-website: <id>.toml:
-   <what is wrong>`. Otherwise it prints each failure as `check: <id>
-   <version>: <code>: <what is wrong>`, each warning as `check: warning:
-   <id> <version>: <code>: <what is wrong>`, then `check: <n> plugins,
-   <m> packages ready, <k> problems, <w> warnings`, and ends with 0 when
-   nothing failed.
-6. Commit only the plugin's files, push the branch and open the pull
-   request, each with the user's yes:
-
-   ```sh
-   git switch -c add-night-owl
-   git add catalogue/night-owl.toml catalogue/packages/night-owl catalogue/screenshots/night-owl
-   git commit -m "catalogue: add night-owl 1.0.0"
-   git push -u origin add-night-owl
-   gh pr create --repo hthoene/paperpaw.org --title "catalogue: add night-owl 1.0.0" --body "A new plugin: <one sentence>."
-   ```
-
-A data plugin's entry:
-
-```toml
-id = "night-owl"
-name = "Night owl"
-summary = "Dark headers and roomy rows for reading at night."
-description = "A theme without code: new defaults for the appearance settings."
-kind = "data"
-author = "Your Name"
-author_url = "https://your-name.example"
-licence = "CC0-1.0"
-source = "https://github.com/your-name/night-owl"
-group = "look"
-tags = ["theme", "dark"]
-devices = ["android", "x4-pro"]
-screenshots = [
-  { file = "home.png", alt = "The home screen with dark headers, on a Boox Go 7." },
-]
-
-[i18n.de]
-name = "Nachteule"
-summary = "Dunkle Kopfzeilen und großzügige Zeilen zum Lesen in der Nacht."
-
-[[versions]]
-version = "1.0.0"
-sdk = "0.5"
-date = "2026-10-20"
-folder = "packages/night-owl"
-```
-
-A code plugin's entry adds `author_key`, `devices` (every reader with a
-build), and in each version `[versions.source]` and one
-`[[versions.builds]]` per reader:
-
-```toml
-[versions.source]
-repository = "https://codeberg.org/your-name/clock"
-revision = "v1.0.0"
-
-[[versions.builds]]
-device = "x4"
-abi = "<16 hexadecimal digits: the fingerprint line of paperpaw-sign plugin>"
-url = "https://codeberg.org/your-name/clock/releases/download/v1.0.0/clock-1.0.0-x4.ppn"
-sha256 = "<64 hexadecimal digits: sha256sum clock-1.0.0-x4.ppn>"
-```
-
-## 8. Updates
+## 7. Updates
 
 1. Raise the version in `plugin.ini` and in the code's manifest (and
    `Cargo.toml`): higher than the last. A number once published, also
@@ -612,14 +518,13 @@ sha256 = "<64 hexadecimal digits: sha256sum clock-1.0.0-x4.ppn>"
    published the plugin. What the upload leaves out is taken from the
    last published version (summary, description, group, licence,
    source, sdk, tags, translations, screenshots, `path`, `bin`).
-   Pull request: a new `[[versions]]` block beside the ones before.
 4. An update goes live at once only when the store's admins allow it,
    it is signed by the same key and every check passed without a
    warning; otherwise it waits for the moderators.
 
-## 9. Checks, messages and how to fix them
+## 8. Checks, messages and how to fix them
 
-### The site's checks (form and pull request)
+### The site's checks
 
 The codes stay the same; the sentences are the site's own words and may
 change, so go by the code.
@@ -628,13 +533,13 @@ change, so go by the code.
 |---|---|---|
 | `upload` | the files can be read: a ZIP of at most 20 MB (40 MB unpacked), no name leading outside the folder, builds at most 4 MB, source at most 50 MB; warns when it left out files that are no part of a plugin | "not a ZIP", "larger than 20 MB", "a name outside the folder" (`..` or a backslash): zip again as in section 5a. "Left out what is no part of a plugin: .DS_Store" (warning): zip without them |
 | `manifest` | `plugin.ini` at the top or in one folder at the top, with `id`, `name`, `version` | "The ZIP has no plugin.ini at its top": zip the plugin's folder itself, not the folder around it. "plugin.ini names no id": add the key |
-| `id` | the id is free or the author's | "belongs to another author", "is a plugin of the catalogue here", "was taken down and cannot be used again": choose another id in `plugin.ini` and the code |
+| `id` | the id is free or the author's | "belongs to another author", "is one of PaperPaw's own plugins", "was taken down and cannot be used again": choose another id in `plugin.ini` and the code |
 | `version` | three numbers, not published before, not older than the newest | "was published before; a new version needs a new number", "is older than": raise `version` |
 | `metadata` | the entry: id's letters, name, summary, description, licence, group, tags, languages, screenshots' names and alt, `source` https, `sdk` like `0.5`; for code its readers, key and source | fix the field the sentence names, in the form or `store.ini`. "sdk is not like 0.3": fill in `sdk`. "source: the revision is a tag or a commit": fill in `source-revision` |
 | `package` | the folder readers install: allowed file types, names, at most 64 files (63 for code), `plugin.ini`'s id and version, `formats`, translations that parse | "only ini, css, ttf, otf, ttc, ppfp, txt, md, png files belong in a data plugin": take that file out. "names are letters, digits, dots, hyphens and underscores": rename. "more than 63 files": fewer. A translation that does not parse names its line |
 | `build.x4`, `build.x4-pro`, `build.x4-classic` | each build: a plugin file of format 1, that reader's chip, as long as its header says, digest whole, signed | "The file is not signed": sign it. "built for chip 5, x4-pro has chip 9": the X4's file in the X4 Pro's field. "not a PaperPaw plugin file": that is the linked program; make the `.ppn` with `paperpaw-sign pack`. "Changed or damaged": build and pack again. "The file of this build is missing": upload it again |
-| `signature` | all builds signed by one key (the catalogue's `author_key`) | "signed by 2 different keys": sign every build with the one key file. "another key than the entry names": sign with the key in `author_key`, or correct it |
-| `key` | the key is that of the versions before | "Earlier versions are signed by the key": sign with the earlier key; lost, section 10 |
+| `signature` | all builds signed by one key | "signed by 2 different keys": sign every build with the one key file. "another key than the entry names": sign with the key in `author_key`, or correct it |
+| `key` | the key is that of the versions before | "Earlier versions are signed by the key": sign with the earlier key; lost, section 9 |
 | `source` | fetched at the revision or uploaded; at most 50 MB; `Cargo.toml` at the top or at `path`; warns without `Cargo.lock` | "name a repository and a revision": fill in `[source]` or the fields. "could not be fetched from": push the tag, make the repository public, check the address. "has no Cargo.toml at its top": set `path`. "no Cargo.lock": commit it and tag again |
 | `screenshots` | at most four, PNG, JPEG or WebP, 500 KB each; warns when there are none | "at most 500 KB": smaller (fewer colours, or WebP). "is a PNG, JPEG or WebP picture": convert it. "No screenshots" (warning): add one |
 
@@ -681,7 +586,7 @@ possible. "Rebuilt, but does not match its source": build with
 `build.sh` (or the CI job) from the tagged commit on Linux or macOS,
 check it with two folders (section 5b), and publish a new version.
 
-## 10. A lost or leaked key
+## 9. A lost or leaked key
 
 The form takes no other key than the earlier versions' (check `key`).
 
@@ -692,7 +597,7 @@ The form takes no other key than the earlier versions' (check `key`).
   remove the old secret from the CI (`PAPERPAW_PLUGIN_KEY`) and from the
   repository's history, and tell the user plainly.
 
-## 11. What readers see
+## 10. What readers see
 
 The plugin's page on the site and in each reader's store: whether it
 has code (and, before a reader installs the first code plugin, what
@@ -702,7 +607,7 @@ another key is warned and decides. `/log` and
 `/api/v1/log.json?after=<n>` list every version with the SHA-256 of its
 package and builds, its key and its source's revision.
 
-## 12. Final checklist
+## 11. Final checklist
 
 - [ ] The id is valid, free, and the same in `plugin.ini`, the folder's
       name and the code.
@@ -734,7 +639,7 @@ package and builds, its key and its source's revision.
 - [ ] The user has seen the files and the entry, and says yes to each
       step that sends something.
 
-## 13. Not settled yet
+## 12. Not settled yet
 
 - Whether the X4 Pro and the X4 Classic share a fingerprint, and
   rebuilds for the X4 Classic, are open.

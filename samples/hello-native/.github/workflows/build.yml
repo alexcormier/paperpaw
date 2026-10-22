@@ -2,8 +2,8 @@
 # folder's files to start one): on every tag it builds the plugin for the
 # Xteink X4 and the X4 Pro with ./build.sh, packs both files and signs
 # them with the author's key, and attaches them, the plugin's folder as
-# ZIPs, their SHA-256 sums and a catalogue snippet to the tag's release
-# for the plugin library. build.sh writes paths as the same in any folder,
+# ZIPs and their SHA-256 sums to the tag's release, for the upload form
+# of the plugin library. build.sh writes paths as the same in any folder,
 # as the library's rebuild does, so the files can be verified against
 # their source. Nothing here runs in PaperPaw's own repository.
 #
@@ -76,39 +76,6 @@ jobs:
           for ppn in dist/*.ppn; do
             if [ -n "$PAPERPAW_PLUGIN_KEY" ]; then paperpaw-sign check-plugin "$ppn"; else paperpaw-sign plugin "$ppn"; fi
           done
-      - name: Catalogue snippet
-        if: startsWith(github.ref, 'refs/tags/')
-        run: |
-          # The [[versions]] of the plugin's catalogue entry for this
-          # release, the files as the release below serves them.
-          id=$(sed -n 's/^id *= *//p' plugin/plugin.ini | tr -d '\r' | head -n 1)
-          version="${GITHUB_REF_NAME#v}"
-          base="https://github.com/$GITHUB_REPOSITORY/releases/download/$GITHUB_REF_NAME"
-          sum() { sed -n "s/^\([0-9a-f]\{64\}\)  $1\$/\1/p" dist/SHA256SUMS; }
-          abi() { paperpaw-sign plugin "dist/$1" | sed -n 's/^fingerprint: *//p'; }
-          {
-            echo "[[versions]]"
-            echo "version = \"$version\""
-            echo "sdk = \"${PAPERPAW%.*}\""
-            echo "date = \"$(date -u +%Y-%m-%d)\""
-            echo "url = \"$base/$id-$version.zip\""
-            echo "sha256 = \"$(sum "$id-$version.zip")\""
-            echo
-            echo "[versions.source]"
-            echo "repository = \"https://github.com/$GITHUB_REPOSITORY\""
-            echo "revision = \"$GITHUB_REF_NAME\""
-            echo "bin = \"$PLUGIN\""
-            for device in x4 x4-pro; do
-              file="$id-$version-$device.ppn"
-              echo
-              echo "[[versions.builds]]"
-              echo "device = \"$device\""
-              echo "abi = \"$(abi "$file")\""
-              echo "url = \"$base/$file\""
-              echo "sha256 = \"$(sum "$file")\""
-            done
-          } > dist/catalogue-versions.toml
-          cat dist/catalogue-versions.toml
       - uses: actions/upload-artifact@v4
         with:
           name: plugin

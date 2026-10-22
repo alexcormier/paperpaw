@@ -67,7 +67,7 @@ mkdir dist
 paperpaw-sign pack "target/riscv32imc-unknown-none-elf/release/$bin" "dist/$id-$version-x4.ppn" "${key[@]}"
 paperpaw-sign pack "target/xtensa-esp32s3-none-elf/release/$bin" "dist/$id-$version-x4-pro.ppn" "${key[@]}"
 # The plugin's folder, plugin.ini at the top, without hidden files: what
-# readers install (for the catalogue's url), and with store/ for the
+# readers install, and with store/ for the
 # upload form.
 (cd plugin && zip -q -X -r -D "../dist/$id-$version.zip" . -x '.*' -x '*/.*' -x 'store/*')
 if [[ -d plugin/store ]]; then

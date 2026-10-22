@@ -10,8 +10,8 @@
 - <id>-<version>.zip: the plugin's folder (its plugin.ini; the code comes
   as each reader's file), as readers install it;
 - catalogue/<id>.toml: its entry in the plugin library, as the website's
-  catalogue reads it (`catalogue/<id>.toml`, ADR 0023; see
-  samples/hello-native/catalogue.toml), with this version's builds, each
+  catalogue reads it (`catalogue/<id>.toml`, ADR 0023), with this
+  version's builds, each
   file named by its address under <base-url> (the release's downloads)
   and its SHA-256;
 - SHA256SUMS of the ZIPs and the plugin files.
