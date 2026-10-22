@@ -325,8 +325,9 @@ impl Plugin for Wifi {
                 return;
             };
             let mut policy = p.borrow_mut();
-            // Not during the setup with a phone.
-            if !env.settings.read(&ON_DEMAND) || policy.phone {
+            // Not during the setup with a phone, nor while the own network
+            // is open (a transfer without a router).
+            if !env.settings.read(&ON_DEMAND) || policy.phone || wifi.state.is_hosting() {
                 return;
             }
             policy.asked_at = Some(env.now);
@@ -355,8 +356,9 @@ impl Plugin for Wifi {
                     policy.pending = Some((pending, password));
                 }
             }
-            // The setup with a phone says what the radio does.
-            if policy.phone {
+            // The setup with a phone says what the radio does, as does
+            // the plugin that opened the own network.
+            if policy.phone || wifi.state.is_hosting() {
                 return;
             }
             wifi_commands(out, policy.changed(&wifi.state));
@@ -523,7 +525,10 @@ impl Plugin for Wifi {
                     // The status changes with every percent of the
                     // battery: only a change of charging counts.
                     let keeps = charging_keeps_it(env);
-                    if (keeps == policy.charging_kept && !started) || policy.phone {
+                    if (keeps == policy.charging_kept && !started)
+                        || policy.phone
+                        || wifi.state.is_hosting()
+                    {
                         return;
                     }
                     policy.charging_kept = keeps;

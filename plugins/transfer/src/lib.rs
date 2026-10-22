@@ -50,6 +50,9 @@ const PHONE_SCREEN: Id = Id::new_static("transfer.phone");
 
 /// The port asked for; the next free one is taken if it is in use.
 pub(crate) const PORT: u16 = 8080;
+/// Without a request this long, the reader's own network closes (and
+/// the screen with it): it is not left open by mistake.
+const OWN_IDLE_MS: u64 = 10 * 60 * 1000;
 
 /// Lines of the hint below the code, at most.
 const HINT_LINES: usize = 5;
@@ -108,10 +111,22 @@ enum State {
     NoNetwork,
 }
 
+/// The reader's own network, for a transfer without a router: its name
+/// and password, and the code to join it.
+struct OwnNetwork {
+    ssid: String,
+    password: String,
+    qr: Option<QrCode>,
+}
+
 struct TransferScreen {
     style: UiStyle,
     header: ui::Header,
     state: State,
+    /// Without a router: the reader's own network (once chosen), and when
+    /// a request came last.
+    own: Option<OwnNetwork>,
+    active: paperpaw_sdk::Instant,
     /// The key in the address, drawn once the server runs.
     guard: Option<Guard>,
     /// The web page with its texts.
@@ -128,6 +143,8 @@ impl TransferScreen {
             header: ui::Header::new(env, &style, true),
             style,
             state: State::Starting,
+            own: None,
+            active: env.now,
             guard: None,
             page: page(env),
             last: None,
@@ -138,6 +155,68 @@ impl TransferScreen {
     fn redraw(&self, cx: &mut Cx<'_, '_>) {
         cx.request_redraw();
         cx.request_refresh(RefreshMode::Partial);
+    }
+
+    /// The *Without a router* button at the bottom: where PaperPaw runs
+    /// Wi-Fi, before it was chosen.
+    fn own_button(&self, env: &Env<'_>) -> Option<Rect> {
+        if env.wifi.is_none() || self.own.is_some() || !env.random.available() {
+            return None;
+        }
+        let area = self.content(env);
+        let style = &self.style;
+        let row = style.touch_row(style.row) as u16;
+        let height = ui::button_height(style, Rect::new(0, 0, area.width, row));
+        let margin = style.margin as u16;
+        let bottom = area.y + area.height - ui::edge_room(style, row);
+        Some(Rect::new(
+            margin,
+            bottom - row + (row - height) / 2,
+            area.width.saturating_sub(2 * margin),
+            height,
+        ))
+    }
+
+    /// Opens the reader's own network and serves the page there: for a
+    /// transfer where there is no router (or the computer is in another
+    /// network).
+    fn without_router(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        let Some((id, password)) = env.random.token(4).zip(env.random.token(10)) else {
+            return;
+        };
+        let ssid = format!("PaperPaw-{id}");
+        let qr = QrCode::new(format!("WIFI:T:WPA;S:{ssid};P:{password};;").as_bytes());
+        cx.command(Command::StopServing(SERVER));
+        if !env.wifi.is_some_and(|w| w.state.is_on()) {
+            cx.command(Command::Wifi(paperpaw_sdk::wifi::WifiCommand::On));
+        }
+        cx.command(Command::Wifi(paperpaw_sdk::wifi::WifiCommand::Host {
+            ssid: ssid.clone(),
+            password: password.clone(),
+        }));
+        self.own = Some(OwnNetwork { ssid, password, qr });
+        self.guard = None;
+        self.state = State::Starting;
+        self.touched(cx);
+        self.redraw(cx);
+    }
+
+    /// A request came (or the own network opened): the idle time counts
+    /// from now.
+    fn touched(&mut self, cx: &mut Cx<'_, '_>) {
+        self.active = cx.env().now;
+        if self.own.is_some() {
+            cx.wake_at(self.active.add_millis(OWN_IDLE_MS));
+        }
+    }
+
+    /// Closes the screen, and the reader's own network if it is open.
+    fn close(&mut self, cx: &mut Cx<'_, '_>) {
+        if self.own.is_some() && cx.env().wifi.is_some_and(|w| w.state.is_hosting()) {
+            cx.command(Command::Wifi(paperpaw_sdk::wifi::WifiCommand::Leave));
+        }
+        cx.command(Command::Back);
     }
 
     /// The area below the header.
@@ -187,6 +266,7 @@ impl TransferScreen {
                 body_file,
                 ..
             } => {
+                self.touched(cx);
                 let Some(guard) = &mut self.guard else {
                     return;
                 };
@@ -267,6 +347,60 @@ fn page(env: &Env<'_>) -> String {
     }
     json.push('}');
     PAGE.replace("/*STRINGS*/{}", &json)
+}
+
+/// The code to join the reader's own network in `area`, its name and
+/// password below it, to type where the code cannot be scanned.
+fn draw_join(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    area: Rect,
+    own: &OwnNetwork,
+) {
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let margin = style.margin as u16;
+    let width = area.width.saturating_sub(2 * margin);
+    let line = font.line_metrics(style.text).line_height as u16;
+    let small = font.line_metrics(style.small).line_height as u16;
+    let title = env.i18n.tr("transfer.own.join");
+    ui::draw_label(
+        canvas,
+        &font,
+        style.text,
+        f32::from(margin),
+        Rect::new(margin, area.y, width, line),
+        title,
+        Color::BLACK,
+    );
+    let note = env.i18n.format(
+        "transfer.own.network",
+        &[
+            ("ssid", Arg::Str(&own.ssid)),
+            ("password", Arg::Str(&own.password)),
+        ],
+    );
+    let bottom = area.y + area.height;
+    ui::draw_label(
+        canvas,
+        &font,
+        style.small,
+        f32::from(margin),
+        Rect::new(margin, bottom.saturating_sub(small), width, small),
+        &note,
+        style.faint(60),
+    );
+    if let Some(qr) = &own.qr {
+        let room = Rect::new(
+            margin,
+            area.y + line,
+            width,
+            area.height.saturating_sub(line + small),
+        );
+        ui::draw_qr(canvas, qr, room);
+    }
 }
 
 /// The page's address as a QR code and as text, `hint` below it (up to
@@ -393,8 +527,11 @@ fn code_place(area: Rect, side: u16, modules: u16) -> Option<(u16, u16, u16)> {
 }
 
 impl Screen for TransferScreen {
-    fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
-        // Only back does anything here.
+    fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
+        // Back, and Select for the transfer without a router.
+        if *action == actions::CONFIRM && self.own_button(env).is_some() {
+            return paperpaw_sdk::Hint::Text(env.i18n.tr("transfer.without-router").into());
+        }
         paperpaw_sdk::Hint::only_back(action)
     }
 
@@ -405,13 +542,19 @@ impl Screen for TransferScreen {
         let area = self.content(env);
         let (url, qr) = match &self.state {
             State::Starting => {
-                return ui::draw_message(
-                    canvas,
-                    env,
-                    &style,
-                    area,
-                    env.i18n.tr("transfer.starting"),
-                );
+                // While it waits for a network: or without a router.
+                let button = self.own_button(env);
+                let room = match button {
+                    Some(b) => Rect::new(area.x, area.y, area.width, b.y.saturating_sub(area.y)),
+                    None => area,
+                };
+                ui::draw_message(canvas, env, &style, room, env.i18n.tr("transfer.starting"));
+                if let Some(button) = button {
+                    let label = env.i18n.tr("transfer.without-router");
+                    let focused = !env.device.input.touch;
+                    ui::draw_button(canvas, env, &style, button, label, false, focused);
+                }
+                return;
             }
             State::Failed(message) => {
                 return ui::draw_message(canvas, env, &style, area, message);
@@ -424,17 +567,54 @@ impl Screen for TransferScreen {
                 } else {
                     "transfer.no-network.system"
                 };
-                return ui::draw_empty(
+                // Or without a router, through the reader's own network.
+                let button = self.own_button(env);
+                let room = match button {
+                    Some(b) => Rect::new(area.x, area.y, area.width, b.y.saturating_sub(area.y)),
+                    None => area,
+                };
+                ui::draw_empty(
                     canvas,
                     env,
                     &style,
-                    area,
+                    room,
                     "wifi-off",
                     env.i18n.tr("transfer.no-network.title"),
                     env.i18n.tr(text),
                 );
+                if let Some(button) = button {
+                    let label = env.i18n.tr("transfer.without-router");
+                    let focused = !env.device.input.touch;
+                    ui::draw_button(canvas, env, &style, button, label, false, focused);
+                }
+                return;
             }
             State::Serving { url, qr } => (url, qr),
+        };
+        // Without a router: first the code to join the reader's network.
+        let area = match &self.own {
+            Some(own) => {
+                let half = area.height / 2;
+                draw_join(
+                    canvas,
+                    env,
+                    &style,
+                    Rect::new(area.x, area.y, area.width, half),
+                    own,
+                );
+                Rect::new(area.x, area.y + half, area.width, area.height - half)
+            }
+            None => area,
+        };
+        let button = self.own_button(env);
+        let area = match button {
+            Some(button) => Rect::new(
+                area.x,
+                area.y,
+                area.width,
+                button.y.saturating_sub(area.y + style.gap as u16),
+            ),
+            None => area,
         };
         let hint = env.i18n.tr("transfer.hint");
         draw_address(
@@ -447,6 +627,22 @@ impl Screen for TransferScreen {
             hint,
             self.last.as_deref(),
         );
+        if let Some(button) = button {
+            let label = env.i18n.tr("transfer.without-router");
+            let focused = !env.device.input.touch;
+            ui::draw_button(canvas, env, &style, button, label, false, focused);
+        }
+    }
+
+    fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
+        // The own network left alone: closed.
+        if self.own.is_some() {
+            if cx.env().now >= self.active.add_millis(OWN_IDLE_MS) {
+                self.close(cx);
+            } else {
+                cx.wake_at(self.active.add_millis(OWN_IDLE_MS));
+            }
+        }
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
@@ -464,7 +660,10 @@ impl Screen for TransferScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         if *action == actions::BACK {
             // Closing the screen also ends the transfer.
-            cx.command(Command::Back);
+            self.close(cx);
+            Handled::Yes
+        } else if *action == actions::CONFIRM && self.own_button(cx.env()).is_some() {
+            self.without_router(cx);
             Handled::Yes
         } else {
             Handled::No
@@ -475,7 +674,19 @@ impl Screen for TransferScreen {
         if gesture.kind == GestureKind::Tap
             && let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None)
         {
-            cx.command(Command::RunAction(action));
+            if action == actions::BACK {
+                self.close(cx);
+            } else {
+                cx.command(Command::RunAction(action));
+            }
+            return Handled::Yes;
+        }
+        if gesture.kind == GestureKind::Tap
+            && self
+                .own_button(cx.env())
+                .is_some_and(|b| b.contains(gesture.start))
+        {
+            self.without_router(cx);
             return Handled::Yes;
         }
         Handled::No
@@ -486,6 +697,13 @@ impl Screen for TransferScreen {
             && *notice.server() == SERVER
         {
             self.on_server_event(notice, cx);
+        } else if *event == events::WIFI_CHANGED
+            && self.own.is_some()
+            && matches!(self.state, State::Starting)
+            && cx.env().wifi.is_some_and(|w| w.state.is_hosting())
+        {
+            // The own network open: the page served there.
+            cx.command(Command::serve(SERVER, PORT, SERVER_EVENT.into()));
         }
     }
 }
