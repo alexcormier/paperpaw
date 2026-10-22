@@ -28,6 +28,12 @@ change the plugin SDK.
   such a place, it asks once: use it now?
 - SDK: `Env::slot_choice` (the user's choice for a slot), `Env::slot_title`
   and `Env::screen_title`.
+- *Clean up storage* is on the System page of the settings, and runs by
+  itself, silently, while the device charges: a day after the first
+  start, then at most once a week (where there is a clock). A settings
+  group's page lists the actions plugins add to the menu named by the
+  group's id.
+
 - Fewer columns or rows on the home screen no longer leave a page empty:
   an item whose cells lie outside the grid now is moved inside it as
   little as can be (narrower or lower where it was wider or higher than

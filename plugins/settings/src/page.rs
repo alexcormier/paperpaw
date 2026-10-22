@@ -115,6 +115,9 @@ pub(super) enum Row {
     Setting(Box<SettingSpec>),
     /// Resets the page's settings to their defaults, at its end.
     Reset,
+    /// An action plugins add to the group (a menu entry in the menu
+    /// named by the group's id), after its settings: its title.
+    Action(Id),
     /// The theme (or look of widgets) in use, at the top of the
     /// appearance settings where there are such presets (see
     /// [`themes`](super::themes)).
@@ -214,6 +217,17 @@ impl GroupPage {
                     .map(|spec| Row::Setting(Box::new(spec))),
             );
         }
+        // What plugins do with the group's settings (cleaning up the
+        // storage in the device's).
+        if own.is_none() {
+            entries.extend(
+                env.menus
+                    .items(of.as_str())
+                    .into_iter()
+                    .filter(|item| !item.section && env.actions.contains(item.id.as_str()))
+                    .map(|item| Row::Action(item.id.clone())),
+            );
+        }
         if !specs.is_empty() {
             entries.push(Row::Reset);
         }
@@ -232,7 +246,7 @@ impl GroupPage {
             &style,
             entries.iter().filter_map(|e| match e {
                 Row::Setting(spec) => Some(&**spec),
-                Row::Heading(_) | Row::Reset | Row::Theme(_) => None,
+                Row::Heading(_) | Row::Reset | Row::Theme(_) | Row::Action(_) => None,
             }),
         );
         // A title that does not fit beside its control gets a line of its
@@ -263,7 +277,7 @@ impl GroupPage {
                 (Row::Heading(_), _) => heading,
                 (Row::Setting(_), Some(lines)) => lines.height,
                 (Row::Setting(_), None) => slider_row,
-                (Row::Reset | Row::Theme(_), _) => style.row as u16,
+                (Row::Reset | Row::Theme(_) | Row::Action(_), _) => style.row as u16,
             })
             .collect();
         let headings = entries
@@ -419,6 +433,10 @@ impl GroupPage {
                 cx.command(Command::OpenScreen(super::themes::SCREEN, chooser.params()));
                 return;
             }
+            Some(Row::Action(action)) => {
+                cx.command(Command::RunAction(action.clone()));
+                return;
+            }
             _ => {}
         }
         let Some(spec) = self.focused() else {
@@ -472,6 +490,13 @@ impl Screen for GroupPage {
                         let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
                         let name = super::themes::applied_name(env, *chooser);
                         ui::draw_value_row(canvas, env, &style, rect, focused, title, &name);
+                        return;
+                    }
+                    Row::Action(action) => {
+                        let title = env.actions.get(action.as_str()).map_or("", |a| &a.title);
+                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
+                        let title = env.i18n.tr(title);
+                        ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
                         return;
                     }
                     Row::Setting(spec) => spec,
