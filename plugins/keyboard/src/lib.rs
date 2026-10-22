@@ -71,6 +71,18 @@ const REMOTE_TEXT: Event<Typed> = Event::new("keyboard.remote-text");
 /// Longest text the keyboard accepts, in characters: room for long web
 /// addresses and keys; what goes past it is cut, and the keyboard says so.
 const MAX_CHARS: usize = 2000;
+/// What moves the focus between the keys.
+const MOVES: [Id; 8] = [
+    actions::UP,
+    actions::DOWN,
+    actions::LEFT,
+    actions::RIGHT,
+    actions::NEXT,
+    actions::PREVIOUS,
+    actions::PREV_PAGE,
+    actions::NEXT_PAGE,
+];
+
 /// What passes the keyboard while a password is typed.
 const PASSING: [Id; 3] = [
     actions::SLEEP,
@@ -232,7 +244,8 @@ fn rows(letters: &str, layer: Layer, switch: bool, most: u32) -> Vec<Vec<Slot>> 
                 }
                 last.push((Key::Delete, 3));
             }
-            let mut rows: Vec<Vec<Slot>> = rows.into_iter().flat_map(|row| split(row, most)).collect();
+            let mut rows: Vec<Vec<Slot>> =
+                rows.into_iter().flat_map(|row| split(row, most)).collect();
             let other = if layer == Layer::Letters {
                 Layer::Symbols
             } else {
@@ -685,7 +698,9 @@ impl KeyboardScreen {
 
     /// Moves the button focus.
     fn move_focus(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> bool {
-        if held(action) {
+        // Only a move (or Select, where no key has the focus yet): others,
+        // such as Home, are not the keyboard's even before it has a focus.
+        if held(action) || !(MOVES.contains(action) || *action == actions::CONFIRM) {
             return false;
         }
         let Some((row, index)) = self.focus else {
@@ -1171,11 +1186,19 @@ mod split_tests {
                 .collect::<String>()
         };
         let shown: Vec<String> = row.iter().map(|r| names(r)).collect();
-        assert_eq!(&shown[..6], ["qwert", "yuiop", "asdfg", "hjkl", "^zxcv", "bnm<"]);
-        assert!(row[..6]
-            .iter()
-            .all(|r| r.iter().map(|(_, w)| u32::from(*w)).sum::<u32>() <= 16));
+        assert_eq!(
+            &shown[..6],
+            ["qwert", "yuiop", "asdfg", "hjkl", "^zxcv", "bnm<"]
+        );
+        assert!(
+            row[..6]
+                .iter()
+                .all(|r| r.iter().map(|(_, w)| u32::from(*w)).sum::<u32>() <= 16)
+        );
         // Wide enough: the rows as they are.
-        assert_eq!(rows("qwertyuiop asdfghjkl zxcvbnm", Layer::Letters, false, 40).len(), 4);
+        assert_eq!(
+            rows("qwertyuiop asdfghjkl zxcvbnm", Layer::Letters, false, 40).len(),
+            4
+        );
     }
 }

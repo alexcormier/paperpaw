@@ -935,3 +935,19 @@ fn layouts_named_as_others_are_left_out() {
         .count();
     assert!(german <= 1 && dutch <= 1, "{labels:?}");
 }
+
+/// On a touch screen, before any key has the focus, an action that is no
+/// move (such as Home, or another plugin's) passes the keyboard: it is not
+/// taken as the first press that shows the focus.
+#[test]
+fn other_actions_pass_before_a_key_has_the_focus() {
+    let mut typing = Typing::new(TOUCH);
+    typing.open(&[]);
+    assert_eq!(typing.focused(), None);
+    typing.run(COPY);
+    assert_eq!(typing.focused(), None);
+    // It ran: what it copied is there to paste the next time.
+    typing.run(actions::BACK);
+    typing.open(&[]);
+    assert!(typing.part("Paste").is_some());
+}
