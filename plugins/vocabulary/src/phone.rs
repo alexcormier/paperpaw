@@ -191,6 +191,10 @@ const PLAIN: &str = "text/plain; charset=utf-8";
 
 /// The answer to `request`, if `guard` lets it in, and what it changed;
 /// `page` makes the page (only when it is asked for: it is not held).
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub(crate) fn answer(
     number: u32,
     guard: &mut Guard,

@@ -10,6 +10,7 @@
 extern crate alloc;
 
 mod canvas;
+pub mod diffuse;
 mod framebuffer;
 pub mod round;
 

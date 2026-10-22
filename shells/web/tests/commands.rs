@@ -2,8 +2,11 @@
 //! settings set and read, what is shown described, the card's files, the
 //! clock, as x4-remote does on an X4, answered as JSON.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_web::emulator::Emulator;
 

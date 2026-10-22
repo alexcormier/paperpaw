@@ -1,0 +1,5 @@
+Update installiert neue Firmware, auf Geräten, deren Firmware PaperPaw selbst ist, etwa dem X4. Du findest es in den Einstellungen als Update.
+
+Online suchen fragt den Update-Server nach einem neueren PaperPaw und lädt es herunter, einige Minuten über WLAN. Oder kopiere eine Update-Datei (.bin, von paperpaw.org) in den Ordner updates auf der Karte, etwa per WLAN-Übertragung. Installieren dauert dann etwa eine Minute, danach startet das Gerät neu; Bücher, Einstellungen und Lesepositionen bleiben.
+
+Hat ein Plugin, das du nutzt, noch keine Version dafür, kannst du warten oder ohne es aktualisieren. Eine ältere Version wird nur installiert, wenn du sie wählst.

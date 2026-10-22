@@ -4,8 +4,11 @@
 //! in odd places. The text must come through, offsets must point back
 //! into the file.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_plugin_format_txt::TxtDocument;
 use paperpaw_sdk::MemoryStorage;

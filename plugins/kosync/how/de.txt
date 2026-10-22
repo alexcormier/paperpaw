@@ -1,0 +1,5 @@
+Fortschritt abgleichen lässt ein Buch dort aufgehen, wo du auf einem anderen Gerät aufgehört hast, auch in KOReader. Es nutzt den Sync-Server von KOReader oder einen eigenen.
+
+In den Einstellungen unter Fortschritt abgleichen meldet Konto dich an oder erstellt ein Konto, und Server setzt einen anderen Server. Automatisch abgleichen holt die Position beim Öffnen eines Buchs und sendet sie beim Lesen, höchstens einmal pro Minute. Fortschritt abgleichen im Lesemenü unter Weitere tut es sofort.
+
+Ist ein anderes Gerät weiter, fragt eine Meldung, ob du dorthin springen willst: Dorthin oder Hier bleiben. Bücher werden an ihrer Datei erkannt, es muss also auf beiden Geräten dieselbe sein.

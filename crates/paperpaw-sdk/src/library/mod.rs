@@ -17,6 +17,8 @@
 //! with the size of the library: the lists are capped, and details are
 //! read a book at a time.
 
+#![deny(clippy::let_underscore_must_use)]
+
 pub mod catalog;
 pub mod index;
 pub mod listing;
@@ -261,6 +263,10 @@ impl BookData {
     /// folder.
     fn entries(&self, storage: &dyn Storage) -> Vec<(String, bool)> {
         let mut entries = Vec::new();
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a folder that cannot be listed keeps nothing for books"
+        )]
         let _ = storage.list(&self.folder, &mut |entry| {
             if self.key_of(entry.name).is_some() {
                 entries.push((String::from(entry.name), entry.is_dir));
@@ -279,6 +285,10 @@ pub fn move_data(storage: &dyn Storage, data: &[BookData], from: &str, to: &str)
                 && found == old
             {
                 let to = format!("{}/{}{new}{tail}", folder.folder, folder.prefix);
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "what cannot be moved stays under the old name; the book itself is moved already"
+                )]
                 let _ = storage.rename(&format!("{}/{name}", folder.folder), &to);
             }
         }
@@ -408,6 +418,10 @@ pub fn books_in(
         // Files without an extension, told by their first bytes once the
         // folder is listed.
         let mut unknown: Vec<String> = Vec::new();
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a folder that cannot be listed is left out of the walk"
+        )]
         let _ = storage.list(&folder, &mut |entry| {
             if entry.name.starts_with('.') {
                 return;
@@ -531,6 +545,10 @@ fn update_list(
         if text.starts_with('\u{feff}') {
             text.insert(0, '\u{feff}');
         }
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a list of books not written stays as it was: only this change is lost"
+        )]
         let _ = storage.write(path, text.as_bytes());
     }
 }
@@ -847,6 +865,10 @@ pub(crate) fn noted_status(storage: &dyn Storage, path: &str) {
     // What could not be read is not noted: a status of nothing would
     // stand for the book until the catalog is made anew.
     if let Ok(status) = status_of(storage, path) {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "the catalog only keeps what the books' files say: a status not noted is read again when it is made anew"
+        )]
         let _ = catalog::noted(storage, path, status);
     }
 }
@@ -867,6 +889,10 @@ fn status_of(storage: &dyn Storage, path: &str) -> Result<catalog::Status, Stora
 
 /// Moves what the library knows of a book from `from` to `to`: its
 /// details, its place among the recently opened and the favourites.
+#[expect(
+    clippy::let_underscore_must_use,
+    reason = "details and a cover not moved are made again from the book"
+)]
 pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
     let _ = storage.rename(&book_file(from), &book_file(to));
     let _ = storage.rename(&cover_file(from), &cover_file(to));
@@ -890,6 +916,10 @@ pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
 
 /// Forgets the book at `path`, deleted: its details, its cover made
 /// small, its place among the recently opened and the favourites.
+#[expect(
+    clippy::let_underscore_must_use,
+    reason = "details or a cover left behind belong to no book and are never shown"
+)]
 pub fn removed(storage: &dyn Storage, path: &str) {
     let _ = storage.remove(&book_file(path));
     let _ = storage.remove(&cover_file(path));
@@ -942,6 +972,10 @@ pub fn set_favourite(storage: &dyn Storage, path: &str, favourite: bool) {
 
 /// Takes over what the library plugin kept before the library was a
 /// service (`.paperpaw/plugins/files`), once.
+#[expect(
+    clippy::let_underscore_must_use,
+    reason = "old files left where they were are taken over the next time"
+)]
 pub fn take_over_old(storage: &dyn Storage) {
     if storage.exists(&opened_file()) || storage.exists(&favourites_file()) {
         return;
@@ -1000,6 +1034,10 @@ pub fn request_catalog_anew() -> crate::Command {
 }
 
 #[cfg(test)]
+#[allow(
+    clippy::let_underscore_must_use,
+    reason = "tests set up files in memory, which does not fail"
+)]
 mod tests {
     use super::*;
     use crate::MemoryStorage;

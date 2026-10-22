@@ -440,30 +440,8 @@ pub fn look(env: &Env<'_>, widget: &str, area: Rect) -> Look {
 pub fn draw_frame(canvas: &mut Canvas<'_>, env: &Env<'_>, widget: &str, area: Rect) -> Look {
     let style = UiStyle::new(env);
     let look = look(env, widget, area);
-    // A look of a plugin's own draws it (`ui::look::Painters::frame`).
-    let part = crate::ui::look::FramePart::new(area, look.frame);
-    if look.frame != Frame::None && style.look.frame(canvas, &style, part) {
-        return look;
-    }
-    match look.frame {
-        Frame::None => {}
-        Frame::Line => ui::stroke_round(
-            canvas,
-            &style,
-            area,
-            ui::button_border(&style),
-            Color::BLACK,
-        ),
-        Frame::Card if style.grays <= 2 => {
-            // A light gray would be a heavy pattern on black and white:
-            // the sparsest there is, in a thin line as cards in lists.
-            canvas.fill_round_shaded(area, style.corner, style.ink(ui::Ink::CardPattern));
-            let line = (style.line / 2).max(1);
-            canvas.stroke_round(area, line, style.corner, Color::BLACK);
-        }
-        Frame::Card => canvas.fill_round_shaded(area, style.corner, style.ink(ui::Ink::Card)),
-        Frame::Dark => ui::fill_round(canvas, &style, area, Color::BLACK),
-    }
+    // As cards are: a look of a plugin's own paints it, else the usual.
+    crate::ui::layout::paint_frame(canvas, &style, area, look.frame);
     look
 }
 
@@ -565,7 +543,10 @@ pub fn ink_baseline(font: &FontHandle<'_>, size: f32, text: &str, band: Rect) ->
 /// Draws `text` on one line in `area` ([`fit_line`]: from `max` down to
 /// `min`, then shortened), placed as `align` says and centred by its ink
 /// from top to bottom; returns the size drawn.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_line(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -597,7 +578,10 @@ pub fn draw_line(
 /// "…"). Returns the height drawn. A widget drawing the same text again
 /// and again (in every band of a frame) breaks it once ([`Wrapped`]) and
 /// draws that.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_wrapped(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

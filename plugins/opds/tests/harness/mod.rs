@@ -1,7 +1,10 @@
 //! What the OPDS tests share: a kernel with the plugin, a storage the test
 //! looks into, and the requests it asks for, answered as a server would.
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use std::rc::Rc;
 

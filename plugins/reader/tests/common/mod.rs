@@ -4,7 +4,10 @@
 //! test, and helpers to press buttons, touch the page, let time pass and
 //! look at what is on the screen.
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use std::cell::RefCell;
 use std::rc::Rc;

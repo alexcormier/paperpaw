@@ -19,7 +19,10 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 - **Passwords and keys** (Wi-Fi, catalogs, sync accounts) are kept in
   `.paperpaw/secrets.txt`, veiled so that they do not show at a glance,
   **not encrypted**: whoever has the card has them. They are never shown
-  in full; screens show dots and ask for them afresh.
+  in full; screens show dots and ask for them afresh. Wi-Fi networks the
+  web flasher gives with the firmware (X4s) go to the card as `wifi.ini`,
+  are kept with the passwords at the next start and the file removed;
+  the flash keeps them only until the card has them.
 - **Books and notes** are files on the card, as readable as the card is.
 
 ## Who can reach the device
@@ -30,33 +33,54 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   testing has a remote control over USB (files in and out, presses, the
   screen); released firmware is built without it (the X4's `remote`
   feature).
-- **The local network.** The device listens only while a tool asks for it
-  and its screen is open (e.g. Wi-Fi transfer); such a tool shows an
-  address with a key (`?k=`) that every request must carry, so others in
-  the network cannot use it by guessing. Nothing listens in the
-  background.
+- **The local network.** The device listens only while a screen that
+  serves a page is open (the Wi-Fi transfer, typing on a phone, the
+  flash cards' *Edit with your phone*, setting up Wi-Fi with a phone).
+  Nothing listens in the background. The transfer, typing on a phone
+  and the flash cards show an address (as text and a QR code) with a key
+  drawn anew each time (`?k=`, 65 bits) that every request must carry;
+  after five wrong keys no request is answered for a minute
+  (`paperpaw_sdk::served`).
+- **The reader's own network.** Where PaperPaw runs Wi-Fi itself (the
+  X4s), the Wi-Fi transfer without a router and the setup of Wi-Fi with
+  a phone open a network of the device's own (WPA, its password drawn
+  anew each time and shown only on the screen, as a QR code to join).
+  The Wi-Fi setup serves its page only there and takes only the form it
+  gave out. The network closes with the screen, or after ten minutes
+  in which nothing comes.
 - **The internet.** The device connects out only (catalogs, sync,
   updates, news), over TLS where the address says `https`, with the
   certificates checked against the clock (set over the network first).
   An update search sends the version, the plugin crates built in and the
   code plugins installed with their versions, no identifier: when the
   reader asks, and once a day while an update found waits for plugins
-  ([ADR 0022](adr/0022-plugins-in-updates.md)).
+  ([ADR 0022](adr/0022-plugins-in-updates.md)). The store asks for its
+  list with the kind of device and the language, no identifier either.
 - **Files.** Books, fonts, pictures and catalogs are untrusted input: the
   parsers bound their memory and time, reject what they cannot read, and
   are fuzzed in CI (EPUB, text, XML, hyphenation, images, Lua).
 
 ## Plugins
 
-- **Code plugins** are built into the firmware (or the app) and run with
-  the kernel's rights: all of the card, the network, the passwords
-  through the SDK. They are trusted as the firmware is; a plugin store
-  will deliver them only in signed firmware.
-  Planned WebAssembly plugins would run without these rights unless
-  granted ([ADR 0004](adr/0004-everything-is-a-plugin.md)).
+- **Code plugins** run with the kernel's rights: all of the card, the
+  network, the passwords through the SDK, and past the SDK, as native
+  code without a sandbox. They are built into the firmware (or the app),
+  or on the X4s come as plugin files (`code.ppn`) from the store or the
+  web flasher ([ADR 0024](adr/0024-native-code-plugins.md)). Each file
+  is signed by its author (Ed25519, `paperpaw-sign`); PaperPaw's own
+  plugin files are signed with the project's plugin key. The store
+  installs a file only when it is made for this firmware and signed by
+  the key the plugin library names for its author; the device remembers
+  that key at the first install, and an update signed by another waits
+  until the reader, warned, installs it anyway. Only code installed so
+  runs: a file put into a plugin's folder by hand is not loaded (test
+  firmware can name one over USB). Code plugins are trusted as their
+  author is.
 - **Data plugins** (folders with `plugin.ini`) carry no code: translations,
-  key maps, defaults of settings, fonts and stylesheets. They can change
-  what PaperPaw shows and does through those, not reach past them.
+  key maps, defaults of settings, presets, menus, actions made of steps,
+  fonts and stylesheets. They can change what PaperPaw shows and does
+  through those, not reach past them, and never set a setting that keeps
+  the device safe (such as the lock's).
 
 ## The screen lock
 
@@ -92,4 +116,4 @@ PaperPaw's is a trusted customisation and sees what the original would.
 
 - A lost or stolen device with its card: the passwords are only veiled.
 - Firmware flashed over USB by someone holding the device.
-- What a code plugin built in does with its rights.
+- What a code plugin does with its rights, built in or installed.

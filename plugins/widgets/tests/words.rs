@@ -4,8 +4,11 @@
 //! it off, buttons move one down, and a list that cannot be read is
 //! left as it is.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::rc::Rc;
 

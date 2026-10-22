@@ -276,7 +276,10 @@ pub(crate) fn draw_cover(
 
 /// Draws a progress bar `width` wide, centred on the line `area`
 /// starting at `x`: a light track, the part read dark.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw_bar(
     canvas: &mut Canvas<'_>,
     style: &UiStyle,
@@ -304,7 +307,10 @@ pub(crate) fn draw_bar(
 
 /// Draws a small tag (e.g. "New") at `x` on the line `area`: outlined, or
 /// filled with `ink`; returns its width.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw_tag(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -374,7 +380,10 @@ fn state_width(env: &Env<'_>, style: &UiStyle, bar: u16, book: &Loaded) -> u16 {
 /// the percentage while it is read, a check when finished, "New" for a
 /// new book; nothing for a book opened but not begun. Returns where what
 /// it drew ends.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_state(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -529,7 +538,10 @@ pub(crate) fn prepare_row(
 }
 
 /// Draws a book's note in `area` from `x`, its badges' icons after it.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_note(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -578,7 +590,10 @@ pub(crate) fn prepare_card(
 /// cover at the margin, then its title on up to two lines, its details
 /// below and how far it is read (with its series on larger screens);
 /// `next` marks the book to read next in a series.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw_book_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -647,7 +662,10 @@ pub(crate) fn draw_book_row(
 /// up to two lines, and one line below: its details at the start, how
 /// far it is read at the end, on the right margin; `next` marks the book
 /// to read next in a series.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_compact_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -844,7 +862,10 @@ pub(crate) fn draw_card(
 /// (`label`) with a mark that it opens a choice, and at the end `end`
 /// (how many books) or, on touch screens, the search button
 /// (`search`).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw_filter_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -947,7 +968,10 @@ pub(crate) fn pill_places(
 /// Draws the pills at `places` with `labels`, `active` filled (none
 /// where what is shown has no pill of its own), the last as the shelves'
 /// icon where `icon`; `focused`, the active one framed as the focus is.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw_pills(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

@@ -4,8 +4,11 @@
 //! said; another server signs out; nothing goes out without a network or
 //! while an answer is awaited.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

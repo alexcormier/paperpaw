@@ -1,8 +1,11 @@
 //! The gallery of one small plugin on one device: its pictures, pages and
 //! contact sheet are written, and every link on the pages leads to a file.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::path::Path;
 
@@ -87,6 +90,31 @@ fn a_plugin_s_gallery_is_written_and_linked() {
             let target = page.parent().unwrap().join(&link);
             assert!(target.is_file(), "{} links {link}", page.display());
         }
+    }
+    let _ = std::fs::remove_dir_all(&out);
+}
+
+#[test]
+fn the_ui_kit_shows_every_page() {
+    let out = std::env::temp_dir().join(format!("paperpaw-dev-ui-kit-{}", std::process::id()));
+    let mut context = Context::new(
+        Target {
+            plugins: vec![paperpaw_dev::ui_kit::PLUGIN.into()],
+            add: Some(paperpaw_dev::ui_kit::add),
+            ..Target::default()
+        },
+        out.clone(),
+    );
+    context.profiles = vec![Variant::x4().profile];
+    context.quick = true;
+    let mut report = Report::default();
+    gallery::run(&context, &mut report).unwrap();
+    let screens = out.join("gallery/ui-kit/screens");
+    for page in [
+        "text", "rows", "controls", "layout", "share", "dialog", "choice",
+    ] {
+        let page = screens.join(format!("ui-kit.{page}.html"));
+        assert!(page.is_file(), "{}", page.display());
     }
     let _ = std::fs::remove_dir_all(&out);
 }

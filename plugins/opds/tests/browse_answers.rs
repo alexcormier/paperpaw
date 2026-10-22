@@ -5,8 +5,11 @@
 //! downloads whose titles and addresses try to leave the catalog's
 //! folder.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 #[path = "harness/mod.rs"]
 mod common;

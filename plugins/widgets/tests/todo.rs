@@ -4,8 +4,11 @@
 //! as a list kept by hand would be, and the list is read back the same
 //! by a screen opened anew, and by the widget on the home screen.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::rc::Rc;
 

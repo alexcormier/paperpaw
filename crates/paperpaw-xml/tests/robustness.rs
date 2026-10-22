@@ -1,8 +1,11 @@
 //! The tokenizer must accept any input: random bytes and tag soup, in any
 //! chunking, without panicking and with a bounded buffer.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_xml::{Token, Tokenizer, decode};
 

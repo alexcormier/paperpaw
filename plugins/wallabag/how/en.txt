@@ -1,0 +1,5 @@
+Wallabag fetches the articles you saved in Wallabag as books, with their pictures, into the folder Wallabag of your library. It is off at first; switch it on among the plugins.
+
+Open Wallabag from Tools. Enter the server, your user name and password, and the ID and secret of an API client made in Wallabag under API clients management. Then choose Fetch articles, with Wi-Fi on.
+
+Articles you read to the end are archived in Wallabag with the next fetch, and their books are removed.

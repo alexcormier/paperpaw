@@ -6,8 +6,11 @@
 //! without panicking; generated catalogs give every message as the
 //! configuration parser reads it, also after unloading and loading.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::collections::BTreeMap;
 

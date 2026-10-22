@@ -2,7 +2,10 @@
 //! registries, a storage in memory and a clock, as the kernel would make
 //! one.
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use core::cell::RefCell;
 

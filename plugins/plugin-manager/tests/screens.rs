@@ -2,8 +2,11 @@
 //! is listed, a plugin chosen for it is used and kept in `[slots]`, and
 //! *Automatic* goes back to the plugins' order.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::Rotation;

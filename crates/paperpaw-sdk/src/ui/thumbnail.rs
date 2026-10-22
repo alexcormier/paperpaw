@@ -4,6 +4,7 @@ use alloc::vec::Vec;
 
 use paperpaw_document::ImageRef;
 use paperpaw_graphics::Canvas;
+use paperpaw_graphics::diffuse::Atkinson;
 use paperpaw_graphics::round::corner_inset;
 use paperpaw_image::{ColorFile, Downscaler, GrayFile, ImageError, ImageFile, ImageSink, luma};
 use paperpaw_platform::{PixelFormat, Storage};
@@ -12,16 +13,21 @@ use paperpaw_platform::{PixelFormat, Storage};
 const ROWS_BYTES: usize = 8192;
 /// A thumbnail kept on the storage ([`Thumbnail::keep`]): this, its
 /// width and height (2 bytes each, little-endian), its bits a pixel (1),
-/// its stamp (8), then its pixels.
-const MAGIC: &[u8; 4] = b"QIT2";
+/// its stamp (8), then its pixels. `QIT2` was black and white ordered
+/// dithered, `QIT3` black and white alone: made anew.
+const MAGIC: &[u8; 4] = b"QIT4";
 const HEADER: usize = 17;
 
 /// How a thumbnail keeps its pixels, by the panel it is shown on.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Depth {
-    /// Black and white, ordered dithered as such a panel shows it: eight
-    /// pixels a byte, the first in the high bit, set for white.
-    Mono,
+    /// Black and white, and four grays beside for frames shown in grays
+    /// (see [`Screen::grays`](crate::Screen::grays)), each diffused as
+    /// such a panel shows pictures ([`Atkinson`]). Each row holds the
+    /// black and white pixels first, eight a byte, the first in the high
+    /// bit, set for white; then the grays, four a byte, the first in the
+    /// high bits.
+    MonoGrays,
     /// Sixteen grays: two pixels a byte, the first in the high bits.
     Gray,
     /// Red, green, blue.
@@ -31,14 +37,14 @@ enum Depth {
 impl Depth {
     fn bits(self) -> u8 {
         match self {
-            Depth::Mono => 1,
+            Depth::MonoGrays => 3,
             Depth::Gray => 4,
             Depth::Rgb => 24,
         }
     }
 
     fn of_bits(bits: u8) -> Option<Depth> {
-        [Depth::Mono, Depth::Gray, Depth::Rgb]
+        [Depth::MonoGrays, Depth::Gray, Depth::Rgb]
             .into_iter()
             .find(|d| d.bits() == bits)
     }
@@ -47,7 +53,7 @@ impl Depth {
     fn row(self, width: u16) -> usize {
         let width = usize::from(width);
         match self {
-            Depth::Mono => width.div_ceil(8),
+            Depth::MonoGrays => width.div_ceil(8) + width.div_ceil(4),
             Depth::Gray => width.div_ceil(2),
             Depth::Rgb => width * 3,
         }
@@ -57,10 +63,10 @@ impl Depth {
 /// A picture made small once and kept in memory, to draw it again and
 /// again without reading the storage: covers in a list, drawn in every
 /// band of every frame. Kept as the panel shows it ([`Thumbnail::new`]):
-/// in black and white, dithered, for panels of black and white alone (a
-/// cover of 70 by 100 pixels takes under 1 KB), in sixteen grays
-/// otherwise (3.5 KB), in colour where the panel has colour and the
-/// picture too.
+/// in black and white and in four grays beside, for panels of black and
+/// white alone that show frames in grays too (a cover of 70 by 100
+/// pixels takes 2.7 KB), in sixteen grays otherwise (3.5 KB), in colour
+/// where the panel has colour and the picture too.
 ///
 /// [`draw_image`](crate::ui::draw_image) reads a picture's rows from the
 /// storage each time it is drawn; a thumbnail reads it once, when made
@@ -90,7 +96,7 @@ impl Thumbnail {
         let depth = if format.is_color() && file.color {
             Depth::Rgb
         } else if format.gray_levels() == Some(2) {
-            Depth::Mono
+            Depth::MonoGrays
         } else {
             Depth::Gray
         };
@@ -108,6 +114,9 @@ impl Thumbnail {
             height: 0,
             rows: 0,
             pixels: Vec::new(),
+            error: None,
+            error_grays: None,
+            grays: Vec::new(),
         };
         sink.start(scaler.out_width(), scaler.out_height()).ok()?;
         let row = file.width as usize * channels;
@@ -230,6 +239,10 @@ impl Thumbnail {
     }
 
     fn draw_rows(&self, canvas: &mut Canvas<'_>, x: u16, y: u16, radius: u32) {
+        if canvas.is_blind() {
+            let area = paperpaw_platform::Rect::new(x, y, self.width, self.height);
+            return canvas.note_picture(area);
+        }
         let clip = canvas.clip();
         let top = u32::from(y);
         let first = top.max(u32::from(clip.y));
@@ -260,12 +273,20 @@ impl Thumbnail {
             return;
         }
         let mut row = alloc::vec![0u8; width];
+        // A frame in grays shows the grays, one in black and white the
+        // black and white pixels.
+        let grays = canvas.picture_levels().is_some_and(|levels| levels > 2);
+        let mono = width.div_ceil(8);
         for row_y in first..last {
             let at = (row_y - top) as usize * stride;
             let bytes = &self.pixels[at..at + stride];
             for (i, out) in row.iter_mut().enumerate() {
                 *out = match self.depth {
-                    Depth::Mono => {
+                    Depth::MonoGrays if grays => {
+                        let byte = bytes[mono + i / 4];
+                        ((byte >> (6 - 2 * (i % 4))) & 3) * 85
+                    }
+                    Depth::MonoGrays => {
                         if bytes[i / 8] & (0x80 >> (i % 8)) != 0 {
                             255
                         } else {
@@ -293,31 +314,49 @@ struct Pack {
     /// Rows packed so far.
     rows: u16,
     pixels: Vec<u8>,
+    /// In black and white, the error the rows leave to the next.
+    error: Option<Atkinson>,
+    /// In four grays, the same.
+    error_grays: Option<Atkinson>,
+    /// A row's grays, for the diffusion.
+    grays: Vec<u8>,
 }
 
 impl Pack {
     fn push_gray(&mut self, gray: impl Iterator<Item = u8>) {
-        if self.depth == Depth::Mono {
-            /// 4×4 Bayer matrix, as the framebuffer dithers.
-            const BAYER: [[i32; 4]; 4] =
-                [[0, 8, 2, 10], [12, 4, 14, 6], [3, 11, 1, 9], [15, 7, 13, 5]];
-            let y = usize::from(self.rows % 4);
-            let mut byte = 0u8;
-            let mut n = 0;
-            for (x, g) in gray.enumerate() {
-                let offset = (2 * BAYER[y][x % 4] - 15) * 255 / 32;
-                if i32::from(g) + offset >= 128 {
-                    byte |= 0x80 >> n;
+        if self.depth == Depth::MonoGrays {
+            self.grays.clear();
+            self.grays.extend(gray);
+            let row = core::mem::take(&mut self.grays);
+            // Black and white, one bit a pixel; then four grays, two.
+            for (levels, bits) in [(2u8, 1u8), (4, 2)] {
+                let error = if levels == 2 {
+                    &mut self.error
+                } else {
+                    &mut self.error_grays
+                };
+                let mut byte = 0u8;
+                let mut n = 0;
+                let mut put = |gray: u8, pixels: &mut Vec<u8>| {
+                    let level = (u16::from(gray) * u16::from(levels - 1) + 127) / 255;
+                    byte |= (level as u8) << (8 - bits * (n + 1));
+                    n += 1;
+                    if n * bits == 8 {
+                        pixels.push(byte);
+                        (byte, n) = (0, 0);
+                    }
+                };
+                let pixels = &mut self.pixels;
+                match error {
+                    Some(error) => error.row(&row, levels, |_, gray| put(gray, pixels)),
+                    // Without memory for the diffusion, each rounded.
+                    None => row.iter().for_each(|&g| put(g, pixels)),
                 }
-                n += 1;
-                if n == 8 {
+                if n > 0 {
                     self.pixels.push(byte);
-                    (byte, n) = (0, 0);
                 }
             }
-            if n > 0 {
-                self.pixels.push(byte);
-            }
+            self.grays = row;
         } else {
             let mut high = None;
             for g in gray {
@@ -345,6 +384,10 @@ impl ImageSink for Pack {
         self.width = w;
         self.height = h;
         let bytes = self.depth.row(w) * usize::from(h);
+        if self.depth == Depth::MonoGrays {
+            self.error = Atkinson::new(usize::from(w));
+            self.error_grays = Atkinson::new(usize::from(w));
+        }
         self.pixels
             .try_reserve_exact(bytes)
             .map_err(|_| ImageError::OutOfMemory)
@@ -461,18 +504,45 @@ mod tests {
         let storage = MemoryStorage::new();
         let image = picture(&storage);
         let thumb = Thumbnail::new(&storage, &image, 21, 10, PixelFormat::Mono1).unwrap();
-        // Eight pixels a byte, rows whole bytes: a quarter of the grays.
-        assert_eq!(thumb.bytes(), 3 * 10);
+        // Eight pixels a byte, then four, rows whole bytes.
+        assert_eq!(thumb.bytes(), (3 + 6) * 10);
         assert!(thumb.keep(&storage, "m.thumb", 1));
         let read = Thumbnail::kept(&storage, "m.thumb", 1, (21, 10)).unwrap();
-        assert_eq!((read.depth, read.bytes()), (Depth::Mono, 30));
-        let mut frame = Framebuffer::new(30, 12, PixelFormat::Mono1).unwrap();
-        let mut canvas = frame.canvas();
-        canvas.clear(Color::WHITE);
-        read.draw(&mut canvas, 2, 1);
+        assert_eq!((read.depth, read.bytes()), (Depth::MonoGrays, 90));
+        // In black and white, and in a frame in grays.
+        for format in [PixelFormat::Mono1, PixelFormat::Gray2] {
+            let mut frame = Framebuffer::new(30, 12, format).unwrap();
+            let mut canvas = frame.canvas();
+            canvas.clear(Color::WHITE);
+            read.draw(&mut canvas, 2, 1);
+            let view = frame.view();
+            assert_eq!(view.pixel(2, 1), Color::BLACK, "{format:?}");
+            assert_eq!(view.pixel(22, 10), Color::WHITE, "{format:?}");
+        }
+    }
+
+    #[test]
+    fn a_gray_shows_in_grays_where_the_frame_has_them() {
+        let storage = MemoryStorage::new();
+        let mut writer = GrayWriter::new(&storage, "g.gray");
+        writer.start(8, 8).unwrap();
+        for _ in 0..8 {
+            writer.row(&[85; 8]).unwrap();
+        }
+        writer.finish().unwrap();
+        let image = ImageRef {
+            path: "g.gray".into(),
+            width: 8,
+            height: 8,
+        };
+        let thumb = Thumbnail::new(&storage, &image, 8, 8, PixelFormat::Mono1).unwrap();
+        let mut frame = Framebuffer::new(8, 8, PixelFormat::Gray2).unwrap();
+        thumb.draw(&mut frame.canvas(), 0, 0);
         let view = frame.view();
-        assert_eq!(view.pixel(2, 1), Color::BLACK);
-        assert_eq!(view.pixel(22, 10), Color::WHITE);
+        assert!(
+            (0..8).all(|y| (0..8).all(|x| view.pixel(x, y) == Color::gray(85))),
+            "a level of four grays stays as it is"
+        );
     }
 
     #[test]

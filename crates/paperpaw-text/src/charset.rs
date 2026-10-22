@@ -17,7 +17,10 @@ pub const LATIN: &[RangeInclusive<char>] = &[
 
 /// Cyrillic (Russian, Ukrainian, Bulgarian, Serbian and more), for packs
 /// added to fonts made for Latin.
-#[allow(clippy::single_range_in_vec_init)] // a set of ranges, of one here
+#[allow(
+    clippy::single_range_in_vec_init,
+    reason = "a set of ranges, of one here"
+)]
 pub const CYRILLIC: &[RangeInclusive<char>] = &['\u{400}'..='\u{4ff}'];
 
 /// Greek, modern and polytonic (Greek Extended, for older texts).

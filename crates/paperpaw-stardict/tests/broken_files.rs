@@ -4,8 +4,11 @@
 //! tables and data. Each is an error or finds nothing, never a panic or
 //! a loop without end.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

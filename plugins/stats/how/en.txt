@@ -1,0 +1,5 @@
+Reading statistics records how long you read each page. You see it as an overview with today, the week and your streak, as a calendar, and with the numbers of every book.
+
+Open it from Tools, or from More in the reader. In the settings, under Reading statistics, you can switch Record reading off, set a Daily reading goal, and set the Shortest page and Longest page that count, so leafing through or a book left open does not skew the numbers.
+
+Sync with KOReader shares the statistics with KOReader through a WebDAV folder. Recording needs the clock to be set: where it is not, connect to Wi-Fi once.

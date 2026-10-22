@@ -389,6 +389,10 @@ fn quote(s: &str, out: &mut String) {
             '\n' => out.push_str("\\n"),
             '\r' => out.push_str("\\r"),
             c if (c as u32) < 0x20 || c == '\u{7f}' => {
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "writing into a String does not fail"
+                )]
                 let _ = write!(out, "\\{:03}", c as u32);
             }
             c => out.push(c),

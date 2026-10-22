@@ -179,6 +179,10 @@ impl Plugin for DataPlugin {
         self.manifest.clone()
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         for source in self.translations.take() {
             r.add_translations(Cow::Owned(source))?;

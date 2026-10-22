@@ -1,0 +1,5 @@
+Die Tastatur öffnet sich, wann immer etwas Text braucht: eine Suche, ein Passwort, eine Notiz oder eine Einstellung. Sie funktioniert per Touch und allein mit den Tasten.
+
+Mit Tasten gehst du mit Links und Rechts durch eine Reihe, mit den Blättertasten von Reihe zu Reihe; Wählen drückt die Taste, Zurück bricht ab. Einen Buchstaben lange drücken (mit Tasten: Wählen auf ihm halten) zeigt Akzente wie é und è. OK beendet die Eingabe. Einfügen setzt den Text aus der Zwischenablage ein, und Handy lässt dich den Text, wo angeboten, stattdessen am Handy tippen.
+
+In den Einstellungen unter System wählt Tastatur-Layouts die Layouts. Vorgabe ist die Sprache der Menüs; bei mehreren wechselt eine Taste zwischen ihnen.

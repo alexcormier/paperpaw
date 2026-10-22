@@ -1,0 +1,5 @@
+The menu lists what you can do and set. It opens at the bottom of the screen, above whatever is open: while reading, tap the middle of the screen or press Select. Tap or select an entry to run it.
+
+Settings in the menu show their value and change in place, so the menu stays open. An entry with more entries opens a submenu.
+
+Swipe down from the top edge for the quick panel: what you change often, as buttons. Tap a button to switch it, hold it for its settings. With buttons only, the arrow buttons choose, Select switches and Back closes. Under Appearance, Menus shows menus as a list or as tiles.

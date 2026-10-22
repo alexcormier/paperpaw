@@ -1,0 +1,5 @@
+Dieses Plugin teilt Lesezeichen und Markierungen mit KOReader für Bücher, die du in beiden liest, auf einem Gerät oder in einem Bibliotheksordner, der zwischen Geräten synchronisiert wird. Einzurichten gibt es nichts.
+
+Öffnet PaperPaw ein Buch, das auch KOReader geöffnet hat, und änderst du dessen Lesezeichen oder Markierungen, übernimmt es das Neue aus den Daten von KOReader neben dem Buch und lässt das Neue von hier für KOReader da, das es beim nächsten Öffnen des Buchs aufnimmt. Entfernte Markierungen und geänderte Notizen gehen ebenfalls hinüber.
+
+Das gilt nur für EPUB-Bücher. Lässt sich die Datei einer Seite nicht lesen, ändert sich auf keiner Seite etwas, bis es wieder geht.

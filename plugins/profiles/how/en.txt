@@ -1,0 +1,5 @@
+A profile keeps your reading settings, display settings and status lines under a name, such as Night or Large print, and brings them back with a tap.
+
+Open Profiles in the reading menu under More, or in Settings under Customise. Tap a profile to use it; the one in use is marked. Hold it (with buttons, hold Select) to save the current settings into it, rename it or remove it. Save as new profile keeps what is set now.
+
+Next profile switches to the next one in the list; put it on a button or in a rule.

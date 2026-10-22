@@ -1,0 +1,5 @@
+Reading aids change how the text of a book looks while you read. Both are off at first and apply to every book.
+
+You find them in Settings, under Reading, in the section Reading aids. Bold word beginnings sets the first half of each word in bold, which some people find easier to follow. Replace words takes pairs written as "colour = color; Mr. = Mister", separated by semicolons.
+
+Only whole words are replaced, exactly as you wrote them, so "color" never changes part of a longer word. The book file itself is not changed.

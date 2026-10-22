@@ -2,8 +2,11 @@
 //! time it opens, once; closed by a tap or a button; switched off with
 //! *No more hints*; shown again when asked; for the device's input only.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::{

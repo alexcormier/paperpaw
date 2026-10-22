@@ -2,7 +2,10 @@
 //! being installed): a track with the style's corners, filled from its
 //! start.
 
-#[allow(clippy::wildcard_imports)]
+#[allow(
+    clippy::wildcard_imports,
+    reason = "a part of the module, which shares its imports"
+)]
 use super::*;
 
 /// Draws a progress bar in `area`, `permille` thousandths done (more than

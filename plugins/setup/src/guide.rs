@@ -82,7 +82,10 @@ fn line(env: &Env<'_>, style: &UiStyle, size: f32) -> u16 {
 }
 
 /// Draws `text` left-aligned in `area`, wrapped, at most `max` lines.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn paragraph(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -300,16 +303,17 @@ impl Guide {
                 });
                 let segments = self.two(env).map(|_| {
                     let inset = style.margin as u16 / 2;
-                    let half = (card.width - 3 * inset) / 2;
                     // Wide margins and a short card leave the buttons
                     // their height.
                     let above = inset.min(gap).min(card.height / 6);
-                    let top = card.y + above;
-                    let height = card.height.saturating_sub(2 * above);
-                    (
-                        Rect::new(card.x + inset, top, half, height),
-                        Rect::new(card.x + 2 * inset + half, top, half, height),
-                    )
+                    let row = Rect::new(
+                        card.x + inset,
+                        card.y + above,
+                        card.width.saturating_sub(2 * inset),
+                        card.height.saturating_sub(2 * above),
+                    );
+                    let cells = ui::columns(row, 2, inset);
+                    (cells[0], cells[1])
                 });
                 (Some(card), stepper, segments)
             }

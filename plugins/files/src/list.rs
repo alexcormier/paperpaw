@@ -1093,6 +1093,10 @@ impl Screen for ListScreen {
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if !self.covered && self.index.dirty {
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "made where missing; keeping the index tells if it fails"
+            )]
             let _ = env.storage.create_dir(".paperpaw/plugins/files");
             let kept = library::service(&env).keep_index(&env, &self.index, KEPT, &self.archive);
             self.index.dirty = !kept;

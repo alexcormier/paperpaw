@@ -1,0 +1,3 @@
+Öffnet als Datei gespeicherte Webseiten (.html, .htm, .xhtml) wie Bücher: nur das, was zu lesen ist, ohne Menüs, Werbung und Ähnliches drumherum.
+
+Lege die Datei in den Bibliotheksordner und öffne sie aus der Bibliothek wie jedes Buch. Links innerhalb der Seite funktionieren; Bilder erscheinen, wo sie in der Datei liegen.

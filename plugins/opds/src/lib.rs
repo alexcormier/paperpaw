@@ -200,12 +200,19 @@ static SETTINGS: [SettingSpec; 2] = [
     .described("opds.setting.limit.help"),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Opds {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "OPDS catalogs", Version::new(0, 1, 0))
             .description(
                 "Browses OPDS catalogs, downloads their books and keeps folders in sync with them.",
             )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

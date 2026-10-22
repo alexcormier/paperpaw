@@ -4,8 +4,11 @@
 //! pointing back into the file; a position taken on a page is found again
 //! after the text is laid out anew with other type, width and height.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_layout::{Face, LayoutContext, Page, Style, Typesetter, layout_page, line_start};
 use paperpaw_plugin_format_txt::TxtDocument;

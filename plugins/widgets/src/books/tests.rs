@@ -1,8 +1,11 @@
 //! Tests of the book widgets: what they choose and count, and that each
 //! draws, in every frame and at several sizes.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 extern crate std;
 

@@ -2,8 +2,11 @@
 //! newest and a group sorted by date are picked without holding every
 //! plugin at once (the X4 has about 192 KiB of heap in all).
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

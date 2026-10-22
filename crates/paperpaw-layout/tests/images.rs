@@ -3,8 +3,11 @@
 //! and harmless when a book gives sizes of zero (no positions that are
 //! not numbers, no page that never ends).
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_document::{
     Align, Block, BlockKind, Document, DocumentError, ImageRef, Locator, Metadata, NoStorage,

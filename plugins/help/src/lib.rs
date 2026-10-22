@@ -73,10 +73,17 @@ pub(crate) fn mark_seen(storage: &dyn Storage, screen: &str) {
 #[derive(Debug, Default)]
 pub struct Help;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Help {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Hints", paperpaw_sdk::package_version!())
             .description("Shows what a screen's controls do, the first time it opens.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

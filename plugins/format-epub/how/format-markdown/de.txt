@@ -1,0 +1,3 @@
+Öffnet Markdown-Dateien (.md), etwa Notizen, wie Bücher: Überschriften, Listen, Zitate und Hervorhebungen so, wie sie gemeint sind, nicht als Zeichen.
+
+Lege die Dateien in den Bibliotheksordner und öffne sie aus der Bibliothek. Die erste Überschrift wird zum Titel; Bilder neben der Datei erscheinen dort, wo der Text sie nennt.

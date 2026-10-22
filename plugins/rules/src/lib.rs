@@ -359,13 +359,24 @@ fn effect_text(env: &Env<'_>, effect: &Effect) -> String {
 #[derive(Debug, Default)]
 pub struct Rules;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Rules {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Rules", paperpaw_sdk::package_version!())
             .description("When something happens, does something: e.g. night mode at 22:00.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(State::default());
         let shared = state.clone();

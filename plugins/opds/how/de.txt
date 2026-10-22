@@ -1,0 +1,5 @@
+OPDS-Kataloge sind Online-Bibliotheken wie Project Gutenberg, Calibre-Web, Kavita oder Komga. Das Plugin durchblättert und durchsucht sie wie Ordner und lädt ihre Bücher in die Bibliothek.
+
+Öffne Kataloge im Menü Werkzeuge und wähle Katalog hinzufügen: eine Adresse und, falls der Katalog ein Konto braucht, Benutzername und Passwort. Einen Katalog antippen öffnet ihn; lange drücken (mit Tasten: Wählen halten) bietet Synchronisieren, Bearbeiten oder Entfernen.
+
+Ist Diesen Katalog synchronisieren eingeschaltet, lädt Kataloge synchronisieren seine neuen Bücher in seinen Ordner. Bücher pro Abgleich begrenzt, wie viele ein Abgleich holt, damit ein großer Katalog das Gerät nicht füllt. Statt eines Katalogs geht auch ein Cloud-Ordner (WebDAV).

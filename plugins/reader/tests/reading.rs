@@ -3,8 +3,11 @@
 //! kept (also over a restart) and the book continues there, a larger font keeps the place,
 //! bookmarks are kept, and plugins hear of it all, the chapter too.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::RefCell;
 use std::rc::Rc;

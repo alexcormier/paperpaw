@@ -2,8 +2,11 @@
 //! 0024) are named in a notice, with why; one notice shows at a time, so
 //! several share it, and safe mode's wins.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{CodeFile, CodeLoader, Kernel};
 use paperpaw_platform::{

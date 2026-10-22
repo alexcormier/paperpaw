@@ -66,11 +66,39 @@ pub const MARKDOWN_PLUGIN: Id = Id::new_static("format-markdown");
 pub const MARKDOWN: Id = Id::new_static("format-markdown.markdown");
 
 /// A plugin's manifest: its id, its name and what it does.
-fn manifest(id: Id, name: &'static str, description: &'static str) -> Manifest {
+fn manifest(
+    id: Id,
+    name: &'static str,
+    description: &'static str,
+    how: &'static [(&'static str, &'static str)],
+) -> Manifest {
     Manifest::new(id, name, Version::new(0, 1, 0))
         .description(description)
+        .how(how)
         .uses(paperpaw_sdk::Uses::NOTHING)
 }
+
+/// How each works, by language (see `Manifest::how`).
+static EPUB_HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/format-epub/en.txt")),
+    ("de", include_str!("../how/format-epub/de.txt")),
+];
+static HTML_HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/format-html/en.txt")),
+    ("de", include_str!("../how/format-html/de.txt")),
+];
+static FB2_HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/format-fb2/en.txt")),
+    ("de", include_str!("../how/format-fb2/de.txt")),
+];
+static MARKDOWN_HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/format-markdown/en.txt")),
+    ("de", include_str!("../how/format-markdown/de.txt")),
+];
+static CBZ_HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/format-cbz/en.txt")),
+    ("de", include_str!("../how/format-cbz/de.txt")),
+];
 
 /// EPUB books. HTML, FictionBook, Markdown and comic books are plugins of
 /// their own ([`HtmlFormat`], [`Fb2Format`], [`MarkdownFormat`],
@@ -85,6 +113,7 @@ impl Plugin for EpubFormat {
             PLUGIN,
             "EPUB",
             "Opens EPUB books with their styles, table of contents and images.",
+            &EPUB_HOW,
         )
     }
 
@@ -121,6 +150,7 @@ impl Plugin for HtmlFormat {
             HTML_PLUGIN,
             "HTML",
             "Opens web pages saved as files, showing only what is to be read.",
+            &HTML_HOW,
         )
     }
 
@@ -156,6 +186,7 @@ impl Plugin for Fb2Format {
             FB2_PLUGIN,
             "FictionBook",
             "Opens FictionBook books (.fb2, also zipped).",
+            &FB2_HOW,
         )
     }
 
@@ -187,6 +218,7 @@ impl Plugin for MarkdownFormat {
             MARKDOWN_PLUGIN,
             "Markdown",
             "Opens Markdown files (.md), e.g. notes.",
+            &MARKDOWN_HOW,
         )
     }
 
@@ -218,6 +250,7 @@ impl Plugin for CbzFormat {
             CBZ_PLUGIN,
             "Comic books",
             "Opens comic book archives (.cbz), a picture a page.",
+            &CBZ_HOW,
         )
     }
 

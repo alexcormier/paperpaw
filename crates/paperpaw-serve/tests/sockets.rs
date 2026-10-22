@@ -3,7 +3,11 @@
 //! that are not open, sockets closed by the kernel staying quiet, and
 //! broadcasts with nothing to send.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 use std::io::{Read, Write};

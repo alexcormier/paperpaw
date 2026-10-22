@@ -150,12 +150,22 @@ impl PluginInfo {
             .unwrap_or(&self.manifest.description)
     }
 
-    /// How it works, at length, in the current language: the plugin's
-    /// translation of `<id>.plugin.how` (plain text, paragraphs apart by
-    /// an empty line), if it has one: shown by the plugin manager and the
-    /// store as *How it works*.
-    pub fn how<'a>(&self, i18n: &'a Translator) -> Option<&'a str> {
-        i18n.get(&format!("{}.plugin.how", self.manifest.id))
+    /// How it works, at length, in the current language (else in
+    /// English): the plugin's own text ([`Manifest::how`]), else its
+    /// translation of `<id>.plugin.how` (a data plugin's); plain text,
+    /// paragraphs apart by an empty line. Shown by the plugin manager as
+    /// *How it works*.
+    pub fn how<'a>(&'a self, i18n: &'a Translator) -> Option<&'a str> {
+        let language = i18n.language();
+        let base = language.split('-').next().unwrap_or(language);
+        let own = [language, base, "en"].into_iter().find_map(|wanted| {
+            self.manifest
+                .how
+                .iter()
+                .find(|(written, _)| *written == wanted)
+                .map(|(_, text)| *text)
+        });
+        own.or_else(|| i18n.get(&format!("{}.plugin.how", self.manifest.id)))
             .filter(|text| !text.trim().is_empty())
     }
 
@@ -266,6 +276,7 @@ mod tests {
                 version: Version::new(1, 0, 0),
                 sdk: SDK_VERSION,
                 uses: crate::Uses::NOTHING,
+                how: &[],
             },
             state,
             enabled,

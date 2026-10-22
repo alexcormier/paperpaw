@@ -1,0 +1,5 @@
+Readwise sends your highlights to Readwise, with their notes and their place in the book. It sends when you choose Export as Markdown at the end of a book's Bookmarks and highlights.
+
+The first export asks for your Readwise access token (readwise.io/access_token); it is kept with the other Passwords and keys. Readwise keeps each highlight once, so exporting again sends only what is new.
+
+The plugin comes switched off: switch it on under Plugins. Without a network, or if Readwise cannot be reached, the highlights wait and are sent later.

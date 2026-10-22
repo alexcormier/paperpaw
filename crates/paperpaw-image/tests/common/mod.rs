@@ -5,7 +5,10 @@
 //! decoders hand over.
 
 // Each test file uses a part of it.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use paperpaw_image::{Fit, Format, ImageError, ImageSink, Source, decode};
 

@@ -4,7 +4,11 @@
 //! caught: plugins run without a sandbox (ADR 0024), and the firmware's
 //! safe mode deals with them, so that is not tested here.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 mod common;

@@ -2,8 +2,11 @@
 //! pages set when they become fewer, and it is reset by a held finger as
 //! by a held *Select*.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::{

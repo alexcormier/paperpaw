@@ -62,7 +62,10 @@ pub(crate) fn state(
 }
 
 /// Draws the row of `plugin` in `rect`.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

@@ -480,6 +480,10 @@ fn lines(
 /// out. Where the catalog cannot be read further, the books before.
 pub fn each_at(storage: &dyn Storage, f: &mut dyn FnMut(u64, Record)) {
     let changes = changes(storage);
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "a catalog cut short gives the books before, as said above"
+    )]
     let _ = lines(storage, &catalog_path(), &mut |offset, line| {
         if let Some(record) = Record::parse(line).and_then(|r| changes.apply(r)) {
             f(offset, record);
@@ -906,6 +910,10 @@ pub fn search_after(
 
 /// Writes `records` as the catalog (emptying the log), e.g. for tests of
 /// views.
+#[expect(
+    clippy::let_underscore_must_use,
+    reason = "for tests of views; a catalog not written is made anew by the next walk"
+)]
 pub fn write(storage: &dyn Storage, records: &[Record]) {
     let mut text = next_header(storage);
     text.extend(records.iter().map(Record::text));
@@ -1098,11 +1106,19 @@ impl Making {
             && !since.is_empty()
             && storage.write(&log_path(), since.as_bytes()).is_ok();
         if !kept {
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "the changes left in the log are in the catalog now: applied again, they change nothing"
+            )]
             let _ = storage.remove(&log_path());
         }
         Ok(())
     }
 
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "what a walk given up leaves is written anew by the next walk"
+    )]
     fn abort(storage: &dyn Storage) {
         let _ = storage.remove(&building_path());
         let _ = storage.remove(&listed_path());
@@ -1365,6 +1381,10 @@ impl Walk {
         self.making.go_on(storage)?;
         let Some(dir) = self.dir.clone() else {
             let Some(dir) = self.dirs.pop() else {
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "the listing of a walk that is done: the next walk writes it anew"
+                )]
                 let _ = storage.remove(&listed_path());
                 self.making.finish(storage)?;
                 return Ok(true);
@@ -1453,6 +1473,10 @@ impl Walk {
                 return;
             }
             let kind = if entry.is_dir { 'd' } else { 'f' };
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "writing into a String does not fail"
+            )]
             let _ = writeln!(piece, "{kind}\t{}\t{}", entry.size, entry.name);
             at += 1;
         });

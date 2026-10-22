@@ -88,12 +88,19 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
 .advanced()
 .described("file-manager.setting.hidden.help")];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for FileManager {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "File manager", Version::new(0, 1, 0))
             .description(
                 "Every folder and file on the device: open, rename, move, copy and delete them.",
             )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

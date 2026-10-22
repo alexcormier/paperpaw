@@ -45,6 +45,10 @@ pub fn run_script(device: &mut Device, script: &str) -> Result<(), String> {
     Ok(())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn run_step(device: &mut Device, step: &str) -> Result<(), String> {
     let parts: Vec<&str> = step.split(':').collect();
     let touch_step = matches!(

@@ -7,10 +7,12 @@
 mod address;
 mod button;
 pub mod choice;
+mod dialog;
 mod header;
 mod hints;
 mod image;
 pub mod items;
+pub(crate) mod layout;
 mod list;
 pub mod look;
 pub mod offline;
@@ -27,9 +29,11 @@ pub mod widget_list;
 
 pub use address::*;
 pub use button::*;
+pub use dialog::Dialog;
 pub use header::*;
 pub use hints::*;
 pub use image::*;
+pub use layout::*;
 pub use list::*;
 pub use offline::{Offer, OfflineOffer};
 pub use progress::*;

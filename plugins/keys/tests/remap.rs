@@ -6,8 +6,11 @@
 //! writes its own layer and wins there, the same input bound twice keeps
 //! the last, and the search finds actions by their names.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::Cell;
 use std::rc::Rc;

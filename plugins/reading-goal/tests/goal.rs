@@ -3,8 +3,11 @@
 //! the cat, whose mood and minutes show on the home screen and while the
 //! device sleeps; without the statistics the widget says so.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::{Rotation, SystemStatus, WallClock};

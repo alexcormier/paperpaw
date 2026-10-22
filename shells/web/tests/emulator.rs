@@ -2,8 +2,11 @@
 //! standard app and shows it, takes its buttons and touch, takes a data
 //! plugin's files and shows them after a restart, and checks them.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::path::Path;
 use std::sync::Mutex;

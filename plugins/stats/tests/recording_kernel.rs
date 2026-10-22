@@ -4,8 +4,11 @@
 //! clock; and how the numbers come out: reading across midnight and over
 //! the changes to and from summer time counted on the right days.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

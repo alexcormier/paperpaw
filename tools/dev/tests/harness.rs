@@ -3,8 +3,11 @@
 //! added, a snapshot case written, matched, then missed; and the library
 //! call a snapshot test makes.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::path::{Path, PathBuf};
 

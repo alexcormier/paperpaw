@@ -2,8 +2,11 @@
 //! (`L` mode; transparency composited over white). Small differences are
 //! expected from rounding and, when downscaling, from Pillow's box filter.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_image::{Fit, Format, ImageError, ImageSink, decode, dimensions};
 

@@ -2,8 +2,11 @@
 //! (as the browser's emulator asks them): a sample theme passes, a
 //! damaged one is found wanting, and nothing is written.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::collections::BTreeMap;
 use std::path::Path;

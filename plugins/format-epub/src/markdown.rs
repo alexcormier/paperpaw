@@ -244,6 +244,10 @@ impl State {
 
 /// Turns one line into HTML; `cut` if it goes on in the next (a line
 /// longer than [`MAX_LINE`]).
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn line(raw: &str, state: &mut State, out: &mut String, cut: bool) {
     let br = core::mem::replace(&mut state.br, !cut && raw.ends_with("  "));
     if core::mem::replace(&mut state.cut, cut) {

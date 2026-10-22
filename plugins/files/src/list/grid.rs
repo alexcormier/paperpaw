@@ -119,7 +119,10 @@ fn draw_focus(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect) {
 /// Draws a book's cell: its cover (as a stack for `count` books of a
 /// series), how far it is read on it, and its title (the series' name
 /// for a stack) below.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw_cell(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

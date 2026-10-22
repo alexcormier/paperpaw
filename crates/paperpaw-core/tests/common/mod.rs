@@ -2,7 +2,10 @@
 //! plugin (`drv`) whose screens log what reaches them, and a way to carry
 //! out commands as a plugin would, through the kernel's public API only.
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use std::cell::RefCell;
 use std::rc::Rc;

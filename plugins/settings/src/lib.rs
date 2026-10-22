@@ -31,6 +31,9 @@
 //!
 //! The main page is bound to the `core.settings` slot.
 
+// What goes wrong with the user's data is told, never dropped unseen:
+// a result left unread says why (see CONTRIBUTING.md).
+#![deny(clippy::let_underscore_must_use)]
 #![no_std]
 
 extern crate alloc;
@@ -95,10 +98,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
 )
 .described("settings.advanced.help")];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for SettingsPlugin {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Settings", Version::new(0, 1, 0))
             .description("The settings pages, built from the settings of every plugin.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

@@ -401,6 +401,10 @@ pub(crate) fn dc_level(dc: i32) -> u8 {
 // Not inlined into `decode`: each format's frame on the stack alone,
 // not all three together.
 #[inline(never)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub(crate) fn decode(
     reader: &mut Reader<'_>,
     fit: Fit,
@@ -578,7 +582,14 @@ pub(crate) fn read_huffman(
     reader.skip(left)
 }
 
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn scan(
     reader: &mut Reader<'_>,
     components: &mut [Component],

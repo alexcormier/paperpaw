@@ -44,6 +44,10 @@ pub(super) struct GroupList {
 }
 
 impl GroupList {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub(super) fn new(env: &Env<'_>) -> Self {
         let (style, header, area) = page(env);
         let settings_menu = menus::SETTINGS;
