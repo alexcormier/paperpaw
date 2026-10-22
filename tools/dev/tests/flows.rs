@@ -2,8 +2,11 @@
 //! picture written with `--bless` is compared, and a flow that expects
 //! what is not there fails with the line, what was there and a picture.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::path::PathBuf;
 

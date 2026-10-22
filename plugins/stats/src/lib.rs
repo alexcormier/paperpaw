@@ -17,6 +17,7 @@
 //! on the same device (see `sync`); its database format is in
 //! `koreader`, the merge in `merge`.
 
+#![deny(clippy::let_underscore_must_use)]
 #![no_std]
 
 extern crate alloc;
@@ -426,6 +427,10 @@ fn register_book(env: &Env<'_>, path: &str, now: i64, pages: u32) -> Option<u16>
 /// too. Where `books.ini` cannot be read or written, it stays as it was.
 fn mark_finished(env: &Env<'_>, path: &str, now: i64) {
     let year = |unix: i64| fmt::date_of(fmt::day_of(env, unix.max(0) as u32)).year;
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "books.ini that cannot be read or written stays as it was, as said above"
+    )]
     let _ = store::update_books(env.storage, |books| {
         match books.iter_mut().find(|b| b.path == path) {
             Some(book) if book.finished <= 0 || year(book.finished) != year(now) => {
@@ -476,6 +481,12 @@ static SECONDS_10: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new(
 #[derive(Debug, Default)]
 pub struct Stats;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Stats {
     fn manifest(&self) -> Manifest {
         Manifest::new(
@@ -486,9 +497,14 @@ impl Plugin for Stats {
         .description(
             "Records how long and how much you read, with a calendar and every book's numbers.",
         )
+        .how(&HOW)
         .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
         widget::register(r)?;

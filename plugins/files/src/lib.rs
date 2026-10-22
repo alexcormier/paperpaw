@@ -4,7 +4,7 @@
 //! confirm or one tap; below it every book with its cover, title, author
 //! and how far it is read. What is shown (all books, those being read,
 //! unread or finished ones, the shelves) is chosen above the books: from
-//! one row on small screens, from pills on larger ones. Series, folders
+//! one row on small screens, from chips on larger ones. Series, folders
 //! (collections), favourites, authors and tags open as lists of their
 //! own; "Find" picks a book by a letter without a keyboard. See `list`.
 //!
@@ -15,6 +15,9 @@
 //! `core.library`, and to `core.home` only as a fallback when no home
 //! screen plugin is installed.
 
+// What goes wrong with the user's data is told, never dropped unseen:
+// a result left unread says why (see CONTRIBUTING.md).
+#![deny(clippy::let_underscore_must_use)]
 #![no_std]
 
 extern crate alloc;
@@ -116,13 +119,24 @@ static SETTINGS: [SettingSpec; 3] = [
     .described("files.setting.sort.help"),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Files {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "File browser", Version::new(0, 1, 0))
             .description("Lists the books and folders on the device and opens them.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_screen(ScreenSpec::new(
             SCREEN,
@@ -371,6 +385,10 @@ pub(crate) fn archive(env: &Env<'_>, path: &str, cx: &mut Cx<'_, '_>) {
         .text(ARCHIVE.as_str())
         .trim_matches('/')
         .to_string();
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "made where missing; moving the book into it tells if it is not there"
+    )]
     let _ = env.storage.create_dir(&archive);
     let target = files::free_path(env.storage, &archive, files::name(path));
     match files::move_to(env.storage, path, &target) {

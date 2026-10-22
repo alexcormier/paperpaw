@@ -3,7 +3,11 @@
 //! not UTF-8) is read with defaults and warnings, never a panic, and
 //! saving a setting does not lose what the user wrote.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 mod common;

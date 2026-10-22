@@ -1,0 +1,5 @@
+Diagnostics is a test screen for checking a device: it shows every gray level the panel can display, four boxes to try the buttons and touch, and a page counter with a progress bar to compare the refresh modes.
+
+It has no menu entry. It is only the home screen while no other plugin offers one, or when you choose it under Screens in the plugin manager for the place Home screen.
+
+Select marks the focused box, and the arrow buttons move between the boxes; with touch, tap a box. The page buttons turn the test pages. Hold Select, or hold a finger on the screen, to start over.

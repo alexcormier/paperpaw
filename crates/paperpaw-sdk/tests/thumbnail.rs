@@ -5,8 +5,11 @@
 //! thumbnail without a panic and without taking memory for what is not
 //! there.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod support;
 

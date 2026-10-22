@@ -3,7 +3,10 @@
 //! touch only, driven by actions, taps, long presses and drags, with a
 //! keyboard that answers what the test says it types.
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use std::cell::RefCell;
 use std::collections::VecDeque;

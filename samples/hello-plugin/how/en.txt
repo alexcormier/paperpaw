@@ -1,0 +1,3 @@
+Hello greets you by name and counts the books you opened since PaperPaw started.
+
+Open it from the tools menu. Your name is set in the settings, under Your name.

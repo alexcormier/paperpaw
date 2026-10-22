@@ -207,12 +207,19 @@ static SETTINGS: [SettingSpec; 9] = [
     .described("sleep.setting.overlay-when.help"),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Sleep {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Sleep screen", Version::new(0, 1, 0))
             .description(
                 "Shows a sleeping cat, the book's cover, your pictures or a message while the device sleeps.",
             )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

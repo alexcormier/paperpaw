@@ -54,10 +54,17 @@ pub(crate) fn mark_done(env: &Env<'_>) {
 #[derive(Debug, Default)]
 pub struct Setup;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Setup {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Setup", Version::new(0, 1, 0))
             .description("A short guide through the settings that matter.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

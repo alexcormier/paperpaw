@@ -21,6 +21,8 @@
 //!   kept any more, the lock screen lets the device be used.
 //! - *Lock now* (`lock.now`) locks at once, from any button, gesture,
 //!   menu or rule.
+//! - The touch lock ([`touch`]): taps and swipes do nothing while it is
+//!   on, the buttons still work, e.g. to read with a hand on the screen.
 
 #![no_std]
 
@@ -28,6 +30,7 @@ extern crate alloc;
 
 mod code;
 mod screen;
+pub mod touch;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -147,10 +150,19 @@ static SETTINGS: [SettingSpec; 2] = [
     .guarded(),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Lock {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Screen lock", Version::new(0, 1, 0))
-            .description("A PIN, a pattern or a password when the device wakes up.")
+            .description(
+                "A PIN, a pattern or a password when the device wakes up; touch locked while reading.",
+            )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
@@ -165,6 +177,7 @@ impl Plugin for Lock {
             }),
         ))?;
         r.add_settings(&SETTINGS)?;
+        touch::register(r, state.clone())?;
         let now = state.clone();
         // Sealed: no other plugin's handler may lock in its place.
         r.add_action(

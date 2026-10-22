@@ -5,8 +5,11 @@
 //! minute and again after a failure, late and hostile answers, the device
 //! id and the key kept by earlier versions.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

@@ -398,13 +398,13 @@ fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
 const CALM_STATUS: [(&str, &str); 6] = [
     (
         "reader.status.bottom-left",
-        "core.status.clock, reader.status.aloud",
+        "core.status.clock, reader.status.aloud, lock.touch-status",
     ),
     ("reader.status.bottom-center", ""),
     ("reader.status.bottom-right", "reader.status.page"),
     ("home.status.left", "core.status.clock"),
     ("home.status.center", ""),
-    ("home.status.right", "core.status.battery"),
+    ("home.status.right", "lock.touch-status, core.status.battery"),
 ];
 
 /// The kernel with the standard app, as the X4 wants it.

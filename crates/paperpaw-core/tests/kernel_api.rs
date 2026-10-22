@@ -3,7 +3,11 @@
 //! waking, passwords and keys kept on the storage, slots opened and
 //! events sent from outside.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 mod common;
@@ -463,6 +467,89 @@ fn questions_are_asked_where_the_choice_slot_says() {
         common::render(&mut kernel);
         assert_eq!(kernel.active_screen().map(|s| s.as_str()), Some(expected));
     }
+}
+
+/// The yes or no question every plugin asks (`ask::confirm`): asked on
+/// the kernel's box, the focus on no; yes by the buttons, no by a tap on
+/// it, nothing on *Back* or a tap outside the box.
+#[test]
+fn a_yes_or_no_question_is_answered_by_buttons_and_by_touch() {
+    use paperpaw_core::sdk::event::Event;
+    use paperpaw_core::sdk::replies::Confirmed;
+    use paperpaw_core::sdk::semantics::Role;
+    use paperpaw_platform::Rect;
+    const ANSWERED: Event<Confirmed> = Event::new("drv.reply");
+    let harness = Harness::new();
+    let mut kernel = harness.kernel();
+    let ask = |kernel: &mut Kernel, at: u64| {
+        let paperpaw_core::sdk::Command::OpenSlot(slot, params) =
+            paperpaw_core::sdk::ask::confirm("Delete?", &ANSWERED)
+                .with("book", "a.epub")
+                .command()
+        else {
+            panic!("a slot");
+        };
+        kernel.open_slot(Instant(at), slot, params);
+        common::render(kernel);
+        assert_eq!(
+            kernel.active_screen().map(|s| s.as_str()),
+            Some("core.confirm-dialog")
+        );
+    };
+    let buttons = |kernel: &mut Kernel| -> Vec<(String, Rect, bool)> {
+        kernel
+            .describe()
+            .into_iter()
+            .filter(|p| p.role == Role::Button)
+            .map(|p| (p.label, p.area, p.focused))
+            .collect()
+    };
+    let closed = |kernel: &Kernel| {
+        assert_eq!(kernel.active_screen().map(|s| s.as_str()), Some("drv.base"));
+    };
+    let answers = || {
+        let lines = harness.lines("event drv.reply");
+        harness.take();
+        lines
+            .iter()
+            .map(|l| {
+                assert!(l.contains("book=a.epub"), "{l}");
+                l.contains("answer=yes")
+            })
+            .collect::<Vec<bool>>()
+    };
+    // Asked: yes and no, the focus on no.
+    ask(&mut kernel, 100);
+    let shown = buttons(&mut kernel);
+    let labels: Vec<&str> = shown.iter().map(|(l, _, _)| l.as_str()).collect();
+    assert_eq!(labels, ["Yes", "No"]);
+    assert!(!shown[0].2 && shown[1].2, "{shown:?}");
+    // Yes with the buttons: left to it, then confirm.
+    common::press(&mut kernel, 200, "left");
+    assert!(buttons(&mut kernel)[0].2);
+    common::press(&mut kernel, 300, "confirm");
+    closed(&kernel);
+    assert_eq!(answers(), [true]);
+    // No by a tap on it.
+    ask(&mut kernel, 400);
+    let no = buttons(&mut kernel)[1].1;
+    let (x, y) = (
+        i32::from(no.x) + i32::from(no.width) / 2,
+        i32::from(no.y) + i32::from(no.height) / 2,
+    );
+    common::tap(&mut kernel, 500, x, y);
+    closed(&kernel);
+    assert_eq!(answers(), [false]);
+    // Back: closed, no answer.
+    ask(&mut kernel, 700);
+    common::press(&mut kernel, 800, "back");
+    closed(&kernel);
+    assert_eq!(answers(), []);
+    // A tap outside the box, at the top of the screen: closed, no answer.
+    ask(&mut kernel, 900);
+    common::tap(&mut kernel, 1000, 60, 1);
+    closed(&kernel);
+    assert_eq!(answers(), []);
 }
 
 /// A name typed for a setting, and a number whose check refuses large

@@ -5,8 +5,11 @@
 //! raw values and array items they were written with; the streaming
 //! parser reports every value with its path, the same in any chunking.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_json::stream::{Event, MAX_DEPTH, MAX_STRING, Parser, read_file};
 use paperpaw_json::{Value, number, object, raw_member, string, string_array, text, unquote};

@@ -5,8 +5,11 @@
 //! button pausing it and reading on from there, pages turned along, a
 //! device that cannot speak, speech that fails).
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

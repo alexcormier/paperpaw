@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, events, settings};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::install::Progress;
-use paperpaw_sdk::ui::choice::Picked;
+use paperpaw_sdk::replies::Confirmed;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
@@ -26,7 +26,7 @@ use crate::samples::{self, SAMPLE, Samples};
 pub(crate) const FONT: &str = "font";
 
 /// The answer to *Remove?*.
-const REMOVE: Event<Picked> = Event::new("fonts-browser.remove");
+const REMOVE: Event<Confirmed> = Event::new("fonts-browser.remove");
 
 /// Lines of the sample at most.
 const SAMPLE_LINES: usize = 4;
@@ -176,9 +176,10 @@ impl FontScreen {
                     &[("name", Arg::Str(&font.name))],
                 );
                 cx.command(
-                    paperpaw_sdk::ask::choice(&title, &REMOVE)
-                        .about(font.plugin())
-                        .options("fonts-browser.option.", &["remove", "keep"])
+                    paperpaw_sdk::ask::confirm(&title, &REMOVE)
+                        .yes(env.i18n.tr("fonts-browser.option.remove"))
+                        .no(env.i18n.tr("fonts-browser.option.keep"))
+                        .with("plugin", font.plugin())
                         .command(),
                 );
             }
@@ -368,9 +369,10 @@ impl Screen for FontScreen {
             let env = *cx.env();
             self.samples.received(&env, &reply, self.font.as_slice());
             self.want_sample(cx);
-        } else if let Some(picked) = REMOVE.read(event, params) {
-            if picked.option == "remove"
-                && let Ok(plugin) = Id::parse(&picked.path)
+        } else if let Some(answer) = REMOVE.read(event, params) {
+            if answer.yes
+                && let Some(plugin) = answer.context.get("plugin")
+                && let Ok(plugin) = Id::parse(plugin)
             {
                 cx.command(Command::RemovePlugin(plugin));
                 self.list.set_focus(0);

@@ -1,0 +1,3 @@
+Opens web pages saved as files (.html, .htm, .xhtml) as books: only what is there to be read, without menus, adverts and the like around it.
+
+Put the file into the library folder and open it from the library like any book. Links within the page work; pictures show where they are in the file.

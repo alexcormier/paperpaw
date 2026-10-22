@@ -53,10 +53,17 @@ type OpenScreen = fn(&Env<'_>, &Params) -> Box<dyn Screen>;
 #[derive(Debug, Default)]
 pub struct MenuEditor;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for MenuEditor {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Menu editor", paperpaw_sdk::package_version!())
             .description("Reorders, removes and adds the entries of every menu.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

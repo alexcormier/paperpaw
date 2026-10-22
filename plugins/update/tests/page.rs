@@ -3,8 +3,11 @@
 //! downloaded into `updates` and then offered like one copied there, and
 //! the server's other answers are said.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::rc::Rc;
 

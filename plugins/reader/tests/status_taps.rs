@@ -1,8 +1,11 @@
 //! Status items that do something when tapped: a tap on one in a status
 //! line does it; a tap beside it shows the next line, as before.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

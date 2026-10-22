@@ -457,10 +457,17 @@ fn place_changed(env: &Env<'_>, state: &Shared, out: &mut Vec<Command>) {
 #[derive(Debug, Default)]
 pub struct Weather;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Weather {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Weather", paperpaw_sdk::package_version!())
             .description("The weather now and the next days as widgets, from Open-Meteo.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

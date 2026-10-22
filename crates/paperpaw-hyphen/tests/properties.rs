@@ -5,8 +5,11 @@
 //! exceptions win; damaged or random tables are refused or used without
 //! panicking.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_hyphen::{Patterns, compile};
 use proptest::prelude::*;

@@ -2,8 +2,11 @@
 //! unknown method, WOFF files with damaged tables, fonts too large or
 //! missing, more families than a style can name.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

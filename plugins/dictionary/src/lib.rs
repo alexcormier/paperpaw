@@ -81,10 +81,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
 .with_extra(&FOLDER_EXTRA)
 .described("dictionary.setting.folder.help")];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for DictionaryPlugin {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Dictionary", Version::new(0, 1, 0))
             .description("Looks up words in StarDict dictionaries.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

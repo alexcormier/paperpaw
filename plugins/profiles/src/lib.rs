@@ -63,10 +63,17 @@ fn apply(env: &Env<'_>, profile: &Profile, out: &mut Vec<Command>) {
 #[derive(Debug, Default)]
 pub struct Profiles;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Profiles {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Reading profiles", paperpaw_sdk::package_version!())
             .description("Named sets of reading and display settings, switched with a tap.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

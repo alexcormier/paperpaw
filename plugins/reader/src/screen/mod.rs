@@ -460,6 +460,10 @@ impl Screen for ReaderScreen {
         self.update_status(cx);
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         // A button pressed while the book is being prepared waits for it.
         self.prepare(cx);
@@ -639,6 +643,10 @@ impl Screen for ReaderScreen {
     /// A tap on a link follows it, a long press selects the word under
     /// the finger; while text is selected, taps extend the selection or
     /// choose an item of the bar.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
         // As does any tap.
         if self.aloud.is_some() {
@@ -860,6 +868,10 @@ impl ReaderScreen {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         // The book waited for is there now: opened.
         if let Some(ready) = events::DOCUMENT_READY.read(event, params)

@@ -38,6 +38,9 @@ COMMANDS:
     package     A data plugin as the installer and the website take it, a .ppn
                 file's header, fingerprint, signature and sizes, compatibility
     snapshots   Compares screens with the pictures in --snapshots (--bless writes them)
+    ui-kit      Every building block of the SDK's `ui` module, as the gallery shows
+                screens (every device, look, light and dark), checked as `visual`
+                checks; a label shortened to fit is an error
 
 PATHS:
     A data plugin folder (with plugin.ini) or a .ppn file. A plugin with code
@@ -60,6 +63,8 @@ OPTIONS:
     --release <version>   Check compatibility with this PaperPaw release
     --out <dir>           Output folder (default: target/paperpaw-dev)
     --strict              Warnings fail the run too
+    --labels-whole        A label shortened to fit is an error, wherever it ends
+                          (`visual`; `ui-kit` checks its strict pages so by itself)
     --verbose             Notes too on the console
     --keep                Keep the emulated libraries (in <out>/work)
     --list                List profiles and looks
@@ -102,6 +107,12 @@ pub struct Context {
     /// The emulated libraries kept in memory and no pictures written:
     /// where there is no file system (the browser's emulator).
     pub in_memory: bool,
+    /// A label shortened to fit (`visual.ellipsis`) is an error, not a
+    /// warning, and reported wherever it ends: for the UI kit, whose
+    /// blocks must never cut their titles; on the screens named in
+    /// `strict_screens`, or on all where that is empty.
+    pub labels_whole: bool,
+    pub strict_screens: Vec<String>,
     app_languages: OnceLock<Vec<String>>,
 }
 
@@ -127,6 +138,8 @@ impl Context {
             verbose: false,
             keep: false,
             in_memory: false,
+            labels_whole: false,
+            strict_screens: Vec::new(),
             app_languages: OnceLock::new(),
         }
     }
@@ -219,9 +232,27 @@ pub fn run(args: impl Iterator<Item = String>, add: Option<AddPlugins>) -> Resul
         return Ok(true);
     };
     context.target.add = add;
+    // The kit's pages, drawn as the gallery draws a plugin's screens.
+    // The kit's pages, drawn as the gallery draws a plugin's screens and
+    // checked as `visual` checks them, a label shortened an error.
+    let kit = command == "ui-kit";
+    if kit {
+        context.target.plugins = vec![crate::ui_kit::PLUGIN.to_string()];
+        context.target.add = Some(crate::ui_kit::add);
+        // Its strict pages, or all of them with `--labels-whole`.
+        if !context.labels_whole {
+            context.labels_whole = true;
+            context.strict_screens = crate::ui_kit::STRICT
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+        }
+    }
     let mut report = Report::default();
     let commands: Vec<&str> = if command == "check" {
         COMMANDS.to_vec()
+    } else if kit {
+        vec!["gallery", "visual"]
     } else {
         vec![command.as_str()]
     };
@@ -289,6 +320,10 @@ fn flows_at(path: PathBuf) -> Result<Vec<PathBuf>, String> {
     Ok(flows)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<(String, Context)>, String> {
     let mut command = None;
     let mut target = Target::default();
@@ -371,6 +406,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<(String, Conte
             "--release" => context.release = Some(value("--release")?),
             "--out" => out = Some(PathBuf::from(value("--out")?)),
             "--strict" => context.strict = true,
+            "--labels-whole" => context.labels_whole = true,
             "--verbose" => context.verbose = true,
             "--keep" => context.keep = true,
             flag if flag.starts_with('-') => {
@@ -400,7 +436,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<(String, Conte
 }
 
 fn is_command(word: &str) -> bool {
-    word == "check" || COMMANDS.contains(&word)
+    word == "check" || word == "ui-kit" || COMMANDS.contains(&word)
 }
 
 #[cfg(test)]

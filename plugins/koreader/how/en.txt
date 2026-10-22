@@ -1,0 +1,5 @@
+This plugin shares bookmarks and highlights with KOReader for books you read in both, on one device or in a library folder synced between devices. There is nothing to set up.
+
+When PaperPaw opens a book that KOReader has also opened, and when you change its bookmarks or highlights, it takes over what is new from KOReader's data beside the book and leaves what is new here for KOReader to pick up the next time it opens the book. Removed marks and changed notes go over too.
+
+This works for EPUB books only. If one side's file cannot be read, nothing changes on either side until it can be.

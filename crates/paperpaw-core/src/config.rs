@@ -1,7 +1,10 @@
 //! Settings: the user's configuration read and saved, a book's own
 //! settings (the scope), and what the kernel does when one changes.
 
-#[allow(unused_imports)]
+#[allow(
+    unused_imports,
+    reason = "a part of the kernel, which sees all of it; not every part uses every name"
+)]
 use super::*;
 
 /// Largest `paperpaw.ini` read.
@@ -433,6 +436,10 @@ impl Kernel {
         }
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub(crate) fn apply_user_config(&mut self, source: &str) {
         let ids = entries(source);
         // Secret settings kept in the file before: moved to the secrets.

@@ -25,6 +25,12 @@ const EN: &[u8] = include_bytes!(concat!(env!("OUT_DIR"), "/en.pphp"));
 #[derive(Debug, Default)]
 pub struct Hyphenation;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Hyphenation {
     fn manifest(&self) -> Manifest {
         Manifest::new(
@@ -33,10 +39,12 @@ impl Plugin for Hyphenation {
             Version::new(0, 1, 0),
         )
         .description("Hyphenation patterns for German and English, for evenly set text.")
+        .how(&HOW)
         .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         for (id, language, patterns) in [(ENGLISH, "en", EN), (GERMAN, "de", DE)] {
             r.add_hyphenation(HyphenationSpec::new(id, language, patterns))?;

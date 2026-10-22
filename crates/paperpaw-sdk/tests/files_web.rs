@@ -3,7 +3,11 @@
 //! itself), sizes; links, percent encoding, safe file names from
 //! addresses (no path traversal), HTTP dates and Base64.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::ops::ControlFlow;
 

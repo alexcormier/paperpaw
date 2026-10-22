@@ -71,6 +71,10 @@ fn big_size(env: &Env<'_>, room: Option<f32>) -> f32 {
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (style, font) = ui(env);
@@ -260,7 +264,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 
 /// A sheet of a tear-off calendar: the month on a dark band at the top,
 /// the day's number large, the weekday below it.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_sheet(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

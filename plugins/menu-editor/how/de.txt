@@ -1,0 +1,5 @@
+Der Menü-Editor ändert, was in den Menüs steht: Einträge nach oben oder unten schieben, entfernen oder neue hinzufügen.
+
+Du findest ihn in den Einstellungen unter Anpassen, als Menüs anpassen. Wähle ein Menü und dann einen Eintrag, um ihn zu verschieben oder zu entfernen; Eintrag hinzufügen ergänzt einen neuen. Änderungen gelten sofort. Dieses Menü zurücksetzen stellt ein Menü so her, wie seine Plugins es festlegen, Alle Menüs zurücksetzen tut das für alle.
+
+Aussperren kannst du dich nicht: Ein Eintrag, der zu den Einstellungen führt, bleibt, bis du einen anderen Weg dorthin hinzugefügt hast.

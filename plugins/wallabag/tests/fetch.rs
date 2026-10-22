@@ -1,8 +1,11 @@
 //! A fetch against answers as Wallabag gives them: the token, the list of
 //! unread articles, their books; then archiving one read to the end.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::rc::Rc;
 

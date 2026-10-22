@@ -1,7 +1,10 @@
 //! Plugins registered: their contributions merged into the kernel, the
 //! plugins switched off or required, menus, key maps and fonts.
 
-#[allow(unused_imports)]
+#[allow(
+    unused_imports,
+    reason = "a part of the kernel, which sees all of it; not every part uses every name"
+)]
 use super::*;
 
 /// Sections of `paperpaw.ini` that are no plugin's settings: no plugin
@@ -189,6 +192,10 @@ impl Kernel {
     }
 
     /// Merges a plugin's contributions: all of them or none.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub(crate) fn merge(&mut self, plugin: &Id, mut staging: Staging) -> Result<(), RegisterError> {
         for setting in staging.settings.iter().map(registry::Staged::spec) {
             if self.shared.settings.get(setting.id.as_str()).is_some() {

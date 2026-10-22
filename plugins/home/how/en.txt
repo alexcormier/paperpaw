@@ -1,0 +1,5 @@
+The home screen is made of pages, each a grid of widgets and tools like on a phone. At first the clock, the book you are reading and the recently read books are on one page, and all tools on the next.
+
+Tap an item to open it, and swipe or use the page buttons to change pages. With buttons only, the arrow buttons move from one item to the next and Select opens it.
+
+To rearrange it, hold the home screen, tap the pencil below the page or choose Edit home screen in the menu. Drag items to move them or tap one for its options, also with buttons. Add a widget is there too. Columns and Rows are in the settings, under Home screen.

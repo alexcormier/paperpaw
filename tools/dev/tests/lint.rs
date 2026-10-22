@@ -1,8 +1,11 @@
 //! The lint command on a real screen in the pseudo-language and on a
 //! data plugin made to be found wanting.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::path::{Path, PathBuf};
 

@@ -209,6 +209,10 @@ fn lines(env: &Env<'_>, moon: &Moon, today: &LocalTime) -> Vec<String> {
     lines
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (style, font) = ui(env);

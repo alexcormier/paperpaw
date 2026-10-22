@@ -3,7 +3,11 @@
 //! heads, conflicting or broken lengths, chunked bodies with bad sizes,
 //! cut bodies and trailers, interim answers and the end of the connection.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 use paperpaw_http::{Error, Head, MAX_HEAD, Parser};

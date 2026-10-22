@@ -202,7 +202,7 @@ static SETTINGS: [SettingSpec; 11] = [
     part(
         BOTTOM_RIGHT,
         "reader.status.bottom-right",
-        "wifi.status, power.status, core.status.battery, reader.status.page",
+        "lock.touch-status, wifi.status, power.status, core.status.battery, reader.status.page",
         &BOTTOM_ITEMS,
     ),
     SettingSpec::fixed_switch(
@@ -214,6 +214,10 @@ static SETTINGS: [SettingSpec; 11] = [
     .described("reader.status.battery-percent.help"),
 ];
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
     for place in PLACES {
@@ -418,6 +422,10 @@ pub(crate) fn load_choice(storage: &dyn Storage) -> [String; 2] {
 }
 
 pub(crate) fn save_choice(storage: &dyn Storage, chosen: &[String; 2]) {
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "which status line the reader chose; not kept, the first shows next time"
+    )]
     let _ = storage.write(
         &choice_path(),
         format!("{}\n{}\n", chosen[0], chosen[1]).as_bytes(),

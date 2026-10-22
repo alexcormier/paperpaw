@@ -29,11 +29,8 @@ pub(crate) struct Overlay {
     screen: String,
     /// Each zone's frame, its text and the box the text is in.
     zones: Vec<(Rect, String, Rect)>,
-    /// The lines of the box.
-    lines: Vec<String>,
-    /// Where the box and its buttons are.
-    panel: Rect,
-    buttons: [Rect; 2],
+    /// The box: the hints without a zone, *Got it*, *No more hints*.
+    dialog: ui::Dialog,
     focus: usize,
 }
 
@@ -51,21 +48,21 @@ impl Overlay {
                 None => lines.push(text),
             }
         }
+        let lines: Vec<&str> = lines.iter().map(String::as_str).collect();
+        let buttons = [env.i18n.tr("help.got-it"), env.i18n.tr("help.no-more")];
+        let dialog = ui::Dialog::new(env, &style, env.i18n.tr("help.title"), &lines, &buttons);
         let mut overlay = Self {
             style,
             screen,
             zones,
-            lines,
-            panel: Rect::new(0, 0, 0, 0),
-            buttons: [Rect::new(0, 0, 0, 0); 2],
+            dialog,
             focus: GOT_IT,
         };
         overlay.lay_out(env);
         overlay
     }
 
-    /// The zones' frames and their texts' boxes, then the box: the title,
-    /// the lines (wrapped), the buttons.
+    /// The zones' frames and their texts' boxes, then where the box goes.
     fn lay_out(&mut self, env: &Env<'_>) {
         let style = self.style;
         let display = env.device.display;
@@ -103,25 +100,12 @@ impl Overlay {
                 .min(display.height.saturating_sub(height));
             *label = Rect::new(x, y, width, height);
         }
-        // One space all round and between its parts: the screen's margin.
-        let width = display.width.saturating_sub(2 * margin);
-        let text_width = f32::from(width.saturating_sub(2 * margin));
-        let line = font.line_metrics(style.text).line_height as u16;
-        let rows: usize = self
-            .lines
-            .iter()
-            .map(|l| font.wrap(style.text, l, text_width).len().max(1))
-            .sum();
-        let title = font.line_metrics(style.title).line_height as u16;
-        let button_h = ui::button_height(
-            &style,
-            Rect::new(0, 0, 0, style.touch_row(style.row) as u16),
-        );
-        let height = (margin * 4 + title + line * rows as u16 + button_h).min(display.height);
-        // Where it hides least of the zones, their texts above all.
+        // Where the box hides least of the zones, their texts above all.
+        let height = self.dialog.height().min(display.height);
         let room = display.height.saturating_sub(height);
         let covered = |y: u16| -> u32 {
-            let panel = Rect::new((display.width - width) / 2, y, width, height);
+            let mut panel = self.dialog.panel();
+            panel.y = y;
             let area = |r: &Rect| {
                 panel
                     .intersection(r)
@@ -136,14 +120,7 @@ impl Overlay {
             .into_iter()
             .min_by_key(|y| covered(*y))
             .unwrap_or(room / 2);
-        self.panel = Rect::new((display.width - width) / 2, y, width, height);
-        let half = width.saturating_sub(3 * margin) / 2;
-        let y = self.panel.y + self.panel.height.saturating_sub(margin + button_h);
-        let x = self.panel.x + margin;
-        self.buttons = [
-            Rect::new(x, y, half, button_h),
-            Rect::new(x + half + margin, y, half, button_h),
-        ];
+        self.dialog.place(y);
     }
 
     /// Closes, the screen's hints seen; `more` false switches all off.
@@ -219,63 +196,19 @@ impl Screen for Overlay {
                 y += small;
             }
         }
-        // The box.
-        let r = self.panel;
-        canvas.fill(r, Color::WHITE);
-        ui::stroke_round(canvas, &style, r, style.line * 2, Color::BLACK);
-        let margin = style.margin as u16;
-        let title = env.i18n.tr("help.title");
-        let title_h = font.line_metrics(style.title).line_height as u16;
-        let title_row = Rect::new(r.x + margin, r.y + margin, r.width - 2 * margin, title_h);
-        let x = f32::from(title_row.x)
-            + (f32::from(title_row.width) - font.measure(style.title, title)).max(0.0) / 2.0;
-        ui::draw_label(
-            canvas,
-            &font,
-            style.title,
-            x,
-            title_row,
-            title,
-            Color::BLACK,
-        );
-        let width = f32::from(r.width.saturating_sub(2 * margin));
-        let line = font.line_metrics(style.text).line_height as u16;
-        let mut y = title_row.y + title_row.height + margin;
-        for text in &self.lines {
-            for range in font.wrap(style.text, text, width) {
-                let row = Rect::new(r.x + margin, y, r.width - 2 * margin, line);
-                ui::draw_label(
-                    canvas,
-                    &font,
-                    style.text,
-                    f32::from(row.x),
-                    row,
-                    &text[range],
-                    Color::BLACK,
-                );
-                y += line;
-            }
-        }
-        let labels = [env.i18n.tr("help.got-it"), env.i18n.tr("help.no-more")];
-        for (i, (rect, label)) in self.buttons.iter().zip(labels).enumerate() {
-            ui::draw_button(canvas, env, &style, *rect, label, false, i == self.focus);
-        }
+        self.dialog.draw(canvas, env, &style, Some(self.focus));
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         if *action == actions::CONFIRM {
             let more = self.focus == GOT_IT;
             self.close(more, cx);
-        } else if *action == actions::LEFT
-            || *action == actions::RIGHT
-            || *action == actions::NEXT
-            || *action == actions::PREVIOUS
-        {
-            self.focus = if self.focus == GOT_IT {
-                NO_MORE
-            } else {
-                GOT_IT
-            };
+        } else if self.dialog.on_scroll_action(action) {
+            // Hints longer than the screen: the page buttons scroll them.
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Fast);
+        } else if let Some(focus) = self.dialog.step(self.focus, action) {
+            self.focus = focus;
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
         } else {
@@ -286,8 +219,13 @@ impl Screen for Overlay {
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        if self.dialog.on_gesture(&gesture) {
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Fast);
+            return Handled::Yes;
+        }
         if gesture.kind == GestureKind::Tap {
-            let more = !self.buttons[NO_MORE].contains(gesture.start);
+            let more = self.dialog.hit(gesture.start) != Some(NO_MORE);
             self.close(more, cx);
         }
         Handled::Yes

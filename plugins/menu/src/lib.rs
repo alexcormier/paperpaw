@@ -60,10 +60,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
 )
 .described("menu.setting.style.help")];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Menu {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Menu", Version::new(0, 1, 0))
             .description("The menu at the bottom of the screen, with actions and settings.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

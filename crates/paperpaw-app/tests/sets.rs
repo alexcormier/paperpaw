@@ -3,8 +3,11 @@
 //! get online, update, install more and recover; the list of crates the
 //! firmware writes into its image (ADR 0022) is what is registered.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{Kernel, KernelBuilder};
 use paperpaw_platform::{DeviceInfo, DisplayInfo, InputCaps, MemoryClass, PixelFormat, Rotation};

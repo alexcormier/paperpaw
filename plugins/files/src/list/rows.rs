@@ -1,6 +1,6 @@
 //! How the calm list draws a book: a row with a cover, the title on up to
 //! two lines, author and series below and how far it is read; the
-//! "Continue reading" card; the filter pills; a progress bar.
+//! "Continue reading" card; the filter row; a progress bar.
 //!
 //! Everything drawn here was read before: a book's record of the catalog,
 //! its details, its cover made small and the badges plugins put on it
@@ -31,13 +31,13 @@ pub(crate) struct Sizes {
     /// The "Continue reading" card, and its cover's place.
     pub(crate) card: u16,
     pub(crate) card_cover: (u16, u16),
-    /// A pill (filters, buttons): as high as a fingertip on touch screens.
+    /// A pill (the card's button): as high as a fingertip on touch screens.
     pub(crate) pill: u16,
     /// How thick a progress bar is.
     pub(crate) bar: u16,
     /// A small screen (the X4's 55 mm wide): fewer things with more room
     /// around them, one line of details under a title, the filters
-    /// behind one row ([`Sizes::filter_row`]) instead of pills.
+    /// behind one row ([`Sizes::filter_row`]) instead of chips.
     pub(crate) compact: bool,
     /// The row that shows and changes the filter on small screens.
     pub(crate) filter_row: u16,
@@ -276,7 +276,10 @@ pub(crate) fn draw_cover(
 
 /// Draws a progress bar `width` wide, centred on the line `area`
 /// starting at `x`: a light track, the part read dark.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw_bar(
     canvas: &mut Canvas<'_>,
     style: &UiStyle,
@@ -304,7 +307,10 @@ pub(crate) fn draw_bar(
 
 /// Draws a small tag (e.g. "New") at `x` on the line `area`: outlined, or
 /// filled with `ink`; returns its width.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw_tag(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -374,7 +380,10 @@ fn state_width(env: &Env<'_>, style: &UiStyle, bar: u16, book: &Loaded) -> u16 {
 /// the percentage while it is read, a check when finished, "New" for a
 /// new book; nothing for a book opened but not begun. Returns where what
 /// it drew ends.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_state(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -529,7 +538,10 @@ pub(crate) fn prepare_row(
 }
 
 /// Draws a book's note in `area` from `x`, its badges' icons after it.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_note(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -578,7 +590,10 @@ pub(crate) fn prepare_card(
 /// cover at the margin, then its title on up to two lines, its details
 /// below and how far it is read (with its series on larger screens);
 /// `next` marks the book to read next in a series.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw_book_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -647,7 +662,10 @@ pub(crate) fn draw_book_row(
 /// up to two lines, and one line below: its details at the start, how
 /// far it is read at the end, on the right margin; `next` marks the book
 /// to read next in a series.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_compact_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -844,7 +862,10 @@ pub(crate) fn draw_card(
 /// (`label`) with a mark that it opens a choice, and at the end `end`
 /// (how many books) or, on touch screens, the search button
 /// (`search`).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw_filter_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -886,113 +907,5 @@ pub(crate) fn draw_filter_row(
     }
     if !focused {
         ui::draw_separator(canvas, style, rect, 0);
-    }
-}
-
-/// The pills of the filters in `area`, from the margin, as wide as their
-/// labels; where they do not all fit, the last one (the shelves) shows
-/// as its icon. Returns their places and whether the last is an icon.
-pub(crate) fn pill_places(
-    env: &Env<'_>,
-    style: &UiStyle,
-    sizes: &Sizes,
-    area: Rect,
-    labels: &[String],
-) -> (Vec<Rect>, bool) {
-    let Some(font) = style.font(env) else {
-        return (Vec::new(), false);
-    };
-    let margin = style.margin as u16;
-    let room = area.width.saturating_sub(2 * margin);
-    let between = style.gap as u16 / 2;
-    let widths = |pad: u16, icon: bool| -> Vec<u16> {
-        labels
-            .iter()
-            .enumerate()
-            .map(|(n, label)| {
-                let text = if icon && n + 1 == labels.len() {
-                    ui::icon_width(env, "books", style.small * 1.3)
-                } else {
-                    font.measure(style.small, label)
-                };
-                // At least as wide as high: a short word's pill ("All")
-                // a fingertip wide too.
-                (text as u16 + 2 * pad).max(sizes.pill)
-            })
-            .collect()
-    };
-    let total = |w: &[u16]| w.iter().sum::<u16>() + between * (w.len() as u16).saturating_sub(1);
-    let gap = style.gap as u16;
-    let mut chosen = (widths(gap, false), false);
-    for (pad, icon) in [(gap, true), (gap * 2 / 3, true), (gap / 3, true)] {
-        if total(&chosen.0) <= room {
-            break;
-        }
-        chosen = (widths(pad, icon), icon);
-    }
-    let y = area.y + area.height.saturating_sub(sizes.pill) / 2;
-    let mut x = area.x + margin;
-    let places = chosen
-        .0
-        .iter()
-        .map(|w| {
-            let place = Rect::new(x, y, *w, sizes.pill);
-            x += w + between;
-            place
-        })
-        .collect();
-    (places, chosen.1)
-}
-
-/// Draws the pills at `places` with `labels`, `active` filled (none
-/// where what is shown has no pill of its own), the last as the shelves'
-/// icon where `icon`; `focused`, the active one framed as the focus is.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn draw_pills(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    places: &[Rect],
-    labels: &[String],
-    active: Option<usize>,
-    focused: bool,
-    icon: bool,
-) {
-    let Some(font) = style.font(env) else {
-        return;
-    };
-    let ring = (style.line * 2).max(3);
-    for (n, (place, label)) in places.iter().zip(labels).enumerate() {
-        let on = Some(n) == active;
-        let radius = u32::from(place.height / 2);
-        canvas.describe(Role::Button, label, *place, on && focused, Some(on));
-        if on && focused {
-            // The focus: a bar under the pill, as wide as it.
-            let gap = (style.gap as u16 / 4).max(2);
-            let bar = Rect::new(
-                place.x,
-                place.y + place.height + gap,
-                place.width,
-                ring as u16,
-            );
-            canvas.fill_round(bar, ring / 2, Color::BLACK);
-        }
-        let ink = if on {
-            canvas.fill_round(*place, radius, Color::BLACK);
-            Color::WHITE
-        } else {
-            canvas.stroke_round(*place, style.line.max(1), radius, Color::BLACK);
-            Color::BLACK
-        };
-        if icon && n + 1 == labels.len() {
-            let size = style.small * 1.3;
-            let w = ui::icon_width(env, "books", size);
-            let x = f32::from(place.x) + (f32::from(place.width) - w) / 2.0;
-            ui::draw_icon(canvas, env, "books", size, x, *place, ink);
-        } else {
-            let w = font.measure(style.small, label);
-            let x = f32::from(place.x) + (f32::from(place.width) - w) / 2.0;
-            ui::draw_label(canvas, &font, style.small, x, *place, label, ink);
-        }
     }
 }

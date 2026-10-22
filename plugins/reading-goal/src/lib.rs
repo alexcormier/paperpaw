@@ -199,12 +199,19 @@ fn told(storage: &dyn Storage) -> Option<(i32, u32)> {
 #[derive(Debug, Default)]
 pub struct ReadingGoal;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for ReadingGoal {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Reading goal", paperpaw_sdk::package_version!())
             .description(
                 "Minutes to read a day, and a cat on the home screen whose mood follows today's reading.",
             )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

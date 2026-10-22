@@ -267,7 +267,14 @@ fn grid(env: &Env<'_>, font: &FontHandle<'_>, area: Rect, rows: u8, all: bool) -
 /// `weeks_shown` weeks (so that two months shown side by side line up).
 /// Where the whole month has no room, the week of today alone; where that
 /// has none either, today's number large under the month's name.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn draw_month(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -388,7 +395,10 @@ fn draw_month(
 /// Today alone, where not even a week has room: the month's name (or
 /// its short name) small above the day's number as large as fits, the
 /// two in the middle; the name left out where both have no room.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_today(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -445,7 +455,10 @@ fn draw_today(
 
 /// Draws today's mark round the number at `x`, `y` and returns the
 /// number's colour on it.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_mark(
     canvas: &mut Canvas<'_>,
     look: &widgets::Look,

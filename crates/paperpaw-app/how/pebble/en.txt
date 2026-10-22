@@ -1,0 +1,3 @@
+Pebble gives touch screens a softer look: lists sit on rounded cards, as groups in a phone's settings do, and the chosen row is a light bar (a frame where the screen has only black and white).
+
+It comes switched off. Switch it on among the plugins in the settings. It only sets defaults: whatever you chose under Appearance stays, and switching it off brings the usual look back.

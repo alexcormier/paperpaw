@@ -1,0 +1,5 @@
+More plugins is the plugin store: it finds plugins for this device on the internet and installs, updates and removes them. Open it from Tools; it needs Wi-Fi.
+
+Plugins are listed by group, and you can search and sort them. Open one to see its page, with its size and the memory it takes, then choose Install, Update or Remove. Update all brings every installed plugin up to date.
+
+Code plugins run with full access to the device: the store says so and asks first, and they start after a restart. If one goes wrong, PaperPaw starts without code plugins and says which. Plugin library sets where the list comes from.

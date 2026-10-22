@@ -2,8 +2,11 @@
 //! whatever the archive's order, files that are no pictures left out,
 //! empty and damaged archives refused, odd `ComicInfo.xml`.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

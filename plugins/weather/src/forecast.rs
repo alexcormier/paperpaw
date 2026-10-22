@@ -289,6 +289,10 @@ impl Context<'_, '_> {
 
     /// The days side by side, each a column: its name, symbol, highest,
     /// lowest and chance of rain, one below the other.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn row(&self, canvas: &mut Canvas<'_>, area: Rect, days: &[Day]) {
         let style = self.style;
         let font = self.font;
@@ -459,6 +463,10 @@ impl Context<'_, '_> {
 
     /// The days one below the other, each a row: its name, symbol, chance
     /// of rain, lowest, a bar of its range within the week's, highest.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn list(&self, canvas: &mut Canvas<'_>, area: Rect, days: &[Day]) {
         let style = self.style;
         let font = self.font;

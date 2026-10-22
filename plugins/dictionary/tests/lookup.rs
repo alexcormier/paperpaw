@@ -2,8 +2,11 @@
 //! again with every word, the caches of dictionaries removed go, and the
 //! good ones are still indexed.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::Cell;
 use std::rc::Rc;

@@ -1,6 +1,9 @@
 //! QR codes and pictures (covers, illustrations) drawn into an area.
 
-#[allow(clippy::wildcard_imports)]
+#[allow(
+    clippy::wildcard_imports,
+    reason = "a part of the module, which shares its imports"
+)]
 use super::*;
 
 // ---- QR codes ----------------------------------------------------------

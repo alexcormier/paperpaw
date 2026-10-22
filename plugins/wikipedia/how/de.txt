@@ -1,0 +1,5 @@
+Wikipedia schlägt Wörter online nach, neben den Wörterbüchern. Schlägst du ein Wort in einem Buch nach, listet die Wörterbuch-Anzeige, was deine Wörterbücher finden. Wähle Online, um auch Wikipedia zu fragen: Die kurze Zusammenfassung seines Artikels erscheint als weiterer Eintrag, in der Sprache des Buchs, sonst der von PaperPaw.
+
+Öffne den Eintrag, um ihn auf einem eigenen Bildschirm zu lesen. Die Seitentasten oder Tippen scrollen ihn, die Auswahltaste oder ein Tippen am Ende schließt ihn.
+
+Dafür braucht es ein Netz. Gibt es keinen Artikel, sagt es das.

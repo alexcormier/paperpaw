@@ -5,8 +5,11 @@
 //! is, and passwords kept with the other
 //! secrets, never in the list.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 #[path = "harness/mod.rs"]
 mod common;

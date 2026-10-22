@@ -3,8 +3,11 @@
 //! while charging); a mode's values worn over the reader's own and taken
 //! off again, nothing written.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::{Battery, Rotation, SystemStatus};

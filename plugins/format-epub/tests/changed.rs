@@ -1,8 +1,11 @@
 //! A book replaced by another of its name, even of the same size, is read
 //! anew: nothing converted or decoded from the one before stays.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_plugin_format_epub::{EpubDocument, Fb2Document, HtmlDocument, MarkdownDocument};
 use paperpaw_sdk::document::{BlockKind, Document, Locator};

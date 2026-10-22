@@ -1,8 +1,11 @@
 //! A session on an emulated X4: a screen and a widget shown, the widget's
 //! cell measured.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_dev::cases;
 use paperpaw_dev::cli::Context;

@@ -1,0 +1,5 @@
+Weather shows the weather now and the next days as widgets for the home screen, from Open-Meteo, which needs no account or key. Weather now shows the temperature, the condition and more to choose; Forecast shows the next days in a row or a list.
+
+First choose a place: in the settings, under Weather, Place (type a name, then pick it from the places found). Only its coordinates are sent, and only while a weather widget is shown. Add the widgets by editing the home screen.
+
+The weather is fetched at most as often as Update at most every says, and only while there is a network: it never switches Wi-Fi on by itself.

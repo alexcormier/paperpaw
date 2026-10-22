@@ -4,8 +4,11 @@
 //! onto the lines next to them; decorators asked in their order, those
 //! switched off left out.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod support;
 

@@ -6,8 +6,11 @@
 //! plugin adds, opened and closed again on a device with buttons only
 //! (as the X4) and on a touch screen.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::rc::Rc;
 

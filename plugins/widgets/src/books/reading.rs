@@ -490,6 +490,10 @@ fn cover_at(env: &Env<'_>, area: Rect, book: &Book) -> Option<Rect> {
         .then(|| Rect::new(area.x, area.y + (area.height - h) / 2, w, h))
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn draw(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

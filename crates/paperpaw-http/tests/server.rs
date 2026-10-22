@@ -3,7 +3,11 @@
 //! heads, broken or conflicting lengths, invalid UTF-8, targets that look
 //! like path traversal), and answer heads made with [`response_head`].
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 use paperpaw_http::server::{MAX_REQUEST_HEAD, RequestHead, parse_request, reason, response_head};

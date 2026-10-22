@@ -50,11 +50,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
 #[derive(Debug, Default)]
 pub struct FontsBrowser;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for FontsBrowser {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "More fonts", paperpaw_sdk::package_version!()).description(
                 "Shows fonts from the internet, each with a sample, and downloads them to read with.",
-            ).uses(paperpaw_sdk::Uses::NETWORK)
+            ).how(&HOW).uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

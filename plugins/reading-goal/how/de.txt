@@ -1,0 +1,5 @@
+Eine Katze auf deinem Startbildschirm zeigt, wie das Lesen heute läuft: traurig, solange du noch nicht gelesen hast, so lala nach ein wenig, zufrieden ab der Hälfte deines Tagesziels, glücklich, sobald du es erreicht hast.
+
+Füge das Widget Lesekatze zum Startbildschirm hinzu (Startbildschirm lange drücken, dann ein Widget hinzufügen) oder wähle Die Lesekatze von heute als Ruhebildschirm. Ein Tippen auf die Katze öffnet das Tagesziel; es ist das Ziel der Lesestatistik, die deine Leseminuten zählt.
+
+In den Einstellungen unter Lesen legen Zufrieden ab und Glücklich ab fest, ab welchem Anteil des Ziels die Katze zufrieden oder glücklich ist, und Eigene Bilder einen Ordner mit Bildern (sad, meh, content und happy), die statt der Katzen erscheinen.

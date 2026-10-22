@@ -1,6 +1,9 @@
 //! Paged, focusable lists ([`ListView`]) and moving a focus.
 
-#[allow(clippy::wildcard_imports)]
+#[allow(
+    clippy::wildcard_imports,
+    reason = "a part of the module, which shares its imports"
+)]
 use super::*;
 
 /// What changed after moving a list's focus.

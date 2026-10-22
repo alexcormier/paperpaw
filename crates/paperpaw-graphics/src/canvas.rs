@@ -185,7 +185,6 @@ impl<'a> Canvas<'a> {
         }
     }
 
-    /// The visible region of this canvas, in its coordinates.
     /// The grays a picture is shown in where the frame has few (2 to 16:
     /// black and white, four grays, sixteen), for those who draw pictures
     /// to dither them themselves ([`diffuse`](crate::diffuse)), from the
@@ -221,6 +220,7 @@ impl<'a> Canvas<'a> {
         }
     }
 
+    /// The visible region of this canvas, in its coordinates.
     pub fn clip(&self) -> Rect {
         let (left, top, right, bottom) = self.local_clip();
         let fit = |v: i64| v.clamp(0, i64::from(u16::MAX)) as u16;
@@ -433,7 +433,10 @@ impl<'a> Canvas<'a> {
 
     /// Draws the outline of a rectangle with corners rounded by `radius`
     /// pixels, `thickness` wide, growing inwards.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "its inputs are separate things; a struct of them would serve this call alone"
+    )]
     pub fn stroke_round_rect(
         &mut self,
         x: i32,

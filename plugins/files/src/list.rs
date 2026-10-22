@@ -1,9 +1,9 @@
 //! The library as a calm list with covers and how far each book is
 //! read. The library is one list of all books (those in folders
 //! included), opening with the book read last as a larger card, so going
-//! on reading is one confirm or one tap. Pills under the header filter
+//! on reading is one confirm or one tap. Chips under the header filter
 //! the books by how far they are read (All, Reading, Unread, Finished);
-//! the last pill shows the shelves instead: favourites, authors, the
+//! the last chip shows the shelves instead: favourites, authors, the
 //! series and the folders (collections). A series lists its books with
 //! their covers, numbers and states, the next one to read marked and
 //! focused. "Find" in the header picks a book by the first letter of its
@@ -12,7 +12,7 @@
 //!
 //! On small screens (the X4) the filters sit behind one row above the
 //! books, which shows what is shown and opens a choice of it (and of
-//! "Find"); larger screens show them as pills.
+//! "Find"); larger screens show them as chips ([`ui::Chips`]).
 //!
 //! Buttons work as in every list: the focus moves a book at a time, the
 //! page buttons turn pages, confirm opens, holding confirm (the menu
@@ -20,7 +20,7 @@
 //! open, finished, favourite, information, archive, the book menu's
 //! actions, delete, asked about first). Above the first
 //! book (and after the last) the focus reaches the filter's row.
-//! Touch: tap the filter's row or a pill, a book, the search button (for
+//! Touch: tap the filter's row or a chip, a book, the search button (for
 //! "Find"); hold a book for its actions; tap the title for the library's
 //! menu.
 //!
@@ -230,17 +230,16 @@ impl ShelfRow {
     }
 }
 
-/// Where things go on the screen, and the words of the pills: made anew
+/// Where things go on the screen, and the words of the chips: made anew
 /// when a setting changes (the view, the size of the interface).
 struct Layout {
     style: UiStyle,
     sizes: Sizes,
     header: ui::Header,
-    /// The pills and their names (larger screens), and whether the last
-    /// shows as an icon.
-    pills: Vec<Rect>,
-    pill_labels: Vec<String>,
-    pill_icon: bool,
+    /// The filters' chips and their names (larger screens; none on
+    /// small ones).
+    chips: ui::Chips,
+    chip_labels: Vec<String>,
     /// The filter's row (small screens).
     filter_row: Option<Rect>,
     /// Where the books (or shelves) go.
@@ -256,18 +255,31 @@ impl Layout {
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
         let gap = style.gap as u16;
-        let pill_labels: Vec<String> = Filter::ALL
+        let chip_labels: Vec<String> = Filter::ALL
             .iter()
             .map(|f| env.i18n.tr(f.label()).to_string())
             .collect();
-        let (pills, pill_icon, filter_row, top) = if sizes.compact {
+        let (chips, filter_row, top) = if sizes.compact {
             let row = Rect::new(0, header.area.height, display.width, sizes.filter_row);
-            (Vec::new(), false, Some(row), row.y + row.height + gap / 2)
+            (
+                ui::Chips::default(),
+                Some(row),
+                row.y + row.height + gap / 2,
+            )
         } else {
-            // Room below the pills for the focus's bar.
-            let pills_area = Rect::new(0, header.area.height, display.width, sizes.pill + gap);
-            let (pills, icon) = rows::pill_places(env, &style, &sizes, pills_area, &pill_labels);
-            (pills, icon, None, pills_area.y + pills_area.height)
+            // From margin to margin, with room round them for the focus.
+            let margin = style.margin as u16;
+            let labels: Vec<&str> = chip_labels.iter().map(String::as_str).collect();
+            let width = display.width.saturating_sub(2 * margin);
+            // As many rows as the words need: none is shortened.
+            let band = Rect::new(
+                margin,
+                header.area.height,
+                width,
+                ui::Chips::height_for(env, &style, width, &labels) + gap,
+            );
+            let chips = ui::Chips::new(env, &style, band, &labels);
+            (chips, None, band.y + band.height)
         };
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let grid = (env.settings.read(&crate::VIEW) == crate::VIEW_COVERS)
@@ -276,9 +288,8 @@ impl Layout {
             style,
             sizes,
             header,
-            pills,
-            pill_labels,
-            pill_icon,
+            chips,
+            chip_labels,
             filter_row,
             area,
             grid,
@@ -310,7 +321,7 @@ struct ListScreen {
     /// The focus shows: with buttons, and on touch screens once a button
     /// moved it.
     shown: bool,
-    /// The focus is on the filter's row or the pills.
+    /// The focus is on the filter's row or the chips.
     filter_focused: bool,
     /// The books of the page shown, read when it was shown.
     loaded: Vec<Loaded>,
@@ -741,7 +752,7 @@ impl ListScreen {
     }
 
     /// Moves the focus by `delta` entries. Past the first (or the last)
-    /// it reaches the filter's row (or the pills), as in other lists the
+    /// it reaches the filter's row (or the chips), as in other lists the
     /// header's note.
     fn step(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
         let len = self.len();
@@ -884,7 +895,7 @@ impl ListScreen {
         Some(Rect::new(right.saturating_sub(square), a.y, square, square))
     }
 
-    /// Where the filter is: its row, or the pills' band.
+    /// Where the filter is: its row, or the chips' band.
     fn filter_area(&self) -> Rect {
         match self.layout.filter_row {
             Some(row) => row,
@@ -982,24 +993,25 @@ impl Screen for ListScreen {
                 let ink = style.header_colors().1;
                 ui::draw_icon(canvas, env, "search", size, x, button, ink);
             }
-            // No pills before there are books to sort. Next in your series
-            // is on the shelves: their pill is the active one then.
+            // No chips before there are books to sort. Next in your series
+            // is on the shelves: their chip is the chosen one then.
             if has_books {
                 let shown = if self.filter == Filter::Next {
                     Filter::Shelves
                 } else {
                     self.filter
                 };
-                let active = Filter::ALL.iter().position(|f| *f == shown);
-                rows::draw_pills(
+                let chosen = Filter::ALL.iter().position(|f| *f == shown);
+                // The names as the chips take them, without allocating.
+                let labels: [&str; Filter::ALL.len()] =
+                    core::array::from_fn(|i| layout.chip_labels[i].as_str());
+                layout.chips.draw(
                     canvas,
                     env,
                     &style,
-                    &layout.pills,
-                    &layout.pill_labels,
-                    active,
-                    focused_filter,
-                    layout.pill_icon,
+                    &labels,
+                    chosen.unwrap_or(usize::MAX),
+                    chosen.filter(|_| focused_filter),
                 );
             }
         }
@@ -1093,6 +1105,10 @@ impl Screen for ListScreen {
     fn on_timer(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if !self.covered && self.index.dirty {
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "made where missing; keeping the index tells if it fails"
+            )]
             let _ = env.storage.create_dir(".paperpaw/plugins/files");
             let kept = library::service(&env).keep_index(&env, &self.index, KEPT, &self.archive);
             self.index.dirty = !kept;
@@ -1104,7 +1120,7 @@ impl Screen for ListScreen {
         let touch = cx.env().device.input.touch;
         let side = *a == actions::LEFT || *a == actions::RIGHT;
         if side && self.filter_focused && self.layout.filter_row.is_none() {
-            // On the pills, left and right go from pill to pill.
+            // On the chips, left and right go from chip to chip.
             let steps = if *a == actions::LEFT { -1 } else { 1 };
             self.set_filter(self.filter.step(steps), cx);
         } else if *a == actions::NEXT_PAGE || *a == actions::PREV_PAGE {
@@ -1175,7 +1191,7 @@ impl Screen for ListScreen {
             }
             return Handled::Yes;
         }
-        if let Some(n) = self.layout.pills.iter().position(|p| p.contains(point)) {
+        if let Some(n) = self.layout.chips.hit(point) {
             self.set_filter(Filter::ALL[n], cx);
             return Handled::Yes;
         }

@@ -5,8 +5,11 @@
 //! the room numbers above each other get, and notes that speak of
 //! buttons where there is no touch screen.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod support;
 

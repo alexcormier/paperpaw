@@ -99,6 +99,9 @@ pub struct Scene<'a> {
     pub panel: Panel,
     /// A widget's cell.
     pub cell: Option<Rect>,
+    /// Every label shortened with "…" is reported, wherever it ends (the
+    /// UI kit: no block may shorten one).
+    pub labels_whole: bool,
 }
 
 impl<'a> Scene<'a> {
@@ -117,7 +120,13 @@ impl<'a> Scene<'a> {
             ui,
             panel: Panel::Gray,
             cell: None,
+            labels_whole: false,
         }
+    }
+
+    pub fn labels_whole(mut self, whole: bool) -> Self {
+        self.labels_whole = whole;
+        self
     }
 
     pub fn panel(mut self, panel: Panel) -> Self {

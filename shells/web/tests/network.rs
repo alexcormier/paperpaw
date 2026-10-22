@@ -3,8 +3,11 @@
 //! answers fail as without one, or go to the page to fetch where it allows
 //! that; each told to the page.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_web::emulator::Emulator;
 use paperpaw_web::network::Fixture;

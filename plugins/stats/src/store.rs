@@ -325,6 +325,10 @@ fn drop_cut_record(storage: &dyn Storage, log: &str, size: u64) -> Result<(), St
         storage.rename(&new, log)
     })();
     if copied.is_err() {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a temporary file left behind is written over the next time"
+        )]
         let _ = storage.remove(&new);
     }
     copied
@@ -338,6 +342,10 @@ pub(crate) fn replace_log(storage: &dyn Storage, file: &str) -> Result<(), Stora
     let new = path("pages.new");
     let result = write_log(storage, file, &new);
     if result.is_err() {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a temporary file left behind is written over the next time"
+        )]
         let _ = storage.remove(&new);
     }
     result
@@ -518,6 +526,10 @@ pub(crate) fn days(storage: &dyn Storage, day_of: impl Fn(u32) -> i32) -> Vec<Da
         out.extend_from_slice(&d.encode());
     }
     // Only a shortcut: if it cannot be kept, the days are summed anew.
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "only a shortcut: days not kept are summed anew, as said above"
+    )]
     let _ = storage.write(&file, &out);
     days
 }

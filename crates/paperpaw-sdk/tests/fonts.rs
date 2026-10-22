@@ -3,7 +3,11 @@
 //! panic, a family's face nearest each style's weight is chosen, and the
 //! roles fall back to fonts that are there.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::rc::Rc;
 

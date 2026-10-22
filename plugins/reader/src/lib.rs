@@ -21,6 +21,9 @@
 //!
 //! It is bound to the `core.reader` slot; any other plugin can replace it.
 
+// What goes wrong with the user's data is told, never dropped unseen:
+// a result left unread says why (see CONTRIBUTING.md).
+#![deny(clippy::let_underscore_must_use)]
 #![no_std]
 
 extern crate alloc;
@@ -306,13 +309,24 @@ static SETTINGS: [SettingSpec; 9] = [
     .described("reader.setting.aloud-timer.help"),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Reader {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Reader", Version::new(0, 1, 0))
             .description("Shows books page by page, with table of contents and reading settings.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // Each book's position, page index and own settings, moved and
         // removed with it.

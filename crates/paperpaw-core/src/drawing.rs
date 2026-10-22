@@ -2,7 +2,10 @@
 //! described for reading aloud and tests, captured as a screenshot; the
 //! busy mark; the screen made anew for another size.
 
-#[allow(unused_imports)]
+#[allow(
+    unused_imports,
+    reason = "a part of the kernel, which sees all of it; not every part uses every name"
+)]
 use super::*;
 
 /// What is drawn: the parts changed, the bands, large pictures shown, a

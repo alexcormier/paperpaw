@@ -313,7 +313,7 @@ macro_rules! event_data {
         impl $name {
             /// Made of its fields in their order; the optional ones are
             /// `None`.
-            #[allow(clippy::too_many_arguments, dead_code)]
+            #[allow(clippy::too_many_arguments, dead_code, reason = "made by the macro for every event: as many fields as it has, and not every event's used")]
             $vis fn new($($field: $type),*) -> Self {
                 Self {
                     $( $field, )*
@@ -323,7 +323,7 @@ macro_rules! event_data {
 
             $($(
                 /// Sets this optional field (to `None` too).
-                #[allow(dead_code)]
+                #[allow(dead_code, reason = "made by the macro for every event's optional fields; not every one is used")]
                 $opt_vis fn $opt(mut self, $opt: impl Into<Option<$opt_type>>) -> Self {
                     self.$opt = $opt.into();
                     self

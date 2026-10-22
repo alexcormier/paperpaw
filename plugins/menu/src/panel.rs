@@ -241,7 +241,7 @@ fn place(line: &Line, area: Rect, g: Geometry) -> Row {
     );
     let (label, controls) = match line {
         Line::Buttons(controls) => {
-            let cells = split(inner, controls.len(), g.spacing);
+            let cells = ui::columns(inner, controls.len(), g.spacing);
             (None, controls.iter().cloned().zip(cells).collect())
         }
         // Drawn as the settings pages draw it, across the row.
@@ -258,7 +258,7 @@ fn place(line: &Line, area: Rect, g: Geometry) -> Row {
             (Some(id.clone()), controls)
         }
         Line::Segments(id, options) => {
-            let cells = split(rest, options.len(), g.spacing);
+            let cells = ui::columns(rest, options.len(), g.spacing);
             let controls = options
                 .iter()
                 .zip(cells)
@@ -783,15 +783,6 @@ fn inset(area: Rect, g: &Geometry) -> Rect {
     area.inset(g.margin(), pad)
 }
 
-/// `count` equal parts of `area` side by side, `gap` apart.
-fn split(area: Rect, count: usize, gap: u16) -> Vec<Rect> {
-    let count = count.max(1) as u16;
-    let width = area.width.saturating_sub(gap * (count - 1)) / count;
-    (0..count)
-        .map(|i| Rect::new(area.x + i * (width + gap), area.y, width, area.height))
-        .collect()
-}
-
 impl Screen for PanelScreen {
     fn region(&self, _: &Env<'_>) -> Option<Rect> {
         Some(self.region)
@@ -1187,8 +1178,9 @@ mod layout_tests {
         let row = place(&buttons, Rect::new(0, 100, 480, 60), geometry());
         assert_eq!(row.controls.len(), 3);
         let widths: Vec<u16> = row.controls.iter().map(|(_, r)| r.width).collect();
-        assert!(widths.iter().all(|w| *w == widths[0]));
-        assert!(row.controls[2].1.x + row.controls[2].1.width <= 480 - 20);
+        // As wide as each other to a pixel, the last ending at the margin.
+        assert!(widths.iter().all(|w| w.abs_diff(widths[0]) <= 1));
+        assert_eq!(row.controls[2].1.right(), 480 - 20);
         assert_eq!(row.controls[1].1.x, row.controls[0].1.right() as u16 + 5);
 
         // A slider is its whole row, across the screen.

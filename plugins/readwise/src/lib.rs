@@ -206,10 +206,17 @@ fn push_bounded(field: &mut String, text: &str, max: usize) {
 #[derive(Debug, Default)]
 pub struct Readwise;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Readwise {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Readwise", paperpaw_sdk::package_version!())
             .description("Sends the highlights of exported notes to Readwise.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

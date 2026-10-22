@@ -180,6 +180,12 @@ const EXPORT_NAME: &str = "Vocabulary.tsv";
 #[derive(Debug, Default)]
 pub struct Vocabulary;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Vocabulary {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Vocabulary", paperpaw_sdk::package_version!())
@@ -187,6 +193,7 @@ impl Plugin for Vocabulary {
                 "Keeps the words you look up, with their sentences, and reviews flash cards with spaced repetition, made on your phone.",
             )
             // The page for editing cards on a phone.
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
@@ -235,6 +242,17 @@ impl Plugin for Vocabulary {
             "vocabulary.review.title",
             Box::new(|env, params| Box::new(review::ReviewScreen::new(env, params))),
         ))?;
+        // The first review: the answers, by touch or with the buttons.
+        paperpaw_sdk::help::add(
+            r,
+            review::SCREEN.as_str(),
+            &[
+                paperpaw_sdk::help::Hint::any("vocabulary.help.answers"),
+                paperpaw_sdk::help::Hint::touch("vocabulary.help.tap"),
+                paperpaw_sdk::help::Hint::buttons("vocabulary.help.select"),
+                paperpaw_sdk::help::Hint::any("vocabulary.help.back"),
+            ],
+        )?;
         r.add_screen(ScreenSpec::new(
             Id::new_static(SLEEP_CARD),
             "vocabulary.sleep-card",

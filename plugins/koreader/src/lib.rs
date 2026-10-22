@@ -24,6 +24,9 @@
 //! the time they were made: while neither they nor the clock tell it,
 //! they wait here.
 
+// What goes wrong with the user's data is told, never dropped unseen:
+// a result left unread says why (see CONTRIBUTING.md).
+#![deny(clippy::let_underscore_must_use)]
 #![no_std]
 
 extern crate alloc;
@@ -207,12 +210,20 @@ fn save_known(storage: &dyn Storage, book: &str, known: &[Known]) {
         }
         out.push('\n');
     }
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "kept as it was when this check came in; decide whether the user should hear of a failure here when this is next changed"
+    )]
     let _ = storage.write(&known_file(book), out.as_bytes());
 }
 
 /// Whether a folder has anything in it.
 fn has_entries(storage: &dyn Storage, dir: &str) -> bool {
     let mut any = false;
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "a folder that cannot be listed has no entries here"
+    )]
     let _ = storage.list(dir, &mut |_| any = true);
     any
 }
@@ -505,6 +516,10 @@ fn known_time(times: impl IntoIterator<Item = i64>) -> Option<i64> {
 /// Exchanges the annotations of the book at `book` with KOReader's side
 /// `theirs`; `true` if those here changed. Nothing changes on either side
 /// if a file here cannot be read.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Unreadable> {
     let (doc, storage) = (x.doc, x.storage);
     // Only where KOReader's positions are understood.
@@ -623,6 +638,10 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
             ("datetime", at.unwrap_or(Value::Nil)),
             ("device_id", lua::string(DEVICE)),
         ]);
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "kept as it was when this check came in; decide whether the user should hear of a failure here when this is next changed"
+        )]
         let _ = storage.write(&exchange_file(book), lua::write(&file).as_bytes());
     }
     if shared != known {
@@ -696,12 +715,20 @@ impl Announced {
 fn moved_book(env: &Env<'_>, from: &str, to: &str) {
     let storage = env.storage;
     if has_entries(storage, &sidecar(from)) {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "kept as it was when this check came in; decide whether the user should hear of a failure here when this is next changed"
+        )]
         let _ = storage.rename(&sidecar(from), &sidecar(to));
         let old = format!(
             "{}/{}.annotations.lua",
             sidecar(to),
             paperpaw_sdk::files::name(from)
         );
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "kept as it was when this check came in; decide whether the user should hear of a failure here when this is next changed"
+        )]
         let _ = storage.rename(&old, &exchange_file(to));
     }
 }
@@ -710,10 +737,17 @@ fn moved_book(env: &Env<'_>, from: &str, to: &str) {
 #[derive(Debug, Default)]
 pub struct KoReader;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for KoReader {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "KOReader", paperpaw_sdk::package_version!())
             .description("Shares bookmarks and highlights with KOReader for books read in both.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

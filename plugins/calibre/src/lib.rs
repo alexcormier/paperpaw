@@ -100,10 +100,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
 .described("calibre.setting.address.help")
 .advanced()];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Calibre {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Calibre", paperpaw_sdk::package_version!())
             .description("Receive books from Calibre over the network, as its wireless device.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
@@ -399,6 +406,10 @@ impl CalibreScreen {
 
     /// Answers a message of Calibre's, then reads on (unless a book or
     /// the end comes).
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn handle(&mut self, message: Message, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let args = message.args.as_str();
@@ -622,6 +633,10 @@ fn library_folder<'e>(env: &Env<'e>) -> &'e str {
 }
 
 impl Screen for CalibreScreen {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         self.header.draw(

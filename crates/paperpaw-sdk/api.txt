@@ -64,6 +64,15 @@ impl paperpaw_sdk::ask::ChoiceQuestion
 pub fn paperpaw_sdk::ask::ChoiceQuestion::about(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::ask::ChoiceQuestion::command(self) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::ask::ChoiceQuestion::options(self, &str, &[&str]) -> Self
+pub struct paperpaw_sdk::ask::ConfirmQuestion
+impl paperpaw_sdk::ask::ConfirmQuestion
+pub fn paperpaw_sdk::ask::ConfirmQuestion::command(self) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::ask::ConfirmQuestion::context(self, &paperpaw_sdk::Params) -> Self
+pub fn paperpaw_sdk::ask::ConfirmQuestion::focus_yes(self) -> Self
+pub fn paperpaw_sdk::ask::ConfirmQuestion::no(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::ask::ConfirmQuestion::text(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::ask::ConfirmQuestion::with(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn paperpaw_sdk::ask::ConfirmQuestion::yes(self, impl core::convert::Into<alloc::string::String>) -> Self
 pub struct paperpaw_sdk::ask::FolderQuestion
 impl paperpaw_sdk::ask::FolderQuestion
 pub fn paperpaw_sdk::ask::FolderQuestion::command(self) -> paperpaw_sdk::Command
@@ -80,6 +89,7 @@ pub fn paperpaw_sdk::ask::TextQuestion::password(self) -> Self
 pub fn paperpaw_sdk::ask::TextQuestion::remote_command(self) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::ask::TextQuestion::with(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::ask::choice(impl core::convert::Into<alloc::string::String>, &paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked>) -> paperpaw_sdk::ask::ChoiceQuestion
+pub fn paperpaw_sdk::ask::confirm(impl core::convert::Into<alloc::string::String>, &paperpaw_sdk::event::Event<paperpaw_sdk::replies::Confirmed>) -> paperpaw_sdk::ask::ConfirmQuestion
 pub fn paperpaw_sdk::ask::folder(&paperpaw_sdk::event::Event<paperpaw_sdk::replies::Chosen>) -> paperpaw_sdk::ask::FolderQuestion
 pub fn paperpaw_sdk::ask::text(impl core::convert::Into<alloc::string::String>, &paperpaw_sdk::event::Event<paperpaw_sdk::replies::Typed>) -> paperpaw_sdk::ask::TextQuestion
 pub mod paperpaw_sdk::builtin
@@ -517,6 +527,7 @@ pub const paperpaw_sdk::builtin::roles::SEARCH_HIT: paperpaw_sdk::Id
 pub mod paperpaw_sdk::builtin::screens
 pub const paperpaw_sdk::builtin::screens::ADD_WIDGET: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::CHOICE: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::screens::CONFIRM: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::FOLDER_EDITOR: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::PLACEHOLDER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::screens::STATUS_ITEMS: paperpaw_sdk::Id
@@ -640,6 +651,7 @@ pub const paperpaw_sdk::builtin::slots::BROWSER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::CHOICE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::CHOOSE_FOLDER: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::CHOOSE_VALUE: paperpaw_sdk::Id
+pub const paperpaw_sdk::builtin::slots::CONFIRM: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::EDIT_WIDGETS: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::FOOTNOTE: paperpaw_sdk::Id
 pub const paperpaw_sdk::builtin::slots::HOME: paperpaw_sdk::Id
@@ -1203,6 +1215,9 @@ pub fn paperpaw_sdk::reading::PageWords::to_params(&self) -> paperpaw_sdk::Param
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Chosen
 pub fn paperpaw_sdk::replies::Chosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Chosen::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Confirmed
+pub fn paperpaw_sdk::replies::Confirmed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::replies::Confirmed::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::HttpReply::to_params(&self) -> paperpaw_sdk::Params
@@ -2561,6 +2576,14 @@ pub paperpaw_sdk::replies::Chosen::path: alloc::string::String
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Chosen
 pub fn paperpaw_sdk::replies::Chosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Chosen::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::replies::Confirmed
+pub paperpaw_sdk::replies::Confirmed::context: paperpaw_sdk::Params
+pub paperpaw_sdk::replies::Confirmed::yes: bool
+impl paperpaw_sdk::replies::Confirmed
+pub fn paperpaw_sdk::replies::Confirmed::new(bool, paperpaw_sdk::Params) -> Self
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Confirmed
+pub fn paperpaw_sdk::replies::Confirmed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::replies::Confirmed::to_params(&self) -> paperpaw_sdk::Params
 pub struct paperpaw_sdk::replies::HttpReply
 pub paperpaw_sdk::replies::HttpReply::body: alloc::string::String
 pub paperpaw_sdk::replies::HttpReply::content_type: core::option::Option<alloc::string::String>
@@ -3001,6 +3024,38 @@ pub fn paperpaw_sdk::ui::choice::Picked::from_params(&paperpaw_sdk::Params) -> c
 pub fn paperpaw_sdk::ui::choice::Picked::to_params(&self) -> paperpaw_sdk::Params
 pub const paperpaw_sdk::ui::choice::OPTION: &str
 pub fn paperpaw_sdk::ui::choice::open(paperpaw_sdk::Id, &paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked>, &str, &str, &str, &[&str]) -> paperpaw_sdk::Command
+pub mod paperpaw_sdk::ui::confirm
+pub struct paperpaw_sdk::ui::confirm::Confirm
+impl paperpaw_sdk::ui::confirm::Confirm
+pub fn paperpaw_sdk::ui::confirm::Confirm::new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> Self
+impl paperpaw_sdk::Screen for paperpaw_sdk::ui::confirm::Confirm
+pub fn paperpaw_sdk::ui::confirm::Confirm::dims_below(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::grays(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::guards(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::hint(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
+pub fn paperpaw_sdk::ui::confirm::Confirm::hints(&self) -> core::option::Option<paperpaw_sdk::Hints>
+pub fn paperpaw_sdk::ui::confirm::Confirm::holds_edges(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::mirrored(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_gesture(&mut self, paperpaw_sdk::Gesture, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_hide(&mut self)
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::outside(&self) -> paperpaw_sdk::Outside
+pub fn paperpaw_sdk::ui::confirm::Confirm::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::ui::confirm::Confirm::secret(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::confirm::Confirm::takes_double_taps(&self) -> bool
+pub const paperpaw_sdk::ui::confirm::ANSWER: &str
+pub const paperpaw_sdk::ui::confirm::FOCUS_YES: &str
+pub const paperpaw_sdk::ui::confirm::NO_LABEL: &str
+pub const paperpaw_sdk::ui::confirm::YES_LABEL: &str
 pub mod paperpaw_sdk::ui::items
 pub struct paperpaw_sdk::ui::items::ItemsScreen
 impl paperpaw_sdk::ui::items::ItemsScreen
@@ -3038,6 +3093,10 @@ pub mod paperpaw_sdk::ui::look
 pub paperpaw_sdk::ui::look::ButtonPart::focused: bool
 pub paperpaw_sdk::ui::look::ButtonPart::on: bool
 pub paperpaw_sdk::ui::look::ButtonPart::rect: paperpaw_platform::geometry::Rect
+#[non_exhaustive] pub struct paperpaw_sdk::ui::look::CheckPart
+pub paperpaw_sdk::ui::look::CheckPart::inverted: bool
+pub paperpaw_sdk::ui::look::CheckPart::on: bool
+pub paperpaw_sdk::ui::look::CheckPart::rect: paperpaw_platform::geometry::Rect
 #[non_exhaustive] pub struct paperpaw_sdk::ui::look::FocusPart
 pub paperpaw_sdk::ui::look::FocusPart::rect: paperpaw_platform::geometry::Rect
 #[non_exhaustive] pub struct paperpaw_sdk::ui::look::FramePart
@@ -3061,6 +3120,7 @@ pub fn paperpaw_sdk::ui::look::Look::fmt(&self, &mut core::fmt::Formatter<'_>) -
 pub struct paperpaw_sdk::ui::look::Painters
 impl paperpaw_sdk::ui::look::Painters
 pub const fn paperpaw_sdk::ui::look::Painters::button(self, paperpaw_sdk::ui::look::InkPainter<paperpaw_sdk::ui::look::ButtonPart>) -> Self
+pub const fn paperpaw_sdk::ui::look::Painters::check(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::CheckPart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::focus(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::FocusPart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::frame(self, paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::FramePart>) -> Self
 pub const fn paperpaw_sdk::ui::look::Painters::header(self, paperpaw_sdk::ui::look::InkPainter<paperpaw_sdk::ui::look::HeaderPart>) -> Self
@@ -3254,6 +3314,10 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::region(&self, &paperpaw_sdk::E
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::takes_double_taps(&self) -> bool
+#[non_exhaustive] pub enum paperpaw_sdk::ui::DateOrder
+pub paperpaw_sdk::ui::DateOrder::DayMonthYear
+pub paperpaw_sdk::ui::DateOrder::MonthDayYear
+pub paperpaw_sdk::ui::DateOrder::YearMonthDay
 #[non_exhaustive] pub enum paperpaw_sdk::ui::Focus
 pub paperpaw_sdk::ui::Focus::Fill
 pub paperpaw_sdk::ui::Focus::Ring
@@ -3285,6 +3349,10 @@ pub fn paperpaw_sdk::ui::ListChange::request(self, &mut paperpaw_sdk::Cx<'_, '_>
 pub enum paperpaw_sdk::ui::Offer
 pub paperpaw_sdk::ui::Offer::NotNow
 pub paperpaw_sdk::ui::Offer::Online
+pub enum paperpaw_sdk::ui::PickerPart
+pub paperpaw_sdk::ui::PickerPart::Minus(usize)
+pub paperpaw_sdk::ui::PickerPart::Plus(usize)
+pub paperpaw_sdk::ui::PickerPart::Value(usize)
 #[non_exhaustive] pub enum paperpaw_sdk::ui::ReorderStep
 pub paperpaw_sdk::ui::ReorderStep::Changed
 pub paperpaw_sdk::ui::ReorderStep::Dropped
@@ -3313,6 +3381,53 @@ pub paperpaw_sdk::ui::TextRole::Headline
 pub paperpaw_sdk::ui::TextRole::Numeral
 pub paperpaw_sdk::ui::TextRole::Small
 pub paperpaw_sdk::ui::TextRole::Title
+pub struct paperpaw_sdk::ui::Chips
+impl paperpaw_sdk::ui::Chips
+pub fn paperpaw_sdk::ui::Chips::cell(&self, usize) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::ui::Chips::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &[&str], usize, core::option::Option<usize>)
+pub fn paperpaw_sdk::ui::Chips::height(&paperpaw_sdk::ui::UiStyle) -> u16
+pub fn paperpaw_sdk::ui::Chips::height_for(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &[&str]) -> u16
+pub fn paperpaw_sdk::ui::Chips::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
+pub fn paperpaw_sdk::ui::Chips::new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &[&str]) -> Self
+pub fn paperpaw_sdk::ui::Chips::shown(&self) -> usize
+pub fn paperpaw_sdk::ui::Chips::step(&self, usize, &paperpaw_sdk::Id) -> core::option::Option<usize>
+pub struct paperpaw_sdk::ui::DatePicker
+impl paperpaw_sdk::ui::DatePicker
+pub fn paperpaw_sdk::ui::DatePicker::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle)
+pub fn paperpaw_sdk::ui::DatePicker::focus(&self) -> usize
+pub fn paperpaw_sdk::ui::DatePicker::height(&paperpaw_sdk::ui::UiStyle) -> u16
+pub fn paperpaw_sdk::ui::DatePicker::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<paperpaw_sdk::ui::PickerPart>
+pub fn paperpaw_sdk::ui::DatePicker::new(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, (i32, u8, u8)) -> Self
+pub fn paperpaw_sdk::ui::DatePicker::next_field(&mut self) -> bool
+pub fn paperpaw_sdk::ui::DatePicker::on_action(&mut self, &paperpaw_sdk::Id) -> bool
+pub fn paperpaw_sdk::ui::DatePicker::on_tap(&mut self, paperpaw_platform::geometry::Point) -> bool
+pub fn paperpaw_sdk::ui::DatePicker::order(self, paperpaw_sdk::ui::DateOrder) -> Self
+pub fn paperpaw_sdk::ui::DatePicker::set_focus(&mut self, usize)
+pub fn paperpaw_sdk::ui::DatePicker::value(&self) -> (i32, u8, u8)
+pub fn paperpaw_sdk::ui::DatePicker::years(self, i32, i32) -> Self
+pub struct paperpaw_sdk::ui::Dialog
+impl paperpaw_sdk::ui::Dialog
+pub fn paperpaw_sdk::ui::Dialog::button(&self, usize) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::ui::Dialog::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, core::option::Option<usize>)
+pub fn paperpaw_sdk::ui::Dialog::height(&self) -> u16
+pub fn paperpaw_sdk::ui::Dialog::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
+pub fn paperpaw_sdk::ui::Dialog::new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &str, &[&str], &[&str]) -> Self
+pub fn paperpaw_sdk::ui::Dialog::on_gesture(&mut self, &paperpaw_sdk::Gesture) -> bool
+pub fn paperpaw_sdk::ui::Dialog::on_scroll_action(&mut self, &paperpaw_sdk::Id) -> bool
+pub fn paperpaw_sdk::ui::Dialog::panel(&self) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::Dialog::place(&mut self, u16)
+pub fn paperpaw_sdk::ui::Dialog::scroll(&mut self, isize) -> bool
+pub fn paperpaw_sdk::ui::Dialog::scrolls(&self) -> bool
+pub fn paperpaw_sdk::ui::Dialog::step(&self, usize, &paperpaw_sdk::Id) -> core::option::Option<usize>
+pub struct paperpaw_sdk::ui::Grid
+impl paperpaw_sdk::ui::Grid
+pub fn paperpaw_sdk::ui::Grid::cell(&self, usize) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::Grid::hit(&self, paperpaw_platform::geometry::Point, usize, usize) -> core::option::Option<usize>
+pub fn paperpaw_sdk::ui::Grid::new(paperpaw_platform::geometry::Rect, u16, u16, u16) -> Self
+pub fn paperpaw_sdk::ui::Grid::page_of(&self, usize) -> usize
+pub fn paperpaw_sdk::ui::Grid::per_page(&self) -> usize
+pub fn paperpaw_sdk::ui::Grid::rows(&self) -> usize
+pub fn paperpaw_sdk::ui::Grid::step(&self, usize, &paperpaw_sdk::Id, usize) -> core::option::Option<usize>
 pub struct paperpaw_sdk::ui::Header
 pub paperpaw_sdk::ui::Header::area: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::Header::note_button: bool
@@ -3425,6 +3540,14 @@ pub fn paperpaw_sdk::ui::sections::Sections::set_focus(&mut self, usize) -> pape
 pub fn paperpaw_sdk::ui::sections::Sections::step(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::turn(&mut self, bool) -> paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::sections::Sections::visible(&self) -> alloc::vec::Vec<(paperpaw_sdk::ui::sections::Item, paperpaw_platform::geometry::Rect)>
+pub struct paperpaw_sdk::ui::Segments
+impl paperpaw_sdk::ui::Segments
+pub fn paperpaw_sdk::ui::Segments::cell(&self, usize) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::ui::Segments::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &[&str], usize, core::option::Option<usize>)
+pub fn paperpaw_sdk::ui::Segments::height(&paperpaw_sdk::ui::UiStyle) -> u16
+pub fn paperpaw_sdk::ui::Segments::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
+pub fn paperpaw_sdk::ui::Segments::new(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, usize) -> Self
+pub fn paperpaw_sdk::ui::Segments::step(&self, usize, &paperpaw_sdk::Id) -> core::option::Option<usize>
 pub struct paperpaw_sdk::ui::Slider
 impl paperpaw_sdk::ui::slider::Slider
 pub fn paperpaw_sdk::ui::slider::Slider::clamp(&self, i64) -> i64
@@ -3461,6 +3584,21 @@ pub fn paperpaw_sdk::ui::slider::SliderView<'a>::focus(self, paperpaw_sdk::ui::s
 pub fn paperpaw_sdk::ui::slider::SliderView<'a>::new(paperpaw_platform::geometry::Rect, i64, &'a str) -> Self
 pub fn paperpaw_sdk::ui::slider::SliderView<'a>::note(self, &'a str) -> Self
 pub fn paperpaw_sdk::ui::slider::SliderView<'a>::title(self, &'a str) -> Self
+pub struct paperpaw_sdk::ui::Stack
+impl paperpaw_sdk::ui::Stack
+pub fn paperpaw_sdk::ui::Stack::new(paperpaw_platform::geometry::Rect, u16) -> Self
+pub fn paperpaw_sdk::ui::Stack::rest(&self) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::Stack::take(&mut self, u16) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::Stack::take_bottom(&mut self, u16) -> paperpaw_platform::geometry::Rect
+pub struct paperpaw_sdk::ui::TextView
+impl paperpaw_sdk::ui::TextView
+pub fn paperpaw_sdk::ui::TextView::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &str)
+pub fn paperpaw_sdk::ui::TextView::new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str) -> Self
+pub fn paperpaw_sdk::ui::TextView::on_action(&mut self, &paperpaw_sdk::Id) -> bool
+pub fn paperpaw_sdk::ui::TextView::on_gesture(&mut self, &paperpaw_sdk::Gesture) -> bool
+pub fn paperpaw_sdk::ui::TextView::rows(&self) -> usize
+pub fn paperpaw_sdk::ui::TextView::scroll(&mut self, isize) -> bool
+pub fn paperpaw_sdk::ui::TextView::top(&self) -> usize
 pub struct paperpaw_sdk::ui::Thumbnail
 impl paperpaw_sdk::ui::Thumbnail
 pub fn paperpaw_sdk::ui::Thumbnail::bytes(&self) -> usize
@@ -3471,6 +3609,19 @@ pub fn paperpaw_sdk::ui::Thumbnail::keep(&self, &dyn paperpaw_platform::storage:
 pub fn paperpaw_sdk::ui::Thumbnail::kept(&dyn paperpaw_platform::storage::Storage, &str, u64, (u16, u16)) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::Thumbnail::new(&dyn paperpaw_platform::storage::Storage, &paperpaw_document::ImageRef, u16, u16, paperpaw_platform::pixel::PixelFormat) -> core::option::Option<Self>
 pub fn paperpaw_sdk::ui::Thumbnail::width(&self) -> u16
+pub struct paperpaw_sdk::ui::TimePicker
+impl paperpaw_sdk::ui::TimePicker
+pub fn paperpaw_sdk::ui::TimePicker::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle)
+pub fn paperpaw_sdk::ui::TimePicker::focus(&self) -> usize
+pub fn paperpaw_sdk::ui::TimePicker::height(&paperpaw_sdk::ui::UiStyle) -> u16
+pub fn paperpaw_sdk::ui::TimePicker::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<paperpaw_sdk::ui::PickerPart>
+pub fn paperpaw_sdk::ui::TimePicker::new(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, (u8, u8)) -> Self
+pub fn paperpaw_sdk::ui::TimePicker::next_field(&mut self) -> bool
+pub fn paperpaw_sdk::ui::TimePicker::on_action(&mut self, &paperpaw_sdk::Id) -> bool
+pub fn paperpaw_sdk::ui::TimePicker::on_tap(&mut self, paperpaw_platform::geometry::Point) -> bool
+pub fn paperpaw_sdk::ui::TimePicker::set_focus(&mut self, usize)
+pub fn paperpaw_sdk::ui::TimePicker::twelve_hours(self, bool) -> Self
+pub fn paperpaw_sdk::ui::TimePicker::value(&self) -> (u8, u8)
 #[non_exhaustive] pub struct paperpaw_sdk::ui::UiStyle
 pub paperpaw_sdk::ui::UiStyle::cards: bool
 pub paperpaw_sdk::ui::UiStyle::corner: u32
@@ -3518,10 +3669,17 @@ pub fn paperpaw_sdk::ui::button_border(&paperpaw_sdk::ui::UiStyle) -> u32
 pub fn paperpaw_sdk::ui::button_height(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> u16
 pub fn paperpaw_sdk::ui::button_hints_height(&paperpaw_sdk::Env<'_>) -> u16
 pub fn paperpaw_sdk::ui::button_width(&paperpaw_sdk::ui::UiStyle, f32) -> f32
+pub fn paperpaw_sdk::ui::card_inside(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::look::Frame) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::check_rect(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::check_row_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str, &str) -> u16
+pub fn paperpaw_sdk::ui::columns(paperpaw_platform::geometry::Rect, usize, u16) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::draw_address(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, core::option::Option<&paperpaw_qr::QrCode>, &str, core::option::Option<&str>)
 pub fn paperpaw_sdk::ui::draw_arrow(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, (i32, i32), &str, bool, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::draw_button(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, bool, bool)
 pub fn paperpaw_sdk::ui::draw_button_hints(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, &[paperpaw_sdk::Hint], core::option::Option<usize>)
+pub fn paperpaw_sdk::ui::draw_card(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::look::Frame) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::draw_check(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, bool)
+pub fn paperpaw_sdk::ui::draw_check_row(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str, &str, bool)
 pub fn paperpaw_sdk::ui::draw_chevron(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, i32, i32, bool, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::draw_empty(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, &str, &str)
 pub fn paperpaw_sdk::ui::draw_faint_button(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, bool)
@@ -3552,10 +3710,12 @@ pub fn paperpaw_sdk::ui::draw_stepper_lines(&mut paperpaw_graphics::canvas::Canv
 pub fn paperpaw_sdk::ui::draw_switch(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, bool)
 pub fn paperpaw_sdk::ui::draw_switch_lines(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::ui::RowLines, bool, &str, &str, bool)
 pub fn paperpaw_sdk::ui::draw_switch_row(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str, &str, bool)
+pub fn paperpaw_sdk::ui::draw_text_field(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str, &str, &str)
 pub fn paperpaw_sdk::ui::draw_value_row(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str, &str)
 pub fn paperpaw_sdk::ui::edge_bar_band(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::edge_bar_height(&paperpaw_sdk::ui::UiStyle) -> u16
 pub fn paperpaw_sdk::ui::edge_room(&paperpaw_sdk::ui::UiStyle, u16) -> u16
+pub fn paperpaw_sdk::ui::edit_text(&str, &str, &paperpaw_sdk::event::Event<paperpaw_sdk::replies::Typed>) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::ui::fill(&mut paperpaw_graphics::canvas::Canvas<'_>, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::fill_round(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::fit(&paperpaw_sdk::FontHandle<'_>, f32, &str, f32) -> alloc::string::String
@@ -3581,8 +3741,11 @@ pub fn paperpaw_sdk::ui::setting_row(&paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::
 pub fn paperpaw_sdk::ui::setting_value(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> alloc::string::String
 pub fn paperpaw_sdk::ui::step_focus(usize, isize, usize) -> usize
 pub fn paperpaw_sdk::ui::stepper(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str) -> core::option::Option<(paperpaw_platform::geometry::Rect, paperpaw_platform::geometry::Rect)>
+pub fn paperpaw_sdk::ui::stepper_lines(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, u16, &str, &str) -> paperpaw_sdk::ui::RowLines
 pub fn paperpaw_sdk::ui::stroke_round(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::switch_rect(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_sdk::ui::text_field_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str) -> u16
+pub fn paperpaw_sdk::ui::text_field_layout(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, f32, u16, u16) -> (paperpaw_platform::geometry::Rect, paperpaw_platform::geometry::Rect, bool)
 pub fn paperpaw_sdk::ui::title_area(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::tr_input<'a>(&paperpaw_sdk::Env<'a>, &'a str) -> &'a str
 pub fn paperpaw_sdk::ui::two_options(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> bool
@@ -5037,6 +5200,7 @@ impl core::default::Default for paperpaw_sdk::ItemState
 pub fn paperpaw_sdk::ItemState::default() -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::Manifest
 pub paperpaw_sdk::Manifest::description: alloc::borrow::Cow<'static, str>
+pub paperpaw_sdk::Manifest::how: &'static [(&'static str, &'static str)]
 pub paperpaw_sdk::Manifest::id: paperpaw_sdk::Id
 pub paperpaw_sdk::Manifest::name: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::Manifest::sdk: paperpaw_sdk::Version
@@ -5044,6 +5208,7 @@ pub paperpaw_sdk::Manifest::uses: paperpaw_sdk::Uses
 pub paperpaw_sdk::Manifest::version: paperpaw_sdk::Version
 impl paperpaw_sdk::Manifest
 pub fn paperpaw_sdk::Manifest::description(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub fn paperpaw_sdk::Manifest::how(self, &'static [(&'static str, &'static str)]) -> Self
 pub fn paperpaw_sdk::Manifest::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, paperpaw_sdk::Version) -> Self
 pub fn paperpaw_sdk::Manifest::sdk(self, paperpaw_sdk::Version) -> Self
 pub fn paperpaw_sdk::Manifest::uses(self, paperpaw_sdk::Uses) -> Self
@@ -5168,7 +5333,7 @@ pub paperpaw_sdk::PluginInfo::update: core::option::Option<paperpaw_sdk::Version
 impl paperpaw_sdk::PluginInfo
 pub fn paperpaw_sdk::PluginInfo::can_switch_off(&self) -> bool
 pub fn paperpaw_sdk::PluginInfo::description<'a>(&'a self, &'a paperpaw_i18n::Translator) -> &'a str
-pub fn paperpaw_sdk::PluginInfo::how<'a>(&self, &'a paperpaw_i18n::Translator) -> core::option::Option<&'a str>
+pub fn paperpaw_sdk::PluginInfo::how<'a>(&'a self, &'a paperpaw_i18n::Translator) -> core::option::Option<&'a str>
 pub fn paperpaw_sdk::PluginInfo::name<'a>(&'a self, &'a paperpaw_i18n::Translator) -> &'a str
 pub fn paperpaw_sdk::PluginInfo::restart_needed(&self) -> bool
 pub struct paperpaw_sdk::Plugins
@@ -5641,6 +5806,9 @@ pub fn paperpaw_sdk::reading::PageWords::to_params(&self) -> paperpaw_sdk::Param
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Chosen
 pub fn paperpaw_sdk::replies::Chosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Chosen::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Confirmed
+pub fn paperpaw_sdk::replies::Confirmed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::replies::Confirmed::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::HttpReply::to_params(&self) -> paperpaw_sdk::Params
@@ -5712,6 +5880,30 @@ pub fn paperpaw_sdk::ui::choice::Choice::region(&self, &paperpaw_sdk::Env<'_>) -
 pub fn paperpaw_sdk::ui::choice::Choice::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::shows_through(&self) -> paperpaw_sdk::ShowsThrough
 pub fn paperpaw_sdk::ui::choice::Choice::takes_double_taps(&self) -> bool
+impl paperpaw_sdk::Screen for paperpaw_sdk::ui::confirm::Confirm
+pub fn paperpaw_sdk::ui::confirm::Confirm::dims_below(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::grays(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::guards(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::hint(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
+pub fn paperpaw_sdk::ui::confirm::Confirm::hints(&self) -> core::option::Option<paperpaw_sdk::Hints>
+pub fn paperpaw_sdk::ui::confirm::Confirm::holds_edges(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::mirrored(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_close(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_close_request(&mut self, paperpaw_sdk::CloseCause, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_event(&mut self, &paperpaw_sdk::Id, &paperpaw_sdk::Params, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_gesture(&mut self, paperpaw_sdk::Gesture, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_hide(&mut self)
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::confirm::Confirm::outside(&self) -> paperpaw_sdk::Outside
+pub fn paperpaw_sdk::ui::confirm::Confirm::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_sdk::ui::confirm::Confirm::secret(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::shows_through(&self) -> paperpaw_sdk::ShowsThrough
+pub fn paperpaw_sdk::ui::confirm::Confirm::takes_double_taps(&self) -> bool
 impl paperpaw_sdk::Screen for paperpaw_sdk::ui::items::ItemsScreen
 pub fn paperpaw_sdk::ui::items::ItemsScreen::dims_below(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>)
