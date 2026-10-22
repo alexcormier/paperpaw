@@ -36,8 +36,6 @@ enum Row {
     Kind(String, usize),
     /// A widget or tool, and the translation key of its name.
     Add(What, String),
-    /// The ready-made layouts, to start anew from one.
-    Layouts,
     AddPage,
     RemovePage,
 }
@@ -167,12 +165,10 @@ impl AddScreen {
                 .map(|(_, what, title)| Row::Add(what, title))
                 .collect(),
             None => {
-                let mut rows: Vec<Row> = alloc::vec![Row::Layouts];
-                rows.extend(
-                    kinds(&env.widgets.kinds().collect::<Vec<_>>(), &found)
-                        .into_iter()
-                        .map(|(kind, count)| Row::Kind(kind, count)),
-                );
+                let mut rows: Vec<Row> = kinds(&env.widgets.kinds().collect::<Vec<_>>(), &found)
+                    .into_iter()
+                    .map(|(kind, count)| Row::Kind(kind, count))
+                    .collect();
                 let all = pages::pages(env).len();
                 if all < MAX_PAGES {
                     rows.push(Row::AddPage);
@@ -233,7 +229,7 @@ impl AddScreen {
     /// ([`Self::make_page`]).
     fn lay_out(&self, env: &Env<'_>, area: Rect) -> Vec<Preview> {
         let style = self.style;
-        let (_, geometry, _) = crate::frame(env, None);
+        let (_, geometry, _) = crate::frame(env);
         let title_h = widgets::line_height(env, style.title) + style.gap as u16 / 2;
         let gap = style.gap as u16;
         let bottom = area.y + area.height;
@@ -304,7 +300,7 @@ impl AddScreen {
                 let Some(page) = all.get(self.page) else {
                     return;
                 };
-                let (_, geometry, _) = crate::frame(&env, None);
+                let (_, geometry, _) = crate::frame(&env);
                 // The page as shown, every item with its place, and the new one.
                 let shown = pages::expand(&env, &page.items);
                 let Some(added) = grid::add(&env, &geometry, &shown, what) else {
@@ -313,12 +309,6 @@ impl AddScreen {
                     return;
                 };
                 cx.command(pages::store(page.slot, &added));
-            }
-            Some(Row::Layouts) => {
-                // Over the home screen, so that what is chosen shows there.
-                cx.command(Command::Back);
-                cx.command(Command::OpenScreen(crate::layouts::SCREEN, Params::new()));
-                return;
             }
             Some(Row::AddPage) => {
                 // After the others, kept as a space until it is filled.
@@ -379,11 +369,6 @@ impl AddScreen {
                         String::from("+"),
                     ),
                     Row::Add(_, title) => (None, env.i18n.tr(title).to_string(), String::from("+")),
-                    Row::Layouts => (
-                        Some("layout"),
-                        env.i18n.tr("home.layouts.title").to_string(),
-                        String::new(),
-                    ),
                     Row::AddPage => (
                         Some("plus"),
                         env.i18n.tr("home.edit.add-page").to_string(),

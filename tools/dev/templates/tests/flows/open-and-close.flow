@@ -1,0 +1,10 @@
+# The plugin's screen, opened and left again. Write one flow like it for
+# every action of the plugin, from where a user starts to what should be
+# true after (see docs/plugins.md, "Flows"); `paperpaw-emu --record` writes
+# the steps.
+
+open:my-plugin.screen
+expect screen my-plugin.screen
+back
+expect stack 1
+expect no warnings

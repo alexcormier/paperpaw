@@ -396,7 +396,10 @@ mod tests {
         };
         let mut builder = PackBuilder::new();
         for size in [10.0, 20.0] {
-            let glyphs = "12:Ab".chars().map(|c| (c, glyph(2, 255, size / 2.0))).collect();
+            let glyphs = "12:Ab"
+                .chars()
+                .map(|c| (c, glyph(2, 255, size / 2.0)))
+                .collect();
             builder.add_strike(size, metrics(size), glyphs);
         }
         let digits = "12:".chars().map(|c| (c, glyph(2, 255, 40.0))).collect();

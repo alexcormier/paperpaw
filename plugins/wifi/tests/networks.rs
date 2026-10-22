@@ -449,18 +449,15 @@ fn odd_network_names_are_listed_strongest_first_each_once() {
         .map(|r| r.split(", ").next().unwrap())
         .collect();
     // No network without a name; "Home" once, at its strongest.
-    // The longest name shortened to the row (how far depends on the
-    // look's margins).
+    // The longest name smaller where the row needs it, shortened only
+    // past the small size (how far depends on the look's margins).
     assert_eq!(names.len(), 4, "{rows:?}");
     assert_eq!(
         [names[0], names[1], names[3]],
         ["Home", UNICODE, "spaced"],
         "{rows:?}"
     );
-    assert!(
-        names[2].starts_with("abcdefghijklmnop") && names[2].ends_with('…'),
-        "{rows:?}"
-    );
+    assert!(names[2].starts_with("abcdefghijklmnop"), "{rows:?}");
     assert!(rows[1].contains("Excellent signal"), "{rows:?}");
     assert!(rows[3].contains("Open, no password"), "{rows:?}");
 }

@@ -17,8 +17,9 @@
 //!   and which plugin was loaded last; the plugins it switched off are
 //!   switched on again here, one at a time.
 //!
-//! - Above the plugins: where more come from, e.g. the store
-//!   ([`MORE`]): a row each, which opens it.
+//! - Above the plugins: *Screens* (which plugin shows each place several
+//!   offer a screen for, see `screens`) and where more come from, e.g.
+//!   the store ([`MORE`]): a row each, which opens it.
 //!
 //! The manager is itself a plugin and reached from the main settings page
 //! (`core.settings-pages`); another plugin can replace it.
@@ -26,6 +27,8 @@
 #![no_std]
 
 extern crate alloc;
+
+mod screens;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -74,6 +77,8 @@ impl Plugin for PluginManager {
         ))?;
         r.add_menu_entry(MenuEntry::new(menus::SETTINGS, OPEN).order(220))?;
         r.add_icon(OPEN, Cow::Borrowed("puzzle"))?;
+        // Which plugin shows each place several offer a screen for.
+        screens::register(r)?;
         r.on(events::STARTED, |env, _, out| {
             let Some(native) = env.native else {
                 return;

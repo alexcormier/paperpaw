@@ -98,7 +98,15 @@ pub fn draw_button_hints(
             }
             Hint::Icon(name) => {
                 let width = icon_width(env, name, style.text);
-                draw_icon(canvas, env, name, style.text, middle - width / 2.0, cell, ink);
+                draw_icon(
+                    canvas,
+                    env,
+                    name,
+                    style.text,
+                    middle - width / 2.0,
+                    cell,
+                    ink,
+                );
             }
             Hint::Default | Hint::Hidden => {}
         }

@@ -502,9 +502,7 @@ impl ClockLayout {
                 .as_ref()
                 .map_or((0, 0), |(size, text)| ink_of(font, *size, text));
             let high = digits_ink.1 - digits_ink.0
-                + date
-                    .as_ref()
-                    .map_or(0, |_| gap + date_ink.1 - date_ink.0);
+                + date.as_ref().map_or(0, |_| gap + date_ink.1 - date_ink.0);
             let layout = ClockLayout {
                 size,
                 small: date.as_ref().map_or(small, |(size, _)| *size),
@@ -548,7 +546,9 @@ fn clock_height(env: &Env<'_>, width: u16) -> u16 {
     // As high as the time and the date need at their size: as large as
     // fits, that is as wide as the place.
     let frame = widgets::frame(env, CLOCK);
-    let pad = widgets::padding(env, CLOCK).pixels(&style, frame).min(width / 4);
+    let pad = widgets::padding(env, CLOCK)
+        .pixels(&style, frame)
+        .min(width / 4);
     let inner = f32::from(width.saturating_sub(2 * pad));
     let layout = ClockLayout::of(env, &style, &font, inner, f32::MAX);
     // The room above and below the ink a line of text has.

@@ -16,7 +16,8 @@ These files start it in a plugin's repository. Copy them, then replace
 | `examples/paperpaw-dev.rs` | The harness: `paperpaw_dev::main` with your plugin added. `cargo run --example paperpaw-dev -- check --plugin my-plugin` |
 | `tests/snapshots.rs` | The snapshot test: the cases of `tests/snapshots/cases.ini` compared with the pictures beside it. |
 | `tests/snapshots/cases.ini` | The cases: screens and widgets, the device, settings, script steps. |
-| `.github/workflows/paperpaw-dev.yml` | CI: the tests, then `check --plugin my-plugin --quick`, the report kept as the run's artifact. |
+| `tests/flows/open-and-close.flow` | A flow: steps and what should be true after them. Write one for every action of the plugin. |
+| `.github/workflows/paperpaw-dev.yml` | CI: the tests, then `check --plugin my-plugin --quick` and the flows varied at the edges, the reports kept as the run's artifact. |
 
 ## The dependency
 
@@ -54,6 +55,7 @@ day) it fetches the newest.
 
 ```sh
 cargo run --example paperpaw-dev -- check --plugin my-plugin --quick
+cargo run --example paperpaw-dev -- flows --plugin my-plugin --flow tests/flows
 cargo run --example paperpaw-dev -- gallery --plugin my-plugin --profile xteink-x4
 cargo run --example paperpaw-dev -- --help
 ```

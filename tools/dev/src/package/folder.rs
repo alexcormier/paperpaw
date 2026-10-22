@@ -547,7 +547,13 @@ fn files_and_kinds(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Fin
             };
             add(Finding::error("package.website", path, message));
         }
-        if read_as(folder, path, &id).is_none() && !["txt", "md"].contains(&ext.as_str()) {
+        if is_test(path) {
+            add(Finding::warning(
+                "package.tests",
+                path,
+                "A test of the plugin (a flow or its pictures) would ship in the package; keep flows and their snapshots in a folder beside the plugin's.",
+            ));
+        } else if read_as(folder, path, &id).is_none() && !["txt", "md"].contains(&ext.as_str()) {
             let hint = match ext.as_str() {
                 "ini" => {
                     " (it reads plugin.ini, settings.ini, keymap.ini, presets.ini and i18n/*.ini)"
@@ -590,6 +596,17 @@ fn files_and_kinds(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Fin
         ));
     }
     let _ = text(folder, "styles.css", MAX_DATA_FILE, add);
+}
+
+/// Whether `path` is one of the plugin's tests (see `flows`): a flow, or
+/// a file in a `flows`, `tests` or `snapshots` folder.
+fn is_test(path: &str) -> bool {
+    extension(path) == "flow"
+        || path
+            .split('/')
+            .rev()
+            .skip(1)
+            .any(|part| matches!(part, "flows" | "tests" | "snapshots"))
 }
 
 /// Translation catalogs: read by the kernel and the website alike.
@@ -850,6 +867,45 @@ mod tests {
         assert!(
             has("package.files", "", Level::Error),
             "the installer refuses it"
+        );
+    }
+
+    #[test]
+    fn tests_beside_the_plugin_are_named() {
+        let plugin = folder(
+            "tested",
+            &[
+                (
+                    "plugin.ini",
+                    b"[plugin]\nid = tested\nname = Tested\nversion = 1.0.0\n",
+                ),
+                ("night.flow", b"confirm\n"),
+                ("flows/day.flow", b"confirm\n"),
+                ("snapshots/night-1.png", b"\x89PNG\r\n\x1a\nrest"),
+                ("tests/notes.txt", b"notes"),
+                ("README.md", b"# Tested\n"),
+            ],
+        );
+        let found = findings(&plugin);
+        let mut tests: Vec<&str> = found
+            .iter()
+            .filter(|f| f.1 == "package.tests" && f.0 == Level::Warning)
+            .map(|f| f.2.as_str())
+            .collect();
+        tests.sort_unstable();
+        assert_eq!(
+            tests,
+            [
+                "flows/day.flow",
+                "night.flow",
+                "snapshots/night-1.png",
+                "tests/notes.txt"
+            ],
+            "{found:#?}"
+        );
+        assert!(
+            !found.iter().any(|f| f.3.contains("does not read")),
+            "{found:#?}"
         );
     }
 

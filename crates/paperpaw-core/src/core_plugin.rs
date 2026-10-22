@@ -383,17 +383,7 @@ fn register_device_actions(r: &mut Registrar) -> Result<(), RegisterError> {
             actions::CLEAN_UP,
             "core.action.clean-up",
             Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
-                // What is kept for files no longer on the storage: of any
-                // format, by any spelling; nothing where a folder could not
-                // be read.
-                let library = library::folder(env);
-                let text = match library::clean_up_unused(env.storage, env.book_data, library) {
-                    Ok(removed) => env.i18n.format(
-                        "core.cleaned-up",
-                        &[("count", paperpaw_sdk::Arg::Int(i64::from(removed)))],
-                    ),
-                    Err(_) => String::from(env.i18n.tr("core.clean-up-failed")),
-                };
+                let text = clean_up(env, out);
                 out.push(Command::Notify(text));
             }),
         ),
@@ -780,10 +770,90 @@ fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     r.add_book_data(paperpaw_sdk::readers::DIR, "")?;
     r.add_book_data(alloc::format!("{}/books", library::DIR), "")?;
     r.add_book_data(alloc::format!("{}/covers", library::DIR), "")?;
-    // In the device's part of the settings, before *About*.
-    r.add_menu_entry(paperpaw_sdk::MenuEntry::new(menus::SETTINGS, actions::CLEAN_UP).order(98))?;
+    // With the device's settings.
+    r.add_menu_entry(paperpaw_sdk::MenuEntry::new(
+        groups::SYSTEM,
+        actions::CLEAN_UP,
+    ))?;
     r.add_icon(actions::CLEAN_UP, Cow::Borrowed("eraser"))?;
+    // And by itself now and then, silently.
+    r.add_work(WorkSpec::new(
+        CLEAN_UP_WORK,
+        "core.work.clean-up",
+        |env, _, out| {
+            // What it found is its note, no notice.
+            let text = clean_up(env, out);
+            out.push(Command::Notify(text));
+            paperpaw_sdk::work::Step::Done
+        },
+    ))?;
+    r.on(events::STARTED, |env, (), out| declare_clean_up(env, out))?;
     Ok(())
+}
+
+/// The work that cleans up the storage by itself.
+const CLEAN_UP_WORK: Id = Id::new_static("core.clean-up-work");
+/// When the storage was cleaned up last, in seconds since 1970.
+const CLEANED_UP: &str = paperpaw_sdk::data_path!("cleaned-up.txt");
+/// How often the storage is cleaned up by itself, at most.
+const CLEAN_UP_EVERY: i64 = 7 * 24 * 3600;
+/// How long after the first start it is cleaned up by itself first.
+const CLEAN_UP_FIRST: i64 = 24 * 3600;
+
+/// Removes what is kept for files no longer on the storage: of any
+/// format, by any spelling; nothing where a folder could not be read.
+/// Notes the time and declares the next time it is done by itself; what
+/// it did, to say.
+fn clean_up(env: &Env<'_>, out: &mut Vec<Command>) -> String {
+    let library = library::folder(env);
+    let text = match library::clean_up_unused(env.storage, env.book_data, library) {
+        Ok(removed) => env.i18n.format(
+            "core.cleaned-up",
+            &[("count", paperpaw_sdk::Arg::Int(i64::from(removed)))],
+        ),
+        Err(_) => String::from(env.i18n.tr("core.clean-up-failed")),
+    };
+    if let Some(now) = paperpaw_sdk::time::unix_seconds(env) {
+        let _ = env
+            .storage
+            .write(CLEANED_UP, alloc::format!("{now}\n").as_bytes());
+        declare_clean_up(env, out);
+    }
+    text
+}
+
+/// Declares cleaning up by itself: while charging, a week after it was
+/// last done (a day after the first start). Not without a clock, which
+/// tells the time across starts (on the X4 every wake is one).
+fn declare_clean_up(env: &Env<'_>, out: &mut Vec<Command>) {
+    use paperpaw_sdk::work::{Moments, Work};
+    let Some(now) = paperpaw_sdk::time::unix_seconds(env) else {
+        return;
+    };
+    let last = paperpaw_sdk::read_file(env.storage, CLEANED_UP, 32)
+        .ok()
+        .and_then(|bytes| {
+            core::str::from_utf8(&bytes)
+                .ok()?
+                .trim()
+                .parse::<i64>()
+                .ok()
+        });
+    let last = last.unwrap_or_else(|| {
+        // Seen first now: as if done the right while ago.
+        let seen = now - (CLEAN_UP_EVERY - CLEAN_UP_FIRST);
+        let _ = env
+            .storage
+            .write(CLEANED_UP, alloc::format!("{seen}\n").as_bytes());
+        seen
+    });
+    let wait = (last + CLEAN_UP_EVERY - now).clamp(0, CLEAN_UP_EVERY);
+    out.push(Command::Work(
+        Work::new(CLEAN_UP_WORK)
+            .charging()
+            .after(core::time::Duration::from_secs(wait as u64))
+            .at_moments(Moments::CHARGING | Moments::IDLE),
+    ));
 }
 
 /// The kernel's slots, with a placeholder under each, and its own

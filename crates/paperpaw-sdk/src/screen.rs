@@ -37,6 +37,25 @@ pub trait ScreenMaker {
         let _ = slot;
         Vec::new()
     }
+
+    /// The screen the user chose for slot `slot` (`[slots]`), where it is
+    /// there; `None` for automatic (the plugins' choice).
+    fn slot_choice(&self, slot: &str) -> Option<&Id> {
+        let _ = slot;
+        None
+    }
+
+    /// The translation key of slot `slot`'s name.
+    fn slot_title(&self, slot: &str) -> Option<&str> {
+        let _ = slot;
+        None
+    }
+
+    /// The translation key of screen `screen`'s name.
+    fn screen_title(&self, screen: &Id) -> Option<&str> {
+        let _ = screen;
+        None
+    }
 }
 
 /// A screen contribution.

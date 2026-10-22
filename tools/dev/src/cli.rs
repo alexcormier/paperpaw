@@ -26,8 +26,13 @@ COMMANDS:
                 ink off centre, contrast on black-and-white screens
     lint        Texts: missing translations, pseudo-language overflow, settings
                 without help, ids outside the plugin's namespace, dashes
-    flows       Scripted flows with assertions (--flow <file>), recorded or written
+    flows       Scripted flows with assertions (--flow <file>), recorded or written:
+                each step's heap and time against the X4's budgets, and the flow
+                varied at the edges (repeated steps, Back, Home and sleep in the
+                middle, the network failing, slow, empty or huge, the
+                pseudo-language, long data, little storage; not with --quick)
     reach       Every screen reachable and closable with buttons alone
+    explore     Every target of every screen used once, each from a fresh start
     perf        Time per frame, heap per screen, storage reads while drawing,
                 against the X4's budgets
     package     A data plugin as the installer and the website take it, a .ppn
@@ -48,7 +53,8 @@ OPTIONS:
     --theme <name>|all    Looks (repeatable; default: all; see --list)
     --quick               One variant per profile: English, light, default look
     --set <id>=<value>    A setting for every session (repeatable)
-    --flow <file>         A flow to run (repeatable; `flows` and `check`)
+    --flow <file>|<dir>   A flow to run, or every .flow in a folder (repeatable;
+                          `flows` and `check`)
     --snapshots <dir>     Reference pictures (default: tests/snapshots if it exists)
     --bless               Write the reference pictures anew
     --release <version>   Check compatibility with this PaperPaw release
@@ -67,6 +73,7 @@ pub const COMMANDS: &[&str] = &[
     "gallery",
     "visual",
     "reach",
+    "explore",
     "perf",
     "flows",
     "snapshots",
@@ -257,11 +264,29 @@ pub fn run_command(command: &str, context: &Context, report: &mut Report) -> Res
         "lint" => crate::lint::run(context, report),
         "flows" => crate::flows::run(context, report),
         "reach" => crate::reach::run(context, report),
+        "explore" => crate::explore::run(context, report),
         "perf" => crate::perf::run(context, report),
         "package" => crate::package::run(context, report),
         "snapshots" => crate::snapshot::run(context, report),
         other => Err(format!("unknown command `{other}` (see --help)")),
     }
+}
+
+/// The flow at `path`, or every flow in the folder `path` (by name).
+fn flows_at(path: PathBuf) -> Result<Vec<PathBuf>, String> {
+    if !path.is_dir() {
+        return Ok(vec![path]);
+    }
+    let mut flows: Vec<PathBuf> = std::fs::read_dir(&path)
+        .map_err(|e| format!("{}: {e}", path.display()))?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|file| file.extension().is_some_and(|ext| ext == "flow"))
+        .collect();
+    flows.sort();
+    if flows.is_empty() {
+        return Err(format!("{}: no .flow files in it", path.display()));
+    }
+    Ok(flows)
 }
 
 fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<(String, Context)>, String> {
@@ -338,7 +363,9 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<(String, Conte
                     .ok_or_else(|| format!("--set expects <id>=<value>, got `{set}`"))?;
                 context.settings.push((id.to_string(), v.to_string()));
             }
-            "--flow" => context.flows.push(PathBuf::from(value("--flow")?)),
+            "--flow" => context
+                .flows
+                .extend(flows_at(PathBuf::from(value("--flow")?))?),
             "--snapshots" => context.snapshots = Some(PathBuf::from(value("--snapshots")?)),
             "--bless" => context.bless = true,
             "--release" => context.release = Some(value("--release")?),
@@ -415,6 +442,20 @@ mod tests {
         assert_eq!(command, "check");
         assert_eq!(context.target.data.len(), 1);
         assert_eq!(context.variants().len(), variant::DEFAULT_PROFILES.len());
+    }
+
+    #[test]
+    fn a_folder_of_flows_gives_each_flow() {
+        let folder = concat!(env!("CARGO_MANIFEST_DIR"), "/tests/fixtures/flows");
+        let (_, context) = parsed(&["flows", "--flow", folder]);
+        assert!(!context.flows.is_empty());
+        assert!(
+            context
+                .flows
+                .iter()
+                .all(|f| f.extension().is_some_and(|e| e == "flow"))
+        );
+        assert!(context.flows.is_sorted());
     }
 
     #[test]

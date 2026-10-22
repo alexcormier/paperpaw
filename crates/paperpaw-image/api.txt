@@ -18,6 +18,7 @@ pub paperpaw_image::ImageError::Invalid(&'static str)
 pub paperpaw_image::ImageError::Io
 pub paperpaw_image::ImageError::OutOfMemory
 pub paperpaw_image::ImageError::Stopped
+pub paperpaw_image::ImageError::Storage(paperpaw_platform::storage::StorageError)
 pub paperpaw_image::ImageError::Unsupported(&'static str)
 impl core::fmt::Display for paperpaw_image::ImageError
 pub fn paperpaw_image::ImageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result

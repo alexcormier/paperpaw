@@ -1349,6 +1349,9 @@ pub const CONFIG_FILE: &str = "paperpaw.ini";
 pub const PLUGIN_DIR: &str = "plugins";
 
 /// Groups of the generated settings screen; plugins can add their own.
+/// A group's page lists its settings, then the actions plugins add to
+/// the menu named by the group's id (e.g. *Clean up storage* in
+/// [`SYSTEM`](groups::SYSTEM)).
 pub mod groups {
     use crate::Id;
 

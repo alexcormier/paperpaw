@@ -134,6 +134,21 @@ section of `docs/plugins.md`. A plugin that should run there:
 - Screens can be checked as text (what a screen describes, part by part)
   and as pictures in the emulator; the repository's snapshot tests show
   how, and say how to update a snapshot when a change is meant.
+- Write a flow for every action of the plugin, as the main test of what
+  it does: each thing a user does with it (a setting switched, an entry
+  made, a sync started), from where they start to what should be true
+  after, by touch and with buttons alone (`docs/plugins.md`, "Flows";
+  `paperpaw-emu --record` writes the steps). Keep them in `tests/flows`
+  of the plugin's repository and run `paperpaw-dev flows --flow
+  tests/flows` (the templates in `tools/dev/templates` set it up, CI
+  included): every step's heap and frame time is held against the X4's
+  budgets with the step named, and each flow is played again at the
+  edges (steps repeated, *Back*, *Home* and sleep in the middle, the
+  network failing, slow, empty or huge, the pseudo-language, long data,
+  little storage). Fix what a variation finds rather than leaving the
+  flow out; `paperpaw-dev explore` is only a cheap baseline beside them.
+- Flows and their pictures stay out of the plugin's package (a data
+  plugin's folder): `paperpaw-dev package` warns of any it finds.
 
 ## 5. The desktop emulator
 

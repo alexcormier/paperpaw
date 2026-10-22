@@ -54,13 +54,30 @@
 //! `snapshots` folder beside the flow). A flow stops at the first step or
 //! assertion that fails; that is reported as `flows.failed` with the
 //! line, what was expected, what was there and a picture of the screen.
+//!
+//! # Costs and variations
+//!
+//! On the profiles with the X4's budgets (they draw in bands, with a heap
+//! budget) every step is measured: the most the heap held above what was
+//! live before it, and its slowest frame estimated on an X4 (see `perf`).
+//! The costliest step is named: `flows.heap` (an error where the device
+//! would run out, a warning above an eighth of its heap) and
+//! `flows.frame-time` (a warning above half a second).
+//!
+//! Then, unless `--quick`, each flow is played again in variations that
+//! find what a plugin does at the edges (see `vary`): every step done
+//! many times, *Back*, *Home* or sleep and waking in the middle, the
+//! network failing, slow, empty or huge, the pseudo-language and long
+//! data, little room on the storage. Assertions are left out there;
+//! what is checked is that nothing panics, the heap holds, and the home
+//! screen is reached after (`flows.varied`).
 
 use std::path::{Path, PathBuf};
 
 use paperpaw_core::sdk::SettingValue;
 use paperpaw_core::sdk::semantics::{self, Part};
-use paperpaw_emulator::headless;
 use paperpaw_emulator::profiles::Profile;
+use paperpaw_emulator::{budget, headless};
 use paperpaw_platform::Rect;
 
 use crate::cli::Context;
@@ -349,12 +366,51 @@ pub struct Failure {
     pub screen: Option<String>,
 }
 
+/// What a step cost.
+#[derive(Debug, Clone, PartialEq)]
+pub struct StepCost {
+    pub line: usize,
+    pub text: String,
+    /// The most the heap held above what was live before it, in bytes.
+    pub peak: usize,
+    /// Its slowest frame, in ms on this computer (0 without one).
+    pub frame_ms: f64,
+}
+
 /// How a flow went on one device.
 #[derive(Debug, Default)]
 pub struct Played {
     /// Pictures written anew (`--bless`).
     pub blessed: Vec<PathBuf>,
     pub failure: Option<Failure>,
+    /// What each step cost, in order (assertions left out).
+    pub costs: Vec<StepCost>,
+}
+
+/// Runs `step` on `session`, measuring what it cost.
+fn measured<T>(
+    session: &mut Session,
+    line: &Line,
+    costs: &mut Vec<StepCost>,
+    step: impl FnOnce(&mut Session) -> T,
+) -> T {
+    drop(session.frames());
+    budget::reset_peak();
+    let live = budget::stats().live;
+    let result = step(session);
+    let peak = budget::stats().peak.saturating_sub(live);
+    let frame_ms = session
+        .frames()
+        .iter()
+        .map(|f| f.millis)
+        .fold(0.0, f64::max);
+    costs.push(StepCost {
+        line: line.number,
+        text: line.text.clone(),
+        peak,
+        frame_ms,
+    });
+    result
 }
 
 /// Plays `flow` on `session` (started as the flow says, see [`start`]).
@@ -363,9 +419,13 @@ pub fn play(flow: &Flow, session: &mut Session, pictures: &Pictures) -> Played {
     let warned = session.device.warnings.len();
     for line in &flow.lines {
         let result = match &line.step {
-            Step::Script(step) => headless::run_script(&mut session.device, step)
-                .map_err(|e| (String::from("the step to work"), e, None)),
-            Step::TapOn(label) => tap_on(session, label),
+            Step::Script(step) => measured(session, line, &mut played.costs, |session| {
+                headless::run_script(&mut session.device, step)
+                    .map_err(|e| (String::from("the step to work"), e, None))
+            }),
+            Step::TapOn(label) => measured(session, line, &mut played.costs, |session| {
+                tap_on(session, label)
+            }),
             Step::Expect(expect) => check(expect, session, warned, pictures, &mut played),
         };
         if let Err((expected, found, area)) = result {
@@ -666,8 +726,16 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
                 continue;
             }
             ran += 1;
+            // What a session of the app keeps, before the flow's steps.
+            let outside = budget::stats().live;
             let mut session = start(context, &flow, &variant)?;
+            let app = budget::stats().live.saturating_sub(outside);
             let played = play(&flow, &mut session, &pictures);
+            drop(session);
+            costs(context, &flow, &place, &variant, app, &played.costs, report)?;
+            if !context.quick {
+                crate::vary::run(context, &flow, &place, &variant, report)?;
+            }
             for file in &played.blessed {
                 report.add(
                     Finding::info(
@@ -702,6 +770,90 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+/// The costliest steps of a flow on `variant`, against the X4's budgets
+/// where the profile has them (`app`: what the app kept before the flow).
+fn costs(
+    context: &Context,
+    flow: &Flow,
+    place: &str,
+    variant: &Variant,
+    app: usize,
+    costs: &[StepCost],
+    report: &mut Report,
+) -> Result<(), String> {
+    let profile = variant.profile;
+    let (Some(limit), Some(_)) = (profile.heap_budget, profile.frame_rows) else {
+        return Ok(());
+    };
+    let kib = |bytes: usize| bytes as f64 / 1024.0;
+    let at = |cost: &StepCost| format!("{place}:{}", cost.line);
+    if let Some(cost) = costs.iter().max_by_key(|c| c.peak) {
+        let free = limit.saturating_sub(app);
+        let said = format!(
+            "`{}` held {:.1} KiB more on the heap ({:.0} KiB free beside the app, {:.0} KiB the \
+             device has).",
+            cost.text,
+            kib(cost.peak),
+            kib(free),
+            kib(limit)
+        );
+        let finding = if cost.peak > free {
+            Some(Finding::error("flows.heap", at(cost), said))
+        } else if cost.peak > limit / crate::perf::HEAP_SHARE {
+            Some(Finding::warning("flows.heap", at(cost), said))
+        } else {
+            None
+        };
+        if let Some(finding) = finding {
+            report.add(finding.variant(variant.name()));
+        }
+    }
+    if costs.iter().any(|c| c.frame_ms > 0.0) {
+        let calibration = calibrated(context, variant)?;
+        if let Some(cost) = costs
+            .iter()
+            .max_by(|a, b| a.frame_ms.total_cmp(&b.frame_ms))
+        {
+            let x4_ms = cost.frame_ms * calibration;
+            if x4_ms > crate::perf::FRAME_BUDGET_MS {
+                report.add(
+                    Finding::warning(
+                        "flows.frame-time",
+                        at(cost),
+                        format!(
+                            "`{}` drew a frame of about {x4_ms:.0} ms on an X4 (at most {:.0}).",
+                            cost.text,
+                            crate::perf::FRAME_BUDGET_MS
+                        ),
+                    )
+                    .variant(variant.name()),
+                );
+            }
+        }
+    }
+    let _ = flow;
+    Ok(())
+}
+
+/// How much slower an X4 draws than this computer (see `perf`), measured
+/// once a profile.
+fn calibrated(context: &Context, variant: &Variant) -> Result<f64, String> {
+    thread_local! {
+        static FACTORS: std::cell::RefCell<Vec<(String, f64)>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+    let name = variant.name();
+    if let Some(factor) =
+        FACTORS.with_borrow(|f| f.iter().find(|(n, _)| *n == name).map(|(_, f)| *f))
+    {
+        return Ok(factor);
+    }
+    let mut session = Session::new(context, variant)?;
+    let factor = crate::perf::calibrate(&mut session).factor;
+    FACTORS.with_borrow_mut(|f| f.push((name, factor)));
+    Ok(factor)
 }
 
 fn failed(

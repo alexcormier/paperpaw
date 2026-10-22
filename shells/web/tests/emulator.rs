@@ -165,7 +165,7 @@ fn the_settings_open_from_the_menu_and_the_quick_panel() {
     boox.pointer(PointerPhase::Up, x, top + i32::from(height) / 2, later(16));
     boox.advance(later(2_000));
     shows(&boox, "menu.");
-    tap(&mut boox, at(734, 574));
+    tap(&mut boox, at(734, 548));
     shows(&boox, "settings.");
 }
 
