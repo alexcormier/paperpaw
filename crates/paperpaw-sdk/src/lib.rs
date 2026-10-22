@@ -28,7 +28,14 @@
 // Without the `kernel` feature (as plugins build it) what only the
 // kernel's methods use is left over; with it, as the kernel and CI build,
 // unused code is found as everywhere.
-#![cfg_attr(not(any(test, feature = "kernel")), allow(dead_code, unused_imports))]
+#![cfg_attr(
+    not(any(test, feature = "kernel")),
+    allow(
+        dead_code,
+        unused_imports,
+        reason = "what only the kernel's methods use is left over without the kernel feature"
+    )
+)]
 #![no_std]
 
 extern crate alloc;
