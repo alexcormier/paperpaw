@@ -387,7 +387,10 @@ pub fn parse(line: &str) -> Option<Command> {
         },
         // A path, the rest of the line.
         "ls" | "stat" | "md5" | "rm" | "mkdir" => {
-            let path = line.split_once(' ').map_or("", |(_, rest)| rest.trim());
+            // Paths on the card are named from its root, `/` or not.
+            let path = line
+                .split_once(' ')
+                .map_or("", |(_, rest)| rest.trim().trim_matches('/'));
             let path = String::from(path);
             return match line.split_ascii_whitespace().next()? {
                 "ls" => Some(Command::List(path)),
@@ -637,6 +640,11 @@ mod tests {
     #[test]
     fn the_storage() {
         assert_eq!(parse("ls"), Some(Command::List(String::new())));
+        assert_eq!(parse("ls /"), Some(Command::List(String::new())));
+        assert_eq!(
+            parse("stat /books/a.epub"),
+            Some(Command::Stat(String::from("books/a.epub")))
+        );
         assert_eq!(
             parse("ls books/my books"),
             Some(Command::List(String::from("books/my books")))

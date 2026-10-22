@@ -264,8 +264,11 @@ impl Firmware {
     }
 
     /// The presses and releases that came, before any work in the
-    /// background.
+    /// background. All that waits is handled before a frame shows: what
+    /// came while the last one refreshed (taps on *+*, presses of a
+    /// button) shows in one frame, not a frame each after the other.
     fn buttons(&mut self) {
+        let mut waiting: Option<Effects> = None;
         while let Some(change) = input::next() {
             let (event, at) = match change {
                 input::Change::Button(name, down, at) => {
@@ -294,6 +297,19 @@ impl Firmware {
             if let InputEvent::Button { name, .. } = event {
                 info!("{name}: {} ms", now().since(started));
             }
+            let effects = match waiting.take() {
+                Some(before) => before.and(effects),
+                None => effects,
+            };
+            // What cannot wait for the next input: a restart, sleep, the
+            // busy mark's work, a frame in grays.
+            if effects.restart() || effects.sleep() || effects.proceed() || effects.grays() {
+                self.apply(effects);
+            } else {
+                waiting = Some(effects);
+            }
+        }
+        if let Some(effects) = waiting {
             self.apply(effects);
         }
     }
@@ -476,6 +492,9 @@ impl Firmware {
         // From the first work not written back: work coming again and
         // again does not put it off.
         self.state.unsynced.get_or_insert(now().0);
+        // The light as set (or shown while a slider moves) at once, not
+        // after the frame that shows the setting.
+        self.light();
         loop {
             if effects.restart() {
                 self.restart();

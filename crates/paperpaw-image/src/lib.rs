@@ -49,6 +49,8 @@ pub enum ImageError {
     Unsupported(&'static str),
     /// Reading the source or writing the result failed.
     Io,
+    /// Writing to the storage failed, as it says (see [`PngWriter`]).
+    Storage(paperpaw_platform::StorageError),
     OutOfMemory,
     /// The sink stopped decoding.
     Stopped,
@@ -60,6 +62,7 @@ impl fmt::Display for ImageError {
             ImageError::Invalid(what) => write!(f, "invalid image: {what}"),
             ImageError::Unsupported(what) => write!(f, "unsupported image: {what}"),
             ImageError::Io => f.write_str("image could not be read or written"),
+            ImageError::Storage(e) => write!(f, "image could not be written: {e}"),
             ImageError::OutOfMemory => f.write_str("not enough memory for the image"),
             ImageError::Stopped => f.write_str("decoding stopped"),
         }

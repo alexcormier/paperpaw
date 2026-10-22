@@ -1271,9 +1271,8 @@ fn screens_below_overlays_redraw_themselves() {
     render(&mut kernel);
     log.borrow_mut().clear();
 
-    // The base screen changes while the overlay is open: the whole screen
-    // is drawn again, the base where the overlay leaves it, the overlay
-    // on top.
+    // The base screen changes while the overlay is open: drawn again
+    // where the overlay leaves it, the overlay, unchanged, not.
     kernel.apply(Command::Emit(
         Id::new_static("ov.changed"),
         paperpaw_sdk::Params::new(),
@@ -1281,11 +1280,38 @@ fn screens_below_overlays_redraw_themselves() {
     let effects = kernel.finish();
     assert_eq!(
         effects.refresh().map(|(r, _)| r),
-        Some(Rect::new(0, 0, 90, 90))
+        Some(Rect::new(0, 0, 90, 45))
     );
     render(&mut kernel);
     assert_eq!(*log.borrow(), ["event ov.changed ", "draw base 90x45"]);
     assert_eq!(kernel.frame().pixel(0, 60), Color::BLACK);
+}
+
+#[test]
+fn effects_shown_together_join() {
+    let first = crate::Effects {
+        refresh: Some((Rect::new(0, 0, 10, 10), RefreshMode::Fast)),
+        wake_at: Some(Instant(500)),
+        grays: true,
+        ..crate::Effects::default()
+    };
+    let later = crate::Effects {
+        refresh: Some((Rect::new(20, 20, 10, 10), RefreshMode::Partial)),
+        wake_at: Some(Instant(200)),
+        ..crate::Effects::default()
+    };
+    let both = first.and(later);
+    assert_eq!(
+        both.refresh(),
+        Some((Rect::new(0, 0, 30, 30), RefreshMode::Partial))
+    );
+    assert_eq!(both.wake_at(), Some(Instant(200)));
+    // As the later frame says.
+    assert!(!both.grays());
+    assert_eq!(
+        crate::Effects::default().and(first).refresh(),
+        first.refresh()
+    );
 }
 
 #[test]

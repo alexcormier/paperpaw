@@ -198,6 +198,30 @@ impl Effects {
         self.sleep
     }
 
+    /// What these and the `later` effects ask together, for a shell that
+    /// shows one frame for both (input that came while the last frame
+    /// refreshed): the parts to refresh joined, in the stronger mode; the
+    /// earlier time to wake; grays as the later frame says.
+    #[must_use]
+    pub fn and(self, later: Effects) -> Effects {
+        let refresh = match (self.refresh, later.refresh) {
+            (Some((a, m)), Some((b, n))) => Some((a.union(&b), m.max(n))),
+            (a, b) => a.or(b),
+        };
+        let wake_at = match (self.wake_at, later.wake_at) {
+            (Some(a), Some(b)) => Some(a.min(b)),
+            (a, b) => a.or(b),
+        };
+        Effects {
+            refresh,
+            grays: later.grays,
+            wake_at,
+            restart: self.restart || later.restart,
+            sleep: self.sleep || later.sleep,
+            proceed: self.proceed || later.proceed,
+        }
+    }
+
     pub fn is_empty(&self) -> bool {
         self.refresh.is_none()
             && self.wake_at.is_none()
