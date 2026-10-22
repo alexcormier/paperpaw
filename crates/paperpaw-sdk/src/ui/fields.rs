@@ -212,7 +212,7 @@ pub fn check_rect(style: &UiStyle, row: Rect) -> Rect {
     let side = (plain * 7 / 10 * 3 / 4).max(8);
     Rect::new(
         row.x + style.margin as u16,
-        row.y + (plain - side) / 2,
+        row.y + plain.saturating_sub(side) / 2,
         side,
         side,
     )
@@ -472,7 +472,9 @@ impl TextView {
         let Some(font) = style.font(env) else {
             return;
         };
-        let shown = self.lines.iter().skip(self.top).take(self.rows());
+        // Only what fits in its area, none where it has no room.
+        let fit = usize::from(self.area.height / self.line);
+        let shown = self.lines.iter().skip(self.top).take(fit);
         for (i, range) in shown.enumerate() {
             let y = self.area.y + i as u16 * self.line;
             let at = Rect::new(self.area.x, y, self.area.width, self.line);

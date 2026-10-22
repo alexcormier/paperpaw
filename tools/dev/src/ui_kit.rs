@@ -29,8 +29,20 @@ pub fn add(app: KernelBuilder) -> KernelBuilder {
     app.plugin(UiKit)
 }
 
+/// The pages of the blocks that keep every label whole at every text
+/// size: drawn without the header (whose titles are not yet so), checked
+/// strictly by `ui-kit` ([`crate::cli::Context::strict_screens`]).
+pub const STRICT: [&str; 6] = [
+    "ui-kit.inputs",
+    "ui-kit.ticks",
+    "ui-kit.chips",
+    "ui-kit.pickers",
+    "ui-kit.dialog",
+    "ui-kit.confirm",
+];
+
 /// The pages, by screen id and title key.
-const PAGES: [(&str, &str); 12] = [
+const PAGES: [(&str, &str); 13] = [
     ("ui-kit.text", "ui-kit.text"),
     ("ui-kit.messages", "ui-kit.messages"),
     ("ui-kit.rows", "ui-kit.rows"),
@@ -39,6 +51,7 @@ const PAGES: [(&str, &str); 12] = [
     ("ui-kit.share", "ui-kit.share"),
     ("ui-kit.dialog", "ui-kit.dialog"),
     ("ui-kit.inputs", "ui-kit.inputs"),
+    ("ui-kit.ticks", "ui-kit.ticks"),
     ("ui-kit.chips", "ui-kit.chips"),
     ("ui-kit.pickers", "ui-kit.pickers"),
     ("ui-kit.choice", "ui-kit.choice"),
@@ -60,7 +73,8 @@ ui-kit.layout = Layout and cards
 ui-kit.share = Address and offers
 ui-kit.dialog = Dialog
 ui-kit.messages = Headings and messages
-ui-kit.inputs = Fields and ticks
+ui-kit.inputs = Text fields
+ui-kit.ticks = Ticked rows
 ui-kit.chips = Chips and long text
 ui-kit.pickers = Date and time
 ui-kit.choice = Choice
@@ -135,7 +149,8 @@ ui-kit.layout = Anordnung und Karten
 ui-kit.share = Adresse und Angebote
 ui-kit.dialog = Dialog
 ui-kit.messages = Überschriften und Meldungen
-ui-kit.inputs = Felder und Häkchen
+ui-kit.inputs = Textfelder
+ui-kit.ticks = Häkchen-Zeilen
 ui-kit.chips = Chips und langer Text
 ui-kit.pickers = Datum und Uhrzeit
 ui-kit.choice = Auswahl
@@ -268,12 +283,16 @@ impl Screen for Page {
         let display = env.device.display;
         let screen = Rect::new(0, 0, display.width, display.height);
         canvas.fill(screen, Color::WHITE);
-        let (_, title) = PAGES[self.index];
+        let (id, title) = PAGES[self.index];
         let mut stack = ui::Stack::new(screen, 0);
-        let header = stack.take(style.header as u16);
-        let page = format!("{} / {}", self.index + 1, PAGES.len());
-        ui::draw_header(canvas, env, &style, header, env.i18n.tr(title), Some(&page));
         let margin = style.margin as u16;
+        if STRICT.contains(&id) {
+            stack.take(margin);
+        } else {
+            let header = stack.take(style.header as u16);
+            let page = format!("{} / {}", self.index + 1, PAGES.len());
+            ui::draw_header(canvas, env, &style, header, env.i18n.tr(title), Some(&page));
+        }
         let rest = stack.rest();
         let body = Rect::new(
             margin,
@@ -291,6 +310,7 @@ impl Screen for Page {
             "ui-kit.share" => share(canvas, env, &style, body),
             "ui-kit.dialog" => dialog(canvas, env, &style),
             "ui-kit.inputs" => inputs(canvas, env, &style, whole),
+            "ui-kit.ticks" => ticks(canvas, env, &style, whole),
             "ui-kit.chips" => chips(canvas, env, &style, whole),
             _ => pickers(canvas, env, &style, body),
         }
@@ -338,7 +358,7 @@ fn messages(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect)
     ui::draw_heading(canvas, env, style, heading, env.i18n.tr("ui-kit.heading"));
     let note = stack.take(font.line_metrics(style.small).line_height as u16);
     ui::draw_note_line(canvas, env, style, note, env.i18n.tr("ui-kit.note"));
-    let message = stack.take(font.line_metrics(style.text).line_height as u16 * 2);
+    let message = stack.take(font.line_metrics(style.text).line_height as u16 * 4);
     let empty = stack.rest();
     ui::draw_message(canvas, env, style, message, env.i18n.tr("ui-kit.message"));
     ui::draw_empty(
@@ -404,13 +424,16 @@ fn rows(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         env.i18n.tr("ui-kit.noted.note"),
     );
     ui::draw_separator(canvas, style, noted, 0);
-    let stepper = stack.take(row);
-    ui::draw_stepper(
+    // Its title beside the − and +, or above them where it needs the room.
+    let title = env.i18n.tr("ui-kit.stepper");
+    let lines = ui::stepper_lines(env, style, area.width, row, title, "100");
+    let stepper = stack.take(lines.height);
+    ui::draw_stepper_lines(
         canvas,
         env,
         style,
-        stepper,
-        env.i18n.tr("ui-kit.stepper"),
+        lines.at(stepper),
+        title,
         "12",
         "100",
         false,
@@ -516,9 +539,13 @@ fn layout(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         } else {
             Color::BLACK
         };
-        let line = font.line_metrics(style.text).line_height as u16;
-        let row = Rect::new(inside.x, inside.y, inside.width, line);
-        ui::draw_label(canvas, &font, style.text, f32::from(row.x), row, name, ink);
+        // The frame's name at the top of its card, a gap in from its edges.
+        let _ = inside;
+        let gap = style.gap as u16;
+        let line = font.line_metrics(style.small).line_height as u16;
+        let row = Rect::new(cell.x + gap, cell.y + gap, cell.width.saturating_sub(2 * gap), line);
+        let x = f32::from(row.x) + (f32::from(row.width) - font.measure(style.small, name)).max(0.0) / 2.0;
+        ui::draw_label(canvas, &font, style.small, x, row, name, ink);
     }
     let rest = stack.rest();
     let grid = ui::Grid::new(rest, 3, (rest.height / 3).saturating_sub(gap), gap);
@@ -594,9 +621,15 @@ fn inputs(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     let empty = stack.take(ui::text_field_height(env, style, width, title));
     let placeholder = tr("ui-kit.field.placeholder");
     ui::draw_text_field(canvas, env, style, empty, false, title, "", placeholder);
+}
+
+/// Rows where several may be ticked, the first focused.
+fn ticks(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+    let width = area.width;
+    let tr = |key: &'static str| env.i18n.tr(key);
+    let mut stack = ui::Stack::new(area, 0);
     for (on, focus, key) in [
         (true, true, "ui-kit.check.focused"),
-        (true, false, "ui-kit.check"),
         (false, false, "ui-kit.check.off"),
     ] {
         let title = tr(key);

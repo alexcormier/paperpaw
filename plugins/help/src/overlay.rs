@@ -203,6 +203,10 @@ impl Screen for Overlay {
         if *action == actions::CONFIRM {
             let more = self.focus == GOT_IT;
             self.close(more, cx);
+        } else if self.dialog.on_scroll_action(action) {
+            // Hints longer than the screen: the page buttons scroll them.
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Fast);
         } else if let Some(focus) = self.dialog.step(self.focus, action) {
             self.focus = focus;
             cx.request_redraw();
@@ -215,6 +219,11 @@ impl Screen for Overlay {
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        if self.dialog.on_gesture(&gesture) {
+            cx.request_redraw();
+            cx.request_refresh(RefreshMode::Fast);
+            return Handled::Yes;
+        }
         if gesture.kind == GestureKind::Tap {
             let more = self.dialog.hit(gesture.start) != Some(NO_MORE);
             self.close(more, cx);

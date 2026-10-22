@@ -25,10 +25,19 @@ pub fn draw_header(
     };
     let mut canvas = canvas.clipped(area);
     let margin = style.margin as f32;
-    let mut right = f32::from(area.x) + f32::from(area.width) - margin;
-    let note = note.map(|n| fit(&font, style.small, n, f32::from(area.width) / 2.0));
+    let end = f32::from(area.x) + f32::from(area.width) - margin;
+    let mut right = end;
+    let mut note = note.map(|n| fit(&font, style.small, n, f32::from(area.width) / 2.0));
     if let Some(note) = note.as_deref() {
         right -= font.measure(style.small, note) + margin;
+    }
+    // The title is never shortened for the note: where it does not fit
+    // beside it even in the least size, the note gives way.
+    let least = style.text.min(style.head);
+    let room = right - f32::from(area.x) - margin;
+    if note.is_some() && font.measure(least, title) > room + 1.0 {
+        note = None;
+        right = end;
     }
     let (size, title) = title_fitting(&font, style, title, right - f32::from(area.x) - margin);
     let band = style.header_band(area);
@@ -199,9 +208,19 @@ impl Header {
         };
         let t = parts.title;
         let margin = style.margin as f32;
-        let mut right = f32::from(t.x) + f32::from(t.width) - margin;
-        let note = note.map(|n| fit(&font, style.small, n, f32::from(t.width) / 2.0));
+        let end = f32::from(t.x) + f32::from(t.width) - margin;
+        let mut right = end;
+        let mut note = note.map(|n| fit(&font, style.small, n, f32::from(t.width) / 2.0));
         let pad = style.gap as f32 / 2.0;
+        // The title is never shortened for the note: where it does not
+        // fit beside it even in the least size, the note gives way.
+        let least = style.text.min(style.head);
+        if let Some(text) = note.as_deref() {
+            let beside = end - font.measure(style.small, text) - margin - pad - f32::from(t.x);
+            if font.measure(least, title) > beside + 1.0 {
+                note = None;
+            }
+        }
         let note_x = note.as_deref().map(|note| {
             right -= font.measure(style.small, note);
             let x = right;
@@ -410,7 +429,8 @@ impl Pager {
 /// smaller, down to the body's size, before it is shortened (the arrows
 /// and the page number beside it keep their room).
 fn title_fitting(font: &FontHandle<'_>, style: &UiStyle, title: &str, room: f32) -> (f32, String) {
-    let least = style.text.min(style.head);
+    // Down to the small size before it is shortened: a title is not.
+    let least = style.small.min(style.head);
     let size = crate::widgets::largest_size(style.head, least, |size| {
         font.measure(size, title) <= room + 1.0
     })

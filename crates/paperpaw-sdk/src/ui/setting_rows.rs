@@ -163,7 +163,15 @@ pub fn draw_value_row(
         let top = rect.y + (rect.height - 2 * line) / 2;
         for (i, range) in lines.into_iter().enumerate() {
             let at = Rect::new(rect.x, top + i as u16 * line, rect.width, line);
-            draw_label(canvas, &font, style.small, title_x, at, &title[range], color);
+            draw_label(
+                canvas,
+                &font,
+                style.small,
+                title_x,
+                at,
+                &title[range],
+                color,
+            );
         }
         return;
     }
@@ -690,6 +698,41 @@ pub fn draw_stepper(
 ) {
     let lines = RowLines::one(rect);
     draw_stepper_lines(canvas, env, style, lines, title, value, room, editing);
+}
+
+/// Where a stepper's title and its `−` value `+` go in a row `width`
+/// wide and `row` high, at the top left (move them with
+/// [`RowLines::at`]): side by side where the whole title fits beside
+/// them, else the title above, on as many lines as it needs, and the
+/// stepper on a line of its own, as setting rows do. The title is never
+/// shortened; draw with [`draw_stepper_lines`], the row
+/// [`RowLines::height`] high.
+pub fn stepper_lines(
+    env: &Env<'_>,
+    style: &UiStyle,
+    width: u16,
+    row: u16,
+    title: &str,
+    room: &str,
+) -> RowLines {
+    let line = Rect::new(0, 0, width, row);
+    let Some(font) = style.font(env) else {
+        return RowLines::one(line);
+    };
+    let room = wider(&font, style.text, room, room);
+    let beside = stepper(env, style, line, room).is_some_and(|(minus, _)| {
+        let margin = style.margin as f32;
+        font.measure(style.text, title) <= f32::from(minus.x) - 2.0 * margin + 1.0
+    });
+    if beside {
+        return RowLines::one(line);
+    }
+    let high = own_title_height(env, style, width, title);
+    RowLines {
+        title: Rect::new(0, 0, width, high),
+        control: Rect::new(0, high, width, row),
+        height: high + row,
+    }
 }
 
 /// [`draw_stepper`] on [`RowLines`]: the `−` value `+` below the title

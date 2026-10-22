@@ -63,6 +63,8 @@ OPTIONS:
     --release <version>   Check compatibility with this PaperPaw release
     --out <dir>           Output folder (default: target/paperpaw-dev)
     --strict              Warnings fail the run too
+    --labels-whole        A label shortened to fit is an error, wherever it ends
+                          (`visual`; `ui-kit` checks its strict pages so by itself)
     --verbose             Notes too on the console
     --keep                Keep the emulated libraries (in <out>/work)
     --list                List profiles and looks
@@ -106,8 +108,11 @@ pub struct Context {
     /// where there is no file system (the browser's emulator).
     pub in_memory: bool,
     /// A label shortened to fit (`visual.ellipsis`) is an error, not a
-    /// warning: for the UI kit, whose blocks must never cut their titles.
+    /// warning, and reported wherever it ends: for the UI kit, whose
+    /// blocks must never cut their titles; on the screens named in
+    /// `strict_screens`, or on all where that is empty.
     pub labels_whole: bool,
+    pub strict_screens: Vec<String>,
     app_languages: OnceLock<Vec<String>>,
 }
 
@@ -134,6 +139,7 @@ impl Context {
             keep: false,
             in_memory: false,
             labels_whole: false,
+            strict_screens: Vec::new(),
             app_languages: OnceLock::new(),
         }
     }
@@ -233,7 +239,14 @@ pub fn run(args: impl Iterator<Item = String>, add: Option<AddPlugins>) -> Resul
     if kit {
         context.target.plugins = vec![crate::ui_kit::PLUGIN.to_string()];
         context.target.add = Some(crate::ui_kit::add);
-        context.labels_whole = true;
+        // Its strict pages, or all of them with `--labels-whole`.
+        if !context.labels_whole {
+            context.labels_whole = true;
+            context.strict_screens = crate::ui_kit::STRICT
+                .iter()
+                .map(|s| s.to_string())
+                .collect();
+        }
     }
     let mut report = Report::default();
     let commands: Vec<&str> = if command == "check" {
@@ -389,6 +402,7 @@ fn parse(mut args: impl Iterator<Item = String>) -> Result<Option<(String, Conte
             "--release" => context.release = Some(value("--release")?),
             "--out" => out = Some(PathBuf::from(value("--out")?)),
             "--strict" => context.strict = true,
+            "--labels-whole" => context.labels_whole = true,
             "--verbose" => context.verbose = true,
             "--keep" => context.keep = true,
             flag if flag.starts_with('-') => {

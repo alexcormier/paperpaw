@@ -3407,8 +3407,12 @@ pub fn paperpaw_sdk::ui::Dialog::draw(&self, &mut paperpaw_graphics::canvas::Can
 pub fn paperpaw_sdk::ui::Dialog::height(&self) -> u16
 pub fn paperpaw_sdk::ui::Dialog::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<usize>
 pub fn paperpaw_sdk::ui::Dialog::new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &str, &[&str], &[&str]) -> Self
+pub fn paperpaw_sdk::ui::Dialog::on_gesture(&mut self, &paperpaw_sdk::Gesture) -> bool
+pub fn paperpaw_sdk::ui::Dialog::on_scroll_action(&mut self, &paperpaw_sdk::Id) -> bool
 pub fn paperpaw_sdk::ui::Dialog::panel(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::Dialog::place(&mut self, u16)
+pub fn paperpaw_sdk::ui::Dialog::scroll(&mut self, isize) -> bool
+pub fn paperpaw_sdk::ui::Dialog::scrolls(&self) -> bool
 pub fn paperpaw_sdk::ui::Dialog::step(&self, usize, &paperpaw_sdk::Id) -> core::option::Option<usize>
 pub struct paperpaw_sdk::ui::Grid
 impl paperpaw_sdk::ui::Grid
@@ -3732,6 +3736,7 @@ pub fn paperpaw_sdk::ui::setting_row(&paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::
 pub fn paperpaw_sdk::ui::setting_value(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec) -> alloc::string::String
 pub fn paperpaw_sdk::ui::step_focus(usize, isize, usize) -> usize
 pub fn paperpaw_sdk::ui::stepper(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str) -> core::option::Option<(paperpaw_platform::geometry::Rect, paperpaw_platform::geometry::Rect)>
+pub fn paperpaw_sdk::ui::stepper_lines(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, u16, &str, &str) -> paperpaw_sdk::ui::RowLines
 pub fn paperpaw_sdk::ui::stroke_round(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::switch_rect(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::text_field_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str) -> u16

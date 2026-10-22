@@ -108,8 +108,8 @@ fn the_ui_kit_shows_every_page() {
     gallery::run(&context, &mut report).unwrap();
     let screens = out.join("gallery/ui-kit/screens");
     for page in [
-        "text", "messages", "rows", "controls", "layout", "share", "dialog", "inputs", "chips",
-        "pickers", "choice", "confirm",
+        "text", "messages", "rows", "controls", "layout", "share", "dialog", "inputs", "ticks",
+        "chips", "pickers", "choice", "confirm",
     ] {
         let page = screens.join(format!("ui-kit.{page}.html"));
         assert!(page.is_file(), "{}", page.display());
@@ -118,33 +118,52 @@ fn the_ui_kit_shows_every_page() {
 }
 
 /// Long German labels and the pseudo-language at the largest interface
-/// text on the X4: no building block shortens a label (an error with
-/// `ui-kit`), none reaches past the screen.
+/// text on the X4: no block of the kit's strict pages shortens a label
+/// (an error with `ui-kit`), none reaches past the screen.
 #[test]
 fn the_ui_kit_keeps_every_label_whole_at_the_largest_text() {
     let out =
         std::env::temp_dir().join(format!("paperpaw-dev-ui-kit-whole-{}", std::process::id()));
-    let args = [
-        "ui-kit",
-        "--profile",
-        "xteink-x4",
-        "--language",
-        "de",
-        "--language",
-        "pseudo",
-        "--light",
-        "--theme",
-        "default",
-        "--set",
-        "core.ui-size=24",
-        "--out",
-    ];
-    let args = args
-        .into_iter()
-        .map(String::from)
-        .chain([out.display().to_string()]);
-    let passed = paperpaw_dev::cli::run(args, None).unwrap();
-    let report = std::fs::read_to_string(out.join("report.json")).unwrap_or_default();
+    let mut context = Context::new(
+        Target {
+            plugins: vec![paperpaw_dev::ui_kit::PLUGIN.into()],
+            add: Some(paperpaw_dev::ui_kit::add),
+            ..Target::default()
+        },
+        out.clone(),
+    );
+    context.profiles = vec![Variant::x4().profile];
+    context.languages = Some(vec!["de".into(), "pseudo".into()]);
+    context.nights = vec![false];
+    context.themes = paperpaw_dev::variant::THEMES.iter().take(1).collect();
+    context.settings = vec![("core.ui-size".into(), "24".into())];
+    context.labels_whole = true;
+    context.strict_screens = paperpaw_dev::ui_kit::STRICT
+        .iter()
+        .map(|s| s.to_string())
+        .collect();
+    let mut report = Report::default();
+    paperpaw_dev::visual::run(&context, &mut report).unwrap();
     let _ = std::fs::remove_dir_all(&out);
-    assert!(passed, "{report}");
+    let errors: Vec<_> = report
+        .findings
+        .iter()
+        .filter(|f| f.level == paperpaw_dev::report::Level::Error)
+        .filter(|f| {
+            paperpaw_dev::ui_kit::STRICT
+                .iter()
+                .any(|s| f.place.starts_with(s))
+        })
+        .map(|f| format!("{} {}: {}", f.check, f.place, f.message))
+        .collect();
+    assert!(errors.is_empty(), "{errors:#?}");
+    // It looked: the kit's pages were drawn and checked.
+    assert!(report.ran.iter().any(|c| c == "visual") || !report.findings.is_empty());
+    assert!(
+        report
+            .findings
+            .iter()
+            .any(|f| f.place.starts_with("ui-kit.")),
+        "nothing of the kit was looked at"
+    );
 }

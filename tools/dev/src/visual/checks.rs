@@ -236,7 +236,7 @@ pub fn ellipsis(scene: &Scene<'_>) -> Vec<Issue> {
             .visible(d)
             .map_or(d.area.right(), |v| v.right().min(d.area.right()));
         let slack = u32::from(scene.ui.margin + 2 * height);
-        if run.right() + slack < room_end {
+        if !scene.labels_whole && run.right() + slack < room_end {
             continue;
         }
         let area = run;

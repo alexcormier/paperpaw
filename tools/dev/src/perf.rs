@@ -469,10 +469,8 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
 
 /// Opens and closes every screen and widget of the target on one profile.
 fn measure_variant(context: &Context, variant: &Variant) -> Result<Run, String> {
-    let start = Start {
-        settings: context.settings.clone(),
-        ..Start::default()
-    };
+    // The command line's settings come with every session.
+    let start = Start::default();
     // Heap of no session's: another device running beside the checks
     // (the browser's emulator), not what the app keeps.
     let outside = budget::stats().live;
