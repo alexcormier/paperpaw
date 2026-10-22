@@ -394,6 +394,18 @@ fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
     clippy::expect_used,
     reason = "the plugins are built in: a kernel that cannot be built is a bug to see at once"
 )]
+
+/// The status lines of the X4s by default (see `setting_default_text`):
+/// fewer items than on large screens.
+const CALM_STATUS: [(&str, &str); 6] = [
+    ("reader.status.bottom-left", "reader.status.aloud"),
+    ("reader.status.bottom-center", "core.status.clock"),
+    ("reader.status.bottom-right", "reader.status.page"),
+    ("home.status.left", "core.status.clock"),
+    ("home.status.center", ""),
+    ("home.status.right", "core.status.battery"),
+];
+
 fn kernel(
     storage: Box<dyn Storage>,
     ota: Option<&ota::Ota>,
@@ -432,7 +444,13 @@ fn kernel(
         // A full refresh takes 3.5 s on its panel: screens change fast.
         .setting_default(&settings::FLASH_SCREENS, false)
         .setting_default(&settings::UI_SIZE, 9)
-        .setting_default(&settings::FONT_SIZE, 9)
+        .setting_default(&settings::FONT_SIZE, 9);
+    // A small screen: calm status lines, the time and the page while
+    // reading (and the mark of reading aloud while it reads), the time
+    // and the battery elsewhere. Every item stays to be chosen.
+    let builder = CALM_STATUS
+        .iter()
+        .fold(builder, |builder, (id, value)| builder.setting_default_text(id, value))
         // PaperPaw switches the radio (`network`); on USB it stays on in a
         // network joined before, for transfers and for trying things.
         .wifi(true)

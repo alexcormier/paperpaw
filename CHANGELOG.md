@@ -11,6 +11,10 @@ change the plugin SDK.
   layout. Breaking: presets of the kind `home.layout` (a data plugin's
   `presets.ini`) are no longer offered anywhere; they are left unread.
   Presets stay for other kinds (the power modes).
+- X4, X4 Pro and X4 Classic: calm status lines by default. While
+  reading, the time and the page (and the mark of reading aloud while it
+  reads); on the home screen, the time and the battery. Every item can
+  still be chosen.
 - Fewer columns or rows on the home screen no longer leave a page empty:
   an item whose cells lie outside the grid now is moved inside it as
   little as can be (narrower or lower where it was wider or higher than

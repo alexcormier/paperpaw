@@ -32,7 +32,7 @@ const X4_BUTTONS: [&str; 7] = [
 ];
 
 /// The firmware's setting defaults (the X4, X4 Pro and X4 Classic).
-const X4_SETTINGS: [(&str, &str); 4] = [
+const X4_SETTINGS: [(&str, &str); 10] = [
     // A 4.3" screen: smaller text, so menus and pages hold enough.
     ("core.ui-size", "9"),
     ("core.font-size", "9"),
@@ -40,6 +40,14 @@ const X4_SETTINGS: [(&str, &str); 4] = [
     ("core.flash-screens", "false"),
     // On USB the radio stays on in a network joined before.
     ("wifi.while-charging", "true"),
+    // A small screen: calm status lines, the time and the page while
+    // reading, the time and the battery elsewhere.
+    ("reader.status.bottom-left", "reader.status.aloud"),
+    ("reader.status.bottom-center", "core.status.clock"),
+    ("reader.status.bottom-right", "reader.status.page"),
+    ("home.status.left", "core.status.clock"),
+    ("home.status.center", ""),
+    ("home.status.right", "core.status.battery"),
 ];
 
 /// The firmware's memory for glyphs of font packs on the card.
