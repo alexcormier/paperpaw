@@ -586,17 +586,18 @@ fn the_answer_carries_the_question_context() {
 fn buttons_move_round_the_rows() {
     let mut typing = Typing::new(BUTTONS);
     typing.open(&[]);
+    // On this narrow screen the rows are split ("qwert" above "yuiop").
     // Left from the first key wraps to the end of the row.
     typing.run(actions::LEFT);
-    assert_eq!(typing.focused().as_deref(), Some("p"));
+    assert_eq!(typing.focused().as_deref(), Some("t"));
     typing.run(actions::RIGHT);
     assert_eq!(typing.focused().as_deref(), Some("q"));
     // Down to the row below, near the same place.
     typing.run(actions::DOWN);
-    assert_eq!(typing.focused().as_deref(), Some("a"));
+    assert_eq!(typing.focused().as_deref(), Some("y"));
     // Previous from the first key of a row: the end of the row above.
     typing.run(actions::PREVIOUS);
-    assert_eq!(typing.focused().as_deref(), Some("p"));
+    assert_eq!(typing.focused().as_deref(), Some("t"));
     // Up from the first row: the bottom row, below (no buttons in the
     // field without a clipboard or network).
     typing.run(actions::UP);
@@ -784,7 +785,7 @@ fn paste_by_buttons_from_above_the_first_row() {
     typing.run(actions::CONFIRM);
     // Down again to the key below it, at the right of the first row.
     typing.run(actions::DOWN);
-    assert_eq!(typing.focused().as_deref(), Some("o"));
+    assert_eq!(typing.focused().as_deref(), Some("t"));
     typing.press_by_buttons("OK");
     assert_eq!(typing.answer(), "pasted line end");
 }

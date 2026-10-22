@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The keyboard on narrow screens (the X4 and X4 Pro): a row too wide for
+  keys at least 6 mm wide is split in two in its order ("qwert" above
+  "yuiop"), so the keys are about twice as wide; by touch and with the
+  buttons as before. Wide screens keep their rows.
 - Fewer columns or rows on the home screen no longer leave a page empty:
   an item whose cells lie outside the grid now is moved inside it as
   little as can be (narrower or lower where it was wider or higher than
