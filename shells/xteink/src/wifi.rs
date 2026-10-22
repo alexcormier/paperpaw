@@ -31,7 +31,7 @@ use esp_radio::wifi::scan::ScanConfig;
 use esp_radio::wifi::sta::{ScanMethod, StationConfig};
 use esp_radio::wifi::{
     AuthenticationMethod, AuthenticationMethodConfig, Config, ConnectionError, ControllerConfig,
-    DisconnectReason, WifiController,
+    DisconnectReason, PowerSaveMode, WifiController,
 };
 use paperpaw_core::{JoinFailure, WifiCommand, WifiEvent, WifiNetwork, WifiState};
 
@@ -91,6 +91,8 @@ struct On {
     hosting: Option<String>,
     /// What to do once the task going on is done.
     queued: Vec<WifiCommand>,
+    /// The power saving set (none yet: the driver's, off).
+    saving: Option<bool>,
 }
 
 pub struct Radio {
@@ -225,6 +227,7 @@ impl Radio {
             linked: false,
             hosting: None,
             queued: Vec::new(),
+            saving: None,
         });
         self.stopping = false;
     }
@@ -449,6 +452,30 @@ impl Radio {
         }
         self.stopping = false;
         log::info!("wifi: off");
+    }
+
+    /// The radio's power saving: between the network's beacons it sleeps
+    /// (ADR 0025), unless data moves (a download, a server's answer), which
+    /// it would slow by as long as it sleeps.
+    pub fn save_power(&mut self, saving: bool) {
+        let Some(on) = &mut self.on else {
+            return;
+        };
+        if on.saving == Some(saving) {
+            return;
+        }
+        let Work::Idle(controller) = &mut on.work else {
+            return;
+        };
+        let mode = if saving {
+            PowerSaveMode::Minimum
+        } else {
+            PowerSaveMode::None
+        };
+        match controller.set_power_saving(mode) {
+            Ok(()) => on.saving = Some(saving),
+            Err(e) => log::warn!("wifi: power saving: {e:?}"),
+        }
     }
 
     /// Reports the state when it changed.

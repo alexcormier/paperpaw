@@ -432,6 +432,24 @@ where
         Ok(())
     }
 
+    /// Turns the panel's power off after a refresh that left it on (a
+    /// fast one), once nothing follows for a while: the picture stays,
+    /// and the next refresh powers it up again (its sequence does).
+    pub fn power_down(&mut self) -> Result<(), Error> {
+        if self.powered {
+            self.command(cmd::UPDATE_CONTROL_2, &[0x03])?;
+            self.command(cmd::ACTIVATE, &[])?;
+            self.wait()?;
+            self.powered = false;
+        }
+        Ok(())
+    }
+
+    /// Whether the panel's power is on (after a fast refresh).
+    pub fn powered(&self) -> bool {
+        self.powered
+    }
+
     /// Puts the controller into deep sleep, the picture staying; [`init`]
     /// wakes it again.
     ///
@@ -1089,6 +1107,34 @@ mod tests {
         let sequences: Vec<u8> = c.refreshes.iter().map(|&(_, two)| two).collect();
         assert_eq!(sequences, [0xD7, 0xFC, 0xFF]);
         assert_eq!(c.commands.last(), Some(&cmd::DEEP_SLEEP));
+    }
+
+    #[test]
+    fn a_fast_refresh_leaves_the_power_on_until_powered_down() {
+        let controller = Controller::new();
+        let mut display = Display::new(
+            Spi(controller.clone()),
+            Dc(controller.clone()),
+            Pin,
+            Busy,
+            Delay,
+        );
+        display.init().unwrap();
+        display.refresh(Refresh::Fast, false).unwrap();
+        assert!(!display.powered(), "the first is a half one");
+        display.refresh(Refresh::Fast, false).unwrap();
+        assert!(display.powered());
+        display.power_down().unwrap();
+        assert!(!display.powered());
+        // Once is enough.
+        display.power_down().unwrap();
+        let sequences: Vec<u8> = controller
+            .borrow()
+            .refreshes
+            .iter()
+            .map(|&(_, two)| two)
+            .collect();
+        assert_eq!(sequences, [0xD7, 0xFC, 0x03]);
     }
 
     #[test]

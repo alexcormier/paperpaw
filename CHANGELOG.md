@@ -23,6 +23,22 @@ change the plugin SDK.
   A `wifi.ini` on the card (`ssid = …`, `password = …`) is read once at a
   start, kept with the passwords and removed. SDK: `WifiCommand::Host`,
   `WifiState::Hosting` (servers serve on the own network).
+- X4 and X4 Pro save power (ADR 0025): the radio sleeps between the
+  network's beacons while connected and no data moves; on battery the
+  processor sleeps while the panel refreshes instead of watching it; the
+  panel's power goes off after a refresh once nothing follows (soon on
+  the X4, after 30 s on the X4 Pro, whose next refresh takes longer
+  then); going to sleep lets requests under way finish first, 15 s at
+  the longest, a press keeping it awake (`Kernel::holds_sleep`). A
+  press is counted as soon as it holds (the device stays awake while it
+  settles); *Button response* (Controls) set to *Faster* reads the
+  buttons more often on battery and keeps the X4 Pro's screen powered,
+  for a little more battery.
+
+- In Offline mode the store, an OPDS catalog, Calibre and Wi-Fi
+  transfer offer to go online once, inline ("Offline mode. Go online for
+  it?" with *Go online* and *Not now*), instead of failing. SDK:
+  `ui::OfflineOffer` (sends `Command::GoOnline`).
 - Plugin authors: `paperpaw-dev flows` is the main test of a plugin's
   actions. Every step of a flow is measured on the X4's budgets, the
   costliest one named (`flows.heap`, `flows.frame-time`), and each flow

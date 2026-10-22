@@ -103,6 +103,8 @@ pub(crate) struct ListScreen {
     keys: bool,
     /// A fresh list was asked for since the screen opened.
     asked: bool,
+    /// Offline mode: the offer to go online for the list.
+    offer: ui::OfflineOffer,
 }
 
 impl ListScreen {
@@ -123,6 +125,7 @@ impl ListScreen {
             trouble: Trouble::None,
             keys: !env.device.input.touch,
             asked: false,
+            offer: ui::OfflineOffer::new(),
             style,
             header,
         };
@@ -263,6 +266,11 @@ impl ListScreen {
         }
     }
 
+    /// Whether the offer to go online shows: no list, for Offline mode.
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.list.is_empty() && self.trouble == Trouble::Offline && self.offer.shows(env)
+    }
+
     /// Whether *Select* tries again: nothing to show for want of the
     /// list.
     fn retry(&self) -> bool {
@@ -314,6 +322,9 @@ impl Screen for ListScreen {
             .filter(|_| self.index.is_some() && self.paging().is_none());
         self.header
             .draw(canvas, env, &style, title, note, self.paging());
+        if self.offering(env) {
+            return self.offer.draw(canvas, env, &style, self.area);
+        }
         if self.list.is_empty() {
             let (icon, title, text) = match self.trouble {
                 _ if env.catalog_device.is_none() => {
@@ -398,6 +409,12 @@ impl Screen for ListScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
+        if *a != actions::BACK && self.offering(cx.env()) {
+            if self.offer.on_action(a, cx) == Some(ui::Offer::Online) {
+                self.fetch(cx);
+            }
+            return Handled::Yes;
+        }
         let back = [actions::UP, actions::LEFT, actions::PREVIOUS];
         let forward = [actions::DOWN, actions::RIGHT, actions::NEXT];
         if (back.contains(a) || forward.contains(a)) && !self.keys {
@@ -438,6 +455,12 @@ impl Screen for ListScreen {
             .tap(cx.env(), &self.style, gesture.start, self.paging())
         {
             cx.command(Command::RunAction(action));
+            return Handled::Yes;
+        }
+        if self.offering(cx.env()) {
+            if self.offer.on_tap(gesture.start, cx) == Some(ui::Offer::Online) {
+                self.fetch(cx);
+            }
             return Handled::Yes;
         }
         if self.list.is_empty() {

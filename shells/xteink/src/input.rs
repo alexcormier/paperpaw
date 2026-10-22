@@ -263,6 +263,28 @@ pub fn sample_now() {
     });
 }
 
+/// Whether a press or release is under way, not counted yet (it has to
+/// hold, see `buttons::Debouncer`): the main loop stays awake meanwhile,
+/// so that the readings every [`SAMPLE_MS`] count it at once.
+pub fn settling() -> bool {
+    critical_section::with(|cs| {
+        SAMPLER
+            .borrow_ref(cs)
+            .as_ref()
+            .is_some_and(|s| s.debouncer.settling())
+    })
+}
+
+/// Whether a press or release waits for the main loop.
+pub fn waiting() -> bool {
+    critical_section::with(|cs| {
+        SAMPLER
+            .borrow_ref(cs)
+            .as_ref()
+            .is_some_and(|s| !s.queue.is_empty())
+    })
+}
+
 /// The next press or release, oldest first.
 pub fn next() -> Option<Change> {
     critical_section::with(|cs| {

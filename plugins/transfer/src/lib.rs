@@ -109,6 +109,8 @@ enum State {
     Failed(String),
     /// Without a network: how to get one.
     NoNetwork,
+    /// Offline mode: the offer to go online for the transfer.
+    Offline(ui::OfflineOffer),
 }
 
 /// The reader's own network, for a transfer without a router: its name
@@ -150,6 +152,20 @@ impl TransferScreen {
             last: None,
             started: false,
         }
+    }
+
+    /// What the reader chose on the offer to go online: served now, or
+    /// without a network as without one.
+    fn offered(&mut self, chosen: Option<ui::Offer>, cx: &mut Cx<'_, '_>) {
+        match chosen {
+            Some(ui::Offer::Online) => {
+                self.state = State::Starting;
+                cx.command(Command::serve(SERVER, PORT, SERVER_EVENT.into()));
+            }
+            Some(ui::Offer::NotNow) => self.state = State::NoNetwork,
+            None => return,
+        }
+        self.redraw(cx);
     }
 
     fn redraw(&self, cx: &mut Cx<'_, '_>) {
@@ -540,7 +556,7 @@ impl Screen for TransferScreen {
         let title = env.i18n.tr("transfer.title");
         self.header.draw(canvas, env, &style, title, None, None);
         let area = self.content(env);
-        let (url, qr) = match &self.state {
+        let (url, qr) = match &mut self.state {
             State::Starting => {
                 // While it waits for a network: or without a router.
                 let button = self.own_button(env);
@@ -589,6 +605,7 @@ impl Screen for TransferScreen {
                 }
                 return;
             }
+            State::Offline(offer) => return offer.draw(canvas, env, &style, area),
             State::Serving { url, qr } => (url, qr),
         };
         // Without a router: first the code to join the reader's network.
@@ -653,6 +670,12 @@ impl Screen for TransferScreen {
                 self.redraw(cx);
                 return;
             }
+            let offer = ui::OfflineOffer::new();
+            if offer.shows(cx.env()) {
+                self.state = State::Offline(offer);
+                self.redraw(cx);
+                return;
+            }
             cx.command(Command::serve(SERVER, PORT, SERVER_EVENT.into()));
         }
     }
@@ -664,6 +687,10 @@ impl Screen for TransferScreen {
             Handled::Yes
         } else if *action == actions::CONFIRM && self.own_button(cx.env()).is_some() {
             self.without_router(cx);
+            Handled::Yes
+        } else if let State::Offline(offer) = &mut self.state {
+            let chosen = offer.on_action(action, cx);
+            self.offered(chosen, cx);
             Handled::Yes
         } else {
             Handled::No
@@ -687,6 +714,13 @@ impl Screen for TransferScreen {
                 .is_some_and(|b| b.contains(gesture.start))
         {
             self.without_router(cx);
+            return Handled::Yes;
+        }
+        if gesture.kind == GestureKind::Tap
+            && let State::Offline(offer) = &mut self.state
+        {
+            let chosen = offer.on_tap(gesture.start, cx);
+            self.offered(chosen, cx);
             return Handled::Yes;
         }
         Handled::No

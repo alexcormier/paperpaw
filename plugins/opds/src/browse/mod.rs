@@ -86,6 +86,9 @@ pub(crate) struct BrowseScreen {
     failed: Vec<usize>,
     /// The files the answers are written to.
     temp: TempFiles,
+    /// Offline mode: the offer to go online, and the feed to load then.
+    offer: ui::OfflineOffer,
+    offline: Option<(String, bool)>,
 }
 
 impl BrowseScreen {
@@ -120,6 +123,8 @@ impl BrowseScreen {
                 && env.settings.read(&crate::COVERS),
             fetching: None,
             failed: Vec::new(),
+            offer: ui::OfflineOffer::new(),
+            offline: None,
             temp,
             catalog,
             style,
@@ -149,12 +154,40 @@ impl BrowseScreen {
         self.redraw(cx);
     }
 
+    /// Whether the offer to go online shows (Offline mode, a feed to load).
+    fn offering(&self, env: &Env<'_>) -> bool {
+        self.offline.is_some() && self.offer.shows(env)
+    }
+
+    /// What the reader chose on the offer: the feed loaded now, or said
+    /// to need the network.
+    fn offered(&mut self, chosen: Option<ui::Offer>, cx: &mut Cx<'_, '_>) {
+        let Some(chosen) = chosen else {
+            return;
+        };
+        let Some((url, back)) = self.offline.take() else {
+            return;
+        };
+        match chosen {
+            ui::Offer::Online => self.load(&url, back, cx),
+            ui::Offer::NotNow => {
+                let message = cx.env().i18n.tr("opds.no-network").to_string();
+                self.say(message, cx);
+            }
+        }
+    }
+
     /// Loads feed `url`; `back` when returning to it.
     fn load(&mut self, url: &str, back: bool, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if !env.caps.network {
             let message = env.i18n.tr("opds.no-network").to_string();
             return self.say(message, cx);
+        }
+        // Offline mode: asked first, once.
+        if self.offer.shows(&env) {
+            self.offline = Some((url.to_string(), back));
+            return self.redraw(cx);
         }
         self.loading = Some((url.to_string(), back));
         let message = env
@@ -327,6 +360,10 @@ impl Screen for BrowseScreen {
             None,
             self.list.paging(rows.len()),
         );
+        if self.offering(env) {
+            let area = self.list.area();
+            return self.offer.draw(canvas, env, &style, area);
+        }
         let entries = &self.feed.entries;
         let covers = &self.covers;
         // A column for covers, as wide as a book's picture of the row's height.
@@ -409,6 +446,11 @@ impl Screen for BrowseScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
+        if *a != actions::BACK && self.offering(cx.env()) {
+            let chosen = self.offer.on_action(a, cx);
+            self.offered(chosen, cx);
+            return Handled::Yes;
+        }
         if let Some(delta) = ui::list_step(a, self.list.rows() as isize) {
             self.move_focus(delta, cx);
         } else if *a == actions::CONFIRM {
@@ -432,6 +474,11 @@ impl Screen for BrowseScreen {
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
             cx.command(Command::RunAction(action));
+            return Handled::Yes;
+        }
+        if self.offering(cx.env()) {
+            let chosen = self.offer.on_tap(gesture.start, cx);
+            self.offered(chosen, cx);
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {
