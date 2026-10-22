@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Pictures on panels with few grays (the X4s in black and white, four
+  grays) are dithered by error diffusion (Atkinson's) instead of a 4×4
+  ordered pattern: line drawings such as the cats stay clean, without the
+  grid that made them look pixelated, covers and photos keep their
+  tones but the lightest. Drawn in bands, a picture shows no seams; it
+  takes two rows of error for each picture (two at once). Flat shades of
+  the interface keep the calm ordered pattern.
 - Vocabulary: flash cards with spaced repetition (FSRS, Anki's
   scheduler), in *Tools*, *Flash cards*. A review shows each due card's
   front, then its back and example and four answers (*Again*, *Hard*,

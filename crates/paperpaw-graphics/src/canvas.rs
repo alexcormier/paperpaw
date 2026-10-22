@@ -549,13 +549,10 @@ impl<'a> Canvas<'a> {
             return;
         };
         let x = x + self.origin.0;
-        let opacity = u32::from(opacity);
-        for px in rect.x..rect.right() as u16 {
-            let at = (i32::from(px) - x) as usize * 2;
-            let alpha = (u32::from(gray_alpha[at + 1]) * opacity + 127) / 255;
-            self.framebuffer
-                .put_gray_over(px, rect.y, gray_alpha[at], alpha as u8);
-        }
+        let from = (i32::from(rect.x) - x) as usize * 2;
+        let row = &gray_alpha[from..from + usize::from(rect.width) * 2];
+        self.framebuffer
+            .put_gray_alpha_row(rect.x, rect.y, row, opacity);
         self.framebuffer.mark_dirty(rect);
     }
 
@@ -568,11 +565,9 @@ impl<'a> Canvas<'a> {
             return;
         };
         let x = x + self.origin.0;
-        for px in rect.x..rect.right() as u16 {
-            let at = (i32::from(px) - x) as usize * 3;
-            self.framebuffer
-                .put_rgb(px, rect.y, [rgb[at], rgb[at + 1], rgb[at + 2]]);
-        }
+        let from = (i32::from(rect.x) - x) as usize * 3;
+        let row = &rgb[from..from + usize::from(rect.width) * 3];
+        self.framebuffer.put_rgb_row(rect.x, rect.y, row);
         self.framebuffer.mark_dirty(rect);
     }
 
