@@ -14,6 +14,7 @@
 extern crate alloc;
 
 mod page;
+mod phone;
 mod policy;
 
 use alloc::borrow::Cow;
@@ -43,6 +44,12 @@ pub const GROUP: Id = Id::new_static("wifi.group");
 pub const PAGE: Id = Id::new_static("wifi.page");
 /// Opens the Wi-Fi page: what a tap on Wi-Fi's status item runs.
 pub const OPEN: Id = Id::new_static("wifi.open");
+/// Setting up Wi-Fi with a phone (see `phone`).
+pub const PHONE: Id = Id::new_static("wifi.phone");
+/// A file on the card with networks to join, read once at a start, kept
+/// with the passwords and removed (e.g. written by the flasher): lines
+/// `ssid = …` and `password = …`, a pair for each network.
+pub const WIFI_FILE: &str = "wifi.ini";
 /// The status item: the Wi-Fi sign while the device is in a network.
 pub const STATUS: Id = Id::new_static("wifi.status");
 /// The radio comes on by itself when a plugin wants the network.
@@ -130,7 +137,7 @@ fn no_network(policy: &mut Policy, out: &mut Vec<Command>) {
 }
 
 /// Why joining `ssid` failed, in words.
-fn failure_text(env: &Env<'_>, ssid: &str, reason: JoinFailure) -> String {
+pub(crate) fn failure_text(env: &Env<'_>, ssid: &str, reason: JoinFailure) -> String {
     let key = match reason {
         JoinFailure::Password => "wifi.failed.password",
         JoinFailure::NotFound => "wifi.failed.not-found",
@@ -139,6 +146,37 @@ fn failure_text(env: &Env<'_>, ssid: &str, reason: JoinFailure) -> String {
         _ => "wifi.failed.other",
     };
     env.i18n.format(key, &[("ssid", Arg::Str(ssid))])
+}
+
+/// The networks in [`WIFI_FILE`], to keep, and the file removed; nothing
+/// where there is none. A password goes with the `ssid` line before it.
+fn read_wifi_file(env: &Env<'_>) -> Vec<Command> {
+    let Ok(bytes) = paperpaw_sdk::read_file(env.storage, WIFI_FILE, 16 * 1024) else {
+        return Vec::new();
+    };
+    let text = String::from_utf8_lossy(&bytes);
+    let mut networks: Vec<(String, String)> = Vec::new();
+    for line in text.lines().map(str::trim) {
+        let Some((key, value)) = line.split_once('=') else {
+            continue;
+        };
+        let value = value.trim();
+        match key.trim() {
+            "ssid" if !value.is_empty() => networks.push((String::from(value), String::new())),
+            "password" => {
+                if let Some(network) = networks.last_mut() {
+                    network.1 = String::from(value);
+                }
+            }
+            _ => {}
+        }
+    }
+    // Kept now: the file must not stay on the card with the passwords.
+    let _ = env.storage.remove(WIFI_FILE);
+    networks
+        .iter()
+        .map(|(ssid, password)| Command::SetSecret(wifi::keep(ssid, password)))
+        .collect()
 }
 
 /// The Wi-Fi plugin.
@@ -229,6 +267,18 @@ impl Plugin for Wifi {
             "wifi.title",
             Box::new(move |env, _| Box::new(page::WifiPage::new(env, p.clone()))),
         ))?;
+        let p = policy.clone();
+        r.add_screen(ScreenSpec::new(
+            PHONE,
+            "wifi.phone.title",
+            Box::new(move |env, _| Box::new(phone::PhoneScreen::new(env, p.clone()))),
+        ))?;
+        // Networks put on the card: kept, the file removed.
+        r.on(events::STARTED, |env, (), out| {
+            if env.wifi.is_some() {
+                out.extend(read_wifi_file(env));
+            }
+        })?;
 
         // A plugin wants the network.
         let p = policy.clone();
@@ -236,7 +286,8 @@ impl Plugin for Wifi {
             let Some(wifi) = env.wifi else {
                 return;
             };
-            if !env.settings.read(&ON_DEMAND) {
+            // Not while the own network is open (the setup with a phone).
+            if !env.settings.read(&ON_DEMAND) || wifi.state.is_hosting() {
                 return;
             }
             let mut policy = p.borrow_mut();

@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Wi-Fi set up with a phone (X4, X4 Pro): the reader opens a network of
+  its own and shows two QR codes, to join it and to open a page there
+  that lists the networks found and takes the password with the phone's
+  keyboard; the reader then joins that network and keeps the password.
+  A `wifi.ini` on the card (`ssid = …`, `password = …`) is read once at a
+  start, kept with the passwords and removed. SDK: `WifiCommand::Host`,
+  `WifiState::Hosting` (servers serve on the own network).
+
 - Fewer columns or rows on the home screen no longer leave a page empty:
   an item whose cells lie outside the grid now is moved inside it as
   little as can be (narrower or lower where it was wider or higher than
