@@ -15,6 +15,7 @@ kosync sync
 menu-editor look
 news library
 profiles reading
+reading-goal reading
 readwise sync
 rules system
 stats reading

@@ -496,6 +496,17 @@ pub mod events {
     }
 
     crate::event_data! {
+        /// How long was read on a day ([`READ_TODAY`]).
+        pub struct ReadToday {
+            /// The day: days since 1970-01-01, by the local time.
+            pub day: i32,
+            /// Seconds read that day, as the reading statistics count
+            /// them.
+            pub seconds: u32,
+        }
+    }
+
+    crate::event_data! {
         /// A word looked up in a book ([`WORD_LOOKED_UP`]).
         pub struct WordLookedUp {
             pub word: String,
@@ -879,6 +890,12 @@ pub mod events {
     pub const PAGE_WORDS_WANTED: Event<PageWordsWanted> = Event::new("core.page-words-wanted");
     /// A word of a book was looked up ([`WordLookedUp`]).
     pub const WORD_LOOKED_UP: Event<WordLookedUp> = Event::new("core.word-looked-up");
+    /// How long was read today ([`ReadToday`]), as the plugin that keeps
+    /// the reading statistics counts it (`stats`): sent as it records
+    /// reading, as it starts and as the device learns the date, when the
+    /// number changed. Plugins that show it (a reading goal) keep the
+    /// last one: on a day after its `day`, nothing was read yet.
+    pub const READ_TODAY: Event<ReadToday> = Event::new("core.read-today");
     /// What a widget shows changed by other means than the events screens
     /// already follow, e.g. a tap on it turned to another quote or ticked
     /// an item off ([`WidgetChanged`]): screens showing it read it anew

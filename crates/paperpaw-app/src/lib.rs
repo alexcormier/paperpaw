@@ -77,7 +77,7 @@ impl core::fmt::Debug for StorePlugins<'_> {
 
 /// The ids of the plugins the store offers as files too: built in only
 /// with the feature `store-plugins`.
-pub const STORE_PLUGINS: [&str; 20] = [
+pub const STORE_PLUGINS: [&str; 21] = [
     "aids",
     "battery",
     "browser",
@@ -90,6 +90,7 @@ pub const STORE_PLUGINS: [&str; 20] = [
     "menu-editor",
     "news",
     "profiles",
+    "reading-goal",
     "readwise",
     "rules",
     "stats",
@@ -164,6 +165,7 @@ pub fn install_with(
         b = offered(b, store, paperpaw_plugin_koreader::KoReader);
         b = offered(b, store, paperpaw_plugin_calibre::Calibre);
         b = offered(b, store, paperpaw_plugin_stats::Stats);
+        b = offered(b, store, paperpaw_plugin_reading_goal::ReadingGoal);
         b = offered(b, store, paperpaw_plugin_battery::Battery);
     }
     b = b
