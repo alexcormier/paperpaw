@@ -29,14 +29,19 @@ const POLL_MS: u64 = 10;
 /// How often the battery is read.
 const STATUS_MS: u64 = 60_000;
 /// On battery, the longest the processor sleeps between readings of the
-/// buttons (a press lasts 80 ms and more).
+/// buttons (a press lasts 80 ms and more); less with the button response
+/// *Faster*.
 const IDLE_MS: u64 = 30;
+const IDLE_FAST_MS: u64 = 10;
+/// How often the buttons are read while awake (`input`'s timer): the
+/// rest while a press settles.
+const SAMPLE_MS: u64 = 5;
 /// How long after the last refresh the panel's power goes off: soon
 /// where powering up again costs nothing; where it makes the next
 /// refresh slower, once refreshes do not follow each other (menus,
 /// sliders) and reading goes on.
 const PANEL_IDLE_MS: u64 = 1_000;
-const PANEL_IDLE_SLOW_MS: u64 = 30_000;
+const PANEL_IDLE_SLOW_MS: u64 = 60_000;
 /// How long going to sleep waits for work under way (a position pushed).
 const SLEEP_WAIT_MS: u64 = 15_000;
 /// How long after the last work what was written is written back to the
@@ -169,12 +174,18 @@ impl Firmware {
         self.rest(battery, installing);
     }
 
-    /// How long after a refresh the panel's power goes off.
+    /// Whether the button response is *Faster* (see `device`).
+    fn faster(&self) -> bool {
+        self.kernel.settings().read(&device::BUTTON_RESPONSE) == device::RESPONSE_FASTER
+    }
+
+    /// How long after a refresh the panel's power goes off: never where
+    /// that slows the next refresh and the response is *Faster*.
     fn panel_idle_ms(&self) -> u64 {
-        if self.panel.power_up_ms() > 0 {
-            PANEL_IDLE_SLOW_MS
-        } else {
-            PANEL_IDLE_MS
+        match self.panel.power_up_ms() {
+            0 => PANEL_IDLE_MS,
+            _ if self.faster() => u64::MAX / 2,
+            _ => PANEL_IDLE_SLOW_MS,
         }
     }
 
@@ -404,9 +415,16 @@ impl Firmware {
             power::mark(power::at::TRIED);
             esp_hal::system::software_reset();
         }
+        // A press under way: read again soon, awake (the readings stop in
+        // a light sleep), so that it counts at once.
+        if input::settling() {
+            self.delay.delay_millis(SAMPLE_MS as u32);
+            return;
+        }
+        let idle = if self.faster() { IDLE_FAST_MS } else { IDLE_MS };
         let mut until = now().0
             + if battery {
-                IDLE_MS
+                idle
             } else if self.network.moving() || installing {
                 // Data on the way, or an update: on at once.
                 0

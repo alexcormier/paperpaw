@@ -12,7 +12,11 @@ change the plugin SDK.
   panel's power goes off after a refresh once nothing follows (soon on
   the X4, after 30 s on the X4 Pro, whose next refresh takes longer
   then); going to sleep lets requests under way finish first, 15 s at
-  the longest, a press keeping it awake (`Kernel::holds_sleep`).
+  the longest, a press keeping it awake (`Kernel::holds_sleep`). A
+  press is counted as soon as it holds (the device stays awake while it
+  settles); *Button response* (Controls) set to *Faster* reads the
+  buttons more often on battery and keeps the X4 Pro's screen powered,
+  for a little more battery.
 
 - In Offline mode the store, an OPDS catalog, Calibre and Wi-Fi
   transfer offer to go online once, inline ("Offline mode. Go online for
