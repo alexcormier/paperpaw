@@ -345,6 +345,12 @@ impl Screen for ReaderScreen {
             .is_ok_and(|book| self.smooth || book.pictured())
     }
 
+    /// It says itself which pages are best in grays ([`Screen::grays`]):
+    /// pages of text turn in black and white.
+    fn pictures_in_grays(&self) -> bool {
+        false
+    }
+
     /// *Select* opens the reading menu, so its hint says so.
     fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
         if *action == actions::CONFIRM {
@@ -423,6 +429,8 @@ impl Screen for ReaderScreen {
             if !book.web() {
                 cx.command(events::BOOK_OPENED.emit(book.reading(cx.env())));
             }
+            // The book shows: its hints may, the first time.
+            cx.command(paperpaw_sdk::help::ready(&crate::SCREEN));
             let now = cx.env().now;
             cx.wake_at(now);
         }

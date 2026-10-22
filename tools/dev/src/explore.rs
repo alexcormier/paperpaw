@@ -46,11 +46,11 @@ fn usable(part: &Part) -> bool {
     )
 }
 
-/// A fresh session, the home screen's first tips already seen (they
-/// would open over it when *Home* reaches it).
+/// A fresh session without first-time hints (they would open over a
+/// screen when it shows).
 fn fresh(context: &Context, variant: &Variant) -> Result<Session, String> {
     let start = session::Start {
-        settings: vec![("home.gesture-tips".into(), "false".into())],
+        settings: vec![("help.show".into(), "false".into())],
         ..session::Start::default()
     };
     Session::start(context, variant, &start)

@@ -95,3 +95,79 @@ fn a_plugin_installed_while_the_list_is_open_is_listed() {
     assert!(shown.contains("Airy"), "{shown}");
     assert!(shown.contains("Roomy."), "{shown}");
 }
+
+/// Says how it works, at length.
+struct Explained;
+
+impl Plugin for Explained {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(
+            Id::new_static("explained"),
+            "Explained",
+            Version::new(0, 1, 0),
+        )
+        .description("Says how it works.")
+        .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_translations(std::borrow::Cow::Borrowed(
+            "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\n\
+             explained.plugin.how = \"First this.\\n\\nThen that.\"\n",
+        ))
+    }
+}
+
+/// Holding each row of the list in turn, until one says how it works:
+/// the text it was shown in, if any.
+fn hold_each(kernel: &mut Kernel) -> Option<String> {
+    for step in 0..40 {
+        let at = Instant(1000 + step * 100);
+        kernel.run_action(at, paperpaw_sdk::builtin::actions::LONG_CONFIRM);
+        let text = paperpaw_sdk::read_file(
+            kernel.storage(),
+            ".paperpaw/plugins/plugin-manager/how.txt",
+            1 << 16,
+        )
+        .ok()
+        .map(|data| String::from_utf8(data).unwrap());
+        if text.is_some() {
+            return text;
+        }
+        kernel.run_action(at, paperpaw_sdk::builtin::actions::DOWN);
+    }
+    None
+}
+
+#[test]
+fn holding_a_plugin_shows_how_it_works() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(MemoryStorage::new())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(PluginManager)
+        .plugin(Explained)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.run_action(Instant(100), OPEN);
+    let text = hold_each(&mut kernel).expect("how it works was shown");
+    assert_eq!(text, "Explained\n\nFirst this.\n\nThen that.\n");
+}
+
+#[test]
+fn holding_a_plugin_that_says_nothing_more_keeps_the_list() {
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(MemoryStorage::new())
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(PluginManager)
+        .plugin(Installer)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.run_action(Instant(100), OPEN);
+    // None of these says how it works: a hold tells so (a notice) and
+    // the list stays.
+    assert_eq!(hold_each(&mut kernel), None);
+    let shown = shown(&mut kernel);
+    assert!(shown.starts_with("Plugins"), "{shown}");
+}

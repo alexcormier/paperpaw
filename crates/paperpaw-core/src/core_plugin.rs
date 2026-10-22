@@ -1380,7 +1380,7 @@ fn register_look_settings(r: &mut Registrar) -> Result<(), RegisterError> {
 
 /// Buttons, the panel's refresh, sleep, rotation, notices and long
 /// presses.
-static DEVICE: [SettingSpec; 14] = [
+static DEVICE: [SettingSpec; 15] = [
     SettingSpec::fixed_choice(
         settings::KEYMAP_PRESET.static_str(),
         "core.setting.keymap-preset",
@@ -1408,6 +1408,13 @@ static DEVICE: [SettingSpec; 14] = [
     )
     .advanced()
     .described("core.setting.flash-screens.help"),
+    SettingSpec::fixed_switch(
+        settings::PICTURES_IN_GRAYS.static_str(),
+        "core.setting.pictures-in-grays",
+        true,
+        groups::DISPLAY,
+    )
+    .described("core.setting.pictures-in-grays.help"),
     SettingSpec::fixed_number(
         settings::SLEEP_AFTER.static_str(),
         "core.setting.sleep-after",
@@ -1523,6 +1530,10 @@ fn register_device_settings(r: &mut Registrar) -> Result<(), RegisterError> {
     r.set_menu_need(settings::SLEEP_AFTER, paperpaw_sdk::MenuNeed::Sleep)?;
     r.set_menu_need(settings::ROTATION, paperpaw_sdk::MenuNeed::Rotation)?;
     r.set_menu_need(settings::BUTTON_HINTS, paperpaw_sdk::MenuNeed::ButtonRow)?;
+    r.set_menu_need(
+        settings::PICTURES_IN_GRAYS,
+        paperpaw_sdk::MenuNeed::BlackAndWhite,
+    )?;
     let touch = [
         settings::EDGE_ENDS,
         settings::EDGE_SIDES,

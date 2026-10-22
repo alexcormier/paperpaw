@@ -90,6 +90,7 @@ paperpaw-plugin-koreader = { workspace = true, optional = true }
 paperpaw-plugin-wallabag = { workspace = true, optional = true }
 paperpaw-plugin-about.workspace = true
 paperpaw-plugin-setup.workspace = true
+paperpaw-plugin-help.workspace = true
 paperpaw-plugin-update.workspace = true
 paperpaw-plugin-news = { workspace = true, optional = true }
 paperpaw-plugin-weather = { workspace = true, optional = true }

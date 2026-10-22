@@ -86,6 +86,16 @@ impl Plugin for Menu {
             Box::new(|env, params| Box::new(panel::PanelScreen::open(env, params))),
         ))?;
         r.bind_slot(slots::PANEL, PANEL, Priority::DEFAULT)?;
+        paperpaw_sdk::help::add(
+            r,
+            PANEL.as_str(),
+            &[
+                paperpaw_sdk::help::Hint::any("menu.help.panel"),
+                paperpaw_sdk::help::Hint::touch("menu.help.panel-tap"),
+                paperpaw_sdk::help::Hint::touch("menu.help.panel-close"),
+                paperpaw_sdk::help::Hint::buttons("menu.help.panel-buttons"),
+            ],
+        )?;
         r.add_screen(ScreenSpec::new(
             NOTICE,
             "menu.title",

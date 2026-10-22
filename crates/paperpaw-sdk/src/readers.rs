@@ -351,6 +351,19 @@ pub fn open_page(path: impl Into<String>) -> Command {
     )
 }
 
+/// Shows `text`, plain (paragraphs apart by an empty line), to read paged
+/// as a book: written to `path` (a `.txt` in the plugin's own folder),
+/// opened as a plugin's page ([`open_page`]), so *Back* returns to it.
+/// For long texts such as *How it works*.
+pub fn show_text(
+    storage: &dyn crate::Storage,
+    path: &str,
+    text: &str,
+) -> Result<Command, crate::StorageError> {
+    storage.write(path, text.as_bytes())?;
+    Ok(open_page(path))
+}
+
 /// What a reader that cannot open a book after all answers (instead of
 /// showing an error of its own): `params` are those it was opened with,
 /// `reader` its own id. The kernel opens the book with the next reader

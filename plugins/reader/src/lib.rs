@@ -44,6 +44,7 @@ use paperpaw_sdk::builtin::{
     actions as core_actions, events, groups, menus, params, settings as core_settings, slots,
 };
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::help::{self, Zone};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::{
     Command, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar, ScreenSpec,
@@ -327,6 +328,23 @@ impl Plugin for Reader {
             Box::new(|env, params| Box::new(screen::ReaderScreen::open(env, params))),
         ))?;
         r.bind_slot(slots::READER, SCREEN, Priority::DEFAULT)?;
+        // The first time: the tap zones (as the standard key map has them),
+        // or the buttons; once the book shows (see `Screen::on_show`).
+        help::wait(r, SCREEN.as_str())?;
+        help::add(
+            r,
+            SCREEN.as_str(),
+            &[
+                help::Hint::touch("reader.help.previous").zone(Zone::new(0, 120, 333, 760)),
+                help::Hint::touch("reader.help.menu").zone(Zone::new(333, 120, 334, 760)),
+                help::Hint::touch("reader.help.next").zone(Zone::new(667, 120, 333, 760)),
+                help::Hint::touch("reader.help.quick"),
+                help::Hint::touch("reader.help.night"),
+                help::Hint::buttons("reader.help.turn"),
+                help::Hint::buttons("reader.help.select"),
+                help::Hint::buttons("reader.help.back"),
+            ],
+        )?;
         r.add_reader(paperpaw_sdk::readers::ReaderSpec::new(APP, SCREEN))?;
         r.add_screen(ScreenSpec::new(
             TOC_SCREEN,

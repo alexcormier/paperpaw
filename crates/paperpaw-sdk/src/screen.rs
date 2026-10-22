@@ -287,6 +287,15 @@ pub trait Screen {
         false
     }
 
+    /// Whether its pictures may be shown in grays where
+    /// [`settings::PICTURES_IN_GRAYS`](crate::builtin::settings::PICTURES_IN_GRAYS)
+    /// is on: when it is drawn whole and has pictures, it is shown so as
+    /// if it said so ([`Screen::grays`]). Yes by default; a screen that
+    /// decides itself, or whose pictures change often, says no.
+    fn pictures_in_grays(&self) -> bool {
+        true
+    }
+
     /// For an overlay: whether what lies below it is washed out while it
     /// shows, so that it stands out and what it cuts through is not read
     /// as its own (menus, questions). Overlays looked through keep it as

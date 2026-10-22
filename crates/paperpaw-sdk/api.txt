@@ -585,6 +585,7 @@ pub const paperpaw_sdk::builtin::settings::PAPER_COLOR: paperpaw_sdk::setting::S
 pub const paperpaw_sdk::builtin::settings::PAPER_COLORS: &[&str]
 pub const paperpaw_sdk::builtin::settings::PAPER_COLOR_OWN: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::PARAGRAPH_SPACING: paperpaw_sdk::setting::Setting<bool>
+pub const paperpaw_sdk::builtin::settings::PICTURES_IN_GRAYS: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::PUBLISHER_STYLES: paperpaw_sdk::setting::Setting<bool>
 pub const paperpaw_sdk::builtin::settings::READING_APP: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
 pub const paperpaw_sdk::builtin::settings::READING_APP_DEFAULT: &str
@@ -1460,6 +1461,39 @@ pub fn paperpaw_sdk::firmware::Update::read(&dyn paperpaw_platform::storage::Sto
 pub fn paperpaw_sdk::firmware::Update::signer(&self, &paperpaw_sdk::firmware::Firmware) -> paperpaw_sdk::firmware::Signer
 pub const paperpaw_sdk::firmware::UPDATE_DIR: &str
 pub fn paperpaw_sdk::firmware::compare_versions(&str, &str) -> core::cmp::Ordering
+pub mod paperpaw_sdk::help
+pub enum paperpaw_sdk::help::Input
+pub paperpaw_sdk::help::Input::Any
+pub paperpaw_sdk::help::Input::Buttons
+pub paperpaw_sdk::help::Input::Touch
+impl paperpaw_sdk::help::Input
+pub fn paperpaw_sdk::help::Input::fits(self, &paperpaw_sdk::Env<'_>) -> bool
+pub struct paperpaw_sdk::help::Hint
+pub paperpaw_sdk::help::Hint::input: paperpaw_sdk::help::Input
+pub paperpaw_sdk::help::Hint::text: alloc::string::String
+pub paperpaw_sdk::help::Hint::zone: core::option::Option<paperpaw_sdk::help::Zone>
+impl paperpaw_sdk::help::Hint
+pub fn paperpaw_sdk::help::Hint::any(&str) -> Self
+pub fn paperpaw_sdk::help::Hint::buttons(&str) -> Self
+pub fn paperpaw_sdk::help::Hint::line(&self, &str) -> alloc::string::String
+pub fn paperpaw_sdk::help::Hint::parse(&str) -> core::option::Option<(&str, paperpaw_sdk::help::Hint)>
+pub fn paperpaw_sdk::help::Hint::touch(&str) -> Self
+pub fn paperpaw_sdk::help::Hint::zone(self, paperpaw_sdk::help::Zone) -> Self
+pub struct paperpaw_sdk::help::Zone
+pub paperpaw_sdk::help::Zone::h: u16
+pub paperpaw_sdk::help::Zone::w: u16
+pub paperpaw_sdk::help::Zone::x: u16
+pub paperpaw_sdk::help::Zone::y: u16
+impl paperpaw_sdk::help::Zone
+pub const fn paperpaw_sdk::help::Zone::new(u16, u16, u16, u16) -> Self
+pub fn paperpaw_sdk::help::Zone::on(self, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
+pub const paperpaw_sdk::help::POINT: &str
+pub const paperpaw_sdk::help::READY: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::ScreenShown>
+pub fn paperpaw_sdk::help::add(&mut paperpaw_sdk::contribution::Registrar, &str, &[paperpaw_sdk::help::Hint]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::help::hints(&paperpaw_sdk::Env<'_>, &str) -> alloc::vec::Vec<paperpaw_sdk::help::Hint>
+pub fn paperpaw_sdk::help::ready(&paperpaw_sdk::Id) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::help::wait(&mut paperpaw_sdk::contribution::Registrar, &str) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::help::waits(&paperpaw_sdk::Env<'_>, &str) -> bool
 pub mod paperpaw_sdk::host
 pub struct paperpaw_sdk::host::ScreenHost
 impl paperpaw_sdk::host::ScreenHost
@@ -2402,6 +2436,7 @@ pub fn paperpaw_sdk::readers::past(&paperpaw_sdk::Params) -> impl core::iter::tr
 pub fn paperpaw_sdk::readers::remember(&dyn paperpaw_platform::storage::Storage, paperpaw_sdk::readers::Choice<'_>, core::option::Option<&paperpaw_sdk::Id>) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::readers::remembered(&dyn paperpaw_platform::storage::Storage, paperpaw_sdk::readers::Choice<'_>) -> core::option::Option<alloc::string::String>
 pub fn paperpaw_sdk::readers::resolve(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::readers::show_text(&dyn paperpaw_platform::storage::Storage, &str, &str) -> core::result::Result<paperpaw_sdk::Command, paperpaw_platform::storage::StorageError>
 pub mod paperpaw_sdk::reading
 pub struct paperpaw_sdk::reading::DroppedRuns
 impl paperpaw_sdk::reading::DroppedRuns
@@ -2951,6 +2986,7 @@ pub fn paperpaw_sdk::ui::choice::Choice::on_show(&mut self, &mut paperpaw_sdk::C
 pub fn paperpaw_sdk::ui::choice::Choice::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::choice::Choice::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::choice::Choice::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::choice::Choice::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::shows_through(&self) -> paperpaw_sdk::ShowsThrough
@@ -2991,6 +3027,7 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::on_show(&mut self, &mut paperpaw_sd
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::items::ItemsScreen::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::items::ItemsScreen::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::items::ItemsScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
@@ -3184,6 +3221,7 @@ pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_show(&mut self, &mut paperpa
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
@@ -3211,6 +3249,7 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_show(&mut self, &mut paperp
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
@@ -5129,6 +5168,7 @@ pub paperpaw_sdk::PluginInfo::update: core::option::Option<paperpaw_sdk::Version
 impl paperpaw_sdk::PluginInfo
 pub fn paperpaw_sdk::PluginInfo::can_switch_off(&self) -> bool
 pub fn paperpaw_sdk::PluginInfo::description<'a>(&'a self, &'a paperpaw_i18n::Translator) -> &'a str
+pub fn paperpaw_sdk::PluginInfo::how<'a>(&self, &'a paperpaw_i18n::Translator) -> core::option::Option<&'a str>
 pub fn paperpaw_sdk::PluginInfo::name<'a>(&'a self, &'a paperpaw_i18n::Translator) -> &'a str
 pub fn paperpaw_sdk::PluginInfo::restart_needed(&self) -> bool
 pub struct paperpaw_sdk::Plugins
@@ -5642,6 +5682,7 @@ pub fn paperpaw_sdk::Screen::on_show(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::Screen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::Screen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::Screen::passes_through(&self) -> bool
+pub fn paperpaw_sdk::Screen::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::Screen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::Screen::secret(&self) -> bool
 pub fn paperpaw_sdk::Screen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
@@ -5666,6 +5707,7 @@ pub fn paperpaw_sdk::ui::choice::Choice::on_show(&mut self, &mut paperpaw_sdk::C
 pub fn paperpaw_sdk::ui::choice::Choice::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::choice::Choice::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::choice::Choice::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::choice::Choice::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::choice::Choice::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::choice::Choice::shows_through(&self) -> paperpaw_sdk::ShowsThrough
@@ -5690,6 +5732,7 @@ pub fn paperpaw_sdk::ui::items::ItemsScreen::on_show(&mut self, &mut paperpaw_sd
 pub fn paperpaw_sdk::ui::items::ItemsScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::items::ItemsScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::items::ItemsScreen::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::items::ItemsScreen::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::items::ItemsScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::items::ItemsScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
@@ -5714,6 +5757,7 @@ pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_show(&mut self, &mut paperpa
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::widget_list::AddScreen::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::AddScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough
@@ -5738,6 +5782,7 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_show(&mut self, &mut paperp
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::widget_list::ListScreen::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::shows_through(&self) -> paperpaw_sdk::ShowsThrough

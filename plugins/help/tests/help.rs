@@ -1,0 +1,283 @@
+//! First-time hints with the real kernel: shown over a screen the first
+//! time it opens, once; closed by a tap or a button; switched off with
+//! *No more hints*; shown again when asked; for the device's input only.
+
+// Tests panic on purpose when something is wrong.
+#![allow(clippy::unwrap_used, clippy::expect_used)]
+
+use paperpaw_core::{Effects, Kernel};
+use paperpaw_platform::{
+    DeviceInfo, DisplayInfo, InputCaps, InputEvent, Instant, MemoryClass, PixelFormat, Point,
+    PointerEvent, PointerPhase, PointerTool, Rotation,
+};
+use paperpaw_sdk::builtin::{actions, slots};
+use paperpaw_sdk::help::{self, Hint, Zone};
+use paperpaw_sdk::{
+    Canvas, Cx, Env, Handled, Id, Manifest, MemoryStorage, Params, Plugin, Priority, RegisterError,
+    Registrar, Screen, ScreenSpec, Version,
+};
+
+const BUTTONS: DeviceInfo = DeviceInfo {
+    id: "test-x4",
+    name: "Test X4",
+    display: DisplayInfo {
+        width: 480,
+        height: 800,
+        dpi: 220,
+        format: PixelFormat::Mono1,
+        rotation: Rotation::Deg0,
+        color: None,
+    },
+    input: InputCaps {
+        buttons: true,
+        touch: false,
+        pen: false,
+        keys: &["back", "confirm", "left", "right", "up", "down", "power"],
+    },
+    memory: MemoryClass::Small,
+};
+
+const TOUCH: DeviceInfo = DeviceInfo {
+    id: "test-touch",
+    name: "Test touch",
+    input: InputCaps {
+        buttons: false,
+        touch: true,
+        pen: false,
+        keys: &[],
+    },
+    ..BUTTONS
+};
+
+const HOME: Id = Id::new_static("probe.home");
+const OTHER: Id = Id::new_static("probe.other");
+
+/// A home screen without hints, and a screen with some.
+struct Probe;
+
+struct Blank;
+
+impl Screen for Blank {
+    fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
+
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        if *action == actions::BACK {
+            cx.command(paperpaw_sdk::Command::Back);
+            return Handled::Yes;
+        }
+        Handled::No
+    }
+}
+
+impl Plugin for Probe {
+    fn manifest(&self) -> Manifest {
+        Manifest::new(Id::new_static("probe"), "Probe", Version::new(0, 1, 0))
+            .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_screen(ScreenSpec::new(
+            HOME,
+            "probe",
+            Box::new(|_, _| Box::new(Blank)),
+        ))?;
+        r.add_screen(ScreenSpec::new(
+            OTHER,
+            "probe",
+            Box::new(|_, _| Box::new(Blank)),
+        ))?;
+        r.bind_slot(slots::HOME, HOME, Priority::DEFAULT)?;
+        help::add(
+            r,
+            OTHER.as_str(),
+            &[
+                Hint::touch("probe.next").zone(Zone::new(667, 0, 333, 1000)),
+                Hint::any("probe.both"),
+                Hint::buttons("probe.buttons"),
+            ],
+        )?;
+        r.add_translations(
+            "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\n\
+             probe.next = Tap here: next\nprobe.both = For all\nprobe.buttons = For buttons\n"
+                .into(),
+        )
+    }
+}
+
+struct Device {
+    kernel: Kernel,
+    now: u64,
+}
+
+impl Device {
+    fn new(device: DeviceInfo, config: &str) -> Self {
+        let mut kernel = Kernel::builder(device)
+            .storage(MemoryStorage::new())
+            .user_config(format!("[core]\nlanguage = en\n{config}"))
+            .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+            .plugin(Probe)
+            .plugin(paperpaw_plugin_help::Help)
+            .build()
+            .unwrap();
+        let effects = kernel.start(Instant(0));
+        let mut device = Self { kernel, now: 0 };
+        device.settle(effects);
+        device
+    }
+
+    fn settle(&mut self, mut effects: Effects) {
+        for _ in 0..1000 {
+            match effects.wake_at() {
+                Some(at) if at.0 <= self.now + 1000 => {
+                    self.now = self.now.max(at.0);
+                    effects = self.kernel.tick(Instant(self.now));
+                }
+                _ => return,
+            }
+        }
+    }
+
+    fn open(&mut self, screen: Id) {
+        self.now += 100;
+        let effects = self
+            .kernel
+            .open_screen(Instant(self.now), screen, Params::new());
+        self.settle(effects);
+    }
+
+    fn run(&mut self, action: Id) {
+        self.now += 100;
+        let effects = self.kernel.run_action(Instant(self.now), action);
+        self.settle(effects);
+    }
+
+    fn on_top(&self) -> &str {
+        self.kernel
+            .active_screen()
+            .map(Id::as_str)
+            .unwrap_or_default()
+    }
+
+    fn shown(&mut self) -> String {
+        self.kernel.render(&mut |_, _| {});
+        self.kernel
+            .describe()
+            .iter()
+            .map(|p| format!("{}\n", p.label))
+            .collect()
+    }
+
+    fn tap(&mut self, x: i32, y: i32) {
+        for phase in [PointerPhase::Down, PointerPhase::Up] {
+            self.now += 50;
+            let event = InputEvent::Pointer(PointerEvent {
+                id: 0,
+                phase,
+                point: Point::new(x, y),
+                tool: PointerTool::Finger,
+                pressure: 1000,
+            });
+            let effects = self.kernel.handle(Instant(self.now), event);
+            if phase == PointerPhase::Up {
+                self.settle(effects);
+            }
+        }
+    }
+
+    fn button(&mut self, label: &str) -> (i32, i32) {
+        let part = self
+            .kernel
+            .describe()
+            .into_iter()
+            .find(|p| p.label == label)
+            .unwrap_or_else(|| panic!("no {label}"));
+        let a = part.area;
+        (
+            i32::from(a.x) + i32::from(a.width) / 2,
+            i32::from(a.y) + i32::from(a.height) / 2,
+        )
+    }
+
+    /// Whether hints show (`help.show`).
+    fn hints_on(&self) -> bool {
+        self.kernel.settings().read(&paperpaw_plugin_help::SHOW)
+    }
+}
+
+#[test]
+fn hints_show_once_over_a_screen_on_a_touch_screen() {
+    let mut device = Device::new(TOUCH, "");
+    assert_eq!(
+        device.on_top(),
+        "probe.home",
+        "no hints for the home screen here"
+    );
+    device.open(OTHER);
+    assert_eq!(device.on_top(), "help.overlay");
+    let shown = device.shown();
+    // In its zone, as wide as that.
+    assert!(
+        shown.contains(
+            "Tap
+here:
+next"
+        ),
+        "{shown}"
+    );
+    assert!(shown.contains("For all"), "{shown}");
+    assert!(!shown.contains("For buttons"), "{shown}");
+    assert!(
+        shown.contains("How it works here") && shown.contains("Got it"),
+        "{shown}"
+    );
+    // A tap anywhere closes them, the screen below as it was.
+    device.tap(100, 100);
+    assert_eq!(device.on_top(), "probe.other");
+    device.run(actions::BACK);
+    device.open(OTHER);
+    assert_eq!(device.on_top(), "probe.other", "once");
+}
+
+#[test]
+fn no_more_hints_switches_them_off() {
+    let mut device = Device::new(TOUCH, "");
+    device.open(OTHER);
+    device.shown();
+    let (x, y) = device.button("No more hints");
+    device.tap(x, y);
+    assert_eq!(device.on_top(), "probe.other");
+    assert!(!device.hints_on());
+}
+
+#[test]
+fn with_buttons_alone_their_hints_and_their_choice() {
+    let mut device = Device::new(BUTTONS, "");
+    device.open(OTHER);
+    let shown = device.shown();
+    assert!(
+        shown.contains("For buttons") && !shown.contains("Tap here"),
+        "{shown}"
+    );
+    device.run(actions::RIGHT);
+    device.run(actions::CONFIRM);
+    assert_eq!(device.on_top(), "probe.other");
+    assert!(!device.hints_on());
+
+    // Switched off at first: none.
+    let mut device = Device::new(BUTTONS, "[help]\nshow = false\n");
+    device.open(OTHER);
+    assert_eq!(device.on_top(), "probe.other");
+}
+
+#[test]
+fn hints_show_again_when_asked() {
+    let mut device = Device::new(BUTTONS, "");
+    device.open(OTHER);
+    device.run(actions::CONFIRM);
+    device.run(actions::BACK);
+    device.open(Id::new_static("help.again"));
+    assert!(device.shown().contains("The hints show again"));
+    device.run(actions::BACK);
+    device.open(OTHER);
+    assert_eq!(device.on_top(), "help.overlay");
+}

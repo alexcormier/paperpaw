@@ -76,7 +76,7 @@ fn emulator(name: &str, profile: &str, book: Option<&str>, args: &[&str]) -> Out
     command
         .args(["--profile", profile, "--headless", "--library"])
         .arg(&library)
-        .args(["--set", "home.gesture-tips=false"])
+        .args(["--set", "help.show=false"])
         .args(args);
     if book.is_none() {
         command.args(["--set", "reader.open-last=false"]);

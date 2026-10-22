@@ -1,0 +1,23 @@
+[package]
+name = "paperpaw-plugin-help"
+description = "PaperPaw first-time help: what a screen's controls do, shown over it the first time it opens"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std"]
+
+[dependencies]
+paperpaw-sdk.workspace = true
+
+[dev-dependencies]
+paperpaw-core.workspace = true
+paperpaw-i18n.workspace = true
+paperpaw-platform.workspace = true
+paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
+
+[lints]
+workspace = true
