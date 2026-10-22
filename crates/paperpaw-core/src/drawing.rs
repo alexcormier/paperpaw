@@ -393,7 +393,6 @@ impl Kernel {
                 &env,
                 row,
                 &self.hint.shown,
-                &self.hint.held,
                 pressed,
             );
         }
@@ -466,7 +465,6 @@ impl Kernel {
                     &env,
                     row,
                     &self.hint.shown,
-                    &self.hint.held,
                     None,
                 );
             }

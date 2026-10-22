@@ -26,10 +26,9 @@ impl Kernel {
         self.check_network();
         self.run_commands();
         if let Some(row) = self.hint_row() {
-            let (hints, held) = (self.current_hints(), self.current_holds());
-            if hints != self.hint.shown || held != self.hint.held {
+            let hints = self.current_hints();
+            if hints != self.hint.shown {
                 self.hint.shown = hints;
-                self.hint.held = held;
                 self.invalidate(row);
             }
         }

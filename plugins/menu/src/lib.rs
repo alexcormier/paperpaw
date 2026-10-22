@@ -50,42 +50,8 @@ mod panel;
 #[derive(Debug, Default)]
 pub struct Menu;
 
-/// The quick panel's part of the Appearance settings: the status items
-/// of its head, chosen on their picker, and its size.
-static QUICK_ITEMS: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
-    .section("menu.quick.section")
-    .editor(paperpaw_sdk::builtin::screens::STATUS_ITEMS);
-static QUICK_PT: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
-    .section("menu.quick.section")
-    .unit("core.unit.pt");
-
-const fn quick_part(id: Id, title: &'static str, default: &'static str) -> SettingSpec {
-    SettingSpec::fixed(
-        id.static_str(),
-        title,
-        SettingKind::List,
-        paperpaw_sdk::SettingValue::Text(Cow::Borrowed(default)),
-        paperpaw_sdk::builtin::groups::LOOK,
-    )
-    .with_extra(&QUICK_ITEMS)
-    .described("menu.quick.part.help")
-}
-
-/// How menus look, and the quick panel's head: what it shows, and how
-/// large.
-static QUICK_LINES: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new()
-    .section("menu.quick.section")
-    .editor(paperpaw_sdk::builtin::screens::STATUS_LINES);
-static SETTINGS: [SettingSpec; 6] = [
-    SettingSpec::fixed(
-        panel::QUICK_LINE.static_str(),
-        "menu.quick.line",
-        SettingKind::List,
-        paperpaw_sdk::SettingValue::Text(Cow::Borrowed("")),
-        paperpaw_sdk::builtin::groups::LOOK,
-    )
-    .with_extra(&QUICK_LINES)
-    .described("menu.quick.line.help"),
+/// How menus look.
+static SETTINGS: [SettingSpec; 1] = [
     SettingSpec::fixed_choice(
         STYLE.static_str(),
         "menu.setting.style",
@@ -94,27 +60,6 @@ static SETTINGS: [SettingSpec; 6] = [
         paperpaw_sdk::builtin::groups::LOOK,
     )
     .described("menu.setting.style.help"),
-    quick_part(
-        panel::QUICK_LEFT,
-        "menu.quick.left",
-        "core.status.clock, core.status.date-short",
-    ),
-    quick_part(panel::QUICK_CENTER, "menu.quick.center", ""),
-    quick_part(
-        panel::QUICK_RIGHT,
-        "menu.quick.right",
-        "wifi.status, core.status.battery",
-    ),
-    SettingSpec::fixed_number(
-        panel::QUICK_SIZE.static_str(),
-        "menu.quick.size",
-        6,
-        24,
-        11,
-        paperpaw_sdk::builtin::groups::LOOK,
-    )
-    .with_extra(&QUICK_PT)
-    .described("menu.quick.size.help"),
 ];
 
 impl Plugin for Menu {
@@ -150,7 +95,6 @@ impl Plugin for Menu {
         ))?;
         r.bind_slot(slots::NOTICE, NOTICE, Priority::DEFAULT)?;
         r.add_settings(&SETTINGS)?;
-        r.add_status_place(panel::QUICK_PLACE)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
@@ -185,6 +129,9 @@ struct MenuScreen {
     keys: bool,
     /// Room for icons left of the labels, if any entry has one.
     icon_width: u16,
+    /// How each setting's row is laid out (its title never cut for its
+    /// control), with the room of a number's value: none for others.
+    lines: Vec<Option<(ui::RowLines, String)>>,
     /// How many menus are open below this one (submenus).
     depth: usize,
     /// What it was opened with, to make it anew (see `on_event`).
@@ -245,14 +192,29 @@ impl MenuScreen {
         let display = env.device.display;
         let border = style.line * 2;
         let heading = ui::heading_height(env, &style);
-        let heights: Vec<u16> = items
+        let icon_width = ui::icon_room(
+            env,
+            &style,
+            items.iter().any(|i| i.icon.is_some() && !i.heading),
+        );
+        // A setting's row as the settings pages lay it out: its control
+        // below its title where both do not fit side by side.
+        let width = display.width.saturating_sub(icon_width);
+        let lines: Vec<Option<(ui::RowLines, String)>> = items
             .iter()
             .map(|item| {
-                let row = match Self::setting(env, &item.id) {
-                    // A number's − and + grow, and its row with them.
-                    Some(spec) => ui::setting_row(&style, spec, style.row, false) as u16,
-                    None => style.row as u16,
-                };
+                let spec = Self::setting(env, &item.id).filter(|_| !item.heading)?;
+                let room = ui::number_room(env, &style, core::iter::once(spec));
+                let lines = ui::row_lines(env, &style, spec, width, &room, style.row, false);
+                Some((lines, room))
+            })
+            .collect();
+        let heights: Vec<u16> = items
+            .iter()
+            .zip(&lines)
+            .map(|(item, lines)| {
+                // A number's − and + grow, and its row with them.
+                let row = lines.as_ref().map_or(style.row as u16, |(l, _)| l.height);
                 if item.heading {
                     heading
                 } else if item.description.is_some() {
@@ -288,11 +250,6 @@ impl MenuScreen {
             let area = Rect::new(0, region.y + region.height - bar, display.width, bar);
             pager = Some(ui::Pager::new(env, area));
         }
-        let icon_width = ui::icon_room(
-            env,
-            &style,
-            items.iter().any(|i| i.icon.is_some() && !i.heading),
-        );
         let headings = items.iter().map(|i| i.heading).collect();
         let mut rows = ui::Rows::new(list_area, heights, headings);
         rows.set_passed(passed(env, &items));
@@ -308,6 +265,7 @@ impl MenuScreen {
             editing: false,
             keys: !env.device.input.touch,
             icon_width,
+            lines,
             depth: params.get(DEPTH).and_then(|d| d.parse().ok()).unwrap_or(0),
             style,
             params: params.clone(),
@@ -380,7 +338,7 @@ impl MenuScreen {
         &self,
         canvas: &mut Canvas<'_>,
         env: &Env<'_>,
-        item: &Item,
+        (item, laid): (&Item, Option<&(ui::RowLines, String)>),
         rect: Rect,
         focused: bool,
     ) {
@@ -396,7 +354,8 @@ impl MenuScreen {
         // The line under it, below the row.
         let rect = match &item.description {
             Some(key) => {
-                let row = (style.row as u16).min(rect.height);
+                let row = laid.map_or(style.row as u16, |(l, _)| l.height);
+                let row = row.min(rect.height);
                 let below = Rect::new(rect.x, rect.y + row, rect.width, rect.height - row);
                 let x = f32::from(below.x) + style.margin as f32 + f32::from(self.icon_width);
                 let width = f32::from(below.width) - x - style.margin as f32;
@@ -429,37 +388,32 @@ impl MenuScreen {
             ui::draw_value_row(canvas, env, &style, rect, focused, label, badge);
             return;
         }
+        let (lines, room) = match laid {
+            Some((lines, room)) => (lines.at(rect), room.as_str()),
+            None => (ui::RowLines::one(rect), ""),
+        };
+        let number = |spec: &SettingSpec| matches!(spec.kind, SettingKind::Int { .. });
         match Self::setting(env, &item.id) {
             Some(spec) if matches!(spec.kind, SettingKind::Bool) => {
                 let on = env.settings.bool(spec.id.as_str());
-                ui::draw_switch_row(canvas, env, &style, rect, focused, label, "", on);
+                ui::draw_switch_lines(canvas, env, &style, rect, lines, focused, label, "", on);
             }
-            Some(spec) if focused && matches!(spec.kind, SettingKind::Int { .. }) => {
+            Some(spec) if focused && number(spec) => {
                 let value = ui::setting_value(env, spec);
-                ui::draw_stepper(
-                    canvas,
-                    env,
-                    &style,
-                    rect,
-                    label,
-                    &value,
-                    &value,
-                    self.editing,
-                );
+                let editing = self.editing;
+                ui::draw_stepper_lines(canvas, env, &style, lines, label, &value, room, editing);
             }
             // On touch screens − and + are always there.
-            Some(spec)
-                if env.device.input.touch && matches!(spec.kind, SettingKind::Int { .. }) =>
-            {
+            Some(spec) if env.device.input.touch && number(spec) => {
                 let value = ui::setting_value(env, spec);
-                ui::draw_number(canvas, env, &style, rect, label, &value, &value, None);
+                ui::draw_number_lines(canvas, env, &style, lines, label, &value, room, None);
             }
             Some(spec) => {
                 let mut value = ui::setting_value(env, spec);
                 if ui::opens_screen(env, spec) {
                     value.push_str(" ›");
                 }
-                ui::draw_value_row(canvas, env, &style, rect, focused, label, &value);
+                ui::draw_setting_row(canvas, env, &style, rect, lines, focused, label, &value, "");
             }
             None if is_menu(env, &item.id) => {
                 ui::draw_value_row(canvas, env, &style, rect, focused, label, "›");
@@ -538,7 +492,8 @@ impl Screen for MenuScreen {
                 if item.heading {
                     ui::draw_heading(canvas, env, &style, rect, env.i18n.tr(&item.title));
                 } else {
-                    self.draw_entry(canvas, env, item, rect, focused);
+                    let laid = self.lines.get(index).and_then(Option::as_ref);
+                    self.draw_entry(canvas, env, (item, laid), rect, focused);
                 }
             });
         if let Some(pager) = &self.pager {
@@ -669,7 +624,11 @@ impl Screen for MenuScreen {
             self.rows.set_focus(index);
             self.editing = false;
         }
-        if let Some((minus, plus)) = ui::stepper(&env, &self.style, rect, &value) {
+        let (line, room) = match self.lines.get(index).and_then(Option::as_ref) {
+            Some((lines, room)) => (lines.at(rect).control, room.as_str()),
+            None => (rect, ""),
+        };
+        if let Some((minus, plus)) = ui::value_stepper(&env, &self.style, line, room, &value) {
             let x = gesture.start.x;
             // A little room around the buttons: easier to hit.
             let slack = if touch {

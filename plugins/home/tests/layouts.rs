@@ -102,7 +102,7 @@ proptest! {
 /// has none over another.
 #[test]
 fn overlapping_places_are_kept_apart_once_edited() {
-    let config = "[home]\npage-1 = tool:core.library 0/0 2x2, tool:core.settings 1/1 2x2, \
+    let config = "[home]\ncolumns = 4\npage-1 = tool:core.library 0/0 2x2, tool:core.settings 1/1 2x2, \
                   tool:file-manager.open 0/0 1x1\n";
     let mut app = App::new(X4, Shared::memory(config, &[]));
     app.run(Id::new_static("home.edit-pages"));

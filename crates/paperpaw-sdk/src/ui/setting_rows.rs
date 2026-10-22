@@ -139,11 +139,22 @@ pub fn draw_value_row(
     let width = f32::from(rect.width) - 2.0 * margin;
     // At least a margin between them: the value ends at the margin, as
     // the title begins at it.
-    let (title, value, value_width) = fit_pair(&font, style.text, title, value, width, margin);
+    let (title_text, value, value_width) = fit_pair(&font, style.text, title, value, width, margin);
     let value_x = f32::from(rect.x) + f32::from(rect.width) - margin - value_width;
     draw_label(canvas, &font, style.text, value_x, rect, &value, color);
     let title_x = f32::from(rect.x) + margin;
-    draw_label(canvas, &font, style.text, title_x, rect, &title, color);
+    // A title that would be shortened beside its value smaller, down to
+    // the small size, before it is (the row keeps its height).
+    let room = width - margin - value_width;
+    if title_text != title
+        && let Some(size) = crate::widgets::largest_size(style.text, style.small, |size| {
+            font.measure(size, title) <= room + 1.0
+        })
+    {
+        draw_label(canvas, &font, size, title_x, rect, title, color);
+        return;
+    }
+    draw_label(canvas, &font, style.text, title_x, rect, &title_text, color);
 }
 
 /// Room a number's value always gets between its − and +, so the

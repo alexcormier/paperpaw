@@ -710,7 +710,6 @@ proptest! {
             ],
             0..6,
         ),
-        held in proptest::collection::vec(any::<bool>(), 0..6),
         pressed in proptest::option::of(0usize..6),
     ) {
         let h = Harness::new(Device::BUTTONS);
@@ -718,7 +717,7 @@ proptest! {
         let height = ui::button_hints_height(&env);
         let area = Rect::new(0, 800 - height, 480, height);
         let mut frame = frame(480, 800);
-        ui::draw_button_hints(&mut frame.canvas(), &env, area, &hints, &held, pressed);
+        ui::draw_button_hints(&mut frame.canvas(), &env, area, &hints, pressed);
         prop_assert_eq!(drawn_outside(&mut frame, area), None);
     }
 }
