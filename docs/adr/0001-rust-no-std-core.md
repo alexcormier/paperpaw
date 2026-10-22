@@ -1,6 +1,7 @@
 # 0001. Rust with a `no_std` core
 
-- Status: Accepted
+- Status: Accepted; the WebAssembly plugins it looks ahead to became
+  native code plugins ([ADR 0024](0024-native-code-plugins.md))
 - Date: 2026-10-14
 
 ## Context

@@ -181,7 +181,7 @@ fn a_low_cell_keeps_its_headline_inside() {
 fn a_small_cell_says_where_feeds_are_added() {
     let (shown, _) = home(MemoryStorage::new(), "news.widget.headlines 0/0 2x1", "");
     assert!(
-        shown.contains("Add feeds under News in the menu"),
+        shown.contains("Add feeds under News in the tools"),
         "{shown}"
     );
 }

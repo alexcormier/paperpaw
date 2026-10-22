@@ -702,15 +702,14 @@ fn a_name_with_a_tab_stays_known_after_a_restart() {
     assert_eq!(device.saved(), [(name.into(), "pw1".into())]);
 }
 
+/// Without a saved network, what wants one fails at once and its screen
+/// says so: no notice over that screen besides.
 #[test]
-fn without_a_saved_network_wanting_it_says_so() {
+fn without_a_saved_network_wanting_it_fails_at_once_without_a_notice() {
     let mut device = Device::new(TOUCH);
     device.run(FETCH);
     assert!(device.told().is_empty());
-    assert_eq!(
-        device.notices.borrow().last().map(String::as_str),
-        Some("No saved Wi-Fi network: choose one in the settings under Wi-Fi.")
-    );
+    assert!(device.notices.borrow().is_empty());
     assert!(device.requests.is_empty());
 }
 

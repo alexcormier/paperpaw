@@ -344,8 +344,8 @@ impl Plugin for Wifi {
             policy.asked_at = Some(env.now);
             let known = wifi::known(env.secrets.iter());
             if known.is_empty() {
-                // Nothing to join: what waits says so now.
-                out.push(Command::Notify(env.i18n.tr("wifi.no-saved").into()));
+                // Nothing to join: what waits fails now, and its screen
+                // says so (no notice over it besides).
                 no_network(&mut policy, out);
             }
             wifi_commands(out, policy.wanted(&wifi.state, &known));

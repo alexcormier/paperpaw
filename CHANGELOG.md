@@ -40,7 +40,17 @@ change the plugin SDK.
   smaller. `paperpaw-dev visual` takes a "…" that ends a translated text
   ("Loading…") for no shortening. Buttons one below the other sit in
   slots a touch row high, higher only by the lines a long word takes
-  (`ui::button_slot_height`, `ui::button_in_slot`).
+  (`ui::button_slot_height`, `ui::button_in_slot`). The row of hints
+  below the screen never shortens a word at the default size: a hint too
+  long for its share reaches over the room beside it, up to a gap before
+  what its neighbours show, as near its button as it can. `paperpaw-dev
+  visual --labels-whole` checks the row of hints too, and a "…" that a
+  translated text holds of itself (after a filled blank too) is no
+  shortening. Wi-Fi shows no notice that no network is saved where a
+  screen waits for one: that screen says so itself (Wi-Fi transfer's
+  "Without a router" no longer under a notice). The setup's choices set
+  a long value smaller, then on two lines; the library's numbers widget
+  takes its digits' ink as drawn, so its names stay in its cell.
 - `ask::confirm` asks yes or no on the screen of the new slot
   `core.confirm` (the kernel's `ui::confirm::Confirm`, a `ui::Dialog` in
   the middle of the screen, unless a plugin binds another): the question,

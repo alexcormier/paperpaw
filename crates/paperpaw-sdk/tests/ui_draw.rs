@@ -16,7 +16,7 @@ mod support;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::{self, Role};
 use paperpaw_sdk::ui::{self, Header, Pager, UiStyle};
-use paperpaw_sdk::{Hint, Point, Rect};
+use paperpaw_sdk::{Color, Hint, Point, Rect};
 use proptest::prelude::*;
 
 use support::{Device, Harness, describe, drawn_in, drawn_outside, frame, middle};
@@ -722,6 +722,73 @@ proptest! {
         let mut frame = frame(480, 800);
         ui::draw_button_hints(&mut frame.canvas(), &env, area, &hints, pressed);
         prop_assert_eq!(drawn_outside(&mut frame, area), None);
+    }
+}
+
+/// The ink of hint row `area` in `frame` (what is not white below its
+/// line): its columns from left to right.
+fn hint_ink(frame: &paperpaw_graphics::Framebuffer, area: Rect) -> Vec<u16> {
+    let view = frame.view();
+    (area.x..area.right() as u16)
+        .filter(|&x| (area.y + 4..area.bottom() as u16).any(|y| view.pixel(x, y) != Color::WHITE))
+        .collect()
+}
+
+/// Two hints too long for their shares side by side keep half a gap or
+/// more between their words.
+#[test]
+fn long_hints_side_by_side_stay_apart() {
+    let h = Harness::new(Device::BUTTONS);
+    let env = h.env();
+    let gap = UiStyle::new(&env).gap as u16;
+    let height = ui::button_hints_height(&env);
+    let area = Rect::new(0, 800 - height, 480, height);
+    let long = |c: char| Hint::Text(std::iter::repeat_n(c, 30).collect());
+    let hints = [long('W'), long('M'), long('W'), long('M')];
+    let mut frame = frame(480, 800);
+    ui::draw_button_hints(&mut frame.canvas(), &env, area, &hints, None);
+    let ink = hint_ink(&frame, area);
+    for boundary in [120, 240, 360] {
+        let near: Vec<_> = ink
+            .iter()
+            .filter(|&&x| x + gap / 2 > boundary && x < boundary + gap / 2)
+            .collect();
+        assert!(near.is_empty(), "ink at {near:?} near {boundary}");
+    }
+}
+
+/// A pressed hint whose words reach past its share has its box round all
+/// of them: white words never on the white row.
+#[test]
+fn a_pressed_hint_keeps_its_words_in_its_box() {
+    let h = Harness::new(Device::BUTTONS);
+    let env = h.env();
+    let height = ui::button_hints_height(&env);
+    let area = Rect::new(0, 800 - height, 480, height);
+    let hints = [
+        Hint::Text("Back".into()),
+        Hint::Text("Without a router at all".into()),
+        Hint::Hidden,
+        Hint::Icon("arrow-left"),
+    ];
+    let mut plain = frame(480, 800);
+    ui::draw_button_hints(&mut plain.canvas(), &env, area, &hints, None);
+    // The words of the second hint, where they are drawn.
+    let words: Vec<u16> = hint_ink(&plain, area)
+        .into_iter()
+        .filter(|&x| (125..355).contains(&x))
+        .collect();
+    let (first, last) = (words[0], words[words.len() - 1]);
+    assert!(
+        last > 240,
+        "the words reach past their share: {first}..{last}"
+    );
+    let mut pressed = frame(480, 800);
+    ui::draw_button_hints(&mut pressed.canvas(), &env, area, &hints, Some(1));
+    let view = pressed.view();
+    let middle = area.y + area.height / 2 + 1;
+    for x in [first - 1, last + 1] {
+        assert_eq!(view.pixel(x, middle), Color::BLACK, "box at {x}");
     }
 }
 

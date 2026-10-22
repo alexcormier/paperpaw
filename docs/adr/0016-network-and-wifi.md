@@ -1,6 +1,7 @@
 # 0016. Network and Wi-Fi
 
-- Status: Accepted
+- Status: Accepted; the X4 now has servers and sockets too
+  (`shells/xteink/src/serve.rs`, `sockets.rs`)
 - Date: 2026-10-18
 
 ## Context

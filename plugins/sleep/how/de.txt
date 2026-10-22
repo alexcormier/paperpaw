@@ -2,4 +2,4 @@ Der Ruhebildschirm bestimmt, was der Bildschirm zeigt, während das Gerät schl�
 
 Du wählst es in den Einstellungen unter Anzeige bei Im Ruhezustand zeigen: eine schlafende Katze (Standard), das Cover des Buchs, meine Bilder, das Logo und „Ruhezustand“, Widgets, die Seite, wie sie ist, oder die Seite mit einem Bild. Meine Bilder zeigt die Dateien des Bilderordners nacheinander.
 
-Gibt es kein Cover oder Bild, erscheint die Katze. Wo das System den Ruhebildschirm selbst zeichnet, etwa auf Android, sind diese Einstellungen verborgen.
+Gibt es kein Cover oder Bild, erscheint die Katze. Wo das System den Ruhebildschirm selbst zeichnet, sind diese Einstellungen verborgen.

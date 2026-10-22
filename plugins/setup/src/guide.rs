@@ -528,22 +528,8 @@ impl Guide {
             }
         }
         let arrow = if more { " ›" } else { "" };
-        let text = ui::fit(
-            &font,
-            style.title,
-            &alloc::format!("{label}{arrow}"),
-            f32::from(inner.width),
-        );
-        let row = Rect::new(inner.x, card.y, inner.width, card.height);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.title,
-            f32::from(inner.x),
-            row,
-            &text,
-            Color::BLACK,
-        );
+        let label = alloc::format!("{label}{arrow}");
+        draw_card_label(canvas, &font, style, (card, inner), &label);
     }
 
     /// The target at `point`, if any.
@@ -717,4 +703,33 @@ impl Screen for Guide {
             None => Handled::No,
         }
     }
+}
+
+/// A card's `label` in its `inner` room: smaller where it does not fit,
+/// down to the small size, then on two lines in it; only then shortened.
+fn draw_card_label(
+    canvas: &mut Canvas<'_>,
+    font: &paperpaw_sdk::FontHandle<'_>,
+    style: &UiStyle,
+    (card, inner): (Rect, Rect),
+    label: &str,
+) {
+    let width = f32::from(inner.width);
+    let row = Rect::new(inner.x, card.y, inner.width, card.height);
+    let (size, text) =
+        paperpaw_sdk::widgets::fit_line(font, style.title, style.small, label, width);
+    let lines = font.wrap(style.small, label, width);
+    let line = font.line_metrics(style.small).line_height as u16;
+    if text != label && lines.len() == 2 && 2 * line <= card.height {
+        let top = card.y + (card.height - 2 * line) / 2;
+        for (i, range) in lines.into_iter().enumerate() {
+            let at = Rect::new(inner.x, top + i as u16 * line, inner.width, line);
+            let part = label[range].trim();
+            let x = f32::from(inner.x);
+            ui::draw_label(canvas, font, style.small, x, at, part, Color::BLACK);
+        }
+        return;
+    }
+    let x = f32::from(inner.x);
+    ui::draw_label(canvas, font, size, x, row, &text, Color::BLACK);
 }

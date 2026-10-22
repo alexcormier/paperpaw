@@ -1,6 +1,7 @@
 # 0008. Fonts: runtime outlines and bitmap packs
 
-- Status: Accepted
+- Status: Accepted; the default UI font is Source Sans 3 since 2026-10-19,
+  not Atkinson Hyperlegible Next
 - Date: 2026-10-14
 
 ## Context

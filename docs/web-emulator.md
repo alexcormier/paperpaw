@@ -11,6 +11,7 @@ a device looks and behaves as it does there.
 ```
 shells/web/
   src/emulator.rs   the device and what a page asks of it (tested natively)
+  src/network.rs    plugins' requests answered from the page's recorded answers
   src/exports.rs    the module's functions (wasm32 only)
   www/              paperpaw-web.js (loader), frame.html and frame.js
                     (the emulator frame), index.html (a page to try it)
@@ -53,11 +54,12 @@ started with the data plugins it had, and sends
 `{ type: "restarted", reason }`. The device's heap budget holds in the
 browser as on the X4; where it ran out with no way around it (what
 stops the device too), the frame says so before it starts again:
-`{ type: "out-of-memory", bytes, device }`.
+`{ type: "out-of-memory", bytes, device }`. Before `start`, only
+`fixtures` and `network` are taken; other messages answer with `error`.
 
 | Message to the frame | Effect | Answer |
 |---|---|---|
-| `{ type: "start", profile, language, dark, plugins: [{ id, files: { path: bytes } }] }` | Starts a device (`xteink-x4`, `xteink-x4-pro`, `boox-go-7`); each plugin's files go into its storage under `plugins/<id>/`, as a card would have them | `{ device: { id, name, width, height, dpi, grays, color, touch, buttons, row } }` |
+| `{ type: "start", profile, language, dark, plugins: [{ id, files: { path: bytes } }] }` | Starts a device (`xteink-x4`, `xteink-x4-pro`, `boox-go-7`, or another profile of the emulator); each plugin's files go into its storage under `plugins/<id>/`, as a card would have them | `{ device: { id, name, width, height, dpi, grays, color, touch, buttons, row, version } }` |
 | `{ type: "files", id, files }` | Replaces a data plugin's files (whatever of it was on the card goes) and starts the device again (a few milliseconds); `files: {}` takes it off | `{}` |
 | `{ type: "input", event }` | `event`: `{ kind: "button", name, pressed }`, `{ kind: "button", name, hold }` (a long press, held `hold` ms), `{ kind: "key", key, pressed }` (the keyboard's keys as the desktop emulator maps them), `{ kind: "pointer", phase: "down" \| "move" \| "up" \| "cancel", x, y }` (the screen's pixels) | `{}` |
 | `{ type: "screenshot", profile?, dark?, asleep? }` | The panel as it shows, at the device's resolution; with `profile`, `dark` or `asleep`, what that device, night mode or the sleep screen would show with the same card, made apart (what is shown stays) | `{ png }` (bytes) |
@@ -109,7 +111,7 @@ that hosts the frame should also say which pages may embed it
 
 On an X4 profile PaperPaw manages the radio as on the device: a plugin
 that waits for Wi-Fi asks for it to be joined first (the pretend radio's
-network `PaperPaw Test`, any password but `wrong`); on the Boox the
+network `PaperPaw Test`, any password but an empty one or `wrong`); on the Boox the
 network is the system's.
 
 **Commands.** `command` takes the remote control's lines, parsed as on

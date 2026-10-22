@@ -14,9 +14,8 @@
 //! - **Offered by the store as files too** (feature `store-plugins`, ADR
 //!   0024): statistics, widgets, sync and more. The X4 and the X4 Pro
 //!   leave them out of their firmware, which stays lean, and install them
-//!   from the store; Android, which loads no code from files where Play
-//!   forbids it, builds them in and switches them off until the reader
-//!   wants them ([`StorePlugins`]).
+//!   from the store; the emulator and the Android app build them in and
+//!   switch them off until the reader wants them ([`StorePlugins`]).
 //!
 //! The diagnostics screen (feature `diagnostics`) is for developer
 //! builds.

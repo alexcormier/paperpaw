@@ -57,8 +57,8 @@ toolchain as `/rust`). The CI job runs it: push a tag `v` +
 `plugin.ini`'s version, with
 the author's key as the repository's secret `PAPERPAW_PLUGIN_KEY`; the
 tag's release then holds the folder as ZIPs (with `store/` for the
-upload form, without for the catalogue), a signed file for each reader,
-their SHA-256 sums and the catalogue's `[[versions]]`. The same on
+upload form, without for the catalogue), a signed file for each reader
+and their SHA-256 sums. The same on
 one's own computer (Linux or macOS), with both toolchains and
 `paperpaw-sign` of the release:
 
