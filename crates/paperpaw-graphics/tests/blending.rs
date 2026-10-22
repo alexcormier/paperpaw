@@ -64,8 +64,7 @@ fn opaque_pixels_are_drawn_as_gray_rows() {
 #[test]
 fn half_opaque_is_the_mix_and_dithering_keeps_its_lightness() {
     // Black half opaque over white, white half opaque over black, and a
-    // quarter of a gray over white; on every panel the mean is the mix,
-    // near enough.
+    // quarter of a gray over white; on every panel the mean is the mix.
     let cases = [
         (Color::WHITE, 0, 128, 255, 127),
         (Color::BLACK, 255, 128, 255, 128),
@@ -73,14 +72,10 @@ fn half_opaque_is_the_mix_and_dithering_keeps_its_lightness() {
         (Color::WHITE, 80, 255, 255, 80),
     ];
     for format in common::formats() {
-        // In black and white, pictures are diffused after Atkinson, which
-        // passes on seven eighths of the error: light grays come out a
-        // little lighter, dark ones a little darker.
-        let near = if format == PixelFormat::Mono1 { 25 } else { 10 };
         for (under, gray, alpha, opacity, expected) in cases {
             let got = mean(&blended(format, under, gray, alpha, opacity));
             assert!(
-                got.abs_diff(expected) <= near,
+                got.abs_diff(expected) <= 10,
                 "{format:?}: {gray} at {alpha}/{opacity}: {got}, not {expected}"
             );
         }

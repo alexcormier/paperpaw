@@ -11,69 +11,6 @@ use crate::diffuse::Atkinson;
 /// [`Framebuffer::set_mono_coverage`]).
 pub const MONO_COVERAGE: u8 = 96;
 
-/// The pictures followed at once by error diffusion
-/// ([`Framebuffer::put_gray_row`]); a picture more starts with no error.
-const DIFFUSIONS: usize = 2;
-
-/// Error diffusion ([`Atkinson`]) of one picture's rows: where rows
-/// `width` wide at `x` go on, and the error the rows drawn so far leave.
-///
-/// A screen is drawn in bands, and a band may be drawn more than once:
-/// what the band's first row starts from is kept ([`Diffusion::entry`]),
-/// so every drawing of a band comes out the same, and the next band goes
-/// on where the last one ended, without a seam.
-#[derive(Debug)]
-struct Diffusion {
-    x: u16,
-    width: u16,
-    /// The row it goes on with.
-    next: u16,
-    error: Atkinson,
-    /// The band's first row, where the error went on into the band, and
-    /// the error it started from.
-    entry: Option<u16>,
-    entry_error: Atkinson,
-}
-
-impl Diffusion {
-    /// A diffusion of rows `width` wide at `x`, starting at row `y` with
-    /// no error; none where memory is short.
-    fn new(x: u16, y: u16, width: u16) -> Option<Self> {
-        Some(Self {
-            x,
-            width,
-            next: y,
-            error: Atkinson::new(usize::from(width))?,
-            entry: None,
-            entry_error: Atkinson::new(usize::from(width))?,
-        })
-    }
-
-    /// Ready for row `y` in a band starting at row `top`: going on, the
-    /// band started again from where it began, or anew.
-    fn start(&mut self, y: u16, top: u16) {
-        if self.next == y {
-            if y == top && self.entry != Some(y) {
-                self.entry_error.copy_from(&self.error);
-                self.entry = Some(y);
-            }
-        } else if self.entry == Some(y) {
-            self.error.copy_from(&self.entry_error);
-        } else {
-            self.error.reset();
-            self.entry = None;
-        }
-        self.next = y;
-    }
-
-    /// Row `grays` as levels of `levels` grays, each passed to `put` with
-    /// its column; then on to the next row.
-    fn row(&mut self, grays: &[u8], levels: u8, put: impl FnMut(usize, u8)) {
-        self.error.row(grays, levels, put);
-        self.next = self.next.saturating_add(1);
-    }
-}
-
 /// Pixels in a device's native format, plus dirty-region tracking.
 ///
 /// A framebuffer holds either the whole screen or a *band* of rows
@@ -108,12 +45,15 @@ pub struct Framebuffer {
     /// Holds no pixels: what is drawn is only described (see
     /// [`Framebuffer::blind`]).
     blind: bool,
-    /// The pictures diffused lately, the last used last.
-    diffusions: Vec<Diffusion>,
-    /// A row of grays worked out before it is diffused (pictures with
-    /// transparency, colour pictures on gray panels), kept for the next.
-    scratch: Vec<u8>,
+    /// Pictures diffused across the end of the band: each one's key, the
+    /// screen row where the next band takes it up, and its error there
+    /// (see [`Canvas::keep_diffusion`](crate::Canvas::keep_diffusion)).
+    diffusions: Vec<(u64, u16, Atkinson)>,
 }
+
+/// Pictures a band leaves diffused for the next one, at most; more start
+/// from their first row again.
+const DIFFUSIONS: usize = 8;
 
 impl Framebuffer {
     /// Allocates a white framebuffer. Fails instead of aborting when memory
@@ -157,7 +97,6 @@ impl Framebuffer {
             counting: true,
             blind: false,
             diffusions: Vec::new(),
-            scratch: Vec::new(),
         })
     }
 
@@ -184,7 +123,6 @@ impl Framebuffer {
             counting: true,
             blind: true,
             diffusions: Vec::new(),
-            scratch: Vec::new(),
         }
     }
 
@@ -229,6 +167,38 @@ impl Framebuffer {
     /// cleared; draw the band completely afterwards.
     pub fn set_top(&mut self, top: u16) {
         self.top = top.min(self.height.saturating_sub(1));
+        // Only what the band now begins with is still of use.
+        let top = self.top;
+        self.diffusions.retain(|(_, row, _)| *row == top);
+    }
+
+    /// The frame drawn in all its bands: nothing kept for the next band
+    /// any more.
+    pub fn end_frame(&mut self) {
+        self.diffusions = Vec::new();
+    }
+
+    /// The error of picture `key` at screen row `row`, where the band
+    /// before left it.
+    pub(crate) fn take_diffusion(&mut self, key: u64, row: u16) -> Option<Atkinson> {
+        let at = self
+            .diffusions
+            .iter()
+            .position(|(k, r, _)| *k == key && *r == row)?;
+        Some(self.diffusions.swap_remove(at).2)
+    }
+
+    /// Keeps the error of picture `key` at screen row `row` for the next
+    /// band, where this band ends there and the frame goes on.
+    pub(crate) fn keep_diffusion(&mut self, key: u64, row: u16, atkinson: Atkinson) {
+        let end = u32::from(self.top) + u32::from(self.rows);
+        if u32::from(row) != end || row >= self.height {
+            return;
+        }
+        self.diffusions.retain(|(k, _, _)| *k != key);
+        if self.diffusions.len() < DIFFUSIONS && self.diffusions.try_reserve(1).is_ok() {
+            self.diffusions.push((key, row, atkinson));
+        }
     }
 
     /// Copies `rows` (full-width rows in the same format, starting at
@@ -591,10 +561,10 @@ impl Framebuffer {
         self.store(x, y, value);
     }
 
-    /// A row of a picture's grays from `(x, y)` on (inside the band), as
-    /// [`Framebuffer::put_gray`] puts each but diffused where the format
-    /// has few grays: a picture's rows drawn from the top, one after the
-    /// other, carry their error on ([`Diffusion`]).
+    /// A row of grays from `(x, y)` on, as [`Framebuffer::put_gray`] puts
+    /// each, the dither's offsets worked out once for the row rather than
+    /// for every pixel (a division each, slow on chips without one: a
+    /// picture over the whole screen is some 400,000 pixels).
     pub(crate) fn put_gray_row(&mut self, x: u16, y: u16, grays: &[u8]) {
         if self.blind {
             return;
@@ -603,126 +573,14 @@ impl Framebuffer {
         self.pictured = self
             .pictured
             .saturating_add(count * u32::from(self.counting));
+        let offsets: [i32; 4] = core::array::from_fn(|column| self.offset(column as u16, y));
         let keep = self.inverted && self.pictures_kept;
-        self.put_grays(x, y, grays, keep);
-    }
-
-    /// A row of a picture's grays with transparency from `(x, y)` on
-    /// (inside the band; two bytes a pixel: gray, and how opaque it is,
-    /// that times `opacity` of 255): mixed with what is drawn there as
-    /// [`Framebuffer::put_gray_over`] mixes each, the row then diffused as
-    /// [`Framebuffer::put_gray_row`] does.
-    pub(crate) fn put_gray_alpha_row(&mut self, x: u16, y: u16, gray_alpha: &[u8], opacity: u8) {
-        if self.blind {
-            return;
+        for (px, &gray) in (x..).zip(grays) {
+            let gray = (i32::from(gray) + offsets[usize::from(px % 4)]).clamp(0, 255) as u8;
+            let gray = if keep { 255 - gray } else { gray };
+            let value = self.encode(Color::gray(gray));
+            self.store(px, y, value);
         }
-        let opacity = u32::from(opacity);
-        let alpha = |at: usize| ((u32::from(gray_alpha[at * 2 + 1]) * opacity + 127) / 255) as u8;
-        let width = gray_alpha.len() / 2;
-        if !self.diffuses() {
-            for (at, px) in (x..).take(width).enumerate() {
-                self.put_gray_over(px, y, gray_alpha[at * 2], alpha(at));
-            }
-            return;
-        }
-        let mut mixed = core::mem::take(&mut self.scratch);
-        mixed.clear();
-        let mut seen = 0u32;
-        for (at, px) in (x..).take(width).enumerate() {
-            let a = u32::from(alpha(at));
-            seen += u32::from(a > 0);
-            // What shows there now, as the page means it (not inverted).
-            let levels = u32::from(self.format.gray_levels().unwrap_or(2));
-            let level = self.load(px, y) * 255 / (levels - 1);
-            let under = if self.inverted { 255 - level } else { level };
-            let gray = gray_alpha[at * 2];
-            let over = u32::from(if self.inverted && self.pictures_kept {
-                255 - gray
-            } else {
-                gray
-            });
-            mixed.push(((over * a + under * (255 - a) + 127) / 255) as u8);
-        }
-        self.pictured = self
-            .pictured
-            .saturating_add(seen * u32::from(self.counting));
-        self.put_grays(x, y, &mixed, false);
-        self.scratch = mixed;
-    }
-
-    /// A row of a picture's RGB pixels from `(x, y)` on (inside the band;
-    /// three bytes a pixel): as [`Framebuffer::put_rgb`] puts each, their
-    /// grays diffused on gray formats as [`Framebuffer::put_gray_row`]
-    /// does.
-    pub(crate) fn put_rgb_row(&mut self, x: u16, y: u16, rgb: &[u8]) {
-        if self.blind {
-            return;
-        }
-        let (pixels, _) = rgb.as_chunks::<3>();
-        if self.format.is_color() {
-            for (px, &p) in (x..).zip(pixels) {
-                self.put_rgb(px, y, p);
-            }
-            return;
-        }
-        let mut grays = core::mem::take(&mut self.scratch);
-        grays.clear();
-        grays.extend(pixels.iter().map(|&[r, g, b]| Color::rgb(r, g, b).luma()));
-        self.put_gray_row(x, y, &grays);
-        self.scratch = grays;
-    }
-
-    /// Whether pictures are diffused: the format has few grays.
-    fn diffuses(&self) -> bool {
-        matches!(self.format.gray_levels(), Some(2..=16))
-    }
-
-    /// Puts row `grays` from `(x, y)` on: diffused where the format has
-    /// few grays and memory for it could be had, ordered dithered
-    /// otherwise; each gray inverted where `keep` says (pictures that keep
-    /// their tones in night mode).
-    fn put_grays(&mut self, x: u16, y: u16, grays: &[u8], keep: bool) {
-        let invert = |gray: u8| if keep { 255 - gray } else { gray };
-        let Some(mut diffusion) = self.diffusion(x, y, grays.len()) else {
-            let offsets: [i32; 4] = core::array::from_fn(|column| self.offset(column as u16, y));
-            for (px, &gray) in (x..).zip(grays) {
-                let gray = (i32::from(gray) + offsets[usize::from(px % 4)]).clamp(0, 255) as u8;
-                let value = self.encode(Color::gray(invert(gray)));
-                self.store(px, y, value);
-            }
-            return;
-        };
-        let levels = u8::try_from(self.format.gray_levels().unwrap_or(2)).unwrap_or(16);
-        diffusion.row(grays, levels, |column, gray| {
-            let value = self.encode(Color::gray(invert(gray)));
-            self.store(x + column as u16, y, value);
-        });
-        self.diffusions.push(diffusion);
-    }
-
-    /// The diffusion of rows `width` wide at `x`, ready for row `y`,
-    /// taken out (put it back last, as the one used last); none where
-    /// the format has many grays or memory is short.
-    fn diffusion(&mut self, x: u16, y: u16, width: usize) -> Option<Diffusion> {
-        if !self.diffuses() {
-            return None;
-        }
-        let width = u16::try_from(width).ok()?;
-        let mut diffusion = match self
-            .diffusions
-            .iter()
-            .position(|d| d.x == x && d.width == width)
-        {
-            Some(at) => self.diffusions.remove(at),
-            None => {
-                if self.diffusions.len() >= DIFFUSIONS {
-                    self.diffusions.remove(0);
-                }
-                Diffusion::new(x, y, width)?
-            }
-        };
-        diffusion.start(y, self.top);
-        Some(diffusion)
     }
 
     /// `gray` at `(x, y)` with the offset of an ordered dither where the
@@ -981,128 +839,33 @@ mod tests {
         assert_eq!(fb.view().pixel(1, 0), Color::WHITE);
     }
 
-    /// A picture of `width`×`height`: a gradient across, a little
-    /// different in each row.
-    fn picture(width: u16, height: u16) -> Vec<Vec<u8>> {
-        (0..height)
-            .map(|y| {
-                (0..width)
-                    .map(|x| {
-                        ((u32::from(x) * 255 / u32::from(width - 1) + u32::from(y) * 7) % 256) as u8
-                    })
-                    .collect()
-            })
-            .collect()
-    }
-
     #[test]
-    fn a_row_of_grays_is_put_as_each_of_its_pixels_where_there_are_many_grays() {
+    fn a_row_of_grays_is_put_as_each_of_its_pixels() {
         let grays: Vec<u8> = (0..=255u8).step_by(3).collect();
         let width = grays.len() as u16 + 5;
-        for (inverted, kept) in [(false, false), (true, false), (true, true)] {
-            let mut each = Framebuffer::new(width, 5, PixelFormat::Gray8).unwrap();
-            let mut row = Framebuffer::new(width, 5, PixelFormat::Gray8).unwrap();
-            for fb in [&mut each, &mut row] {
-                fb.set_inverted(inverted);
-                fb.set_pictures_kept(kept);
-            }
-            for y in 0..5 {
-                for (i, &gray) in grays.iter().enumerate() {
-                    each.put_gray(3 + i as u16, y, gray);
+        for format in [
+            PixelFormat::Mono1,
+            PixelFormat::Gray2,
+            PixelFormat::Gray4,
+            PixelFormat::Gray8,
+        ] {
+            for (inverted, kept) in [(false, false), (true, false), (true, true)] {
+                let mut each = Framebuffer::new(width, 5, format).unwrap();
+                let mut row = Framebuffer::new(width, 5, format).unwrap();
+                for fb in [&mut each, &mut row] {
+                    fb.set_inverted(inverted);
+                    fb.set_pictures_kept(kept);
                 }
-                row.put_gray_row(3, y, &grays);
-            }
-            assert_eq!(each.data, row.data, "{inverted} {kept}");
-            assert_eq!(each.take_pictured(), row.take_pictured());
-        }
-    }
-
-    #[test]
-    fn pictures_diffused_in_bands_come_out_as_drawn_whole() {
-        let (width, height) = (37, 23);
-        let rows = picture(width, height);
-        for format in [PixelFormat::Mono1, PixelFormat::Gray2, PixelFormat::Gray4] {
-            let mut whole = Framebuffer::new(width + 6, height + 4, format).unwrap();
-            for (y, row) in rows.iter().enumerate() {
-                whole.put_gray_row(3, 2 + y as u16, row);
-            }
-            // Bands of 5 rows, each drawn twice, as screens may.
-            let mut joined = Framebuffer::new(width + 6, height + 4, format).unwrap();
-            let mut band = Framebuffer::banded(width + 6, height + 4, 5, format).unwrap();
-            for top in (0..height + 4).step_by(5) {
-                band.set_top(top);
-                band.fill_clipped(band.band(), Color::WHITE);
-                for _ in 0..2 {
-                    for (y, row) in rows.iter().enumerate() {
-                        let y = 2 + y as u16;
-                        if (top..top + 5).contains(&y) {
-                            band.put_gray_row(3, y, row);
-                        }
+                for y in 0..5 {
+                    for (i, &gray) in grays.iter().enumerate() {
+                        each.put_gray(3 + i as u16, y, gray);
                     }
+                    row.put_gray_row(3, y, &grays);
                 }
-                joined.write_rows(top, band.view());
+                assert_eq!(each.data, row.data, "{format:?} {inverted} {kept}");
+                assert_eq!(each.take_pictured(), row.take_pictured());
             }
-            assert_eq!(whole.data, joined.data, "{format:?}");
         }
-    }
-
-    #[test]
-    fn diffusion_keeps_a_picture_s_tones() {
-        // A middle gray in black and white: about half the pixels white
-        // (the diffusion darkens dark grays and lightens light ones a
-        // little: it passes on seven eighths of the error).
-        let mut fb = Framebuffer::new(64, 64, PixelFormat::Mono1).unwrap();
-        for y in 0..64 {
-            fb.put_gray_row(0, y, &[128; 64]);
-        }
-        let white: u32 = fb.data.iter().map(|b| b.count_ones()).sum();
-        let share = white * 100 / (64 * 64);
-        assert!((40..=60).contains(&share), "{share} % white");
-        // Black and white stay as they are.
-        let mut fb = Framebuffer::new(16, 2, PixelFormat::Mono1).unwrap();
-        fb.put_gray_row(0, 0, &[0; 16]);
-        fb.put_gray_row(0, 1, &[255; 16]);
-        assert_eq!(fb.data, [0, 0, 255, 255]);
-    }
-
-    #[test]
-    fn diffused_pictures_keep_their_tones_in_night_mode() {
-        let rows = picture(20, 6);
-        let mut day = Framebuffer::new(20, 6, PixelFormat::Gray2).unwrap();
-        let mut night = Framebuffer::new(20, 6, PixelFormat::Gray2).unwrap();
-        night.set_inverted(true);
-        night.set_pictures_kept(true);
-        for (y, row) in rows.iter().enumerate() {
-            day.put_gray_row(0, y as u16, row);
-            night.put_gray_row(0, y as u16, row);
-        }
-        assert_eq!(day.data, night.data);
-    }
-
-    #[test]
-    fn transparent_pixels_leave_what_is_drawn() {
-        let mut fb = Framebuffer::new(8, 1, PixelFormat::Mono1).unwrap();
-        fb.fill_clipped(Rect::new(0, 0, 8, 1), Color::BLACK);
-        // Clear white over the left half, nothing over the right.
-        let row: Vec<u8> = (0..8)
-            .flat_map(|x| [255, if x < 4 { 255 } else { 0 }])
-            .collect();
-        fb.put_gray_alpha_row(0, 0, &row, 255);
-        assert_eq!(fb.data, [0b1111_0000]);
-        assert_eq!(fb.take_pictured(), 4);
-    }
-
-    #[test]
-    fn colour_rows_on_gray_panels_are_diffused_as_their_grays() {
-        let rgb: Vec<u8> = (0..30u8).flat_map(|i| [i * 8, i * 8, i * 8]).collect();
-        let grays: Vec<u8> = (0..30u8).map(|i| i * 8).collect();
-        let mut from_rgb = Framebuffer::new(30, 3, PixelFormat::Mono1).unwrap();
-        let mut from_gray = Framebuffer::new(30, 3, PixelFormat::Mono1).unwrap();
-        for y in 0..3 {
-            from_rgb.put_rgb_row(0, y, &rgb);
-            from_gray.put_gray_row(0, y, &grays);
-        }
-        assert_eq!(from_rgb.data, from_gray.data);
     }
 
     #[test]

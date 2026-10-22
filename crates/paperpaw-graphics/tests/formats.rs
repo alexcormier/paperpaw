@@ -103,17 +103,22 @@ proptest! {
         }
     }
 
-    /// Flat shades are ordered dithered: the mean of each 4 × 4 tile of a
-    /// flat gray is that gray (to within a level's sixteenth and
-    /// rounding); darker grays never give fewer dark pixels.
+    /// Ordered dithering: the mean of each 4 × 4 tile of a flat gray is
+    /// that gray (to within a level's sixteenth and rounding); darker
+    /// grays never give fewer dark pixels.
     #[test]
-    fn shaded_grays_keep_their_lightness(
+    fn dithered_grays_keep_their_lightness(
         format in (0usize..3).prop_map(|i| gray_formats()[i]),
         gray in any::<u8>(),
     ) {
         let mean = |gray: u8| {
             let mut fb = Framebuffer::new(8, 8, format).unwrap();
-            fb.canvas().fill_shaded(Rect::new(0, 0, 8, 8), Color::gray(gray));
+            {
+                let mut canvas = fb.canvas();
+                for y in 0..8 {
+                    canvas.draw_gray_row(0, y, &[gray; 8]);
+                }
+            }
             let tile: u32 = (0..4u16)
                 .flat_map(|y| (0..4u16).map(move |x| (x, y)))
                 .map(|(x, y)| u32::from(fb.view().pixel(x, y).r))

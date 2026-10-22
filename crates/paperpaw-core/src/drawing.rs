@@ -251,6 +251,7 @@ impl Kernel {
                 break;
             }
         }
+        self.framebuffer.end_frame();
         // Large pictures on the screen now: the next change of most of it
         // refreshes in full.
         let pictured = self.framebuffer.take_pictured();

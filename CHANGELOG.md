@@ -10,11 +10,16 @@ change the plugin SDK.
   grays) are dithered by error diffusion (after Atkinson's, seven eighths
   of the error passed on) instead of a 4×4 ordered pattern: line drawings
   such as the cats stay clean, without the grid that made them look
-  pixelated, and covers and photos keep their tones. Drawn in bands, a picture shows no seams; it
-  takes two rows of error for each picture (two at once). Covers and
-  pictures kept small in black and white (thumbnails) are diffused the
-  same way, and those kept on the card are made anew. Flat shades of the
-  interface keep the calm ordered pattern.
+  pixelated, and covers and photos keep their tones. A picture is
+  diffused from its first row each time it is drawn, so bands and parts
+  drawn again (a notice closing over it) show the same pixels. Each band
+  takes it up where the band above left it, so its rows are still read
+  once a frame; it takes two rows of error while it is drawn, nothing
+  after the frame. Covers and
+  pictures kept small in black and white (thumbnails) are diffused when
+  they are made, and those kept on the card are made anew. Flat shades
+  of the interface, and pictures with transparency, keep the calm
+  ordered pattern.
 - Vocabulary: flash cards with spaced repetition (FSRS, Anki's
   scheduler), in *Tools*, *Flash cards*. A review shows each due card's
   front, then its back and example and four answers (*Again*, *Hard*,

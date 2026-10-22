@@ -170,6 +170,41 @@ impl<'a> Canvas<'a> {
     }
 
     /// The visible region of this canvas, in its coordinates.
+    /// The grays a picture is shown in where the frame has few (2 to 16:
+    /// black and white, four grays, sixteen), for those who draw pictures
+    /// to dither them themselves ([`diffuse`](crate::diffuse)), from the
+    /// picture's first row so that every band and every part drawn again
+    /// comes out the same; none where the frame has many grays or colour.
+    pub fn picture_levels(&self) -> Option<u8> {
+        match self.framebuffer.format().gray_levels() {
+            Some(levels @ 2..=16) => u8::try_from(levels).ok(),
+            _ => None,
+        }
+    }
+
+    /// The error of a picture diffused from its first row ([`Atkinson`]),
+    /// as the band above left it at row `y`
+    /// ([`Canvas::keep_diffusion`]): the picture goes on from there
+    /// without reading its rows above again. `key` says which picture,
+    /// where and how large (the same everywhere it is drawn so). Taken:
+    /// a band drawn again starts from the first row.
+    ///
+    /// [`Atkinson`]: crate::diffuse::Atkinson
+    pub fn take_diffusion(&mut self, key: u64, y: i32) -> Option<crate::diffuse::Atkinson> {
+        let row = u16::try_from(y + self.origin.1).ok()?;
+        self.framebuffer.take_diffusion(key, row)
+    }
+
+    /// Keeps the error of picture `key` at row `y` for the next band
+    /// ([`Canvas::take_diffusion`]), where this band ends there. Freed
+    /// when the next band begins elsewhere or the frame ends
+    /// ([`Framebuffer::end_frame`](crate::Framebuffer::end_frame)).
+    pub fn keep_diffusion(&mut self, key: u64, y: i32, atkinson: crate::diffuse::Atkinson) {
+        if let Ok(row) = u16::try_from(y + self.origin.1) {
+            self.framebuffer.keep_diffusion(key, row, atkinson);
+        }
+    }
+
     pub fn clip(&self) -> Rect {
         let (left, top, right, bottom) = self.local_clip();
         let fit = |v: i64| v.clamp(0, i64::from(u16::MAX)) as u16;
@@ -549,10 +584,13 @@ impl<'a> Canvas<'a> {
             return;
         };
         let x = x + self.origin.0;
-        let from = (i32::from(rect.x) - x) as usize * 2;
-        let row = &gray_alpha[from..from + usize::from(rect.width) * 2];
-        self.framebuffer
-            .put_gray_alpha_row(rect.x, rect.y, row, opacity);
+        let opacity = u32::from(opacity);
+        for px in rect.x..rect.right() as u16 {
+            let at = (i32::from(px) - x) as usize * 2;
+            let alpha = (u32::from(gray_alpha[at + 1]) * opacity + 127) / 255;
+            self.framebuffer
+                .put_gray_over(px, rect.y, gray_alpha[at], alpha as u8);
+        }
         self.framebuffer.mark_dirty(rect);
     }
 
@@ -565,9 +603,11 @@ impl<'a> Canvas<'a> {
             return;
         };
         let x = x + self.origin.0;
-        let from = (i32::from(rect.x) - x) as usize * 3;
-        let row = &rgb[from..from + usize::from(rect.width) * 3];
-        self.framebuffer.put_rgb_row(rect.x, rect.y, row);
+        for px in rect.x..rect.right() as u16 {
+            let at = (i32::from(px) - x) as usize * 3;
+            self.framebuffer
+                .put_rgb(px, rect.y, [rgb[at], rgb[at + 1], rgb[at + 2]]);
+        }
         self.framebuffer.mark_dirty(rect);
     }
 
