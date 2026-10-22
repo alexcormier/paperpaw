@@ -1,7 +1,8 @@
 //! The touch lock with the real kernel: on a touch screen, taps and
-//! swipes turn no page while it is on and the buttons still do; a finger
-//! held still unlocks, and so does the power button held where it is
-//! bound; with the lock off, both do what they always do.
+//! swipes turn no page while it is on and the buttons still do; two taps
+//! and a hold unlock, a hand resting does not, and the power button held
+//! unlocks where it is bound; with the lock off, both do what they always
+//! do.
 
 // Tests panic on purpose when something is wrong.
 #![allow(clippy::unwrap_used, clippy::expect_used)]
@@ -157,6 +158,15 @@ impl Test {
         self.pointer(millis - millis / 2, PointerPhase::Up, (245, 404));
     }
 
+    /// Two quick taps in the middle, then the finger kept down `millis`.
+    fn taps_and_hold(&mut self, millis: u64) {
+        for _ in 0..2 {
+            self.pointer(200, PointerPhase::Down, (240, 400));
+            self.pointer(80, PointerPhase::Up, (240, 400));
+        }
+        self.hold(millis);
+    }
+
     fn button(&mut self, name: &'static str, held: u64) {
         let at = self.at(200);
         self.kernel.handle(
@@ -198,13 +208,15 @@ fn locked_touch_turns_no_page_but_the_buttons_do() {
 }
 
 #[test]
-fn a_finger_held_still_unlocks() {
+fn two_taps_and_a_hold_unlock_a_resting_hand_does_not() {
     let mut t = Test::new(true);
     t.toggle();
-    t.hold(HOLD_MS / 2);
-    assert!(t.locked(), "a short hold does not unlock");
-    t.hold(HOLD_MS + 100);
-    assert!(!t.locked(), "three seconds still unlock");
+    t.hold(10_000);
+    assert!(t.locked(), "a hand resting, then lifted, does not unlock");
+    t.taps_and_hold(HOLD_MS / 2);
+    assert!(t.locked(), "a short hold after the taps does not");
+    t.taps_and_hold(HOLD_MS + 100);
+    assert!(!t.locked(), "two taps and a hold unlock");
     assert_eq!(t.turned(), 0, "and turn no page");
 }
 

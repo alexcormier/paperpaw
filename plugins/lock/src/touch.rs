@@ -8,15 +8,16 @@
 //! - An input filter takes every finger and pen before screens, gestures
 //!   and key maps see it, on every screen; not while the screen lock asks
 //!   for its code.
-//! - A way out that needs no menu: a finger held still for
-//!   [`HOLD_MS`] anywhere, or, where PaperPaw is the firmware, the power
-//!   button held. A small lock in the status lines says it is on.
+//! - A way out that needs no menu and that a resting hand does not make
+//!   ([`Escape`]): one finger taps twice and then stays down; or, where
+//!   PaperPaw is the firmware, the power button held. A small lock in the
+//!   status lines says it is on.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::rc::Rc;
 use alloc::vec::Vec;
-use core::cell::Cell;
+use core::cell::RefCell;
 
 use paperpaw_sdk::builtin::{groups, menus};
 use paperpaw_sdk::filters::{InputFilterSpec, InputVerdict};
@@ -37,51 +38,113 @@ pub const TOGGLE: Id = Id::new_static("lock.touch-toggle");
 pub const STATUS: Id = Id::new_static("lock.touch-status");
 const FILTER: Id = Id::new_static("lock.touch-filter");
 
-/// How long a finger held still unlocks touch, in milliseconds: far
-/// longer than a hand brushing the screen.
-pub const HOLD_MS: u64 = 3_000;
-/// How far the finger may move meanwhile, in pixels.
-const HOLD_SLOP: i32 = 40;
+/// The way out by touch, which a hand resting on the screen does not do:
+/// one finger taps twice, then stays down for [`HOLD_MS`] at the same
+/// spot, each tap shorter than [`TAP_MS`] and the next touch within
+/// [`GAP_MS`]. A second finger on the screen starts it over.
+pub const TAP_MS: u64 = 300;
+pub const GAP_MS: u64 = 600;
+pub const HOLD_MS: u64 = 1_500;
+/// How far the finger may stray from the first tap, in pixels.
+const SLOP: i32 = 40;
+
+/// How far the way out has come.
+#[derive(Debug, Default)]
+struct Escape {
+    /// The fingers down now, by id.
+    down: Vec<u8>,
+    /// The finger that may go on with it: its id, when and where it came
+    /// down.
+    finger: Option<(u8, Instant, Point)>,
+    /// Taps so far, where the first was, when the last ended.
+    taps: u8,
+    first: Option<Point>,
+    last_up: Option<Instant>,
+}
+
+impl Escape {
+    fn over(&mut self) {
+        self.finger = None;
+        self.taps = 0;
+        self.first = None;
+        self.last_up = None;
+    }
+
+    fn near(&self, point: Point) -> bool {
+        self.first
+            .is_none_or(|at| (point.x - at.x).abs() <= SLOP && (point.y - at.y).abs() <= SLOP)
+    }
+
+    /// Follows `pointer` (a finger or the pen) at `now`: whether it
+    /// completed the way out.
+    fn follow(&mut self, now: Instant, pointer: &paperpaw_sdk::PointerEvent) -> bool {
+        let id = pointer.id;
+        match pointer.phase {
+            PointerPhase::Down => {
+                if !self.down.contains(&id) {
+                    self.down.push(id);
+                }
+                let late = self.last_up.is_some_and(|up| now.since(up) > GAP_MS);
+                if self.down.len() > 1 || late || !self.near(pointer.point) {
+                    self.over();
+                }
+                if self.down.len() == 1 {
+                    self.finger = Some((id, now, pointer.point));
+                    self.first.get_or_insert(pointer.point);
+                }
+            }
+            PointerPhase::Move => {
+                if self.finger.is_some_and(|(f, ..)| f == id) && !self.near(pointer.point) {
+                    self.over();
+                }
+            }
+            PointerPhase::Up => {
+                self.down.retain(|d| *d != id);
+                let Some((f, at, _)) = self.finger.take() else {
+                    return false;
+                };
+                if f != id {
+                    self.over();
+                    return false;
+                }
+                let held = now.since(at);
+                if held < TAP_MS && self.taps < 2 {
+                    self.taps += 1;
+                    self.last_up = Some(now);
+                } else if held >= HOLD_MS && self.taps == 2 {
+                    self.over();
+                    return true;
+                } else {
+                    self.over();
+                }
+            }
+            _ => {
+                self.down.retain(|d| *d != id);
+                self.over();
+            }
+        }
+        false
+    }
+}
 
 /// The switch, with the controls.
-pub(crate) static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_switch(
-    LOCKED.static_str(),
-    "lock.touch",
-    false,
-    groups::CONTROLS,
-)
-.described("lock.touch.help")];
+pub(crate) static SETTINGS: [SettingSpec; 1] =
+    [
+        SettingSpec::fixed_switch(LOCKED.static_str(), "lock.touch", false, groups::CONTROLS)
+            .described("lock.touch.help"),
+    ];
 
 /// While touch is locked, the power button held unlocks it.
 const ESCAPE: &str = "[keymap.global]\nlong.power = lock.touch-toggle\n";
 
-/// What the filter does with `event` while touch is locked, `held` the
-/// finger put down (when, where) while it may still unlock: taken, or the
-/// toggle once a finger held still long enough is lifted.
-fn locked(now: Instant, event: &InputEvent, held: &Cell<Option<(Instant, Point)>>) -> InputVerdict {
+/// What the filter does with `event` while touch is locked: taken, or
+/// the toggle once the way out is done.
+fn locked(now: Instant, event: &InputEvent, escape: &mut Escape) -> InputVerdict {
     let InputEvent::Pointer(pointer) = event else {
         return InputVerdict::Pass;
     };
-    match pointer.phase {
-        PointerPhase::Down => held.set(Some((now, pointer.point))),
-        PointerPhase::Move => {
-            let far = held.get().is_some_and(|(_, at)| {
-                (pointer.point.x - at.x).abs() > HOLD_SLOP
-                    || (pointer.point.y - at.y).abs() > HOLD_SLOP
-            });
-            if far {
-                held.set(None);
-            }
-        }
-        PointerPhase::Up => {
-            if held
-                .take()
-                .is_some_and(|(at, _)| now.since(at) >= HOLD_MS)
-            {
-                return InputVerdict::Run(TOGGLE);
-            }
-        }
-        _ => held.set(None),
+    if escape.follow(now, pointer) {
+        return InputVerdict::Run(TOGGLE);
     }
     InputVerdict::Take
 }
@@ -90,31 +153,30 @@ fn locked(now: Instant, event: &InputEvent, held: &Cell<Option<(Instant, Point)>
 /// it leaves alone.
 pub(crate) fn register(r: &mut Registrar, state: Shared) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
-    r.add_action(
-        ActionSpec::new(TOGGLE, "lock.touch-toggle").handler(
-            |env: &Env<'_>, out: &mut Vec<Command>| {
-                let on = !env.settings.read(&LOCKED);
-                out.push(Command::set(&LOCKED, on));
-                let told = match (on, env.caps.firmware) {
-                    (true, true) => "lock.touch.locked.buttons",
-                    (true, false) => "lock.touch.locked",
-                    (false, _) => "lock.touch.unlocked",
-                };
-                out.push(Command::Notify(env.i18n.tr(told).into()));
-            },
-        ),
-    )?;
+    r.add_action(ActionSpec::new(TOGGLE, "lock.touch-toggle").handler(
+        |env: &Env<'_>, out: &mut Vec<Command>| {
+            let on = !env.settings.read(&LOCKED);
+            out.push(Command::set(&LOCKED, on));
+            let told = match (on, env.caps.firmware) {
+                (true, true) => "lock.touch.locked.buttons",
+                (true, false) => "lock.touch.locked",
+                (false, _) => "lock.touch.unlocked",
+            };
+            out.push(Command::Notify(env.i18n.tr(told).into()));
+        },
+    ))?;
     r.add_icon(TOGGLE, Cow::Borrowed("lock"))?;
-    let held: Rc<Cell<Option<(Instant, Point)>>> = Rc::new(Cell::new(None));
+    let escape: Rc<RefCell<Escape>> = Rc::default();
     r.add_input_filter(InputFilterSpec::new(
         FILTER,
         "lock.touch",
         Box::new(move |env, event| {
+            let mut escape = escape.borrow_mut();
             if !env.settings.read(&LOCKED) || state.locked.get() {
-                held.set(None);
+                *escape = Escape::default();
                 return InputVerdict::Pass;
             }
-            locked(env.now, event, &held)
+            locked(env.now, event, &mut escape)
         }),
     ))?;
     r.add_keymap_when(&LOCKED, Cow::Borrowed(ESCAPE))?;
@@ -143,9 +205,9 @@ mod tests {
     use super::*;
     use paperpaw_sdk::{PointerEvent, PointerTool};
 
-    fn finger(phase: PointerPhase, x: i32, y: i32) -> InputEvent {
+    fn finger(id: u8, phase: PointerPhase, (x, y): (i32, i32)) -> InputEvent {
         InputEvent::Pointer(PointerEvent {
-            id: 0,
+            id,
             phase,
             point: Point::new(x, y),
             tool: PointerTool::Finger,
@@ -153,34 +215,96 @@ mod tests {
         })
     }
 
+    /// Runs `steps` (when, which finger, what, where): the verdicts.
+    fn run(steps: &[(u64, u8, PointerPhase, (i32, i32))]) -> Vec<InputVerdict> {
+        let mut escape = Escape::default();
+        steps
+            .iter()
+            .map(|&(at, id, phase, point)| {
+                locked(Instant(at), &finger(id, phase, point), &mut escape)
+            })
+            .collect()
+    }
+
+    use PointerPhase::{Down, Move, Up};
+    const AT: (i32, i32) = (200, 300);
+
     #[test]
-    fn a_finger_held_still_unlocks_a_tap_does_not() {
-        let held = Cell::new(None);
-        let at = Instant;
-        // A tap: taken, nothing more.
-        let down = finger(PointerPhase::Down, 100, 100);
-        assert_eq!(locked(at(0), &down, &held), InputVerdict::Take);
-        let up = finger(PointerPhase::Up, 100, 100);
-        assert_eq!(locked(at(80), &up, &held), InputVerdict::Take);
-        // Held still three seconds: the toggle.
-        locked(at(1000), &down, &held);
-        locked(at(2000), &finger(PointerPhase::Move, 110, 95), &held);
-        let lifted = finger(PointerPhase::Up, 110, 95);
-        assert_eq!(locked(at(1000 + HOLD_MS), &lifted, &held), InputVerdict::Run(TOGGLE));
-        // Moved away meanwhile (a swipe, a hand sliding): not.
-        locked(at(9000), &down, &held);
-        locked(at(9500), &finger(PointerPhase::Move, 300, 100), &held);
-        let away = finger(PointerPhase::Up, 300, 100);
-        assert_eq!(locked(at(9000 + HOLD_MS + 1), &away, &held), InputVerdict::Take);
+    fn two_taps_then_a_hold_unlock() {
+        let verdicts = run(&[
+            (0, 0, Down, AT),
+            (100, 0, Up, AT),
+            (400, 0, Down, (210, 305)),
+            (500, 0, Up, (210, 305)),
+            (800, 0, Down, AT),
+            (800 + HOLD_MS, 0, Up, AT),
+        ]);
+        assert_eq!(verdicts.last(), Some(&InputVerdict::Run(TOGGLE)));
+        assert!(verdicts[..5].iter().all(|v| *v == InputVerdict::Take));
+    }
+
+    #[test]
+    fn a_resting_hand_does_not_unlock() {
+        // A palm still for a long while, then lifted.
+        assert!(
+            !run(&[(0, 0, Down, AT), (10_000, 0, Up, AT)]).contains(&InputVerdict::Run(TOGGLE))
+        );
+        // A palm and a thumb: one lifts after the other's taps and hold.
+        let verdicts = run(&[
+            (0, 0, Down, AT),
+            (100, 1, Down, (300, 600)),
+            (150, 1, Up, (300, 600)),
+            (400, 1, Down, (300, 600)),
+            (450, 1, Up, (300, 600)),
+            (700, 1, Down, (300, 600)),
+            (700 + HOLD_MS, 1, Up, (300, 600)),
+            (5_000, 0, Up, AT),
+        ]);
+        assert!(
+            !verdicts.contains(&InputVerdict::Run(TOGGLE)),
+            "{verdicts:?}"
+        );
+    }
+
+    #[test]
+    fn taps_too_slow_or_too_far_apart_do_not_unlock() {
+        let slow = run(&[
+            (0, 0, Down, AT),
+            (100, 0, Up, AT),
+            (100 + GAP_MS + 1, 0, Down, AT),
+            (200 + GAP_MS, 0, Up, AT),
+            (500 + GAP_MS, 0, Down, AT),
+            (500 + GAP_MS + HOLD_MS, 0, Up, AT),
+        ]);
+        assert!(!slow.contains(&InputVerdict::Run(TOGGLE)));
+        let far = run(&[
+            (0, 0, Down, AT),
+            (100, 0, Up, AT),
+            (400, 0, Down, (400, 700)),
+            (500, 0, Up, (400, 700)),
+            (800, 0, Down, (400, 700)),
+            (800 + HOLD_MS, 0, Up, (400, 700)),
+        ]);
+        assert!(!far.contains(&InputVerdict::Run(TOGGLE)));
+        let moved = run(&[
+            (0, 0, Down, AT),
+            (100, 0, Up, AT),
+            (400, 0, Down, AT),
+            (500, 0, Up, AT),
+            (800, 0, Down, AT),
+            (900, 0, Move, (350, 300)),
+            (800 + HOLD_MS, 0, Up, (350, 300)),
+        ]);
+        assert!(!moved.contains(&InputVerdict::Run(TOGGLE)));
     }
 
     #[test]
     fn buttons_pass() {
-        let held = Cell::new(None);
+        let mut escape = Escape::default();
         let press = InputEvent::Button {
             name: "page-forward",
             state: paperpaw_sdk::ButtonState::Pressed,
         };
-        assert_eq!(locked(Instant(0), &press, &held), InputVerdict::Pass);
+        assert_eq!(locked(Instant(0), &press, &mut escape), InputVerdict::Pass);
     }
 }

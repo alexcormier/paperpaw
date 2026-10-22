@@ -10,9 +10,11 @@ change the plugin SDK.
   panel and the reader's menu, on touch screens. While it is on, taps,
   swipes and the pen do nothing on every screen and the buttons still
   work, e.g. to read with a hand on the screen; a small lock in the status
-  lines says so. To unlock: hold a finger still on the screen for three
-  seconds, or on the X4 Pro hold the power button, or switch it off again
-  from a button bound to *Lock or unlock touch*. Off by default.
+  lines says so. To unlock: tap twice with one finger and keep it down a
+  moment (a hand resting on the screen does not do that, and a second
+  finger starts it over), or on the X4 Pro hold the power button, or
+  switch it off from a button bound to *Lock or unlock touch*. Off by
+  default.
 - Vocabulary: flash cards with spaced repetition (FSRS, Anki's
   scheduler), in *Tools*, *Flash cards*. A review shows each due card's
   front, then its back and example and four answers (*Again*, *Hard*,
