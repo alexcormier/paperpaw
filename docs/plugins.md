@@ -1493,16 +1493,14 @@ five: large print, three themes (airy, paw, calm ink) and a layout
 
 The plugin library on paperpaw.org is what the website lists and every
 reader's store (*More plugins*) installs from (ADR 0023). A plugin gets
-there in one of two ways, both through the same checks:
+there with the upload form at <https://paperpaw.org/submit>: sign in
+with a link sent by e-mail, upload the plugin's folder as a ZIP (and a
+code plugin's builds), read the checks, complete the entry, look at the
+preview, and send it to the moderators. (The paperpaw.org repository's
+catalogue holds PaperPaw's own plugins only; it is not a way to
+publish.)
 
-- **The upload form** at <https://paperpaw.org/submit>, the main way:
-  sign in with a link sent by e-mail, upload the plugin's folder as a
-  ZIP (and a code plugin's builds), read the checks, complete the entry,
-  look at the preview, and send it to the moderators.
-- **A pull request** to the paperpaw.org repository that adds
-  `catalogue/<id>.toml`, for developers.
-
-Before either, `paperpaw-dev check` (and `paperpaw-dev package` for a
+Before that, `paperpaw-dev check` (and `paperpaw-dev package` for a
 data plugin or a `.ppn` file) finds most of what the checks would refuse,
 and what they cannot see: see [Checking your plugin](#checking-your-plugin).
 
@@ -1606,21 +1604,8 @@ built with the plugin, as `/rust`. So:
 
 The sample's `build.sh`, which the job runs, builds both readers, packs
 and signs the files, and zips the folder, with and without `store/`; the
-job attaches them to the tag's release with their SHA-256 and the
-catalogue's `[[versions]]` for them. Building twice, in two folders, and
+job attaches them to the tag's release with their SHA-256. Building twice, in two folders, and
 comparing the files with `cmp` shows that the build holds.
-
-### By pull request
-
-`catalogue/<id>.toml` holds what `store.ini` would, and `author`,
-`kind` and the versions; the folder lies at `catalogue/packages/<id>/`
-(without `store/`) or elsewhere as a ZIP (`url`, `sha256`). A code
-plugin adds `author_key`, `devices` (every reader with a build), and in
-each version `[versions.source]` and a `[[versions.builds]]` per reader
-with its `device`, its fingerprint as `abi` (which `paperpaw-sign
-plugin` prints), and its file. `samples/hello-native/catalogue.toml` is
-one to fill in; `paperpaw-website check` in a clone of the paperpaw.org
-repository runs the site's checks on it.
 
 [`Plugin`]: ../crates/paperpaw-sdk/src/plugin.rs
 [`Registrar`]: ../crates/paperpaw-sdk/src/plugin.rs

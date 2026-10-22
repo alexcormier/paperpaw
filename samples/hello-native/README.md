@@ -16,7 +16,6 @@ from:
 | `plugin/store/store.ini` | what the plugin store shows of it, for the upload form; readers never install `store/` |
 | `build.sh` | builds both files, packs and signs them, zips the folder, into `dist/` |
 | `.github/workflows/build.yml` | a CI job for a plugin's repository: `build.sh` on every tag, its files as a release |
-| `catalogue.toml` | the plugin's entry for a pull request to the plugin library |
 | `.gitignore` | keeps `target/`, `dist/` and any `*.key` out of the repository |
 | `examples/second.rs` | a second plugin, to try several at once |
 | `examples/crash.rs` | a plugin that panics at every start, to try safe mode |
