@@ -30,7 +30,12 @@ change the plugin SDK.
   second row (`Chips::height_for`), and value rows set a long title on two
   small lines before they shorten it. `paperpaw-dev ui-kit` checks the
   kit in long German and the pseudo-language, a shortened label an error;
-  a value shortened in a field is no longer reported.
+  a value shortened in a field is no longer reported. Dialogs that do
+  not fit even in smaller sizes scroll their title and text above their
+  buttons; header bars leave out their page count before shortening
+  their title. `paperpaw-dev`: `--set` now applies to every command (it
+  reached `perf` alone), `--labels-whole` makes any shortened label an
+  error.
 - Building blocks for plugin screens, so positions are not computed by
   hand: `ui::Stack` (parts one below the other, from the top and the
   bottom), `ui::columns` (equal columns that end flush with their area),
