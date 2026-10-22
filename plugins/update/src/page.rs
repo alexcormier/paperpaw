@@ -565,19 +565,24 @@ impl UpdatePage {
     /// The button areas, the first one above the second, at the bottom:
     /// each in a row as other screens' buttons, within the side margin,
     /// the lowest keeping it from the bottom edge too.
-    fn button_rects(&self, env: &Env<'_>, count: usize) -> Vec<Rect> {
+    fn button_rects(&self, env: &Env<'_>, buttons: &[Button]) -> Vec<Rect> {
         let style = &self.style;
         let display = env.device.display;
         let margin = style.margin as u16;
         let width = display.width.saturating_sub(2 * margin);
         let row = style.touch_row(style.row) as u16;
-        let height = ui::button_height(style, Rect::new(0, 0, width, row));
+        let pad = row.saturating_sub(ui::Segments::height(style)) / 2;
         let mut bottom = display.height.saturating_sub(ui::edge_room(style, row));
-        let mut rects: Vec<Rect> = (0..count)
-            .map(|_| {
-                let top = bottom.saturating_sub(row);
+        // From the bottom up, each as high as its word needs.
+        let mut rects: Vec<Rect> = buttons
+            .iter()
+            .rev()
+            .map(|button| {
+                let label = self.label(env, *button);
+                let height = ui::button_height_for(env, style, width, label);
+                let top = bottom.saturating_sub(height + 2 * pad);
                 bottom = top;
-                Rect::new(margin, top + (row - height) / 2, width, height)
+                Rect::new(margin, top + pad, width, height)
             })
             .collect();
         rects.reverse();
@@ -711,10 +716,12 @@ fn paragraph(
         let height = font.line_metrics(size).line_height as u16;
         max.min(usize::from(area.height / height.max(1)))
     };
-    let size = paperpaw_sdk::widgets::largest_size(size, size * 0.85, |size| {
+    // Smaller where it does not fit, down to seven tenths (at the largest
+    // text still larger than text at the default).
+    let size = paperpaw_sdk::widgets::largest_size(size, size * 0.7, |size| {
         font.wrap(size, text, width).len() <= lines_at(size)
     })
-    .unwrap_or(size * 0.85);
+    .unwrap_or(size * 0.7);
     let (height, max) = (font.line_metrics(size).line_height as u16, lines_at(size));
     let lines = font.wrap(size, text, width);
     let cut = lines.len() > max;
@@ -772,7 +779,7 @@ impl Screen for UpdatePage {
             Color::BLACK,
         ) + gap;
         let buttons = self.buttons(env);
-        let rects = self.button_rects(env, buttons.len());
+        let rects = self.button_rects(env, &buttons);
         // The words keep clear of the buttons.
         let bottom = rects
             .first()
@@ -863,7 +870,7 @@ impl Screen for UpdatePage {
         }
         self.shown = false;
         let buttons = self.buttons(&env);
-        let rects = self.button_rects(&env, buttons.len());
+        let rects = self.button_rects(&env, &buttons);
         match buttons
             .iter()
             .zip(rects)

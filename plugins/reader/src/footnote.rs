@@ -28,6 +28,9 @@ pub(crate) struct FootnoteScreen {
     href: String,
 }
 
+/// The keys of its buttons' words: close, then follow the link.
+const BUTTONS: [&str; 2] = ["reader.footnote.close", "reader.footnote.go"];
+
 impl FootnoteScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
@@ -62,29 +65,28 @@ impl FootnoteScreen {
         let button_row = style.touch_row(u32::from(row)) as u16;
         // Its buttons keep the side margin from the bottom edge too.
         let room = ui::edge_room(&style, button_row);
-        let height = gap * 3 - gap / 2 + line_height * lines.len() as u16 + button_row + room;
+        let pad = button_row.saturating_sub(ui::Segments::height(&style)) / 2;
+        // Side by side where their words fit, else one below the other.
+        let labels = BUTTONS.map(|key| env.i18n.tr(key));
+        let inner = display.width.saturating_sub(2 * margin);
+        let buttons_height = ui::button_cells_height(env, &style, inner, &labels, gap);
+        let height =
+            gap * 3 - gap / 2 + line_height * lines.len() as u16 + buttons_height + 2 * pad + room;
         let region = Rect::new(
             0,
             display.height.saturating_sub(height),
             display.width,
             height,
         );
-        let half = display.width / 2;
-        let buttons_y = region.y + height - button_row - room;
-        let buttons = [
-            Rect::new(
-                margin,
-                buttons_y,
-                half.saturating_sub(margin + gap / 2),
-                button_row,
-            ),
-            Rect::new(
-                half + gap / 2,
-                buttons_y,
-                half.saturating_sub(margin + gap / 2),
-                button_row,
-            ),
-        ];
+        let buttons_y = region.y + height - room - pad - buttons_height;
+        let cells = ui::button_cells(
+            env,
+            &style,
+            Rect::new(margin, buttons_y, inner, 0),
+            &labels,
+            gap,
+        );
+        let buttons = [0, 1].map(|i| cells.get(i).copied().unwrap_or_default());
         Self {
             focus: (!env.device.input.touch).then_some(0),
             style,
@@ -131,20 +133,13 @@ impl Screen for FootnoteScreen {
             ui::draw_label(canvas, &font, style.text, x, area, line, Color::BLACK);
             y += line_height;
         }
-        for (i, (rect, label)) in self
-            .buttons
-            .iter()
-            .zip(["reader.footnote.close", "reader.footnote.go"])
-            .enumerate()
-        {
-            let h = ui::button_height(&style, *rect);
-            let button = Rect::new(rect.x, rect.y + (rect.height - h) / 2, rect.width, h);
+        for (i, (rect, label)) in self.buttons.iter().zip(BUTTONS).enumerate() {
             let label = env.i18n.tr(label);
             ui::draw_button(
                 canvas,
                 env,
                 &style,
-                button,
+                *rect,
                 label,
                 false,
                 self.focus == Some(i),
