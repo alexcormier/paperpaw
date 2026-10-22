@@ -9,7 +9,7 @@
 //!   and key maps see it, on every screen; not while the screen lock asks
 //!   for its code.
 //! - A way out that needs no menu and that a resting hand does not make
-//!   ([`Escape`]): one finger taps twice and then stays down; or, where
+//!   (`Escape`): one finger taps twice and then stays down; or, where
 //!   PaperPaw is the firmware, the power button held. A small lock in the
 //!   status lines says it is on.
 

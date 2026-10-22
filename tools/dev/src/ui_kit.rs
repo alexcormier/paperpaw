@@ -543,8 +543,14 @@ fn layout(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         let _ = inside;
         let gap = style.gap as u16;
         let line = font.line_metrics(style.small).line_height as u16;
-        let row = Rect::new(cell.x + gap, cell.y + gap, cell.width.saturating_sub(2 * gap), line);
-        let x = f32::from(row.x) + (f32::from(row.width) - font.measure(style.small, name)).max(0.0) / 2.0;
+        let row = Rect::new(
+            cell.x + gap,
+            cell.y + gap,
+            cell.width.saturating_sub(2 * gap),
+            line,
+        );
+        let x = f32::from(row.x)
+            + (f32::from(row.width) - font.measure(style.small, name)).max(0.0) / 2.0;
         ui::draw_label(canvas, &font, style.small, x, row, name, ink);
     }
     let rest = stack.rest();

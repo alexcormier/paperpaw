@@ -404,7 +404,10 @@ const CALM_STATUS: [(&str, &str); 6] = [
     ("reader.status.bottom-right", "reader.status.page"),
     ("home.status.left", "core.status.clock"),
     ("home.status.center", ""),
-    ("home.status.right", "lock.touch-status, core.status.battery"),
+    (
+        "home.status.right",
+        "lock.touch-status, core.status.battery",
+    ),
 ];
 
 /// The kernel with the standard app, as the X4 wants it.

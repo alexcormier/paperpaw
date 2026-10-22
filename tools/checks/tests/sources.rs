@@ -25,7 +25,10 @@ fn listed() -> BTreeMap<String, usize> {
         .filter(|line| !line.is_empty() && !line.starts_with('#'))
         .map(|line| {
             let (count, path) = line.split_once(' ').expect("`<lines> <path>`");
-            (path.trim().to_string(), count.parse().expect("a number of lines"))
+            (
+                path.trim().to_string(),
+                count.parse().expect("a number of lines"),
+            )
         })
         .collect()
 }

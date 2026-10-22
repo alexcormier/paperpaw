@@ -12,7 +12,14 @@ pub fn root() -> PathBuf {
 
 /// Folders left out: built files, others' code (patched crates, fuzz
 /// targets built on their own), tools' folders.
-const SKIPPED: [&str; 6] = [".git", ".claude", "target", "patches", "fuzz", "node_modules"];
+const SKIPPED: [&str; 6] = [
+    ".git",
+    ".claude",
+    "target",
+    "patches",
+    "fuzz",
+    "node_modules",
+];
 
 /// Every Rust file of the repository below `root`, by its path from there
 /// with `/` between folders, sorted.

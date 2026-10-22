@@ -51,7 +51,10 @@ const X4_SETTINGS: [(&str, &str); 10] = [
     ("reader.status.bottom-right", "reader.status.page"),
     ("home.status.left", "core.status.clock"),
     ("home.status.center", ""),
-    ("home.status.right", "lock.touch-status, core.status.battery"),
+    (
+        "home.status.right",
+        "lock.touch-status, core.status.battery",
+    ),
 ];
 
 /// The firmware's memory for glyphs of font packs on the card.

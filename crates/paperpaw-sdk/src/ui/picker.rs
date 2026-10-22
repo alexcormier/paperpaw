@@ -158,7 +158,10 @@ impl Wheels {
 
     /// Draws field `i`: its `+` and `−`, and `text` large between them,
     /// with `mark` (e.g. "PM") small after it.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "its inputs are separate things; a struct of them would serve this call alone"
+    )]
     fn draw_field(
         &self,
         canvas: &mut Canvas<'_>,

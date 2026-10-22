@@ -3048,6 +3048,7 @@ pub fn paperpaw_sdk::ui::confirm::Confirm::on_show(&mut self, &mut paperpaw_sdk:
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::confirm::Confirm::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::confirm::Confirm::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::confirm::Confirm::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::shows_through(&self) -> paperpaw_sdk::ShowsThrough
@@ -5900,6 +5901,7 @@ pub fn paperpaw_sdk::ui::confirm::Confirm::on_show(&mut self, &mut paperpaw_sdk:
 pub fn paperpaw_sdk::ui::confirm::Confirm::on_timer(&mut self, &mut paperpaw_sdk::Cx<'_, '_>)
 pub fn paperpaw_sdk::ui::confirm::Confirm::outside(&self) -> paperpaw_sdk::Outside
 pub fn paperpaw_sdk::ui::confirm::Confirm::passes_through(&self) -> bool
+pub fn paperpaw_sdk::ui::confirm::Confirm::pictures_in_grays(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::region(&self, &paperpaw_sdk::Env<'_>) -> core::option::Option<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::confirm::Confirm::secret(&self) -> bool
 pub fn paperpaw_sdk::ui::confirm::Confirm::shows_through(&self) -> paperpaw_sdk::ShowsThrough
