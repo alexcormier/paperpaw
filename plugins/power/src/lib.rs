@@ -151,12 +151,19 @@ fn wear(env: &Env<'_>, out: &mut Vec<Command>) {
 #[derive(Debug)]
 pub struct Power;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Power {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Power", Version::new(0, 1, 0))
             .description(
                 "Chooses the power mode, by hand or by the battery: Normal, Saving, Offline.",
             )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

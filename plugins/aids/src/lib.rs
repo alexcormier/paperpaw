@@ -141,10 +141,17 @@ static SETTINGS: [SettingSpec; 2] = [
     .described("aids.setting.replace.help"),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Aids {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Reading aids", paperpaw_sdk::package_version!())
             .description("Bold word beginnings, replaced words: text as you want it.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

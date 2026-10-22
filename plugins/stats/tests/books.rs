@@ -3,8 +3,11 @@
 //! under an id of its own, and a `books.ini` that cannot be read is
 //! never written over.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::{Rotation, SystemStatus, WallClock};

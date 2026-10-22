@@ -11,8 +11,11 @@
 //! whichever features the fonts plugin is built with; problems that show
 //! only with its scalable fonts have tests of their own.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::borrow::Cow;
 use std::cell::{Cell, RefCell};

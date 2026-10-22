@@ -468,11 +468,13 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
 }
 
 /// Opens and closes every screen and widget of the target on one profile.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn measure_variant(context: &Context, variant: &Variant) -> Result<Run, String> {
-    let start = Start {
-        settings: context.settings.clone(),
-        ..Start::default()
-    };
+    // The command line's settings come with every session.
+    let start = Start::default();
     // Heap of no session's: another device running beside the checks
     // (the browser's emulator), not what the app keeps.
     let outside = budget::stats().live;
@@ -737,6 +739,10 @@ fn in_sizes(sizes: &[&Measured]) -> String {
     }
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn findings(run: &Run, report: &mut Report) {
     let variant = run.variant.name();
     let device = run.variant.profile.device.name;

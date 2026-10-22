@@ -126,12 +126,19 @@ fn started(env: &Env<'_>, firmware: &Firmware, out: &mut Vec<Command>) {
 #[derive(Debug, Default)]
 pub struct Update;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Update {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Update", Version::new(0, 1, 0))
             .description(
                 "Installs firmware updates, from the card or downloaded from the internet.",
             )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

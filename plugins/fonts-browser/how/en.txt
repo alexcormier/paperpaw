@@ -1,0 +1,5 @@
+More fonts lists fonts from a font library on the internet, each name set in its own font, and downloads the ones you want to read with.
+
+You find it at the end of the list of fonts where the reading font is chosen, in Settings, under Reading, as Font; the status lines have the same entry for their font. Tap a font (with buttons, press Select) to see it larger with a sample sentence, then choose Download. You can leave the page while it downloads. When it is done, choose Read with (the font's name), or Use for the status lines. Update fetches a newer version, Remove deletes the font from the device.
+
+It needs Wi-Fi.

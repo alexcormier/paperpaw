@@ -5,8 +5,11 @@
 //! has settings of its own, its frame among them, so that the reader can
 //! shape it.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::{
@@ -83,7 +86,9 @@ impl App {
             .with(".paperpaw/plugins/setup/done", "");
         let builder = Kernel::builder(device)
             .storage(storage)
-            .user_config(format!("[core]\nlanguage = {language}\n"));
+            .user_config(format!(
+                "[help]\nshow = false\n[core]\nlanguage = {language}\n"
+            ));
         let mut kernel = paperpaw_app::install(builder, fonts()).build().unwrap();
         let effects = kernel.start(Instant(0));
         let mut app = Self { kernel, now: 0 };

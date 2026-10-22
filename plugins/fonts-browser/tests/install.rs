@@ -4,8 +4,11 @@
 //! installed, nor one cut off by a restart; the catalog is fetched once
 //! each time the list is opened.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::rc::Rc;
 
@@ -292,6 +295,8 @@ fn a_font_is_downloaded_chosen_and_removed() {
     browsing.run(actions::CONFIRM);
     let shown = browsing.shown();
     assert!(shown.contains("Remove Round"), "{shown}");
+    // The focus on *Keep*, the safe answer: left to *Remove*.
+    browsing.run(actions::LEFT);
     browsing.run(actions::CONFIRM);
     assert!(browsing.kernel.plugins().get("font-round").is_none());
     assert!(!browsing.storage.exists("plugins/font-round/plugin.ini"));

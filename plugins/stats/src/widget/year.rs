@@ -302,6 +302,10 @@ fn notes(env: &Env<'_>, shown: &Shown) -> Vec<(String, bool)> {
     notes
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {

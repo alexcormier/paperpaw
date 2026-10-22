@@ -292,6 +292,10 @@ pub fn set(source: &str, section: &str, key: &str, value: &str) -> String {
 
 /// Returns `source` with each `(section, key, value)` of `entries` set, as
 /// calls of [`set`] one after another would, in a single pass over the file.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn set_all<S, K, V>(source: &str, entries: impl IntoIterator<Item = (S, K, V)>) -> String
 where
     S: AsRef<str>,

@@ -47,6 +47,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params, slots};
 use paperpaw_sdk::event::Event;
+use paperpaw_sdk::help::{self, Zone};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets;
@@ -72,23 +73,18 @@ pub const ALL_TOOLS: Id = Id::new_static("home.all-tools");
 /// reach it, also without the pencil.
 pub const EDIT_PAGES: Id = Id::new_static("home.edit-pages");
 const DRAWER_SCREEN: Id = Id::new_static("home.drawer");
-const TIPS_SCREEN: Id = Id::new_static("home.tips");
 /// An item's options were chosen.
 const CHOSEN: Event<choice::Picked> = Event::new("home.item-chosen");
-
-/// Whether the home screen tells how to swipe, until tried.
-static TIPS: [paperpaw_sdk::SettingSpec; 1] = [paperpaw_sdk::SettingSpec::fixed_switch(
-    drawer::TIPS_SETTING.static_str(),
-    "home.setting.gesture-tips",
-    true,
-    paperpaw_sdk::builtin::groups::LOOK,
-)
-.advanced()
-.described("home.setting.gesture-tips.help")];
 
 /// The home screen plugin.
 #[derive(Debug, Default)]
 pub struct Home;
+
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
 
 impl Plugin for Home {
     fn manifest(&self) -> Manifest {
@@ -96,6 +92,7 @@ impl Plugin for Home {
             .description(
                 "The start page: pages of widgets, such as the book being read and the tools.",
             )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
@@ -127,11 +124,6 @@ impl Plugin for Home {
             "home.drawer",
             Box::new(|env, _| Box::new(drawer::DrawerScreen::new(env))),
         ))?;
-        r.add_screen(ScreenSpec::new(
-            TIPS_SCREEN,
-            "home.tips.title",
-            Box::new(|env, _| Box::new(drawer::TipsScreen::new(env))),
-        ))?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(ALL_TOOLS, "home.drawer").handler(
                 |_: &Env<'_>, out: &mut Vec<Command>| {
@@ -156,7 +148,21 @@ impl Plugin for Home {
         r.add_keymap(Cow::Borrowed(
             "[keymap.core.home]\nswipe.up = home.all-tools\n",
         ))?;
-        r.add_settings(&TIPS)?;
+        // The first time: how the gestures go, or the buttons.
+        help::add(
+            r,
+            SCREEN.as_str(),
+            &[
+                help::Hint::touch("home.tips.quick").zone(Zone::new(0, 0, 1000, 120)),
+                help::Hint::touch("home.tips.back").zone(Zone::new(0, 400, 150, 300)),
+                help::Hint::touch("home.tips.home"),
+                help::Hint::touch("home.tips.tools"),
+                help::Hint::touch("home.tips.arrange"),
+                help::Hint::buttons("home.tips.move"),
+                help::Hint::buttons("home.tips.select"),
+                help::Hint::buttons("home.tips.menu"),
+            ],
+        )?;
         r.add_menu_entry(MenuEntry::new(ACTIONS, actions::LIBRARY).order(10))?;
         pages::register(r)?;
         blocks::register(r)?;
@@ -493,10 +499,6 @@ impl Screen for Dashboard {
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         // The reader may have changed the recent books meanwhile.
         let env = *cx.env();
-        if drawer::tips_due(&env) {
-            // The first time on a touch screen: how the gestures go.
-            cx.command(Command::OpenScreen(TIPS_SCREEN, Params::new()));
-        }
         // Each time it shows, the page as it is: made anew after it was
         // hidden (its widgets went) or changed, else what they show read
         // again. The focus where wanted.

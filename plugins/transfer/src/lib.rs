@@ -60,12 +60,19 @@ const PAGE: &str = include_str!("page.html");
 #[derive(Debug, Default)]
 pub struct Transfer;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Transfer {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Transfer", Version::new(0, 1, 0))
             .description(
                 "Put books and other files on the device from a browser in the same network.",
             )
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NETWORK)
     }
 

@@ -47,6 +47,10 @@ pub struct Request<'a> {
 
 /// Answers `request`, if `guard` lets it in; `page` is the web page to
 /// serve.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn answer(
     storage: &dyn Storage,
     guard: &mut Guard,

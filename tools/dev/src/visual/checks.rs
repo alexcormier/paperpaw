@@ -212,12 +212,18 @@ pub fn text_cut(scene: &Scene<'_>) -> Vec<Issue> {
     issues
 }
 
-/// Text shortened with an ellipsis to fit.
+/// Text shortened with an ellipsis to fit: a label, a heading, a
+/// button's word. A value in a field may be shortened (it is the reader's
+/// own, typed); it is left alone.
 pub fn ellipsis(scene: &Scene<'_>) -> Vec<Issue> {
     let mut issues: Vec<Issue> = Vec::new();
+    let fields: Vec<_> = scene.parts(&[Role::Field]).map(|f| f.area).collect();
     for d in scene.parts(&[Role::Text, Role::Heading, Role::Button]) {
         let label = d.label.trim_end();
         if !label.ends_with('…') || !says_something(label) {
+            continue;
+        }
+        if fields.iter().any(|f| f.intersection(&d.area).is_some()) {
             continue;
         }
         // Shortened to fit, the text fills its room to the end (less a
@@ -230,7 +236,7 @@ pub fn ellipsis(scene: &Scene<'_>) -> Vec<Issue> {
             .visible(d)
             .map_or(d.area.right(), |v| v.right().min(d.area.right()));
         let slack = u32::from(scene.ui.margin + 2 * height);
-        if run.right() + slack < room_end {
+        if !scene.labels_whole && run.right() + slack < room_end {
             continue;
         }
         let area = run;
@@ -1007,6 +1013,10 @@ pub fn touch_targets(scene: &Scene<'_>) -> Vec<Issue> {
 /// room a button has in its row) from the edges of the row they are in
 /// and from each other. A button grown into the room around it (a bar
 /// that did not grow with it, `UiStyle::touch_row`) is found.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
     let ui = scene.ui;
     let tolerance = i32::from(ui.tolerance());

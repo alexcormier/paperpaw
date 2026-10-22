@@ -3,8 +3,11 @@
 //! device's zone, and the forecast's first day, names of days and parts
 //! shown follow what is set.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::{
@@ -46,7 +49,7 @@ fn texts(offset: i32, config: &str) -> Vec<String> {
         .with(".paperpaw/plugins/setup/done", "")
         .with(KEPT, include_str!("../testdata/weather.txt.v1"));
     let config = format!(
-        "[core]\nlanguage = en\n\
+        "[core]\nlanguage = en\n[help]\nshow = false\n\
          [home]\npage-1 = weather.now 0/0 4x3, weather.forecast 0/3 4x3\n{PLACE}{config}"
     );
     let builder = Kernel::builder(DEVICE)

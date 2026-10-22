@@ -3,8 +3,11 @@
 //! own, and a faint one that the focus passes and that does nothing when
 //! tapped.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::RefCell;
 
@@ -125,7 +128,10 @@ impl Test {
     fn new(device: DeviceInfo) -> Self {
         RAN.with(|r| r.borrow_mut().clear());
         let storage = MemoryStorage::new().with(".paperpaw/plugins/setup/done", "");
-        let builder = Kernel::builder(device).storage(storage);
+        // Without the hints over it all.
+        let builder = Kernel::builder(device)
+            .storage(storage)
+            .user_config("[help]\nshow = false\n");
         let mut kernel = paperpaw_app::install(builder, paperpaw_app::Fonts::Packs)
             .plugin(Probe)
             .build()

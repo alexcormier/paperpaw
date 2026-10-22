@@ -5,8 +5,11 @@
 //! entries that show what they are now (a switch, faint, hidden) with a
 //! line under them, said only by the plugin they belong to.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::borrow::Cow;
 
@@ -186,7 +189,10 @@ impl App {
         plugins: impl FnOnce(paperpaw_core::KernelBuilder) -> paperpaw_core::KernelBuilder,
     ) -> Self {
         let storage = MemoryStorage::new()
-            .with("paperpaw.ini", format!("[core]\nlanguage = en\n{config}"))
+            .with(
+                "paperpaw.ini",
+                format!("[help]\nshow = false\n[core]\nlanguage = en\n{config}"),
+            )
             .with(".paperpaw/plugins/setup/done", "");
         let builder = paperpaw_app::install(
             Kernel::builder(DEVICE).storage(storage),

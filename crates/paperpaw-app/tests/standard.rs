@@ -4,8 +4,11 @@
 //! puts an entry in its menu, and marks words on its pages that it hears
 //! taps on (ADR 0021).
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::sync::Mutex;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -121,7 +124,7 @@ impl App {
             .with(".paperpaw/plugins/setup/done", "");
         let builder = Kernel::builder(DEVICE)
             .storage(storage)
-            .user_config("[core]\nlanguage = en\n");
+            .user_config("[help]\nshow = false\n[core]\nlanguage = en\n");
         let mut kernel = paperpaw_app::install(builder, fonts())
             .plugin(Probe)
             .build()

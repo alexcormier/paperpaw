@@ -1,8 +1,12 @@
 //! The real kernel with the OPDS plugin, a storage the test looks into,
 //! and the requests the kernel asks the shell to make, answered by hand.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used, dead_code)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    dead_code,
+    reason = "tests panic on purpose when something is wrong; not every test uses every helper"
+)]
 
 use std::cell::RefCell;
 use std::rc::Rc;

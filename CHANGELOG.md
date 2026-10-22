@@ -6,6 +6,87 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- `ask::confirm` asks yes or no on the screen of the new slot
+  `core.confirm` (the kernel's `ui::confirm::Confirm`, a `ui::Dialog` in
+  the middle of the screen, unless a plugin binds another): the question,
+  an optional text, two buttons (*Yes* and *No* unless given words of
+  their own), the focus on no unless `focus_yes`. The answer is a
+  `replies::Confirmed` with `yes` and the question's context; *Back* or a
+  tap outside answers nothing. Removing a font and resetting the keys ask
+  this way.
+- More building blocks for plugin screens: `ui::Chips` (filters or tags
+  as wide as their words, one chosen; the library's filters use them),
+  `ui::draw_text_field` with `ui::edit_text` (a one-line text in a row,
+  typed on the keyboard's screen), `ui::draw_check_row` and
+  `ui::draw_check` (lists where several may be ticked; looks may paint
+  the box, `Painters::check`), `ui::TextView` (text longer than its room,
+  scrolled by buttons, swipes and taps) and `ui::DatePicker` /
+  `ui::TimePicker` (fields stepped with the buttons or by touch, months
+  and leap years right). All are in `paperpaw-dev ui-kit`. No block
+  shortens a title or a button's word: text fields put their box below a
+  long title (`ui::text_field_height`), ticked rows and dialogs wrap
+  their titles (`ui::check_row_height`), a dialog's buttons go one below
+  the other where their words do not fit side by side, chips go onto a
+  second row (`Chips::height_for`), and value rows set a long title on two
+  small lines before they shorten it. `paperpaw-dev ui-kit` checks the
+  kit in long German and the pseudo-language, a shortened label an error;
+  a value shortened in a field is no longer reported. Dialogs that do
+  not fit even in smaller sizes scroll their title and text above their
+  buttons; header bars leave out their page count before shortening
+  their title. `paperpaw-dev`: `--set` now applies to every command (it
+  reached `perf` alone), `--labels-whole` makes any shortened label an
+  error.
+- Touch lock (in the screen lock plugin): *Lock touch* in the quick
+  panel and the reader's menu, on touch screens. While it is on, taps,
+  swipes and the pen do nothing on every screen and the buttons still
+  work, e.g. to read with a hand on the screen; a small lock in the status
+  lines says so. To unlock: tap twice with one finger and keep it down a
+  moment (a hand resting on the screen does not do that, and a second
+  finger starts it over), or on the X4 Pro hold the power button, or
+  switch it off from a button bound to *Lock or unlock touch*. Off by
+  default.
+- Building blocks for plugin screens, so positions are not computed by
+  hand: `ui::Stack` (parts one below the other, from the top and the
+  bottom), `ui::columns` (equal columns that end flush with their area),
+  `ui::Grid` (cells, what a tap hits, the focus moved by the buttons),
+  `ui::draw_card` and `ui::card_inside` (a group on a card or in a frame,
+  painted as the look paints widget frames), `ui::Segments` (a row of
+  options, one chosen, also as tabs) and `ui::Dialog` (a box with a title,
+  text and buttons, one space all round). The quick panel, the setup
+  guide and the hints use them. `paperpaw-dev ui-kit` draws every
+  building block on every device, in every look, light and dark.
+- How it works: every plugin of PaperPaw says what it does, where it is
+  and how it is used, read from the plugin manager. The vocabulary
+  review has its first-time hints. Hyphenation has English texts.
+- *Pictures in grays* (*Settings*, *Display*; on by default, on panels
+  of black and white alone): a screen with pictures, such as the
+  library's covers, the home screen's or a sleep screen's picture, is
+  shown in four grays when it opens or changes whole, as pages with
+  pictures already are. What changes on it after (the focus moving) is
+  shown in black and white. The kernel counts the pictures of the
+  screen drawn aside, where nothing is drawn or read. Covers kept small
+  on such panels (thumbnails) keep four grays beside black and white
+  for it (2.7 KB for a cover of 70 by 100 pixels instead of 0.9 KB), and
+  those kept on the card are made anew. The emulator shows frames in
+  grays as the X4 does.
+- SDK: `Screen::pictures_in_grays` (yes by default) lets a screen say
+  no to being shown in grays for its pictures (the reader decides
+  itself, with `Screen::grays`); the setting is
+  `settings::PICTURES_IN_GRAYS`.
+- Pictures on panels with few grays (the X4s in black and white, four
+  grays) are dithered by error diffusion (after Atkinson's, seven eighths
+  of the error passed on) instead of a 4×4 ordered pattern: line drawings
+  such as the cats stay clean, without the grid that made them look
+  pixelated, and covers and photos keep their tones. A picture is
+  diffused from its first row each time it is drawn, so bands and parts
+  drawn again (a notice closing over it) show the same pixels. Each band
+  takes it up where the band above left it, so its rows are still read
+  once a frame; it takes two rows of error while it is drawn, nothing
+  after the frame. Covers and
+  pictures kept small in black and white (thumbnails) are diffused when
+  they are made, and those kept on the card are made anew. Flat shades
+  of the interface, and pictures with transparency, keep the calm
+  ordered pattern.
 - Vocabulary: flash cards with spaced repetition (FSRS, Anki's
   scheduler), in *Tools*, *Flash cards*. A review shows each due card's
   front, then its back and example and four answers (*Again*, *Hard*,
@@ -35,6 +116,21 @@ change the plugin SDK.
   or taken out). Its fuel gauge then starts asleep and forgets the
   battery's profile; PaperPaw gives it the profile again at the start
   and wakes it, as the stock firmware did.
+- Hints: the first time a screen opens, a short note over it says what
+  its controls do, the parts a tap goes to framed, for touch or for
+  buttons as the device has them. A tap or any button closes it for
+  good; *No more hints* switches them all off, as does a setting under
+  System, where *Show hints again* has them shown once more. The home
+  screen's gesture tips are now its hints; the reader, the library, the
+  quick panel have theirs. SDK: `help` (`help::add` for a screen's
+  hints, `help::hints` to read them, `help::wait` and `help::ready` for
+  a screen that prepares first), the `help` plugin shows them.
+- How it works: a plugin's own longer text (plain text files named by
+  its manifest, a data plugin's `<id>.plugin.how`; `description` in the
+  store's catalogue), to read paged from the plugin manager (hold a
+  plugin) and the store's page of a plugin. `paperpaw-dev` warns where a
+  plugin with code has none or a short one (`lint.how-it-works`). SDK:
+  `Manifest::how`, `PluginInfo::how`, `readers::show_text`.
 - Reading goal, a plugin of its own (in the store on the X4s): the daily
   goal of the reading statistics (one goal for both; 20 minutes where
   this plugin is), and a cat whose mood follows today's reading: sad

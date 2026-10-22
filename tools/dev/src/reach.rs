@@ -524,6 +524,10 @@ pub fn actions(variant: &Variant) -> Vec<String> {
 /// newly seen every button is pressed once, then the focus is walked
 /// forward through it and on each part the focus reaches what acts is
 /// pressed (see [`actions`]).
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn search(driver: &mut Driver<'_>, wanted: &HashSet<String>, limits: &Limits) -> Found {
     let variant = driver.variant.clone();
     let (keys, forward, actions) = (keys(&variant), forward(&variant), actions(&variant));
@@ -1018,6 +1022,10 @@ pub fn taps(context: &Context, variant: &Variant, report: &mut Report) -> Result
 }
 
 /// Checks every screen of the target on `variant`, within `limits`.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn check(
     context: &Context,
     variant: &Variant,

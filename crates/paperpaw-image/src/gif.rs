@@ -250,7 +250,14 @@ pub(crate) fn decode(
 }
 
 /// The picture whose descriptor follows, on a `width`×`height` screen.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn picture(
     reader: &mut Reader<'_>,
     width: u32,

@@ -12,7 +12,8 @@
 //! `lint.placeholders`, `lint.plural`, `lint.missing-key`,
 //! `lint.setting-help`, `lint.untranslated`, `lint.id`, `lint.catalog`,
 //! `lint.unknown-setting`, `lint.dash`, `lint.register`,
-//! `lint.pseudo-overflow`, `lint.hardcoded`.
+//! `lint.pseudo-overflow`, `lint.hardcoded`, `lint.how-it-works` (a plugin
+//! with code that says not, or hardly, how it works: `Manifest::how`).
 
 mod catalogs;
 mod drawn;
@@ -86,6 +87,10 @@ pub fn pseudo_plugin(context: &Context) -> Result<Vec<(String, Vec<u8>)>, String
     pseudo::plugin(context)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
     // Pictures of an earlier run would mislead.
     if !context.in_memory {
@@ -123,6 +128,9 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
         }
         // A data plugin's manifest is a file, looked at with the others.
         if context.target.data.iter().all(|d| d.id != id) {
+            if let Some(finding) = how_it_works(id, info.how(kernel.translator())) {
+                report.add(finding);
+            }
             let is_own = own(id, None);
             for (place, text) in [
                 ("name", info.manifest.name.as_ref()),
@@ -222,6 +230,32 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
     drop(session);
 
     drawn(context, &looked, &all, report)
+}
+
+/// The shortest *How it works* that says enough, in characters.
+const LEAST_HOW: usize = 120;
+
+/// What to say of plugin `id`'s *How it works* (`how`), if anything: a
+/// plugin with code must say how it works, at some length.
+fn how_it_works(id: &str, how: Option<&str>) -> Option<Finding> {
+    if id == paperpaw_core::sdk::builtin::CORE_PLUGIN.as_str() {
+        return None;
+    }
+    let message = match how {
+        None => String::from(
+            "It says nothing of how it works: give its manifest `how` (`how/en.txt` and a \
+             file per other language, see Manifest::how), a few sentences (paragraphs apart \
+             by an empty line) on what it does, where it is found and how it is used. The \
+             plugin manager and the store show it as How it works.",
+        ),
+        Some(text) if text.chars().count() < LEAST_HOW => format!(
+            "How it works says little ({} characters): a few sentences on what it does, \
+             where it is found and how it is used, at least {LEAST_HOW} characters.",
+            text.chars().count()
+        ),
+        Some(_) => return None,
+    };
+    Some(Finding::warning("lint.how-it-works", id, message).plugin(id))
 }
 
 /// The profiles the pseudo-language is drawn on, among those asked for:
@@ -404,6 +438,10 @@ fn known_ids(session: &Session) -> Vec<String> {
 
 /// Draws the screens and widgets of the plugins looked at in English and
 /// in the pseudo-language and compares what is drawn.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn drawn(
     context: &Context,
     looked: &[String],
@@ -558,4 +596,20 @@ fn drawn(
         }
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_code_plugin_says_how_it_works_at_some_length() {
+        let missing = how_it_works("apple", None).unwrap();
+        assert_eq!(missing.check, "lint.how-it-works");
+        assert!(missing.message.contains("Manifest::how"));
+        let short = how_it_works("apple", Some("Shows apples.")).unwrap();
+        assert!(short.message.contains("13 characters"), "{}", short.message);
+        assert!(how_it_works("apple", Some(&"Shows apples. ".repeat(10))).is_none());
+        assert!(how_it_works(paperpaw_core::sdk::builtin::CORE_PLUGIN.as_str(), None).is_none());
+    }
 }

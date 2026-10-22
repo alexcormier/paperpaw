@@ -1,0 +1,5 @@
+The browser opens web pages in the reader, which shows their text like a book, and fetches books and fonts. It needs a network connection, and it is off until you switch it on in the plugin manager.
+
+Open Browser from the Tools menu. The start screen offers Search or enter address, your bookmarks and the pages you read lately. Hold an entry (with buttons, hold Select) to open it, delete it or add it to the bookmarks. Links in a page lead to further pages, and Back returns to the page before.
+
+An address that is an EPUB or a text file goes to the library, a font to the fonts folder (choose it after a restart), anything else to Downloads.

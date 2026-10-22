@@ -4,8 +4,11 @@
 //! the room left said where the device can tell, and a plugin's page with
 //! its source and screenshots.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 
@@ -281,6 +284,35 @@ fn a_plugins_page_says_where_its_source_is() {
     // The screenshot fetched when shown.
     shopping.choose("Screenshots");
     shopping.request(&format!("{BASE}/shots/apple-1.png"));
+}
+
+#[test]
+fn a_plugins_page_says_how_it_works() {
+    let mut shopping = Shopping::new(&fruit());
+    shopping.choose("Reading");
+    shopping.choose("Apple");
+    let more = r#""description": "First this.\n\nThen \"that\".","#;
+    shopping.serve(&page_url("apple"), page("apple", "1.0.0", more).as_bytes());
+    // Shown as a text to read paged.
+    shopping.choose("How it works");
+    let text = paperpaw_sdk::read_file(
+        shopping.kernel.storage(),
+        ".paperpaw/plugins/store/how.txt",
+        1 << 16,
+    )
+    .map(|data| String::from_utf8(data).unwrap())
+    .unwrap();
+    assert_eq!(text, "Apple\n\nFirst this.\n\nThen \"that\".\n");
+}
+
+#[test]
+fn a_plugin_that_says_nothing_more_has_no_how_it_works() {
+    let mut shopping = Shopping::new(&fruit());
+    shopping.choose("Reading");
+    shopping.choose("Apple");
+    shopping.serve(&page_url("apple"), page("apple", "1.0.0", "").as_bytes());
+    let shown = shopping.shown();
+    assert!(!shown.contains("How it works"), "{shown}");
 }
 
 fn many(count: usize) -> String {

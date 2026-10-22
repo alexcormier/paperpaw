@@ -6,8 +6,11 @@
 //! says so; the reader's menu (the bar at the top) and its panel at the
 //! bottom are reached and used by buttons as by touch.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

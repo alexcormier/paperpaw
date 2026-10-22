@@ -51,10 +51,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_number(
 .advanced()
 .described("diagnostics.setting.pages.help")];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Diagnostics {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Diagnostics", paperpaw_sdk::package_version!())
             .description("A test screen for gray levels, buttons, touch and refresh modes.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

@@ -60,10 +60,17 @@ static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
 )
 .described("menu.setting.style.help")];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Menu {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Menu", Version::new(0, 1, 0))
             .description("The menu at the bottom of the screen, with actions and settings.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
@@ -86,6 +93,16 @@ impl Plugin for Menu {
             Box::new(|env, params| Box::new(panel::PanelScreen::open(env, params))),
         ))?;
         r.bind_slot(slots::PANEL, PANEL, Priority::DEFAULT)?;
+        paperpaw_sdk::help::add(
+            r,
+            PANEL.as_str(),
+            &[
+                paperpaw_sdk::help::Hint::any("menu.help.panel"),
+                paperpaw_sdk::help::Hint::touch("menu.help.panel-tap"),
+                paperpaw_sdk::help::Hint::touch("menu.help.panel-close"),
+                paperpaw_sdk::help::Hint::buttons("menu.help.panel-buttons"),
+            ],
+        )?;
         r.add_screen(ScreenSpec::new(
             NOTICE,
             "menu.title",

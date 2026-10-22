@@ -79,11 +79,17 @@ pub(crate) const INSTALLER: Installer = Installer::new(PLUGIN, DOWNLOADED);
 #[derive(Debug, Default)]
 pub struct Store;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Store {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "More plugins", Version::new(0, 1, 0)).description(
                 "Finds plugins for this device on the internet and installs, updates and removes them.",
-            ).uses(paperpaw_sdk::Uses::NETWORK)
+            ).how(&HOW).uses(paperpaw_sdk::Uses::NETWORK)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

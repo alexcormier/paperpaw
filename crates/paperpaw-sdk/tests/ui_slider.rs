@@ -4,8 +4,11 @@
 //! keep to the margins and nothing is drawn outside the row. Broken
 //! ranges (as a broken plugin may give) do not bring it down.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod support;
 

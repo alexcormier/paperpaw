@@ -9,8 +9,11 @@
 //! than its box, a page laid out again from a kept position is the same,
 //! and a position kept at one width is on the page shown at another.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::collections::BTreeSet;
 

@@ -2,7 +2,11 @@
 //! and choices, specs kept in the program and changed later, scopes,
 //! previews and placements, presets, and the sorted map they are kept in.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::borrow::Cow;
 use std::collections::BTreeMap;

@@ -1,7 +1,10 @@
 //! Labels, icons, headings, messages and empty screens: text drawn in
 //! its room, shortened where it does not fit.
 
-#[allow(clippy::wildcard_imports)]
+#[allow(
+    clippy::wildcard_imports,
+    reason = "a part of the module, which shares its imports"
+)]
 use super::*;
 
 /// Lines of a row's note, e.g. a setting's description.
@@ -243,7 +246,10 @@ pub fn draw_row_icon(
 
 /// Draws a row with `title` and a switch for `on` at its end, with
 /// `note` below when `noted` (see [`draw_noted_row`]).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_switch_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -349,7 +355,10 @@ pub(super) fn cap_baseline(font: &FontHandle<'_>, band: Rect, size: f32) -> i32 
 }
 
 /// [`draw_label`] on `baseline` rather than centred in `area`.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(super) fn draw_label_on(
     canvas: &mut Canvas<'_>,
     font: &FontHandle<'_>,
@@ -508,7 +517,14 @@ pub fn fit(font: &FontHandle<'_>, size: f32, text: &str, width: f32) -> String {
 /// filled: a large `icon` in gray, a short `title`, and `text` below it,
 /// together a little above the middle of `area`. The icon is left out
 /// where there is not room for all of it, the text shortened last.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn draw_empty(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

@@ -4,8 +4,11 @@
 //! and the logo beside them (or the picture the logo setting names, where
 //! it is there); when they cannot be written, nothing is opened.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::RefCell;
 use std::rc::Rc;

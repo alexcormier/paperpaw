@@ -1,0 +1,5 @@
+Einfache Textdateien (.txt) öffnen sich aus der Bibliothek wie jedes Buch, ganz ohne Einrichtung. Das Plugin liest UTF-8, UTF-16 und Windows-1252 und erkennt die Kodierung selbst.
+
+Absätze folgen den Leerzeilen der Datei; hat eine Datei keine, ist jede Zeile ein Absatz. Bei Dateien von Project Gutenberg bleibt der Lizenztext am Anfang und am Ende weg, und Titel und Autor stammen aus dem Kopf der Datei.
+
+Die Datei wird nie ganz geladen, daher öffnen sich auch sehr große Texte auf kleinen Geräten.

@@ -1,0 +1,5 @@
+Beim ersten Öffnen eines Bildschirms sagt eine kurze Notiz darüber, was seine Bedienelemente tun: die Teile des Bildschirms, auf die ein Tippen wirkt, eingerahmt, und was die Tasten tun.
+
+Ein Tippen oder eine beliebige Taste schließt die Notiz, und sie kommt für diesen Bildschirm nicht wieder. Keine Hinweise mehr schaltet alle ab.
+
+In den Einstellungen unter System schaltet Hinweise für neue Bildschirme sie ein oder aus, und Hinweise wieder zeigen lässt die Notiz jedes Bildschirms noch einmal erscheinen.

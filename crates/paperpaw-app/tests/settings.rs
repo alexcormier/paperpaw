@@ -2,8 +2,11 @@
 //! below its name, in every language shipped;
 //! sliders show their value with its unit.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::{
@@ -47,7 +50,9 @@ fn is_widget_group(kernel: &Kernel, group: &str) -> bool {
 /// The standard app, started.
 fn app() -> Kernel {
     let storage = MemoryStorage::new().with(".paperpaw/plugins/setup/done", "");
-    let builder = Kernel::builder(DEVICE).storage(storage);
+    let builder = Kernel::builder(DEVICE)
+        .storage(storage)
+        .user_config("[help]\nshow = false\n");
     let mut kernel = paperpaw_app::install(builder, fonts()).build().unwrap();
     let _ = kernel.start(Instant(0));
     kernel

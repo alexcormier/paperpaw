@@ -149,7 +149,7 @@ impl Emulator {
         // Started as the first-run setup left it, and without the tips on
         // gestures a new reader sees once.
         let config = format!(
-            "[core]\nlanguage = {}\n{night}[home]\ngesture-tips = false\n",
+            "[core]\nlanguage = {}\n{night}[help]\nshow = false\n",
             self.language
         );
         let mut device = Device::in_memory(

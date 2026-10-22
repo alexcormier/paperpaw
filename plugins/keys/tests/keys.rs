@@ -3,8 +3,11 @@
 //! go back or move with is refused, everything changed is taken back in
 //! one go, and screens of the same name can each be chosen as a place.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::{ButtonState, InputEvent, Rotation};
@@ -195,7 +198,8 @@ fn every_change_is_taken_back_with_the_buttons() {
     // Up from the first row: the last, *Reset buttons and gestures*.
     test.press("up");
     test.press("confirm");
-    // *Reset* is the first choice.
+    // The focus on *Cancel*, the safe answer: left to *Reset*.
+    test.press("left");
     test.press("confirm");
     let config = test.config();
     assert!(!config.contains("button.menu"), "{config}");

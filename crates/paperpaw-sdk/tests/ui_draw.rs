@@ -5,8 +5,11 @@
 //! the same margins, and a header's or pager's arrows are hit where they
 //! are drawn, on touch screens only.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod support;
 

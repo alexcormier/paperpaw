@@ -6,8 +6,11 @@
 //! delete the reader's own files, send messages larger than the device
 //! holds.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::rc::Rc;
 
@@ -172,6 +175,10 @@ fn kernel_on(device: DeviceInfo, storage: &Shared, config: &str) -> Kernel {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn a_session_with_calibre() {
     let storage = Shared(Rc::new(MemoryStorage::new()));
     let mut kernel = kernel(&storage, CONFIG);

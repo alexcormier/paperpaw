@@ -1,0 +1,5 @@
+The keyboard opens whenever something needs text: a search, a password, a note or a setting. It works by touch and with buttons alone.
+
+With buttons, left and right move along a row, the page buttons move between rows, Select presses a key and Back cancels. Hold a letter (with buttons: hold Select on it) for accents such as é and è. OK finishes. Paste inserts the clipboard text, and Phone, where offered, lets you type on your phone instead.
+
+Under System in the settings, Keyboard layouts chooses the layouts. By default it follows the menu language; with several, a key switches between them.

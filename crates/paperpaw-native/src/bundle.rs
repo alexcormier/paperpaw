@@ -143,6 +143,10 @@ impl Bundle {
     /// The bundle `source` holds, checked whole against the format and
     /// against `image` (the SHA-256 the app image it must lie behind ends
     /// with), in `room` bytes at most.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub fn read(
         source: &mut dyn Source,
         image: &[u8; 32],

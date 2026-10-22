@@ -2,8 +2,11 @@
 //! the home screen and the default fonts: each shows the words, in every
 //! frame, and says what to do while there are none.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::{Rotation, SystemStatus, WallClock};
@@ -72,7 +75,7 @@ fn one(buf: &mut [u8]) -> bool {
 /// [`home`] on a device with `device`.
 fn home_on(storage: MemoryStorage, page: &str, config: &str, device: Device) -> (String, usize) {
     let user = format!(
-        "[core]\nlanguage = en\n[home]\ngesture-tips = false\ncolumns = 4\npage-1 = \"{page}\"\n[vocabulary]\n{config}\n"
+        "[core]\nlanguage = en\n[help]\nshow = false\n[home]\ncolumns = 4\npage-1 = \"{page}\"\n[vocabulary]\n{config}\n"
     );
     let mut builder = Kernel::builder(DEVICE);
     if device == Device::Random {

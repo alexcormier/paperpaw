@@ -41,6 +41,10 @@ impl Emulator {
     ///   "size"}`.
     ///
     /// Secrets are never said (`•`), as on an X4.
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub fn command(&mut self, line: &str, now_ms: u64) -> Result<String, String> {
         let command = remote::parse(line).ok_or_else(|| format!("no command: {line}"))?;
         self.advance(now_ms);

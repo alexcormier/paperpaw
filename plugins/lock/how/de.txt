@@ -1,0 +1,7 @@
+Die Displaysperre fragt nach einer PIN, einem Muster oder einem Passwort, wenn PaperPaw startet und wenn das Gerät aufwacht. Anfangs ist sie aus. Sie hält andere vom einfachen Benutzen ab, nicht jemanden, der die Dateien nimmt.
+
+Richte sie in den Einstellungen unter System ein, als Displaysperre: Gib den bisherigen Code ein, falls es einen gibt, wähle die Art und dann den neuen Code zweimal. Ein Muster gibt es nur auf Touchscreens.
+
+Nach fünf falschen Versuchen wartet der nächste eine halbe Minute. Jetzt sperren sperrt sofort und lässt sich auf eine Taste, eine Geste oder eine Regel legen. Beim Aufwachen sperren lässt sich ausschalten, außer wo jedes Aufwachen ein Start ist, wie beim X4 im Akkubetrieb.
+
+Daneben die Touch-Sperre: Touch sperren im Schnellpanel und im Lesemenü lässt Tippen, Wischen und den Stift nichts tun, die Tasten aber weiter gehen, etwa um mit der Hand auf dem Bildschirm zu lesen. Zum Entsperren zweimal mit einem Finger tippen und ihn kurz liegen lassen; auf dem X4 Pro geht es auch mit gehaltener Ein-Taste.

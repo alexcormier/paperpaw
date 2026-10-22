@@ -34,10 +34,17 @@ pub const FORMAT: Id = Id::new_static("format-txt.txt");
 #[derive(Debug, Default)]
 pub struct TxtFormat;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for TxtFormat {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Plain text", Version::new(0, 1, 0))
             .description("Opens plain text files (.txt).")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

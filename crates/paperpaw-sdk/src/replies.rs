@@ -1,7 +1,8 @@
 //! What comes back to a plugin, as typed events: the answer to an HTTP
 //! request ([`HttpReply`]), what happens to its server ([`ServerNotice`])
-//! or its sockets ([`SocketNotice`]), and what the reader typed or chose
-//! when asked ([`Typed`], [`Chosen`], see [`ask`](crate::ask)).
+//! or its sockets ([`SocketNotice`]), and what the reader typed, chose or
+//! answered when asked ([`Typed`], [`Chosen`], [`Confirmed`], see
+//! [`ask`](crate::ask)).
 //!
 //! A plugin names the event that brings it, e.g.
 //! `const FETCHED: Event<HttpReply> = Event::new("news.fetched")`, passes
@@ -456,6 +457,45 @@ impl EventData for Chosen {
     }
 }
 
+/// The answer to a yes or no question ([`ask::confirm`](crate::ask::confirm)).
+/// Made with [`Confirmed::new`] (a screen of one's own on slot
+/// [`CONFIRM`](crate::builtin::slots::CONFIRM) answers so). No answer
+/// comes when the reader goes back.
+#[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Confirmed {
+    /// Yes, or no.
+    pub yes: bool,
+    /// The parameters the question was asked with.
+    pub context: Params,
+}
+
+impl Confirmed {
+    /// The answer `yes` to the question asked with `context`.
+    pub fn new(yes: bool, context: Params) -> Self {
+        Self { yes, context }
+    }
+}
+
+impl EventData for Confirmed {
+    fn to_params(&self) -> Params {
+        let answer = if self.yes { "yes" } else { "no" };
+        with_context(Params::new(), &self.context).with(crate::ui::confirm::ANSWER, answer)
+    }
+
+    fn from_params(p: &Params) -> Option<Self> {
+        let yes = match p.get(crate::ui::confirm::ANSWER)? {
+            "yes" => true,
+            "no" => false,
+            _ => return None,
+        };
+        Some(Self {
+            yes,
+            context: context(p, &[crate::ui::confirm::ANSWER]),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -510,5 +550,11 @@ mod tests {
         assert_eq!(Typed::from_params(&typed.to_params()), Some(typed.clone()));
         typed.typing = true;
         assert_eq!(Typed::from_params(&typed.to_params()), Some(typed));
+        for yes in [true, false] {
+            let confirmed = Confirmed::new(yes, Params::new().with("book", "a.epub"));
+            let back = Confirmed::from_params(&confirmed.to_params());
+            assert_eq!(back, Some(confirmed));
+        }
+        assert_eq!(Confirmed::from_params(&Params::new()), None);
     }
 }

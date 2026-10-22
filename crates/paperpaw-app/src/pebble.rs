@@ -12,6 +12,12 @@ use paperpaw_core::sdk::{Id, Manifest, Plugin, RegisterError, Registrar, Version
 #[derive(Debug)]
 pub struct Pebble;
 
+/// Its name and what it does, in each language.
+const TEXTS: [&str; 2] = [
+    include_str!("../i18n/pebble/en.ini"),
+    include_str!("../i18n/pebble/de.ini"),
+];
+
 /// Its settings: the rest of PaperPaw's look stays as it is.
 const DEFAULTS: [(&str, &str); 3] = [
     ("core.ui-groups", "core.groups.cards"),
@@ -19,14 +25,24 @@ const DEFAULTS: [(&str, &str); 3] = [
     ("home.continue.frame", "core.frame.card"),
 ];
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/pebble/en.txt")),
+    ("de", include_str!("../how/pebble/de.txt")),
+];
+
 impl Plugin for Pebble {
     fn manifest(&self) -> Manifest {
         Manifest::new(Id::new_static("pebble"), "Pebble", Version::new(1, 0, 0))
             .description("A theme for touch screens: lists on rounded cards, a light highlight.")
+            .how(&HOW)
             .uses(paperpaw_core::sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        for text in TEXTS {
+            r.add_translations(Cow::Borrowed(text))?;
+        }
         for (setting, value) in DEFAULTS {
             r.set_setting_default(Id::new_static(setting), Cow::Borrowed(value))?;
         }

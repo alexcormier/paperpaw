@@ -1,8 +1,11 @@
 //! Damaged and crafted images, built here byte by byte: none may panic,
 //! ask for memory beyond its size or take long to decode.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::time::{Duration, Instant};
 

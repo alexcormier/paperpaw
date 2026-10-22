@@ -4,8 +4,11 @@
 //! wakes it, turning its screen, restarting when a plugin asks, speaking
 //! a book aloud.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
@@ -79,7 +82,7 @@ fn run_in(library: &Path, profile: &str, script: &str, args: &[&str]) -> Run {
     Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"))
         .args(["--profile", profile, "--headless", "--library"])
         .arg(library)
-        .args(["--set", "home.gesture-tips=false"])
+        .args(["--set", "help.show=false"])
         .args(["--script", script])
         .args(args)
         .output()

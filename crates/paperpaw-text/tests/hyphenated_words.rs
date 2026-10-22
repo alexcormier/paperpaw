@@ -3,8 +3,11 @@
 //! the patterns allow it for the whole word, also when a word runs over
 //! more than two lines, and breaking never changes the text.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::sync::OnceLock;
 

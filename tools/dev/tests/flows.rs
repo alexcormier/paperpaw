@@ -2,8 +2,11 @@
 //! picture written with `--bless` is compared, and a flow that expects
 //! what is not there fails with the line, what was there and a picture.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::path::PathBuf;
 
@@ -82,7 +85,7 @@ fn flows_pass_and_fail_where_they_should() {
     assert_eq!(failed.len(), 1, "{}", report.text(Level::Info));
     let failure = failed[0];
     assert!(
-        failure.place.ends_with("battery.flow:17"),
+        failure.place.ends_with("battery.flow:14"),
         "{}",
         failure.place
     );

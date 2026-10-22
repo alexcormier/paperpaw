@@ -2,8 +2,11 @@
 //! with the network answered here (no real requests): what they show,
 //! that they draw, and when the weather is asked for.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{HttpResponse, Io, Kernel};
 use paperpaw_platform::{
@@ -53,7 +56,7 @@ impl App {
             storage = storage.with(KEPT, include_str!("../testdata/weather.txt.v1"));
         }
         let config = format!(
-            "[core]\nlanguage = en\n[home]\npage-1 = weather.now 0/0 4x2, weather.forecast 0/2 4x2\n{config}"
+            "[core]\nlanguage = en\n[help]\nshow = false\n[home]\npage-1 = weather.now 0/0 4x2, weather.forecast 0/2 4x2\n{config}"
         );
         let builder = Kernel::builder(DEVICE)
             .storage(storage)

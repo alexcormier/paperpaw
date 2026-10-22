@@ -2,7 +2,11 @@
 //! one pass, every entry is found as itself, and what `find` gives is in
 //! bounds, in order, without overlaps and made of entries.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_sdk::decorations::PageWord;
 use paperpaw_sdk::document::Locator;

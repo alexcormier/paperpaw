@@ -1,0 +1,5 @@
+Die Bibliothek listet die Bücher in deinem Bibliotheksordner, jedes mit Cover, Titel, Autor und wie weit du es gelesen hast. Das Buch, das du zuletzt gelesen hast, steht oben als Karte, zum Weiterlesen genügt also ein Tippen oder ein Druck auf Wählen.
+
+Über den Büchern wählst du, was angezeigt wird: alle, begonnene, ungelesene oder gelesene Bücher oder die Regale (nach Autor, Reihe, Schlagwort, Favoriten). Tippe ein Buch an, um es zu lesen; drücke es lange (mit Tasten: Wählen halten) für Buchinfo, Favoriten, Verschieben ins Archiv oder Löschen.
+
+Den Bibliotheksordner stellst du in den Einstellungen unter Bibliothek bei Bibliotheksordner ein, dort kannst du die Bücher auch als Raster von Covern zeigen. Für alle anderen Dateien gibt es Dateien im Menü Werkzeuge.

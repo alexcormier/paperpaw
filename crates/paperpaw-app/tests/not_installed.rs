@@ -2,8 +2,11 @@
 //! 0024) are named in a notice, with why; one notice shows at a time, so
 //! several share it, and safe mode's wins.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{CodeFile, CodeLoader, Kernel};
 use paperpaw_platform::{
@@ -73,7 +76,9 @@ fn shown_in(
     let storage = MemoryStorage::new().with(".paperpaw/plugins/setup/done", "");
     let builder = Kernel::builder(DEVICE)
         .storage(storage)
-        .user_config(format!("[core]\nlanguage = {language}\n"))
+        .user_config(format!(
+            "[help]\nshow = false\n[core]\nlanguage = {language}\n"
+        ))
         .code_plugins(native, Box::new(NoCode));
     let builder = match safe_mode {
         Some(safe_mode) => builder.safe_mode(safe_mode),

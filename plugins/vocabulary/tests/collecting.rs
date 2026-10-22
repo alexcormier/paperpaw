@@ -3,8 +3,11 @@
 //! on one line), not when switched off, not when blank; the list shows
 //! them newest first, deletes one held, and exports all for flash cards.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::rc::Rc;
 

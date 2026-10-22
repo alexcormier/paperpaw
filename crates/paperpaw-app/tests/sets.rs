@@ -3,8 +3,11 @@
 //! get online, update, install more and recover; the list of crates the
 //! firmware writes into its image (ADR 0022) is what is registered.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{Kernel, KernelBuilder};
 use paperpaw_platform::{DeviceInfo, DisplayInfo, InputCaps, MemoryClass, PixelFormat, Rotation};
@@ -60,7 +63,7 @@ fn fonts() -> paperpaw_app::Fonts {
 fn builder() -> KernelBuilder {
     Kernel::builder(DEVICE)
         .storage(MemoryStorage::new().with(".paperpaw/plugins/setup/done", ""))
-        .user_config("[core]\nlanguage = en\n")
+        .user_config("[help]\nshow = false\n[core]\nlanguage = en\n")
 }
 
 /// The plugins registered, with their states.
@@ -182,7 +185,9 @@ fn a_store_plugin_switched_off_before_stays_off() {
         );
     let ran_before = paperpaw_app::ran_before(&storage);
     let kernel = paperpaw_app::install_with(
-        Kernel::builder(DEVICE).storage(storage),
+        Kernel::builder(DEVICE)
+            .storage(storage)
+            .user_config("[help]\nshow = false\n"),
         fonts(),
         paperpaw_app::StorePlugins::Off(&|_| ran_before),
     )

@@ -1,0 +1,5 @@
+Lesehilfen verändern, wie der Text eines Buchs beim Lesen aussieht. Beide sind zuerst aus und gelten für jedes Buch.
+
+Du findest sie in den Einstellungen unter Lesen, im Abschnitt Lesehilfen. Wortanfänge fett setzt die erste Hälfte jedes Worts fett, was manchen das Lesen erleichtert. Wörter ersetzen nimmt Paare wie "daß = dass; Thür = Tür", durch Semikolon getrennt.
+
+Ersetzt werden nur ganze Wörter, genau so geschrieben, wie du sie eingibst, ein Teil eines längeren Worts bleibt also unberührt. Die Buchdatei selbst wird nicht verändert.

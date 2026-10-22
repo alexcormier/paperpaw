@@ -300,7 +300,10 @@ fn minute_shows(env: &Env<'_>) -> String {
 
 /// Draws `text` `size` pixels large in the row `row`, placed as `align`
 /// says, shortened with "…" where it is wider.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn label(
     canvas: &mut Canvas<'_>,
     font: &FontHandle<'_>,

@@ -14,8 +14,11 @@
 //! pictures are small enough to keep (`ui::Thumbnail`) this cannot tell,
 //! as it does not see how large they are drawn.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::RefCell;
 use std::fmt::Write as _;
@@ -192,7 +195,7 @@ impl App {
             .storage(storage)
             .frame_rows(FRAME_ROWS)
             .row_align(8)
-            .user_config("[core]\nlanguage = en\n");
+            .user_config("[help]\nshow = false\n[core]\nlanguage = en\n");
         let mut kernel = add(paperpaw_app::install(builder, fonts()))
             .build()
             .unwrap();

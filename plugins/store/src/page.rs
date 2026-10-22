@@ -69,6 +69,8 @@ enum Row {
     Shots,
     /// Where its source is, as a QR code.
     Source,
+    /// How it works, at length, to read paged.
+    How,
 }
 
 /// What the page shows above its rows.
@@ -181,6 +183,9 @@ impl PageScreen {
         if self.shown() == Shown::Plugin
             && let Details::Here(plugin) = &self.details
         {
+            if !plugin.more.description.is_empty() {
+                rows.push(Row::How);
+            }
             if !plugin.more.shots.is_empty() {
                 rows.push(Row::Shots);
             }
@@ -411,6 +416,18 @@ impl PageScreen {
                     cx.command(crate::source::open(&plugin.name, &details.more.source));
                 }
             }
+            Some(Row::How) => {
+                if let Details::Here(details) = &self.details {
+                    let text = format!("{}\n\n{}\n", plugin.name, details.more.description);
+                    let file = format!("{}/how.txt", Env::plugin_dir(crate::PLUGIN.as_str()));
+                    match paperpaw_sdk::readers::show_text(env.storage, &file, &text) {
+                        Ok(open) => cx.command(open),
+                        Err(_) => {
+                            cx.command(Command::Notify(env.i18n.tr("store.how-failed").into()))
+                        }
+                    }
+                }
+            }
             Some(Row::Remove) => {
                 let title = env
                     .i18n
@@ -464,6 +481,7 @@ impl PageScreen {
                 (tr("store.shots"), format!("{count}  ›"))
             }
             Row::Source => (tr("store.source"), String::from("›")),
+            Row::How => (tr("store.how"), String::from("›")),
         }
     }
 
@@ -574,6 +592,10 @@ fn facts(
 }
 
 impl Screen for PageScreen {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let rows = self.rows(env);

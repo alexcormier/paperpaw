@@ -1,0 +1,5 @@
+Wallabag holt die Artikel, die du in Wallabag gespeichert hast, als Bücher mit ihren Bildern in den Ordner Wallabag deiner Bibliothek. Zuerst ist es aus; schalte es bei den Plugins ein.
+
+Öffne Wallabag unter Werkzeuge. Gib Server, Benutzernamen und Passwort ein sowie ID und Secret eines API-Clients, den du in Wallabag unter API-Clients verwalten anlegst. Wähle dann Artikel holen, bei eingeschaltetem WLAN.
+
+Artikel, die du zu Ende gelesen hast, werden beim nächsten Holen in Wallabag archiviert und ihre Bücher entfernt.

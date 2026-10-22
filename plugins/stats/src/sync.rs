@@ -129,6 +129,10 @@ pub(crate) fn move_password(env: &Env<'_>, out: &mut Vec<Command>) {
     if !old.is_empty() && env.secrets.get(SECRET).is_none() {
         out.push(save_password(&old));
     }
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "the old password is in the secrets now; a file left behind is read once more and changes nothing"
+    )]
     let _ = env.storage.remove(&path);
 }
 
@@ -176,6 +180,10 @@ fn last_upload(env: &Env<'_>) -> String {
 /// whichever folder was set then).
 fn forget_other_uploads(env: &Env<'_>, keep: &str) {
     let mut others = Vec::new();
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "a folder that cannot be listed has no old uploads to forget"
+    )]
     let _ = env.storage.list(&dir(), &mut |entry| {
         let path = file(entry.name);
         if entry.name.starts_with(FILE) && entry.name.ends_with(".sync") && path != keep {
@@ -183,6 +191,10 @@ fn forget_other_uploads(env: &Env<'_>, keep: &str) {
         }
     });
     for path in others {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "an old upload left behind only takes room"
+        )]
         let _ = env.storage.remove(&path);
     }
 }
@@ -215,6 +227,10 @@ impl Sync {
             // None yet: this is the first.
             404 => None,
             status => {
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "a download left behind is written over by the next sync"
+                )]
                 let _ = env.storage.remove(&incoming);
                 return self.fail(env, &status.to_string(), out);
             }
@@ -225,6 +241,10 @@ impl Sync {
             .then_some(self.last_upload.as_str());
         let upload = file(FILE);
         let result = merge::merge(env.storage, income, cached, Some(&upload), &dir());
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a download left behind is written over by the next sync"
+        )]
         let _ = env.storage.remove(&incoming);
         let outcome = match result {
             Ok(outcome) => outcome,
@@ -275,6 +295,10 @@ impl Sync {
                 // Where it cannot be kept, the one before stays: it can
                 // only tell less, never more, as deleted there.
                 if paperpaw_sdk::files::move_to(env.storage, &upload, &self.last_upload).is_err() {
+                    #[expect(
+                        clippy::let_underscore_must_use,
+                        reason = "an upload left behind is written over by the next sync"
+                    )]
                     let _ = env.storage.remove(&upload);
                 }
                 forget_other_uploads(env, &self.last_upload);
@@ -291,11 +315,19 @@ impl Sync {
             }
             // Changed in between: again, from the download.
             412 if self.attempt < ATTEMPTS => {
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "an upload left behind is written over by the next sync"
+                )]
                 let _ = env.storage.remove(&upload);
                 self.running = false;
                 self.start(env, out);
             }
             _ => {
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "an upload left behind is written over by the next sync"
+                )]
                 let _ = env.storage.remove(&upload);
                 self.fail(env, &status, out);
             }

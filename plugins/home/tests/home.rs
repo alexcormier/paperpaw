@@ -2,8 +2,11 @@
 //! margin, pages are edited and added where their settings are, and
 //! widgets are made anew only when what makes them changed.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -142,7 +145,7 @@ impl Home {
 
     /// The same on `device`.
     fn on(device: DeviceInfo, settings: &str) -> Self {
-        let config = format!("[core]\nlanguage = en\n[home]\ngesture-tips = false\n{settings}");
+        let config = format!("[core]\nlanguage = en\n[help]\nshow = false\n[home]\n{settings}");
         let mut kernel = Kernel::builder(device)
             .storage(MemoryStorage::new())
             .user_config(&config)

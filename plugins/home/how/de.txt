@@ -1,0 +1,5 @@
+Die Startseite besteht aus Seiten, jede ein Raster aus Widgets und Werkzeugen wie auf einem Handy. Anfangs sind die Uhr, das Buch, das du liest, und die zuletzt gelesenen Bücher auf einer Seite, auf der nächsten alle Werkzeuge.
+
+Tippe ein Element an, um es zu öffnen, und wische oder nimm die Blättertasten, um die Seite zu wechseln. Nur mit Tasten gehen die Pfeiltasten von einem Element zum nächsten, und Wählen öffnet es.
+
+Zum Umbauen drückst du die Startseite lange, tippst den Stift unter der Seite an oder wählst im Menü Startseite bearbeiten. Elemente ziehst du an ihren Platz oder tippst eines für seine Optionen an, auch mit Tasten; dort gibt es auch Widget hinzufügen. Spalten und Zeilen stehen in den Einstellungen unter Startseite.

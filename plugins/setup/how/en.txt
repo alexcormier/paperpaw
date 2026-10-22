@@ -1,0 +1,5 @@
+Setup is a short guide through the settings that matter, shown once, the first time PaperPaw starts. Each page asks one thing, such as the language, the buttons, the text size, the time zone or Wi-Fi, with a sensible answer already chosen, so Next is always right. Steps this device does not need are left out.
+
+Tap the buttons, or use the up and down buttons and Select. Skip on the first page leaves the setup at once. The last page tells where your books come from.
+
+To run it again, open the settings and choose Set up PaperPaw. Everything chosen here can be changed in the settings later.

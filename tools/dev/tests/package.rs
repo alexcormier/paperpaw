@@ -2,8 +2,11 @@
 //! known, a fixture wrong in every file is caught, by the files and on
 //! the device; releases and `.ppn` files.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::path::{Path, PathBuf};
 
@@ -117,9 +120,26 @@ fn a_plugin_wrong_everywhere_is_caught() {
 #[test]
 fn the_samples_load_and_a_release_is_compared() {
     let root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../../samples/plugins");
+    // A theme as a preset beside them, which PaperPaw 0.3 could not read.
+    let themes = std::env::temp_dir().join(format!("paperpaw-dev-themes-{}", std::process::id()));
+    std::fs::create_dir_all(&themes).unwrap();
+    std::fs::write(
+        themes.join("plugin.ini"),
+        "[plugin]\nid = themes\nname = Themes\ndescription = A theme.\nversion = 1.0.0\nformats = 1\n",
+    )
+    .unwrap();
+    std::fs::write(
+        themes.join("presets.ini"),
+        "[tall]\nkind = core.theme\nname = Tall\ndescription = Taller rows.\ncore.ui-row = 180\n",
+    )
+    .unwrap();
     let mut context = context(
         "samples",
-        &[root.join("airy-theme"), root.join("reading-nook")],
+        &[
+            root.join("airy-theme"),
+            root.join("reading-nook"),
+            themes.clone(),
+        ],
     );
     context.release = Some("0.3.0".into());
     let report = run(&context);
@@ -139,6 +159,7 @@ fn the_samples_load_and_a_release_is_compared() {
         .filter(|f| f.level == Level::Error && f.check != "package.release")
         .collect();
     assert!(errors.is_empty(), "{text}");
+    let _ = std::fs::remove_dir_all(&themes);
 }
 
 #[test]

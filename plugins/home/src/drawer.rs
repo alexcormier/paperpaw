@@ -6,7 +6,6 @@
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::actions;
-use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::widgets::grid;
 use paperpaw_sdk::{
@@ -142,116 +141,5 @@ impl Screen for DrawerScreen {
             }
             _ => Handled::No,
         }
-    }
-}
-
-/// Whether the hint on gestures shows (once; switched off when shown).
-pub(crate) const TIPS_SETTING: Setting<bool> = Setting::new("home.gesture-tips");
-
-/// Whether the hint on gestures is due: on touch screens, until shown.
-pub(crate) fn tips_due(env: &Env<'_>) -> bool {
-    env.device.input.touch && env.settings.read(&TIPS_SETTING)
-}
-
-/// The hint on the gestures, in a box in the middle of the screen: what
-/// the edges do, and that a long press arranges the home screen.
-pub(crate) struct TipsScreen {
-    style: UiStyle,
-    region: Rect,
-    ok: Rect,
-}
-
-/// The lines of the hint, in order.
-const TIPS: [&str; 5] = [
-    "home.tips.home",
-    "home.tips.tools",
-    "home.tips.quick",
-    "home.tips.back",
-    "home.tips.arrange",
-];
-
-impl TipsScreen {
-    pub(crate) fn new(env: &Env<'_>) -> Self {
-        let style = UiStyle::new(env);
-        let display = env.device.display;
-        let line = style.row as u16;
-        let width = display.width.saturating_sub(4 * style.margin as u16);
-        // OK grows on touch screens, and its row with it.
-        let ok_row = style.touch_row(style.row) as u16;
-        let height = style.row as u16 + ok_row + line * TIPS.len() as u16 + style.gap as u16 * 2;
-        let region = Rect::new(
-            (display.width - width) / 2,
-            display.height.saturating_sub(height) / 2,
-            width,
-            height,
-        );
-        let button_w = width / 3;
-        let ok = Rect::new(
-            region.x + (width - button_w) / 2,
-            region.y + height - ok_row - style.gap as u16 / 2,
-            button_w,
-            ui::button_height(&style, Rect::new(0, 0, 0, ok_row)),
-        );
-        Self { style, region, ok }
-    }
-}
-
-impl Screen for TipsScreen {
-    /// Only *Back* shows: nothing else does more than close it.
-    fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
-        paperpaw_sdk::Hint::only_back(action)
-    }
-
-    fn region(&self, _: &Env<'_>) -> Option<Rect> {
-        Some(self.region)
-    }
-
-    /// Shown once: switched off as it shows.
-    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
-        cx.command(Command::set(&TIPS_SETTING, false));
-    }
-
-    fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let style = self.style;
-        let r = self.region;
-        canvas.fill(r, Color::WHITE);
-        ui::stroke_round(canvas, &style, r, style.line * 2, Color::BLACK);
-        let Some(font) = style.font(env) else {
-            return;
-        };
-        let margin = style.margin as u16;
-        let title = Rect::new(
-            r.x + margin,
-            r.y + style.gap as u16,
-            r.width - 2 * margin,
-            style.row as u16,
-        );
-        // Centred, as the lines below.
-        let text = env.i18n.tr("home.tips.title");
-        let x =
-            f32::from(title.x) + (f32::from(title.width) - font.measure(style.title, text)) / 2.0;
-        ui::draw_label(canvas, &font, style.title, x, title, text, Color::BLACK);
-        let line = style.row as u16;
-        for (n, key) in TIPS.iter().enumerate() {
-            let row = Rect::new(r.x, title.y + title.height + n as u16 * line, r.width, line);
-            ui::draw_message(canvas, env, &style, row, env.i18n.tr(key));
-        }
-        let ok = env.i18n.tr("home.tips.ok");
-        ui::draw_button(canvas, env, &style, self.ok, ok, false, true);
-    }
-
-    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        if *action == actions::CONFIRM || *action == actions::BACK {
-            cx.command(Command::Back);
-            return Handled::Yes;
-        }
-        Handled::Yes
-    }
-
-    fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
-        if gesture.kind == GestureKind::Tap {
-            cx.command(Command::Back);
-        }
-        Handled::Yes
     }
 }

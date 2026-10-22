@@ -581,6 +581,10 @@ struct Opf {
 }
 
 /// First pass: metadata and the spine.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn read_metadata(
     storage: &dyn Storage,
     archive: &ZipArchive,

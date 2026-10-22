@@ -76,7 +76,10 @@ pub(super) fn largest(least: f32, most: f32, fits: impl Fn(f32) -> bool) -> f32 
 
 /// Draws `lines` at `size`, each `lead` times its line height below the
 /// one before, from `top`, each placed in `area` as `align` says.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(super) fn draw_lines(
     canvas: &mut Canvas<'_>,
     font: &FontHandle<'_>,

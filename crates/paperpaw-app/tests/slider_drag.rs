@@ -7,8 +7,11 @@
 //! or written to the card while the finger moves: the X4 Pro's card is
 //! slow, and the light follows the value shown.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -158,7 +161,7 @@ impl App {
             .storage(storage)
             .frame_rows(96)
             .row_align(8)
-            .user_config("[core]\nlanguage = en\n[home]\ngesture-tips = false\n");
+            .user_config("[core]\nlanguage = en\n[help]\nshow = false\n");
         let mut kernel = paperpaw_app::install(builder, fonts())
             .plugin(Light)
             .build()

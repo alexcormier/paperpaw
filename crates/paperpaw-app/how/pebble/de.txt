@@ -1,0 +1,3 @@
+Pebble gibt Touchscreens ein weicheres Aussehen: Listen liegen auf abgerundeten Karten, wie Gruppen in den Einstellungen eines Handys, und die gewählte Zeile ist ein heller Balken (ein Rahmen, wo der Bildschirm nur Schwarz und Weiß kennt).
+
+Es ist anfangs ausgeschaltet. Schalte es unter den Plugins in den Einstellungen ein. Es setzt nur Vorgaben: Was du unter Darstellung gewählt hast, bleibt, und ausgeschaltet kehrt das übliche Aussehen zurück.

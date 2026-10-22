@@ -5,7 +5,10 @@
 //! screen shows.
 
 // Not every test file uses every helper.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use std::rc::Rc;
 
@@ -223,7 +226,7 @@ impl App {
         network: bool,
     ) -> Self {
         let storage = Shared::new(storage);
-        let user = format!("[core]\nlanguage = en\n[home]\ngesture-tips = false\n{config}\n");
+        let user = format!("[core]\nlanguage = en\n[help]\nshow = false\n{config}\n");
         let mut kernel = Kernel::builder(device)
             .storage(storage.clone())
             .user_config(user)

@@ -5,8 +5,11 @@
 //! `paperpaw.ini` and read by a new kernel; text typed for a setting;
 //! advanced settings; resetting a page and everything.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 
@@ -427,9 +430,10 @@ ui-size = 14
             )
         };
         app.open_slot(slots::SETTINGS, look());
+        // The text size is not a theme's: the appearance is as it comes.
         let first = rows(&mut app)[0].clone();
         assert!(
-            first.starts_with("Theme") && first.contains("Your own"),
+            first.starts_with("Theme") && first.contains("None"),
             "{first}"
         );
         choose(&mut app, "Theme");

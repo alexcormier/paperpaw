@@ -4,7 +4,11 @@
 //! paths that try to climb out), what [`NoStorage`] and the trait's
 //! default methods do, and the errors' messages.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 use std::cell::RefCell;

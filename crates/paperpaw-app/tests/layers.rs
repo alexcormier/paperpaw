@@ -4,8 +4,11 @@
 //! the bookmark corner is), draws behind the text and over it while
 //! switched on, and sets pages in two columns or in one narrower one.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::RefCell;
 use std::rc::Rc;
@@ -174,7 +177,9 @@ impl App {
             .with(".paperpaw/plugins/setup/done", "");
         let builder = Kernel::builder(DEVICE)
             .storage(storage)
-            .user_config(format!("[core]\nlanguage = en\n{config}"));
+            .user_config(format!(
+                "[help]\nshow = false\n[core]\nlanguage = en\n{config}"
+            ));
         let seen = Rc::new(RefCell::new(Seen::default()));
         let mut kernel = paperpaw_app::install(builder, fonts())
             .plugin(Margin(seen.clone(), side))

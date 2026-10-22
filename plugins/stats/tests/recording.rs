@@ -3,8 +3,11 @@
 //! pages as the statistics log them, with and without the time of day,
 //! and the views while the device does not know it.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::{Cell, RefCell};
 use std::rc::Rc;
@@ -187,7 +190,6 @@ impl Device {
             "[core]
 language = en
 [home]
-gesture-tips = false
 page-1 = \"{page_1}\"
 "
         );

@@ -276,7 +276,10 @@ pub(crate) fn below(area: Rect, by: u16) -> Rect {
 
 /// A line of text `size` pixels large at the top of `area`, placed as
 /// `align` says and shortened to fit; returns its height.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub(crate) fn draw_line(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

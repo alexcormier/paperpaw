@@ -6,8 +6,11 @@
 //! plugin adds, opened and closed again on a device with buttons only
 //! (as the X4) and on a touch screen.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::rc::Rc;
 
@@ -135,7 +138,7 @@ impl App {
         let builder = Kernel::builder(device)
             .storage(card.clone())
             // Without the tips on gestures over everything on touch screens.
-            .user_config("[core]\nlanguage = en\n[home]\ngesture-tips = false\n");
+            .user_config("[core]\nlanguage = en\n[help]\nshow = false\n");
         let mut kernel = paperpaw_app::install(builder, fonts()).build().unwrap();
         let effects = kernel.start(Instant(0));
         let mut app = Self { kernel, now: 0 };

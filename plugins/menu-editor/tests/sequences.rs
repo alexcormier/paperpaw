@@ -3,8 +3,11 @@
 //! always agree, the way to the settings stays, and a new kernel reads
 //! back the same menu from `paperpaw.ini`.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

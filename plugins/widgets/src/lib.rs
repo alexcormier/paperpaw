@@ -30,11 +30,17 @@ pub const PLUGIN: Id = Id::new_static("widgets");
 #[derive(Debug, Default, Clone, Copy)]
 pub struct Widgets;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for Widgets {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Widget pack", paperpaw_sdk::package_version!()).description(
                 "Many more widgets for the home screen: clocks, a calendar, quotes, books, notes and more.",
-            ).uses(paperpaw_sdk::Uses::NOTHING)
+            ).how(&HOW).uses(paperpaw_sdk::Uses::NOTHING)
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {

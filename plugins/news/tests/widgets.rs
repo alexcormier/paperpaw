@@ -2,8 +2,11 @@
 //! home screen and the default fonts: the headlines fetched last, as many
 //! as fit and are wanted, in every frame; without feeds, how to add them.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::Rotation;
@@ -62,7 +65,7 @@ fn home(storage: MemoryStorage, page: &str, config: &str) -> (String, usize) {
 /// [`home`], with the black pixels of each row of the screen.
 fn screen(storage: MemoryStorage, page: &str, config: &str) -> (String, Vec<usize>) {
     let user = format!(
-        "[core]\nlanguage = en\n[home]\ngesture-tips = false\ncolumns = 4\npage-1 = \"{page}\"\n[news]\n{config}\n"
+        "[core]\nlanguage = en\n[help]\nshow = false\n[home]\ncolumns = 4\npage-1 = \"{page}\"\n[news]\n{config}\n"
     );
     let mut kernel = Kernel::builder(DEVICE)
         .storage(storage)

@@ -24,6 +24,9 @@ pub struct Manifest {
     /// it is installed, and the kernel refuses what is not declared
     /// (ADR 0024, ADR 0025).
     pub uses: Uses,
+    /// How it works, at length, by language: `(language, text)`, the text
+    /// plain, paragraphs apart by an empty line ([`Manifest::how`]).
+    pub how: &'static [(&'static str, &'static str)],
 }
 
 impl Manifest {
@@ -36,11 +39,28 @@ impl Manifest {
             description: Cow::Borrowed(""),
             sdk: crate::SDK_VERSION,
             uses: Uses::default(),
+            how: &[],
         }
     }
 
     pub fn description(mut self, description: impl Into<Cow<'static, str>>) -> Self {
         self.description = description.into();
+        self
+    }
+
+    /// How it works, at length, in each language it is written in:
+    /// shown by the plugin manager as *How it works*. A table in the
+    /// program, so it takes no memory until it is read:
+    ///
+    /// ```
+    /// # use paperpaw_sdk::{Id, Manifest, Version};
+    /// static HOW: [(&str, &str); 1] = [("en", "What it does.\n\nWhere it is.")];
+    /// // In `manifest`, usually `include_str!("../how/en.txt")` and the others:
+    /// let manifest = Manifest::new(Id::new_static("demo"), "Demo", Version::new(1, 0, 0)).how(&HOW);
+    /// # assert_eq!(manifest.how.len(), 1);
+    /// ```
+    pub fn how(mut self, how: &'static [(&'static str, &'static str)]) -> Self {
+        self.how = how;
         self
     }
 

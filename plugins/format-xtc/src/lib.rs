@@ -480,10 +480,17 @@ impl Document for XtcDocument {
 #[derive(Debug, Default)]
 pub struct XtcFormat;
 
+/// How it works, by language (see `Manifest::how`).
+static HOW: [(&str, &str); 2] = [
+    ("en", include_str!("../how/en.txt")),
+    ("de", include_str!("../how/de.txt")),
+];
+
 impl Plugin for XtcFormat {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "XTC", Version::new(0, 1, 0))
             .description("Opens XTC and XTCH books, the Xteink readers' pre-rendered pages.")
+            .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 

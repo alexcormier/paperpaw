@@ -3,7 +3,10 @@
 //! touch only, driven by actions, taps, long presses and drags, with a
 //! keyboard that answers what the test says it types.
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use std::cell::RefCell;
 use std::collections::VecDeque;
@@ -63,8 +66,8 @@ pub const TOUCH: DeviceInfo = DeviceInfo {
 pub const DEVICES: [DeviceInfo; 2] = [X4, TOUCH];
 
 /// The configuration every test starts from: English, and on touch
-/// screens without the tips on gestures over it all.
-pub const BASE_CONFIG: &str = "[core]\nlanguage = en\n[home]\ngesture-tips = false\n";
+/// screens without the hints over it all.
+pub const BASE_CONFIG: &str = "[core]\nlanguage = en\n[help]\nshow = false\n";
 
 /// Where the first-run setup notes that it was done.
 pub const SETUP_DONE: &str = ".paperpaw/plugins/setup/done";

@@ -5,8 +5,11 @@
 //! thumbnail without a panic and without taking memory for what is not
 //! there.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod support;
 
@@ -158,7 +161,7 @@ proptest! {
         // Random bytes, and bytes in the format with random sizes.
         storage.write("random.thumb", &header).unwrap();
         prop_assert!(Thumbnail::kept(&storage, "random.thumb", 0, BOX).is_none() || header.len() >= 17);
-        let mut data = b"QIT2".to_vec();
+        let mut data = b"QIT4".to_vec();
         data.extend_from_slice(&dims.0.to_le_bytes());
         data.extend_from_slice(&dims.1.to_le_bytes());
         data.push(bits);
@@ -225,7 +228,7 @@ fn proportions_are_kept_when_fitting_a_box() {
 #[test]
 fn a_header_claiming_a_huge_picture_takes_no_memory_for_it() {
     let storage = MemoryStorage::new();
-    let mut data = b"QIT2".to_vec();
+    let mut data = b"QIT4".to_vec();
     data.extend_from_slice(&4096u16.to_le_bytes());
     data.extend_from_slice(&4096u16.to_le_bytes());
     data.push(4);

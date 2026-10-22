@@ -31,6 +31,10 @@ pub(crate) fn sort(
     let mut runs: Vec<String> = Vec::new();
     let result = sort_in_runs(storage, input, output, size, temp, &mut runs);
     for run in &runs {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a temporary file left behind is written over the next time"
+        )]
         let _ = storage.remove(run);
     }
     result
@@ -90,6 +94,10 @@ fn sort_in_runs(
             let run = run_name(runs);
             merge(storage, group, &run, size)?;
             for done in group {
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "a temporary file left behind is written over the next time"
+                )]
                 let _ = storage.remove(done);
             }
             merged.push(run);

@@ -3,8 +3,11 @@
 //! the cat, whose mood and minutes show on the home screen and while the
 //! device sleeps; without the statistics the widget says so.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::{Rotation, SystemStatus, WallClock};
@@ -59,7 +62,7 @@ impl Reader {
             storage = storage.with(path, bytes.to_vec());
         }
         let user = format!(
-            "[core]\nlanguage = en\n[home]\ngesture-tips = false\ncolumns = 4\npage-1 = \"{WIDGET}\"\n{config}\n"
+            "[core]\nlanguage = en\n[help]\nshow = false\n[home]\ncolumns = 4\npage-1 = \"{WIDGET}\"\n{config}\n"
         );
         let mut builder = Kernel::builder(X4)
             .storage(storage)

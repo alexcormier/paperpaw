@@ -1,7 +1,10 @@
 //! Settings drawn as rows: values, notes, numbers and steppers, and
 //! stepping a setting's value.
 
-#[allow(clippy::wildcard_imports)]
+#[allow(
+    clippy::wildcard_imports,
+    reason = "a part of the module, which shares its imports"
+)]
 use super::*;
 
 // ---- Settings as rows --------------------------------------------------
@@ -41,7 +44,10 @@ pub fn draw_number_note(
 /// "…" if longer. Rows are always fully readable before they are tapped,
 /// so a description never needs a tap that would change a setting.
 /// Without a note, the row looks like [`draw_value_row`].
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_noted_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -121,7 +127,10 @@ pub(super) fn draw_note_below(
 }
 
 /// Draws a row: `title` on the left, `value` right-aligned.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_value_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -144,7 +153,8 @@ pub fn draw_value_row(
     draw_label(canvas, &font, style.text, value_x, rect, &value, color);
     let title_x = f32::from(rect.x) + margin;
     // A title that would be shortened beside its value smaller, down to
-    // the small size, before it is (the row keeps its height).
+    // the small size, then on two lines, before it is (the row keeps its
+    // height).
     let room = width - margin - value_width;
     if title_text != title
         && let Some(size) = crate::widgets::largest_size(style.text, style.small, |size| {
@@ -152,6 +162,26 @@ pub fn draw_value_row(
         })
     {
         draw_label(canvas, &font, size, title_x, rect, title, color);
+        return;
+    }
+    // Still too long: on two lines in the small size where the row holds
+    // them, rather than shortened.
+    let lines = font.wrap(style.small, title, room.max(1.0));
+    let line = font.line_metrics(style.small).line_height as u16;
+    if title_text != title && lines.len() == 2 && 2 * line <= rect.height {
+        let top = rect.y + (rect.height - 2 * line) / 2;
+        for (i, range) in lines.into_iter().enumerate() {
+            let at = Rect::new(rect.x, top + i as u16 * line, rect.width, line);
+            draw_label(
+                canvas,
+                &font,
+                style.small,
+                title_x,
+                at,
+                &title[range],
+                color,
+            );
+        }
         return;
     }
     draw_label(canvas, &font, style.text, title_x, rect, &title_text, color);
@@ -377,7 +407,10 @@ fn draw_own_title(
 /// and how high it is. At the top left: drawn at its place with
 /// [`RowLines::at`]. Made once with the list (it measures, and wraps a
 /// long title), not each time the row is drawn.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn row_lines(
     env: &Env<'_>,
     style: &UiStyle,
@@ -416,7 +449,10 @@ pub fn row_lines(
 /// of rows `row` high: as [`setting_row`], and a title's line more where
 /// the title does not fit beside its control (see [`row_lines`], which
 /// tells both).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn setting_height(
     env: &Env<'_>,
     style: &UiStyle,
@@ -431,7 +467,10 @@ pub fn setting_height(
 
 /// A setting's row with a value: `title` and `value` on [`RowLines`]
 /// (side by side, or the value below at the right), `note` below them.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_setting_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -465,7 +504,10 @@ pub fn draw_setting_row(
 /// A setting's row with a switch: as [`draw_switch_row`], on
 /// [`RowLines`] (the switch below the title, at the right, where the
 /// title would not fit beside it).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_switch_lines(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -587,7 +629,10 @@ pub fn number_room<'a>(
 /// A number on a light row: its title, then `[−] value [+]` exactly as in
 /// menus, with `room` for the value (see [`stepper`]); `focus` frames the
 /// `−` (`Some(false)`) or the `+` (`Some(true)`).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_number(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -604,7 +649,10 @@ pub fn draw_number(
 
 /// [`draw_number`] on [`RowLines`]: the `−` value `+` below the title
 /// where they are stacked.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_number_lines(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -664,7 +712,10 @@ pub(super) fn centred(
 /// A focused number: title, then `[−] value [+]`, with `room` for the
 /// value (see [`stepper`]). While editing with buttons the boxes are
 /// filled.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_stepper(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -679,9 +730,47 @@ pub fn draw_stepper(
     draw_stepper_lines(canvas, env, style, lines, title, value, room, editing);
 }
 
+/// Where a stepper's title and its `−` value `+` go in a row `width`
+/// wide and `row` high, at the top left (move them with
+/// [`RowLines::at`]): side by side where the whole title fits beside
+/// them, else the title above, on as many lines as it needs, and the
+/// stepper on a line of its own, as setting rows do. The title is never
+/// shortened; draw with [`draw_stepper_lines`], the row
+/// [`RowLines::height`] high.
+pub fn stepper_lines(
+    env: &Env<'_>,
+    style: &UiStyle,
+    width: u16,
+    row: u16,
+    title: &str,
+    room: &str,
+) -> RowLines {
+    let line = Rect::new(0, 0, width, row);
+    let Some(font) = style.font(env) else {
+        return RowLines::one(line);
+    };
+    let room = wider(&font, style.text, room, room);
+    let beside = stepper(env, style, line, room).is_some_and(|(minus, _)| {
+        let margin = style.margin as f32;
+        font.measure(style.text, title) <= f32::from(minus.x) - 2.0 * margin + 1.0
+    });
+    if beside {
+        return RowLines::one(line);
+    }
+    let high = own_title_height(env, style, width, title);
+    RowLines {
+        title: Rect::new(0, 0, width, high),
+        control: Rect::new(0, high, width, row),
+        height: high + row,
+    }
+}
+
 /// [`draw_stepper`] on [`RowLines`]: the `−` value `+` below the title
 /// where they are stacked.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_stepper_lines(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
