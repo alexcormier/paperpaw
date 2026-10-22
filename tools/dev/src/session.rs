@@ -8,6 +8,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use paperpaw_core::sdk::builtin::actions;
 use paperpaw_core::sdk::semantics::{Described, Part};
 use paperpaw_core::sdk::{Id, Params};
 use paperpaw_emulator::device::Device;
@@ -49,6 +50,9 @@ pub struct Start {
     pub setup: bool,
     /// Files to put into the library besides the books, as `(path, bytes)`.
     pub files: Vec<(String, Vec<u8>)>,
+    /// What the storage says it has free, in bytes (the computer's disk
+    /// where `None`); for a library kept in a folder.
+    pub free_space: Option<u64>,
 }
 
 /// A device running the app in a variant.
@@ -129,6 +133,10 @@ impl Session {
             }
             let storage = paperpaw_fs::DirStorage::new(&root)
                 .map_err(|e| format!("library {}: {e}", root.display()))?;
+            let storage = match start.free_space {
+                Some(bytes) => storage.with_free_space(bytes),
+                None => storage,
+            };
             let device = Device::with_plugins(profile, Some(config), storage, true, add);
             (device, Some(root))
         };
@@ -208,6 +216,30 @@ impl Session {
         self.device.run_action(id);
         self.settle();
         Ok(())
+    }
+
+    /// Goes back to the home screen as one would: *Home*, else *Back* (a
+    /// screen may keep *Home* to itself, as the keyboard does while a
+    /// password is typed) and *Home* again; what was still open if that
+    /// did not reach it.
+    pub fn go_home(&mut self) -> Result<(), String> {
+        self.run(actions::HOME.as_str())?;
+        for _ in 0..self.stack().len() {
+            if self.stack().len() == 1 {
+                return Ok(());
+            }
+            self.run(actions::BACK.as_str())?;
+            self.run(actions::HOME.as_str())?;
+        }
+        let stack = self.stack();
+        if stack.len() == 1 {
+            return Ok(());
+        }
+        Err(format!(
+            "neither Home nor Back reached the home screen ({} open: {})",
+            stack.len(),
+            stack.join(", ")
+        ))
     }
 
     /// Presses a button of the device (short).

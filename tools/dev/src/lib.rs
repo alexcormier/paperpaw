@@ -31,6 +31,7 @@
 pub mod cases;
 pub mod cli;
 pub mod data;
+pub mod explore;
 pub mod flows;
 pub mod gallery;
 pub mod image;
@@ -45,6 +46,7 @@ pub mod session;
 pub mod snapshot;
 pub mod target;
 pub mod variant;
+pub mod vary;
 pub mod visual;
 
 use std::process::ExitCode;

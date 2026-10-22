@@ -6,6 +6,21 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Plugin authors: `paperpaw-dev flows` is the main test of a plugin's
+  actions. Every step of a flow is measured on the X4's budgets, the
+  costliest one named (`flows.heap`, `flows.frame-time`), and each flow
+  is played again at the edges (`flows.varied`): every step repeated,
+  *Back*, *Home* or sleep and waking in the middle, network answers that
+  fail, come late, are empty or huge, the pseudo-language, long data and
+  an almost full storage. `paperpaw-dev explore` uses every target of
+  every screen once, each from a fresh start, as a cheap baseline.
+  `--flow` takes a folder of flows; `package` warns of flows and test
+  pictures in a data plugin's folder (`package.tests`). The templates
+  for a plugin's repository have a flow and run them in CI.
+- The on-screen keyboard on touch screens no longer takes *Home* (or any
+  other action that is no move) as the press that shows its focus: *Home*
+  leaves a text field at once. While a password is typed it still keeps
+  every button but *Sleep*, refresh and night mode.
 - The home screen's ready-made layouts are gone: no chooser, no row in
   *Add*, no step in the first-run setup; the home screen has one default
   layout. Breaking: presets of the kind `home.layout` (a data plugin's
