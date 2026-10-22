@@ -206,12 +206,21 @@ pub struct Looker {
     buttons: bool,
     /// Every shortened label reported ([`Scene::labels_whole`]).
     pub labels_whole: bool,
+    /// The texts of the language looked at that end with "…" of
+    /// themselves ("Loading…"): not shortened ([`Scene::ellipses`]).
+    ellipses: Vec<String>,
 }
 
 impl Looker {
     pub fn new(session: &mut Session) -> Self {
         let variant = session.variant.clone();
         let display = session.device.kernel.device().display;
+        let ellipses = crate::lint::catalogs::languages(session.device.kernel.translator())
+            .into_iter()
+            .filter(|l| l.code == variant.language)
+            .flat_map(|l| l.messages.into_values())
+            .filter(|text| text.trim_end().ends_with('…'))
+            .collect();
         cases::home(session);
         Looker {
             ui: ui(session, &variant),
@@ -224,6 +233,7 @@ impl Looker {
             home: session.described(),
             buttons: !variant.has_touch(),
             labels_whole: false,
+            ellipses,
         }
     }
 
@@ -238,7 +248,8 @@ impl Looker {
         let own = own(&shown.described, &self.home, self.screen);
         let scene = Scene::new(&shown.image, own, self.screen, self.ui)
             .panel(self.panel)
-            .labels_whole(self.labels_whole);
+            .labels_whole(self.labels_whole)
+            .ellipses(&self.ellipses);
         let mut issues = checks::all(&scene);
         if self.buttons {
             issues.extend(focus(session, id, &scene, &self.home));
@@ -274,7 +285,8 @@ impl Looker {
         let scene = Scene::new(&shown.image, own.clone(), self.screen, self.ui)
             .panel(self.panel)
             .cell(Some(cell))
-            .labels_whole(self.labels_whole);
+            .labels_whole(self.labels_whole)
+            .ellipses(&self.ellipses);
         let mut issues = checks::all(&scene);
         issues.extend(checks::outside_cell(&scene, &baseline, &own));
         Ok(Some(Looked {

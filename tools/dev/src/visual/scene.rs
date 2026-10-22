@@ -102,6 +102,9 @@ pub struct Scene<'a> {
     /// Every label shortened with "…" is reported, wherever it ends (the
     /// UI kit: no block may shorten one).
     pub labels_whole: bool,
+    /// Texts of the language drawn that end with "…" of themselves
+    /// ("Loading…"): a line that ends one is not shortened.
+    pub ellipses: &'a [String],
 }
 
 impl<'a> Scene<'a> {
@@ -121,7 +124,13 @@ impl<'a> Scene<'a> {
             panel: Panel::Gray,
             cell: None,
             labels_whole: false,
+            ellipses: &[],
         }
+    }
+
+    pub fn ellipses(mut self, ellipses: &'a [String]) -> Self {
+        self.ellipses = ellipses;
+        self
     }
 
     pub fn labels_whole(mut self, whole: bool) -> Self {

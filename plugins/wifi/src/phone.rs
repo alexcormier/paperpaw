@@ -359,11 +359,35 @@ impl PhoneScreen {
                 Some(qr) => {
                     ui::draw_qr(canvas, qr, room);
                 }
-                None => {
-                    ui::draw_message(canvas, env, &style, room, env.i18n.tr("wifi.phone.opening"))
-                }
+                None => draw_opening(canvas, env, &style, room),
             }
         }
+    }
+}
+
+/// That the reader's own network is opening, in `room` below a step: as a
+/// message, or in the small size where the room is too short for that.
+fn draw_opening(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, room: Rect) {
+    let text = env.i18n.tr("wifi.phone.opening");
+    if ui::message_height(env, style, room.width, text) <= room.height {
+        return ui::draw_message(canvas, env, style, room, text);
+    }
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    let margin = style.margin as u16;
+    let width = room.width.saturating_sub(2 * margin);
+    let line = font.line_metrics(style.small).line_height as u16;
+    let lines = font.wrap(style.small, text, f32::from(width));
+    let high = line * lines.len() as u16;
+    let mut y = room.y + room.height.saturating_sub(high) / 2;
+    for range in lines {
+        let part = text[range].trim();
+        let x = f32::from(room.x + margin)
+            + (f32::from(width) - font.measure(style.small, part)).max(0.0) / 2.0;
+        let at = Rect::new(room.x, y, room.width, line);
+        ui::draw_label(canvas, &font, style.small, x, at, part, Color::BLACK);
+        y += line;
     }
 }
 

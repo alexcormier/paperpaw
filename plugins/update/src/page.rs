@@ -115,6 +115,9 @@ pub(crate) struct UpdatePage {
     shown: bool,
     /// An update that waits chosen anyway: offered as one that does not.
     anyway: bool,
+    /// The help text scrolled, where it does not fit whole even smaller
+    /// (the largest text), and where it is.
+    help: Option<(ui::TextView, Rect)>,
 }
 
 /// The text for why an update cannot be installed.
@@ -143,6 +146,7 @@ impl UpdatePage {
             focus: 0,
             shown: !env.device.input.touch,
             anyway: false,
+            help: None,
         };
         page.view = page.look_noted(env);
         page
@@ -698,6 +702,25 @@ impl UpdatePage {
     }
 }
 
+/// Whether [`paragraph`] shows all of `text` in `area` (in `size` or
+/// smaller, at most `max` lines).
+fn paragraph_fits(
+    env: &Env<'_>,
+    style: &UiStyle,
+    area: Rect,
+    size: f32,
+    text: &str,
+    max: usize,
+) -> bool {
+    let Some(font) = style.font(env) else {
+        return true;
+    };
+    let size = size * 0.5;
+    let height = font.line_metrics(size).line_height as u16;
+    let lines = font.wrap(size, text, f32::from(area.width)).len();
+    lines <= max.min(usize::from(area.height / height.max(1)))
+}
+
 /// Draws `text` left-aligned in `area`, wrapped, at most `max` lines and
 /// as many as `area` holds: a little smaller where it needs more, only
 /// then cut, the last line ending in "…"; returns the height used.
@@ -723,12 +746,12 @@ fn paragraph(
         let height = font.line_metrics(size).line_height as u16;
         max.min(usize::from(area.height / height.max(1)))
     };
-    // Smaller where it does not fit, down to seven tenths (at the largest
-    // text still larger than text at the default).
-    let size = paperpaw_sdk::widgets::largest_size(size, size * 0.7, |size| {
+    // Smaller where it does not fit, down to half (at the largest text,
+    // whose fonts come in steps, still as large as text at the default).
+    let size = paperpaw_sdk::widgets::largest_size(size, size * 0.5, |size| {
         font.wrap(size, text, width).len() <= lines_at(size)
     })
-    .unwrap_or(size * 0.7);
+    .unwrap_or(size * 0.5);
     let (height, max) = (font.line_metrics(size).line_height as u16, lines_at(size));
     let lines = font.wrap(size, text, width);
     let cut = lines.len() > max;
@@ -792,16 +815,29 @@ impl Screen for UpdatePage {
             .first()
             .map_or(env.device.display.height, |r| r.y.saturating_sub(gap));
         let area = Rect::new(margin, y, width, bottom.saturating_sub(y));
-        y += paragraph(
-            canvas,
-            env,
-            &style,
-            area,
-            style.small,
-            &help,
-            HELP_LINES,
-            style.ink(ui::Ink::Note),
-        ) + gap * 2;
+        if paragraph_fits(env, &style, area, style.small, &help, HELP_LINES) {
+            self.help = None;
+            y += paragraph(
+                canvas,
+                env,
+                &style,
+                area,
+                style.small,
+                &help,
+                HELP_LINES,
+                style.ink(ui::Ink::Note),
+            ) + gap * 2;
+        } else {
+            // Too long even smaller: scrolled with the page buttons, a
+            // swipe or a tap on it.
+            if self.help.as_ref().is_none_or(|(_, at)| *at != area) {
+                self.help = Some((ui::TextView::new(env, &style, area, &help), area));
+            }
+            if let Some((view, _)) = &self.help {
+                view.draw(canvas, env, &style, &help);
+            }
+            y += area.height + gap * 2;
+        }
         if let View::Installing { done, total } = self.view {
             let bar = Rect::new(margin, y, width, gap * 3);
             self.draw_progress(canvas, env, bar, done, total);
@@ -844,6 +880,12 @@ impl Screen for UpdatePage {
         }
         if *a == actions::BACK {
             cx.command(Command::Back);
+        } else if [actions::PREV_PAGE, actions::NEXT_PAGE].contains(a)
+            && let Some((view, _)) = &mut self.help
+        {
+            if view.on_action(a) {
+                self.redraw(cx, RefreshMode::Fast);
+            }
         } else if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
             self.move_focus(-1, cx);
         } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
@@ -865,9 +907,19 @@ impl Screen for UpdatePage {
     }
 
     fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
-        if gesture.kind != GestureKind::Tap
-            || matches!(self.view, View::Installing { .. } | View::Installed)
+        if matches!(self.view, View::Installing { .. } | View::Installed) {
+            return Handled::No;
+        }
+        // On the help text scrolled: it scrolls.
+        if let Some((view, area)) = &mut self.help
+            && area.contains(gesture.start)
         {
+            if view.on_gesture(&gesture) {
+                self.redraw(cx, RefreshMode::Fast);
+            }
+            return Handled::Yes;
+        }
+        if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
         let env = *cx.env();

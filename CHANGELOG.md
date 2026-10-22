@@ -34,7 +34,11 @@ change the plugin SDK.
   lines set title and value smaller first. Header bars without arrows
   leave out the page number where the title is not whole beside it. The
   reading statistics go to one column, paged like a list, where their
-  tiles do not fit side by side.
+  tiles do not fit side by side. In the library's rows on small screens
+  how far a book is read gives way where its details do not fit beside
+  it; the update page scrolls its help where it does not fit even
+  smaller. `paperpaw-dev visual` takes a "…" that ends a translated text
+  ("Loading…") for no shortening.
 - `ask::confirm` asks yes or no on the screen of the new slot
   `core.confirm` (the kernel's `ui::confirm::Confirm`, a `ui::Dialog` in
   the middle of the screen, unless a plugin binds another): the question,

@@ -127,6 +127,9 @@ pub(crate) struct Loaded {
     /// The line of details under the title (the author, or its number in
     /// a series), shortened to the room it has.
     pub(crate) note: String,
+    /// On a small screen: how far the book is read (and its "next" tag)
+    /// left out where the details do not fit beside it whole.
+    pub(crate) state_hidden: bool,
     /// The series with the book's number ("Sherlock Holmes 5").
     pub(crate) tail: String,
     /// How far it is read, as written ("42 %").
@@ -532,9 +535,18 @@ pub(crate) fn prepare_row(
     }
     let room = end.saturating_sub(x + if end < right { gap } else { 0 });
     let room = room.saturating_sub(book.icons_width(env, style));
-    if let Some(font) = style.font(env) {
-        book.note = ui::fit(&font, style.small, &book.note, f32::from(room));
+    let Some(font) = style.font(env) else {
+        return;
+    };
+    // Too long beside it, but whole on the line alone: the smaller thing,
+    // how far it is read, gives way.
+    let whole = (right - x).saturating_sub(book.icons_width(env, style));
+    let width = font.measure(style.small, &book.note);
+    if end < right && width > f32::from(room) + 1.0 && width <= f32::from(whole) + 1.0 {
+        book.state_hidden = true;
+        return;
     }
+    book.note = ui::fit(&font, style.small, &book.note, f32::from(room));
 }
 
 /// Draws a book's note in `area` from `x`, its badges' icons after it.
@@ -700,12 +712,16 @@ fn draw_compact_row(
     let line = Rect::new(x, y + gap / 3, width, sizes.small_line);
     let bar = bar_width(env, sizes, width);
     let mut end = right;
-    let state = state_width(env, style, bar, book);
+    let state = if book.state_hidden {
+        0
+    } else {
+        state_width(env, style, bar, book)
+    };
     if state > 0 {
         end = right.saturating_sub(state);
         draw_state(canvas, env, style, sizes, end, line, bar, book, focused);
     }
-    if next {
+    if next && !book.state_hidden {
         let label = env.i18n.tr("files.list.next");
         let w = tag_width(env, style, label);
         let at = end.saturating_sub(w + if state > 0 { gap / 2 } else { 0 });
