@@ -556,6 +556,7 @@ impl Screen for TransferScreen {
         let title = env.i18n.tr("transfer.title");
         self.header.draw(canvas, env, &style, title, None, None);
         let area = self.content(env);
+        let own_button = self.own_button(env);
         let (url, qr) = match &mut self.state {
             State::Starting => {
                 // While it waits for a network: or without a router.
@@ -623,7 +624,7 @@ impl Screen for TransferScreen {
             }
             None => area,
         };
-        let button = self.own_button(env);
+        let button = own_button;
         let area = match button {
             Some(button) => Rect::new(
                 area.x,
