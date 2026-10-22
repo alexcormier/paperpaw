@@ -73,9 +73,9 @@ fn half_opaque_is_the_mix_and_dithering_keeps_its_lightness() {
         (Color::WHITE, 80, 255, 255, 80),
     ];
     for format in common::formats() {
-        // In black and white, pictures are diffused as Atkinson does,
-        // which passes on six eighths of the error: light grays come out
-        // a little lighter, dark ones a little darker.
+        // In black and white, pictures are diffused after Atkinson, which
+        // passes on seven eighths of the error: light grays come out a
+        // little lighter, dark ones a little darker.
         let near = if format == PixelFormat::Mono1 { 25 } else { 10 };
         for (under, gray, alpha, opacity, expected) in cases {
             let got = mean(&blended(format, under, gray, alpha, opacity));

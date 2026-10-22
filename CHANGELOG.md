@@ -7,10 +7,10 @@ change the plugin SDK.
 ## [Unreleased]
 
 - Pictures on panels with few grays (the X4s in black and white, four
-  grays) are dithered by error diffusion (Atkinson's) instead of a 4×4
-  ordered pattern: line drawings such as the cats stay clean, without the
-  grid that made them look pixelated, covers and photos keep their
-  tones but the lightest. Drawn in bands, a picture shows no seams; it
+  grays) are dithered by error diffusion (after Atkinson's, seven eighths
+  of the error passed on) instead of a 4×4 ordered pattern: line drawings
+  such as the cats stay clean, without the grid that made them look
+  pixelated, and covers and photos keep their tones. Drawn in bands, a picture shows no seams; it
   takes two rows of error for each picture (two at once). Covers and
   pictures kept small in black and white (thumbnails) are diffused the
   same way, and those kept on the card are made anew. Flat shades of the

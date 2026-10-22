@@ -1049,8 +1049,8 @@ mod tests {
     #[test]
     fn diffusion_keeps_a_picture_s_tones() {
         // A middle gray in black and white: about half the pixels white
-        // (Atkinson's diffusion darkens dark grays and lightens light
-        // ones a little: it passes on six eighths of the error).
+        // (the diffusion darkens dark grays and lightens light ones a
+        // little: it passes on seven eighths of the error).
         let mut fb = Framebuffer::new(64, 64, PixelFormat::Mono1).unwrap();
         for y in 0..64 {
             fb.put_gray_row(0, y, &[128; 64]);

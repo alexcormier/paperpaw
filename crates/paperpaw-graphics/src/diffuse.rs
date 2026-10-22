@@ -1,11 +1,13 @@
-//! Error diffusion as Atkinson's ([`Atkinson`]): how pictures become the
-//! few grays of a panel, row by row from the top. Each pixel's error is
-//! passed on, six eighths of it, to the two pixels after it, the three
-//! below and the one below those: line drawings stay clean (no specks in
-//! white paper, no grid as an ordered dither leaves), photos keep their
-//! tones but the lightest and darkest, which come out a little lighter
-//! and darker. Integers only (chips without floating point), two rows of
-//! error at a time.
+//! Error diffusion after Atkinson's ([`Atkinson`]): how pictures become
+//! the few grays of a panel, row by row from the top. Each pixel's error
+//! is passed on, seven eighths of it: two eighths to the pixel after it,
+//! one to the one after that, to each of the three below and to the one
+//! below those. Line drawings stay clean (few specks in white paper, no
+//! grid as an ordered dither leaves); photos and covers keep their tones,
+//! the lightest and darkest a little lighter and darker (Atkinson's own,
+//! six eighths, loses a cover's pale sky; all of it, as Floyd and
+//! Steinberg's, speckles drawings). Integers only (chips without floating
+//! point), two rows of error at a time.
 
 use alloc::vec::Vec;
 
@@ -69,7 +71,7 @@ impl Atkinson {
             let level = (value.clamp(0, 255) * top + 127) / 255;
             let shown = level * step;
             let part = (value - shown) / 8;
-            ahead = (ahead.1 + part, part);
+            ahead = (ahead.1 + 2 * part, part);
             if column > 0 {
                 add(&mut below[column - 1], part);
             }
