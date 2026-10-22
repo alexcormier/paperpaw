@@ -426,7 +426,6 @@ impl Screen for BrowseScreen {
                 ui::draw_noted_row(canvas, env, &style, rect, focused, &title, &value, &note);
             },
         );
-        canvas.fill(self.status, Color::WHITE);
         let text = match &self.message {
             Some(message) => message.clone(),
             None if rows.is_empty() && self.loading.is_none() => {
@@ -434,7 +433,23 @@ impl Screen for BrowseScreen {
             }
             None => String::new(),
         };
-        ui::draw_note_line(canvas, env, &style, self.status, &text);
+        // Without rows the message takes the room it needs above its line.
+        let status = if rows.is_empty() {
+            let s = self.status;
+            let top = self.list.area().y;
+            let needed = ui::note_line_height(env, &style, s.width, &text)
+                .clamp(s.height, s.bottom().saturating_sub(u32::from(top)) as u16);
+            Rect::new(
+                s.x,
+                (s.bottom() as u16).saturating_sub(needed),
+                s.width,
+                needed,
+            )
+        } else {
+            self.status
+        };
+        canvas.fill(status, Color::WHITE);
+        ui::draw_note_line(canvas, env, &style, status, &text);
     }
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {

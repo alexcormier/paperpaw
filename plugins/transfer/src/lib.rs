@@ -184,14 +184,18 @@ impl TransferScreen {
         }
         let area = self.content(env);
         let style = &self.style;
-        let row = style.touch_row(style.row) as u16;
-        let height = ui::button_height(style, Rect::new(0, 0, area.width, row));
+        let row = style.touch_row(style.control_row) as u16;
         let margin = style.margin as u16;
+        let width = area.width.saturating_sub(2 * margin);
+        // As high as its words need, on more lines where they are long.
+        let label = env.i18n.tr("transfer.without-router");
+        let height = ui::button_height_for(env, style, width, label);
+        let pad = row.saturating_sub(ui::Segments::height(style)) / 2;
         let bottom = area.y + area.height - ui::edge_room(style, row);
         Some(Rect::new(
             margin,
-            bottom - row + (row - height) / 2,
-            area.width.saturating_sub(2 * margin),
+            bottom.saturating_sub(height + pad),
+            width,
             height,
         ))
     }

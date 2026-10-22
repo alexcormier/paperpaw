@@ -315,28 +315,46 @@ impl PhoneScreen {
         ];
         for (n, (title, note, qr)) in steps.into_iter().enumerate() {
             let top = y + half * n as u16;
-            let title_row = Rect::new(margin, top, width, line);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.text,
-                f32::from(margin),
-                title_row,
-                title,
-                Color::BLACK,
+            // The step and its note whole, wrapped; the code between them
+            // as large as what is left.
+            let titles = font.wrap(style.text, title, f32::from(width));
+            let notes = font.wrap(style.small, &note, f32::from(width));
+            let title_high = line * titles.len() as u16;
+            let note_high = small * notes.len() as u16;
+            for (i, range) in titles.into_iter().enumerate() {
+                let row = Rect::new(margin, top + i as u16 * line, width, line);
+                let text = title[range].trim();
+                ui::draw_label(
+                    canvas,
+                    &font,
+                    style.text,
+                    f32::from(margin),
+                    row,
+                    text,
+                    Color::BLACK,
+                );
+            }
+            let note_top = (top + half).saturating_sub(note_high);
+            for (i, range) in notes.into_iter().enumerate() {
+                let row = Rect::new(margin, note_top + i as u16 * small, width, small);
+                let text = note[range].trim();
+                let faint = style.faint(60);
+                ui::draw_label(
+                    canvas,
+                    &font,
+                    style.small,
+                    f32::from(margin),
+                    row,
+                    text,
+                    faint,
+                );
+            }
+            let room = Rect::new(
+                margin,
+                top + title_high,
+                width,
+                half.saturating_sub(title_high + note_high),
             );
-            let note_row = Rect::new(margin, top + half - small, width, small);
-            let faint = style.faint(60);
-            ui::draw_label(
-                canvas,
-                &font,
-                style.small,
-                f32::from(margin),
-                note_row,
-                &note,
-                faint,
-            );
-            let room = Rect::new(margin, top + line, width, half.saturating_sub(line + small));
             match qr {
                 Some(qr) => {
                     ui::draw_qr(canvas, qr, room);

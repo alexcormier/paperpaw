@@ -83,7 +83,9 @@ impl Screen for SleepCard {
             .unwrap_or_default();
         let shown = lines.len().min(6) as u16;
         let gap = style.gap as u16 * 3;
-        let height = shown * big + gap + small;
+        // The note whole, on as many lines as it takes.
+        let notes = font.wrap(style.small, &self.note, width);
+        let height = shown * big + gap + small * notes.len() as u16;
         let mut y = display.height.saturating_sub(height) / 2;
         if let Some(front) = &self.front {
             for range in lines.into_iter().take(6) {
@@ -95,10 +97,13 @@ impl Screen for SleepCard {
             }
             y += gap;
         }
-        let note = ui::fit(&font, style.small, &self.note, width);
-        let x = f32::from(margin) + (width - font.measure(style.small, &note)).max(0.0) / 2.0;
-        let row = Rect::new(margin, y, display.width.saturating_sub(2 * margin), small);
-        ui::draw_label(canvas, &font, style.small, x, row, &note, style.faint(60));
+        for range in notes {
+            let note = self.note[range].trim();
+            let x = f32::from(margin) + (width - font.measure(style.small, note)).max(0.0) / 2.0;
+            let row = Rect::new(margin, y, display.width.saturating_sub(2 * margin), small);
+            ui::draw_label(canvas, &font, style.small, x, row, note, style.faint(60));
+            y += small;
+        }
     }
 
     /// Buttons are the sleep screen's (it shows this one in its place).
