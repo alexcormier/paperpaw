@@ -614,6 +614,23 @@ where
         }
     }
 
+    /// Turns the panel's power off once nothing follows for a while: the
+    /// picture stays, and the next refresh powers it up again.
+    pub fn power_down(&mut self) -> Result<(), Error> {
+        self.wait()?;
+        if self.powered {
+            self.command(cmd::POWER_OFF, &[])?;
+            self.wait_ready()?;
+            self.powered = false;
+        }
+        Ok(())
+    }
+
+    /// Whether the panel's power is on.
+    pub fn powered(&self) -> bool {
+        self.powered
+    }
+
     /// Puts the controller into deep sleep, the picture staying;
     /// [`Display::init`] wakes it again.
     pub fn sleep(&mut self) -> Result<(), Error> {

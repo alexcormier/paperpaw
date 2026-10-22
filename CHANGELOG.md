@@ -31,6 +31,57 @@ change the plugin SDK.
   `param` (a query's parameter, decoded) and `json_string`; and
   `ui::draw_address`, the address as a QR code and as text with a hint.
   The transfer plugin uses them.
+- X4 Pro: the battery no longer shows 0 % after it was cut off (run flat
+  or taken out). Its fuel gauge then starts asleep and forgets the
+  battery's profile; PaperPaw gives it the profile again at the start
+  and wakes it, as the stock firmware did.
+- Reading goal, a plugin of its own (in the store on the X4s): the daily
+  goal of the reading statistics (one goal for both; 20 minutes where
+  this plugin is), and a cat whose mood follows today's reading: sad
+  while nothing was read, so-so after a little, content from half the
+  goal, happy once it is reached (both shares are settings). The widget
+  *Reading cat* shows it with the minutes read and the goal, on the home
+  screen or the sleep screen's widgets; a tap opens the goal, or, where
+  the statistics are off or missing, offers to switch them on or get
+  them from the store. *Today's
+  reading cat* is a sleep screen too. One's own pictures can take the
+  cats' place (a folder with `sad`, `meh`, `content` and `happy`), also
+  a data plugin's. The minutes come from the reading statistics. SDK:
+  `events::READ_TODAY` (`ReadToday`: the day and the seconds read), which
+  the statistics send as they record reading.
+- The sleep screen shows a sleeping cat by default: PaperPaw's own
+  drawing, in the middle of the screen with even margins, in grays where
+  the screen can. It also shows where the cover or the pictures chosen
+  are missing. The cover, the pictures, the message and the others can
+  still be chosen. SDK: `image::picture_from_bytes` decodes a picture a
+  plugin carries in its code, as `picture_from_file` decodes a file.
+- Wi-Fi transfer without a router (X4, X4 Pro): *Without a router* on
+  the transfer screen opens the reader's own network and shows codes to
+  join it and to open the transfer page there; closing the screen (or
+  ten minutes without a request) closes the network.
+- Wi-Fi set up with a phone (X4, X4 Pro): the reader opens a network of
+  its own and shows two QR codes, to join it and to open a page there
+  that lists the networks found and takes the password with the phone's
+  keyboard; the reader then joins that network and keeps the password.
+  A `wifi.ini` on the card (`ssid = …`, `password = …`) is read once at a
+  start, kept with the passwords and removed. SDK: `WifiCommand::Host`,
+  `WifiState::Hosting` (servers serve on the own network).
+- X4 and X4 Pro save power (ADR 0025): the radio sleeps between the
+  network's beacons while connected and no data moves; on battery the
+  processor sleeps while the panel refreshes instead of watching it; the
+  panel's power goes off after a refresh once nothing follows (soon on
+  the X4, after 30 s on the X4 Pro, whose next refresh takes longer
+  then); going to sleep lets requests under way finish first, 15 s at
+  the longest, a press keeping it awake (`Kernel::holds_sleep`). A
+  press is counted as soon as it holds (the device stays awake while it
+  settles); *Button response* (Controls) set to *Faster* reads the
+  buttons more often on battery and keeps the X4 Pro's screen powered,
+  for a little more battery.
+
+- In Offline mode the store, an OPDS catalog, Calibre and Wi-Fi
+  transfer offer to go online once, inline ("Offline mode. Go online for
+  it?" with *Go online* and *Not now*), instead of failing. SDK:
+  `ui::OfflineOffer` (sends `Command::GoOnline`).
 - Plugin authors: `paperpaw-dev flows` is the main test of a plugin's
   actions. Every step of a flow is measured on the X4's budgets, the
   costliest one named (`flows.heap`, `flows.frame-time`), and each flow
@@ -52,9 +103,9 @@ change the plugin SDK.
   `presets.ini`) are no longer offered anywhere; they are left unread.
   Presets stay for other kinds (the power modes).
 - X4, X4 Pro and X4 Classic: calm status lines by default. While
-  reading, the time and the page (and the mark of reading aloud while it
-  reads); on the home screen, the time and the battery. Every item can
-  still be chosen.
+  reading, the time at the left edge and the page at the right (the mark
+  of reading aloud beside the time while it reads); on the home screen,
+  the time and the battery. Every item can still be chosen.
 - The keyboard on narrow screens (the X4 and X4 Pro): a row too wide for
   keys at least 6 mm wide is split in two in its order ("qwert" above
   "yuiop"), so the keys are about twice as wide; by touch and with the

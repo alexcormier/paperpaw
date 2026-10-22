@@ -64,6 +64,9 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/crashes.txt` | X4 firmware | a line per panic: the version and why, written for bug reports, never read back | |
 | `.paperpaw/plugins/battery/plugins.csv` | battery | CSV with a header, written for reading on a computer, never read back | |
 | `.paperpaw/plugins/sleep/next.txt` | sleep | the next picture, counted | version 1 |
+| `.paperpaw/plugins/reading-goal/today.txt` | reading-goal | the day (days since 1970, local time) and the seconds read on it, as the statistics told them | version 1 |
+| `.paperpaw/plugins/reading-goal/cat-<mood>-<size>.gray`, `own-<mood>-<size>.gray` | reading-goal | the mood's picture decoded (a cache: made again where it is missing) | version 1 |
+| `.paperpaw/plugins/sleep/cat-<side>.gray` | sleep | the sleeping cat decoded for a screen (a cache: made again where it is missing) | version 1 |
 | `.paperpaw/plugins/setup/done` | setup | its presence | version 1 (the app's screen tests) |
 | `.paperpaw/plugins/update/installing.txt`, `offered.txt` | update | a path and a version, a line each (`offered.txt`: `online` and the version for an update the server named) | version 1 |
 | `.paperpaw/plugins/update/waiting.txt` | update | an update that waits for plugins: its version, `since <unix seconds or ->`, `checked <unix seconds or ->`, `asked`, `seen` and `told` lines where set, then what it waits for, `plugin <id> <version>` and `crate <name>` lines | version 1 |

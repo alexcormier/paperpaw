@@ -115,6 +115,11 @@ struct State {
     /// Writing the statistics failed (e.g. the card is full): `Some(false)`
     /// until that was said, `Some(true)` after; `None` while writing works.
     write_failed: Option<bool>,
+    /// The day and the seconds read on it, summed once from the records
+    /// and counted on as stays are recorded (see [`State::tell`]).
+    today: Option<(i32, u32)>,
+    /// What was told last of today ([`events::READ_TODAY`]).
+    told: Option<(i32, u32)>,
 }
 
 type Shared = Rc<RefCell<State>>;
@@ -165,6 +170,28 @@ impl State {
             out.push(Command::Notify(env.i18n.tr("stats.not-saved").to_string()));
             self.write_failed = Some(true);
         }
+        // How long was read today, for those who show it (a reading goal),
+        // when it changed.
+        if let Some(today) = self.read_today(env)
+            && self.told != Some(today)
+        {
+            self.told = Some(today);
+            let (day, seconds) = today;
+            out.push(events::READ_TODAY.emit(events::ReadToday::new(day, seconds)));
+        }
+    }
+
+    /// Today and the seconds read on it, if the device knows the date:
+    /// summed from the records on a new day, else as counted on.
+    fn read_today(&mut self, env: &Env<'_>) -> Option<(i32, u32)> {
+        let day = fmt::today(env)?;
+        if let Some(today) = self.today.filter(|(d, _)| *d == day) {
+            return Some(today);
+        }
+        let days = store::days(env.storage, |unix| fmt::day_of(env, unix));
+        let seconds = days.iter().find(|d| d.day == day).map_or(0, |d| d.seconds);
+        self.today = Some((day, seconds));
+        self.today
     }
 
     /// Ends the stay on the current page now: recorded, or kept until the
@@ -234,7 +261,14 @@ impl State {
                     duration: stay.duration,
                     pages: stay.pages,
                 };
-                if self.wrote(store::append(env.storage, stat)).is_none() {
+                let recorded = self.wrote(store::append(env.storage, stat));
+                if let Some((day, seconds)) = &mut self.today
+                    && recorded.is_some()
+                    && fmt::day_of(env, start) == *day
+                {
+                    *seconds = seconds.saturating_add(u32::from(stay.duration));
+                }
+                if recorded.is_none() {
                     // Kept to be written with the next page.
                     self.undated.push(stay);
                     self.undated.extend(stays);
@@ -515,6 +549,11 @@ impl Plugin for Stats {
                 s.borrow_mut().finish_page(env);
             })?;
         }
+        // Today's reading told at the start, for those who show it.
+        let s = state.clone();
+        r.on(events::STARTED, move |env, _, out| {
+            s.borrow_mut().tell(env, out)
+        })?;
         // Only a book still open goes on being read.
         let s = state.clone();
         r.on(events::RESUME, move |env, _, _| {

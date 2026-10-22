@@ -1,0 +1,26 @@
+[package]
+name = "paperpaw-plugin-reading-goal"
+description = "PaperPaw reading goal: minutes to read a day, and a cat on the home screen whose mood follows today's reading"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+categories = ["no-std"]
+
+[dependencies]
+paperpaw-sdk.workspace = true
+
+[dev-dependencies]
+paperpaw-core.workspace = true
+paperpaw-i18n.workspace = true
+paperpaw-platform.workspace = true
+paperpaw-plugin-fonts-default = { workspace = true, features = ["packs"] }
+paperpaw-plugin-home.workspace = true
+paperpaw-plugin-sleep.workspace = true
+paperpaw-plugin-stats.workspace = true
+
+[lints]
+workspace = true

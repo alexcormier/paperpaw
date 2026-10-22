@@ -90,6 +90,14 @@ impl Kernel {
             .is_none_or(|wifi| wifi.state.is_online())
     }
 
+    /// The device's own network is open (`WifiState::Hosting`).
+    fn hosting(&self) -> bool {
+        self.shared
+            .wifi
+            .as_ref()
+            .is_some_and(|wifi| wifi.state.is_hosting())
+    }
+
     /// Network work waiting for the shell (requests, servers, sockets).
     pub(crate) fn network_work_waiting(&self) -> bool {
         self.io.http.waiting() || self.io.servers.waiting() || self.io.sockets.waiting()
@@ -139,6 +147,16 @@ impl Kernel {
         self.io.servers.fail_waiting(REASON, out);
         self.io.sockets.fail_waiting(REASON, storage, out);
         self.io.network_waiting = None;
+    }
+
+    /// Whether requests are under way that going to sleep waits for a
+    /// while (ADR 0025): a position pushed on suspending. Not work waiting
+    /// for a network that may never come (Offline, none in reach), nor
+    /// jobs (they go on at the next start). A shell that cuts the power on
+    /// sleep keeps going until they are answered or a while has passed,
+    /// then sleeps anyway.
+    pub fn holds_sleep(&self) -> bool {
+        self.io.http.busy()
     }
 
     /// Whether plugins have sockets or broadcasts open, e.g. to keep
@@ -202,6 +220,9 @@ impl Kernel {
             io.extend(self.io.http.take().into_iter().map(Io::Http));
             io.extend(self.io.servers.take().into_iter().map(Io::Server));
             io.extend(self.io.sockets.take().into_iter().map(Io::Socket));
+        } else if self.hosting() {
+            // The device's own network: its servers serve on it.
+            io.extend(self.io.servers.take().into_iter().map(Io::Server));
         }
         io
     }

@@ -286,14 +286,41 @@ pub mod image {
             path: from,
             offset: 0,
         };
+        picture_from(storage, format, &mut source, to, fit, color)
+    }
+
+    /// A picture a plugin carries in its code (`include_bytes!`), a JPEG,
+    /// PNG or GIF, decoded into the file `to` as [`picture_from_file`]
+    /// decodes one, a few rows at a time: drawn from there in bands, it
+    /// is never whole in memory.
+    pub fn picture_from_bytes(
+        storage: &dyn Storage,
+        bytes: &[u8],
+        to: &str,
+        fit: Fit,
+        color: bool,
+    ) -> Option<ImageRef> {
+        let format = Format::detect(bytes.get(..8).unwrap_or(bytes))?;
+        let mut source = bytes;
+        picture_from(storage, format, &mut source, to, fit, color)
+    }
+
+    fn picture_from(
+        storage: &dyn Storage,
+        format: Format,
+        source: &mut dyn Source,
+        to: &str,
+        fit: Fit,
+        color: bool,
+    ) -> Option<ImageRef> {
         if color {
             let mut writer = ColorWriter::new(storage, to);
-            decode(format, &mut source, fit, &mut writer)
+            decode(format, source, fit, &mut writer)
                 .and_then(|()| writer.finish())
                 .ok()?;
         } else {
             let mut writer = GrayWriter::new(storage, to);
-            decode(format, &mut source, fit, &mut writer)
+            decode(format, source, fit, &mut writer)
                 .and_then(|()| writer.finish())
                 .ok()?;
         }

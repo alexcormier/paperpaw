@@ -276,6 +276,14 @@ pub fn paperpaw_sdk::builtin::events::PageWordsWanted::new(paperpaw_sdk::Id) -> 
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::PageWordsWanted
 pub fn paperpaw_sdk::builtin::events::PageWordsWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::PageWordsWanted::to_params(&self) -> paperpaw_sdk::Params
+#[non_exhaustive] pub struct paperpaw_sdk::builtin::events::ReadToday
+pub paperpaw_sdk::builtin::events::ReadToday::day: i32
+pub paperpaw_sdk::builtin::events::ReadToday::seconds: u32
+impl paperpaw_sdk::builtin::events::ReadToday
+pub fn paperpaw_sdk::builtin::events::ReadToday::new(i32, u32) -> Self
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::ReadToday
+pub fn paperpaw_sdk::builtin::events::ReadToday::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::ReadToday::to_params(&self) -> paperpaw_sdk::Params
 #[non_exhaustive] pub struct paperpaw_sdk::builtin::events::Reading
 pub paperpaw_sdk::builtin::events::Reading::chapter: alloc::string::String
 pub paperpaw_sdk::builtin::events::Reading::chapter_left: core::option::Option<u32>
@@ -422,6 +430,7 @@ pub const paperpaw_sdk::builtin::events::PLUGINS_CHANGED: paperpaw_sdk::event::E
 pub const paperpaw_sdk::builtin::events::POWER_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::PREVIEW_CHANGED: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::READING_APP_WANTED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::ReadingAppWanted>
+pub const paperpaw_sdk::builtin::events::READ_TODAY: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::ReadToday>
 pub const paperpaw_sdk::builtin::events::RESUME: paperpaw_sdk::event::Event<()>
 pub const paperpaw_sdk::builtin::events::SCREEN_SHOWN: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::ScreenShown>
 pub const paperpaw_sdk::builtin::events::SETTING_CHANGED: paperpaw_sdk::event::Event<paperpaw_sdk::builtin::events::SettingChanged>
@@ -1154,6 +1163,9 @@ pub fn paperpaw_sdk::builtin::events::PageLayerTapped::to_params(&self) -> paper
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::PageWordsWanted
 pub fn paperpaw_sdk::builtin::events::PageWordsWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::PageWordsWanted::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::ReadToday
+pub fn paperpaw_sdk::builtin::events::ReadToday::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::ReadToday::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Reading
 pub fn paperpaw_sdk::builtin::events::Reading::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Reading::to_params(&self) -> paperpaw_sdk::Params
@@ -1512,6 +1524,7 @@ pub use paperpaw_sdk::image::dimensions
 pub use paperpaw_sdk::image::luma
 pub use paperpaw_sdk::image::over_white
 pub fn paperpaw_sdk::image::gray_from_file(&dyn paperpaw_platform::storage::Storage, &str, &str, paperpaw_image::Fit) -> core::option::Option<paperpaw_document::ImageRef>
+pub fn paperpaw_sdk::image::picture_from_bytes(&dyn paperpaw_platform::storage::Storage, &[u8], &str, paperpaw_image::Fit, bool) -> core::option::Option<paperpaw_document::ImageRef>
 pub fn paperpaw_sdk::image::picture_from_file(&dyn paperpaw_platform::storage::Storage, &str, &str, paperpaw_image::Fit, bool) -> core::option::Option<paperpaw_document::ImageRef>
 pub fn paperpaw_sdk::image::picture_with_alpha(&dyn paperpaw_platform::storage::Storage, &str, &str, paperpaw_image::Fit) -> core::result::Result<paperpaw_document::ImageRef, paperpaw_image::ImageError>
 pub mod paperpaw_sdk::install
@@ -3041,6 +3054,17 @@ pub paperpaw_sdk::ui::look::SwitchPart::on: bool
 pub paperpaw_sdk::ui::look::SwitchPart::rect: paperpaw_platform::geometry::Rect
 pub type paperpaw_sdk::ui::look::InkPainter<P> = fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, &P) -> core::option::Option<paperpaw_platform::pixel::Color>
 pub type paperpaw_sdk::ui::look::Painter<P> = fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, &P) -> bool
+pub mod paperpaw_sdk::ui::offline
+pub enum paperpaw_sdk::ui::offline::Offer
+pub paperpaw_sdk::ui::offline::Offer::NotNow
+pub paperpaw_sdk::ui::offline::Offer::Online
+pub struct paperpaw_sdk::ui::offline::OfflineOffer
+impl paperpaw_sdk::ui::offline::OfflineOffer
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect)
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::new() -> Self
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> core::option::Option<paperpaw_sdk::ui::offline::Offer>
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_tap(&mut self, paperpaw_platform::geometry::Point, &mut paperpaw_sdk::Cx<'_, '_>) -> core::option::Option<paperpaw_sdk::ui::offline::Offer>
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::shows(&self, &paperpaw_sdk::Env<'_>) -> bool
 pub mod paperpaw_sdk::ui::reorder
 #[non_exhaustive] pub enum paperpaw_sdk::ui::reorder::ReorderStep
 pub paperpaw_sdk::ui::reorder::ReorderStep::Changed
@@ -3219,6 +3243,9 @@ pub paperpaw_sdk::ui::ListChange::None
 pub paperpaw_sdk::ui::ListChange::Page
 impl paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::ListChange::request(self, &mut paperpaw_sdk::Cx<'_, '_>)
+pub enum paperpaw_sdk::ui::Offer
+pub paperpaw_sdk::ui::Offer::NotNow
+pub paperpaw_sdk::ui::Offer::Online
 #[non_exhaustive] pub enum paperpaw_sdk::ui::ReorderStep
 pub paperpaw_sdk::ui::ReorderStep::Changed
 pub paperpaw_sdk::ui::ReorderStep::Dropped
@@ -3284,6 +3311,13 @@ pub fn paperpaw_sdk::ui::ListView::set_focus(&mut self, usize) -> paperpaw_sdk::
 pub fn paperpaw_sdk::ui::ListView::set_len(&mut self, usize)
 pub fn paperpaw_sdk::ui::ListView::set_shown(&mut self, bool)
 pub fn paperpaw_sdk::ui::ListView::shown(&self) -> bool
+pub struct paperpaw_sdk::ui::OfflineOffer
+impl paperpaw_sdk::ui::offline::OfflineOffer
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect)
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::new() -> Self
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_action(&mut self, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> core::option::Option<paperpaw_sdk::ui::offline::Offer>
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_tap(&mut self, paperpaw_platform::geometry::Point, &mut paperpaw_sdk::Cx<'_, '_>) -> core::option::Option<paperpaw_sdk::ui::offline::Offer>
+pub fn paperpaw_sdk::ui::offline::OfflineOffer::shows(&self, &paperpaw_sdk::Env<'_>) -> bool
 pub struct paperpaw_sdk::ui::Pager
 pub paperpaw_sdk::ui::Pager::area: paperpaw_platform::geometry::Rect
 impl paperpaw_sdk::ui::Pager
@@ -3980,6 +4014,9 @@ pub fn paperpaw_sdk::wifi::JoinFailure::from_param(&str) -> core::option::Option
 pub fn paperpaw_sdk::wifi::JoinFailure::missing() -> core::option::Option<Self>
 pub fn paperpaw_sdk::wifi::JoinFailure::to_param(&self) -> alloc::string::String
 pub enum paperpaw_sdk::wifi::WifiCommand
+pub paperpaw_sdk::wifi::WifiCommand::Host
+pub paperpaw_sdk::wifi::WifiCommand::Host::password: alloc::string::String
+pub paperpaw_sdk::wifi::WifiCommand::Host::ssid: alloc::string::String
 pub paperpaw_sdk::wifi::WifiCommand::Join
 pub paperpaw_sdk::wifi::WifiCommand::Join::password: alloc::string::String
 pub paperpaw_sdk::wifi::WifiCommand::Join::ssid: alloc::string::String
@@ -3990,6 +4027,9 @@ pub paperpaw_sdk::wifi::WifiCommand::Scan
 impl core::fmt::Debug for paperpaw_sdk::wifi::WifiCommand
 pub fn paperpaw_sdk::wifi::WifiCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub enum paperpaw_sdk::wifi::WifiState
+pub paperpaw_sdk::wifi::WifiState::Hosting
+pub paperpaw_sdk::wifi::WifiState::Hosting::address: alloc::string::String
+pub paperpaw_sdk::wifi::WifiState::Hosting::ssid: alloc::string::String
 pub paperpaw_sdk::wifi::WifiState::Joining
 pub paperpaw_sdk::wifi::WifiState::Joining::ssid: alloc::string::String
 pub paperpaw_sdk::wifi::WifiState::Off
@@ -3998,6 +4038,7 @@ pub paperpaw_sdk::wifi::WifiState::Online
 pub paperpaw_sdk::wifi::WifiState::Online::address: alloc::string::String
 pub paperpaw_sdk::wifi::WifiState::Online::ssid: alloc::string::String
 impl paperpaw_sdk::wifi::WifiState
+pub fn paperpaw_sdk::wifi::WifiState::is_hosting(&self) -> bool
 pub fn paperpaw_sdk::wifi::WifiState::is_on(&self) -> bool
 pub fn paperpaw_sdk::wifi::WifiState::is_online(&self) -> bool
 pub fn paperpaw_sdk::wifi::WifiState::ssid(&self) -> core::option::Option<&str>
@@ -5521,6 +5562,9 @@ pub fn paperpaw_sdk::builtin::events::PageLayerTapped::to_params(&self) -> paper
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::PageWordsWanted
 pub fn paperpaw_sdk::builtin::events::PageWordsWanted::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::PageWordsWanted::to_params(&self) -> paperpaw_sdk::Params
+impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::ReadToday
+pub fn paperpaw_sdk::builtin::events::ReadToday::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
+pub fn paperpaw_sdk::builtin::events::ReadToday::to_params(&self) -> paperpaw_sdk::Params
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::builtin::events::Reading
 pub fn paperpaw_sdk::builtin::events::Reading::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::builtin::events::Reading::to_params(&self) -> paperpaw_sdk::Params

@@ -159,6 +159,27 @@ where
     pub fn sleep(&mut self) -> Result<(), Error> {
         each!(self, d => d.sleep())
     }
+
+    /// Turns the panel's power off, the picture staying (see the
+    /// controllers' `power_down`).
+    pub fn power_down(&mut self) -> Result<(), Error> {
+        each!(self, d => d.power_down())
+    }
+
+    /// Whether the panel's power is on.
+    pub fn powered(&self) -> bool {
+        each!(self, d => d.powered())
+    }
+
+    /// How long a refresh takes longer once the power was off, in
+    /// milliseconds: the SSD1677's sequences power up anyway, the
+    /// UltraChip controllers' take about an eighth of a second more.
+    pub fn power_up_ms(&self) -> u64 {
+        match self {
+            Panel::Ssd1677 { .. } => 0,
+            Panel::UltraChip(_) => 130,
+        }
+    }
 }
 
 /// `rotation` with its sides the other way round, if `swap`.

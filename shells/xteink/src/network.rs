@@ -138,6 +138,10 @@ impl Network {
     /// kernel's effects for the main loop to apply.
     pub fn step(&mut self, kernel: &mut Kernel, now: Instant) -> Vec<Effects> {
         let mut effects = Vec::new();
+        // The radio sleeps between beacons unless data moves or a page is
+        // served (the transfer, the setup with a phone).
+        let busy = self.moving() || kernel.serving();
+        self.radio.save_power(!busy);
         for event in self.radio.poll() {
             #[cfg(feature = "remote")]
             self.answer_asked(kernel, &event);

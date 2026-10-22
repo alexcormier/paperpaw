@@ -53,6 +53,9 @@ pub struct Policy {
     /// When a plugin asked for the network last; `None` once the plugin
     /// said none is coming, which fails what waited.
     pub asked_at: Option<Instant>,
+    /// The setup with a phone is under way: it says what the radio does,
+    /// nothing is joined by itself meanwhile.
+    pub phone: bool,
 }
 
 /// The strongest of `networks` joined before (`known`) and not tried yet,

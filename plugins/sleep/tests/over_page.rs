@@ -342,8 +342,10 @@ impl Device {
             .collect()
     }
 
-    fn says_sleeping(&mut self) -> bool {
-        self.texts().iter().any(|t| t == "Sleeping")
+    /// The sleeping cat shows: chosen, or where there is no cover or no
+    /// picture.
+    fn shows_cat(&mut self) -> bool {
+        self.texts().iter().any(|t| t == "A sleeping cat")
     }
 }
 
@@ -383,7 +385,7 @@ fn a_picture_goes_over_the_page_which_shows_around_it() {
     let line = (top + side / 2) / 8 * 8;
     assert_eq!(at(&page, middle, line), Color::BLACK);
     assert_eq!(at(&shown, middle, line), Color::WHITE);
-    assert!(!device.says_sleeping());
+    assert!(!device.shows_cat());
     // Waking, the page is as it was.
     device.now += 60_000;
     let effects = device.kernel.resume(Instant(device.now));
@@ -437,22 +439,22 @@ fn size_and_place_are_settings() {
 }
 
 #[test]
-fn only_where_it_is_used_else_the_cover_or_the_message() {
+fn only_where_it_is_used_else_the_cover_or_the_cat() {
     // Not reading: the cover, of which there is none.
     let mut device = Device::new("overlay-when = sleep.when.reading", false);
     device.run(actions::SLEEP);
     assert_eq!(device.kernel.active_screen().map(Id::as_str), Some(SCREEN));
-    assert!(device.says_sleeping());
+    assert!(device.shows_cat());
     let mut device = Device::new("overlay-when = sleep.when.reading", true);
     device.run(actions::SLEEP);
-    assert!(!device.says_sleeping());
+    assert!(!device.shows_cat());
     let mut device = Device::new("overlay-when = sleep.when.elsewhere", true);
     device.run(actions::SLEEP);
-    assert!(device.says_sleeping());
+    assert!(device.shows_cat());
     // No picture to show.
     let mut device = Device::new("folder = empty", true);
     device.run(actions::SLEEP);
-    assert!(device.says_sleeping());
+    assert!(device.shows_cat());
 }
 
 #[test]
@@ -547,7 +549,7 @@ fn over_the_page_not_a_menu_left_open() {
     device.run(actions::SLEEP);
     assert_eq!(device.kernel.active_screen().map(Id::as_str), Some(SCREEN));
     // Read below the menu: the picture shows, over the page alone.
-    assert!(!device.says_sleeping());
+    assert!(!device.shows_cat());
     let shown = device.render().to_vec();
     assert_eq!(at(&shown, 5, 701), Color::WHITE, "the page, not the menu");
     assert_eq!(at(&shown, 5, 704), Color::BLACK, "a line of the page");
@@ -566,7 +568,7 @@ fn never_over_a_lock() {
     device.run(actions::SLEEP);
     assert_eq!(device.kernel.active_screen().map(Id::as_str), Some(SCREEN));
     // The cover, of which there is none: the message, nothing of the page.
-    assert!(device.says_sleeping());
+    assert!(device.shows_cat());
 }
 
 #[test]
@@ -615,7 +617,7 @@ fn a_widget_in_place_of_a_picture() {
     let mut device = Device::new("overlay-widget = owls.moon", true);
     let page = device.render().to_vec();
     device.run(actions::SLEEP);
-    assert!(!device.says_sleeping());
+    assert!(!device.shows_cat());
     let shown = device.render().to_vec();
     let changed = changes(&shown, &page);
     // The moon, black, on its panel of paper below on the right.
@@ -632,7 +634,7 @@ fn the_picker_says_why_the_last_picture_did_not_show() {
     let mut device = Device::new("overlay-picture = owls/missing.png", true);
     device.run(actions::SLEEP);
     // Not shown: the cover, of which there is none.
-    assert!(device.says_sleeping());
+    assert!(device.shows_cat());
     device.wake();
     device.now += 100;
     let effects = device

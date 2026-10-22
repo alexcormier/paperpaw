@@ -7,7 +7,9 @@
 //! plugins looked at add:
 //!
 //! - `reach.unreachable`: it could not be reached from the home screen
-//!   with the buttons alone.
+//!   with the buttons alone. A screen a setting offers among its choices
+//!   (a mode of the sleep screen, shown in that one's place) is reached
+//!   through that setting instead: a note (`reach.chosen`) says which.
 //! - `reach.no-close`: back (the button, or what stands for it on a
 //!   device without one), pressed up to five times (a folder at a time),
 //!   neither closes it, nor brings the home screen, nor asks whether to
@@ -1090,6 +1092,18 @@ pub fn check(
             // Shown while the device sleeps: power closes it.
             continue;
         }
+        if let Some(setting) = chosen_by(&driver.session, screen) {
+            let note = Finding::info(
+                "reach.chosen",
+                screen.clone(),
+                format!(
+                    "Shown in another screen's place where the setting `{setting}` chooses \
+                     it: reached through that setting."
+                ),
+            );
+            report.add(place(note, screen));
+            continue;
+        }
         let (way, state) = match found.ways.get(screen) {
             Some((way, state)) => (way.clone(), state.clone()),
             None if passing.contains(screen) => {
@@ -1304,6 +1318,22 @@ fn focus(
         findings.push(trap);
     }
     findings
+}
+
+/// The setting that offers `screen` among its choices, if one does: a
+/// mode of another screen, shown in its place (the sleep screen's).
+fn chosen_by(session: &Session, screen: &str) -> Option<String> {
+    use paperpaw_core::sdk::SettingKind;
+    session
+        .device
+        .kernel
+        .settings()
+        .specs()
+        .find(|spec| match &spec.kind {
+            SettingKind::Choice(choices) => choices.iter().any(|value| value == screen),
+            _ => false,
+        })
+        .map(|spec| spec.id.to_string())
 }
 
 #[cfg(test)]

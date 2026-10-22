@@ -389,23 +389,22 @@ fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
     CodePlugins::Load(native::Loader::new(place))
 }
 
-/// The kernel with the standard app, as the X4 wants it.
-#[expect(
-    clippy::expect_used,
-    reason = "the plugins are built in: a kernel that cannot be built is a bug to see at once"
-)]
-
 /// The status lines of the X4s by default (see `setting_default_text`):
 /// fewer items than on large screens.
 const CALM_STATUS: [(&str, &str); 6] = [
-    ("reader.status.bottom-left", "reader.status.aloud"),
-    ("reader.status.bottom-center", "core.status.clock"),
+    ("reader.status.bottom-left", "core.status.clock, reader.status.aloud"),
+    ("reader.status.bottom-center", ""),
     ("reader.status.bottom-right", "reader.status.page"),
     ("home.status.left", "core.status.clock"),
     ("home.status.center", ""),
     ("home.status.right", "core.status.battery"),
 ];
 
+/// The kernel with the standard app, as the X4 wants it.
+#[expect(
+    clippy::expect_used,
+    reason = "the plugins are built in: a kernel that cannot be built is a bug to see at once"
+)]
 fn kernel(
     storage: Box<dyn Storage>,
     ota: Option<&ota::Ota>,
