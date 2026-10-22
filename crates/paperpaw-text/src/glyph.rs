@@ -106,7 +106,13 @@ pub(crate) fn zeroed<T: Clone + Default>(len: usize) -> Option<Vec<T>> {
 
 /// Packs 8-bit coverage into the 4-bit glyph format; `None` if memory is
 /// short.
-#[cfg_attr(not(feature = "outline"), allow(dead_code))]
+#[cfg_attr(
+    not(feature = "outline"),
+    allow(
+        dead_code,
+        reason = "only outlines drawn with the outline feature are packed"
+    )
+)]
 pub(crate) fn pack_coverage(coverage: &[u8], width: usize, height: usize) -> Option<Vec<u8>> {
     let stride = width.div_ceil(2);
     let mut data = zeroed(stride.checked_mul(height)?)?;

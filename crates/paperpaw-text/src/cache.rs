@@ -54,7 +54,13 @@ impl GlyphCache {
 
     /// The glyph for `ch`. `font_index` identifies `font` within the
     /// caller's font registry.
-    #[cfg_attr(not(feature = "outline"), allow(unused_variables))]
+    #[cfg_attr(
+        not(feature = "outline"),
+        allow(
+            unused_variables,
+            reason = "some arguments serve only outlines, drawn with the outline feature"
+        )
+    )]
     pub fn glyph<'a>(
         &'a mut self,
         font_index: u16,

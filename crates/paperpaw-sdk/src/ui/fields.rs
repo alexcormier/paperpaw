@@ -108,7 +108,10 @@ fn title_lines(
 /// [`text_field_height`]. With `focused`, the row is focused (draw the
 /// focus first, as for other rows). *Select* or a tap opens the keyboard
 /// ([`edit_text`]); the value comes back as the reply.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_text_field(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -291,7 +294,10 @@ pub fn draw_check(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, on: bool
 /// Draws a row of a list where several may be ticked: its box on the
 /// left ([`draw_check`]), `title` beside it, `note` small below where
 /// given. Draw the focus first where it is focused, as for other rows.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 pub fn draw_check_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
