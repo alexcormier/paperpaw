@@ -445,6 +445,23 @@ impl<'a> Env<'a> {
             .map_or_else(alloc::vec::Vec::new, |maker| maker.slot_screens(slot))
     }
 
+    /// The screen the user chose for slot `slot` (`[slots]`, see
+    /// [`Command::BindSlot`](crate::Command::BindSlot)), where it is
+    /// there; `None` for automatic, the plugins' choice.
+    pub fn slot_choice(&self, slot: &str) -> Option<&'a crate::Id> {
+        self.screen_maker?.slot_choice(slot)
+    }
+
+    /// The translation key of slot `slot`'s name (e.g. "Home screen").
+    pub fn slot_title(&self, slot: &str) -> Option<&'a str> {
+        self.screen_maker?.slot_title(slot)
+    }
+
+    /// The translation key of screen `screen`'s name.
+    pub fn screen_title(&self, screen: &crate::Id) -> Option<&'a str> {
+        self.screen_maker?.screen_title(screen)
+    }
+
     /// This environment with `maker` making the screens
     /// [`Env::make_screen`] asks for: the kernel's.
     #[cfg(any(test, feature = "kernel"))]

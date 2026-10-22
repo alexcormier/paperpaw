@@ -19,6 +19,15 @@ change the plugin SDK.
   keys at least 6 mm wide is split in two in its order ("qwert" above
   "yuiop"), so the keys are about twice as wide; by touch and with the
   buttons as before. Wide screens keep their rows.
+- Settings, Plugins, *Screens*: for every place several plugins offer a
+  screen for (the home screen, the library, the reader, the quick panel,
+  the lock, the keyboard, the sleep screen, …) the plugin that shows it,
+  *Automatic* by default; kept in `paperpaw.ini` (`[slots]`), a choice
+  whose plugin is gone counts as *Automatic*. The reading app books open
+  with is chosen there too. When a plugin comes that offers a screen for
+  such a place, it asks once: use it now?
+- SDK: `Env::slot_choice` (the user's choice for a slot), `Env::slot_title`
+  and `Env::screen_title`.
 - Fewer columns or rows on the home screen no longer leave a page empty:
   an item whose cells lie outside the grid now is moved inside it as
   little as can be (narrower or lower where it was wider or higher than

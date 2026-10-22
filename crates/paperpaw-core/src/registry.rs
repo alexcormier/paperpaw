@@ -117,6 +117,20 @@ impl paperpaw_sdk::ScreenMaker for Registry {
         self.resolve_slot(slot)
     }
 
+    fn slot_choice(&self, slot: &str) -> Option<&Id> {
+        self.user_bindings
+            .get(slot)
+            .filter(|screen| self.screens.contains_key(*screen))
+    }
+
+    fn slot_title(&self, slot: &str) -> Option<&str> {
+        self.slots.get(slot).map(|spec| spec.title.as_ref())
+    }
+
+    fn screen_title(&self, screen: &Id) -> Option<&str> {
+        self.screens.get(screen).map(|spec| spec.title.as_ref())
+    }
+
     fn slot_screens(&self, slot: &str) -> Vec<&Id> {
         let mut screens: Vec<&Id> = Vec::new();
         for candidate in self.candidates.iter().filter(|c| c.slot.as_str() == slot) {
