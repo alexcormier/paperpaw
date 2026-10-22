@@ -54,6 +54,7 @@ mod network;
 mod ota;
 mod power;
 mod probe;
+mod provision;
 #[cfg(feature = "remote")]
 mod remote;
 mod roots;
@@ -270,6 +271,9 @@ fn main() -> ! {
     let board = Board::take(p);
 
     let storage = card::mount(board.card);
+    // Wi-Fi the web flasher wrote with the firmware: to the card, for the
+    // kernel to keep at its start.
+    provision::take(&flash, storage.as_ref());
     // For bug reports: on the card, and said over USB.
     if let Some(message) = &panicked {
         crash::keep(storage.as_ref(), message);
