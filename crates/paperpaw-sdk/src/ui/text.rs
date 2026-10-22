@@ -146,7 +146,7 @@ pub fn draw_heading(
 pub fn switch_rect(style: &UiStyle, row: Rect) -> Rect {
     // A switch is tapped with its whole row: drawn as large as in a
     // plain row, also in one a long title makes higher.
-    let plain = row.height.min(style.row as u16);
+    let plain = row.height.min(style.control_row as u16);
     let height = (plain * 7 / 10 * 3 / 4).max(8);
     let width = height * 2;
     Rect::new(
@@ -260,7 +260,7 @@ pub fn draw_switch_row(
         rect.x,
         rect.y,
         rect.width,
-        (style.row as u16).min(rect.height),
+        (style.control_row as u16).min(rect.height),
     );
     let beside = f32::from(switch_rect(style, plain).width);
     let band = if note.is_empty() {

@@ -28,6 +28,17 @@ enum Row {
     Sync,
 }
 
+/// What a row of the list shows: a way on, or, where the tiles do not fit
+/// side by side (the largest text), a tile, the chart or the totals, one
+/// below the other.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Entry {
+    Tile(usize),
+    Chart,
+    Totals,
+    Go(Row),
+}
+
 pub(crate) struct Overview {
     style: UiStyle,
     header: ui::Header,
@@ -35,7 +46,9 @@ pub(crate) struct Overview {
     chart: Rect,
     totals: Rect,
     list: ListView,
-    rows: Vec<Row>,
+    entries: Vec<Entry>,
+    /// Tiles, chart and totals in the list, one below the other.
+    stacked: bool,
     today: Option<i32>,
     days: Vec<Day>,
     books: usize,
@@ -85,7 +98,8 @@ impl Overview {
                 style.row,
             )
             .focus_on_keys(env),
-            rows,
+            entries: rows.into_iter().map(Entry::Go).collect(),
+            stacked: false,
             style,
             header,
             tiles,
@@ -98,7 +112,84 @@ impl Overview {
             value_size: style.title,
         };
         overview.value_size = overview.value_size(env);
+        if overview.today.is_some() && !overview.tiles_fit(env) {
+            overview.stack(env);
+        }
         overview
+    }
+
+    /// Whether each tile's words fit whole side by side (as small as
+    /// [`Overview::draw_tiles`] sets them).
+    fn tiles_fit(&self, env: &Env<'_>) -> bool {
+        let style = self.style;
+        let (Some(font), Some(tiles)) = (style.font(env), self.tiles(env)) else {
+            return true;
+        };
+        let least = style.small * 0.85;
+        tiles.iter().enumerate().all(|(i, (label, value, note))| {
+            let room = self.tile_room(i) + 1.0;
+            font.measure(least, env.i18n.tr(label)) <= room
+                && font.measure(self.value_size, value) <= room
+                && font.measure(least, note) <= room
+        })
+    }
+
+    /// One column: the tiles, the chart and the totals as rows of the list
+    /// above the ways on, the list across the screen below the header.
+    fn stack(&mut self, env: &Env<'_>) {
+        let style = self.style;
+        let display = env.device.display;
+        let top = self.header.area.height;
+        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        let mut entries = alloc::vec![Entry::Tile(0), Entry::Tile(1), Entry::Tile(2), Entry::Chart];
+        if !self.days.is_empty() {
+            entries.push(Entry::Totals);
+        }
+        entries.extend(self.entries.iter().copied());
+        self.entries = entries;
+        self.list = ListView::new(area, style.noted_row()).focus_on_keys(env);
+        self.stacked = true;
+    }
+
+    /// One column: the list of tiles, chart, totals and ways on.
+    fn draw_stacked(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        let style = self.style;
+        let tiles = self.tiles(env);
+        let totals = self.totals_text(env);
+        self.list.draw(
+            canvas,
+            &style,
+            self.entries.len(),
+            |canvas, index, rect, focused| match self.entries[index] {
+                Entry::Tile(i) => {
+                    if let Some((label, value, note)) = tiles.as_ref().and_then(|t| t.get(i)) {
+                        let label = env.i18n.tr(label);
+                        ui::draw_noted_row(canvas, env, &style, rect, focused, label, value, note);
+                    }
+                }
+                Entry::Chart => {
+                    let margin = style.margin as u16;
+                    let gap = style.gap as u16;
+                    let area = Rect::new(
+                        rect.x + margin,
+                        rect.y + gap,
+                        rect.width.saturating_sub(2 * margin),
+                        rect.height.saturating_sub(2 * gap),
+                    );
+                    self.draw_chart(canvas, env, area);
+                }
+                Entry::Totals => ui::draw_message(canvas, env, &style, rect, &totals),
+                Entry::Go(row) => draw_way(canvas, env, &style, rect, focused, row),
+            },
+        );
+    }
+
+    /// The way on in row `index`, if it is one.
+    fn row_at(&self, index: usize) -> Option<Row> {
+        match self.entries.get(index) {
+            Some(Entry::Go(row)) => Some(*row),
+            _ => None,
+        }
     }
 
     /// The tiles: their names, values and notes; none without the time.
@@ -206,12 +297,11 @@ impl Overview {
         }
     }
 
-    fn draw_chart(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+    fn draw_chart(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, c: Rect) {
         let style = self.style;
         let Some(font) = style.font(env) else {
             return;
         };
-        let c = self.chart;
         let title_h = (style.small * 1.6) as u16;
         let title = Rect::new(c.x, c.y, c.width, title_h);
         let label = env.i18n.format(
@@ -259,13 +349,9 @@ impl Overview {
     }
 
     /// All reading: the time, the books and the days.
-    fn draw_totals(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
-        let style = self.style;
-        let Some(font) = style.font(env) else {
-            return;
-        };
+    fn totals_text(&self, env: &Env<'_>) -> String {
         let total: u64 = self.days.iter().map(|d| u64::from(d.seconds)).sum();
-        let text = env.i18n.format(
+        env.i18n.format(
             "stats.totals",
             &[
                 ("time", Arg::Str(&fmt::duration(env, total))),
@@ -281,7 +367,16 @@ impl Overview {
                     ),
                 ),
             ],
-        );
+        )
+    }
+
+    /// The totals on a line below the chart.
+    fn draw_totals(&self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        let style = self.style;
+        let Some(font) = style.font(env) else {
+            return;
+        };
+        let text = self.totals_text(env);
         let w = font.measure(style.small, &text);
         let x = (f32::from(self.totals.width) - w).max(0.0) / 2.0;
         ui::draw_label(
@@ -294,6 +389,24 @@ impl Overview {
             style.faint(60),
         );
     }
+}
+
+/// A way on in `rect`: its name and "›".
+fn draw_way(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    rect: Rect,
+    focused: bool,
+    row: Row,
+) {
+    let key = match row {
+        Row::ThisBook(_) => "stats.this-book",
+        Row::Calendar => "stats.calendar",
+        Row::Books => "stats.books",
+        Row::Sync => "stats.sync.title",
+    };
+    ui::draw_value_row(canvas, env, style, rect, focused, env.i18n.tr(key), "›");
 }
 
 /// Distinct pages read on local day `day`.
@@ -314,10 +427,15 @@ impl Screen for Overview {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("stats.title");
+        if self.stacked {
+            let paging = self.list.paging(self.entries.len());
+            self.header.draw(canvas, env, &style, title, None, paging);
+            return self.draw_stacked(canvas, env);
+        }
         self.header.draw(canvas, env, &style, title, None, None);
         if self.today.is_some() {
             self.draw_tiles(canvas, env);
-            self.draw_chart(canvas, env);
+            self.draw_chart(canvas, env, self.chart);
         } else {
             // Without the time no day is today: what needs it gives way to
             // a hint (and the totals, if anything was read).
@@ -332,36 +450,45 @@ impl Screen for Overview {
         if self.today.is_some() || !self.days.is_empty() {
             self.draw_totals(canvas, env);
         }
-        let rows = &self.rows;
+        let entries = &self.entries;
         self.list.draw(
             canvas,
             &style,
-            rows.len(),
+            entries.len(),
             |canvas, index, rect, focused| {
-                let key = match rows[index] {
-                    Row::ThisBook(_) => "stats.this-book",
-                    Row::Calendar => "stats.calendar",
-                    Row::Books => "stats.books",
-                    Row::Sync => "stats.sync.title",
-                };
-                ui::draw_value_row(canvas, env, &style, rect, focused, env.i18n.tr(key), "›");
+                if let Entry::Go(row) = entries[index] {
+                    draw_way(canvas, env, &style, rect, focused, row);
+                }
             },
         );
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
+        // In one column the buttons page as in other lists.
+        if self.stacked
+            && *a != actions::CONFIRM
+            && let Some(change) = self.list.navigate(a, self.entries.len())
+        {
+            if change != ListChange::None {
+                cx.request_redraw();
+                cx.request_refresh(RefreshMode::Fast);
+            }
+            return Handled::Yes;
+        }
         let delta = if [actions::UP, actions::LEFT, actions::PREVIOUS].contains(a) {
             -1
         } else if [actions::DOWN, actions::RIGHT, actions::NEXT].contains(a) {
             1
         } else if *a == actions::CONFIRM {
-            self.open(self.rows[self.list.focus().min(self.rows.len() - 1)], cx);
+            if let Some(row) = self.row_at(self.list.focus()) {
+                self.open(row, cx);
+            }
             return Handled::Yes;
         } else {
             return Handled::No;
         };
-        if self.list.move_focus(delta, self.rows.len()) != ListChange::None {
+        if self.list.move_focus(delta, self.entries.len()) != ListChange::None {
             cx.request_redraw_area(self.list.area());
             cx.request_refresh(RefreshMode::Fast);
         }
@@ -376,12 +503,14 @@ impl Screen for Overview {
             cx.command(Command::RunAction(action));
             return Handled::Yes;
         }
-        let Some(index) = self.list.hit(gesture.start, self.rows.len()) else {
+        let Some(index) = self.list.hit(gesture.start, self.entries.len()) else {
             return Handled::No;
         };
         self.list.set_focus(index);
         cx.request_redraw_area(self.list.area());
-        self.open(self.rows[index], cx);
+        if let Some(row) = self.row_at(index) {
+            self.open(row, cx);
+        }
         Handled::Yes
     }
 }

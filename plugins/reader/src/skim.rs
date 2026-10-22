@@ -53,7 +53,12 @@ impl SkimScreen {
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let display = env.device.display;
-        let (margin, gap, row) = (style.margin as u16, style.gap as u16, style.row as u16);
+        // Its bar and buttons are controls: as large at every size.
+        let (margin, gap, row) = (
+            style.margin as u16,
+            style.gap as u16,
+            style.control_row as u16,
+        );
         // The buttons' row grows with them on touch screens.
         let button_row = style.touch_row(u32::from(row)) as u16;
         // Four in a row where their names fit whole, else two rows of two,

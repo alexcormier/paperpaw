@@ -3630,6 +3630,7 @@ pub fn paperpaw_sdk::ui::TimePicker::twelve_hours(self, bool) -> Self
 pub fn paperpaw_sdk::ui::TimePicker::value(&self) -> (u8, u8)
 #[non_exhaustive] pub struct paperpaw_sdk::ui::UiStyle
 pub paperpaw_sdk::ui::UiStyle::cards: bool
+pub paperpaw_sdk::ui::UiStyle::control_row: u32
 pub paperpaw_sdk::ui::UiStyle::corner: u32
 pub paperpaw_sdk::ui::UiStyle::dark_header: bool
 pub paperpaw_sdk::ui::UiStyle::finger: u32

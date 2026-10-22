@@ -358,6 +358,7 @@ pub(super) fn card_style() -> UiStyle {
         title: 23.0,
         head: 23.0,
         row: 20,
+        control_row: 20,
         header: 24,
         margin: 12,
         gap: 8,

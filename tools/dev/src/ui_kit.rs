@@ -30,7 +30,7 @@ pub fn add(app: KernelBuilder) -> KernelBuilder {
 }
 
 /// The pages, by screen id and title key.
-const PAGES: [(&str, &str); 19] = [
+const PAGES: [(&str, &str); 20] = [
     ("ui-kit.text", "ui-kit.text"),
     ("ui-kit.messages", "ui-kit.messages"),
     ("ui-kit.empties", "ui-kit.empties"),
@@ -38,6 +38,7 @@ const PAGES: [(&str, &str); 19] = [
     ("ui-kit.values", "ui-kit.values"),
     ("ui-kit.noted-rows", "ui-kit.noted-rows"),
     ("ui-kit.numbers", "ui-kit.numbers"),
+    ("ui-kit.sliders", "ui-kit.sliders"),
     ("ui-kit.controls", "ui-kit.controls"),
     ("ui-kit.segments", "ui-kit.segments"),
     ("ui-kit.layout", "ui-kit.layout"),
@@ -65,6 +66,7 @@ ui-kit.rows = Switch rows
 ui-kit.values = Value rows
 ui-kit.noted-rows = Rows with a note
 ui-kit.numbers = Numbers
+ui-kit.sliders = Sliders
 ui-kit.controls = Buttons
 ui-kit.segments = Segments
 ui-kit.layout = Layout and cards
@@ -147,6 +149,7 @@ ui-kit.rows = Schalterzeilen
 ui-kit.values = Wertzeilen
 ui-kit.noted-rows = Zeilen mit Hinweis
 ui-kit.numbers = Zahlen
+ui-kit.sliders = Schieberegler
 ui-kit.controls = Schaltflächen
 ui-kit.segments = Segmente
 ui-kit.layout = Anordnung und Karten
@@ -311,6 +314,7 @@ impl Screen for Page {
             "ui-kit.values" => values(canvas, env, &style, whole),
             "ui-kit.noted-rows" => noted(canvas, env, &style, whole),
             "ui-kit.numbers" => numbers(canvas, env, &style, whole),
+            "ui-kit.sliders" => sliders(canvas, env, &style, whole),
             "ui-kit.controls" => controls(canvas, env, &style, body),
             "ui-kit.segments" => segments(canvas, env, &style, body),
             "ui-kit.layout" => layout(canvas, env, &style, body),
@@ -425,7 +429,7 @@ fn noted(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     ui::draw_noted_row(canvas, env, style, noted, false, title, value, note);
 }
 
-/// A stepper, a slider (focused) and a progress bar.
+/// A stepper and a progress bar.
 fn numbers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     let row = style.row as u16;
     let mut stack = ui::Stack::new(area, 0);
@@ -443,12 +447,6 @@ fn numbers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) 
         "100",
         false,
     );
-    let slider = stack.take(ui::slider::row_height(style, false));
-    let view = SliderView::new(slider, 40, "40 %")
-        .title(env.i18n.tr("ui-kit.slider"))
-        .focus(SliderFocus::Focused);
-    ui::draw_focus(canvas, style, slider);
-    ui::Slider::new(0, 100).draw_row(canvas, env, style, &view);
     let margin = style.margin as u16;
     let progress = stack.take(row);
     let bar = Rect::new(
@@ -458,6 +456,19 @@ fn numbers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) 
         progress.height / 3,
     );
     ui::draw_progress(canvas, style, bar, 620, Color::BLACK);
+}
+
+/// A slider, focused.
+fn sliders(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
+    let title = env.i18n.tr("ui-kit.slider");
+    let height = ui::slider::row_height_for(env, style, area.width, title, "100 %", false);
+    let slider = ui::Stack::new(area, 0).take(height);
+    let view = SliderView::new(slider, 40, "40 %")
+        .title(title)
+        .room("100 %")
+        .focus(SliderFocus::Focused);
+    ui::draw_focus(canvas, style, slider);
+    ui::Slider::new(0, 100).draw_row(canvas, env, style, &view);
 }
 
 /// Buttons in each state, a faint one and icon buttons.

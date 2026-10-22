@@ -115,6 +115,7 @@ fn the_ui_kit_shows_every_page() {
         "values",
         "noted-rows",
         "numbers",
+        "sliders",
         "controls",
         "segments",
         "layout",

@@ -205,7 +205,7 @@ impl Wheels {
 /// The height of a picker's `+` and `−`: a button's in a row that can be
 /// touched.
 fn button_size(style: &UiStyle) -> u16 {
-    let row = style.touch_row(style.row) as u16;
+    let row = style.touch_row(style.control_row) as u16;
     button_height(style, Rect::new(0, 0, 0, row))
 }
 

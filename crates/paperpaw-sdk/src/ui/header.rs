@@ -63,7 +63,10 @@ pub fn draw_header(
 /// does not fit so, on as many lines as the bar holds, in the small size,
 /// else in the size of captions, in the middle of the bar. Shortened only
 /// where none of that holds it.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "a drawing helper: canvas, font, style, band, position, room, title and ink"
+)]
 fn draw_title(
     canvas: &mut Canvas<'_>,
     font: &FontHandle<'_>,
@@ -104,6 +107,21 @@ fn draw_title(
     let (size, title) = title_fitting(font, style, title, room);
     let baseline = cap_baseline(font, band, size);
     draw_label_on(canvas, font, size, x, area, baseline, &title, ink);
+}
+
+/// Whether [`draw_title`] shows `title` whole in `room`, on lines as
+/// high as `high` holds.
+fn title_fits(font: &FontHandle<'_>, style: &UiStyle, high: u16, room: f32, title: &str) -> bool {
+    let least = style.small.min(style.head);
+    if font.measure(least, title) <= room + 1.0 {
+        return true;
+    }
+    [least, style.size(super::TextRole::Caption).min(least)]
+        .into_iter()
+        .any(|size| {
+            let lines = font.wrap(size, title, room.max(1.0)).len() as u16;
+            lines < 2 || lines * font.line_metrics(size).line_height as u16 <= high
+        })
 }
 
 /// A screen's header bar for touch screens too: a back arrow on the left
@@ -220,6 +238,23 @@ impl Header {
         }
     }
 
+    /// Whether `title` is whole beside the page number of `page`.
+    fn title_whole(
+        &self,
+        env: &Env<'_>,
+        style: &UiStyle,
+        title: &str,
+        page: Option<(usize, usize)>,
+    ) -> bool {
+        let Some(font) = style.font(env) else {
+            return true;
+        };
+        let t = self.layout(env, style, page).title;
+        let room = f32::from(t.width) - style.margin as f32;
+        let high = t.height.max(style.header_band(self.area).height);
+        title_fits(&font, style, high, room, title)
+    }
+
     /// Draws the header: the title, an optional note right of it (e.g. a
     /// sort order) and the page number of a paged list (`page` is the
     /// 0-based page and the number of pages).
@@ -232,6 +267,9 @@ impl Header {
         note: Option<&str>,
         page: Option<(usize, usize)>,
     ) {
+        // Without arrows to page with, the page number gives way where the
+        // title is not whole beside it.
+        let page = page.filter(|_| self.arrows || self.title_whole(env, style, title, page));
         let parts = self.layout(env, style, page);
         // A note that only tells something is said with the title ("„word“,
         // 3 hits"); one that does something is a button of its own.

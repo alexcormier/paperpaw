@@ -411,8 +411,29 @@ impl Screen for Calendar {
         if let Some(font) = style.font(env) {
             let (year, month) = month_of(self.day);
             let name = format!("{} {year}", fmt::month(env, month));
-            let x = (f32::from(self.nav.width) - font.measure(style.title, &name)) / 2.0;
-            ui::draw_label(canvas, &font, style.title, x, self.nav, &name, Color::BLACK);
+            // Between the arrows, a gap from each: smaller where it does
+            // not fit there.
+            let gap = style.gap as f32;
+            let from = f32::from(left.x + left.width) + gap;
+            let room = (f32::from(right.x) - gap - from).max(1.0);
+            let (size, line) =
+                paperpaw_sdk::widgets::fit_line(&font, style.title, style.small * 0.7, &name, room);
+            // Still too long: month and year on two lines where the row
+            // holds them.
+            let lines = font.wrap(style.small, &name, room);
+            let high = font.line_metrics(style.small).line_height as u16;
+            if line != name && lines.len() == 2 && 2 * high <= self.nav.height {
+                let top = self.nav.y + (self.nav.height - 2 * high) / 2;
+                for (i, range) in lines.into_iter().enumerate() {
+                    let part = name[range].trim();
+                    let x = from + (room - font.measure(style.small, part)).max(0.0) / 2.0;
+                    let at = Rect::new(self.nav.x, top + i as u16 * high, self.nav.width, high);
+                    ui::draw_label(canvas, &font, style.small, x, at, part, Color::BLACK);
+                }
+            } else {
+                let x = from + (room - font.measure(size, &line)).max(0.0) / 2.0;
+                ui::draw_label(canvas, &font, size, x, self.nav, &line, Color::BLACK);
+            }
         }
         self.draw_grid(canvas, env);
         self.draw_detail(canvas, env);

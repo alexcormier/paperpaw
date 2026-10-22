@@ -371,7 +371,7 @@ impl Segments {
     /// The height a row of segments takes: a button's in a row that can
     /// be touched.
     pub fn height(style: &UiStyle) -> u16 {
-        let row = style.touch_row(style.row) as u16;
+        let row = style.touch_row(style.control_row) as u16;
         super::button_height(style, Rect::new(0, 0, 0, row))
     }
 

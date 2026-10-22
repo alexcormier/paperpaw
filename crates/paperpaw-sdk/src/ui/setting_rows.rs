@@ -249,7 +249,7 @@ pub fn switch_row_height(
     title: &str,
     note: &str,
 ) -> u16 {
-    let plain = Rect::new(0, 0, width, style.row as u16);
+    let plain = Rect::new(0, 0, width, style.control_row as u16);
     let base = if note.is_empty() {
         style.row
     } else {

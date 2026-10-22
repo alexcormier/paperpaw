@@ -26,6 +26,15 @@ change the plugin SDK.
   (`ui::note_line_height`, `ui::message_height`, `ui::empty_height`). The
   button hints below the screen set a long word smaller, then on two
   lines. `paperpaw-dev ui-kit` checks every page of the kit strictly.
+  At the largest text sizes, where a row cannot hold a label on two lines
+  even in smaller letters, rows (and every list with them) grow to two
+  lines of small text; controls keep their size (`UiStyle::control_row`,
+  which buttons, switches, ticks and pickers are sized from). At the
+  default and smaller sizes nothing changes. Value rows too short for two
+  lines set title and value smaller first. Header bars without arrows
+  leave out the page number where the title is not whole beside it. The
+  reading statistics go to one column, paged like a list, where their
+  tiles do not fit side by side.
 - `ask::confirm` asks yes or no on the screen of the new slot
   `core.confirm` (the kernel's `ui::confirm::Confirm`, a `ui::Dialog` in
   the middle of the screen, unless a plugin binds another): the question,
