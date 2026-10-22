@@ -43,8 +43,10 @@ impl Chips {
                 // No font: about half the size a character.
                 None => label.chars().count() as f32 * size / 2.0,
             };
-            // Rounded up, so the word keeps all its room.
-            let width = super::button_width(style, text);
+            // Half the chip's height at each side, as its rounded ends
+            // take that much; rounded up, so the word keeps all its room.
+            let width =
+                text + f32::from(Self::height(style)).max(super::button_width(style, text) - text);
             width as u16 + u16::from(width > f32::from(width as u16))
         });
         Self::from_widths(style, area, widths)
