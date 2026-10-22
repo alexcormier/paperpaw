@@ -45,20 +45,8 @@ pub fn draw_header(
             ink,
         );
     }
-    let (x, baseline) = (
-        f32::from(area.x) + margin,
-        cap_baseline(&font, band, size),
-    );
-    draw_label_on(
-        &mut canvas,
-        &font,
-        size,
-        x,
-        area,
-        baseline,
-        &title,
-        ink,
-    );
+    let (x, baseline) = (f32::from(area.x) + margin, cap_baseline(&font, band, size));
+    draw_label_on(&mut canvas, &font, size, x, area, baseline, &title, ink);
 }
 
 /// A screen's header bar for touch screens too: a back arrow on the left

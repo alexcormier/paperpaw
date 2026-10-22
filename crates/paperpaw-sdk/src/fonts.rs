@@ -760,7 +760,8 @@ impl<'a> FontHandle<'a> {
     /// is drawn at (see [`FontHandle::size_for`]; for a display, the size
     /// asked).
     pub fn line_metrics(&self, size: f32) -> LineMetrics {
-        self.font().line_metrics(self.font().size_for(size, "", self.display))
+        self.font()
+            .line_metrics(self.font().size_for(size, "", self.display))
     }
 
     /// The font that draws `ch` and its number in the cache: this one,

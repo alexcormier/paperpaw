@@ -206,11 +206,7 @@ fn layout(lines: &[Line], g: Geometry) -> Layout {
         Rect::new(0, g.height - height, g.width, height)
     };
     // The border on the side towards the rest of the screen.
-    let inner_top = if g.top {
-        region.y
-    } else {
-        region.y + g.border
-    };
+    let inner_top = if g.top { region.y } else { region.y + g.border };
     let rows = lines
         .iter()
         .zip(heights)

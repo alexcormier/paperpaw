@@ -51,16 +51,14 @@ mod panel;
 pub struct Menu;
 
 /// How menus look.
-static SETTINGS: [SettingSpec; 1] = [
-    SettingSpec::fixed_choice(
-        STYLE.static_str(),
-        "menu.setting.style",
-        &[STYLE_LIST, STYLE_TILES],
-        STYLE_LIST,
-        paperpaw_sdk::builtin::groups::LOOK,
-    )
-    .described("menu.setting.style.help"),
-];
+static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_choice(
+    STYLE.static_str(),
+    "menu.setting.style",
+    &[STYLE_LIST, STYLE_TILES],
+    STYLE_LIST,
+    paperpaw_sdk::builtin::groups::LOOK,
+)
+.described("menu.setting.style.help")];
 
 impl Plugin for Menu {
     fn manifest(&self) -> Manifest {

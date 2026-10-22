@@ -248,7 +248,11 @@ fn packs_hold_the_latin_set_at_every_size() {
             .filter(|&size| pack.size_for(size, "A", false) == size)
             .collect();
         if std::env::var_os("PAPERPAW_FONT_SIZES").is_none() {
-            assert_eq!(text_sizes, [20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 48.0], "{id}");
+            assert_eq!(
+                text_sizes,
+                [20.0, 24.0, 28.0, 32.0, 36.0, 40.0, 48.0],
+                "{id}"
+            );
         }
         if *id == paperpaw_sdk::builtin::fonts::UI {
             let large: Vec<f32> = pack.sizes().filter(|s| !text_sizes.contains(s)).collect();
@@ -257,7 +261,11 @@ fn packs_hold_the_latin_set_at_every_size() {
                 assert_eq!(pack.size_for(size, "12:30", true), size);
                 assert!(pack.size_for(size, "12:30", false) <= 48.0);
                 for digit in "0123456789:".chars() {
-                    assert_ne!(pack.glyph(digit, size), pack.glyph('?', 48.0), "{digit} at {size}");
+                    assert_ne!(
+                        pack.glyph(digit, size),
+                        pack.glyph('?', 48.0),
+                        "{digit} at {size}"
+                    );
                 }
             }
         }

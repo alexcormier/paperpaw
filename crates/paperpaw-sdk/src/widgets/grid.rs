@@ -422,7 +422,10 @@ fn places(env: &Env<'_>, geometry: &Geometry, items: &[Item]) -> Vec<(usize, Cel
         let Some(c) = item.at.filter(|c| !c.fits(geometry.columns, geometry.rows)) else {
             continue;
         };
-        let (w, h) = (c.w.min(geometry.columns).max(1), c.h.min(geometry.rows.max(1)).max(1));
+        let (w, h) = (
+            c.w.min(geometry.columns).max(1),
+            c.h.min(geometry.rows.max(1)).max(1),
+        );
         let near = Cells {
             col: c.col.min(geometry.columns.saturating_sub(w)),
             row: c.row.min(geometry.rows.saturating_sub(h)),

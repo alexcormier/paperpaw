@@ -644,10 +644,22 @@ fn fewer_columns_keep_every_item_in_sight() {
 /// A tool in cell `col`/`row`, one of 16 apart.
 fn alloc_free(col: u8, row: u8) -> String {
     let tools = [
-        "core.library", "core.settings", "core.home", "core.tools",
-        "core.back", "core.menu", "core.sleep", "core.refresh-screen",
-        "core.next-page", "core.prev-page", "core.night-mode", "core.screenshot",
-        "core.quick-panel", "core.up", "core.down", "core.left",
+        "core.library",
+        "core.settings",
+        "core.home",
+        "core.tools",
+        "core.back",
+        "core.menu",
+        "core.sleep",
+        "core.refresh-screen",
+        "core.next-page",
+        "core.prev-page",
+        "core.night-mode",
+        "core.screenshot",
+        "core.quick-panel",
+        "core.up",
+        "core.down",
+        "core.left",
     ];
     format!("tool:{} {col}/{row} 1x1", tools[usize::from(row * 4 + col)])
 }
