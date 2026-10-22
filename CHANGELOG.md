@@ -6,6 +6,20 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Reading goal, a plugin of its own (in the store on the X4s): the daily
+  goal of the reading statistics (one goal for both; 20 minutes where
+  this plugin is), and a cat whose mood follows today's reading: sad
+  while nothing was read, so-so after a little, content from half the
+  goal, happy once it is reached (both shares are settings). The widget
+  *Reading cat* shows it with the minutes read and the goal, on the home
+  screen or the sleep screen's widgets; a tap opens the goal, or, where
+  the statistics are off or missing, offers to switch them on or get
+  them from the store. *Today's
+  reading cat* is a sleep screen too. One's own pictures can take the
+  cats' place (a folder with `sad`, `meh`, `content` and `happy`), also
+  a data plugin's. The minutes come from the reading statistics. SDK:
+  `events::READ_TODAY` (`ReadToday`: the day and the seconds read), which
+  the statistics send as they record reading.
 - The sleep screen shows a sleeping cat by default: PaperPaw's own
   drawing, in the middle of the screen with even margins, in grays where
   the screen can. It also shows where the cover or the pictures chosen

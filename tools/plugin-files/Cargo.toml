@@ -95,6 +95,12 @@ test = false
 bench = false
 
 [[bin]]
+name = "reading-goal"
+path = "src/bin/reading-goal.rs"
+test = false
+bench = false
+
+[[bin]]
 name = "rules"
 path = "src/bin/rules.rs"
 test = false
@@ -140,6 +146,7 @@ bench = false
 paperpaw-sdk = { path = "../../crates/paperpaw-sdk" }
 paperpaw-plugin-aids = { path = "../../plugins/aids" }
 paperpaw-plugin-battery = { path = "../../plugins/battery" }
+paperpaw-plugin-reading-goal = { path = "../../plugins/reading-goal" }
 paperpaw-plugin-browser = { path = "../../plugins/browser" }
 paperpaw-plugin-calibre = { path = "../../plugins/calibre" }
 paperpaw-plugin-diagnostics = { path = "../../plugins/diagnostics" }
