@@ -477,32 +477,9 @@ impl Dialog {
             }
         }
         // The buttons are there (and told) without a font too.
+        // A word too long for one line on two: the buttons are as high.
         for (i, (rect, label)) in self.buttons.iter().zip(&self.labels).enumerate() {
-            let focused = focus == Some(i);
-            let font = style.font(env);
-            let room = f32::from(rect.width) - 2.0 * super::label_pad(style, f32::from(rect.width));
-            let long = font.as_ref().filter(|f| {
-                self.label_line > 0
-                    && label.chars().count() > 1
-                    && f.measure(style.small, label) > room
-            });
-            let Some(font) = long else {
-                super::draw_button(canvas, env, style, *rect, label, false, focused);
-                continue;
-            };
-            // A word too long for one line: on two, in the middle.
-            let ink = super::draw_icon_button(canvas, style, *rect, label, false, focused);
-            let lines = font.wrap(style.small, label, room);
-            let height = self.label_line * lines.len() as u16;
-            let mut y = rect.y + rect.height.saturating_sub(height) / 2;
-            for range in lines {
-                let part = &label[range];
-                let x = f32::from(rect.x)
-                    + (f32::from(rect.width) - font.measure(style.small, part)) / 2.0;
-                let at = Rect::new(rect.x, y, rect.width, self.label_line);
-                super::draw_label(canvas, font, style.small, x, at, part, ink);
-                y += self.label_line;
-            }
+            super::draw_button(canvas, env, style, *rect, label, false, focus == Some(i));
         }
     }
 }

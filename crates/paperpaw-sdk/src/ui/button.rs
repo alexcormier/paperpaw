@@ -187,7 +187,38 @@ pub fn button_width(style: &UiStyle, label: f32) -> f32 {
     }
 }
 
-/// A button's word, centred and shortened to fit.
+/// The lines of a button's `label` in a button `width` wide: one where it
+/// fits there (a single character always), else its words wrapped, in the
+/// small size; and a line's height.
+fn label_lines(
+    font: &FontHandle<'_>,
+    style: &UiStyle,
+    width: f32,
+    label: &str,
+) -> (Vec<core::ops::Range<usize>>, u16) {
+    let line = font.line_metrics(style.small).line_height as u16;
+    let room = width - 2.0 * label_pad(style, width);
+    if label.chars().count() <= 1 || font.measure(style.small, label) <= room + 1.0 {
+        return (alloc::vec![0..label.len()], line);
+    }
+    (font.wrap(style.small, label, room.max(1.0)), line)
+}
+
+/// The height of a button `width` wide for `label`, its word whole: a
+/// button's in a row that can be touched ([`Segments::height`]), a line
+/// higher for each more line a word too long for one takes.
+pub fn button_height_for(env: &Env<'_>, style: &UiStyle, width: u16, label: &str) -> u16 {
+    let base = Segments::height(style);
+    let Some(font) = style.font(env) else {
+        return base;
+    };
+    let (lines, line) = label_lines(&font, style, f32::from(width), label);
+    base + line * (lines.len().max(1) as u16 - 1)
+}
+
+/// A button's word, centred: on more lines where it is too long for one
+/// and the button is high enough ([`button_height_for`]), else shortened
+/// to fit.
 pub(super) fn button_label(
     canvas: &mut Canvas<'_>,
     style: &UiStyle,
@@ -214,6 +245,29 @@ pub(super) fn button_label(
     } else {
         f32::from(rect.width) - 2.0 * pad
     };
+    if !single {
+        let (lines, line) = label_lines(font, style, f32::from(rect.width), label);
+        let height = line * lines.len() as u16;
+        if lines.len() > 1 && height <= rect.height {
+            let mut y = rect.y + (rect.height - height) / 2;
+            for range in lines {
+                let part = label[range].trim();
+                let x =
+                    f32::from(rect.x) + (f32::from(rect.width) - font.measure(size, part)) / 2.0;
+                draw_label(
+                    canvas,
+                    font,
+                    size,
+                    x,
+                    Rect::new(rect.x, y, rect.width, line),
+                    part,
+                    ink,
+                );
+                y += line;
+            }
+            return;
+        }
+    }
     let label = fit(font, size, label, room);
     let label_x = f32::from(rect.x) + (f32::from(rect.width) - font.measure(size, &label)) / 2.0;
     draw_label(canvas, font, size, label_x, rect, &label, ink);

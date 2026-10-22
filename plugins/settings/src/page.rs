@@ -276,7 +276,11 @@ impl GroupPage {
             .map(|(e, lines)| match (e, lines) {
                 (Row::Heading(_), _) => heading,
                 (Row::Setting(_), Some(lines)) => lines.height,
-                (Row::Setting(_), None) => slider_row,
+                (Row::Setting(spec), None) => {
+                    let title = env.i18n.tr(&spec.title);
+                    slider_row
+                        + ui::slider::title_extra(env, &style, area.width, title, &number_room)
+                }
                 (Row::Reset | Row::Theme(_) | Row::Action(_), _) => style.row as u16,
             })
             .collect();
@@ -397,12 +401,21 @@ impl GroupPage {
         }
     }
 
+    /// How much lower a slider's band is in `rect` for its long title
+    /// ([`ui::slider::title_extra`]), as its row was laid out.
+    fn slider_extra(&self, env: &Env<'_>, spec: &SettingSpec, rect: Rect) -> u16 {
+        let title = env.i18n.tr(&spec.title);
+        ui::slider::title_extra(env, &self.style, rect.width, title, &self.number_room)
+    }
+
     /// The − and + of number row `index` in `rect`, where it shows them:
     /// a slider's in its band, else beside the value.
     fn steps(&self, env: &Env<'_>, index: usize, rect: Rect) -> Option<(Rect, Rect)> {
         let spec = self.spec(index)?;
         if ui::slider::shows(env, spec) {
-            let parts = ui::slider::parts(&self.style, ui::slider::band(&self.style, rect));
+            let extra = self.slider_extra(env, spec, rect);
+            let band = ui::slider::band_below(&self.style, rect, extra);
+            let parts = ui::slider::parts(&self.style, band);
             return Some((parts.minus, parts.plus));
         }
         let value = ui::setting_value(env, spec);
@@ -516,7 +529,8 @@ impl Screen for GroupPage {
                         ui::SliderView::new(rect, env.settings.int(spec.id.as_str()), &value)
                             .title(title)
                             .note(note)
-                            .focus(focus);
+                            .focus(focus)
+                            .room(&self.number_room);
                     slider.draw_row(canvas, env, &style, &view);
                     return;
                 }
@@ -680,7 +694,10 @@ impl Screen for GroupPage {
         }) else {
             return Handled::No;
         };
-        let band = ui::slider::band(&self.style, rect);
+        let extra = self
+            .spec(index)
+            .map_or(0, |spec| self.slider_extra(&env, spec, rect));
+        let band = ui::slider::band_below(&self.style, rect, extra);
         let value = env.settings.int(id.as_str());
         let Some(step) = self
             .drag

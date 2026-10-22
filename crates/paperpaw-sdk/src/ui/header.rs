@@ -39,7 +39,7 @@ pub fn draw_header(
         note = None;
         right = end;
     }
-    let (size, title) = title_fitting(&font, style, title, right - f32::from(area.x) - margin);
+    let room = right - f32::from(area.x) - margin;
     let band = style.header_band(area);
     if let Some(note) = note.as_deref() {
         let (x, baseline) = (right + margin, cap_baseline(&font, band, style.small));
@@ -54,8 +54,56 @@ pub fn draw_header(
             ink,
         );
     }
-    let (x, baseline) = (f32::from(area.x) + margin, cap_baseline(&font, band, size));
-    draw_label_on(&mut canvas, &font, size, x, area, baseline, &title, ink);
+    let x = f32::from(area.x) + margin;
+    draw_title(&mut canvas, &font, style, (band, area), x, room, title, ink);
+}
+
+/// A header's `title` from `x`, `room` wide, in `band` (drawn within
+/// `area`): on one line, as large as fits down to the small size; where it
+/// does not fit so, on as many lines as the bar holds, in the small size,
+/// else in the size of captions, in the middle of the bar. Shortened only
+/// where none of that holds it.
+#[allow(clippy::too_many_arguments)]
+fn draw_title(
+    canvas: &mut Canvas<'_>,
+    font: &FontHandle<'_>,
+    style: &UiStyle,
+    (band, area): (Rect, Rect),
+    x: f32,
+    room: f32,
+    title: &str,
+    ink: Color,
+) {
+    let least = style.small.min(style.head);
+    if font.measure(least, title) > room + 1.0 {
+        // As many lines as the bar holds, in the small size, then in the
+        // size of captions.
+        let high = area.height.max(band.height);
+        for size in [least, style.size(super::TextRole::Caption).min(least)] {
+            let lines = font.wrap(size, title, room.max(1.0));
+            let line = font.line_metrics(size).line_height as u16;
+            let count = lines.len() as u16;
+            if count < 2 {
+                // On one line in this size.
+                let baseline = cap_baseline(font, band, size);
+                draw_label_on(canvas, font, size, x, area, baseline, title, ink);
+                return;
+            }
+            if count * line > high {
+                continue;
+            }
+            let top = area.y + (high - count * line) / 2;
+            for (i, range) in lines.into_iter().enumerate() {
+                let at = Rect::new(area.x, top + i as u16 * line, area.width, line);
+                let baseline = cap_baseline(font, at, size);
+                draw_label_on(canvas, font, size, x, area, baseline, &title[range], ink);
+            }
+            return;
+        }
+    }
+    let (size, title) = title_fitting(font, style, title, room);
+    let baseline = cap_baseline(font, band, size);
+    draw_label_on(canvas, font, size, x, area, baseline, &title, ink);
 }
 
 /// A screen's header bar for touch screens too: a back arrow on the left
@@ -227,7 +275,7 @@ impl Header {
             right -= margin + pad;
             x
         });
-        let (size, title) = title_fitting(&font, style, title, right - f32::from(t.x));
+        let title_room = right - f32::from(t.x);
         let label = page
             .filter(|_| parts.pager.is_some())
             .map(|page| Self::page_label(env, page));
@@ -279,8 +327,16 @@ impl Header {
             draw_label_on(&mut canvas, &font, style.small, x, t, y, note, note_ink);
         }
         let x = f32::from(t.x);
-        let y = baseline(size);
-        draw_label_on(&mut canvas, &font, size, x, t, y, &title, ink);
+        draw_title(
+            &mut canvas,
+            &font,
+            style,
+            (band, t),
+            x,
+            title_room,
+            title,
+            ink,
+        );
     }
 
     /// The action a tap at `point` stands for: back, or the previous or
@@ -435,7 +491,8 @@ fn title_fitting(font: &FontHandle<'_>, style: &UiStyle, title: &str, room: f32)
         font.measure(size, title) <= room + 1.0
     })
     .unwrap_or(least);
-    (size, fit(font, size, title, room))
+    // The same pixel of grace as above: a title that fits is not cut.
+    (size, fit(font, size, title, room + 1.0))
 }
 
 pub(super) fn center(area: Rect) -> (i32, i32) {

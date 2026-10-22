@@ -75,7 +75,6 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
         let mut session = start(context, &variant)?;
         let mut looker = Looker::new(&mut session);
         looker.labels_whole = context.labels_whole;
-        looker.strict_screens = context.strict_screens.clone();
         let mut found = Found {
             context,
             report,
@@ -205,10 +204,8 @@ pub struct Looker {
     home: Vec<Described>,
     /// Whether focus is checked: devices with buttons alone.
     buttons: bool,
-    /// Every shortened label reported ([`Scene::labels_whole`]), on these
-    /// screens (all where empty).
+    /// Every shortened label reported ([`Scene::labels_whole`]).
     pub labels_whole: bool,
-    pub strict_screens: Vec<String>,
 }
 
 impl Looker {
@@ -227,7 +224,6 @@ impl Looker {
             home: session.described(),
             buttons: !variant.has_touch(),
             labels_whole: false,
-            strict_screens: Vec::new(),
         }
     }
 
@@ -240,11 +236,9 @@ impl Looker {
             return Ok(None);
         }
         let own = own(&shown.described, &self.home, self.screen);
-        let strict = self.labels_whole
-            && (self.strict_screens.is_empty() || self.strict_screens.iter().any(|s| s == id));
         let scene = Scene::new(&shown.image, own, self.screen, self.ui)
             .panel(self.panel)
-            .labels_whole(strict);
+            .labels_whole(self.labels_whole);
         let mut issues = checks::all(&scene);
         if self.buttons {
             issues.extend(focus(session, id, &scene, &self.home));
@@ -506,13 +500,7 @@ impl Found<'_> {
         }
         let picture = self.picture(place, image)?;
         for mut issue in issues {
-            let strict = self.context.strict_screens.is_empty()
-                || self
-                    .context
-                    .strict_screens
-                    .iter()
-                    .any(|s| place.starts_with(s.as_str()));
-            if self.context.labels_whole && strict && issue.check == checks::ELLIPSIS {
+            if self.context.labels_whole && issue.check == checks::ELLIPSIS {
                 issue.level = crate::report::Level::Error;
             }
             self.finding(place, picture.clone(), issue);

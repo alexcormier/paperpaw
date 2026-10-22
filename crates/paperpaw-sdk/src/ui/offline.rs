@@ -24,7 +24,10 @@ use crate::builtin::actions;
 use crate::power::PowerLevel;
 use crate::{Canvas, Command, Cx, Env, Id, Point, Rect};
 
-use super::{UiStyle, button_height, draw_button, draw_empty};
+use super::{UiStyle, button_height_for, draw_button, draw_empty, empty_height};
+
+/// The keys of its buttons' words, *Go online* first.
+const BUTTONS: [&str; 2] = ["core.offline.go-online", "core.offline.not-now"];
 
 /// What the reader chose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -56,20 +59,39 @@ impl OfflineOffer {
         env.power.level == PowerLevel::Offline && !self.chosen
     }
 
+    /// The height it needs in an area `width` wide for all its words:
+    /// what it is about and its buttons (an area higher shows an icon as
+    /// well).
+    pub fn height(env: &Env<'_>, style: &UiStyle, width: u16) -> u16 {
+        let title = env.i18n.tr("core.offline.title");
+        let text = env.i18n.tr("core.offline.text");
+        empty_height(env, style, width, title, text) + Self::buttons_height(env, style, width)
+    }
+
+    /// The height of the buttons below the words, the room above them
+    /// included.
+    fn buttons_height(env: &Env<'_>, style: &UiStyle, width: u16) -> u16 {
+        let gap = style.gap as u16;
+        let width = Self::button_width(style, width);
+        let buttons: u16 = BUTTONS
+            .iter()
+            .map(|key| button_height_for(env, style, width, env.i18n.tr(key)))
+            .sum();
+        2 * gap + buttons + gap
+    }
+
+    /// How wide its buttons are in an area `width` wide: between the
+    /// margins.
+    fn button_width(style: &UiStyle, width: u16) -> u16 {
+        width.saturating_sub(2 * style.margin as u16)
+    }
+
     /// Draws it in `area`: what it is about, as an empty screen says it,
     /// and the two buttons below, *Go online* first.
     pub fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-        let row = style.touch_row(style.row) as u16;
-        let height = button_height(style, Rect::new(0, 0, area.width, row));
-        let gap = style.gap as u16 * 2;
-        let margin = style.margin as u16 * 2;
-        let room = row * 2 + gap;
-        let text = Rect::new(
-            area.x,
-            area.y,
-            area.width,
-            area.height.saturating_sub(room + gap),
-        );
+        let gap = style.gap as u16;
+        let room = Self::buttons_height(env, style, area.width);
+        let text = Rect::new(area.x, area.y, area.width, area.height.saturating_sub(room));
         draw_empty(
             canvas,
             env,
@@ -79,14 +101,12 @@ impl OfflineOffer {
             env.i18n.tr("core.offline.title"),
             env.i18n.tr("core.offline.text"),
         );
-        let width = area.width.saturating_sub(2 * margin);
-        let top = text.y + text.height + gap;
-        for (index, key) in ["core.offline.go-online", "core.offline.not-now"]
-            .into_iter()
-            .enumerate()
-        {
-            let y = top + index as u16 * (row + gap / 2) + (row - height) / 2;
-            let rect = Rect::new(area.x + margin, y, width, height);
+        let width = Self::button_width(style, area.width);
+        let mut y = text.y + text.height + 2 * gap;
+        for (index, key) in BUTTONS.into_iter().enumerate() {
+            let height = button_height_for(env, style, width, env.i18n.tr(key));
+            let rect = Rect::new(area.x + style.margin as u16, y, width, height);
+            y += height + gap;
             self.buttons[index] = rect;
             let focused = !env.device.input.touch && self.focus == index;
             draw_button(

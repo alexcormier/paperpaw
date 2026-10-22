@@ -6,6 +6,26 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- No building block shortens a label any more, even at the largest
+  text: header bars set a long title on two lines, smaller where needed;
+  value, noted and switch rows wrap their titles and grow
+  (`ui::value_row_height`, `ui::noted_row_height`,
+  `ui::switch_row_height`), the value whole beside the wrapped title or,
+  where the title's words do not fit beside it, on a line of its own
+  below; sliders do the same (`ui::slider::row_height_for`,
+  `ui::slider::title_extra`, `ui::slider::band_below`,
+  `SliderView::room`). Buttons set a long word on more lines
+  (`ui::button_height_for`), and rows of buttons go into more rows where
+  their words do not fit side by side (`ui::button_cells`,
+  `ui::button_cells_height`, `Segments::fitted`, `Segments::height_for`).
+  `ui::draw_address` wraps its hint and last line whole (smaller where its
+  area is short; `ui::address_height`; `ADDRESS_HINT_LINES` is gone),
+  `ui::OfflineOffer` keeps its words whole with its buttons between the
+  margins (`OfflineOffer::height`), `ui::draw_empty` wraps a long title,
+  and notes, messages and empty states say how high they need to be
+  (`ui::note_line_height`, `ui::message_height`, `ui::empty_height`). The
+  button hints below the screen set a long word smaller, then on two
+  lines. `paperpaw-dev ui-kit` checks every page of the kit strictly.
 - `ask::confirm` asks yes or no on the screen of the new slot
   `core.confirm` (the kernel's `ui::confirm::Confirm`, a `ui::Dialog` in
   the middle of the screen, unless a plugin binds another): the question,

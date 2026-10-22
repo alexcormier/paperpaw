@@ -235,7 +235,12 @@ impl Calendar {
                 continue;
             }
             let r = self.cell(index);
-            let inner = Rect::new(r.x + pad, r.y + pad, r.width - 2 * pad, r.height - 2 * pad);
+            let inner = Rect::new(
+                r.x + pad,
+                r.y + pad,
+                r.width.saturating_sub(2 * pad),
+                r.height.saturating_sub(2 * pad),
+            );
             let minutes = self.seconds_on(day) / 60;
             // Darker the longer one read.
             let shade = match minutes {

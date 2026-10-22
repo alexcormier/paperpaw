@@ -52,6 +52,79 @@ pub fn columns(area: Rect, count: usize, gap: u16) -> Vec<Rect> {
         .collect()
 }
 
+/// Buttons with `labels` in `area`, from its top, every word whole: side
+/// by side in equal columns where each word fits its column
+/// ([`button_width`](super::button_width)), else in rows of fewer, down to
+/// one a row (a word too long even for that on more lines, as high as
+/// [`button_height_for`](super::button_height_for) says); `gap` apart.
+/// Their cells, in the order of `labels`; [`button_cells_height`] says
+/// how high they are.
+pub fn button_cells(
+    env: &Env<'_>,
+    style: &UiStyle,
+    area: Rect,
+    labels: &[&str],
+    gap: u16,
+) -> Vec<Rect> {
+    let per_row = buttons_per_row(env, style, area.width, labels, gap);
+    let mut cells = Vec::with_capacity(labels.len());
+    let mut y = area.y;
+    for row in labels.chunks(per_row) {
+        let line = Rect::new(area.x, y, area.width, 0);
+        let mut row_cells = columns(line, per_row, gap);
+        row_cells.truncate(row.len());
+        let height = row_cells
+            .iter()
+            .zip(row)
+            .map(|(cell, label)| super::button_height_for(env, style, cell.width, label))
+            .max()
+            .unwrap_or(0);
+        cells.extend(row_cells.into_iter().map(|c| Rect { height, ..c }));
+        y += height + gap;
+    }
+    cells
+}
+
+/// How high [`button_cells`] lays out buttons with `labels` in an area
+/// `width` wide.
+pub fn button_cells_height(
+    env: &Env<'_>,
+    style: &UiStyle,
+    width: u16,
+    labels: &[&str],
+    gap: u16,
+) -> u16 {
+    let area = Rect::new(0, 0, width, 0);
+    button_cells(env, style, area, labels, gap)
+        .last()
+        .map_or(0, |cell| cell.y + cell.height)
+}
+
+/// How many of the buttons with `labels` go side by side in a row `width`
+/// wide, `gap` apart, each word whole: all where they fit, else as many
+/// as rows of even length take (half of them, a third, ...), down to one.
+fn buttons_per_row(env: &Env<'_>, style: &UiStyle, width: u16, labels: &[&str], gap: u16) -> usize {
+    let count = labels.len().max(1);
+    let Some(font) = style.font(env) else {
+        return count;
+    };
+    let fits = |n: usize| {
+        let room = width.saturating_sub(gap.saturating_mul(n as u16 - 1)) / n as u16;
+        labels.iter().all(|label| {
+            let size = if label.chars().count() <= 1 {
+                style.text
+            } else {
+                style.small
+            };
+            super::button_width(style, font.measure(size, label)) <= f32::from(room)
+        })
+    };
+    (1..=count)
+        .map(|rows| count.div_ceil(rows))
+        .find(|&n| fits(n))
+        .unwrap_or(1)
+}
+
 /// A column of parts, `gap` apart: taken from the top down and from the
 /// bottom up, the rest between them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -278,6 +351,21 @@ impl Segments {
         Self {
             cells: columns(area, count, style.gap as u16),
         }
+    }
+
+    /// Segments with `labels` in `area`, from its top, every word whole:
+    /// side by side where each fits its share, else in more rows
+    /// ([`button_cells`]); as high as [`Segments::height_for`] says.
+    pub fn fitted(env: &Env<'_>, style: &UiStyle, area: Rect, labels: &[&str]) -> Self {
+        Self {
+            cells: button_cells(env, style, area, labels, style.gap as u16),
+        }
+    }
+
+    /// The height [`Segments::fitted`] takes for `labels` in an area
+    /// `width` wide: [`Segments::height`] where they fit side by side.
+    pub fn height_for(env: &Env<'_>, style: &UiStyle, width: u16, labels: &[&str]) -> u16 {
+        button_cells_height(env, style, width, labels, style.gap as u16)
     }
 
     /// The height a row of segments takes: a button's in a row that can
