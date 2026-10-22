@@ -2600,6 +2600,22 @@ pub fn paperpaw_sdk::semantics::find<'a>(&'a [paperpaw_sdk::semantics::Part], &s
 pub fn paperpaw_sdk::semantics::focused(&[paperpaw_sdk::semantics::Part]) -> core::option::Option<&paperpaw_sdk::semantics::Part>
 pub fn paperpaw_sdk::semantics::parts(alloc::vec::Vec<paperpaw_graphics::canvas::Described>) -> alloc::vec::Vec<paperpaw_sdk::semantics::Part>
 pub fn paperpaw_sdk::semantics::role_name(paperpaw_graphics::canvas::Role) -> &'static str
+pub mod paperpaw_sdk::served
+pub enum paperpaw_sdk::served::Access
+pub paperpaw_sdk::served::Access::Denied
+pub paperpaw_sdk::served::Access::Granted
+pub paperpaw_sdk::served::Access::Locked
+pub struct paperpaw_sdk::served::Guard
+impl paperpaw_sdk::served::Guard
+pub fn paperpaw_sdk::served::Guard::check(&mut self, core::option::Option<&str>, paperpaw_platform::input::Instant) -> paperpaw_sdk::served::Access
+pub fn paperpaw_sdk::served::Guard::check_target(&mut self, &str, paperpaw_platform::input::Instant) -> paperpaw_sdk::served::Access
+pub fn paperpaw_sdk::served::Guard::new(alloc::string::String) -> Self
+pub const paperpaw_sdk::served::KEY_LETTERS: usize
+pub const paperpaw_sdk::served::LOCKED_FOR: u64
+pub const paperpaw_sdk::served::WRONG_KEYS: u32
+pub fn paperpaw_sdk::served::json_string(&str) -> alloc::string::String
+pub fn paperpaw_sdk::served::key(&paperpaw_sdk::random::Random) -> core::option::Option<alloc::string::String>
+pub fn paperpaw_sdk::served::param(&str, &str) -> core::option::Option<alloc::string::String>
 pub mod paperpaw_sdk::server_params
 pub const paperpaw_sdk::server_params::ADDRESS: &str
 pub const paperpaw_sdk::server_params::BODY_FILE: &str
@@ -3420,6 +3436,7 @@ pub fn paperpaw_sdk::ui::UiStyle::noted_row_of(&self, usize) -> u32
 pub fn paperpaw_sdk::ui::UiStyle::radius(&self, u32) -> u32
 pub fn paperpaw_sdk::ui::UiStyle::size(&self, paperpaw_sdk::ui::TextRole) -> f32
 pub fn paperpaw_sdk::ui::UiStyle::touch_row(&self, u32) -> u32
+pub const paperpaw_sdk::ui::ADDRESS_HINT_LINES: usize
 pub const paperpaw_sdk::ui::HOLD_ICON: &str
 pub const paperpaw_sdk::ui::ICON_SCALE: f32
 pub const paperpaw_sdk::ui::NOTE_LINES: usize
@@ -3428,6 +3445,7 @@ pub fn paperpaw_sdk::ui::button_border(&paperpaw_sdk::ui::UiStyle) -> u32
 pub fn paperpaw_sdk::ui::button_height(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> u16
 pub fn paperpaw_sdk::ui::button_hints_height(&paperpaw_sdk::Env<'_>) -> u16
 pub fn paperpaw_sdk::ui::button_width(&paperpaw_sdk::ui::UiStyle, f32) -> f32
+pub fn paperpaw_sdk::ui::draw_address(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, core::option::Option<&paperpaw_qr::QrCode>, &str, core::option::Option<&str>)
 pub fn paperpaw_sdk::ui::draw_arrow(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, (i32, i32), &str, bool, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::draw_button(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, bool, bool)
 pub fn paperpaw_sdk::ui::draw_button_hints(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, &[paperpaw_sdk::Hint], core::option::Option<usize>)

@@ -4,6 +4,7 @@
 //! setting, so every plugin's UI looks consistent and scales together when
 //! the user chooses larger text.
 
+mod address;
 mod button;
 pub mod choice;
 mod header;
@@ -23,6 +24,7 @@ mod text;
 mod thumbnail;
 pub mod widget_list;
 
+pub use address::*;
 pub use button::*;
 pub use header::*;
 pub use hints::*;

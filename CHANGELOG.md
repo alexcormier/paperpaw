@@ -6,6 +6,26 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Vocabulary: flash cards with spaced repetition (FSRS, Anki's
+  scheduler), in *Tools*, *Flash cards*. A review shows each due card's
+  front, then its back and example and four answers (*Again*, *Hard*,
+  *Good*, *Easy*) with when the card would come again; with the buttons
+  alone the focus starts on *Good*, by touch a tap answers. New cards a
+  day (20) and the retention wanted (90 %) can be set. *Edit with your
+  phone* serves a page on the local network while it is open (a QR code,
+  a key of its own each time): decks and cards are made, changed and
+  deleted there, a list pasted as CSV or TSV, or an Anki deck (`.apkg`,
+  exported for older versions) read in the phone's browser. A widget says
+  how many cards are due. With *Words looked up become cards* (off at
+  first) each word looked up goes into the deck *Looked up*, its sentence
+  the example. Only the due cards' state is held during a review; decks
+  are text files in the plugin's folder, versioned.
+- SDK: `paperpaw_sdk::served`, for pages served to a phone or computer
+  on the local network: the key in the address (`key`), a `Guard` that
+  counts wrong keys and turns requests away for a while after a few,
+  `param` (a query's parameter, decoded) and `json_string`; and
+  `ui::draw_address`, the address as a QR code and as text with a hint.
+  The transfer plugin uses them.
 - Plugin authors: `paperpaw-dev flows` is the main test of a plugin's
   actions. Every step of a flow is measured on the X4's budgets, the
   costliest one named (`flows.heap`, `flows.frame-time`), and each flow

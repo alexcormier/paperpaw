@@ -82,6 +82,7 @@ pub mod replies;
 mod screen;
 pub mod secrets;
 pub mod semantics;
+pub mod served;
 pub mod services;
 pub mod setting;
 mod settings;

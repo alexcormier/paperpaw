@@ -6,7 +6,7 @@
 //! The screen shows the page's address as text and as a QR code. The
 //! address carries a key drawn anew each time from the platform's random
 //! source, so others in the network cannot get at the files; a few wrong
-//! keys, and no request is answered for a while (see `access`). Closing
+//! keys, and no request is answered for a while (see `paperpaw_sdk::served`). Closing
 //! the screen ends the transfer.
 //!
 //! The same way, the plugin lets one type text on a phone for the
@@ -16,7 +16,6 @@
 
 extern crate alloc;
 
-mod access;
 mod phone;
 mod web;
 
@@ -32,12 +31,12 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::ServerNotice;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
+    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
     ScreenSpec, Version,
 };
 
-use crate::access::Guard;
+use paperpaw_sdk::served::{self, Guard};
 
 pub const PLUGIN: Id = Id::new_static("transfer");
 /// Opens the transfer screen.
@@ -50,9 +49,6 @@ const PHONE_SCREEN: Id = Id::new_static("transfer.phone");
 
 /// The port asked for; the next free one is taken if it is in use.
 pub(crate) const PORT: u16 = 8080;
-
-/// Lines of the hint below the code, at most.
-const HINT_LINES: usize = 5;
 
 /// The web page; its texts come from the translations.
 const PAGE: &str = include_str!("page.html");
@@ -152,7 +148,7 @@ impl TransferScreen {
         match notice {
             ServerNotice::Started { address, .. } => {
                 // Drawn now: on the X4, the radio makes it fully random.
-                self.state = match access::key(&env.random) {
+                self.state = match served::key(&env.random) {
                     Some(key) => {
                         let url = format!("http://{address}/?k={key}");
                         self.guard = Some(Guard::new(key));
@@ -263,133 +259,10 @@ fn page(env: &Env<'_>) -> String {
         if i > 0 {
             json.push(',');
         }
-        json.push_str(&format!("{name}:{}", web::json_string(env.i18n.tr(key))));
+        json.push_str(&format!("{name}:{}", served::json_string(env.i18n.tr(key))));
     }
     json.push('}');
     PAGE.replace("/*STRINGS*/{}", &json)
-}
-
-/// The page's address as a QR code and as text, `hint` below it (up to
-/// [`HINT_LINES`] lines) and `last`, what happened last.
-#[allow(clippy::too_many_arguments)]
-pub(crate) fn draw_address(
-    canvas: &mut Canvas<'_>,
-    env: &Env<'_>,
-    style: &UiStyle,
-    area: Rect,
-    url: &str,
-    qr: Option<&QrCode>,
-    hint: &str,
-    last: Option<&str>,
-) {
-    let Some(font) = style.font(env) else {
-        return;
-    };
-    let margin = style.margin as u16;
-    let line = font.line_metrics(style.text).line_height as u16;
-    let small = font.line_metrics(style.small).line_height as u16;
-    // Below the code: the address, the hint (up to five lines) and
-    // what happened last.
-    let width = f32::from(area.width.saturating_sub(2 * margin));
-    // The address whole, to be typed: on two lines (the host, then the
-    // rest) if it is too long for one.
-    let shown = url.strip_prefix("http://").unwrap_or(url);
-    let address: Vec<&str> = match shown.find('/') {
-        Some(at) if font.measure(style.text, shown) > width => {
-            alloc::vec![&shown[..at], &shown[at..]]
-        }
-        _ => alloc::vec![shown],
-    };
-    let hint_lines = font.wrap(style.small, hint, width);
-    let text_height = line * address.len() as u16
-        + small * (hint_lines.len().min(HINT_LINES) as u16 + 1)
-        + style.gap as u16 * 3;
-    let room = area.height.saturating_sub(text_height + style.gap as u16);
-    let side = room.min(area.width.saturating_sub(2 * margin));
-    let mut y = area.y;
-    if let Some(qr) = qr
-        && let Some((x0, y0, scale)) = code_place(area, side, qr.size() as u16)
-    {
-        for my in 0..qr.size() {
-            for mx in 0..qr.size() {
-                if qr.dark(mx, my) {
-                    canvas.fill_rect(
-                        i32::from(x0 + mx as u16 * scale),
-                        i32::from(y0 + my as u16 * scale),
-                        u32::from(scale),
-                        u32::from(scale),
-                        Color::BLACK,
-                    );
-                }
-            }
-        }
-        y += side;
-    }
-    y += style.gap as u16;
-    let row =
-        |y: u16, height: u16| Rect::new(margin, y, area.width.saturating_sub(2 * margin), height);
-    let centered = |text: &str, size: f32| {
-        let text = ui::fit(&font, size, text, width);
-        let x = f32::from(margin) + (width - font.measure(size, &text)) / 2.0;
-        (text, x.max(f32::from(margin)))
-    };
-    for part in address {
-        let (text, x) = centered(part, style.text);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.text,
-            x,
-            row(y, line),
-            &text,
-            Color::BLACK,
-        );
-        y += line;
-    }
-    y += style.gap as u16;
-    for range in hint_lines.into_iter().take(HINT_LINES) {
-        let (text, x) = centered(&hint[range], style.small);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            x,
-            row(y, small),
-            &text,
-            style.faint(60),
-        );
-        y += small;
-    }
-    y += style.gap as u16;
-    if let Some(last) = last {
-        let (text, x) = centered(last, style.small);
-        ui::draw_label(
-            canvas,
-            &font,
-            style.small,
-            x,
-            row(y, small),
-            &text,
-            Color::BLACK,
-        );
-    }
-}
-
-/// Where a QR code of `modules` modules a side goes in a square of
-/// `side` at the top of `area`, centred: the top left corner of its first
-/// module and the size of a module. `None` where not even a pixel per
-/// module fits (large fonts, a short screen in landscape).
-fn code_place(area: Rect, side: u16, modules: u16) -> Option<(u16, u16, u16)> {
-    // Four modules of white around the code, as scanners expect.
-    let modules = modules.checked_add(8)?;
-    let scale = side / modules;
-    if scale == 0 || side > area.width {
-        return None;
-    }
-    let size = scale * modules;
-    let x0 = (area.width - size) / 2 + 4 * scale;
-    let y0 = area.y + (side - size) / 2 + 4 * scale;
-    Some((x0, y0, scale))
 }
 
 impl Screen for TransferScreen {
@@ -437,7 +310,7 @@ impl Screen for TransferScreen {
             State::Serving { url, qr } => (url, qr),
         };
         let hint = env.i18n.tr("transfer.hint");
-        draw_address(
+        ui::draw_address(
             canvas,
             env,
             &style,

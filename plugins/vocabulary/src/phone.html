@@ -1,0 +1,406 @@
+<!doctype html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PaperPaw</title>
+<style>
+body { font: 16px/1.4 system-ui, sans-serif; margin: 0 auto; max-width: 40rem; padding: 1rem; color: #111; background: #fff; }
+h1 { font-size: 1.4rem; margin: 0 0 1rem; }
+h2 { font-size: 1.1rem; margin: 1.5rem 0 .5rem; }
+button { font: inherit; padding: .5rem .9rem; border: 2px solid #111; border-radius: .4rem; background: #fff; color: #111; }
+button.main { background: #111; color: #fff; }
+input, textarea { font: inherit; width: 100%; box-sizing: border-box; padding: .5rem; border: 1px solid #888; border-radius: .3rem; margin: .2rem 0 .6rem; }
+textarea { min-height: 6rem; }
+label { display: block; font-size: .9rem; color: #444; }
+.row { display: flex; gap: .5rem; align-items: center; flex-wrap: wrap; }
+.item { border-bottom: 1px solid #ddd; padding: .6rem 0; }
+.item b { display: block; }
+.small { font-size: .9rem; color: #555; }
+.message { padding: .6rem; background: #eee; border-radius: .3rem; margin: .5rem 0; }
+[hidden] { display: none !important; }
+</style>
+</head>
+<body>
+<h1 id="title"></h1>
+<div id="message" class="message" hidden></div>
+
+<section id="decks-view">
+  <h2 id="decks-title"></h2>
+  <div id="decks"></div>
+  <form id="new-deck" class="row">
+    <input id="new-deck-name" maxlength="60" required>
+    <button class="main" id="new-deck-add"></button>
+  </form>
+</section>
+
+<section id="deck-view" hidden>
+  <div class="row"><button id="back">‹</button><h2 id="deck-name"></h2></div>
+  <div class="row"><button id="rename"></button><button id="delete-deck"></button></div>
+
+  <h2 id="card-title"></h2>
+  <form id="card">
+    <label id="front-label" for="front"></label><input id="front" required>
+    <label id="back-label" for="back-text"></label><input id="back-text">
+    <label id="example-label" for="example"></label><input id="example">
+    <div class="row"><button class="main" id="card-save"></button><button type="button" id="card-cancel" hidden></button></div>
+  </form>
+
+  <h2 id="import-title"></h2>
+  <p class="small" id="import-help"></p>
+  <label id="paste-label" for="paste"></label><textarea id="paste"></textarea>
+  <label class="row"><input type="checkbox" id="header" style="width:auto"> <span id="header-label"></span></label>
+  <label id="file-label" for="file"></label><input type="file" id="file" accept=".csv,.tsv,.txt,.apkg">
+  <button class="main" id="import"></button>
+
+  <h2 id="cards-title"></h2>
+  <div id="cards"></div>
+  <button id="more" hidden></button>
+</section>
+
+<script>
+const S = /*STRINGS*/{};
+const MAX_IMPORT = /*MAX_IMPORT*/0, MAX_TEXT = /*MAX_TEXT*/0, MOST_NOTES = 20000;
+const key = new URLSearchParams(location.search).get('k') || '';
+const $ = id => document.getElementById(id);
+let deck = null, shown = 0, total = 0, editing = null;
+
+for (const [id, text] of [['title', 'title'], ['decks-title', 'decks'], ['new-deck-add', 'add'],
+  ['rename', 'rename'], ['delete-deck', 'deleteDeck'], ['front-label', 'front'], ['back-label', 'back'],
+  ['example-label', 'example'], ['card-cancel', 'cancel'], ['import-title', 'import'],
+  ['import-help', 'importHelp'], ['paste-label', 'paste'], ['header-label', 'header'],
+  ['file-label', 'file'], ['import', 'send'], ['cards-title', 'cards'], ['more', 'more']]) {
+  $(id).textContent = S[text];
+}
+$('new-deck-name').placeholder = S.deckName;
+document.title = S.title;
+
+function say(text) { const m = $('message'); m.textContent = text; m.hidden = !text; }
+
+async function api(path, body) {
+  const url = path + (path.includes('?') ? '&' : '?') + 'k=' + encodeURIComponent(key);
+  const response = await fetch(url, body === undefined ? {} : { method: 'POST', body });
+  if (!response.ok) throw new Error(await response.text());
+  return response.json();
+}
+
+function form(fields) { return new URLSearchParams(fields); }
+
+async function showDecks() {
+  deck = null;
+  $('deck-view').hidden = true;
+  $('decks-view').hidden = false;
+  const { decks } = await api('/api/decks');
+  const list = $('decks');
+  list.textContent = '';
+  if (!decks.length) list.textContent = S.noDecks;
+  for (const d of decks) {
+    const item = document.createElement('div');
+    item.className = 'item row';
+    const open = document.createElement('button');
+    open.textContent = d.name;
+    open.onclick = () => showDeck(d);
+    const count = document.createElement('span');
+    count.className = 'small';
+    count.textContent = S.cards + ': ' + d.cards;
+    item.append(open, count);
+    list.append(item);
+  }
+}
+
+async function showDeck(d) {
+  deck = d;
+  $('decks-view').hidden = true;
+  $('deck-view').hidden = false;
+  $('deck-name').textContent = d.name;
+  stopEditing();
+  $('cards').textContent = '';
+  shown = 0;
+  await moreCards();
+}
+
+async function moreCards() {
+  const page = await api('/api/cards?deck=' + deck.id + '&from=' + shown);
+  total = page.total;
+  if (!total) $('cards').textContent = S.noCards;
+  for (const card of page.cards) $('cards').append(cardItem(card));
+  shown += page.cards.length;
+  $('more').hidden = shown >= total;
+}
+
+function cardItem(card) {
+  const item = document.createElement('div');
+  item.className = 'item';
+  const front = document.createElement('b');
+  front.textContent = card.front;
+  const back = document.createElement('div');
+  back.textContent = card.back;
+  const example = document.createElement('div');
+  example.className = 'small';
+  example.textContent = card.example;
+  const edit = document.createElement('button');
+  edit.textContent = S.edit;
+  edit.onclick = () => startEditing(card);
+  const remove = document.createElement('button');
+  remove.textContent = S.delete;
+  remove.onclick = async () => {
+    if (!confirm(S.deleteCard + '\n' + card.front)) return;
+    await run(() => api('/api/card/delete?deck=' + deck.id + '&id=' + card.id, ''));
+    showDeck(deck);
+  };
+  const buttons = document.createElement('div');
+  buttons.className = 'row';
+  buttons.append(edit, remove);
+  item.append(front, back, example, buttons);
+  return item;
+}
+
+function startEditing(card) {
+  editing = card;
+  $('front').value = card.front;
+  $('back-text').value = card.back;
+  $('example').value = card.example;
+  $('card-title').textContent = S.edit;
+  $('card-save').textContent = S.save;
+  $('card-cancel').hidden = false;
+  $('card').scrollIntoView();
+}
+
+function stopEditing() {
+  editing = null;
+  $('card').reset();
+  $('card-title').textContent = S.newCard;
+  $('card-save').textContent = S.add;
+  $('card-cancel').hidden = true;
+}
+
+async function run(task) {
+  try { say(''); return await task(); } catch (e) { say(S.failed + ' ' + e.message); throw e; }
+}
+
+$('new-deck').onsubmit = async e => {
+  e.preventDefault();
+  await run(() => api('/api/deck', form({ name: $('new-deck-name').value })));
+  $('new-deck-name').value = '';
+  showDecks();
+};
+$('back').onclick = () => showDecks();
+$('more').onclick = () => moreCards();
+$('card-cancel').onclick = () => stopEditing();
+$('rename').onclick = async () => {
+  const name = prompt(S.deckName, deck.name);
+  if (!name) return;
+  await run(() => api('/api/deck', form({ deck: deck.id, name })));
+  deck.name = name;
+  $('deck-name').textContent = name;
+};
+$('delete-deck').onclick = async () => {
+  if (!confirm(S.deleteDeck + '\n' + deck.name)) return;
+  await run(() => api('/api/deck/delete?deck=' + deck.id, ''));
+  showDecks();
+};
+$('card').onsubmit = async e => {
+  e.preventDefault();
+  const fields = { front: $('front').value, back: $('back-text').value, example: $('example').value };
+  if (editing) fields.id = editing.id;
+  await run(() => api('/api/card?deck=' + deck.id, form(fields)));
+  showDeck(deck);
+};
+
+// ---- Many cards at once ----
+
+/** Rows of a CSV or TSV text: tabs if the first line has one, else `;` or `,`. */
+function table(text) {
+  const first = text.split('\n', 1)[0];
+  const sep = first.includes('\t') ? '\t' : (first.split(';').length > first.split(',').length ? ';' : ',');
+  const rows = [];
+  let row = [], field = '', quoted = false;
+  for (let i = 0; i < text.length; i++) {
+    const c = text[i];
+    if (quoted) {
+      if (c === '"' && text[i + 1] === '"') { field += '"'; i++; }
+      else if (c === '"') quoted = false;
+      else field += c;
+    } else if (c === '"' && field === '') quoted = true;
+    else if (c === sep) { row.push(field); field = ''; }
+    else if (c === '\n') { row.push(field); rows.push(row); row = []; field = ''; }
+    else if (c !== '\r') field += c;
+  }
+  if (field || row.length) { row.push(field); rows.push(row); }
+  return rows;
+}
+
+/** A text as the reader's lines keep it. */
+function field(text) {
+  return (text || '').trim().slice(0, MAX_TEXT).replace(/\\/g, '\\\\').replace(/\t/g, '\\t').replace(/\r?\n/g, '\\n');
+}
+
+async function send(rows) {
+  let added = 0, part = '';
+  const flush = async () => {
+    if (!part) return;
+    const answer = await api('/api/import?deck=' + deck.id, part);
+    added += answer.added;
+    part = '';
+  };
+  for (const r of rows) {
+    if (!r[0] || !r[0].trim()) continue;
+    part += [r[0], r[1], r[2]].map(field).join('\t') + '\n';
+    if (part.length > MAX_IMPORT / 2) await flush();
+  }
+  await flush();
+  return added;
+}
+
+$('import').onclick = () => run(async () => {
+  let rows = [];
+  const file = $('file').files[0];
+  if (file && /\.apkg$/i.test(file.name)) {
+    say(S.read);
+    rows = await apkg(file);
+  } else {
+    const text = file ? await file.text() : $('paste').value;
+    rows = table(text);
+    if ($('header').checked) rows.shift();
+  }
+  const added = await send(rows);
+  say(S.imported.replace('{count}', added));
+  $('paste').value = '';
+  $('file').value = '';
+  const d = deck;
+  await showDeck(d);
+  say(S.imported.replace('{count}', added));
+});
+
+// ---- Anki's .apkg: a ZIP with an SQLite database, read here ----
+
+/** The files of a ZIP, by name: how each is packed and its bytes. */
+function unzip(zip) {
+  const v = new DataView(zip.buffer, zip.byteOffset, zip.byteLength);
+  let end = zip.length - 22;
+  while (end >= 0 && v.getUint32(end, true) !== 0x06054b50) end--;
+  if (end < 0) throw new Error(S.noNotes);
+  const files = {};
+  let at = v.getUint32(end + 16, true);
+  for (let n = v.getUint16(end + 10, true); n > 0; n--) {
+    if (v.getUint32(at, true) !== 0x02014b50) break;
+    const method = v.getUint16(at + 10, true), size = v.getUint32(at + 20, true);
+    const nameLength = v.getUint16(at + 28, true);
+    const local = v.getUint32(at + 42, true);
+    const name = new TextDecoder().decode(zip.subarray(at + 46, at + 46 + nameLength));
+    const data = local + 30 + v.getUint16(local + 26, true) + v.getUint16(local + 28, true);
+    files[name] = { method, bytes: zip.subarray(data, data + size) };
+    at += 46 + nameLength + v.getUint16(at + 30, true) + v.getUint16(at + 32, true);
+  }
+  return files;
+}
+
+async function unpack(file) {
+  if (file.method === 0) return file.bytes;
+  const stream = new Blob([file.bytes]).stream().pipeThrough(new DecompressionStream('deflate-raw'));
+  return new Uint8Array(await new Response(stream).arrayBuffer());
+}
+
+function varint(bytes, at) {
+  let value = 0;
+  for (let i = 0; i < 8; i++) {
+    const b = bytes[at + i];
+    value = value * 128 + (b & 127);
+    if (b < 128) return [value, i + 1];
+  }
+  return [value * 256 + bytes[at + 8], 9];
+}
+
+/** The columns of an SQLite record: texts and numbers. */
+function columns(record) {
+  const [headerSize, first] = varint(record, 0);
+  const types = [];
+  for (let at = first; at < headerSize;) { const [t, n] = varint(record, at); types.push(t); at += n; }
+  const out = [];
+  let at = headerSize;
+  for (const t of types) {
+    const size = t >= 12 ? Math.floor((t - 12) / 2) : [0, 1, 2, 3, 4, 6, 8, 8, 0, 0][t] || 0;
+    if (t >= 13 && t % 2 === 1) out.push(new TextDecoder().decode(record.subarray(at, at + size)));
+    else if (t >= 1 && t <= 6) { let n = 0; for (let i = 0; i < size; i++) n = n * 256 + record[at + i]; out.push(n); }
+    else out.push(t === 9 ? 1 : t === 8 ? 0 : null);
+    at += size;
+  }
+  return out;
+}
+
+/** The rows of the table whose b-tree begins at page `root`. */
+function rows(db, root, visit) {
+  const v = new DataView(db.buffer, db.byteOffset, db.byteLength);
+  let pageSize = v.getUint16(16);
+  if (pageSize === 1) pageSize = 65536;
+  const usable = pageSize - db[20], pages = Math.floor(db.length / pageSize);
+  const seen = new Set();
+  const payload = (at, size) => {
+    const most = usable - 35;
+    if (size <= most) return db.subarray(at, at + size);
+    const least = Math.floor((usable - 12) * 32 / 255) - 23;
+    const k = least + (size - least) % (usable - 4);
+    const local = k <= most ? k : least;
+    const out = new Uint8Array(size);
+    out.set(db.subarray(at, at + local));
+    let got = local, next = v.getUint32(at + local);
+    while (got < size && next > 0 && next <= pages && !seen.has('o' + next)) {
+      seen.add('o' + next);
+      const start = (next - 1) * pageSize, n = Math.min(usable - 4, size - got);
+      out.set(db.subarray(start + 4, start + 4 + n), got);
+      got += n;
+      next = v.getUint32(start);
+    }
+    return out;
+  };
+  const walk = page => {
+    if (page < 1 || page > pages || seen.has(page)) return true;
+    seen.add(page);
+    const start = (page - 1) * pageSize, head = start + (page === 1 ? 100 : 0);
+    const kind = db[head], count = v.getUint16(head + 3);
+    for (let i = 0; i < count; i++) {
+      const cell = start + v.getUint16(head + (kind === 5 ? 12 : 8) + 2 * i);
+      if (kind === 13) {
+        const [size, a] = varint(db, cell), [, b] = varint(db, cell + a);
+        if (!visit(columns(payload(cell + a + b, size)))) return false;
+      } else if (kind === 5 && !walk(v.getUint32(cell))) return false;
+    }
+    return kind === 5 ? walk(v.getUint32(head + 8)) : true;
+  };
+  walk(root);
+}
+
+/** Plain text of a field of Anki's: without markup and sounds. */
+function plain(html) {
+  const text = new DOMParser().parseFromString(html.replace(/<br\s*\/?>/gi, '\n'), 'text/html').body.textContent || '';
+  return text.replace(/\[sound:[^\]]*\]/g, '').trim();
+}
+
+async function apkg(file) {
+  if (file.size > 200 * 1024 * 1024) throw new Error(S.tooLarge);
+  const files = unzip(new Uint8Array(await file.arrayBuffer()));
+  // Newer Anki packs its collection apart (zstd), and leaves a note in
+  // the old one that says so: only a deck exported for older versions is
+  // read.
+  if (!files['collection.anki21'] && files['collection.anki21b']) throw new Error(S.newerAnki);
+  const packed = files['collection.anki21'] || files['collection.anki2'];
+  if (!packed) throw new Error(S.noNotes);
+  const db = await unpack(packed);
+  if (new TextDecoder().decode(db.subarray(0, 15)) !== 'SQLite format 3') throw new Error(S.noNotes);
+  let notes = 0;
+  rows(db, 1, r => { if (r[0] === 'table' && r[1] === 'notes') notes = r[3]; return !notes; });
+  if (!notes) throw new Error(S.noNotes);
+  const out = [];
+  rows(db, notes, r => {
+    const fields = String(r[6] || '').split('\x1f').map(plain);
+    if (fields[0]) out.push([fields[0], fields[1] || '', fields[2] || '']);
+    return out.length < MOST_NOTES;
+  });
+  if (!out.length) throw new Error(S.noNotes);
+  return out;
+}
+
+showDecks().catch(e => say(S.failed + ' ' + e.message));
+</script>
+</body>
+</html>

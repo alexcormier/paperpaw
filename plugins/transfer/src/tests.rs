@@ -9,11 +9,10 @@ use paperpaw_fat::fatfs::{
 };
 use paperpaw_fat::{BLOCK, BlockDisk, Blocks, DiskError, FatStorage};
 use paperpaw_i18n::{Catalog, check};
-use paperpaw_sdk::random::Random;
 use paperpaw_sdk::{DirEntry, Instant, MemoryStorage, Storage, StorageError, files, read_file};
 
-use crate::access::{self, Guard, KEY_LETTERS, LOCKED_FOR, WRONG_KEYS};
 use crate::web::{self, Done, Refused, Request};
+use paperpaw_sdk::served::{Guard, LOCKED_FOR, WRONG_KEYS};
 
 #[test]
 fn translations_are_complete() {
@@ -21,19 +20,6 @@ fn translations_are_complete() {
     let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
     let issues = check::compare(&en, &de);
     assert!(issues.is_empty(), "{issues:?}");
-}
-
-#[test]
-fn the_code_is_placed_inside_its_square_or_not_at_all() {
-    use paperpaw_sdk::Rect;
-    let area = Rect::new(0, 40, 480, 760);
-    // 29 modules and the white around them: 37, three pixels each.
-    assert_eq!(crate::code_place(area, 120, 29), Some((196, 56, 3)));
-    // Less room than a pixel per module (large fonts, a short screen in
-    // landscape): no code, the address is shown alone.
-    assert_eq!(crate::code_place(area, 36, 29), None);
-    assert_eq!(crate::code_place(area, 0, 29), None);
-    assert_eq!(crate::code_place(Rect::new(0, 40, 20, 760), 120, 29), None);
 }
 
 #[test]
@@ -129,26 +115,6 @@ fn wrong_keys_lock_for_a_while() {
         assert_eq!(send("guess"), (403, None));
     }
     assert_eq!(send(KEY), (429, None));
-}
-
-#[test]
-fn keys_are_random_and_long() {
-    // From the platform's source, 5 bits a letter.
-    let random = Random::new(|buf| {
-        for (i, byte) in buf.iter_mut().enumerate() {
-            *byte = (i as u8).wrapping_mul(97).wrapping_add(13);
-        }
-        true
-    });
-    let key = access::key(&random).unwrap();
-    assert_eq!(key.len(), KEY_LETTERS);
-    assert!(
-        key.bytes()
-            .all(|b| b.is_ascii_digit() || b.is_ascii_lowercase())
-    );
-    // None where there is no source: no weaker key in its place.
-    assert_eq!(access::key(&Random::NONE), None);
-    assert_eq!(access::key(&Random::new(|_| false)), None);
 }
 
 #[test]
@@ -324,15 +290,6 @@ fn files_come_and_go() {
 }
 
 #[test]
-fn queries_are_decoded() {
-    let query = "k=1&path=a%2Fb+c%C3%A4";
-    assert_eq!(web::param(query, "path").as_deref(), Some("a/b cä"));
-    assert_eq!(web::param("k", "k").as_deref(), Some(""));
-    assert_eq!(web::param("path=%zz%4", "path").as_deref(), Some("%zz%4"));
-    assert_eq!(web::param("k=1", "path"), None);
-}
-
-#[test]
 fn paths_are_found_as_listed() {
     let storage = MemoryStorage::new().with("Books/x.epub", b"x".to_vec());
     let found = |path, new| web::find(&storage, path, new);
@@ -347,11 +304,6 @@ fn paths_are_found_as_listed() {
     ] {
         assert_eq!(found(bad, true), Err(Refused::Bad), "{bad}");
     }
-}
-
-#[test]
-fn json_is_escaped() {
-    assert_eq!(web::json_string("a\"b\\c</\n"), r#""a\"b\\c\u003c/\u000a""#);
 }
 
 #[test]

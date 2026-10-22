@@ -274,3 +274,41 @@ fn without_words_the_list_says_where_they_come_from() {
     vocabulary.press(actions::MENU);
     assert_eq!(vocabulary.screen(), "vocabulary.list");
 }
+
+/// With `cards-from-lookups` on, each word looked up becomes a card of
+/// the deck *Looked up*, once, its sentence the example; off at first.
+#[test]
+fn words_looked_up_become_cards_when_wanted() {
+    let decks = ".paperpaw/plugins/vocabulary/cards/decks.txt";
+    let mut off = Vocabulary::new("");
+    off.looked_up("curious", "Curiouser and curiouser!");
+    assert!(!off.card.0.exists(decks));
+
+    let mut on = Vocabulary::new("[vocabulary]\ncards-from-lookups = true\n");
+    on.looked_up("curious", "Curiouser and curiouser!");
+    on.looked_up("Curious", "Again.");
+    on.looked_up("rabbit", "A white rabbit.");
+    assert!(
+        on.card.text(decks).contains("Looked up"),
+        "{}",
+        on.card.text(decks)
+    );
+    let deck = on
+        .card
+        .text(".paperpaw/plugins/vocabulary/cards/deck-1.txt");
+    let fronts: Vec<(&str, &str)> = deck
+        .lines()
+        .skip(1)
+        .map(|l| {
+            let f: Vec<&str> = l.split('\t').collect();
+            (f[7], f[9])
+        })
+        .collect();
+    assert_eq!(
+        fronts,
+        [
+            ("curious", "Curiouser and curiouser!"),
+            ("rabbit", "A white rabbit.")
+        ]
+    );
+}

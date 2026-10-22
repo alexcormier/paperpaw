@@ -1,0 +1,194 @@
+//! *Flash cards* (in *Tools*): *Review* with how many cards are due, *Edit
+//! with your phone* (see [`phone`](crate::phone)), then the decks with
+//! how many cards each has; a deck chosen is reviewed alone.
+
+use alloc::format;
+use alloc::string::String;
+use alloc::vec::Vec;
+
+use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
+use paperpaw_sdk::{
+    Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode, Screen,
+};
+
+use crate::cards::{self, Day, Deck};
+use crate::{NEW_PER_DAY, phone, review};
+
+pub(crate) const SCREEN: Id = Id::new_static("vocabulary.cards");
+
+/// Rows before the decks.
+const REVIEW_ROW: usize = 0;
+const PHONE_ROW: usize = 1;
+const FIRST_DECK: usize = 2;
+
+pub(crate) struct DecksScreen {
+    style: UiStyle,
+    header: ui::Header,
+    list: ListView,
+    decks: Vec<(Deck, usize)>,
+    due: usize,
+}
+
+/// The cards due now, and new ones to show today, as the widget and this
+/// screen count them.
+pub(crate) fn due_now(env: &Env<'_>) -> usize {
+    let now = cards::now(env);
+    let day = Day::now(env, now);
+    let per_day = env.settings.read(&NEW_PER_DAY).clamp(0, 1000) as u32;
+    cards::due_count(
+        env.storage,
+        day.end,
+        cards::new_left(env.storage, day, per_day),
+    )
+}
+
+impl DecksScreen {
+    pub(crate) fn new(env: &Env<'_>) -> Self {
+        let style = UiStyle::new(env);
+        let display = env.device.display;
+        let header = ui::Header::new(env, &style, true);
+        let top = header.area.height + style.gap as u16;
+        let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
+        let mut screen = Self {
+            list: ListView::new(area, style.noted_row()).focus_on_keys(env),
+            style,
+            header,
+            decks: Vec::new(),
+            due: 0,
+        };
+        screen.load(env);
+        screen
+    }
+
+    fn load(&mut self, env: &Env<'_>) {
+        let sizes = cards::sizes(env.storage);
+        self.decks = cards::decks(env.storage)
+            .into_iter()
+            .map(|d| {
+                let n = sizes.get(&d.id).copied().unwrap_or(0);
+                (d, n)
+            })
+            .collect();
+        self.due = due_now(env);
+        let len = self.len();
+        if self.list.focus() >= len {
+            self.list.set_focus(len - 1);
+        }
+    }
+
+    fn len(&self) -> usize {
+        FIRST_DECK + self.decks.len()
+    }
+
+    fn open(&mut self, row: usize, cx: &mut Cx<'_, '_>) {
+        let params = match row {
+            REVIEW_ROW => Params::new(),
+            PHONE_ROW => {
+                cx.command(Command::OpenScreen(phone::SCREEN, Params::new()));
+                return;
+            }
+            row => match self.decks.get(row - FIRST_DECK) {
+                Some((deck, _)) => Params::new().with(review::DECK, format!("{}", deck.id)),
+                None => return,
+            },
+        };
+        cx.command(Command::OpenScreen(review::SCREEN, params));
+    }
+
+    fn changed(&mut self, change: ListChange, cx: &mut Cx<'_, '_>) {
+        if change == ListChange::None {
+            return;
+        }
+        cx.request_redraw();
+        cx.request_refresh(if change == ListChange::Page {
+            RefreshMode::Partial
+        } else {
+            RefreshMode::Fast
+        });
+    }
+}
+
+impl Screen for DecksScreen {
+    fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
+        let style = self.style;
+        let len = self.len();
+        let title = env.i18n.tr("vocabulary.cards.title");
+        self.header
+            .draw(canvas, env, &style, title, None, self.list.paging(len));
+        let due = env
+            .i18n
+            .plural("vocabulary.cards.due", self.due as i64, &[]);
+        let empty = self.decks.is_empty();
+        let decks = &self.decks;
+        self.list
+            .draw(canvas, &style, len, |canvas, row, rect, focused| {
+                let (title, note): (&str, String) = match row {
+                    REVIEW_ROW => (env.i18n.tr("vocabulary.cards.review"), due.clone()),
+                    PHONE_ROW => {
+                        let key = if empty {
+                            "vocabulary.cards.phone.first"
+                        } else {
+                            "vocabulary.cards.phone.help"
+                        };
+                        (
+                            env.i18n.tr("vocabulary.cards.phone"),
+                            env.i18n.tr(key).into(),
+                        )
+                    }
+                    row => match decks.get(row - FIRST_DECK) {
+                        Some((deck, n)) => (
+                            deck.name.as_str(),
+                            env.i18n.plural("vocabulary.cards.count", *n as i64, &[]),
+                        ),
+                        None => return,
+                    },
+                };
+                ui::draw_noted_row(canvas, env, &style, rect, focused, title, "›", &note);
+            });
+    }
+
+    /// Back from a review or the phone: the counts as they are now.
+    fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        self.load(&env);
+        cx.request_redraw();
+    }
+
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        let len = self.len();
+        let rows = self.list.rows() as isize;
+        let delta = if let Some(delta) = ui::list_step(action, rows) {
+            delta
+        } else if *action == actions::CONFIRM {
+            self.open(self.list.focus(), cx);
+            return Handled::Yes;
+        } else {
+            return Handled::No;
+        };
+        let change = self.list.move_focus(delta, len);
+        self.changed(change, cx);
+        Handled::Yes
+    }
+
+    fn on_gesture(&mut self, gesture: Gesture, cx: &mut Cx<'_, '_>) -> Handled {
+        let env = *cx.env();
+        let len = self.len();
+        if gesture.kind == GestureKind::Tap {
+            let paging = self.list.paging(len);
+            if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
+                cx.command(Command::RunAction(action));
+                return Handled::Yes;
+            }
+        }
+        let Some(row) = self.list.hit(gesture.start, len) else {
+            return Handled::No;
+        };
+        self.list.set_focus(row);
+        if gesture.kind == GestureKind::Tap {
+            self.open(row, cx);
+            return Handled::Yes;
+        }
+        Handled::No
+    }
+}
