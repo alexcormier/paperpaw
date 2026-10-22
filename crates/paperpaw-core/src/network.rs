@@ -90,6 +90,14 @@ impl Kernel {
             .is_none_or(|wifi| wifi.state.is_online())
     }
 
+    /// The device's own network is open (`WifiState::Hosting`).
+    fn hosting(&self) -> bool {
+        self.shared
+            .wifi
+            .as_ref()
+            .is_some_and(|wifi| wifi.state.is_hosting())
+    }
+
     /// Network work waiting for the shell (requests, servers, sockets).
     pub(crate) fn network_work_waiting(&self) -> bool {
         self.io.http.waiting() || self.io.servers.waiting() || self.io.sockets.waiting()
@@ -202,6 +210,9 @@ impl Kernel {
             io.extend(self.io.http.take().into_iter().map(Io::Http));
             io.extend(self.io.servers.take().into_iter().map(Io::Server));
             io.extend(self.io.sockets.take().into_iter().map(Io::Socket));
+        } else if self.hosting() {
+            // The device's own network: its servers serve on it.
+            io.extend(self.io.servers.take().into_iter().map(Io::Server));
         }
         io
     }

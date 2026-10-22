@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Wi-Fi transfer without a router (X4, X4 Pro): *Without a router* on
+  the transfer screen opens the reader's own network and shows codes to
+  join it and to open the transfer page there; closing the screen (or
+  ten minutes without a request) closes the network.
+- Wi-Fi set up with a phone (X4, X4 Pro): the reader opens a network of
+  its own and shows two QR codes, to join it and to open a page there
+  that lists the networks found and takes the password with the phone's
+  keyboard; the reader then joins that network and keeps the password.
+  A `wifi.ini` on the card (`ssid = …`, `password = …`) is read once at a
+  start, kept with the passwords and removed. SDK: `WifiCommand::Host`,
+  `WifiState::Hosting` (servers serve on the own network).
 - Plugin authors: `paperpaw-dev flows` is the main test of a plugin's
   actions. Every step of a flow is measured on the X4's budgets, the
   costliest one named (`flows.heap`, `flows.frame-time`), and each flow

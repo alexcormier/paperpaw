@@ -443,3 +443,100 @@ fn closing_the_screen_stops_the_server() {
     });
     assert!(device.calls().is_empty());
 }
+
+/// Where PaperPaw runs Wi-Fi, the transfer goes without a router too:
+/// the reader opens its own network, serves the page there and closes
+/// the network with the screen (or after ten minutes left alone).
+#[test]
+fn a_transfer_without_a_router_opens_the_readers_own_network() {
+    use paperpaw_core::WifiEvent;
+    use paperpaw_sdk::wifi::{WifiCommand, WifiState};
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(Shared::default())
+        .user_config("[core]\nlanguage = en\n")
+        .network(true)
+        .wifi(true)
+        .random(fill)
+        .plugin(paperpaw_plugin_fonts_default::DefaultFontPacks)
+        .plugin(Transfer)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    kernel.run_action(Instant(100), Id::new_static("transfer.open"));
+    let _ = kernel.take_io();
+    kernel.render(&mut |_, _| {});
+    let parts = kernel.describe();
+    let button = parts
+        .iter()
+        .find(|p| p.label == "Without a router")
+        .unwrap_or_else(|| panic!("{parts:?}"));
+    let at = paperpaw_platform::Point::new(
+        i32::from(button.area.x + button.area.width / 2),
+        i32::from(button.area.y + button.area.height / 2),
+    );
+    for (t, phase) in [
+        (200, paperpaw_platform::PointerPhase::Down),
+        (260, paperpaw_platform::PointerPhase::Up),
+    ] {
+        kernel.handle(
+            Instant(t),
+            paperpaw_platform::InputEvent::Pointer(paperpaw_platform::PointerEvent {
+                id: 0,
+                phase,
+                point: at,
+                tool: paperpaw_platform::PointerTool::Finger,
+                pressure: 1000,
+            }),
+        );
+    }
+    kernel.tick(Instant(1000));
+    let radio: Vec<WifiCommand> = kernel
+        .take_io()
+        .into_iter()
+        .filter_map(|io| match io {
+            Io::Wifi(command) => Some(command),
+            _ => None,
+        })
+        .collect();
+    let Some(WifiCommand::Host { ssid, password }) = radio.last().cloned() else {
+        panic!("{radio:?}");
+    };
+    kernel.wifi_event(
+        Instant(1200),
+        WifiEvent::State(WifiState::Hosting {
+            ssid: ssid.clone(),
+            address: "192.168.4.1".into(),
+        }),
+    );
+    // The server waiting for a network goes; the one in the own network
+    // listens.
+    let io = kernel.take_io();
+    let Some(server) = io.iter().rev().find_map(|io| match io {
+        Io::Server(ServerCall::Listen { server, .. }) => Some(*server),
+        _ => None,
+    }) else {
+        panic!("{io:?}");
+    };
+    kernel.server_event(
+        Instant(1300),
+        ServerEvent::Started {
+            server,
+            address: "192.168.4.1:8080".into(),
+        },
+    );
+    kernel.render(&mut |_, _| {});
+    let shown: Vec<String> = kernel.describe().into_iter().map(|p| p.label).collect();
+    assert!(shown.iter().any(|l| l.contains(&password)), "{shown:?}");
+    assert!(shown.iter().any(|l| l.contains("192.168.4.1")), "{shown:?}");
+    // Left alone ten minutes: the own network closes.
+    kernel.tick(Instant(1300 + 11 * 60 * 1000));
+    let radio: Vec<WifiCommand> = kernel
+        .take_io()
+        .into_iter()
+        .filter_map(|io| match io {
+            Io::Wifi(command) => Some(command),
+            _ => None,
+        })
+        .collect();
+    assert!(radio.contains(&WifiCommand::Leave), "{radio:?}");
+}

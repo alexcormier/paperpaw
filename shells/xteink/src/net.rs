@@ -4,6 +4,10 @@
 //! address, router and name servers come by DHCP. What goes over it is in
 //! `http` (requests), `serve` (servers) and `sockets` (plugins' own
 //! connections and broadcasts).
+//!
+//! In the device's own network (an access point, [`Net::hosted`]) its
+//! address is fixed and it gives the phones that join theirs
+//! (`paperpaw_x4::dhcp`).
 
 use alloc::vec::Vec;
 use core::task::{Context, Waker};
@@ -110,7 +114,10 @@ pub struct Net {
     phy: Phy,
     stack: Stack,
     sockets: SocketSet<'static>,
-    dhcp: SocketHandle,
+    /// Asks for the address; none in the device's own network.
+    dhcp: Option<SocketHandle>,
+    /// Gives the addresses in the device's own network: its socket.
+    server: Option<(SocketHandle, paperpaw_x4::dhcp::Server)>,
     /// Created once DHCP named the name servers.
     dns: Option<SocketHandle>,
     /// The address DHCP gave, with its network's size.
@@ -124,14 +131,39 @@ pub struct Net {
 
 impl Net {
     pub fn new(interface: Interface) -> Self {
+        let mut net = Self::bare(interface);
+        net.dhcp = Some(net.sockets.add(dhcpv4::Socket::new()));
+        net
+    }
+
+    /// The device's own network, on the access point's interface: its
+    /// address `address` (the network is its /24), addresses given to
+    /// those that join. `None` without memory for the server's socket.
+    pub fn hosted(interface: Interface, address: [u8; 4]) -> Option<Self> {
+        use paperpaw_x4::dhcp;
+        let mut net = Self::bare(interface);
+        let cidr = smoltcp::wire::Ipv4Cidr::new(address.into(), 24);
+        net.stack.update_ip_addrs(|addrs| {
+            let _ = addrs.push(IpCidr::Ipv4(cidr));
+        });
+        net.address = Some(cidr);
+        let handle = net.open_udp(4, 4 * 600).ok()?;
+        let socket = net.udp(handle);
+        socket.close();
+        socket.bind(dhcp::SERVER_PORT).ok()?;
+        net.server = Some((handle, dhcp::Server::new(address)));
+        Some(net)
+    }
+
+    /// The stack on `interface`, without an address yet.
+    fn bare(interface: Interface) -> Self {
         let mut phy = Phy(interface);
         let mac = EthernetAddress(phy.0.mac_address());
         let rng = esp_hal::rng::Rng::new();
         let mut config = Config::new(HardwareAddress::Ethernet(mac));
         config.random_seed = u64::from(rng.random()) << 32 | u64::from(rng.random());
         let stack = Stack::new(config, &mut phy, now());
-        let mut sockets = SocketSet::new(Vec::new());
-        let dhcp = sockets.add(dhcpv4::Socket::new());
+        let sockets = SocketSet::new(Vec::new());
         // SAFETY: one core, used from the main loop only.
         let generation = unsafe {
             let next = &mut *core::ptr::addr_of_mut!(GENERATION);
@@ -142,7 +174,8 @@ impl Net {
             phy,
             stack,
             sockets,
-            dhcp,
+            dhcp: None,
+            server: None,
             dns: None,
             address: None,
             // In the range for ports a client picks.
@@ -170,10 +203,10 @@ impl Net {
     /// The link came up (a network was joined): DHCP asks at once, not
     /// after the waits it grew while nothing answered.
     pub fn joined(&mut self) {
-        self.sockets
-            .get_mut::<dhcpv4::Socket<'_>>(self.dhcp)
-            .reset();
-        self.asked = Some(now());
+        if let Some(dhcp) = self.dhcp {
+            self.sockets.get_mut::<dhcpv4::Socket<'_>>(dhcp).reset();
+            self.asked = Some(now());
+        }
     }
 
     /// Sends and receives what is due, and takes what DHCP says.
@@ -187,7 +220,11 @@ impl Net {
             self.joined();
         }
         self.stack.poll(now(), &mut self.phy, &mut self.sockets);
-        let event = self.sockets.get_mut::<dhcpv4::Socket<'_>>(self.dhcp).poll();
+        self.serve_addresses();
+        let Some(dhcp) = self.dhcp else {
+            return;
+        };
+        let event = self.sockets.get_mut::<dhcpv4::Socket<'_>>(dhcp).poll();
         match event {
             None => {}
             Some(dhcpv4::Event::Configured(config)) => {
@@ -229,6 +266,31 @@ impl Net {
                 self.address = None;
                 self.stack.update_ip_addrs(|addrs| addrs.clear());
                 self.stack.routes_mut().remove_default_ipv4_route();
+            }
+        }
+    }
+
+    /// In the device's own network: answers those asking for an address.
+    fn serve_addresses(&mut self) {
+        let Some((handle, server)) = &mut self.server else {
+            return;
+        };
+        let socket = self.sockets.get_mut::<udp::Socket<'_>>(*handle);
+        let mut answers = Vec::new();
+        while let Ok((request, _)) = socket.recv() {
+            let seconds = u64::try_from(now().total_millis() / 1000).unwrap_or(0);
+            if let Some(answer) = server.answer(request, seconds) {
+                answers.push(answer);
+            }
+        }
+        // To all: those asking have no address yet.
+        let to = smoltcp::wire::IpEndpoint::new(
+            IpAddress::Ipv4(smoltcp::wire::Ipv4Address::BROADCAST),
+            paperpaw_x4::dhcp::CLIENT_PORT,
+        );
+        for answer in answers {
+            if let Err(e) = socket.send_slice(&answer, to) {
+                log::info!("net: address not given: {e:?}");
             }
         }
     }

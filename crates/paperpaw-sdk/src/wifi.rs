@@ -23,6 +23,11 @@
 //!   nothing uses the network any more, e.g. to switch the radio off a
 //!   little later (it costs battery and memory).
 //!
+//! For the setup with a phone the device opens a network of its own
+//! ([`WifiCommand::Host`], an access point): the phone joins it and opens
+//! a page the device serves ([`WifiState::Hosting`]), where the reader
+//! chooses the network to join and types its password.
+//!
 //! The networks joined before are kept with the passwords and keys
 //! ([`secrets`](crate::secrets)) as `wifi.<name>` ([`known`], [`keep`],
 //! [`forget`]), the same whichever plugin joins them.
@@ -52,6 +57,12 @@ pub enum WifiCommand {
     Join { ssid: String, password: String },
     /// Leaves the network, keeping the radio on.
     Leave,
+    /// Opens a network of the device's own (an access point) named `ssid`,
+    /// with WPA2 and `password` (8 characters at least), leaving any
+    /// network joined: a phone joins it and opens a page the device
+    /// serves ([`WifiState::Hosting`]). Joining a network, leaving or the
+    /// radio off closes it.
+    Host { ssid: String, password: String },
 }
 
 impl core::fmt::Debug for WifiCommand {
@@ -66,6 +77,11 @@ impl core::fmt::Debug for WifiCommand {
                 .field("password", &"…")
                 .finish(),
             WifiCommand::Leave => f.write_str("Leave"),
+            WifiCommand::Host { ssid, .. } => f
+                .debug_struct("Host")
+                .field("ssid", ssid)
+                .field("password", &"…")
+                .finish(),
         }
     }
 }
@@ -86,6 +102,14 @@ pub enum WifiState {
         /// The device's address, e.g. `192.168.1.20`.
         address: String,
     },
+    /// The device's own network is open ([`WifiCommand::Host`]): plugins'
+    /// servers serve on it (requests to elsewhere wait, there is no way
+    /// out).
+    Hosting {
+        ssid: String,
+        /// The device's address in it, e.g. `192.168.4.1`.
+        address: String,
+    },
 }
 
 impl WifiState {
@@ -95,6 +119,11 @@ impl WifiState {
 
     pub fn is_online(&self) -> bool {
         matches!(self, WifiState::Online { .. })
+    }
+
+    /// The device's own network is open ([`WifiState::Hosting`]).
+    pub fn is_hosting(&self) -> bool {
+        matches!(self, WifiState::Hosting { .. })
     }
 
     /// The network joined or being joined.
@@ -250,6 +279,11 @@ mod tests {
             password: String::from("s3cr3t"),
         };
         assert!(!alloc::format!("{join:?}").contains("s3cr3t"));
+        let host = WifiCommand::Host {
+            ssid: String::from("PaperPaw-1a2b"),
+            password: String::from("s3cr3t99"),
+        };
+        assert!(!alloc::format!("{host:?}").contains("s3cr3t99"));
     }
 
     #[test]

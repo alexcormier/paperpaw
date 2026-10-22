@@ -12,6 +12,10 @@
 //! Looking for networks and joining one take a while: they go on in the
 //! background, moved on by [`Radio::poll`] from the main loop, so the X4
 //! stays usable.
+//!
+//! For the setup with a phone it opens a network of its own (an access
+//! point, `WifiCommand::Host`) at [`HOST_ADDRESS`]; any other command
+//! closes it again, the radio back in a station's part.
 
 use alloc::boxed::Box;
 use alloc::string::String;
@@ -22,6 +26,7 @@ use core::task::{Context, Poll, Waker};
 
 use esp_hal::peripherals::{FROM_CPU_INTR0, WIFI};
 use esp_hal::timer::timg::Timer;
+use esp_radio::wifi::ap::AccessPointConfig;
 use esp_radio::wifi::scan::ScanConfig;
 use esp_radio::wifi::sta::{ScanMethod, StationConfig};
 use esp_radio::wifi::{
@@ -40,6 +45,10 @@ const STOP_MS: u64 = 2_000;
 const JOIN_RETRIES: u8 = 2;
 /// Networks a scan reports at most.
 const SCAN_MAX: usize = 20;
+/// The device's address in its own network.
+const HOST_ADDRESS: [u8; 4] = [192, 168, 4, 1];
+/// Phones in the device's own network at a time.
+const HOST_CLIENTS: u16 = 2;
 
 /// What the radio needs to start the first time.
 pub struct Parts {
@@ -56,6 +65,11 @@ enum Outcome {
     /// Joined, or why not.
     Joined(Result<(), JoinFailure>),
     Left,
+    /// The device's own network named so is open, or could not be.
+    Hosted {
+        ssid: String,
+        opened: bool,
+    },
 }
 
 type Task = Pin<Box<dyn Future<Output = (Outcome, Controller)>>>;
@@ -73,6 +87,8 @@ struct On {
     ssid: Option<String>,
     /// Joined (the link is up), waiting for an address or with one.
     linked: bool,
+    /// The device's own network is open, named so.
+    hosting: Option<String>,
     /// What to do once the task going on is done.
     queued: Vec<WifiCommand>,
 }
@@ -207,6 +223,7 @@ impl Radio {
             net: Net::new(esp_radio::wifi::Interface::station()),
             ssid: None,
             linked: false,
+            hosting: None,
             queued: Vec::new(),
         });
         self.stopping = false;
@@ -260,6 +277,33 @@ impl Radio {
                 on.linked = false;
                 on.ssid = None;
             }
+            Outcome::Hosted { ssid, opened } => {
+                let net = opened
+                    .then(|| Net::hosted(esp_radio::wifi::Interface::access_point(), HOST_ADDRESS))
+                    .flatten();
+                match net {
+                    Some(net) => {
+                        log::info!("wifi: hosting {ssid}");
+                        on.net = net;
+                        on.hosting = Some(ssid);
+                    }
+                    None => {
+                        // Not left open without a network on it: a
+                        // station again, and said.
+                        log::warn!("wifi: the own network could not open");
+                        if let Work::Idle(controller) = &mut on.work
+                            && let Err(e) =
+                                controller.set_config(&Config::Station(StationConfig::default()))
+                        {
+                            log::warn!("wifi: station: {e:?}");
+                        }
+                        events.push(WifiEvent::Failed {
+                            ssid,
+                            reason: JoinFailure::Other,
+                        });
+                    }
+                }
+            }
         }
     }
 
@@ -277,6 +321,19 @@ impl Radio {
         else {
             return;
         };
+        // Anything but hosting again closes the own network: a station's
+        // part and network again (what was opened on it is gone).
+        let closing = on.hosting.is_some() && !matches!(command, WifiCommand::Host { .. });
+        if closing {
+            log::info!("wifi: own network closed");
+            on.hosting = None;
+            on.net = Net::new(esp_radio::wifi::Interface::station());
+            if !matches!(command, WifiCommand::Join { .. })
+                && let Err(e) = controller.set_config(&Config::Station(StationConfig::default()))
+            {
+                log::warn!("wifi: station: {e:?}");
+            }
+        }
         on.work = Work::Busy(match command {
             WifiCommand::Scan => {
                 mark(at::RADIO_SCAN);
@@ -353,6 +410,26 @@ impl Radio {
                 }
                 (Outcome::Left, controller)
             }),
+            WifiCommand::Host { ssid, password } => {
+                on.ssid = None;
+                on.linked = false;
+                let config = password
+                    .as_str()
+                    .try_into()
+                    .map(AuthenticationMethodConfig::Wpa2Personal)
+                    .and_then(|authentication| {
+                        Ok(AccessPointConfig::default()
+                            .with_ssid(ssid.as_str().try_into()?)
+                            .with_authentication(authentication)
+                            .with_max_connections(HOST_CLIENTS))
+                    });
+                Box::pin(async move {
+                    let opened = config.ok().is_some_and(|config| {
+                        controller.set_config(&Config::AccessPoint(config)).is_ok()
+                    });
+                    (Outcome::Hosted { ssid, opened }, controller)
+                })
+            }
             WifiCommand::On | WifiCommand::Off => {
                 Box::pin(async move { (Outcome::Left, controller) })
             }
@@ -378,6 +455,17 @@ impl Radio {
     fn report(&mut self) {
         let state = match &mut self.on {
             None => WifiState::Off,
+            Some(On {
+                hosting: Some(ssid),
+                net,
+                ..
+            }) => WifiState::Hosting {
+                ssid: ssid.clone(),
+                address: net
+                    .address()
+                    .map(|a| alloc::format!("{}", a.address()))
+                    .unwrap_or_default(),
+            },
             Some(on) => match (&on.ssid, on.linked, on.net.address()) {
                 (Some(ssid), true, Some(address)) => WifiState::Online {
                     ssid: ssid.clone(),
