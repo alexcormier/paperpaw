@@ -396,7 +396,10 @@ fn code_plugins(ota: Option<&ota::Ota>, flash: &ota::Flash) -> CodePlugins {
 /// The status lines of the X4s by default (see `setting_default_text`):
 /// fewer items than on large screens.
 const CALM_STATUS: [(&str, &str); 6] = [
-    ("reader.status.bottom-left", "core.status.clock, reader.status.aloud"),
+    (
+        "reader.status.bottom-left",
+        "core.status.clock, reader.status.aloud",
+    ),
     ("reader.status.bottom-center", ""),
     ("reader.status.bottom-right", "reader.status.page"),
     ("home.status.left", "core.status.clock"),

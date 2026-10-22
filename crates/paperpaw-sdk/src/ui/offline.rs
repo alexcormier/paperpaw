@@ -4,7 +4,7 @@
 //! layout, never as a pop-up over the page: "Offline mode. Go online for
 //! this?" with *Go online* and *Not now*.
 //!
-//! *Go online* sends [`Command::GoOnline`](crate::Command::GoOnline): the
+//! *Go online* sends [`Command::GoOnline`]: the
 //! network for that screen until it closes; the screen then does again
 //! what needed the network. *Not now* leaves the screen as it is without
 //! the network (it says so as it would without one). Either way it is
