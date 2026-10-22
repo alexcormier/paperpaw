@@ -144,7 +144,8 @@ pub fn draw_value_row(
     draw_label(canvas, &font, style.text, value_x, rect, &value, color);
     let title_x = f32::from(rect.x) + margin;
     // A title that would be shortened beside its value smaller, down to
-    // the small size, before it is (the row keeps its height).
+    // the small size, then on two lines, before it is (the row keeps its
+    // height).
     let room = width - margin - value_width;
     if title_text != title
         && let Some(size) = crate::widgets::largest_size(style.text, style.small, |size| {
@@ -152,6 +153,18 @@ pub fn draw_value_row(
         })
     {
         draw_label(canvas, &font, size, title_x, rect, title, color);
+        return;
+    }
+    // Still too long: on two lines in the small size where the row holds
+    // them, rather than shortened.
+    let lines = font.wrap(style.small, title, room.max(1.0));
+    let line = font.line_metrics(style.small).line_height as u16;
+    if title_text != title && lines.len() == 2 && 2 * line <= rect.height {
+        let top = rect.y + (rect.height - 2 * line) / 2;
+        for (i, range) in lines.into_iter().enumerate() {
+            let at = Rect::new(rect.x, top + i as u16 * line, rect.width, line);
+            draw_label(canvas, &font, style.small, title_x, at, &title[range], color);
+        }
         return;
     }
     draw_label(canvas, &font, style.text, title_x, rect, &title_text, color);

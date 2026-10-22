@@ -492,7 +492,10 @@ impl Found<'_> {
             return Ok(());
         }
         let picture = self.picture(place, image)?;
-        for issue in issues {
+        for mut issue in issues {
+            if self.context.labels_whole && issue.check == checks::ELLIPSIS {
+                issue.level = crate::report::Level::Error;
+            }
             self.finding(place, picture.clone(), issue);
         }
         Ok(())

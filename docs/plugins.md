@@ -182,8 +182,14 @@ like PaperPaw's own, follow the reader's text size and the look chosen
 (a theme paints switches, the focus, buttons, headers, frames and more),
 and work by touch and with the buttons alone. Sizes come from
 `UiStyle::new(env)`: `margin`, `gap`, `row`, `header`, the text sizes
-(`style.size(TextRole::Body)` and the others). `paperpaw-dev ui-kit`
-draws every block below on every device, in every look, light and dark.
+(`style.size(TextRole::Body)` and the others). No block shortens a
+title or a button's word: a title is measured first and keeps its whole
+width, a box or control beside it takes what is left, and where that is
+too little the row takes a second line (ask the block for its row's
+height); only a value, the reader's own text in a field, may be
+shortened. `paperpaw-dev ui-kit` draws every block below on every
+device, in every look, light and dark, and checks that no label is
+shortened.
 
 | For | Use |
 |---|---|
@@ -197,9 +203,9 @@ draws every block below on every device, in every look, light and dark.
 | A group on a card or in a frame | `ui::draw_card(canvas, &style, area, Frame::Card)` returns where its parts go |
 | A button, on, focused, faint, with an icon | `ui::draw_button`, `ui::draw_faint_button`, `ui::draw_icon_button` |
 | A few options to pick at a glance, or tabs | `ui::Segments` |
-| Filters or tags in a row, each as wide as its word | `ui::Chips` |
-| A one-line text in a row, typed on the keyboard | `ui::draw_text_field`, `ui::edit_text` |
-| A list where several may be ticked | `ui::draw_check_row` (the box alone: `ui::draw_check`) |
+| Filters or tags in a row, each as wide as its word | `ui::Chips` (the height of their rows: `Chips::height_for`) |
+| A one-line text in a row, typed on the keyboard | `ui::draw_text_field` (its row: `text_field_height`), `ui::edit_text` |
+| A list where several may be ticked | `ui::draw_check_row` (its row: `check_row_height`; the box alone: `ui::draw_check`) |
 | Text longer than its room, scrolled by buttons and touch | `ui::TextView` |
 | A date or a time | `ui::DatePicker`, `ui::TimePicker` |
 | A box over the screen with a title, text and buttons | `ui::Dialog` |

@@ -17,9 +17,11 @@ use super::UiStyle;
 /// ([`draw_button`](super::draw_button)) as wide as its label needs with
 /// the room a button keeps at its sides
 /// ([`button_width`](super::button_width)), at least as wide as high, the
-/// style's gap apart, from the left of the area. A chip that does not fit is cut to what is left of the area;
-/// those after it are not shown. With the buttons, left and right move
-/// the focus, *Select* chooses.
+/// style's gap apart, from the left of the area. A chip that does not fit
+/// beside the others goes onto the next row: words are never shortened
+/// (only a word wider than the whole area is); [`Chips::height_for`] says
+/// how tall the rows are. With the buttons, left and right move the
+/// focus, *Select* chooses.
 ///
 /// Made once with the layout (it measures the labels); drawing and
 /// hitting allocate nothing. The default is a row of no chips.
@@ -34,22 +36,18 @@ impl Chips {
     /// size [`draw_button`](super::draw_button) sets them, centred in the
     /// area's height.
     pub fn new(env: &Env<'_>, style: &UiStyle, area: Rect, labels: &[&str]) -> Self {
-        let font = style.font(env);
-        let widths = labels.iter().map(|label| {
-            let single = label.chars().count() == 1;
-            let size = if single { style.text } else { style.small };
-            let text = match &font {
-                Some(font) => font.measure(size, label),
-                // No font: about half the size a character.
-                None => label.chars().count() as f32 * size / 2.0,
-            };
-            // Half the chip's height at each side, as its rounded ends
-            // take that much; rounded up, so the word keeps all its room.
-            let width =
-                text + f32::from(Self::height(style)).max(super::button_width(style, text) - text);
-            width as u16 + u16::from(width > f32::from(width as u16))
-        });
-        Self::from_widths(style, area, widths)
+        Self::from_widths(style, area, widths(env, style, labels))
+    }
+
+    /// How tall the chips of `labels` are in an area `width` wide: their
+    /// rows, the style's gap apart.
+    pub fn height_for(env: &Env<'_>, style: &UiStyle, width: u16, labels: &[&str]) -> u16 {
+        let cells = place(style, Rect::new(0, 0, width, 0), widths(env, style, labels));
+        cells
+            .iter()
+            .map(|c| c.bottom())
+            .max()
+            .map_or(0, |b| b as u16)
     }
 
     /// The chips in `area` with the label widths `widths` already known
@@ -59,22 +57,18 @@ impl Chips {
         area: Rect,
         widths: impl IntoIterator<Item = u16>,
     ) -> Self {
-        let height = Self::height(style).min(area.height);
-        let y = area.y + (area.height - height) / 2;
-        let gap = style.gap as u16;
-        let right = area.x.saturating_add(area.width);
-        let mut x = area.x;
-        let cells = widths
+        let cells = place(style, area, widths);
+        // The rows in the middle of the area's height, as a row of
+        // buttons is.
+        let rows_height = cells
+            .iter()
+            .map(|c| c.bottom())
+            .max()
+            .map_or(0, |b| b as u16);
+        let below = (area.y + area.height).saturating_sub(rows_height) / 2;
+        let cells = cells
             .into_iter()
-            .map(|width| {
-                let width = width.max(height).min(right.saturating_sub(x));
-                if width == 0 {
-                    return Rect::new(right, y, 0, 0);
-                }
-                let cell = Rect::new(x, y, width, height);
-                x = x.saturating_add(width).saturating_add(gap).min(right);
-                cell
-            })
+            .map(|c| Rect::new(c.x, c.y + below, c.width, c.height))
             .collect();
         Self { cells }
     }
@@ -95,7 +89,7 @@ impl Chips {
         self.cells.iter().position(|c| c.contains(point))
     }
 
-    /// How many chips are shown: those that fit, at least in part.
+    /// How many chips there are (every one is shown).
     pub fn shown(&self) -> usize {
         self.cells.iter().take_while(|c| c.width > 0).count()
     }
@@ -142,6 +136,51 @@ impl Chips {
     }
 }
 
+/// The width of each label's chip: its word in the size buttons set it,
+/// and half the chip's height at each side, as its rounded ends take that
+/// much; rounded up, so the word keeps all its room.
+fn widths<'a>(
+    env: &'a Env<'_>,
+    style: &'a UiStyle,
+    labels: &'a [&str],
+) -> impl Iterator<Item = u16> + 'a {
+    let font = style.font(env);
+    labels.iter().map(move |label| {
+        let single = label.chars().count() == 1;
+        let size = if single { style.text } else { style.small };
+        let text = match &font {
+            Some(font) => font.measure(size, label),
+            // No font: about half the size a character.
+            None => label.chars().count() as f32 * size / 2.0,
+        };
+        let width =
+            text + f32::from(Chips::height(style)).max(super::button_width(style, text) - text);
+        width as u16 + u16::from(width > f32::from(width as u16))
+    })
+}
+
+/// The chips of `widths` from the top left of `area`, the gap apart,
+/// onto the next row where one does not fit beside the others.
+fn place(style: &UiStyle, area: Rect, widths: impl IntoIterator<Item = u16>) -> Vec<Rect> {
+    let height = Chips::height(style);
+    let gap = style.gap as u16;
+    let right = area.x.saturating_add(area.width);
+    let (mut x, mut y) = (area.x, area.y);
+    widths
+        .into_iter()
+        .map(|width| {
+            let width = width.max(height).min(area.width);
+            if x > area.x && x.saturating_add(width) > right {
+                x = area.x;
+                y = y.saturating_add(height + gap);
+            }
+            let cell = Rect::new(x, y, width, height);
+            x = x.saturating_add(width).saturating_add(gap);
+            cell
+        })
+        .collect()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -166,20 +205,27 @@ mod tests {
     }
 
     #[test]
-    fn a_chip_that_does_not_fit_is_cut_and_those_after_are_not_shown() {
+    fn a_chip_that_does_not_fit_goes_onto_the_next_row_whole() {
         let height = Chips::height(&STYLE);
         let gap = STYLE.gap as u16;
         let wide = height * 2;
-        let area = Rect::new(0, 0, 2 * wide + gap + wide / 2, height);
+        let area = Rect::new(0, 0, 2 * wide + gap + wide / 2, 2 * height + gap);
         let chips = Chips::from_widths(&STYLE, area, [wide, wide, wide, wide]);
-        assert_eq!(chips.shown(), 3);
-        let cut = chips.cell(2).unwrap();
-        assert_eq!((cut.width, cut.right()), (wide / 2 - gap, area.right()));
-        assert_eq!(chips.cell(3), None);
-        assert_eq!(chips.step(2, &actions::RIGHT), Some(2));
-        assert_eq!(chips.step(3, &actions::LEFT), Some(2));
-        // Nothing past the area's edge is hit.
-        assert_eq!(chips.hit(Point::new(area.right() as i32, 1)), None);
+        assert_eq!(chips.shown(), 4);
+        // The third begins the second row, as wide as its word needs.
+        assert_eq!(
+            chips.cell(2),
+            Some(Rect::new(0, height + gap, wide, height))
+        );
+        assert_eq!(
+            chips.cell(3),
+            Some(Rect::new(wide + gap, height + gap, wide, height))
+        );
+        assert_eq!(chips.step(3, &actions::RIGHT), Some(3));
+        assert_eq!(chips.step(2, &actions::LEFT), Some(1));
+        // A word wider than the whole area alone is cut to it.
+        let cut = Chips::from_widths(&STYLE, area, [area.width * 2]);
+        assert_eq!(cut.cell(0).unwrap().width, area.width);
     }
 
     #[test]

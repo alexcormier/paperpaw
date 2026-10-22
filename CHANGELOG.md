@@ -22,7 +22,15 @@ change the plugin SDK.
   the box, `Painters::check`), `ui::TextView` (text longer than its room,
   scrolled by buttons, swipes and taps) and `ui::DatePicker` /
   `ui::TimePicker` (fields stepped with the buttons or by touch, months
-  and leap years right). All are in `paperpaw-dev ui-kit`.
+  and leap years right). All are in `paperpaw-dev ui-kit`. No block
+  shortens a title or a button's word: text fields put their box below a
+  long title (`ui::text_field_height`), ticked rows and dialogs wrap
+  their titles (`ui::check_row_height`), a dialog's buttons go one below
+  the other where their words do not fit side by side, chips go onto a
+  second row (`Chips::height_for`), and value rows set a long title on two
+  small lines before they shorten it. `paperpaw-dev ui-kit` checks the
+  kit in long German and the pseudo-language, a shortened label an error;
+  a value shortened in a field is no longer reported.
 - Building blocks for plugin screens, so positions are not computed by
   hand: `ui::Stack` (parts one below the other, from the top and the
   bottom), `ui::columns` (equal columns that end flush with their area),

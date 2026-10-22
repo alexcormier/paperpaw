@@ -212,12 +212,18 @@ pub fn text_cut(scene: &Scene<'_>) -> Vec<Issue> {
     issues
 }
 
-/// Text shortened with an ellipsis to fit.
+/// Text shortened with an ellipsis to fit: a label, a heading, a
+/// button's word. A value in a field may be shortened (it is the reader's
+/// own, typed); it is left alone.
 pub fn ellipsis(scene: &Scene<'_>) -> Vec<Issue> {
     let mut issues: Vec<Issue> = Vec::new();
+    let fields: Vec<_> = scene.parts(&[Role::Field]).map(|f| f.area).collect();
     for d in scene.parts(&[Role::Text, Role::Heading, Role::Button]) {
         let label = d.label.trim_end();
         if !label.ends_with('…') || !says_something(label) {
+            continue;
+        }
+        if fields.iter().any(|f| f.intersection(&d.area).is_some()) {
             continue;
         }
         // Shortened to fit, the text fills its room to the end (less a

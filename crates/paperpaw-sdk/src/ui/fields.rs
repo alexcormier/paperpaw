@@ -18,24 +18,95 @@ use crate::{Command, Id};
 
 use super::{Ink, UiStyle};
 
-/// Where a text field's box goes in its row: the right part, a margin in
-/// from the row's end, as tall as a button.
-pub fn text_field_box(style: &UiStyle, row: Rect) -> Rect {
+/// Where a text field's title and box go in `row`: the title measured
+/// first keeps its whole width (`title_width`, the width of its widest
+/// line where it is wrapped into `title_lines` lines `line` tall); the
+/// box beside it takes what is left, at least a third of the row; where
+/// that does not fit, the title takes the top of the row and the box its
+/// whole width below it. The box is as tall as a button. Whether it is
+/// below is `true` in the third place.
+pub fn text_field_layout(
+    style: &UiStyle,
+    row: Rect,
+    title_width: f32,
+    title_lines: u16,
+    line: u16,
+) -> (Rect, Rect, bool) {
     let margin = style.margin as u16;
-    let height = super::button_height(style, row);
-    let width = (row.width / 2).saturating_sub(margin);
-    Rect::new(
-        (row.x + row.width).saturating_sub(width + margin),
-        row.y + (row.height - height) / 2,
-        width,
-        height,
-    )
+    let button = super::Segments::height(style);
+    // Rounded up, so the title keeps all its room.
+    let title_width = title_width as u16 + u16::from(title_width > f32::from(title_width as u16));
+    let least = row.width / 3;
+    let inner = row.width.saturating_sub(2 * margin);
+    if title_lines <= 1 && title_width.saturating_add(margin).saturating_add(least) <= inner {
+        let title = Rect::new(row.x + margin, row.y, title_width, row.height);
+        let x = title.x + title_width + margin;
+        let field = Rect::new(
+            x,
+            row.y + row.height.saturating_sub(button) / 2,
+            (row.x + row.width).saturating_sub(x + margin),
+            button,
+        );
+        return (title, field, false);
+    }
+    let top = row.y + margin / 2;
+    let title = Rect::new(row.x + margin, top, inner, line.saturating_mul(title_lines));
+    let field = Rect::new(
+        row.x + margin,
+        title.y + title.height + style.gap as u16,
+        inner,
+        button,
+    );
+    (title, field, true)
 }
 
-/// Draws a one-line text field in `row`: `title` on the left, `value` in a
-/// framed box on the right (`placeholder`, gray, while it is empty),
-/// shortened to fit. With `focused`, the row is focused (draw the focus
-/// first, as for other rows). *Select* or a tap opens the keyboard
+/// The height of a text field's row `width` wide titled `title`: a row
+/// ([`UiStyle::row`]) where the box fits beside the whole title, else the
+/// title's lines and the box below them ([`text_field_layout`]).
+pub fn text_field_height(env: &Env<'_>, style: &UiStyle, width: u16, title: &str) -> u16 {
+    let row = Rect::new(0, 0, width, style.row as u16);
+    let Some(font) = style.font(env) else {
+        return row.height;
+    };
+    let (lines, widest, line) = title_lines(&font, style, title, width);
+    let (_, field, below) = text_field_layout(style, row, widest, lines, line);
+    if below {
+        field.y + field.height + style.margin as u16 / 2
+    } else {
+        row.height
+    }
+}
+
+/// `title` in the text size: its lines where it is wrapped into a row
+/// `width` wide less its margins (one where it fits), the widest, and a
+/// line's height.
+fn title_lines(
+    font: &crate::fonts::FontHandle<'_>,
+    style: &UiStyle,
+    title: &str,
+    width: u16,
+) -> (u16, f32, u16) {
+    let line = font.line_metrics(style.text).line_height as u16;
+    let room = f32::from(width.saturating_sub(2 * style.margin as u16));
+    let whole = font.measure(style.text, title);
+    // A title that fits beside a third of the row stays on one line.
+    if whole <= room - f32::from(width / 3) - style.margin as f32 {
+        return (1, whole, line);
+    }
+    let wrapped = font.wrap(style.text, title, room);
+    let widest = wrapped
+        .iter()
+        .map(|r| font.measure(style.text, &title[r.clone()]))
+        .fold(0.0f32, f32::max);
+    (wrapped.len().max(1) as u16, widest, line)
+}
+
+/// Draws a one-line text field in `row`: `title`, whole, then `value` in
+/// a framed box (`placeholder`, gray, while it is empty), the value
+/// alone shortened to fit. The box is beside the title where it fits
+/// with a third of the row, else below it: give the row
+/// [`text_field_height`]. With `focused`, the row is focused (draw the
+/// focus first, as for other rows). *Select* or a tap opens the keyboard
 /// ([`edit_text`]); the value comes back as the reply.
 #[allow(clippy::too_many_arguments)]
 pub fn draw_text_field(
@@ -48,29 +119,29 @@ pub fn draw_text_field(
     value: &str,
     placeholder: &str,
 ) {
-    let field = text_field_box(style, row);
-    canvas.describe(Role::Field, value, field, focused, None);
     let Some(font) = style.font(env) else {
+        let (_, field, _) = text_field_layout(style, row, 0.0, 1, 0);
+        canvas.describe(Role::Field, value, field, focused, None);
         return;
     };
+    let (lines, widest, line) = title_lines(&font, style, title, row.width);
+    let (title_area, field, below) = text_field_layout(style, row, widest, lines, line);
+    canvas.describe(Role::Field, value, field, focused, None);
     let ink = style.focus_ink(focused);
+    if below {
+        draw_lines(canvas, &font, style.text, title_area, line, title, ink);
+    } else {
+        super::draw_label(
+            canvas,
+            &font,
+            style.text,
+            f32::from(title_area.x),
+            title_area,
+            title,
+            ink,
+        );
+    }
     let margin = style.margin as u16;
-    let title_room = Rect::new(
-        row.x + margin,
-        row.y,
-        field.x.saturating_sub(row.x + 2 * margin),
-        row.height,
-    );
-    let title = super::fit(&font, style.text, title, f32::from(title_room.width));
-    super::draw_label(
-        canvas,
-        &font,
-        style.text,
-        f32::from(title_room.x),
-        title_room,
-        &title,
-        ink,
-    );
     let paper = if focused && style.dark_focus() {
         Color::BLACK
     } else {
@@ -107,22 +178,78 @@ pub fn draw_text_field(
     );
 }
 
+/// `text` wrapped into `area`'s width, a line `line` tall each, from its
+/// top.
+fn draw_lines(
+    canvas: &mut Canvas<'_>,
+    font: &crate::fonts::FontHandle<'_>,
+    size: f32,
+    area: Rect,
+    line: u16,
+    text: &str,
+    ink: Color,
+) {
+    for (i, range) in font
+        .wrap(size, text, f32::from(area.width))
+        .into_iter()
+        .enumerate()
+    {
+        let at = Rect::new(area.x, area.y + i as u16 * line, area.width, line);
+        super::draw_label(canvas, font, size, f32::from(at.x), at, &text[range], ink);
+    }
+}
+
 /// What opens the keyboard for a text field titled `title` with `value`
 /// in it; what is typed comes back as `reply` ([`ask::text`](crate::ask::text)).
 pub fn edit_text(title: &str, value: &str, reply: &Event<Typed>) -> Command {
     crate::ask::text(title, reply).initial(value).command()
 }
 
-/// Where the box of a ticked row goes: at the row's left, a margin in, as
-/// a switch is tall.
+/// Where the box of a ticked row goes: at the row's left, a margin in,
+/// as a switch in a plain row is tall, beside the row's first line.
 pub fn check_rect(style: &UiStyle, row: Rect) -> Rect {
-    let side = (row.height * 7 / 10 * 3 / 4).max(8);
+    let plain = (style.row as u16).min(row.height);
+    let side = (plain * 7 / 10 * 3 / 4).max(8);
     Rect::new(
         row.x + style.margin as u16,
-        row.y + (row.height - side) / 2,
+        row.y + (plain - side) / 2,
         side,
         side,
     )
+}
+
+/// The height of a ticked row `width` wide: a row ([`UiStyle::row`]), or
+/// taller where `title` (whole, wrapped beside the box) and `note` need
+/// more lines.
+pub fn check_row_height(
+    env: &Env<'_>,
+    style: &UiStyle,
+    width: u16,
+    title: &str,
+    note: &str,
+) -> u16 {
+    let row = Rect::new(0, 0, width, style.row as u16);
+    let Some(font) = style.font(env) else {
+        return row.height;
+    };
+    let text = check_text_width(style, row);
+    let line = font.line_metrics(style.text).line_height as u16;
+    let small = font.line_metrics(style.small).line_height as u16;
+    let lines = font.wrap(style.text, title, f32::from(text)).len().max(1) as u16;
+    let notes = if note.is_empty() {
+        0
+    } else {
+        font.wrap(style.small, note, f32::from(text)).len().max(1) as u16
+    };
+    let needed = line * lines + small * notes + style.margin as u16;
+    row.height.max(needed)
+}
+
+/// The width a ticked row's text has beside its box.
+fn check_text_width(style: &UiStyle, row: Rect) -> u16 {
+    let check = check_rect(style, row);
+    let x = check.x + check.width + style.margin as u16;
+    (row.x + row.width).saturating_sub(x + style.margin as u16)
 }
 
 /// Draws a box, ticked (`on`) or not, in `rect`; `inverted` on a focused
@@ -182,34 +309,49 @@ pub fn draw_check_row(
     };
     let ink = style.focus_ink(focused);
     let x = check.x + check.width + style.margin as u16;
-    let width = (row.x + row.width).saturating_sub(x + style.margin as u16);
-    if note.is_empty() {
-        let text = super::fit(&font, style.text, title, f32::from(width));
-        let at = Rect::new(x, row.y, width, row.height);
-        super::draw_label(canvas, &font, style.text, f32::from(x), at, &text, ink);
-        return;
-    }
+    let width = check_text_width(style, row);
     let line = font.line_metrics(style.text).line_height as u16;
     let small = font.line_metrics(style.small).line_height as u16;
-    let top = row.y + row.height.saturating_sub(line + small) / 2;
-    let text = super::fit(&font, style.text, title, f32::from(width));
-    super::draw_label(
-        canvas,
-        &font,
-        style.text,
-        f32::from(x),
-        Rect::new(x, top, width, line),
-        &text,
-        ink,
-    );
+    let titles = font.wrap(style.text, title, f32::from(width));
+    let notes = if note.is_empty() {
+        Vec::new()
+    } else {
+        font.wrap(style.small, note, f32::from(width))
+    };
+    // The text whole, in the middle of the row's height.
+    let height = line * titles.len().max(1) as u16 + small * notes.len() as u16;
+    let mut y = row.y + row.height.saturating_sub(height) / 2;
+    for range in titles {
+        let at = Rect::new(x, y, width, line);
+        super::draw_label(
+            canvas,
+            &font,
+            style.text,
+            f32::from(x),
+            at,
+            &title[range],
+            ink,
+        );
+        y += line;
+    }
     let muted = if focused && style.dark_focus() {
         Color::WHITE
     } else {
         style.ink(Ink::Muted)
     };
-    let note = super::fit(&font, style.small, note, f32::from(width));
-    let at = Rect::new(x, top + line, width, small);
-    super::draw_label(canvas, &font, style.small, f32::from(x), at, &note, muted);
+    for range in notes {
+        let at = Rect::new(x, y, width, small);
+        super::draw_label(
+            canvas,
+            &font,
+            style.small,
+            f32::from(x),
+            at,
+            &note[range],
+            muted,
+        );
+        y += small;
+    }
 }
 
 /// Text longer than its room, a page of lines at a time: the up and down
@@ -415,16 +557,31 @@ mod tests {
     }
 
     #[test]
-    fn a_text_field_s_box_and_a_check_lie_in_their_row() {
+    fn a_text_field_keeps_its_title_whole_and_its_box_beside_or_below() {
+        let margin = STYLE.margin as u16;
         let row = Rect::new(0, 40, 480, 60);
-        let field = text_field_box(&STYLE, row);
-        assert!(
-            field.x > row.width / 2 - 1
-                && field.right() <= u32::from(row.width - STYLE.margin as u16)
-        );
+        // A short title: the box beside it takes the rest of the row.
+        let (title, field, below) = text_field_layout(&STYLE, row, 100.0, 1, 20);
+        assert!(!below);
+        assert_eq!((title.x, title.width), (margin, 100));
+        assert_eq!(field.x, margin + 100 + margin);
+        assert_eq!(field.right(), u32::from(480 - margin));
         assert!(field.y >= row.y && field.bottom() <= row.bottom());
+        // A long one (no room for a third beside it): the box below, both
+        // as wide as the row less its margins.
+        let (title, field, below) = text_field_layout(&STYLE, row, 400.0, 1, 20);
+        assert!(below);
+        assert_eq!(
+            (title.width, field.width),
+            (480 - 2 * margin, 480 - 2 * margin)
+        );
+        assert!(field.y >= title.bottom() as u16);
+        // A wrapped one: all its lines above the box.
+        let (title, field, _) = text_field_layout(&STYLE, row, 300.0, 3, 20);
+        assert_eq!(title.height, 60);
+        assert!(field.y >= title.bottom() as u16);
         let check = check_rect(&STYLE, row);
-        assert_eq!(check.x, STYLE.margin as u16);
+        assert_eq!(check.x, margin);
         assert_eq!(check.width, check.height);
         assert!(check.bottom() <= row.bottom());
     }

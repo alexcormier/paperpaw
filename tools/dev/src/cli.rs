@@ -39,7 +39,8 @@ COMMANDS:
                 file's header, fingerprint, signature and sizes, compatibility
     snapshots   Compares screens with the pictures in --snapshots (--bless writes them)
     ui-kit      Every building block of the SDK's `ui` module, as the gallery shows
-                screens: on every device, in every look, light and dark
+                screens (every device, look, light and dark), checked as `visual`
+                checks; a label shortened to fit is an error
 
 PATHS:
     A data plugin folder (with plugin.ini) or a .ppn file. A plugin with code
@@ -104,6 +105,9 @@ pub struct Context {
     /// The emulated libraries kept in memory and no pictures written:
     /// where there is no file system (the browser's emulator).
     pub in_memory: bool,
+    /// A label shortened to fit (`visual.ellipsis`) is an error, not a
+    /// warning: for the UI kit, whose blocks must never cut their titles.
+    pub labels_whole: bool,
     app_languages: OnceLock<Vec<String>>,
 }
 
@@ -129,6 +133,7 @@ impl Context {
             verbose: false,
             keep: false,
             in_memory: false,
+            labels_whole: false,
             app_languages: OnceLock::new(),
         }
     }
@@ -222,16 +227,19 @@ pub fn run(args: impl Iterator<Item = String>, add: Option<AddPlugins>) -> Resul
     };
     context.target.add = add;
     // The kit's pages, drawn as the gallery draws a plugin's screens.
-    let command = if command == "ui-kit" {
+    // The kit's pages, drawn as the gallery draws a plugin's screens and
+    // checked as `visual` checks them, a label shortened an error.
+    let kit = command == "ui-kit";
+    if kit {
         context.target.plugins = vec![crate::ui_kit::PLUGIN.to_string()];
         context.target.add = Some(crate::ui_kit::add);
-        String::from("gallery")
-    } else {
-        command
-    };
+        context.labels_whole = true;
+    }
     let mut report = Report::default();
     let commands: Vec<&str> = if command == "check" {
         COMMANDS.to_vec()
+    } else if kit {
+        vec!["gallery", "visual"]
     } else {
         vec![command.as_str()]
     };

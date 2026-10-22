@@ -269,13 +269,15 @@ impl Layout {
         } else {
             // From margin to margin, with room round them for the focus.
             let margin = style.margin as u16;
+            let labels: Vec<&str> = chip_labels.iter().map(String::as_str).collect();
+            let width = display.width.saturating_sub(2 * margin);
+            // As many rows as the words need: none is shortened.
             let band = Rect::new(
                 margin,
                 header.area.height,
-                display.width.saturating_sub(2 * margin),
-                ui::Chips::height(&style) + gap,
+                width,
+                ui::Chips::height_for(env, &style, width, &labels) + gap,
             );
-            let labels: Vec<&str> = chip_labels.iter().map(String::as_str).collect();
             let chips = ui::Chips::new(env, &style, band, &labels);
             (chips, None, band.y + band.height)
         };
