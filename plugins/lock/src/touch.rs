@@ -112,14 +112,18 @@ impl Escape {
                     self.taps += 1;
                     self.last_up = Some(now);
                 } else if held >= HOLD_MS && self.taps == 2 {
+                    self.down.clear();
                     self.over();
                     return true;
                 } else {
                     self.over();
                 }
             }
+            // A cancel ends every touch: the Android shell sends it for one
+            // pointer alone, and the others left would count as a second
+            // finger from then on.
             _ => {
-                self.down.retain(|d| *d != id);
+                self.down.clear();
                 self.over();
             }
         }
@@ -226,7 +230,7 @@ mod tests {
             .collect()
     }
 
-    use PointerPhase::{Down, Move, Up};
+    use PointerPhase::{Cancel, Down, Move, Up};
     const AT: (i32, i32) = (200, 300);
 
     #[test]
@@ -296,6 +300,24 @@ mod tests {
             (800 + HOLD_MS, 0, Up, (350, 300)),
         ]);
         assert!(!moved.contains(&InputVerdict::Run(TOGGLE)));
+    }
+
+    #[test]
+    fn a_cancel_for_one_finger_ends_them_all() {
+        // Two fingers down, the gesture cancelled for one of them alone:
+        // the way out works afterwards all the same.
+        let verdicts = run(&[
+            (0, 0, Down, AT),
+            (10, 1, Down, (300, 600)),
+            (20, 0, Cancel, AT),
+            (1_000, 2, Down, AT),
+            (1_100, 2, Up, AT),
+            (1_400, 2, Down, AT),
+            (1_500, 2, Up, AT),
+            (1_800, 2, Down, AT),
+            (1_800 + HOLD_MS, 2, Up, AT),
+        ]);
+        assert_eq!(verdicts.last(), Some(&InputVerdict::Run(TOGGLE)));
     }
 
     #[test]
