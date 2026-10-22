@@ -362,8 +362,14 @@ fn lay_out(env: &Env<'_>, area: Rect, numbers: &Numbers) -> Option<Laid> {
             let size = widgets::largest_size(max, style.small, |s| {
                 // A pixel or two to spare: the ink is measured from the
                 // ascent here, as drawn there.
-                digits_height(&font, s, digits) + gap / 2 + names_h + 2 <= row
+                let fits = |height: u16| height + gap / 2 + names_h + 2 <= row;
+                // The estimate first; where it fits, the ink as drawn (the
+                // digits' ink does not grow quite with the size).
+                fits(digits_height(&font, s, digits))
                     && font.measure(s, &widest) <= f32::from(column) * 0.8
+                    && font
+                        .ink(s, "0123456789")
+                        .is_none_or(|(top, bottom)| fits((bottom - top) as u16))
             });
             let Some(size) = size else {
                 continue;

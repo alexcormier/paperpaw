@@ -226,12 +226,15 @@ pub fn ellipsis(scene: &Scene<'_>) -> Vec<Issue> {
         if fields.iter().any(|f| f.intersection(&d.area).is_some()) {
             continue;
         }
-        // The end of a text that ends with "…" of itself.
-        if scene
-            .ellipses
-            .iter()
-            .any(|text| text.trim_end().ends_with(label))
-        {
+        // A line that ends at a "…" of the text itself (after what fills
+        // its last blank, "Loading {host} …").
+        let own = |text: &String| {
+            text.contains(label)
+                || text
+                    .rsplit_once('}')
+                    .is_some_and(|(_, tail)| tail.contains('…') && label.ends_with(tail.trim_end()))
+        };
+        if scene.ellipses.iter().any(own) {
             continue;
         }
         // Shortened to fit, the text fills its room to the end (less a
