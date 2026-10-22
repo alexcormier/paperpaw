@@ -45,19 +45,18 @@ PaperPaw was called QuireInk up to version 0.3.
 
 <table>
   <tr>
-    <td align="center" width="25%"><img src="docs/images/readme/x4-pro-home.png" width="200" alt="The home screen: the clock, the flash cards due, the book to continue"><br><sub>Home screen</sub></td>
-    <td align="center" width="25%"><img src="docs/images/readme/x4-pro-goal.png" width="200" alt="The home screen with a happy reading cat: 10 of 10 minutes read today"><br><sub>Reading goal</sub></td>
+    <td align="center" width="25%"><img src="docs/images/readme/x4-pro-home.png" width="200" alt="The home screen: the clock, a happy reading cat for 24 of 20 minutes read today, and The Hound of the Baskervilles to continue"><br><sub>Home screen</sub></td>
+    <td align="center" width="25%"><img src="docs/images/readme/x4-pro-reading.png" width="200" alt="The start of chapter II of The Hound of the Baskervilles, The Curse of the Baskervilles"><br><sub>Reading</sub></td>
     <td align="center" width="25%"><img src="docs/images/readme/x4-pro-card.png" width="200" alt="A flash card: to arrive, ankommen, with its sentence, and Again, Hard, Good, Easy"><br><sub>Flash cards</sub></td>
     <td align="center" width="25%"><img src="docs/images/readme/x4-pro-sleep.png" width="200" alt="The sleep screen: a sleeping cat"><br><sub>Sleep screen</sub></td>
   </tr>
   <tr><td colspan="4" align="center"><sub>As on an Xteink X4 Pro (in the emulator).</sub></td></tr>
   <tr>
-    <td align="center"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/1.png" width="200" alt="The home screen: the date, the book to continue and the one read before"><br><sub>Home screen</sub></td>
-    <td align="center"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/2.png" width="200" alt="A page of Alice's Adventures in Wonderland"><br><sub>Reading</sub></td>
-    <td align="center"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/4.png" width="200" alt="The reading menu over the page: contents, search, listen, notes, font, night"><br><sub>Reading menu</sub></td>
-    <td align="center"><img src="fastlane/metadata/android/en-US/images/phoneScreenshots/5.png" width="200" alt="The settings, with a search at the top"><br><sub>Settings</sub></td>
+    <td align="center"><img src="docs/images/readme/x4-home.png" width="200" alt="The home screen with the buttons' hints below it: the clock, the reading cat and the book to continue"><br><sub>Home screen</sub></td>
+    <td align="center"><img src="docs/images/readme/x4-reading.png" width="200" alt="A page of The Hound of the Baskervilles, 5 % read"><br><sub>Reading</sub></td>
+    <td colspan="2"></td>
   </tr>
-  <tr><td colspan="4" align="center"><sub>As on a Boox Go 7 (in the emulator).</sub></td></tr>
+  <tr><td colspan="4" align="center"><sub>As on an Xteink X4 (in the emulator).</sub></td></tr>
 </table>
 
 ## What it does
