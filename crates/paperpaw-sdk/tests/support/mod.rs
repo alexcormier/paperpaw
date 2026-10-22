@@ -3,7 +3,10 @@
 //! fonts of fonts-default), a framebuffer to draw into and a way to find
 //! what was drawn outside a rectangle, and pointer samples.
 
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use std::cell::RefCell;
 

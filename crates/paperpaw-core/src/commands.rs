@@ -1,10 +1,17 @@
 //! The end of every call: commands carried out, what changed drawn and
 //! how the panel refreshes.
 
-#[allow(unused_imports)]
+#[allow(
+    unused_imports,
+    reason = "a part of the kernel, which sees all of it; not every part uses every name"
+)]
 use super::*;
 
 impl Kernel {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub(crate) fn finish(&mut self) -> Effects {
         self.run_commands();
         // The time since, to the screen on top.

@@ -2,8 +2,11 @@
 //! standard app: a badge on books' rows, a field on a book's
 //! information, an action in the book menu, told for which book.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

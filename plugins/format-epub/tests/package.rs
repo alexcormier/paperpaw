@@ -4,8 +4,11 @@
 //! must do: fail with an error, or read what can be read; never panic,
 //! never write outside the plugin's cache.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

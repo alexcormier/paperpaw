@@ -2,8 +2,11 @@
 //! smaller with: the size it gives, every row it owes and no more, each
 //! pixel the mean of those it covers, gray or RGB.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

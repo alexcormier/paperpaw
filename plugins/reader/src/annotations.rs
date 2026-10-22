@@ -121,6 +121,10 @@ impl AnnotationsScreen {
         let name =
             paperpaw_sdk::web::clean_name(&base, 100).unwrap_or_else(|| String::from("notes"));
         let dir = notes_dir(&env);
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "made where missing; writing the notes into it tells if it is not there"
+        )]
         let _ = env.storage.create_dir(&dir);
         let file = format!("{dir}/{name}.md");
         let text = markdown(&env, &title, &author, &self.annotations);

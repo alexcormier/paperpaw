@@ -4,7 +4,11 @@
 //! in their order, filter signatures, hyphenation by language with its
 //! fallbacks, services by type, and formats by extension.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

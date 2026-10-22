@@ -3,8 +3,11 @@
 //! in every pixel format, changes no pixel outside its clip region, and
 //! the region it reports changed holds every pixel it changed.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

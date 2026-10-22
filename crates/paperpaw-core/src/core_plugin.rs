@@ -649,6 +649,10 @@ impl Catalog {
 
 /// The library service and what plugins keep for books, which follow
 /// the books.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn register_library(r: &mut Registrar) -> Result<(), RegisterError> {
     use alloc::rc::Rc;
     use paperpaw_sdk::work::WorkSpec;

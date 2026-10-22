@@ -5,8 +5,11 @@
 //! for); `dimensions` never panics either. And `Fit` itself: sizes
 //! inside the box, never larger than the picture, in its proportions.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

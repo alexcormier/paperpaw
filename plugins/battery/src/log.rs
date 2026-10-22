@@ -26,6 +26,8 @@ pub(crate) const FILE: &str = "log.csv";
 pub(crate) const OLD: &str = "log.old.csv";
 /// What each plugin took.
 pub(crate) const PLUGINS: &str = "plugins.csv";
+/// What each plugin took before.
+pub(crate) const PLUGINS_OLD: &str = "plugins.old.csv";
 /// Its first line.
 pub(crate) const PLUGINS_HEADER: &str =
     "ms,plugin,busy_ms,calls,shown_ms,fast,partial,full,kilopixels,read_kb,written_kb\n";

@@ -2,7 +2,11 @@
 //! by `.`, placements as `@` and a number), their namespace, ownership,
 //! and placements.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_sdk::{Id, InvalidId};
 use proptest::prelude::*;

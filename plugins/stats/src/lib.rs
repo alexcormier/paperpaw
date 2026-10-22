@@ -496,6 +496,10 @@ impl Plugin for Stats {
         .uses(paperpaw_sdk::Uses::NETWORK)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let state: Shared = Rc::new(RefCell::new(State::default()));
         widget::register(r)?;

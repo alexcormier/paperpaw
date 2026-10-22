@@ -406,6 +406,10 @@ impl CalibreScreen {
 
     /// Answers a message of Calibre's, then reads on (unless a book or
     /// the end comes).
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn handle(&mut self, message: Message, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         let args = message.args.as_str();
@@ -629,6 +633,10 @@ fn library_folder<'e>(env: &Env<'e>) -> &'e str {
 }
 
 impl Screen for CalibreScreen {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         self.header.draw(

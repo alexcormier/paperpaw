@@ -90,6 +90,10 @@ pub(crate) struct BarScreen {
 }
 
 impl BarScreen {
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     pub(crate) fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let display = env.device.display;

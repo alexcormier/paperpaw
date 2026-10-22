@@ -1644,6 +1644,10 @@ fn http_requests_go_to_the_shell_and_answers_come_back() {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn plugins_serve_through_the_shell() {
     use paperpaw_sdk::server_params as p;
     let log = log();
@@ -1770,7 +1774,7 @@ fn plugins_serve_through_the_shell() {
 
 #[test]
 fn files_go_up_and_come_down() {
-    let storage = paperpaw_sdk::MemoryStorage::new().with("up.bin", b" data".to_vec());
+    let storage = paperpaw_sdk::MemoryStorage::new().with("up.bin", b"\0\x01data".to_vec());
     let mut kernel = Kernel::builder(DEVICE)
         .storage(storage)
         .network(true)
@@ -2210,6 +2214,10 @@ fn round_pack() -> Vec<u8> {
 }
 
 #[test]
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn data_plugins_are_installed_in_place_of_every_version() {
     use paperpaw_sdk::PluginState::{Off, Running};
 

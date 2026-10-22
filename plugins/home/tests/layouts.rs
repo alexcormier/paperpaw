@@ -4,8 +4,11 @@
 //! device and can be edited without a panic; what it keeps after an edit
 //! reads back the same in a new kernel, which shows the same page.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

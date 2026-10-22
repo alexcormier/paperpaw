@@ -1,2 +1,4 @@
 allow-unwrap-in-tests = true
 allow-expect-in-tests = true
+# Longer functions are split; see `too_many_lines` in Cargo.toml.
+too-many-lines-threshold = 100

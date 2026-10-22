@@ -3,7 +3,10 @@
 //! pixel formats this build has.
 
 // Each test file uses a part of it.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use paperpaw_graphics::{Canvas, Framebuffer};
 use paperpaw_platform::{Color, PixelFormat, Point, Rect};

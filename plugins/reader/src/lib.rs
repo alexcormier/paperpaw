@@ -21,6 +21,9 @@
 //!
 //! It is bound to the `core.reader` slot; any other plugin can replace it.
 
+// What goes wrong with the user's data is told, never dropped unseen:
+// a result left unread says why (see CONTRIBUTING.md).
+#![deny(clippy::let_underscore_must_use)]
 #![no_std]
 
 extern crate alloc;
@@ -320,6 +323,10 @@ impl Plugin for Reader {
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // Each book's position, page index and own settings, moved and
         // removed with it.

@@ -1,8 +1,11 @@
 //! What the widget pack's tests draw with: an `Env` made of the widget
 //! pack and the default fonts registered, on a storage in memory.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use alloc::vec::Vec;
 

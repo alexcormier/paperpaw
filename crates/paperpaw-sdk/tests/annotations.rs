@@ -3,7 +3,11 @@
 //! spaces), and hostile files (wrong field counts, bad numbers, invalid
 //! UTF-8, huge lines, duplicates) are read without panics.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_sdk::annotations::{self, Annotation, Kind, Mark};
 use paperpaw_sdk::document::Locator;

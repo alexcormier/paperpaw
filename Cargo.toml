@@ -85,6 +85,7 @@ members = [
     "tools/fontgen",
     "tools/sign",
     "tools/dev",
+    "tools/checks",
 ]
 
 [workspace.package]
@@ -187,6 +188,11 @@ all = { level = "warn", priority = -1 }
 # allocations and panics visible in review.
 unwrap_used = "warn"
 expect_used = "warn"
+# Code quality, as a ratchet: functions longer than clippy.toml's
+# threshold carry an `expect` with a reason until they are split, and new
+# ones fail. Every allow or expect says why.
+too_many_lines = "warn"
+allow_attributes_without_reason = "warn"
 
 [profile.release]
 opt-level = "s"

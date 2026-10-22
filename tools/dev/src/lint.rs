@@ -87,6 +87,10 @@ pub fn pseudo_plugin(context: &Context) -> Result<Vec<(String, Vec<u8>)>, String
     pseudo::plugin(context)
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
     // Pictures of an earlier run would mislead.
     if !context.in_memory {
@@ -238,11 +242,11 @@ fn how_it_works(id: &str, how: Option<&str>) -> Option<Finding> {
         return None;
     }
     let message = match how {
-        None => format!(
+        None => String::from(
             "It says nothing of how it works: give its manifest `how` (`how/en.txt` and a \
              file per other language, see Manifest::how), a few sentences (paragraphs apart \
              by an empty line) on what it does, where it is found and how it is used. The \
-             plugin manager and the store show it as How it works."
+             plugin manager and the store show it as How it works.",
         ),
         Some(text) if text.chars().count() < LEAST_HOW => format!(
             "How it works says little ({} characters): a few sentences on what it does, \
@@ -434,6 +438,10 @@ fn known_ids(session: &Session) -> Vec<String> {
 
 /// Draws the screens and widgets of the plugins looked at in English and
 /// in the pseudo-language and compares what is drawn.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn drawn(
     context: &Context,
     looked: &[String],

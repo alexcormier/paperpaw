@@ -2,8 +2,11 @@
 //! the home screen and the default fonts: each shows the words, in every
 //! frame, and says what to do while there are none.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::Kernel;
 use paperpaw_platform::{Rotation, SystemStatus, WallClock};

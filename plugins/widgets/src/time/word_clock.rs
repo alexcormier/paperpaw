@@ -245,7 +245,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 }
 
 /// The time as text, as large as fits (or as set), its lines balanced.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_text(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -449,7 +452,10 @@ pub(super) fn lit(grid: &[Vec<char>], words: &str) -> Option<Vec<(usize, usize)>
 
 /// The time as a grid of letters, the words lit; `false` if the language
 /// has no grid that tells it (the text is drawn then).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_grid(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

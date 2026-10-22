@@ -6,8 +6,11 @@
 //! (also into itself, which is refused), new folders, hidden files, and
 //! what ends up on the storage each time.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

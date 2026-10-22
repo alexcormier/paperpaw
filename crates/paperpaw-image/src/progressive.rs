@@ -284,6 +284,10 @@ const END: u8 = 0xd9;
 /// Decodes one scan (its header next) into `coefficients` (of the first
 /// components, those kept), counting the blocks it goes through in
 /// `work`; the marker after it.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn scan(
     reader: &mut Reader<'_>,
     frame: &mut Frame,

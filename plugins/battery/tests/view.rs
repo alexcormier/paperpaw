@@ -2,8 +2,11 @@
 //! the recent times awake do not fit, and its log stays small where the
 //! old log cannot be replaced.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::collections::BTreeSet;
 use std::fmt::Write as _;

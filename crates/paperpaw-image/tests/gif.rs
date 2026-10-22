@@ -3,8 +3,11 @@
 //! transparency, every LZW code size and a table that fills up; and
 //! damaged, truncated or unusual files failing cleanly.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

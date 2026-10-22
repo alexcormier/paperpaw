@@ -2,7 +2,11 @@
 //! networks kept in it: veiled values come back exactly, labels and ids
 //! stay on their line, and hostile files are read without panics.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_sdk::secrets::{FILE, SecretChange, Secrets};
 use paperpaw_sdk::wifi;

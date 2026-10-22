@@ -382,7 +382,10 @@ impl<'a> Canvas<'a> {
 
     /// Draws the outline of a rectangle with corners rounded by `radius`
     /// pixels, `thickness` wide, growing inwards.
-    #[allow(clippy::too_many_arguments)]
+    #[allow(
+        clippy::too_many_arguments,
+        reason = "its inputs are separate things; a struct of them would serve this call alone"
+    )]
     pub fn stroke_round_rect(
         &mut self,
         x: i32,

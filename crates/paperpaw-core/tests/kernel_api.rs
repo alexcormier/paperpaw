@@ -3,7 +3,11 @@
 //! waking, passwords and keys kept on the storage, slots opened and
 //! events sent from outside.
 
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 // Tests panic on purpose when something is wrong.
 
 mod common;

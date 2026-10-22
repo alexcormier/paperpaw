@@ -182,7 +182,10 @@ pub fn wrap_lines_hyphenated(
 /// hyphenated (with at least one lowercase letter among them); punctuation
 /// before them and whatever follows them, such as "(s)" or "'s", stays
 /// attached.
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn hyphen_break(
     text: &str,
     word_start: usize,

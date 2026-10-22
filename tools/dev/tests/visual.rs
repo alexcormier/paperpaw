@@ -2,8 +2,11 @@
 //! black-and-white X4 and a gray Boox, a widget stays in its cell, and
 //! content off the interface's margin is found.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_dev::cli::Context;
 use paperpaw_dev::report::Level;

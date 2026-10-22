@@ -4,7 +4,10 @@
 //! a lookup caught in a loop fails instead of hanging.
 
 // Not every test file uses every helper.
-#![allow(dead_code)]
+#![allow(
+    dead_code,
+    reason = "shared by the tests; not every test file uses every helper"
+)]
 
 use std::cell::Cell;
 

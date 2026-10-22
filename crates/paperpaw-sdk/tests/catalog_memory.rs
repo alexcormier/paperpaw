@@ -7,7 +7,11 @@
 //! about 192 KiB of heap in all, the library's index of 2000 books 48 KB
 //! of it).
 
-#![allow(clippy::unwrap_used, clippy::expect_used)] // Tests panic on purpose when something is wrong.
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

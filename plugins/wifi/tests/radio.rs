@@ -3,8 +3,11 @@
 //! the radio does not stay on for work that has already failed. And the
 //! plugin's translations.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use paperpaw_core::{Io, Kernel, WifiEvent};
 use paperpaw_platform::Rotation;

@@ -4,8 +4,11 @@
 //! the language chosen; answers that are malformed read as failures,
 //! refused keys are asked for again, and each failure is told apart.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::RefCell;
 use std::rc::Rc;

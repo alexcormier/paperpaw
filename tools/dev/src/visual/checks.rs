@@ -1007,6 +1007,10 @@ pub fn touch_targets(scene: &Scene<'_>) -> Vec<Issue> {
 /// room a button has in its row) from the edges of the row they are in
 /// and from each other. A button grown into the room around it (a bar
 /// that did not grow with it, `UiStyle::touch_row`) is found.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
     let ui = scene.ui;
     let tolerance = i32::from(ui.tolerance());

@@ -14,8 +14,11 @@
 //! pictures are small enough to keep (`ui::Thumbnail`) this cannot tell,
 //! as it does not see how large they are drawn.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::cell::RefCell;
 use std::fmt::Write as _;

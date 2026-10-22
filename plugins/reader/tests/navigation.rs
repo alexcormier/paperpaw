@@ -5,8 +5,11 @@
 //! the status lines switched and kept, and the list of bookmarks and
 //! highlights with its export. *Back* returns from each jump.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 mod common;
 

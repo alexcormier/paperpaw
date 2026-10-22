@@ -2,8 +2,11 @@
 //! known, a fixture wrong in every file is caught, by the files and on
 //! the device; releases and `.ppn` files.
 
-// Tests panic on purpose when something is wrong.
-#![allow(clippy::unwrap_used, clippy::expect_used)]
+#![allow(
+    clippy::unwrap_used,
+    clippy::expect_used,
+    reason = "tests panic on purpose when something is wrong"
+)]
 
 use std::path::{Path, PathBuf};
 

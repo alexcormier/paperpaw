@@ -314,6 +314,10 @@ mod tests {
     }
 
     #[test]
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn pages_follow_the_full_sort_order() {
         let mut storage = MemoryStorage::new();
         // Folders first, case-insensitive, unsupported and hidden skipped.

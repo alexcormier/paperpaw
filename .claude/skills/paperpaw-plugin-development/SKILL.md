@@ -142,6 +142,9 @@ section of `docs/plugins.md`. A plugin that should run there:
   as errors, tests, and a build for the embedded target (`no_std`), so it
   runs on the smallest device too. Run them before saying something is
   done.
+- Follow PaperPaw's code guidelines (`CONTRIBUTING.md`, *Code
+  guidelines*): length limits, errors on user data never dropped,
+  memory, and comments in plain English.
 - Build against a released SDK version and say it in the manifest
   (`sdk`): the kernel loads the plugin only where its SDK fits. When
   moving to a newer SDK, read the CHANGELOG for what changed. Until

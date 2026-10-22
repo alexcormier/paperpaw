@@ -618,6 +618,10 @@ impl Converter<'_> {
         })
     }
 
+    #[expect(
+        clippy::too_many_lines,
+        reason = "longer than the limit from before it was set; split it when it is next changed"
+    )]
     fn start(&mut self, name: &str, attrs: paperpaw_sdk::xml::Attrs<'_>) {
         if self.full {
             return;
@@ -1387,6 +1391,10 @@ fn heading_level(tag: &str) -> Option<u8> {
 }
 
 /// Converts a chapter; returns the length of its text file.
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 pub(crate) fn convert(
     storage: &dyn Storage,
     source: &Source<'_>,

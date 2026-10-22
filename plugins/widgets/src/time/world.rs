@@ -235,6 +235,10 @@ fn height(env: &Env<'_>, _: u16) -> u16 {
     row * count + style.gap as u16 * (count - 1) + frame_height(env, ID.as_str())
 }
 
+#[expect(
+    clippy::too_many_lines,
+    reason = "longer than the limit from before it was set; split it when it is next changed"
+)]
 fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let look = widgets::draw_frame(canvas, env, ID.as_str(), area);
     let (style, font) = ui(env);
@@ -492,7 +496,10 @@ fn time_size(font: &FontHandle<'_>, clock: &str, height: f32, width: f32) -> f32
 /// below (`compact`: beside the name); the time `size` large, room
 /// left for `notes` lines of small text (as for the other places, so
 /// that they line up).
-#[allow(clippy::too_many_arguments)]
+#[allow(
+    clippy::too_many_arguments,
+    reason = "its inputs are separate things; a struct of them would serve this call alone"
+)]
 fn draw_column(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,

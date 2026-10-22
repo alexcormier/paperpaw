@@ -127,6 +127,10 @@ impl Unopened {
 /// Remembers `path` as the book read last (reopened at start-up).
 pub(crate) fn remember_last(storage: &dyn paperpaw_sdk::Storage, path: &str) {
     let state = format!("[reader]\nlast = {}\n", paperpaw_sdk::config::quote(path));
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "only which book opens at the start; not kept, the library opens instead"
+    )]
     let _ = storage.write(&state_path(), state.as_bytes());
 }
 
@@ -170,6 +174,10 @@ impl Book {
         // them: moved where they are now, if any are there.
         let old = format!("{dir}/annotations.txt");
         if env.storage.exists(&old) {
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "the file of an earlier version: where it stays, it is moved again at the next opening"
+            )]
             let _ = env
                 .storage
                 .rename(&old, &paperpaw_sdk::annotations::file(path));
@@ -331,6 +339,10 @@ impl Book {
         let path = format!("{}/{name}", self.dir);
         if !storage.exists(&path) {
             let mut others = Vec::new();
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "a folder that cannot be listed keeps its page indexes"
+            )]
             let _ = storage.list(&self.dir, &mut |entry| {
                 if entry.name.starts_with("pages-") && !entry.is_dir {
                     others.push(format!("{}/{}", self.dir, entry.name));
@@ -338,6 +350,10 @@ impl Book {
             });
             if others.len() >= INDEXES_KEPT {
                 for other in others {
+                    #[expect(
+                        clippy::let_underscore_must_use,
+                        reason = "an old page index, made again when needed: where it stays, it takes room, not data"
+                    )]
                     let _ = storage.remove(&other);
                 }
             }

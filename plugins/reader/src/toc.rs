@@ -90,6 +90,10 @@ fn save_headings(env: &Env<'_>, path: &str, headings: &[TocEntry]) {
             h.title
         ));
     }
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "the headings kept as a cache, made again where missing"
+    )]
     let _ = env.storage.write(&headings_path(path), out.as_bytes());
 }
 

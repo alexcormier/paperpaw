@@ -1,7 +1,10 @@
 //! The kernel's side of what the shell does for it: HTTP, servers and
 //! sockets, speech, the clipboard, Wi-Fi and firmware updates.
 
-#[allow(unused_imports)]
+#[allow(
+    unused_imports,
+    reason = "a part of the kernel, which sees all of it; not every part uses every name"
+)]
 use super::*;
 
 /// What the shell is to do for the kernel, and what it does: HTTP,
