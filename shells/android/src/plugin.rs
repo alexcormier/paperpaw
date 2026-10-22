@@ -137,8 +137,8 @@ impl AndroidPlugin {
         ))
     }
 
-    /// Brightness and warmth as settings, also in the reader's and the
-    /// main menu. They follow the device: its levels at start, and every
+    /// Brightness and warmth as settings, also in the reader's panel and
+    /// the quick panel. They follow the device: its levels at start, and every
     /// change goes to the device.
     fn register_frontlight(
         &self,
@@ -174,10 +174,9 @@ impl AndroidPlugin {
             )?;
             items.push(WARMTH);
         }
-        // In the reader's quick panel, first, and with the device's
-        // settings in the main menu.
+        // In the reader's quick panel, first, and in the quick panel.
         for (n, item) in items.into_iter().enumerate() {
-            for (menu, order) in [(READER_PANEL, -10), (menus::MAIN, 82), (menus::QUICK, 20)] {
+            for (menu, order) in [(READER_PANEL, -10), (menus::QUICK, 20)] {
                 r.add_menu_entry(
                     MenuEntry::new(menu, item.clone().into()).order(order + n as i16),
                 )?;

@@ -30,7 +30,7 @@ pub fn draw_header(
     if let Some(note) = note.as_deref() {
         right -= font.measure(style.small, note) + margin;
     }
-    let title = fit(&font, style.head, title, right - f32::from(area.x) - margin);
+    let (size, title) = title_fitting(&font, style, title, right - f32::from(area.x) - margin);
     let band = style.header_band(area);
     if let Some(note) = note.as_deref() {
         let (x, baseline) = (right + margin, cap_baseline(&font, band, style.small));
@@ -47,12 +47,12 @@ pub fn draw_header(
     }
     let (x, baseline) = (
         f32::from(area.x) + margin,
-        cap_baseline(&font, band, style.head),
+        cap_baseline(&font, band, size),
     );
     draw_label_on(
         &mut canvas,
         &font,
-        style.head,
+        size,
         x,
         area,
         baseline,
@@ -220,7 +220,7 @@ impl Header {
             right -= margin + pad;
             x
         });
-        let title = fit(&font, style.head, title, right - f32::from(t.x));
+        let (size, title) = title_fitting(&font, style, title, right - f32::from(t.x));
         let label = page
             .filter(|_| parts.pager.is_some())
             .map(|page| Self::page_label(env, page));
@@ -272,8 +272,8 @@ impl Header {
             draw_label_on(&mut canvas, &font, style.small, x, t, y, note, note_ink);
         }
         let x = f32::from(t.x);
-        let y = baseline(style.head);
-        draw_label_on(&mut canvas, &font, style.head, x, t, y, &title, ink);
+        let y = baseline(size);
+        draw_label_on(&mut canvas, &font, size, x, t, y, &title, ink);
     }
 
     /// The action a tap at `point` stands for: back, or the previous or
@@ -416,6 +416,18 @@ impl Pager {
             actions::NEXT_PAGE
         })
     }
+}
+
+/// A header's title in `room` pixels: at its size where it fits, else
+/// smaller, down to the body's size, before it is shortened (the arrows
+/// and the page number beside it keep their room).
+fn title_fitting(font: &FontHandle<'_>, style: &UiStyle, title: &str, room: f32) -> (f32, String) {
+    let least = style.text.min(style.head);
+    let size = crate::widgets::largest_size(style.head, least, |size| {
+        font.measure(size, title) <= room + 1.0
+    })
+    .unwrap_or(least);
+    (size, fit(font, size, title, room))
 }
 
 pub(super) fn center(area: Rect) -> (i32, i32) {

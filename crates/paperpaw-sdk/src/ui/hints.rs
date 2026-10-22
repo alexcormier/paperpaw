@@ -13,8 +13,7 @@ pub fn button_hints_height(env: &Env<'_>) -> u16 {
     ((line * 1.5) as u32 + style.line).max(env.metrics.mm(4)) as u16
 }
 
-/// PaperPaw's paw: on empty screens ([`draw_empty`]) and as the busy
-/// mark, also in the hint of a button whose press is being worked on.
+/// PaperPaw's paw: the busy mark in a corner of the screen.
 pub const PAW_ICON: &str = "paw";
 
 /// The mark beside a button's label in the row of hints where holding
@@ -34,7 +33,6 @@ pub fn draw_button_hints(
     env: &Env<'_>,
     area: Rect,
     hints: &[Hint],
-    held: &[bool],
     pressed: Option<usize>,
 ) {
     let style = UiStyle::new(env);
@@ -80,7 +78,7 @@ pub fn draw_button_hints(
         let left = u32::from(area.x) + width * i / count;
         let right = u32::from(area.x) + width * (i + 1) / count;
         let cell = Rect::new(left as u16, row.y, (right - left) as u16, row.height);
-        let mut room = (right - left).saturating_sub(2 * style.gap) as f32;
+        let room = (right - left).saturating_sub(2 * style.gap) as f32;
         let middle = left as f32 + (right - left) as f32 / 2.0;
         let ink = if pressed == Some(i as usize) {
             let pressed = cell.inset(style.gap as u16 / 2, style.gap as u16 / 4);
@@ -90,45 +88,19 @@ pub fn draw_button_hints(
         } else {
             Color::BLACK
         };
-        // Holding the button does something too: a small hand beside its
-        // label, the two together in the middle; while its press is being
-        // worked on, the paw in its place.
-        let busy = pressed == Some(i as usize);
-        let hold = (busy || held.get(i as usize).copied().unwrap_or(false))
-            && matches!(hint, Hint::Text(_) | Hint::Icon(_));
-        let sign = if busy {
-            crate::icons::BUSY
-        } else {
-            crate::icons::HOLD
-        };
-        // Smaller than the label, close to it, the cell's margins halved:
-        // the label keeps its room (German words are long).
-        let mark_size = style.small * 0.8;
-        let mark = if hold {
-            room += style.gap as f32;
-            icon_width(env, sign, mark_size) + style.gap as f32 / 4.0
-        } else {
-            0.0
-        };
-        let end = match hint {
+        // The label alone, in the middle: no mark beside it.
+        match hint {
             Hint::Text(text) => {
-                let text = fit(&font, style.small, text, room - mark);
+                let text = fit(&font, style.small, text, room);
                 let width = font.measure(style.small, &text);
-                let x = middle - (width + mark) / 2.0;
+                let x = middle - width / 2.0;
                 draw_label(canvas, &font, style.small, x, cell, &text, ink);
-                x + width
             }
             Hint::Icon(name) => {
                 let width = icon_width(env, name, style.text);
-                let x = middle - (width + mark) / 2.0;
-                draw_icon(canvas, env, name, style.text, x, cell, ink);
-                x + width
+                draw_icon(canvas, env, name, style.text, middle - width / 2.0, cell, ink);
             }
-            Hint::Default | Hint::Hidden => continue,
-        };
-        if hold {
-            let x = end + style.gap as f32 / 4.0;
-            draw_icon(canvas, env, sign, mark_size, x, cell, ink);
+            Hint::Default | Hint::Hidden => {}
         }
     }
 }

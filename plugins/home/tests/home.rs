@@ -283,7 +283,8 @@ fn on_screen(home: &Home, shown: &[(String, Rect)]) {
 fn without_margins_the_grid_stays_on_the_screen() {
     let mut home = Home::new(
         true,
-        "page-1 = tool:core.settings 0/0 1x1, tool:core.settings 3/0 1x1\n\
+        "columns = 4\n\
+         page-1 = tool:core.settings 0/0 1x1, tool:core.settings 3/0 1x1\n\
          [core]\nui-margin = 0\n",
     );
     let shown = home.shown();
@@ -355,7 +356,7 @@ fn layouts_with_widgets_not_there_are_not_offered() {
 
 #[test]
 fn widgets_are_made_anew_only_when_what_makes_them_changes() {
-    let mut home = Home::new(true, "page-1 = probe.widget 0/0 4x1\n");
+    let mut home = Home::new(true, "columns = 4\npage-1 = probe.widget 0/0 4x1\n");
     home.shown();
     let made = MADE.load(Ordering::SeqCst);
     assert_eq!(made, 1, "made once as the home screen showed");

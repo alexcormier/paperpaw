@@ -2897,8 +2897,6 @@ fn a_row_of_hints_names_the_buttons_below_the_screen() {
             Hint::Icon("chevron-right"),
         ]
     );
-    // Holding back goes home, holding confirm opens the menu: marked.
-    assert_eq!(kernel.hint.held, [true, true, false, false]);
 
     // The reader keeps all of the screen, made once for it.
     kernel.apply(Command::OpenSlot(

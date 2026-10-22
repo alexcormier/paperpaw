@@ -66,6 +66,7 @@ home.page-2 = home.tools",
 tool:core.library 0/5 1x1, tool:stats.open 1/5 1x1, tool:file-manager.open 2/5 1x1, \
 tool:core.settings 3/5 1x1
 home.page-2 = home.tools
+home.columns = 4
 home.rows = 6
 home.recent@1.count = 8
 home.recent@1.heading = off",
@@ -78,6 +79,7 @@ home.recent@1.heading = off",
         "home.page-1 = home.clock 0/0 4x1, stats.widget.goal@1 0/1 2x2, \
 stats.widget.today@1 2/1 2x2, stats.widget.streak@1 0/3 4x1, home.continue@1 0/4 4x2
 home.page-2 = home.tools
+home.columns = 4
 home.rows = 6
 stats.widget.goal@1.frame = core.frame.line
 stats.widget.today@1.frame = core.frame.line
@@ -92,6 +94,7 @@ stats.widget.streak@1.size = core.size.small",
         "home.page-1 = widgets.analogue-clock@1 0/0 4x3, home.date@1 0/3 4x1, \
 home.continue@1 0/4 4x2
 home.page-2 = home.tools
+home.columns = 4
 home.rows = 6
 home.status-bar = off",
     ),
@@ -102,6 +105,7 @@ home.status-bar = off",
         "home.layout.minimal.help",
         "home.page-1 = home.continue@1 0/1 4x3
 home.page-2 = home.tools
+home.columns = 4
 home.rows = 5
 home.status-bar = off
 home.footer.dots = off

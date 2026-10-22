@@ -103,18 +103,14 @@ impl Plugin for X4 {
 }
 
 /// The front light's settings, also first in the reader's panel and in
-/// the quick panel, and with the device's settings in the main menu.
+/// the quick panel.
 #[cfg(feature = "x4-pro")]
 fn register_light(r: &mut Registrar) -> Result<(), RegisterError> {
     use paperpaw_sdk::MenuEntry;
     use paperpaw_sdk::builtin::menus;
     r.add_settings(&LIGHT_SETTINGS)?;
     for (n, item) in [FRONTLIGHT, WARMTH].into_iter().enumerate() {
-        for (menu, order) in [
-            (menus::READER_PANEL, -10),
-            (menus::MAIN, 82),
-            (menus::QUICK, 20),
-        ] {
+        for (menu, order) in [(menus::READER_PANEL, -10), (menus::QUICK, 20)] {
             r.add_menu_entry(MenuEntry::new(menu, item.clone().into()).order(order + n as i16))?;
         }
     }

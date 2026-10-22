@@ -120,7 +120,7 @@ static SETTINGS: [SettingSpec; 16] = [
         "home.setting.columns",
         2,
         grid::MAX_COLUMNS as i64,
-        4,
+        3,
         groups::LOOK,
     )
     .with_extra(&IN_HOME)

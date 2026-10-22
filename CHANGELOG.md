@@ -13,6 +13,24 @@ change the plugin SDK.
   `readers::open_page` (the browser's), no more on every document a
   plugin keeps, and draws it as the interface's buttons.
 
+- The quick panel leaves the screen's status line as it is: it has no
+  line of its own at its top any more (its settings *Top line*, *Top
+  left*, *Top centre*, *Top right* and *Text size at the top* are gone;
+  saved values of them are left unread).
+- The home screen has 3 columns by default (was 4), so the tools' names
+  fit; a layout placing things 4 wide keeps 4.
+- The front light and its warmth are no longer in the main menu: they
+  are in the quick panel and the reader's panel.
+- No title is cut for a control any more: menus lay out a setting's row
+  as the settings pages do (its control below its title where both do
+  not fit); a header's title gets smaller beside its arrows, down to the
+  body's size, before it is shortened, and so does a row's title beside
+  its value, down to the small size; the skim bar puts its buttons in two
+  rows where their names do not fit in one.
+- No paws beside symbols: the row of hints shows each button's label
+  alone (no mark for holding, no paw while a press is worked on), and an
+  empty screen its icon alone. SDK, Breaking: `ui::draw_button_hints`
+  takes no `held` any more.
 - Web emulator: plugins' requests get the page's recorded answers
   (method and address pattern to status, headers, body and a delay of
   the device's time; redirects followed through them), offline and the

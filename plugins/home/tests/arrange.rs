@@ -15,7 +15,7 @@ const HOME: &str = "home.dashboard";
 const EDIT: Id = Id::new_static("home.edit-pages");
 /// A page with two tools in the first row, one in the second and the
 /// book being read below.
-const PAGE: &str = "[home]\npage-1 = tool:core.library 0/0 1x1, tool:core.settings 1/0 1x1, \
+const PAGE: &str = "[home]\ncolumns = 4\npage-1 = tool:core.library 0/0 1x1, tool:core.settings 1/0 1x1, \
                     tool:file-manager.open 0/1 1x1, home.continue 0/3 4x2\n";
 
 fn page(app: &App, n: usize) -> String {
@@ -441,7 +441,7 @@ fn a_full_page_says_there_is_no_room() {
         .map(|(col, row)| format!("home.continue@{} {col}/{row} 1x1", row * 4 + col + 1))
         .collect::<Vec<_>>()
         .join(", ");
-    let config = format!("[home]\npage-1 = {full}\nrows = 4\n");
+    let config = format!("[home]\ncolumns = 4\npage-1 = {full}\nrows = 4\n");
     let mut app = App::new(X4, Shared::memory(&config, &[]));
     let before = page(&app, 1);
     edit(&mut app);
