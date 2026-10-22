@@ -48,6 +48,28 @@ file copied into a plugin's folder does not run until it is named as
 installed, as the store and the web flasher do, here over USB
 (`--trust-code`, which only a firmware built for development answers).
 
+## Publishing
+
+`build.sh` builds the files as the plugin library rebuilds them to
+compare, with the paths written as the same in any folder (the
+source's top as `/plugin`, Cargo's home as `/cargo`, the X4 Pro's
+toolchain as `/rust`). The CI job runs it: push a tag `v` +
+`plugin.ini`'s version, with
+the author's key as the repository's secret `PAPERPAW_PLUGIN_KEY`; the
+tag's release then holds the folder as ZIPs (with `store/` for the
+upload form, without for the catalogue), a signed file for each reader,
+their SHA-256 sums and the catalogue's `[[versions]]`. The same on
+one's own computer (Linux or macOS), with both toolchains and
+`paperpaw-sign` of the release:
+
+```sh
+. ~/export-esp.sh
+./build.sh --key ~/.paperpaw/author.key
+```
+
+[Publishing](../../docs/plugins.md#publishing) and the site's guide,
+<https://paperpaw.org/authors>, say what to submit and how.
+
 ## Size
 
 | | X4 | X4 Pro |

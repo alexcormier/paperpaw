@@ -1299,14 +1299,16 @@ Services between plugins are found by their type's name too, so a plugin
 built apart finds those of the firmware's plugins (see [Services and
 points of your own](#services-and-points-of-your-own)).
 
-### Publishing
+### Publishing a code plugin
 
 The plugin library (paperpaw.org) lists a code plugin with its folder
-and a build per device (`x4`, `x4-pro`), each a signed `.ppn` with the
-fingerprint it was built for, and the author's key. The sample's CI job
+and a build per reader (`x4`, `x4-pro`, `x4-classic`), each a signed
+`.ppn` with the fingerprint it was built for, the author's key, and its
+source, which the library rebuilds to compare. The sample's `build.sh`
+builds, packs and signs both files, and its CI job
 (`samples/hello-native/.github/workflows/build.yml`, for a plugin's own
-repository) builds, packs and signs both files on every tag, with the
-author's key kept as a secret of the repository.
+repository) runs it on every tag, with the author's key kept as a
+secret of the repository. [Publishing](#publishing) says how.
 
 ## Plugins without code
 
