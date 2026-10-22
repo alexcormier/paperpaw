@@ -68,6 +68,10 @@ pub(super) struct Book {
     pub(super) chapter_marks: String,
     /// The page the last link led to: it offers the way back.
     pub(super) landed: Option<Locator>,
+    /// A page a plugin shows one after another (see
+    /// [`paperpaw_sdk::readers::open_page`]): it offers the way back
+    /// always.
+    pub(super) page_back: bool,
     /// Read aloud (`volume`) or turning its pages by itself (`clock`):
     /// the icon shown in the status line.
     pub(super) hands_free: Option<&'static str>,
@@ -208,6 +212,7 @@ impl Book {
             status_lines: status::load_choice(env.storage),
             chapter_marks: String::new(),
             landed: None,
+            page_back: params.get(paperpaw_sdk::readers::PAGE).is_some(),
             hands_free: None,
             finished: false,
             decorated: Vec::new(),

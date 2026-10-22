@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- About PaperPaw is a settings page with rows (version, source, plugins
+  built in, code plugins); the licences, a chapter each and in full, and
+  the list of the plugins built in open in the reader. The reader offers
+  *Back* always only on a plugin's pages opened with the SDK's new
+  `readers::open_page` (the browser's), no more on every document a
+  plugin keeps, and draws it as the interface's buttons.
+
 - Web emulator: plugins' requests get the page's recorded answers
   (method and address pattern to status, headers, body and a delay of
   the device's time; redirects followed through them), offline and the

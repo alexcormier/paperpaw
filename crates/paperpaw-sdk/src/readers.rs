@@ -154,6 +154,10 @@ const LIMIT: usize = 16 * 1024;
 /// open it ([`cannot_open`]), comma-separated.
 const PAST: &str = "readers-past";
 
+/// The parameter of a page's opening ([`open_page`]): *Back* is offered on
+/// it always.
+pub const PAGE: &str = "readers-page";
+
 /// A path as choices are kept by: without `/` at its ends.
 fn plain(path: &str) -> &str {
     path.trim_matches('/')
@@ -335,6 +339,18 @@ pub fn open(path: impl Into<String>) -> Command {
     Command::OpenBook(Params::new().with(params::PATH, path.into()))
 }
 
+/// Opens `path`, a page a plugin shows one after another (a web page),
+/// as [`open`] does; readers offer *Back* on it always, to the plugin's
+/// page before (a plugin's other documents, e.g. a text it writes to be
+/// read, show as books do).
+pub fn open_page(path: impl Into<String>) -> Command {
+    Command::OpenBook(
+        Params::new()
+            .with(params::PATH, path.into())
+            .with(PAGE, "1"),
+    )
+}
+
 /// What a reader that cannot open a book after all answers (instead of
 /// showing an error of its own): `params` are those it was opened with,
 /// `reader` its own id. The kernel opens the book with the next reader
@@ -348,7 +364,11 @@ pub fn cannot_open(params: &Params, reader: &Id) -> Command {
         past.push_str(reader.as_str());
     }
     let path = params.get(params::PATH).unwrap_or_default().to_string();
-    Command::OpenBook(Params::new().with(params::PATH, path).with(PAST, past))
+    let mut opened = Params::new().with(params::PATH, path).with(PAST, past);
+    if let Some(page) = params.get(PAGE) {
+        opened = opened.with(PAGE, page.to_string());
+    }
+    Command::OpenBook(opened)
 }
 
 /// The readers that could not open the book opened with `params`.
@@ -370,6 +390,9 @@ pub fn resolve(env: &Env<'_>, params: &Params) -> Command {
     let mut opened = Params::new().with(params::PATH, path.to_string());
     if !past.is_empty() {
         opened = opened.with(PAST, params.get(PAST).unwrap_or_default().to_string());
+    }
+    if let Some(page) = params.get(PAGE) {
+        opened = opened.with(PAGE, page.to_string());
     }
     match chosen_past(env, path, &past) {
         Some(reader) => Command::OpenInSlot(slots::READER, reader.screen.clone(), opened),
