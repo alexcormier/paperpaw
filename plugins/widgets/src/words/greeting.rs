@@ -191,6 +191,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let room = f32::from(area.height.saturating_sub(small));
     // The icon is as high as a capital, a space before the text.
     let icon_width = |icon: bool, size: f32| {
+        // At the size the text is drawn at (a pack's largest at most).
+        let size = font.size_for(size, "");
         if icon {
             ui::icon_width(env, part.icon(), size) + size * 0.3
         } else {
@@ -280,7 +282,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         let x = align.x(area, total);
         let row = Rect::new(area.x, top + big * n as u16, area.width, big);
         if icon {
-            let icon_size = size * 0.9;
+            let icon_size = font.size_for(size, shown) * 0.9;
             ui::draw_icon(canvas, env, part.icon(), icon_size, x, row, look.ink);
         }
         ui::draw_label(

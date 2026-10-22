@@ -788,8 +788,11 @@ impl<'a> FontHandle<'a> {
                 .any(|(font, _)| font.has_char(ch))
     }
 
-    /// Horizontal advance of one character in pixels.
+    /// Horizontal advance of one character in pixels, at the size it is
+    /// drawn at alone (see [`FontHandle::size_for`]).
     pub fn advance(&self, size: f32, ch: char) -> f32 {
+        let mut buffer = [0u8; 4];
+        let size = self.size_for(size, ch.encode_utf8(&mut buffer));
         self.pick(ch).0.advance(ch, size)
     }
 

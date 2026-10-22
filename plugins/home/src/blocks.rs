@@ -443,11 +443,12 @@ fn set_share(size: Size) -> f32 {
 const DATE_SHARE: f32 = 0.24;
 
 /// Where the time's digits end and what follows them begins ("AM"): the
-/// digits are drawn large, from a pack's large sizes where it has them
-/// (see [`FontHandle::display`]), the rest beside them at the date's size.
+/// digits (or the dashes of a clock not yet set) are drawn large, from a
+/// pack's large sizes where it has them (see [`FontHandle::display`]),
+/// the rest beside them at the date's size.
 fn split_time(clock: &str) -> (&str, &str) {
     let end = clock
-        .find(|c: char| !(c.is_ascii_digit() || c == ':'))
+        .find(|c: char| !(c.is_ascii_digit() || c == ':' || c == '-'))
         .unwrap_or(clock.len());
     (&clock[..end], clock[end..].trim())
 }
@@ -484,7 +485,9 @@ impl ClockLayout {
             size => size_for(set_share(size) * f32::from(env.device.display.width)),
         };
         let lay = |size: f32, with_date: bool| {
-            let small = (size * DATE_SHARE).max(style.small);
+            // In proportion to the size the digits are drawn at (a pack's
+            // largest at most), so the date never outgrows them.
+            let small = (display.size_for(size, digits) * DATE_SHARE).max(style.small);
             let rest_width = if rest.is_empty() {
                 0.0
             } else {
