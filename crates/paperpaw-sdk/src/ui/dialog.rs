@@ -40,12 +40,16 @@ pub struct Dialog {
     /// The height of the title's line and of a line of text.
     title_line: u16,
     text_line: u16,
+    /// The height of the screen: the box stays within it.
+    room: u16,
 }
 
 impl Dialog {
     /// A dialog as wide as the screen less its margins, as tall as
     /// `title`, `text` (each a paragraph, wrapped) and `buttons` need, at
-    /// the top of the screen until [placed](Self::place).
+    /// the top of the screen until [placed](Self::place). Never taller
+    /// than the screen less its margins: text that does not fit is cut,
+    /// its last line ending in an ellipsis, the buttons kept.
     pub fn new(
         env: &Env<'_>,
         style: &UiStyle,
@@ -89,6 +93,7 @@ impl Dialog {
             buttons: Vec::new(),
             title_line,
             text_line,
+            room: display.height,
         };
         dialog.lay_out(style, 0);
         dialog
@@ -104,8 +109,10 @@ impl Dialog {
         self.panel
     }
 
-    /// Puts its top at `y`.
+    /// Puts its top at `y`, or higher where it would not end on the
+    /// screen.
     pub fn place(&mut self, y: u16) {
+        let y = y.min(self.room.saturating_sub(self.panel.height));
         let dy = i32::from(y) - i32::from(self.panel.y);
         self.panel.y = y;
         for button in &mut self.buttons {
@@ -139,18 +146,47 @@ impl Dialog {
 
     fn lay_out(&mut self, style: &UiStyle, y: u16) {
         let margin = style.margin as u16;
-        let button_h = super::Segments::height(style);
-        let parts = [
-            self.title_line,
-            self.text_line * self.lines.len() as u16,
-            if self.labels.is_empty() { 0 } else { button_h },
-        ];
+        let button_h = if self.labels.is_empty() {
+            0
+        } else {
+            super::Segments::height(style)
+        };
+        // What the text may take: the screen less its margins, the box's
+        // space round and between its parts, its title and its buttons.
+        let fixed = [self.title_line, button_h, 1]
+            .iter()
+            .filter(|p| **p > 0)
+            .count() as u16;
+        let room = self
+            .room
+            .saturating_sub(2 * margin)
+            .saturating_sub(margin.saturating_mul(fixed + 1))
+            .saturating_sub(self.title_line)
+            .saturating_sub(button_h);
+        let fit = usize::from(room / self.text_line.max(1));
+        if self.lines.len() > fit {
+            self.lines.truncate(fit);
+            if let Some(last) = self.lines.last_mut() {
+                last.push('…');
+            }
+        }
+        let text = self.text_height();
+        let parts = [self.title_line, text, button_h];
         let shown = parts.iter().filter(|p| **p > 0).count() as u16;
-        let height = parts.iter().sum::<u16>() + margin * (shown + 1);
+        let height = parts
+            .iter()
+            .fold(0u16, |sum, p| sum.saturating_add(*p))
+            .saturating_add(margin.saturating_mul(shown + 1));
         self.panel = Rect::new(self.panel.x, y, self.panel.width, height);
         let inside = super::card_inside(style, self.panel, Frame::Line);
         let row = super::Stack::new(inside, margin).take_bottom(button_h);
         self.buttons = super::columns(row, self.labels.len(), margin);
+    }
+
+    /// The height of its text's lines.
+    fn text_height(&self) -> u16 {
+        let lines = u16::try_from(self.lines.len()).unwrap_or(u16::MAX);
+        self.text_line.saturating_mul(lines)
     }
 
     /// Draws it, white with a frame (as the look draws frames), the
@@ -182,7 +218,7 @@ impl Dialog {
                 );
             }
             if !self.lines.is_empty() {
-                let text = stack.take(self.text_line * self.lines.len() as u16);
+                let text = stack.take(self.text_height());
                 for (i, line) in self.lines.iter().enumerate() {
                     let row = Rect::new(
                         text.x,
@@ -223,6 +259,7 @@ mod tests {
             buttons: Vec::new(),
             title_line: 30,
             text_line: 20,
+            room: 800,
         };
         dialog.lay_out(&STYLE, 0);
         dialog
@@ -256,6 +293,23 @@ mod tests {
         assert_eq!(d.step(0, &actions::RIGHT), Some(1));
         assert_eq!(d.step(1, &actions::RIGHT), Some(1));
         assert_eq!(d.step(1, &actions::CONFIRM), None);
+    }
+
+    #[test]
+    fn a_dialog_too_tall_for_the_x4_keeps_its_buttons_on_the_screen() {
+        let margin = STYLE.margin as u16;
+        let mut d = dialog(500, 2);
+        assert!(d.height() <= 800 - 2 * margin, "{}", d.height());
+        assert!(d.lines.len() < 500);
+        assert!(d.lines.last().unwrap().ends_with('…'));
+        // Placed low: it moves up so all of it shows.
+        d.place(700);
+        assert!(d.panel().bottom() <= 800);
+        for button in [d.button(0).unwrap(), d.button(1).unwrap()] {
+            assert!(button.bottom() <= u32::from(d.panel().bottom() as u16 - margin));
+        }
+        // Lines beyond what any number holds: no overflow.
+        assert!(dialog(70_000, 1).height() <= 800);
     }
 
     #[test]
