@@ -1,5 +1,6 @@
-//! Reading goal: minutes to read a day (`reading-goal.minutes`, 20 at
-//! first), and a cat whose mood follows how much of them were read today:
+//! Reading goal: the daily goal of the reading statistics (`stats.goal`,
+//! 20 minutes at first where this plugin is), and a cat whose mood follows
+//! how much of it was read today:
 //! sad while nothing was, meh after a little, content from half the goal
 //! (`reading-goal.content`, in percent), happy once it is reached
 //! (`reading-goal.happy`).
@@ -7,7 +8,9 @@
 //! - *Reading cat* (`reading-goal.widget`), a widget for the home screen
 //!   and the sleep screen's widgets: the cat of today's mood, as large as
 //!   its place leaves, and below it the minutes read and the goal (part
-//!   `minutes`). A tap opens the goal's setting.
+//!   `minutes`). A tap opens the goal's setting; where the statistics are
+//!   off it offers to switch them on, where they are missing to get them
+//!   from the store.
 //! - A sleep screen of its own (*Today's reading cat* among the sleep
 //!   screen's choices): the cat large in the middle, the minutes and the
 //!   goal below it.
@@ -21,7 +24,9 @@
 //! Today's reading comes from the reading statistics (the `stats`
 //! plugin), which tell it as they record it ([`events::READ_TODAY`]);
 //! it is kept in `today.txt` (`<day> <seconds>`, version 1). Without
-//! them, nothing is counted, and the widget says so.
+//! them, nothing is counted, and the widget says so. Without a goal (set
+//! to none), the cat goes by [`DEFAULT_GOAL`] minutes and only the
+//! minutes read show.
 
 #![no_std]
 
@@ -38,17 +43,30 @@ use alloc::format;
 use alloc::string::String;
 
 use paperpaw_sdk::builtin::{events, groups, slots};
+use paperpaw_sdk::event::Event;
 use paperpaw_sdk::setting::{Setting, Text};
+use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{
-    Env, Id, Manifest, Plugin, RegisterError, Registrar, ScreenSpec, SettingExtra, SettingSpec,
-    Storage,
+    Command, Env, Id, Manifest, Plugin, RegisterError, Registrar, ScreenSpec, SettingExtra,
+    SettingSpec, Storage,
 };
 
 pub use mood::Mood;
 
 pub const PLUGIN: Id = Id::new_static("reading-goal");
-/// Setting: minutes to read a day.
-pub const MINUTES: Setting<i64> = Setting::new("reading-goal.minutes");
+/// The daily goal: the reading statistics' setting, `stats.goal.<minutes>`
+/// or `stats.goal.off`.
+pub const GOAL: &str = "stats.goal";
+/// The goal where this plugin is: 20 minutes.
+const GOAL_DEFAULT: &str = "stats.goal.20";
+/// The minutes the cat goes by without a goal.
+pub const DEFAULT_GOAL: u32 = 20;
+/// The reading statistics' plugin.
+const STATS: Id = Id::new_static("stats");
+/// The store's action that opens it.
+const STORE: Id = Id::new_static("store.open");
+/// The answer to the offer of the statistics.
+pub(crate) const OFFERED: Event<Picked> = Event::new("reading-goal.offered");
 /// Setting: from which share of the goal the cat is content, in percent.
 pub const CONTENT: Setting<i64> = Setting::new("reading-goal.content");
 /// Setting: from which share of the goal the cat is happy, in percent.
@@ -63,10 +81,6 @@ const SLEEP_NAME: &str = "reading-goal.sleep";
 const SLEEP_SHOW: Id = Id::new_static("sleep.show");
 
 const SECTION: &str = "reading-goal.title";
-static MINUTES_EXTRA: SettingExtra = SettingExtra::new()
-    .section(SECTION)
-    .unit("core.unit.minutes")
-    .step(5);
 static PERCENT: SettingExtra = SettingExtra::new()
     .section(SECTION)
     .unit("core.unit.percent")
@@ -76,17 +90,7 @@ static FOLDER: SettingExtra = SettingExtra::new()
     .section(SECTION)
     .editor_slot(slots::CHOOSE_FOLDER);
 
-static SETTINGS: [SettingSpec; 4] = [
-    SettingSpec::fixed_number(
-        MINUTES.static_str(),
-        "reading-goal.setting.minutes",
-        5,
-        600,
-        20,
-        groups::READING,
-    )
-    .with_extra(&MINUTES_EXTRA)
-    .described("reading-goal.setting.minutes.help"),
+static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::fixed_number(
         CONTENT.static_str(),
         "reading-goal.setting.content",
@@ -124,37 +128,55 @@ pub(crate) fn data(name: &str) -> String {
     format!("{}/{name}", Env::plugin_dir(PLUGIN.as_str()))
 }
 
+/// Whether the reading statistics count.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Statistics {
+    Counting,
+    /// There, switched off.
+    Off,
+    /// Not there (not installed).
+    Missing,
+}
+
 /// What is known of today's reading.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) struct Today {
-    /// The goal in minutes.
-    pub goal: u32,
+    /// The goal in minutes, if one is set.
+    pub goal: Option<u32>,
     /// Minutes read today.
     pub minutes: u32,
     pub mood: Mood,
-    /// The reading statistics are off or missing: nothing is counted.
-    pub uncounted: bool,
+    pub statistics: Statistics,
 }
 
 impl Today {
     /// Today as the statistics told it last, with the settings.
     pub(crate) fn now(env: &Env<'_>) -> Today {
-        let goal = env.settings.read(&MINUTES).clamp(1, 600) as u32;
+        // `stats.goal.30`: 30; `stats.goal.off`: none.
+        let goal = env
+            .settings
+            .text(GOAL)
+            .rsplit('.')
+            .next()
+            .and_then(|m| m.parse::<u32>().ok())
+            .filter(|&m| m > 0);
         let seconds = match (told(env.storage), today(env)) {
             (Some((day, seconds)), Some(today)) if day == today => seconds,
             _ => 0,
         };
         let content = env.settings.read(&CONTENT).clamp(1, 99) as u32;
         let happy = env.settings.read(&HAPPY).clamp(1, 1000) as u32;
-        let stats = env
-            .plugins
-            .iter()
-            .any(|p| p.manifest.id.as_str() == "stats" && p.enabled);
+        let statistics = match env.plugins.iter().find(|p| p.manifest.id == STATS) {
+            Some(p) if p.enabled => Statistics::Counting,
+            Some(_) => Statistics::Off,
+            None => Statistics::Missing,
+        };
+        let by = goal.unwrap_or(DEFAULT_GOAL);
         Today {
             goal,
             minutes: seconds / 60,
-            mood: Mood::of(seconds, goal, content, happy),
-            uncounted: !stats,
+            mood: Mood::of(seconds, by, content, happy),
+            statistics,
         }
     }
 }
@@ -188,6 +210,17 @@ impl Plugin for ReadingGoal {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
+        // One daily goal, the statistics': 20 minutes where this plugin is.
+        r.set_setting_default(Id::new_static(GOAL), Cow::Borrowed(GOAL_DEFAULT))?;
+        r.on(OFFERED, |_, picked, out| match picked.option.as_str() {
+            // Switched on, at the next start: started anew at once.
+            "switch-on" => {
+                out.push(Command::SetPluginEnabled(STATS, true));
+                out.push(Command::Restart);
+            }
+            "store" => out.push(Command::RunAction(STORE)),
+            _ => {}
+        })?;
         r.on(events::READ_TODAY, |env, read, _| {
             // Only when it changed: a write a page turn at most.
             if told(env.storage) != Some((read.day, read.seconds)) {

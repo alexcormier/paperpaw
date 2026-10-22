@@ -16,7 +16,7 @@ use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
 };
 
-use crate::{MINUTES, PICTURES, Today, pictures};
+use crate::{GOAL, OFFERED, PICTURES, Statistics, Today, pictures};
 
 pub(crate) const WIDGET: Id = Id::new_static(NAME);
 const NAME: &str = "reading-goal.widget";
@@ -43,18 +43,35 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     )
 }
 
-/// "12 / 20 min", or what is missing for it.
+/// "12 / 20 min" ("12 min" without a goal), or what is missing for it.
 pub(crate) fn progress(env: &Env<'_>, today: &Today) -> String {
-    if today.uncounted {
+    if today.statistics != Statistics::Counting {
         return env.i18n.tr("reading-goal.uncounted").into();
     }
-    env.i18n.format(
-        "reading-goal.progress",
-        &[
-            ("read", Arg::Int(i64::from(today.minutes))),
-            ("goal", Arg::Int(i64::from(today.goal))),
-        ],
-    )
+    let read = ("read", Arg::Int(i64::from(today.minutes)));
+    match today.goal {
+        Some(goal) => env.i18n.format(
+            "reading-goal.progress",
+            &[read, ("goal", Arg::Int(i64::from(goal)))],
+        ),
+        None => env.i18n.format("reading-goal.read", &[read]),
+    }
+}
+
+/// What a tap does: the goal's setting, or the offer of the statistics
+/// where they do not count.
+pub(crate) fn tapped(env: &Env<'_>, today: &Today) -> Command {
+    let options: &[&str] = match today.statistics {
+        Statistics::Counting => {
+            let goal = Params::new().with(params::FOCUS, GOAL);
+            return Command::OpenSlot(slots::SETTINGS, goal);
+        }
+        Statistics::Off => &["switch-on", "not-now"],
+        Statistics::Missing => &["store", "not-now"],
+    };
+    paperpaw_sdk::ask::choice(env.i18n.tr("reading-goal.offer"), &OFFERED)
+        .options("reading-goal.offer.", options)
+        .command()
 }
 
 /// What the picture of `today`'s mood says, for screen readers.
@@ -175,12 +192,9 @@ impl Widget for Cat {
         ui::draw_label(canvas, &font, style.small, x, row, &text, look.ink);
     }
 
-    fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        let goal = Params::new().with(params::FOCUS, MINUTES.static_str());
-        alloc::vec![WidgetTarget::new(
-            area,
-            Command::OpenSlot(slots::SETTINGS, goal)
-        )]
+    fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
+        let today = self.today.unwrap_or_else(|| Today::now(env));
+        alloc::vec![WidgetTarget::new(area, tapped(env, &today))]
     }
 }
 

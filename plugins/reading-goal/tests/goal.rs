@@ -160,7 +160,7 @@ fn the_cat_follows_today_s_reading() {
 #[test]
 fn thresholds_and_the_goal_are_settings() {
     let mut reader = Reader::new(
-        "[reading-goal]\nminutes = 10\ncontent = 40\nhappy = 150",
+        "[stats]\ngoal = stats.goal.10\n[reading-goal]\ncontent = 40\nhappy = 150",
         true,
     );
     reader.read_for(5);
@@ -222,4 +222,33 @@ fn own_pictures_take_the_cats_place() {
             .storage()
             .exists(".paperpaw/plugins/reading-goal/own-meh-0.gray")
     );
+}
+
+/// Without a goal (set to none), the minutes read alone.
+#[test]
+fn without_a_goal_the_minutes_read_show() {
+    let mut reader = Reader::new("[stats]\ngoal = stats.goal.off", true);
+    reader.read_for(4);
+    reader.run_home();
+    let shown = reader.shown();
+    assert!(shown.contains("4 min\n"), "{shown}");
+}
+
+/// Where the statistics are off, the cat offers to switch them on: on at
+/// the next start, which follows at once.
+#[test]
+fn the_statistics_are_offered_where_they_are_off() {
+    let mut reader = Reader::new("[plugins]\nstats = false", true);
+    assert!(reader.shown().contains("Statistics off"));
+    reader.now += 100;
+    let picked = paperpaw_sdk::ui::choice::Picked::new(String::new(), "switch-on".into());
+    let effects = reader.kernel.send_event(
+        Instant(reader.now),
+        paperpaw_sdk::Id::new_static("reading-goal.offered"),
+        picked.to_params(),
+    );
+    assert!(effects.restart(), "started anew");
+    let config = paperpaw_sdk::read_file(reader.kernel.storage(), "paperpaw.ini", 1 << 16).unwrap();
+    let config = String::from_utf8(config).unwrap();
+    assert!(config.contains("stats = on"), "{config}");
 }
