@@ -10,12 +10,15 @@
 //!   for its code.
 //! - A way out that needs no menu and that a resting hand does not make
 //!   (`Escape`): one finger taps twice and then stays down; or, where
-//!   PaperPaw is the firmware, the power button held. A small lock in the
-//!   status lines says it is on.
+//!   PaperPaw is the firmware, the power button held, or the home key (the
+//!   X4 Pro's, below the screen) held. A small lock in the status lines
+//!   says it is on. Its times allow for a slow screen: a refresh may hold
+//!   the touches back that came meanwhile.
 //! - Said whenever it turns on or off, however it was switched (the
-//!   setting's change); and while it is on, a touch that ends says again
-//!   how to unlock, at most every [`HINT_MS`], as a notice (no full
-//!   refresh), apart from the way out.
+//!   setting's change); and while it is on, a touch that is no step of
+//!   the way out says again how to unlock, at most every [`HINT_MS`], as
+//!   a notice (no full refresh): never in the middle of the way out, whose
+//!   taps a refresh would hold back.
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
@@ -49,9 +52,11 @@ const FILTER: Id = Id::new_static("lock.touch-filter");
 /// The way out by touch, which a hand resting on the screen does not do:
 /// one finger taps twice, then stays down for [`HOLD_MS`] at the same
 /// spot, each tap shorter than [`TAP_MS`] and the next touch within
-/// [`GAP_MS`]. A second finger on the screen starts it over.
-pub const TAP_MS: u64 = 300;
-pub const GAP_MS: u64 = 600;
+/// [`GAP_MS`]. A second finger on the screen starts it over. It unlocks
+/// when the finger is lifted, or before, as it moves a little once held
+/// long enough.
+pub const TAP_MS: u64 = 500;
+pub const GAP_MS: u64 = 1_000;
 pub const HOLD_MS: u64 = 1_500;
 /// How far the finger may stray from the first tap, in pixels.
 const SLOP: i32 = 40;
@@ -102,8 +107,19 @@ impl Escape {
                 }
             }
             PointerPhase::Move => {
-                if self.finger.is_some_and(|(f, ..)| f == id) && !self.near(pointer.point) {
+                let Some((f, at, _)) = self.finger else {
+                    return false;
+                };
+                if f != id {
+                    return false;
+                }
+                if !self.near(pointer.point) {
                     self.over();
+                } else if self.taps == 2 && now.since(at) >= HOLD_MS {
+                    // Held long enough, still down: no need to lift.
+                    self.down.clear();
+                    self.over();
+                    return true;
                 }
             }
             PointerPhase::Up => {
@@ -146,13 +162,17 @@ pub(crate) static SETTINGS: [SettingSpec; 1] =
             .described("lock.touch.help"),
     ];
 
-/// While touch is locked, the power button held unlocks it.
-const ESCAPE: &str = "[keymap.global]\nlong.power = lock.touch-toggle\n";
+/// While touch is locked, the power button held unlocks it, and the home
+/// key held (the X4 Pro's touch key below the screen).
+const ESCAPE: &str =
+    "[keymap.global]\nlong.power = lock.touch-toggle\nlong.home = lock.touch-toggle\n";
 
 /// What the filter does with `event` while touch is locked: taken, the
-/// toggle once the way out is done, or how to unlock said where a touch
-/// ends and it was not said for [`HINT_MS`] (the way out goes on as it
-/// was: saying so takes nothing from it).
+/// toggle once the way out is done, or how to unlock said where it was
+/// not said for [`HINT_MS`] and the touch is no step of the way out: one
+/// that ends without being one of its taps (a swipe, a hand resting, a
+/// hold too short), or one that comes long after a tap (the way out given
+/// up). Never between its steps: the refresh would hold the next back.
 fn locked(
     now: Instant,
     event: &InputEvent,
@@ -162,11 +182,17 @@ fn locked(
     let InputEvent::Pointer(pointer) = event else {
         return InputVerdict::Pass;
     };
+    let taps = escape.taps;
+    let given_up = escape.last_up.is_some_and(|up| now.since(up) > GAP_MS);
     if escape.follow(now, pointer) {
         return InputVerdict::Run(TOGGLE);
     }
-    let ended = matches!(pointer.phase, PointerPhase::Up);
-    if ended && hinted.is_none_or(|at| now.since(at) >= HINT_MS) {
+    let no_step = match pointer.phase {
+        PointerPhase::Up => escape.taps <= taps && escape.finger.is_none(),
+        PointerPhase::Down => taps > 0 && given_up,
+        _ => false,
+    };
+    if no_step && hinted.is_none_or(|at| now.since(at) >= HINT_MS) {
         *hinted = Some(now);
         return InputVerdict::Run(HINT);
     }
@@ -390,25 +416,36 @@ mod tests {
         assert_eq!(verdict, InputVerdict::Pass);
     }
 
-    /// A touch that ends says how to unlock, at most every HINT_MS; the
-    /// way out works all the same, said or not.
+    fn hints(verdicts: &[InputVerdict]) -> usize {
+        verdicts
+            .iter()
+            .filter(|v| **v == InputVerdict::Run(HINT))
+            .count()
+    }
+
+    /// Touches that are no step of the way out say how to unlock, at most
+    /// every HINT_MS; the way out itself is never interrupted by it.
     #[test]
     fn touches_say_how_to_unlock_now_and_then() {
-        let hints = |verdicts: &[InputVerdict]| {
-            verdicts
-                .iter()
-                .filter(|v| **v == InputVerdict::Run(HINT))
-                .count()
-        };
-        // Taps a second apart, for twenty seconds: said twice.
+        // Single taps two seconds apart, for forty seconds: said every
+        // ten seconds, the first time at the second tap.
         let taps: Vec<_> = (0..20u64)
-            .flat_map(|n| [(n * 1_000, 0, Down, AT), (n * 1_000 + 50, 0, Up, AT)])
+            .flat_map(|n| [(n * 2_000, 0, Down, AT), (n * 2_000 + 50, 0, Up, AT)])
             .collect();
-        assert_eq!(hints(&run_with_hints(&taps)), 2);
+        let verdicts = run_with_hints(&taps);
+        assert_eq!(verdicts[2], InputVerdict::Run(HINT));
+        assert_eq!(hints(&verdicts), 4);
         // A hand resting, then lifted: said once, when it is lifted.
         let rest = run_with_hints(&[(0, 0, Down, AT), (10_000, 0, Up, AT)]);
         assert_eq!(rest, [InputVerdict::Take, InputVerdict::Run(HINT)]);
-        // The way out, its first tap said: it still unlocks.
+        // A swipe.
+        let swipe = run_with_hints(&[
+            (0, 0, Down, AT),
+            (50, 0, Move, (300, 300)),
+            (80, 0, Up, (400, 300)),
+        ]);
+        assert_eq!(hints(&swipe), 1);
+        // The way out: nothing said between its steps.
         let verdicts = run_with_hints(&[
             (0, 0, Down, AT),
             (100, 0, Up, AT),
@@ -417,7 +454,44 @@ mod tests {
             (800, 0, Down, AT),
             (800 + HOLD_MS, 0, Up, AT),
         ]);
-        assert_eq!(verdicts[1], InputVerdict::Run(HINT));
+        assert_eq!(hints(&verdicts), 0);
         assert_eq!(verdicts.last(), Some(&InputVerdict::Run(TOGGLE)));
+        // Held too short after the taps: then it is said.
+        let short = run_with_hints(&[
+            (0, 0, Down, AT),
+            (100, 0, Up, AT),
+            (400, 0, Down, AT),
+            (500, 0, Up, AT),
+            (800, 0, Down, AT),
+            (1_200, 0, Up, AT),
+        ]);
+        assert_eq!(short.last(), Some(&InputVerdict::Run(HINT)));
+    }
+
+    /// A slow screen holds touches back: taps up to TAP_MS long, GAP_MS
+    /// apart, still count; and once held long enough, a little movement
+    /// of the finger unlocks without lifting it.
+    #[test]
+    fn the_way_out_allows_for_a_slow_screen_and_needs_no_lift() {
+        let slow = run(&[
+            (0, 0, Down, AT),
+            (TAP_MS - 50, 0, Up, AT),
+            (TAP_MS + GAP_MS - 100, 0, Down, AT),
+            (2 * TAP_MS + GAP_MS - 150, 0, Up, AT),
+            (2 * TAP_MS + 2 * GAP_MS - 200, 0, Down, AT),
+            (2 * TAP_MS + 2 * GAP_MS - 200 + HOLD_MS, 0, Up, AT),
+        ]);
+        assert_eq!(slow.last(), Some(&InputVerdict::Run(TOGGLE)));
+        let held = run(&[
+            (0, 0, Down, AT),
+            (100, 0, Up, AT),
+            (400, 0, Down, AT),
+            (500, 0, Up, AT),
+            (800, 0, Down, AT),
+            (1_000, 0, Move, (201, 301)),
+            (800 + HOLD_MS + 10, 0, Move, (202, 300)),
+        ]);
+        assert_eq!(held.last(), Some(&InputVerdict::Run(TOGGLE)));
+        assert!(held[..6].iter().all(|v| *v == InputVerdict::Take));
     }
 }

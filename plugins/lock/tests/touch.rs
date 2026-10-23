@@ -326,9 +326,9 @@ fn locking_touch_says_how_to_unlock_however_it_is_switched() {
     assert!(t.says(UNLOCKED_TEXT));
 }
 
-/// While touch is locked, a tap or a swipe says how to unlock, now and
-/// then (not at every touch), and still turns no page; the way out works
-/// as before.
+/// While touch is locked, taps and swipes say how to unlock, now and
+/// then (not at every touch, never between the way out's steps), and
+/// still turn no page; the way out works as before.
 #[test]
 fn a_touch_while_locked_says_how_to_unlock_now_and_then() {
     let mut t = Test::new(true);
@@ -336,7 +336,13 @@ fn a_touch_while_locked_says_how_to_unlock_now_and_then() {
     t.wait(HINT_MS);
     assert!(!t.says(LOCKED_TEXT));
     t.tap_right();
-    assert!(t.says(LOCKED_TEXT), "a tap says how to unlock");
+    assert!(!t.says(LOCKED_TEXT), "a first tap may begin the way out");
+    t.wait(2_000);
+    t.tap_right();
+    assert!(
+        t.says(LOCKED_TEXT),
+        "a tap a while later says how to unlock"
+    );
     t.wait(5_000);
     assert!(!t.says(LOCKED_TEXT));
     t.swipe_left();
@@ -349,4 +355,13 @@ fn a_touch_while_locked_says_how_to_unlock_now_and_then() {
     t.taps_and_hold(HOLD_MS + 100);
     assert!(!t.locked(), "the way out still unlocks");
     assert!(t.says(UNLOCKED_TEXT));
+}
+
+/// The X4 Pro's home key (below the screen) held unlocks too.
+#[test]
+fn the_home_key_held_unlocks() {
+    let mut t = Test::new(true);
+    t.toggle();
+    t.button("home", 1_500);
+    assert!(!t.locked());
 }
