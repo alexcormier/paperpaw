@@ -322,6 +322,11 @@ file to your report.
 
 #### For developers
 
+- `paperpaw-dev` takes font packs (`.ppfp`) in a data plugin's `fonts/`,
+  where the kernel reads them, and names one elsewhere. It no longer
+  checks the X4 Classic by default, and `--list-profiles` says it is not
+  supported yet. A release no longer lists the X4 Classic's firmware:
+  it is built, but not yet tried on one.
 - `paperpaw-dev` checks a plugin on the emulated X4, X4 Pro and Boox, in
   every language, light and dark. It finds cut text, uneven margins,
   small touch targets, missing translations and screens that buttons

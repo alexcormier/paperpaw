@@ -249,7 +249,7 @@ pub const PROFILES: &[Profile] = &[
         sleep: true,
         button_row: &X4_ROW,
         light: None,
-        summary: "ESP32-S3 with 8 MB PSRAM, 4.3\" 800x480, buttons only, 10 MiB heap budget",
+        summary: "not supported yet: ESP32-S3 with 8 MB PSRAM, 4.3\" 800x480, buttons only, 10 MiB heap budget",
     },
     Profile {
         device: DeviceInfo {

@@ -31,12 +31,7 @@ pub const THEMES: &[Theme] = &[
 
 /// The profiles looked at unless `--profile` says otherwise: the devices
 /// PaperPaw runs on.
-pub const DEFAULT_PROFILES: &[&str] = &[
-    "xteink-x4",
-    "xteink-x4-pro",
-    "xteink-x4-classic",
-    "boox-go-7",
-];
+pub const DEFAULT_PROFILES: &[&str] = &["xteink-x4", "xteink-x4-pro", "boox-go-7"];
 
 pub fn theme(name: &str) -> Option<&'static Theme> {
     THEMES.iter().find(|t| t.name == name)
