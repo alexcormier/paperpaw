@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Hints covered by another screen (a plugin's question, a notice opened
+  over them) close and show again when their screen does, instead of
+  staying below it, cut.
 - PaperPaw's own plugins in the store carry their How it works in
   their folders (`how/<lang>.txt`, `tools/plugin-files/catalogue.py`),
   so the store's page of each and the readers' store show it; a plugin
