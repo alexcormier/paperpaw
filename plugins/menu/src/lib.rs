@@ -331,7 +331,7 @@ impl MenuScreen {
             for _ in 0..=self.depth {
                 cx.command(Command::Back);
             }
-            cx.command(Command::RunAction(id.clone()));
+            cx.command(Command::run(id.clone()));
             return;
         };
         // Its editor, the keyboard for text, the list of its values.

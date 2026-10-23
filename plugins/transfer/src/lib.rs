@@ -89,7 +89,7 @@ impl Plugin for Transfer {
             Box::new(|env, _| Box::new(TransferScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "transfer.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -693,7 +693,7 @@ impl Screen for TransferScreen {
             if action == actions::BACK {
                 self.close(cx);
             } else {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
             }
             return Handled::Yes;
         }

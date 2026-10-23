@@ -81,7 +81,7 @@ impl Plugin for StandIn {
         ] {
             let page = self.0.clone();
             r.add_action(ActionSpec::new(id.clone(), "stand-in.action").handler(
-                move |_: &Env<'_>, out: &mut Commands| {
+                move |_: &Env<'_>, _, out: &mut Commands| {
                     if id == TURN {
                         page.set(page.get() + 1);
                     }

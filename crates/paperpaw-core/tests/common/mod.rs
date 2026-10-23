@@ -196,11 +196,11 @@ impl Plugin for Driver {
         r.bind_slot(slots::MENU, OVERLAY, Priority::DEFAULT)?;
         r.bind_slot(slots::NOTICE, OVERLAY, Priority::DEFAULT)?;
         let queue = self.queue.clone();
-        r.add_action(ActionSpec::new(GO, "drv.go").handler(move |_, out| {
+        r.add_action(ActionSpec::new(GO, "drv.go").handler(move |_, _, out| {
             out.extend(queue.borrow_mut().drain(..));
         }))?;
-        r.add_action(ActionSpec::new(LOOP, "drv.loop").handler(|_, out| {
-            out.push(Command::RunAction(LOOP));
+        r.add_action(ActionSpec::new(LOOP, "drv.loop").handler(|_, _, out| {
+            out.push(Command::run(LOOP));
         }))?;
         for event in [REPLY, LATER, LATER2] {
             let log = self.log.clone();

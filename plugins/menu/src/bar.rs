@@ -257,7 +257,7 @@ impl BarScreen {
         }
         let Some(spec) = env.settings.specs().find(|spec| spec.id == id) else {
             cx.command(Command::Back);
-            cx.command(Command::RunAction(id));
+            cx.command(Command::run(id));
             return;
         };
         // Its own page (e.g. the lock's, which asks for the code), the
@@ -467,7 +467,7 @@ impl Screen for BarScreen {
             && self.info.contains(gesture.start)
         {
             cx.command(Command::Back);
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
         }
         Handled::Yes
     }

@@ -402,7 +402,7 @@ impl Step {
                 let value = env.settings.spec(id.as_str())?.kind.parse(text)?;
                 Command::SetSetting(id.clone(), value)
             }
-            Step::Run(action) => Command::RunAction(action.clone()),
+            Step::Run(action) => Command::run(action.clone()),
             Step::Open(slot) => Command::OpenSlot(slot.clone(), Params::new()),
             Step::Notify(text) => Command::Notify(text.clone()),
             Step::Emit(event) => Command::Emit(event.clone(), Params::new()),
@@ -513,7 +513,7 @@ fn actions(plugin: &Id, source: &str) -> Result<Vec<MadeAction>, RegisterError> 
         } else {
             title
         };
-        let spec = paperpaw_sdk::ActionSpec::new(id.clone(), title).handler(move |env, out| {
+        let spec = paperpaw_sdk::ActionSpec::new(id.clone(), title).handler(move |env, _, out| {
             out.extend(steps.iter().filter_map(|step| step.command(env)));
         });
         made.push(MadeAction { id, spec, icon });

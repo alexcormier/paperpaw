@@ -620,7 +620,7 @@ impl PanelScreen {
             }
             Control::Run(id) => {
                 cx.command(Command::Back);
-                cx.command(Command::RunAction(id.clone()));
+                cx.command(Command::run(id.clone()));
             }
         }
     }

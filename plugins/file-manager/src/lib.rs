@@ -114,7 +114,7 @@ impl Plugin for FileManager {
             Box::new(|env, params| Box::new(Browser::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "file-manager.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -730,7 +730,7 @@ impl Screen for Browser {
                     cx.command(Command::Back);
                 }
             } else {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
             }
             return Handled::Yes;
         }

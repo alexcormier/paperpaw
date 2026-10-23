@@ -120,7 +120,7 @@ impl Plugin for Store {
             Box::new(|env, params| Box::new(shots::ShotsScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "store.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;

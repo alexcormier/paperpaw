@@ -316,7 +316,7 @@ impl Screen for ListScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if len == 0 && self.list.area().contains(gesture.start) {

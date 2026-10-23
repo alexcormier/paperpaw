@@ -416,7 +416,7 @@ impl GroupPage {
                 return;
             }
             Some(Row::Action(action)) => {
-                cx.command(Command::RunAction(action.clone()));
+                cx.command(Command::run(action.clone()));
                 return;
             }
             _ => {}
@@ -568,7 +568,7 @@ impl Screen for GroupPage {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging(&self.rows));
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.rows.hit(gesture.start) else {

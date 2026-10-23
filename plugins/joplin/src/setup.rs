@@ -202,7 +202,7 @@ impl SetupScreen {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Fast);
             }
-            Row::Send => cx.command(Command::RunAction(SEND)),
+            Row::Send => cx.command(Command::run(SEND)),
             _ => {
                 let initial = row.setting().map_or("", |s| env.settings.read(&s));
                 let question =
@@ -282,7 +282,7 @@ impl Screen for SetupScreen {
             return Handled::No;
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, self.rows().len()) else {

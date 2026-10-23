@@ -158,7 +158,7 @@ fn locked(now: Instant, event: &InputEvent, escape: &mut Escape) -> InputVerdict
 pub(crate) fn register(r: &mut Registrar, state: Shared) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
     r.add_action(ActionSpec::new(TOGGLE, "lock.touch-toggle").handler(
-        |env: &Env<'_>, out: &mut Commands| {
+        |env: &Env<'_>, _, out: &mut Commands| {
             let on = !env.settings.read(&LOCKED);
             out.push(Command::set(&LOCKED, on));
             let told = match (on, env.caps.firmware) {

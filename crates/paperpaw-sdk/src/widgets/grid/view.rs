@@ -280,10 +280,9 @@ impl GridView {
                         }
                     }
                     (What::Widget(_), None) => {}
-                    (What::Tool(action), _) => self.targets.push((
-                        shown.area,
-                        Target::Run(Command::RunAction(action.clone()), None),
-                    )),
+                    (What::Tool(action), _) => self
+                        .targets
+                        .push((shown.area, Target::Run(Command::run(action.clone()), None))),
                 }
             }
             let name = shown.item.what.title(env);
@@ -726,7 +725,7 @@ impl GridView {
         };
         match target {
             // A tool shown faint by its plugin: nothing to do now.
-            Target::Run(Command::RunAction(action), _)
+            Target::Run(Command::RunAction(action, _), _)
                 if !cx.env().menus.state(cx.env(), action.as_str()).enabled => {}
             Target::Run(command, _) => cx.command(command),
             Target::Item(item) => self.options(item, cx),
@@ -1649,7 +1648,7 @@ mod tests {
         assert_eq!(grid.focus, 0);
         let (response, out) = act(&mut grid, &env, &actions::CONFIRM);
         assert_eq!(response, GridResponse::Handled);
-        assert_eq!(out.commands, [Command::RunAction(Id::new_static("t.a"))]);
+        assert_eq!(out.commands, [Command::run(Id::new_static("t.a"))]);
         // Other buttons are the screen's.
         let (response, _) = act(&mut grid, &env, &actions::NEXT_PAGE);
         assert_eq!(response, GridResponse::Ignored);

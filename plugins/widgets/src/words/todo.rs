@@ -152,7 +152,7 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
         }),
     ))?;
     r.add_action(ActionSpec::new(OPEN, "widgets.todo").handler(
-        |_: &Env<'_>, out: &mut Commands| {
+        |_: &Env<'_>, _, out: &mut Commands| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         },
     ))?;
@@ -849,7 +849,7 @@ impl Screen for TodoScreen {
                 self.header
                     .tap(&env, &self.style, gesture.start, self.list.paging(len))
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(row) = self.list.hit(gesture.start, len) else {

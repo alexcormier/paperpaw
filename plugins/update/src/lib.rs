@@ -178,12 +178,12 @@ impl Plugin for Update {
             Box::new(|env, _| Box::new(page::UpdatePage::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "update.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(PAGE, Params::new()));
             },
         ))?;
         r.add_action(ActionSpec::new(CHECK, "update.check").handler(
-            |env: &Env<'_>, out: &mut Commands| {
+            |env: &Env<'_>, _, out: &mut Commands| {
                 if env.reader {
                     online::check(env, true, out);
                 } else {

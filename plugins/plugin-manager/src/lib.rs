@@ -82,7 +82,7 @@ impl Plugin for PluginManager {
             Box::new(|env, _| Box::new(PluginList::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "plugin-manager.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -225,7 +225,7 @@ impl PluginList {
     /// does.
     fn activate(&mut self, env: &Env<'_>, index: usize, cx: &mut Cx<'_, '_>) {
         if let Some(action) = self.more.get(index) {
-            cx.command(Command::RunAction(action.clone()));
+            cx.command(Command::run(action.clone()));
         } else if let Some(id) = self.plugins.get(index - self.more.len()).cloned() {
             self.switch(env, &id, cx);
         }
@@ -601,7 +601,7 @@ impl Screen for PluginList {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let env = *cx.env();

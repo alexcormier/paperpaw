@@ -475,7 +475,7 @@ impl Screen for BatteryView {
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
             Some(action) => {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
                 Handled::Yes
             }
             None => Handled::No,

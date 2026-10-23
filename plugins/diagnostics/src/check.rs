@@ -365,7 +365,7 @@ impl Check {
                 cx.request_refresh(RefreshMode::Full);
             }
             Control::LightAgain => self.start_light(cx),
-            Control::WifiPage => cx.command(Command::RunAction(Id::new_static(WIFI_PAGE))),
+            Control::WifiPage => cx.command(Command::run(Id::new_static(WIFI_PAGE))),
             Control::SleepNow => {
                 // Marked asleep when the device goes to sleep (SUSPEND).
                 self.sleep_asked = Some(env.now);
@@ -655,7 +655,7 @@ impl Screen for Check {
         }
         match self.header.tap(cx.env(), &self.style, gesture.start, None) {
             Some(action) if !touch => {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
                 Handled::Yes
             }
             _ => Handled::No,

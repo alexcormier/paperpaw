@@ -33,7 +33,7 @@ impl Widget for Block {
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         vec![WidgetTarget::new(
             area,
-            Command::RunAction(Id::new_static("t.open")),
+            Command::run(Id::new_static("t.open")),
         )]
     }
 }

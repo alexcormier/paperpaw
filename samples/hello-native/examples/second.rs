@@ -10,9 +10,7 @@ extern crate alloc;
 
 use alloc::string::String;
 
-use paperpaw_sdk::{
-    ActionSpec, Command, Id, Manifest, Plugin, RegisterError, Registrar, Version,
-};
+use paperpaw_sdk::{ActionSpec, Command, Id, Manifest, Plugin, RegisterError, Registrar, Version};
 
 struct Second;
 
@@ -25,7 +23,7 @@ impl Plugin for Second {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(
-            ActionSpec::new(Id::new_static("second.hello"), "second.hello").handler(|_, out| {
+            ActionSpec::new(Id::new_static("second.hello"), "second.hello").handler(|_, _, out| {
                 out.push(Command::Notify(String::from(
                     "Hello from the second plugin",
                 )));

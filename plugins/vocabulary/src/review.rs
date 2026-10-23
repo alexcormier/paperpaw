@@ -382,7 +382,7 @@ impl Screen for ReviewScreen {
         }
         let env = *cx.env();
         if let Some(action) = self.header.tap(&env, &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.current.is_none() {

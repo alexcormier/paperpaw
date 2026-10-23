@@ -53,7 +53,7 @@ impl Plugin for Adds {
         ))?;
         r.add_book_field(BookField::new(Id::new_static("adds.rating"), "adds.rating"))?;
         r.add_action(
-            ActionSpec::new(SEND, "adds.send").handler(|_, _: &mut Commands| {
+            ActionSpec::new(SEND, "adds.send").handler(|_, _, _: &mut Commands| {
                 CHOSEN.with(|c| c.borrow_mut().push(String::from("ran")));
             }),
         )?;

@@ -213,7 +213,7 @@ impl ReaderScreen {
             )));
             // Then the action runs as usual (after the selection is gone),
             // so any action works here, e.g. the night mode.
-            cx.command(Command::RunAction(item.clone()));
+            cx.command(Command::run(item.clone()));
         }
         self.set_selection(None, cx);
         cx.request_refresh(RefreshMode::Partial);

@@ -174,7 +174,7 @@ impl Plugin for SettingsPlugin {
             Box::new(|env, params| Box::new(secrets::SecretPage::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(secrets::OPEN, "settings.secrets").handler(
-            |_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
+            |_: &Env<'_>, _, out: &mut paperpaw_sdk::Commands| {
                 out.push(Command::OpenScreen(secrets::SCREEN, Params::new()));
             },
         ))?;

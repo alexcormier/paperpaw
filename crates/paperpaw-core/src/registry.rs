@@ -183,7 +183,7 @@ pub(crate) struct Staging {
     pub(crate) setting_groups: Vec<SettingGroupSpec>,
     /// Events, the plugins that hear them, and their handlers.
     pub(crate) subscriptions: Vec<(Id, Id, EventHandler)>,
-    pub(crate) overrides: Vec<(Id, Priority, paperpaw_sdk::ActionParamsHandler)>,
+    pub(crate) overrides: Vec<(Id, Priority, paperpaw_sdk::ActionHandler)>,
     pub(crate) action_observers: Vec<paperpaw_sdk::ObserverSpec>,
     pub(crate) event_observers: Vec<paperpaw_sdk::ObserverSpec>,
     pub(crate) menu_entries: Vec<MenuEntry>,

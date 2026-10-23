@@ -64,7 +64,7 @@ impl Plugin for Counter {
         let count = self.0.clone();
         r.add_settings(&SWITCHES)?;
         r.add_action(ActionSpec::new(COUNT, "counter.count").handler(
-            move |_: &Env<'_>, _: &mut Commands| {
+            move |_: &Env<'_>, _, _: &mut Commands| {
                 count.set(count.get() + 1);
             },
         ))

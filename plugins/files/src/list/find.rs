@@ -112,7 +112,7 @@ impl FindScreen {
 
     fn choose(&self, index: usize, cx: &mut Cx<'_, '_>) {
         if index == 0 {
-            cx.command(Command::RunAction(crate::SEARCH));
+            cx.command(Command::run(crate::SEARCH));
         } else if let Some(letter) = self.letters.get(index - 1) {
             let letter = String::from(*letter as char);
             cx.command(shelf::open(Kind::Letter, &letter));
@@ -193,7 +193,7 @@ impl Screen for FindScreen {
         }
         let point = gesture.start;
         if let Some(action) = self.header.tap(cx.env(), &self.style, point, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.search.contains(point) {

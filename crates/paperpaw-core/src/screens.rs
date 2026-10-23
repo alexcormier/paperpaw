@@ -565,7 +565,9 @@ impl Kernel {
         let env = base.within(&device, area);
         let running = self.shared.meter.enter(active.id.namespace());
         let key = paperpaw_sdk::ScreenKey::new(active.serial);
-        let mut cx = Cx::new(&env, &mut self.output).for_screen(key);
+        let mut cx = Cx::new(&env, &mut self.output)
+            .for_screen(key)
+            .with_params(&self.action_params);
         let handled = f(active.screen.as_mut(), &mut cx);
         drop(running);
         // A part it asked to draw again is in its own coordinates.

@@ -10,20 +10,17 @@ use crate::params::Params;
 use crate::plugin::Priority;
 
 /// Global handler of an action, called when the active screen does not
-/// handle it. It reacts by emitting commands.
-pub type ActionHandler = Box<dyn Fn(&Env<'_>, &mut crate::Commands)>;
-
-/// A handler of an action that gets the params it was run with
-/// ([`Command::RunActionWith`](crate::Command::RunActionWith)), e.g. the
-/// profile to apply.
-pub type ActionParamsHandler = Box<dyn Fn(&Env<'_>, &Params, &mut crate::Commands)>;
+/// handle it, with the params it was run with
+/// ([`Command::RunAction`](crate::Command::RunAction); none from inputs),
+/// e.g. the profile to apply. It reacts by queuing commands.
+pub type ActionHandler = Box<dyn Fn(&Env<'_>, &Params, &mut crate::Commands)>;
 
 /// A handler put in place of an action's own
 /// ([`Registrar::override_action`](crate::Registrar::override_action)).
 #[non_exhaustive]
 pub struct ActionOverride {
     pub action: Id,
-    pub handler: ActionParamsHandler,
+    pub handler: ActionHandler,
     pub priority: Priority,
 }
 
@@ -83,7 +80,7 @@ impl fmt::Debug for ObserverSpec {
 ///
 /// const OPEN: Id = Id::new_static("demo.open");
 /// let spec = ActionSpec::new(OPEN, "demo.open")
-///     .handler(|_, out| out.push(Command::Back))
+///     .handler(|_, _, out| out.push(Command::Back))
 ///     .hint(ActionHint::Label("demo.open.short".into()));
 /// ```
 #[non_exhaustive]
@@ -102,7 +99,6 @@ pub struct ActionSpec {
 /// What few actions have ([`ActionSpec`]).
 #[derive(Default)]
 struct ActionExtra {
-    handler_with: Option<ActionParamsHandler>,
     description: Option<Cow<'static, str>>,
     keywords: Option<Cow<'static, str>>,
     sealed: bool,
@@ -124,21 +120,14 @@ impl ActionSpec {
         self.extra.get_or_insert_with(Default::default)
     }
 
-    /// What it does where the screen shown does not take it.
-    pub fn handler(mut self, handler: impl Fn(&Env<'_>, &mut crate::Commands) + 'static) -> Self {
-        self.handler = Some(Box::new(handler));
-        self
-    }
-
     /// What it does where the screen shown does not take it, with the
-    /// params it was run with
-    /// ([`Command::RunActionWith`](crate::Command::RunActionWith); none for
-    /// [`Command::RunAction`](crate::Command::RunAction) and inputs).
-    pub fn handler_with(
+    /// params it was run with ([`Command::RunAction`](crate::Command::RunAction);
+    /// none from inputs).
+    pub fn handler(
         mut self,
         handler: impl Fn(&Env<'_>, &Params, &mut crate::Commands) + 'static,
     ) -> Self {
-        self.extra().handler_with = Some(Box::new(handler));
+        self.handler = Some(Box::new(handler));
         self
     }
 
@@ -170,11 +159,6 @@ impl ActionSpec {
         self
     }
 
-    /// The handler that gets the params ([`ActionSpec::handler_with`]).
-    pub fn params_handler(&self) -> Option<&ActionParamsHandler> {
-        self.extra.as_ref()?.handler_with.as_ref()
-    }
-
     /// What it does ([`ActionSpec::describe`]).
     pub fn description(&self) -> Option<&str> {
         self.extra.as_ref()?.description.as_deref()
@@ -192,7 +176,7 @@ impl ActionSpec {
 
     /// Whether it does something itself, without a screen that takes it.
     pub fn runs_itself(&self) -> bool {
-        self.handler.is_some() || self.params_handler().is_some()
+        self.handler.is_some()
     }
 }
 
@@ -232,7 +216,7 @@ pub struct Actions {
     map: VecMap<Id, ActionSpec>,
     /// Handlers plugins put in place of actions' own, the highest
     /// priority first: the action, the plugin, the handler.
-    overrides: Vec<(Id, Priority, Id, ActionParamsHandler)>,
+    overrides: Vec<(Id, Priority, Id, ActionHandler)>,
 }
 
 impl fmt::Debug for Actions {
@@ -285,7 +269,7 @@ impl Actions {
         action: Id,
         priority: Priority,
         plugin: Id,
-        handler: ActionParamsHandler,
+        handler: ActionHandler,
     ) {
         let at = self
             .overrides
@@ -317,16 +301,16 @@ impl Actions {
     /// priority, and the plugin whose it is.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn override_of(&self, id: &str) -> Option<(&Id, &ActionParamsHandler)> {
+    pub fn override_of(&self, id: &str) -> Option<(&Id, &ActionHandler)> {
         self.first_override(id)
     }
 
     #[cfg(not(any(test, feature = "kernel")))]
-    fn override_of(&self, id: &str) -> Option<(&Id, &ActionParamsHandler)> {
+    fn override_of(&self, id: &str) -> Option<(&Id, &ActionHandler)> {
         self.first_override(id)
     }
 
-    fn first_override(&self, id: &str) -> Option<(&Id, &ActionParamsHandler)> {
+    fn first_override(&self, id: &str) -> Option<(&Id, &ActionHandler)> {
         if self.get(id).is_some_and(ActionSpec::is_sealed) {
             return None;
         }
@@ -343,7 +327,7 @@ impl Actions {
     pub fn overrides_of<'a>(
         &'a self,
         id: &'a str,
-    ) -> impl Iterator<Item = (&'a Id, &'a ActionParamsHandler)> + 'a {
+    ) -> impl Iterator<Item = (&'a Id, &'a ActionHandler)> + 'a {
         let sealed = self.get(id).is_some_and(ActionSpec::is_sealed);
         self.overrides
             .iter()

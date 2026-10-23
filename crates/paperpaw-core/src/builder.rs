@@ -533,6 +533,7 @@ impl KernelBuilder {
             framebuffer,
             subscriptions: Vec::new(),
             offered_down_to: 0,
+            action_params: Params::new(),
             action_observers: Vec::new(),
             event_observers: Vec::new(),
             show_pending: false,

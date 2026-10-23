@@ -68,7 +68,7 @@ impl Plugin for Probe {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(ActionSpec::new(GO, "probe.go").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 let goto = events::Goto::to(BOOK, Locator::new(0, TARGET));
                 out.push(events::GOTO.emit(goto));
             },

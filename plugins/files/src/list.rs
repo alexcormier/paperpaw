@@ -104,7 +104,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     ))?;
     r.add_action(
         paperpaw_sdk::ActionSpec::new(FIND, "files.list.find").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(FIND, Params::new()));
             },
         ),
@@ -823,7 +823,7 @@ impl ListScreen {
             if row.next {
                 self.set_filter(Filter::Next, cx);
             } else if row.kind == shelf::Kind::Authors {
-                cx.command(Command::RunAction(crate::BY_AUTHOR));
+                cx.command(Command::run(crate::BY_AUTHOR));
             } else {
                 cx.command(shelf::open(row.kind, &row.name));
             }
@@ -1169,7 +1169,7 @@ impl Screen for ListScreen {
         let paging = Some((self.page_of(self.focus), self.pages()));
         let style = self.layout.style;
         if let Some(action) = self.layout.header.tap(cx.env(), &style, point, paging) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.layout.header.area().contains(point) {

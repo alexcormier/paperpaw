@@ -179,7 +179,7 @@ impl Screen for DecksScreen {
         if gesture.kind == GestureKind::Tap {
             let paging = self.list.paging(len);
             if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
                 return Handled::Yes;
             }
         }

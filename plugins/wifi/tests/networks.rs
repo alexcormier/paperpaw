@@ -176,15 +176,15 @@ impl Plugin for NoticeKeeper {
             Priority::DEFAULT,
         )?;
         // Wants the network: a request.
-        r.add_action(
-            ActionSpec::new(FETCH, "Fetch").handler(|_: &Env<'_>, out: &mut Commands| {
+        r.add_action(ActionSpec::new(FETCH, "Fetch").handler(
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::Http(HttpRequest::new(
                     "GET",
                     "http://example.org/",
                     Id::new_static("notices.fetched"),
                 )));
-            }),
-        )
+            },
+        ))
     }
 }
 

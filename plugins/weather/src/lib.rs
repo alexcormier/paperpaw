@@ -483,14 +483,14 @@ impl Plugin for Weather {
         ))?;
         r.add_action(
             ActionSpec::new(CHOOSE_PLACE, "weather.setting.place").handler(
-                |_: &Env<'_>, out: &mut Commands| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(Command::OpenScreen(PLACE_SCREEN, Params::new()));
                 },
             ),
         )?;
         let s = state.clone();
         r.add_action(ActionSpec::new(REFRESH, "weather.refresh").handler(
-            move |env: &Env<'_>, out: &mut Commands| {
+            move |env: &Env<'_>, _, out: &mut Commands| {
                 if data::split_coordinates(env.settings.read(&COORDINATES)).is_none() {
                     out.push(Command::OpenScreen(PLACE_SCREEN, Params::new()));
                 } else {
@@ -532,7 +532,7 @@ pub(crate) fn tap(shown: &Shown) -> Command {
     if shown.waiting == Waiting::NoPlace {
         Command::OpenScreen(PLACE_SCREEN, Params::new())
     } else {
-        Command::RunAction(REFRESH)
+        Command::run(REFRESH)
     }
 }
 

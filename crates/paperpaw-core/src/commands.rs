@@ -331,8 +331,7 @@ impl Kernel {
             Command::Back => self.close_top(paperpaw_sdk::CloseCause::Back),
             Command::Notify(text) | Command::Announce(text) => self.notify(text),
             Command::Emit(event, params) => self.emit(&event, &params),
-            Command::RunAction(action) => self.dispatch(action),
-            Command::RunActionWith(action, params) => self.dispatch_with(action, &params),
+            Command::RunAction(action, params) => self.dispatch_with(action, params),
             // Run in its place where a handler in place of the action's own
             // asked for it (see `run_handler`): here it came from elsewhere.
             Command::RunOriginal(action, _) => {
@@ -896,7 +895,7 @@ fn typed_for(command: &Command) -> Option<Option<&Params>> {
         | Command::OpenScreen(_, params)
         | Command::Replace(_, params)
         | Command::OpenInSlot(_, _, params)
-        | Command::RunActionWith(_, params)
+        | Command::RunAction(_, params)
         | Command::RunOriginal(_, params)
             if reply(params) =>
         {

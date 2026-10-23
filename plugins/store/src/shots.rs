@@ -190,7 +190,7 @@ impl Screen for ShotsScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         // Left half back, right half on, as in a book.

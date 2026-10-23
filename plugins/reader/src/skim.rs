@@ -150,7 +150,7 @@ impl SkimScreen {
         match MOVES[index] {
             "number" => {
                 cx.command(Command::Back);
-                cx.command(Command::RunAction(crate::actions::GO_TO_PAGE));
+                cx.command(Command::run(crate::actions::GO_TO_PAGE));
             }
             "back" => {
                 self.go("back", cx);

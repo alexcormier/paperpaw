@@ -56,7 +56,7 @@ impl Plugin for Hello {
         let opened = Rc::new(Cell::new(0u32));
 
         // The action: what a menu entry, a button or a gesture runs.
-        r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, out| {
+        r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, _, out| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         }))?;
         r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(90))?;
@@ -148,7 +148,7 @@ impl Screen for HelloScreen {
             return Handled::No;
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
         } else {
             cx.command(Command::Back);
         }

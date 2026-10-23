@@ -45,7 +45,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
         Box::new(|env, params| Box::new(Screens::new(env, params))),
     ))?;
     r.add_action(ActionSpec::new(OPEN, "plugin-manager.screens").handler(
-        |_: &Env<'_>, out: &mut Commands| {
+        |_: &Env<'_>, _, out: &mut Commands| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         },
     ))?;
@@ -335,7 +335,7 @@ impl Screen for Screens {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {

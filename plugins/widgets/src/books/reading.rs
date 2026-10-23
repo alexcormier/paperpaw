@@ -339,9 +339,7 @@ impl Widget for Reading {
         let command = self
             .shown
             .as_ref()
-            .map_or(Command::RunAction(actions::LIBRARY), |(book, _)| {
-                book.open()
-            });
+            .map_or(Command::run(actions::LIBRARY), |(book, _)| book.open());
         alloc::vec![WidgetTarget::new(area, command)]
     }
 }

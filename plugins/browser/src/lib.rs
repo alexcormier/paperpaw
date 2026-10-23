@@ -93,7 +93,7 @@ impl Plugin for Browser {
         ))?;
         r.bind_slot(slots::BROWSER, SCREEN, Priority::DEFAULT)?;
         r.add_action(ActionSpec::new(OPEN, "browser.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenSlot(slots::BROWSER, Params::new()));
             },
         ))?;
@@ -581,7 +581,7 @@ impl Screen for BrowserScreen {
                 .header
                 .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {

@@ -716,7 +716,7 @@ impl Screen for PhoneScreen {
             if action == actions::BACK {
                 self.close(cx);
             } else {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
             }
             return Handled::Yes;
         }

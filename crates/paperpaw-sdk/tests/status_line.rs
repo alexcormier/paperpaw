@@ -340,7 +340,7 @@ fn told(line: &StatusLine<'_>, env: &Env<'_>) -> Vec<String> {
     line.targets(env, &font, &Params::new())
         .into_iter()
         .map(|t| match t.command {
-            paperpaw_sdk::Command::RunActionWith(action, _) => action
+            paperpaw_sdk::Command::RunAction(action, _) => action
                 .as_str()
                 .trim_start_matches("t.")
                 .trim_end_matches("-tapped")

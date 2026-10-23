@@ -212,7 +212,7 @@ impl Plugin for Battery {
             }),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "battery.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;

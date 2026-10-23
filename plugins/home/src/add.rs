@@ -501,7 +501,7 @@ impl Screen for AddScreen {
             .tap(&env, &self.style, gesture.start, self.paging())
         {
             if action == actions::BACK {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
                 return Handled::Yes;
             }
             return self.on_action(&action, cx);
