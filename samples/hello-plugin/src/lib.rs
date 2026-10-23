@@ -125,7 +125,7 @@ impl Screen for HelloScreen {
         self.header
             .draw(canvas, env, &self.style, title, None, None);
         let display = env.device.display;
-        let top = self.header.area.height;
+        let top = self.header.area().height;
         // A header taller than a tiny screen leaves no room, not an
         // overflow.
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));

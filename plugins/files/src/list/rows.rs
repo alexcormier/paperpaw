@@ -616,7 +616,9 @@ pub(crate) fn draw_book_row(
     book: &Loaded,
     next: bool,
 ) {
-    canvas.describe(Role::Row, &book.spoken, rect, focused, None);
+    canvas
+        .describe(Role::Row, &book.spoken, rect)
+        .focused(focused);
     if sizes.compact {
         draw_compact_row(canvas, env, style, sizes, rect, focused, book, next);
         return;
@@ -805,7 +807,9 @@ pub(crate) fn draw_card(
     focused: bool,
     book: &Loaded,
 ) {
-    canvas.describe(Role::Row, &book.spoken, rect, focused, None);
+    canvas
+        .describe(Role::Row, &book.spoken, rect)
+        .focused(focused);
     if sizes.compact {
         draw_compact_card(canvas, env, style, sizes, rect, focused, book);
         return;
@@ -903,7 +907,7 @@ pub(crate) fn draw_filter_row(
     let margin = style.margin as u16;
     let gap = style.gap as u16;
     let x = rect.x + margin;
-    canvas.describe(Role::Button, label, rect, focused, None);
+    canvas.describe(Role::Button, label, rect).focused(focused);
     let w = ui::draw_label(canvas, &font, style.text, f32::from(x), rect, label, ink);
     let icon_x = f32::from(x) + w + f32::from(gap / 3);
     ui::draw_icon(canvas, env, "chevron-down", style.small, icon_x, rect, ink);

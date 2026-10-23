@@ -693,6 +693,7 @@ fn draw_line(
 /// book. A word split over two lines (hyphenated) is two page words, each
 /// with the whole word as its text and its own part's place.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct PageWord<'a> {
     pub text: &'a str,
     pub start: Locator,
@@ -700,8 +701,17 @@ pub struct PageWord<'a> {
     pub end: Locator,
 }
 
+impl<'a> PageWord<'a> {
+    /// The word `text`, from `start` to just after its last character
+    /// (`end`).
+    pub const fn new(text: &'a str, start: Locator, end: Locator) -> Self {
+        Self { text, start, end }
+    }
+}
+
 /// The words of a page, for decorators.
 #[derive(Debug, Clone, Copy)]
+#[non_exhaustive]
 pub struct PageText<'a> {
     /// The book.
     pub path: &'a str,
@@ -711,8 +721,21 @@ pub struct PageText<'a> {
     pub words: &'a [PageWord<'a>],
 }
 
+impl<'a> PageText<'a> {
+    /// The `words` of a page of the book at `path`, in reading order, in
+    /// `language` (e.g. `de`; empty where unknown).
+    pub const fn new(path: &'a str, language: &'a str, words: &'a [PageWord<'a>]) -> Self {
+        Self {
+            path,
+            language,
+            words,
+        }
+    }
+}
+
 /// A range a decorator marks, with its role.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Decorated {
     pub start: Locator,
     /// Just after its last character.
@@ -721,6 +744,11 @@ pub struct Decorated {
 }
 
 impl Decorated {
+    /// The text from `start` to just before `end`, in `role`.
+    pub fn new(start: Locator, end: Locator, role: Id) -> Self {
+        Self { start, end, role }
+    }
+
     /// The range of `words` (from the first's start to the last's end) in
     /// `role`.
     pub fn words(words: &[PageWord<'_>], role: &Id) -> Option<Decorated> {
@@ -991,6 +1019,7 @@ impl fmt::Debug for DecoratorSpec {
 
 /// A range of a page that a decorator marked.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Mark {
     /// The decorator.
     pub decorator: Id,
@@ -1015,6 +1044,8 @@ pub struct Decorators {
 }
 
 impl Decorators {
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn new() -> Self {
         Self::default()
     }

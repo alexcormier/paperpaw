@@ -29,7 +29,7 @@ impl DrawerScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         let area = Rect::new(
             style.margin as u16,
             top,
@@ -92,13 +92,9 @@ impl Screen for DrawerScreen {
             let focused = list.shown() && index == list.focus();
             // Named after its action, also where its name is not shown.
             let name = grid::What::Tool(tools[index].clone()).title(env);
-            canvas.describe(
-                paperpaw_sdk::semantics::Role::Button,
-                &name,
-                rect,
-                focused,
-                None,
-            );
+            canvas
+                .describe(paperpaw_sdk::semantics::Role::Button, &name, rect)
+                .focused(focused);
             let ink = blocks::draw_tool_lines(canvas, env, rect, &tools[index], lines);
             if focused {
                 // Round its icon and name, never through them.

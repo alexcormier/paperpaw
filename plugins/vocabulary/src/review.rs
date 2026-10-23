@@ -129,7 +129,7 @@ impl ReviewScreen {
 
     fn content(&self, env: &Env<'_>) -> Rect {
         let display = env.device.display;
-        let top = self.header.area.height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap as u16;
         let bar = ui::edge_bar_height(&self.style);
         Rect::new(
             0,

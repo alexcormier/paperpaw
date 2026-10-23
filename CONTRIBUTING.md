@@ -92,7 +92,8 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
    (`crates/paperpaw-sdk/interface/crates.txt`), comes with that crate's
    `api.txt` and `shape.txt` brought up to date
    (`python3 tools/interface.py`, with the nightly it names and
-   cargo-public-api), and what goes is `#[deprecated]` first. What code
+   cargo-public-api). What goes is `#[deprecated]` first and gone before
+   the next release, whose plugins are built anew until 1.0. What code
    plugins see is the plugin interface
    ([ADR 0026](docs/adr/0026-plugin-interface-version.md)): any change
    to a type that crosses raises `native::INTERFACE`, a new item alone
@@ -101,6 +102,9 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
    `kernel` and `unstable` add only functions and modules, never a
    field, variant or trait item: a plugin built without them runs with
    firmware built with them.
+9. **The SDK is designed to grow without breaking**: a change to it
+   follows [docs/sdk-design.md](docs/sdk-design.md), whose checks run
+   with the workspace's tests.
 
 Significant decisions are recorded as [Architecture Decision Records](docs/adr/).
 

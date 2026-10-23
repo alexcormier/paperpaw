@@ -15,14 +15,7 @@ fn ui() -> Ui {
 }
 
 fn d(role: Role, label: &str, area: Rect) -> Described {
-    Described {
-        role,
-        label: label.to_string(),
-        area,
-        focused: false,
-        on: None,
-        clip: Rect::new(0, 0, 480, 755),
-    }
+    Described::new(role, label.to_string(), area).clip(Rect::new(0, 0, 480, 755))
 }
 
 fn fill(image: &mut Image, area: Rect, rgb: [u8; 3]) {
@@ -90,6 +83,25 @@ fn shortened_text_is_noted_once() {
         d(Role::Text, "Loading…", Rect::new(26, 100, 428, 40)),
     ];
     assert_eq!(checks(&ellipsis(&scene(&image, texts))), [ELLIPSIS]);
+}
+
+/// An explanation of several lines cut short is an error, even where its
+/// last line, centred, leaves room at its end.
+#[test]
+fn an_explanation_cut_short_is_an_error() {
+    let mut image = paper();
+    word(&mut image, 100, 210, 40, 20);
+    word(&mut image, 150, 240, 12, 20);
+    let texts = vec![d(
+        Role::Text,
+        "Enter your account, or create one. Only a hash of the pa…",
+        Rect::new(0, 200, 480, 70),
+    )];
+    // A text of the language ending in a "…" of its own after a blank
+    // does not pass every "…" as its own.
+    let own = [String::from("Loading {host} …")];
+    let issues = ellipsis(&scene(&image, texts).ellipses(&own));
+    assert_eq!(checks(&issues), [EXPLANATION_CUT]);
 }
 
 #[test]

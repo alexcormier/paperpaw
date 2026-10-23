@@ -149,20 +149,18 @@ mod tests {
         texts
             .iter()
             .enumerate()
-            .map(|(n, text)| PageWord {
-                text,
-                start: Locator::new(0, n as u32 * 10),
-                end: Locator::new(0, n as u32 * 10 + text.len() as u32),
+            .map(|(n, text)| {
+                PageWord::new(
+                    text,
+                    Locator::new(0, n as u32 * 10),
+                    Locator::new(0, n as u32 * 10 + text.len() as u32),
+                )
             })
             .collect()
     }
 
     fn page<'a>(language: &'a str, words: &'a [PageWord<'a>]) -> PageText<'a> {
-        PageText {
-            path: "books/alice.txt",
-            language,
-            words,
-        }
+        PageText::new("books/alice.txt", language, words)
     }
 
     #[test]

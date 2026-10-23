@@ -670,7 +670,7 @@ impl Screen for CableScreen {
         let title = env.i18n.tr("transfer.cable.title");
         self.header.draw(canvas, env, &style, title, None, None);
         let display = env.device.display;
-        let top = self.header.area.height + style.gap as u16;
+        let top = self.header.area().height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let state = match self.permission {
             Permission::Allowed => "transfer.cable.allowed",

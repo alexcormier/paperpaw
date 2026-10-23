@@ -236,6 +236,11 @@ impl Sockets {
                         s.reading = Some(Reading::File { path, left: len });
                         max
                     }
+                    _ => {
+                        let reason = String::from("a way of reading not known");
+                        out.push(s.notice(|socket| SocketNotice::Failed { socket, reason }));
+                        return;
+                    }
                 };
                 self.calls.push(SocketCall::Read {
                     socket: s.number,

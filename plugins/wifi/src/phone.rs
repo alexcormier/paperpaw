@@ -603,7 +603,7 @@ impl Screen for PhoneScreen {
         let title = env.i18n.tr("wifi.phone.title");
         self.header.draw(canvas, env, &style, title, None, None);
         let display = env.device.display;
-        let top = self.header.area.height + style.gap as u16;
+        let top = self.header.area().height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let message = |key| env.i18n.tr(key).to_string();
         let text = match (&self.state, &self.own) {

@@ -605,14 +605,7 @@ mod tests {
     use super::*;
 
     fn d(role: Role, area: Rect, clip: Rect) -> Described {
-        Described {
-            role,
-            label: String::new(),
-            area,
-            focused: false,
-            on: None,
-            clip,
-        }
+        Described::new(role, String::new(), area).clip(clip)
     }
 
     #[test]

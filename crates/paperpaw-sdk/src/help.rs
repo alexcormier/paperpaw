@@ -44,6 +44,7 @@ pub const POINT: &str = "help.hints";
 
 /// What a hint is for.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Input {
     /// Every device.
     Any,
@@ -80,6 +81,7 @@ impl Input {
 
 /// A part of the screen, in thousandths of its width and height.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Zone {
     pub x: u16,
     pub y: u16,
@@ -109,6 +111,7 @@ impl Zone {
 
 /// A hint: its text (a translation key), for which devices, where.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Hint {
     pub text: String,
     pub input: Input,

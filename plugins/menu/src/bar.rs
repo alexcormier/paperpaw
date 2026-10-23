@@ -370,13 +370,10 @@ impl Screen for BarScreen {
             );
             // Told as a button: what it is, which has the focus, which is on.
             let focused = self.keys && i == self.focus;
-            canvas.describe(
-                Role::Button,
-                &entry.label(env),
-                frame,
-                focused,
-                on.then_some(true),
-            );
+            canvas
+                .describe(Role::Button, &entry.label(env), frame)
+                .focused(focused)
+                .on(on.then_some(true));
             if on {
                 let back = if enabled {
                     Color::BLACK

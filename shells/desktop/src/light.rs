@@ -41,7 +41,7 @@ plural = one-other
 
 [messages]
 emulator.frontlight = Front light
-emulator.frontlight.help = How bright the light in front of the screen shines; 0 is off. The emulated screen does not light up.
+emulator.frontlight.help = How bright the front light shines; 0 is off. The emulated screen stays dark.
 emulator.warmth = Light colour
 emulator.warmth.help = How warm (yellow) the light is, kinder to the eyes in the evening.
 ";
@@ -53,7 +53,7 @@ plural = one-other
 
 [messages]
 emulator.frontlight = Beleuchtung
-emulator.frontlight.help = Wie hell das Licht vor dem Bildschirm scheint; 0 ist aus. Der nachgebildete Bildschirm leuchtet nicht.
+emulator.frontlight.help = Wie hell die Beleuchtung ist; 0 ist aus. Der nachgebildete Bildschirm leuchtet nicht.
 emulator.warmth = Lichtfarbe
 emulator.warmth.help = Wie warm (gelb) das Licht ist, angenehmer für die Augen am Abend.
 ";

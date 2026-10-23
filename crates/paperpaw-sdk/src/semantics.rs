@@ -4,7 +4,7 @@
 //! Nothing has to be written for it: the drawing helpers of [`ui`](crate::ui)
 //! tell what they draw ([`Canvas::describe`](crate::Canvas::describe)), list
 //! rows with their focus, the text in them, buttons, switches and
-//! headers. [`parts`] puts that together: the text drawn inside a row
+//! headers. `parts` puts that together: the text drawn inside a row
 //! becomes the row's. Screens that draw in their own way describe their
 //! parts themselves.
 
@@ -16,6 +16,7 @@ use paperpaw_platform::Rect;
 
 /// A part of a screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Part {
     pub role: Role,
     /// Its text: its own, or that drawn inside it.
@@ -25,6 +26,41 @@ pub struct Part {
     /// Switched on or off, for switches (also a row's) and buttons that
     /// are either.
     pub on: Option<bool>,
+    /// It does nothing now (drawn faint).
+    pub disabled: bool,
+}
+
+impl Part {
+    /// A part in `role` with `label` at `area`: without the focus,
+    /// neither on nor off.
+    pub fn new(role: Role, label: impl Into<String>, area: Rect) -> Self {
+        Self {
+            role,
+            label: label.into(),
+            area,
+            focused: false,
+            on: None,
+            disabled: false,
+        }
+    }
+
+    /// With the focus or not.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
+    /// Switched on or off, or neither.
+    pub fn on(mut self, on: Option<bool>) -> Self {
+        self.on = on;
+        self
+    }
+
+    /// Doing nothing now, or not.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
 }
 
 fn inside(inner: Rect, outer: Rect) -> bool {
@@ -36,6 +72,8 @@ fn inside(inner: Rect, outer: Rect) -> bool {
 
 /// The parts of what was drawn, in drawing order: rows, headings and
 /// buttons with the text and switches drawn inside them.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn parts(described: Vec<Described>) -> Vec<Part> {
     let mut parts: Vec<Part> = Vec::new();
     // Whether a part's text is its own (the text drawn inside it is then
@@ -76,6 +114,7 @@ pub fn parts(described: Vec<Described>) -> Vec<Part> {
                     area: d.area,
                     focused: d.focused,
                     on: d.on,
+                    disabled: d.disabled,
                 });
             }
         }
@@ -139,14 +178,10 @@ mod tests {
     use super::*;
 
     fn d(role: Role, label: &str, area: Rect, focused: bool, on: Option<bool>) -> Described {
-        Described {
-            role,
-            label: String::from(label),
-            area,
-            focused,
-            on,
-            clip: Rect::new(0, 0, 400, 800),
-        }
+        Described::new(role, String::from(label), area)
+            .focused(focused)
+            .on(on)
+            .clip(Rect::new(0, 0, 400, 800))
     }
 
     #[test]

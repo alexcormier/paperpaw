@@ -757,6 +757,8 @@ pub struct Widgets {
 }
 
 impl Widgets {
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn new() -> Self {
         Self::default()
     }

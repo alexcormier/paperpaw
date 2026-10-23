@@ -244,7 +244,6 @@ pub enum Outside {
 
 /// Whether an event was consumed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-#[non_exhaustive]
 pub enum Handled {
     Yes,
     No,

@@ -271,13 +271,9 @@ impl Screen for SkimScreen {
         let kx = (track.x + done).saturating_sub(knob / 2);
         let ky = self.bar.y + (self.bar.height - knob) / 2;
         canvas.fill(Rect::new(kx, ky, knob, knob), ink);
-        canvas.describe(
-            paperpaw_sdk::semantics::Role::Slider,
-            &self.label,
-            self.bar,
-            on_bar,
-            None,
-        );
+        canvas
+            .describe(paperpaw_sdk::semantics::Role::Slider, &self.label, self.bar)
+            .focused(on_bar);
         // The buttons.
         for (i, (slot, key)) in self.buttons.iter().zip(BUTTONS).enumerate() {
             ui::draw_button(

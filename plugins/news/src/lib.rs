@@ -459,7 +459,7 @@ impl FeedsScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let feeds = load(env.storage);
         Self {

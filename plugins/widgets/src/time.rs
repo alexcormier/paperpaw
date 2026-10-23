@@ -564,13 +564,7 @@ pub(crate) fn draw_stack(
         // Told as one text, drawn as lines.
         let told = Rect::new(area.x, top as u16, area.width, (below - above) as u16);
         let text = part.lines.join(" ");
-        canvas.describe(
-            paperpaw_sdk::semantics::Role::Text,
-            &text,
-            told,
-            false,
-            None,
-        );
+        canvas.describe(paperpaw_sdk::semantics::Role::Text, &text, told);
         let mut baseline = top - above;
         for text in &part.lines {
             // Shortened where it is wider than the place after all.

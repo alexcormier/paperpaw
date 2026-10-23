@@ -1349,13 +1349,7 @@ mod tests {
     use super::*;
 
     fn part(role: Role, label: &str, area: Rect, focused: bool) -> Part {
-        Part {
-            role,
-            label: label.to_string(),
-            area,
-            focused,
-            on: None,
-        }
+        Part::new(role, label.to_string(), area).focused(focused)
     }
 
     #[test]

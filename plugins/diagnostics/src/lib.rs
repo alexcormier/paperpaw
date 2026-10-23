@@ -268,7 +268,7 @@ impl DiagnosticsScreen {
                 ("pages", Arg::Int(i64::from(pages))),
             ],
         );
-        canvas.describe(Role::Text, &text, r, false, None);
+        canvas.describe(Role::Text, &text, r);
         draw_label(
             &mut canvas.clipped(r),
             env,

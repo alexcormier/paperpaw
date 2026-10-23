@@ -27,6 +27,7 @@ pub struct Canvas<'a> {
 /// screen aloud, automation and tests. Drawing helpers describe what
 /// they draw; most of the time nobody asks and it costs nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Described {
     pub role: Role,
     /// Its text, if it has one of its own.
@@ -36,10 +37,112 @@ pub struct Described {
     pub focused: bool,
     /// Switched on or off, for switches and buttons that are either.
     pub on: Option<bool>,
+    /// It does nothing now (drawn faint), e.g. a menu entry that cannot
+    /// be chosen yet.
+    pub disabled: bool,
     /// What the canvas showed when it was described (its clip): the
     /// screen, cell or row it was drawn into. An area reaching past it
     /// was cut (see `paperpaw-dev`'s checks).
     pub clip: Rect,
+}
+
+impl Described {
+    /// A part in `role` with `label` at `area`, drawn into a canvas
+    /// showing `area` alone: without the focus, neither on nor off.
+    pub fn new(role: Role, label: impl Into<String>, area: Rect) -> Self {
+        Self {
+            role,
+            label: label.into(),
+            area,
+            focused: false,
+            on: None,
+            disabled: false,
+            clip: area,
+        }
+    }
+
+    /// Doing nothing now, or not.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// With the focus or not.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
+    /// Switched on or off, or neither.
+    pub fn on(mut self, on: Option<bool>) -> Self {
+        self.on = on;
+        self
+    }
+
+    /// Drawn into a canvas that showed `clip`.
+    pub fn clip(mut self, clip: Rect) -> Self {
+        self.clip = clip;
+        self
+    }
+}
+
+/// A part being described ([`Canvas::describe`]): told to whoever asks
+/// when it goes, at the end of the statement that made it.
+pub struct Describe<'c> {
+    sink: Option<&'c mut Vec<Described>>,
+    role: Role,
+    label: &'c str,
+    area: Rect,
+    clip: Rect,
+    focused: bool,
+    on: Option<bool>,
+    disabled: bool,
+}
+
+impl Describe<'_> {
+    /// It has the focus (buttons move it), or not.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
+    /// Switched on or off, for switches and buttons that are either.
+    pub fn on(mut self, on: Option<bool>) -> Self {
+        self.on = on;
+        self
+    }
+
+    /// It does nothing now (drawn faint), or not.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+impl Drop for Describe<'_> {
+    fn drop(&mut self) {
+        if let Some(sink) = self.sink.take() {
+            sink.push(Described {
+                role: self.role,
+                label: String::from(self.label),
+                area: self.area,
+                focused: self.focused,
+                on: self.on,
+                disabled: self.disabled,
+                clip: self.clip,
+            });
+        }
+    }
+}
+
+impl core::fmt::Debug for Describe<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Describe")
+            .field("role", &self.role)
+            .field("label", &self.label)
+            .field("area", &self.area)
+            .finish_non_exhaustive()
+    }
 }
 
 /// What a described part is.
@@ -129,6 +232,7 @@ impl<'a> Canvas<'a> {
     }
 
     /// This canvas, describing what is drawn into `sink`.
+    #[doc(hidden)]
     pub fn describing(mut self, sink: &'a mut Vec<Described>) -> Self {
         self.described = Some(sink);
         self
@@ -137,6 +241,7 @@ impl<'a> Canvas<'a> {
     /// Whether it keeps no pixels ([`Framebuffer::blind`]): what is drawn
     /// is only described, so drawing that costs (glyphs, pictures) can be
     /// left out.
+    #[doc(hidden)]
     pub fn is_blind(&self) -> bool {
         self.framebuffer.is_blind()
     }
@@ -145,6 +250,7 @@ impl<'a> Canvas<'a> {
     /// ([`Canvas::is_blind`]), for
     /// [`Framebuffer::take_all_pictured`](crate::Framebuffer::take_all_pictured);
     /// its pixels count where they are drawn.
+    #[doc(hidden)]
     pub fn note_picture(&mut self, area: Rect) {
         if !self.framebuffer.is_blind() {
             return;
@@ -162,26 +268,23 @@ impl<'a> Canvas<'a> {
         self.described.is_some()
     }
 
-    /// Tells what is drawn at `area`, for those who ask.
-    pub fn describe(
-        &mut self,
-        role: Role,
-        label: &str,
-        area: Rect,
-        focused: bool,
-        on: Option<bool>,
-    ) {
+    /// Tells what is drawn at `area`, for those who ask: a part in
+    /// `role` with `label`, said as it is once the statement ends;
+    /// `focused`, `on` and `disabled`
+    /// say more first. Nothing is kept (nor its text copied) where nobody
+    /// asks.
+    pub fn describe<'c>(&'c mut self, role: Role, label: &'c str, area: Rect) -> Describe<'c> {
         let clip = self.clip;
         let area = self.to_screen(area);
-        if let Some(sink) = self.described.as_deref_mut() {
-            sink.push(Described {
-                role,
-                label: String::from(label),
-                area,
-                focused,
-                on,
-                clip,
-            });
+        Describe {
+            sink: self.described.as_deref_mut(),
+            role,
+            label,
+            area,
+            clip,
+            focused: false,
+            on: None,
+            disabled: false,
         }
     }
 
@@ -205,6 +308,7 @@ impl<'a> Canvas<'a> {
     /// a band drawn again starts from the first row.
     ///
     /// [`Atkinson`]: crate::diffuse::Atkinson
+    #[doc(hidden)]
     pub fn take_diffusion(&mut self, key: u64, y: i32) -> Option<crate::diffuse::Atkinson> {
         let row = u16::try_from(y + self.origin.1).ok()?;
         self.framebuffer.take_diffusion(key, row)
@@ -214,6 +318,7 @@ impl<'a> Canvas<'a> {
     /// ([`Canvas::take_diffusion`]), where this band ends there. Freed
     /// when the next band begins elsewhere or the frame ends
     /// ([`Framebuffer::end_frame`](crate::Framebuffer::end_frame)).
+    #[doc(hidden)]
     pub fn keep_diffusion(&mut self, key: u64, y: i32, atkinson: crate::diffuse::Atkinson) {
         if let Ok(row) = u16::try_from(y + self.origin.1) {
             self.framebuffer.keep_diffusion(key, row, atkinson);
@@ -318,6 +423,7 @@ impl<'a> Canvas<'a> {
     /// not count as pictures that leave ghosts on e-paper, which a full
     /// refresh clears after large ones
     /// ([`Framebuffer::take_pictured`]).
+    #[doc(hidden)]
     pub fn small_pictures(&mut self, draw: impl FnOnce(&mut Canvas<'_>)) {
         let was = self.framebuffer.set_counting(false);
         draw(self);
@@ -770,7 +876,7 @@ mod tests {
                 |dx, _| if dx == 0 { 255 } else { 0 },
             );
             canvas.fill_rect(-5, -9, 4, 4, Color::BLACK);
-            canvas.describe(Role::Button, "OK", Rect::new(1, 1, 4, 2), false, None);
+            canvas.describe(Role::Button, "OK", Rect::new(1, 1, 4, 2));
         }
         {
             let mut canvas = plain.canvas();
@@ -956,7 +1062,7 @@ mod tests {
         let mut described = Vec::new();
         {
             let mut canvas = fb.canvas().describing(&mut described).offset(-4, -6);
-            canvas.describe(Role::Row, "row", Rect::new(1, 1, 5, 9), false, None);
+            canvas.describe(Role::Row, "row", Rect::new(1, 1, 5, 9));
         }
         assert_eq!(described[0].area, Rect::new(0, 0, 2, 4));
     }

@@ -203,7 +203,9 @@ proptest! {
         height in 20u16..120,
     ) {
         let band = Rect::new(x, 300, width, height);
-        let SliderParts { minus, track, plus } = parts(&style(), band);
+        let SliderParts {
+            minus, track, plus, ..
+        } = parts(&style(), band);
         let margin = style().margin;
         prop_assert_eq!(u32::from(minus.x), u32::from(band.x) + margin);
         prop_assert_eq!(plus.right() + margin, band.right());

@@ -174,7 +174,7 @@ impl Widget for Cat {
         if let Some((picture, x, y)) = &self.picture {
             picture.draw(canvas, *x, *y);
             let at = Rect::new(*x, *y, picture.width(), picture.height());
-            canvas.describe(Role::Image, &described(env, today), at, false, None);
+            canvas.describe(Role::Image, &described(env, today), at);
         }
         let line = Self::line(env);
         if line == 0 {

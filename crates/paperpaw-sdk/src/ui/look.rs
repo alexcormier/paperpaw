@@ -10,17 +10,15 @@
 //!
 //! ```
 //! use paperpaw_sdk::Priority;
-//! use paperpaw_sdk::ui::look::{Painters, SwitchPart};
-//! use paperpaw_sdk::ui::UiStyle;
-//! use paperpaw_graphics::Canvas;
+//! use paperpaw_sdk::ui::look::{PaintCx, Painters, SwitchPart};
 //! use paperpaw_platform::Color;
 //!
 //! /// Square switches: a box, filled when on.
-//! fn switch(canvas: &mut Canvas<'_>, _: &UiStyle, part: &SwitchPart) -> bool {
+//! fn switch(cx: &mut PaintCx<'_, '_>, part: &SwitchPart) -> bool {
 //!     let ink = if part.inverted { Color::WHITE } else { Color::BLACK };
-//!     canvas.stroke_round(part.rect, 2, 0, ink);
+//!     cx.canvas.stroke_round(part.rect, 2, 0, ink);
 //!     if part.on {
-//!         canvas.fill(part.rect.inset(4, 4), ink);
+//!         cx.canvas.fill(part.rect.inset(4, 4), ink);
 //!     }
 //!     true
 //! }
@@ -122,9 +120,8 @@ pub struct HeaderPart {
     pub area: Rect,
 }
 
-/// The background of the row of button hints
-/// ([`draw_button_hints`](super::draw_button_hints)), with the line that
-/// sets it apart; the hints come after.
+/// The background of the row of button hints below the screen, with the
+/// line that sets it apart; the hints come after.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct HintsPart {
@@ -151,10 +148,24 @@ pub struct SliderPart {
     pub ink: Color,
 }
 
+/// What a painter paints with: the canvas the part is drawn into and the
+/// screen's style. More may come; a painter takes what it needs.
+#[non_exhaustive]
+pub struct PaintCx<'c, 'a> {
+    pub canvas: &'c mut Canvas<'a>,
+    pub style: &'c UiStyle,
+}
+
+impl fmt::Debug for PaintCx<'_, '_> {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("PaintCx").finish_non_exhaustive()
+    }
+}
+
 /// Paints a part; `true` when it did.
-pub type Painter<P> = fn(&mut Canvas<'_>, &UiStyle, &P) -> bool;
+pub type Painter<P> = fn(&mut PaintCx<'_, '_>, &P) -> bool;
 /// Paints a part's background; the ink for what goes on it when it did.
-pub type InkPainter<P> = fn(&mut Canvas<'_>, &UiStyle, &P) -> Option<Color>;
+pub type InkPainter<P> = fn(&mut PaintCx<'_, '_>, &P) -> Option<Color>;
 
 /// A look: a painter for each part it changes (see the
 /// [module](self)). Made in the program, e.g. as a `static`.
@@ -293,25 +304,25 @@ impl Look {
     ) -> bool {
         self.0
             .and_then(|p| p.switch)
-            .is_some_and(|paint| paint(canvas, style, &part))
+            .is_some_and(|paint| paint(&mut PaintCx { canvas, style }, &part))
     }
 
     pub(super) fn check(&self, canvas: &mut Canvas<'_>, style: &UiStyle, part: CheckPart) -> bool {
         self.0
             .and_then(|p| p.check)
-            .is_some_and(|paint| paint(canvas, style, &part))
+            .is_some_and(|paint| paint(&mut PaintCx { canvas, style }, &part))
     }
 
     pub(crate) fn frame(&self, canvas: &mut Canvas<'_>, style: &UiStyle, part: FramePart) -> bool {
         self.0
             .and_then(|p| p.frame)
-            .is_some_and(|paint| paint(canvas, style, &part))
+            .is_some_and(|paint| paint(&mut PaintCx { canvas, style }, &part))
     }
 
     pub(super) fn focus(&self, canvas: &mut Canvas<'_>, style: &UiStyle, part: FocusPart) -> bool {
         self.0
             .and_then(|p| p.focus)
-            .is_some_and(|paint| paint(canvas, style, &part))
+            .is_some_and(|paint| paint(&mut PaintCx { canvas, style }, &part))
     }
 
     pub(super) fn separator(
@@ -322,7 +333,7 @@ impl Look {
     ) -> bool {
         self.0
             .and_then(|p| p.separator)
-            .is_some_and(|paint| paint(canvas, style, &part))
+            .is_some_and(|paint| paint(&mut PaintCx { canvas, style }, &part))
     }
 
     pub(super) fn button(
@@ -333,7 +344,7 @@ impl Look {
     ) -> Option<Color> {
         self.0
             .and_then(|p| p.button)
-            .and_then(|paint| paint(canvas, style, &part))
+            .and_then(|paint| paint(&mut PaintCx { canvas, style }, &part))
     }
 
     pub(super) fn header(
@@ -344,13 +355,13 @@ impl Look {
     ) -> Option<Color> {
         self.0
             .and_then(|p| p.header)
-            .and_then(|paint| paint(canvas, style, &part))
+            .and_then(|paint| paint(&mut PaintCx { canvas, style }, &part))
     }
 
     pub(super) fn hints(&self, canvas: &mut Canvas<'_>, style: &UiStyle, part: HintsPart) -> bool {
         self.0
             .and_then(|p| p.hints)
-            .is_some_and(|paint| paint(canvas, style, &part))
+            .is_some_and(|paint| paint(&mut PaintCx { canvas, style }, &part))
     }
 
     pub(super) fn progress(
@@ -361,7 +372,7 @@ impl Look {
     ) -> bool {
         self.0
             .and_then(|p| p.progress)
-            .is_some_and(|paint| paint(canvas, style, &part))
+            .is_some_and(|paint| paint(&mut PaintCx { canvas, style }, &part))
     }
 
     pub(super) fn slider(
@@ -372,7 +383,7 @@ impl Look {
     ) -> bool {
         self.0
             .and_then(|p| p.slider)
-            .is_some_and(|paint| paint(canvas, style, &part))
+            .is_some_and(|paint| paint(&mut PaintCx { canvas, style }, &part))
     }
 }
 

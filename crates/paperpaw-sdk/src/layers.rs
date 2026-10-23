@@ -20,7 +20,7 @@
 //!   its id.
 //!
 //! Readers find both in `Env::page_layers` ([`PageLayers`]). The shipped
-//! reader's [`PageType`](crate::reading::PageType) applies the rooms and
+//! reader's `PageType` applies the rooms and
 //! the frame to the page's box; a reader of one's own does the same with
 //! [`PageLayers::rooms`] and [`PageLayers::columns`].
 //!
@@ -313,6 +313,8 @@ pub struct PageLayers {
 }
 
 impl PageLayers {
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn new() -> Self {
         Self::default()
     }

@@ -127,6 +127,7 @@ impl<'a> SliderView<'a> {
 
 /// Where the parts of a slider are in its band (see [`parts`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SliderParts {
     pub minus: Rect,
     pub track: Rect,
@@ -322,13 +323,9 @@ impl Slider {
                 Color::WHITE
             }
         };
-        canvas.describe(
-            Role::Slider,
-            view.shown,
-            track,
-            focus != SliderFocus::None,
-            None,
-        );
+        canvas
+            .describe(Role::Slider, view.shown, track)
+            .focused(focus != SliderFocus::None);
         self.draw_track(canvas, style, track, view.value, ink);
     }
 

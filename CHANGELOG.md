@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- First-run setup: the sample of the font size is in the book's font,
+  at the size chosen, as the reader shows it: no longer in the
+  interface's font, its second line cut. The card grows with the size
+  (fewer words where there is no more room), and follows the size as it
+  changes.
 - The web emulator's release asset (`paperpaw-web-<version>.zip`) is
   signed as the emulators are, and holds everything its pages load. Its
   frame loads no inline style or script, so it runs under a strict
@@ -178,6 +183,11 @@ file to your report.
 - A plugin's settings group that names no place on the settings' main
   page is listed at the end of *Customise*, by name, with a plugin's
   icon, instead of first among the books' groups.
+- No explanation is cut short any more. Every setting's description fits
+  the two lines of its row on the X4 and the X4 Pro, in English and
+  German, and a test keeps it so. The text below *Progress sync*'s rows
+  takes the room there is; where it still has none, a row *More about
+  this* shows it whole.
 
 #### Touch, buttons and the keyboard
 
@@ -372,6 +382,43 @@ file to your report.
 
 #### For developers
 
+- The SDK's design rules ([Designing the plugin SDK](docs/sdk-design.md)):
+  how it grows without breaking plugins. Tests check four of them over
+  the crates whose types cross: growing types are `#[non_exhaustive]`,
+  handlers take no `&mut Vec<Command>`, nothing is `#[doc(hidden)]`
+  outside the `kernel` feature, and no deprecated item reaches a
+  release. What they found before is listed and may only get less.
+- SDK, cleaned up before its first release (UI): `ui::fill` and
+  `ui::HOLD_ICON` are gone (`Canvas::fill`, `icons::HOLD`);
+  `ui::PAW_ICON` is `icons::PAW`. What only the kernel uses is no longer
+  part of the plugin API: `ui::draw_button_hints`,
+  `ui::button_hints_height`, `semantics::parts` and the constructors of
+  `PageLayers`, `Decorators` and `Widgets` come with the `kernel`
+  feature, and `Canvas`'s drawing internals are hidden. A cover drawn
+  small is `ui::draw_small_image`; whether the device has a row of
+  button hints is `env.caps.button_row`.
+- SDK: types that may grow are `#[non_exhaustive]`, with constructors
+  where plugins build them: `decorations::{PageWord, PageText,
+  Decorated}::new`, `semantics::Part::new` and `Described::new` (with
+  `.focused()`, `.on()`, `.clip()`); also `decorations::Mark`,
+  `RowLines`, `SliderParts`, `PickerPart`, `Offer`, `Padding`. A match
+  on `Offer` needs an arm for answers to come. `Header` and `Pager` keep
+  their state: `area()` reads it, `Header::note_focused()` and
+  `note_button()` set the note.
+- SDK: `canvas.describe(role, text, area)` says more by its builder
+  (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
+  in place of five arguments; parts (`Described`, `semantics::Part`)
+  tell whether they are disabled.
+- SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
+  and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
+  `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,
+  `Refusal`, `WorkRefused` and `Note` (with `new`), `Step` and
+  `Importance`. A match on them needs an arm for what comes later.
+  `Handled` is exhaustive: an event is handled or not, and a plugin
+  matches both.
+- SDK: a look's painters take a `ui::look::PaintCx` (the canvas and the
+  style, more to come) and the part: `fn(&mut PaintCx, &SwitchPart) ->
+  bool`.
 - SDK: `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).
@@ -457,6 +504,12 @@ file to your report.
 - `paperpaw-dev` warns of a settings group without an order or an icon,
   and of a widget's settings in a group of the main page rather than the
   widget's own (`widgets::settings_group`). SDK: `Kernel::menus`.
+- `paperpaw-dev` finds an explanation of several lines cut short
+  (`visual.explanation-cut`, an error): the SDK's text blocks now say
+  what they draw, "…" included, and a text of the language with a "…" of
+  its own no longer passes every "…" as one. It warns of a setting's
+  description longer than its row (`lint.help-cut`). SDK:
+  `ui::note_fits`, `ask::confirm(…).only_yes()`.
 
 ## [0.3.0] - 2026-10-16
 

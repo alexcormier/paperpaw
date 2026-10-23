@@ -340,7 +340,7 @@ impl BatteryView {
 
     /// The room for lines: below the header, above the footer.
     fn room(&self, env: &Env<'_>) -> (u16, u16) {
-        let top = self.header.area.y + self.header.area.height;
+        let top = self.header.area().y + self.header.area().height;
         let bottom = env
             .device
             .display

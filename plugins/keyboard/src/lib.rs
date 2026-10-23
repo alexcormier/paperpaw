@@ -1035,13 +1035,7 @@ impl KeyboardScreen {
         ui::stroke_round(canvas, &style, box_area, style.line.max(2), Color::BLACK);
         // What is typed in it, for screen readers (dots of a password say
         // nothing).
-        canvas.describe(
-            paperpaw_sdk::semantics::Role::Field,
-            "",
-            box_area,
-            false,
-            None,
-        );
+        canvas.describe(paperpaw_sdk::semantics::Role::Field, "", box_area);
         // The end of the text, with a cursor after it; a password as dots.
         let text = if self.password {
             "•".repeat(self.text.chars().count())

@@ -385,12 +385,11 @@ impl Plugin for Looks {
 #[test]
 fn the_look_of_the_highest_priority_is_used_of_equal_ones_the_later() {
     use paperpaw_core::sdk::Priority;
-    use paperpaw_core::sdk::ui::UiStyle;
-    use paperpaw_core::sdk::ui::look::{FocusPart, Painters, SwitchPart};
-    fn switch(_: &mut paperpaw_core::sdk::Canvas<'_>, _: &UiStyle, _: &SwitchPart) -> bool {
+    use paperpaw_core::sdk::ui::look::{FocusPart, PaintCx, Painters, SwitchPart};
+    fn switch(_: &mut PaintCx<'_, '_>, _: &SwitchPart) -> bool {
         true
     }
-    fn focus(_: &mut paperpaw_core::sdk::Canvas<'_>, _: &UiStyle, _: &FocusPart) -> bool {
+    fn focus(_: &mut PaintCx<'_, '_>, _: &FocusPart) -> bool {
         true
     }
     static PLAIN: Painters = Painters::new();
@@ -670,7 +669,9 @@ impl paperpaw_core::sdk::Screen for TwoButtons {
         use paperpaw_core::sdk::semantics::Role;
         for (i, label) in ["First", "Second"].iter().enumerate() {
             let area = paperpaw_core::sdk::Rect::new(0, 40 * i as u16, 100, 40);
-            canvas.describe(Role::Button, label, area, self.0 == i, None);
+            canvas
+                .describe(Role::Button, label, area)
+                .focused(self.0 == i);
         }
     }
 

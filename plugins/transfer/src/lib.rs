@@ -181,7 +181,8 @@ impl TransferScreen {
                 self.state = State::Starting;
                 cx.command(Command::serve(SERVER, PORT, SERVER_EVENT.into()));
             }
-            Some(ui::Offer::NotNow) => self.state = State::NoNetwork,
+            // Not now, and any answer to come: on without the network.
+            Some(_) => self.state = State::NoNetwork,
             None => return,
         }
         self.redraw(cx);
@@ -260,7 +261,7 @@ impl TransferScreen {
     /// The area below the header.
     fn content(&self, env: &Env<'_>) -> Rect {
         let display = env.device.display;
-        let top = self.header.area.height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap as u16;
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
 

@@ -137,7 +137,7 @@ impl RulesScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         let line = (style.row as u16) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(
@@ -759,7 +759,7 @@ impl PickScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mode = params.get(params::MODE).unwrap_or(ACTION);
         let mut entries: Vec<(Id, String)> = if mode == SWITCH || mode == NUMBER {

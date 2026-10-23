@@ -151,6 +151,7 @@ pub const PADDINGS: &[&str] = &[
 /// a gap, a gap, two gaps. A frame's line comes on top of that, so the
 /// content never touches it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Padding {
     /// As suits the frame: [`None`](Padding::None) without one, so that
     /// what the widget shows lines up with the page's margins and the
@@ -575,7 +576,7 @@ pub fn draw_line(
     let width = font.measure(size, &shown);
     let x = align.x(area, width);
     let at = Rect::new(x.max(0.0) as u16, area.y, width as u16, area.height);
-    canvas.describe(paperpaw_graphics::Role::Text, text, at, false, None);
+    canvas.describe(paperpaw_graphics::Role::Text, text, at);
     let baseline = ink_baseline(&font, size, &shown, area);
     font.draw(canvas, size, x, baseline, &shown, color);
     size
@@ -800,7 +801,7 @@ impl Wrapped {
         let top = area.y + area.height.saturating_sub(total) / 2;
         // Told as one text, drawn as lines.
         let at = Rect::new(area.x, top, area.width, total);
-        canvas.describe(paperpaw_graphics::Role::Text, &self.text, at, false, None);
+        canvas.describe(paperpaw_graphics::Role::Text, &self.text, at);
         let metrics = font.line_metrics(size);
         for (n, shown) in self.lines.iter().enumerate() {
             let y = f32::from(top) + apart * n as f32;

@@ -280,7 +280,7 @@ fn page(env: &Env<'_>) -> (UiStyle, ui::Header, Rect) {
     let style = UiStyle::new(env);
     let display = env.device.display;
     let header = ui::Header::new(env, &style, true);
-    let top = header.area.height + style.gap as u16;
+    let top = header.area().height + style.gap as u16;
     let height = display.height.saturating_sub(top);
     (style, header, Rect::new(0, top, display.width, height))
 }

@@ -350,16 +350,8 @@ fn marking(id: &'static str, role: &'static str) -> DecoratorSpec {
             .filter_map(|w| Decorated::words(&[*w], &Id::new_static(role)))
             .collect();
         // Empty and backwards ranges are left out.
-        out.push(Decorated {
-            start: at(5),
-            end: at(5),
-            role: Id::new_static(role),
-        });
-        out.push(Decorated {
-            start: at(9),
-            end: at(2),
-            role: Id::new_static(role),
-        });
+        out.push(Decorated::new(at(5), at(5), Id::new_static(role)));
+        out.push(Decorated::new(at(9), at(2), Id::new_static(role)));
         out
     })
 }
@@ -398,22 +390,10 @@ fn decorators_mark_in_their_order_and_only_while_switched_on() {
     list.add(marking("t.second", "t.second").switch(&switch).taps());
     list.add(marking("t.first", "t.first").order(-3));
     let words = [
-        PageWord {
-            text: "one",
-            start: at(0),
-            end: at(3),
-        },
-        PageWord {
-            text: "two",
-            start: at(4),
-            end: at(7),
-        },
+        PageWord::new("one", at(0), at(3)),
+        PageWord::new("two", at(4), at(7)),
     ];
-    let page = PageText {
-        path: "books/a.epub",
-        language: "en",
-        words: &words,
-    };
+    let page = PageText::new("books/a.epub", "en", &words);
     let marks = list.decorate(&h.env(), &page);
     let order: Vec<&str> = marks.iter().map(|m| m.decorator.as_str()).collect();
     assert_eq!(

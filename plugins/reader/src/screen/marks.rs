@@ -89,17 +89,9 @@ impl Book {
         let page_words: Vec<PageWord<'_>> = words
             .iter()
             .zip(&whole)
-            .map(|(w, whole)| PageWord {
-                text: whole.as_deref().unwrap_or(&w.text),
-                start: w.start,
-                end: w.end,
-            })
+            .map(|(w, whole)| PageWord::new(whole.as_deref().unwrap_or(&w.text), w.start, w.end))
             .collect();
-        let page = PageText {
-            path: &self.path,
-            language: &self.language,
-            words: &page_words,
-        };
+        let page = PageText::new(&self.path, &self.language, &page_words);
         env.decorators.decorate(env, &page)
     }
 

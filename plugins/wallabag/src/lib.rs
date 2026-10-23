@@ -775,7 +775,7 @@ impl SetupScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         let height = style.row as u16 * ROWS.len() as u16;
         let note_top = top + height + style.gap as u16;
         Self {

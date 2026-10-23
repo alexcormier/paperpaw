@@ -103,7 +103,7 @@ impl Screen for BookView {
         let display = env.device.display;
         let title = self.book.as_ref().map_or("", |b| b.title.as_str());
         self.header.draw(canvas, env, &style, title, None, None);
-        let top = self.header.area.height + style.gap as u16;
+        let top = self.header.area().height + style.gap as u16;
         let Some(book) = &self.book else {
             let area = Rect::new(0, top, display.width, display.height - top);
             ui::draw_message(canvas, env, &style, area, env.i18n.tr("stats.no-books"));

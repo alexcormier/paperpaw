@@ -153,7 +153,7 @@ impl AddScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let page = params.get(PAGE).and_then(|p| p.parse().ok()).unwrap_or(0);
         let kind = params.get(KIND).map(ToString::to_string);
@@ -401,13 +401,13 @@ impl AddScreen {
             };
             let focused = shown && preview.row == focus;
             let name = env.i18n.tr(title);
-            canvas.describe(
-                paperpaw_sdk::semantics::Role::Row,
-                name,
-                preview.title.union(&preview.area),
-                focused,
-                None,
-            );
+            canvas
+                .describe(
+                    paperpaw_sdk::semantics::Role::Row,
+                    name,
+                    preview.title.union(&preview.area),
+                )
+                .focused(focused);
             let name = ui::fit(&font, style.title, name, f32::from(preview.title.width));
             ui::draw_label(
                 canvas,

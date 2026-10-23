@@ -1,5 +1,6 @@
 //! Checks of PaperPaw's own source, as tests (`cargo test -p
-//! paperpaw-checks`, and with the workspace's): see `tests/sources.rs`.
+//! paperpaw-checks`, and with the workspace's): see `tests/sources.rs`
+//! and, for the SDK's design rules, `tests/sdk.rs`.
 //! What these checks find may only get less: a file over the limit that is
 //! listed may not grow, and one that shrank below it leaves the list.
 

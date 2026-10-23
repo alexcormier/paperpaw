@@ -618,7 +618,7 @@ pub fn draw_tool_lines(
         widest as u16,
         (cap + descent + more) as u16,
     );
-    canvas.describe(crate::semantics::Role::Text, &name, at, false, None);
+    canvas.describe(crate::semantics::Role::Text, &name, at);
     // Each line centred by its ink, as the icon above it.
     for (n, line) in lines.iter().enumerate() {
         let (first, last) = font

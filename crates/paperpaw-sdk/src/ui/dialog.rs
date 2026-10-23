@@ -168,7 +168,7 @@ impl Dialog {
             // The screen above the row of button hints.
             room: display
                 .height
-                .saturating_sub(super::button_hints_height(env)),
+                .saturating_sub(super::hints::hints_height(env)),
             stacked,
             small_text: false,
             title_size: 0,

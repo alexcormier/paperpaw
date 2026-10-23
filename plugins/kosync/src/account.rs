@@ -1,6 +1,7 @@
 //! The account screen: the server, user name and password, then *Sign in*
 //! or *Create account*; *Sign out* once signed in. A line below tells what
-//! happened. Another server signs out: accounts belong to their server
+//! happened, whole: where the screen has no room for it, a row *More about
+//! this* shows it to read. Another server signs out: accounts belong to their server
 //! (set elsewhere, the plugin signs out as well).
 //!
 //! The password never leaves this screen: only its MD5 is sent and kept,
@@ -14,7 +15,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::replies::{Confirmed, HttpReply, Typed};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
@@ -34,6 +35,8 @@ const USER_ENTERED: Event<Typed> = Event::new("kosync.user-entered");
 const PASSWORD_ENTERED: Event<Typed> = Event::new("kosync.password-entered");
 const AUTHORIZED: Event<HttpReply> = Event::new("kosync.authorized");
 const CREATED: Event<HttpReply> = Event::new("kosync.created");
+/// The message read whole, closed.
+const READ: Event<Confirmed> = Event::new("kosync.message-read");
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum Row {
@@ -43,6 +46,8 @@ enum Row {
     SignIn,
     Create,
     SignOut,
+    /// The message to read whole, where the screen has no room for it.
+    More,
 }
 
 #[derive(Debug)]
@@ -50,8 +55,8 @@ pub(crate) struct AccountScreen {
     style: UiStyle,
     header: ui::Header,
     list: ListView,
-    /// Where the message goes.
-    note: Rect,
+    /// Where the rows go, as many as the screen holds.
+    list_area: Rect,
     user: String,
     /// The MD5 of the password entered.
     key: Option<String>,
@@ -67,25 +72,17 @@ impl AccountScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         // No longer than the screen: the list pages where its rows are tall.
         let rows = ((style.row * 6) as u16).min(display.height.saturating_sub(top));
         let list =
             ListView::new(Rect::new(0, top, display.width, rows), style.row).focus_on_keys(env);
-        let note_top = top + rows + style.gap as u16;
-        let note = Rect::new(
-            0,
-            note_top,
-            display.width,
-            // Right below the rows, a few lines high.
-            ((style.row * 3) as u16).min(display.height.saturating_sub(note_top)),
-        );
         let signed_in = env.settings.read(&USER).to_string();
         let mut screen = Self {
             style,
             header,
             list,
-            note,
+            list_area: Rect::new(0, top, display.width, rows),
             user: signed_in.clone(),
             key: None,
             signed_in,
@@ -96,7 +93,7 @@ impl AccountScreen {
         screen
     }
 
-    fn rows(&self) -> Vec<Row> {
+    fn rows(&self, env: &Env<'_>) -> Vec<Row> {
         let mut rows = Vec::from([
             Row::Server,
             Row::User,
@@ -107,7 +104,36 @@ impl AccountScreen {
         if !self.signed_in.is_empty() {
             rows.push(Row::SignOut);
         }
+        if !self.fits(env, rows.len()) {
+            rows.push(Row::More);
+        }
         rows
+    }
+
+    /// Whether the message shows whole below `rows` rows.
+    fn fits(&self, env: &Env<'_>, rows: usize) -> bool {
+        let needs = ui::message_height(env, &self.style, self.list_area.width, &self.message);
+        self.note(env, rows).height >= needs
+    }
+
+    /// Where the message goes: right below the `rows` shown, down to the
+    /// margin. An explanation takes all the room there is, so that it shows
+    /// whole wherever the screen holds it.
+    fn note(&self, env: &Env<'_>, rows: usize) -> Rect {
+        let style = &self.style;
+        let shown = (style.row as u16)
+            .saturating_mul(rows as u16)
+            .min(self.list_area.height);
+        let top = self.list_area.y + shown + style.gap as u16;
+        let bottom = env
+            .device
+            .display
+            .height
+            .saturating_sub(style.margin as u16);
+        let width = self.list_area.width;
+        // As high as the message needs, right below the rows.
+        let needs = ui::message_height(env, style, width, &self.message);
+        Rect::new(0, top, width, needs.min(bottom.saturating_sub(top)))
     }
 
     /// What the line below says when nothing happened yet.
@@ -188,6 +214,12 @@ impl AccountScreen {
                 self.busy = true;
                 self.show(cx, env.i18n.tr("kosync.connecting").to_string());
             }
+            Row::More => cx.command(
+                ask::confirm(env.i18n.tr("kosync.group"), &READ)
+                    .text(self.message.clone())
+                    .only_yes()
+                    .command(),
+            ),
             Row::SignOut => {
                 self.sign_out(cx);
                 self.list.set_focus(0);
@@ -230,7 +262,7 @@ impl AccountScreen {
 impl Screen for AccountScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
-        let rows = self.rows();
+        let rows = self.rows(env);
         self.list.set_len(rows.len());
         let title = env.i18n.tr("kosync.group");
         self.header.draw(canvas, env, &style, title, None, None);
@@ -255,15 +287,25 @@ impl Screen for AccountScreen {
                     Row::SignIn => (i18n.tr("kosync.sign-in"), "›".to_string()),
                     Row::Create => (i18n.tr("kosync.create"), "›".to_string()),
                     Row::SignOut => (i18n.tr("kosync.sign-out"), "›".to_string()),
+                    Row::More => (i18n.tr("kosync.more"), "›".to_string()),
                 };
                 ui::draw_value_row(canvas, env, &style, rect, focused, title, &value);
             },
         );
-        ui::draw_message(canvas, env, &style, self.note, &self.message);
+        // Whole, or not at all: then *More about this* shows it.
+        if !rows.contains(&Row::More) {
+            ui::draw_message(
+                canvas,
+                env,
+                &style,
+                self.note(env, rows.len()),
+                &self.message,
+            );
+        }
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
-        let rows = self.rows();
+        let rows = self.rows(cx.env());
         let a = action;
         let delta = if *a == actions::UP || *a == actions::LEFT || *a == actions::PREVIOUS {
             -1
@@ -289,7 +331,7 @@ impl Screen for AccountScreen {
             cx.command(Command::RunAction(action));
             return Handled::Yes;
         }
-        let rows = self.rows();
+        let rows = self.rows(cx.env());
         let Some(index) = self.list.hit(gesture.start, rows.len()) else {
             return Handled::No;
         };

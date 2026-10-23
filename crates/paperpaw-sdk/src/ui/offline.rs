@@ -78,6 +78,7 @@ impl Buttons {
 
 /// What the reader chose.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Offer {
     /// *Go online*: [`Command::GoOnline`] was sent; do again what needed
     /// the network.

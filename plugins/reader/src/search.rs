@@ -72,7 +72,7 @@ impl SearchScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         let area = paperpaw_sdk::Rect::new(0, top, display.width, display.height - top);
         let next = (document.is_some() && !needle.is_empty()).then_some(Locator::START);
         Self {
@@ -352,7 +352,7 @@ impl Screen for SearchScreen {
         let percent = self.percent() / 10 * 10;
         if self.next.is_none() || percent != self.shown_percent {
             self.shown_percent = percent;
-            cx.request_redraw_area(self.header.area);
+            cx.request_redraw_area(self.header.area());
             if self.hits.is_empty() {
                 cx.request_redraw_area(self.list.area());
             }
