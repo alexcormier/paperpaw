@@ -1610,6 +1610,7 @@ pub paperpaw_sdk::install::Digest::Sha1(alloc::string::String)
 pub paperpaw_sdk::install::Digest::Sha256(alloc::string::String)
 impl paperpaw_sdk::install::Digest
 pub fn paperpaw_sdk::install::Digest::is_valid(&self) -> bool
+pub fn paperpaw_sdk::install::Digest::take(&mut self, &str, &str) -> bool
 pub fn paperpaw_sdk::install::Digest::text(&self) -> alloc::string::String
 impl core::default::Default for paperpaw_sdk::install::Digest
 pub fn paperpaw_sdk::install::Digest::default() -> Self

@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The files of a data plugin are checked by their SHA-256 where the
+  plugin library gives it (`sha256` beside `sha1` in `latest.files` and
+  in an update's `files`), else by their SHA-1 as before; downloads
+  kept on the card with `sha1:` go on (`install::Digest::take`).
 - Font size offers only the sizes the reading font has: on the X4 and
   X4 Pro, whose built-in fonts stop at about 12 pt, no larger ones that
   looked the same. A size set before past them gives way to the

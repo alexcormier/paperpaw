@@ -392,8 +392,9 @@ impl Item {
                     "path" => file.path = value.to_string(),
                     "url" => file.url = value.to_string(),
                     "size" => file.size = value.parse().unwrap_or(0),
-                    "sha1" => file.digest = Digest::Sha1(value.to_ascii_lowercase()),
-                    _ => {}
+                    key => {
+                        file.digest.take(key, value);
+                    }
                 }
             }
             [latest, builds, at, key] if latest == "latest" && builds == "builds" && at == "[]" => {
@@ -1261,6 +1262,17 @@ mod tests {
             ]
         );
         assert_eq!(plugin.author_key, None);
+        assert!(matches!(&package.files[0].digest, Digest::Sha1(hex) if hex == SHA1));
+        // Given with its SHA-256 too, a file is checked by that.
+        let both = file("plugin.ini").replace(
+            &format!(r#""sha1": "{SHA1}""#),
+            &format!(r#""sha1": "{SHA1}", "sha256": "{SHA256}""#),
+        );
+        let plugin = read_plugin(&page(&both), "a.json", &X4, BASE).unwrap();
+        assert_eq!(
+            plugin.package.files[0].digest,
+            Digest::Sha256(SHA256.into())
+        );
     }
 
     #[test]

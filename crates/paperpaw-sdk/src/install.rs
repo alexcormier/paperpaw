@@ -112,9 +112,11 @@ pub fn is_safe_path(path: &str) -> bool {
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum Digest {
-    /// 40 digits, as plugin libraries give the files of a folder.
+    /// 40 digits, as plugin libraries gave the files of a folder before
+    /// they gave SHA-256 (and as jobs on the card may still have them).
     Sha1(String),
-    /// 64 digits, as they give a code plugin's code.
+    /// 64 digits, as they give a code plugin's code and the files of a
+    /// folder.
     Sha256(String),
 }
 
@@ -132,6 +134,22 @@ impl Digest {
             Digest::Sha256(hex) => (hex, 64),
         };
         hex.len() == len && hex.bytes().all(|b| b.is_ascii_hexdigit())
+    }
+
+    /// Takes the digest a plugin library gives for a file as `key`
+    /// (`sha256` or `sha1`), in whichever order: SHA-256 where it gives
+    /// both. `false` for another key.
+    pub fn take(&mut self, key: &str, hex: &str) -> bool {
+        let hex = hex.to_ascii_lowercase();
+        match key {
+            "sha256" => *self = Digest::Sha256(hex),
+            "sha1" if !matches!(self, Digest::Sha256(kept) if !kept.is_empty()) => {
+                *self = Digest::Sha1(hex);
+            }
+            "sha1" => {}
+            _ => return false,
+        }
+        true
     }
 
     /// As kept in a job: `sha1:…` or `sha256:…`.
@@ -710,5 +728,24 @@ mod tests {
         assert!(!Digest::Sha256("ab".into()).is_valid());
         assert!(!Digest::Sha1("0".repeat(40)).holds(&storage, "f"));
         assert!(Digest::parse("md5:00").is_none());
+    }
+
+    /// A file a library gives both digests of is checked by its SHA-256,
+    /// whichever comes first; one with only a SHA-1 by that.
+    #[test]
+    fn sha256_is_taken_before_sha1() {
+        let (sha1, sha256) = ("a".repeat(40), "B".repeat(64));
+        for keys in [["sha1", "sha256"], ["sha256", "sha1"]] {
+            let mut digest = Digest::default();
+            for key in keys {
+                let hex = if key == "sha1" { &sha1 } else { &sha256 };
+                assert!(digest.take(key, hex));
+            }
+            assert_eq!(digest, Digest::Sha256("b".repeat(64)));
+        }
+        let mut digest = Digest::default();
+        assert!(digest.take("sha1", &sha1));
+        assert!(!digest.take("md5", "00"));
+        assert_eq!(digest, Digest::Sha1(sha1));
     }
 }
