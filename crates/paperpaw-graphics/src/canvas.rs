@@ -270,7 +270,7 @@ impl<'a> Canvas<'a> {
 
     /// Tells what is drawn at `area`, for those who ask: a part in
     /// `role` with `label`, said as it is once the statement ends;
-    /// [`Describe::focused`], [`Describe::on`] and [`Describe::disabled`]
+    /// `focused`, `on` and `disabled`
     /// say more first. Nothing is kept (nor its text copied) where nobody
     /// asks.
     pub fn describe<'c>(&'c mut self, role: Role, label: &'c str, area: Rect) -> Describe<'c> {
