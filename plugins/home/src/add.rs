@@ -272,10 +272,10 @@ impl AddScreen {
             .map_or(0, |p| p.page)
     }
 
-    fn paging(&self) -> Option<(usize, usize)> {
+    fn paging(&self) -> Option<ui::Paging> {
         if self.is_gallery() {
             let pages = self.gallery_pages();
-            (pages > 1).then(|| (self.gallery_page(), pages))
+            (pages > 1).then(|| ui::Paging::new(self.gallery_page(), pages))
         } else {
             self.list.paging(self.rows.len())
         }

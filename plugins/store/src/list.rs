@@ -281,9 +281,9 @@ impl ListScreen {
     }
 
     /// The page and the number of pages, where there is more than one.
-    fn paging(&self) -> Option<(usize, usize)> {
+    fn paging(&self) -> Option<ui::Paging> {
         let paging = self.list.paging();
-        (paging.1 > 1).then_some(paging)
+        (paging.pages > 1).then_some(paging)
     }
 
     /// What entry `row` says at its end.

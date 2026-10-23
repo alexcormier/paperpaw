@@ -859,7 +859,12 @@ impl Screen for PanelScreen {
             }
         }
         if let Some(pager) = &self.pager {
-            pager.draw(canvas, env, &style, (self.page, self.pages()));
+            pager.draw(
+                canvas,
+                env,
+                &style,
+                ui::Paging::new(self.page, self.pages()),
+            );
         }
     }
 

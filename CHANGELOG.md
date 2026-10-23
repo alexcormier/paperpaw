@@ -412,6 +412,10 @@ file to your report.
   everything drawn into it so. Faint menu and quick panel entries are
   told as disabled, and the remote control's `describe` (and the web
   emulator's) says `disabled` in a part's state.
+- SDK: which page of how many a list shows is a `ui::Paging` (`page`,
+  `pages`, `is_first()`, `is_last()`), in place of a pair of numbers:
+  `Rows::paging()`, `Sections::paging()`, `ListView::paging()`, and what
+  `Header` and `Pager` draw and hit.
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,

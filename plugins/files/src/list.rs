@@ -966,7 +966,7 @@ impl Screen for ListScreen {
         let layout = &self.layout;
         let style = layout.style;
         let len = self.len();
-        let paging = (len > 0).then(|| (self.page_of(self.focus), self.pages()));
+        let paging = (len > 0).then(|| ui::Paging::new(self.page_of(self.focus), self.pages()));
         let title = env.i18n.tr("files.title");
         layout.header.draw(canvas, env, &style, title, None, paging);
         let has_books = self.index.has_books();
@@ -1166,7 +1166,7 @@ impl Screen for ListScreen {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        let paging = Some((self.page_of(self.focus), self.pages()));
+        let paging = Some(ui::Paging::new(self.page_of(self.focus), self.pages()));
         let style = self.layout.style;
         if let Some(action) = self.layout.header.tap(cx.env(), &style, point, paging) {
             cx.command(Command::RunAction(action));

@@ -357,7 +357,7 @@ impl Covered {
 }
 
 /// The page shown in a header: its number and the number of pages.
-fn paging(rows: &ui::Rows) -> Option<(usize, usize)> {
+fn paging(rows: &ui::Rows) -> Option<ui::Paging> {
     Some(rows.paging())
 }
 
