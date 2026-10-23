@@ -163,7 +163,10 @@ fn run(call: HttpCall) -> HttpResponse {
     };
     if !output.status.success() {
         let error = curl_error(output.status.code());
-        return failed(error, String::from_utf8_lossy(&output.stderr).trim().to_string());
+        return failed(
+            error,
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        );
     }
     answer(&call, output.stdout)
 }

@@ -76,7 +76,11 @@ fn http_errors_are_told_with_their_status() {
 #[test]
 fn no_answer_names_the_host() {
     let (mut h, call) = browse();
-    h.reply(HttpResponse::failed(call.id, paperpaw_sdk::HttpError::Timeout, "timed out"));
+    h.reply(HttpResponse::failed(
+        call.id,
+        paperpaw_sdk::HttpError::Timeout,
+        "timed out",
+    ));
     let shown = h.said();
     assert!(
         shown.contains("www.gutenberg.org could not be reached"),

@@ -310,7 +310,10 @@ impl Network {
                 let timeout = u64::from(call.timeout_ms);
                 if delay > timeout {
                     let reason = "timed out (the recorded answer takes longer)";
-                    (Some(HttpResponse::failed(call.id, HttpError::Timeout, reason)), timeout)
+                    (
+                        Some(HttpResponse::failed(call.id, HttpError::Timeout, reason)),
+                        timeout,
+                    )
                 } else {
                     let from = (url != call.url).then_some(url.as_str());
                     let body = Cow::Borrowed(&*fixture.body);
@@ -328,7 +331,10 @@ impl Network {
                     "no recorded answer for {} {url} (no network in the browser's emulator)",
                     call.method
                 );
-                (Some(HttpResponse::failed(call.id, HttpError::NoNetwork, &reason)), 0)
+                (
+                    Some(HttpResponse::failed(call.id, HttpError::NoNetwork, &reason)),
+                    0,
+                )
             }
         };
         self.seen.push(seen);

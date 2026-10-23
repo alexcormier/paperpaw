@@ -289,10 +289,12 @@ const paperpaw_sdk::builtin::status_lines::ITEMS: paperpaw_sdk::id::Id = Id::new
 const paperpaw_sdk::command::MAX_CLIPBOARD: usize = 4_096usize
 const paperpaw_sdk::command::http_params::BODY: &str = "body"
 const paperpaw_sdk::command::http_params::CONTENT_TYPE: &str = "content-type"
+const paperpaw_sdk::command::http_params::ERROR: &str = "error"
 const paperpaw_sdk::command::http_params::ETAG: &str = "etag"
 const paperpaw_sdk::command::http_params::FINAL_URL: &str = "final-url"
 const paperpaw_sdk::command::http_params::HEADER: &str = "header:"
 const paperpaw_sdk::command::http_params::STATUS: &str = "status"
+const paperpaw_sdk::command::http_params::TRUNCATED: &str = "truncated"
 const paperpaw_sdk::command::server_params::ADDRESS: &str = "address"
 const paperpaw_sdk::command::server_params::BODY_FILE: &str = "body-file"
 const paperpaw_sdk::command::server_params::FAILED: &str = "failed"
@@ -380,7 +382,7 @@ const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "cod
 const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = CROSSING
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
 const paperpaw_sdk::native::INTERFACE: u16 = 2u16
-const paperpaw_sdk::native::LAYOUT: u64 = 8_479_768_381_693_771_469u64
+const paperpaw_sdk::native::LAYOUT: u64 = 9_529_769_984_825_922_701u64
 const paperpaw_sdk::native::TOOLCHAIN: &str = if cfg!(target_arch = "riscv32") { "rustc 1.99.0, riscv32imc-unknown-none-elf" } else if cfg!(target_arch = "xtensa") { "esp 1.97.0.0, xtensa-esp32s3-none-elf" } else { "the compiler of PaperPaw's release, for this computer" }
 const paperpaw_sdk::numbers::DECIMAL_MARK: &str = "core.decimal"
 const paperpaw_sdk::pattern::MAX_PATTERN: usize = 256usize
@@ -530,6 +532,7 @@ enum paperpaw_sdk::plugins::PluginState { Running, Off, Failed }
 enum paperpaw_sdk::power::PowerLevel { Normal, Saving, Offline }
 enum paperpaw_sdk::power::Start { Unknown, PowerOn, Wake, Restart }
 enum paperpaw_sdk::readers::Choice<'a> { Book(0: &'a str), Folder(0: &'a str) }
+enum paperpaw_sdk::replies::HttpError { NoNetwork, Dns, Tls, Timeout, Refused, Replaced, Cancelled, Io }
 enum paperpaw_sdk::replies::ServerNotice { Started { server: paperpaw_sdk::id::Id, address: alloc::string::String }, Request { server: paperpaw_sdk::id::Id, request: u32, method: alloc::string::String, target: alloc::string::String, body_file: core::option::Option<alloc::string::String> }, Failed { server: paperpaw_sdk::id::Id, reason: alloc::string::String }, Stopped { server: paperpaw_sdk::id::Id } }
 enum paperpaw_sdk::replies::SocketNotice { Connected { socket: paperpaw_sdk::id::Id }, Received { socket: paperpaw_sdk::id::Id, text: alloc::string::String }, Saved { socket: paperpaw_sdk::id::Id, path: alloc::string::String }, Closed { socket: paperpaw_sdk::id::Id, reason: alloc::string::String }, Failed { socket: paperpaw_sdk::id::Id, reason: alloc::string::String }, Answer { socket: paperpaw_sdk::id::Id, text: alloc::string::String, from: alloc::string::String }, Done { socket: paperpaw_sdk::id::Id, reason: alloc::string::String } }
 enum paperpaw_sdk::screen::CloseCause { Back, TapOutside, Slot }
@@ -733,7 +736,7 @@ struct paperpaw_sdk::native::Fingerprint(0: u64)
 struct paperpaw_sdk::native::Native { fingerprint: paperpaw_sdk::native::Fingerprint, toolchain: alloc::borrow::Cow<'static, str>, compiler: u32, file: alloc::borrow::Cow<'static, str>, safe_mode: core::option::Option<paperpaw_sdk::native::SafeMode>, not_installed: alloc::vec::Vec<paperpaw_sdk::native::NotInstalled> }
 struct paperpaw_sdk::native::NotInstalled { plugin: paperpaw_sdk::id::Id, reason: paperpaw_sdk::native::NotInstalledReason }
 struct paperpaw_sdk::native::SafeMode { reason: paperpaw_sdk::native::SafeModeReason, last_loaded: core::option::Option<alloc::string::String>, crashed: core::option::Option<alloc::string::String>, switched_off: alloc::vec::Vec<paperpaw_sdk::id::Id> }
-struct paperpaw_sdk::params::Params(0: alloc::vec::Vec<(alloc::borrow::Cow<'static, str>, alloc::string::String)>)
+struct paperpaw_sdk::params::Params { values: alloc::vec::Vec<(alloc::borrow::Cow<'static, str>, alloc::string::String)>, carried: core::option::Option<alloc::rcs::rc::Rc<dyn core::any::Any>> }
 struct paperpaw_sdk::pattern::Class { negated: bool, items: alloc::vec::Vec<paperpaw_sdk::pattern::Item> }
 struct paperpaw_sdk::pattern::Matches<'p, 't> { pattern: &'p paperpaw_sdk::pattern::Pattern, text: &'t str, at: usize, budget: u32 }
 struct paperpaw_sdk::pattern::Pattern { alternatives: alloc::vec::Vec<alloc::vec::Vec<paperpaw_sdk::pattern::Node>>, fold: bool, source: alloc::string::String }
@@ -764,7 +767,7 @@ struct paperpaw_sdk::reading::typeset::StatusRoom { top: bool, bottom: bool, hei
 struct paperpaw_sdk::reading::typeset::WordBox { area: paperpaw_platform::geometry::Rect, text: alloc::string::String, start: paperpaw_document::Locator, end: paperpaw_document::Locator }
 struct paperpaw_sdk::replies::Chosen { path: alloc::string::String, context: paperpaw_sdk::params::Params }
 struct paperpaw_sdk::replies::Confirmed { yes: bool, context: paperpaw_sdk::params::Params }
-struct paperpaw_sdk::replies::HttpReply { status: u16, body: alloc::string::String, etag: core::option::Option<alloc::string::String>, content_type: core::option::Option<alloc::string::String>, final_url: core::option::Option<alloc::string::String>, context: paperpaw_sdk::params::Params, refused: core::option::Option<paperpaw_sdk::work::Refusal>, headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)> }
+struct paperpaw_sdk::replies::HttpReply { status: u16, body: alloc::vec::Vec<u8>, truncated: bool, error: core::option::Option<paperpaw_sdk::replies::HttpError>, etag: core::option::Option<alloc::string::String>, content_type: core::option::Option<alloc::string::String>, final_url: core::option::Option<alloc::string::String>, context: paperpaw_sdk::params::Params, refused: core::option::Option<paperpaw_sdk::work::Refusal>, headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)> }
 struct paperpaw_sdk::replies::Typed { text: alloc::string::String, typing: bool, context: paperpaw_sdk::params::Params }
 struct paperpaw_sdk::screen::Cx<'a, 'e> { env: &'a paperpaw_sdk::env::Env<'e>, output: &'a mut paperpaw_sdk::screen::Output, key: core::option::Option<paperpaw_sdk::screen::ScreenKey>, params: &'a paperpaw_sdk::params::Params }
 struct paperpaw_sdk::screen::Output { commands: alloc::vec::Vec<paperpaw_sdk::command::Command>, refresh: core::option::Option<paperpaw_platform::display::RefreshMode>, refresh_set: core::option::Option<paperpaw_platform::display::RefreshMode>, refresh_cause: core::option::Option<paperpaw_sdk::filters::RefreshCause>, redraw: bool, redraw_area: core::option::Option<paperpaw_platform::geometry::Rect>, wake_at: core::option::Option<paperpaw_platform::input::Instant> }
@@ -893,7 +896,7 @@ struct paperpaw_sdk::work::Work { id: paperpaw_sdk::id::Id, key: alloc::string::
 struct paperpaw_sdk::work::WorkRefused { work: paperpaw_sdk::id::Id, refusal: paperpaw_sdk::work::Refusal }
 struct paperpaw_sdk::work::WorkSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, step: paperpaw_sdk::work::StepFn }
 struct paperpaw_sdk::work::WorkStates { works: alloc::vec::Vec<(paperpaw_sdk::id::Id, alloc::string::String, paperpaw_sdk::work::WorkState)>, notes: alloc::vec::Vec<(paperpaw_sdk::id::Id, paperpaw_sdk::work::Note)> }
-trait paperpaw_sdk::event::EventData { function to_params, function from_params }
+trait paperpaw_sdk::event::EventData { function to_params, function from_params, function into_params }
 trait paperpaw_sdk::event::ParamValue { function to_param, function from_param, function missing }
 trait paperpaw_sdk::keys::GestureRecognizer { function pointer, function tick, function next_tick }
 trait paperpaw_sdk::keys::KeyBindings { function bound, function bindings }

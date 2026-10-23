@@ -286,7 +286,11 @@ mod tests {
         let (places, search) = outcome(&reply(200, r#"{"generationtime_ms":0.3}"#), name());
         assert!(places.is_empty());
         assert_eq!(search, Search::Nothing(name()));
-        let failed = HttpReply::failed(paperpaw_sdk::HttpError::NoNetwork, "no network", Params::new());
+        let failed = HttpReply::failed(
+            paperpaw_sdk::HttpError::NoNetwork,
+            "no network",
+            Params::new(),
+        );
         let (_, search) = outcome(&failed, name());
         assert_eq!(search, Search::Failed);
     }
