@@ -120,13 +120,14 @@ fn the_settings_open_from_the_menu_and_the_quick_panel() {
         );
     };
 
-    // The X4: the menu held open on confirm, Settings its sixth entry.
+    // The X4: the menu held open on confirm, Settings its seventh entry
+    // (after the quick panel).
     let mut x4 = started("xteink-x4");
     x4.button("confirm", true, later(60_000));
     x4.button("confirm", false, later(1_500));
     x4.advance(later(2_000));
     shows(&x4, "menu.");
-    for _ in 0..5 {
+    for _ in 0..6 {
         x4.button("right", true, later(60_000));
         x4.button("right", false, later(100));
     }
