@@ -338,3 +338,51 @@ fn a_number_is_changed_with_the_buttons_as_on_the_settings_pages() {
     assert_eq!(app.kernel.settings().int(size), before + 2);
     assert_ne!(question(&mut app), "Font size");
 }
+
+/// How high the ink of the first line of the sample of the text is, as
+/// drawn at `size` points.
+fn sample_ink(app: &mut App, size: i64) -> u16 {
+    app.set("core.font-size", &size.to_string());
+    app.render();
+    // Told inside the card's button, which names the value: as drawn.
+    let drawn = app.kernel.described();
+    let sample = drawn
+        .iter()
+        .find(|d| d.label.starts_with("The quick brown fox"))
+        .unwrap_or_else(|| {
+            panic!(
+                "no sample at {size}:
+{}",
+                app.described()
+            )
+        });
+    let a = sample.area;
+    let (mut top, mut bottom) = (None, 0);
+    for y in a.y..a.y + a.height {
+        let inked = (a.x..a.x + a.width).any(|x| app.inked(i32::from(x), i32::from(y)));
+        if inked {
+            top.get_or_insert(y);
+            bottom = y;
+        } else if top.is_some() {
+            break;
+        }
+    }
+    top.map_or(0, |top| bottom - top + 1)
+}
+
+/// The sample of the text shows the size chosen, in the reading font: it
+/// grows with each size, also past 12, and is never smaller at a larger
+/// size (the tests' bitmap fonts stop at 48 pixels, about 16 points here).
+#[test]
+fn the_sample_shows_the_size_chosen() {
+    for device in DEVICES {
+        let mut app = first_start(device);
+        page_of(&mut app, "Font size");
+        let inks: Vec<u16> = [10, 12, 16, 20, 24]
+            .iter()
+            .map(|s| sample_ink(&mut app, *s))
+            .collect();
+        assert!(inks[..3].windows(2).all(|w| w[0] < w[1]), "{inks:?}");
+        assert!(inks.windows(2).all(|w| w[0] <= w[1]), "{inks:?}");
+    }
+}

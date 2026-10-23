@@ -16,7 +16,7 @@
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::builtin::{actions, events};
+use paperpaw_sdk::builtin::{actions, events, fonts};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setup::SetupPage;
@@ -82,6 +82,56 @@ fn line(env: &Env<'_>, style: &UiStyle, size: f32) -> u16 {
     style
         .font(env)
         .map_or(size * 1.3, |f| f.line_metrics(size).line_height) as u16
+}
+
+/// The font a sample of the reading text is in: the reader's (the UI
+/// font's sizes may stop short of those the reader has).
+fn sample_font<'a>(env: &Env<'a>, style: &UiStyle) -> Option<paperpaw_sdk::FontHandle<'a>> {
+    env.fonts
+        .role(fonts::READING.as_str())
+        .or_else(|| style.font(env))
+}
+
+/// The height of `lines` lines of the sample at `size`.
+fn sample_lines(env: &Env<'_>, style: &UiStyle, size: f32, lines: u16) -> u16 {
+    sample_font(env, style).map_or(size * 1.3, |f| f.line_metrics(size).line_height) as u16 * lines
+}
+
+/// Draws the sample `text` at `size` in the reading font in `area`,
+/// wrapped: the lines that fit (fewer words at large sizes), at least
+/// one.
+fn draw_sample(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    style: &UiStyle,
+    area: Rect,
+    size: f32,
+    text: &str,
+) {
+    let Some(font) = sample_font(env, style) else {
+        return;
+    };
+    canvas.describe(Role::Text, text, area, false, None);
+    let height = font.line_metrics(size).line_height.max(1.0);
+    let fit = ((f32::from(area.height) / height) as usize).max(1);
+    let mut top = area.y;
+    for range in font
+        .wrap(size, text, f32::from(area.width))
+        .into_iter()
+        .take(fit)
+    {
+        let row = Rect::new(area.x, top, area.width, height as u16);
+        ui::draw_label(
+            canvas,
+            &font,
+            size,
+            f32::from(area.x),
+            row,
+            &text[range],
+            Color::BLACK,
+        );
+        top += height as u16;
+    }
 }
 
 /// Draws `text` left-aligned in `area`, wrapped, at most `max` lines.
@@ -213,6 +263,14 @@ impl Guide {
             .is_some_and(|s| matches!(s.kind, SettingKind::Int { .. }))
     }
 
+    /// The size of the sample of the text, where the step's number is a
+    /// size of the text (points): as the setting is now.
+    fn sample_size(&self, env: &Env<'_>) -> Option<f32> {
+        let spec = self.setting(env)?;
+        (spec.extra().unit.as_deref() == Some("core.unit.pt"))
+            .then(|| env.metrics.pt(env.settings.int(spec.id.as_str()) as f32))
+    }
+
     /// What can be chosen on the page, top to bottom.
     fn targets(&self) -> Vec<Target> {
         let mut targets = Vec::new();
@@ -289,9 +347,15 @@ impl Guide {
             None => (None, None, None),
             Some(_) => {
                 let number = self.is_number(env);
-                // A number: − value + on a row, a sample below it.
+                // A number: − value + on a row, a sample below it: two
+                // lines of the text at that size, in the reading font (the
+                // card as high as there is room for, then fewer words).
+                let below = match self.sample_size(env) {
+                    Some(size) => sample_lines(env, style, size, 2),
+                    None => line(env, style, style.text) * 2,
+                };
                 let height = if number {
-                    button + gap * 2 + line(env, style, style.text) * 2 + gap * 2
+                    button + gap * 2 + below + gap * 2
                 } else {
                     button + gap * 2
                 };
@@ -515,8 +579,7 @@ impl Guide {
                         + (f32::from(between.width) - font.measure(style.title, &label)) / 2.0;
                     ui::draw_label(canvas, &font, style.title, x, between, &label, Color::BLACK);
                     // A sample of the text at that size, where it is one.
-                    if spec.extra().unit.as_deref() == Some("core.unit.pt") {
-                        let size = env.metrics.pt(env.settings.int(spec.id.as_str()) as f32);
+                    if let Some(size) = self.sample_size(env) {
                         let top = minus.y + minus.height + style.gap as u16;
                         let sample = Rect::new(
                             inner.x,
@@ -525,15 +588,13 @@ impl Guide {
                             (card.y + card.height).saturating_sub(top + style.gap as u16),
                         );
                         let mut clipped = canvas.clipped(sample);
-                        paragraph(
+                        draw_sample(
                             &mut clipped,
                             env,
                             style,
                             sample,
                             size,
                             env.i18n.tr("setup.sample"),
-                            2,
-                            Color::BLACK,
                         );
                     }
                     return;
@@ -564,6 +625,9 @@ impl Guide {
 impl Screen for Guide {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         canvas.clear(Color::WHITE);
+        // As the page is now: the sample's card follows its size as it
+        // is changed (and previewed).
+        self.layout = self.layout(env);
         let style = self.style;
         let l = self.layout;
         self.draw_dots(canvas);
@@ -674,6 +738,13 @@ impl Screen for Guide {
         // or goes with it; the page shown stays.
         if let Some(changed) = events::SETTING_CHANGED.read(event, params) {
             let env = *cx.env();
+            // The page's own setting, changed elsewhere too: shown as it is
+            // now (the sample at its size).
+            if self.setting(&env).is_some_and(|spec| spec.id == changed.id) {
+                self.layout = self.layout(&env);
+                cx.request_redraw();
+                cx.request_refresh(RefreshMode::Fast);
+            }
             if env.settings.governs(changed.id.as_str()) {
                 let shown = self.steps.get(self.page).cloned();
                 self.steps = steps(&env);
