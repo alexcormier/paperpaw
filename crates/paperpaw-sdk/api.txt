@@ -3606,6 +3606,14 @@ pub fn paperpaw_sdk::ui::ListView::set_focus(&mut self, usize) -> paperpaw_sdk::
 pub fn paperpaw_sdk::ui::ListView::set_len(&mut self, usize)
 pub fn paperpaw_sdk::ui::ListView::set_shown(&mut self, bool)
 pub fn paperpaw_sdk::ui::ListView::shown(&self) -> bool
+pub struct paperpaw_sdk::ui::NumberEdit
+impl paperpaw_sdk::ui::NumberEdit
+pub fn paperpaw_sdk::ui::NumberEdit::active(&self) -> bool
+pub fn paperpaw_sdk::ui::NumberEdit::finish(&mut self, &paperpaw_sdk::Env<'_>, core::option::Option<&paperpaw_sdk::SettingSpec>, bool, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::NumberEdit::hint(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
+pub fn paperpaw_sdk::ui::NumberEdit::leave(&mut self, &paperpaw_sdk::Env<'_>, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::NumberEdit::on_action(&mut self, &paperpaw_sdk::Env<'_>, core::option::Option<&paperpaw_sdk::SettingSpec>, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::NumberEdit::start(&mut self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, &mut paperpaw_sdk::Cx<'_, '_>)
 pub struct paperpaw_sdk::ui::OfflineOffer
 impl paperpaw_sdk::ui::offline::OfflineOffer
 pub fn paperpaw_sdk::ui::offline::OfflineOffer::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect)
@@ -3868,6 +3876,7 @@ pub fn paperpaw_sdk::ui::edge_bar_band(&paperpaw_sdk::ui::UiStyle, paperpaw_plat
 pub fn paperpaw_sdk::ui::edge_bar_height(&paperpaw_sdk::ui::UiStyle) -> u16
 pub fn paperpaw_sdk::ui::edge_room(&paperpaw_sdk::ui::UiStyle, u16) -> u16
 pub fn paperpaw_sdk::ui::edit_text(&str, &str, &paperpaw_sdk::event::Event<paperpaw_sdk::replies::Typed>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::ui::editing_hint(&paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
 pub fn paperpaw_sdk::ui::empty_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str, &str) -> u16
 pub fn paperpaw_sdk::ui::fill(&mut paperpaw_graphics::canvas::Canvas<'_>, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::fill_round(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)

@@ -1040,12 +1040,13 @@ impl Screen for PanelScreen {
         Handled::Yes
     }
 
-    fn hint(&self, action: &Id, _: &Env<'_>) -> Hint {
-        // While the buttons move a slider: what each does to it.
-        match ui::slider::key_step(action).filter(|_| self.editing.is_some()) {
-            Some(step) if step < 0 => Hint::Text(String::from("−")),
-            Some(_) => Hint::Text(String::from("+")),
-            None => Hint::Default,
+    fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {
+        // While the buttons move a slider: what each key does to it, as
+        // on the settings pages.
+        if self.editing.is_some() {
+            ui::editing_hint(action, env)
+        } else {
+            Hint::Default
         }
     }
 

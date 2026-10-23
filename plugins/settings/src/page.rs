@@ -134,10 +134,9 @@ pub(super) struct GroupPage {
     pub(super) rows: ui::Rows,
     /// The focus shows (buttons were used, or a number was tapped).
     pub(super) keys: bool,
-    /// The focused number is being changed with the buttons: the value it
-    /// had before. What it is changed to shows without being kept
-    /// (`Command::PreviewSettings`) until it is chosen.
-    pub(super) editing: Option<SettingValue>,
+    /// The focused number being changed with the buttons, as every
+    /// screen that shows one does it (`ui::NumberEdit`).
+    pub(super) edit: ui::NumberEdit,
     /// A slider's knob taken along by a finger: its row and the value it
     /// had before (shown, not kept, until the finger is lifted).
     pub(super) drag: ui::SliderDrag,
@@ -300,7 +299,7 @@ impl GroupPage {
             header,
             rows: ui::Rows::new(area, heights, headings),
             keys: !env.device.input.touch,
-            editing: None,
+            edit: ui::NumberEdit::default(),
             drag: ui::SliderDrag::default(),
             dragged: None,
             noted,
@@ -316,11 +315,11 @@ impl GroupPage {
     fn rebuild(&mut self, env: &Env<'_>) {
         let focus = self.rows.focus();
         let (keys, drag, dragged) = (self.keys, self.drag, self.dragged);
-        let editing = self.editing.take();
+        let edit = core::mem::take(&mut self.edit);
         *self = Self::new(env, self.group.clone());
         refocus(&mut self.rows, focus);
         self.keys = keys;
-        self.editing = editing;
+        self.edit = edit;
         self.drag = drag;
         self.dragged = dragged;
     }
@@ -365,44 +364,10 @@ impl GroupPage {
         }
     }
 
-    /// Moves the number being changed with the buttons by `step`: shown
-    /// at once, kept when chosen ([`GroupPage::finish`]).
-    fn preview_step(&self, env: &Env<'_>, step: i64, cx: &mut Cx<'_, '_>) {
-        let Some(spec) = self.focused() else {
-            return;
-        };
-        let current = env.settings.get(spec.id.as_str());
-        if let Some(value) = ui::next_value(env, spec, step).filter(|v| Some(v) != current) {
-            cx.command(Command::PreviewSettings(alloc::vec![(
-                spec.id.clone(),
-                Some(value)
-            )]));
-        }
-    }
-
-    /// Ends changing the focused number with the buttons: keeps the value
-    /// shown (`keep`), or shows the one before again.
-    fn finish(&mut self, env: &Env<'_>, keep: bool, cx: &mut Cx<'_, '_>) {
-        let before = self.editing.take();
-        if keep
-            && let Some(spec) = self.focused()
-            && let Some(shown) = env.settings.get(spec.id.as_str())
-            && Some(shown) != before.as_ref()
-        {
-            cx.command(Command::SetSetting(spec.id.clone(), shown.clone()));
-        }
-        end_preview(env, cx);
-        // Quick while it moved; now with its grays again.
-        cx.request_redraw();
-        cx.request_refresh(RefreshMode::Partial);
-    }
-
     /// Stops changing a number with the buttons without keeping what was
     /// shown, e.g. for a tap elsewhere.
     fn leave_editing(&mut self, env: &Env<'_>, cx: &mut Cx<'_, '_>) {
-        if self.editing.take().is_some() {
-            end_preview(env, cx);
-        }
+        self.edit.leave(env, cx);
     }
 
     /// How much lower a slider's band is in `rect` for its long title
@@ -466,9 +431,8 @@ impl GroupPage {
         }
         match spec.kind {
             SettingKind::Int { .. } => {
-                self.editing = env.settings.get(spec.id.as_str()).cloned();
-                cx.request_redraw();
-                cx.request_refresh(RefreshMode::Fast);
+                let spec = spec.clone();
+                self.edit.start(env, &spec, cx);
             }
             _ => self.change(env, 1, cx),
         }
@@ -484,7 +448,7 @@ impl Screen for GroupPage {
             preview.draw(canvas, env, &style);
         }
         let entries = &self.entries;
-        let editing = self.editing.is_some();
+        let editing = self.edit.active();
         let noted = self.noted;
         let room = self.number_room.as_str();
         let all_lines = &self.lines;
@@ -582,15 +546,9 @@ impl Screen for GroupPage {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let env = *cx.env();
-        if self.editing.is_some() {
-            if let Some(step) = ui::slider::key_step(action) {
-                self.preview_step(&env, step, cx);
-            } else if *action == actions::CONFIRM || *action == actions::BACK {
-                self.finish(&env, *action == actions::CONFIRM, cx);
-            } else {
-                return Handled::No;
-            }
-            return Handled::Yes;
+        if self.edit.active() {
+            let spec = self.focused().cloned();
+            return self.edit.on_action(&env, spec.as_ref(), action, cx);
         }
         if let Some(change) = navigate_rows(&mut self.rows, &mut self.keys, action) {
             change.request(cx);
@@ -752,20 +710,7 @@ impl Screen for GroupPage {
 
     fn hint(&self, action: &Id, env: &Env<'_>) -> Hint {
         // While the buttons change a number: what each does to it.
-        if self.editing.is_none() {
-            return Hint::Default;
-        }
-        match ui::slider::key_step(action) {
-            Some(step) if step < 0 => Hint::Text(String::from("−")),
-            Some(_) => Hint::Text(String::from("+")),
-            None if *action == actions::CONFIRM => {
-                Hint::Text(env.i18n.tr("settings.hint.keep").to_string())
-            }
-            None if *action == actions::BACK => {
-                Hint::Text(env.i18n.tr("settings.hint.cancel").to_string())
-            }
-            None => Hint::Default,
-        }
+        self.edit.hint(action, env)
     }
 
     fn on_hide(&mut self) {

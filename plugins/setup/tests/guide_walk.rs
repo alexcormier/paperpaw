@@ -112,9 +112,9 @@ fn the_choices_made_are_kept_and_read_by_a_new_kernel() {
         if touch(&app) {
             app.tap_on("Deutsch");
         } else {
-            // Up from Next to the card; right picks the second.
+            // Up from Next to the card; Select picks the other one.
             app.run(actions::UP);
-            app.run(actions::RIGHT);
+            app.run(actions::CONFIRM);
         }
         assert_eq!(app.kernel.settings().text("core.language"), "de");
         // The guide speaks German at once.
@@ -129,9 +129,12 @@ fn the_choices_made_are_kept_and_read_by_a_new_kernel() {
             app.tap_on("+");
             app.tap_on("+");
         } else {
+            // As on the settings pages: Select, two steps, Select keeps.
             app.run(actions::UP);
+            app.run(actions::CONFIRM);
             app.run(actions::RIGHT);
             app.run(actions::RIGHT);
+            app.run(actions::CONFIRM);
         }
         assert_eq!(app.kernel.settings().int(size), before + 2);
         walk(&mut app, "Weiter", "Los geht's");
@@ -284,4 +287,54 @@ fn a_device_used_before_does_not_show_it() {
         assert_eq!(app.screen(), HOME);
         assert!(app.storage.exists(SETUP_DONE));
     }
+}
+
+/// Whether the page's number is being changed with the buttons: its −
+/// and + filled, as on the settings pages.
+fn changing(app: &mut App) -> bool {
+    app.parts()
+        .iter()
+        .any(|p| p.role == Role::Button && p.label == "−" && p.on == Some(true))
+}
+
+#[test]
+fn a_number_is_changed_with_the_buttons_as_on_the_settings_pages() {
+    let mut app = first_start(X4);
+    let size = "core.font-size";
+    let before = app.kernel.settings().int(size);
+    page_of(&mut app, "Font size");
+    // On the card, right moves on: the page is never a trap.
+    app.run(actions::UP);
+    app.run(actions::RIGHT);
+    assert_eq!(app.kernel.settings().int(size), before);
+    assert_eq!(app.focused().as_deref(), Some("Next"));
+    // Select changes it; left and right move it, shown at once.
+    app.run(actions::LEFT);
+    assert!(!changing(&mut app));
+    app.run(actions::CONFIRM);
+    assert!(changing(&mut app), "{}", app.described());
+    app.run(actions::RIGHT);
+    app.run(actions::RIGHT);
+    assert_eq!(app.kernel.settings().int(size), before + 2);
+    // Back: the value before again, the page stays.
+    app.run(actions::BACK);
+    assert_eq!(app.kernel.settings().int(size), before);
+    assert_eq!(question(&mut app), "Font size");
+    assert!(!changing(&mut app));
+    // Select keeps it.
+    app.run(actions::CONFIRM);
+    app.run(actions::RIGHT);
+    app.run(actions::CONFIRM);
+    assert_eq!(app.kernel.settings().int(size), before + 1);
+    assert!(
+        app.storage
+            .config()
+            .contains(&format!("font-size = {}", before + 1))
+    );
+    // A page button keeps it and turns the page, as ever.
+    app.run(actions::CONFIRM);
+    app.run(actions::RIGHT);
+    app.run(actions::NEXT_PAGE);
+    assert_eq!(app.kernel.settings().int(size), before + 2);
+    assert_ne!(question(&mut app), "Font size");
 }
