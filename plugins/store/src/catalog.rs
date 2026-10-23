@@ -17,6 +17,10 @@
 //! `author_key` its author signs with; it is listed where a build fits
 //! this device and PaperPaw.
 //!
+//! `"official": true` marks PaperPaw's own plugins. It is taken only
+//! where the plugin's `author_key` is also PaperPaw's
+//! ([`FIRST_PARTY_KEY`]), so a list made elsewhere cannot give the mark.
+//!
 //! The plugins that fit go to an index on the storage: a line each, and
 //! where each line begins (4 bytes each). In memory are only the runs of
 //! plugins of one group, so the list may grow without limit. A plugin's
@@ -39,6 +43,11 @@ use paperpaw_sdk::{Env, PluginKind, Plugins, Storage, Version};
 
 use crate::PLUGIN;
 
+mod runs;
+
+pub(crate) use runs::RUN;
+use runs::{Cursor, Keyed, Output, before, order_of};
+
 /// The format of the list and of a plugin's page this plugin reads.
 const FORMAT: u32 = 2;
 /// The longest summary kept, in bytes, and the longest name and other
@@ -53,6 +62,13 @@ const WRITE_AT: usize = 2048;
 /// has one a group; plugins of a list out of order beyond these go with
 /// the last run.
 const MAX_RUNS: usize = 32;
+
+/// The public key PaperPaw's own plugins are signed with (the first-party
+/// plugin key of its releases).
+pub(crate) const FIRST_PARTY_KEY: [u8; 32] = [
+    0x14, 0x8c, 0xcf, 0x3e, 0xbc, 0x30, 0x50, 0x6b, 0x35, 0x5c, 0x6b, 0x5c, 0xb2, 0xba, 0xf8, 0x7d,
+    0x92, 0x65, 0x60, 0x6c, 0xc6, 0xa8, 0x1f, 0x08, 0x5b, 0xb3, 0xb9, 0x74, 0x0a, 0x95, 0xae, 0xbd,
+];
 
 /// The groups, in the order the website shows them.
 pub(crate) const GROUPS: [&str; 7] = [
@@ -121,6 +137,9 @@ pub(crate) struct Entry {
     pub sdk: String,
     /// It has code, which runs with full access to the device.
     pub code: bool,
+    /// One of PaperPaw's own: the library says so, and its author's key
+    /// is PaperPaw's.
+    pub official: bool,
     /// Bytes to download, its code with them.
     pub size: u64,
     /// When it was first published and when its newest version, as
@@ -145,7 +164,7 @@ impl Entry {
             "{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\t{}\n",
             self.group,
             self.size,
-            u8::from(self.code),
+            u8::from(self.code) | (u8::from(self.official) << 1),
             self.added,
             self.updated,
             clean(&self.id),
@@ -160,10 +179,14 @@ impl Entry {
 
     fn parse(line: &str) -> Option<Entry> {
         let mut f = line.splitn(12, '\t');
+        let group = f.next()?.parse().ok()?;
+        let size = f.next()?.parse().ok()?;
+        let flags: u8 = f.next()?.parse().ok()?;
         Some(Entry {
-            group: f.next()?.parse().ok()?,
-            size: f.next()?.parse().ok()?,
-            code: f.next()? == "1",
+            group,
+            size,
+            code: flags & 1 != 0,
+            official: flags & 2 != 0,
             added: f.next()?.parse().ok()?,
             updated: f.next()?.parse().ok()?,
             id: f.next()?.to_string(),
@@ -196,6 +219,8 @@ struct Item {
     entry: Entry,
     kind: String,
     built_in: bool,
+    /// The library says it is PaperPaw's own (see [`Entry::official`]).
+    official: bool,
     /// `devices`, where the library names them: any, and this one.
     devices: bool,
     device: bool,
@@ -305,6 +330,7 @@ impl Item {
                 "group" => entry.group = group(value),
                 "kind" => self.kind = cut(value, MAX_NAME),
                 "built_in" => self.built_in = value == "true",
+                "official" => self.official = value == "true",
                 "author_key" => self.author_key = cut(value, MAX_NAME),
                 "added" => entry.added = date(value),
                 // Its home; `latest.source.url` (that version's source)
@@ -434,6 +460,7 @@ impl Item {
             self.entry.code = true;
             self.entry.size = self.entry.size.saturating_add(code.size);
         }
+        self.entry.official = self.official && key(&self.author_key) == Some(FIRST_PARTY_KEY);
         self.entry
     }
 }
@@ -908,126 +935,6 @@ impl Index {
     }
 }
 
-/// A plugin with the key it is ordered by: (key, its place in the index).
-type Keyed = (u32, u32);
-
-/// Plugins ordered by a key in memory at once (8 bytes each): longer lists
-/// are sorted in runs of this many on the storage.
-pub(crate) const RUN: usize = 512;
-
-/// Entries of a run read at once while runs are merged.
-const MERGE_READ: usize = 16;
-
-/// The order of plugins by a key: the highest (newest) first; of one key,
-/// in the list's order.
-fn order_of(a: Keyed, b: Keyed) -> core::cmp::Ordering {
-    b.0.cmp(&a.0).then(a.1.cmp(&b.1))
-}
-
-fn before(a: Keyed, b: Keyed) -> bool {
-    order_of(a, b) == core::cmp::Ordering::Less
-}
-
-/// Where a sorted run on the storage is read while merging.
-struct Cursor {
-    /// The byte of the next entry not read yet, and how many are left.
-    at: u64,
-    left: u32,
-    read: [Keyed; MERGE_READ],
-    /// The next of those read, and how many were.
-    next: usize,
-    len: usize,
-}
-
-impl Cursor {
-    fn new(at: u64, left: u32) -> Self {
-        Self {
-            at,
-            left,
-            read: [(0, 0); MERGE_READ],
-            next: 0,
-            len: 0,
-        }
-    }
-
-    /// The run's first entry not taken yet.
-    fn head(&mut self, storage: &dyn Storage, path: &str) -> Option<Keyed> {
-        if self.next == self.len {
-            let want = (self.left as usize).min(MERGE_READ);
-            if want == 0 {
-                return None;
-            }
-            let mut bytes = [0u8; MERGE_READ * 8];
-            let mut got = 0;
-            while got < want * 8 {
-                match storage.read_at(path, self.at + got as u64, &mut bytes[got..want * 8]) {
-                    Ok(0) | Err(_) => break,
-                    Ok(n) => got += n,
-                }
-            }
-            let entries = got / 8;
-            for (slot, chunk) in self.read.iter_mut().zip(bytes[..entries * 8].chunks(8)) {
-                let word = |at: usize| {
-                    u32::from_le_bytes([chunk[at], chunk[at + 1], chunk[at + 2], chunk[at + 3]])
-                };
-                *slot = (word(0), word(4));
-            }
-            self.at += (entries * 8) as u64;
-            self.left = if entries == want {
-                self.left - want as u32
-            } else {
-                0
-            };
-            self.next = 0;
-            self.len = entries;
-            if entries == 0 {
-                return None;
-            }
-        }
-        Some(self.read[self.next])
-    }
-
-    fn next(&mut self) {
-        self.next += 1;
-    }
-}
-
-/// The plugins picked, written to the storage a piece at a time.
-struct Output<'a> {
-    storage: &'a dyn Storage,
-    path: &'a str,
-    bytes: Vec<u8>,
-    count: usize,
-    written: bool,
-}
-
-impl<'a> Output<'a> {
-    fn new(storage: &'a dyn Storage, path: &'a str) -> Self {
-        Self {
-            written: storage.write(path, b"").is_ok(),
-            storage,
-            path,
-            bytes: Vec::new(),
-            count: 0,
-        }
-    }
-
-    fn push(&mut self, n: u32) {
-        self.bytes.extend_from_slice(&n.to_le_bytes());
-        self.count += 1;
-        if self.bytes.len() >= WRITE_AT {
-            self.written &= self.storage.append(self.path, &self.bytes).is_ok();
-            self.bytes.clear();
-        }
-    }
-
-    /// How many were picked; none where they could not be kept.
-    fn finish(mut self) -> usize {
-        self.written &= self.storage.append(self.path, &self.bytes).is_ok();
-        if self.written { self.count } else { 0 }
-    }
-}
-
 /// The order a view of the plugins shows them in.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum Order {
@@ -1195,6 +1102,43 @@ mod tests {
         assert_eq!(runs, [(0, 1), (5, 1), (6, 1)]);
         assert_eq!(entries[0].summary, "Does plain.");
         assert_eq!((entries[0].size, entries[0].code), (30, false));
+    }
+
+    /// PaperPaw's mark is kept with the index, and taken only where the
+    /// plugin's key is PaperPaw's own: never from the list's word alone.
+    #[test]
+    fn only_paperpaws_own_key_makes_a_plugin_official() {
+        let fits = build_of("x4", "0123456789abcdef");
+        let ours = "148ccf3ebc30506b355c6b5cb2baf87d9265606cc6a81f085bb3b9740a95aebd";
+        let official = |plugin: String| {
+            plugin.replace(r#""author": "A","#, r#""author": "A", "official": true,"#)
+        };
+        let storage = list(&[
+            official(code("own", core::slice::from_ref(&fits)).replace(KEY, ours)),
+            official(code("forged", core::slice::from_ref(&fits))),
+            official(plugin("data", "reading", "")),
+            code("unsaid", core::slice::from_ref(&fits)).replace(KEY, ours),
+        ]);
+        let (entries, _) = entries(&storage);
+        let marked: Vec<(&str, bool)> = entries
+            .iter()
+            .map(|e| (e.id.as_str(), e.official))
+            .collect();
+        assert_eq!(
+            marked,
+            [
+                ("own", true),
+                ("forged", false),
+                ("data", false),
+                ("unsaid", false)
+            ]
+        );
+        assert!(entries[0].code);
+        // Lines an index kept before the mark read as they did.
+        let old = "0\t30\t1\t0\t0\tclock\t1.0.0\t0.4\tA\tMIT\tClock\tTells the time.";
+        let entry = Entry::parse(old).unwrap();
+        assert_eq!((entry.code, entry.official), (true, false));
+        assert_eq!(entry.summary, "Tells the time.");
     }
 
     #[test]

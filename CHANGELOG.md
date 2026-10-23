@@ -27,6 +27,10 @@ change the plugin SDK.
   plugin manager says why; `paperpaw-dev package` finds it before
   (`package.version`).
 - SDK: `PluginProblem::OtherVersion`.
+- The store marks PaperPaw's own plugins *By PaperPaw*, on their row
+  and their page. The mark is taken only where the plugin library says
+  so and the plugin's key is PaperPaw's own, so another list cannot
+  give it.
 - Your data is safer: an audit of everything PaperPaw keeps found ways
   it could lose notes, places, statistics, cards or passwords, and they
   are closed, each with a test.
