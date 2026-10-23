@@ -12,6 +12,9 @@ change the plugin SDK.
   remote control has them; `described` names the screen; `network`
   sends plugins' requests to the network, to answers recorded with
   `fixture`, or nowhere, and each `request` says how it was answered.
+  `ready` says the commit of PaperPaw's source the emulator is built
+  from and whether it is the release of its version, so tools can pin
+  `paperpaw-sdk` to exactly that source.
 - Each release also brings, for tools that work with it without a build
   of their own (the workshop): the desktop emulator for Windows, macOS
   (Apple silicon and Intel) and Linux with paperpaw-dev beside it

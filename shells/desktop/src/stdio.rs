@@ -36,8 +36,11 @@
 //! | `fixture` | `url` (a `*` at its end matches what starts so), `method`, `status` (200), `body` (text) or `file` (its bytes), `content_type` | records an answer for `recorded`; `clear: true` forgets them all |
 //! | `quit` | | ends |
 //!
-//! Events (`event`): `ready` (`protocol`, `paperpaw`, `profiles`, and
-//! `fingerprint` and `toolchain`, which code plugins must be built for),
+//! Events (`event`): `ready` (`protocol`, `paperpaw`, `profiles`,
+//! `fingerprint` and `toolchain`, which code plugins must be built for,
+//! and `commit`, the commit of PaperPaw's source it is built from or
+//! `null`, and `release`, whether that is the release of its version, so
+//! tools can pin `paperpaw-sdk` to exactly that source),
 //! `started` (`profile`, `width`, `height`, `buttons`, `touch`), `frame`
 //! (`width`, `height`, `png` in base64), `described` (`screen`, `parts`:
 //! `role`, `label`, `x`, `y`, `width`, `height`, `focused`, `on`), `shot`
@@ -399,11 +402,16 @@ impl Session {
         let profiles: Vec<String> = PROFILES.iter().map(|p| string(p.device.id)).collect();
         let native = crate::native::native();
         format!(
-            "{{\"event\": \"ready\", \"protocol\": {PROTOCOL}, \"paperpaw\": {}, \"profiles\": [{}], \"fingerprint\": \"{:016x}\", \"toolchain\": {}}}",
+            "{{\"event\": \"ready\", \"protocol\": {PROTOCOL}, \"paperpaw\": {}, \"profiles\": [{}], \"fingerprint\": \"{:016x}\", \"toolchain\": {}, \"commit\": {}, \"release\": {}}}",
             string(env!("CARGO_PKG_VERSION")),
             profiles.join(", "),
             native.fingerprint.0,
-            string(&native.toolchain)
+            string(&native.toolchain),
+            match env!("PAPERPAW_SOURCE_COMMIT") {
+                "" => String::from("null"),
+                commit => string(commit),
+            },
+            env!("PAPERPAW_SOURCE_RELEASE")
         )
     }
 
@@ -1332,5 +1340,12 @@ mod tests {
             Some(f64::from(PROTOCOL))
         );
         assert!(ready.contains("\"xteink-x4-pro\""));
+        // Built in a checkout: its commit, as Git writes it.
+        let commit = json::text(&members, "commit").unwrap_or_default();
+        assert!(
+            commit.len() == 40 && commit.bytes().all(|b| b.is_ascii_hexdigit()),
+            "{ready}"
+        );
+        assert!(ready.contains("\"release\": true") || ready.contains("\"release\": false"));
     }
 }
