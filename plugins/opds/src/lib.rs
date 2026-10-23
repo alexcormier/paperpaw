@@ -72,6 +72,7 @@ const COVERS: Setting<bool> = Setting::new("opds.covers");
 /// feeds may link to covers, books or further feeds anywhere, and those
 /// get no password.
 fn request(
+    agent: &(String, String),
     catalog: &Catalog,
     url: &str,
     save_to: String,
@@ -81,7 +82,7 @@ fn request(
     let mut request = HttpRequest::get(url, reply)
         .with(params.with(temp::FILE, save_to.clone()))
         .save_to(save_to);
-    request.headers.push(paperpaw_sdk::web::user_agent());
+    request.headers.push(agent.clone());
     if let Some(auth) = catalog.authorization()
         && same_origin(url, &catalog.url)
     {
@@ -124,13 +125,14 @@ fn same_origin(a: &str, b: &str) -> bool {
 /// A request for a list of a catalog: for a WebDAV folder its listing
 /// (`PROPFIND`), else the feed.
 fn list_request(
+    agent: &(String, String),
     catalog: &Catalog,
     url: &str,
     save_to: String,
     reply: &Event<HttpReply>,
     params: Params,
 ) -> HttpRequest {
-    let mut request = request(catalog, url, save_to, reply, params);
+    let mut request = request(agent, catalog, url, save_to, reply, params);
     if catalog.webdav {
         request.method = String::from("PROPFIND");
         request
@@ -317,7 +319,15 @@ mod tests {
         };
         let reply = Event::<HttpReply>::new("opds.test");
         let auth = |url: &str| {
-            let request = request(&catalog, url, String::from("a.tmp"), &reply, Params::new());
+            let agent = (String::from("User-Agent"), String::from("PaperPaw"));
+            let request = request(
+                &agent,
+                &catalog,
+                url,
+                String::from("a.tmp"),
+                &reply,
+                Params::new(),
+            );
             request
                 .headers
                 .iter()

@@ -114,6 +114,8 @@ struct Item {
 struct Run {
     /// Its number: answers to an earlier run are ignored.
     number: u32,
+    /// The `User-Agent` header of its requests, taken at its start.
+    agent: (String, String),
     catalog: Catalog,
     /// The catalogs after this one.
     waiting: VecDeque<Catalog>,
@@ -193,6 +195,7 @@ impl Sync {
         let limit = env.settings.read(&LIMIT).max(1) as usize;
         let run = Run {
             number: self.runs,
+            agent: paperpaw_sdk::web::user_agent_of(env),
             folder: catalog.sync_folder(env),
             waiting,
             queue: VecDeque::new(),
@@ -211,7 +214,14 @@ impl Sync {
     fn request(&self, url: &str, save_to: String, reply: &Event<HttpReply>) -> Option<HttpRequest> {
         let run = self.run.as_ref()?;
         let params = Params::new().with(RUN, run.number.to_string());
-        Some(crate::request(&run.catalog, url, save_to, reply, params))
+        Some(crate::request(
+            &run.agent,
+            &run.catalog,
+            url,
+            save_to,
+            reply,
+            params,
+        ))
     }
 
     fn request_feed(&mut self, url: &str, out: &mut Commands) {
@@ -223,6 +233,7 @@ impl Sync {
                 .with(RUN, run.number.to_string())
                 .with(crate::URL, url.to_string());
             out.push(Command::Http(crate::list_request(
+                &run.agent,
                 &run.catalog,
                 url,
                 self.temp.next("xml"),

@@ -213,9 +213,15 @@ fn save(storage: &dyn Storage, feeds: &[Feed]) {
 
 /// Asks for `feed`, at `index` in the list, and with `all` for the feeds
 /// after it too.
-fn request(feed: &Feed, index: usize, all: bool, (done, failed): (usize, usize)) -> Command {
+fn request(
+    env: &Env<'_>,
+    feed: &Feed,
+    index: usize,
+    all: bool,
+    (done, failed): (usize, usize),
+) -> Command {
     let mut request = HttpRequest::new("GET", &feed.url, FETCHED);
-    request.headers.push(paperpaw_sdk::web::user_agent());
+    request.headers.push(paperpaw_sdk::web::user_agent_of(env));
     request.save_to = Some(download(&feed.url));
     let mut params = Params::new()
         .with(URL, feed.url.clone())
@@ -242,7 +248,7 @@ fn fetch(env: &Env<'_>, from: usize, all: bool, out: &mut Commands) {
     match feeds.get(from) {
         Some(feed) => {
             out.push(Command::Notify(env.i18n.tr("news.fetching").to_string()));
-            out.push(request(feed, from, all, (0, 0)));
+            out.push(request(env, feed, from, all, (0, 0)));
         }
         None => out.push(Command::Notify(env.i18n.tr("news.none").to_string())),
     }
@@ -282,7 +288,7 @@ fn fetched(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     if reply.context.get(ALL).is_some()
         && let Some(feed) = feeds.get(next)
     {
-        out.push(request(feed, next, true, (done, failed)));
+        out.push(request(env, feed, next, true, (done, failed)));
         return;
     }
     let message = if failed == 0 {

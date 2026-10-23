@@ -73,13 +73,27 @@ const JOB: &str = "install-job";
 const FILE: &str = "install-file";
 
 /// Whether a data plugin made for the SDK `sdk` (e.g. `0.4`) and the data
-/// formats `formats` is read by this PaperPaw: its SDK not later than this
-/// one, its formats not later than [`DATA_FORMATS`]. A missing SDK (an
-/// empty text) passes.
+/// formats `formats` is read by a PaperPaw of the SDK this is built with
+/// ([`SDK_VERSION`]); [`fits_in`] asks the PaperPaw that runs.
 pub fn fits(sdk: &str, formats: u32) -> bool {
+    fits_sdk(SDK_VERSION, sdk, formats)
+}
+
+/// Whether a data plugin made for the SDK `sdk` (e.g. `0.4`) and the data
+/// formats `formats` is read by the PaperPaw that runs: its SDK not later
+/// than the kernel's ([`Plugins::kernel`](crate::Plugins::kernel)), not
+/// the one the asking plugin was built with; its formats not later than
+/// [`DATA_FORMATS`]. A missing SDK (an empty text) passes.
+pub fn fits_in(env: &Env<'_>, sdk: &str, formats: u32) -> bool {
+    let kernel = env.plugins.kernel().map_or(SDK_VERSION, |k| k.manifest.sdk);
+    fits_sdk(kernel, sdk, formats)
+}
+
+/// [`fits_in`] for a kernel of the SDK `kernel`, where the `Env` is not at
+/// hand.
+pub fn fits_sdk(kernel: Version, sdk: &str, formats: u32) -> bool {
     let sdk_fits = sdk.trim().is_empty()
-        || Version::parse(sdk)
-            .is_some_and(|v| (v.major, v.minor) <= (SDK_VERSION.major, SDK_VERSION.minor));
+        || Version::parse(sdk).is_some_and(|v| (v.major, v.minor) <= (kernel.major, kernel.minor));
     sdk_fits && formats <= DATA_FORMATS
 }
 
@@ -686,6 +700,8 @@ mod tests {
         assert!(!fits("1.0", 1));
         assert!(!fits("0.3", DATA_FORMATS + 1));
         assert!(!fits("new", 1));
+        // A later kernel takes what its SDK reads.
+        assert!(fits_sdk(Version::new(1, 2, 0), "1.0", 1));
     }
 
     #[test]

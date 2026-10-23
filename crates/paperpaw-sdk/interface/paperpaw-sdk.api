@@ -1664,6 +1664,8 @@ pub paperpaw_sdk::install::Progress::plugin: alloc::string::String
 pub paperpaw_sdk::install::Progress::total: usize
 pub const paperpaw_sdk::install::MAX_FILES: usize
 pub fn paperpaw_sdk::install::fits(&str, u32) -> bool
+pub fn paperpaw_sdk::install::fits_in(&paperpaw_sdk::Env<'_>, &str, u32) -> bool
+pub fn paperpaw_sdk::install::fits_sdk(paperpaw_sdk::Version, &str, u32) -> bool
 pub fn paperpaw_sdk::install::folder_release(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<alloc::string::String>
 pub fn paperpaw_sdk::install::folder_version(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_sdk::Version>
 pub fn paperpaw_sdk::install::is_plugin_name(&str) -> bool
@@ -3978,6 +3980,7 @@ pub fn paperpaw_sdk::web::http_date(&str) -> core::option::Option<i64>
 pub fn paperpaw_sdk::web::join_url(&str, &str) -> alloc::string::String
 pub fn paperpaw_sdk::web::percent_decode(&str) -> alloc::string::String
 pub fn paperpaw_sdk::web::user_agent() -> (alloc::string::String, alloc::string::String)
+pub fn paperpaw_sdk::web::user_agent_of(&paperpaw_sdk::Env<'_>) -> (alloc::string::String, alloc::string::String)
 pub mod paperpaw_sdk::widgets
 pub mod paperpaw_sdk::widgets::categories
 pub const paperpaw_sdk::widgets::categories::ALL: &[&str]
@@ -5559,6 +5562,7 @@ impl paperpaw_sdk::Plugins
 pub fn paperpaw_sdk::Plugins::get(&self, &str) -> core::option::Option<&paperpaw_sdk::PluginInfo>
 pub fn paperpaw_sdk::Plugins::is_empty(&self) -> bool
 pub fn paperpaw_sdk::Plugins::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::PluginInfo>
+pub fn paperpaw_sdk::Plugins::kernel(&self) -> core::option::Option<&paperpaw_sdk::PluginInfo>
 pub fn paperpaw_sdk::Plugins::len(&self) -> usize
 pub const fn paperpaw_sdk::Plugins::new() -> Self
 pub fn paperpaw_sdk::Plugins::owner(&self, &paperpaw_sdk::Id) -> core::option::Option<&paperpaw_sdk::PluginInfo>

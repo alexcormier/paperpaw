@@ -282,7 +282,7 @@ impl Fetch {
             String::from("Authorization"),
             format!("Bearer {}", self.token),
         ));
-        request.headers.push(paperpaw_sdk::web::user_agent());
+        request.headers.push(paperpaw_sdk::web::user_agent_of(env));
         request
     }
 

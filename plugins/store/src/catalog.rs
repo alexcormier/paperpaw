@@ -98,6 +98,9 @@ pub(crate) struct Device<'a> {
     pub fingerprint: Option<Fingerprint>,
     pub code_file: &'a str,
     pub plugins: Option<&'a Plugins>,
+    /// The SDK of the kernel that runs, which data plugins must not be
+    /// later than.
+    pub sdk: Version,
     /// The list is PaperPaw's own library ([`OFFICIAL_LIST`]).
     pub official: bool,
 }
@@ -110,6 +113,10 @@ impl<'a> Device<'a> {
             fingerprint: env.native.map(|native| native.fingerprint),
             code_file: env.native.map_or("", |native| &native.file),
             plugins: Some(env.plugins),
+            sdk: env
+                .plugins
+                .kernel()
+                .map_or(paperpaw_sdk::SDK_VERSION, |kernel| kernel.manifest.sdk),
             official: env.settings.read(&crate::CATALOG).trim() == OFFICIAL_LIST,
         })
     }
@@ -322,7 +329,7 @@ impl Item {
             && install::is_plugin_name(&entry.id)
             && !entry.name.is_empty()
             && Version::parse(&entry.version).is_some()
-            && install::fits(&entry.sdk, self.formats)
+            && install::fits_sdk(device.sdk, &entry.sdk, self.formats)
     }
 
     /// Takes what `key` (the path below the plugin) says.
@@ -1037,6 +1044,7 @@ mod tests {
         fingerprint: Some(Fingerprint(0x0123_4567_89ab_cdef)),
         code_file: "code.ppn",
         plugins: None,
+        sdk: paperpaw_sdk::SDK_VERSION,
         official: true,
     };
 

@@ -72,6 +72,7 @@ impl BrowseScreen {
                 .with(URL, url.clone())
                 .with(ENTRY, i.to_string());
             cx.command(Command::Http(request(
+                &paperpaw_sdk::web::user_agent_of(cx.env()),
                 &self.catalog,
                 &url,
                 self.temp.next("tmp"),
