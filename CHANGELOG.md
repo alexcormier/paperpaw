@@ -6,6 +6,22 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- PaperPaw's own plugins in the store carry their How it works in
+  their folders (`how/<lang>.txt`, `tools/plugin-files/catalogue.py`),
+  so the store's page of each and the readers' store show it; a plugin
+  without one in English fails the release.
+- `paperpaw-emu --stdio` protocol 2 (version 1's requests as they were):
+  `slot`, `set` and `setting`, `emit`, `screens` and `actions`, `wait`,
+  `until` (a text or a screen, with a timeout) and `expect`, as the X4's
+  remote control has them; `described` names the screen; `network`
+  sends plugins' requests to the network, to answers recorded with
+  `fixture` (from a text, or a file of at most 16 MB in the device's
+  folder), or nowhere, and each `request` says how it was answered.
+  `wait` and `until` last at most ten minutes, and `quit` or the end of
+  the input ends them. `ready` says the commit of PaperPaw's source the emulator is built
+  from and whether it is the release of its version (tagged, and nothing
+  changed), so tools can pin
+  `paperpaw-sdk` to exactly that source.
 - Each release also brings, for tools that work with it without a build
   of their own (the workshop): the desktop emulator for Windows, macOS
   (Apple silicon and Intel) and Linux with paperpaw-dev beside it
@@ -13,7 +29,9 @@ change the plugin SDK.
   silicon), and the handbook
   (`paperpaw-handbook-<version>.zip`, `tools/handbook.py`: the registry,
   the codes of paperpaw-dev's findings, the docs, the samples, the SDK's
-  items and source), each with its SHA-256 and a signature of its own
+  items and source, and PaperPaw's own plugins as examples of good
+  solutions built against the same SDK; no tests, pictures, fonts or
+  sample books, about 2.3 MB), each with its SHA-256 and a signature of its own
   with the firmware's key over a domain of its own, so it never holds as
   a firmware's (`paperpaw-sign sign-asset`, `check-asset`).
 - The desktop emulator loads code plugins built for the computer it runs

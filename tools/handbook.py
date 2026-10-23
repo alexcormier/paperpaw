@@ -18,9 +18,15 @@ The zip holds, under `paperpaw-handbook-<version>/`:
 - api/<crate>.txt: the public items of the SDK and the crates it passes
   on, as their `api.txt` lists them;
 - src/<crate>/: the source of those and of every crate the SDK is built
-  from, for the items' documentation.
+  from, for the items' documentation;
+- plugins/<id>/: PaperPaw's own plugins (their `Cargo.toml`, `src/`,
+  `i18n/`, `how/`, `plugin.ini`), built against the same SDK: examples of
+  how a plugin solves things, to search where one is wanted.
 
-A field or file is only added; FORMAT counts up where one changes.
+Never in it: tests (also those in `src/`), pictures, fonts and the sample
+books, what a build or a run leaves, and the kernel and the shells, which
+a plugin never uses. A field or file is only added; FORMAT counts up
+where one changes.
 """
 
 import json
@@ -37,7 +43,14 @@ GROUPS = ("package", "lint", "visual", "reach", "explore", "perf", "flows",
           "gallery", "snapshots", "ui-kit", "data")
 CODE = re.compile(r'"((?:%s)\.[a-z0-9-]+(?:\.[a-z0-9-]+)*)"' % "|".join(GROUPS))
 # Below a crate's folder, what is not part of it.
-SKIP = {"target", ".git", "node_modules", "out"}
+SKIP = {"target", ".git", "node_modules", "out", "tests", "testdata", "snapshots"}
+# Large files a model reads nothing in: pictures, fonts, books, builds.
+ASSETS = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".ttf", ".otf", ".ttc", ".ppfp",
+          ".epub", ".fb2", ".pdf", ".bin", ".ppn"}
+# Folders of such files, by their path.
+ASSET_FOLDERS = ("samples/library/books/",)
+# What of a plugin's folder the handbook holds.
+PLUGIN_PARTS = ("Cargo.toml", "plugin.ini", "src", "i18n", "how")
 
 
 def check_codes(dev: Path) -> list:
@@ -61,7 +74,35 @@ def files(folder: Path):
     for name in sorted(filter(None, listed.split("\0"))):
         path = ROOT / name
         parts = path.relative_to(folder).parts
-        if path.is_file() and not any(p.startswith(".") for p in parts)                 and not SKIP.intersection(parts):
+        test = path.name == "tests.rs" or path.name.endswith("_tests.rs")
+        if (path.is_file() and not any(p.startswith(".") for p in parts)
+                and not SKIP.intersection(parts) and not test
+                and path.suffix.lower() not in ASSETS
+                and not name.startswith(ASSET_FOLDERS)):
+            yield path
+
+
+def without_tests(text: str) -> str:
+    """A Rust file without the module of tests at its end
+    (`#[cfg(test)] mod tests { ... }`); as it is where that is not its
+    last item. As rustfmt writes it, the module ends at the first line
+    that is `}` alone (braces in its strings never count)."""
+    start = text.find("\n#[cfg(test)]\nmod tests {\n")
+    if start < 0:
+        return text
+    end = text.find("\n}\n", start)
+    # After it, at most more tests in files of their own (`mod x_tests;`).
+    rest = re.sub(r"#\[cfg\(test\)\]\s*mod \w+;", "", text[end + 3:]) if end >= 0 else "x"
+    if rest.strip():
+        return text
+    return text[:start + 1]
+
+
+def plugin_files(plugins: Path):
+    """The files of PaperPaw's own plugins the handbook holds, by plugin:
+    their manifest, source, translations and How it works."""
+    for path in files(plugins):
+        if path.relative_to(plugins).parts[1] in PLUGIN_PARTS:
             yield path
 
 
@@ -87,6 +128,9 @@ def main(registry: str, version: str, out: str) -> None:
     crates = crates_with_api()
     if not any(c.name == "paperpaw-sdk" for c in crates):
         sys.exit("no crates/paperpaw-sdk/api.txt")
+    plugins = len({p.relative_to(ROOT / "plugins").parts[0] for p in plugin_files(ROOT / "plugins")})
+    if plugins < 10:
+        sys.exit(f"only {plugins} plugins found: has plugins/ moved?")
     readme = f"""# PaperPaw {version}: the handbook
 
 Format {FORMAT}. What tools that write or check plugins for PaperPaw
@@ -98,6 +142,26 @@ Format {FORMAT}. What tools that write or check plugins for PaperPaw
 - samples/: the sample plugins
 - api/: the public items of {", ".join(c.name for c in crates)}
 - src/: the source of those and of the crates the SDK is built from
+- plugins/: PaperPaw's own plugins ({plugins}): source, translations, How it works
+
+What each part is for:
+
+- The SDK (api/, src/) is what a plugin may use, and all it may use:
+  `paperpaw-sdk` and the crates it passes on. A plugin builds against it
+  alone.
+- PaperPaw's own plugins (plugins/) are examples of good solutions,
+  built against the same SDK: how a screen, a setting, a widget, a sync
+  or a reader feature is done. Search them when a plugin needs something
+  one of them does; they are not an API, and a plugin does not depend on
+  them.
+- The kernel and the shells (the devices' programs) are left out on
+  purpose: a plugin never uses them, only the SDK.
+- docs/ explains how plugins are written (`docs/plugins.md`) and why
+  PaperPaw is as it is (docs/adr); samples/ are small plugins to start
+  from; registry.json and checks.json are what the app offers data
+  plugins and what paperpaw-dev checks.
+
+Tests, pictures, fonts and the sample books are not in it.
 """
     with zipfile.ZipFile(out, "w", zipfile.ZIP_DEFLATED) as z:
         z.writestr(f"{top}/README.md", readme)
@@ -108,10 +172,20 @@ Format {FORMAT}. What tools that write or check plugins for PaperPaw
                 z.write(path, f"{top}/{path.relative_to(ROOT).as_posix()}")
         for crate in crates:
             z.write(crate / "api.txt", f"{top}/api/{crate.name}.txt")
+        def source(path: Path, name: str) -> None:
+            if path.suffix == ".rs":
+                z.writestr(name, without_tests(path.read_text(encoding="utf-8")))
+            else:
+                z.write(path, name)
+
         for crate in sorted(set(crates) | set(sdk_crates())):
             for path in files(crate / "src"):
-                z.write(path, f"{top}/src/{crate.name}/{path.relative_to(crate / 'src').as_posix()}")
-    print(f"{out}: {len(codes)} check codes, {len(crates)} crates")
+                source(path, f"{top}/src/{crate.name}/{path.relative_to(crate / 'src').as_posix()}")
+        for path in plugin_files(ROOT / "plugins"):
+            source(path, f"{top}/{path.relative_to(ROOT).as_posix()}")
+    size = Path(out).stat().st_size
+    print(f"{out}: {len(codes)} check codes, {len(crates)} crates, {plugins} plugins, "
+          f"{size / 1e6:.1f} MB")
 
 
 if __name__ == "__main__":
