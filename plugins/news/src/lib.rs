@@ -413,12 +413,12 @@ impl Plugin for News {
             Box::new(|env, _| Box::new(FeedsScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "news.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
         r.add_action(ActionSpec::new(FETCH, "news.fetch").handler(
-            |env: &Env<'_>, out: &mut Commands| {
+            |env: &Env<'_>, _, out: &mut Commands| {
                 if env.reader {
                     fetch(env, 0, true, out);
                 } else {
@@ -614,7 +614,7 @@ impl Screen for FeedsScreen {
                 self.header
                     .tap(&env, &self.style, gesture.start, self.list.paging(len))
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(row) = self.list.hit(gesture.start, len) else {

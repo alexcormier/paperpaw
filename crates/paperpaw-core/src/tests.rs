@@ -893,7 +893,7 @@ impl Plugin for LifecyclePlugin {
         // Back to the screen below, and at once another over it, as a
         // menu that closes to open a screen does.
         r.add_action(paperpaw_sdk::ActionSpec::new(SWAP, "swap").handler(
-            |_: &Env<'_>, out: &mut paperpaw_sdk::Commands| {
+            |_: &Env<'_>, _, out: &mut paperpaw_sdk::Commands| {
                 out.push(paperpaw_sdk::Command::Back);
                 out.push(paperpaw_sdk::Command::OpenScreen(
                     Id::new_static("life.screen"),

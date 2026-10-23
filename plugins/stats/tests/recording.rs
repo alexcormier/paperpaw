@@ -84,7 +84,7 @@ impl Plugin for StandIn {
         ] {
             let reading = self.0.clone();
             r.add_action(ActionSpec::new(id, "stand-in.action").handler(
-                move |_: &Env<'_>, out: &mut Commands| {
+                move |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(event.emit(reading.borrow().clone()));
                 },
             ))?;

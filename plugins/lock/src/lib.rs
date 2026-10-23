@@ -181,7 +181,7 @@ impl Plugin for Lock {
         // Sealed: no other plugin's handler may lock in its place.
         r.add_action(
             ActionSpec::new(NOW, "lock.now")
-                .handler(move |env: &Env<'_>, out: &mut Commands| {
+                .handler(move |env: &Env<'_>, _, out: &mut Commands| {
                     lock(env, &now, out);
                 })
                 .sealed(),

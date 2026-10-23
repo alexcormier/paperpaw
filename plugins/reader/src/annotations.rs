@@ -244,7 +244,7 @@ impl Screen for AnnotationsScreen {
         let env = *cx.env();
         let paging = self.list.paging(self.len());
         if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, self.len()) {

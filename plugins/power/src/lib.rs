@@ -189,7 +189,7 @@ impl Plugin for Power {
             .tap(OPEN),
         )?;
         r.add_action(paperpaw_sdk::ActionSpec::new(OPEN, "power.title").handler(
-            |_: &paperpaw_sdk::Env<'_>, out: &mut paperpaw_sdk::Commands| {
+            |_: &paperpaw_sdk::Env<'_>, _, out: &mut paperpaw_sdk::Commands| {
                 let page = paperpaw_sdk::Params::new()
                     .with(paperpaw_sdk::builtin::params::ID, GROUP.as_str());
                 out.push(paperpaw_sdk::Command::OpenSlot(

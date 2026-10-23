@@ -214,7 +214,7 @@ impl Plugin for About {
             Box::new(|env, _| Box::new(screen::AboutScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "about.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;

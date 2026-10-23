@@ -402,7 +402,7 @@ fn initial<'a>(env: &Env<'a>, weekday: u8) -> &'a str {
 
 /// A tap on the whole widget opens the statistics.
 fn open_statistics(area: Rect) -> Vec<WidgetTarget> {
-    alloc::vec![WidgetTarget::new(area, Command::RunAction(OPEN))]
+    alloc::vec![WidgetTarget::new(area, Command::run(OPEN))]
 }
 
 /// Draws a ring into the square `at`, `thick` pixels wide: a thin track

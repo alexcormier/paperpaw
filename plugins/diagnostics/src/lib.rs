@@ -94,7 +94,7 @@ impl Plugin for Diagnostics {
             Box::new(|env, _| check::make(env)),
         ))?;
         r.add_action(
-            ActionSpec::new(OPEN_CHECK, "diagnostics.check.title").handler(|_, out| {
+            ActionSpec::new(OPEN_CHECK, "diagnostics.check.title").handler(|_, _, out| {
                 out.push(Command::OpenScreen(CHECK, Params::new()));
             }),
         )?;

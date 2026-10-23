@@ -934,7 +934,7 @@ impl Plugin for Kosync {
         // "Sync progress" in the reading menu's "More".
         let s = state;
         r.add_action(ActionSpec::new(SYNC_NOW, "kosync.sync-now").handler(
-            move |env: &Env<'_>, out: &mut Commands| {
+            move |env: &Env<'_>, _, out: &mut Commands| {
                 let mut state = s.borrow_mut();
                 state.load(env);
                 if !env.caps.network || !state.signed_in(env) {

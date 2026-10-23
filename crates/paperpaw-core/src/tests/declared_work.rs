@@ -80,15 +80,15 @@ impl Plugin for WorkPlugin {
         )?;
         // Says whose doing it is handling, run as an action.
         let log = self.log.clone();
-        r.add_action(
-            ActionSpec::new(Id::new_static("wk.who"), "who").handler(move |env, _| {
+        r.add_action(ActionSpec::new(Id::new_static("wk.who"), "who").handler(
+            move |env, _, _| {
                 log.borrow_mut()
                     .push(alloc::format!("reader {}", env.reader));
-            }),
-        )?;
+            },
+        ))?;
         r.subscribe(
             Id::new_static("wk.fire"),
-            Box::new(|_, _, out| out.push(Command::RunAction(Id::new_static("wk.who")))),
+            Box::new(|_, _, out| out.push(Command::run(Id::new_static("wk.who")))),
         )?;
         // Work that fetches: its request goes out as it runs.
         r.subscribe(
@@ -339,7 +339,7 @@ impl Plugin for Sayer {
         )?;
         r.add_action(
             ActionSpec::new(Id::new_static("sy.act"), "act")
-                .handler(|_, out| out.push(Command::Notify(String::from("done")))),
+                .handler(|_, _, out| out.push(Command::Notify(String::from("done")))),
         )
     }
 }

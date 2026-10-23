@@ -56,7 +56,7 @@ impl Plugin for Asker {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(ActionSpec::new(ASK, "asker.ask").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(ask::text("Address", &TYPED).command());
             },
         ))?;

@@ -207,7 +207,7 @@ impl GroupList {
                     Params::new().with(ID, id.as_str().to_string()),
                 ));
             }
-            Some(Link::Page(action)) => cx.command(Command::RunAction(action.clone())),
+            Some(Link::Page(action)) => cx.command(Command::run(action.clone())),
             Some(Link::Advanced) => {
                 let advanced = cx.env().settings.read(&ADVANCED);
                 cx.command(Command::set(&ADVANCED, !advanced));
@@ -274,7 +274,7 @@ impl Screen for GroupList {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging(&self.rows));
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.rows.hit(gesture.start) {

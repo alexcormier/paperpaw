@@ -409,6 +409,11 @@ file to your report.
   (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
   in place of five arguments; parts (`Described`, `semantics::Part`)
   tell whether they are disabled.
+- SDK: actions have one shape, with params everywhere. A handler is
+  `.handler(|env, params, out| ..)`; `handler_with` and
+  `ActionParamsHandler` are gone. `Command::RunAction(id, params)` takes
+  the place of `RunActionWith`, and `Command::run(id)` runs one without
+  params. A screen reads them with `cx.params()` in `on_action`.
 - SDK: every handler queues its commands in `Commands` instead of a
   `&mut Vec<Command>`: actions, events, observers, work steps, voices,
   widgets' input and the installer. It has `push`, `extend` and `emit`

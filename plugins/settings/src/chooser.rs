@@ -83,7 +83,7 @@ impl Chooser {
             .checked_sub(self.options.len())
             .and_then(|i| self.more.get(i))
         {
-            cx.command(Command::RunAction(action.clone()));
+            cx.command(Command::run(action.clone()));
             return;
         }
         let (Some(spec), Some((value, _))) = (&self.spec, self.options.get(index)) else {
@@ -158,7 +158,7 @@ impl Screen for Chooser {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging);
         if let Some(action) = tapped {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, self.len()) {

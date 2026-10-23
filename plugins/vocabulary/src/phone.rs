@@ -493,7 +493,7 @@ impl Screen for PhoneScreen {
         if gesture.kind == GestureKind::Tap
             && let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         Handled::No

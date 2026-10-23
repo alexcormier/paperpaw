@@ -141,13 +141,13 @@ impl Plugin for Joplin {
             Box::new(|env, _| Box::new(setup::SetupScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "joplin.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
         let state = run.clone();
         r.add_action(ActionSpec::new(SEND, "joplin.send").handler(
-            move |env: &Env<'_>, out: &mut Commands| {
+            move |env: &Env<'_>, _, out: &mut Commands| {
                 if env.reader {
                     state.borrow_mut().start(env, Start::Action, out);
                 } else {

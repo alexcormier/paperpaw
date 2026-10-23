@@ -88,7 +88,7 @@ impl Plugin for Probe {
         r.add_setting(SettingSpec::switch(&OTHER, "probe.other", false))?;
         r.add_setting(SettingSpec::switch(&OWN, "probe.own", false))?;
         // Something to open, listed with the tools.
-        r.add_action(ActionSpec::new(APP, "probe.app").handler(|_, _| {}))?;
+        r.add_action(ActionSpec::new(APP, "probe.app").handler(|_, _, _| {}))?;
         r.add_menu_entry(MenuEntry::new(menus::APPS, APP))?;
         // Below the page, beside the pencil.
         r.add_menu_entry(MenuEntry::new(
@@ -116,7 +116,7 @@ impl Plugin for Probe {
             .tap(Id::new_static("probe.switch")),
         )?;
         r.add_action(
-            ActionSpec::new(Id::new_static("probe.switch"), "probe.switch").handler(|_, out| {
+            ActionSpec::new(Id::new_static("probe.switch"), "probe.switch").handler(|_, _, out| {
                 out.push(paperpaw_sdk::Command::SetSetting(
                     Id::new_static("probe.other"),
                     paperpaw_sdk::SettingValue::Bool(true),

@@ -225,7 +225,7 @@ impl Plugin for ReadingGoal {
                 out.push(Command::SetPluginEnabled(STATS, true));
                 out.push(Command::Restart);
             }
-            "store" => out.push(Command::RunAction(STORE)),
+            "store" => out.push(Command::run(STORE)),
             _ => {}
         })?;
         r.on(events::READ_TODAY, |env, read, _| {

@@ -845,7 +845,7 @@ impl Widget for Card {
         let command = self
             .book
             .as_ref()
-            .map_or(Command::RunAction(actions::LIBRARY), Book::open);
+            .map_or(Command::run(actions::LIBRARY), Book::open);
         alloc::vec![WidgetTarget::new(area, command)]
     }
 }

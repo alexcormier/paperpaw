@@ -114,7 +114,7 @@ impl Plugin for Plain {
                 .into(),
         )?;
         // Another way to open a book, in the list of *Open with …*.
-        r.add_action(ActionSpec::new(SEND, "plain.send").handler(|_, _| {}))?;
+        r.add_action(ActionSpec::new(SEND, "plain.send").handler(|_, _, _| {}))?;
         r.add_menu_entry(paperpaw_sdk::MenuEntry::new(
             paperpaw_sdk::builtin::menus::OPEN_WITH,
             SEND,
@@ -129,12 +129,12 @@ impl Plugin for Plain {
         )?;
         r.add_action(
             ActionSpec::new(Id::new_static("plain.ask-book"), "plain.ask-book").handler(
-                |_: &Env<'_>, out: &mut Commands| out.push(readers::ask(Choice::Book(TEXT))),
+                |_: &Env<'_>, _, out: &mut Commands| out.push(readers::ask(Choice::Book(TEXT))),
             ),
         )?;
         r.add_action(
             ActionSpec::new(Id::new_static("plain.ask-folder"), "plain.ask-folder").handler(
-                |_: &Env<'_>, out: &mut Commands| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(readers::ask(Choice::Folder("books/plain")))
                 },
             ),
@@ -145,8 +145,9 @@ impl Plugin for Plain {
             ("plain.epub", EPUB),
         ] {
             r.add_action(
-                ActionSpec::new(Id::new_static(action), action)
-                    .handler(move |_: &Env<'_>, out: &mut Commands| out.push(readers::open(path))),
+                ActionSpec::new(Id::new_static(action), action).handler(
+                    move |_: &Env<'_>, _, out: &mut Commands| out.push(readers::open(path)),
+                ),
             )?;
         }
         Ok(())

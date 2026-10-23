@@ -25,7 +25,7 @@ impl Plugin for Observing {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         let log = self.0.clone();
         r.add_action(
-            ActionSpec::new(APPLY, "obs.apply").handler_with(move |_, params, _| {
+            ActionSpec::new(APPLY, "obs.apply").handler(move |_, params, _| {
                 let profile = params.get("profile").unwrap_or("none");
                 log.borrow_mut().push(alloc::format!("apply {profile}"));
             }),
@@ -35,7 +35,7 @@ impl Plugin for Observing {
             ActionSpec::new(PLAIN, "obs.plain")
                 .describe("obs.plain.help")
                 .keywords("obs.plain.words")
-                .handler(move |_, _| log.borrow_mut().push(String::from("plain"))),
+                .handler(move |_, _, _| log.borrow_mut().push(String::from("plain"))),
         )?;
         r.add_action(ActionSpec::new(SCREEN_ONLY, "obs.screen-only"))?;
         for (priority, name) in [(1, "low"), (5, "high")] {
@@ -55,7 +55,7 @@ impl Plugin for Observing {
         let log = self.0.clone();
         r.add_action(
             ActionSpec::new(WRAPPED, "obs.wrapped")
-                .handler(move |_, _| log.borrow_mut().push(String::from("inner"))),
+                .handler(move |_, _, _| log.borrow_mut().push(String::from("inner"))),
         )?;
         let log = self.0.clone();
         r.override_action(
@@ -63,8 +63,8 @@ impl Plugin for Observing {
             move |_, params, out| {
                 log.borrow_mut().push(String::from("outer"));
                 out.push(Command::RunOriginal(WRAPPED, params.clone()));
-                out.push(Command::RunAction(WRAPPED));
-                out.push(Command::RunAction(PLAIN));
+                out.push(Command::run(WRAPPED));
+                out.push(Command::run(PLAIN));
             },
             Priority::DEFAULT,
         )?;
@@ -76,7 +76,7 @@ impl Plugin for Observing {
             Box::new(|_, _| Box::new(Lock)),
         ))?;
         r.add_action(
-            ActionSpec::new(Id::new_static("obs.open"), "obs.open").handler(|_, out| {
+            ActionSpec::new(Id::new_static("obs.open"), "obs.open").handler(|_, _, out| {
                 out.push(Command::OpenScreen(
                     Id::new_static("obs.page"),
                     Params::new(),
@@ -85,16 +85,16 @@ impl Plugin for Observing {
         )?;
         let log = self.0.clone();
         r.add_action(
-            ActionSpec::new(Id::new_static("obs.step"), "obs.step").handler_with(
+            ActionSpec::new(Id::new_static("obs.step"), "obs.step").handler(
                 move |_, params, out| {
                     let n: u8 = params.get("n").and_then(|n| n.parse().ok()).unwrap_or(0);
                     log.borrow_mut().push(alloc::format!("step {n}"));
                     if n < 2 {
                         let next = Params::new().with("n", alloc::format!("{}", n + 1));
-                        out.push(Command::RunActionWith(Id::new_static("obs.step"), next));
+                        out.push(Command::RunAction(Id::new_static("obs.step"), next));
                     }
                     // The same again: dropped.
-                    out.push(Command::RunActionWith(
+                    out.push(Command::RunAction(
                         Id::new_static("obs.step"),
                         params.clone(),
                     ));
@@ -104,7 +104,7 @@ impl Plugin for Observing {
         let log = self.0.clone();
         r.add_action(
             ActionSpec::new(Id::new_static("obs.sealed"), "obs.sealed")
-                .handler(move |_, _| log.borrow_mut().push(String::from("sealed")))
+                .handler(move |_, _, _| log.borrow_mut().push(String::from("sealed")))
                 .sealed(),
         )?;
         // In place of another plugin's action, which its screen takes.
@@ -215,9 +215,9 @@ fn a_guard_keeps_others_overrides_and_observers_out() {
     let (mut kernel, log, _) = observed_with_screen();
     kernel.open_screen(Instant(10), LOCK, Params::new());
     log.borrow_mut().clear();
-    kernel.apply(Command::RunAction(Id::new_static("obs.overridden")));
-    kernel.apply(Command::RunAction(WRAPPED));
-    kernel.apply(Command::RunAction(Id::new_static("obs.guarded")));
+    kernel.apply(Command::run(Id::new_static("obs.overridden")));
+    kernel.apply(Command::run(WRAPPED));
+    kernel.apply(Command::run(Id::new_static("obs.guarded")));
     kernel.finish();
     assert_eq!(
         *log.borrow(),
@@ -237,7 +237,7 @@ fn a_guard_keeps_others_overrides_and_observers_out() {
 fn a_screen_comes_before_an_override() {
     let (mut kernel, log, screen) = observed_with_screen();
     let special = Id::new_static("a.special");
-    kernel.apply(Command::RunActionWith(
+    kernel.apply(Command::RunAction(
         special.clone(),
         Params::new().with("n", "1"),
     ));
@@ -255,7 +255,7 @@ fn a_screen_comes_before_an_override() {
 #[test]
 fn an_override_runs_the_original_and_never_itself() {
     let (mut kernel, log) = observed();
-    kernel.apply(Command::RunAction(WRAPPED));
+    kernel.apply(Command::run(WRAPPED));
     kernel.finish();
     assert_eq!(
         *log.borrow(),
@@ -282,9 +282,9 @@ fn an_override_runs_the_original_and_never_itself() {
 fn actions_run_with_params() {
     let (mut kernel, log) = observed();
     let params = Params::new().with("profile", "night");
-    kernel.apply(Command::RunActionWith(APPLY, params));
-    kernel.apply(Command::RunAction(APPLY));
-    kernel.apply(Command::RunAction(PLAIN));
+    kernel.apply(Command::RunAction(APPLY, params));
+    kernel.apply(Command::run(APPLY));
+    kernel.apply(Command::run(PLAIN));
     kernel.finish();
     assert_eq!(
         *log.borrow(),
@@ -307,7 +307,7 @@ fn actions_run_with_params() {
 #[test]
 fn the_override_of_the_highest_priority_runs() {
     let (mut kernel, log) = observed();
-    kernel.apply(Command::RunAction(Id::new_static("obs.overridden")));
+    kernel.apply(Command::run(Id::new_static("obs.overridden")));
     kernel.finish();
     assert_eq!(
         *log.borrow(),
@@ -394,7 +394,7 @@ fn the_lock_takes_what_it_does_not_let_pass() {
 #[test]
 fn an_action_runs_again_with_other_params() {
     let (mut kernel, log) = observed();
-    kernel.apply(Command::RunAction(Id::new_static("obs.step")));
+    kernel.apply(Command::run(Id::new_static("obs.step")));
     kernel.finish();
     let log = log.borrow();
     let steps: Vec<&str> = log
@@ -423,7 +423,7 @@ fn a_sealed_action_keeps_its_handler() {
         "{warnings:?}"
     );
     log.borrow_mut().clear();
-    kernel.apply(Command::RunAction(Id::new_static("obs.sealed")));
+    kernel.apply(Command::run(Id::new_static("obs.sealed")));
     kernel.finish();
     assert!(
         log.borrow().contains(&String::from("sealed")),
@@ -500,12 +500,12 @@ mod above_the_guard {
                 ))?;
             }
             r.add_action(
-                ActionSpec::new(Id::new_static("up.raise"), "raise").handler(|_, out| {
+                ActionSpec::new(Id::new_static("up.raise"), "raise").handler(|_, _, out| {
                     out.push(Command::OpenScreen(Id::new_static("up.top"), Params::new()));
                 }),
             )?;
             r.add_action(
-                ActionSpec::new(Id::new_static("up.go"), "go").handler(|_, out| {
+                ActionSpec::new(Id::new_static("up.go"), "go").handler(|_, _, out| {
                     out.push(Command::OpenScreen(
                         Id::new_static("up.evil"),
                         Params::new(),
@@ -531,7 +531,7 @@ mod above_the_guard {
         // That screen gets no input: an action run (as from a timer of
         // plugin `up`) reaches the guard, which takes it.
         assert!(kernel.top_shut_out());
-        kernel.apply(Command::RunAction(Id::new_static("up.go")));
+        kernel.apply(Command::run(Id::new_static("up.go")));
         kernel.finish();
         let ids: Vec<&str> = kernel.stack.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(ids, ["a.screen", "gate.lock", "up.top"]);
@@ -569,7 +569,7 @@ mod secrets_of_others {
                 Priority::DEFAULT,
             )?;
             r.add_action(
-                ActionSpec::new(Id::new_static("editor.change"), "x").handler(|_, out| {
+                ActionSpec::new(Id::new_static("editor.change"), "x").handler(|_, _, out| {
                     out.push(Command::SetSecret(SecretChange::keep(
                         "keeper.pw",
                         "",
@@ -590,7 +590,7 @@ mod secrets_of_others {
 
         fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
             r.add_action(
-                ActionSpec::new(Id::new_static("snoop.rename"), "x").handler(|_, out| {
+                ActionSpec::new(Id::new_static("snoop.rename"), "x").handler(|_, _, out| {
                     out.push(Command::SetSecret(SecretChange::keep(
                         "keeper.pw",
                         "Mine",
@@ -604,7 +604,7 @@ mod secrets_of_others {
                 }),
             )?;
             r.add_action(
-                ActionSpec::new(Id::new_static("snoop.change"), "x").handler(|_, out| {
+                ActionSpec::new(Id::new_static("snoop.change"), "x").handler(|_, _, out| {
                     out.push(Command::SetSecret(SecretChange::keep(
                         "keeper.pw",
                         "",
@@ -671,7 +671,7 @@ mod originals_work {
 
         fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
             r.add_action(
-                ActionSpec::new(Id::new_static("wk.plan"), "plan").handler(|_, out| {
+                ActionSpec::new(Id::new_static("wk.plan"), "plan").handler(|_, _, out| {
                     out.push(Command::Work(Work::at(
                         Id::new_static("wk.later"),
                         Instant(5000),
@@ -747,7 +747,7 @@ fn a_sealed_action_keeps_its_handler_in_either_order() {
         "{warnings:?}"
     );
     log.borrow_mut().clear();
-    kernel.apply(Command::RunAction(Id::new_static("obs.sealed")));
+    kernel.apply(Command::run(Id::new_static("obs.sealed")));
     kernel.finish();
     assert!(
         log.borrow().contains(&String::from("sealed")),
@@ -781,7 +781,7 @@ mod guarded_settings {
                 .guarded(),
             )?;
             r.add_action(
-                ActionSpec::new(Id::new_static("safe.off"), "off").handler(|_, out| {
+                ActionSpec::new(Id::new_static("safe.off"), "off").handler(|_, _, out| {
                     out.push(Command::SetSetting(
                         Id::new_static("safe.on"),
                         SettingValue::Bool(false),
@@ -801,8 +801,8 @@ mod guarded_settings {
 
         fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
             r.set_setting_default(Id::new_static("safe.on"), Cow::Borrowed("false"))?;
-            r.add_action(
-                ActionSpec::new(Id::new_static("other.off"), "off").handler(|_, out| {
+            r.add_action(ActionSpec::new(Id::new_static("other.off"), "off").handler(
+                |_, _, out| {
                     out.push(Command::SetSetting(
                         Id::new_static("safe.on"),
                         SettingValue::Bool(false),
@@ -811,8 +811,8 @@ mod guarded_settings {
                         slots::SLEEP,
                         Some(Id::new_static("other.screen")),
                     ));
-                }),
-            )
+                },
+            ))
         }
     }
 

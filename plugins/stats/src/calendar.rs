@@ -506,7 +506,7 @@ impl Screen for Calendar {
         }
         let p: Point = gesture.start;
         if let Some(action) = self.header.tap(&env, &self.style, p, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let (left, right) = self.arrows();

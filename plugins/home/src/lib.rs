@@ -126,7 +126,7 @@ impl Plugin for Home {
         ))?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(ALL_TOOLS, "home.drawer").handler(
-                |_: &Env<'_>, out: &mut Commands| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(Command::OpenScreen(DRAWER_SCREEN, Params::new()));
                 },
             ),
@@ -136,7 +136,7 @@ impl Plugin for Home {
         // editing.
         r.add_action(
             paperpaw_sdk::ActionSpec::new(EDIT_PAGES, "home.edit-pages").handler(
-                |_: &Env<'_>, out: &mut Commands| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     let params = Params::new().with(params::MODE, "edit");
                     out.push(Command::OpenSlot(slots::HOME, params));
                 },
@@ -377,7 +377,7 @@ impl Dashboard {
             )),
             GridResponse::Button(n) if n >= FOOTER_BASE => {
                 if let Some((_, action)) = self.actions.get(usize::from(n - FOOTER_BASE)) {
-                    cx.command(Command::RunAction(action.clone()));
+                    cx.command(Command::run(action.clone()));
                 }
             }
             _ => {}

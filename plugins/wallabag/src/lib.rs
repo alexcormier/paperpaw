@@ -639,13 +639,13 @@ impl Plugin for Wallabag {
             Box::new(|env, _| Box::new(SetupScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "wallabag.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
         let s = state.clone();
         r.add_action(ActionSpec::new(FETCH, "wallabag.fetch").handler(
-            move |env: &Env<'_>, out: &mut Commands| {
+            move |env: &Env<'_>, _, out: &mut Commands| {
                 if env.reader {
                     s.borrow_mut().start(env, out);
                 } else {
@@ -796,7 +796,7 @@ impl SetupScreen {
     fn activate(&mut self, row: Row, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         if row == Row::Fetch {
-            cx.command(Command::RunAction(FETCH));
+            cx.command(Command::run(FETCH));
             return;
         }
         let (text, password) = match row {
@@ -877,7 +877,7 @@ impl Screen for SetupScreen {
             return Handled::No;
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, ROWS.len()) else {

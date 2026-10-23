@@ -79,7 +79,7 @@ impl Plugin for Counter {
         let count = self.0.clone();
         r.add_action(
             ActionSpec::new(COUNT, "Count things")
-                .handler(move |_: &Env<'_>, _: &mut Commands| count.set(count.get() + 1)),
+                .handler(move |_: &Env<'_>, _, _: &mut Commands| count.set(count.get() + 1)),
         )
     }
 }

@@ -238,13 +238,13 @@ impl Plugin for Opds {
             Box::new(|env, params| Box::new(edit::EditScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "opds.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
         let shared = state.clone();
         r.add_action(ActionSpec::new(SYNC, "opds.sync-all").handler(
-            move |env: &Env<'_>, out: &mut Commands| {
+            move |env: &Env<'_>, _, out: &mut Commands| {
                 if env.reader {
                     shared.borrow_mut().start(env, marked(env), out);
                 } else {

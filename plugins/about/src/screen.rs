@@ -185,7 +185,7 @@ impl Screen for AboutScreen {
         let env = *cx.env();
         let paging = self.list.paging(self.rows.len());
         if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, self.rows.len()) else {

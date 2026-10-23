@@ -4696,8 +4696,7 @@ pub paperpaw_sdk::Command::Replace(paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::ResetSetting(paperpaw_sdk::Id)
 pub paperpaw_sdk::Command::Respond(paperpaw_sdk::ServerResponse)
 pub paperpaw_sdk::Command::Restart
-pub paperpaw_sdk::Command::RunAction(paperpaw_sdk::Id)
-pub paperpaw_sdk::Command::RunActionWith(paperpaw_sdk::Id, paperpaw_sdk::Params)
+pub paperpaw_sdk::Command::RunAction(paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::RunOriginal(paperpaw_sdk::Id, paperpaw_sdk::Params)
 pub paperpaw_sdk::Command::Screenshot(alloc::string::String)
 #[non_exhaustive] pub paperpaw_sdk::Command::Serve
@@ -4735,6 +4734,7 @@ pub fn paperpaw_sdk::Command::socket_read(paperpaw_sdk::Id, paperpaw_sdk::Socket
 pub fn paperpaw_sdk::Command::socket_send(paperpaw_sdk::Id, alloc::vec::Vec<u8>) -> Self
 impl paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::open_slot(paperpaw_sdk::Id) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::Command::run(impl core::convert::Into<paperpaw_sdk::Id>) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::Command::set<T: paperpaw_sdk::setting::SettingType>(&paperpaw_sdk::setting::Setting<T>, <T as paperpaw_sdk::setting::SettingType>::Input) -> paperpaw_sdk::Command
 impl core::iter::traits::collect::Extend<paperpaw_sdk::Command> for paperpaw_sdk::Commands
 pub fn paperpaw_sdk::Commands::extend<I: core::iter::traits::collect::IntoIterator<Item = paperpaw_sdk::Command>>(&mut self, I)
@@ -5046,7 +5046,7 @@ pub fn paperpaw_sdk::setting::Text::read(core::option::Option<&paperpaw_sdk::Set
 pub fn paperpaw_sdk::setting::Text::write(alloc::borrow::Cow<'static, str>) -> paperpaw_sdk::SettingValue
 #[non_exhaustive] pub struct paperpaw_sdk::ActionOverride
 pub paperpaw_sdk::ActionOverride::action: paperpaw_sdk::Id
-pub paperpaw_sdk::ActionOverride::handler: paperpaw_sdk::ActionParamsHandler
+pub paperpaw_sdk::ActionOverride::handler: paperpaw_sdk::ActionHandler
 pub paperpaw_sdk::ActionOverride::priority: paperpaw_sdk::Priority
 impl core::fmt::Debug for paperpaw_sdk::ActionOverride
 pub fn paperpaw_sdk::ActionOverride::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -5058,13 +5058,11 @@ pub paperpaw_sdk::ActionSpec::title: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::ActionSpec
 pub fn paperpaw_sdk::ActionSpec::describe(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::ActionSpec::description(&self) -> core::option::Option<&str>
-pub fn paperpaw_sdk::ActionSpec::handler(self, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &mut paperpaw_sdk::Commands) + 'static) -> Self
-pub fn paperpaw_sdk::ActionSpec::handler_with(self, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut paperpaw_sdk::Commands) + 'static) -> Self
+pub fn paperpaw_sdk::ActionSpec::handler(self, impl core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut paperpaw_sdk::Commands) + 'static) -> Self
 pub fn paperpaw_sdk::ActionSpec::hint(self, paperpaw_sdk::ActionHint) -> Self
 pub fn paperpaw_sdk::ActionSpec::is_sealed(&self) -> bool
 pub fn paperpaw_sdk::ActionSpec::keywords(self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::ActionSpec::new(impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
-pub fn paperpaw_sdk::ActionSpec::params_handler(&self) -> core::option::Option<&paperpaw_sdk::ActionParamsHandler>
 pub fn paperpaw_sdk::ActionSpec::runs_itself(&self) -> bool
 pub fn paperpaw_sdk::ActionSpec::sealed(self) -> Self
 pub fn paperpaw_sdk::ActionSpec::search_keywords(&self) -> core::option::Option<&str>
@@ -5132,6 +5130,7 @@ pub fn paperpaw_sdk::Cx<'a, 'e>::env(&self) -> &paperpaw_sdk::Env<'e>
 pub fn paperpaw_sdk::Cx<'a, 'e>::for_screen(self, paperpaw_sdk::ScreenKey) -> Self
 pub fn paperpaw_sdk::Cx<'a, 'e>::key(&self) -> core::option::Option<paperpaw_sdk::ScreenKey>
 pub fn paperpaw_sdk::Cx<'a, 'e>::new(&'a paperpaw_sdk::Env<'e>, &'a mut paperpaw_sdk::Output) -> Self
+pub fn paperpaw_sdk::Cx<'a, 'e>::params(&self) -> &paperpaw_sdk::Params
 pub fn paperpaw_sdk::Cx<'a, 'e>::refresh_cause(&mut self, paperpaw_sdk::filters::RefreshCause)
 pub fn paperpaw_sdk::Cx<'a, 'e>::request_redraw(&mut self)
 pub fn paperpaw_sdk::Cx<'a, 'e>::request_redraw_area(&mut self, paperpaw_platform::geometry::Rect)
@@ -5141,6 +5140,7 @@ pub fn paperpaw_sdk::Cx<'a, 'e>::set_key_layer(&mut self, core::option::Option<p
 pub fn paperpaw_sdk::Cx<'a, 'e>::set_refresh(&mut self, paperpaw_platform::display::RefreshMode)
 pub fn paperpaw_sdk::Cx<'a, 'e>::slot(&self) -> core::option::Option<&paperpaw_sdk::Id>
 pub fn paperpaw_sdk::Cx<'a, 'e>::wake_at(&mut self, paperpaw_platform::input::Instant)
+pub fn paperpaw_sdk::Cx<'a, 'e>::with_params(self, &'a paperpaw_sdk::Params) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::Env<'a>
 pub paperpaw_sdk::Env::actions: &'a paperpaw_sdk::Actions
 pub paperpaw_sdk::Env::book_badges: &'a [paperpaw_sdk::library::service::BookBadge]
@@ -6241,8 +6241,7 @@ pub fn paperpaw_sdk::ui::widget_list::ListScreen::takes_buttons(&self) -> bool
 pub fn paperpaw_sdk::ui::widget_list::ListScreen::takes_double_taps(&self) -> bool
 pub fn paperpaw_sdk::cover_fit(paperpaw_image::Fit) -> paperpaw_image::Fit
 pub fn paperpaw_sdk::read_file(&dyn paperpaw_platform::storage::Storage, &str, usize) -> core::result::Result<alloc::vec::Vec<u8>, paperpaw_platform::storage::StorageError>
-pub type paperpaw_sdk::ActionHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &mut paperpaw_sdk::Commands)>
-pub type paperpaw_sdk::ActionParamsHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut paperpaw_sdk::Commands)>
+pub type paperpaw_sdk::ActionHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut paperpaw_sdk::Commands)>
 pub type paperpaw_sdk::EventHandler = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::Params, &mut paperpaw_sdk::Commands)>
 pub type paperpaw_sdk::FormatOpener = alloc::boxed::Box<dyn core::ops::function::Fn(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::OpenOptions) -> core::result::Result<alloc::boxed::Box<dyn paperpaw_document::Document>, paperpaw_document::DocumentError>>
 pub type paperpaw_sdk::FormatPrepared = alloc::boxed::Box<dyn core::ops::function::Fn(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::OpenOptions) -> bool>

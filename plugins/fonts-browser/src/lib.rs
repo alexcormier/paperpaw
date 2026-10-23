@@ -75,7 +75,7 @@ impl Plugin for FontsBrowser {
             Box::new(|env, params| Box::new(font::FontScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "fonts-browser.more").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;

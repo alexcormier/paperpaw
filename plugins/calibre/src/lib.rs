@@ -132,7 +132,7 @@ impl Plugin for Calibre {
             Box::new(|env, _| Box::new(CalibreScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "calibre.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -894,7 +894,7 @@ impl Screen for CalibreScreen {
             return Handled::No;
         }
         if let Some(action) = self.header.tap(cx.env(), &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.state == State::Offline {

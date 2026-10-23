@@ -64,7 +64,7 @@ impl DrawerScreen {
     fn run(&self, index: usize, cx: &mut Cx<'_, '_>) {
         if let Some(action) = self.tools.get(index) {
             cx.command(Command::Back);
-            cx.command(Command::RunAction(action.clone()));
+            cx.command(Command::run(action.clone()));
         }
     }
 }
@@ -138,7 +138,7 @@ impl Screen for DrawerScreen {
                     .header
                     .tap(cx.env(), &self.style, gesture.start, paging)
                 {
-                    cx.command(Command::RunAction(action));
+                    cx.command(Command::run(action));
                     return Handled::Yes;
                 }
                 match self.list.hit(gesture.start, len) {

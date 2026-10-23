@@ -616,7 +616,7 @@ impl UpdatePage {
         let env = *cx.env();
         match button {
             Button::Close => cx.command(Command::Back),
-            Button::Transfer => cx.command(Command::RunAction(TRANSFER)),
+            Button::Transfer => cx.command(Command::run(TRANSFER)),
             Button::Check => {
                 let mut out = paperpaw_sdk::Commands::new();
                 online::check(&env, false, &mut out);
@@ -932,7 +932,7 @@ impl Screen for UpdatePage {
         }
         let env = *cx.env();
         if let Some(action) = self.header.tap(&env, &self.style, gesture.start, None) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         self.shown = false;

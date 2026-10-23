@@ -109,7 +109,7 @@ impl Plugin for Listener {
         })?;
         // Copies text with a line break and a tab to the clipboard.
         r.add_action(
-            ActionSpec::new(COPY, "Copy").handler(|_: &Env<'_>, out: &mut Commands| {
+            ActionSpec::new(COPY, "Copy").handler(|_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::SetClipboard("  pasted\nline\tend ".into()));
             }),
         )

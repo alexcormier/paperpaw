@@ -445,10 +445,12 @@ impl Plugin for Reader {
         )?;
 
         let font_step = |step: i64| -> paperpaw_sdk::ActionHandler {
-            Box::new(move |env: &Env<'_>, out: &mut Commands| {
-                let size = env.settings.read(&settings::FONT_SIZE) + step;
-                out.push(Command::set(&settings::FONT_SIZE, size.clamp(6, 40)));
-            })
+            Box::new(
+                move |env: &Env<'_>, _: &paperpaw_sdk::Params, out: &mut Commands| {
+                    let size = env.settings.read(&settings::FONT_SIZE) + step;
+                    out.push(Command::set(&settings::FONT_SIZE, size.clamp(6, 40)));
+                },
+            )
         };
         let handlers: [(Id, &'static str, paperpaw_sdk::ActionHandler); 3] = [
             (
@@ -464,10 +466,12 @@ impl Plugin for Reader {
             (
                 actions::TOGGLE_JUSTIFY,
                 "reader.action.toggle-justify",
-                Box::new(|env: &Env<'_>, out: &mut Commands| {
-                    let justify = env.settings.read(&settings::JUSTIFY);
-                    out.push(Command::set(&settings::JUSTIFY, !justify));
-                }),
+                Box::new(
+                    |env: &Env<'_>, _: &paperpaw_sdk::Params, out: &mut Commands| {
+                        let justify = env.settings.read(&settings::JUSTIFY);
+                        out.push(Command::set(&settings::JUSTIFY, !justify));
+                    },
+                ),
             ),
         ];
         for (id, title, handler) in handlers {
@@ -476,7 +480,7 @@ impl Plugin for Reader {
         // Font and layout as a panel of controls: changes show at once.
         r.add_action(
             paperpaw_sdk::ActionSpec::new(actions::QUICK_SETTINGS, "reader.layout").handler(
-                |_: &Env<'_>, out: &mut Commands| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(Command::OpenSlot(
                         slots::PANEL,
                         Params::new().with(params::MENU, String::from(LAYOUT_MENU.as_str())),

@@ -281,7 +281,7 @@ impl Screen for OfferScreen {
         let env = *cx.env();
         let paging = self.list.paging(self.rows.len());
         if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.button(&env).is_some_and(|b| b.contains(gesture.start)) {

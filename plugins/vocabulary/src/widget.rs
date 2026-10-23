@@ -310,7 +310,7 @@ fn draw_empty(
 
 /// A tap opens the list of words.
 fn open_words(area: Rect) -> Vec<WidgetTarget> {
-    alloc::vec![WidgetTarget::new(area, Command::RunAction(OPEN))]
+    alloc::vec![WidgetTarget::new(area, Command::run(OPEN))]
 }
 
 /// The day it is where the reader is, counted from 1970; `None` where the
@@ -813,7 +813,7 @@ impl Widget for Due {
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        alloc::vec![WidgetTarget::new(area, Command::RunAction(crate::CARDS))]
+        alloc::vec![WidgetTarget::new(area, Command::run(crate::CARDS))]
     }
 }
 

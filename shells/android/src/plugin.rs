@@ -62,7 +62,7 @@ impl Plugin for AndroidPlugin {
         let app = self.app.clone();
         r.add_action(
             ActionSpec::new(ALLOW_STORAGE, "android.allow-storage").handler(
-                move |_: &Env<'_>, _: &mut paperpaw_sdk::Commands| {
+                move |_: &Env<'_>, _, _: &mut paperpaw_sdk::Commands| {
                     crate::access::request(&app);
                 },
             ),
@@ -209,42 +209,46 @@ impl AndroidPlugin {
         let following = std::cell::Cell::new(false);
         r.subscribe(
             events::PREVIEW_CHANGED,
-            Box::new(move |env: &Env<'_>, _: &Params, _: &mut paperpaw_sdk::Commands| {
-                let shown = |id: &Setting<i64>| {
-                    env.settings.get(id.as_str()) != env.settings.global(id.as_str())
-                };
-                let light = shown(&FRONTLIGHT) || shown(&WARMTH);
-                if !following.replace(light) && !light {
-                    return;
-                }
-                let level = env.settings.read(&FRONTLIGHT) as i32;
-                if lights.brightness(&app) != level {
-                    lights.set_brightness(&app, level);
-                }
-                let warmth = env.settings.read(&WARMTH) as i32;
-                if lights.has_warmth() && lights.warmth(&app) != warmth {
-                    lights.set_warmth(&app, warmth);
-                }
-            }),
+            Box::new(
+                move |env: &Env<'_>, _: &Params, _: &mut paperpaw_sdk::Commands| {
+                    let shown = |id: &Setting<i64>| {
+                        env.settings.get(id.as_str()) != env.settings.global(id.as_str())
+                    };
+                    let light = shown(&FRONTLIGHT) || shown(&WARMTH);
+                    if !following.replace(light) && !light {
+                        return;
+                    }
+                    let level = env.settings.read(&FRONTLIGHT) as i32;
+                    if lights.brightness(&app) != level {
+                        lights.set_brightness(&app, level);
+                    }
+                    let warmth = env.settings.read(&WARMTH) as i32;
+                    if lights.has_warmth() && lights.warmth(&app) != warmth {
+                        lights.set_warmth(&app, warmth);
+                    }
+                },
+            ),
         )?;
         // The device's levels are the truth (they also change through
         // the system's own controls): take them over on start.
         let app = self.app.clone();
         r.subscribe(
             events::STARTED,
-            Box::new(move |env: &Env<'_>, _: &Params, out: &mut paperpaw_sdk::Commands| {
-                let levels = [
-                    (FRONTLIGHT, lights.brightness(&app)),
-                    (WARMTH, lights.warmth(&app)),
-                ];
-                for (id, level) in levels {
-                    let level = i64::from(level);
-                    let known = env.settings.get(id.as_str()).is_some();
-                    if known && env.settings.read(&id) != level {
-                        out.push(Command::set(&id, level));
+            Box::new(
+                move |env: &Env<'_>, _: &Params, out: &mut paperpaw_sdk::Commands| {
+                    let levels = [
+                        (FRONTLIGHT, lights.brightness(&app)),
+                        (WARMTH, lights.warmth(&app)),
+                    ];
+                    for (id, level) in levels {
+                        let level = i64::from(level);
+                        let known = env.settings.get(id.as_str()).is_some();
+                        if known && env.settings.read(&id) != level {
+                            out.push(Command::set(&id, level));
+                        }
                     }
-                }
-            }),
+                },
+            ),
         )?;
         Ok(())
     }

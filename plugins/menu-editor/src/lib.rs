@@ -80,7 +80,7 @@ impl Plugin for MenuEditor {
             r.add_screen(ScreenSpec::new(id, "menu-editor.title", Box::new(open)))?;
         }
         r.add_action(ActionSpec::new(OPEN, "menu-editor.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(MENUS_SCREEN, Params::new()));
             },
         ))?;
@@ -283,7 +283,7 @@ impl Frame {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return None;
         }
         let index = self.list.hit(gesture.start, len)?;

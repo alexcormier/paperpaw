@@ -523,7 +523,12 @@ pub struct Cx<'a, 'e> {
     output: &'a mut Output,
     /// The screen whose handler runs, if it is one of the stack's.
     key: Option<ScreenKey>,
+    /// The params of the action that runs ([`Cx::params`]).
+    params: &'a Params,
 }
+
+/// No params, for a context without an action's.
+static NO_PARAMS: Params = Params::new();
 
 impl<'a, 'e> Cx<'a, 'e> {
     /// Used by the kernel and by tests.
@@ -532,7 +537,22 @@ impl<'a, 'e> Cx<'a, 'e> {
             env,
             output,
             key: None,
+            params: &NO_PARAMS,
         }
+    }
+
+    /// For an action run with `params` (the kernel's, or a test that
+    /// plays it).
+    pub fn with_params(mut self, params: &'a Params) -> Self {
+        self.params = params;
+        self
+    }
+
+    /// The params the action that [`Screen::on_action`] gets was run
+    /// with ([`Command::RunAction`]); none from an input, and none outside
+    /// `on_action`.
+    pub fn params(&self) -> &Params {
+        self.params
     }
 
     /// For the handler of the open screen `key` (the kernel's, or a test

@@ -241,7 +241,7 @@ pub struct StatusItemSpec {
     pub value: StatusFn,
     /// The action a tap on it runs, one of its own plugin's, with the
     /// context its line was drawn with (see [`context`];
-    /// [`Command::RunActionWith`](crate::Command::RunActionWith)): it
+    /// [`Command::RunAction`](crate::Command::RunAction)): it
     /// runs as that plugin, whichever screen shows the line, and can be
     /// bound to buttons too. Without it a tap does what the screen does
     /// with the line.
@@ -539,7 +539,7 @@ impl StatusItems {
         let item = self.item(id)?;
         let action = item.tap.as_ref()?;
         (action.namespace() == item.id.namespace())
-            .then(|| crate::Command::RunActionWith(action.clone(), context.clone()))
+            .then(|| crate::Command::RunAction(action.clone(), context.clone()))
     }
 
     /// How much item `id` matters ([`StatusItemSpec::priority`]).

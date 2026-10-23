@@ -352,6 +352,9 @@ pub struct Kernel {
     subscriptions: Vec<(Id, Id, EventHandler)>,
     /// The lowest screen the last offer of input reached ([`Kernel::offer`]).
     offered_down_to: usize,
+    /// The params of the action offered to the screens now, for their
+    /// context ([`Cx::params`](paperpaw_sdk::Cx::params)); none else.
+    action_params: Params,
     /// What sees every action run and every event emitted.
     action_observers: Vec<paperpaw_sdk::ObserverSpec>,
     event_observers: Vec<paperpaw_sdk::ObserverSpec>,
@@ -707,9 +710,9 @@ impl Kernel {
                 let below = self.stack.len().checked_sub(2)?;
                 Some(format!("back:{}", self.stack[below].id))
             }
-            Command::RunAction(action)
-            | Command::RunActionWith(action, _)
-            | Command::RunOriginal(action, _) => Some(format!("run:{action}")),
+            Command::RunAction(action, _) | Command::RunOriginal(action, _) => {
+                Some(format!("run:{action}"))
+            }
             _ => None,
         }
     }
@@ -898,7 +901,7 @@ impl Kernel {
             if !self.io.speech.speaking() && !self.io.http.busy() && !self.io.servers.busy() {
                 self.output
                     .commands
-                    .push(Command::RunAction(paperpaw_sdk::builtin::actions::SLEEP));
+                    .push(Command::run(paperpaw_sdk::builtin::actions::SLEEP));
             }
         }
         if self.network_deadline().is_some_and(|at| at <= now) {

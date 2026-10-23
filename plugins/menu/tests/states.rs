@@ -109,7 +109,7 @@ impl Plugin for Probe {
             };
             r.add_action(
                 ActionSpec::new(id.clone(), name)
-                    .handler(move |_, _| RAN.with(|r| r.borrow_mut().push(name))),
+                    .handler(move |_, _, _| RAN.with(|r| r.borrow_mut().push(name))),
             )?;
             r.add_menu_entry(MenuEntry::new(MENU, id).order(order as i16))?;
         }

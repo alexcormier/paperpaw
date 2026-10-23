@@ -64,7 +64,7 @@ impl Plugin for Hello {
     }
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
-        r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, out| {
+        r.add_action(ActionSpec::new(OPEN, "hello.title").handler(|_, _, out| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         }))?;
         r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(90))?;
@@ -135,6 +135,11 @@ Screens are made by a factory each time they open
 (`r.add_screen(ScreenSpec::new(id, title, factory))`). Return
 `Handled::No` for what a screen does not handle: the kernel then runs
 the action's own handler (e.g. the menu button opens the menu).
+
+An action can be run with params: `Command::RunAction(id, params)`, or
+`Command::run(id)` without. Its handler gets them as its second argument
+(`.handler(|env, params, out| ..)`), and a screen reads them with
+`cx.params()` in `on_action`. From a button or a gesture there are none.
 
 A screen that needs time to pass asks for it with `cx.wake_at(when)`,
 and `on_timer` comes then. Long work goes in steps, each asking for the

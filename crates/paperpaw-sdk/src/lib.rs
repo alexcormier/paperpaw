@@ -111,8 +111,7 @@ pub mod words;
 pub mod work;
 
 pub use action::{
-    ActionHandler, ActionHint, ActionOverride, ActionParamsHandler, ActionSpec, Actions, Observer,
-    ObserverSpec,
+    ActionHandler, ActionHint, ActionOverride, ActionSpec, Actions, Observer, ObserverSpec,
 };
 pub use command::{
     Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,

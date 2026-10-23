@@ -171,7 +171,7 @@ impl Plugin for Files {
         ] {
             r.add_action(
                 paperpaw_sdk::ActionSpec::new(action.clone(), title).handler(
-                    move |_: &Env<'_>, out: &mut Commands| {
+                    move |_: &Env<'_>, _, out: &mut Commands| {
                         out.push(Command::OpenScreen(
                             SHELF_SCREEN,
                             Params::new().with(params::MODE, mode),
@@ -183,7 +183,7 @@ impl Plugin for Files {
         }
         r.add_action(
             paperpaw_sdk::ActionSpec::new(FAVOURITES, "files.favourites").handler(
-                |_: &Env<'_>, out: &mut Commands| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(list::shelf::open(list::shelf::Kind::Favourites, ""));
                 },
             ),
@@ -207,7 +207,7 @@ impl Plugin for Files {
         r.add_settings(&SETTINGS)?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(SEARCH, "files.search").handler(
-                |env: &Env<'_>, out: &mut Commands| {
+                |env: &Env<'_>, _, out: &mut Commands| {
                     out.push(
                         ask::text(env.i18n.tr("files.search.prompt"), &SEARCH_ENTERED).command(),
                     );
@@ -232,7 +232,7 @@ impl Plugin for Files {
         // The shelves as a submenu: an action named like its menu.
         r.add_action(
             paperpaw_sdk::ActionSpec::new(SHELVES_MENU, "files.shelves").handler(
-                |_: &Env<'_>, out: &mut Commands| {
+                |_: &Env<'_>, _, out: &mut Commands| {
                     out.push(Command::OpenSlot(
                         slots::MENU,
                         Params::new().with(params::MENU, String::from(SHELVES_MENU.as_str())),

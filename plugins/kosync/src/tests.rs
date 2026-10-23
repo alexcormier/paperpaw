@@ -317,7 +317,7 @@ impl Harness {
     /// Chooses *Sync progress*.
     fn sync_now(&self) -> Vec<Command> {
         let mut out = paperpaw_sdk::Commands::new();
-        (self.sync_now.as_ref().unwrap())(&self.env(), &mut out);
+        (self.sync_now.as_ref().unwrap())(&self.env(), &Params::new(), &mut out);
         out.into_iter().collect()
     }
 

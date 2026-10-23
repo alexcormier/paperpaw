@@ -54,7 +54,7 @@ impl Plugin for Installer {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(ActionSpec::new(INSTALL, "installer.install").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::InstallPlugin(
                     Id::new_static("airy"),
                     String::from("plugins/.airy.part"),

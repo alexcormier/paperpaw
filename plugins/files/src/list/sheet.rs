@@ -255,7 +255,7 @@ impl BookSheet {
                 // Which book, then the action as usual.
                 let chosen = events::BookChosen::new(id.clone(), path.to_string());
                 cx.command(events::BOOK_CHOSEN.emit(chosen));
-                cx.command(Command::RunAction(id.clone()));
+                cx.command(Command::run(id.clone()));
             }
             Action::Menu => super::open_menu(cx),
             Action::Delete => {}

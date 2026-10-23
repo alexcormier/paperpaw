@@ -457,7 +457,7 @@ impl Screen for ListScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, self.paging())
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         if self.offering(cx.env()) {

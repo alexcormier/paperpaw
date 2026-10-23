@@ -249,7 +249,7 @@ impl ViewScreen {
         let env = *cx.env();
         if let Some(&top) = self.top.get(row) {
             match top {
-                Top::Fonts => cx.command(Command::RunAction(crate::FONTS)),
+                Top::Fonts => cx.command(Command::run(crate::FONTS)),
                 Top::Sort => {
                     let options: Vec<&str> = Order::ALL.iter().map(|o| o.key()).collect();
                     cx.command(
@@ -437,7 +437,7 @@ impl Screen for ViewScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(row) = self.list.hit(gesture.start, len) else {

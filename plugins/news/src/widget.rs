@@ -232,7 +232,7 @@ impl Widget for Headlines {
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
         let look = widgets::look::look(env, NAME, area);
         if self.shown.is_empty() {
-            return alloc::vec![WidgetTarget::new(area, Command::RunAction(OPEN))];
+            return alloc::vec![WidgetTarget::new(area, Command::run(OPEN))];
         }
         rows(env, &look, self.shown.len())
             .1

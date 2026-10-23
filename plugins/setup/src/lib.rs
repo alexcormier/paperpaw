@@ -75,7 +75,7 @@ impl Plugin for Setup {
         ))?;
         r.bind_slot(slots::SETUP, SCREEN, Priority::DEFAULT)?;
         r.add_action(ActionSpec::new(OPEN, "setup.open").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenSlot(slots::SETUP, Params::new()));
             },
         ))?;

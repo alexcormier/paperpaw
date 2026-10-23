@@ -107,7 +107,7 @@ impl State {
                 }
                 let (id, value) = match &rule.effect {
                     Effect::Action(action) => {
-                        out.push(Command::RunAction(action.clone()));
+                        out.push(Command::run(action.clone()));
                         continue;
                     }
                     Effect::Message(text) => {
@@ -391,7 +391,7 @@ impl Plugin for Rules {
             Box::new(|env, params| Box::new(screens::PickScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "rules.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;

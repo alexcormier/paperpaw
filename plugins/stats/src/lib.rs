@@ -615,7 +615,7 @@ impl Plugin for Stats {
         ))?;
         let s = state;
         r.add_action(ActionSpec::new(OPEN, "stats.title").handler(
-            move |env: &Env<'_>, out: &mut Commands| {
+            move |env: &Env<'_>, _, out: &mut Commands| {
                 // Recorded so far, so the views include the current page.
                 let mut state = s.borrow_mut();
                 let reading = state.session.as_ref().is_some_and(|s| s.since.is_some());

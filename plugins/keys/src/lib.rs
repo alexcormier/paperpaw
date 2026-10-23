@@ -444,7 +444,7 @@ impl Plugin for Keys {
             Box::new(|env, params| Box::new(PlaceScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "keys.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
@@ -732,7 +732,7 @@ impl Screen for ListScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.rows.hit(gesture.start) {
@@ -873,7 +873,7 @@ impl Screen for PlaceScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.list.hit(gesture.start, len) {
@@ -1142,7 +1142,7 @@ impl Screen for PickScreen {
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         match self.rows.hit(gesture.start) {

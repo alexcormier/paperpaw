@@ -358,11 +358,6 @@ pub enum Command {
     /// and these params, else in place of what the slot shows (one
     /// launcher of several, chosen once).
     OpenInSlot(Id, Id, Params),
-    /// Runs action `.0` with params `.1`, as [`Command::RunAction`]: a
-    /// handler made with [`ActionSpec::handler_with`](crate::ActionSpec::handler_with)
-    /// gets them (a screen that takes the action does not), e.g. a
-    /// rule applying the profile it names.
-    RunActionWith(Id, Params),
     /// Runs action `.0`'s own handler with params `.1`, past the handlers
     /// put in its place and the screens: for a handler put in its place
     /// that does more around it. Only from such a handler of action `.0`
@@ -418,8 +413,12 @@ pub enum Command {
     Redraw(RefreshMode),
     /// Notifies all subscribers of an event, then every open screen.
     Emit(Id, Params),
-    /// Runs an action as if the user had triggered it (e.g. from a menu).
-    RunAction(Id),
+    /// Runs action `.0` as if the user had triggered it (e.g. from a
+    /// menu), with params `.1`: its handler gets them, and so does a
+    /// screen that takes it ([`Cx::params`](crate::Cx::params)), e.g. a
+    /// rule applying the profile it names. [`Command::run`] runs it
+    /// without.
+    RunAction(Id, Params),
     /// Switches a plugin on or off in `paperpaw.ini`; applies after a
     /// restart. The kernel refuses plugins that cannot be switched off
     /// (see [`PluginInfo::can_switch_off`](crate::PluginInfo)).
@@ -662,6 +661,11 @@ impl Command {
         value: T::Input,
     ) -> Command {
         Command::SetSetting(setting.id().clone(), T::write(value))
+    }
+
+    /// [`Command::RunAction`]: runs `action` without params.
+    pub fn run(action: impl Into<Id>) -> Command {
+        Command::RunAction(action.into(), Params::new())
     }
 
     /// Opens a slot without parameters.

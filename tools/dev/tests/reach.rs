@@ -49,7 +49,7 @@ impl Plugin for Trapped {
             Box::new(|_, _| Box::new(Hidden)),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "trapped.open").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(STUCK, Params::new()));
             },
         ))?;

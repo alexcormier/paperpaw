@@ -372,7 +372,7 @@ fn an_action_that_runs_itself_for_ever_is_cut_off() {
     let harness = Harness::new();
     let mut kernel = kernel(&harness, None);
     for i in 0..3 {
-        harness.run(&mut kernel, 1000 + i, [Command::RunAction(common::LOOP)]);
+        harness.run(&mut kernel, 1000 + i, [Command::run(common::LOOP)]);
     }
     let warnings = kernel.take_warnings();
     assert_eq!(warnings.len(), 3, "{warnings:?}");

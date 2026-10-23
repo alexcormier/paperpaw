@@ -91,12 +91,12 @@ impl Plugin for Profiles {
             Box::new(|env, _| Box::new(ListScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "profiles.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
         r.add_action(ActionSpec::new(NEXT, "profiles.next").handler(
-            |env: &Env<'_>, out: &mut Commands| {
+            |env: &Env<'_>, _, out: &mut Commands| {
                 let profiles = profile::load(env.storage).unwrap_or_default();
                 let last = profile::last(env.storage);
                 let at = profiles.iter().position(|p| p.name == last);
@@ -413,7 +413,7 @@ impl Screen for ListScreen {
                 .header
                 .tap(cx.env(), &self.style, gesture.start, paging)
         {
-            cx.command(Command::RunAction(action));
+            cx.command(Command::run(action));
             return Handled::Yes;
         }
         let Some(index) = self.list.hit(gesture.start, len) else {

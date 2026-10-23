@@ -232,7 +232,7 @@ impl Plugin for Vocabulary {
             Box::new(move |env, _| Box::new(WordsScreen::new(env, changes.clone()))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "vocabulary.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -272,7 +272,7 @@ impl Plugin for Vocabulary {
             Box::new(|env, _| Box::new(phone::PhoneScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(CARDS, "vocabulary.cards.title").handler(
-            |_: &Env<'_>, out: &mut Commands| {
+            |_: &Env<'_>, _, out: &mut Commands| {
                 out.push(Command::OpenScreen(decks::SCREEN, Params::new()));
             },
         ))?;
@@ -595,7 +595,7 @@ impl Screen for WordsScreen {
         if gesture.kind == GestureKind::Tap {
             let paging = self.list.paging(len);
             if let Some(action) = self.header.tap(&env, &self.style, gesture.start, paging) {
-                cx.command(Command::RunAction(action));
+                cx.command(Command::run(action));
                 return Handled::Yes;
             }
         }
