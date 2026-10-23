@@ -17,6 +17,16 @@ use alloc::vec::Vec;
 use crate::Instant;
 use crate::random::Random;
 
+/// The port of the device's cable link (USB): a server asked for it
+/// ([`Command::serve`](crate::Command::serve)) is reached by the computer
+/// at the other end of the cable, where the device has such a link, with
+/// the same requests as over the network, and needs no network. Nobody
+/// shows a key there, and who is at that end is not known: ask the reader
+/// on the device before anything is written. PaperPaw opens the screen
+/// bound to [`slots::CABLE`](crate::builtin::slots::CABLE) when a computer
+/// speaks over the cable while nothing serves there.
+pub const CABLE_PORT: u16 = 0;
+
 /// Letters of a key, 5 bits each: 65 bits.
 pub const KEY_LETTERS: usize = 13;
 // At least 64 bits.

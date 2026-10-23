@@ -65,6 +65,7 @@ mod stack;
 mod tls;
 #[cfg(feature = "remote")]
 mod traced;
+mod usb_lines;
 #[cfg(feature = "esp32s3")]
 mod usb_power;
 mod volume;
@@ -329,9 +330,10 @@ fn main() -> ! {
         power_latch: board.power_latch,
         usb_power: board.usb_power,
         delay: board.delay,
-        // Commands from a computer on USB; the log goes out the same way.
+        // Lines from a computer on USB; the log goes out the same way.
+        usb: usb_lines::UsbLines::new(board.usb),
         #[cfg(feature = "remote")]
-        remote: remote::Remote::new(board.usb),
+        remote: remote::Remote,
         #[cfg(feature = "x4-pro")]
         light: board.light,
         state: State::default(),

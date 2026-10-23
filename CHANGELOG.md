@@ -116,6 +116,16 @@ change the plugin SDK.
   `GET /api/plugins` lists what is installed and where it came from.
 - SDK: `install::local::Staging` installs a plugin sent file by file,
   with the same checks for every way it comes.
+- Transfer over USB (X4, X4 Pro, in every firmware): a computer at the
+  other end of the cable (the workshop, `tools/usb-transfer.py`) installs
+  a plugin or adds books. The device shows what it means to send, with
+  names and sizes, and writes nothing until you allow it; only the
+  plugins and books offered are taken, never over a book, and *Back*
+  ends it. Requests and answers are lines over the USB serial link
+  (`docs/usb-transfer.md`). The emulator speaks the same with `--stdio`.
+- SDK: `served::CABLE_PORT` serves over the cable instead of the
+  network; the slot `slots::CABLE` is opened when a computer speaks
+  there.
 - SDK: `Storage::total_space` tells a storage's size, as `free_space`
   tells what it has free.
 - SDK: `builtin::events::TYPE_TEXT` types text into the text field

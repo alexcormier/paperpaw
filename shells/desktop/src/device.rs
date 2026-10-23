@@ -393,6 +393,21 @@ impl Device {
         self.execute(effects);
     }
 
+    /// A line from the computer at the cable (`--stdio`): the cable
+    /// transfer's requests (see `paperpaw_core::Kernel::cable_line`); the
+    /// answers wait in [`Device::take_cable_lines`].
+    pub fn cable_line(&mut self, line: &str) {
+        let now = self.now();
+        let kernel = &mut self.kernel;
+        let effects = budget::track(|| kernel.cable_line(now, line));
+        self.execute(effects);
+    }
+
+    /// The cable transfer's lines for the computer, in order.
+    pub fn take_cable_lines(&mut self) -> Vec<String> {
+        self.kernel.take_cable_lines()
+    }
+
     /// Types `text` into the text field shown, then confirms it with
     /// `done` (scripts' `type`, the remote's): whether one was shown.
     pub fn type_text(&mut self, text: &str, done: bool) -> bool {

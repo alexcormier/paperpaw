@@ -8,76 +8,27 @@ use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt::Write;
 
-use esp_hal::peripherals::USB_DEVICE;
 use esp_println::println;
 use paperpaw_core::{HttpResponse, JoinFailure, Kernel, WifiNetwork, WifiState};
 use paperpaw_platform::FrameView;
 use paperpaw_x4::remote::{Command, hex_bytes, part_state, runs};
 
-/// A line is never longer: `data` and 512 bytes in hexadecimal.
-const MAX_LINE: usize = 1100;
+use crate::usb_lines::{TooLong, UsbLines};
+
 /// A file is written in pieces this large.
 const CHUNK: usize = 4096;
 /// Without data for this long, a file is given up.
 const QUIET_MS: u64 = 5000;
 
-/// Reads commands from USB, a line at a time.
-///
-/// It reads the USB unit's receive buffer itself: esp-hal's driver resets
-/// the unit when it starts, which cuts the connection the log goes out on.
-pub struct Remote {
-    _usb: USB_DEVICE<'static>,
-    line: Vec<u8>,
-    /// The line coming is longer than [`MAX_LINE`]: dropped whole.
-    too_long: bool,
-}
-
-/// A line longer than [`MAX_LINE`] came: not carried out cut.
-struct TooLong;
+/// The commands from USB (the lines of [`UsbLines`] that are not the
+/// cable transfer's).
+#[derive(Default)]
+pub struct Remote;
 
 impl Remote {
-    pub fn new(usb: USB_DEVICE<'static>) -> Self {
-        Self {
-            _usb: usb,
-            line: Vec::new(),
-            too_long: false,
-        }
-    }
-
-    /// The next byte the computer sent, if any.
-    fn read_byte(&mut self) -> Option<u8> {
-        let regs = USB_DEVICE::regs();
-        regs.ep1_conf()
-            .read()
-            .serial_out_ep_data_avail()
-            .bit_is_set()
-            .then(|| regs.ep1().read().rdwr_byte().bits())
-    }
-
-    /// The next whole line that came, if one did.
-    fn next_line(&mut self) -> Option<Result<Vec<u8>, TooLong>> {
-        while let Some(byte) = self.read_byte() {
-            match byte {
-                b'\n' | b'\r' if self.too_long => {
-                    self.too_long = false;
-                    return Some(Err(TooLong));
-                }
-                b'\n' | b'\r' if self.line.is_empty() => {}
-                b'\n' | b'\r' => return Some(Ok(core::mem::take(&mut self.line))),
-                _ if self.too_long => {}
-                _ if self.line.len() < MAX_LINE => self.line.push(byte),
-                _ => {
-                    self.line.clear();
-                    self.too_long = true;
-                }
-            }
-        }
-        None
-    }
-
-    /// The next command, once a whole line has come.
-    pub fn poll(&mut self) -> Option<Command> {
-        let Ok(line) = self.next_line()? else {
+    /// The command a line says, if it says one.
+    pub fn command(&mut self, line: Result<Vec<u8>, TooLong>) -> Option<Command> {
+        let Ok(line) = line else {
             error("line too long");
             return None;
         };
@@ -92,7 +43,12 @@ impl Remote {
     /// Answers a command that only asks (the screen, a screenshot, what it
     /// shows, the heap) or brings a file; the others it gives back for the
     /// main loop.
-    pub fn answer(&mut self, kernel: &mut Kernel, command: Command) -> Option<Command> {
+    pub fn answer(
+        &mut self,
+        kernel: &mut Kernel,
+        lines: &mut UsbLines,
+        command: Command,
+    ) -> Option<Command> {
         match command {
             Command::Shot => shot(kernel),
             Command::Describe => describe(kernel),
@@ -110,7 +66,7 @@ impl Remote {
                     esp_alloc::HEAP.stats().max_usage
                 );
             }
-            Command::Put { size, path } => self.receive(kernel, size, &path),
+            Command::Put { size, path } => self.receive(kernel, lines, size, &path),
             Command::Get(path) => send(kernel, &path),
             Command::Hang(seconds) => {
                 println!("PP:HANGING");
@@ -339,7 +295,7 @@ impl Remote {
 
     /// Writes a file of `size` bytes to `path` from the lines `data <hex>`
     /// that follow, a piece at a time.
-    fn receive(&mut self, kernel: &Kernel, size: usize, path: &str) {
+    fn receive(&mut self, kernel: &Kernel, lines: &mut UsbLines, size: usize, path: &str) {
         let storage = kernel.storage();
         if let Err(e) = storage.write(path, &[]) {
             return println!("PP:ERR {path}: {e:?}");
@@ -354,7 +310,7 @@ impl Remote {
         let (mut got, mut last) = (0, millis());
         while got < size {
             crate::power::feed();
-            let Some(line) = self.next_line() else {
+            let Some(line) = lines.next_line() else {
                 if millis() - last > QUIET_MS {
                     return println!("PP:ERR {path}: {got} of {size} bytes came");
                 }

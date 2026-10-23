@@ -184,7 +184,15 @@ fn state_json(state: Option<State>) -> String {
 }
 
 fn refused(refusal: Refusal) -> String {
-    let why = match refusal {
+    format!(
+        "{{\"state\":\"refused\",\"why\":{}}}",
+        json_string(why(refusal))
+    )
+}
+
+/// Why a plugin was not installed, in a word or two.
+pub(crate) fn why(refusal: Refusal) -> &'static str {
+    match refusal {
         Refusal::Name => "name",
         Refusal::Damaged => "damaged",
         Refusal::Storage => "storage",
@@ -195,8 +203,7 @@ fn refused(refusal: Refusal) -> String {
         Refusal::OtherBuild => "built for another PaperPaw",
         Refusal::NeedsApproval => "not approved",
         _ => "refused",
-    };
-    format!("{{\"state\":\"refused\",\"why\":{}}}", json_string(why))
+    }
 }
 
 /// 64 hexadecimal digits as 32 bytes.
@@ -205,7 +212,7 @@ fn digest(hex: &str) -> Option<[u8; 32]> {
 }
 
 /// The plugins installed, as JSON.
-fn listing(env: &Env<'_>) -> String {
+pub(crate) fn listing(env: &Env<'_>) -> String {
     let mut json = String::from("{\"plugins\":[");
     for (i, info) in env.plugins.iter().enumerate() {
         let version = info.update.unwrap_or(info.manifest.version);

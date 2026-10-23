@@ -94,6 +94,7 @@ pub use crate::code_plugin::{CodeFile, CodeLoader};
 use crate::config::{mono_coverage, plugin_switches, read_config};
 use crate::core_plugin::{CORE, CorePlugin};
 use crate::input::{Recognized, Recognizer, Thresholds};
+pub use crate::io::cable::PREFIX as CABLE_PREFIX;
 pub use crate::io::{
     HttpCall, HttpResponse, Io, MAX_FILE, MAX_RESPONSE, SOCKET_PART, ServedFile, ServerCall,
     ServerEvent, SocketCall, SocketEvent, SpeechCall, WifiEvent,

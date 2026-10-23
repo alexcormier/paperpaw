@@ -194,6 +194,104 @@ impl Kernel {
         self.finish()
     }
 
+    /// A line from the computer at the other end of the cable (USB), as
+    /// the shell read it: requests for the server on the cable (see
+    /// `io::cable`, `docs/usb-transfer.md`). A line that is not the
+    /// cable's is passed over. Where nothing serves the cable, the screen
+    /// bound to [`slots::CABLE`] is opened first. The answers wait in
+    /// [`Kernel::take_cable_lines`].
+    pub fn cable_line(&mut self, now: Instant, line: &str) -> Effects {
+        use io::cable::Line;
+        let Some(line) = io::cable::parse(line) else {
+            return Effects::default();
+        };
+        let _running = self.shared.meter.enter(meter::CORE);
+        self.now = now;
+        // The computer at the cable is the reader's.
+        self.shared.reader = true;
+        self.last_activity = now;
+        match line {
+            Line::Request {
+                n,
+                method,
+                target,
+                len,
+            } => {
+                if self.io.servers.cable_server().is_none() {
+                    self.output
+                        .commands
+                        .push(Command::OpenSlot(slots::CABLE, Params::new()));
+                    self.run_commands();
+                }
+                let Some(server) = self.io.servers.cable_server() else {
+                    self.io
+                        .servers
+                        .cable
+                        .refuse(n, 503, "nothing serves the cable");
+                    return self.finish();
+                };
+                let storage = &*self.shared.storage;
+                if storage.free_space().is_some_and(|free| len > free) {
+                    self.io.servers.cable.refuse(n, 507, "not enough room");
+                    return self.finish();
+                }
+                let request = self.io.servers.cable.begin(n, len);
+                let event = ServerEvent::Request {
+                    server,
+                    request,
+                    method,
+                    target,
+                    body: len > 0,
+                };
+                self.io
+                    .servers
+                    .event(event, storage, &mut self.output.commands);
+            }
+            Line::Data { n, bytes } => match self.io.servers.cable.data(n, bytes.len()) {
+                Some((request, last)) => {
+                    let event = ServerEvent::Body {
+                        request,
+                        data: bytes,
+                        last,
+                    };
+                    let storage = &*self.shared.storage;
+                    self.io
+                        .servers
+                        .event(event, storage, &mut self.output.commands);
+                }
+                None => {
+                    // Its request, if any, is cut short: its body goes.
+                    if let Some(request) = self.io.servers.cable.cut(n) {
+                        let storage = &*self.shared.storage;
+                        let closed = ServerEvent::Closed { request };
+                        self.io
+                            .servers
+                            .event(closed, storage, &mut self.output.commands);
+                    }
+                    self.io.servers.cable.refuse(n, 400, "no such body coming");
+                }
+            },
+            Line::Bad { n: Some(n), why } => {
+                if let Some(request) = self.io.servers.cable.cut(n) {
+                    let storage = &*self.shared.storage;
+                    let closed = ServerEvent::Closed { request };
+                    self.io
+                        .servers
+                        .event(closed, storage, &mut self.output.commands);
+                }
+                self.io.servers.cable.refuse(n, 400, why);
+            }
+            Line::Bad { n: None, .. } => {}
+        }
+        self.finish()
+    }
+
+    /// The lines to send to the computer at the cable, in order: check
+    /// after every kernel call, as [`Kernel::take_io`].
+    pub fn take_cable_lines(&mut self) -> Vec<String> {
+        self.io.servers.cable.take()
+    }
+
     /// Delivers the answer to a request ([`Io::Http`]).
     pub fn http_response(&mut self, now: Instant, response: HttpResponse) -> Effects {
         let _running = self.shared.meter.enter(meter::CORE);

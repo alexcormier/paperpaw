@@ -126,6 +126,11 @@ pub mod slots {
     /// by [`REPLY`](super::params::REPLY). The keyboard offers it where a
     /// screen is bound here and there is a network.
     pub const REMOTE_KEYBOARD: Id = Id::new_static("core.remote-keyboard");
+    /// Opened by PaperPaw when a computer speaks over the cable (USB)
+    /// while nothing serves there: the screen bound here serves it on
+    /// [`CABLE_PORT`](crate::served::CABLE_PORT) while it is open, and asks
+    /// the reader before anything is written (the `transfer` plugin's).
+    pub const CABLE: Id = Id::new_static("core.cable");
     /// Shows a web page: parameter [`URL`](super::params::URL), and
     /// [`ID`](super::params::ID) different for every request (opening a
     /// slot with the parameters it is open with only brings it forward).

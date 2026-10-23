@@ -10,7 +10,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 use paperpaw_emulator::device::Device;
-use paperpaw_emulator::{budget, device, headless, profiles, trace};
+use paperpaw_emulator::{budget, device, headless, profiles, stdio, trace};
 
 const USAGE: &str = "\
 PaperPaw emulator
@@ -39,6 +39,8 @@ OPTIONS:
                           disk (screenshots alike everywhere)
     --trace               Print what each frame's drawing asks the storage, band by band,
                           and how long it takes
+    --stdio               Speak the cable transfer (USB) on standard input and output,
+                          as a device does over its cable (docs/usb-transfer.md)
     -h, --help            Show this help
 
 KEYS (if the device has the button):
@@ -64,6 +66,8 @@ struct Options {
     /// `Some(None)` removes the budget.
     heap_budget: Option<Option<usize>>,
     heap_report: bool,
+    /// The cable transfer on standard input and output.
+    stdio: bool,
 }
 
 fn main() -> ExitCode {
@@ -113,6 +117,22 @@ fn run() -> Result<(), String> {
         if let Some(script) = &options.script {
             headless::run_script(&mut device, script)?;
         }
+        if options.stdio {
+            // Line by line until standard input ends, time passing as it
+            // does.
+            let lines = stdio::lines();
+            loop {
+                match lines.recv_timeout(std::time::Duration::from_millis(50)) {
+                    Ok(line) => device.cable_line(&line),
+                    Err(std::sync::mpsc::RecvTimeoutError::Timeout) => {}
+                    Err(std::sync::mpsc::RecvTimeoutError::Disconnected) => break,
+                }
+                device.tick_if_due();
+                stdio::send(&device.take_cable_lines());
+            }
+            // Standard output is the cable's: nothing more on it.
+            return Ok(());
+        }
         if let Some(path) = &options.screenshot {
             headless::screenshot(&device, path)?;
             println!("screenshot saved to {}", path.display());
@@ -143,7 +163,7 @@ fn run() -> Result<(), String> {
     let dir = options
         .screenshot_dir
         .unwrap_or_else(|| PathBuf::from("out"));
-    gui::run(device, dir, recorder)
+    gui::run(device, dir, recorder, options.stdio)
 }
 
 /// Reads `--config` and appends `--set` overrides as config sections.
@@ -191,6 +211,7 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
                 options.sets.push((key.to_string(), val.to_string()));
             }
             "--headless" => options.headless = true,
+            "--stdio" => options.stdio = true,
             "--script" => options.script = Some(value("--script")?),
             "--screenshot" => options.screenshot = Some(PathBuf::from(value("--screenshot")?)),
             "--library" => options.library = Some(PathBuf::from(value("--library")?)),

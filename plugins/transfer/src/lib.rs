@@ -16,6 +16,7 @@
 
 extern crate alloc;
 
+mod cable;
 mod phone;
 mod plugins;
 mod web;
@@ -50,6 +51,8 @@ const SERVER_EVENT: Event<ServerNotice> = Event::new("transfer.server-event");
 const CODE_APPROVED: Event<Confirmed> = Event::new("transfer.code-approved");
 /// Typing on a phone for the keyboard.
 const PHONE_SCREEN: Id = Id::new_static("transfer.phone");
+/// Transfer over the cable (USB).
+const CABLE_SCREEN: Id = Id::new_static("transfer.cable");
 
 /// The port asked for; the next free one is taken if it is in use.
 pub(crate) const PORT: u16 = 8080;
@@ -99,6 +102,12 @@ impl Plugin for Transfer {
             Box::new(|env, params| Box::new(phone::PhoneScreen::new(env, params))),
         ))?;
         r.bind_slot(slots::REMOTE_KEYBOARD, PHONE_SCREEN, Priority::DEFAULT)?;
+        r.add_screen(ScreenSpec::new(
+            CABLE_SCREEN,
+            "transfer.cable.title",
+            Box::new(|env, _| Box::new(cable::CableScreen::new(env))),
+        ))?;
+        r.bind_slot(slots::CABLE, CABLE_SCREEN, Priority::DEFAULT)?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;
         Ok(())
