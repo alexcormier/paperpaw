@@ -341,7 +341,7 @@ fn a_folder_with_everything_in_it_is_deleted_after_asking() {
         // Asked first; cancelled, all stays.
         options(&mut app, "Series");
         choose(&mut app, "Delete");
-        assert!(app.shows("Delete “Series”?"), "{}", app.described());
+        assert!(app.shows("Delete the folder"), "{}", app.described());
         choose(&mut app, "Cancel");
         assert_eq!(app.screen(), BROWSER);
         assert!(storage.exists("books/Series/Deeper/two.txt"));

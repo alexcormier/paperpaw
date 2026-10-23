@@ -219,6 +219,8 @@ fn the_mount_point_itself_is_never_removed_whole() {
     );
 }
 
+/// The base's error is told too: a clean-up must not take what is
+/// there for gone.
 #[test]
 fn the_root_lists_the_mount_point_even_when_the_base_cannot() {
     let calls = Calls::default();
@@ -228,9 +230,8 @@ fn the_root_lists_the_mount_point_even_when_the_base_cannot() {
         Log::new("books", &calls),
     );
     let mut seen = Vec::new();
-    storage
-        .list("", &mut |e| seen.push((e.name.to_string(), e.is_dir)))
-        .unwrap();
+    let listed = storage.list("", &mut |e| seen.push((e.name.to_string(), e.is_dir)));
+    assert_eq!(listed, Err(StorageError::NotFound));
     assert_eq!(seen, [(String::from("books"), true)]);
     assert_eq!(calls.take(), ["base: list "]);
 }

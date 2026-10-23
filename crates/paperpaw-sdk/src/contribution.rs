@@ -557,12 +557,15 @@ impl Registrar {
         self.add(Contribution::Stylesheet(css))
     }
 
-    /// A folder where the plugin keeps something for each book, named by
-    /// the book's key ([`library::key`](crate::library::key)) after
-    /// `prefix` (alone, or followed by `.` and more, a file or a folder):
-    /// the kernel moves it with its book, removes it with it and cleans up
-    /// what is left of books no longer there
-    /// ([`library::BookData`](crate::library::BookData)).
+    /// A folder where the plugin keeps the reader's data for each book
+    /// (a place, notes, settings for the book), named by the book's key
+    /// ([`library::key`](crate::library::key)) after `prefix` (alone, or
+    /// followed by `.` and more, a file or a folder): the kernel moves it
+    /// with its book and removes it with it. What is left of books no
+    /// longer found goes only when the reader agrees: a book renamed on a
+    /// computer or on a card not inserted is not found either
+    /// ([`library::BookData`](crate::library::BookData)). For what is
+    /// made again from the book, [`add_book_cache`](Self::add_book_cache).
     pub fn add_book_data(
         &mut self,
         folder: impl Into<Cow<'static, str>>,
@@ -571,6 +574,23 @@ impl Registrar {
         self.add(Contribution::BookData(crate::library::BookData {
             folder: folder.into(),
             prefix: prefix.into(),
+            kind: crate::library::BookDataKind::UserData,
+        }))
+    }
+
+    /// As [`add_book_data`](Self::add_book_data), for what the plugin
+    /// makes again from the book when needed (pages laid out, a cover
+    /// made small): what is left of books no longer found is cleaned up
+    /// by itself.
+    pub fn add_book_cache(
+        &mut self,
+        folder: impl Into<Cow<'static, str>>,
+        prefix: impl Into<Cow<'static, str>>,
+    ) -> Result<(), RegisterError> {
+        self.add(Contribution::BookData(crate::library::BookData {
+            folder: folder.into(),
+            prefix: prefix.into(),
+            kind: crate::library::BookDataKind::Cache,
         }))
     }
 

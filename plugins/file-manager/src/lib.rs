@@ -387,10 +387,15 @@ impl Browser {
                 } else if ops::same_path(env.storage, ops::parent(&picked.path), &self.dir) {
                     // Moved where it is: nothing to do.
                     Ok(())
+                } else if let Some(refused) = refused(&env, &picked.path) {
+                    self.message = Some(refused);
+                    return self.redraw(cx);
                 } else {
                     let moved = ops::move_to(env.storage, &picked.path, &target);
                     if moved.is_ok() {
                         note = tell_moved(&env, &picked.path, &target, cx);
+                    } else {
+                        tell_partly_moved(&env, &picked.path, &target, cx);
                     }
                     moved
                 };
@@ -440,10 +445,21 @@ impl Browser {
                 self.message = Some(env.i18n.format(key, &[("name", Arg::Str(&name))]));
                 self.redraw(cx);
             }
+            "delete" | "delete-yes" if is_own_data(env.storage, path) => {
+                self.message = Some(env.i18n.tr("file-manager.error.own-data").to_string());
+                self.redraw(cx);
+            }
             "delete" => {
-                let title = env
-                    .i18n
-                    .format("file-manager.delete-question", &[("name", Arg::Str(&name))]);
+                // What goes: a folder with everything in it, a book with
+                // what is kept for it.
+                let key = if ops::is_dir(env.storage, path) {
+                    "file-manager.delete-folder-question"
+                } else if env.formats.supports_file(env.storage, path) {
+                    "file-manager.delete-book-question"
+                } else {
+                    "file-manager.delete-question"
+                };
+                let title = env.i18n.format(key, &[("name", Arg::Str(&name))]);
                 cx.command(
                     paperpaw_sdk::ask::choice(&title, &CHOSEN)
                         .about(path)
@@ -758,6 +774,10 @@ impl Screen for Browser {
             if name == ops::name(&path) {
                 return;
             }
+            if let Some(refused) = refused(&env, &path) {
+                self.message = Some(refused);
+                return self.redraw(cx);
+            }
             let at = match rename(env.storage, &path, name) {
                 Ok(target) => {
                     self.message = tell_moved(&env, &path, &target, cx);
@@ -791,8 +811,34 @@ impl Screen for Browser {
     }
 }
 
-/// Most books whose moving (or deleting) is told at once, for one folder.
+/// Most books whose moving (or deleting) is told at once, for one folder:
+/// a folder of more is not moved ([`refused`]).
 const MAX_TOLD: usize = 2000;
+
+/// Whether `path` is PaperPaw's own folder, with every setting, note and
+/// statistic: not deleted, renamed or moved here.
+fn is_own_data(storage: &dyn Storage, path: &str) -> bool {
+    ops::same_path(storage, path.trim_matches('/'), paperpaw_sdk::data::DIR)
+}
+
+/// Why `path` is not moved or renamed, if it is not: PaperPaw's own
+/// folder, or a folder of more books than can be told moving
+/// ([`MAX_TOLD`]), whose notes would stay behind.
+fn refused(env: &Env<'_>, path: &str) -> Option<String> {
+    if is_own_data(env.storage, path) {
+        return Some(env.i18n.tr("file-manager.error.own-data").to_string());
+    }
+    if !ops::is_dir(env.storage, path) {
+        return None;
+    }
+    let mut books = 0;
+    paperpaw_sdk::library::books_in(env.storage, env.formats, path, &mut |_| books += 1);
+    (books > MAX_TOLD).then(|| {
+        let most = Arg::Int(MAX_TOLD as i64);
+        env.i18n
+            .format("file-manager.too-many-books", &[("count", most)])
+    })
+}
 
 /// The folder chooser of the `files` plugin: settings edited with it (or
 /// with whatever is bound to `core.choose-folder`) hold folders.
@@ -801,7 +847,8 @@ const CHOOSE_FOLDER: Id = Id::new_static("files.choose-folder");
 /// Tells the other plugins that the books at `from` are now at `to`
 /// ([`events::BOOK_MOVED`]), so the data they keep by a book's path
 /// (progress, notes, statistics) goes along: for a folder, of each book in
-/// it (each file a format plugin opens), up to [`MAX_TOLD`]. Settings
+/// it (each file a format plugin opens), up to [`MAX_TOLD`]; a file,
+/// whatever its name now (`a.epub.bak` may be named back). Settings
 /// that hold the folder moved, or one in it (the library folder, say),
 /// follow it. Says so where the data of some books could not go along.
 fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) -> Option<String> {
@@ -809,6 +856,10 @@ fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) -> Optio
     // The reading apps chosen for the folder and those in it go along.
     let _ = paperpaw_sdk::readers::folder_moved(env.storage, from, to);
     let (from, to) = (from.trim_matches('/'), to.trim_matches('/'));
+    if !ops::is_dir(env.storage, to) {
+        cx.command(events::BOOK_MOVED.emit(events::BookMoved::new(from.into(), to.into())));
+        return None;
+    }
     let mut told = 0;
     let mut more = false;
     paperpaw_sdk::library::books_in(env.storage, env.formats, to, &mut |book| {
@@ -826,6 +877,24 @@ fn tell_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) -> Optio
         )));
     });
     more.then(|| env.i18n.tr("file-manager.moved-many").to_string())
+}
+
+/// Tells of the books a move cut short moved (copied, then not all
+/// deleted): those at `to` and gone from `from`. The others are still
+/// where they were, with what is kept for them.
+fn tell_partly_moved(env: &Env<'_>, from: &str, to: &str, cx: &mut Cx<'_, '_>) {
+    let (from, to) = (from.trim_matches('/'), to.trim_matches('/'));
+    let mut told = 0;
+    paperpaw_sdk::library::books_in(env.storage, env.formats, to, &mut |book| {
+        let Some(rest) = book.strip_prefix(to) else {
+            return;
+        };
+        let was = format!("{from}{rest}");
+        if told < MAX_TOLD && !env.storage.exists(&was) {
+            told += 1;
+            cx.command(events::BOOK_MOVED.emit(events::BookMoved::new(was, book.to_string())));
+        }
+    });
 }
 
 /// Folder `value` (a setting's), after folder `from` moved to `to`: where

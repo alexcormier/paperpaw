@@ -119,7 +119,7 @@ impl Plugin for EpubFormat {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
-        r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "")?;
+        r.add_book_cache(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "")?;
         r.add_format(
             FormatSpec::new(
                 FORMAT,
@@ -156,7 +156,7 @@ impl Plugin for HtmlFormat {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
-        r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "html-")?;
+        r.add_book_cache(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "html-")?;
         r.add_format(FormatSpec::new(
             HTML,
             "format-html.title",
@@ -192,7 +192,7 @@ impl Plugin for Fb2Format {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
-        r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "fb2-")?;
+        r.add_book_cache(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "fb2-")?;
         r.add_format(FormatSpec::new(
             FB2,
             "format-fb2.title",
@@ -224,7 +224,7 @@ impl Plugin for MarkdownFormat {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
-        r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "md-")?;
+        r.add_book_cache(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "md-")?;
         r.add_format(FormatSpec::new(
             MARKDOWN,
             "format-markdown.title",
@@ -256,7 +256,7 @@ impl Plugin for CbzFormat {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is converted of each book, moved and removed with it.
-        r.add_book_data(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "cbz-")?;
+        r.add_book_cache(paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()), "cbz-")?;
         r.add_format(FormatSpec::new(
             CBZ,
             "format-cbz.title",

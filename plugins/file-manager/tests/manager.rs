@@ -19,7 +19,7 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{
     DeviceInfo, DisplayInfo, Id, InputCaps, Instant, Manifest, MemoryClass, MemoryStorage, Params,
-    PixelFormat, Plugin, RegisterError, Registrar, Version,
+    PixelFormat, Plugin, RegisterError, Registrar, Storage, StorageError, Version,
 };
 
 const DEVICE: DeviceInfo = DeviceInfo {
@@ -65,7 +65,7 @@ impl Plugin for Spy {
 
 /// The file manager in folder `dir` of `storage`; and the books said to
 /// have moved.
-fn manager(storage: MemoryStorage, dir: &str) -> (Kernel, Moved) {
+fn manager(storage: impl Storage + 'static, dir: &str) -> (Kernel, Moved) {
     let moved = Rc::new(RefCell::new(Vec::new()));
     let mut kernel = Kernel::builder(DEVICE)
         .storage(storage)
@@ -225,4 +225,145 @@ fn deleting_a_folder_drops_what_was_picked_in_it() {
     choose(&mut kernel, "books/Old", "delete-yes");
     let after = shown(&mut kernel);
     assert!(!after.iter().any(|l| l == "Paste here"), "{after:?}");
+}
+
+/// A folder of more books than can be told moving at once is not moved:
+/// the data kept by their paths would stay behind.
+#[test]
+fn a_folder_of_too_many_books_is_not_moved() {
+    let storage = (0..=2000).fold(MemoryStorage::new(), |card, i| {
+        card.with(&format!("books/All/{i:04}.txt"), "x")
+    });
+    let (mut kernel, moved) = manager(storage, "books");
+    rename(&mut kernel, "books/All", "Every");
+    assert!(kernel.storage().exists("books/All/0000.txt"));
+    assert!(!kernel.storage().exists("books/Every/0000.txt"));
+    assert!(moved.borrow().is_empty());
+    let said = shown(&mut kernel);
+    assert!(
+        said.iter().any(|l| l.contains("more than 2000 books")),
+        "{said:?}"
+    );
+}
+
+/// A book renamed to a name no format opens is told moving all the same:
+/// renamed back, its notes come back with it.
+#[test]
+fn a_file_renamed_is_told_moving_whatever_its_name() {
+    let storage = MemoryStorage::new().with("books/a.txt", "A");
+    let (mut kernel, moved) = manager(storage, "books");
+    rename(&mut kernel, "books/a.txt", "a.txt.bak");
+    assert_eq!(
+        *moved.borrow(),
+        [("books/a.txt".into(), "books/a.txt.bak".into())]
+    );
+}
+
+/// A storage that moves between folders by copying, and deletes only the
+/// first file of a folder moved (`books/Old`) before failing.
+struct HalfMoving(MemoryStorage);
+
+impl Storage for HalfMoving {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        self.0.read_at(path, offset, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.0.size(path)
+    }
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.0.write(path, data)
+    }
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.0.append(path, data)
+    }
+    fn list(
+        &self,
+        dir: &str,
+        visit: &mut dyn FnMut(paperpaw_platform::DirEntry<'_>),
+    ) -> Result<(), StorageError> {
+        self.0.list(dir, visit)
+    }
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.0.remove(path)
+    }
+    fn exists(&self, path: &str) -> bool {
+        self.0.exists(path)
+    }
+    fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        if from.starts_with("books/Old") {
+            return Err(StorageError::Unsupported);
+        }
+        self.0.rename(from, to)
+    }
+    fn create_dir(&self, path: &str) -> Result<(), StorageError> {
+        self.0.create_dir(path)
+    }
+    fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
+        if path == "books/Old" {
+            self.0.remove("books/Old/a.txt")?;
+            return Err(StorageError::Io);
+        }
+        self.0.remove_dir_all(path)
+    }
+}
+
+/// A move that fails half-way tells of the books it moved: those at the
+/// new place and gone from the old one.
+#[test]
+fn a_move_cut_short_tells_of_the_books_it_moved() {
+    let storage = HalfMoving(
+        MemoryStorage::new()
+            .with("books/Old/a.txt", "A")
+            .with("books/Old/b.txt", "B")
+            .with("New/keep.dat", "x"),
+    );
+    let (mut kernel, moved) = manager(storage, "New");
+    choose(&mut kernel, "books/Old", "move");
+    // Up from the first entry to the bar: *Cancel*, then *Paste here*.
+    for action in ["core.up", "core.up", "core.confirm"] {
+        let effects = kernel.run_action(Instant(0), Id::new_static(action));
+        settle(&mut kernel, effects);
+    }
+    assert!(kernel.storage().exists("New/Old/a.txt"));
+    assert!(kernel.storage().exists("books/Old/b.txt"));
+    assert_eq!(
+        *moved.borrow(),
+        [("books/Old/a.txt".into(), "New/Old/a.txt".into())]
+    );
+}
+
+/// Deleting says what goes: a folder with everything in it, a book with
+/// its place and notes.
+#[test]
+fn deleting_says_what_goes() {
+    let storage = MemoryStorage::new()
+        .with("books/Old/a.txt", "A")
+        .with("books/b.txt", "B");
+    let (mut kernel, _) = manager(storage, "books");
+    choose(&mut kernel, "books/Old", "delete");
+    let said = shown(&mut kernel).join(" ");
+    assert!(said.contains("everything in it"), "{said}");
+    let effects = kernel.run_action(Instant(0), Id::new_static("core.back"));
+    settle(&mut kernel, effects);
+    choose(&mut kernel, "books/b.txt", "delete");
+    let said = shown(&mut kernel).join(" ");
+    assert!(said.contains("bookmarks and notes"), "{said}");
+}
+
+/// PaperPaw's own folder, shown with hidden files, is not deleted: it
+/// holds every setting, note and statistic.
+#[test]
+fn paperpaws_own_folder_is_not_deleted() {
+    let storage = MemoryStorage::new()
+        .with(".paperpaw/annotations/0123456789abcdef", "a note")
+        .with("books/b.txt", "B");
+    let (mut kernel, _) = manager(storage, "");
+    choose(&mut kernel, ".paperpaw", "delete-yes");
+    assert!(
+        kernel
+            .storage()
+            .exists(".paperpaw/annotations/0123456789abcdef")
+    );
+    let said = shown(&mut kernel).join(" ");
+    assert!(said.contains("PaperPaw"), "{said}");
 }
