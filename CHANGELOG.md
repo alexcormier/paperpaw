@@ -6,6 +6,10 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- PaperPaw's own plugins in the store carry their How it works in
+  their folders (`how/<lang>.txt`, `tools/plugin-files/catalogue.py`),
+  so the store's page of each and the readers' store show it; a plugin
+  without one in English fails the release.
 - `paperpaw-emu --stdio` protocol 2 (version 1's requests as they were):
   `slot`, `set` and `setting`, `emit`, `screens` and `actions`, `wait`,
   `until` (a text or a screen, with a timeout) and `expect`, as the X4's

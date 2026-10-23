@@ -227,6 +227,8 @@ jobs:
             fi
           done
           exit $status
+      - name: The store's first-party folders carry How it works
+        run: python3 -m unittest discover -s tools/plugin-files
 
   emulator:
     name: Emulator (${{ matrix.os }})
