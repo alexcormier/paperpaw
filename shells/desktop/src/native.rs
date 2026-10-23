@@ -5,7 +5,7 @@
 //! Android loads `code.so`, with the same entry and table as `.ppn` files
 //! on the X4. It must be built by the same compiler, for this computer,
 //! against the same SDK as this emulator ([`FINGERPRINT`], which
-//! `--stdio` says; [`built_here`] checks the compiler), and installed: only a file whose SHA-256 the card
+//! `--stdio` says; `built_here` checks the compiler), and installed: only a file whose SHA-256 the card
 //! has (`native::remember_code`) runs, as on the devices, which
 //! [`trust`] gives every one on a card (`--trust-code`).
 //!
