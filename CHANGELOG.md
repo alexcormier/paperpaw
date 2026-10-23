@@ -32,6 +32,11 @@ change the plugin SDK.
   `paperpaw-emu --registry` and in the web emulator's device). The web
   emulator's frame draws the body with the keys there, for the mouse,
   touch and the keyboard, in the embedding page's colours (`look`).
+- Lock touch says how to unlock it whenever it turns on, however it was
+  switched (the quick panel, the reader's menu, Settings, a button), and
+  says when it is unlocked. While it is on, a tap or a swipe says again
+  how to unlock, at most every ten seconds, calmly (no full refresh);
+  the way out works as before.
 ### 0.5.0-beta.1 (draft)
 
 This is a beta, for testers and developers. It is the first release of

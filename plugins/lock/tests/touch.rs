@@ -19,7 +19,7 @@ use paperpaw_platform::{
     Point, PointerEvent, PointerPhase, PointerTool, Rotation,
 };
 use paperpaw_plugin_lock::Lock;
-use paperpaw_plugin_lock::touch::{HOLD_MS, LOCKED, TOGGLE};
+use paperpaw_plugin_lock::touch::{HINT_MS, HOLD_MS, LOCKED, TOGGLE};
 use paperpaw_sdk::builtin::{actions, slots};
 use paperpaw_sdk::{
     Canvas, Cx, Env, Handled, Id, Manifest, MemoryStorage, Plugin, Priority, RegisterError,
@@ -61,9 +61,15 @@ struct PagesScreen(Turned);
 impl Screen for PagesScreen {
     fn draw(&mut self, _: &mut Canvas<'_>, _: &Env<'_>) {}
 
-    fn on_action(&mut self, action: &Id, _: &mut Cx<'_, '_>) -> Handled {
+    fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         if *action == actions::NEXT_PAGE {
             *self.0.borrow_mut() += 1;
+            return Handled::Yes;
+        }
+        // A switch of the setting, as the quick panel's and Settings' are.
+        if *action == actions::CONFIRM {
+            let on = cx.env().settings.read(&LOCKED);
+            cx.command(paperpaw_sdk::Command::set(&LOCKED, !on));
             return Handled::Yes;
         }
         Handled::No
@@ -100,6 +106,8 @@ impl Test {
             .storage(MemoryStorage::new())
             .plugin(paperpaw_plugin_fonts_default::DefaultFonts)
             .plugin(Lock)
+            // Shows the notices, and the quick panel.
+            .plugin(paperpaw_plugin_menu::Menu)
             .plugin(Pages(turned.clone()))
             .build()
             .unwrap();
@@ -168,6 +176,49 @@ impl Test {
             self.pointer(80, PointerPhase::Up, (240, 400));
         }
         self.hold(millis);
+    }
+
+    /// Whether the screen says `text` now (a notice too).
+    fn says(&mut self, text: &str) -> bool {
+        self.kernel.render(&mut |_, _| {});
+        let labels: Vec<String> = self
+            .kernel
+            .describe()
+            .into_iter()
+            .map(|p| p.label)
+            .collect();
+        labels.join(" ").contains(text)
+    }
+
+    /// Opens the quick panel and taps its *Lock touch* switch.
+    fn quick_panel_switch(&mut self) {
+        let at = self.at(200);
+        self.kernel.run_action(at, actions::QUICK_PANEL);
+        self.kernel.render(&mut |_, _| {});
+        let parts = self.kernel.describe();
+        let switch = parts
+            .iter()
+            .find(|p| p.label.contains("Lock touch"))
+            .unwrap_or_else(|| panic!("no switch in {parts:?}"));
+        let (x, y) = (
+            i32::from(switch.area.x) + i32::from(switch.area.width) / 2,
+            i32::from(switch.area.y) + i32::from(switch.area.height) / 2,
+        );
+        self.pointer(200, PointerPhase::Down, (x, y));
+        self.pointer(60, PointerPhase::Up, (x, y));
+    }
+
+    /// Time passes: a notice showing goes.
+    fn wait(&mut self, millis: u64) {
+        let at = self.at(millis);
+        self.kernel.tick(at);
+    }
+
+    /// Switches the setting on a screen, as the reader does in the quick
+    /// panel and in Settings.
+    fn switch(&mut self) {
+        let at = self.at(200);
+        self.kernel.run_action(at, actions::CONFIRM);
     }
 
     fn button(&mut self, name: &'static str, held: u64) {
@@ -239,4 +290,63 @@ fn with_buttons_only_nothing_changes() {
     t.button("page-forward", 50);
     assert_eq!(t.turned(), 1);
     assert!(!t.locked());
+}
+
+const LOCKED_TEXT: &str = "Touch is locked. To unlock, tap the screen twice";
+const UNLOCKED_TEXT: &str = "Touch is unlocked.";
+
+/// However touch is locked (Settings or the quick panel, which set the
+/// setting; the toggle, from a button or a rule), the reader is told how
+/// to unlock it, and told when it is unlocked.
+#[test]
+fn locking_touch_says_how_to_unlock_however_it_is_switched() {
+    let mut t = Test::new(true);
+    t.switch();
+    assert!(t.locked());
+    assert!(
+        t.says(LOCKED_TEXT),
+        "switched as in Settings and the quick panel"
+    );
+    t.wait(10_000);
+    assert!(!t.says(LOCKED_TEXT));
+    t.switch();
+    assert!(t.says(UNLOCKED_TEXT));
+    t.wait(10_000);
+    t.quick_panel_switch();
+    assert!(t.locked());
+    assert!(t.says(LOCKED_TEXT), "the quick panel's switch");
+    t.wait(10_000);
+    t.toggle();
+    assert!(t.says(UNLOCKED_TEXT));
+    t.wait(10_000);
+    t.toggle();
+    assert!(t.says(LOCKED_TEXT), "the toggle");
+    t.wait(10_000);
+    t.toggle();
+    assert!(t.says(UNLOCKED_TEXT));
+}
+
+/// While touch is locked, a tap or a swipe says how to unlock, now and
+/// then (not at every touch), and still turns no page; the way out works
+/// as before.
+#[test]
+fn a_touch_while_locked_says_how_to_unlock_now_and_then() {
+    let mut t = Test::new(true);
+    t.toggle();
+    t.wait(HINT_MS);
+    assert!(!t.says(LOCKED_TEXT));
+    t.tap_right();
+    assert!(t.says(LOCKED_TEXT), "a tap says how to unlock");
+    t.wait(5_000);
+    assert!(!t.says(LOCKED_TEXT));
+    t.swipe_left();
+    assert!(!t.says(LOCKED_TEXT), "not again so soon");
+    t.wait(HINT_MS);
+    t.swipe_left();
+    assert!(t.says(LOCKED_TEXT), "a swipe, a while later, says it again");
+    assert_eq!(t.turned(), 0);
+    t.wait(HINT_MS);
+    t.taps_and_hold(HOLD_MS + 100);
+    assert!(!t.locked(), "the way out still unlocks");
+    assert!(t.says(UNLOCKED_TEXT));
 }
