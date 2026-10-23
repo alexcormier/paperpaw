@@ -31,7 +31,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::install::{self, Digest, MAX_FILES, Origin, Package, PackageFile};
+use paperpaw_sdk::install::{self, Digest, MAX_FILES, Package, PackageFile};
 use paperpaw_sdk::json::stream::{Event, read_file};
 use paperpaw_sdk::native::Fingerprint;
 use paperpaw_sdk::web::{encode, join_url};
@@ -136,30 +136,6 @@ impl Entry {
         env.plugins
             .get(&self.id)
             .map(|info| info.update.unwrap_or(info.manifest.version))
-    }
-
-    /// Whether a newer version than the one installed is offered: only
-    /// for a plugin this store installed, never over one put in place
-    /// otherwise (see [`install::origin`]).
-    pub(crate) fn newer(&self, env: &Env<'_>) -> bool {
-        match (self.installed(env), Version::parse(&self.version)) {
-            (Some(installed), Some(offered)) => {
-                offered > installed && self.origin(env, installed) == Origin::Store
-            }
-            _ => false,
-        }
-    }
-
-    /// Whether the plugin is installed, but not by this store (the Wi-Fi
-    /// transfer, a memory card, one's own build): its version here may be
-    /// used in its place, when the reader says so, never as an update.
-    pub(crate) fn local(&self, env: &Env<'_>) -> bool {
-        self.installed(env)
-            .is_some_and(|installed| self.origin(env, installed) == Origin::Local)
-    }
-
-    fn origin(&self, env: &Env<'_>, installed: Version) -> Origin {
-        install::origin(env.storage, &self.id, installed)
     }
 
     /// Its line in the index, tabs and line ends of the list left out.
