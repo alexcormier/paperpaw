@@ -455,9 +455,9 @@ device: see [Checking your plugin](#checking-your-plugin).
 
 `paperpaw-dev` ([`tools/dev`](../tools/dev/src/lib.rs)) looks at a
 plugin the way its users will meet it, before it is published. It runs
-PaperPaw's standard app with the plugin added on emulated devices (the
-emulator's profiles: by default the X4, X4 Pro and Boox
-), draws everything the plugin adds and checks it. It finds what
+PaperPaw's standard app with the plugin added on emulated devices (by default
+the X4, X4 Pro and Boox profiles), draws everything the plugin adds and
+checks it. It finds what
 is easy to miss on one's own device: a label that fits in English but not
 in German, a widget that spills out of its cell at 1x1, a screen that
 cannot be left with the X4's buttons, a frame that reads the card in
