@@ -28,6 +28,11 @@ change the plugin SDK.
   asks the update server for them (`"betas": true`); a device running a
   beta gets the next anyway. About and the update's texts show a beta
   calmly, as `0.5.0 Beta 1`. SDK: `firmware::beta`.
+- The workspace publishes to crates.io as a pre-release
+  (`tools/publish-dry-run.sh 0.5.0-beta.1`, and the *Publish check*
+  workflow): the plugins that test with the app take it by path alone,
+  so the two no longer wait for each other there, and the plugins whose
+  How it works is compiled in ship it in their packages.
 - Hints covered by another screen (a plugin's question, a notice opened
   over them) close and show again when their screen does, instead of
   staying below it, cut.

@@ -9,7 +9,7 @@ repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 categories = ["no-std"]
-include = ["src", "i18n", "licences.md", "logo.png"]
+include = ["src", "how", "i18n", "licences.md", "logo.png"]
 
 [dependencies]
 paperpaw-sdk.workspace = true

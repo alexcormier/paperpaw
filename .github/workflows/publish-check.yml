@@ -1,0 +1,41 @@
+name: Publish check
+
+# Whether the workspace's crates publish to crates.io as a pre-release
+# (tools/publish-dry-run.sh): each packaged and built from its package,
+# path and version dependencies between them included. By hand with the
+# version to try, and when a manifest changes, as the next beta.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: The version to try, e.g. 0.5.0-beta.1
+        required: true
+  push:
+    branches: [main]
+    paths:
+      - "**/Cargo.toml"
+      - ".github/workflows/publish-check.yml"
+      - "tools/publish-dry-run.sh"
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  dry-run:
+    name: cargo publish --dry-run
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: dtolnay/rust-toolchain@stable
+      - name: Publish as a pre-release, without publishing
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          if [[ -z "$VERSION" ]]; then
+            current="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
+            VERSION="${current%%-*}-beta.1"
+          fi
+          tools/publish-dry-run.sh "$VERSION"
