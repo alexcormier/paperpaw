@@ -141,10 +141,15 @@ change the plugin SDK.
   reaching back past it, as drawn and as measured by
   `FontHandle::ink_across` (`paperpaw_text::is_mark`,
   `paperpaw_text::glyph_x`, `TextStyle::based`).
-- The keyboard's keys are nearly round where they are tapped (about
-  4.7 mm wide and 5.2 mm high on the X4 Pro), every key as wide in every row and a
-  thin seam between them, so the keyboard takes much less of the
-  screen; with buttons only (the X4) the keys stay as they were. German
+- The keyboard's keys are round where they are tapped (about 4.9 mm
+  wide and 4.8 mm high on the X4 Pro), every key as wide in every row
+  and a thin seam between them, so the keyboard takes much less of the
+  screen; with buttons only (the X4) the keys stay as they were. The
+  setting *Shape of keys* makes them a little taller or a little wider
+  instead. *Keyboard size* (Small, Medium, Large) makes the keyboard a
+  quarter lower or higher: with round keys about 30 %, 40 % or 50 % of
+  the screen. Keys never get narrower or lower than 4 mm, nor than
+  their letter, and the keyboard never takes more than half the screen. German
   has ten keys a row, as English: ä, ö, ü and ß come from holding a, o,
   u and s, first in their lists, and with buttons the field says so on
   those letters. The setting *Umlaut keys* (off by default) gives them
