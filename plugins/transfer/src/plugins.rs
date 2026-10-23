@@ -92,6 +92,16 @@ impl Installs {
         let Some(staging) = Staging::new(id) else {
             return (json(400, String::from("{\"why\":\"name\"}")), None);
         };
+        // The cable is sent this plugin now: not both at once.
+        if matches!(method, "PUT" | "POST") && staged_over_cable(env, id) {
+            if let Some(body) = body_file {
+                let _ = env.storage.remove(body);
+            }
+            return (
+                json(409, String::from("{\"why\":\"being sent over the cable\"}")),
+                None,
+            );
+        }
         match (method, file) {
             ("PUT", file) if !file.is_empty() => {
                 let Some(sha256) = param(query, "sha256").and_then(|hex| digest(&hex)) else {
@@ -166,6 +176,23 @@ impl Installs {
         self.set(plugin, state);
         matches!(state, State::Installed { .. })
     }
+}
+
+/// Whether the Wi-Fi transfer, open, has files of plugin `id` staged.
+pub(crate) fn staged_over_wifi(env: &Env<'_>, id: &str) -> bool {
+    let open = env.stack.iter().any(|entry| entry.screen == crate::SCREEN);
+    open && Staging::new(id).is_some_and(|staging| !staging.files(env.storage).is_empty())
+}
+
+/// Whether the cable transfer, open, has an offer of plugin `id` (its
+/// folder is made for it).
+fn staged_over_cable(env: &Env<'_>, id: &str) -> bool {
+    let open = env
+        .stack
+        .iter()
+        .any(|entry| entry.screen == crate::CABLE_SCREEN);
+    let staging = Staging::apart(id, crate::cable::STAGING);
+    open && staging.is_some_and(|staging| env.storage.exists(&staging.folder()))
 }
 
 fn status(state: State) -> u16 {

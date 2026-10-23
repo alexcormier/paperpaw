@@ -64,6 +64,8 @@ pub enum Refusal {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Staging {
     plugin: String,
+    /// Whose folder it is (see [`Staging::apart`]).
+    place: &'static str,
 }
 
 /// What [`Staging::commit`] is told.
@@ -96,8 +98,18 @@ pub struct Committed {
 impl Staging {
     /// The staging of plugin `id`; `None` for a name no plugin can have.
     pub fn new(id: &str) -> Option<Self> {
-        super::is_plugin_name(id).then(|| Self {
+        Self::apart(id, "local")
+    }
+
+    /// The staging of plugin `id` in a folder of its own, named by
+    /// `place` (a word of small letters): one way a plugin comes (the
+    /// cable, say) never takes or changes the files another sends. `None`
+    /// for a name no plugin can have, or a `place` not such a word.
+    pub fn apart(id: &str, place: &'static str) -> Option<Self> {
+        let word = !place.is_empty() && place.bytes().all(|b| b.is_ascii_lowercase());
+        (word && super::is_plugin_name(id)).then(|| Self {
             plugin: String::from(id),
+            place,
         })
     }
 
@@ -107,7 +119,7 @@ impl Staging {
 
     /// The folder the files go into, which PaperPaw does not load.
     pub fn folder(&self) -> String {
-        format!("{PLUGIN_DIR}/.{}.local", self.plugin)
+        format!("{PLUGIN_DIR}/.{}.{}", self.plugin, self.place)
     }
 
     /// Takes the file at `from` (on the storage, e.g. where a request's
@@ -300,6 +312,21 @@ mod tests {
 
     /// A file is taken only as it was said to be; the one sent before in
     /// its place stays where the new one is refused.
+    /// Stagings apart never share their files.
+    #[test]
+    fn stagings_apart_keep_their_files_apart() {
+        assert_eq!(
+            Staging::new("dark").unwrap().folder(),
+            "plugins/.dark.local"
+        );
+        let cable = Staging::apart("dark", "cable").unwrap();
+        assert_eq!(cable.folder(), "plugins/.dark.cable");
+        assert!(Staging::apart("dark", "").is_none());
+        assert!(Staging::apart("dark", "Cable").is_none());
+        assert!(Staging::apart("dark", "a/b").is_none());
+        assert!(Staging::apart("../x", "cable").is_none());
+    }
+
     #[test]
     fn files_are_taken_by_their_digest() {
         let storage = MemoryStorage::new();

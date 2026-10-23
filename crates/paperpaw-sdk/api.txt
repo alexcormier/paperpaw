@@ -1625,6 +1625,7 @@ pub paperpaw_sdk::install::local::Committed::plugin: alloc::string::String
 pub struct paperpaw_sdk::install::local::Staging
 impl paperpaw_sdk::install::local::Staging
 pub fn paperpaw_sdk::install::local::Staging::abort(&self, &dyn paperpaw_platform::storage::Storage)
+pub fn paperpaw_sdk::install::local::Staging::apart(&str, &'static str) -> core::option::Option<Self>
 pub fn paperpaw_sdk::install::local::Staging::code(&self, &dyn paperpaw_platform::storage::Storage) -> core::option::Option<[u8; 32]>
 pub fn paperpaw_sdk::install::local::Staging::commit(&self, &paperpaw_sdk::Env<'_>, paperpaw_sdk::install::local::Commit, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> core::result::Result<paperpaw_sdk::install::local::Committed, paperpaw_sdk::install::local::Refusal>
 pub fn paperpaw_sdk::install::local::Staging::files(&self, &dyn paperpaw_platform::storage::Storage) -> alloc::vec::Vec<alloc::string::String>

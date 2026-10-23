@@ -6,6 +6,21 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Transfer over USB, further:
+  - A plugin's files are put together in a folder of the cable's own,
+    and installed only if they are those offered, each with the SHA-256
+    offered, and no others: nothing sent another way (the Wi-Fi
+    transfer) is installed as what you allowed. The cable and the open
+    Wi-Fi transfer never send the same plugin at once (*409*).
+  - Offers are read a line at a time: up to 256 lines (a plugin of up
+    to 64 files and books), each book kept in a few bytes.
+  - Only closing the question refuses an offer; a screen shown over it
+    does not.
+  - A request given the number of one whose body was still coming
+    takes its place: the new one is answered, and the other's body
+    goes at once, not at the next start.
+- SDK: `install::local::Staging::apart` puts a plugin's files together
+  in a folder of its own, for one way of sending.
 - Your data is safer: an audit of everything PaperPaw keeps found ways
   it could lose notes, places, statistics, cards or passwords, and they
   are closed, each with a test.

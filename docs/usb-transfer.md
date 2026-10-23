@@ -95,8 +95,9 @@ book Some book.epub 512000 <sha256>
 `plugin <id>` names a plugin, and each line after it a file of it with
 its size in bytes and its SHA-256 in hexadecimal; a plugin's paths have no
 spaces. `book <name> <size> <sha256>` names a book (a file name without
-folders, spaces allowed). One plugin per offer; books as many as needed;
-at most 64 files and 8 KiB of offer.
+folders, spaces allowed). One plugin per offer, with at most 64 files;
+books as many as fit: at most 256 lines in all, each of at most 320
+bytes. The device reads the offer a line at a time.
 
 The device shows the names and sizes and asks the reader: *Allow this
 computer to install a plugin / add books?* For a plugin with code it adds
@@ -104,12 +105,14 @@ that the code comes from this computer, not from the store, and runs with
 full access to the device. The answer is *202* `{"state": "asking"}`;
 *400* for an offer that names what may not be written (a path out of the
 plugin's folder, a hidden file, a folder for a book); *409* while another
-offer is asked about; *507* where there is not room for all of it. Files
-of the plugin sent before the offer are let go.
+offer is asked about, or while the Wi-Fi transfer, open, is being sent
+the same plugin; *507* where there is not room for all of it. Files of
+the plugin sent before the offer are let go.
 
 The computer then asks `GET /api/offer` until the state is `allowed` or
 `refused`. The permission holds for this offer, while the screen is open;
-a question closed without an answer counts as `refused`.
+the question closed without an answer counts as `refused` (a screen shown
+over it does not).
 
 ### Sending
 
@@ -122,6 +125,8 @@ offered, each once:
 - `POST /api/plugin/<id>`: installs the plugin from the files sent, in one
   step: `{"state": "installed", "restart": false}`. The version before
   stays until the new one is whole; the plugin's own data stays; it is
+  installed only if the files sent are those offered, each with the
+  SHA-256 offered, and no others (*422* `"not as offered"`); it is
   loaded at once. A plugin with code is checked whole and must be built
   for the device's `fingerprint`; it runs after a restart (`"restart":
   true`). *422* `{"state": "refused", "why": …}` where it was not
@@ -148,6 +153,9 @@ requests, each with the page's key (`k=`), shown on the device:
 - `GET /api/plugin/<id>`: how the last install stands (`none`, `asking`,
   `installed`, `refused`)
 - `DELETE /api/plugin/<id>`: drops the files sent
+
+The two ways keep their files apart. While the cable is sent a plugin,
+the Wi-Fi transfer refuses files of that plugin (*409*).
 
 ## The emulator
 
