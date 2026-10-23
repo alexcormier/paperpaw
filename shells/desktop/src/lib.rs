@@ -20,6 +20,7 @@ pub mod panel;
 pub mod private;
 pub mod profiles;
 pub mod registry;
+#[cfg(not(target_arch = "wasm32"))]
 pub mod stdio;
 pub mod trace;
 pub mod wifi;
