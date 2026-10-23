@@ -143,7 +143,7 @@ impl Screen for FindScreen {
         let w = ui::draw_icon(canvas, env, "search", size, margin, self.search, ink);
         let x = margin + w + style.gap as f32;
         let hint = env.i18n.tr("files.list.find.search");
-        let faint = style.focus_faint(focused, 80);
+        let faint = style.focus_faint(focused, ui::Ink::Detail);
         ui::draw_label(canvas, &font, style.text, x, self.search, hint, faint);
         // The letters, the focused one on a dark circle.
         let big = style.title * 1.2;

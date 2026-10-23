@@ -413,23 +413,22 @@ fn canvases_describe_what_they_draw_to_those_who_ask() {
     {
         let mut canvas = fb.canvas();
         assert!(!canvas.is_describing());
-        canvas.describe(Role::Button, "OK", Rect::new(1, 1, 5, 5), true, None);
+        canvas
+            .describe(Role::Button, "OK", Rect::new(1, 1, 5, 5))
+            .focused(true);
     }
     let mut described = Vec::new();
     {
         let mut canvas = fb.canvas().describing(&mut described);
         assert!(canvas.is_describing());
-        canvas.describe(Role::Heading, "Title", Rect::new(0, 0, 50, 8), false, None);
+        canvas.describe(Role::Heading, "Title", Rect::new(0, 0, 50, 8));
         // A clipped canvas describes into the same list.
         let mut inner = canvas.clipped(Rect::new(0, 10, 20, 10));
         assert!(inner.is_describing());
-        inner.describe(
-            Role::Switch,
-            "Wi-Fi",
-            Rect::new(0, 10, 20, 10),
-            true,
-            Some(true),
-        );
+        inner
+            .describe(Role::Switch, "Wi-Fi", Rect::new(0, 10, 20, 10))
+            .focused(true)
+            .on(Some(true));
     }
     assert_eq!(
         described,

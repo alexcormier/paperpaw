@@ -545,13 +545,13 @@ pub fn draw_tool_lines(
     let ink = match (on, state.enabled) {
         (true, _) => Color::WHITE,
         (false, true) => Color::BLACK,
-        (false, false) => style.faint(60),
+        (false, false) => style.faint(crate::ui::Ink::Note),
     };
     if on {
         let back = if state.enabled {
             Color::BLACK
         } else {
-            style.faint(60)
+            style.faint(crate::ui::Ink::Note)
         };
         canvas.fill_round(area, style.corner, back);
     }
@@ -618,7 +618,7 @@ pub fn draw_tool_lines(
         widest as u16,
         (cap + descent + more) as u16,
     );
-    canvas.describe(crate::semantics::Role::Text, &name, at, false, None);
+    canvas.describe(crate::semantics::Role::Text, &name, at);
     // Each line centred by its ink, as the icon above it.
     for (n, line) in lines.iter().enumerate() {
         let (first, last) = font

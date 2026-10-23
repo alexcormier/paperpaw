@@ -52,8 +52,8 @@ use paperpaw_sdk::library::{self, catalog::State};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect, RefreshMode,
-    RegisterError, Registrar, Screen, ScreenSpec,
+    Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
+    RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 use index::{Filter, Index, NEVER, cap, hash};
@@ -104,7 +104,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
     ))?;
     r.add_action(
         paperpaw_sdk::ActionSpec::new(FIND, "files.list.find").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(FIND, Params::new()));
             },
         ),
@@ -939,7 +939,7 @@ impl ListScreen {
     ) {
         let style = &self.layout.style;
         // A row, whose words are those drawn in it.
-        canvas.describe(Role::Row, "", rect, focused, None);
+        canvas.describe(Role::Row, "", rect).focused(focused);
         let ink = style.focus_ink(focused);
         let room = ui::icon_room(env, style, true);
         let band = ui::title_area(style, rect);

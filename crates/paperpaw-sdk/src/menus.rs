@@ -258,6 +258,7 @@ impl MenuNeed {
 
 /// One entry of a resolved menu.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct MenuItem<'a> {
     /// An action or a setting, or a section.
     pub id: &'a Id,

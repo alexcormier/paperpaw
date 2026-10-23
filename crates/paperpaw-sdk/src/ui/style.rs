@@ -81,6 +81,9 @@ pub enum Ink {
     Paper,
     /// Notes below the titles of rows, what an empty screen explains.
     Note,
+    /// What is told beside or below a row's title: details, the notes of
+    /// lists, hints on a page.
+    Detail,
     /// Headings of sections, a widget's lesser text.
     Muted,
     /// The least of text, e.g. what an empty screen says.
@@ -97,20 +100,20 @@ pub enum Ink {
     OnFocusMuted,
     /// Lesser text on a dark card.
     OnDarkMuted,
-    /// Cards, e.g. the frames of widgets.
+    /// Cards, e.g. the frames of widgets (on panels of black and white
+    /// alone, a sparser pattern of it).
     Card,
-    /// Cards on panels of black and white alone, drawn as a pattern.
-    CardPattern,
     /// The cards a list's sections are on.
     Section,
 }
 
 impl Ink {
     /// Every role, in the order of [`Palette`]'s values.
-    pub const ALL: [Ink; 14] = [
+    pub const ALL: &'static [Ink] = &[
         Ink::Text,
         Ink::Paper,
         Ink::Note,
+        Ink::Detail,
         Ink::Muted,
         Ink::Faint,
         Ink::Disabled,
@@ -120,7 +123,6 @@ impl Ink {
         Ink::OnFocusMuted,
         Ink::OnDarkMuted,
         Ink::Card,
-        Ink::CardPattern,
         Ink::Section,
     ];
 
@@ -130,6 +132,7 @@ impl Ink {
             Ink::Text => "text",
             Ink::Paper => "paper",
             Ink::Note => "note",
+            Ink::Detail => "detail",
             Ink::Muted => "muted",
             Ink::Faint => "faint",
             Ink::Disabled => "disabled",
@@ -139,28 +142,36 @@ impl Ink {
             Ink::OnFocusMuted => "on-focus-muted",
             Ink::OnDarkMuted => "on-dark-muted",
             Ink::Card => "card",
-            Ink::CardPattern => "card-pattern",
             Ink::Section => "section",
         }
     }
 
     /// Text, which strong contrast draws black.
     const fn is_text(self) -> bool {
-        matches!(self, Ink::Note | Ink::Muted | Ink::Faint)
+        matches!(self, Ink::Note | Ink::Detail | Ink::Muted | Ink::Faint)
     }
 }
 
-/// The gray of each [`Ink`] (0 black, 255 white), read from the setting
-/// `core.ui-palette`: names and values separated by spaces, e.g.
+/// The colour of each [`Ink`], read from the setting `core.ui-palette`:
+/// names and grays (0 black, 255 white) separated by spaces, e.g.
 /// `muted=60 line=170`; what it leaves out has its default.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Palette([u8; 14]);
+pub struct Palette([Color; 14]);
 
 impl Palette {
     /// The interface's own grays.
-    pub const DEFAULT: Palette = Palette([
-        0, 255, 60, 90, 120, 150, 150, 190, 210, 215, 200, 225, 240, 238,
-    ]);
+    pub const DEFAULT: Palette = {
+        const GRAYS: [u8; 14] = [
+            0, 255, 60, 80, 90, 120, 150, 150, 190, 210, 215, 200, 225, 238,
+        ];
+        let mut colors = [Color::BLACK; 14];
+        let mut at = 0;
+        while at < GRAYS.len() {
+            colors[at] = Color::gray(GRAYS[at]);
+            at += 1;
+        }
+        Palette(colors)
+    };
 
     /// The default with what `text` sets; names it does not know and bad
     /// values are left out.
@@ -176,13 +187,13 @@ impl Palette {
             ) else {
                 continue;
             };
-            palette.0[at] = value;
+            palette.0[at] = Color::gray(value);
         }
         palette
     }
 
-    /// The gray of `ink`.
-    pub fn gray(&self, ink: Ink) -> u8 {
+    /// The colour of `ink`.
+    pub fn color(&self, ink: Ink) -> Color {
         let at = Ink::ALL.iter().position(|i| *i == ink).unwrap_or(0);
         self.0[at]
     }
@@ -361,9 +372,9 @@ impl UiStyle {
     /// white on a dark focus, else black.
     pub fn focus_ink(&self, focused: bool) -> Color {
         if focused && self.dark_focus() {
-            Color::WHITE
+            self.ink(Ink::Paper)
         } else {
-            Color::BLACK
+            self.ink(Ink::Text)
         }
     }
 
@@ -371,19 +382,19 @@ impl UiStyle {
     /// be cleared to (black on a dark focus).
     pub fn focus_paper(&self, focused: bool) -> Color {
         if focused && self.dark_focus() {
-            Color::BLACK
+            self.ink(Ink::Text)
         } else {
-            Color::WHITE
+            self.ink(Ink::Paper)
         }
     }
 
     /// The colour of gray text (notes) on a row or item, `focused` or not
     /// (light on a dark focus).
-    pub fn focus_faint(&self, focused: bool, gray: u8) -> Color {
+    pub fn focus_faint(&self, focused: bool, ink: Ink) -> Color {
         if focused && self.dark_focus() {
             self.ink(Ink::OnFocusMuted)
         } else {
-            self.faint(gray)
+            self.faint(ink)
         }
     }
 
@@ -402,7 +413,7 @@ impl UiStyle {
         if self.strong && ink.is_text() {
             Color::BLACK
         } else {
-            Color::gray(self.palette.gray(ink))
+            self.palette.color(ink)
         }
     }
 
@@ -420,23 +431,24 @@ impl UiStyle {
         }
     }
 
-    /// The colour of gray text such as hints and notes: `gray`, or black
-    /// for strong contrast.
-    pub fn faint(&self, gray: u8) -> Color {
+    /// The colour of gray text such as hints and notes, of `ink`'s role
+    /// in the palette; black for strong contrast.
+    pub fn faint(&self, ink: Ink) -> Color {
         if self.strong {
-            Color::BLACK
+            self.ink(Ink::Text)
         } else {
-            Color::gray(gray)
+            self.palette.color(ink)
         }
     }
 
-    /// A header's background and text: black and white, or the other way
-    /// round for light headers.
+    /// A header's background and text: the palette's text and paper, the
+    /// other way round for light headers.
     pub fn header_colors(&self) -> (Color, Color) {
+        let (text, paper) = (self.ink(Ink::Text), self.ink(Ink::Paper));
         if self.dark_header {
-            (Color::BLACK, Color::WHITE)
+            (text, paper)
         } else {
-            (Color::WHITE, Color::BLACK)
+            (paper, text)
         }
     }
 

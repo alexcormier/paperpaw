@@ -22,7 +22,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::install::local::{Commit, Refusal, Staging};
 use paperpaw_sdk::install::{self, Origin};
 use paperpaw_sdk::served::{json_string, param};
-use paperpaw_sdk::{Command, Env, PluginKind, ServerResponse};
+use paperpaw_sdk::{Commands, Env, PluginKind, ServerResponse};
 
 /// How an install stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -78,7 +78,7 @@ impl Installs {
         method: &str,
         target: &str,
         body_file: Option<&str>,
-        out: &mut Vec<Command>,
+        out: &mut Commands,
     ) -> (ServerResponse, Option<Ask>) {
         let (path, query) = target.split_once('?').unwrap_or((target, ""));
         let json = |status, body: String| {
@@ -156,7 +156,7 @@ impl Installs {
         env: &Env<'_>,
         plugin: &str,
         yes: bool,
-        out: &mut Vec<Command>,
+        out: &mut Commands,
     ) -> bool {
         let Some(staging) = Staging::new(plugin) else {
             return false;

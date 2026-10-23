@@ -1208,7 +1208,7 @@ impl Plugin for MenuLook {
         let entries = self.0.clone();
         r.add_action(
             paperpaw_sdk::ActionSpec::new(Id::new_static("looker.look"), "look").handler(
-                move |env: &paperpaw_sdk::Env<'_>, _: &mut Vec<paperpaw_sdk::Command>| {
+                move |env: &paperpaw_sdk::Env<'_>, _: &mut paperpaw_sdk::Commands| {
                     *entries.borrow_mut() = env
                         .menus
                         .items(paperpaw_plugin_reader::MORE_MENU.as_str())
@@ -1429,7 +1429,7 @@ impl Plugin for Asker {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_action(
             paperpaw_sdk::ActionSpec::new(Id::new_static("asker.ask"), "ask").handler(
-                |_: &paperpaw_sdk::Env<'_>, out: &mut Vec<paperpaw_sdk::Command>| {
+                |_: &paperpaw_sdk::Env<'_>, out: &mut paperpaw_sdk::Commands| {
                     out.push(paperpaw_sdk::reading::ask_page_words(&WORDS_HEARD));
                 },
             ),

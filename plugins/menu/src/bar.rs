@@ -349,7 +349,7 @@ impl Screen for BarScreen {
             let width = f32::from(r.width) - 2.0 * margin;
             let (chapter, page, page_width) =
                 ui::fit_pair(&font, style.small, &self.text, &self.page, width, margin);
-            let gray = style.faint(70);
+            let gray = style.faint(ui::Ink::Detail);
             ui::draw_label(canvas, &font, style.small, margin, text, &chapter, gray);
             let x = f32::from(r.width) - margin - page_width;
             ui::draw_label(canvas, &font, style.small, x, text, &page, gray);
@@ -370,18 +370,15 @@ impl Screen for BarScreen {
             );
             // Told as a button: what it is, which has the focus, which is on.
             let focused = self.keys && i == self.focus;
-            canvas.describe(
-                Role::Button,
-                &entry.label(env),
-                frame,
-                focused,
-                on.then_some(true),
-            );
+            canvas
+                .describe(Role::Button, &entry.label(env), frame)
+                .focused(focused)
+                .on(on.then_some(true));
             if on {
                 let back = if enabled {
                     Color::BLACK
                 } else {
-                    style.faint(60)
+                    style.faint(ui::Ink::Note)
                 };
                 ui::fill_round(canvas, &style, frame, back);
             }
@@ -397,7 +394,7 @@ impl Screen for BarScreen {
             let ink = match (on, enabled) {
                 (true, _) => Color::WHITE,
                 (false, true) => Color::BLACK,
-                (false, false) => style.faint(60),
+                (false, false) => style.faint(ui::Ink::Note),
             };
             let icon_area = Rect::new(
                 inner.x,

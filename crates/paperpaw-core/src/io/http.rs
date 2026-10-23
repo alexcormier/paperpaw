@@ -283,16 +283,12 @@ impl Http {
             }
             None => text(body),
         };
-        let answer = HttpReply {
-            status,
-            body: String::new(),
-            etag: response.etag,
-            content_type: response.content_type,
-            final_url: response.url,
-            context: awaiting.context,
-            refused: None,
-            headers: response.headers,
-        };
+        let mut answer = HttpReply::new(status, String::new());
+        answer.etag = response.etag;
+        answer.content_type = response.content_type;
+        answer.final_url = response.url;
+        answer.context = awaiting.context;
+        answer.headers = response.headers;
         let mut params = answer.to_params();
         params.set(http_params::BODY, body);
         out.push(Command::Emit(awaiting.reply, params));

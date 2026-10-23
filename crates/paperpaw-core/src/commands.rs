@@ -7,6 +7,18 @@
 )]
 use super::*;
 
+/// Runs a plugin's handler with a [`Commands`](paperpaw_sdk::Commands) of
+/// its own, then queues what it sent at the end of `out`.
+pub(crate) fn handing<R>(
+    out: &mut Vec<Command>,
+    handler: impl FnOnce(&mut paperpaw_sdk::Commands) -> R,
+) -> R {
+    let mut commands = paperpaw_sdk::Commands::new();
+    let result = handler(&mut commands);
+    out.append(&mut commands.take());
+    result
+}
+
 impl Kernel {
     #[expect(
         clippy::too_many_lines,
@@ -482,7 +494,7 @@ impl Kernel {
         {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
-            handler(&env, params, &mut self.output.commands);
+            handing(&mut self.output.commands, |out| handler(&env, params, out));
             let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
             let out = &mut self.output.commands;
             refused_secret |= vet_reserved(out, from, plugin.as_str(), &reserved);
@@ -561,7 +573,7 @@ impl Kernel {
         {
             let _running = self.shared.meter.enter(plugin.as_str());
             let from = self.output.commands.len();
-            handler(&env, params, &mut self.output.commands);
+            handing(&mut self.output.commands, |out| handler(&env, params, out));
             let reserved = Reserved::of(&self.shared.settings, &self.shared.registry);
             vet_reserved(&mut self.output.commands, from, plugin.as_str(), &reserved);
         }
@@ -689,10 +701,12 @@ impl Kernel {
                     && let Some((id, _)) = self.io.speech.voice.take()
                     && let Some(old) = self.shared.voices.get(id.as_str())
                 {
-                    (old.stop)(&env, &mut self.output.commands);
+                    handing(&mut self.output.commands, |out| (old.stop)(&env, out));
                 }
             }
-            (voice.speak)(&env, &speech, &mut self.output.commands);
+            handing(&mut self.output.commands, |out| {
+                (voice.speak)(&env, &speech, out)
+            });
             self.io.speech.voice = Some((voice.id.clone(), screens));
             return;
         }
@@ -710,7 +724,7 @@ impl Kernel {
         if let Some((id, _)) = self.io.speech.voice.take() {
             let env = self.shared.env(self.now);
             if let Some(voice) = self.shared.voices.get(id.as_str()) {
-                (voice.stop)(&env, &mut self.output.commands);
+                handing(&mut self.output.commands, |out| (voice.stop)(&env, out));
             }
         }
     }

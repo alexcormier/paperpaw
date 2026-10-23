@@ -280,9 +280,19 @@ impl Overview {
             // language), only then shortened.
             let least = style.small * 0.85;
             let lines = [
-                (env.i18n.tr(label), style.small, least, style.faint(90)),
+                (
+                    env.i18n.tr(label),
+                    style.small,
+                    least,
+                    style.faint(ui::Ink::Muted),
+                ),
                 (value.as_str(), value_size, value_size, Color::BLACK),
-                (note.as_str(), style.small, least, style.faint(90)),
+                (
+                    note.as_str(),
+                    style.small,
+                    least,
+                    style.faint(ui::Ink::Muted),
+                ),
             ];
             for (row, (text, size, least, color)) in lines.into_iter().enumerate() {
                 let (size, line) = widgets::fit_line(&font, size, least, text, room);
@@ -315,7 +325,7 @@ impl Overview {
             f32::from(c.x),
             title,
             &label,
-            style.faint(90),
+            style.faint(ui::Ink::Muted),
         );
         let Some(today) = self.today else {
             return;
@@ -386,7 +396,7 @@ impl Overview {
             x,
             self.totals,
             &text,
-            style.faint(60),
+            style.faint(ui::Ink::Note),
         );
     }
 }

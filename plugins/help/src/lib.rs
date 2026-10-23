@@ -18,14 +18,13 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
-use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, groups, params};
 use paperpaw_sdk::help;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
-    Command, Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, ScreenSpec, SettingExtra,
-    SettingSpec, Storage,
+    Command, Commands, Env, Id, Manifest, Params, Plugin, RegisterError, Registrar, ScreenSpec,
+    SettingExtra, SettingSpec, Storage,
 };
 
 pub const PLUGIN: Id = Id::new_static("help");
@@ -131,7 +130,7 @@ impl Plugin for Help {
 
 /// Opens the hints over `screen`, where it has some, they are on, and
 /// they were not shown yet.
-fn explain(env: &Env<'_>, screen: &Id, out: &mut Vec<Command>) {
+fn explain(env: &Env<'_>, screen: &Id, out: &mut Commands) {
     if !env.settings.read(&SHOW)
         || screen.namespace() == PLUGIN.as_str()
         || help::hints(env, screen.as_str()).is_empty()
@@ -146,7 +145,7 @@ fn explain(env: &Env<'_>, screen: &Id, out: &mut Vec<Command>) {
 /// Closes the hints that another screen, `shown`, now covers (a
 /// plugin's question, a notice opened over them): what they explain is
 /// hidden, so they show the next time instead.
-fn covered(env: &Env<'_>, shown: &Id, out: &mut Vec<Command>) {
+fn covered(env: &Env<'_>, shown: &Id, out: &mut Commands) {
     if *shown == OVERLAY {
         return;
     }

@@ -509,7 +509,7 @@ impl Screen for SleepScreen {
                 let area = Rect::new((display.width - w) / 2, (display.height - h) / 2, w, h);
                 ui::draw_image(canvas, env.storage, image, area);
                 let what = env.i18n.tr("sleep.show.cat");
-                canvas.describe(Role::Image, what, area, false, None);
+                canvas.describe(Role::Image, what, area);
             }
             Some(image) => {
                 // As large as fits, in the middle, on black.

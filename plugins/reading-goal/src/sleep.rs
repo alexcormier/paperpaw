@@ -57,7 +57,7 @@ impl Screen for GoalSleep {
         if let Some(image) = &self.image {
             let area = Rect::new((display.width - w) / 2, top, w, h);
             ui::draw_image(canvas, env.storage, image, area);
-            canvas.describe(Role::Image, &self.described, area, false, None);
+            canvas.describe(Role::Image, &self.described, area);
         }
         let width = f32::from(room_w);
         let text = ui::fit(&font, style.text, &self.text, width);

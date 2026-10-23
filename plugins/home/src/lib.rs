@@ -53,8 +53,8 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets;
 use paperpaw_sdk::widgets::grid::{self, Geometry, GridResponse, GridView, Item, What};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, Handled, Hint, Id, Manifest, MenuEntry, Params,
-    Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    Canvas, Color, Command, Commands, Cx, Env, Gesture, Handled, Hint, Id, Manifest, MenuEntry,
+    Params, Plugin, PointerEvent, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
     ScreenSpec, Version,
 };
 
@@ -126,7 +126,7 @@ impl Plugin for Home {
         ))?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(ALL_TOOLS, "home.drawer").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, out: &mut Commands| {
                     out.push(Command::OpenScreen(DRAWER_SCREEN, Params::new()));
                 },
             ),
@@ -136,7 +136,7 @@ impl Plugin for Home {
         // editing.
         r.add_action(
             paperpaw_sdk::ActionSpec::new(EDIT_PAGES, "home.edit-pages").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, out: &mut Commands| {
                     let params = Params::new().with(params::MODE, "edit");
                     out.push(Command::OpenSlot(slots::HOME, params));
                 },
@@ -426,7 +426,7 @@ impl Dashboard {
                     Rect::new(margin, f.y, width, f.height),
                     [env.settings.read(&pages::FOOTER_ITEMS), "", ""],
                     style.small,
-                    style.faint(60),
+                    style.faint(ui::Ink::Note),
                 );
                 line.draw(canvas, env, &font, &Params::new());
             }
@@ -453,25 +453,27 @@ impl Dashboard {
             icon("plus", self.plus, Color::BLACK);
             icon("check", self.pencil, Color::BLACK);
         } else if env.settings.read(&pages::FOOTER_PENCIL) {
-            icon("pencil", self.pencil, style.faint(60));
+            icon("pencil", self.pencil, style.faint(ui::Ink::Note));
         }
         if !editing {
             for (area, action) in &self.actions {
                 let name = env.menus.icon(action.as_str()).unwrap_or("puzzle");
                 let w = ui::icon_width(env, name, size);
                 let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
-                ui::draw_icon(canvas, env, name, size, x, *area, style.faint(60));
+                ui::draw_icon(
+                    canvas,
+                    env,
+                    name,
+                    size,
+                    x,
+                    *area,
+                    style.faint(ui::Ink::Note),
+                );
                 let title = env
                     .menus
                     .title(action.as_str())
                     .map_or(action.as_str(), |t| env.i18n.tr(t));
-                canvas.describe(
-                    paperpaw_sdk::semantics::Role::Button,
-                    title,
-                    *area,
-                    false,
-                    None,
-                );
+                canvas.describe(paperpaw_sdk::semantics::Role::Button, title, *area);
             }
         }
     }

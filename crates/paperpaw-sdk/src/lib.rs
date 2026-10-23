@@ -47,6 +47,7 @@ pub mod builtin;
 pub mod chrome;
 pub mod collections;
 mod command;
+mod commands;
 pub mod contribution;
 pub mod data;
 pub mod decorations;
@@ -117,6 +118,7 @@ pub use command::{
     Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,
     http_params, server_params, socket_params, speech_params,
 };
+pub use commands::Commands;
 pub use contribution::{Contribution, Registrar};
 pub use env::{Capabilities, Env, EnvParts, Metrics};
 pub use event::{Event, EventData, EventHandler};

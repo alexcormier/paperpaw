@@ -38,8 +38,8 @@ use paperpaw_sdk::builtin::{events, groups, menus, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingSpec, Version,
+    ActionSpec, Command, Commands, Env, HttpRequest, Id, Manifest, MenuEntry, Params, Plugin,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
 };
 
 use crate::catalogs::Catalog;
@@ -238,13 +238,13 @@ impl Plugin for Opds {
             Box::new(|env, params| Box::new(edit::EditScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "opds.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
         let shared = state.clone();
         r.add_action(ActionSpec::new(SYNC, "opds.sync-all").handler(
-            move |env: &Env<'_>, out: &mut Vec<Command>| {
+            move |env: &Env<'_>, out: &mut Commands| {
                 if env.reader {
                     shared.borrow_mut().start(env, marked(env), out);
                 } else {

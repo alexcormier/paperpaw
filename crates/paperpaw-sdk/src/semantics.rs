@@ -4,7 +4,7 @@
 //! Nothing has to be written for it: the drawing helpers of [`ui`](crate::ui)
 //! tell what they draw ([`Canvas::describe`](crate::Canvas::describe)), list
 //! rows with their focus, the text in them, buttons, switches and
-//! headers. [`parts`] puts that together: the text drawn inside a row
+//! headers. `parts` puts that together: the text drawn inside a row
 //! becomes the row's. Screens that draw in their own way describe their
 //! parts themselves.
 
@@ -26,6 +26,8 @@ pub struct Part {
     /// Switched on or off, for switches (also a row's) and buttons that
     /// are either.
     pub on: Option<bool>,
+    /// It does nothing now (drawn faint).
+    pub disabled: bool,
 }
 
 impl Part {
@@ -38,6 +40,7 @@ impl Part {
             area,
             focused: false,
             on: None,
+            disabled: false,
         }
     }
 
@@ -50,6 +53,12 @@ impl Part {
     /// Switched on or off, or neither.
     pub fn on(mut self, on: Option<bool>) -> Self {
         self.on = on;
+        self
+    }
+
+    /// Doing nothing now, or not.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
         self
     }
 }
@@ -90,6 +99,13 @@ pub fn parts(described: Vec<Described>) -> Vec<Part> {
         if d.role == Role::Text && !d.label.chars().any(char::is_alphanumeric) {
             continue;
         }
+        // What is drawn inside a part that does nothing now: the part
+        // does nothing now (a row drawn by the list, its text faint).
+        if let Some(i) = container
+            && d.disabled
+        {
+            parts[i].disabled = true;
+        }
         match (d.role, container) {
             (Role::Text, Some(i)) => {
                 if !own[i] && !d.label.trim().is_empty() {
@@ -105,6 +121,7 @@ pub fn parts(described: Vec<Described>) -> Vec<Part> {
                     area: d.area,
                     focused: d.focused,
                     on: d.on,
+                    disabled: d.disabled,
                 });
             }
         }

@@ -301,13 +301,13 @@ impl Harness {
     /// Hands event `id` to the plugin's handlers; what they asked for.
     fn dispatch(&self, id: &Id, params: &Params) -> Vec<Command> {
         let env = self.env();
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         for (event, handler) in &self.handlers {
             if event == id {
                 handler(&env, params, &mut out);
             }
         }
-        out
+        out.into_iter().collect()
     }
 
     fn emit<P: EventData>(&self, event: &Event<P>, data: P) -> Vec<Command> {
@@ -316,23 +316,16 @@ impl Harness {
 
     /// Chooses *Sync progress*.
     fn sync_now(&self) -> Vec<Command> {
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         (self.sync_now.as_ref().unwrap())(&self.env(), &mut out);
-        out
+        out.into_iter().collect()
     }
 
     /// The server answers `request` with `status` and `body`.
     fn answer(&self, request: &HttpRequest, status: u16, body: &str) -> Vec<Command> {
-        let reply = HttpReply {
-            status,
-            body: body.to_string(),
-            etag: None,
-            content_type: Some("application/json".to_string()),
-            final_url: None,
-            context: request.params.clone(),
-            refused: None,
-            headers: Vec::new(),
-        };
+        let mut reply = HttpReply::new(status, body);
+        reply.content_type = Some("application/json".to_string());
+        reply.context = request.params.clone();
         self.dispatch(&request.reply, &reply.to_params())
     }
 

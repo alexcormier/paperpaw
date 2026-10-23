@@ -875,24 +875,20 @@ fn a_qr_code_is_drawn_whole_or_not_at_all() {
 #[test]
 fn a_look_paints_the_parts_and_keeps_what_they_say() {
     use paperpaw_sdk::Color;
-    use paperpaw_sdk::ui::look::{ButtonPart, FocusPart, Look, Painters, SwitchPart};
+    use paperpaw_sdk::ui::look::{ButtonPart, FocusPart, Look, PaintCx, Painters, SwitchPart};
     const SWITCH: Color = Color::gray(100);
     const FOCUS: Color = Color::gray(60);
     const BUTTON: Color = Color::gray(140);
-    fn switch(canvas: &mut paperpaw_sdk::Canvas<'_>, _: &UiStyle, part: &SwitchPart) -> bool {
-        canvas.fill(part.rect, SWITCH);
+    fn switch(cx: &mut PaintCx<'_, '_>, part: &SwitchPart) -> bool {
+        cx.canvas.fill(part.rect, SWITCH);
         true
     }
-    fn focus(canvas: &mut paperpaw_sdk::Canvas<'_>, _: &UiStyle, part: &FocusPart) -> bool {
-        canvas.fill(part.rect, FOCUS);
+    fn focus(cx: &mut PaintCx<'_, '_>, part: &FocusPart) -> bool {
+        cx.canvas.fill(part.rect, FOCUS);
         true
     }
-    fn button(
-        canvas: &mut paperpaw_sdk::Canvas<'_>,
-        _: &UiStyle,
-        part: &ButtonPart,
-    ) -> Option<Color> {
-        canvas.fill(part.rect, BUTTON);
+    fn button(cx: &mut PaintCx<'_, '_>, part: &ButtonPart) -> Option<Color> {
+        cx.canvas.fill(part.rect, BUTTON);
         Some(Color::WHITE)
     }
     static SQUARE: Painters = Painters::new().switch(switch).focus(focus).button(button);
@@ -946,11 +942,11 @@ fn the_palette_sets_the_grays_the_parts_draw_in() {
     use paperpaw_sdk::Color;
     use paperpaw_sdk::ui::{Ink, Palette, TextRole};
     let palette = Palette::parse("muted=60 line=100 bad nope=3 faint=x note=300");
-    assert_eq!(palette.gray(Ink::Muted), 60);
-    assert_eq!(palette.gray(Ink::Line), 100);
+    assert_eq!(palette.color(Ink::Muted), Color::gray(60));
+    assert_eq!(palette.color(Ink::Line), Color::gray(100));
     // What it does not set, or sets wrongly, keeps its default.
     for ink in [Ink::Faint, Ink::Note, Ink::Rule, Ink::Text, Ink::Paper] {
-        assert_eq!(palette.gray(ink), Palette::DEFAULT.gray(ink), "{ink:?}");
+        assert_eq!(palette.color(ink), Palette::DEFAULT.color(ink), "{ink:?}");
     }
     assert_eq!(Palette::parse(""), Palette::DEFAULT);
 

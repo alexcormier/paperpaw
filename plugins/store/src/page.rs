@@ -327,7 +327,7 @@ impl PageScreen {
         }
         match &self.details {
             Details::Here(plugin) => {
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 trust::expect(env.storage, &plugin.entry.id, plugin.author_key.as_ref());
                 if !INSTALLER.start(&env, &plugin.package, &mut out) {
                     out.push(failed(&env, name));
@@ -372,7 +372,7 @@ impl PageScreen {
                     INSTALLER.cancel(env.storage);
                     self.job = None;
                     // The next update waiting has its turn.
-                    let mut out = Vec::new();
+                    let mut out = paperpaw_sdk::Commands::new();
                     queue::next(&env, &mut out);
                     for command in out {
                         cx.command(command);
@@ -384,7 +384,7 @@ impl PageScreen {
                 self.redraw(cx);
             }
             Some(Row::Anyway) => {
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 if trust::install_anyway(&env, &mut out).is_none() {
                     INSTALLER.cancel(env.storage);
                     out.push(failed(&env, &plugin.name));
@@ -400,7 +400,7 @@ impl PageScreen {
             Some(Row::Stop) => {
                 INSTALLER.cancel(env.storage);
                 // Only this one stops: the next update waiting goes on.
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 queue::next(&env, &mut out);
                 for command in out {
                     cx.command(command);
@@ -660,7 +660,7 @@ impl Screen for PageScreen {
                 width as u16,
                 (metrics.line_height * shown as f32) as u16,
             );
-            canvas.describe(Role::Text, text, area, false, None);
+            canvas.describe(Role::Text, text, area);
             for (n, range) in lines.iter().take(shown).enumerate() {
                 let text = if n + 1 == shown && lines.len() > shown {
                     ui::fit(&font, size, text[range.start..].trim_end(), width)
@@ -689,7 +689,7 @@ impl Screen for PageScreen {
         let line = font.line_metrics(style.small).line_height;
         for (icon, fact) in facts {
             let first = Rect::new(0, y as u16, self.list.area().width, line as u16);
-            let ink = style.faint(80);
+            let ink = style.faint(ui::Ink::Detail);
             ui::draw_icon(canvas, env, icon, icon_size, margin, first, ink);
             paragraph(canvas, &mut y, &fact, style.small, ink, 3, room);
             y += style.gap as f32 / 3.0;
@@ -782,7 +782,7 @@ impl Screen for PageScreen {
                 && let Ok(plugin) = Id::parse(&picked.path)
             {
                 let env = *cx.env();
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 INSTALLER.remove(&env, &plugin, &mut out);
                 let name = self.plugin.as_ref().map_or("", |p| p.name.as_str());
                 out.push(Command::Notify(

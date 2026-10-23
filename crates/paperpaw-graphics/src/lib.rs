@@ -14,7 +14,7 @@ pub mod diffuse;
 mod framebuffer;
 pub mod round;
 
-pub use canvas::{Canvas, Described, Role};
+pub use canvas::{Canvas, Describe, Described, Role};
 pub use framebuffer::{Framebuffer, MONO_COVERAGE};
 
 use core::fmt;

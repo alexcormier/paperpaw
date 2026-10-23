@@ -30,7 +30,6 @@ mod shelves;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::{String, ToString};
-use alloc::vec::Vec;
 
 use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions as core_actions, events, groups, params, slots};
@@ -40,8 +39,8 @@ use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect,
-    RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
+    Canvas, Color, Command, Commands, Cx, Env, Id, Manifest, MenuEntry, Params, Plugin, Priority,
+    Rect, RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("files");
@@ -172,7 +171,7 @@ impl Plugin for Files {
         ] {
             r.add_action(
                 paperpaw_sdk::ActionSpec::new(action.clone(), title).handler(
-                    move |_: &Env<'_>, out: &mut Vec<Command>| {
+                    move |_: &Env<'_>, out: &mut Commands| {
                         out.push(Command::OpenScreen(
                             SHELF_SCREEN,
                             Params::new().with(params::MODE, mode),
@@ -184,7 +183,7 @@ impl Plugin for Files {
         }
         r.add_action(
             paperpaw_sdk::ActionSpec::new(FAVOURITES, "files.favourites").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, out: &mut Commands| {
                     out.push(list::shelf::open(list::shelf::Kind::Favourites, ""));
                 },
             ),
@@ -208,7 +207,7 @@ impl Plugin for Files {
         r.add_settings(&SETTINGS)?;
         r.add_action(
             paperpaw_sdk::ActionSpec::new(SEARCH, "files.search").handler(
-                |env: &Env<'_>, out: &mut Vec<Command>| {
+                |env: &Env<'_>, out: &mut Commands| {
                     out.push(
                         ask::text(env.i18n.tr("files.search.prompt"), &SEARCH_ENTERED).command(),
                     );
@@ -233,7 +232,7 @@ impl Plugin for Files {
         // The shelves as a submenu: an action named like its menu.
         r.add_action(
             paperpaw_sdk::ActionSpec::new(SHELVES_MENU, "files.shelves").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, out: &mut Commands| {
                     out.push(Command::OpenSlot(
                         slots::MENU,
                         Params::new().with(params::MENU, String::from(SHELVES_MENU.as_str())),

@@ -25,7 +25,6 @@ use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::format;
 use alloc::string::String;
-use alloc::vec::Vec;
 
 use paperpaw_qr::QrCode;
 use paperpaw_sdk::builtin::{actions, events, menus, slots};
@@ -33,9 +32,9 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{Confirmed, ServerNotice};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec, ServerResponse, Version,
+    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
+    Screen, ScreenSpec, ServerResponse, Version,
 };
 
 use paperpaw_sdk::served::{self, Guard};
@@ -90,7 +89,7 @@ impl Plugin for Transfer {
             Box::new(|env, _| Box::new(TransferScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "transfer.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -397,7 +396,7 @@ impl TransferScreen {
             }
             return cx.command(Command::Respond(response));
         }
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         let (response, ask) =
             self.installs
                 .answer(&env, number, method, target, body_file.as_deref(), &mut out);
@@ -518,7 +517,7 @@ fn draw_join(
         f32::from(margin),
         Rect::new(margin, bottom.saturating_sub(small), width, small),
         &note,
-        style.faint(60),
+        style.faint(ui::Ink::Note),
     );
     if let Some(qr) = &own.qr {
         let room = Rect::new(
@@ -727,7 +726,7 @@ impl Screen for TransferScreen {
                 return;
             };
             let id = String::from(id);
-            let mut out = Vec::new();
+            let mut out = paperpaw_sdk::Commands::new();
             let installed = self.installs.approved(&env, &id, answer.yes, &mut out);
             for command in out {
                 cx.command(command);

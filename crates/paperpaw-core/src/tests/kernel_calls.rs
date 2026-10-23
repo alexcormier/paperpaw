@@ -17,13 +17,9 @@ impl Screen for Rows {
         for row in 0..3u16 {
             let label = alloc::format!("Row {row}");
             let area = Rect::new(0, row * 20, 90, 20);
-            canvas.describe(
-                Role::Row,
-                &label,
-                area,
-                usize::from(row) == self.focus,
-                None,
-            );
+            canvas
+                .describe(Role::Row, &label, area)
+                .focused(usize::from(row) == self.focus);
         }
     }
 

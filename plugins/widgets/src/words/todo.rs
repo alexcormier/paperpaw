@@ -28,8 +28,8 @@ use paperpaw_sdk::widgets::{
     self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, FontHandle, Gesture, GestureKind, Handled,
-    Id, Params, Point, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
+    ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, FontHandle, Gesture, GestureKind,
+    Handled, Id, Params, Point, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
     SettingSpec, Storage, StorageError,
 };
 
@@ -152,7 +152,7 @@ pub(super) fn register(r: &mut Registrar, changes: &Changes) -> Result<(), Regis
         }),
     ))?;
     r.add_action(ActionSpec::new(OPEN, "widgets.todo").handler(
-        |_: &Env<'_>, out: &mut Vec<Command>| {
+        |_: &Env<'_>, out: &mut Commands| {
             out.push(Command::OpenScreen(SCREEN, Params::new()));
         },
     ))?;
@@ -679,7 +679,7 @@ impl TodoScreen {
             ));
         }
         (self.items, self.rest) = (list.items, list.rest);
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         self.changes.changed(&mut out, &ID);
         for command in out {
             cx.command(command);
@@ -764,7 +764,7 @@ impl Screen for TodoScreen {
                     if focused && style.dark_focus() {
                         Color::gray(200)
                     } else {
-                        style.faint(90)
+                        style.faint(ui::Ink::Muted)
                     },
                     paper,
                     widgets::Frame::None,
@@ -813,8 +813,8 @@ impl Screen for TodoScreen {
             );
             let look = Look::new(
                 area,
-                style.faint(90),
-                style.faint(90),
+                style.faint(ui::Ink::Muted),
+                style.faint(ui::Ink::Muted),
                 Color::WHITE,
                 widgets::Frame::None,
             );

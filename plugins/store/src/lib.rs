@@ -31,7 +31,6 @@ mod view;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, groups, menus, params};
 use paperpaw_sdk::event::Event;
@@ -39,8 +38,8 @@ use paperpaw_sdk::install::{Installer, Progress, Received};
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Command, Env, Id, Manifest, MenuEntry, Params, Plugin, RegisterError,
-    Registrar, ScreenSpec, SettingSpec, Version,
+    ActionSpec, Arg, Command, Commands, Env, Id, Manifest, MenuEntry, Params, Plugin,
+    RegisterError, Registrar, ScreenSpec, SettingSpec, Version,
 };
 use trust::Verdict;
 
@@ -125,7 +124,7 @@ impl Plugin for Store {
             Box::new(|env, params| Box::new(shots::ShotsScreen::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "store.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(LIST_SCREEN, Params::new()));
             },
         ))?;
@@ -136,7 +135,7 @@ impl Plugin for Store {
         r.add_icon(OPEN, Cow::Borrowed("cloud-download"))?;
         r.add_action(
             ActionSpec::new(DISCOVER_FONTS, "store.discover-fonts").handler(
-                |env: &Env<'_>, out: &mut Vec<Command>| {
+                |env: &Env<'_>, out: &mut Commands| {
                     if env.actions.contains(FONTS.as_str()) {
                         out.push(Command::RunAction(FONTS));
                     } else {
@@ -176,8 +175,8 @@ impl Plugin for Store {
 /// A file arrived (or did not): once all are here, the plugin installed
 /// if it may be (see [`trust`]), and said; then the next update waiting
 /// in the queue ([`queue`]) has its turn.
-fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
-    let mut said = Vec::new();
+fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
+    let mut said = paperpaw_sdk::Commands::new();
     let installed = match INSTALLER.received(env, reply, out) {
         Received::Complete(done) => (finish(env, &done, &mut said), done.name),
         Received::Failed(job) => {
@@ -203,7 +202,7 @@ fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
 
 /// Installs the plugin all of whose files are here, if it may be, and
 /// says so; whether it was installed.
-fn finish(env: &Env<'_>, done: &Progress, out: &mut Vec<Command>) -> bool {
+fn finish(env: &Env<'_>, done: &Progress, out: &mut Commands) -> bool {
     let name = [("name", Arg::Str(&done.name))];
     let folder = INSTALLER.folder(env.storage).unwrap_or_default();
     let (key, installed) = match trust::verdict(env, &done.plugin, &folder) {

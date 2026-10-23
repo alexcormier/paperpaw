@@ -21,6 +21,9 @@ pub struct Canvas<'a> {
     /// Where what is drawn is described, if anyone asks (see
     /// [`Canvas::describing`]).
     described: Option<&'a mut Vec<Described>>,
+    /// What is described is told as doing nothing now (see
+    /// [`Canvas::disabling`]).
+    disabled: bool,
 }
 
 /// What a part of a screen is, as its drawing tells: for reading the
@@ -37,6 +40,9 @@ pub struct Described {
     pub focused: bool,
     /// Switched on or off, for switches and buttons that are either.
     pub on: Option<bool>,
+    /// It does nothing now (drawn faint), e.g. a menu entry that cannot
+    /// be chosen yet.
+    pub disabled: bool,
     /// What the canvas showed when it was described (its clip): the
     /// screen, cell or row it was drawn into. An area reaching past it
     /// was cut (see `paperpaw-dev`'s checks).
@@ -53,8 +59,15 @@ impl Described {
             area,
             focused: false,
             on: None,
+            disabled: false,
             clip: area,
         }
+    }
+
+    /// Doing nothing now, or not.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
     }
 
     /// With the focus or not.
@@ -73,6 +86,65 @@ impl Described {
     pub fn clip(mut self, clip: Rect) -> Self {
         self.clip = clip;
         self
+    }
+}
+
+/// A part being described ([`Canvas::describe`]): told to whoever asks
+/// when it goes, at the end of the statement that made it.
+pub struct Describe<'c> {
+    sink: Option<&'c mut Vec<Described>>,
+    role: Role,
+    label: &'c str,
+    area: Rect,
+    clip: Rect,
+    focused: bool,
+    on: Option<bool>,
+    disabled: bool,
+}
+
+impl Describe<'_> {
+    /// It has the focus (buttons move it), or not.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
+    /// Switched on or off, for switches and buttons that are either.
+    pub fn on(mut self, on: Option<bool>) -> Self {
+        self.on = on;
+        self
+    }
+
+    /// It does nothing now (drawn faint), or not.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+}
+
+impl Drop for Describe<'_> {
+    fn drop(&mut self) {
+        if let Some(sink) = self.sink.take() {
+            sink.push(Described {
+                role: self.role,
+                label: String::from(self.label),
+                area: self.area,
+                focused: self.focused,
+                on: self.on,
+                disabled: self.disabled,
+                clip: self.clip,
+            });
+        }
+    }
+}
+
+impl core::fmt::Debug for Describe<'_> {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.debug_struct("Describe")
+            .field("role", &self.role)
+            .field("label", &self.label)
+            .field("area", &self.area)
+            .finish_non_exhaustive()
     }
 }
 
@@ -120,6 +192,7 @@ impl<'a> Canvas<'a> {
             clip,
             origin: (0, 0),
             described: None,
+            disabled: false,
         }
     }
 
@@ -199,26 +272,23 @@ impl<'a> Canvas<'a> {
         self.described.is_some()
     }
 
-    /// Tells what is drawn at `area`, for those who ask.
-    pub fn describe(
-        &mut self,
-        role: Role,
-        label: &str,
-        area: Rect,
-        focused: bool,
-        on: Option<bool>,
-    ) {
+    /// Tells what is drawn at `area`, for those who ask: a part in
+    /// `role` with `label`, said as it is once the statement ends;
+    /// `focused`, `on` and `disabled`
+    /// say more first. Nothing is kept (nor its text copied) where nobody
+    /// asks.
+    pub fn describe<'c>(&'c mut self, role: Role, label: &'c str, area: Rect) -> Describe<'c> {
         let clip = self.clip;
         let area = self.to_screen(area);
-        if let Some(sink) = self.described.as_deref_mut() {
-            sink.push(Described {
-                role,
-                label: String::from(label),
-                area,
-                focused,
-                on,
-                clip,
-            });
+        Describe {
+            sink: self.described.as_deref_mut(),
+            role,
+            label,
+            area,
+            clip,
+            focused: false,
+            on: None,
+            disabled: self.disabled,
         }
     }
 
@@ -280,6 +350,20 @@ impl<'a> Canvas<'a> {
             clip,
             origin: self.origin,
             described: self.described.as_deref_mut(),
+            disabled: self.disabled,
+        }
+    }
+
+    /// This canvas, telling every part drawn into it as doing nothing now
+    /// where `disabled` (e.g. a menu entry that cannot be chosen yet,
+    /// whatever helper draws it); as it is otherwise.
+    pub fn disabling(&mut self, disabled: bool) -> Canvas<'_> {
+        Canvas {
+            framebuffer: self.framebuffer,
+            clip: self.clip,
+            origin: self.origin,
+            described: self.described.as_deref_mut(),
+            disabled: self.disabled || disabled,
         }
     }
 
@@ -810,7 +894,7 @@ mod tests {
                 |dx, _| if dx == 0 { 255 } else { 0 },
             );
             canvas.fill_rect(-5, -9, 4, 4, Color::BLACK);
-            canvas.describe(Role::Button, "OK", Rect::new(1, 1, 4, 2), false, None);
+            canvas.describe(Role::Button, "OK", Rect::new(1, 1, 4, 2));
         }
         {
             let mut canvas = plain.canvas();
@@ -996,7 +1080,7 @@ mod tests {
         let mut described = Vec::new();
         {
             let mut canvas = fb.canvas().describing(&mut described).offset(-4, -6);
-            canvas.describe(Role::Row, "row", Rect::new(1, 1, 5, 9), false, None);
+            canvas.describe(Role::Row, "row", Rect::new(1, 1, 5, 9));
         }
         assert_eq!(described[0].area, Rect::new(0, 0, 2, 4));
     }

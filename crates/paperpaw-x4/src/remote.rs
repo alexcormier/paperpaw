@@ -525,13 +525,14 @@ pub fn runs(bytes: &[u8], out: &mut String) {
     }
 }
 
-/// The state of a part `describe` sends: `focused`, `on` or `off` joined
-/// by `+`, or `-` for none.
-pub fn part_state(focused: bool, on: Option<bool>) -> String {
+/// The state of a part `describe` sends: `focused`, `on` or `off` and
+/// `disabled` joined by `+`, or `-` for none.
+pub fn part_state(focused: bool, on: Option<bool>, disabled: bool) -> String {
     let words = [
         (focused, "focused"),
         (on == Some(true), "on"),
         (on == Some(false), "off"),
+        (disabled, "disabled"),
     ];
     let mut state = String::new();
     for (_, word) in words.iter().filter(|(on, _)| *on) {
@@ -790,8 +791,9 @@ mod tests {
 
     #[test]
     fn states_of_parts() {
-        assert_eq!(part_state(false, None), "-");
-        assert_eq!(part_state(true, Some(true)), "focused+on");
-        assert_eq!(part_state(false, Some(false)), "off");
+        assert_eq!(part_state(false, None, false), "-");
+        assert_eq!(part_state(true, Some(true), false), "focused+on");
+        assert_eq!(part_state(false, Some(false), false), "off");
+        assert_eq!(part_state(true, None, true), "focused+disabled");
     }
 }

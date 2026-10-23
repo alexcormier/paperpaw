@@ -199,7 +199,7 @@ impl RulesScreen {
                 self.message = Some(env.i18n.tr("rules.not-saved").to_string());
             }
         }
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         crate::schedule(&env, &self.state.store, &mut out);
         for command in out {
             cx.command(command);

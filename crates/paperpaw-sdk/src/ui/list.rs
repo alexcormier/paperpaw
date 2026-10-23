@@ -303,7 +303,7 @@ impl ListView {
         for (slot, index) in (first..len).take(self.rows()).enumerate() {
             let rect = self.row_rect(slot);
             let focused = self.active && self.shown && index == self.focus;
-            canvas.describe(Role::Row, "", rect, focused, None);
+            canvas.describe(Role::Row, "", rect).focused(focused);
             if focused {
                 draw_focus(canvas, style, rect);
             } else if self.columns == 1 {

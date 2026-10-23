@@ -63,7 +63,7 @@ use paperpaw_sdk::firmware::{Firmware, Plugins, UPDATE_DIR, compare_versions};
 use paperpaw_sdk::native::Native;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::setting::{Setting, Text};
-use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, PluginKind, Storage, files};
+use paperpaw_sdk::{Arg, Command, Commands, Env, HttpRequest, Params, PluginKind, Storage, files};
 
 use crate::fetch::{self, Build};
 use crate::{OFFERED, PAGE, file, read_pair, waiting, write_pair};
@@ -367,7 +367,7 @@ fn question(
 
 /// Asks the server for an update; `quiet` from the action, which offers
 /// what it finds by opening the page and says nothing otherwise.
-pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Vec<Command>) {
+pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Commands) {
     let Some(firmware) = env.firmware else {
         return;
     };
@@ -395,7 +395,7 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Vec<Command>) {
 
 /// The answer: the update it names kept (or the one kept before let go),
 /// and offered if the question was asked in the background.
-pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let Some(firmware) = env.firmware else {
         return;
     };
@@ -454,7 +454,7 @@ fn path_for(firmware: &Firmware, version: &str) -> String {
 }
 
 /// Downloads `offer` into `updates`.
-pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Vec<Command>) {
+pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Commands) {
     let _ = env.storage.create_dir(UPDATE_DIR);
     clear_download(env.storage);
     // A path on the server asked.
@@ -473,7 +473,7 @@ pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Vec<Command>) {
 /// The download done: whole, it takes its name in `updates` and the
 /// offer is let go; otherwise it is removed. Either is said, also while
 /// the page is closed (downloads go on meanwhile).
-pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let Some(firmware) = env.firmware else {
         return;
     };

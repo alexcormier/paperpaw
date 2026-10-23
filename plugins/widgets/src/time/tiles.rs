@@ -265,8 +265,6 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         paperpaw_sdk::semantics::Role::Text,
         &super::clock_text(env, &now),
         Rect::new(left as u16, top as u16, total as u16, h as u16),
-        false,
-        None,
     );
 
     // The date below, and "AM" or "PM" at the right end.

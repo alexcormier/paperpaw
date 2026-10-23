@@ -32,7 +32,7 @@ use paperpaw_sdk::round::point_at;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{self, Look, Size, WidgetTarget};
 use paperpaw_sdk::{
-    Canvas, Color, Command, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
+    Canvas, Color, Command, Commands, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
     SettingSpec, SettingValue,
 };
 
@@ -104,7 +104,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 /// goes onto its first page, after the book being read, if no page shows
 /// it yet. Offered once only (kept as a file of the plugin), so that a
 /// widget the user removed stays away.
-fn offer_widget(env: &Env<'_>, out: &mut Vec<Command>) {
+fn offer_widget(env: &Env<'_>, out: &mut Commands) {
     let offered = alloc::format!(
         "{}/goal-widget-offered",
         Env::plugin_dir(crate::PLUGIN.as_str())

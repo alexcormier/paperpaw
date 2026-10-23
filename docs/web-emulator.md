@@ -134,7 +134,7 @@ They answer in JSON:
 | `run <action>`, `slot <slot> [<key>=<hex> …]`, `show <screen> [<key>=<hex> …]`, `open <hex path>`, `set <setting> <hex value>`, `emit <event> [<key>=<hex> …]`, `type <hex>`, `type-enter <hex>`, `press <button>`, `hold <button> <ms>`, `touch <down\|move\|up> <x> <y>`, `time set <unix ms>`, `mkdir <path>`, `rm <path>`, `mv <hex> <hex>` | `{}` |
 | `screen` | `{ "screen": id }` |
 | `screens` | `{ "screens": [ids, the one shown last] }` |
-| `describe` | `{ "screen": id, "parts": [{ "role", "x", "y", "width", "height", "state", "focused", "on", "label" }] }`; `state` is `focused`, `on`, `off` joined by `+`, or `-`, the same as `focused` (true, false) and `on` (true, false, null: no switch) |
+| `describe` | `{ "screen": id, "parts": [{ "role", "x", "y", "width", "height", "state", "focused", "on", "disabled", "label" }] }`; `state` is `focused`, `on`, `off`, `disabled` joined by `+`, or `-`, the same as `focused` (true, false), `on` (true, false, null: no switch) and `disabled` (true where it does nothing now) |
 | `setting <id>` | `{ "value": text }` |
 | `settings [<prefix>]` | `{ "values": { id: text } }` |
 | `actions [<prefix>]` | `{ "actions": [ids] }` |

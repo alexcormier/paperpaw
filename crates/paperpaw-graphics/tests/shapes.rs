@@ -344,7 +344,8 @@ fn a_blind_framebuffer_describes_what_is_drawn_and_keeps_no_pixels() {
         canvas.draw_gray_row(0, 300, &[0, 128, 255, 64]);
         canvas.set_pixel(Point::new(5, 5), Color::BLACK);
         let mut row = canvas.clipped(Rect::new(0, 400, 800, 80));
-        row.describe(Role::Button, "OK", Rect::new(20, 410, 100, 50), true, None);
+        row.describe(Role::Button, "OK", Rect::new(20, 410, 100, 50))
+            .focused(true);
     }
     assert_eq!(blind.byte_len(), 0);
     assert_eq!(blind.view().height, 0);

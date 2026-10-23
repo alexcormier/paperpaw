@@ -137,7 +137,9 @@ pub(crate) fn draw_cell(
     let Some(font) = style.font(env) else {
         return;
     };
-    canvas.describe(Role::Row, &book.spoken, cell, focused, None);
+    canvas
+        .describe(Role::Row, &book.spoken, cell)
+        .focused(focused);
     let around = grid.focus_box(cell, sizes, style);
     if focused {
         draw_focus(canvas, style, around);

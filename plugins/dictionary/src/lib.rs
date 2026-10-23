@@ -714,7 +714,7 @@ impl Screen for Popup {
             note_x,
             header,
             &note,
-            style.faint(80),
+            style.faint(ui::Ink::Detail),
         );
         let word = ui::fit(&font, style.title, &self.word, right - margin * 2.0);
         ui::draw_label(
@@ -740,7 +740,7 @@ impl Screen for Popup {
                 .iter()
                 .any(|&(from, to)| (from..to).contains(&start));
             let ink = if heading {
-                style.faint(80)
+                style.faint(ui::Ink::Detail)
             } else {
                 Color::BLACK
             };
@@ -754,13 +754,9 @@ impl Screen for Popup {
                 let focused = !env.device.input.touch
                     && self.more_shown(env).map(|m| m.begins)
                         == self.more_at(self.top + n).map(|m| m.begins);
-                canvas.describe(
-                    paperpaw_sdk::semantics::Role::Button,
-                    text,
-                    area,
-                    focused,
-                    None,
-                );
+                canvas
+                    .describe(paperpaw_sdk::semantics::Role::Button, text, area)
+                    .focused(focused);
             }
         }
     }

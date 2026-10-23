@@ -539,7 +539,7 @@ impl Screen for Check {
             l.help,
             style.small,
             &help,
-            style.faint(60),
+            style.faint(ui::Ink::Note),
         );
         match self.step {
             Some(Step::Screen) => draw_screen_test(canvas, env, l.body, self.flipped),
@@ -1109,7 +1109,7 @@ fn paragraph(
     let Some(font) = style.font(env) else {
         return;
     };
-    canvas.describe(Role::Text, text, area, false, None);
+    canvas.describe(Role::Text, text, area);
     let height = font.line_metrics(size).line_height as u16;
     let mut top = area.y;
     for range in font.wrap(size, text, f32::from(area.width)) {

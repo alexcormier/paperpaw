@@ -14,7 +14,7 @@ use crate::ui::{self, UiStyle};
 use crate::widgets::{SizeClass, Widget, WidgetContext, WidgetInput};
 use crate::{
     Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id, Params, Point,
-    PointerEvent, PointerPhase, Rect, RefreshMode,
+    PointerEvent, PointerPhase, Rect, RefreshMode, semantics::Role,
 };
 
 /// Translation keys of an item's options: this, then the option.
@@ -448,8 +448,8 @@ impl GridView {
                     // a text of its own).
                     let name = shown.item.what.title(env);
                     let focused = !editing && focused_tool == Some(shown.area);
-                    let button = crate::semantics::Role::Button;
-                    canvas.describe(button, &name, shown.area, focused, None);
+                    let told = canvas.describe(Role::Button, &name, shown.area);
+                    told.focused(focused);
                 }
             }
             if editing {
@@ -489,7 +489,7 @@ impl GridView {
             && let Some((area, _)) = self.targets.get(self.focus)
         {
             let name = self.names.get(self.focus).map_or("", String::as_str);
-            canvas.describe(crate::semantics::Role::Button, name, *area, true, None);
+            canvas.describe(Role::Button, name, *area).focused(true);
         }
         // The widget's own focus where it draws one.
         let own = self.focus_shown
@@ -598,7 +598,7 @@ impl GridView {
         let Some(widget) = &mut shown.widget else {
             return false;
         };
-        let mut out = Vec::new();
+        let mut out = crate::Commands::new();
         let taken = widget.on_input(&env, input, shown.area, &mut out);
         if taken {
             cx.request_redraw_area(shown.area);

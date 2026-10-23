@@ -240,12 +240,12 @@ fn typed_handlers_hear_only_what_they_can_read() {
     assert_eq!(event.as_str(), "demo.counted");
     let h = common::Harness::new();
     let env = h.env();
-    let mut out = Vec::new();
+    let mut out = paperpaw_sdk::Commands::new();
     handler(&env, &Params::new().with("n", "5"), &mut out);
     handler(&env, &Params::new().with("n", "five"), &mut out);
     handler(&env, &Params::new(), &mut out);
     assert_eq!(heard.get(), 5);
-    assert_eq!(out, [Command::Restart]);
+    assert_eq!(out.as_slice(), [Command::Restart]);
 }
 
 #[test]

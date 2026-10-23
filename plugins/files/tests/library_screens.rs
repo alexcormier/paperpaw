@@ -641,7 +641,7 @@ impl paperpaw_sdk::Plugin for Senders {
             let id = paperpaw_sdk::Id::parse(&format!("senders.to-{n:02}")).unwrap();
             r.add_action(
                 paperpaw_sdk::ActionSpec::new(id.clone(), format!("Send to {n:02}"))
-                    .handler(|_: &paperpaw_sdk::Env<'_>, _: &mut Vec<paperpaw_sdk::Command>| {}),
+                    .handler(|_: &paperpaw_sdk::Env<'_>, _: &mut paperpaw_sdk::Commands| {}),
             )?;
             r.add_menu_entry(
                 paperpaw_sdk::MenuEntry::new(paperpaw_sdk::builtin::menus::BOOK, id).order(50),

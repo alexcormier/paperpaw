@@ -171,7 +171,7 @@ impl OfferScreen {
             // This page said what they are: no need to tell it again on
             // a plugin's page.
             trust::tell(env.storage);
-            let mut out = Vec::new();
+            let mut out = paperpaw_sdk::Commands::new();
             queue::add_quietly(&env, &fetch, &mut out);
             out.into_iter().for_each(|command| cx.command(command));
         }
@@ -233,7 +233,7 @@ impl Screen for OfferScreen {
                 style.margin as f32,
                 area,
                 ui::tr_input(env, "store.offer.hint"),
-                style.faint(60),
+                style.faint(ui::Ink::Note),
             );
         }
     }

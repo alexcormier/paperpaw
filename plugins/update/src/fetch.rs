@@ -36,7 +36,7 @@ use paperpaw_sdk::install::{self, Digest, Installer, Package, PackageFile, Recei
 use paperpaw_sdk::json::stream::{Event as JsonEvent, Parser};
 use paperpaw_sdk::native::{self, Author};
 use paperpaw_sdk::replies::HttpReply;
-use paperpaw_sdk::{Arg, Command, Env, PluginKind, Storage};
+use paperpaw_sdk::{Arg, Command, Commands, Env, PluginKind, Storage};
 
 use crate::{PLUGIN, file};
 
@@ -289,7 +289,7 @@ pub(crate) fn start(
     version: &str,
     builds: &[Build],
     native: Option<(u64, u32)>,
-    out: &mut Vec<Command>,
+    out: &mut Commands,
 ) -> bool {
     if builds.is_empty() {
         return false;
@@ -355,7 +355,7 @@ pub(crate) fn interrupted(storage: &dyn Storage, firmware: &Firmware) {
 }
 
 /// Goes on fetching (from the update page): after a restart cut it off.
-pub(crate) fn resume(env: &Env<'_>, out: &mut Vec<Command>) {
+pub(crate) fn resume(env: &Env<'_>, out: &mut Commands) {
     if INSTALLER.progress(env.storage).is_some() {
         return;
     }
@@ -365,7 +365,7 @@ pub(crate) fn resume(env: &Env<'_>, out: &mut Vec<Command>) {
 }
 
 /// Fetches the next plugin left; when none is, says the update is ready.
-fn next(env: &Env<'_>, version: &str, out: &mut Vec<Command>) {
+fn next(env: &Env<'_>, version: &str, out: &mut Commands) {
     let storage = env.storage;
     let mut left = left(storage);
     while !left.is_empty() {
@@ -414,7 +414,7 @@ pub(crate) fn failed_names(storage: &dyn Storage) -> Option<String> {
 
 /// A download of a plugin's file done: the next one asked for, or the
 /// plugin checked and put in its place, and the next plugin fetched.
-pub(crate) fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+pub(crate) fn received(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
     let storage = env.storage;
     let Some(version) = paperpaw_sdk::read_file(storage, &file(QUEUE), 64 * 1024)
         .ok()

@@ -439,7 +439,7 @@ fn draw_day(
                 inner.height.saturating_sub(lift),
             );
             let baseline = widgets::ink_baseline(&font, size, text, band);
-            canvas.describe(Role::Text, text, cell, false, None);
+            canvas.describe(Role::Text, text, cell);
             font.draw(canvas, size, x, baseline, text, color);
         }
         None if level == 0 && !today => {

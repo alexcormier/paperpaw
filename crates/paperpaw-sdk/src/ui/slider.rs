@@ -323,13 +323,9 @@ impl Slider {
                 Color::WHITE
             }
         };
-        canvas.describe(
-            Role::Slider,
-            view.shown,
-            track,
-            focus != SliderFocus::None,
-            None,
-        );
+        canvas
+            .describe(Role::Slider, view.shown, track)
+            .focused(focus != SliderFocus::None);
         self.draw_track(canvas, style, track, view.value, ink);
     }
 

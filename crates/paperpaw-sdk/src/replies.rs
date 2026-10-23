@@ -42,6 +42,7 @@ fn text(params: &Params, key: &str) -> Option<String> {
 
 /// The answer to an HTTP request ([`Command::Http`](crate::Command::Http)).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct HttpReply {
     /// The status, e.g. 200; 0 if there was no answer (no network, a
     /// refused certificate …), with the reason as the body.
@@ -69,6 +70,20 @@ pub struct HttpReply {
 }
 
 impl HttpReply {
+    /// An answer with `status` and `body`, without headers or context.
+    pub fn new(status: u16, body: impl Into<String>) -> Self {
+        Self {
+            status,
+            body: body.into(),
+            etag: None,
+            content_type: None,
+            final_url: None,
+            context: Params::new(),
+            refused: None,
+            headers: alloc::vec::Vec::new(),
+        }
+    }
+
     const KEYS: [&'static str; 7] = [
         http_params::STATUS,
         http_params::BODY,
@@ -438,10 +453,21 @@ impl EventData for Typed {
 
 /// The folder the reader chose when asked ([`ask::folder`](crate::ask::folder)).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Chosen {
     pub path: String,
     /// The parameters the question was asked with.
     pub context: Params,
+}
+
+impl Chosen {
+    /// The folder `path`, chosen for a question asked with `context`.
+    pub fn new(path: impl Into<String>, context: Params) -> Self {
+        Self {
+            path: path.into(),
+            context,
+        }
+    }
 }
 
 impl EventData for Chosen {

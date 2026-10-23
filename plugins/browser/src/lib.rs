@@ -37,9 +37,9 @@ use paperpaw_sdk::replies::{HttpReply, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
-    Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
-    Screen, ScreenSpec,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
+    HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, Priority, Rect, RefreshMode,
+    RegisterError, Registrar, Screen, ScreenSpec,
 };
 
 use crate::store::Entry;
@@ -93,7 +93,7 @@ impl Plugin for Browser {
         ))?;
         r.bind_slot(slots::BROWSER, SCREEN, Priority::DEFAULT)?;
         r.add_action(ActionSpec::new(OPEN, "browser.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenSlot(slots::BROWSER, Params::new()));
             },
         ))?;
@@ -525,7 +525,7 @@ impl Screen for BrowserScreen {
                 style.margin as f32,
                 self.status,
                 message,
-                style.faint(60),
+                style.faint(ui::Ink::Note),
             );
         }
     }

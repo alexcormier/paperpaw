@@ -498,7 +498,7 @@ impl LockScreen {
                 i32::from(rect.y) + i32::from(rect.height) / 2,
             );
             let radius = i32::from(rect.width) / 2;
-            canvas.describe(Role::Button, key, rect, focused, None);
+            canvas.describe(Role::Button, key, rect).focused(focused);
             // Digits in a thin ring; delete and OK as plain signs. Chosen
             // with the buttons, a key is filled.
             let digit = *key != DELETE && *key != "OK";
@@ -544,7 +544,15 @@ impl LockScreen {
         if let Some(date) = paperpaw_sdk::time::date_text(env) {
             let below = Rect::new(top.x, top.y + big, top.width, line(env, style, style.small));
             let x = (f32::from(below.width) - font.measure(style.small, &date)) / 2.0;
-            ui::draw_label(canvas, &font, style.small, x, below, &date, style.faint(70));
+            ui::draw_label(
+                canvas,
+                &font,
+                style.small,
+                x,
+                below,
+                &date,
+                style.faint(ui::Ink::Detail),
+            );
         }
     }
 
@@ -563,18 +571,18 @@ impl LockScreen {
             canvas.draw_line(l.points[last], at, line, Color::gray(110));
         }
         for (i, &point) in l.points.iter().enumerate() {
-            canvas.describe(
-                Role::Button,
-                "",
-                Rect::new(
-                    (point.x - l.radius * 3).max(0) as u16,
-                    (point.y - l.radius * 3).max(0) as u16,
-                    (l.radius * 6) as u16,
-                    (l.radius * 6) as u16,
-                ),
-                self.shown && self.focus == i,
-                None,
-            );
+            canvas
+                .describe(
+                    Role::Button,
+                    "",
+                    Rect::new(
+                        (point.x - l.radius * 3).max(0) as u16,
+                        (point.y - l.radius * 3).max(0) as u16,
+                        (l.radius * 6) as u16,
+                        (l.radius * 6) as u16,
+                    ),
+                )
+                .focused(self.shown && self.focus == i);
             let on = chosen.contains(&i);
             circle(
                 canvas,

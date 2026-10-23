@@ -18,7 +18,7 @@ use paperpaw_sdk::builtin::groups;
 use paperpaw_sdk::event::EventData;
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{
-    ActionSpec, Command, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
+    ActionSpec, Commands, DeviceInfo, DisplayInfo, Env, Id, InputCaps, Instant, Manifest,
     MemoryClass, MemoryStorage, Params, PixelFormat, Plugin, RegisterError, Registrar, SettingSpec,
     Storage, StorageError, Version,
 };
@@ -64,7 +64,7 @@ impl Plugin for Counter {
         let count = self.0.clone();
         r.add_settings(&SWITCHES)?;
         r.add_action(ActionSpec::new(COUNT, "counter.count").handler(
-            move |_: &Env<'_>, _: &mut Vec<Command>| {
+            move |_: &Env<'_>, _: &mut Commands| {
                 count.set(count.get() + 1);
             },
         ))

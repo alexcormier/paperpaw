@@ -126,7 +126,7 @@ impl EditScreen {
         };
         if let Some(slot) = all.get_mut(self.index) {
             *slot = self.catalog.clone();
-            let mut out = Vec::new();
+            let mut out = paperpaw_sdk::Commands::new();
             catalogs::save(env, &all, &mut out);
             for command in out {
                 cx.command(command);

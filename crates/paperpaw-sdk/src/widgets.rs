@@ -234,7 +234,7 @@ pub trait Widget {
         env: &Env<'_>,
         input: WidgetInput,
         area: Rect,
-        out: &mut Vec<crate::Command>,
+        out: &mut crate::Commands,
     ) -> bool {
         let _ = (env, input, area, out);
         false
@@ -976,7 +976,7 @@ impl Widget for Placed {
         env: &Env<'_>,
         input: WidgetInput,
         area: Rect,
-        out: &mut Vec<crate::Command>,
+        out: &mut crate::Commands,
     ) -> bool {
         let placement = core::mem::take(&mut self.placement);
         let taken = env.settings.with_placement(Some(&placement), || {

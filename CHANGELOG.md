@@ -415,6 +415,38 @@ file to your report.
   on `Offer` needs an arm for answers to come. `Header` and `Pager` keep
   their state: `area()` reads it, `Header::note_focused()` and
   `note_button()` set the note.
+- SDK: `canvas.describe(role, text, area)` says more by its builder
+  (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
+  in place of five arguments; parts (`Described`, `semantics::Part`)
+  tell whether they are disabled.
+- SDK: every handler queues its commands in `Commands` instead of a
+  `&mut Vec<Command>`: actions, events, observers, work steps, voices,
+  widgets' input and the installer. It has `push`, `extend` and `emit`
+  and reads as a slice. Its fields are private, so it can carry more
+  later without a new signature. A closure such as `|env, out|` stays as
+  it is; a parameter typed `&mut Vec<Command>` becomes `&mut Commands`.
+  tell whether they are disabled, and `canvas.disabling(true)` tells
+  everything drawn into it so. Faint menu and quick panel entries are
+  told as disabled, and the remote control's `describe` (and the web
+  emulator's) says `disabled` in a part's state.
+- SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
+  and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
+  `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,
+  `Refusal`, `WorkRefused` and `Note` (with `new`), `Step` and
+  `Importance`. A match on them needs an arm for what comes later.
+  `Handled` is exhaustive: an event is handled or not, and a plugin
+  matches both.
+- SDK: a look's painters take a `ui::look::PaintCx` (the canvas and the
+  style, more to come) and the part: `fn(&mut PaintCx, &SwitchPart) ->
+  bool`.
+- SDK: the interface's colours come from the palette: `faint(Ink)` and
+  `focus_faint(focused, Ink)` take a role (`Ink::Note`, the new
+  `Ink::Detail` for what is told beside a row's title, `Ink::Muted` …)
+  in place of a gray; the focus and the header use the palette's text
+  and paper. `Palette` holds colours (`color(ink)`), `Ink::ALL` is a
+  slice, and `Ink::CardPattern` is gone (cards on black and white
+  panels are a sparser pattern of `Ink::Card`). The palette setting
+  names `detail` too.
 - SDK: `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).

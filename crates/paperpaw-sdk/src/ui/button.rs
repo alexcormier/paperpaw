@@ -72,7 +72,10 @@ pub fn draw_button(
     on: bool,
     focused: bool,
 ) {
-    canvas.describe(Role::Button, label, rect, focused, on.then_some(true));
+    canvas
+        .describe(Role::Button, label, rect)
+        .focused(focused)
+        .on(on.then_some(true));
     let Some(ink) = button_frame(canvas, style, rect, on, focused) else {
         return;
     };
@@ -92,8 +95,11 @@ pub fn draw_faint_button(
     label: &str,
     focused: bool,
 ) {
-    canvas.describe(Role::Button, label, rect, focused, None);
-    let faint = style.faint(60);
+    canvas
+        .describe(Role::Button, label, rect)
+        .focused(focused)
+        .disabled(true);
+    let faint = style.faint(Ink::Note);
     framed(canvas, style, rect, (Color::WHITE, faint), focused);
     let Some(font) = style.font(env) else {
         return;
@@ -112,7 +118,10 @@ pub fn draw_icon_button(
     on: bool,
     focused: bool,
 ) -> Color {
-    canvas.describe(Role::Button, name, rect, focused, on.then_some(true));
+    canvas
+        .describe(Role::Button, name, rect)
+        .focused(focused)
+        .on(on.then_some(true));
     button_frame(canvas, style, rect, on, focused).unwrap_or(Color::BLACK)
 }
 

@@ -40,9 +40,9 @@ use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::web::{clean_name, encode};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, HttpRequest, Id,
-    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec, SettingSpec, Storage, StorageError,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled,
+    HttpRequest, Id, Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError,
+    Registrar, Screen, ScreenSpec, SettingSpec, Storage, StorageError,
 };
 
 pub const PLUGIN: Id = Id::new_static("wallabag");
@@ -287,7 +287,7 @@ impl Fetch {
     }
 
     /// Starts a fetch: first a token for the account.
-    fn start(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn start(&mut self, env: &Env<'_>, out: &mut Commands) {
         if self.running {
             return;
         }
@@ -329,7 +329,7 @@ impl Fetch {
         reply.ok().then_some(reply.status)
     }
 
-    fn token(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn token(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         let token = Self::ok(reply)
             .and_then(|_| json::text(&json::object(&reply.body), "access_token").map(String::from));
         let Some(token) = token else {
@@ -354,7 +354,7 @@ impl Fetch {
 
     /// The next step: archive, list, ask about articles, download, or
     /// done.
-    fn next(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn next(&mut self, env: &Env<'_>, out: &mut Commands) {
         if let Some(id) = self.archive.pop() {
             let mut request =
                 self.request(env, "PATCH", &format!("/api/entries/{id}.json"), &ARCHIVED);
@@ -412,7 +412,7 @@ impl Fetch {
         done(env, key, &args, out);
     }
 
-    fn archived(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn archived(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         let id = reply.context.get(ARTICLE).unwrap_or_default();
         if Self::ok(reply).is_some() {
             self.archived += 1;
@@ -423,7 +423,7 @@ impl Fetch {
         self.next(env, out);
     }
 
-    fn listed(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn listed(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         self.listed = true;
         // Only a whole list counts: an answer that is not one (a page of
         // the server's own, an error, a list cut short) changes nothing.
@@ -451,7 +451,7 @@ impl Fetch {
 
     /// An article fetched but not among the newest unread: its book goes
     /// only when Wallabag says it is archived or no longer there.
-    fn checked(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn checked(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         let id = reply.context.get(ARTICLE).unwrap_or_default();
         let gone = match reply.status {
             404 => Some(true),
@@ -467,7 +467,7 @@ impl Fetch {
         self.next(env, out);
     }
 
-    fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn downloaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         let tmp = data("article.tmp");
         let id = reply.context.get(ARTICLE).unwrap_or_default();
         let title = reply.context.get(params::TITLE).unwrap_or_default();
@@ -559,7 +559,7 @@ fn is_id(id: &str) -> bool {
 /// reader's annotations stays, as does one another article in the list
 /// is at too (an older version gave two articles one name): the article
 /// is only let go of.
-fn remove_article(env: &Env<'_>, id: &str, out: &mut Vec<Command>) {
+fn remove_article(env: &Env<'_>, id: &str, out: &mut Commands) {
     if let Ok(mut list) = articles(env.storage)
         && let Some(at) = list.iter().position(|a| a.id == id)
     {
@@ -582,7 +582,7 @@ fn remove_article(env: &Env<'_>, id: &str, out: &mut Vec<Command>) {
 }
 
 /// Ends a fetch with message `key`.
-fn done(env: &Env<'_>, key: &str, args: &[(&str, Arg<'_>)], out: &mut Vec<Command>) {
+fn done(env: &Env<'_>, key: &str, args: &[(&str, Arg<'_>)], out: &mut Commands) {
     let text = env.i18n.format(key, args);
     out.push(Command::Notify(text.clone()));
     out.push(DONE.emit(Finished { text }));
@@ -639,13 +639,13 @@ impl Plugin for Wallabag {
             Box::new(|env, _| Box::new(SetupScreen::new(env))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "wallabag.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
         let s = state.clone();
         r.add_action(ActionSpec::new(FETCH, "wallabag.fetch").handler(
-            move |env: &Env<'_>, out: &mut Vec<Command>| {
+            move |env: &Env<'_>, out: &mut Commands| {
                 if env.reader {
                     s.borrow_mut().start(env, out);
                 } else {
@@ -664,7 +664,7 @@ impl Plugin for Wallabag {
         r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN).order(48))?;
         r.add_icon(OPEN, Cow::Borrowed("article"))?;
         r.add_icon(FETCH, Cow::Borrowed("refresh"))?;
-        type Step = fn(&mut Fetch, &Env<'_>, &HttpReply, &mut Vec<Command>);
+        type Step = fn(&mut Fetch, &Env<'_>, &HttpReply, &mut Commands);
         let steps: [(Event<HttpReply>, Step); 5] = [
             (TOKEN, Fetch::token),
             (ARCHIVED, Fetch::archived),
@@ -738,7 +738,7 @@ impl Row {
 }
 
 /// Keeps what was typed for a row of the set-up.
-fn entered(typed: &Typed, out: &mut Vec<Command>) {
+fn entered(typed: &Typed, out: &mut Commands) {
     let Some(row) = typed.context.get(FIELD).and_then(Row::of) else {
         return;
     };

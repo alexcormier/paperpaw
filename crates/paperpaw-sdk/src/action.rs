@@ -4,7 +4,6 @@ use alloc::vec::Vec;
 use core::fmt;
 
 use crate::collections::VecMap;
-use crate::command::Command;
 use crate::env::Env;
 use crate::id::Id;
 use crate::params::Params;
@@ -12,12 +11,12 @@ use crate::plugin::Priority;
 
 /// Global handler of an action, called when the active screen does not
 /// handle it. It reacts by emitting commands.
-pub type ActionHandler = Box<dyn Fn(&Env<'_>, &mut Vec<Command>)>;
+pub type ActionHandler = Box<dyn Fn(&Env<'_>, &mut crate::Commands)>;
 
 /// A handler of an action that gets the params it was run with
 /// ([`Command::RunActionWith`](crate::Command::RunActionWith)), e.g. the
 /// profile to apply.
-pub type ActionParamsHandler = Box<dyn Fn(&Env<'_>, &Params, &mut Vec<Command>)>;
+pub type ActionParamsHandler = Box<dyn Fn(&Env<'_>, &Params, &mut crate::Commands)>;
 
 /// A handler put in place of an action's own
 /// ([`Registrar::override_action`](crate::Registrar::override_action)).
@@ -39,7 +38,7 @@ impl fmt::Debug for ActionOverride {
 
 /// Sees every action run, or every event emitted, with its params
 /// (see [`ObserverSpec`]).
-pub type Observer = Box<dyn Fn(&Env<'_>, &Id, &Params, &mut Vec<Command>)>;
+pub type Observer = Box<dyn Fn(&Env<'_>, &Id, &Params, &mut crate::Commands)>;
 
 /// Something that sees every action run
 /// ([`Registrar::observe_actions`](crate::Registrar::observe_actions)) or
@@ -57,7 +56,7 @@ pub struct ObserverSpec {
 impl ObserverSpec {
     pub fn new(
         id: impl Into<Id>,
-        observer: impl Fn(&Env<'_>, &Id, &Params, &mut Vec<Command>) + 'static,
+        observer: impl Fn(&Env<'_>, &Id, &Params, &mut crate::Commands) + 'static,
     ) -> Self {
         Self {
             id: id.into(),
@@ -126,7 +125,7 @@ impl ActionSpec {
     }
 
     /// What it does where the screen shown does not take it.
-    pub fn handler(mut self, handler: impl Fn(&Env<'_>, &mut Vec<Command>) + 'static) -> Self {
+    pub fn handler(mut self, handler: impl Fn(&Env<'_>, &mut crate::Commands) + 'static) -> Self {
         self.handler = Some(Box::new(handler));
         self
     }
@@ -137,7 +136,7 @@ impl ActionSpec {
     /// [`Command::RunAction`](crate::Command::RunAction) and inputs).
     pub fn handler_with(
         mut self,
-        handler: impl Fn(&Env<'_>, &Params, &mut Vec<Command>) + 'static,
+        handler: impl Fn(&Env<'_>, &Params, &mut crate::Commands) + 'static,
     ) -> Self {
         self.extra().handler_with = Some(Box::new(handler));
         self

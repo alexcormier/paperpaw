@@ -380,7 +380,7 @@ const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "cod
 const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = &[ "paperpaw_sdk", "paperpaw_platform", "paperpaw_graphics", "paperpaw_i18n", "paperpaw_config", "paperpaw_text", "paperpaw_document", "paperpaw_layout", "paperpaw_xml", "paperpaw_zip", "paperpaw_hyphen", "paperpaw_image", "paperpaw_update", "paperpaw_digest", "paperpaw_json", "paperpaw_qr", "paperpaw_native", ]
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
 const paperpaw_sdk::native::INTERFACE: u16 = 2u16
-const paperpaw_sdk::native::LAYOUT: u64 = 8_800_446_313_539_346_877u64
+const paperpaw_sdk::native::LAYOUT: u64 = 15_269_956_107_036_351_621u64
 const paperpaw_sdk::native::TOOLCHAIN: &str = if cfg!(target_arch = "riscv32") { "rustc 1.99.0, riscv32imc-unknown-none-elf" } else if cfg!(target_arch = "xtensa") { "esp 1.97.0.0, xtensa-esp32s3-none-elf" } else { "the compiler of PaperPaw's release, for this computer" }
 const paperpaw_sdk::numbers::DECIMAL_MARK: &str = "core.decimal"
 const paperpaw_sdk::pattern::MAX_PATTERN: usize = 256usize
@@ -429,8 +429,8 @@ const paperpaw_sdk::ui::confirm::NO_LABEL: &str = "no-label"
 const paperpaw_sdk::ui::confirm::ONLY_YES: &str = "only-yes"
 const paperpaw_sdk::ui::confirm::YES_LABEL: &str = "yes-label"
 const paperpaw_sdk::ui::items::LINES: &str = "lines"
-const paperpaw_sdk::ui::style::Ink::ALL: [paperpaw_sdk::ui::style::Ink; 14] = [ Ink::Text, Ink::Paper, Ink::Note, Ink::Muted, Ink::Faint, Ink::Disabled, Ink::Rule, Ink::Line, Ink::LineFaint, Ink::OnFocusMuted, Ink::OnDarkMuted, Ink::Card, Ink::CardPattern, Ink::Section, ]
-const paperpaw_sdk::ui::style::Palette::DEFAULT: paperpaw_sdk::ui::style::Palette = Palette([ 0, 255, 60, 90, 120, 150, 150, 190, 210, 215, 200, 225, 240, 238, ])
+const paperpaw_sdk::ui::style::Ink::ALL: &'static [paperpaw_sdk::ui::style::Ink] = &[ Ink::Text, Ink::Paper, Ink::Note, Ink::Detail, Ink::Muted, Ink::Faint, Ink::Disabled, Ink::Rule, Ink::Line, Ink::LineFaint, Ink::OnFocusMuted, Ink::OnDarkMuted, Ink::Card, Ink::Section, ]
+const paperpaw_sdk::ui::style::Palette::DEFAULT: paperpaw_sdk::ui::style::Palette = { const GRAYS: [u8
 const paperpaw_sdk::ui::style::UiStyle::PLAIN: paperpaw_sdk::ui::style::UiStyle = UiStyle { text: 20.0, small: 15.0, title: 23.0, head: 23.0, row: 60, control_row: 60, header: 64, margin: 12, gap: 8, line: 2, dark_header: false, corner: 0, strong: false, pill: false, focus: Focus::Fill, separators: Separators::Line, plain_header: false, cards: false, grays: 2, finger: 0, look: super::look::Look::none(), palette: Palette::DEFAULT, }
 const paperpaw_sdk::ui::text::ICON_SCALE: f32 = 1.25f32
 const paperpaw_sdk::ui::text::NOTE_LINES: usize = 2usize
@@ -559,7 +559,7 @@ enum paperpaw_sdk::ui::sections::Item { Heading(0: usize), Entry(0: usize) }
 enum paperpaw_sdk::ui::slider::SliderFocus { None, Focused, Editing }
 enum paperpaw_sdk::ui::slider::SliderStep { Moved(0: i64), Same, Chosen(0: i64), Cancelled }
 enum paperpaw_sdk::ui::style::Focus { Fill, Ring, Soft }
-enum paperpaw_sdk::ui::style::Ink { Text, Paper, Note, Muted, Faint, Disabled, Rule, Line, LineFaint, OnFocusMuted, OnDarkMuted, Card, CardPattern, Section }
+enum paperpaw_sdk::ui::style::Ink { Text, Paper, Note, Detail, Muted, Faint, Disabled, Rule, Line, LineFaint, OnFocusMuted, OnDarkMuted, Card, Section }
 enum paperpaw_sdk::ui::style::Separators { Line, Inset, None }
 enum paperpaw_sdk::ui::style::TextRole { Caption, Small, Body, Title, Head, Headline, Display, Numeral }
 enum paperpaw_sdk::ui::thumbnail::Depth { MonoGrays, Gray, Rgb }
@@ -631,6 +631,7 @@ struct paperpaw_sdk::command::HttpOptions { timeout: core::option::Option<core::
 struct paperpaw_sdk::command::HttpRequest { method: alloc::string::String, url: alloc::string::String, headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, body: core::option::Option<alloc::string::String>, body_from: core::option::Option<alloc::string::String>, save_to: core::option::Option<alloc::string::String>, reply: paperpaw_sdk::id::Id, params: paperpaw_sdk::params::Params, options: core::option::Option<alloc::boxed::Box<paperpaw_sdk::command::HttpOptions>> }
 struct paperpaw_sdk::command::ServerResponse { request: u32, status: u16, content_type: alloc::string::String, headers: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>, body: alloc::vec::Vec<u8>, body_from: core::option::Option<alloc::string::String> }
 struct paperpaw_sdk::command::Speech { text: alloc::string::String, language: alloc::string::String, rate: u16, reply: paperpaw_sdk::id::Id, params: paperpaw_sdk::params::Params, queue: bool }
+struct paperpaw_sdk::commands::Commands { queued: alloc::vec::Vec<paperpaw_sdk::command::Command> }
 struct paperpaw_sdk::contribution::Registrar { plugin: paperpaw_sdk::id::Id, contributions: alloc::vec::Vec<paperpaw_sdk::contribution::Contribution> }
 struct paperpaw_sdk::data::Format { version: u32, upgrades: &'static [paperpaw_sdk::data::Upgrade] }
 struct paperpaw_sdk::decorations::Decorated { start: paperpaw_document::Locator, end: paperpaw_document::Locator, role: paperpaw_sdk::id::Id }
@@ -774,7 +775,7 @@ struct paperpaw_sdk::secrets::SecretChange { id: alloc::string::String, label: a
 struct paperpaw_sdk::secrets::Secrets { list: alloc::vec::Vec<paperpaw_sdk::secrets::Secret>, unread: paperpaw_sdk::secrets::Unread, unsaved: alloc::vec::Vec<alloc::string::String> }
 struct paperpaw_sdk::secrets::Unread(0: alloc::vec::Vec<alloc::string::String>)
 struct paperpaw_sdk::secrets::Visible<'a> { all: &'a paperpaw_sdk::secrets::Secrets, running: &'a dyn paperpaw_sdk::secrets::Running }
-struct paperpaw_sdk::semantics::Part { role: paperpaw_graphics::canvas::Role, label: alloc::string::String, area: paperpaw_platform::geometry::Rect, focused: bool, on: core::option::Option<bool> }
+struct paperpaw_sdk::semantics::Part { role: paperpaw_graphics::canvas::Role, label: alloc::string::String, area: paperpaw_platform::geometry::Rect, focused: bool, on: core::option::Option<bool>, disabled: bool }
 struct paperpaw_sdk::served::Guard { key: alloc::string::String, wrong: u32, locked_until: core::option::Option<paperpaw_platform::input::Instant> }
 struct paperpaw_sdk::services::Contract { key: &'static str, size: usize, align: usize, version: paperpaw_sdk::version::Version }
 struct paperpaw_sdk::services::EventSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, params: &'static [&'static str] }
@@ -823,6 +824,7 @@ struct paperpaw_sdk::ui::look::FramePart { area: paperpaw_platform::geometry::Re
 struct paperpaw_sdk::ui::look::HeaderPart { area: paperpaw_platform::geometry::Rect }
 struct paperpaw_sdk::ui::look::HintsPart { area: paperpaw_platform::geometry::Rect }
 struct paperpaw_sdk::ui::look::Look(0: core::option::Option<&'static paperpaw_sdk::ui::look::Painters>)
+struct paperpaw_sdk::ui::look::PaintCx<'c, 'a> { canvas: &'c mut paperpaw_graphics::canvas::Canvas<'a>, style: &'c paperpaw_sdk::ui::style::UiStyle }
 struct paperpaw_sdk::ui::look::Painters { switch: core::option::Option<paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::SwitchPart>>, check: core::option::Option<paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::CheckPart>>, focus: core::option::Option<paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::FocusPart>>, separator: core::option::Option<paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::SeparatorPart>>, button: core::option::Option<paperpaw_sdk::ui::look::InkPainter<paperpaw_sdk::ui::look::ButtonPart>>, header: core::option::Option<paperpaw_sdk::ui::look::InkPainter<paperpaw_sdk::ui::look::HeaderPart>>, hints: core::option::Option<paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::HintsPart>>, progress: core::option::Option<paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::ProgressPart>>, slider: core::option::Option<paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::SliderPart>>, frame: core::option::Option<paperpaw_sdk::ui::look::Painter<paperpaw_sdk::ui::look::FramePart>> }
 struct paperpaw_sdk::ui::look::ProgressPart { area: paperpaw_platform::geometry::Rect, permille: u16, ink: paperpaw_platform::pixel::Color }
 struct paperpaw_sdk::ui::look::SeparatorPart { row: paperpaw_platform::geometry::Rect, indent: u16 }
@@ -844,7 +846,7 @@ struct paperpaw_sdk::ui::slider::Slider { min: i64, max: i64, step: i64 }
 struct paperpaw_sdk::ui::slider::SliderDrag { drag: core::option::Option<paperpaw_sdk::ui::slider::Drag> }
 struct paperpaw_sdk::ui::slider::SliderParts { minus: paperpaw_platform::geometry::Rect, track: paperpaw_platform::geometry::Rect, plus: paperpaw_platform::geometry::Rect }
 struct paperpaw_sdk::ui::slider::SliderView<'a> { area: paperpaw_platform::geometry::Rect, value: i64, shown: &'a str, title: &'a str, note: &'a str, focus: paperpaw_sdk::ui::slider::SliderFocus, room: &'a str }
-struct paperpaw_sdk::ui::style::Palette(0: [u8; 14])
+struct paperpaw_sdk::ui::style::Palette(0: [paperpaw_platform::pixel::Color; 14])
 struct paperpaw_sdk::ui::style::UiStyle { text: f32, small: f32, title: f32, head: f32, row: u32, control_row: u32, header: u32, margin: u32, gap: u32, line: u32, dark_header: bool, corner: u32, strong: bool, pill: bool, focus: paperpaw_sdk::ui::style::Focus, separators: paperpaw_sdk::ui::style::Separators, plain_header: bool, cards: bool, grays: u16, finger: u32, look: paperpaw_sdk::ui::look::Look, palette: paperpaw_sdk::ui::style::Palette }
 struct paperpaw_sdk::ui::thumbnail::Thumbnail { width: u16, height: u16, depth: paperpaw_sdk::ui::thumbnail::Depth, pixels: alloc::vec::Vec<u8> }
 struct paperpaw_sdk::ui::widget_list::AddScreen { style: paperpaw_sdk::ui::style::UiStyle, header: paperpaw_sdk::ui::header::Header, list: paperpaw_sdk::ui::list::ListView, target: paperpaw_sdk::ui::widget_list::Target, widgets: alloc::vec::Vec<(paperpaw_sdk::id::Id, alloc::string::String)> }

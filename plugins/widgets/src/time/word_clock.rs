@@ -320,13 +320,7 @@ fn draw_text(
         let x = align.x(room, font.measure(size, &shown));
         font.draw(canvas, size, x, baseline as i32, &shown, look.ink);
     }
-    canvas.describe(
-        paperpaw_sdk::semantics::Role::Text,
-        &rest,
-        room,
-        false,
-        None,
-    );
+    canvas.describe(paperpaw_sdk::semantics::Role::Text, &rest, room);
     if let Some(past) = past {
         // The minutes past the five, as dots below the text.
         let y = (top + total) as i32 + (dot * 3) as i32;
@@ -527,13 +521,7 @@ fn draw_grid(
     }
     let sentence = format!("{lead} {rest}");
     let at = Rect::new(left as u16, top as u16, width as u16, height as u16);
-    canvas.describe(
-        paperpaw_sdk::semantics::Role::Text,
-        &sentence,
-        at,
-        false,
-        None,
-    );
+    canvas.describe(paperpaw_sdk::semantics::Role::Text, &sentence, at);
     if let Some(past) = past {
         let dot = (cell_w.min(cell_h) * 0.12).max(2.0) as u32;
         let (l, t) = (left - cell_w * 0.25, top - cell_h * 0.25);

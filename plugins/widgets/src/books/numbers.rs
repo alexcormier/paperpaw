@@ -450,7 +450,7 @@ fn draw(
             }
             let x = Align::Center.x(cell, font.measure(style.small, &text));
             let baseline = widgets::ink_baseline(&font, style.small, &text, cell);
-            canvas.describe(Role::Text, &text, cell, false, None);
+            canvas.describe(Role::Text, &text, cell);
             font.draw(canvas, style.small, x, baseline, &number, look.ink);
             let x = x + font.measure(style.small, &alloc::format!("{number} "));
             font.draw(canvas, style.small, x, baseline, label, look.faint);
@@ -492,7 +492,7 @@ fn draw(
         let cell = Rect::new(left + shift + col * column, y, column, row_h);
         let number = numbers.of(part).to_string();
         let said = alloc::format!("{number} {label}");
-        canvas.describe(Role::Text, &said, cell, false, None);
+        canvas.describe(Role::Text, &said, cell);
         let x = Align::Center.x(cell, font.measure(size, &number));
         font.draw(canvas, size, x, i32::from(y) - digits.0, &number, look.ink);
         let label = &names[i];

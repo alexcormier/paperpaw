@@ -15,7 +15,7 @@ use core::cell::RefCell;
 use paperpaw_sdk::builtin::{events, params, slots};
 use paperpaw_sdk::decorations::{Decorated, DecoratorSpec, PageText};
 use paperpaw_sdk::words::{WordSet, fold};
-use paperpaw_sdk::{Command, Env, Id, Params, Storage};
+use paperpaw_sdk::{Command, Commands, Env, Id, Params, Storage};
 
 use crate::store::{self, Changes};
 use crate::{LEARNING, MARK};
@@ -101,7 +101,7 @@ fn words_in(storage: &dyn Storage, language: &str) -> WordSet {
 }
 
 /// A tap on a marked word: looks it up, in the language it was kept in.
-pub(crate) fn tapped(env: &Env<'_>, tapped: &events::DecorationTapped, out: &mut Vec<Command>) {
+pub(crate) fn tapped(env: &Env<'_>, tapped: &events::DecorationTapped, out: &mut Commands) {
     if tapped.decorator != DECORATOR {
         return;
     }

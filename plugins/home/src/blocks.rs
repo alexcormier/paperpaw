@@ -300,7 +300,7 @@ fn draw_status_line(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look
     let color = if look.frame == Frame::Dark {
         look.faint
     } else {
-        style.faint(60)
+        style.faint(ui::Ink::Note)
     };
     let context = Params::new();
     PLACE.draw(canvas, env, &status_frame(env, area, color, &context));
@@ -597,7 +597,7 @@ fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let x = align.x(area, digits_width + rest_width);
     let high = (bottom - top) as u16;
     let at = Rect::new(x.max(0.0) as u16, y.max(0) as u16, area.width, high);
-    canvas.describe(paperpaw_sdk::semantics::Role::Text, &clock, at, false, None);
+    canvas.describe(paperpaw_sdk::semantics::Role::Text, &clock, at);
     let baseline = y - top;
     display.draw(canvas, size, x, baseline, &shown, look.ink);
     if !rest.is_empty() {
@@ -611,7 +611,7 @@ fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         font.draw(canvas, layout.small, x, y - date_top, text, look.faint);
         let high = (date_bottom - date_top) as u16;
         let at = Rect::new(x.max(0.0) as u16, y.max(0) as u16, area.width, high);
-        canvas.describe(paperpaw_sdk::semantics::Role::Text, text, at, false, None);
+        canvas.describe(paperpaw_sdk::semantics::Role::Text, text, at);
     }
 }
 

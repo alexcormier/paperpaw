@@ -92,13 +92,9 @@ impl Screen for DrawerScreen {
             let focused = list.shown() && index == list.focus();
             // Named after its action, also where its name is not shown.
             let name = grid::What::Tool(tools[index].clone()).title(env);
-            canvas.describe(
-                paperpaw_sdk::semantics::Role::Button,
-                &name,
-                rect,
-                focused,
-                None,
-            );
+            canvas
+                .describe(paperpaw_sdk::semantics::Role::Button, &name, rect)
+                .focused(focused);
             let ink = blocks::draw_tool_lines(canvas, env, rect, &tools[index], lines);
             if focused {
                 // Round its icon and name, never through them.

@@ -825,7 +825,7 @@ impl Registrar {
     pub fn on<P: crate::event::EventData>(
         &mut self,
         event: crate::event::Event<P>,
-        handler: impl Fn(&crate::Env<'_>, &P, &mut Vec<crate::Command>) + 'static,
+        handler: impl Fn(&crate::Env<'_>, &P, &mut crate::Commands) + 'static,
     ) -> Result<(), RegisterError> {
         self.subscribe(
             event.id().clone(),
@@ -937,7 +937,7 @@ impl Registrar {
     pub fn override_action(
         &mut self,
         action: Id,
-        handler: impl Fn(&crate::Env<'_>, &crate::Params, &mut Vec<crate::Command>) + 'static,
+        handler: impl Fn(&crate::Env<'_>, &crate::Params, &mut crate::Commands) + 'static,
         priority: Priority,
     ) -> Result<(), RegisterError> {
         self.add(Contribution::ActionOverride(Box::new(

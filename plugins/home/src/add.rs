@@ -401,13 +401,13 @@ impl AddScreen {
             };
             let focused = shown && preview.row == focus;
             let name = env.i18n.tr(title);
-            canvas.describe(
-                paperpaw_sdk::semantics::Role::Row,
-                name,
-                preview.title.union(&preview.area),
-                focused,
-                None,
-            );
+            canvas
+                .describe(
+                    paperpaw_sdk::semantics::Role::Row,
+                    name,
+                    preview.title.union(&preview.area),
+                )
+                .focused(focused);
             let name = ui::fit(&font, style.title, name, f32::from(preview.title.width));
             ui::draw_label(
                 canvas,

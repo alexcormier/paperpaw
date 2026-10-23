@@ -25,7 +25,7 @@ use paperpaw_plugin_keys::Keys;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::{self, Part, Role};
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, Manifest, MemoryStorage, Plugin, RegisterError, Registrar,
+    ActionSpec, Commands, Env, Id, Manifest, MemoryStorage, Plugin, RegisterError, Registrar,
     Version,
 };
 
@@ -79,7 +79,7 @@ impl Plugin for Counter {
         let count = self.0.clone();
         r.add_action(
             ActionSpec::new(COUNT, "Count things")
-                .handler(move |_: &Env<'_>, _: &mut Vec<Command>| count.set(count.get() + 1)),
+                .handler(move |_: &Env<'_>, _: &mut Commands| count.set(count.get() + 1)),
         )
     }
 }

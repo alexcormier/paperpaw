@@ -618,7 +618,7 @@ impl UpdatePage {
             Button::Close => cx.command(Command::Back),
             Button::Transfer => cx.command(Command::RunAction(TRANSFER)),
             Button::Check => {
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 online::check(&env, false, &mut out);
                 out.into_iter().for_each(|command| cx.command(command));
                 self.view = View::Checking;
@@ -636,7 +636,7 @@ impl UpdatePage {
                 let View::Offer { offer, .. } = &self.view else {
                     return;
                 };
-                let mut out = Vec::new();
+                let mut out = paperpaw_sdk::Commands::new();
                 online::download(&env, offer, &mut out);
                 out.into_iter().for_each(|command| cx.command(command));
                 self.view = View::Downloading(offer.version.clone());
@@ -697,7 +697,7 @@ impl UpdatePage {
         let permille = (done * 1000).checked_div(total).unwrap_or(0).min(1000) as u16;
         ui::draw_progress(canvas, style, area, permille, Color::BLACK);
         let text = alloc::format!("{percent} %");
-        canvas.describe(Role::Text, &text, area, false, None);
+        canvas.describe(Role::Text, &text, area);
         if let Some(font) = style.font(env) {
             let label = Rect::new(
                 area.x,
@@ -770,8 +770,6 @@ fn paragraph(
         Role::Text,
         text,
         Rect::new(area.x, area.y, area.width, used),
-        false,
-        None,
     );
     let mut top = area.y;
     for (n, range) in lines.into_iter().take(max).enumerate() {
@@ -870,7 +868,7 @@ impl Screen for UpdatePage {
 
     fn on_show(&mut self, cx: &mut Cx<'_, '_>) {
         // Plugins for a downloaded update, cut off by a restart: on.
-        let mut out = Vec::new();
+        let mut out = paperpaw_sdk::Commands::new();
         crate::fetch::resume(cx.env(), &mut out);
         out.into_iter().for_each(|command| cx.command(command));
         // Back from Wi-Fi transfer: a file may have come.

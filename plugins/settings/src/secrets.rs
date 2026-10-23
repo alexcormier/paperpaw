@@ -11,7 +11,9 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
-use paperpaw_sdk::{Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen};
+use paperpaw_sdk::{
+    Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen,
+};
 
 use crate::{ID, page};
 
@@ -31,7 +33,7 @@ const REMOVE: Event<Confirmed> = Event::new("settings.secret-remove");
 const HIDDEN: &str = "••••••";
 
 /// Keeps a secret typed anew.
-pub(crate) fn entered(env: &Env<'_>, typed: &Typed, out: &mut Vec<Command>) {
+pub(crate) fn entered(env: &Env<'_>, typed: &Typed, out: &mut Commands) {
     let Some(id) = typed.context.get(ID) else {
         return;
     };

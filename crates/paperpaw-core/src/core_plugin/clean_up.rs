@@ -46,7 +46,7 @@ pub(super) fn register_clean_up(r: &mut Registrar) -> Result<(), RegisterError> 
 /// Cleans up the caches of books not found, then asks whether the
 /// reader's data of those books goes too, saying of how many: a book
 /// renamed on a computer, or on a card not inserted, is not found either.
-pub(super) fn ask_clean_up(env: &Env<'_>, out: &mut Vec<Command>) {
+pub(super) fn ask_clean_up(env: &Env<'_>, out: &mut paperpaw_sdk::Commands) {
     let text = clean_up(env, out, BookDataKind::Cache);
     let user = BookDataKind::UserData;
     match library::unused_books(env.storage, env.book_data, library::folder(env), user) {
@@ -70,7 +70,7 @@ pub(super) fn ask_clean_up(env: &Env<'_>, out: &mut Vec<Command>) {
 /// any format, by any spelling; nothing where a folder could not be read.
 /// Notes the time and declares the next time it is done by itself; what
 /// it did, to say.
-fn clean_up(env: &Env<'_>, out: &mut Vec<Command>, kind: BookDataKind) -> String {
+fn clean_up(env: &Env<'_>, out: &mut paperpaw_sdk::Commands, kind: BookDataKind) -> String {
     let library = library::folder(env);
     let text = match library::clean_up_unused(env.storage, env.book_data, library, kind) {
         Ok(removed) => env.i18n.format(

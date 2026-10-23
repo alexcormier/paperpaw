@@ -428,7 +428,7 @@ impl Screen for BatteryView {
                             style.margin as f32,
                             rect,
                             text,
-                            style.faint(90),
+                            style.faint(ui::Ink::Muted),
                         );
                     }
                 }
@@ -444,7 +444,7 @@ impl Screen for BatteryView {
                 style.margin as f32,
                 rect,
                 &self.footer,
-                style.faint(60),
+                style.faint(ui::Ink::Note),
             );
         }
     }

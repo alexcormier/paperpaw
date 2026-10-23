@@ -30,9 +30,9 @@ use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec,
-    SettingSpec, SettingValue, Storage, StorageError, Version,
+    ActionSpec, Arg, Canvas, Command, Commands, Cx, Env, Gesture, GestureKind, Handled, Id,
+    Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, Screen,
+    ScreenSpec, SettingSpec, SettingValue, Storage, StorageError, Version,
 };
 
 use paperpaw_sdk::files::{self as ops, Entry};
@@ -114,7 +114,7 @@ impl Plugin for FileManager {
             Box::new(|env, params| Box::new(Browser::new(env, params))),
         ))?;
         r.add_action(ActionSpec::new(OPEN, "file-manager.title").handler(
-            |_: &Env<'_>, out: &mut Vec<Command>| {
+            |_: &Env<'_>, out: &mut Commands| {
                 out.push(Command::OpenScreen(SCREEN, Params::new()));
             },
         ))?;
@@ -670,7 +670,7 @@ impl Screen for Browser {
                 style.margin as f32,
                 line,
                 message,
-                style.faint(60),
+                style.faint(ui::Ink::Note),
             );
         }
         for (i, button) in self.buttons().into_iter().enumerate() {

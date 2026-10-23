@@ -233,10 +233,8 @@ impl Queue {
             if !self.full.contains(&owner) {
                 self.full.push(owner);
             }
-            let refused = WorkRefused {
-                work: work.id,
-                refusal: Refusal::new(Reason::TooOften, Retry::WhenAllowed),
-            };
+            let refused =
+                WorkRefused::new(work.id, Refusal::new(Reason::TooOften, Retry::WhenAllowed));
             out.push(events::WORK_REFUSED.emit(refused));
             return;
         }
@@ -654,10 +652,10 @@ impl Kernel {
             if entry.work.network && self.works.network_off(&entry.owner) {
                 let entry = self.works.entries.remove(index);
                 self.works.changed = true;
-                let refused = WorkRefused {
-                    work: entry.work.id,
-                    refusal: Refusal::new(Reason::NetworkOff, Retry::Never),
-                };
+                let refused = WorkRefused::new(
+                    entry.work.id,
+                    Refusal::new(Reason::NetworkOff, Retry::Never),
+                );
                 self.output
                     .commands
                     .push(events::WORK_REFUSED.emit(refused));
@@ -888,7 +886,7 @@ fn step_job(
     let from = out.len();
     let step = {
         let _running = meter.enter(&entry.owner);
-        (spec.step)(env, &entry.work.params, out)
+        crate::commands::handing(out, |out| (spec.step)(env, &entry.work.params, out))
     };
     // A job is background work: its notices become its plugin's note.
     let mut said = Queue::default();
@@ -938,8 +936,10 @@ fn step_job(
             }
             let owner = Id::parse(&entry.owner).unwrap_or_else(|_| entry.work.id.clone());
             tell(entry, out);
-            notes.push((owner, paperpaw_sdk::work::Note { at: now, text }));
+            notes.push((owner, paperpaw_sdk::work::Note::new(now, text)));
         }
+        // A step this kernel does not know yet: the job goes on.
+        _ => {}
     }
     true
 }
@@ -975,10 +975,7 @@ pub(crate) fn quiet(
     let mut index = from;
     while index < out.len() {
         if let Command::Notify(text) = &out[index] {
-            let note = paperpaw_sdk::work::Note {
-                at: now,
-                text: text.clone(),
-            };
+            let note = paperpaw_sdk::work::Note::new(now, text.clone());
             works.notes.push((String::from(owner), note));
             out.remove(index);
         } else {

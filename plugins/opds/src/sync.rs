@@ -23,7 +23,7 @@ use paperpaw_sdk::digest::md5;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::HttpReply;
 use paperpaw_sdk::web::{clean_name, file_name};
-use paperpaw_sdk::{Command, Env, HttpRequest, Id, Params, Storage, StorageError, files};
+use paperpaw_sdk::{Command, Commands, Env, HttpRequest, Id, Params, Storage, StorageError, files};
 
 use crate::catalogs::Catalog;
 use crate::temp::{self, TempFiles};
@@ -153,7 +153,7 @@ impl Sync {
     }
 
     /// Syncs `catalogs`, one after the other, unless a sync is running.
-    pub(crate) fn start(&mut self, env: &Env<'_>, catalogs: Vec<Catalog>, out: &mut Vec<Command>) {
+    pub(crate) fn start(&mut self, env: &Env<'_>, catalogs: Vec<Catalog>, out: &mut Commands) {
         if self.run.is_some() {
             return;
         }
@@ -171,7 +171,7 @@ impl Sync {
 
     /// Stops the sync; the books loaded stay. What is still on its way
     /// is thrown away when it comes.
-    pub(crate) fn stop(&mut self, out: &mut Vec<Command>) {
+    pub(crate) fn stop(&mut self, out: &mut Commands) {
         if self.run.take().is_some() {
             if let Some(report) = &mut self.report {
                 report.running = false;
@@ -185,7 +185,7 @@ impl Sync {
         env: &Env<'_>,
         catalog: Catalog,
         waiting: VecDeque<Catalog>,
-        out: &mut Vec<Command>,
+        out: &mut Commands,
     ) {
         if let Some(report) = &mut self.report {
             report.catalog = catalog.name.clone();
@@ -214,7 +214,7 @@ impl Sync {
         Some(crate::request(&run.catalog, url, save_to, reply, params))
     }
 
-    fn request_feed(&mut self, url: &str, out: &mut Vec<Command>) {
+    fn request_feed(&mut self, url: &str, out: &mut Commands) {
         if let Some(run) = &mut self.run {
             run.pages.push(url.to_string());
         }
@@ -241,12 +241,12 @@ impl Sync {
     }
 
     /// A page of the catalog's list arrived.
-    pub(crate) fn feed_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub(crate) fn feed_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         self.read_page(env, reply, out);
         temp::discard(env.storage, reply);
     }
 
-    fn read_page(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn read_page(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.current(reply) {
             return;
         }
@@ -323,7 +323,7 @@ impl Sync {
     }
 
     /// The next book, else the next page, else the next catalog.
-    fn go_on(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn go_on(&mut self, env: &Env<'_>, out: &mut Commands) {
         let Some(run) = &mut self.run else {
             return;
         };
@@ -346,12 +346,12 @@ impl Sync {
     }
 
     /// A book arrived.
-    pub(crate) fn book_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    pub(crate) fn book_loaded(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         self.store_book(env, reply, out);
         temp::discard(env.storage, reply);
     }
 
-    fn store_book(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) {
+    fn store_book(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         if !self.current(reply) {
             return;
         }
@@ -385,7 +385,7 @@ impl Sync {
         self.go_on(env, out);
     }
 
-    fn next_catalog(&mut self, env: &Env<'_>, out: &mut Vec<Command>) {
+    fn next_catalog(&mut self, env: &Env<'_>, out: &mut Commands) {
         let Some(mut run) = self.run.take() else {
             return;
         };

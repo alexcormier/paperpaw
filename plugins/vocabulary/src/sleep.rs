@@ -101,7 +101,15 @@ impl Screen for SleepCard {
             let note = self.note[range].trim();
             let x = f32::from(margin) + (width - font.measure(style.small, note)).max(0.0) / 2.0;
             let row = Rect::new(margin, y, display.width.saturating_sub(2 * margin), small);
-            ui::draw_label(canvas, &font, style.small, x, row, note, style.faint(60));
+            ui::draw_label(
+                canvas,
+                &font,
+                style.small,
+                x,
+                row,
+                note,
+                style.faint(ui::Ink::Note),
+            );
             y += small;
         }
     }

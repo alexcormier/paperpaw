@@ -41,7 +41,6 @@ mod toc;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 use alloc::string::String;
-use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{
     actions as core_actions, events, groups, menus, params, settings as core_settings, slots,
@@ -50,8 +49,8 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::help::{self, Zone};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::{
-    Command, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar, ScreenSpec,
-    SettingSpec, Version,
+    Command, Commands, Env, Id, Manifest, Params, Plugin, Priority, RegisterError, Registrar,
+    ScreenSpec, SettingSpec, Version,
 };
 
 pub const PLUGIN: Id = Id::new_static("reader");
@@ -446,7 +445,7 @@ impl Plugin for Reader {
         )?;
 
         let font_step = |step: i64| -> paperpaw_sdk::ActionHandler {
-            Box::new(move |env: &Env<'_>, out: &mut Vec<Command>| {
+            Box::new(move |env: &Env<'_>, out: &mut Commands| {
                 // Within the sizes the reading font has (see the setting).
                 let (min, max) = match env.settings.spec(settings::FONT_SIZE.as_str()) {
                     Some(paperpaw_sdk::SettingSpec {
@@ -473,7 +472,7 @@ impl Plugin for Reader {
             (
                 actions::TOGGLE_JUSTIFY,
                 "reader.action.toggle-justify",
-                Box::new(|env: &Env<'_>, out: &mut Vec<Command>| {
+                Box::new(|env: &Env<'_>, out: &mut Commands| {
                     let justify = env.settings.read(&settings::JUSTIFY);
                     out.push(Command::set(&settings::JUSTIFY, !justify));
                 }),
@@ -485,7 +484,7 @@ impl Plugin for Reader {
         // Font and layout as a panel of controls: changes show at once.
         r.add_action(
             paperpaw_sdk::ActionSpec::new(actions::QUICK_SETTINGS, "reader.layout").handler(
-                |_: &Env<'_>, out: &mut Vec<Command>| {
+                |_: &Env<'_>, out: &mut Commands| {
                     out.push(Command::OpenSlot(
                         slots::PANEL,
                         Params::new().with(params::MENU, String::from(LAYOUT_MENU.as_str())),
@@ -635,7 +634,7 @@ fn last_in(text: &str) -> Option<String> {
         .map(|e| String::from(e.value.as_str()))
 }
 
-fn reopen_last_book(env: &Env<'_>, out: &mut Vec<Command>) {
+fn reopen_last_book(env: &Env<'_>, out: &mut Commands) {
     if !env.settings.read(&settings::OPEN_LAST) {
         return;
     }

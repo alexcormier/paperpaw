@@ -18,7 +18,6 @@ extern crate alloc;
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{events, menus};
 use paperpaw_sdk::power::{self, PowerLevel, Wear};
@@ -135,7 +134,7 @@ fn automatic(env: &Env<'_>) -> PowerLevel {
 }
 
 /// Wears the mode chosen now, if another is worn.
-fn wear(env: &Env<'_>, out: &mut Vec<Command>) {
+fn wear(env: &Env<'_>, out: &mut paperpaw_sdk::Commands) {
     let (mode, automatic) = choose(env);
     if env.power.mode == mode && env.power.automatic == automatic {
         return;
@@ -190,7 +189,7 @@ impl Plugin for Power {
             .tap(OPEN),
         )?;
         r.add_action(paperpaw_sdk::ActionSpec::new(OPEN, "power.title").handler(
-            |_: &paperpaw_sdk::Env<'_>, out: &mut Vec<paperpaw_sdk::Command>| {
+            |_: &paperpaw_sdk::Env<'_>, out: &mut paperpaw_sdk::Commands| {
                 let page = paperpaw_sdk::Params::new()
                     .with(paperpaw_sdk::builtin::params::ID, GROUP.as_str());
                 out.push(paperpaw_sdk::Command::OpenSlot(

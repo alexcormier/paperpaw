@@ -93,6 +93,12 @@ emit an event, run an action, show a short message, make an HTTP
 request, keep a password, and so on. The kernel runs the commands after
 the plugin's code returns.
 
+A handler queues its commands in the `Commands` it is handed (`out` in
+the examples): `out.push(..)`, `out.extend(..)`, `out.emit(..)`. It
+reads as the slice of what is queued so far. Its fields are private, so
+that it can grow: what PaperPaw adds to it later reaches every handler
+without a new signature.
+
 This keeps plugins simple to test and the API message-based. It does
 not confine them: a plugin runs as native code without a sandbox (see
 [Plugins as files](#plugins-as-files)).
@@ -179,9 +185,11 @@ Some rules every screen should follow:
 Screens say what they show, for reading the interface aloud,
 automation and tests: the `ui` helpers (list rows, buttons, switches,
 headers, labels) tell what they draw by themselves. A screen that draws
-in its own way tells it with `canvas.describe(role, text, area,
-focused, on)`, with the role of what it is (`Row`, `Button`, `Switch`,
-`Check`, `Radio`, `Field`, `Image`, `Link`, `Dialog`, `Progress` …). A
+in its own way tells it with `canvas.describe(role, text, area)`, with
+the role of what it is (`Row`, `Button`, `Switch`, `Check`, `Radio`,
+`Field`, `Image`, `Link`, `Dialog`, `Progress` …), and says more where
+it is so: `.focused(true)`, `.on(Some(true))`, `.disabled(true)` for
+what does nothing now. Nothing is kept where nobody asks. A
 screen reader of one's own hears where the focus of the buttons goes
 (`events::FOCUS_CHANGED`: its role, label and area).
 

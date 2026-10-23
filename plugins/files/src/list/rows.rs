@@ -402,7 +402,7 @@ fn draw_state(
         return x;
     };
     let ink = style.focus_ink(focused);
-    let faint = style.focus_faint(focused, 80);
+    let faint = style.focus_faint(focused, ui::Ink::Detail);
     let gap = style.gap as u16;
     match book.progress {
         100 => {
@@ -616,7 +616,9 @@ pub(crate) fn draw_book_row(
     book: &Loaded,
     next: bool,
 ) {
-    canvas.describe(Role::Row, &book.spoken, rect, focused, None);
+    canvas
+        .describe(Role::Row, &book.spoken, rect)
+        .focused(focused);
     if sizes.compact {
         draw_compact_row(canvas, env, style, sizes, rect, focused, book, next);
         return;
@@ -647,7 +649,7 @@ pub(crate) fn draw_book_row(
     }
     if !note.is_empty() || !book.badge_icons.is_empty() {
         let area = Rect::new(x, y, width, sizes.small_line);
-        let faint = style.focus_faint(focused, 80);
+        let faint = style.focus_faint(focused, ui::Ink::Detail);
         draw_note(canvas, env, style, &font, x, area, book, faint);
         y += sizes.small_line;
     }
@@ -664,7 +666,7 @@ pub(crate) fn draw_book_row(
         let end = draw_state(canvas, env, style, sizes, at, area, bar, book, focused);
         if !tail.is_empty() {
             let x = if end > at { end + gap * 2 / 3 } else { at };
-            let faint = style.focus_faint(focused, 80);
+            let faint = style.focus_faint(focused, ui::Ink::Detail);
             ui::draw_label(canvas, &font, style.small, f32::from(x), area, tail, faint);
         }
     }
@@ -692,7 +694,7 @@ fn draw_compact_row(
         return;
     };
     let ink = style.focus_ink(focused);
-    let faint = style.focus_faint(focused, 80);
+    let faint = style.focus_faint(focused, ui::Ink::Detail);
     let margin = style.margin as u16;
     let gap = style.gap as u16;
     let (cw, ch) = sizes.cover;
@@ -753,7 +755,7 @@ fn draw_compact_card(
         ui::draw_focus(canvas, style, rect);
     }
     let ink = style.focus_ink(focused);
-    let faint = style.focus_faint(focused, 80);
+    let faint = style.focus_faint(focused, ui::Ink::Detail);
     let margin = style.margin as u16;
     let gap = style.gap as u16;
     let (cw, ch) = sizes.card_cover;
@@ -805,7 +807,9 @@ pub(crate) fn draw_card(
     focused: bool,
     book: &Loaded,
 ) {
-    canvas.describe(Role::Row, &book.spoken, rect, focused, None);
+    canvas
+        .describe(Role::Row, &book.spoken, rect)
+        .focused(focused);
     if sizes.compact {
         draw_compact_card(canvas, env, style, sizes, rect, focused, book);
         return;
@@ -832,7 +836,7 @@ pub(crate) fn draw_card(
     } else {
         Color::WHITE
     };
-    let faint = style.focus_faint(focused, 80);
+    let faint = style.focus_faint(focused, ui::Ink::Detail);
     let (cw, ch) = sizes.card_cover;
     let place = Rect::new(rect.x + margin, rect.y + (rect.height - ch) / 2, cw, ch);
     draw_cover(canvas, env, style, place, book, ink);
@@ -899,11 +903,11 @@ pub(crate) fn draw_filter_row(
         ui::draw_focus(canvas, style, rect);
     }
     let ink = style.focus_ink(focused);
-    let faint = style.focus_faint(focused, 80);
+    let faint = style.focus_faint(focused, ui::Ink::Detail);
     let margin = style.margin as u16;
     let gap = style.gap as u16;
     let x = rect.x + margin;
-    canvas.describe(Role::Button, label, rect, focused, None);
+    canvas.describe(Role::Button, label, rect).focused(focused);
     let w = ui::draw_label(canvas, &font, style.text, f32::from(x), rect, label, ink);
     let icon_x = f32::from(x) + w + f32::from(gap / 3);
     ui::draw_icon(canvas, env, "chevron-down", style.small, icon_x, rect, ink);

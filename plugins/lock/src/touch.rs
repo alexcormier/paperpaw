@@ -24,8 +24,8 @@ use paperpaw_sdk::filters::{InputFilterSpec, InputVerdict};
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::status::{StatusItemSpec, StatusValue};
 use paperpaw_sdk::{
-    ActionSpec, Command, Env, Id, InputEvent, Instant, MenuEntry, MenuNeed, Point, PointerPhase,
-    RegisterError, Registrar, SettingSpec,
+    ActionSpec, Command, Commands, Env, Id, InputEvent, Instant, MenuEntry, MenuNeed, Point,
+    PointerPhase, RegisterError, Registrar, SettingSpec,
 };
 
 use crate::Shared;
@@ -158,7 +158,7 @@ fn locked(now: Instant, event: &InputEvent, escape: &mut Escape) -> InputVerdict
 pub(crate) fn register(r: &mut Registrar, state: Shared) -> Result<(), RegisterError> {
     r.add_settings(&SETTINGS)?;
     r.add_action(ActionSpec::new(TOGGLE, "lock.touch-toggle").handler(
-        |env: &Env<'_>, out: &mut Vec<Command>| {
+        |env: &Env<'_>, out: &mut Commands| {
             let on = !env.settings.read(&LOCKED);
             out.push(Command::set(&LOCKED, on));
             let told = match (on, env.caps.firmware) {
