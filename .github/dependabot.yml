@@ -11,3 +11,6 @@ updates:
     directory: /
     schedule:
       interval: monthly
+    ignore:
+      # Pinned on purpose: the oldest Rust PaperPaw supports (MSRV).
+      - dependency-name: dtolnay/rust-toolchain
