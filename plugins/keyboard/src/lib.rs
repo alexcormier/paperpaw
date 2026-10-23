@@ -68,8 +68,8 @@ pub const LAYOUTS_SETTING: Setting<Text> = Setting::new("keyboard.layouts");
 /// Whether the letters a layout types by holding another (German ä, ö, ü,
 /// ß) have keys of their own, in rows of more keys.
 pub const UMLAUT_KEYS: Setting<bool> = Setting::new("keyboard.umlaut-keys");
-/// The shape of keys that are tapped: a little taller than wide (as
-/// before), round, or a little wider than tall.
+/// The shape of keys that are tapped: round (as high as wide, the
+/// default), a little taller than wide, or a little wider than tall.
 pub const KEY_SHAPE: Setting<Text> = Setting::new("keyboard.key-shape");
 pub const SHAPE_TALL: &str = "keyboard.key-shape.tall";
 pub const SHAPE_ROUND: &str = "keyboard.key-shape.round";
@@ -158,8 +158,8 @@ static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::fixed_choice(
         KEY_SHAPE.static_str(),
         "keyboard.setting.key-shape",
-        &[SHAPE_TALL, SHAPE_ROUND, SHAPE_WIDE],
-        SHAPE_TALL,
+        &[SHAPE_ROUND, SHAPE_TALL, SHAPE_WIDE],
+        SHAPE_ROUND,
         groups::SYSTEM,
     )
     .described("keyboard.setting.key-shape.help"),
