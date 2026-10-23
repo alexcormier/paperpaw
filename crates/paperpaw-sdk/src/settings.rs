@@ -245,7 +245,7 @@ pub struct SettingExtra {
     /// Another setting of the same kind whose value this one has until it
     /// is set itself, e.g. the margins at the top and bottom those at the
     /// sides (one step only: what that one follows is not followed).
-    pub follows: Option<&'static str>,
+    pub follows: Option<Id>,
     /// A choice that keeps values its options lack (one a plugin offered
     /// that is not installed now, such as a reading app): kept as they
     /// are, without a warning, for whoever reads it to pass over.
@@ -253,7 +253,7 @@ pub struct SettingExtra {
     /// Shown only while another setting has a value, e.g. the server's
     /// address while syncing is on (see [`Settings::shows`]): the
     /// setting's id and the value, as written in `paperpaw.ini`.
-    pub shown_if: Option<(&'static str, &'static str)>,
+    pub shown_if: Option<(Id, &'static str)>,
     /// What a value must be: a value it refuses is not set, and the
     /// reader is told why (see [`SettingCheck`]).
     pub check: Option<SettingCheck>,
@@ -363,14 +363,14 @@ impl SettingExtra {
 
     /// With the value of setting `id` until set itself
     /// ([`SettingExtra::follows`]).
-    pub const fn follows(mut self, id: &'static str) -> Self {
-        self.follows = Some(id);
+    pub const fn follows(mut self, id: Id) -> Self {
+        core::mem::forget(self.follows.replace(id));
         self
     }
 
     /// Shown only while setting `id` has `value` ([`SettingExtra::shown_if`]).
-    pub const fn shown_if(mut self, id: &'static str, value: &'static str) -> Self {
-        self.shown_if = Some((id, value));
+    pub const fn shown_if(mut self, id: Id, value: &'static str) -> Self {
+        core::mem::forget(self.shown_if.replace((id, value)));
         self
     }
 
@@ -1258,25 +1258,29 @@ impl Settings {
     /// ([`SettingExtra::shown_if`]): screens listing settings make
     /// themselves anew when it changes.
     pub fn governs(&self, id: &str) -> bool {
-        self.specs()
-            .any(|spec| spec.extra().shown_if.is_some_and(|(of, _)| of == id))
+        self.specs().any(|spec| {
+            spec.extra()
+                .shown_if
+                .as_ref()
+                .is_some_and(|(of, _)| of == id)
+        })
     }
 
     /// Whether `spec` shows now: not while the setting its
     /// [`SettingExtra::shown_if`] names has another value.
     pub fn shows(&self, spec: &SettingSpec) -> bool {
-        let Some((id, value)) = spec.extra().shown_if else {
+        let Some((id, value)) = &spec.extra().shown_if else {
             return true;
         };
         // The value read as that setting reads it (`on`, `true` …); a
         // setting not there does not hide this one.
-        let Some(condition) = self.spec(id) else {
+        let Some(condition) = self.spec(id.as_str()) else {
             return true;
         };
         condition
             .kind
             .parse(value)
-            .is_some_and(|value| self.get(id) == Some(&value))
+            .is_some_and(|value| self.get(id.as_str()) == Some(&value))
     }
 
     /// Sets a value after validating it.
@@ -1417,8 +1421,8 @@ impl Settings {
 
     /// The setting `id` follows until it is set
     /// ([`SettingExtra::follows`]), if any.
-    fn follows(&self, id: &str) -> Option<&'static str> {
-        self.specs.get(id)?.extra().follows
+    fn follows(&self, id: &str) -> Option<&str> {
+        self.specs.get(id)?.extra().follows.as_ref().map(Id::as_str)
     }
 
     /// The value outside any scope, or the default if none was set; for a

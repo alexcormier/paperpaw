@@ -2,7 +2,7 @@ use super::*;
 
 #[test]
 fn a_setting_follows_another_until_set_itself() {
-    static FOLLOWS: SettingExtra = SettingExtra::new().follows("a.sides");
+    static FOLLOWS: SettingExtra = SettingExtra::new().follows(Id::new_static("a.sides"));
     let mut s = Settings::new();
     let int = |id: &'static str| {
         SettingSpec::new(

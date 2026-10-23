@@ -44,7 +44,7 @@ proptest! {
         let text = segments.join(".");
         let id = Id::parse(&text).unwrap();
         prop_assert_eq!(id.as_str(), text.as_str());
-        prop_assert_eq!(&Id::parse(&id.to_string()).unwrap(), &id);
+        prop_assert_eq!(&Id::parse(id.as_ref()).unwrap(), &id);
         prop_assert_eq!(id.namespace(), segments[0].as_str());
         prop_assert!(id.is_owned_by(&Id::parse(&segments[0]).unwrap()));
         prop_assert_eq!(id.unplaced(), None);

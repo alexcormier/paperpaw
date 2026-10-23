@@ -110,8 +110,7 @@ impl Plugin for Plain {
             ReaderSpec::new(PLAIN, PLAIN_SCREEN).formats(&[Id::new_static("format-txt.txt")]),
         )?;
         r.add_translations(
-            "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\nplain.app = Plain text reader\nplain.send = Send to a computer\n"
-                .into(),
+            "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\nplain.app = Plain text reader\nplain.send = Send to a computer\n",
         )?;
         // Another way to open a book, in the list of *Open with …*.
         r.add_action(ActionSpec::new(SEND, "plain.send").handler(|_, _, _| {}))?;

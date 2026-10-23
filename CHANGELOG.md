@@ -474,6 +474,11 @@ file to your report.
   (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
   in place of five arguments; parts (`Described`, `semantics::Part`)
   tell whether they are disabled.
+- SDK: the registrar's methods take ids as `impl Into<Id>` and text as
+  `impl Into<Cow<'static, str>>` or `impl Into<String>`, so `&ID`, a
+  setting or an event and a `&'static str` or `String` go in as they
+  are. `Id`, `Setting` and `Event` are `AsRef<str>`.
+  `SettingExtra::follows` and `shown_if` name the setting by its `Id`.
 - SDK: what was deprecated is gone: `Registrar::add_service` and
   `Contribution::Service` (publish with `Registrar::publish`),
   `Service::any` and `Id::placed` (`Id::unplaced`).

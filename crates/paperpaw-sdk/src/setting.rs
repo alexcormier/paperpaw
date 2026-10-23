@@ -157,6 +157,12 @@ impl<T: SettingType> fmt::Display for Setting<T> {
     }
 }
 
+impl<T: SettingType> AsRef<str> for Setting<T> {
+    fn as_ref(&self) -> &str {
+        self.id.as_str()
+    }
+}
+
 impl<T: SettingType> From<Setting<T>> for Id {
     fn from(setting: Setting<T>) -> Id {
         setting.id

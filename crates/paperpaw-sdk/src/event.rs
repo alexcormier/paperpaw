@@ -408,6 +408,12 @@ impl<P: EventData> fmt::Debug for Event<P> {
     }
 }
 
+impl<P: EventData> AsRef<str> for Event<P> {
+    fn as_ref(&self) -> &str {
+        self.id.as_str()
+    }
+}
+
 impl<P: EventData> From<Event<P>> for Id {
     fn from(event: Event<P>) -> Id {
         event.id

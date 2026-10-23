@@ -178,7 +178,7 @@ pub fn add(r: &mut Registrar, screen: &str, hints: &[Hint]) -> Result<(), Regist
         text.push_str(&hint.line(screen));
         text.push('\n');
     }
-    r.contribute(Id::new_static(POINT), text.into())
+    r.contribute(Id::new_static(POINT), text)
 }
 
 /// Sent by a screen whose hints wait ([`wait`]) once it shows what it is
@@ -193,8 +193,7 @@ pub fn wait(r: &mut Registrar, screen: &str) -> Result<(), RegisterError> {
         format!(
             "{screen} wait
 "
-        )
-        .into(),
+        ),
     )
 }
 
