@@ -65,6 +65,7 @@ mod stack;
 mod tls;
 #[cfg(feature = "remote")]
 mod traced;
+mod usb_lines;
 #[cfg(feature = "esp32s3")]
 mod usb_power;
 mod volume;
@@ -298,6 +299,9 @@ fn main() -> ! {
     let board = Board::take(p);
 
     let storage = card::mount(board.card);
+    // What the card keeps under PaperPaw's old name, moved before anything
+    // is written to its folder (the kernel does it again, finding nothing).
+    paperpaw_sdk::data::take_over_old_name(storage.as_ref());
     // Wi-Fi the web flasher wrote with the firmware: to the card, for the
     // kernel to keep at its start.
     provision::take(&flash, storage.as_ref());
@@ -353,9 +357,10 @@ fn main() -> ! {
         power_latch: board.power_latch,
         usb_power: board.usb_power,
         delay: board.delay,
-        // Commands from a computer on USB; the log goes out the same way.
+        // Lines from a computer on USB; the log goes out the same way.
+        usb: usb_lines::UsbLines::new(board.usb),
         #[cfg(feature = "remote")]
-        remote: remote::Remote::new(board.usb),
+        remote: remote::Remote,
         #[cfg(feature = "x4-pro")]
         light: board.light,
         state: State::default(),

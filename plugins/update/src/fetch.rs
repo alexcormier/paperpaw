@@ -32,7 +32,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::firmware::{Firmware, compare_versions};
-use paperpaw_sdk::install::{Digest, Installer, Package, PackageFile, Received};
+use paperpaw_sdk::install::{self, Digest, Installer, Package, PackageFile, Received};
 use paperpaw_sdk::json::stream::{Event as JsonEvent, Parser};
 use paperpaw_sdk::native::{self, Author};
 use paperpaw_sdk::replies::HttpReply;
@@ -246,17 +246,25 @@ fn fitting(env: &Env<'_>, builds: Vec<Build>) -> (Vec<Build>, Vec<String>) {
 
 /// Which of `builds` this device takes: where it loads code plugins, those
 /// of code plugins it has and of plugins built in that are switched on
-/// (one switched off is not fetched; its settings stay).
+/// (one switched off is not fetched; its settings stay). Not one the
+/// store did not install ([`install::origin`]): it is the reader's own,
+/// never put in place by itself.
 pub(crate) fn wanted(env: &Env<'_>, builds: &[Build]) -> Vec<Build> {
     if env.native.is_none() {
         return Vec::new();
     }
+    // Those installed before origins were kept: the store's.
+    install::adopt(env);
     builds
         .iter()
         .filter(|b| {
-            env.plugins
-                .get(&b.package.plugin)
-                .is_some_and(|p| p.kind == PluginKind::Code || p.enabled)
+            env.plugins.get(&b.package.plugin).is_some_and(|p| {
+                let version = p.update.unwrap_or(p.manifest.version);
+                let local = p.kind != PluginKind::BuiltIn
+                    && install::origin(env.storage, p.manifest.id.as_str(), version)
+                        == install::Origin::Local;
+                (p.kind == PluginKind::Code || p.enabled) && !local
+            })
         })
         .cloned()
         .collect()
@@ -443,9 +451,18 @@ fn place(env: &Env<'_>, plugin: &str) -> bool {
     if !author_ok || !native::remember_fetched(storage, plugin, &header.sha256) {
         return false;
     }
+    // The store's at the version fetched too: it is still once the new
+    // firmware puts it in place.
+    let version = install::folder_version(storage, &folder);
     let target = native::fetched_folder(plugin);
     let _ = storage.remove_dir_all(&target);
-    storage.rename(&folder, &target).is_ok()
+    if storage.rename(&folder, &target).is_err() {
+        return false;
+    }
+    if let Some(version) = version {
+        install::remember_store_install(storage, plugin, version);
+    }
+    true
 }
 
 /// Whether the server named `key` as the author of `plugin`, new here.

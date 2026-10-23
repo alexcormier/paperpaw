@@ -38,21 +38,22 @@ the `esp` toolchain, installed once for each release
 rustup.
 
 Then the plugin's folder with the file in it, signed with the author's
-key (`paperpaw-sign key author.key` makes one), onto the card (from the
-repository's top):
+key (`paperpaw-sign key author.key` makes one), onto the device over
+the USB cable (from the repository's top). The device shows what comes
+and installs it once you say yes there:
 
 ```sh
 cp -r samples/hello-native/plugin hello
 cargo run -p paperpaw-sign -- pack samples/hello-native/target/riscv32imc-unknown-none-elf/release/hello hello/code.ppn --key author.key
-python tools/x4-remote.py --push hello plugins/hello
-python tools/x4-remote.py --trust-code hello
+python tools/usb-transfer.py install hello
 ```
 
 The file runs only on a PaperPaw built by the same compiler from the
 same SDK; *About* on the device names both. And only once installed: a
 file copied into a plugin's folder does not run until it is named as
-installed, as the store and the web flasher do, here over USB
-(`--trust-code`, which only a firmware built for development answers).
+installed, as the store, the web flasher and the transfer over USB or
+Wi-Fi do ([docs/usb-transfer.md](../../docs/usb-transfer.md)). A plugin
+installed so is local: the store does not update it.
 
 ## Publishing
 

@@ -59,6 +59,10 @@ impl BrowseScreen {
         // The catalog's folder, for order on the device.
         let dir = self.catalog.sync_folder(&env);
         let name = reply.context.get(NAME).unwrap_or("download").to_string();
+        if !crate::temp::may_be_book(env.storage, file, &name) {
+            let message = env.i18n.tr("opds.not-a-book").to_string();
+            return self.say(message, cx);
+        }
         let _ = env.storage.create_dir(&dir);
         let Ok(target) = files::put_in_free_place(env.storage, file, &dir, &name) else {
             let message = env.i18n.tr("opds.cannot-save").to_string();

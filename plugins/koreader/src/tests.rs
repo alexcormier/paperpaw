@@ -77,6 +77,17 @@ fn storage() -> MemoryStorage {
 /// An exchange at `now`, with KOReader's files read up to `limit`:
 /// whether ours changed, `None` if KOReader has no file.
 fn try_run(storage: &dyn Storage, now: i64, limit: usize) -> Result<Option<bool>, Unreadable> {
+    try_run_as(storage, now, limit, Removal::Ask)
+}
+
+/// An exchange, `removal` saying what to do where KOReader's file has
+/// none any more of what both had.
+fn try_run_as(
+    storage: &dyn Storage,
+    now: i64,
+    limit: usize,
+    removal: Removal,
+) -> Result<Option<bool>, Unreadable> {
     let Some(theirs) = read_theirs(storage, BOOK, limit)? else {
         return Ok(None);
     };
@@ -84,6 +95,7 @@ fn try_run(storage: &dyn Storage, now: i64, limit: usize) -> Result<Option<bool>
     let local = |unix| unix;
     let x = Exchange {
         storage,
+        removal,
         doc: &doc,
         now,
         local: &local,
@@ -97,7 +109,7 @@ fn run(storage: &dyn Storage, now: i64) -> bool {
 }
 
 fn items(storage: &MemoryStorage, path: &str) -> Vec<Table> {
-    read_items(storage, path, MAX_FILE).unwrap().unwrap()
+    read_items(storage, path, MAX_FILE).unwrap().unwrap().0
 }
 
 fn text(storage: &MemoryStorage, path: &str) -> String {
@@ -250,6 +262,7 @@ fn file_names_as_koreader_has_them() {
     let doc = EpubDocument::open(&storage(), BOOK).unwrap();
     let x = Exchange {
         storage: &MemoryStorage::new(),
+        removal: Removal::Ask,
         doc: &doc,
         now: 0,
         local: &local,
@@ -428,7 +441,7 @@ fn a_koreader_file_without_annotations_has_none() {
         MemoryStorage::new().with(SIDECAR, b"return { [\"percent_finished\"] = 0.5 }".to_vec());
     assert_eq!(
         read_items(&storage, SIDECAR, MAX_FILE),
-        Ok(Some(Vec::new()))
+        Ok(Some((Vec::new(), false)))
     );
     assert_eq!(read_items(&storage, EXCHANGE, MAX_FILE), Ok(None));
 }
@@ -443,7 +456,11 @@ fn small_devices_read_small_files_only() {
     assert_eq!(read_items(&storage, SIDECAR, small), Err(Unreadable));
     let large = max_file(MemoryClass::Large);
     assert_eq!(
-        read_items(&storage, SIDECAR, large).unwrap().unwrap().len(),
+        read_items(&storage, SIDECAR, large)
+            .unwrap()
+            .unwrap()
+            .0
+            .len(),
         3
     );
 }
@@ -592,6 +609,7 @@ fn unix_of_utc(text: &str) -> i64 {
     let local = |unix| unix;
     let x = Exchange {
         storage: &MemoryStorage::new(),
+        removal: Removal::Ask,
         doc: &doc,
         now: 0,
         local: &local,
@@ -607,4 +625,226 @@ fn translations_are_complete() {
     let de = Catalog::parse(include_str!("../i18n/de.ini")).unwrap();
     let issues = check::compare(&en, &de);
     assert!(issues.is_empty(), "{issues:?}");
+}
+
+/// The exchange file cannot be written (the card is full, its name too
+/// long): what was to go to KOReader is not known to both, so the next
+/// exchange does not take it for removed there.
+#[test]
+fn what_cannot_be_passed_on_is_not_known() {
+    let storage = storage();
+    let tired = highlight(
+        &storage,
+        "/body/DocFragment[1]/body/p[1]/text().32",
+        "/body/DocFragment[1]/body/p[1]/text().37",
+        "my own note",
+    );
+    assert!(annotations::add(&storage, BOOK, tired));
+    let card = Unwritable {
+        storage: &storage,
+        path: String::from(EXCHANGE),
+    };
+    // KOReader's come over all the same.
+    assert_eq!(try_run(&card, NOW, MAX_FILE), Ok(Some(true)));
+    assert!(!storage.exists(EXCHANGE));
+    // With room again, it is passed on, not removed here.
+    run(&storage, NOW + 10);
+    let ours = annotations::load(&storage, BOOK);
+    assert!(ours.iter().any(|a| a.note == "my own note"), "{ours:?}");
+    assert!(
+        items(&storage, EXCHANGE)
+            .iter()
+            .any(|i| i.str("note") == Some("my own note"))
+    );
+}
+
+/// A note of KOReader longer than PaperPaw keeps is cut here; that is no
+/// change here to pass back, which would cut KOReader's note too.
+#[test]
+fn a_long_note_of_koreader_is_not_cut_there() {
+    let storage = storage();
+    let long = "x".repeat(5000);
+    storage
+        .write(SIDECAR, METADATA.replace("Her name", &long).as_bytes())
+        .unwrap();
+    assert!(run(&storage, NOW));
+    let ours = annotations::load(&storage, BOOK);
+    assert!(
+        ours.iter()
+            .any(|a| a.note.len() < long.len() && a.note.starts_with("xxx"))
+    );
+    for later in [10, 20] {
+        assert!(!run(&storage, NOW + later));
+        assert!(!storage.exists(EXCHANGE));
+    }
+    assert_eq!(items(&storage, SIDECAR)[0].str("note"), Some(long.as_str()));
+}
+
+/// One side has none at all of what both had (book data moved halfway, a
+/// synced folder not complete yet): nothing is taken for removed.
+#[test]
+fn all_gone_on_one_side_changes_nothing() {
+    // None here.
+    let storage = exchanged();
+    storage.remove(&annotations::file(BOOK)).unwrap();
+    let before = state(&storage);
+    assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Err(Unreadable));
+    assert_eq!(state(&storage), before);
+    assert!(!storage.exists(EXCHANGE));
+    // KOReader's file without a list of annotations.
+    let storage = exchanged();
+    storage
+        .write(SIDECAR, b"return { [\"percent_finished\"] = 0.5 }")
+        .unwrap();
+    let before = state(&storage);
+    assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Err(Unreadable));
+    assert_eq!(state(&storage), before);
+    assert!(!storage.exists(EXCHANGE));
+    // None here after a change the reader did not tell of.
+    let storage = exchanged();
+    storage.remove(&annotations::file(BOOK)).unwrap();
+    note_emptied(&storage, "books/other.epub");
+    assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Err(Unreadable));
+    // None here, and KOReader's file cannot be read.
+    let storage = exchanged();
+    assert!(annotations::remove(&storage, BOOK, |_| true));
+    note_emptied(&storage, BOOK);
+    storage.write(SIDECAR, b"return { garbage").unwrap();
+    let before = state(&storage);
+    assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Err(Unreadable));
+    assert_eq!(state(&storage), before);
+    assert!(!storage.exists(EXCHANGE));
+}
+
+/// Every annotation removed in KOReader: its list there is empty. The
+/// reader is asked first, nothing changing on either side meanwhile;
+/// told to remove them, they go here too. Those it makes after come over
+/// again.
+#[test]
+fn everything_removed_in_koreader_goes_here_too_when_the_reader_says_so() {
+    let storage = exchanged();
+    storage
+        .write(SIDECAR, b"return { [\"annotations\"] = {} }")
+        .unwrap();
+    let before = text(&storage, &annotations::file(BOOK));
+    let theirs = read_theirs(&storage, BOOK, MAX_FILE).unwrap().unwrap();
+    assert_eq!(removed_there(&storage, BOOK, &theirs), Ok(true));
+    let known = state(&storage);
+    assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Ok(Some(false)));
+    assert_eq!(text(&storage, &annotations::file(BOOK)), before);
+    assert_eq!(state(&storage), known);
+    // Kept aside before, and not over one kept aside earlier.
+    let earlier = format!("{}.removed", annotations::file(BOOK));
+    storage.write(&earlier, b"earlier").unwrap();
+    assert_eq!(
+        try_run_as(&storage, NOW + 20, MAX_FILE, Removal::Remove),
+        Ok(Some(true))
+    );
+    assert!(annotations::load(&storage, BOOK).is_empty());
+    assert!(!storage.exists(EXCHANGE), "nothing to tell KOReader");
+    assert_eq!(text(&storage, &earlier), "earlier");
+    let aside = annotations::file(BOOK).replace(".txt", ".txt (2).removed");
+    assert_eq!(text(&storage, &aside), before);
+    // A new one in KOReader comes over.
+    storage.write(SIDECAR, METADATA.as_bytes()).unwrap();
+    assert_eq!(try_run(&storage, NOW + 30, MAX_FILE), Ok(Some(true)));
+    assert_eq!(annotations::load(&storage, BOOK).len(), 2);
+}
+
+/// An empty list in a KOReader file never seen with annotations is no
+/// sign of anything removed there: KOReader writes one for every book it
+/// opened. A fresh file (the book opened in KOReader elsewhere, or reset
+/// there) that came by a sync, which also took the file for KOReader
+/// away, removes nothing here: what both had is offered to KOReader
+/// again.
+#[test]
+fn a_fresh_koreader_file_removes_nothing() {
+    let storage = storage();
+    let fresh = b"return { [\"annotations\"] = {}, [\"percent_finished\"] = 0 }";
+    storage.write(SIDECAR, fresh).unwrap();
+    let tired = highlight(
+        &storage,
+        "/body/DocFragment[1]/body/p[1]/text().32",
+        "/body/DocFragment[1]/body/p[1]/text().37",
+        "mine",
+    );
+    annotations::add(&storage, BOOK, tired);
+    assert!(!run(&storage, NOW));
+    assert_eq!(items(&storage, EXCHANGE).len(), 1);
+    // The sync: KOReader's fresh file stays, the file for it is gone.
+    storage.remove(EXCHANGE).unwrap();
+    assert!(!run(&storage, NOW + 10));
+    let ours = annotations::load(&storage, BOOK);
+    assert_eq!(ours.len(), 1, "{ours:?}");
+    assert_eq!(ours[0].note, "mine");
+    assert_eq!(items(&storage, EXCHANGE)[0].str("note"), Some("mine"));
+    // KOReader takes it over; then its file is empty again (removed
+    // there, or a fresh one synced in): asked, nothing goes meanwhile.
+    koreader_takes_over(&storage);
+    assert!(!run(&storage, NOW + 20));
+    storage.write(SIDECAR, fresh).unwrap();
+    assert!(!run(&storage, NOW + 30));
+    assert_eq!(annotations::load(&storage, BOOK).len(), 1);
+    // Kept: here as they were, and offered to KOReader again; not asked
+    // again for that file.
+    assert_eq!(
+        try_run_as(&storage, NOW + 40, MAX_FILE, Removal::Keep),
+        Ok(Some(false))
+    );
+    assert_eq!(annotations::load(&storage, BOOK).len(), 1);
+    assert_eq!(items(&storage, EXCHANGE)[0].str("note"), Some("mine"));
+    let theirs = read_theirs(&storage, BOOK, MAX_FILE).unwrap().unwrap();
+    assert_eq!(removed_there(&storage, BOOK, &theirs), Ok(false));
+    // Told to remove them: they go, a copy kept aside.
+    koreader_takes_over(&storage);
+    assert!(!run(&storage, NOW + 50));
+    storage.write(SIDECAR, fresh).unwrap();
+    assert!(
+        try_run_as(&storage, NOW + 60, MAX_FILE, Removal::Remove)
+            .unwrap()
+            .unwrap()
+    );
+    assert!(annotations::load(&storage, BOOK).is_empty());
+}
+
+/// Every annotation removed here, as the reader tells: KOReader is told
+/// by an empty list (with only what is not placed here), and nothing
+/// comes back.
+#[test]
+fn everything_removed_here_goes_to_koreader() {
+    let storage = exchanged();
+    assert!(annotations::remove(&storage, BOOK, |_| true));
+    note_emptied(&storage, BOOK);
+    assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Ok(Some(false)));
+    let passed = items(&storage, EXCHANGE);
+    assert_eq!(passed.len(), 1, "{passed:?}");
+    assert_eq!(passed[0].str("text"), Some("Elsewhere"));
+    koreader_takes_over(&storage);
+    assert_eq!(try_run(&storage, NOW + 30, MAX_FILE), Ok(Some(false)));
+    assert!(annotations::load(&storage, BOOK).is_empty());
+    assert!(!storage.exists(EXCHANGE));
+}
+
+/// A book moved whose folder KOReader shares with another format of it:
+/// only its own files go along.
+#[test]
+fn a_shared_folder_stays_with_the_other_format() {
+    let storage = exchanged();
+    let pdf_metadata = "books/alice.sdr/metadata.pdf.lua";
+    storage.write("books/alice.pdf", b"%PDF-1.4").unwrap();
+    storage.write(pdf_metadata, b"return {}").unwrap();
+    let theirs = text(&storage, SIDECAR);
+    let to = "moved/alice.epub";
+    storage.rename(BOOK, to).unwrap();
+    moved_book(&storage, BOOK, to);
+    assert_eq!(text(&storage, pdf_metadata), "return {}");
+    assert!(!storage.exists(SIDECAR));
+    assert_eq!(text(&storage, "moved/alice.sdr/metadata.epub.lua"), theirs);
+
+    // Alone in it, the whole folder goes.
+    let storage = exchanged();
+    storage.rename(BOOK, to).unwrap();
+    moved_book(&storage, BOOK, to);
+    assert!(!storage.exists(SIDECAR));
+    assert_eq!(text(&storage, "moved/alice.sdr/metadata.epub.lua"), theirs);
 }

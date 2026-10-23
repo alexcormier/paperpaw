@@ -5,6 +5,7 @@
 //! Each part keeps its own state; the shell takes all of it at once as
 //! [`Io`] (`Kernel::take_io`).
 
+pub(crate) mod cable;
 pub(crate) mod clipboard;
 pub(crate) mod http;
 pub(crate) mod servers;

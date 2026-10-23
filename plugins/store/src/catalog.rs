@@ -138,14 +138,6 @@ impl Entry {
             .map(|info| info.update.unwrap_or(info.manifest.version))
     }
 
-    /// Whether a newer version than the one installed is offered.
-    pub(crate) fn newer(&self, env: &Env<'_>) -> bool {
-        match (self.installed(env), Version::parse(&self.version)) {
-            (Some(installed), Some(offered)) => offered > installed,
-            _ => false,
-        }
-    }
-
     /// Its line in the index, tabs and line ends of the list left out.
     fn line(&self) -> String {
         let clean = |s: &str| s.replace(['\t', '\n', '\r'], " ");

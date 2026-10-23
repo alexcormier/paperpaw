@@ -18,8 +18,8 @@
 
 Swap the home screen, add a vocabulary trainer, remap every gesture: a
 folder of text files is enough, no fork, no rebuild. PaperPaw runs as
-firmware of its own on the Xteink X4 and X4 Pro; an app for Android
-e-readers follows later. Free and open source: no account, no ads, no
+firmware of its own on the Xteink X4 and X4 Pro, and as an app for
+Android e-readers. Free and open source: no account, no ads, no
 tracking.
 
 > **Status: beta (0.5.0-beta.1), for testers and developers.** The
@@ -30,8 +30,8 @@ tracking.
 > FB2, Markdown, HTML, CBZ, plain text and XTC. It shares reading
 > positions, bookmarks and highlights with KOReader, takes books from
 > Calibre over Wi-Fi and from OPDS catalogs, and much more; see the
-> [changelog](CHANGELOG.md). The app for Android e-readers follows after
-> the first release.
+> [changelog](CHANGELOG.md). The app for Android e-readers is a beta
+> too, as an APK on the [releases](https://github.com/hthoene/paperpaw/releases).
 
 ## Three ways in
 
@@ -69,7 +69,8 @@ The core is a small kernel. The home screen, library, reader, menus, file
 formats, themes, key maps and translations are plugins, and first-party
 ones use exactly the same SDK as community plugins. Anything can be
 added, replaced, reconfigured or removed. On the X4, a plugin with code
-is a signed file from the plugin store: no firmware rebuild.
+is a file from the plugin store, signed by its author, or one's own
+build sent from a computer: no firmware rebuild.
 
 <br clear="right">
 
@@ -78,8 +79,9 @@ is a signed file from the plugin store: no firmware rebuild.
 <img align="left" width="160" src="docs/images/readme/phone.png" alt="A cat tapping a phone beside an e-reader">
 
 Join a network by scanning a code and typing the password on your phone.
-Books go over from a phone or a computer, with or without a router; Calibre
-sends them over Wi-Fi as to any wireless reader.
+Books go over from a phone or a computer, with or without a router, or
+over the USB cable; Calibre sends them over Wi-Fi as to any wireless
+reader. Nothing is written before you allow it on the device.
 
 <br clear="left">
 
@@ -109,9 +111,9 @@ today's reading: sad, so-so, content or happy.
   change. It fails if they take more than 85 % of that heap.
 - **Simple by default.** Turn it on and keep reading. Every function is at
   most two steps away, and it works with buttons only or with touch.
-- **One codebase, many devices.** Today: the Xteink X4 and X4 Pro, and
-  the desktop emulator. Planned: Android e-readers such as Boox, in
-  grayscale and colour e-ink, the Xteink X3, Kobo, Kindle
+- **One codebase, many devices.** Today: the Xteink X4 and X4 Pro, the
+  desktop emulator, and as a beta Android e-readers such as Boox, in
+  grayscale and colour e-ink. Planned: the Xteink X3, Kobo, Kindle
   (jailbroken), PocketBook and reMarkable. To add a device, see
   [docs/porting.md](docs/porting.md).
 
@@ -123,7 +125,10 @@ The flasher first saves the reader's own firmware, so you can go back.
 Developers can build and flash it as
 [shells/xteink](shells/xteink/README.md) describes.
 
-The app for Android e-readers follows after the first release.
+The app for Android e-readers is on each
+[release](https://github.com/hthoene/paperpaw/releases) as an APK, a beta
+as well. [shells/android](shells/android/README.md) says how to install
+it.
 
 ## How it's made
 
@@ -172,8 +177,11 @@ through the [`paperpaw-sdk`](crates/paperpaw-sdk) crate. See
 ### Plugins without code
 
 A folder with a few text files is a plugin too. Copy it into the `plugins`
-folder of the device and restart; it shows up in *Settings → Plugins*, where it can be
-switched off again. These work on every device, including the Xteink X4.
+folder of the device and restart, or send it from a computer with the
+Wi-Fi transfer or over the USB cable. It shows up in *Settings →
+Plugins*, where it can be switched off again; the store does not update
+a plugin put in place so. These work on every device, including the
+Xteink X4.
 
 ```text
 plugins/large-print/
@@ -197,8 +205,10 @@ plugins/large-print/
 
 [`samples/plugins/large-print`](samples/plugins/large-print) is a complete
 example. Plugins with code are Rust crates using the SDK; on the X4 and
-X4 Pro, those not built into the firmware are signed files from the
-plugin store, with no firmware rebuild. [Writing plugins](docs/plugins.md)
+X4 Pro, those not built into the firmware are files from the plugin
+store, signed by their authors, or one's own builds sent over USB or the
+Wi-Fi transfer ([docs/usb-transfer.md](docs/usb-transfer.md)), with no
+firmware rebuild. [Writing plugins](docs/plugins.md)
 walks through [`samples/hello-plugin`](samples/hello-plugin/src/lib.rs), a
 small one to start from.
 

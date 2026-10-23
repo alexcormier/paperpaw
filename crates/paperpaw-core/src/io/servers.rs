@@ -4,6 +4,10 @@
 //! as it comes, so it never needs to fit in memory; bodies left behind
 //! (by a crash) go when the next one comes.
 //!
+//! A server on [`CABLE_PORT`] is reached over the cable instead
+//! ([`cable`](super::cable)): it needs no network, the shell does nothing
+//! for it but pass lines, and it keeps no radio on.
+//!
 //! [`Io::Server`]: super::Io::Server
 
 use alloc::format;
@@ -12,7 +16,10 @@ use alloc::vec::Vec;
 
 use paperpaw_platform::Storage;
 use paperpaw_sdk::event::EventData;
+use paperpaw_sdk::served::CABLE_PORT;
 use paperpaw_sdk::{Command, Id, ServerNotice, ServerResponse};
+
+use super::cable::{self, Cable};
 
 /// What a shell does for plugins' servers.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -110,6 +117,10 @@ pub(crate) struct Servers {
     /// Bodies of requests not answered yet: request, file.
     bodies: Vec<(u32, String)>,
     incoming: Vec<Incoming>,
+    /// The number of the server on the cable, while one runs.
+    cable_server: Option<u32>,
+    /// The cable's requests and the lines to send.
+    pub(crate) cable: Cable,
 }
 
 impl Servers {
@@ -128,21 +139,34 @@ impl Servers {
             let old = self.running.remove(at);
             self.calls.push(ServerCall::Stop { server: old.number });
         }
-        if !network {
+        let on_cable = port == CABLE_PORT;
+        if !network && !on_cable {
             let reason = String::from("no network");
             return tell(&events, ServerNotice::Failed { server, reason }, out);
         }
         self.next = self.next.wrapping_add(1);
         self.running.push(Running {
             number: self.next,
-            id: server,
-            events,
+            id: server.clone(),
+            events: events.clone(),
             screens,
         });
-        self.calls.push(ServerCall::Listen {
-            server: self.next,
-            port,
-        });
+        if on_cable {
+            // Its shell part is the lines passed on: it runs at once.
+            self.cable_server = Some(self.next);
+            let address = String::from("cable");
+            tell(&events, ServerNotice::Started { server, address }, out);
+        } else {
+            self.calls.push(ServerCall::Listen {
+                server: self.next,
+                port,
+            });
+        }
+    }
+
+    /// The number of the server on the cable, while one runs.
+    pub fn cable_server(&self) -> Option<u32> {
+        self.cable_server
     }
 
     /// Stops a plugin's server, if it runs.
@@ -154,9 +178,15 @@ impl Servers {
 
     fn stop_at(&mut self, at: usize, out: &mut Vec<Command>) {
         let running = self.running.remove(at);
-        self.calls.push(ServerCall::Stop {
-            server: running.number,
-        });
+        if self.cable_server == Some(running.number) {
+            // Ended on the device: not opened again by the next line.
+            self.cable_server = None;
+            self.cable.ended = true;
+        } else {
+            self.calls.push(ServerCall::Stop {
+                server: running.number,
+            });
+        }
         let server = running.id;
         tell(&running.events, ServerNotice::Stopped { server }, out);
     }
@@ -188,6 +218,12 @@ impl Servers {
         if let Some(at) = self.bodies.iter().position(|(r, _)| *r == response.request) {
             let (_, path) = self.bodies.remove(at);
             let _ = storage.remove(&path);
+        }
+        if response.request >= cable::FIRST_REQUEST {
+            let ct = &response.content_type;
+            return self
+                .cable
+                .answer(response.request, status, ct, body, file.is_some());
         }
         self.calls.push(ServerCall::Respond {
             request: response.request,
@@ -337,6 +373,12 @@ impl Servers {
     /// Answers a request without its plugin, e.g. when its body could not
     /// be saved.
     fn refuse(&mut self, request: u32, status: u16, reason: &str) {
+        if request >= cable::FIRST_REQUEST {
+            let ct = "text/plain";
+            return self
+                .cable
+                .answer(request, status, ct, reason.as_bytes().to_vec(), false);
+        }
         self.calls.push(ServerCall::Respond {
             request,
             status,
@@ -357,9 +399,11 @@ impl Servers {
         !self.calls.is_empty()
     }
 
-    /// Whether a server runs.
+    /// Whether a server runs on the network.
     pub fn busy(&self) -> bool {
-        !self.running.is_empty()
+        self.running
+            .iter()
+            .any(|r| Some(r.number) != self.cable_server)
     }
 
     /// The calls waited too long for a network: every server fails, for
@@ -368,7 +412,12 @@ impl Servers {
         if self.take().is_empty() {
             return;
         }
-        for running in core::mem::take(&mut self.running) {
+        let cable = self.cable_server;
+        let (kept, failed) = core::mem::take(&mut self.running)
+            .into_iter()
+            .partition(|r| Some(r.number) == cable);
+        self.running = kept;
+        for running in failed {
             let server = running.id;
             let reason = String::from(reason);
             tell(

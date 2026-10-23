@@ -541,7 +541,8 @@ expect no warnings
 
 Steps are those of the emulator's scripts: a button's name, `long:`,
 `tap:x:y`, `tap-on:<text>`, `long-tap:x:y`, `swipe:`, `down:`, `move:`,
-`up:`, `wait:<ms>`, `run:<action>`, `open:<screen>`, `redraw` and
+`up:`, `wait:<ms>`, `run:<action>`, `open:<screen>`, `type:<text>`
+into the keyboard shown, `type-enter:` to confirm it, `redraw` and
 `shot:<file>`. Lines before the first step may say `profiles: a, b`
 and `set: <id> = <value>`, a setting before the app starts. Assertions
 are `expect screen`, `stack`, `text`, `no text`, `focus`, `on`, `off`,
@@ -653,7 +654,7 @@ as the run's artifact, also when a check failed.
 | Services | `publish` | Anything one plugin offers others, found with `env.services.get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |
 | Translations | `add_translations` | Catalogs for any language |
-| Book data | `add_book_data` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book, cleaned up when it is gone |
+| Book data | `add_book_data`, `add_book_cache` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book. What `add_book_cache` names (made again from the book when needed) is cleaned up by itself when the book is gone; what `add_book_data` names (the reader's own: notes, places) only when the reader agrees, in *Clean up storage* |
 | Book fields | `add_book_field` | A value kept with books (`library::set_field`), shown on their information page and, where `in_catalog`, kept in the catalog to filter by |
 | Book badges | `add_book_badge` | A few letters or an icon on books' rows in views of the library |
 | Actions of others | `override_action` | Runs in place of any action's own handler; of several, the highest priority wins |
@@ -1380,13 +1381,14 @@ The emulator's X4 profile enforces the budget. After a run with
 
 A code plugin can also be a file, `code.ppn`, in a plugin's folder on
 the card, which the X4 and the X4 Pro load at their
-start (ADR 0024): from the plugin store or from the web flasher with
-the firmware. Only code installed runs: an installer names the file by
-its digest (`native::remember_code`, kept in `.paperpaw` where neither
-the Wi-Fi transfer nor plugins' folders reach), and a file put into a
-plugin's folder otherwise is not run (the plugin manager says why); an
-author trying their own build names it over USB
-(`tools/x4-remote.py --trust-code <id>`). Its code is the same as that
+start (ADR 0024): from the plugin store, from the web flasher with the
+firmware, or sent from a computer over the USB cable or the Wi-Fi
+transfer, where the device asks first ([USB transfer](usb-transfer.md)).
+Only code installed runs. An installer names the file by its digest
+(`native::remember_code`, kept in `.paperpaw`, which plugins' folders do
+not reach), and a file put into a plugin's folder otherwise is not run;
+the plugin manager says why. An author trying their own build sends it
+with `tools/usb-transfer.py install <folder>`. Its code is the same as that
 of a plugin built in, and it runs as part of PaperPaw, at full speed
 and without a sandbox: it can do
 whatever PaperPaw can, also past the SDK. The X4 Pro runs it from its
@@ -1506,9 +1508,12 @@ plugins/my-plugin/
   i18n/*.ini     translations, settings.ini, … as for data plugins
 ```
 
-Copy the folder onto the card, name its code as installed and restart
-(over USB: `python tools/x4-remote.py --push my-plugin plugins/my-plugin
---trust-code my-plugin`). The plugin manager lists it as one with code,
+Send the folder from a computer and say yes on the device
+(`python tools/usb-transfer.py install my-plugin`, or the Wi-Fi
+transfer); it is loaded at once. A firmware built for development also
+takes a folder over its remote control
+(`tools/x4-remote.py --push my-plugin plugins/my-plugin --trust-code
+my-plugin`, a folder under `plugins/`). The plugin manager lists it as one with code,
 and says why one does not run (built for another PaperPaw, damaged, no
 room, not installed, changed since it was installed). Over USB, `--script native` (and `--info`)
 says where each plugin lies and what loading it took.
@@ -1703,7 +1708,12 @@ after another into `plugins/.<id>.part`, checks each by its size and
 digest (SHA-1 or SHA-256), then has the kernel install it
 (`Command::InstallPlugin`) in place of
 every version of it before, what was chosen from it still chosen; the
-job is kept on the storage, so it goes on with no screen open.
+job is kept on the storage, so it goes on with no screen open. Where a
+plugin came from is kept once it is in place (`install::origin`): the
+store updates only those it installed, and one put in place otherwise
+(the Wi-Fi transfer, the USB cable, a card) is local, which the plugin
+manager says. `install::local::Staging` installs a plugin sent file by
+file, with the same checks.
 
 Copy it into the `plugins` folder of a device (or of the emulator's
 library) and restart, or have a plugin load it at once

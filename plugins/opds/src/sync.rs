@@ -361,7 +361,9 @@ impl Sync {
         let Some(item) = run.queue.pop_front() else {
             return;
         };
-        let file = temp::file(reply).filter(|_| (200..300).contains(&reply.status));
+        let file = temp::file(reply)
+            .filter(|_| (200..300).contains(&reply.status))
+            .filter(|file| temp::may_be_book(env.storage, file, &item.name));
         let stored = file.and_then(|file| {
             let _ = env.storage.create_dir(&run.folder);
             files::put_in_free_place(env.storage, file, &run.folder, &item.name).ok()

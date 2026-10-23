@@ -109,6 +109,11 @@
 //!
 //! - `emit <event> [<key>=<hex value> …]`: an event, as a plugin would
 //!   send it (`PP:OK`);
+//! - `type <text>`, `type-enter <text>`: the text (hexadecimal, `-` for
+//!   none) typed into the text field shown (the on-screen keyboard's, or
+//!   whatever screen is bound to `core.keyboard`) as if on its keys,
+//!   plugins seeing it as typed; with `type-enter` it is then confirmed
+//!   (`PP:OK`, or `PP:ERR no text field` where none shows);
 //! - `touch <down|move|up> <x> <y>`: a finger on the screen, where
 //!   PaperPaw draws (`PP:OK`), e.g. to tap or swipe on the X4 Pro;
 //! - `drag <x1> <y1> <x2> <y2> <steps> <ms>`: a finger put down at the
@@ -231,6 +236,11 @@ pub enum Command {
     Show {
         id: String,
         params: Vec<(String, String)>,
+    },
+    /// Text typed into the text field shown, then confirmed with `done`.
+    Type {
+        text: String,
+        done: bool,
     },
     /// A finger down, moved or up at a point.
     Touch {
@@ -376,6 +386,10 @@ pub fn parse(line: &str) -> Option<Command> {
             },
             x: words.next()?.parse().ok()?,
             y: words.next()?.parse().ok()?,
+        },
+        "type" | "type-enter" => Command::Type {
+            text: unhex(words.next()?)?,
+            done: line.starts_with("type-enter"),
         },
         "emit" => Command::Emit {
             event: String::from(words.next()?),
@@ -718,6 +732,22 @@ mod tests {
             })
         );
         assert_eq!(parse("emit e path"), None);
+        assert_eq!(
+            parse("type 4772c3bc"),
+            Some(Command::Type {
+                text: String::from("Grü"),
+                done: false
+            })
+        );
+        assert_eq!(
+            parse("type-enter -"),
+            Some(Command::Type {
+                text: String::new(),
+                done: true
+            })
+        );
+        assert_eq!(parse("type"), None);
+        assert_eq!(parse("type 4g"), None);
         assert_eq!(
             parse("slot core.settings id=726561646572"),
             Some(Command::Slot {

@@ -56,7 +56,10 @@ cards often come with.
 Over USB, [`tools/x4-remote.py`](../../tools/x4-remote.py) presses the
 X4's buttons, takes screenshots and prints what the screen shows, with
 the steps of the emulator's scripts. Firmware built here has it (the
-`remote` feature, on by default); released firmware leaves it out.
+`remote` feature, on by default); released firmware leaves it out. The
+transfer over the cable, which installs plugins and adds books once the
+reader allows it, is in every firmware
+([docs/usb-transfer.md](../../docs/usb-transfer.md)).
 
 It also waits for and checks what the screen shows (`until:`, `expect:`,
 with an exit code for scripts), taps and swipes (the X4 Pro), runs

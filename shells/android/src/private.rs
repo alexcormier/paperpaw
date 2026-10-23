@@ -130,6 +130,10 @@ impl<B: Storage, P: Storage> Storage for Private<B, P> {
         self.base.free_space()
     }
 
+    fn total_space(&self) -> Option<u64> {
+        self.base.total_space()
+    }
+
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         let (storage, path) = self.route(path);
         storage.local_path(path, with);

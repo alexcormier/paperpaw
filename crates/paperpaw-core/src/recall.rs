@@ -223,6 +223,10 @@ impl Storage for Recalled {
         self.inner.free_space()
     }
 
+    fn total_space(&self) -> Option<u64> {
+        self.inner.total_space()
+    }
+
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         self.inner.local_path(path, with);
     }

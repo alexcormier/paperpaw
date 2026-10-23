@@ -102,7 +102,7 @@ impl Plugin for Diagnostics {
         // Apps with this plugin built in (Android) keep their Tools for
         // readers.
         r.set_menu_need(OPEN_CHECK, MenuNeed::Firmware)?;
-        r.add_icon(OPEN_CHECK, Cow::Borrowed("stethoscope"))?;
+        r.add_icon(OPEN_CHECK, Cow::Borrowed("list-check"))?;
         r.add_settings(&SETTINGS)?;
         r.add_keymap(Cow::Borrowed(include_str!("../keymap.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

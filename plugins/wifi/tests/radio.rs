@@ -177,11 +177,37 @@ fn translations_are_complete() {
 fn the_radio_goes_off_when_no_known_network_is_in_reach() {
     let mut test = Test::new();
     test.want();
-    // None in reach: the request fails at once.
-    assert!(test.event(WifiEvent::Scanned(Vec::new())).is_empty());
+    // None in reach: looked for again a few times, then the request
+    // fails.
+    let mut scans = 1;
+    while test.event(WifiEvent::Scanned(Vec::new())) == [WifiCommand::Scan] {
+        scans += 1;
+        assert!(scans < 10, "looks for ever");
+    }
+    assert_eq!(scans, 3);
     // Nothing waits any more: no more rounds, and the radio goes off.
     let told = test.wait(5 * 60, &[]);
     assert_eq!(told, [WifiCommand::Off]);
+}
+
+/// The first scan after the radio came on often finds nothing (an X4's
+/// radio, just started): it is made again, and the network found then
+/// joined, without the request failing meanwhile.
+#[test]
+fn a_scan_that_finds_nothing_is_made_again() {
+    let home = [WifiNetwork {
+        ssid: String::from("Home"),
+        signal: -50,
+        secured: true,
+    }];
+    let mut test = Test::new();
+    test.want();
+    assert_eq!(
+        test.event(WifiEvent::Scanned(Vec::new())),
+        [WifiCommand::Scan]
+    );
+    let joins = test.event(WifiEvent::Scanned(home.to_vec()));
+    assert!(matches!(joins[..], [WifiCommand::Join { .. }]), "{joins:?}");
 }
 
 #[test]

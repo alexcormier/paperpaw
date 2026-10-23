@@ -253,6 +253,7 @@ fn cards_are_reviewed_with_buttons_alone() {
     let reps: Vec<&str> = deck
         .lines()
         .skip(1)
+        .filter(|l| !l.starts_with("next\t"))
         .map(|l| l.split('\t').nth(5).unwrap())
         .collect();
     assert_eq!(reps, ["2", "1", "2"], "{deck}");

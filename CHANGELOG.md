@@ -168,9 +168,12 @@ file to your report.
 #### Touch, buttons and the keyboard
 
 - The keyboard on touch screens has round keys and takes less of the
-  screen; *Shape of keys* makes them a little taller or wider. German has ten keys a row: hold a, o, u or s for ä, ö, ü
-  and ß, or switch on *Umlaut keys*. On narrow screens, a row too wide
-  is split in two. The keyboard takes up to 2,000 characters.
+  screen; *Shape of keys* makes them a little taller or wider.
+  *Keyboard size* (Small, Medium, Large) makes it a quarter lower or
+  higher: with round keys about 30 %, 40 % or 50 % of the screen, never
+  keys below 4 mm. German has ten keys a row: hold a, o, u or s for ä,
+  ö, ü and ß, or switch on *Umlaut keys*. On narrow screens, a row too
+  wide is split in two. The keyboard takes up to 2,000 characters.
 - Touch lock: *Lock touch* in the quick panel and the reader's menu.
   Taps and swipes do nothing, and the buttons still work. To unlock, tap
   twice and keep the finger down, or hold the power button on the X4
@@ -211,13 +214,24 @@ file to your report.
   and shows QR codes, and you pick your network and type its password on
   the phone. Only secured networks are joined by themselves.
 - Wi-Fi transfer and Calibre work on the X4 and X4 Pro. *Without a
-  router* on the transfer screen opens the reader's own network.
+  router* on the transfer screen opens the reader's own network. A
+  scan that finds no saved network is made again, up to three times,
+  before the device says there is none.
+- Calibre: a burst of books no longer stalls the connection as often,
+  a connection Calibre stops answering ends after 45 seconds, and the
+  device tells Calibre how much its card really has free.
+- The Wi-Fi transfer installs plugins from a computer too, such as
+  one's own build. The version before stays until the new one is whole,
+  and a plugin with code is installed only after you say yes on the
+  device.
 - In Offline mode, the store, catalogs, Calibre and Wi-Fi transfer offer
   to go online once, instead of failing.
 - A plugin store on the device: *More plugins*, in the tools and in the
   plugin manager, with search, groups, sorting and *Update all*. Code
   plugins come from it too, signed by their author; an update signed by
-  someone else needs your consent.
+  someone else needs your consent. The store updates only the plugins
+  it installed: one put in place otherwise (the Wi-Fi transfer, a card,
+  one's own build) is local, and the plugin manager says which is which.
 - The firmware is lean: many plugins, such as the statistics, widgets,
   Calibre, KOReader sync, weather and rules, come from the store instead
   of being built in. This leaves more memory.
@@ -263,17 +277,42 @@ file to your report.
   does the same.
 - QuireInk is now called PaperPaw. Its settings, statistics and
   passwords are taken over once, at the first start.
-- Android: the app is now `org.paperpaw.app` and installs beside the old
-  one. It runs on devices with 16 KB memory pages, and on Android 8 to
-  10 it can write to the shared storage.
+- Android: a beta of the app comes with each release, as an APK. It is
+  now `org.paperpaw.app` and installs beside the old one. It runs on
+  devices with 16 KB memory pages, and on Android 8 to 10 it can write
+  to the shared storage.
+- Transfer over USB on the X4 and X4 Pro: a computer at the other end of
+  the cable installs a plugin or adds books. The device shows what is to
+  come, with names and sizes, and writes nothing until you allow it,
+  never over a book.
 
 #### Your data and security
 
 - PaperPaw never writes over a file it cannot read, such as
   `paperpaw.ini`, passwords, notes, statistics, profiles or rules.
 - Writes are safe against power cuts: a file holds its old content or
-  its new one, whole. Going back to an older update no longer writes
-  over data that a newer PaperPaw wrote.
+  its new one, whole, also on the X4's card, where a file moved or
+  renamed is at its old place or its new one, never at neither. Going
+  back to an older update no longer writes over data that a newer
+  PaperPaw wrote.
+- An audit of everything PaperPaw keeps found ways it could lose notes,
+  places, statistics, cards or passwords; each is closed, with a test.
+  Among them:
+  - *Clean up storage* removes by itself only what can be made again.
+    The notes and places of books not found go only when you agree.
+  - A reading place that cannot be read is never written over with the
+    start of the book; it is kept aside and you are told.
+  - Highlights and notes in EPUB books keep their place when the book's
+    own styles are switched on or off.
+  - Progress sync, KOReader's notes and the statistics sync delete
+    nothing on a failed fetch or an unclear file, and ask where one side
+    lost everything.
+  - Lines PaperPaw does not understand, from a newer version or written
+    by hand, are kept. An old copy of the passwords goes only once the
+    passwords file holds it.
+  - Removing a profile, a password or a vocabulary word asks first;
+    *Reset to defaults* keeps folders, accounts and passwords; the file
+    manager protects PaperPaw's own folders.
 - While the device is locked, nothing shows above the lock screen but
   what the lock opens itself. The lock's code is kept with a random
   salt.
@@ -301,8 +340,16 @@ file to your report.
 - The SDK grew a lot: reading apps, lookup providers, voices, page
   layers, places for widgets, building blocks for screens, one choice
   and confirm dialog, declared work and power modes, typed events and
-  settings. It has breaking changes before 1.0; `api.txt` in
-  `crates/paperpaw-sdk` lists its public API, and CI checks it.
+  settings, where an installed plugin came from (`install::origin`),
+  installs file by file (`install::local::Staging`), serving over the
+  USB cable (`served::CABLE_PORT`), typing into a text field
+  (`events::TYPE_TEXT`), and book data that is made again apart from the
+  reader's own (`add_book_cache`, `add_book_data`). It has breaking
+  changes before 1.0; `api.txt` in `crates/paperpaw-sdk` lists its
+  public API, and CI checks it.
+- `tools/usb-transfer.py` and the emulator's `--cable` speak the USB
+  transfer's lines (`docs/usb-transfer.md`); `Kernel::type_text` and the
+  X4's USB remote type into a keyboard.
 - Each release also brings the desktop emulator for Windows, macOS and
   Linux with `paperpaw-dev`, the web emulator and the handbook, each
   signed. `docs/porting.md` says how to add a device.

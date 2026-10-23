@@ -396,6 +396,24 @@ fn the_history_keeps_the_latest_pages_and_deletes_the_others() {
     assert!(shown.contains("Page 34"), "{shown}");
 }
 
+/// Bookmarks that cannot be read (saved in another encoding here) are
+/// not written over by the ones to start with and a new one.
+#[test]
+fn unreadable_bookmarks_are_not_written_over() {
+    let storage = Shared::default();
+    let kept = b"Caf\xe9\thttps://cafe.example/\n".to_vec();
+    storage.write(BOOKMARKS, &kept).unwrap();
+    let mut h = Harness::build(storage, None, true);
+    let call = h.go("https://h.example/kept");
+    h.answer(&call, 200, HTML, b"<title>Kept</title>");
+    h.run(actions::BACK);
+    h.run(OPEN);
+    assert_eq!(h.history().len(), 1);
+    h.pick("history:0", "bookmark");
+    h.pick("bookmark:0", "delete");
+    assert_eq!(h.storage.0.get(BOOKMARKS).unwrap(), kept);
+}
+
 #[test]
 fn history_entries_become_bookmarks_and_go() {
     let mut h = Harness::new();
@@ -577,16 +595,24 @@ fn odd_lines_in_the_lists_are_skipped() {
     storage
         .write(
             HISTORY,
-            b"Good\thttps://good.example/\r\nNo address\t\nno tab at all\n\t\n\xff\xfe\thttps://bytes.example/\n",
+            b"Good\thttps://good.example/\r\nNo address\t\nno tab at all\n\t\n",
         )
         .unwrap();
     storage.write(BOOKMARKS, b"").unwrap();
-    let mut h = Harness::build(storage, None, true);
+    let mut h = Harness::build(storage.clone(), None, true);
     let shown = h.said();
     assert!(shown.contains("Good"), "{shown}");
-    assert!(shown.contains("bytes.example"), "{shown}");
     assert!(!shown.contains("No address"), "{shown}");
     assert!(!shown.contains("no tab"), "{shown}");
     // An empty list of bookmarks stays empty: none to start with.
     assert!(!shown.contains("Wikipedia"), "{shown}");
+    // A list that is not UTF-8 cannot be read: not shown, and kept as
+    // it is, not written over.
+    let odd = b"\xff\xfe\thttps://bytes.example/\n";
+    storage.write(HISTORY, odd).unwrap();
+    let mut h = Harness::build(storage, None, true);
+    assert!(!h.said().contains("bytes.example"));
+    let call = h.go("https://h.example/kept");
+    h.answer(&call, 200, HTML, b"<title>Kept</title>");
+    assert_eq!(h.storage.0.get(HISTORY).unwrap(), odd);
 }

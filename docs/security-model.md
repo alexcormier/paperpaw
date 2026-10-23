@@ -36,6 +36,13 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   testing has a remote control over USB: files in and out, presses, the
   screen. Released firmware is built without it (the `remote` feature
   of `shells/xteink`).
+- **The cable transfer.** Every firmware takes plugins and books from a
+  computer over the USB cable ([docs/usb-transfer.md](usb-transfer.md)).
+  It writes nothing before the reader allows it on the device: the
+  device shows what is to come, with names and sizes. It takes only what
+  it showed, each file by its size and SHA-256, and never writes over a
+  book. An answer counts only for the offer shown, and *Back* ends the
+  transfer. The Wi-Fi transfer installs plugins the same way.
 - **The local network.** The device listens only while a screen that
   serves a page is open (the Wi-Fi transfer, typing on a phone, the
   flash cards' *Edit with your phone*, setting up Wi-Fi with a phone).
@@ -72,21 +79,27 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 - **Code plugins** run as native code without a sandbox, with the
   kernel's rights. Through the SDK, a plugin reaches all of the card,
   the network and its own passwords and keys. Past the SDK, its code can
-  reach everything, other plugins' passwords too. They are built into the firmware (or the app),
-  or on the X4s come as plugin files (`code.ppn`) from the store, with a
-  firmware update or from the web flasher
-  ([ADR 0024](adr/0024-native-code-plugins.md)). A published file is
+  reach everything, other plugins' passwords too. They are built into
+  the firmware or the app. On the X4s they also come as plugin files
+  (`code.ppn`, [ADR 0024](adr/0024-native-code-plugins.md)): from the
+  store, with a firmware update, from the web flasher, or from a
+  computer over the cable or the Wi-Fi transfer. A published file is
   signed by its author (Ed25519, `paperpaw-sign`); PaperPaw's own plugin
   files are signed with the project's plugin key. The store and a
   firmware update install a file only when it is made for this firmware
   and signed by the key the plugin library names for its author; the device remembers
-  that key at the first install, and an update signed by another waits
-  until the reader, warned, installs it anyway. From the web flasher the
-  firmware also takes a file not signed (one's own build), but only for
-  a plugin that has no author's key remembered yet. Only code installed
-  so runs: a file put into a plugin's folder by hand is not loaded (test
-  firmware can name one over USB). Code plugins are trusted as their
-  author is.
+  that key at the first install. In the store, an update signed by
+  another waits until the reader, warned, installs it anyway; a firmware
+  update does not fetch it at all. From the web flasher and from a
+  computer the firmware also takes a file not signed (one's own build):
+  from the flasher only for a plugin that has no author's key remembered
+  yet, from a computer only once the reader said yes to its code on the
+  device. Only code installed so runs: a file put into a plugin's folder
+  by hand is not loaded. The list of code installed
+  (`.paperpaw/plugin-code.txt`) is on the card, so whoever holds the card
+  can change it, as test firmware does over USB; the transfers and
+  plugins' own folders do not reach it. Code plugins are trusted as
+  their author is.
 - **Data plugins** (folders with `plugin.ini`) carry no code: translations,
   key maps, defaults of settings, presets, menus, actions made of steps,
   marks in the text, icons, steps of the first-run setup, lines for

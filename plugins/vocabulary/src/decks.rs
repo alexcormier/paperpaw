@@ -65,6 +65,7 @@ impl DecksScreen {
         crate::take_lookups(env);
         let sizes = cards::sizes(env.storage);
         self.decks = cards::decks(env.storage)
+            .unwrap_or_default()
             .into_iter()
             .map(|d| {
                 let n = sizes.get(&d.id).copied().unwrap_or(0);

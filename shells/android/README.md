@@ -35,6 +35,11 @@ USB debugging*.
 
 ## Using it
 
+- **Plugins:** the plugins the X4s take from the store (the statistics,
+  widgets, Calibre, KOReader sync and others) are built into the app,
+  but switched off until you switch one on, in the plugin manager or the
+  store. One you used before, whose data is there, stays on.
+
 - **Books:** choose *Allow access to your books* on the home screen. On
   Android 11 and later, allow *All files access*. On older versions,
   allow the storage permission. PaperPaw restarts and shows the shared

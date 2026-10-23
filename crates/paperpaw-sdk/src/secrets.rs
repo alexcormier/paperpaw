@@ -139,6 +139,13 @@ impl<'a> Visible<'a> {
     pub fn has(&self, id: &str) -> bool {
         self.all.get(id).is_some()
     }
+
+    /// Whether secret `id` is on the card as it is here (see
+    /// [`Secrets::saved`]): a plugin removes its own copy of a secret only
+    /// once it is.
+    pub fn saved(&self, id: &str) -> bool {
+        self.all.saved(id)
+    }
 }
 
 /// A change: `value` `None` removes the secret. Printed for debugging
@@ -188,6 +195,23 @@ impl SecretChange {
 #[derive(Debug, Default, Clone, PartialEq, Eq)]
 pub struct Secrets {
     list: Vec<Secret>,
+    /// Lines of the file this version does not read (a newer format's, or
+    /// damaged): written back as they are.
+    unread: Unread,
+    /// Secrets changed here but not in the file: it could not be read or
+    /// written.
+    unsaved: Vec<String>,
+}
+
+/// Lines of the file kept as they are. Printed for debugging by number
+/// alone, as they may hold values.
+#[derive(Default, Clone, PartialEq, Eq)]
+struct Unread(Vec<String>);
+
+impl core::fmt::Debug for Unread {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        write!(f, "{} lines", self.0.len())
+    }
 }
 
 fn veil(data: &[u8]) -> Vec<u8> {
@@ -216,10 +240,37 @@ impl Secrets {
         self.list.is_empty()
     }
 
+    /// Whether secret `id` is kept (or removed) on the card as it is here:
+    /// a change that could not be written lasts only until the device
+    /// restarts. What a plugin keeps elsewhere is removed only once it is.
+    pub fn saved(&self, id: &str) -> bool {
+        !self.unsaved.iter().any(|unsaved| unsaved == id)
+    }
+
+    /// Notes that the change to secret `id` could not be written.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn mark_unsaved(&mut self, id: &str) {
+        if self.saved(id) {
+            self.unsaved.push(id.to_string());
+        }
+    }
+
+    /// Notes that every secret here is written.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn mark_saved(&mut self) {
+        self.unsaved.clear();
+    }
+
     /// Applies `change`.
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn apply(&mut self, change: SecretChange) {
+        // An unread line of the same secret gives way to the change.
+        self.unread
+            .0
+            .retain(|line| unescape(line.split('\t').next().unwrap_or_default()) != change.id);
         let at = self.list.iter().position(|s| s.id == change.id);
         match (change.value, at) {
             (Some(value), Some(at)) => {
@@ -247,8 +298,10 @@ impl Secrets {
     /// value veiled, tabs, line breaks and backslashes in the id and the
     /// label written as `\t`, `\n`, `\r` and `\\` (a network's name may
     /// hold any of them).
+    /// Lines this version does not read are written back as they are.
     pub fn encode(&self) -> String {
-        self.list
+        let mut text: String = self
+            .list
             .iter()
             .map(|s| {
                 alloc::format!(
@@ -259,27 +312,47 @@ impl Secrets {
                     hex(&veil(s.value.as_bytes()))
                 )
             })
-            .collect()
+            .collect();
+        for line in &self.unread.0 {
+            text.push_str(line);
+            text.push('\n');
+        }
+        text
     }
 
+    /// Lines it cannot read (more fields or flags than it knows, or
+    /// damaged) are kept for [`Secrets::encode`], not dropped.
     pub fn decode(text: &str) -> Self {
-        let list = text
-            .lines()
-            .filter_map(|line| {
-                let mut f = line.splitn(4, '\t');
-                let id = unescape(f.next()?);
-                let label = unescape(f.next()?);
-                let changeable = f.next()? == "c";
-                let value = String::from_utf8(veil(&unhex(f.next()?)?)).ok()?;
-                (!id.is_empty()).then_some(Secret {
-                    id,
-                    label,
-                    value,
-                    changeable,
-                })
-            })
-            .collect();
-        Self { list }
+        let mut secrets = Self::default();
+        for line in text.lines() {
+            let line = line.trim_end_matches('\r');
+            if line.trim().is_empty() {
+                continue;
+            }
+            match Self::decode_line(line) {
+                Some(secret) => secrets.list.push(secret),
+                None => secrets.unread.0.push(line.to_string()),
+            }
+        }
+        secrets
+    }
+
+    fn decode_line(line: &str) -> Option<Secret> {
+        let mut f = line.splitn(4, '\t');
+        let id = unescape(f.next()?);
+        let label = unescape(f.next()?);
+        let changeable = match f.next()? {
+            "c" => true,
+            "" => false,
+            _ => return None,
+        };
+        let value = String::from_utf8(veil(&unhex(f.next()?)?)).ok()?;
+        (!id.is_empty()).then_some(Secret {
+            id,
+            label,
+            value,
+            changeable,
+        })
     }
 }
 

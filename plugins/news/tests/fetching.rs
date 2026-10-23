@@ -3,7 +3,7 @@
 //! its address, failures (and answers that are no feed) are counted and
 //! the rest fetched, `feeds.txt` and the headlines stay one
 //! line a feed whatever the titles hold, addresses are checked when
-//! added, removing a feed removes its book, and hostile feeds (scripts,
+//! added, removing a feed keeps its book, and hostile feeds (scripts,
 //! `javascript:` links, entity bombs, deep nesting, traversal in titles)
 //! give plain, safe pages.
 
@@ -561,8 +561,24 @@ fn addresses_are_checked_when_added() {
     assert!(h.said().contains("Good"));
 }
 
+/// A file of the reader's own at the name version 1 gave a feed's book
+/// is not taken for that book: a fetch leaves it.
 #[test]
-fn removing_a_feed_removes_its_book() {
+fn a_file_of_the_feeds_old_name_stays_unless_news_wrote_it() {
+    let mut h = Harness::new("https://a.example/1\tA\n");
+    h.storage.write("News/A.html", b"<p>Mine</p>").unwrap();
+    h.run(FETCH);
+    let call = h.request();
+    h.answer(&call, 200, &rss("A", &[("Good news", "x")]));
+    assert!(h.page("A").contains("Good news"));
+    assert_eq!(
+        h.storage.text("News/A.html").as_deref(),
+        Some("<p>Mine</p>")
+    );
+}
+
+#[test]
+fn removing_a_feed_keeps_its_book() {
     let mut h = Harness::new("https://a.example/\tA\nhttps://b.example/\tB\n");
     h.storage.write("News/A.html", b"<p>a</p>").unwrap();
     h.storage.write("News/B.html", b"<p>b</p>").unwrap();
@@ -586,7 +602,8 @@ fn removing_a_feed_removes_its_book() {
         Picked::new(String::from("0"), String::from("remove")),
     );
     assert_eq!(h.storage.text(FEEDS).unwrap(), "https://b.example/\tB\n");
-    assert_eq!(h.storage.names("News"), ["B.html"]);
+    // Its book stays, a book like any other now.
+    assert_eq!(h.storage.names("News"), ["A.html", "B.html"]);
     // *Fetch* of the one left asks for it alone.
     h.send(
         "news.chosen",

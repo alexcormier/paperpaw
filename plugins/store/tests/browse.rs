@@ -160,6 +160,7 @@ fn a_long_list_goes_to_a_page() {
 }
 
 /// A storage with `apple` and `cherry` installed in 1.0.0.
+/// Apple and cherry, installed by the store at 1.0.0.
 fn with_two() -> Shared {
     let storage = Shared::default();
     for id in ["apple", "cherry"] {
@@ -167,6 +168,7 @@ fn with_two() -> Shared {
         storage
             .write(&path, manifest(id, "1.0.0").as_bytes())
             .unwrap();
+        paperpaw_sdk::install::remember_store_install(&storage, id, Version::new(1, 0, 0));
     }
     storage
 }

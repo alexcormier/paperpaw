@@ -209,7 +209,7 @@ fn ask_reset(env: &Env<'_>, group: Option<(&Id, &str)>) -> Command {
 }
 
 /// Resets the settings `reset` chose: of its group, or all but the
-/// language.
+/// language; the reader's own (accounts, folders, passwords) stay.
 fn reset(env: &Env<'_>, picked: &choice::Picked, cx: &mut Cx<'_, '_>) {
     if picked.option != "reset" {
         return;
@@ -226,7 +226,7 @@ fn reset(env: &Env<'_>, picked: &choice::Picked, cx: &mut Cx<'_, '_>) {
         return;
     }
     let language = paperpaw_sdk::builtin::settings::LANGUAGE;
-    for spec in env.settings.specs() {
+    for spec in env.settings.specs().filter(|spec| !spec.is_kept_on_reset()) {
         let chosen = match &group {
             Some(group) => env.settings.group_of(spec) == *group && visible(env, spec),
             None => spec.id != *language.id(),

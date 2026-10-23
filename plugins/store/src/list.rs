@@ -109,6 +109,8 @@ pub(crate) struct ListScreen {
 
 impl ListScreen {
     pub(crate) fn new(env: &Env<'_>) -> Self {
+        // Those installed before origins were kept: the store's.
+        paperpaw_sdk::install::adopt(env);
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
@@ -142,10 +144,11 @@ impl ListScreen {
             for &(group, count) in index.runs() {
                 counts.groups[group] += count;
             }
+            let origins = paperpaw_sdk::install::Origins::read(env.storage);
             index.scan(env.storage, &mut |_, entry: Entry| {
                 if entry.installed(env).is_some() {
                     counts.installed += 1;
-                    counts.updates += usize::from(entry.newer(env));
+                    counts.updates += usize::from(entry.newer_in(env, &origins));
                 }
             });
         }

@@ -1,5 +1,7 @@
 //! A storage that fails on purpose, for the tests of what happens then:
-//! a card that fills up, a file that cannot be read from some point on.
+//! a card that fills up, a file that cannot be read from some point on,
+//! a rename that takes the file it replaces away and then fails (as FAT
+//! can), reads that return less than asked for.
 
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
@@ -14,6 +16,10 @@ pub(crate) struct Faulty {
     room: Cell<Option<u32>>,
     /// Files whose reads fail from an offset on.
     broken: RefCell<Vec<(String, u64)>>,
+    /// Renames remove the file they replace, then fail.
+    rename_drops_target: Cell<bool>,
+    /// Reads return at most this many bytes.
+    short_reads: Cell<Option<usize>>,
 }
 
 impl Faulty {
@@ -34,6 +40,16 @@ impl Faulty {
         self.broken.borrow_mut().push((path.to_string(), at));
     }
 
+    /// Renames from now on remove the file they replace, then fail.
+    pub(crate) fn drop_target_on_rename(&self) {
+        self.rename_drops_target.set(true);
+    }
+
+    /// Reads from now on return at most `bytes` bytes.
+    pub(crate) fn read_short(&self, bytes: usize) {
+        self.short_reads.set(Some(bytes));
+    }
+
     fn take_room(&self) -> Result<(), StorageError> {
         match self.room.get() {
             Some(0) => Err(StorageError::Full),
@@ -51,7 +67,13 @@ impl Storage for Faulty {
         let broken = self.broken.borrow();
         match broken.iter().find(|(p, _)| p == path) {
             Some((_, at)) if offset + buf.len() as u64 > *at => Err(StorageError::Io),
-            _ => self.inner.read_at(path, offset, buf),
+            _ => {
+                let len = self
+                    .short_reads
+                    .get()
+                    .map_or(buf.len(), |n| n.min(buf.len()));
+                self.inner.read_at(path, offset, &mut buf[..len])
+            }
         }
     }
     fn size(&self, path: &str) -> Result<u64, StorageError> {
@@ -75,6 +97,13 @@ impl Storage for Faulty {
         self.inner.exists(path)
     }
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        if self.rename_drops_target.get() {
+            match self.inner.remove(to) {
+                Ok(()) | Err(StorageError::NotFound) => {}
+                Err(e) => return Err(e),
+            }
+            return Err(StorageError::Io);
+        }
         self.inner.rename(from, to)
     }
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {

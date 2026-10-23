@@ -26,6 +26,11 @@ use crate::{clock, device, input, now, power, stack};
 
 /// How long the main loop rests when there is nothing to do.
 const POLL_MS: u64 = 10;
+/// Lines of the cable transfer read in one turn of the main loop at most.
+const CABLE_LINES: usize = 32;
+/// After a line of the cable transfer, the main loop reads on without
+/// resting for this long.
+const CABLE_QUIET_MS: u64 = 300;
 /// How often the battery is read.
 const STATUS_MS: u64 = 60_000;
 /// On battery, the longest the processor sleeps between readings of the
@@ -61,6 +66,8 @@ pub struct Firmware {
     /// High while on USB power.
     pub usb_power: crate::board::UsbPower,
     pub delay: Delay,
+    /// Lines from a computer on USB.
+    pub usb: crate::usb_lines::UsbLines,
     #[cfg(feature = "remote")]
     pub remote: crate::remote::Remote,
     /// The X4 Pro's front light.
@@ -84,6 +91,9 @@ pub struct State {
     /// A button pressed over USB, and when to let it go.
     #[cfg(feature = "remote")]
     held: Option<(&'static str, Instant)>,
+    /// When a line of the cable transfer came last: while they come, the
+    /// main loop reads on without resting, so the transfer is quick.
+    cable_at: Option<u64>,
     /// Light sleeps on USB too until then (`idle sleep` over USB), for
     /// trying them.
     #[cfg(feature = "remote")]
@@ -168,8 +178,7 @@ impl Firmware {
         power::allow(battery);
         self.status();
         self.buttons();
-        #[cfg(feature = "remote")]
-        self.remote();
+        self.usb();
         self.tick();
         self.rest(battery, installing);
     }
@@ -220,7 +229,6 @@ impl Firmware {
     }
 
     /// The time for the kernel now, never before one it was given.
-    #[cfg(feature = "remote")]
     fn kernel_now(&mut self) -> Instant {
         self.state.kernel_time = now().0.max(self.state.kernel_time);
         Instant(self.state.kernel_time)
@@ -433,7 +441,7 @@ impl Firmware {
         let mut until = now().0
             + if battery {
                 idle
-            } else if self.network.moving() || installing {
+            } else if self.network.moving() || installing || self.cable_moving() {
                 // Data on the way, or an update: on at once.
                 0
             } else {
@@ -648,8 +656,53 @@ impl Firmware {
             }
             self.state.wake_at = effects.wake_at();
             self.state.sleep |= effects.sleep();
+            // The cable transfer's answers, as soon as they are there.
+            while let Some(line) = self.kernel.next_cable_line() {
+                esp_println::println!("{line}");
+            }
             return;
         }
+    }
+
+    /// What came over USB: the cable transfer's lines for the kernel (all
+    /// that is there, a few at most), the test remote control's commands
+    /// (`remote` builds, one at a time).
+    fn usb(&mut self) {
+        for _ in 0..CABLE_LINES {
+            let Some(line) = self.usb.next_line() else {
+                break;
+            };
+            match line {
+                Ok(line) if line.starts_with(paperpaw_core::CABLE_PREFIX.as_bytes()) => {
+                    self.state.cable_at = Some(now().0);
+                    let line = alloc::string::String::from_utf8_lossy(&line);
+                    let at = self.kernel_now();
+                    let effects = self.kernel.cable_line(at, &line);
+                    self.apply(effects);
+                }
+                #[cfg(feature = "remote")]
+                line => {
+                    self.remote(line);
+                    break;
+                }
+                #[cfg(not(feature = "remote"))]
+                _ => {}
+            }
+        }
+        #[cfg(feature = "remote")]
+        if self.state.held.is_some_and(|(_, at)| at <= now()) {
+            self.release_held();
+        }
+    }
+
+    /// Whether the cable transfer's lines are coming (one came a moment
+    /// ago, or one is half there).
+    fn cable_moving(&self) -> bool {
+        self.usb.in_line()
+            || self
+                .state
+                .cable_at
+                .is_some_and(|at| now().0 < at + CABLE_QUIET_MS)
     }
 
     /// Refreshes the panel: on battery the processor sleeps lightly for
@@ -854,14 +907,11 @@ fn heap_free() -> usize {
 /// What came over USB.
 #[cfg(feature = "remote")]
 impl Firmware {
-    fn remote(&mut self) {
-        if let Some(command) = self.remote.poll()
-            && let Some(command) = self.remote.answer(&mut self.kernel, command)
+    fn remote(&mut self, line: Result<alloc::vec::Vec<u8>, crate::usb_lines::TooLong>) {
+        if let Some(command) = self.remote.command(line)
+            && let Some(command) = self.remote.answer(&mut self.kernel, &mut self.usb, command)
         {
             self.remote_command(command);
-        }
-        if self.state.held.is_some_and(|(_, at)| at <= now()) {
-            self.release_held();
         }
     }
 
@@ -977,6 +1027,16 @@ impl Firmware {
                 self.apply(effects);
                 remote::ok();
             }
+            Command::Type { text, done } => {
+                let at = self.kernel_now();
+                match self.kernel.type_text(at, &text, done) {
+                    Some(effects) => {
+                        self.apply(effects);
+                        remote::ok();
+                    }
+                    None => remote::error("no text field"),
+                }
+            }
             Command::Drag {
                 from,
                 to,
@@ -1044,10 +1104,13 @@ impl Firmware {
     /// `press power` wakes the X4 (`true`).
     fn remote_while_asleep(&mut self) -> bool {
         use paperpaw_x4::remote::Command;
-        let Some(command) = self.remote.poll() else {
+        let Some(line) = self.usb.next_line() else {
             return false;
         };
-        match self.remote.answer(&mut self.kernel, command) {
+        let Some(command) = self.remote.command(line) else {
+            return false;
+        };
+        match self.remote.answer(&mut self.kernel, &mut self.usb, command) {
             None => false,
             Some(Command::Press { button, .. }) => {
                 crate::remote::ok();

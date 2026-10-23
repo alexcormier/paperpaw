@@ -50,6 +50,10 @@ enum Field {
     Summary,
 }
 
+/// How every page made here begins, in every version: a file at a
+/// book's name that does not begin so was not made here.
+pub(crate) const HEAD: &str = "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\"/>\n<title>";
+
 /// The feed `from` as a page in `to`: at most `max_articles` articles,
 /// each with at most `max_text` bytes of text.
 pub(crate) fn convert(
@@ -243,7 +247,8 @@ impl Reader<'_> {
         }
     }
 
-    /// The page's beginning, once the feed's title is known.
+    /// The page's beginning, once the feed's title is known: [`HEAD`],
+    /// then the title.
     fn begin(&mut self) -> Result<(), StorageError> {
         if self.started {
             return Ok(());
@@ -252,7 +257,7 @@ impl Reader<'_> {
         let title = one_line(&text_of(&self.channel_title));
         self.converted.title = title.clone();
         let head = format!(
-            "<!DOCTYPE html>\n<html>\n<head>\n<meta charset=\"utf-8\"/>\n<title>{0}</title>\n</head>\n<body>\n<h1>{0}</h1>\n",
+            "{HEAD}{0}</title>\n</head>\n<body>\n<h1>{0}</h1>\n",
             escape(&title)
         );
         self.storage.write(self.to, head.as_bytes())

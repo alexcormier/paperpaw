@@ -46,6 +46,11 @@ const NEW: &str = "books/new.epub";
 const BOOKS: &str = "[book.1]\ntitle = Anna Karenina\nmd5 = 0f343b0931126a20f133d67c2b018a3b\npath = books/anna.epub\n\n\
                      [book.2]\ntitle = Effi Briest\nmd5 = 1f343b0931126a20f133d67c2b018a3b\npath = books/effi.epub\n";
 
+/// A stay of book 7.
+const LOG: [u8; 16] = [
+    7, 0, 1, 0, 0, 0, 0x00, 0x78, 0xe7, 0x68, 50, 0, 0x2c, 0x01, 0, 0,
+];
+
 struct Device {
     kernel: Kernel,
     now: u64,
@@ -53,16 +58,15 @@ struct Device {
 
 impl Device {
     fn new(books: &[u8]) -> Self {
-        let mut log = Vec::new();
-        log.extend_from_slice(&7u16.to_le_bytes());
-        log.extend_from_slice(&1u32.to_le_bytes());
-        log.extend_from_slice(&1_760_000_000u32.to_le_bytes());
-        log.extend_from_slice(&50u16.to_le_bytes());
-        log.extend_from_slice(&300u32.to_le_bytes());
+        Self::with(books, "books.ini", "pages.bin")
+    }
+
+    /// With the books and the log in the files named so.
+    fn with(books: &[u8], books_file: &str, log_file: &str) -> Self {
         let storage = MemoryStorage::new()
             .with(NEW, "A new book")
-            .with(&format!("{DIR}/books.ini"), books.to_vec())
-            .with(&format!("{DIR}/pages.bin"), log);
+            .with(&format!("{DIR}/{books_file}"), books.to_vec())
+            .with(&format!("{DIR}/{log_file}"), LOG.to_vec());
         let mut kernel = Kernel::builder(DEVICE)
             .storage(storage)
             .user_config("[core]\nlanguage = en\n")
@@ -132,6 +136,20 @@ fn a_new_book_joins_the_others() {
     assert!(books.contains("[book.2]\ntitle = Effi Briest"), "{books}");
     assert!(books.contains("[book.8]\ntitle = new\n"), "{books}");
     assert!(books.contains("path = books/new.epub"), "{books}");
+    assert_eq!(device.log_size(), 32);
+}
+
+/// The books and the log left beside their places by a cut while they
+/// were written anew are put there at the start, before a new book
+/// would start a new list of books.
+#[test]
+fn files_left_beside_their_place_are_put_there() {
+    let mut device = Device::with(BOOKS.as_bytes(), "books.new", "pages.new");
+    device.reader(1, events::BOOK_OPENED, NEW, 1);
+    device.reader(31, events::PAGE_TURNED, NEW, 2);
+    let books = device.books();
+    assert!(books.contains("[book.1]\ntitle = Anna Karenina"), "{books}");
+    assert!(books.contains("[book.8]\ntitle = new\n"), "{books}");
     assert_eq!(device.log_size(), 32);
 }
 
