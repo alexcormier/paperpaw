@@ -22,6 +22,8 @@ pub(crate) struct DrawerScreen {
     header: ui::Header,
     list: ListView,
     tools: Vec<Id>,
+    /// The lines the longest name takes: every tool keeps room for them.
+    lines: usize,
 }
 
 impl DrawerScreen {
@@ -36,11 +38,27 @@ impl DrawerScreen {
             display.width.saturating_sub(2 * style.margin as u16),
             display.height.saturating_sub(top),
         );
-        // About as high as a column is wide.
+        // About as high as a column is wide; a line higher where a tool's
+        // name takes two (its icon as large as the others').
         let row = (u32::from(area.width) / COLUMNS * 4 / 5).max(style.row);
+        let tools: Vec<Id> = pages::tools(env).into_iter().map(|(id, _)| id).collect();
+        let cell = Rect::new(0, 0, (u32::from(area.width) / COLUMNS) as u16, row as u16);
+        let lines = tools
+            .iter()
+            .map(|id| blocks::tool_name_lines(env, cell, id))
+            .max()
+            .unwrap_or(0);
+        let more = if lines > 1 {
+            u32::from(paperpaw_sdk::widgets::line_height(env, style.small))
+        } else {
+            0
+        };
         Self {
-            list: ListView::new(area, row).columns(COLUMNS).focus_on_keys(env),
-            tools: pages::tools(env).into_iter().map(|(id, _)| id).collect(),
+            list: ListView::new(area, row + more)
+                .columns(COLUMNS)
+                .focus_on_keys(env),
+            tools,
+            lines,
             style,
             header,
         }
@@ -69,6 +87,9 @@ impl Screen for DrawerScreen {
         let tools = &self.tools;
         let list = &self.list;
         let first = list.page() * list.rows();
+        // Room for as many lines of a name as the longest takes, so that
+        // icons and names line up.
+        let lines = self.lines;
         for (slot, index) in (first..len).take(list.rows()).enumerate() {
             let rect = list.row_rect(slot);
             let focused = list.shown() && index == list.focus();
@@ -81,7 +102,7 @@ impl Screen for DrawerScreen {
                 focused,
                 None,
             );
-            blocks::draw_tool(canvas, env, rect, &tools[index]);
+            blocks::draw_tool_lines(canvas, env, rect, &tools[index], lines);
             if focused {
                 canvas.stroke(rect, style.line * 3, Color::BLACK);
             }

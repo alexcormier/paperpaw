@@ -299,6 +299,30 @@ impl Ink {
         }
     }
 
+    /// Leaves out rows of ink set as dots, a quarter of the area or
+    /// more, none of them longer than two pixels: a light line drawn as
+    /// a pattern (a list's separators on black and white), not an icon.
+    pub fn clear_dotted(&mut self) {
+        let w = self.w();
+        for y in 0..usize::from(self.area.height) {
+            let row = &self.cells[y * w..(y + 1) * w];
+            let count = row.iter().filter(|c| **c).count();
+            let longest = row.split(|c| !*c).map(<[bool]>::len).max().unwrap_or(0);
+            if count * 4 >= w && longest <= 2 {
+                self.cells[y * w..(y + 1) * w].fill(false);
+            }
+        }
+    }
+
+    /// Leaves out ink connected to the area's right edge: what reaches in
+    /// from the right (a label's first letter, a line that runs on under
+    /// it), not an icon before it.
+    pub fn clear_right(&mut self) {
+        let (w, h) = (self.w(), usize::from(self.area.height));
+        let mut stack: Vec<(usize, usize)> = (0..h).map(|y| (w.saturating_sub(1), y)).collect();
+        self.flood(&mut stack);
+    }
+
     /// Leaves out ink connected to the area's edges: the frame of a
     /// button around a label (its round corners too), what reaches in
     /// from outside.
@@ -313,6 +337,12 @@ impl Ink {
             stack.push((0, y));
             stack.push((w.saturating_sub(1), y));
         }
+        self.flood(&mut stack);
+    }
+
+    /// Leaves out the ink connected to the points of `stack`.
+    fn flood(&mut self, stack: &mut Vec<(usize, usize)>) {
+        let w = self.w();
         while let Some((x, y)) = stack.pop() {
             if !self.at(x, y) {
                 continue;

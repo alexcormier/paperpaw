@@ -472,11 +472,35 @@ pub fn add(env: &Env<'_>, geometry: &Geometry, items: &[Item], what: What) -> Op
 /// name are placed by their ink, as one group in the middle of `area`,
 /// half a gap apart: the name sits clearly nearer its own icon than the
 /// tool below it, which the room the cells leave keeps apart.
-#[expect(
-    clippy::too_many_lines,
-    reason = "longer than the limit from before it was set; split it when it is next changed"
-)]
 pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id, label: bool) {
+    draw_tool_lines(canvas, env, area, action, label, 0);
+}
+
+/// How many lines the name of the tool of `action` takes in `area` (see
+/// [`draw_tool`]): one, two where it does not fit on one and the tool is
+/// high enough for its icon and two lines; none without `label`.
+pub fn tool_name_lines(env: &Env<'_>, area: Rect, action: &Id, label: bool) -> usize {
+    let style = UiStyle::new(env);
+    match style.font(env) {
+        Some(font) if label => {
+            let state = env.menus.state(env, action.as_str());
+            tool_name(env, &style, &font, area, action, &state).2.len()
+        }
+        _ => 0,
+    }
+}
+
+/// [`draw_tool`] with room kept for a name of `lines` lines (where more
+/// than its own): tools side by side given the most any of them takes
+/// ([`tool_name_lines`]) keep their icons and names on one line.
+pub fn draw_tool_lines(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    area: Rect,
+    action: &Id,
+    label: bool,
+    lines: usize,
+) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -502,29 +526,7 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
         };
         canvas.fill_round(area, style.corner, back);
     }
-    let name = label.then(|| {
-        let title = env.menus.title(action.as_str()).unwrap_or_default();
-        let name = env
-            .i18n
-            .get(&format!("{title}.short"))
-            .unwrap_or(env.i18n.tr(title));
-        let name = state.text(name);
-        let name = name.as_str();
-        // A little smaller where it does not fit whole, then on two
-        // lines where the tool is high enough, then shortened.
-        let width = area.width.saturating_sub(4);
-        let least = style.small * 0.85;
-        let (size, line) = crate::widgets::fit_line(&font, style.small, least, name, width.into());
-        let two = 2 * crate::widgets::line_height(env, least);
-        if line != name && area.height >= two * 2 {
-            let wrapped =
-                crate::widgets::Wrapped::fitting(env, name, style.small, least, width, two);
-            if wrapped.whole() {
-                return (wrapped.size(), wrapped.lines().to_vec(), String::from(name));
-            }
-        }
-        (size, alloc::vec![line], String::from(name))
-    });
+    let name = label.then(|| tool_name(env, &style, &font, area, action, &state));
     let inner = (style.gap / 2) as i32;
     // The name's capitals above its baseline, its descenders below
     // (by the ink of letters that reach as far, so that names side by
@@ -538,9 +540,11 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
         ),
         None => (0, 0),
     };
-    // A second line a line lower.
-    let more = name.as_ref().map_or(0, |(size, lines, _)| {
-        lines.len().saturating_sub(1) as i32 * i32::from(crate::widgets::line_height(env, *size))
+    // A second line a line lower; as much room where a tool beside it
+    // has one.
+    let more = name.as_ref().map_or(0, |(size, _, own)| {
+        own.len().max(lines).saturating_sub(1) as i32
+            * i32::from(crate::widgets::line_height(env, *size))
     });
     let text_room = if name.is_some() {
         inner + cap + descent + more
@@ -548,31 +552,21 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
         0
     };
     let room = (i32::from(area.height) - text_room).max(1) as f32;
-    // Every icon in the same frame, the ink of a circle (which fills the
-    // icons' grid), so that the names of tools side by side line up.
-    let frame = |size: f32| {
-        let (font, ch) = icon.as_ref()?;
-        let circle = crate::icons::char("circle")
-            .filter(|c| font.has_char(*c))
-            .unwrap_or(*ch);
-        font.ink(size, circle.encode_utf8(&mut [0u8; 4]))
-    };
-    let largest = (style.title * 1.6).min(room);
-    let size = crate::widgets::largest_size(largest, largest * 0.5, |s| {
-        frame(s).is_none_or(|(top, bottom)| (bottom - top) as f32 <= room)
-    })
-    .unwrap_or(largest * 0.5);
-    let (top, bottom) = frame(size).unwrap_or((-(size as i32), 0));
+    let (size, top, bottom) = icon_size(&style, icon.as_ref(), room);
     let group = (bottom - top) + text_room;
     let y = i32::from(area.y) + (i32::from(area.height) - group).div_euclid(2);
     if let Some((icon_font, ch)) = &icon {
         let mut text = [0u8; 4];
         let ch = ch.encode_utf8(&mut text);
-        let w = icon_font.measure(size, ch);
-        let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;
+        // Centred by its ink, as icons are everywhere.
+        let middle = f32::from(area.x) + f32::from(area.width) / 2.0;
+        let x = match icon_font.ink_across(size, ch) {
+            Some((first, last)) => middle - (first + last) as f32 / 2.0,
+            None => middle - icon_font.measure(size, ch) / 2.0,
+        };
         icon_font.draw(canvas, size, x, y - top, ch, ink);
     }
-    let Some((size, lines, name)) = name else {
+    let Some((size, name, lines)) = name else {
         return;
     };
     let baseline = y + (bottom - top) + inner + cap;
@@ -588,11 +582,126 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
         (cap + descent + more) as u16,
     );
     canvas.describe(crate::semantics::Role::Text, &name, at, false, None);
+    // Each line centred by its ink, as the icon above it.
+    let middle = f32::from(area.x) + f32::from(area.width) / 2.0;
     for (n, line) in lines.iter().enumerate() {
-        let width = font.measure(size, line);
-        let x = f32::from(area.x) + (f32::from(area.width) - width) / 2.0;
+        let x = match font.ink_across(size, line) {
+            Some((first, last)) => middle - (first + last) as f32 / 2.0,
+            None => middle - font.measure(size, line) / 2.0,
+        };
         font.draw(canvas, size, x, baseline + n as i32 * step, line, ink);
     }
+}
+
+/// The name of the tool of `action` in `area`: its size, the whole name
+/// and the lines it is drawn on. A little smaller where it does not fit
+/// whole, then on two lines where the tool is high enough for them and
+/// its icon, then shortened.
+fn tool_name(
+    env: &Env<'_>,
+    style: &UiStyle,
+    font: &crate::fonts::FontHandle<'_>,
+    area: Rect,
+    action: &Id,
+    state: &crate::menus::ItemState,
+) -> (f32, String, Vec<String>) {
+    let title = env.menus.title(action.as_str()).unwrap_or_default();
+    let name = env
+        .i18n
+        .get(&format!("{title}.short"))
+        .unwrap_or(env.i18n.tr(title));
+    let name = state.text(name);
+    let name = name.as_str();
+    let width = area.width.saturating_sub(4);
+    let least = style.small * 0.85;
+    let (size, line) = crate::widgets::fit_line(font, style.small, least, name, width.into());
+    let two = 2 * crate::widgets::line_height(env, least);
+    // Room for the icon too, at the least it is drawn (half its largest).
+    let icon = (style.title * 0.8) as u16;
+    if line != name && area.height >= two + icon {
+        let wrapped = crate::widgets::Wrapped::fitting(env, name, style.small, least, width, two);
+        if wrapped.whole() {
+            return (wrapped.size(), String::from(name), wrapped.lines().to_vec());
+        }
+        // A word too long for a line: split where its language lets it be.
+        for size in [style.small, least] {
+            if let Some(lines) = hyphenated(env, font, size, name, f32::from(width)) {
+                return (size, String::from(name), lines);
+            }
+        }
+    }
+    (size, String::from(name), alloc::vec![line])
+}
+
+/// `name` on two lines `width` wide in `size`, split where a word of it
+/// may be: after a hyphen it holds, else where the hyphenation of the
+/// interface's language lets it (a hyphen added); the split that leaves
+/// the lines most even. `None` where no split fits.
+fn hyphenated(
+    env: &Env<'_>,
+    font: &crate::fonts::FontHandle<'_>,
+    size: f32,
+    name: &str,
+    width: f32,
+) -> Option<Vec<String>> {
+    let mut points: Vec<(usize, bool)> = name
+        .char_indices()
+        .filter(|(_, c)| *c == '-')
+        .map(|(at, _)| (at + 1, false))
+        .collect();
+    if let Some(patterns) = env.hyphenation.get(env.i18n.language()) {
+        let mut start = None;
+        for (at, c) in name
+            .char_indices()
+            .chain(core::iter::once((name.len(), ' ')))
+        {
+            match (c.is_alphabetic(), start) {
+                (true, None) => start = Some(at),
+                (false, Some(from)) => {
+                    patterns.hyphenate(&name[from..at], &mut |point| {
+                        points.push((from + point, true))
+                    });
+                    start = None;
+                }
+                _ => {}
+            }
+        }
+    }
+    points
+        .into_iter()
+        .filter_map(|(at, mark)| {
+            let first = alloc::format!("{}{}", name[..at].trim_end(), if mark { "-" } else { "" });
+            let rest = name[at..].trim_start();
+            let (a, b) = (font.measure(size, &first), font.measure(size, rest));
+            (a <= width && b <= width && !rest.is_empty())
+                .then(|| ((a - b).abs(), alloc::vec![first, String::from(rest)]))
+        })
+        .min_by(|x, y| x.0.total_cmp(&y.0))
+        .map(|(_, lines)| lines)
+}
+
+/// The size of a tool's icon in `room` of height, and its frame's ink:
+/// every icon in the same frame, the ink of a circle (which fills the
+/// icons' grid), so that the names of tools side by side line up.
+fn icon_size(
+    style: &UiStyle,
+    icon: Option<&(crate::fonts::FontHandle<'_>, char)>,
+    room: f32,
+) -> (f32, i32, i32) {
+    let frame = |size: f32| {
+        let (font, ch) = icon?;
+        let circle = crate::icons::char("circle")
+            .filter(|c| font.has_char(*c))
+            .unwrap_or(*ch);
+        font.ink(size, circle.encode_utf8(&mut [0u8; 4]))
+    };
+    let largest = (style.title * 1.6).min(room);
+    let size = crate::widgets::largest_size(largest, largest * 0.5, |s| {
+        frame(s).is_none_or(|(top, bottom)| (bottom - top) as f32 <= room)
+    })
+    .unwrap_or(largest * 0.5);
+    let (top, bottom) = frame(size).unwrap_or((-(size as i32), 0));
+    (size, top, bottom)
 }
 
 #[cfg(test)]

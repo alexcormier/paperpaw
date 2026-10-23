@@ -102,7 +102,11 @@ fn an_ellipsis_of_the_text_itself_is_no_cut_with_labels_whole() {
         // The last line of "Plugin wird geladen…".
         d(Role::Text, "geladen…", Rect::new(26, 100, 428, 40)),
         // "Loading {host} …" with its host, and a "…" in the middle.
-        d(Role::Text, "Loading example.org …", Rect::new(26, 100, 428, 40)),
+        d(
+            Role::Text,
+            "Loading example.org …",
+            Rect::new(26, 100, 428, 40),
+        ),
         d(Role::Text, "[Loading…", Rect::new(26, 100, 428, 40)),
     ];
     let own = [
@@ -221,6 +225,30 @@ fn icons_off_their_column() {
     let issues = align(&scene(&image, parts));
     assert_eq!(checks(&issues), [ALIGN]);
     assert!(issues[0].message.contains("8 px left"), "{issues:?}");
+}
+
+/// A dotted separator below some rows, running on under their labels,
+/// and a label's first letter reaching in: neither moves their icons.
+#[test]
+fn separators_and_letters_are_no_icons() {
+    let mut image = paper();
+    let mut parts = Vec::new();
+    for i in 0..4u16 {
+        let y = 100 + i * 60;
+        fill(&mut image, Rect::new(30, y + 20, 20, 20), INK);
+        word(&mut image, 77, y + 20, 5, 20);
+        if i < 3 {
+            // A line of dots from the margin on under the label.
+            for x in (26..454).step_by(2) {
+                fill(&mut image, Rect::new(x, y + 58, 1, 1), INK);
+            }
+        }
+        // A letter that starts a pixel before its described text.
+        fill(&mut image, Rect::new(75, y + 20, 3, 20), INK);
+        parts.push(d(Role::Row, "", Rect::new(0, y, 480, 60)));
+        parts.push(d(Role::Text, "Label", Rect::new(77, y, 377, 60)));
+    }
+    assert!(align(&scene(&image, parts)).is_empty());
 }
 
 #[test]

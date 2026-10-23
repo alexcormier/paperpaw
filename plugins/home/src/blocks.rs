@@ -1287,11 +1287,24 @@ fn draw_placeholder(
 
 // ---- Tools ----------------------------------------------------------------
 
-/// A tool in its cells: its icon, and its name below (where shown),
-/// together in the middle.
-pub(crate) fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id) {
+/// Draws the tool of `action` in `area`, its name if tools show names,
+/// with room for a name of `lines` lines (see
+/// [`grid::draw_tool_lines`](paperpaw_sdk::widgets::grid::draw_tool_lines)).
+pub(crate) fn draw_tool_lines(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    area: Rect,
+    action: &Id,
+    lines: usize,
+) {
     let labels = env.settings.read(&TOOL_LABELS);
-    paperpaw_sdk::widgets::grid::draw_tool(canvas, env, area, action, labels);
+    paperpaw_sdk::widgets::grid::draw_tool_lines(canvas, env, area, action, labels, lines);
+}
+
+/// How many lines the name of the tool of `action` takes in `area`.
+pub(crate) fn tool_name_lines(env: &Env<'_>, area: Rect, action: &Id) -> usize {
+    let labels = env.settings.read(&TOOL_LABELS);
+    paperpaw_sdk::widgets::grid::tool_name_lines(env, area, action, labels)
 }
 
 /// How many of the recent books the widgets in `items` show: the current

@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Tools (the home screen's grid, all tools) set a name too long for a
+  line on two, hyphenated where one word is too long (by the
+  interface's language), before shortening it, and centre icon and name
+  by their ink; all tools gives every tool room for as many lines as the
+  longest name takes, its rows a line higher where that is two
+  (`grid::draw_tool_lines`, `grid::tool_name_lines`). German has a
+  short name for Wi-Fi transfer there. The library's filter row tells
+  itself a row. `paperpaw-dev visual` takes dotted separators and a
+  label's first letter for no icon, looks at a tool's name apart from
+  its icon, and accepts a keyboard's keys as narrow as the screen lets
+  that many be.
 - No building block shortens a label any more, even at the largest
   text: header bars set a long title on two lines, smaller where needed;
   value, noted and switch rows wrap their titles and grow

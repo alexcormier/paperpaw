@@ -903,7 +903,8 @@ pub(crate) fn draw_filter_row(
     let margin = style.margin as u16;
     let gap = style.gap as u16;
     let x = rect.x + margin;
-    canvas.describe(Role::Button, label, rect, focused, None);
+    // A row across the screen, as a list's: what it shows is its label.
+    canvas.describe(Role::Row, label, rect, focused, None);
     let w = ui::draw_label(canvas, &font, style.text, f32::from(x), rect, label, ink);
     let icon_x = f32::from(x) + w + f32::from(gap / 3);
     ui::draw_icon(canvas, env, "chevron-down", style.small, icon_x, rect, ink);
