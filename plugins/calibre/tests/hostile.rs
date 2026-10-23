@@ -615,7 +615,17 @@ fn calibre_not_found_or_no_network_is_said_and_tried_again() {
         );
         assert!(socket_calls(&mut kernel).is_empty());
     }
-    kernel.socket_event(Instant(3), SocketEvent::Done { broadcast });
+    // Heard by no Calibre, each broadcast sent again, until it counts as
+    // not found.
+    let mut last = broadcast;
+    loop {
+        kernel.socket_event(Instant(3), SocketEvent::Done { broadcast: last });
+        match socket_calls(&mut kernel).as_slice() {
+            [SocketCall::Broadcast { broadcast, .. }] => last = *broadcast,
+            [] => break,
+            other => panic!("{other:?}"),
+        }
+    }
     kernel.render(&mut |_, _| {});
     let shown: Vec<String> = kernel.describe().into_iter().map(|p| p.label).collect();
     assert!(

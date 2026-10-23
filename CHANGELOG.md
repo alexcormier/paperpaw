@@ -88,6 +88,12 @@ change the plugin SDK.
     PaperPaw's folders (also the old QuireInk one) and starts its
     delete question on *Cancel*. The QuireInk folder is merged in at
     any depth without overwriting.
+- Calibre: the device tells Calibre how much its card really has free,
+  and its size (it said 64 GB for both). Looking for Calibre in the
+  network asks again a few times when no answer comes, since a call
+  can be lost on Wi-Fi without a word.
+- SDK: `Storage::total_space` tells a storage's size, as `free_space`
+  tells what it has free.
 - SDK: `Registrar::add_book_cache` names book data that is made again
   from the book (cleaned up by itself); `add_book_data` is for the
   reader's own data, removed only when the reader agrees.

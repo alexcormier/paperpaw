@@ -40,7 +40,7 @@ use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Hint, Id,
     Manifest, MenuEntry, Params, Plugin, Rect, RefreshMode, RegisterError, Registrar, SDK_VERSION,
-    Screen, ScreenSpec, SettingSpec, SocketRead,
+    Screen, ScreenSpec, SettingSpec, SocketRead, Storage,
 };
 
 use paperpaw_sdk::setting::{Setting, Text};
@@ -58,14 +58,25 @@ const PASSWORD_TYPED: Event<Typed> = Event::new("calibre.password-typed");
 pub const ADDRESS: Setting<Text> = Setting::new("calibre.address");
 /// The password set in Calibre, kept as a secret.
 const PASSWORD: &str = "calibre.password";
-/// How long to wait for Calibre's answer to the broadcast.
-const FIND_MS: u32 = 3000;
-/// Space reported to Calibre: storages do not say how much is free, and
-/// Calibre refuses to send to a device it thinks full.
+/// How long to wait for Calibre's answer to a broadcast.
+const FIND_MS: u32 = 1500;
+/// Broadcasts sent before Calibre counts as not found: a datagram may be
+/// lost on the way, and nothing says so.
+const FIND_TRIES: u8 = 4;
+/// Space reported to Calibre where the storage cannot tell (yet): Calibre
+/// refuses to send to a device it thinks full.
 const SPACE: u64 = 64 << 30;
 /// Bytes of the book list sent to Calibre in one turn, about (see
 /// [`Listing`]).
 const LIST_PART: usize = 16 * 1024;
+
+/// The space told to Calibre, free and in all: what the storage says,
+/// [`SPACE`] where it cannot tell (the size never less than what is free).
+fn space(storage: &dyn Storage) -> (u64, u64) {
+    let free = storage.free_space().unwrap_or(SPACE);
+    let total = storage.total_space().unwrap_or(SPACE).max(free);
+    (free, total)
+}
 
 /// What Calibre's metadata of a book says of it, for the library.
 fn provided(metadata: &str) -> paperpaw_sdk::library::Provided {
@@ -188,6 +199,8 @@ struct CalibreScreen {
     name: Option<String>,
     library: Option<String>,
     received: u32,
+    /// Broadcasts sent in this search.
+    tries: u8,
     started: bool,
     /// The *Type the password* row, where it shows.
     password_row: Option<Rect>,
@@ -208,6 +221,7 @@ impl CalibreScreen {
             name: None,
             library: None,
             received: 0,
+            tries: 0,
             started: false,
             password_row: None,
             offer: ui::OfflineOffer::new(),
@@ -247,13 +261,8 @@ impl CalibreScreen {
         let address = env.settings.read(&ADDRESS).trim();
         if address.is_empty() {
             self.state = State::Finding;
-            cx.command(Command::broadcast(
-                FIND,
-                protocol::BROADCAST_PORTS.to_vec(),
-                b"hello".to_vec(),
-                FIND_MS,
-                EVENTS.into(),
-            ));
+            self.tries = 0;
+            self.find(cx);
         } else {
             let (host, port) = match address.rsplit_once(':') {
                 Some((host, port)) if port.parse::<u16>().is_ok() => {
@@ -264,6 +273,18 @@ impl CalibreScreen {
             self.connect(host, port, cx);
         }
         self.redraw(cx);
+    }
+
+    /// Asks for Calibre in the local network: a broadcast to its ports.
+    fn find(&mut self, cx: &mut Cx<'_, '_>) {
+        self.tries += 1;
+        cx.command(Command::broadcast(
+            FIND,
+            protocol::BROADCAST_PORTS.to_vec(),
+            b"hello".to_vec(),
+            FIND_MS,
+            EVENTS.into(),
+        ));
     }
 
     fn connect(&mut self, host: &str, port: u16, cx: &mut Cx<'_, '_>) {
@@ -328,6 +349,12 @@ impl CalibreScreen {
                     self.state = State::Found { host: from, port };
                 }
                 self.redraw(cx);
+            }
+            SocketNotice::Done { reason, .. }
+                if self.state == State::Finding && reason.is_empty() && self.tries < FIND_TRIES =>
+            {
+                // Not heard (or not answered) yet: asked again.
+                self.find(cx);
             }
             SocketNotice::Done { reason, .. } if self.state == State::Finding => {
                 let text = if reason == "no network" && env.wifi.is_some() {
@@ -457,18 +484,14 @@ impl CalibreScreen {
                 self.send(op::OK, &info, cx);
             }
             op::TOTAL_SPACE => {
-                self.send(
-                    op::OK,
-                    &format!("{{\"total_space_on_device\": {SPACE}}}"),
-                    cx,
-                );
+                let (_, total) = space(env.storage);
+                let reply = format!("{{\"total_space_on_device\": {total}}}");
+                self.send(op::OK, &reply, cx);
             }
             op::FREE_SPACE => {
-                self.send(
-                    op::OK,
-                    &format!("{{\"free_space_on_device\": {SPACE}}}"),
-                    cx,
-                );
+                let (free, _) = space(env.storage);
+                let reply = format!("{{\"free_space_on_device\": {free}}}");
+                self.send(op::OK, &reply, cx);
             }
             op::GET_BOOK_COUNT => {
                 let books = library::books(env.storage, library_folder(&env));

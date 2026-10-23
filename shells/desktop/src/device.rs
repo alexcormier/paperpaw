@@ -121,6 +121,9 @@ impl Storage for Card {
     fn free_space(&self) -> Option<u64> {
         self.on(|s| s.free_space())
     }
+    fn total_space(&self) -> Option<u64> {
+        self.on(|s| s.total_space())
+    }
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         self.on(|s| s.local_path(path, with));
     }

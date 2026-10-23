@@ -153,14 +153,7 @@ pub(crate) struct Free {
 impl Free {
     /// Counts on (one step), and the free bytes as far as known.
     pub(crate) fn ask(&mut self, read: &Read) -> Option<u64> {
-        if self.geometry.is_none() {
-            let mut boot = [0u8; 512];
-            let geometry = read(0, &mut boot).then(|| Geometry::of(&boot)).flatten()?;
-            self.known = geometry.said(read).map(u64::from);
-            self.counting = Some((2, 0));
-            self.geometry = Some(geometry);
-        }
-        let geometry = self.geometry?;
+        let geometry = self.geometry(read)?;
         if let Some((next, free)) = self.counting {
             let last = geometry.clusters + 2;
             let per_step = match geometry.bits {
@@ -183,6 +176,25 @@ impl Free {
             }
         }
         self.bytes()
+    }
+
+    /// The bytes for files in all, used and free.
+    pub(crate) fn total(&mut self, read: &Read) -> Option<u64> {
+        let geometry = self.geometry(read)?;
+        Some(u64::from(geometry.clusters) * geometry.cluster)
+    }
+
+    /// The volume's geometry, read from its boot sector at the first ask
+    /// (and the card's own count with it).
+    fn geometry(&mut self, read: &Read) -> Option<Geometry> {
+        if self.geometry.is_none() {
+            let mut boot = [0u8; 512];
+            let geometry = read(0, &mut boot).then(|| Geometry::of(&boot)).flatten()?;
+            self.known = geometry.said(read).map(u64::from);
+            self.counting = Some((2, 0));
+            self.geometry = Some(geometry);
+        }
+        self.geometry
     }
 
     fn bytes(&self) -> Option<u64> {

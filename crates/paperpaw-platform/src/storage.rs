@@ -132,6 +132,13 @@ pub trait Storage {
         None
     }
 
+    /// Bytes the storage holds in all, used and free, where it can tell;
+    /// `None` where it cannot. Storages that wrap another say what it
+    /// says.
+    fn total_space(&self) -> Option<u64> {
+        None
+    }
+
     /// Calls `with` with the file's path in the device's own file system,
     /// for platform code that opens files only by name (e.g. a system PDF
     /// renderer); does nothing where files have none.
@@ -296,6 +303,11 @@ impl<B: Storage, M: Storage> Storage for Mounted<B, M> {
     /// The base's, where data and plugins are.
     fn free_space(&self) -> Option<u64> {
         self.base.free_space()
+    }
+
+    /// The base's, as its free space.
+    fn total_space(&self) -> Option<u64> {
+        self.base.total_space()
     }
 }
 

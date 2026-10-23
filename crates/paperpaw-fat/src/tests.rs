@@ -204,6 +204,33 @@ fn small_cards_are_counted() {
     }
 }
 
+/// The bytes for files in all, as rust-fatfs counts them, told from the
+/// boot sector without reading the FAT; also on a card of its own.
+#[test]
+fn total_space_is_told_from_the_boot_sector() {
+    for fat in [
+        fatfs::FatType::Fat12,
+        fatfs::FatType::Fat16,
+        fatfs::FatType::Fat32,
+    ] {
+        let card = match fat {
+            fatfs::FatType::Fat32 => fat32(),
+            _ => Cut::formatted_of(8 << 20, FormatVolumeOptions::new().fat_type(fat)),
+        };
+        let s = card.storage();
+        let before = card.reads.get();
+        let total = s.total_space().unwrap();
+        assert!(card.reads.get() - before <= 2, "{fat:?}");
+        let stats = s.fs.stats().unwrap();
+        assert_eq!(
+            total,
+            u64::from(stats.total_clusters()) * u64::from(stats.cluster_size())
+        );
+        assert!(s.free_space().unwrap() <= total);
+        assert_eq!(mounted(card.image()).total_space(), Some(total));
+    }
+}
+
 #[test]
 fn synced_is_on_the_card() {
     let card = Cut::formatted(FormatVolumeOptions::new());

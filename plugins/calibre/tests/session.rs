@@ -52,6 +52,8 @@ const fn device(memory: MemoryClass) -> DeviceInfo {
 thread_local! {
     /// Renames fail on this test's thread, as on a failing card.
     static FAIL_RENAME: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+    /// The space the storage tells on this test's thread: free, in all.
+    static SPACE: std::cell::Cell<Option<(u64, u64)>> = const { std::cell::Cell::new(None) };
 }
 
 /// A storage the test looks into while the kernel has it.
@@ -88,6 +90,12 @@ impl Storage for Shared {
     }
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
         self.0.create_dir(path)
+    }
+    fn free_space(&self) -> Option<u64> {
+        SPACE.get().map(|(free, _)| free)
+    }
+    fn total_space(&self) -> Option<u64> {
+        SPACE.get().map(|(_, total)| total)
     }
 }
 
@@ -410,6 +418,73 @@ fn answer(kernel: &mut Kernel, broadcast: u32, from: &str) -> Vec<SocketCall> {
         },
     );
     socket_calls(kernel)
+}
+
+/// Calibre is told the space the card has free and in all, asked at
+/// once (a card that cannot tell yet: room for books all the same).
+#[test]
+fn calibre_is_told_the_space_the_card_has() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    SPACE.set(Some((3_000_000_000, 31_000_000_000)));
+    calibre.say(&mut kernel, op::FREE_SPACE, "{}");
+    calibre.say(&mut kernel, op::TOTAL_SPACE, "{}");
+    let answers = calibre.answers();
+    assert_eq!(
+        protocol::number(&answers[0].args, "free_space_on_device"),
+        Some(3_000_000_000)
+    );
+    assert_eq!(
+        protocol::number(&answers[1].args, "total_space_on_device"),
+        Some(31_000_000_000)
+    );
+    // Free space told, the size not: never less than what is free.
+    SPACE.set(Some((900_000_000_000, 0)));
+    calibre.say(&mut kernel, op::TOTAL_SPACE, "{}");
+    let total = protocol::number(&calibre.answers()[0].args, "total_space_on_device");
+    assert!(total >= Some(900_000_000_000), "{total:?}");
+    SPACE.set(None);
+    calibre.say(&mut kernel, op::FREE_SPACE, "{}");
+    let free = protocol::number(&calibre.answers()[0].args, "free_space_on_device");
+    assert!(free > Some(1 << 30), "{free:?}");
+}
+
+/// A broadcast that Calibre did not hear (a datagram lost on the way) is
+/// sent again a few times before Calibre counts as not found (said, see
+/// `hostile.rs`); an answer to a later one finds it.
+#[test]
+fn calibre_is_looked_for_again_when_it_does_not_answer() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let mut kernel = kernel(&storage, CONFIG);
+    let mut rounds = 0;
+    let mut last = broadcast(&mut kernel);
+    loop {
+        rounds += 1;
+        kernel.socket_event(Instant(2), SocketEvent::Done { broadcast: last });
+        let calls = socket_calls(&mut kernel);
+        let Some(next) = calls.iter().find_map(|call| match call {
+            SocketCall::Broadcast { broadcast, .. } => Some(*broadcast),
+            _ => None,
+        }) else {
+            break;
+        };
+        last = next;
+        assert!(rounds < 10, "looks for ever");
+    }
+    assert!(rounds >= 3, "{rounds} broadcasts");
+
+    // Heard the second time.
+    let mut kernel = kernel_on(DEVICE, &storage, CONFIG);
+    let first = broadcast(&mut kernel);
+    kernel.socket_event(Instant(2), SocketEvent::Done { broadcast: first });
+    let second = broadcast(&mut kernel);
+    answer(&mut kernel, second, "192.168.1.5");
+    press(&mut kernel, "confirm");
+    let calls = socket_calls(&mut kernel);
+    assert!(
+        matches!(calls.as_slice(), [SocketCall::Connect { .. }]),
+        "{calls:?}"
+    );
 }
 
 /// A kernel connected to Calibre at the address set, and Calibre.

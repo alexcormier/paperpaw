@@ -1278,6 +1278,17 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
         }
     }
 
+    /// The bytes for files in all, from the boot sector.
+    fn total_space(&self) -> Option<u64> {
+        match &self.read {
+            Some(read) => self.free.borrow_mut().total(read.as_ref()),
+            None => {
+                let stats = self.fs.stats().ok()?;
+                Some(u64::from(stats.total_clusters()) * u64::from(stats.cluster_size()))
+            }
+        }
+    }
+
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
         self.settle_moves()?;
         let made = self.new_dirs(path);
