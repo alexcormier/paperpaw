@@ -95,12 +95,15 @@ fn draw_title(
                 draw_label_on(canvas, font, size, x, area, baseline, title, ink);
                 return;
             }
-            if count * line > high {
+            // Its lines a heading's apart.
+            let apart = font.heading_line_height(size) as u16;
+            let tall = line + apart * (count - 1);
+            if tall > high {
                 continue;
             }
-            let top = area.y + (high - count * line) / 2;
+            let top = area.y + (high - tall) / 2;
             for (i, range) in lines.into_iter().enumerate() {
-                let at = Rect::new(area.x, top + i as u16 * line, area.width, line);
+                let at = Rect::new(area.x, top + i as u16 * apart, area.width, line);
                 let baseline = cap_baseline(font, at, size);
                 draw_label_on(canvas, font, size, x, area, baseline, &title[range], ink);
             }
@@ -123,7 +126,9 @@ fn title_fits(font: &FontHandle<'_>, style: &UiStyle, high: u16, room: f32, titl
         .into_iter()
         .any(|size| {
             let lines = font.wrap(size, title, room.max(1.0)).len() as u16;
-            lines < 2 || lines * font.line_metrics(size).line_height as u16 <= high
+            let line = font.line_metrics(size).line_height as u16;
+            let apart = font.heading_line_height(size) as u16;
+            lines < 2 || line + apart * (lines - 1) <= high
         })
 }
 

@@ -287,15 +287,15 @@ impl Geometry {
     fn sizes_of(&self, env: &Env<'_>, what: &What) -> (u8, u8, u8) {
         match what {
             What::Tool(_) => (1, 1, 1),
-            // As it says, within the grid, without making it.
-            What::Widget(id) if let Some(hint) = env.widgets.cells(id) => {
-                let w = hint.w.clamp(1, self.columns.max(1));
-                let h = hint.h.clamp(1, self.rows.max(1));
-                let cells = hint.keep(Cells::new(0, 0, w, h), w <= h);
-                let (w, h) = (cells.w.min(self.columns), cells.h.min(self.rows));
-                (w, h, hint.min_h.clamp(1, h))
-            }
             What::Widget(id) => {
+                // As it says, within the grid, without making it.
+                if let Some(hint) = env.widgets.cells(id) {
+                    let w = hint.w.clamp(1, self.columns.max(1));
+                    let h = hint.h.clamp(1, self.rows.max(1));
+                    let cells = hint.keep(Cells::new(0, 0, w, h), w <= h);
+                    let (w, h) = (cells.w.min(self.columns), cells.h.min(self.rows));
+                    return (w, h, hint.min_h.clamp(1, h));
+                }
                 let width = (u16::from(self.columns) * self.cell_w).saturating_sub(self.gap);
                 let (height, least) = env.widgets.make(id, env).map_or((0, 0), |widget| {
                     let height = widget.height(env, width);

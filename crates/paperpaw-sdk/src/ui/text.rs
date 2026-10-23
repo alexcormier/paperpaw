@@ -584,6 +584,16 @@ fn empty_title(
     (size, lines)
 }
 
+/// The height of an empty screen's title of `count` lines at `size` (none:
+/// nothing; else a line, and a heading's line for each of the others).
+fn empty_title_height(font: &FontHandle<'_>, size: f32, count: usize) -> f32 {
+    if count == 0 {
+        return 0.0;
+    }
+    let line = font.line_metrics(size).line_height;
+    line + font.heading_line_height(size) * count.saturating_sub(1) as f32
+}
+
 /// The height [`draw_empty`] needs in an area `width` wide for all of
 /// `title` and `text` in their full sizes, without its icon (which it
 /// shows where there is room for it as well).
@@ -593,7 +603,7 @@ pub fn empty_height(env: &Env<'_>, style: &UiStyle, width: u16, title: &str, tex
     };
     let width = empty_width(style, width);
     let (size, titles) = empty_title(&font, style, width, title);
-    let words = font.line_metrics(size).line_height * titles.len() as f32;
+    let words = empty_title_height(&font, size, titles.len());
     let lines = if text.is_empty() {
         0
     } else {
@@ -632,13 +642,18 @@ pub fn draw_empty(
     let icon_size = style.title * 2.4;
     let gap = style.gap as f32;
     let (title_size, mut titles) = empty_title(&font, style, width, title);
-    let title_line = font.line_metrics(title_size).line_height;
     let room = f32::from(area.height);
     // Its lines where the area holds them, else one line, shortened.
-    if title_line * titles.len() as f32 > room {
+    if empty_title_height(&font, title_size, titles.len()) > room {
         titles = alloc::vec![0..title.len()];
     }
-    let words = title_line * titles.len() as f32;
+    let words = empty_title_height(&font, title_size, titles.len());
+    // From one of its lines to the next: a heading's line.
+    let title_line = if titles.len() > 1 {
+        font.heading_line_height(title_size)
+    } else {
+        font.line_metrics(title_size).line_height
+    };
     // The text as large as all its lines fit below the title, down to
     // the small size; only then its last line shortened.
     let below = room - words - gap;
@@ -686,9 +701,13 @@ pub fn draw_empty(
         );
         y += icon_room;
     }
+    // Each line in a row of its own height, a heading's line apart; the
+    // text below after all of them.
+    let below_title = y + words;
+    let row = font.line_metrics(title_size).line_height;
     for range in &titles {
         let shown = fit(&font, title_size, title[range.clone()].trim(), width);
-        let at = Rect::new(area.x, y as u16, area.width, title_line as u16);
+        let at = Rect::new(area.x, y as u16, area.width, row as u16);
         draw_label(
             canvas,
             &font,
@@ -700,6 +719,7 @@ pub fn draw_empty(
         );
         y += title_line;
     }
+    y = y.max(below_title);
     if !titles.is_empty() {
         y += gap;
     }

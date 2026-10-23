@@ -3971,6 +3971,7 @@ pub struct paperpaw_sdk::widgets::look::Wrapped
 impl paperpaw_sdk::widgets::look::Wrapped
 pub fn paperpaw_sdk::widgets::look::Wrapped::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Align, paperpaw_platform::pixel::Color) -> u16
 pub fn paperpaw_sdk::widgets::look::Wrapped::fitting(&paperpaw_sdk::Env<'_>, &str, f32, f32, u16, u16) -> Self
+pub fn paperpaw_sdk::widgets::look::Wrapped::heading(&paperpaw_sdk::Env<'_>, &str, f32, f32, u16, u16) -> Self
 pub fn paperpaw_sdk::widgets::look::Wrapped::height(&self, &paperpaw_sdk::Env<'_>) -> u16
 pub fn paperpaw_sdk::widgets::look::Wrapped::lines(&self) -> &[alloc::string::String]
 pub fn paperpaw_sdk::widgets::look::Wrapped::new(&paperpaw_sdk::Env<'_>, &str, f32, u16, u16) -> Self
@@ -3993,6 +3994,7 @@ pub fn paperpaw_sdk::widgets::look::frame(&paperpaw_sdk::Env<'_>, &str) -> paper
 pub fn paperpaw_sdk::widgets::look::frame_height(&paperpaw_sdk::Env<'_>, &str) -> u16
 pub fn paperpaw_sdk::widgets::look::frame_setting(&paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Frame) -> paperpaw_sdk::SettingSpec
 pub const fn paperpaw_sdk::widgets::look::frame_spec(&'static str, paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Frame) -> paperpaw_sdk::SettingSpec
+pub fn paperpaw_sdk::widgets::look::heading_line_height(&paperpaw_sdk::Env<'_>, f32) -> u16
 pub fn paperpaw_sdk::widgets::look::ink_baseline(&paperpaw_sdk::FontHandle<'_>, f32, &str, paperpaw_platform::geometry::Rect) -> i32
 pub fn paperpaw_sdk::widgets::look::largest_size(f32, f32, impl core::ops::function::FnMut(f32) -> bool) -> core::option::Option<f32>
 pub fn paperpaw_sdk::widgets::look::line_height(&paperpaw_sdk::Env<'_>, f32) -> u16
@@ -4170,6 +4172,7 @@ pub struct paperpaw_sdk::widgets::Wrapped
 impl paperpaw_sdk::widgets::look::Wrapped
 pub fn paperpaw_sdk::widgets::look::Wrapped::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::Align, paperpaw_platform::pixel::Color) -> u16
 pub fn paperpaw_sdk::widgets::look::Wrapped::fitting(&paperpaw_sdk::Env<'_>, &str, f32, f32, u16, u16) -> Self
+pub fn paperpaw_sdk::widgets::look::Wrapped::heading(&paperpaw_sdk::Env<'_>, &str, f32, f32, u16, u16) -> Self
 pub fn paperpaw_sdk::widgets::look::Wrapped::height(&self, &paperpaw_sdk::Env<'_>) -> u16
 pub fn paperpaw_sdk::widgets::look::Wrapped::lines(&self) -> &[alloc::string::String]
 pub fn paperpaw_sdk::widgets::look::Wrapped::new(&paperpaw_sdk::Env<'_>, &str, f32, u16, u16) -> Self
@@ -4211,6 +4214,7 @@ pub fn paperpaw_sdk::widgets::frame_setting(&paperpaw_sdk::Id, paperpaw_sdk::wid
 pub const fn paperpaw_sdk::widgets::frame_spec(&'static str, paperpaw_sdk::Id, paperpaw_sdk::widgets::look::Frame) -> paperpaw_sdk::SettingSpec
 pub fn paperpaw_sdk::widgets::free_placement(&paperpaw_sdk::Env<'_>, &str, impl core::ops::function::Fn(&str) -> bool) -> alloc::string::String
 pub fn paperpaw_sdk::widgets::has_settings(&paperpaw_sdk::Env<'_>, &str) -> bool
+pub fn paperpaw_sdk::widgets::heading_line_height(&paperpaw_sdk::Env<'_>, f32) -> u16
 pub fn paperpaw_sdk::widgets::ink_baseline(&paperpaw_sdk::FontHandle<'_>, f32, &str, paperpaw_platform::geometry::Rect) -> i32
 pub fn paperpaw_sdk::widgets::largest_size(f32, f32, impl core::ops::function::FnMut(f32) -> bool) -> core::option::Option<f32>
 pub fn paperpaw_sdk::widgets::line_height(&paperpaw_sdk::Env<'_>, f32) -> u16
@@ -5037,6 +5041,7 @@ pub fn paperpaw_sdk::FontHandle<'a>::display(self) -> Self
 pub fn paperpaw_sdk::FontHandle<'a>::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, f32, f32, i32, &str, paperpaw_platform::pixel::Color) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::draw_bolder(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, f32, f32, i32, &str, paperpaw_platform::pixel::Color, u16) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::has_char(&self, char) -> bool
+pub fn paperpaw_sdk::FontHandle<'a>::heading_line_height(&self, f32) -> f32
 pub fn paperpaw_sdk::FontHandle<'a>::id(&self) -> &'a paperpaw_sdk::Id
 pub fn paperpaw_sdk::FontHandle<'a>::ink(&self, f32, &str) -> core::option::Option<(i32, i32)>
 pub fn paperpaw_sdk::FontHandle<'a>::ink_across(&self, f32, &str) -> core::option::Option<(i32, i32)>

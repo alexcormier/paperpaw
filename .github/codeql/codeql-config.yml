@@ -1,0 +1,5 @@
+name: PaperPaw CodeQL
+paths-ignore:
+  - "**/tests/**"
+  - "**/testdata/**"
+  - "fuzz/**"
