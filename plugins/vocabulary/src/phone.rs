@@ -10,12 +10,14 @@
 //!
 //! - `GET /`: the page;
 //! - `GET /api/decks`: `{"decks": [{"id", "name", "cards"}]}`;
-//! - `GET /api/cards?deck=&from=`: `{"total", "cards": [{"id", "front",
-//!   "back", "example", "due", "reps"}]}`, [`PAGE`] at a time;
+//! - `GET /api/cards?deck=&from=`: `{"total", "cards": [{"id", "v",
+//!   "front", "back", "example", "due", "reps"}]}`, [`PAGE`] at a time
+//!   (`v` the card's [`version`](cards::Card::version));
 //! - `POST /api/deck` (form: `name`, and `deck` to rename one):
 //!   `{"id"}`; `POST /api/deck/delete?deck=`;
-//! - `POST /api/card?deck=` (form: `front`, `back`, `example`, and `id` to
-//!   change one); `POST /api/card/delete?deck=&id=`;
+//! - `POST /api/card?deck=` (form: `front`, `back`, `example`, and `id`
+//!   and `v` to change one); `POST /api/card/delete?deck=&id=&v=`: a card
+//!   changed since `v` was sent is left as it is (409);
 //! - `POST /api/import?deck=`: a card a line, `front<TAB>back<TAB>example`
 //!   (tabs, line breaks and backslashes in a text written `\t`, `\n`,
 //!   `\\`): `{"added"}`.
@@ -265,8 +267,9 @@ pub(crate) fn answer(
                     example: field("example"),
                 };
                 let front = cards::clean(&texts.front, cards::MAX_TEXT);
+                let seen = param(&form, "v").and_then(|v| v.parse().ok());
                 match param(&form, "id").and_then(|i| i.parse().ok()) {
-                    Some(id) => cards::edit(storage, deck, id, &texts),
+                    Some(id) => cards::edit(storage, deck, id, seen, &texts),
                     None => match cards::add(storage, deck, [texts]) {
                         Ok(0) => Err(Problem::Empty),
                         Ok(_) => Ok(()),
@@ -278,9 +281,8 @@ pub(crate) fn answer(
             None => Err(Problem::Missing),
         },
         ("POST", "/api/card/delete") => match (number_of("deck"), number_of("id")) {
-            (Some(deck), Some(id)) => {
-                cards::delete(storage, deck, id).map(|()| (String::from("{}"), Some(Done::Deleted)))
-            }
+            (Some(deck), Some(id)) => cards::delete(storage, deck, id, number_of("v"))
+                .map(|()| (String::from("{}"), Some(Done::Deleted))),
             _ => Err(Problem::Missing),
         },
         ("POST", "/api/import") => match (number_of("deck"), request.body_file) {
@@ -306,6 +308,7 @@ pub(crate) fn answer(
             let (status, text): (u16, &[u8]) = match problem {
                 Problem::Missing => (404, b"No such deck or card: reload the page."),
                 Problem::Full => (409, b"The reader has no room for more here."),
+                Problem::Changed => (409, b"The card was changed meanwhile: reload the page."),
                 Problem::Empty => (422, b"A name or a front is needed."),
                 Problem::Storage(_) => (500, b"The reader could not save it."),
             };
@@ -340,7 +343,11 @@ fn cards_json(storage: &dyn Storage, deck: u32, from: usize) -> String {
         if shown > 0 {
             out.push(',');
         }
-        out.push_str(&format!("{{\"id\":{},\"front\":", c.state.id));
+        out.push_str(&format!(
+            "{{\"id\":{},\"v\":{},\"front\":",
+            c.state.id,
+            c.version()
+        ));
         out.push_str(&json_string(&c.front));
         out.push_str(",\"back\":");
         out.push_str(&json_string(&c.back));
@@ -577,10 +584,7 @@ mod tests {
             "{\"decks\":[{\"id\":1,\"name\":\"Wörter\",\"cards\":3}]}"
         );
         let (_, list, _) = ask(&storage, "GET", "/api/cards?k=abc&deck=1&from=2", None);
-        assert!(
-            list.starts_with("{\"cards\":[{\"id\":3,\"front\":\"Maus\""),
-            "{list}"
-        );
+        assert!(list.starts_with("{\"cards\":[{\"id\":3,\"v\":"), "{list}");
         assert!(list.ends_with("],\"total\":3}"), "{list}");
 
         let edit = "id=1&front=Hund&back=the+dog";
@@ -614,5 +618,46 @@ mod tests {
         );
         assert!(cards::decks(&storage).unwrap().is_empty());
         assert_eq!(ask(&storage, "GET", "/nothing?k=abc", None).0, 404);
+    }
+
+    /// Two tabs open: one deletes the newest card and the other adds one.
+    /// What the first then sends for the card it deleted finds nothing,
+    /// and a change from texts it saw before another tab changed them is
+    /// refused: neither card is touched.
+    #[test]
+    fn a_stale_tab_cannot_change_a_card_it_never_saw() {
+        let storage = MemoryStorage::new();
+        ask(&storage, "POST", "/api/deck?k=abc", Some("name=Words"));
+        for card in ["front=Hund&back=dog", "front=Katze&back=cat"] {
+            ask(&storage, "POST", "/api/card?k=abc&deck=1", Some(card));
+        }
+        let (_, list, _) = ask(&storage, "GET", "/api/cards?k=abc&deck=1", None);
+        let version = |n: usize| cards::page(&storage, 1, n, 1).0[0].version();
+        let (dog, cat) = (version(0), version(1));
+        assert!(list.contains(&format!("\"id\":2,\"v\":{cat},")), "{list}");
+
+        let delete = format!("/api/card/delete?k=abc&deck=1&id=2&v={cat}");
+        assert_eq!(ask(&storage, "POST", &delete, None).0, 200);
+        let mouse = "front=Maus&back=mouse";
+        ask(&storage, "POST", "/api/card?k=abc&deck=1", Some(mouse));
+        let stale = format!("id=2&v={cat}&front=Katze&back=the+cat");
+        let status = ask(&storage, "POST", "/api/card?k=abc&deck=1", Some(&stale)).0;
+        assert_eq!(status, 404);
+        assert_eq!(ask(&storage, "POST", &delete, None).0, 404);
+        let (cards, total) = cards::page(&storage, 1, 0, 9);
+        assert_eq!((total, cards[1].front.as_str()), (2, "Maus"));
+        assert_eq!(cards[1].back, "mouse");
+
+        let fresh = format!("id=1&v={dog}&front=Hund&back=the+dog");
+        assert_eq!(
+            ask(&storage, "POST", "/api/card?k=abc&deck=1", Some(&fresh)).0,
+            200
+        );
+        let stale = format!("id=1&v={dog}&front=Hund&back=a+dog");
+        let (status, body, done) = ask(&storage, "POST", "/api/card?k=abc&deck=1", Some(&stale));
+        assert_eq!((status, done), (409, None), "{body}");
+        let delete = format!("/api/card/delete?k=abc&deck=1&id=1&v={dog}");
+        assert_eq!(ask(&storage, "POST", &delete, None).0, 409);
+        assert_eq!(cards::page(&storage, 1, 0, 1).0[0].back, "the dog");
     }
 }

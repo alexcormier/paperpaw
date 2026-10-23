@@ -5,11 +5,14 @@
 //! between the fields (a tab, a line break or a backslash in a text
 //! written `\t`, `\n`, `\\`), the version on the first line:
 //!
-//! - `decks.txt`: `paperpaw-decks 1`, then `id<TAB>name` for each deck;
+//! - `decks.txt`: `paperpaw-decks 1`, then `next<TAB>id`, the id the
+//!   next deck gets, then `id<TAB>name` for each deck;
 //! - `deck-<id>.txt`: `paperpaw-cards 1`, then a card a line,
 //!   `id<TAB>due<TAB>last<TAB>stability<TAB>difficulty<TAB>reps<TAB>lapses<TAB>front<TAB>back<TAB>example`:
 //!   `due` and `last` in seconds since 1970 (0 for a new card, never
-//!   seen), stability (in days) and difficulty in hundredths;
+//!   seen), stability (in days) and difficulty in hundredths; and a line
+//!   `next<TAB>id`, the id the next card gets (written after the cards
+//!   when the deck is written anew);
 //! - `answers.txt`: the answers given since the decks were last written,
 //!   `deck<TAB>` a card's fields up to `lapses`, then the due time it had
 //!   before. Appended at each answer, so a review writes little; folded
@@ -27,6 +30,12 @@
 //! - `state.txt`: `clock <seconds>`, the time last known (for a device
 //!   that does not know it now), and `new <day> <count>`, the new cards
 //!   shown that day.
+//!
+//! Ids are never given twice, so that a change meant for a card or a deck
+//! deleted never reaches a newer one: the next is the counter or the one
+//! after the highest there is, whichever is more. A file without the
+//! counter (written before it was kept) goes on from the highest; older
+//! versions skip the line, and keep it as it is in a deck.
 //!
 //! A deck is only ever streamed, a line at a time. One written anew goes
 //! beside itself (`deck-<id>.tmp`) and takes its place once whole, as do
@@ -62,6 +71,8 @@ const QUARTER: i64 = 900;
 const CARDS_HEADER: &str = "paperpaw-cards 1";
 const DECKS_HEADER: &str = "paperpaw-decks 1";
 const DUE_HEADER: &str = "paperpaw-due 1";
+/// The counter line of `decks.txt` and of a deck begins so.
+const NEXT: &str = "next\t";
 /// Bytes written at a time.
 const CHUNK: usize = 2048;
 
@@ -102,6 +113,11 @@ fn recover_whole(storage: &dyn Storage, file: &str, part: &str) {
     }
 }
 
+/// The id a counter line (see [`NEXT`]) says comes next.
+fn counter(line: &str) -> Option<u32> {
+    line.strip_prefix(NEXT)?.parse().ok()
+}
+
 /// What went wrong with a change.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub(crate) enum Problem {
@@ -111,6 +127,8 @@ pub(crate) enum Problem {
     Full,
     /// A name or a front is needed.
     Empty,
+    /// The card changed since it was seen (see [`Card::version`]).
+    Changed,
     Storage(StorageError),
 }
 
@@ -250,6 +268,19 @@ impl Card {
         )
     }
 
+    /// A number that changes with the card's texts (FNV-1a over them):
+    /// sent with a change from the phone, so that one made from texts seen
+    /// before the card changed is refused.
+    pub(crate) fn version(&self) -> u32 {
+        let mut hash: u32 = 0x811c_9dc5;
+        for text in [&self.front, &self.back, &self.example] {
+            for byte in text.bytes().chain([0]) {
+                hash = (hash ^ u32::from(byte)).wrapping_mul(0x0100_0193);
+            }
+        }
+        hash
+    }
+
     fn parse(line: &str) -> Option<Card> {
         let mut fields = line.split('\t');
         let state = State::parse(&mut fields)?;
@@ -358,8 +389,18 @@ pub(crate) struct Deck {
 /// The decks, in the order they were made; an error where the list could
 /// not be read to its end: then it must not be written anew from them.
 pub(crate) fn decks(storage: &dyn Storage) -> Result<Vec<Deck>, StorageError> {
-    let mut decks = Vec::new();
+    Ok(decks_and_next(storage)?.0)
+}
+
+/// The decks, and the id the next one gets.
+fn decks_and_next(storage: &dyn Storage) -> Result<(Vec<Deck>, u32), StorageError> {
+    let mut decks: Vec<Deck> = Vec::new();
+    let mut next = 1u32;
     each_line(storage, &path("decks.txt"), |_, line| {
+        if let Some(n) = counter(line) {
+            next = next.max(n);
+            return ControlFlow::Continue(());
+        }
         let (id, name) = line.split_once('\t').unwrap_or((line, ""));
         if let Ok(id) = id.parse() {
             decks.push(Deck {
@@ -372,11 +413,13 @@ pub(crate) fn decks(storage: &dyn Storage) -> Result<Vec<Deck>, StorageError> {
         }
         ControlFlow::Continue(())
     })?;
-    Ok(decks)
+    let after_highest = decks.iter().map(|d| d.id.saturating_add(1)).max();
+    Ok((decks, next.max(after_highest.unwrap_or(1))))
 }
 
-fn write_decks(storage: &dyn Storage, decks: &[Deck]) -> Result<(), StorageError> {
-    let mut text = format!("{DECKS_HEADER}\n");
+/// Writes the list of decks, `next` the id the next one gets.
+fn write_decks(storage: &dyn Storage, decks: &[Deck], next: u32) -> Result<(), StorageError> {
+    let mut text = format!("{DECKS_HEADER}\n{NEXT}{next}\n");
     for deck in decks {
         text.push_str(&format!("{}\t{}\n", deck.id, escape(&deck.name)));
     }
@@ -389,11 +432,10 @@ pub(crate) fn add_deck(storage: &dyn Storage, name: &str) -> Result<u32, Problem
     if name.is_empty() {
         return Err(Problem::Empty);
     }
-    let mut decks = decks(storage)?;
+    let (mut decks, mut id) = decks_and_next(storage)?;
     if decks.len() >= MAX_DECKS {
         return Err(Problem::Full);
     }
-    let mut id = decks.iter().map(|d| d.id).max().map_or(1, |m| m + 1);
     // Past a deck's file left by a cut (its list not written): never over
     // its cards.
     while storage.exists(&deck_path(id)) {
@@ -405,7 +447,7 @@ pub(crate) fn add_deck(storage: &dyn Storage, name: &str) -> Result<u32, Problem
         format!("{CARDS_HEADER}\n").as_bytes(),
     )?;
     decks.push(Deck { id, name });
-    write_decks(storage, &decks)?;
+    write_decks(storage, &decks, id.saturating_add(1))?;
     Ok(id)
 }
 
@@ -426,26 +468,27 @@ pub(crate) fn rename_deck(storage: &dyn Storage, deck: u32, name: &str) -> Resul
     if name.is_empty() {
         return Err(Problem::Empty);
     }
-    let mut decks = decks(storage)?;
+    let (mut decks, next) = decks_and_next(storage)?;
     let found = decks
         .iter_mut()
         .find(|d| d.id == deck)
         .ok_or(Problem::Missing)?;
     found.name = name;
-    write_decks(storage, &decks)?;
+    write_decks(storage, &decks, next)?;
     Ok(())
 }
 
 /// Deletes a deck and its cards.
 pub(crate) fn delete_deck(storage: &dyn Storage, deck: u32) -> Result<(), Problem> {
     fold(storage)?;
-    let mut decks = decks(storage)?;
+    // The counter is read with the deck still there: its id is past it.
+    let (mut decks, next) = decks_and_next(storage)?;
     let before = decks.len();
     decks.retain(|d| d.id != deck);
     if decks.len() == before {
         return Err(Problem::Missing);
     }
-    write_decks(storage, &decks)?;
+    write_decks(storage, &decks, next)?;
     storage.remove(&deck_path(deck))?;
     set_index(storage, deck, None)?;
     Ok(())
@@ -577,10 +620,14 @@ impl<'a> Adder<'a> {
             return Err(Problem::Missing);
         }
         let (mut count, mut next) = (0usize, 1u32);
-        each_card(storage, deck, |_, card| {
-            count += 1;
-            next = next.max(card.state.id.saturating_add(1));
-            seen(&card);
+        each_line(storage, &deck_path(deck), |_, line| {
+            if let Some(card) = Card::parse(line) {
+                count += 1;
+                next = next.max(card.state.id.saturating_add(1));
+                seen(&card);
+            } else if let Some(n) = counter(line) {
+                next = next.max(n);
+            }
             ControlFlow::Continue(())
         })?;
         // A last line cut off is ended first, so no card joins it.
@@ -665,42 +712,65 @@ fn adding() -> String {
     path("adding.txt")
 }
 
-/// Changes the texts of card `id` of `deck`.
+/// Changes the texts of card `id` of `deck`; refused where `seen` is
+/// given and the card's [`Card::version`] is no longer it.
 pub(crate) fn edit(
     storage: &dyn Storage,
     deck: u32,
     id: u32,
+    seen: Option<u32>,
     texts: &Texts,
 ) -> Result<(), Problem> {
     let texts = texts.cleaned().ok_or(Problem::Empty)?;
     fold(storage)?;
-    let mut found = false;
+    let (mut found, mut changed) = (false, false);
     rewrite(storage, deck, |card| {
         if card.state.id == id {
             found = true;
-            card.front.clone_from(&texts.front);
-            card.back.clone_from(&texts.back);
-            card.example.clone_from(&texts.example);
+            changed = seen.is_some_and(|v| v != card.version());
+            if !changed {
+                card.front.clone_from(&texts.front);
+                card.back.clone_from(&texts.back);
+                card.example.clone_from(&texts.example);
+            }
         }
         true
     })?;
-    if found { Ok(()) } else { Err(Problem::Missing) }
+    match (found, changed) {
+        (false, _) => Err(Problem::Missing),
+        (true, true) => Err(Problem::Changed),
+        (true, false) => Ok(()),
+    }
 }
 
-/// Deletes card `id` of `deck`.
-pub(crate) fn delete(storage: &dyn Storage, deck: u32, id: u32) -> Result<(), Problem> {
+/// Deletes card `id` of `deck`; refused where `seen` is given and the
+/// card's [`Card::version`] is no longer it.
+pub(crate) fn delete(
+    storage: &dyn Storage,
+    deck: u32,
+    id: u32,
+    seen: Option<u32>,
+) -> Result<(), Problem> {
     fold(storage)?;
-    let mut found = false;
+    let (mut found, mut changed) = (false, false);
     rewrite(storage, deck, |card| {
-        let this = card.state.id == id;
-        found |= this;
-        !this
+        if card.state.id != id {
+            return true;
+        }
+        found = true;
+        changed = seen.is_some_and(|v| v != card.version());
+        changed
     })?;
-    if found { Ok(()) } else { Err(Problem::Missing) }
+    match (found, changed) {
+        (false, _) => Err(Problem::Missing),
+        (true, true) => Err(Problem::Changed),
+        (true, false) => Ok(()),
+    }
 }
 
 /// Writes `deck` anew, each card as `change` leaves it (or without it,
-/// where it says `false`), and its index with it.
+/// where it says `false`), and its index with it; the counter after the
+/// cards, past every card there was.
 fn rewrite(
     storage: &dyn Storage,
     deck: u32,
@@ -717,9 +787,16 @@ fn rewrite(
     };
     let mut out = String::new();
     let mut written = Ok(());
+    let mut next = 1u32;
     each_line(storage, &file, |_, line| {
+        // The counter goes after the cards, the highest found.
+        if let Some(n) = counter(line) {
+            next = next.max(n);
+            return ControlFlow::Continue(());
+        }
         match Card::parse(line) {
             Some(mut card) => {
+                next = next.max(card.state.id.saturating_add(1));
                 if !change(&mut card) {
                     return ControlFlow::Continue(());
                 }
@@ -744,7 +821,10 @@ fn rewrite(
         ControlFlow::Continue(())
     })
     .and(written)
-    .and_then(|()| storage.append(&temporary, out.as_bytes()))
+    .and_then(|()| {
+        out.push_str(&format!("{NEXT}{next}\n"));
+        storage.append(&temporary, out.as_bytes())
+    })
     .inspect_err(|_| {
         let _ = storage.remove(&temporary);
     })?;

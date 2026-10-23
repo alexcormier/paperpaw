@@ -61,13 +61,13 @@ fn decks_and_cards_are_added_changed_and_deleted() {
     assert_eq!((cards[0].state.id, cards[1].state.id), (1, 2));
     assert!(cards[0].state.is_new());
 
-    edit(&storage, words, 2, &texts("Katze", "the cat")).unwrap();
+    edit(&storage, words, 2, None, &texts("Katze", "the cat")).unwrap();
     assert_eq!(page(&storage, words, 1, 1).0[0].back, "the cat");
     assert_eq!(
-        edit(&storage, words, 9, &texts("a", "b")),
+        edit(&storage, words, 9, None, &texts("a", "b")),
         Err(Problem::Missing)
     );
-    delete(&storage, words, 1).unwrap();
+    delete(&storage, words, 1, None).unwrap();
     let (cards, total) = page(&storage, words, 0, 10);
     assert_eq!((total, cards[0].front.as_str()), (1, "Katze"));
     // A new card after a deleted one keeps a number of its own.
@@ -223,7 +223,7 @@ fn cuts_leave_nothing_lost_nor_overwritten() {
     storage
         .append(&deck_path(deck), b"a later version's line\n")
         .unwrap();
-    delete(&storage, deck, 8).unwrap();
+    delete(&storage, deck, 8, None).unwrap();
     let file = String::from_utf8(storage.get(&deck_path(deck)).unwrap()).unwrap();
     assert!(file.contains("a later version's line\n"), "{file}");
     assert!(!file.contains("Hund"));
@@ -351,4 +351,97 @@ fn words_looked_up_wait_and_become_cards_once() {
     assert_eq!(cards[0].example, "Der Hund bellt.");
     assert_eq!(cards[1].front, "Katze");
     assert_eq!(due_count(&storage, HUNDRED_DAYS, 20), 2);
+}
+
+/// Ids are never given twice: a card or a deck deleted keeps its number,
+/// also over a restart, so a change meant for it never reaches a newer
+/// one.
+#[test]
+fn ids_are_never_given_twice() {
+    let storage = MemoryStorage::new();
+    let deck = add_deck(&storage, "Words").unwrap();
+    add(
+        &storage,
+        deck,
+        [texts("Hund", "dog"), texts("Katze", "cat")],
+    )
+    .unwrap();
+    // The newest card deleted, the reader started again, a card added.
+    delete(&storage, deck, 2, None).unwrap();
+    recover(&storage);
+    add(&storage, deck, [texts("Maus", "mouse")]).unwrap();
+    let (cards, _) = page(&storage, deck, 0, 9);
+    assert_eq!(cards[1].state.id, 3);
+    // A change meant for the card deleted finds nothing.
+    assert_eq!(
+        edit(&storage, deck, 2, None, &texts("Katze", "the cat")),
+        Err(Problem::Missing)
+    );
+    assert_eq!(delete(&storage, deck, 2, None), Err(Problem::Missing));
+    assert_eq!(page(&storage, deck, 1, 1).0[0].front, "Maus");
+
+    // The same for decks.
+    let other = add_deck(&storage, "Phrases").unwrap();
+    delete_deck(&storage, other).unwrap();
+    recover(&storage);
+    let more = add_deck(&storage, "More").unwrap();
+    assert_eq!(more, other + 1);
+    rename_deck(&storage, more, "Sätze").unwrap();
+    delete_deck(&storage, more).unwrap();
+    assert_eq!(add_deck(&storage, "Again").unwrap(), more + 1);
+}
+
+/// Files written before the counter was kept: the next id is the one
+/// after the highest; a counter left behind by an older version that
+/// added cards past it is never gone back to.
+#[test]
+fn ids_of_files_from_before_the_counter_go_on_from_the_highest() {
+    let storage = MemoryStorage::new();
+    storage
+        .write(&path("decks.txt"), b"paperpaw-decks 1\n4\tWords\n")
+        .unwrap();
+    storage
+        .write(
+            &deck_path(4),
+            b"paperpaw-cards 1\n5\t0\t0\t0\t0\t0\t0\tHund\tdog\t\n",
+        )
+        .unwrap();
+    add(&storage, 4, [texts("Katze", "cat")]).unwrap();
+    assert_eq!(page(&storage, 4, 1, 1).0[0].state.id, 6);
+    assert_eq!(add_deck(&storage, "Phrases"), Ok(5));
+    // An older version deleted the deck's newest cards and added others
+    // after the counter line, which it keeps as it is.
+    storage
+        .write(
+            &deck_path(4),
+            b"paperpaw-cards 1\nnext\t9\n10\t0\t0\t0\t0\t0\t0\tMaus\tmouse\t\n",
+        )
+        .unwrap();
+    add(&storage, 4, [texts("Igel", "hedgehog")]).unwrap();
+    assert_eq!(page(&storage, 4, 1, 1).0[0].state.id, 11);
+    delete(&storage, 4, 11, None).unwrap();
+    add(&storage, 4, [texts("Igel", "hedgehog")]).unwrap();
+    assert_eq!(page(&storage, 4, 1, 1).0[0].state.id, 12);
+    let file = String::from_utf8(storage.get(&deck_path(4)).unwrap()).unwrap();
+    assert_eq!(file.matches("next\t").count(), 1, "{file}");
+}
+
+/// A change or a deletion made from what a card was before is refused
+/// once the card changed since: the card stays as it is now.
+#[test]
+fn a_change_to_a_card_seen_before_it_changed_is_refused() {
+    let storage = MemoryStorage::new();
+    let deck = add_deck(&storage, "Words").unwrap();
+    add(&storage, deck, [texts("Hund", "dog")]).unwrap();
+    let seen = page(&storage, deck, 0, 1).0[0].version();
+    edit(&storage, deck, 1, Some(seen), &texts("Hund", "the dog")).unwrap();
+    assert_eq!(
+        edit(&storage, deck, 1, Some(seen), &texts("Hund", "a dog")),
+        Err(Problem::Changed)
+    );
+    assert_eq!(delete(&storage, deck, 1, Some(seen)), Err(Problem::Changed));
+    let card = page(&storage, deck, 0, 1).0[0].clone();
+    assert_eq!(card.back, "the dog");
+    delete(&storage, deck, 1, Some(card.version())).unwrap();
+    assert_eq!(page(&storage, deck, 0, 1).1, 0);
 }
