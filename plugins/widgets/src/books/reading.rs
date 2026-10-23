@@ -19,7 +19,7 @@ use core::cell::RefCell;
 use paperpaw_sdk::builtin::{actions, events};
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Rect, RegisterError, Registrar, Storage, config,
@@ -189,7 +189,7 @@ static SETTINGS: [SettingSpec; 12] = [
     widgets::align_spec("widgets.reading.align", ID, Align::Left),
     widgets::frame_spec("widgets.reading.frame", ID, Frame::None),
     widgets::padding_spec("widgets.reading.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.reading.size", ID, Size::Medium, false),
+    widgets::size_spec("widgets.reading.size", ID, TextSize::Medium, false),
     widgets::part_spec(
         "widgets.reading.caption",
         ID,
@@ -280,7 +280,7 @@ impl Reading {
     fn make_covers(&mut self, env: &Env<'_>) {
         self.covers = match (self.area, &self.shown) {
             (Some(area), Some((book, _))) => {
-                let area = widgets::look::look(env, WIDGET, area).area;
+                let area = widgets::widget_look(env, WIDGET, area).area;
                 Covers::make(env, cover_at(env, area, book).map(|at| (book, at)))
             }
             _ => Covers::default(),
@@ -495,7 +495,7 @@ fn cover_at(env: &Env<'_>, area: Rect, book: &Book) -> Option<Rect> {
 fn draw(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     book: &Book,
     position: &Position,
     covers: &Covers,

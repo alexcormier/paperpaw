@@ -65,7 +65,7 @@ download written as it arrives, nothing unpacked in memory.
   one more entry that opens the fonts browser. It keeps the list as an
   index on the storage (a line for each plugin and where each line
   begins); in memory are only the runs of plugins of one group and the
-  page shown (`ui::Sections`), so the list may grow without limit. A
+  page shown (`ui::sections::Sections`), so the list may grow without limit. A
   plugin's page fetches the plugin's own page for its files, tells what
   it is, who made it, its licence and size, and installs, updates or
   removes it. Built-in plugins and plugins with code are not listed

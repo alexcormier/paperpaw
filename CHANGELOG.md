@@ -516,6 +516,18 @@ file to your report.
   grays the panel shows is `black_and_white()` or `smooth_grays()`. A
   style changed for a screen of its own is made with `with_row`,
   `with_margin`, `with_corner`, `with_pill`, `with_text` and the like.
+- SDK: one path and one name per item of the UI. The types of the
+  modules `ui::slider`, `ui::sections`, `ui::reorder` and `ui::offline`
+  are reached through them (`ui::slider::Slider`,
+  `ui::offline::OfflineOffer` …). The widgets' look is in `widgets` itself:
+  `WidgetLook` (was `widgets::look::Look`, apart from `ui::look::Look`),
+  `widget_look()`, `TextSize` (was `Size`; `SizeClass` is a widget area's
+  class, `TextRole` the interface's text), `choice_setting()` (was
+  `choice`), `WidgetStack` (was `widgets::Stack`, apart from
+  `ui::Stack`). `ui::Grid` is `ui::CellGrid`, apart from the widgets'
+  `grid`.
+- SDK: `ui::choice::open` and `GridView::new` are gone (`ask::choice`,
+  `GridView::asking`).
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,

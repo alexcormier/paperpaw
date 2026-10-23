@@ -125,7 +125,7 @@ enum State {
     /// Without a network: how to get one.
     NoNetwork,
     /// Offline mode: the offer to go online for the transfer.
-    Offline(ui::OfflineOffer),
+    Offline(ui::offline::OfflineOffer),
 }
 
 /// The reader's own network, for a transfer without a router: its name
@@ -174,9 +174,9 @@ impl TransferScreen {
 
     /// What the reader chose on the offer to go online: served now, or
     /// without a network as without one.
-    fn offered(&mut self, chosen: Option<ui::Offer>, cx: &mut Cx<'_, '_>) {
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
         match chosen {
-            Some(ui::Offer::Online) => {
+            Some(ui::offline::Offer::Online) => {
                 self.state = State::Starting;
                 cx.command(Command::serve(SERVER, PORT, SERVER_EVENT.into()));
             }
@@ -659,7 +659,7 @@ impl Screen for TransferScreen {
                 self.redraw(cx);
                 return;
             }
-            let offer = ui::OfflineOffer::new();
+            let offer = ui::offline::OfflineOffer::new();
             if offer.shows(cx.env()) {
                 self.state = State::Offline(offer);
                 self.redraw(cx);

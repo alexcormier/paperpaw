@@ -393,7 +393,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 /// a fine ring round it.
 fn draw_moon(
     canvas: &mut Canvas<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     center: Point,
     radius: u32,
     degrees: i32,

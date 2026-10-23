@@ -2,7 +2,7 @@
 //! together on a page and the reader shapes them all alike: a frame
 //! around a widget ([`Frame`]: none, a line, a light card, a dark card
 //! with light text), how far its content keeps from the frame
-//! ([`Padding`]), how large its text is ([`Size`]), a small caption
+//! ([`Padding`]), how large its text is ([`TextSize`]), a small caption
 //! above it ([`draw_caption`]), and switches for what it shows
 //! ([`part_setting`]). Each is a setting in the widget's settings group
 //! ([`settings_group`](super::settings_group)), named after the widget:
@@ -102,7 +102,7 @@ const fn sizes(fit: bool) -> &'static [&'static str] {
 /// How large a widget's text is.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub enum Size {
+pub enum TextSize {
     Small,
     Medium,
     Large,
@@ -110,14 +110,14 @@ pub enum Size {
     Fit,
 }
 
-impl Size {
+impl TextSize {
     /// The size a value of [`SIZES`] names; medium for others.
     pub fn of(value: &str) -> Self {
         match SIZES.iter().position(|s| *s == value) {
-            Some(0) => Size::Small,
-            Some(2) => Size::Large,
-            Some(3) => Size::Fit,
-            _ => Size::Medium,
+            Some(0) => TextSize::Small,
+            Some(2) => TextSize::Large,
+            Some(3) => TextSize::Fit,
+            _ => TextSize::Medium,
         }
     }
 
@@ -127,12 +127,12 @@ impl Size {
     }
 
     /// The text size in pixels: the body's, a title's, or larger (also
-    /// for [`Fit`](Size::Fit), where a widget has nothing better).
+    /// for [`Fit`](TextSize::Fit), where a widget has nothing better).
     pub fn text(self, style: &UiStyle) -> f32 {
         match self {
-            Size::Small => style.text,
-            Size::Medium => style.title,
-            Size::Large | Size::Fit => style.title * 1.6,
+            TextSize::Small => style.text,
+            TextSize::Medium => style.title,
+            TextSize::Large | TextSize::Fit => style.title * 1.6,
         }
     }
 }
@@ -203,7 +203,7 @@ impl Padding {
 /// A widget's place inside its frame, and the colours to draw in there.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
-pub struct Look {
+pub struct WidgetLook {
     /// Where its content goes.
     pub area: Rect,
     /// Text and lines.
@@ -215,7 +215,7 @@ pub struct Look {
     pub frame: Frame,
 }
 
-impl Look {
+impl WidgetLook {
     /// Made of what it needs; the rest as set with its methods.
     pub fn new(area: Rect, ink: Color, faint: Color, paper: Color, frame: Frame) -> Self {
         Self {
@@ -241,7 +241,7 @@ pub fn setting_id(widget: &Id, key: &str) -> Id {
 /// The setting of what `widget` is drawn in, `<widget>.frame`, in the
 /// widget's settings group; [`frame`] reads it.
 pub fn frame_setting(widget: &Id, default: Frame) -> SettingSpec {
-    choice(
+    choice_setting(
         widget,
         "frame",
         "core.setting.frame",
@@ -263,7 +263,7 @@ pub const fn frame_spec(id: &'static str, widget: Id, default: Frame) -> Setting
 /// `<widget>.padding`, in the widget's settings group; [`padding`] reads
 /// it. Automatic ([`Padding::Auto`]) suits nearly every widget.
 pub fn padding_setting(widget: &Id, default: Padding) -> SettingSpec {
-    choice(
+    choice_setting(
         widget,
         "padding",
         "core.setting.padding",
@@ -294,7 +294,7 @@ pub fn padding(env: &Env<'_>, widget: &str) -> Padding {
 
 /// [`size_setting`] kept in the program ([`SettingSpec::fixed`]): `id`
 /// must be `<widget>.size`.
-pub const fn size_spec(id: &'static str, widget: Id, default: Size, fit: bool) -> SettingSpec {
+pub const fn size_spec(id: &'static str, widget: Id, default: TextSize, fit: bool) -> SettingSpec {
     SettingSpec::fixed_choice(id, "core.setting.size", sizes(fit), default.value(), widget)
         .described("core.setting.size.help")
 }
@@ -341,8 +341,8 @@ pub const ALL_FRAMES: &[&str] = &[
 /// The setting of how large `widget`'s text is, `<widget>.size`, in the
 /// widget's settings group; with `fit`, also "as large as fits". [`size`]
 /// reads it.
-pub fn size_setting(widget: &Id, default: Size, fit: bool) -> SettingSpec {
-    choice(
+pub fn size_setting(widget: &Id, default: TextSize, fit: bool) -> SettingSpec {
+    choice_setting(
         widget,
         "size",
         "core.setting.size",
@@ -354,8 +354,8 @@ pub fn size_setting(widget: &Id, default: Size, fit: bool) -> SettingSpec {
 
 /// How large `widget`'s text is, by its [`size_setting`]; medium without
 /// one.
-pub fn size(env: &Env<'_>, widget: &str) -> Size {
-    Size::of(env.settings.text(&format!("{widget}.size")))
+pub fn size(env: &Env<'_>, widget: &str) -> TextSize {
+    TextSize::of(env.settings.text(&format!("{widget}.size")))
 }
 
 /// A switch for a part of what `widget` shows, `<widget>.<part>`, in the
@@ -383,7 +383,7 @@ pub fn shows(env: &Env<'_>, widget: &str, part: &str) -> bool {
 
 /// A choice of `values` for `widget`, `<widget>.<key>`, in the widget's
 /// settings group.
-pub fn choice(
+pub fn choice_setting(
     widget: &Id,
     key: &str,
     title: impl Into<Cow<'static, str>>,
@@ -403,7 +403,7 @@ pub fn choice(
 /// without drawing (e.g. for its targets). Its content keeps from the
 /// frame as its [`padding`] says, but never more than a quarter of the
 /// place on each side, so small places keep room for it.
-pub fn look(env: &Env<'_>, widget: &str, area: Rect) -> Look {
+pub fn widget_look(env: &Env<'_>, widget: &str, area: Rect) -> WidgetLook {
     let style = UiStyle::new(env);
     let frame = frame(env, widget);
     let pad = padding(env, widget).pixels(&style, frame);
@@ -427,7 +427,7 @@ pub fn look(env: &Env<'_>, widget: &str, area: Rect) -> Look {
         ),
         _ => (Color::BLACK, style.ink(ui::Ink::Muted), Color::WHITE),
     };
-    Look {
+    WidgetLook {
         area: inner,
         ink,
         faint,
@@ -438,20 +438,20 @@ pub fn look(env: &Env<'_>, widget: &str, area: Rect) -> Look {
 
 /// Draws `widget`'s frame in `area` (cleared before) and returns where
 /// its content goes and in which colours.
-pub fn draw_frame(canvas: &mut Canvas<'_>, env: &Env<'_>, widget: &str, area: Rect) -> Look {
+pub fn draw_frame(canvas: &mut Canvas<'_>, env: &Env<'_>, widget: &str, area: Rect) -> WidgetLook {
     let style = UiStyle::new(env);
-    let look = look(env, widget, area);
+    let look = widget_look(env, widget, area);
     // As cards are: a look of a plugin's own paints it, else the usual.
     crate::ui::layout::paint_frame(canvas, &style, area, look.frame);
     look
 }
 
 /// The height `widget`'s frame takes above and below its content, as its
-/// settings make it ([`look`]): what a widget adds to the height of what
+/// settings make it ([`widget_look`]): what a widget adds to the height of what
 /// it shows.
 pub fn frame_height(env: &Env<'_>, widget: &str) -> u16 {
     let probe = Rect::new(0, 0, 1000, 1000);
-    1000 - look(env, widget, probe).area.height
+    1000 - widget_look(env, widget, probe).area.height
 }
 
 /// The height of a line of text `size` pixels large in the UI font.
@@ -486,7 +486,7 @@ pub fn draw_caption(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     widget: &str,
-    look: &Look,
+    look: &WidgetLook,
     text: &str,
 ) -> Rect {
     let style = UiStyle::new(env);
@@ -844,7 +844,7 @@ fn lines_in(env: &Env<'_>, size: f32, heading: bool, height: u16) -> usize {
 /// Draws `text` in the body size in the middle of `look`'s area, e.g.
 /// what a widget would show is not there yet ("No words saved yet"):
 /// smaller, down to the small size, where it does not fit.
-pub fn draw_message(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, text: &str) {
+pub fn draw_message(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, text: &str) {
     let style = UiStyle::new(env);
     let (area, center) = (look.area, super::Align::Center);
     draw_wrapped(canvas, env, area, center, style.text, text, look.ink);
@@ -859,8 +859,13 @@ mod tests {
         for frame in [Frame::None, Frame::Line, Frame::Card, Frame::Dark] {
             assert_eq!(Frame::of(frame.value()), frame);
         }
-        for size in [Size::Small, Size::Medium, Size::Large, Size::Fit] {
-            assert_eq!(Size::of(size.value()), size);
+        for size in [
+            TextSize::Small,
+            TextSize::Medium,
+            TextSize::Large,
+            TextSize::Fit,
+        ] {
+            assert_eq!(TextSize::of(size.value()), size);
         }
         for padding in [
             Padding::Auto,
@@ -873,7 +878,7 @@ mod tests {
         }
         assert_eq!(Padding::of("core.padding.huge"), Padding::Auto);
         assert_eq!(Frame::of("core.frame.cloud"), Frame::None);
-        assert_eq!(Size::of(""), Size::Medium);
+        assert_eq!(TextSize::of(""), TextSize::Medium);
     }
 
     #[test]
@@ -882,7 +887,7 @@ mod tests {
         let frame = frame_setting(&widget, Frame::Card);
         assert_eq!(frame.id.as_str(), "pack.clock.frame");
         assert_eq!(frame.group, widget);
-        let size = size_setting(&widget, Size::Fit, false);
+        let size = size_setting(&widget, TextSize::Fit, false);
         assert_eq!(size.id.as_str(), "pack.clock.size");
         // Without "fit", it is not offered.
         assert!(matches!(&size.kind, SettingKind::Choice(v) if v.len() == 3));

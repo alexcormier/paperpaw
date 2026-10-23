@@ -1224,8 +1224,8 @@ static LOOK: [SettingSpec; 14] = [
     SettingSpec::fixed_choice(
         settings::WIDGET_FRAME.static_str(),
         "core.setting.widget-frame",
-        paperpaw_sdk::widgets::look::ALL_FRAMES,
-        paperpaw_sdk::widgets::look::OWN_FRAME,
+        paperpaw_sdk::widgets::ALL_FRAMES,
+        paperpaw_sdk::widgets::OWN_FRAME,
         groups::LOOK,
     )
     .for_advanced()

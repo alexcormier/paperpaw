@@ -17,7 +17,8 @@ use alloc::vec::Vec;
 
 use crate::builtin::{actions, params};
 use crate::status::item_ids;
-use crate::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
+use crate::ui::reorder::{Reorder, ReorderStep};
+use crate::ui::{self, ListChange, ListView, UiStyle};
 use crate::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, PointerEvent, Rect,
     RefreshMode, Screen, SettingValue,

@@ -16,8 +16,9 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::replies::{HttpReply, Typed};
+use paperpaw_sdk::ui::sections::Sections;
 use paperpaw_sdk::ui::sections::{Item, Section};
-use paperpaw_sdk::ui::{self, Sections, UiStyle};
+use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Command, Cx, Env, Gesture, GestureKind, Handled, Hint, HttpRequest, Id, Params, Rect,
     RefreshMode, Screen, ask,
@@ -104,7 +105,7 @@ pub(crate) struct ListScreen {
     /// A fresh list was asked for since the screen opened.
     asked: bool,
     /// Offline mode: the offer to go online for the list.
-    offer: ui::OfflineOffer,
+    offer: ui::offline::OfflineOffer,
 }
 
 impl ListScreen {
@@ -127,7 +128,7 @@ impl ListScreen {
             trouble: Trouble::None,
             keys: !env.device.input.touch,
             asked: false,
-            offer: ui::OfflineOffer::new(),
+            offer: ui::offline::OfflineOffer::new(),
             style,
             header,
         };
@@ -413,7 +414,7 @@ impl Screen for ListScreen {
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
         if *a != actions::BACK && self.offering(cx.env()) {
-            if self.offer.on_action(a, cx) == Some(ui::Offer::Online) {
+            if self.offer.on_action(a, cx) == Some(ui::offline::Offer::Online) {
                 self.fetch(cx);
             }
             return Handled::Yes;
@@ -461,7 +462,7 @@ impl Screen for ListScreen {
             return Handled::Yes;
         }
         if self.offering(cx.env()) {
-            if self.offer.on_tap(gesture.start, cx) == Some(ui::Offer::Online) {
+            if self.offer.on_tap(gesture.start, cx) == Some(ui::offline::Offer::Online) {
                 self.fetch(cx);
             }
             return Handled::Yes;

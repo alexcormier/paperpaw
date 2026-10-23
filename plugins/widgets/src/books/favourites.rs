@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::library;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar};
 
@@ -27,7 +27,7 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.favourites.align", ID, Align::Center),
     widgets::frame_spec("widgets.favourites.frame", ID, Frame::None),
     widgets::padding_spec("widgets.favourites.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.favourites.size", ID, Size::Medium, false),
+    widgets::size_spec("widgets.favourites.size", ID, TextSize::Medium, false),
     SettingSpec::fixed_choice(
         "widgets.favourites.layout",
         "widgets.books.setting.layout",
@@ -112,7 +112,7 @@ impl Favourites {
     fn make_covers(&mut self, env: &Env<'_>) {
         self.covers = match self.area {
             Some(area) => {
-                let look = widgets::look::look(env, WIDGET, area);
+                let look = widgets::widget_look(env, WIDGET, area);
                 let places = self.places(env, Self::content(env, &look));
                 shelf::covers(env, &places, &self.books)
             }
@@ -120,7 +120,7 @@ impl Favourites {
         };
     }
 
-    fn content(env: &Env<'_>, look: &Look) -> Rect {
+    fn content(env: &Env<'_>, look: &WidgetLook) -> Rect {
         if widgets::shows(env, WIDGET, "caption")
             && look.area.height >= 3 * widgets::caption_height(env)
         {
@@ -210,7 +210,7 @@ impl Widget for Favourites {
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        let look = widgets::look::look(env, WIDGET, area);
+        let look = widgets::widget_look(env, WIDGET, area);
         let rest = Self::content(env, &look);
         self.places(env, rest)
             .into_iter()

@@ -49,7 +49,7 @@ use paperpaw_sdk::logo::Logo;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{PlaceKind, Stack, WidgetPlace};
+use paperpaw_sdk::widgets::{PlaceKind, WidgetPlace, WidgetStack};
 use paperpaw_sdk::{
     Canvas, Color, Command, Cx, Env, Handled, Id, Manifest, MenuNeed, Params, Plugin, Priority,
     Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec, ShowsThrough,
@@ -374,7 +374,7 @@ struct SleepScreen {
     /// Another plugin's screen shown in its place (its mode).
     shown: Option<Box<dyn Screen>>,
     /// The widgets shown, where they go.
-    widgets: Stack,
+    widgets: WidgetStack,
     /// The logo above the message, when the message shows.
     logo: Option<Logo>,
     /// Whether the device woke since the screen opened.
@@ -429,7 +429,7 @@ impl SleepScreen {
         } else {
             ""
         };
-        let widgets = Stack::new(env, list, screen);
+        let widgets = WidgetStack::new(env, list, screen);
         let message = image.is_none()
             && widgets.is_empty()
             && show != PAGE

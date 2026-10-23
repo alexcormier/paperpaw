@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{Canvas, Command, Env, Id, Point, Rect, RegisterError, Registrar};
 
@@ -36,7 +36,7 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.progress.align", ID, Align::Center),
     widgets::frame_spec("widgets.progress.frame", ID, Frame::None),
     widgets::padding_spec("widgets.progress.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.progress.size", ID, Size::Medium, false),
+    widgets::size_spec("widgets.progress.size", ID, TextSize::Medium, false),
     SettingSpec::fixed_choice(
         "widgets.progress.style",
         "widgets.books.setting.style",
@@ -101,7 +101,7 @@ impl Progress {
     fn make_covers(&mut self, env: &Env<'_>) {
         self.covers = match (self.area, &self.book) {
             (Some(area), Some(book)) => {
-                let look = widgets::look::look(env, WIDGET, area);
+                let look = widgets::widget_look(env, WIDGET, area);
                 let area = below_caption(env, WIDGET, &look);
                 Covers::make(env, cover_at(env, &look, area, book).map(|at| (book, at)))
             }
@@ -172,7 +172,7 @@ fn beside_rest(env: &Env<'_>, area: Rect, book: &Book) -> Option<Rect> {
 
 /// Where the cover goes in `area` (`look`'s, below the caption), if it
 /// shows, as each style places it.
-fn cover_at(env: &Env<'_>, look: &Look, area: Rect, book: &Book) -> Option<Rect> {
+fn cover_at(env: &Env<'_>, look: &WidgetLook, area: Rect, book: &Book) -> Option<Rect> {
     if percent_alone(env, area) {
         return None;
     }
@@ -286,7 +286,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, book: Option<&Book>,
 fn draw_percent_beside(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     area: Rect,
     book: &Book,
     lines: &mut Lines<'_>,
@@ -325,7 +325,7 @@ fn draw_percent_beside(
 }
 
 /// The title and the author, as far as shown.
-fn texts<'b>(env: &Env<'_>, look: &Look, book: &'b Book) -> Lines<'b> {
+fn texts<'b>(env: &Env<'_>, look: &WidgetLook, book: &'b Book) -> Lines<'b> {
     let style = UiStyle::new(env);
     let mut lines = Lines::new();
     if widgets::shows(env, WIDGET, "title") {
@@ -412,7 +412,7 @@ fn ring_layout(env: &Env<'_>, area: Rect, lines: &mut Lines<'_>) -> RingLayout {
 fn draw_ring_layout(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     layout: &RingLayout,
     lines: &mut Lines<'_>,
     book: &Book,
@@ -438,7 +438,7 @@ fn draw_ring_layout(
 fn draw_ring_in(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     at: Rect,
     progress: u8,
     percent: bool,
@@ -472,7 +472,7 @@ fn ring_inner(env: &Env<'_>, at: Rect) -> u32 {
 
 /// The lines of the ring round a small cover: the percentage first
 /// (where there is room for one line, that one), the title, the author.
-fn round_lines<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Lines<'b> {
+fn round_lines<'b>(env: &Env<'b>, look: &WidgetLook, book: &'b Book) -> Lines<'b> {
     let style = UiStyle::new(env);
     let mut lines = Lines::new();
     lines.add(
@@ -487,7 +487,7 @@ fn round_lines<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Lines<'b> {
 
 /// The ring round a small cover (drawn inside it before), the title,
 /// the author and the percentage below it.
-fn draw_round(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, area: Rect, book: &Book) {
+fn draw_round(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, area: Rect, book: &Book) {
     let mut lines = round_lines(env, look, book);
     let layout = ring_layout(env, area, &mut lines);
     draw_ring_in(canvas, env, look, layout.ring, book.percent(), false);
@@ -501,7 +501,13 @@ fn draw_round(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, area: Rect, b
 }
 
 // The title and the author, and below them the percentage with a bar.
-fn draw_bar_and_text(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, area: Rect, book: &Book) {
+fn draw_bar_and_text(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &WidgetLook,
+    area: Rect,
+    book: &Book,
+) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;

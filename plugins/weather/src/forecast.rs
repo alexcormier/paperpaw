@@ -12,7 +12,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Color, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
@@ -44,7 +44,7 @@ const NAMES: [&str; 3] = [
 static LOOK: [SettingSpec; 4] = [
     widgets::frame_spec("weather.forecast.frame", ID, Frame::None),
     widgets::padding_spec("weather.forecast.padding", ID, Padding::Auto),
-    widgets::size_spec("weather.forecast.size", ID, Size::Fit, true),
+    widgets::size_spec("weather.forecast.size", ID, TextSize::Fit, true),
     widgets::align_spec("weather.forecast.align", ID, Align::Center),
 ];
 /// The rest of its settings after the days, kept in the program: what
@@ -124,7 +124,7 @@ impl Widget for Forecast {
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
         let style = UiStyle::new(env);
         let probe = Rect::new(0, 0, 100, 100);
-        let frame = 100 - widgets::look::look(env, ID.as_str(), probe).area.height;
+        let frame = 100 - widgets::widget_look(env, ID.as_str(), probe).area.height;
         let small = widgets::line_height(env, style.small());
         small * 3 + digits_height(style.title()) * 2 + frame
     }
@@ -199,15 +199,21 @@ fn as_list(env: &Env<'_>, area: Rect, count: usize) -> bool {
 /// The temperatures' size as set; `None` for "as large as it fits".
 fn temperature_size(env: &Env<'_>, style: &UiStyle) -> Option<f32> {
     match widgets::size(env, ID.as_str()) {
-        Size::Small => Some(style.text()),
-        Size::Medium => Some(style.title()),
-        Size::Large => Some(style.title() * 1.4),
-        Size::Fit => None,
+        TextSize::Small => Some(style.text()),
+        TextSize::Medium => Some(style.title()),
+        TextSize::Large => Some(style.title() * 1.4),
+        TextSize::Fit => None,
         _ => None,
     }
 }
 
-fn draw_forecast(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown, days: &[Day]) {
+fn draw_forecast(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &WidgetLook,
+    shown: &Shown,
+    days: &[Day],
+) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -253,7 +259,7 @@ struct Context<'a, 'e> {
     env: &'a Env<'e>,
     font: &'a FontHandle<'e>,
     style: UiStyle,
-    look: &'a Look,
+    look: &'a WidgetLook,
     unit: Temperature,
     symbols: Style,
     today: Option<i32>,

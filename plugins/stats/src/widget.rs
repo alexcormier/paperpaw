@@ -30,7 +30,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::round::point_at;
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Look, Size, WidgetTarget};
+use paperpaw_sdk::widgets::{self, TextSize, WidgetLook, WidgetTarget};
 use paperpaw_sdk::{
     Canvas, Color, Command, Commands, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
     SettingSpec, SettingValue,
@@ -210,7 +210,7 @@ fn captioned(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     widget: &str,
-    look: &Look,
+    look: &WidgetLook,
     caption: Option<&str>,
     height: u16,
 ) -> Rect {
@@ -233,7 +233,7 @@ fn captioned(
 /// The colour between `look`'s paper and its ink at `level` of 4 (4: the
 /// ink), for shades drawn with `fill_shaded` (dithered on panels with few
 /// grays): light on light paper, the other way round on a dark card.
-fn shade(look: &Look, level: u8) -> Color {
+fn shade(look: &WidgetLook, level: u8) -> Color {
     const LIGHT: [u8; 5] = [255, 205, 160, 95, 0];
     let gray = LIGHT[usize::from(level.min(4))];
     if look.paper.luma() < 128 {
@@ -282,7 +282,7 @@ fn text_size(
 ) -> f32 {
     let style = UiStyle::new(env);
     let max = match widgets::size(env, widget) {
-        Size::Fit => f32::from(height).max(style.text()),
+        TextSize::Fit => f32::from(height).max(style.text()),
         size => size.text(&style),
     };
     sized(font, &style, text, (width, height), (max, style.text()))
@@ -411,7 +411,7 @@ fn open_statistics(area: Rect) -> Vec<WidgetTarget> {
 fn draw_arc(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     at: Rect,
     progress: Option<u32>,
     thick: u32,
@@ -529,14 +529,14 @@ mod tests {
     #[test]
     fn shades_turn_round_on_a_dark_card() {
         let area = Rect::new(0, 0, 10, 10);
-        let light = Look::new(
+        let light = WidgetLook::new(
             area,
             Color::BLACK,
             Color::gray(90),
             Color::WHITE,
             Frame::None,
         );
-        let dark = Look::new(
+        let dark = WidgetLook::new(
             area,
             Color::WHITE,
             Color::gray(90),

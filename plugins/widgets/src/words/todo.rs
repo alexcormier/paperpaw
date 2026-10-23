@@ -25,7 +25,7 @@ use paperpaw_sdk::time;
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Commands, Cx, Env, FontHandle, Gesture, GestureKind,
@@ -107,7 +107,7 @@ static SETTINGS: [SettingSpec; 8] = [
         "widgets.todo.setting.caption",
         true,
     ),
-    widgets::size_spec("widgets.todo.size", ID, Size::Small, false),
+    widgets::size_spec("widgets.todo.size", ID, TextSize::Small, false),
     widgets::align_spec("widgets.todo.align", ID, Align::Left),
     widgets::frame_spec("widgets.todo.frame", ID, Frame::None),
     widgets::padding_spec("widgets.todo.padding", ID, Padding::Auto),
@@ -417,7 +417,7 @@ impl Widget for TodoWidget {
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        let look = widgets::look::look(env, ID.as_str(), area);
+        let look = widgets::widget_look(env, ID.as_str(), area);
         let places = places(env, look.area, self);
         let open = Command::OpenScreen(SCREEN, Params::new());
         if self.items.is_empty() {
@@ -464,14 +464,14 @@ fn row_height(env: &Env<'_>) -> u16 {
 }
 
 /// The size of the items' text: a list is denser than a widget's one
-/// line, so a step smaller than [`Size::text`] (small is the size of
+/// line, so a step smaller than [`TextSize::text`] (small is the size of
 /// notes, medium the body's).
 fn text_size(env: &Env<'_>) -> f32 {
     let style = UiStyle::new(env);
     match widgets::size(env, ID.as_str()) {
-        Size::Small => style.small(),
-        Size::Medium | Size::Fit => style.text(),
-        Size::Large => style.title(),
+        TextSize::Small => style.small(),
+        TextSize::Medium | TextSize::Fit => style.text(),
+        TextSize::Large => style.title(),
         _ => style.text(),
     }
 }
@@ -533,7 +533,7 @@ fn draw_item(
     item: &Item,
     boxes: &str,
     align: Align,
-    look: &Look,
+    look: &WidgetLook,
 ) {
     let style = UiStyle::new(env);
     let done = item.done.is_some();
@@ -601,7 +601,7 @@ fn draw_box(
     place: Rect,
     square: bool,
     done: bool,
-    look: &Look,
+    look: &WidgetLook,
 ) {
     let style = UiStyle::new(env);
     let line = (u32::from(place.width) / 10)
@@ -760,7 +760,7 @@ impl Screen for TodoScreen {
                     rect.width.saturating_sub(2 * margin),
                     rect.height,
                 );
-                let look = Look::new(
+                let look = WidgetLook::new(
                     inner,
                     ink,
                     if focused && style.dark_focus() {
@@ -813,7 +813,7 @@ impl Screen for TodoScreen {
                 row.width.saturating_sub(2 * style.margin()),
                 style.row() * 2,
             );
-            let look = Look::new(
+            let look = WidgetLook::new(
                 area,
                 style.faint(ui::Ink::Muted),
                 style.faint(ui::Ink::Muted),

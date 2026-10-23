@@ -11,7 +11,9 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Padding, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, Widget, WidgetLook, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{
     Arg, Canvas, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar, SettingSpec,
 };
@@ -323,7 +325,7 @@ fn footer_fitting(
 }
 
 /// Draws `text`, the footer, at the bottom of `block`.
-fn draw_footer(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, block: Rect, text: &str) {
+fn draw_footer(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, block: Rect, text: &str) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -361,7 +363,7 @@ fn number_size(font: &FontHandle<'_>, style: &UiStyle, cell: u16) -> Option<f32>
 fn draw_day(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     cell: Rect,
     level: u8,
     number: Option<(u8, f32)>,
@@ -464,7 +466,7 @@ fn two_digits(day: u8, buf: &mut [u8; 2]) -> &str {
     core::str::from_utf8(digits).unwrap_or("")
 }
 
-fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
+fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -551,7 +553,7 @@ fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
     }
 }
 
-fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
+fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;

@@ -14,7 +14,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{
     Canvas, Color, Command, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
@@ -42,7 +42,12 @@ const LINES: [&str; 2] = ["news.lines.1", "news.lines.2"];
 static SETTINGS: [SettingSpec; 9] = [
     widgets::frame_spec("news.widget.headlines.frame", HEADLINES, Frame::None),
     widgets::padding_spec("news.widget.headlines.padding", HEADLINES, Padding::Auto),
-    widgets::size_spec("news.widget.headlines.size", HEADLINES, Size::Small, false),
+    widgets::size_spec(
+        "news.widget.headlines.size",
+        HEADLINES,
+        TextSize::Small,
+        false,
+    ),
     widgets::align_spec("news.widget.headlines.align", HEADLINES, Align::Left),
     SettingSpec::fixed_choice(
         "news.widget.headlines.count",
@@ -144,7 +149,7 @@ fn empty(env: &Env<'_>, area: Rect) -> Wrapped {
     let (width, height) = message_room(env, area);
     // The sentence inside the spacing, the short form where it does not
     // fit whole.
-    let inner = widgets::look::look(env, NAME, area).area.height;
+    let inner = widgets::widget_look(env, NAME, area).area.height;
     let long = env.i18n.tr("news.widget.empty");
     let wrapped = Wrapped::fitting(env, long, style.text(), style.small(), width, inner);
     if wrapped.whole() {
@@ -159,13 +164,13 @@ fn empty(env: &Env<'_>, area: Rect) -> Wrapped {
 /// room above and below the letters keeps them clear of the edges (two
 /// lines fit a low place then).
 fn message_room(env: &Env<'_>, area: Rect) -> (u16, u16) {
-    let inner = widgets::look::look(env, NAME, area).area;
+    let inner = widgets::widget_look(env, NAME, area).area;
     (inner.width, (inner.height + area.height) / 2)
 }
 
 /// Where a message goes in `area`: inside the spacing across, the whole
 /// place from top to bottom (its lines in the middle of it).
-fn message_area(look: &Look, area: Rect) -> Rect {
+fn message_area(look: &WidgetLook, area: Rect) -> Rect {
     Rect::new(look.area.x, area.y, look.area.width, area.height)
 }
 
@@ -230,7 +235,7 @@ impl Widget for Headlines {
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        let look = widgets::look::look(env, NAME, area);
+        let look = widgets::widget_look(env, NAME, area);
         if self.shown.is_empty() {
             return alloc::vec![WidgetTarget::new(area, Command::run(OPEN))];
         }
@@ -290,7 +295,7 @@ fn row_height(env: &Env<'_>, font: &FontHandle<'_>, style: &UiStyle) -> u16 {
 /// caption is left out where it is too wide or leaves no room for a
 /// headline; a single headline takes what there is where its row is
 /// higher.
-fn rows(env: &Env<'_>, look: &Look, count: usize) -> (Option<u16>, Vec<Rect>) {
+fn rows(env: &Env<'_>, look: &WidgetLook, count: usize) -> (Option<u16>, Vec<Rect>) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return (None, Vec::new());
@@ -321,7 +326,7 @@ fn rows(env: &Env<'_>, look: &Look, count: usize) -> (Option<u16>, Vec<Rect>) {
 fn draw_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     row: Rect,
     title: &str,
     source: &str,

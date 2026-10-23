@@ -399,7 +399,7 @@ fn draw_row(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     cell: Rect,
     place: &Place,
 ) {
@@ -508,7 +508,7 @@ fn draw_column(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     cell: Rect,
     place: &Place,
     compact: bool,

@@ -13,7 +13,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, TextSize, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use crate::data::{self, Current, Day};
@@ -39,7 +41,7 @@ const PLACINGS: [&str; 3] = [
 static SETTINGS: [SettingSpec; 17] = [
     widgets::frame_spec("weather.now.frame", ID, Frame::None),
     widgets::padding_spec("weather.now.padding", ID, Padding::Auto),
-    widgets::size_spec("weather.now.size", ID, Size::Fit, true),
+    widgets::size_spec("weather.now.size", ID, TextSize::Fit, true),
     widgets::align_spec("weather.now.align", ID, Align::Center),
     SettingSpec::fixed_choice(
         "weather.now.symbol",
@@ -107,7 +109,7 @@ fn lay_out(env: &Env<'_>, area: Rect, shown: &Shown) -> Option<Laid> {
     let current = weather.current?;
     let today = weather.days_from(shown.today).first().copied();
     let font = UiStyle::new(env).font(env)?;
-    let area = widgets::look::look(env, ID.as_str(), area).area;
+    let area = widgets::widget_look(env, ID.as_str(), area).area;
     let unit = crate::temperature_unit(env);
     let temperature = data::degrees_text(
         unit,
@@ -139,7 +141,7 @@ impl Widget for Now {
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
         let style = UiStyle::new(env);
         let probe = Rect::new(0, 0, 100, 100);
-        let frame = 100 - widgets::look::look(env, ID.as_str(), probe).area.height;
+        let frame = 100 - widgets::widget_look(env, ID.as_str(), probe).area.height;
         let size = temperature_size(env, &style).unwrap_or(style.title() * 2.4);
         digits_height(size) + widgets::line_height(env, style.small()) * 3 + frame
     }
@@ -173,10 +175,10 @@ impl Widget for Now {
 /// The temperature's size as set; `None` for "as large as it fits".
 fn temperature_size(env: &Env<'_>, style: &UiStyle) -> Option<f32> {
     match widgets::size(env, ID.as_str()) {
-        Size::Small => Some(style.title() * 1.6),
-        Size::Medium => Some(style.title() * 2.4),
-        Size::Large => Some(style.title() * 3.4),
-        Size::Fit => None,
+        TextSize::Small => Some(style.title() * 1.6),
+        TextSize::Medium => Some(style.title() * 2.4),
+        TextSize::Large => Some(style.title() * 3.4),
+        TextSize::Fit => None,
         _ => None,
     }
 }
@@ -607,7 +609,7 @@ fn plan_for(
 fn draw_now(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     current: Current,
     laid: &Laid,
 ) {

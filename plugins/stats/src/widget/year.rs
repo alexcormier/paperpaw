@@ -16,7 +16,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Point, Rect, RegisterError, Registrar, SettingSpec,
@@ -51,7 +51,7 @@ const MOST_DOTS: u32 = 60;
 static SETTINGS: [SettingSpec; 9] = [
     widgets::frame_spec("stats.widget.year.frame", YEAR, Frame::None),
     widgets::padding_spec("stats.widget.year.padding", YEAR, Padding::Auto),
-    widgets::size_spec("stats.widget.year.size", YEAR, Size::Medium, true),
+    widgets::size_spec("stats.widget.year.size", YEAR, TextSize::Medium, true),
     widgets::align_spec("stats.widget.year.align", YEAR, Align::Left),
     SettingSpec::fixed_choice(
         "stats.widget.year.goal",
@@ -306,7 +306,7 @@ fn notes(env: &Env<'_>, shown: &Shown) -> Vec<(String, bool)> {
     clippy::too_many_lines,
     reason = "longer than the limit from before it was set; split it when it is next changed"
 )]
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -437,7 +437,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
 fn draw_ring(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    (look, caption): (&Look, Option<&str>),
+    (look, caption): (&WidgetLook, Option<&str>),
     area: Rect,
     shown: &Shown,
     progress: Option<u32>,
@@ -542,7 +542,7 @@ fn draw_ring(
 fn draw_dots(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     band: Rect,
     done: u32,
     goal: u32,

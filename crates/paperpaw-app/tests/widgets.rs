@@ -16,7 +16,7 @@ use paperpaw_platform::{
     DeviceInfo, DisplayInfo, InputCaps, Instant, MemoryClass, PixelFormat, Rotation,
 };
 use paperpaw_sdk::builtin::{params, slots};
-use paperpaw_sdk::widgets::{self, look::FRAMES};
+use paperpaw_sdk::widgets::{self, FRAMES};
 use paperpaw_sdk::{MemoryStorage, Params};
 
 const X4: DeviceInfo = DeviceInfo {

@@ -25,7 +25,7 @@ use paperpaw_platform::{
 use paperpaw_sdk::builtin::{actions, menus};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
-use paperpaw_sdk::ui::Slider;
+use paperpaw_sdk::ui::slider::Slider;
 use paperpaw_sdk::{
     Manifest, MemoryStorage, MenuEntry, Plugin, RegisterError, Registrar, SettingSpec,
     SettingValue, Version,

@@ -14,7 +14,9 @@ use std::borrow::Cow;
 use paperpaw_core::KernelBuilder;
 use paperpaw_platform::{Color, Rect};
 use paperpaw_sdk::builtin::params;
-use paperpaw_sdk::ui::{self, SliderFocus, SliderView, TextRole, UiStyle};
+use paperpaw_sdk::ui::slider::SliderFocus;
+use paperpaw_sdk::ui::slider::SliderView;
+use paperpaw_sdk::ui::{self, TextRole, UiStyle};
 use paperpaw_sdk::widgets::Frame;
 use paperpaw_sdk::{
     Canvas, Cx, Env, Handled, Id, Manifest, Params, Plugin, RegisterError, Registrar, Screen,
@@ -468,7 +470,7 @@ fn sliders(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) 
         .room("100 %")
         .focus(SliderFocus::Focused);
     ui::draw_focus(canvas, style, slider);
-    ui::Slider::new(0, 100).draw_row(canvas, env, style, &view);
+    ui::slider::Slider::new(0, 100).draw_row(canvas, env, style, &view);
 }
 
 /// Buttons in each state, a faint one and icon buttons.
@@ -560,7 +562,7 @@ fn layout(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
         ui::draw_label(canvas, &font, style.small(), x, row, name, ink);
     }
     let rest = stack.rest();
-    let grid = ui::Grid::new(rest, 3, (rest.height / 3).saturating_sub(gap), gap);
+    let grid = ui::CellGrid::new(rest, 3, (rest.height / 3).saturating_sub(gap), gap);
     let focus = 4;
     for index in 0..grid.per_page() {
         let cell = grid.cell(index);
@@ -599,7 +601,7 @@ fn share(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
 
 /// The offer to go online, as a screen for the network shows it.
 fn offer(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
-    ui::OfflineOffer::new().draw(canvas, env, style, area);
+    ui::offline::OfflineOffer::new().draw(canvas, env, style, area);
 }
 
 /// A dialog in the middle of the screen, its first button focused.

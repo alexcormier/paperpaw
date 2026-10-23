@@ -30,7 +30,7 @@ use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::status::Place;
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Drawn, Frame, Size, Widget, WidgetSpec, WidgetTarget, grid, line_height,
+    self, Align, Drawn, Frame, TextSize, Widget, WidgetSpec, WidgetTarget, grid, line_height,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Env, FontHandle, Id, Params, Rect, RegisterError, Registrar,
@@ -143,11 +143,11 @@ static SETTINGS: [SettingSpec; 21] = {
         align_spec("home.date.align", DATE_ID, Align::Center),
         frame_spec("home.date.frame", DATE_ID, Frame::None),
         padding_spec("home.date.padding", DATE_ID, Padding::Auto),
-        size_spec("home.date.size", DATE_ID, Size::Medium, false),
+        size_spec("home.date.size", DATE_ID, TextSize::Medium, false),
         align_spec("home.clock.align", CLOCK_ID, Align::Center),
         frame_spec("home.clock.frame", CLOCK_ID, Frame::None),
         padding_spec("home.clock.padding", CLOCK_ID, Padding::Auto),
-        size_spec("home.clock.size", CLOCK_ID, Size::Medium, true),
+        size_spec("home.clock.size", CLOCK_ID, TextSize::Medium, true),
         part_spec("home.clock.date", CLOCK_ID, "home.setting.clock-date", true),
         align_spec("home.continue.align", CONTINUE_ID, Align::Left),
         frame_spec("home.continue.frame", CONTINUE_ID, Frame::Line),
@@ -295,7 +295,12 @@ fn draw_status_widget(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 /// the battery's percentage is left out first, then the items that
 /// matter least (the status line leaves them out), so that nothing is
 /// cut or drawn outside.
-fn draw_status_line(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, area: Rect) {
+fn draw_status_line(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &widgets::WidgetLook,
+    area: Rect,
+) {
     let style = UiStyle::new(env);
     let color = if look.frame == Frame::Dark {
         look.faint
@@ -334,7 +339,7 @@ fn status_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
 /// Where a tap on the status line above the grid ([`draw_status`]) does
 /// something.
 pub(crate) fn status_bar_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-    let look = widgets::look::look(env, STATUS, area);
+    let look = widgets::widget_look(env, STATUS, area);
     let inner = if look.frame == Frame::None {
         area
     } else {
@@ -345,7 +350,7 @@ pub(crate) fn status_bar_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget>
 
 /// Where a tap on the status line widget in `area` does something.
 fn status_widget_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-    status_targets(env, widgets::look::look(env, STATUS, area).area)
+    status_targets(env, widgets::widget_look(env, STATUS, area).area)
 }
 
 /// What the status line shows now, to draw it again when it changes.
@@ -428,12 +433,12 @@ fn clock_shows(env: &Env<'_>) -> String {
 /// How wide the time is by the clock's size setting, as a share of the
 /// screen's width: small, medium (the first home screen's, on every
 /// device) and large clearly apart, the same wherever it is placed (as
-/// far as the place holds it); as large as fits ([`Size::Fit`]) fills
+/// far as the place holds it); as large as fits ([`TextSize::Fit`]) fills
 /// the place instead.
-fn set_share(size: Size) -> f32 {
+fn set_share(size: TextSize) -> f32 {
     match size {
-        Size::Small => 0.15,
-        Size::Large => 0.32,
+        TextSize::Small => 0.15,
+        TextSize::Large => 0.32,
         _ => 0.21,
     }
 }
@@ -467,7 +472,7 @@ struct ClockLayout {
 
 impl ClockLayout {
     /// The time as large as its size setting says and the place holds: as
-    /// large as fits by [`Size::Fit`], at most that else; the date below
+    /// large as fits by [`TextSize::Fit`], at most that else; the date below
     /// it in proportion (in short words where the full ones do not fit),
     /// left out only where not even the time at the body's size and the
     /// date at the small size fit together.
@@ -481,7 +486,7 @@ impl ClockLayout {
         // width's, its height checked as it is laid out.
         let size_for = |wide: f32| 100.0 * wide / display.measure(100.0, digits).max(1.0);
         let most = match widgets::size(env, CLOCK) {
-            Size::Fit => size_for(width),
+            TextSize::Fit => size_for(width),
             size => size_for(set_share(size) * f32::from(env.device.display.width)),
         };
         let lay = |size: f32, with_date: bool| {
@@ -714,7 +719,7 @@ impl CardParts {
     /// where there is room for them too (the caption is left out first).
     fn of(env: &Env<'_>, area: Rect, book: &Book) -> Self {
         let style = UiStyle::new(env);
-        let r = widgets::look::look(env, CONTINUE, area).area;
+        let r = widgets::widget_look(env, CONTINUE, area).area;
         let gap = style.gap();
         // A few words of a title at the body's size.
         let least = (style.text() * 4.0) as u16;
@@ -1030,7 +1035,7 @@ impl Shelf {
             self.names.clear();
             return;
         };
-        let inner = widgets::look::look(env, RECENT, area).area;
+        let inner = widgets::widget_look(env, RECENT, area).area;
         self.parts = ShelfParts::of(env, inner, &self.books);
         let shown = self.parts.places.iter().zip(&self.books);
         self.covers = shown
@@ -1104,7 +1109,7 @@ impl Widget for Shelf {
                 area: Some(area),
                 ..Shelf::default()
             };
-            let inner = widgets::look::look(env, RECENT, area).area;
+            let inner = widgets::widget_look(env, RECENT, area).area;
             moved.parts = ShelfParts::of(env, inner, &moved.books);
             draw_shelf(canvas, env, area, &moved);
         }
@@ -1114,7 +1119,7 @@ impl Widget for Shelf {
         let parts = if self.area == Some(area) {
             self.parts.clone()
         } else {
-            let inner = widgets::look::look(env, RECENT, area).area;
+            let inner = widgets::widget_look(env, RECENT, area).area;
             ShelfParts::of(env, inner, &self.books)
         };
         parts

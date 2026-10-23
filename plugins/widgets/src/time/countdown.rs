@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::time;
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, Size};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, TextSize};
 use paperpaw_sdk::{Arg, Canvas, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::word_clock::{balanced, largest};
@@ -54,7 +54,7 @@ static SETTINGS: [SettingSpec; 10] = [
         ID,
     )
     .described("widgets.countdown.style.help"),
-    widgets::size_spec("widgets.countdown.size", ID, Size::Fit, true),
+    widgets::size_spec("widgets.countdown.size", ID, TextSize::Fit, true),
     widgets::part_spec(
         "widgets.countdown.show-date",
         ID,
@@ -406,7 +406,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             font.measure(s, &shown.big) <= width && super::cap_height(&font, s) + below <= height
         };
         let size = match chosen {
-            Size::Fit => widgets::largest_size(height, style.text(), fits),
+            TextSize::Fit => widgets::largest_size(height, style.text(), fits),
             size => {
                 let size = size.text(&style) * 1.6;
                 widgets::largest_size(size, style.text().min(size), fits)
@@ -482,7 +482,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 fn text_size(env: &Env<'_>, font: &FontHandle<'_>, text: &str, room: Rect) -> f32 {
     let (style, _) = ui(env);
     match widgets::size(env, ID.as_str()) {
-        Size::Fit => largest(
+        TextSize::Fit => largest(
             font,
             text,
             room,

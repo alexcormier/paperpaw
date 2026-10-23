@@ -29,7 +29,7 @@
 //! Screens that show widgets in a grid, as the home screen does, use
 //! [`grid`]: its layout as data, and a view that edits it in place.
 //! Screens that show them above each other, as the sleep screen does, use
-//! a [`Stack`]. Either way the screen asks [`refresh`] what an event means
+//! a [`WidgetStack`]. Either way the screen asks [`refresh`] what an event means
 //! for the widgets it shows, and reads the live ones anew each minute
 //! ([`next_minute`]).
 //!
@@ -41,8 +41,8 @@
 //! [`EDIT_WIDGETS`](crate::builtin::slots::EDIT_WIDGETS) edits a place's
 //! list.
 //!
-//! Widgets share a look the reader shapes for each ([`Frame`], [`Size`],
-//! [`draw_caption`], see [`look`]), and say which kind they are
+//! Widgets share a look the reader shapes for each ([`Frame`], [`TextSize`],
+//! [`draw_caption`], see [`widget_look`]), and say which kind they are
 //! ([`categories`]), so that screens offering many of them group them.
 //!
 //! A widget may instead preview a group of settings
@@ -67,17 +67,17 @@ use crate::params::Params;
 use crate::settings::{SettingGroupSpec, SettingKind, SettingSpec, SettingValue};
 
 pub mod grid;
-pub mod look;
+mod look;
 mod stack;
 
-pub use stack::Stack;
+pub use stack::WidgetStack;
 
 pub use look::{
-    Frame, Look, Padding, Size, Wrapped, caption_height, choice, draw_caption, draw_frame,
-    draw_line, draw_message, draw_wrapped, fit_line, frame, frame_height, frame_setting,
-    frame_spec, heading_line_height, ink_baseline, largest_size, line_height, padding,
-    padding_setting, padding_spec, part_setting, part_spec, setting_id, shows, size, size_setting,
-    size_spec,
+    ALL_FRAMES, FRAMES, Frame, OWN_FRAME, PADDINGS, Padding, SIZES, TextSize, WidgetLook, Wrapped,
+    caption_height, choice_setting, draw_caption, draw_frame, draw_line, draw_message,
+    draw_wrapped, fit_line, frame, frame_height, frame_setting, frame_spec, heading_line_height,
+    ink_baseline, largest_size, line_height, padding, padding_setting, padding_spec, part_setting,
+    part_spec, setting_id, shows, size, size_setting, size_spec, widget_look,
 };
 
 /// The kinds of widgets ([`WidgetSpec::category`]), each the translation
@@ -612,7 +612,7 @@ impl SizeClass {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub enum PlaceKind {
-    /// Above each other ([`Stack`]): a setting of widget ids separated by
+    /// Above each other ([`WidgetStack`]): a setting of widget ids separated by
     /// commas, [`FILL`] and [`SPACE`] among them.
     Stack,
     /// In a grid of cells ([`grid`]): settings of items with their cells,

@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Point, Rect, RegisterError, Registrar, SettingSpec};
 
@@ -32,7 +32,7 @@ const DAYS: [&str; 2] = ["stats.marks.7", "stats.marks.14"];
 static SETTINGS: [SettingSpec; 11] = [
     widgets::frame_spec("stats.widget.streak.frame", STREAK, Frame::None),
     widgets::padding_spec("stats.widget.streak.padding", STREAK, Padding::Auto),
-    widgets::size_spec("stats.widget.streak.size", STREAK, Size::Medium, true),
+    widgets::size_spec("stats.widget.streak.size", STREAK, TextSize::Medium, true),
     widgets::align_spec("stats.widget.streak.align", STREAK, Align::Center),
     SettingSpec::fixed_choice(
         "stats.widget.streak.counts",
@@ -238,7 +238,7 @@ fn texts(env: &Env<'_>, streaks: Streaks) -> (String, String) {
     (first, second)
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, shown: &Shown) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -259,7 +259,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     let weekdays = widgets::shows(env, id, "weekdays");
     let align = widgets::align(env, id);
     let headline = match widgets::size(env, id) {
-        Size::Fit => style.text(),
+        TextSize::Fit => style.text(),
         size => size.text(&style),
     };
     let least = line(&font, headline) + small;
@@ -410,7 +410,7 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
 fn draw_texts(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     area: Rect,
     laid: &Texts,
     align: Align,
@@ -445,7 +445,7 @@ fn draw_texts(
 fn draw_marks(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     area: Rect,
     marks: &[Mark],
     (align, weekdays): (Align, bool),
@@ -506,7 +506,7 @@ fn draw_marks(
 }
 
 /// A check in the paper's colour on a filled mark.
-fn draw_check(canvas: &mut Canvas<'_>, center: Point, radius: u32, look: &Look) {
+fn draw_check(canvas: &mut Canvas<'_>, center: Point, radius: u32, look: &WidgetLook) {
     let r = radius as i32;
     let at = |x: i32, y: i32| Point::new(center.x + x * r / 100, center.y + y * r / 100);
     let width = (radius / 4).max(1);

@@ -36,7 +36,7 @@ use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::document::ImageRef;
 use paperpaw_sdk::library::{self, catalog};
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Look, line_height};
+use paperpaw_sdk::widgets::{self, Align, WidgetLook, line_height};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar,
     SettingSpec, Storage,
@@ -704,7 +704,7 @@ impl Covers {
 pub(crate) fn draw_cover(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     at: Rect,
     book: &Book,
     covers: &Covers,
@@ -720,7 +720,13 @@ pub(crate) fn draw_cover(
 }
 
 /// A book without a cover: a frame with its title inside.
-fn draw_placeholder(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, at: Rect, title: &str) {
+fn draw_placeholder(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &WidgetLook,
+    at: Rect,
+    title: &str,
+) {
     let style = UiStyle::new(env);
     canvas.stroke(at, u32::from(style.line()).max(2), look.ink);
     let pad = (style.gap() / 2).min(at.width / 6);
@@ -836,7 +842,7 @@ pub(crate) fn percent_text(env: &Env<'_>, percent: u8) -> String {
 pub(crate) fn draw_ring(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     center: Point,
     radius: u32,
     thickness: u32,
@@ -874,7 +880,7 @@ pub(crate) fn draw_ring(
 pub(crate) fn draw_ring_percent(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     center: Point,
     inner: u32,
     percent: u8,
@@ -917,7 +923,7 @@ pub(crate) fn draw_ring_percent(
 pub(crate) fn draw_percent_alone(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     area: Rect,
     align: Align,
     percent: u8,
@@ -945,7 +951,7 @@ pub(crate) fn draw_percent_alone(
 pub(crate) fn draw_bar(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     area: Rect,
     percent: u8,
 ) {
@@ -967,7 +973,7 @@ pub(crate) fn draw_bar(
 
 /// Draws the message `key` in the middle of `look`'s area (e.g. "Nothing
 /// read yet").
-pub(crate) fn draw_message(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, key: &str) {
+pub(crate) fn draw_message(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, key: &str) {
     widgets::draw_message(canvas, env, look, env.i18n.tr(key));
 }
 
@@ -977,7 +983,7 @@ pub(crate) fn caption(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     id: &str,
-    look: &Look,
+    look: &WidgetLook,
     text: &str,
 ) -> Rect {
     let rest = below_caption(env, id, look);
@@ -988,7 +994,7 @@ pub(crate) fn caption(
 }
 
 /// The area [`caption`] leaves below it, without drawing it.
-pub(crate) fn below_caption(env: &Env<'_>, id: &str, look: &Look) -> Rect {
+pub(crate) fn below_caption(env: &Env<'_>, id: &str, look: &WidgetLook) -> Rect {
     if !widgets::shows(env, id, "caption") || look.area.height < 3 * caption_room(env) {
         return look.area;
     }

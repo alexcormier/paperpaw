@@ -163,18 +163,6 @@ pub struct GridView {
 }
 
 impl GridView {
-    /// An empty grid, not edited, with the plugin's own choice screen
-    /// `choice`, which is no longer needed: the options are asked with
-    /// [`ask::choice`](crate::ask::choice).
-    #[deprecated(
-        since = "0.4.0",
-        note = "use `GridView::asking`, without a choice screen"
-    )]
-    pub fn new(env: &Env<'_>, choice: Id, chosen: Event<Picked>) -> Self {
-        let _ = choice;
-        Self::asking(env, chosen)
-    }
-
     /// An empty grid, not edited; `chosen` is the event the options of an
     /// item come back with (asked with [`ask::choice`](crate::ask::choice)).
     /// Lay it out with [`layout`](Self::layout).

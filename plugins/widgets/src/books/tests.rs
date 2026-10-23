@@ -295,7 +295,7 @@ fn every_widget_draws_in_every_frame_and_size() {
         assert!(h.widgets.has(id), "{id}");
         let kind = h.widgets.category(id).unwrap();
         assert!(categories::ALL.contains(&kind), "{id}: {kind}");
-        for frame in paperpaw_sdk::widgets::look::FRAMES {
+        for frame in paperpaw_sdk::widgets::FRAMES {
             h.set(
                 &alloc::format!("{id}.frame"),
                 SettingValue::Text(Cow::Borrowed(frame)),

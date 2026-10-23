@@ -17,9 +17,10 @@ use std::borrow::Cow;
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::event::{Event, EventData};
 use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::ui::choice::{Choice, Picked};
 use paperpaw_sdk::ui::items::ItemsScreen;
-use paperpaw_sdk::ui::{Reorder, UiStyle};
+use paperpaw_sdk::ui::reorder::Reorder;
 use paperpaw_sdk::{
     Command, Cx, Handled, Id, Output, Params, PointerPhase, Rect, Screen, SettingSpec,
     SettingValue, StatusItemSpec, StatusValue,

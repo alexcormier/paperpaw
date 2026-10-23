@@ -157,7 +157,7 @@ fn height(env: &Env<'_>, _: u16) -> u16 {
 }
 
 /// The track's colour: a light gray on light paper, a dark one on dark.
-fn track(look: &widgets::Look) -> Color {
+fn track(look: &widgets::WidgetLook) -> Color {
     if look.paper.luma() < 128 {
         Color::gray(80)
     } else {
@@ -229,7 +229,7 @@ fn draw_bar(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     caption: Option<&str>,
     p: &Progress,
     months: Option<&LocalTime>,
@@ -398,7 +398,7 @@ fn draw_bar(
 /// went, those to come as rings.
 fn draw_months(
     canvas: &mut Canvas<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     area: Rect,
     y: f32,
     height: f32,
@@ -430,7 +430,7 @@ fn draw_ring(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     area: Rect,
     p: &Progress,
 ) {

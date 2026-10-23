@@ -96,7 +96,7 @@ pub(crate) struct PanelScreen {
     editing: Option<i64>,
     /// A slider's knob taken along by a finger: its row and its value
     /// before.
-    drag: ui::SliderDrag,
+    drag: ui::slider::SliderDrag,
     dragged: Option<(usize, i64)>,
     page: usize,
     pager: Option<ui::Pager>,
@@ -350,7 +350,7 @@ impl PanelScreen {
             top,
             focus: (!touch).then_some(first),
             editing: None,
-            drag: ui::SliderDrag::default(),
+            drag: ui::slider::SliderDrag::default(),
             dragged: None,
             page: 0,
             pager: layout.pager.map(|area| ui::Pager::new(env, area)),
@@ -485,11 +485,11 @@ impl PanelScreen {
     }
 
     /// The focused control if it is a slider: its setting and range.
-    fn focused_slider<'e>(&self, env: &Env<'e>) -> Option<(&'e SettingSpec, ui::Slider)> {
+    fn focused_slider<'e>(&self, env: &Env<'e>) -> Option<(&'e SettingSpec, ui::slider::Slider)> {
         match self.focus.and_then(|f| self.controls().nth(f)) {
             Some((Control::Slide(id), _)) => {
                 let spec = spec(env, id)?;
-                Some((spec, ui::Slider::of(spec)?))
+                Some((spec, ui::slider::Slider::of(spec)?))
             }
             _ => None,
         }
@@ -661,9 +661,9 @@ impl PanelScreen {
             Control::Step(_, step) => (false, String::from(if *step < 0 { "−" } else { "+" })),
             Control::Slide(id) => {
                 let focus = match (focused, self.editing) {
-                    (false, _) => ui::SliderFocus::None,
-                    (true, None) => ui::SliderFocus::Focused,
-                    (true, Some(_)) => ui::SliderFocus::Editing,
+                    (false, _) => ui::slider::SliderFocus::None,
+                    (true, None) => ui::slider::SliderFocus::Focused,
+                    (true, Some(_)) => ui::slider::SliderFocus::Editing,
                 };
                 return draw_slider(canvas, env, &style, id, rect, focus);
             }
@@ -706,17 +706,18 @@ fn draw_slider(
     style: &UiStyle,
     id: &Id,
     rect: Rect,
-    focus: ui::SliderFocus,
+    focus: ui::slider::SliderFocus,
 ) {
-    let Some((spec, slider)) = spec(env, id).and_then(|s| Some((s, ui::Slider::of(s)?))) else {
+    let Some((spec, slider)) = spec(env, id).and_then(|s| Some((s, ui::slider::Slider::of(s)?)))
+    else {
         return;
     };
-    if focus != ui::SliderFocus::None {
+    if focus != ui::slider::SliderFocus::None {
         ui::draw_focus(canvas, style, rect);
     }
     let shown = ui::setting_value(env, spec);
     let room = ui::number_room(env, style, [spec]);
-    let view = ui::SliderView::new(rect, env.settings.int(id.as_str()), &shown)
+    let view = ui::slider::SliderView::new(rect, env.settings.int(id.as_str()), &shown)
         .title(env.i18n.tr(&spec.title))
         .room(&room)
         .focus(focus);
@@ -1009,7 +1010,7 @@ impl Screen for PanelScreen {
             let [(Control::Slide(id), area)] = row.controls.as_slice() else {
                 return None;
             };
-            let slider = spec(&env, id).and_then(ui::Slider::of)?;
+            let slider = spec(&env, id).and_then(ui::slider::Slider::of)?;
             // Shown faint by its plugin: not moved.
             Control::Slide(id.clone()).enabled(&env).then_some(())?;
             Some((index, id.clone(), slider, *area))
@@ -1039,14 +1040,14 @@ impl Screen for PanelScreen {
             }
         };
         match step {
-            ui::SliderStep::Moved(value) => show(cx, id, value),
-            ui::SliderStep::Same => {}
-            ui::SliderStep::Chosen(value) => {
+            ui::slider::SliderStep::Moved(value) => show(cx, id, value),
+            ui::slider::SliderStep::Same => {}
+            ui::slider::SliderStep::Chosen(value) => {
                 self.dragged = None;
                 let row = self.rows[row].area;
                 done(&env, cx, id, (value != before).then_some(value), row);
             }
-            ui::SliderStep::Cancelled => {
+            ui::slider::SliderStep::Cancelled => {
                 self.dragged = None;
                 let row = self.rows[row].area;
                 done(&env, cx, id, None, row);

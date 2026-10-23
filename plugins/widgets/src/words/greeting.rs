@@ -7,7 +7,7 @@ use alloc::string::String;
 
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, Size, WidgetSpec};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, TextSize, WidgetSpec};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec, time};
 
 use super::frame_height;
@@ -56,7 +56,7 @@ static SETTINGS: [SettingSpec; 8] = [
         ID,
     )
     .described("widgets.setting.face-font.help"),
-    widgets::size_spec("widgets.greeting.size", ID, Size::Fit, true),
+    widgets::size_spec("widgets.greeting.size", ID, TextSize::Fit, true),
     widgets::align_spec("widgets.greeting.align", ID, Align::Center),
     widgets::frame_spec("widgets.greeting.frame", ID, Frame::None),
     widgets::padding_spec("widgets.greeting.padding", ID, Padding::Auto),
@@ -161,7 +161,7 @@ fn shows(env: &Env<'_>) -> String {
 fn height(env: &Env<'_>, _: u16) -> u16 {
     let style = UiStyle::new(env);
     let size = match widgets::size(env, ID.as_str()) {
-        Size::Fit => style.title() * 1.6,
+        TextSize::Fit => style.title() * 1.6,
         size => size.text(&style),
     };
     let line = below(env).map_or(0, |_| widgets::line_height(env, style.small()));
@@ -220,7 +220,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     // and the height left by the date allow.
     let (max, min) = match widgets::size(env, ID.as_str()) {
         // As large as the room holds, a line of it checked below.
-        Size::Fit => (room.max(style.small()), style.small()),
+        TextSize::Fit => (room.max(style.small()), style.small()),
         size => (size.text(&style), size.text(&style).min(style.small())),
     };
     let one_line = widgets::largest_size(max, min, |size| {

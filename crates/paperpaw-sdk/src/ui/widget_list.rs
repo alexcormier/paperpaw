@@ -23,7 +23,8 @@ use crate::builtin::{actions, events, params, screens, slots};
 use crate::event::Event;
 use crate::status::item_ids;
 use crate::ui::choice;
-use crate::ui::{self, ListChange, ListView, Reorder, ReorderStep, UiStyle};
+use crate::ui::reorder::{Reorder, ReorderStep};
+use crate::ui::{self, ListChange, ListView, UiStyle};
 use crate::widgets;
 use crate::{
     Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, PointerEvent, Rect,

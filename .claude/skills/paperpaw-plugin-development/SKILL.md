@@ -80,7 +80,7 @@ Read, in this order, and skim what is relevant to the task:
 
 - **Screens are drawn with the SDK's `ui` building blocks**, never with
   positions computed by hand: `ui::Stack` (parts one below the other),
-  `ui::columns` (equal columns, e.g. two buttons), `ui::Grid` (cells
+  `ui::columns` (equal columns, e.g. two buttons), `ui::CellGrid` (cells
   with taps and focus), `ui::draw_card` (a group on a card or in a
   frame), `ui::Segments` (a few options or tabs), `ui::Dialog` (a box
   with a title, text and buttons), `ui::ListView` and the row functions

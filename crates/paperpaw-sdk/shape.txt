@@ -576,7 +576,7 @@ enum paperpaw_sdk::widgets::grid::view::Mode { Choose, Move, Resize }
 enum paperpaw_sdk::widgets::grid::view::Target { Run(0: paperpaw_sdk::command::Command, 1: core::option::Option<alloc::boxed::Box<paperpaw_sdk::command::Command>>), Item(0: usize), Button(0: u16) }
 enum paperpaw_sdk::widgets::look::Frame { None, Line, Card, Dark }
 enum paperpaw_sdk::widgets::look::Padding { Auto, None, Small, Normal, Large }
-enum paperpaw_sdk::widgets::look::Size { Small, Medium, Large, Fit }
+enum paperpaw_sdk::widgets::look::TextSize { Small, Medium, Large, Fit }
 enum paperpaw_sdk::wifi::JoinFailure { NotFound, Password, Timeout, Other }
 enum paperpaw_sdk::wifi::WifiCommand { On, Off, Scan, Join { ssid: alloc::string::String, password: alloc::string::String }, Leave, Host { ssid: alloc::string::String, password: alloc::string::String } }
 enum paperpaw_sdk::wifi::WifiState { Off, On, Joining { ssid: alloc::string::String }, Online { ssid: alloc::string::String, address: alloc::string::String }, Hosting { ssid: alloc::string::String, address: alloc::string::String, guests: u8 } }
@@ -818,7 +818,7 @@ struct paperpaw_sdk::ui::fields::TextView { area: paperpaw_platform::geometry::R
 struct paperpaw_sdk::ui::header::Header { area: paperpaw_platform::geometry::Rect, note_focused: bool, note_button: bool, back: bool, arrows: bool }
 struct paperpaw_sdk::ui::header::Pager { area: paperpaw_platform::geometry::Rect, arrows: bool }
 struct paperpaw_sdk::ui::items::ItemsScreen { setting: core::option::Option<paperpaw_sdk::id::Id>, items: alloc::vec::Vec<(paperpaw_sdk::id::Id, alloc::string::String)>, style: paperpaw_sdk::ui::style::UiStyle, header: paperpaw_sdk::ui::header::Header, list: paperpaw_sdk::ui::list::ListView, reorder: paperpaw_sdk::ui::reorder::Reorder, moving: bool }
-struct paperpaw_sdk::ui::layout::Grid { area: paperpaw_platform::geometry::Rect, columns: u16, cell_height: u16, gap: u16 }
+struct paperpaw_sdk::ui::layout::CellGrid { area: paperpaw_platform::geometry::Rect, columns: u16, cell_height: u16, gap: u16 }
 struct paperpaw_sdk::ui::layout::Segments { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect> }
 struct paperpaw_sdk::ui::layout::Stack { area: paperpaw_platform::geometry::Rect, gap: u16, top: u16, bottom: u16, taken_top: bool, taken_bottom: bool }
 struct paperpaw_sdk::ui::list::ListView { area: paperpaw_platform::geometry::Rect, row: u32, focus: usize, active: bool, shown: bool, columns: u32, before: usize }
@@ -878,10 +878,10 @@ struct paperpaw_sdk::widgets::grid::view::Drag { index: usize, resize: bool, sta
 struct paperpaw_sdk::widgets::grid::view::Edit { mode: paperpaw_sdk::widgets::grid::view::Mode, drag: core::option::Option<paperpaw_sdk::widgets::grid::view::Drag> }
 struct paperpaw_sdk::widgets::grid::view::GridView { style: paperpaw_sdk::ui::style::UiStyle, geometry: paperpaw_sdk::widgets::grid::Geometry, items: alloc::vec::Vec<paperpaw_sdk::widgets::grid::view::Shown>, unplaced: alloc::vec::Vec<paperpaw_sdk::widgets::grid::Item>, buttons: alloc::vec::Vec<(paperpaw_platform::geometry::Rect, u16)>, targets: alloc::vec::Vec<(paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::grid::view::Target)>, touch: alloc::vec::Vec<(paperpaw_platform::geometry::Rect, paperpaw_sdk::command::Command, core::option::Option<alloc::boxed::Box<paperpaw_sdk::command::Command>>)>, owners: alloc::vec::Vec<core::option::Option<usize>>, host: core::option::Option<paperpaw_sdk::id::Id>, extra: alloc::vec::Vec<alloc::borrow::Cow<'static, str>>, drop_check: core::option::Option<paperpaw_sdk::widgets::grid::view::DropCheck>, names: alloc::vec::Vec<alloc::string::String>, focus: usize, focus_shown: bool, edit: core::option::Option<paperpaw_sdk::widgets::grid::view::Edit>, labels: bool, chosen: paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked> }
 struct paperpaw_sdk::widgets::grid::view::Shown { item: paperpaw_sdk::widgets::grid::Item, cells: paperpaw_sdk::widgets::grid::Cells, area: paperpaw_platform::geometry::Rect, widget: core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::widgets::Widget>> }
-struct paperpaw_sdk::widgets::look::Look { area: paperpaw_platform::geometry::Rect, ink: paperpaw_platform::pixel::Color, faint: paperpaw_platform::pixel::Color, paper: paperpaw_platform::pixel::Color, frame: paperpaw_sdk::widgets::look::Frame }
+struct paperpaw_sdk::widgets::look::WidgetLook { area: paperpaw_platform::geometry::Rect, ink: paperpaw_platform::pixel::Color, faint: paperpaw_platform::pixel::Color, paper: paperpaw_platform::pixel::Color, frame: paperpaw_sdk::widgets::look::Frame }
 struct paperpaw_sdk::widgets::look::Wrapped { text: alloc::string::String, size: f32, lines: alloc::vec::Vec<alloc::string::String>, whole: bool, heading: bool }
 struct paperpaw_sdk::widgets::stack::Shown { id: alloc::string::String, widget: alloc::boxed::Box<dyn paperpaw_sdk::widgets::Widget>, area: paperpaw_platform::geometry::Rect }
-struct paperpaw_sdk::widgets::stack::Stack { widgets: alloc::vec::Vec<paperpaw_sdk::widgets::stack::Shown> }
+struct paperpaw_sdk::widgets::stack::WidgetStack { widgets: alloc::vec::Vec<paperpaw_sdk::widgets::stack::Shown> }
 struct paperpaw_sdk::wifi::Wifi { state: paperpaw_sdk::wifi::WifiState, networks: alloc::vec::Vec<paperpaw_sdk::wifi::WifiNetwork>, scanning: bool, wanted: bool, busy: bool }
 struct paperpaw_sdk::wifi::WifiNetwork { ssid: alloc::string::String, signal: i8, secured: bool }
 struct paperpaw_sdk::words::WordSet { text: alloc::string::String, starts: alloc::vec::Vec<u32> }

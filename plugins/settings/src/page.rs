@@ -2,6 +2,7 @@
 //! in a chooser.
 
 use super::*;
+use paperpaw_sdk::ui::slider::{Slider, SliderDrag, SliderFocus, SliderView};
 
 /// The id of setting `id` of group `of` for its placement `placement`:
 /// `widgets.clock.face` of `widgets.clock@2` is `widgets.clock@2.face`.
@@ -139,7 +140,7 @@ pub(super) struct GroupPage {
     pub(super) edit: ui::NumberEdit,
     /// A slider's knob taken along by a finger: its row and the value it
     /// had before (shown, not kept, until the finger is lifted).
-    pub(super) drag: ui::SliderDrag,
+    pub(super) drag: SliderDrag,
     pub(super) dragged: Option<(usize, i64)>,
     /// Rows have room for descriptions.
     pub(super) noted: bool,
@@ -304,7 +305,7 @@ impl GroupPage {
             rows: ui::Rows::new(area, heights, headings),
             keys: !env.device.input.touch,
             edit: ui::NumberEdit::default(),
-            drag: ui::SliderDrag::default(),
+            drag: SliderDrag::default(),
             dragged: None,
             noted,
             number_room,
@@ -490,19 +491,17 @@ impl Screen for GroupPage {
                 let note = spec.description.as_deref().map_or("", |d| env.i18n.tr(d));
                 let note = if noted { note } else { "" };
                 let mut value = ui::setting_value(env, spec);
-                if let Some(slider) = ui::Slider::of(spec).filter(|_| ui::slider::shows(env, spec))
-                {
+                if let Some(slider) = Slider::of(spec).filter(|_| ui::slider::shows(env, spec)) {
                     let focus = match (focused, editing) {
-                        (false, _) => ui::SliderFocus::None,
-                        (true, false) => ui::SliderFocus::Focused,
-                        (true, true) => ui::SliderFocus::Editing,
+                        (false, _) => SliderFocus::None,
+                        (true, false) => SliderFocus::Focused,
+                        (true, true) => SliderFocus::Editing,
                     };
-                    let view =
-                        ui::SliderView::new(rect, env.settings.int(spec.id.as_str()), &value)
-                            .title(title)
-                            .note(note)
-                            .focus(focus)
-                            .room(&self.number_room);
+                    let view = SliderView::new(rect, env.settings.int(spec.id.as_str()), &value)
+                        .title(title)
+                        .note(note)
+                        .focus(focus)
+                        .room(&self.number_room);
                     slider.draw_row(canvas, env, &style, &view);
                     return;
                 }
@@ -655,7 +654,7 @@ impl Screen for GroupPage {
         };
         let Some((index, slider, id, rect)) = index.and_then(|i| {
             let spec = self.spec(i).filter(|s| ui::slider::shows(&env, s))?;
-            let slider = ui::Slider::of(spec)?;
+            let slider = Slider::of(spec)?;
             Some((i, slider, spec.id.clone(), self.rows.rect_of(i)?))
         }) else {
             return Handled::No;
@@ -685,14 +684,14 @@ impl Screen for GroupPage {
             }
         };
         match step {
-            ui::SliderStep::Moved(value) => {
+            ui::slider::SliderStep::Moved(value) => {
                 cx.command(Command::PreviewSettings(alloc::vec![(
                     id,
                     Some(SettingValue::Int(value))
                 )]));
             }
-            ui::SliderStep::Same => {}
-            ui::SliderStep::Chosen(value) => {
+            ui::slider::SliderStep::Same => {}
+            ui::slider::SliderStep::Chosen(value) => {
                 self.dragged = None;
                 if value != before {
                     cx.command(Command::SetSetting(id, SettingValue::Int(value)));
@@ -701,7 +700,7 @@ impl Screen for GroupPage {
                 cx.request_redraw();
                 cx.request_refresh(RefreshMode::Partial);
             }
-            ui::SliderStep::Cancelled => {
+            ui::slider::SliderStep::Cancelled => {
                 self.dragged = None;
                 end_preview(&env, cx);
                 cx.request_redraw();
