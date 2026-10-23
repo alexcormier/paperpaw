@@ -270,6 +270,13 @@ impl Net {
         }
     }
 
+    /// In the device's own network: how many phones took an address from
+    /// it (0 in another network).
+    pub fn guests(&self) -> u8 {
+        let seconds = u64::try_from(now().total_millis() / 1000).unwrap_or(0);
+        self.server.as_ref().map_or(0, |(_, server)| server.guests(seconds))
+    }
+
     /// In the device's own network: answers those asking for an address.
     fn serve_addresses(&mut self) {
         let Some((handle, server)) = &mut self.server else {

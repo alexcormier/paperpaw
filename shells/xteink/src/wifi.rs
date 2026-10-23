@@ -492,6 +492,8 @@ impl Radio {
                     .address()
                     .map(|a| alloc::format!("{}", a.address()))
                     .unwrap_or_default(),
+                // A phone that took an address: reported as it joins.
+                guests: net.guests(),
             },
             Some(on) => match (&on.ssid, on.linked, on.net.address()) {
                 (Some(ssid), true, Some(address)) => WifiState::Online {

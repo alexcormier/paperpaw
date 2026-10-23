@@ -17,10 +17,10 @@ use alloc::vec::Vec;
 use crate::Instant;
 use crate::random::Random;
 
-/// Letters of a key, 5 bits each: 65 bits.
-pub const KEY_LETTERS: usize = 13;
-// At least 64 bits.
-const _: () = assert!(KEY_LETTERS * 5 >= 64);
+/// Letters of a key: at least 64 bits of letters a person reads off the
+/// screen and types without taking one for another
+/// ([`Random::readable`]).
+pub const KEY_LETTERS: usize = crate::random::readable_letters(64);
 /// Wrong keys taken before requests are turned away.
 pub const WRONG_KEYS: u32 = 5;
 /// How long requests are turned away then, in milliseconds.
@@ -29,7 +29,7 @@ pub const LOCKED_FOR: u64 = 60_000;
 /// A key for one time of serving from `random`, the platform's source;
 /// `None` where it has none (no weaker key in its place).
 pub fn key(random: &Random) -> Option<String> {
-    random.token(KEY_LETTERS)
+    random.readable(KEY_LETTERS)
 }
 
 /// Whether a request is answered.

@@ -202,7 +202,8 @@ impl TransferScreen {
     /// network).
     fn without_router(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some((id, password)) = env.random.token(4).zip(env.random.token(10)) else {
+        // Letters not taken for one another: read off the screen, typed.
+        let Some((id, password)) = env.random.readable(4).zip(env.random.readable(15)) else {
             return;
         };
         let ssid = format!("PaperPaw-{id}");
@@ -399,7 +400,10 @@ fn draw_join(
         "transfer.own.network",
         &[
             ("ssid", Arg::Str(&own.ssid)),
-            ("password", Arg::Str(&own.password)),
+            (
+                "password",
+                Arg::Str(&paperpaw_sdk::random::grouped(&own.password)),
+            ),
         ],
     );
     let bottom = area.y + area.height;

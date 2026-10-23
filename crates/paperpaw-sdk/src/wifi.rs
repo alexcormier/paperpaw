@@ -109,6 +109,10 @@ pub enum WifiState {
         ssid: String,
         /// The device's address in it, e.g. `192.168.4.1`.
         address: String,
+        /// How many devices (phones) joined it and were given an address,
+        /// so they can open its pages: a screen showing how to join goes
+        /// on to what comes next once one has.
+        guests: u8,
     },
 }
 

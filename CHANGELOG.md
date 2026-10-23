@@ -6,6 +6,22 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Setting up Wi-Fi with a phone goes a step at a time: first the code
+  that joins the reader's own network, its name and password large below
+  it, then, once a phone joined it, the code that opens the page with its
+  address. *Next* (Select, the page buttons, a tap) goes on where the
+  phone does not say so. `WifiState::Hosting` says how many devices took
+  an address in the own network (`guests`), on the X4 and X4 Pro from
+  their DHCP server; the emulator's script step `phone-joins` makes one
+  join.
+- What a person reads off the screen and types is drawn from letters not
+  taken for one another (no 0 o 1 l i j 2 z 5 s 6 b 8 9 g q u v):
+  `Random::readable`, `random::READABLE`, `random::readable_letters`,
+  shown in groups of five (`random::grouped`). The own network's name
+  and its password of 15 letters (62 bits) in the phone setup and the
+  transfer without a router, and the keys of served pages
+  (`served::KEY_LETTERS`, 16 letters now) use them.
+
 - A combining mark with no character before it (a caption or line
   that begins with one) sits at the start of its text instead of
   reaching back past it, as drawn and as measured by

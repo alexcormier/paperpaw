@@ -390,6 +390,14 @@ impl Device {
         self.execute(effects);
     }
 
+    /// A phone joins the device's own network, where it has one open
+    /// (scripts' `phone-joins`): the pretend radio reports it at once.
+    pub fn phone_joins(&mut self) {
+        let now = self.now();
+        self.wifi.phone_joins(now);
+        self.tick_if_due();
+    }
+
     /// Draws the whole screen again, nothing on it changed (scripts'
     /// `redraw`).
     pub fn draw_again(&mut self) {

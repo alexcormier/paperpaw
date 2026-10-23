@@ -107,10 +107,24 @@ impl Wifi {
                     WifiState::Hosting {
                         ssid,
                         address: String::from(HOST_ADDRESS),
+                        guests: 0,
                     },
                 );
             }
             WifiCommand::Host { .. } => {}
+        }
+    }
+
+    /// A phone joins the device's own network and is given an address
+    /// (the script's `phone-joins`): there is no phone here.
+    pub fn phone_joins(&mut self, now: Instant) {
+        if let WifiState::Hosting { ssid, address, guests } = &self.state {
+            let state = WifiState::Hosting {
+                ssid: ssid.clone(),
+                address: address.clone(),
+                guests: guests.saturating_add(1),
+            };
+            self.set(now, state);
         }
     }
 
