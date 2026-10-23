@@ -1,7 +1,9 @@
 # 0024. Native code plugins as files
 
-- Status: Accepted; supersedes the WebAssembly modules of
-  [ADR 0004](0004-everything-is-a-plugin.md)
+- Status: Accepted, partly implemented; supersedes the WebAssembly
+  modules of [ADR 0004](0004-everything-is-a-plugin.md). The X4s and the
+  desktop emulator load code plugins; Android does not load `code.so`
+  yet.
 - Date: 2026-10-19
 
 ## Context

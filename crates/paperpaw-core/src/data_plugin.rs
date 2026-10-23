@@ -22,7 +22,8 @@
 //!                  [names] title, pattern (one or more), the look
 //!                  (background = yellow, line = wavy …); formats 2
 //!   menus.ini      entries of menus, a section a menu: [core.reader-menu]
-//!                  add = my.night after reader.toc, hide = stats.open;
+//!                  add = my.night after core.toc; [core.reader-more]
+//!                  hide = stats.open;
 //!                  a menu of one's own: [tools] title, entries = a.x, b.y
 //!   actions.ini    actions made of steps, a section each: [night] title,
 //!                  icon, run = core.night-mode=on, core.font-size=14,

@@ -23,9 +23,11 @@ adb install -r target/android/paperpaw.apk
 
 The script finds the SDK through `ANDROID_HOME` and the usual install
 locations, builds `libpaperpaw.so` with `cargo-ndk`, and packages and signs
-the APK with the SDK's build tools and the debug keystore. It does not use
-Gradle. `--debug` builds without optimizations. CI builds the same APK on
-every push; it can be downloaded from the workflow run's artifacts.
+the APK with the SDK's build tools. It does not use Gradle. Without other
+settings, it signs with a debug key made on this computer. The top of
+`build-apk.sh` names the variables for the release key. `--debug` builds
+without optimizations. CI builds the same APK for every push to `main`
+and every pull request. The run's artifact `paperpaw-android-apk` has it.
 
 To install on an e-reader, enable USB debugging once: open *Settings →
 About*, tap *Build number* seven times, then enable *Developer options →
@@ -33,10 +35,10 @@ USB debugging*.
 
 ## Using it
 
-- **Books:** choose *Allow access to your books* on the home screen and
-  allow *All files access* (Android 11+) or the storage permission (older
-  versions); PaperPaw restarts and shows the shared `Books` folder, where
-  Boox and most e-readers keep books. Any other folder can be chosen under
+- **Books:** choose *Allow access to your books* on the home screen. On
+  Android 11 and later, allow *All files access*. On older versions,
+  allow the storage permission. PaperPaw restarts and shows the shared
+  `Books` folder, where Boox and most e-readers keep books. Any other folder can be chosen under
   *Settings → Library → Library folder*. Until access is allowed, the
   library is `Android/data/org.paperpaw.app/files/books` with the
   sample books. `paperpaw.ini` and all caches stay in
@@ -44,6 +46,13 @@ USB debugging*.
   in the app's private folder, which no other app reads.
 - **Plugins without code:** copy plugin folders into `PaperPaw/plugins` on
   the device's storage (created once access is allowed) and restart.
+- **PDF:** PDF books open through Android's own renderer. They have no
+  search, no reading aloud and no table of contents yet.
+- **Dictionaries and fonts:** put StarDict dictionaries into
+  `PaperPaw/dictionaries` and fonts into `PaperPaw/fonts`. PaperPaw also
+  finds KOReader's, in `koreader/data/dict` and `koreader/fonts`.
+- **SD cards** show up as *SD card*.
+- **Reading aloud** uses the system's speech output.
 - **Touch:** tap the left or right side to turn pages, the middle for the
   menu, or swipe. Long-press for more options.
 - **Buttons:** page keys and volume keys turn pages; Back goes back.

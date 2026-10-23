@@ -6,7 +6,7 @@
 
 <p align="center">
   <b>E-reader software made of plugins</b><br>
-  for e-ink readers, first the Xteink X4 and X4 Pro: a microcontroller with 400 KB of RAM
+  for e-ink readers, first the Xteink X4 and X4 Pro: small readers run by a microcontroller
 </p>
 
 <p align="center">
@@ -22,13 +22,15 @@ firmware of its own on the Xteink X4 and X4 Pro; an app for Android
 e-readers follows later. Free and open source: no account, no ads, no
 tracking.
 
-> **Status: early releases (0.3).** The firmware for the Xteink X4 and
-> X4 Pro runs on both readers today, and in the desktop emulator; its
-> first release is still to come. EPUB, plain text and XTC, more formats
-> as plugins, reading positions, bookmarks and highlights shared with
-> KOReader, Calibre's wireless connection, OPDS catalogs and much more;
-> see the [changelog](CHANGELOG.md). The X4 Classic's firmware is built
-> but not yet tried on one. The app for Android e-readers follows after
+> **Status: beta (0.5.0-beta.1), for testers and developers.** The
+> firmware for the Xteink X4 and X4 Pro runs on both readers and in the
+> desktop emulator. It is a beta: expect rough edges, and keep a copy of
+> your books. Please report problems in the
+> [issues](https://github.com/hthoene/paperpaw/issues). It reads EPUB,
+> FB2, Markdown, HTML, CBZ, plain text and XTC. It shares reading
+> positions, bookmarks and highlights with KOReader, takes books from
+> Calibre over Wi-Fi and from OPDS catalogs, and much more; see the
+> [changelog](CHANGELOG.md). The app for Android e-readers follows after
 > the first release.
 
 ## Three ways in
@@ -56,6 +58,8 @@ tracking.
 </table>
 
 ## What it does
+
+On the X4 and X4 Pro, some of these come as plugins from the store.
 
 ### Everything is a plugin
 
@@ -100,35 +104,36 @@ today's reading: sad, so-so, content or happy.
 
 ### Small and simple
 
-- **Runs in 262 KB of heap.** On the Xteink X4, an ESP32-C3 with 400 KB
-  of RAM and no PSRAM, opening a book takes at most 179 KB of its heap;
-  the firmware is 6.4 MB of the 16 MB of flash.
+- **Runs in 262 KB of heap.** The Xteink X4 is an ESP32-C3 with 400 KB
+  of RAM and no PSRAM. A test opens books in the emulator on every
+  change. It fails if they take more than 85 % of that heap.
 - **Simple by default.** Turn it on and keep reading. Every function is at
   most two steps away, and it works with buttons only or with touch.
 - **One codebase, many devices.** Today: the Xteink X4 and X4 Pro, and
   the desktop emulator. Planned: Android e-readers such as Boox, in
-  grayscale and colour e-ink, the Xteink X3 and X4 Classic, Kobo, Kindle
+  grayscale and colour e-ink, the Xteink X3, Kobo, Kindle
   (jailbroken), PocketBook and reMarkable. To add a device, see
   [docs/porting.md](docs/porting.md).
 
 ## Get it
 
-PaperPaw replaces the firmware of the Xteink X4 and X4 Pro. With its
-first release it is installed from the browser, at
-[paperpaw.org/flash](https://paperpaw.org/flash), which first saves the
-reader's own firmware so it can go back. Until then it is built and
-flashed as [shells/xteink](shells/xteink/README.md) describes.
+PaperPaw replaces the firmware of the Xteink X4 and X4 Pro. Install the
+beta from the browser at [paperpaw.org/flash](https://paperpaw.org/flash).
+The flasher first saves the reader's own firmware, so you can go back.
+Developers can build and flash it as
+[shells/xteink](shells/xteink/README.md) describes.
 
 The app for Android e-readers follows after the first release.
 
 ## How it's made
 
 PaperPaw is a one-person project. Much of its code and documentation is
-written with the help of an AI model (Claude, by Anthropic); its maker
-decides what goes in, every change has to pass over 4,000 tests,
-snapshot tests of its screens and the other checks before it is merged,
-and releases are built reproducibly and tried on a real reader first.
-PaperPaw is young and may have rough edges; issues and wishes are welcome.
+written with the help of an AI model (Claude, by Anthropic). Its maker
+decides what goes in. CI runs over 4,000 tests, snapshot tests of the
+screens and other checks on every change. Releases are built
+reproducibly and tried on a real reader first. PaperPaw is in beta:
+expect rough edges, and please report them in the issues. Wishes are
+welcome too.
 More at [paperpaw.org/about](https://paperpaw.org/about).
 
 ## Customisation at a glance
@@ -142,8 +147,8 @@ language = de
 full-refresh-interval = 8
 
 [slots]
-# Replace the home screen with any screen a plugin provides.
-core.home = diagnostics.screen
+# Replace the home screen with any screen a plugin provides, here the library.
+core.home = files.browser
 
 [keymap.global]
 # Bind any input to any action; `none` removes a binding.
@@ -172,13 +177,23 @@ switched off again. These work on every device, including the Xteink X4.
 
 ```text
 plugins/large-print/
-  plugin.ini     [plugin] id, name, description, version
+  plugin.ini     [plugin] id, name, description, version, formats
   i18n/*.ini     translations, also whole new languages
   keymap.ini     key bindings, as in paperpaw.ini
   settings.ini   new defaults for any setting, e.g. [core] font-size = 14
+  menus.ini      entries added to menus or hidden from them
+  actions.ini    actions made of up to 16 steps
+  presets.ini    ready-made sets of settings
+  marks.ini      words marked on book pages by patterns
+  icons.ini      icons of actions and settings
+  setup.ini      steps of the first-run setup
+  styles.css     a stylesheet for books
+  points/*.txt   lines for keyboard layouts and the About page
   fonts/*        fonts to read with: packs (.ppfp), or .ttf, .otf and .ttc
                  where those are drawn (not on the X4 and X4 Pro)
 ```
+
+[docs/data-files.md](docs/data-files.md) describes every file.
 
 [`samples/plugins/large-print`](samples/plugins/large-print) is a complete
 example. Plugins with code are Rust crates using the SDK; on the X4 and
@@ -189,8 +204,11 @@ small one to start from.
 
 ## Try it in the emulator
 
-You need a recent stable [Rust toolchain](https://rustup.rs). The required
-targets are installed automatically from `rust-toolchain.toml`.
+Each release has the emulator ready to run for Windows, macOS and Linux,
+on the [releases page](https://github.com/hthoene/paperpaw/releases). It
+comes with `paperpaw-dev`. To build it yourself, you need a recent stable
+[Rust toolchain](https://rustup.rs). The required targets are installed
+automatically from `rust-toolchain.toml`.
 
 ```bash
 cargo run -p paperpaw-emulator -- --profile xteink-x4
@@ -200,11 +218,12 @@ cargo run -p paperpaw-emulator -- --profile xteink-x4
 cargo run -p paperpaw-emulator -- --list-profiles
 ```
 
-Keys: `PageDown`/`Space` next page, `PageUp` previous page, arrow keys,
-`Enter` confirm, `Esc` back, `M` menu; hold a key for a long press (holding
-`Enter` opens the menu on devices without a menu button). The mouse acts as
-the touch screen: tap the left or right edge to turn pages, the centre for
-the menu. `F2` shows refreshed regions, `F12` saves a screenshot.
+Keys: `PageDown` or `Space` next page, `PageUp` previous page, arrow keys,
+`Enter` confirm, `Esc` or `Backspace` back, `M` menu, `H` home, `P` power.
+Hold a key for a long press. Holding `Enter` opens the menu on devices
+without a menu button. The mouse acts as the touch screen: tap the left or
+right edge to turn pages, the centre for the menu. `F2` shows refreshed
+regions, `F3` switches the flash animation, `F12` saves a screenshot.
 
 Devices with only two buttons (and Bluetooth page turners) can operate
 everything with the *Two buttons* layout (`core.keymap-preset`): a short
@@ -220,13 +239,13 @@ public-domain books are included as EPUB and TXT. Put your own `.epub` and
 `.txt` files into
 `samples/library/books` or point `--library` at any folder.
 
-The emulator enforces each device's heap budget on the kernel, so memory
-problems show up on the desktop before they show up on hardware
-(`--heap-budget none` shows the real peak, `--trace-alloc 1024` lists the
-large allocations behind it, `--heap-report` groups the live heap by call
-site), and `--trace` prints what drawing each frame asks of the storage,
-band by band, as the X4 draws it. Headless
-runs produce screenshots for tests and bug reports:
+The emulator enforces each device's heap budget on the kernel. So memory
+problems show up on the desktop before they show up on hardware.
+`--heap-budget none` shows the real peak. `--trace-alloc 1024` lists the
+large allocations behind it. `--heap-report` groups the live heap by call
+site. `--trace` prints what drawing each frame asks of the storage, band
+by band, as the X4 draws it. Headless runs produce screenshots for tests
+and bug reports:
 
 ```bash
 cargo run -p paperpaw-emulator -- --headless --profile boox-go-7 --set core.language=de --script "page-forward,long:page-forward" --screenshot out/go7.png
@@ -250,12 +269,30 @@ cargo run -p paperpaw-emulator -- --headless --profile boox-go-7 --set core.lang
 | `crates/paperpaw-core` | The kernel: plugin host, registries, input routing, refresh policy |
 | `crates/paperpaw-app` | The standard app: the first-party plugin set shells install |
 | `crates/paperpaw-fs` | Storage in a host directory, for shells with an operating system |
-| `plugins/` | First-party plugins: home screen, reader, library, file manager, menu, settings, plugin manager, menu editor, keyboard, profiles, dictionary, vocabulary, reading goal, translation, Readwise, Wikipedia, news feeds, Wallabag, sleep screen, reading statistics, progress sync, catalogs (OPDS), browser, Wi-Fi (where PaperPaw manages it), Wi-Fi transfer, formats (EPUB, FB2, CBZ, Markdown, TXT, XTC), hyphenation, reading aids, default fonts, diagnostics, about (version and licences) |
+| `crates/paperpaw-hyphen` | Hyphenation by Liang's algorithm on pattern tables read in place |
+| `crates/paperpaw-image` | Streaming JPEG and PNG decoding to grayscale, with bounded memory |
+| `crates/paperpaw-http` | HTTP/1.1 without I/O, for requests and for serving |
+| `crates/paperpaw-json` | JSON read whole or as it streams, with little memory |
+| `crates/paperpaw-sqlite` | SQLite files read and written page by page, e.g. KOReader's statistics |
+| `crates/paperpaw-digest` | MD5, SHA-1, SHA-256 and FNV-1a |
+| `crates/paperpaw-qr` | QR codes for short text such as an address |
+| `crates/paperpaw-native` | Native code plugin files (`.ppn`): format, signatures, loading |
+| `crates/paperpaw-update` | Signed firmware update files |
+| `crates/paperpaw-serve` | HTTP serving for plugins in shells with an operating system |
+| `crates/paperpaw-x4` | The X4's and X4 Pro's hardware: displays, buttons, battery |
+| `crates/paperpaw-fat` | Storage on FAT cards with long file names |
+| `plugins/` | First-party plugins: home screen, reader, library, file manager, menu, settings, plugin manager, plugin store, firmware updates, first-run setup, first-time help, menu editor, keyboard, buttons and gestures, profiles, rules, screen lock, power modes, battery use, dictionary, Wikipedia, translation, vocabulary, reading goal, reading statistics, progress sync and KOReader highlights, Calibre, catalogs (OPDS), browser, news feeds, Wallabag, Readwise, Joplin, widgets, weather, sleep screen, Wi-Fi (where PaperPaw manages it), Wi-Fi transfer, formats (EPUB, HTML, FB2, CBZ, Markdown, TXT, XTC), hyphenation, reading aids, default fonts, fonts from the internet, diagnostics, about (version and licences) |
 | `tools/fontgen` | Converts fonts into bitmap font packs for small devices |
+| `tools/dev` | `paperpaw-dev`, which checks plugins on emulated devices |
+| `tools/sign` | `paperpaw-sign`, which signs updates, makes keys, and packs and signs plugin files |
+| `tools/plugin-files` | Builds PaperPaw's own store plugins as files for each release |
+| `tools/xtensa-std` | The X4 Pro's core libraries for code plugins |
+| `tools/x4-remote.py` | Drives an X4 over USB with developer firmware |
+| `tools/checks` | Checks of the source: file sizes, control characters |
 | `shells/desktop` | Desktop emulator with device profiles |
 | `shells/web` | The emulator in a browser (WebAssembly), with data plugins and their checks ([web emulator](docs/web-emulator.md)) |
 | `shells/android` | Android app for e-readers such as Boox ([build and install](shells/android/README.md)) |
-| `shells/xteink` | Firmware for the Xteink X4 ([build, save the stock firmware, flash](shells/xteink/README.md)) |
+| `shells/xteink` | Firmware for the Xteink X4 and X4 Pro ([build, save the stock firmware, flash](shells/xteink/README.md)) |
 | `samples/` | Emulator library with public-domain books, sample plugins |
 | `docs/` | [Writing plugins](docs/plugins.md) and [architecture decisions](docs/adr/) |
 
@@ -270,3 +307,5 @@ PaperPaw is licensed under the [Apache License, Version 2.0](LICENSE).
 The bundled fonts, [Literata](https://github.com/googlefonts/literata) and
 [Source Sans 3](https://github.com/adobe-fonts/source-sans),
 are licensed under the [SIL Open Font License 1.1](plugins/fonts-default/fonts/).
+The icon font is a subset of [Tabler Icons](https://tabler.io/icons), under
+the MIT License. [NOTICE](NOTICE) lists every bundled part and its licence.

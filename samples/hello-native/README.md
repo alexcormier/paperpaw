@@ -38,7 +38,7 @@ the `esp` toolchain, installed once for each release
 rustup.
 
 Then the plugin's folder with the file in it, signed with the author's
-key (`paperpaw-sign key` makes one), onto the card (from the
+key (`paperpaw-sign key author.key` makes one), onto the card (from the
 repository's top):
 
 ```sh
@@ -57,15 +57,15 @@ installed, as the store and the web flasher do, here over USB
 ## Publishing
 
 `build.sh` builds the files as the plugin library rebuilds them to
-compare, with the paths written as the same in any folder (the
-source's top as `/plugin`, Cargo's home as `/cargo`, the X4 Pro's
-toolchain as `/rust`). The CI job runs it: push a tag `v` +
-`plugin.ini`'s version, with
-the author's key as the repository's secret `PAPERPAW_PLUGIN_KEY`; the
-tag's release then holds the folder as ZIPs (with `store/` for the
-upload form, without for the catalogue), a signed file for each reader
-and their SHA-256 sums. The same on
-one's own computer (Linux or macOS), with both toolchains and
+compare. It writes paths the same in any folder: the source's top as
+`/plugin` and Cargo's home as `/cargo`. The X4 Pro's core libraries
+come built, with their paths as `/rust`. The CI job runs `build.sh`.
+Push a tag `v` followed by `plugin.ini`'s version, and keep the
+author's key as the repository's secret `PAPERPAW_PLUGIN_KEY`. The
+tag's release then holds the folder as two ZIPs: one with `store/` for
+the upload form, one without it for the catalogue. It also holds a
+signed file for each reader and their SHA-256 sums. You can do the same
+on your own computer with Linux or macOS. You need both toolchains and
 `paperpaw-sign` of the release:
 
 ```sh
@@ -78,10 +78,8 @@ one's own computer (Linux or macOS), with both toolchains and
 
 ## Size
 
-| | X4 | X4 Pro |
-|---|---|---|
-| The sample's file (`opt-level = "s"`) | 62.9 KB | 55.0 KB |
-| With `opt-level = "z"` | 59.5 KB | 53.7 KB |
+The sample's file is about 79 KB for the X4, built with
+`opt-level = "s"`. With `opt-level = "z"` it gets smaller, and slower.
 
 Most of it is the SDK code the plugin carries (drawing text, settings,
 translations, `core`'s formatting); the sample's own code is some 9 KB.

@@ -17,7 +17,7 @@ There are two kinds:
 - **Code plugins**: Rust crates against the SDK (`paperpaw-sdk`). They
   bring screens, actions, settings, formats, widgets, services, anything.
   They are compiled into a build of PaperPaw, or built into a file that
-  the Xteink X4, X4 Pro and X4 Classic load at their start, without a
+  the Xteink X4 and X4 Pro load at their start, without a
   new firmware (see [Plugins as files](#plugins-as-files)).
 
 This guide walks through a code plugin, then lists what plugins can
@@ -129,6 +129,12 @@ Screens are made by a factory each time they open
 (`r.add_screen(ScreenSpec::new(id, title, factory))`). Return
 `Handled::No` for what a screen does not handle: the kernel then runs
 the action's own handler (e.g. the menu button opens the menu).
+
+A screen that needs time to pass asks for it with `cx.wake_at(when)`,
+and `on_timer` comes then. Long work goes in steps, each asking for the
+next wake. `on_close_request` may keep a screen open, for example to
+ask first. `on_pointer` takes a finger whole, for drawing or moving
+rows.
 
 Some rules every screen should follow:
 
@@ -299,14 +305,23 @@ static SETTINGS: [SettingSpec; 2] = [
 r.add_settings(&SETTINGS)?;
 ```
 
-Such settings are read like any other; those that need a unit, a step,
-a section or an editor screen are made as above.
+Such settings are read like any other. What few settings need goes
+into a `static SettingExtra`, which a setting takes with
+`with_extra(&EXTRA)`: a unit, a step, a section, a slider or an editor
+screen. `for_advanced()` shows a fixed setting only with the advanced
+settings.
 
-A setting may show only while another has a value
-(`SettingExtra::shown_if("hello.sync", "on")`, the server's address
-while syncing is on), and check a value before it is set
-(`SettingExtra::check(fn)`): a value it refuses is not set, and the
-reader is told the translation of the key it returns. Screens of your
+```rust
+static WHILE_SYNCING: SettingExtra = SettingExtra::new().shown_if("hello.sync", "on");
+static SERVER: [SettingSpec; 1] = [
+    SettingSpec::fixed_text("hello.server", "hello.setting.server", "", GROUP).with_extra(&WHILE_SYNCING),
+];
+```
+
+`shown_if` shows a setting only while another has a value. Here the
+server's address shows while syncing is on. `check(fn)` checks a value
+before it is set. A value it refuses is not set, and the reader sees
+the translation of the key it returns. Screens of your
 own that list settings open them as the settings pages do with
 `ui::setting_opens` (its editor, the keyboard for text, the list of a
 choice's values); text typed there comes back to the kernel as
@@ -346,12 +361,14 @@ strings (`Params`): events known only at run time are heard by id with
 
 Answers come as events too, typed in `replies`: a plugin names the
 event it wants, e.g. `const FETCHED: Event<HttpReply> =
-Event::new("news.fetched")`, and passes it with the request. To ask
-the reader, `ask::text("Server", &ENTERED).initial(url).command()`
-opens the keyboard and brings back a `Typed`, `ask::folder` a
-`Chosen`, and `choice::open` a `Picked`. What the plugin added
-(`.with(key, value)`) comes back as the answer's `context`, to tell
-its questions apart.
+Event::new("news.fetched")`, and passes it with the request.
+
+To ask the reader, `ask::text("Server", &ENTERED).initial(url).command()`
+opens the keyboard and brings back a `Typed`. `ask::folder` brings back
+a `Chosen`, `ask::choice` a `Picked` and `ask::confirm` a `Confirmed`.
+A value passed with `.with(key, value)` comes back in the answer's
+`context`, so a plugin tells its questions apart. On `ask::choice`,
+`.about(text)` comes back as the answer's `path`.
 
 What is known of books is a service, not a screen's: `library` has a
 book's details (title, author, series, tags, cover, progress, and
@@ -420,14 +437,15 @@ short one.
 ### Testing
 
 Plugins are tested with the real kernel and an in-memory storage, as the
-sample's [test](../samples/hello-plugin/tests/hello.rs) does: build a
-kernel with the plugin, send it input, look at the open screen, the
-settings, the files, the HTTP requests it makes (`Kernel::take_io`)
-and answer them (`Kernel::http_response`). The emulator then shows how it
+sample's [test](../samples/hello-plugin/tests/hello.rs) does. The kernel
+comes from the crate `paperpaw-core`, a dev-dependency. Build a kernel
+with the plugin and send it input. Then look at the open screen, the
+settings, the files and the HTTP requests it makes (`Kernel::take_io`).
+Answer them with `Kernel::http_response`. The emulator then shows how it
 looks and how much memory it needs on each device:
 
 ```sh
-cargo run -p paperpaw-emulator -- --profile xteink-x4 --headless --script "confirm" --screenshot out.png
+cargo run -p paperpaw-emulator --features hello -- --profile xteink-x4 --headless --script "run:hello.open" --screenshot out.png --heap-report
 ```
 
 Before a plugin is published, `paperpaw-dev` checks all of it on every
@@ -438,7 +456,7 @@ device: see [Checking your plugin](#checking-your-plugin).
 `paperpaw-dev` ([`tools/dev`](../tools/dev/src/lib.rs)) looks at a
 plugin the way its users will meet it, before it is published. It runs
 PaperPaw's standard app with the plugin added on emulated devices (the
-emulator's profiles: the X4, X4 Pro, X4 Classic and the Boox by
+emulator's profiles: the X4, X4 Pro and the Boox among them by
 default), draws everything the plugin adds and checks it. It finds what
 is easy to miss on one's own device: a label that fits in English but not
 in German, a widget that spills out of its cell at 1x1, a screen that
@@ -483,7 +501,7 @@ the default look. `--set <id>=<value>` sets a setting for every run.
 | Command | What it does |
 |---|---|
 | `gallery` | Contact sheets: every screen the plugin adds and every widget in every size it can take, in every variant, as HTML pages (`gallery/index.html`) and one PNG sheet a plugin and device. |
-| `visual` | What is drawn, checked: text cut at its box or the screen (`visual.text-cut`), shortened (`visual.ellipsis`) or broken where it should not be (`visual.wrap`); ink outside a widget's cell (`visual.outside-cell`) or the screen (`visual.off-screen`); parts over each other (`visual.overlap`); margins off the interface's (`visual.margin`) and rows out of line (`visual.align`); labels and icons off centre by their ink (`visual.ink-centre`); touch targets under 7 mm (`visual.touch-target`); a focus that does not show with buttons (`visual.focus`); text that dithers away on black and white or is too light on grays (`visual.contrast`). |
+| `visual` | What is drawn, checked: text cut at its box or the screen (`visual.text-cut`), shortened (`visual.ellipsis`) or broken where it should not be (`visual.wrap`); ink outside a widget's cell (`visual.outside-cell`) or the screen (`visual.off-screen`); parts over each other (`visual.overlap`); margins off the interface's (`visual.margin`) and rows out of line (`visual.align`); labels and icons off centre by their ink (`visual.ink-centre`); touch targets under 7 mm (`visual.touch-target`); buttons without the room around them (`visual.button-room`); a focus that does not show with buttons (`visual.focus`); text that dithers away on black and white or is too light on grays (`visual.contrast`). |
 | `lint` | Texts and ids: translations missing or left over, placeholders and plural forms; keys shown as they are because English has no text for them (`lint.missing-key`); settings without help (`lint.setting-help`); plugins with code that say nothing or little of how they work (`lint.how-it-works`); ids outside the plugin's namespace; dashes (`lint.dash`); and in the pseudo-language, text that fits in English but not once it is longer (`lint.pseudo-overflow`) and text drawn without going through the catalogs (`lint.hardcoded`). |
 | `reach` | With buttons alone: every screen the plugin adds can be reached from the home screen (`reach.unreachable`) and closed with *Back* (`reach.no-close`), the focus visits every row and button (`reach.focus-skips`) and does not get stuck (`reach.focus-trap`); a screen whose focus moves but which tells nothing of its rows (`reach.undescribed`). |
 | `explore` | A cheap baseline beside the flows: every target of every screen the plugin adds (at most 20 a screen, 200 a device) used once, each from a fresh start, by touch or with the buttons; then the home screen must be reached again. A panic, an allocation the device would refuse or no way back home is an error (`explore.failed`). |
@@ -504,7 +522,7 @@ on every device it fits:
 
 ```text
 # Night mode from the menu, with buttons alone.
-profiles: xteink-x4, xteink-x4-classic
+profiles: xteink-x4, xteink-x4-pro
 
 long:confirm
 expect screen menu.list
@@ -521,11 +539,14 @@ expect stack 1
 expect no warnings
 ```
 
-Steps are those of the emulator's scripts (a button's name, `long:`,
-`tap:x:y`, `tap-on:<text>`, `swipe:`, `wait:<ms>`, `run:<action>`,
-`open:<screen>`); assertions are `expect screen`, `stack`, `text`,
-`no text`, `focus`, `on`, `off`, `setting`, `no warnings` and
-`picture <name>` (compared with a snapshot). `paperpaw-emu --record
+Steps are those of the emulator's scripts: a button's name, `long:`,
+`tap:x:y`, `tap-on:<text>`, `long-tap:x:y`, `swipe:`, `down:`, `move:`,
+`up:`, `wait:<ms>`, `run:<action>`, `open:<screen>`, `redraw` and
+`shot:<file>`. Lines before the first step may say `profiles: a, b`
+and `set: <id> = <value>`, a setting before the app starts. Assertions
+are `expect screen`, `stack`, `text`, `no text`, `focus`, `on`, `off`,
+`setting`, `no warnings` and `picture <name>`, which compares the
+screen with a snapshot. `paperpaw-emu --record
 my.flow` writes what one does in the emulator's window as a flow, to be
 replayed with `paperpaw-dev flows --flow my.flow`; the `expect` lines are
 added after.
@@ -612,7 +633,7 @@ as the run's artifact, also when a check failed.
 | Icons | `add_icon` | The icon of an action, setting group or menu; of a semantic icon (`icons::BACK`, `NEXT`, `SHIFT`, …) for a theme; `U+F8000` names a code point of one's own |
 | Settings and groups | `add_setting`, `add_setting_group` | Shown and saved by the kernel |
 | Setting defaults | `set_setting_default` | New defaults for other plugins' settings (themes) |
-| Event handlers | `subscribe` | React to events |
+| Event handlers | `on`, `subscribe` | React to events |
 | Key maps | `add_keymap`, `add_keymap_preset`, `add_keymap_when` | What buttons, taps and swipes do; bindings that apply while a switch is on |
 | Formats | `add_format` | Open a kind of file as a document to read; big pictures may be decoded when their page shows (`Document::prepare_image`); files without a known extension told by their first bytes (`FormatSpec::sniff`); the format's own settings in `OpenOptions::setting`; a document still coming says `DocumentError::NotReady`, then `events::DOCUMENT_READY` |
 | Lookup providers | `add_lookup_provider` | Where words are looked up (a glossary, a translator, Wikipedia): the dictionary's panel lists every provider's entries, those that go online when asked; an entry may open a screen with more of it (`LookupEntry::more`) |
@@ -635,6 +656,12 @@ as the run's artifact, also when a check failed.
 | Book data | `add_book_data` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book, cleaned up when it is gone |
 | Book fields | `add_book_field` | A value kept with books (`library::set_field`), shown on their information page and, where `in_catalog`, kept in the catalog to filter by |
 | Book badges | `add_book_badge` | A few letters or an icon on books' rows in views of the library |
+| Actions of others | `override_action` | Runs in place of any action's own handler; of several, the highest priority wins |
+| Inputs and gestures of one's own | `add_input`, `add_gesture` | `input.<id>` and `gesture.<id>`, bound in key maps like any other |
+| Bars across screens | `add_chrome` | Tabs, a dock or a bar along an edge that stays while screens open and close (`chrome`) |
+| Watching | `observe_actions`, `observe_events` | Sees every action before it runs, and every event after its handlers |
+| Menus by device | `set_menu_need` | Offers an entry only where the device can do it, e.g. speak |
+| Points and events declared | `add_point`, `declare_event` | Says what a point takes and what an event carries, for authors and for rules |
 
 Slots are how a plugin replaces another: bind your screen to
 `core.home` and it is the home screen; the user's
@@ -702,9 +729,9 @@ r.add_format(FormatSpec::new(
 ))?;
 ```
 
-A status item: what a status line shows, `None` to hide it; tapped, it
-opens the notes. Where a line is full, items of a low priority give way
-first.
+A status item: what a status line shows, `None` to hide it. A tap on
+it runs an action of its own plugin, here one that opens the notes.
+Where a line is full, items of a low priority give way first.
 
 ```rust
 r.add_status_item(
@@ -713,7 +740,7 @@ r.add_status_item(
         "notes.count",
         Box::new(|env, _| Some(StatusValue::Text(count(env).to_string()))),
     )
-    .tap(|_, _| Some(Command::OpenScreen(Id::new_static("notes.list"), Params::new())))
+    .tap(Id::new_static("notes.open"))
     .priority(96),
 )?;
 ```
@@ -843,14 +870,14 @@ every view of it.
 
 | What | Standard | |
 |---|---|---|
-| The library to ask | `library::service(env)` (`trait Library`; a library of one's own publishes one as `library::service::SERVICE`, giving at least `each`, `records` and `version`) | a book's details, the catalog's state, queries, the index of all books, finished and favourite, deleting books (`delete`, `can_delete`); a plugin may publish its own as `library::service::SERVICE` |
-| Every book, without reading each | `library::catalog` | one line a book: author, title, series, number, tags, how far read, favourite, opened, added, fields; read in pieces (`each`, `each_at`, `read_at`) |
+| The library to ask | `library::service(env)`, a `trait Library` | A book's details, the catalog's state, queries, the index of all books, finished and favourite. Deleting books: `delete`, `can_delete`. A library of one's own publishes one as `library::service::SERVICE`, with at least `each`, `records` and `version`. |
+| Every book, without reading each | `library::catalog` | One line a book: author, title, series, number, tags, how far read, favourite, opened, added, fields. Read in pieces with `each`, `each_at` and `read_at`. |
 | Books found, a page at a time | `catalog::Query`, `query`, `found` | by how far read, words, author, series, tag, folder, added since; sorted by title, author, series or added |
-| All books to sort and filter in memory | `library::index::Index` | 24 bytes a book (2000 at most on the X4: 48 KB), kept in a file while a book is open (`save`, `load`), status changes taken with `refresh` |
-| The catalog made anew | the kernel, as work in the background, never while a book is open | walked once a view asks after a start (`library::request_catalog`, `request_catalog_anew`), for a new library folder and after `LIBRARY_CHANGED`; caught up after `BOOK_ADDED`, `BOOK_MOVED` and changed fields; `BOOK_REMOVED` leaves a book out at once; then `events::CATALOG_CHANGED` |
+| All books to sort and filter in memory | `library::index::Index` | 24 bytes a book, at most 2000 on the X4 (48 KB). Kept in a file while a book is open with `save` and `load`. Status changes are taken with `refresh`. |
+| The catalog made anew | the kernel, as work in the background, never while a book is open | Walked once a view asks after a start (`library::request_catalog`, `request_catalog_anew`). Also for a new library folder and after `LIBRARY_CHANGED`. Caught up after `BOOK_ADDED`, `BOOK_MOVED` and changed fields. `BOOK_REMOVED` leaves a book out at once. Then `events::CATALOG_CHANGED` comes. |
 | Something of one book changed | `events::BOOK_CHANGED` (`library::changed_book`, bits of `library::what`) | finished, a favourite, read further, details, cover, a field |
 | A book came | `events::BOOK_ADDED` (`library::added(path, source)`) | transfers, syncs and downloads send it |
-| A book deleted | `Library::delete` (`library::Deleted`; asking first is the view's, as the book's sheet does) | only books (`library::is_book_path`: a format known by extension or first bytes, not in PaperPaw's own folder; others refused), what fails with why; the kernel's library removes the files and sends `events::BOOK_REMOVED` for each, on which the kernel forgets the book and removes what is kept for it in the folders of `Registrar::add_book_data`; views leave it out at once |
+| A book deleted | `Library::delete`, which answers `library::Deleted` | Only books are deleted: a format known by its extension or first bytes, outside PaperPaw's own folder (`library::is_book_path`). Others are refused, and what fails says why. Asking first is the view's job, as the book's sheet does. The kernel's library removes the files and sends `events::BOOK_REMOVED` for each. The kernel then forgets the book and removes what is kept for it in the folders of `Registrar::add_book_data`. Views leave it out at once. |
 | What can be done with a book | `menus::BOOK`, `events::BOOK_CHOSEN` | add an action to the menu, hear which book it was chosen for |
 | Another way to open a book | `menus::OPEN_WITH`, `events::BOOK_CHOSEN` | add an action to the list of *Open with …*, beside the reading apps; it hears the book as the book menu's actions do |
 | A book's information | `slots::BOOK_INFO` | lists the fields of `add_book_field` |
@@ -884,10 +911,14 @@ if let Some(weather) = env.services.get::<Box<dyn Weather>>(WEATHER.as_str()) {
 }
 ```
 
-A service is found by its type's name too, so native code plugins built
-apart from the firmware find it (see *Plugins as files* below). When
-the type of a service changes, give it a new id (`weather.forecast-2`):
-its name alone would not tell.
+A service is found by its type's name too. A native code plugin built
+apart from the firmware finds it, as long as its fingerprint is the
+firmware's (see *Plugins as files* below). When the type of a service
+changes, give it a new id (`weather.forecast-2`). A service that such
+plugins must find safely implements `services::ServiceType`, a key like
+`"weather.forecast/1"`. Publish it with
+`r.provide(id, service, version)`, and find it with
+`env.services.get_typed` or `get_versioned`. Its size and alignment are then checked.
 
 A point is an id a plugin names, with what a contribution there is in
 its documentation (for example one line per entry); others add to it
@@ -1048,9 +1079,9 @@ pictures for it are offered as presets (below).
 
 A setting's choices are open to other plugins: `Registrar::add_choice`
 offers a value of one's own among them (in one's namespace, the
-translation key of its name), after the setting's own. The sleep screen
-takes a screen of another plugin as a mode so (the flash card due and
-the reading cat are such modes):
+translation key of its name), after the setting's own. This is how the
+sleep screen shows a screen of another plugin as one of its modes. The
+flash card due and the reading cat are such modes:
 
 ```rust
 r.add_screen(ScreenSpec::new(Id::new_static("aquarium.sleep"), "aquarium.sleep", factory))?;
@@ -1079,6 +1110,11 @@ and tools in a grid as the home screen does, edited in place
 (`.category(widgets::categories::TIME)`, or `BOOKS`, `READING`, `WORDS`,
 `PERSONAL`, `WORLD`, `DEVICE`): the home screen offers widgets by their
 kind, each drawn as it would show.
+
+A widget may also react. `targets` names the places in it that do
+something. `on_input` gets taps, swipes and the buttons there, and
+`context` tells it its placement and the screen it is on. `draw_focus`
+draws the focus its own way.
 
 ### Widgets with settings
 
@@ -1145,18 +1181,20 @@ be in a list more than once (`widgets::repeatable`).
 
 A preset is a ready-made set of setting values chosen as a whole
 (`paperpaw_sdk::presets`). It has a kind, named by the plugin that
-offers such presets: that plugin lists those of its kind
-(`env.settings.presets().of_kind(kind)`), works out what one changes
-(`Preset::changes` with the settings it covers), shows it
-(`Command::PreviewSettings`: the values show on every screen without
-being kept, until the screen that asked closes) and keeps it
-(`presets::commands`); the settings of its kind that a preset leaves
-out go back to their defaults. The kinds PaperPaw's own plugins offer
-are themes (`core.theme`, below), pictures over the page for the sleep
-screen (`sleep.overlay`, see [Plugins without code](#plugins-without-code))
-and the power modes (`core.power-mode`, which the kernel wears). Add
-presets kept in the program with `Registrar::add_presets` (a `static`
-list of `Preset::fixed`), for your own kind or another plugin's:
+offers such presets. That plugin lists those of its kind with
+`env.settings.presets().of_kind(kind)`. It works out what one changes
+with `Preset::changes` and the settings it covers. It shows it with
+`Command::PreviewSettings`: the values show on every screen without
+being kept, until the screen that asked closes. It keeps it with
+`presets::commands`. The settings of its kind that a preset leaves out
+go back to their defaults.
+
+The kinds PaperPaw's own plugins offer are themes (`core.theme`,
+below) and the power modes, `core.power-mode`, which the kernel offers.
+The sleep screen offers pictures over the page as `sleep.overlay`, see
+[Plugins without code](#plugins-without-code). Add presets kept in the
+program with `Registrar::add_presets`, a `static` list of
+`Preset::fixed`. They may be of your own kind or another plugin's:
 
 ```rust
 static THEMES: [Preset; 1] = [Preset::fixed(
@@ -1223,7 +1261,7 @@ Plugins keep passwords, API keys and tokens with
 `Command::SetSecret(SecretChange::keep(id, label, value))` and read them
 with `env.secrets.get(id)`. They are all listed in *Settings, Passwords
 and keys*, where the user changes or removes them. Ask for one on the
-keyboard in password mode (`params::MODE` `password`); the keyboard
+keyboard in password mode (`ask::text(…).password()`); the keyboard
 offers to type it on a phone. They are kept apart from the settings and
 not readable at a glance, but not encrypted: the devices have no safe
 place for a key. A plugin sees its own alone: name them in its
@@ -1243,7 +1281,7 @@ saved to a file (`.save_to(path)`) for large ones. A request may set a
 longest body kept in memory (`max_body`, by default 64 KiB on small
 devices). Every request is answered once, also when it is refused
 (`HttpReply::refused` says why and when to try again). The manifest says
-that the plugin uses the network (`uses: Uses::NETWORK`); without it,
+that the plugin uses the network (`.uses(Uses::NETWORK)` in its manifest); without it,
 requests are refused. In Offline (`env.power`), only what the reader went
 online for goes out: a screen that needs the network says so on itself
 and offers *Go online*, which sends `Command::GoOnline` (the network for
@@ -1282,7 +1320,8 @@ Read large JSON answers as they stream with
 `paperpaw_sdk::json::stream`, so they need little memory.
 `Command::Serve` serves HTTP to the local network, e.g. for transfers
 from a computer or typing on a phone; what happens to it comes as
-`ServerNotice`s. Serve only while the screen showing the
+`ServerNotice`s. A plugin answers each request with `Command::Respond`.
+A server stops when the screen that started it closes. Serve only while the screen showing the
 address is open, and guard it as `paperpaw_sdk::served` does: a key
 drawn anew each time in the address (`served::key`), checked by a
 `served::Guard`, which turns requests away for a while after a few
@@ -1299,7 +1338,7 @@ it comes (`SocketRead::File`), so files of any size never need to fit in
 memory. `Command::Broadcast` finds services in the local network by a
 UDP datagram and their answers. Everything comes back as events
 (`SocketNotice`s, `socket_params`); a socket closes when the screen
-showing as it was opened is closed.
+that was open as it opened closes.
 
 ### Firmware updates
 
@@ -1333,13 +1372,14 @@ there:
 - reserves large buffers with `try_reserve` and copes when that fails;
 - checks `env.device.memory` (`MemoryClass::Small`) to do less there.
 
-The emulator's X4 profile enforces the budget, and `--heap-report` shows
-where memory goes.
+The emulator's X4 profile enforces the budget. After a run with
+`--headless`, `--heap-report` shows where memory goes.
+`--trace-alloc <bytes>` prints each allocation of at least that size.
 
 ## Plugins as files
 
 A code plugin can also be a file, `code.ppn`, in a plugin's folder on
-the card, which the X4, the X4 Pro and the X4 Classic load at their
+the card, which the X4 and the X4 Pro load at their
 start (ADR 0024): from the plugin store or from the web flasher with
 the firmware. Only code installed runs: an installer names the file by
 its digest (`native::remember_code`, kept in `.paperpaw` where neither
@@ -1349,8 +1389,8 @@ author trying their own build names it over USB
 (`tools/x4-remote.py --trust-code <id>`). Its code is the same as that
 of a plugin built in, and it runs as part of PaperPaw, at full speed
 and without a sandbox: it can do
-whatever PaperPaw can, also past the SDK. The X4 Pro and the X4 Classic
-run it from their PSRAM; the X4 writes it once into the flash behind its
+whatever PaperPaw can, also past the SDK. The X4 Pro runs it from its
+PSRAM; the X4 writes it once into the flash behind its
 firmware and runs it from there, not from its RAM.
 
 PaperPaw's own plugins that not every reader needs (statistics, widgets,
@@ -1389,7 +1429,7 @@ by name). Build it for both chips:
 
 ```sh
 cargo x4                  # riscv32imc-unknown-none-elf, the X4
-cargo +esp x4pro          # xtensa-esp32s3-none-elf, the X4 Pro and X4 Classic (espup's toolchain)
+cargo +esp x4pro          # xtensa-esp32s3-none-elf, the X4 Pro (espup's toolchain)
 ```
 
 The X4's core libraries (`core`, `alloc`) come from rustup, with the
@@ -1470,7 +1510,7 @@ Copy the folder onto the card, name its code as installed and restart
 (over USB: `python tools/x4-remote.py --push my-plugin plugins/my-plugin
 --trust-code my-plugin`). The plugin manager lists it as one with code,
 and says why one does not run (built for another PaperPaw, damaged, no
-room, not installed, changed since it was installed). Over USB, `native` (and `--info`)
+room, not installed, changed since it was installed). Over USB, `--script native` (and `--info`)
 says where each plugin lies and what loading it took.
 
 A panic's calls inside a plugin are kept with its name and the offset
@@ -1479,7 +1519,7 @@ into its file, e.g. `4261a402 (my-plugin+0x452)`: its function lies at
 before PaperPaw shows its first frame is switched off: after two such
 starts PaperPaw starts without the plugin the crash was in (without all
 plugins with code where that is not known) and says so; holding *Back*
-on the X4 and the X4 Classic, *Home* on the X4 Pro, while switching it
+on the X4, *Home* on the X4 Pro, while switching it
 on starts without them too. The plugins it switched off are switched on
 again in the plugin manager, one at a time.
 
@@ -1505,7 +1545,7 @@ points of your own](#services-and-points-of-your-own)).
 ### Publishing a code plugin
 
 The plugin library (paperpaw.org) lists a code plugin with its folder
-and a build per reader (`x4`, `x4-pro`, `x4-classic`), each a signed
+and a build per reader (`x4`, `x4-pro`), each a signed
 `.ppn` with the fingerprint it was built for, the author's key, and its
 source, which the library rebuilds to compare. The sample's `build.sh`
 builds, packs and signs both files, and its CI job
@@ -1555,8 +1595,12 @@ An action of `actions.ini` runs its steps in order, at most 16:
 over, and a setting that keeps the device safe, such as the lock's, is
 never set), `open:<slot>` opens a slot, `notify:<text>` says something,
 `emit:<event>` emits an event of the plugin's own (`<plugin>.<name>`),
-and an action's id runs that action (not one of the same file). `menus.ini` adds to any menu, places an entry
-after another and takes entries out; `title` and `entries` make a menu
+and an action's id runs that action (not one of the same file). A
+section names the action. Without the plugin's id in front, it gets
+it: `[night]` in the plugin `my` is `my.night`.
+
+`menus.ini` adds to any menu, places an entry after another and takes
+entries out; `title` and `entries` make a menu
 of one's own, which other menus list by its id:
 
 ```ini
@@ -1568,7 +1612,9 @@ run = core.night-mode=on, core.font-size=14, notify:Good night
 
 # menus.ini
 [core.reader-menu]
-add = my.night after reader.toc
+add = my.night after core.toc
+
+[core.reader-more]
 hide = stats.open
 
 [my.tools]
@@ -1592,12 +1638,13 @@ left out, and PaperPaw says so.
 A plugin's files take at most 96 KiB together besides its translations
 (512 KiB of their own), those of formats 3 at
 most 24 KiB of it, and its points at most 64 lines; what goes past is
-left out and told. A default (`settings.ini`) or a preset does not
+left out and told. Each file takes at most 64 KiB, and `plugin.ini` at
+most 4 KiB. `points/` holds at most 16 files. A default (`settings.ini`) or a preset does not
 change a setting that keeps the device safe, such as the lock's.
 
-Packs for other scripts (`tools/script-pack.py` builds Cyrillic and
-Greek for Literata) are read a glyph at a time, so devices with little
-memory can use them ([ADR 0018](adr/0018-font-packs-for-other-scripts.md)).
+Packs for other scripts are read a glyph at a time, so devices with
+little memory can use them ([ADR 0018](adr/0018-font-packs-for-other-scripts.md)).
+`tools/script-pack.py` builds Cyrillic and Greek for Literata.
 Icon packs are such packs for the icon font: `tools/icons/pack.py` builds
 one with the Tabler icons named
 (`[extends] icons.ppfp = fonts-default.icons`).
@@ -1622,8 +1669,9 @@ the About page and the logo widget): a picture in the folder, named in
 logo = plugins/my-brand/logo.png
 ```
 
-A theme is a `settings.ini` with new defaults for the appearance
-settings (*Settings > Customise > Appearance*, most of them with
+A theme can also be a `settings.ini` with new defaults. It is then not
+chosen under *Theme*; it is on while the plugin is on. Its defaults are
+for the appearance settings (*Settings > Customise > Appearance*, most of them with
 advanced settings): the header (`core.header.plain`, `.light`, `.dark`),
 the corners (`core.corners.square`, `.small`, `.round`, `.soft`; round
 and soft ones make buttons and switches pills), the highlight
@@ -1742,7 +1790,7 @@ It is PaperPaw's INI: a comment is a line of its own, never after a
 value.
 
 A code plugin adds one signed `.ppn` per reader (the form's fields
-`build-x4`, `build-x4-pro`, `build-x4-classic`) and the exact source of
+`build-x4`, `build-x4-pro`) and the exact source of
 those builds: `[source]` names a public repository on `github.com`,
 `codeberg.org` or `gitlab.com` and the tag or commit built (with `path`
 and `bin` when the crate is not at the top or the binary not named as
@@ -1783,11 +1831,11 @@ home as `/cargo`. The core libraries come built, the same for everyone:
 rustup's for the X4, the release's for the X4 Pro, which the rebuild
 installs as authors do (see [The crate](#the-crate)). So:
 
-- build with `build.sh`, or the sample's CI job
-  (`samples/hello-native/.github/workflows/build.yml`) that runs it, from
-  a pushed tag, in any folder, on Linux or macOS (on Windows, paths
-  inside the source keep their `\`, and such a build matches only builds
-  on Windows);
+- build with `build.sh`, or with the sample's CI job that runs it
+  (`samples/hello-native/.github/workflows/build.yml`). Build from a
+  pushed tag, in any folder, on Linux or macOS. On Windows, paths inside
+  the source keep their `\`, and such a build matches only builds on
+  Windows;
 - commit `Cargo.lock`;
 - keep the release's compilers pinned (`rust-toolchain.toml`, the job's
   `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`), its SDK

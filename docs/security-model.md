@@ -8,8 +8,9 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 ## What is protected
 
 - **The firmware.** A device installs only firmware signed with
-  PaperPaw's key (Ed25519), checked while it is written; a new version that
-  does not start cleanly is undone ([ADR 0019](adr/0019-firmware-updates.md)).
+  PaperPaw's Ed25519 key, and it checks the signature while it writes
+  the image. A new version that does not start cleanly is undone
+  ([ADR 0019](adr/0019-firmware-updates.md)).
   The image paperpaw.org offers for flashing in the browser is signed
   too; the site and the browser check it before it is written.
   Firmware signed with another key (one's own builds) installs only
@@ -17,8 +18,10 @@ are reported as [SECURITY.md](../SECURITY.md) says.
   install, and an older firmware only when the reader chooses it, told
   it is older: nothing on the card makes a key trusted.
 - **Passwords and keys** (Wi-Fi, catalogs, sync accounts) are kept in
-  `.paperpaw/secrets.txt`, veiled so that they do not show at a glance,
-  **not encrypted**: whoever has the card has them. They are never shown
+  `.paperpaw/secrets.txt`. They are veiled so that they do not show at a
+  glance, but they are **not encrypted**: whoever has the card has them.
+  On Android the file is in the app's private folder, which only
+  PaperPaw reads. They are never shown
   in full; screens show dots and ask for them afresh. Wi-Fi networks the
   web flasher gives with the firmware (X4s) go to the card as `wifi.ini`,
   are kept with the passwords at the next start and the file removed;
@@ -30,42 +33,46 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 - **Physical access (the card, USB).** Whoever holds the device can read
   and change the card and flash any firmware over USB (the chip's own
   bootloader); PaperPaw does not try to stop that. Firmware built for
-  testing has a remote control over USB (files in and out, presses, the
-  screen); released firmware is built without it (the X4's `remote`
-  feature).
+  testing has a remote control over USB: files in and out, presses, the
+  screen. Released firmware is built without it (the `remote` feature
+  of `shells/xteink`).
 - **The local network.** The device listens only while a screen that
   serves a page is open (the Wi-Fi transfer, typing on a phone, the
   flash cards' *Edit with your phone*, setting up Wi-Fi with a phone).
   Nothing listens in the background. The transfer, typing on a phone
-  and the flash cards show an address (as text and a QR code) with a key
-  drawn anew each time (`?k=`, 65 bits) that every request must carry;
-  after five wrong keys no request is answered for a minute
-  (`paperpaw_sdk::served`).
-- **The reader's own network.** Where PaperPaw runs Wi-Fi itself (the
-  X4s), the Wi-Fi transfer without a router and the setup of Wi-Fi with
-  a phone open a network of the device's own (WPA, its password drawn
-  anew each time and shown only on the screen, as a QR code to join).
+  and the flash cards show an address as text and as a QR code. The
+  address carries a key of 65 bits, drawn anew each time (`?k=`), and
+  every request must carry it. After five wrong keys, no request is
+  answered for a minute (`paperpaw_sdk::served`).
+- **The reader's own network.** Where PaperPaw runs Wi-Fi itself, as on
+  the X4s, two screens open a network of the device's own: the Wi-Fi
+  transfer without a router and the setup of Wi-Fi with a phone. The
+  network uses WPA2 with a password drawn anew each time. The password
+  shows only on the screen, also as a QR code to join.
   The Wi-Fi setup serves its page only there and takes only the form it
   gave out. The network closes with the screen, or after ten minutes
   in which nothing comes.
-- **The internet.** The device connects out only (catalogs, sync,
-  updates, news), over TLS where the address says `https`, with the
-  certificates checked against the clock (set over the network first).
+- **The internet.** The device only connects out, for catalogs, sync,
+  updates and news. Where the address says `https`, it uses TLS and
+  checks the certificates against the clock, which it sets over the
+  network first.
   An update search sends the chip, the version, the plugin crates built
   in, the fingerprint code plugins need and the code plugins installed
   with their versions, no identifier: when the
   reader asks, and once a day while an update found waits for plugins
   ([ADR 0022](adr/0022-plugins-in-updates.md)). The store asks for its
   list with the kind of device and the language, no identifier either.
-- **Files.** Books, fonts, pictures and catalogs are untrusted input: the
-  parsers bound their memory and time, reject what they cannot read, and
-  are fuzzed in CI (EPUB, text, XML, hyphenation, images, Lua).
+- **Files.** Books, fonts, pictures and catalogs are untrusted input.
+  The parsers bound their memory and time, and they reject what they
+  cannot read. CI fuzzes six of them: EPUB, text, XML, hyphenation,
+  images and Lua.
 
 ## Plugins
 
-- **Code plugins** run with the kernel's rights: all of the card, the
-  network, the passwords through the SDK, and past the SDK, as native
-  code without a sandbox. They are built into the firmware (or the app),
+- **Code plugins** run as native code without a sandbox, with the
+  kernel's rights. Through the SDK, a plugin reaches all of the card,
+  the network and its own passwords and keys. Past the SDK, its code can
+  reach everything, other plugins' passwords too. They are built into the firmware (or the app),
   or on the X4s come as plugin files (`code.ppn`) from the store, with a
   firmware update or from the web flasher
   ([ADR 0024](adr/0024-native-code-plugins.md)). A published file is
@@ -89,9 +96,10 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 
 ## The screen lock
 
-The lock (a PIN, a pattern or a password, asked for at start and on
-waking) keeps a person who picks up the device from using it: from
-reading what is open, changing settings or seeing passwords on screen.
+The lock is a PIN, a pattern or a password. It is asked for at start
+and, unless the reader turns this off, on waking. It keeps a person who
+picks up the device from using it: from reading what is open, changing
+settings or seeing passwords on screen.
 It is a convenience, not encryption: the card is as readable as without
 it, and whoever takes the card out or flashes firmware gets past it. The
 code is kept as a salted hash, never as it is.

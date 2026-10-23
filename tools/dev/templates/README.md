@@ -100,6 +100,9 @@ paperpaw-dev check path/to/my-theme --quick
 paperpaw-dev package path/to/my-theme --release 0.4.0
 ```
 
+Or take `paperpaw-dev` ready built from a release. It is in
+`paperpaw-emu-<version>-<computer>.zip`, beside the emulator.
+
 `package` checks it as the device's installer and the plugin library take
 it, and installs it on emulated devices as the store does: what either
 would refuse is an error. In CI, the job above with these two steps in
