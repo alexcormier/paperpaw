@@ -21,7 +21,8 @@
 //! ```
 //!
 //! - Keys and section names consist of ASCII letters, digits, `_`, `-`, `.`
-//!   and `@`.
+//!   and `@`; a section name may also be words of those, one space
+//!   between each (`[menu core.reader-menu]`).
 //! - Unquoted values are taken literally (trimmed). There are no inline
 //!   comments, so values may contain `#` and `;`.
 //! - Quoted values support the escapes `\\`, `\"`, `\n`, `\t` and `\u{…}`.
@@ -187,7 +188,7 @@ impl<'a> Iterator for Parser<'a> {
                     return error(ErrorKind::InvalidSection);
                 };
                 let name = name.trim();
-                if !is_identifier(name) {
+                if !is_section(name) {
                     return error(ErrorKind::InvalidSection);
                 }
                 self.section = name;
@@ -213,6 +214,12 @@ impl<'a> Iterator for Parser<'a> {
             }));
         }
     }
+}
+
+/// A section name: identifiers, one space between each, as
+/// `[menu core.reader-menu]` names a menu of another plugin.
+fn is_section(s: &str) -> bool {
+    s.split(' ').all(is_identifier)
 }
 
 /// Letters, digits, `_`, `-`, `.`, and `@` (the settings of one
@@ -311,7 +318,7 @@ where
     let mut index: BTreeMap<(&str, &str), usize> = BTreeMap::new();
     for (section, key, value) in &entries {
         let (section, key) = (section.as_ref(), key.as_ref());
-        if !(section.is_empty() || is_identifier(section)) || !is_identifier(key) {
+        if !(section.is_empty() || is_section(section)) || !is_identifier(key) {
             continue;
         }
         let text = alloc::format!("{key} = {}", quote(value.as_ref()));
@@ -532,6 +539,23 @@ mod tests {
         assert_eq!(error(r#"a = "\x""#).kind, ErrorKind::InvalidEscape);
         assert_eq!(error(r#"a = "\u{zz}""#).kind, ErrorKind::InvalidEscape);
         assert_eq!(error(r#"a = "x" trailing"#).kind, ErrorKind::InvalidLine);
+        // Words of a section name, one space between each, no more.
+        for header in ["[menu  core.menu]", "[ menu x ]x", "[menu core/menu]", "[]"] {
+            assert_eq!(error(header).kind, ErrorKind::InvalidSection, "{header}");
+        }
+    }
+
+    #[test]
+    fn a_section_name_may_be_words() {
+        let parsed: Vec<_> = parse("[menu core.reader-menu]\nadd = my.night\n[ menu x ]\nhide = a")
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(parsed[0].section, "menu core.reader-menu");
+        assert_eq!(parsed[1].section, "menu x", "trimmed as before");
+        assert_eq!(
+            set("", "menu core.reader-menu", "add", "my.night"),
+            "[menu core.reader-menu]\nadd = my.night\n"
+        );
     }
 
     #[test]
@@ -625,7 +649,8 @@ a = 1
             ("core", " padded"),
             ("x]\n[y", "a"),
             ("x=y", "a"),
-            ("a b", "a"),
+            ("a  b", "a"),
+            (" a", "a"),
         ] {
             assert_eq!(
                 set(source, section, key, "1"),
