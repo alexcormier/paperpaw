@@ -124,7 +124,7 @@ impl PageScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         let line = (style.row as u16) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         // The rows go below the text, where it ends (see `draw`).

@@ -994,11 +994,12 @@ pub const paperpaw_sdk::decorations::Tone::ALL: &[paperpaw_sdk::decorations::Ton
 pub fn paperpaw_sdk::decorations::Tone::color(self) -> paperpaw_platform::pixel::Color
 pub fn paperpaw_sdk::decorations::Tone::from_id(&str) -> core::option::Option<paperpaw_sdk::decorations::Tone>
 pub const fn paperpaw_sdk::decorations::Tone::id(self) -> &'static str
-pub struct paperpaw_sdk::decorations::Decorated
+#[non_exhaustive] pub struct paperpaw_sdk::decorations::Decorated
 pub paperpaw_sdk::decorations::Decorated::end: paperpaw_document::Locator
 pub paperpaw_sdk::decorations::Decorated::role: paperpaw_sdk::Id
 pub paperpaw_sdk::decorations::Decorated::start: paperpaw_document::Locator
 impl paperpaw_sdk::decorations::Decorated
+pub fn paperpaw_sdk::decorations::Decorated::new(paperpaw_document::Locator, paperpaw_document::Locator, paperpaw_sdk::Id) -> Self
 pub fn paperpaw_sdk::decorations::Decorated::words(&[paperpaw_sdk::decorations::PageWord<'_>], &paperpaw_sdk::Id) -> core::option::Option<paperpaw_sdk::decorations::Decorated>
 #[non_exhaustive] pub struct paperpaw_sdk::decorations::Decoration
 pub paperpaw_sdk::decorations::Decoration::background: core::option::Option<paperpaw_sdk::decorations::Tone>
@@ -1043,7 +1044,7 @@ pub fn paperpaw_sdk::decorations::Decorators::decorate(&self, &paperpaw_sdk::Env
 pub fn paperpaw_sdk::decorations::Decorators::get(&self, &paperpaw_sdk::Id) -> core::option::Option<&paperpaw_sdk::decorations::DecoratorSpec>
 pub fn paperpaw_sdk::decorations::Decorators::is_empty(&self) -> bool
 pub fn paperpaw_sdk::decorations::Decorators::signature(&self, &paperpaw_sdk::Env<'_>) -> u64
-pub struct paperpaw_sdk::decorations::Mark
+#[non_exhaustive] pub struct paperpaw_sdk::decorations::Mark
 pub paperpaw_sdk::decorations::Mark::decorator: paperpaw_sdk::Id
 pub paperpaw_sdk::decorations::Mark::end: paperpaw_document::Locator
 pub paperpaw_sdk::decorations::Mark::role: paperpaw_sdk::Id
@@ -1056,14 +1057,18 @@ pub paperpaw_sdk::decorations::MarkRules::decorator: paperpaw_sdk::decorations::
 pub paperpaw_sdk::decorations::MarkRules::roles: alloc::vec::Vec<(paperpaw_sdk::Id, alloc::string::String, paperpaw_sdk::decorations::Decoration)>
 impl paperpaw_sdk::decorations::MarkRules
 pub fn paperpaw_sdk::decorations::MarkRules::parse(&paperpaw_sdk::Id, &str) -> core::result::Result<paperpaw_sdk::decorations::MarkRules, paperpaw_sdk::RegisterError>
-pub struct paperpaw_sdk::decorations::PageText<'a>
+#[non_exhaustive] pub struct paperpaw_sdk::decorations::PageText<'a>
 pub paperpaw_sdk::decorations::PageText::language: &'a str
 pub paperpaw_sdk::decorations::PageText::path: &'a str
 pub paperpaw_sdk::decorations::PageText::words: &'a [paperpaw_sdk::decorations::PageWord<'a>]
-pub struct paperpaw_sdk::decorations::PageWord<'a>
+impl<'a> paperpaw_sdk::decorations::PageText<'a>
+pub const fn paperpaw_sdk::decorations::PageText<'a>::new(&'a str, &'a str, &'a [paperpaw_sdk::decorations::PageWord<'a>]) -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::decorations::PageWord<'a>
 pub paperpaw_sdk::decorations::PageWord::end: paperpaw_document::Locator
 pub paperpaw_sdk::decorations::PageWord::start: paperpaw_document::Locator
 pub paperpaw_sdk::decorations::PageWord::text: &'a str
+impl<'a> paperpaw_sdk::decorations::PageWord<'a>
+pub const fn paperpaw_sdk::decorations::PageWord<'a>::new(&'a str, paperpaw_document::Locator, paperpaw_document::Locator) -> Self
 pub struct paperpaw_sdk::decorations::PatternDecorator
 impl paperpaw_sdk::decorations::PatternDecorator
 pub fn paperpaw_sdk::decorations::PatternDecorator::decorate(&self, &paperpaw_sdk::decorations::PageText<'_>) -> alloc::vec::Vec<paperpaw_sdk::decorations::Decorated>
@@ -2786,12 +2791,16 @@ pub fn paperpaw_sdk::secrets::Anyone::runs(&self, &str) -> bool
 pub mod paperpaw_sdk::semantics
 pub use paperpaw_sdk::semantics::Described
 pub use paperpaw_sdk::semantics::Role
-pub struct paperpaw_sdk::semantics::Part
+#[non_exhaustive] pub struct paperpaw_sdk::semantics::Part
 pub paperpaw_sdk::semantics::Part::area: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::semantics::Part::focused: bool
 pub paperpaw_sdk::semantics::Part::label: alloc::string::String
 pub paperpaw_sdk::semantics::Part::on: core::option::Option<bool>
 pub paperpaw_sdk::semantics::Part::role: paperpaw_graphics::canvas::Role
+impl paperpaw_sdk::semantics::Part
+pub fn paperpaw_sdk::semantics::Part::focused(self, bool) -> Self
+pub fn paperpaw_sdk::semantics::Part::new(paperpaw_graphics::canvas::Role, impl core::convert::Into<alloc::string::String>, paperpaw_platform::geometry::Rect) -> Self
+pub fn paperpaw_sdk::semantics::Part::on(self, core::option::Option<bool>) -> Self
 pub fn paperpaw_sdk::semantics::find<'a>(&'a [paperpaw_sdk::semantics::Part], &str) -> core::option::Option<&'a paperpaw_sdk::semantics::Part>
 pub fn paperpaw_sdk::semantics::focused(&[paperpaw_sdk::semantics::Part]) -> core::option::Option<&paperpaw_sdk::semantics::Part>
 pub fn paperpaw_sdk::semantics::role_name(paperpaw_graphics::canvas::Role) -> &'static str
@@ -3291,7 +3300,7 @@ pub paperpaw_sdk::ui::look::SwitchPart::rect: paperpaw_platform::geometry::Rect
 pub type paperpaw_sdk::ui::look::InkPainter<P> = fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, &P) -> core::option::Option<paperpaw_platform::pixel::Color>
 pub type paperpaw_sdk::ui::look::Painter<P> = fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, &P) -> bool
 pub mod paperpaw_sdk::ui::offline
-pub enum paperpaw_sdk::ui::offline::Offer
+#[non_exhaustive] pub enum paperpaw_sdk::ui::offline::Offer
 pub paperpaw_sdk::ui::offline::Offer::NotNow
 pub paperpaw_sdk::ui::offline::Offer::Online
 pub struct paperpaw_sdk::ui::offline::OfflineOffer
@@ -3374,7 +3383,7 @@ pub struct paperpaw_sdk::ui::slider::SliderDrag
 impl paperpaw_sdk::ui::slider::SliderDrag
 pub fn paperpaw_sdk::ui::slider::SliderDrag::dragging(&self) -> core::option::Option<i64>
 pub fn paperpaw_sdk::ui::slider::SliderDrag::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::Slider, paperpaw_platform::geometry::Rect, i64) -> core::option::Option<paperpaw_sdk::ui::slider::SliderStep>
-pub struct paperpaw_sdk::ui::slider::SliderParts
+#[non_exhaustive] pub struct paperpaw_sdk::ui::slider::SliderParts
 pub paperpaw_sdk::ui::slider::SliderParts::minus: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::slider::SliderParts::plus: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::slider::SliderParts::track: paperpaw_platform::geometry::Rect
@@ -3495,10 +3504,10 @@ pub paperpaw_sdk::ui::ListChange::None
 pub paperpaw_sdk::ui::ListChange::Page
 impl paperpaw_sdk::ui::ListChange
 pub fn paperpaw_sdk::ui::ListChange::request(self, &mut paperpaw_sdk::Cx<'_, '_>)
-pub enum paperpaw_sdk::ui::Offer
+#[non_exhaustive] pub enum paperpaw_sdk::ui::Offer
 pub paperpaw_sdk::ui::Offer::NotNow
 pub paperpaw_sdk::ui::Offer::Online
-pub enum paperpaw_sdk::ui::PickerPart
+#[non_exhaustive] pub enum paperpaw_sdk::ui::PickerPart
 pub paperpaw_sdk::ui::PickerPart::Minus(usize)
 pub paperpaw_sdk::ui::PickerPart::Plus(usize)
 pub paperpaw_sdk::ui::PickerPart::Value(usize)
@@ -3578,12 +3587,12 @@ pub fn paperpaw_sdk::ui::Grid::per_page(&self) -> usize
 pub fn paperpaw_sdk::ui::Grid::rows(&self) -> usize
 pub fn paperpaw_sdk::ui::Grid::step(&self, usize, &paperpaw_sdk::Id, usize) -> core::option::Option<usize>
 pub struct paperpaw_sdk::ui::Header
-pub paperpaw_sdk::ui::Header::area: paperpaw_platform::geometry::Rect
-pub paperpaw_sdk::ui::Header::note_button: bool
-pub paperpaw_sdk::ui::Header::note_focused: bool
 impl paperpaw_sdk::ui::Header
+pub fn paperpaw_sdk::ui::Header::area(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::Header::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, &str, core::option::Option<&str>, core::option::Option<(usize, usize)>)
 pub fn paperpaw_sdk::ui::Header::new(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, bool) -> Self
+pub fn paperpaw_sdk::ui::Header::note_button(self, bool) -> Self
+pub fn paperpaw_sdk::ui::Header::note_focused(self, bool) -> Self
 pub fn paperpaw_sdk::ui::Header::on_page_number(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Point, core::option::Option<(usize, usize)>) -> bool
 pub fn paperpaw_sdk::ui::Header::on_title(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Point, core::option::Option<(usize, usize)>) -> bool
 pub fn paperpaw_sdk::ui::Header::tap(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Point, core::option::Option<(usize, usize)>) -> core::option::Option<paperpaw_sdk::Id>
@@ -3631,8 +3640,8 @@ pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_action(&mut self, &paperpaw_s
 pub fn paperpaw_sdk::ui::offline::OfflineOffer::on_tap(&mut self, paperpaw_platform::geometry::Point, &mut paperpaw_sdk::Cx<'_, '_>) -> core::option::Option<paperpaw_sdk::ui::offline::Offer>
 pub fn paperpaw_sdk::ui::offline::OfflineOffer::shows(&self, &paperpaw_sdk::Env<'_>) -> bool
 pub struct paperpaw_sdk::ui::Pager
-pub paperpaw_sdk::ui::Pager::area: paperpaw_platform::geometry::Rect
 impl paperpaw_sdk::ui::Pager
+pub fn paperpaw_sdk::ui::Pager::area(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::Pager::draw(&self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, (usize, usize))
 pub fn paperpaw_sdk::ui::Pager::height(&paperpaw_sdk::ui::UiStyle) -> u16
 pub fn paperpaw_sdk::ui::Pager::new(&paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect) -> Self
@@ -3652,7 +3661,7 @@ pub fn paperpaw_sdk::ui::reorder::Reorder::draw(&self, &mut paperpaw_graphics::c
 pub fn paperpaw_sdk::ui::reorder::Reorder::draw_grip(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool)
 pub fn paperpaw_sdk::ui::reorder::Reorder::grip(paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::reorder::Reorder::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::ListView, usize) -> core::option::Option<paperpaw_sdk::ui::reorder::ReorderStep>
-pub struct paperpaw_sdk::ui::RowLines
+#[non_exhaustive] pub struct paperpaw_sdk::ui::RowLines
 pub paperpaw_sdk::ui::RowLines::control: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::RowLines::height: u16
 pub paperpaw_sdk::ui::RowLines::title: paperpaw_platform::geometry::Rect
@@ -3728,7 +3737,7 @@ pub struct paperpaw_sdk::ui::SliderDrag
 impl paperpaw_sdk::ui::slider::SliderDrag
 pub fn paperpaw_sdk::ui::slider::SliderDrag::dragging(&self) -> core::option::Option<i64>
 pub fn paperpaw_sdk::ui::slider::SliderDrag::on_pointer(&mut self, &paperpaw_platform::input::PointerEvent, &paperpaw_sdk::ui::UiStyle, &paperpaw_sdk::ui::slider::Slider, paperpaw_platform::geometry::Rect, i64) -> core::option::Option<paperpaw_sdk::ui::slider::SliderStep>
-pub struct paperpaw_sdk::ui::SliderParts
+#[non_exhaustive] pub struct paperpaw_sdk::ui::SliderParts
 pub paperpaw_sdk::ui::SliderParts::minus: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::SliderParts::plus: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::SliderParts::track: paperpaw_platform::geometry::Rect
@@ -4086,7 +4095,7 @@ pub paperpaw_sdk::widgets::look::Frame::None
 impl paperpaw_sdk::widgets::look::Frame
 pub fn paperpaw_sdk::widgets::look::Frame::of(&str) -> Self
 pub const fn paperpaw_sdk::widgets::look::Frame::value(self) -> &'static str
-pub enum paperpaw_sdk::widgets::look::Padding
+#[non_exhaustive] pub enum paperpaw_sdk::widgets::look::Padding
 pub paperpaw_sdk::widgets::look::Padding::Auto
 pub paperpaw_sdk::widgets::look::Padding::Large
 pub paperpaw_sdk::widgets::look::Padding::None
@@ -4172,7 +4181,7 @@ pub paperpaw_sdk::widgets::Frame::None
 impl paperpaw_sdk::widgets::look::Frame
 pub fn paperpaw_sdk::widgets::look::Frame::of(&str) -> Self
 pub const fn paperpaw_sdk::widgets::look::Frame::value(self) -> &'static str
-pub enum paperpaw_sdk::widgets::Padding
+#[non_exhaustive] pub enum paperpaw_sdk::widgets::Padding
 pub paperpaw_sdk::widgets::Padding::Auto
 pub paperpaw_sdk::widgets::Padding::Large
 pub paperpaw_sdk::widgets::Padding::None

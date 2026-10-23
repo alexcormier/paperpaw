@@ -94,7 +94,7 @@ impl FolderChooser {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         Self {
             setting,
@@ -263,7 +263,7 @@ impl Screen for FolderChooser {
         let title = match style.font(env) {
             // Long paths keep their end, which tells where one is.
             Some(font) => {
-                let width = f32::from(self.header.area.width) * 0.6;
+                let width = f32::from(self.header.area().width) * 0.6;
                 if font.measure(style.title, &title) > width {
                     let tail: String = title.chars().rev().collect();
                     let fitted = ui::fit(&font, style.title, &tail, width);

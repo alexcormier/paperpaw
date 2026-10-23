@@ -75,7 +75,7 @@ impl Overview {
         let list_height = row * rows.len() as u16;
         // The lowest the rows may start.
         let lowest = display.height.saturating_sub(list_height + gap);
-        let tiles = Rect::new(0, header.area.height + gap, display.width, row * 8 / 5);
+        let tiles = Rect::new(0, header.area().height + gap, display.width, row * 8 / 5);
         let chart_top = tiles.y + tiles.height + gap * 2;
         // The chart takes the room left, up to a third of the screen; the
         // totals right below it.
@@ -139,7 +139,7 @@ impl Overview {
     fn stack(&mut self, env: &Env<'_>) {
         let style = self.style;
         let display = env.device.display;
-        let top = self.header.area.height;
+        let top = self.header.area().height;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut entries = alloc::vec![Entry::Tile(0), Entry::Tile(1), Entry::Tile(2), Entry::Chart];
         if !self.days.is_empty() {

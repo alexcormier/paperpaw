@@ -49,7 +49,7 @@ impl FindScreen {
         let margin = style.margin as u16;
         let gap = style.gap as u16;
         let row = style.touch_row(style.row) as u16;
-        let search = Rect::new(0, header.area.height + gap, display.width, row);
+        let search = Rect::new(0, header.area().height + gap, display.width, row);
         // Which letters have books: by title (without "The") or surname.
         let mut has = [false; 27];
         library::service(env).each(env, &mut |_, line| {

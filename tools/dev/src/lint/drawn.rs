@@ -327,14 +327,7 @@ mod tests {
     }
 
     fn text(label: &str, area: Rect, clip: Rect) -> Described {
-        Described {
-            role: Role::Text,
-            label: label.to_string(),
-            area,
-            focused: false,
-            on: None,
-            clip,
-        }
+        Described::new(Role::Text, label.to_string(), area).clip(clip)
     }
 
     const SCREEN: Rect = Rect::new(0, 0, 480, 800);

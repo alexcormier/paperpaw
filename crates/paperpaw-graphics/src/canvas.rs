@@ -27,6 +27,7 @@ pub struct Canvas<'a> {
 /// screen aloud, automation and tests. Drawing helpers describe what
 /// they draw; most of the time nobody asks and it costs nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Described {
     pub role: Role,
     /// Its text, if it has one of its own.
@@ -40,6 +41,39 @@ pub struct Described {
     /// screen, cell or row it was drawn into. An area reaching past it
     /// was cut (see `paperpaw-dev`'s checks).
     pub clip: Rect,
+}
+
+impl Described {
+    /// A part in `role` with `label` at `area`, drawn into a canvas
+    /// showing `area` alone: without the focus, neither on nor off.
+    pub fn new(role: Role, label: impl Into<String>, area: Rect) -> Self {
+        Self {
+            role,
+            label: label.into(),
+            area,
+            focused: false,
+            on: None,
+            clip: area,
+        }
+    }
+
+    /// With the focus or not.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
+    /// Switched on or off, or neither.
+    pub fn on(mut self, on: Option<bool>) -> Self {
+        self.on = on;
+        self
+    }
+
+    /// Drawn into a canvas that showed `clip`.
+    pub fn clip(mut self, clip: Rect) -> Self {
+        self.clip = clip;
+        self
+    }
 }
 
 /// What a described part is.

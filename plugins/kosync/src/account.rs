@@ -67,7 +67,7 @@ impl AccountScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         // No longer than the screen: the list pages where its rows are tall.
         let rows = ((style.row * 6) as u16).min(display.height.saturating_sub(top));
         let list =

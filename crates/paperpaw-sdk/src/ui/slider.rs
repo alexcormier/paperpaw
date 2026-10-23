@@ -127,6 +127,7 @@ impl<'a> SliderView<'a> {
 
 /// Where the parts of a slider are in its band (see [`parts`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct SliderParts {
     pub minus: Rect,
     pub track: Rect,

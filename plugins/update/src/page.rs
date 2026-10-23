@@ -801,7 +801,7 @@ impl Screen for UpdatePage {
         let gap = style.gap as u16;
         let width = env.device.display.width.saturating_sub(2 * margin);
         let (title, help) = self.texts(env);
-        let mut y = self.header.area.height + gap;
+        let mut y = self.header.area().height + gap;
         let area = Rect::new(
             margin,
             y,

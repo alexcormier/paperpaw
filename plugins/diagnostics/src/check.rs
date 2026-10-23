@@ -748,7 +748,7 @@ impl Check {
         let mut y = if touch {
             (env.metrics.mm(TARGET_MM * 2 + 2) + style.gap) as u16
         } else {
-            self.header.area.y + self.header.area.height + gap * 2
+            self.header.area().y + self.header.area().height + gap * 2
         };
         let title = Rect::new(margin, y, width, lines(style.title, &title_text));
         y += title.height + gap;

@@ -492,6 +492,7 @@ pub fn setting_row(style: &UiStyle, spec: &SettingSpec, row: u32, noted: bool) -
 /// out ([`row_lines`]), for every value it may show (a choice's widest
 /// option), and moved to where the row is drawn ([`RowLines::at`]).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct RowLines {
     /// The line of the title.
     pub title: Rect,

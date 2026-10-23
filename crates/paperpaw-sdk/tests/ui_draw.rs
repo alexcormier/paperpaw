@@ -416,7 +416,7 @@ proptest! {
         let style = UiStyle::new(&env);
         let header = Header::new(&env, &style, back);
         let paging = (pages > 0).then_some((page % pages.max(1), pages));
-        let a = header.area;
+        let a = header.area();
         let actions_across: Vec<Option<paperpaw_sdk::Id>> =
             across(a).map(|p| header.tap(&env, &style, p, paging)).collect();
         // From the left: back (if any), the title, then previous and next.
@@ -467,13 +467,13 @@ proptest! {
         let style = UiStyle::new(&env);
         let header = Header::new(&env, &style, back);
         let paging = Some((page % pages, pages));
-        for p in across(header.area) {
+        for p in across(header.area()) {
             prop_assert_eq!(header.tap(&env, &style, p, paging), None);
         }
         let (described, mut frame) = describe(480, 800, |c| {
             header.draw(c, &env, &style, "Library", None, paging);
         });
-        prop_assert_eq!(drawn_outside(&mut frame, header.area), None);
+        prop_assert_eq!(drawn_outside(&mut frame, header.area()), None);
         let label = format!("{} / {}", page % pages + 1, pages);
         prop_assert!(described.iter().any(|d| d.label == label), "the page number");
     }
@@ -502,7 +502,7 @@ fn the_header_keeps_to_the_content_margins() {
         let env = h.env();
         let style = UiStyle::new(&env);
         let header = Header::new(&env, &style, true);
-        let area = header.area;
+        let area = header.area();
         let middle = area.y + area.height / 4..area.y + area.height * 3 / 4;
         let mut arrows = frame(480, 800);
         header.draw(&mut arrows.canvas(), &env, &style, "", None, Some((1, 3)));
@@ -569,7 +569,7 @@ fn header_titles_are_centred_by_their_capitals() {
         let env = h.env();
         let style = UiStyle::new(&env);
         let header = Header::new(&env, &style, false);
-        let height = header.area.height;
+        let height = header.area().height;
         let title = |text: &str| {
             let mut shot = frame(480, 800);
             header.draw(&mut shot.canvas(), &env, &style, text, None, None);
@@ -593,8 +593,7 @@ fn a_focused_header_note_is_told_as_a_focused_button() {
     let h = Harness::new(Device::BUTTONS);
     let env = h.env();
     let style = UiStyle::new(&env);
-    let mut header = Header::new(&env, &style, true);
-    header.note_focused = true;
+    let header = Header::new(&env, &style, true).note_focused(true);
     let (described, _) = describe(480, 800, |c| {
         header.draw(c, &env, &style, "Library", Some("by author"), None);
     });
@@ -628,7 +627,7 @@ fn a_header_note_is_a_button_only_where_it_does_something() {
             .iter()
             .any(|d| d.role == Role::Button && d.label == "3 hits")
     );
-    header.note_button = true;
+    header = header.note_button(true);
     let button = note(&header)
         .into_iter()
         .find(|d| d.role == Role::Button && d.label == "3 hits")

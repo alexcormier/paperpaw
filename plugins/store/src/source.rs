@@ -59,7 +59,7 @@ impl Screen for SourceScreen {
         let display = env.device.display;
         let margin = style.margin as u16;
         let width = display.width.saturating_sub(2 * margin);
-        let mut y = self.header.area.height + style.gap as u16 * 2;
+        let mut y = self.header.area().height + style.gap as u16 * 2;
         // Who it is from, then the code, then the address in full.
         let line = font.line_metrics(style.text).line_height as u16;
         let name = Rect::new(margin, y, width, line);

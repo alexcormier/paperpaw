@@ -203,13 +203,7 @@ mod tests {
     use std::time::Duration;
 
     fn part(role: Role, label: &str, area: Rect) -> Part {
-        Part {
-            role,
-            label: label.to_string(),
-            area,
-            focused: false,
-            on: None,
-        }
+        Part::new(role, label.to_string(), area)
     }
 
     #[test]

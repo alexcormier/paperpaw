@@ -42,7 +42,7 @@ impl InfoScreen {
         let path = params.get(params::PATH).unwrap_or_default();
         let header = ui::Header::new(env, &style, true);
         let (details, description) = details(env, path);
-        let layout = Layout::new(env, &style, header.area.height, &details, &description);
+        let layout = Layout::new(env, &style, header.area().height, &details, &description);
         Self {
             header,
             details,

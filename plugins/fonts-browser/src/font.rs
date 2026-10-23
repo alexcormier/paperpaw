@@ -63,7 +63,7 @@ impl FontScreen {
         let samples = Samples::new(&style);
         let display = env.device.display;
         let gap = style.gap as u16;
-        let top = header.area.height + gap;
+        let top = header.area().height + gap;
         let line = (style.row as u16) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         let sample_line = (samples.size as f32 * 1.4) as u16;

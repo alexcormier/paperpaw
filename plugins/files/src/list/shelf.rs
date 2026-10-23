@@ -124,7 +124,7 @@ impl ShelfScreen {
         let display = env.device.display;
         let summary = Rect::new(
             0,
-            header.area.height,
+            header.area().height,
             display.width,
             sizes.small_line + style.gap as u16,
         );

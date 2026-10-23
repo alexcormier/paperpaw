@@ -80,7 +80,7 @@ impl Calendar {
         let nav_row = style.touch_row(u32::from(row)) as u16;
         let nav = Rect::new(
             0,
-            header.area.height + style.gap as u16,
+            header.area().height + style.gap as u16,
             display.width,
             nav_row,
         );

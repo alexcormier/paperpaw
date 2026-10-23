@@ -153,7 +153,7 @@ impl Browser {
         // The bar of buttons along the bottom: they keep the side margin
         // from the edge too.
         let bar_height = ui::edge_bar_height(&style);
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         // The bar, and a line for messages above it.
         let bottom = bar_height + style.row as u16 + style.gap as u16;
         let area = Rect::new(

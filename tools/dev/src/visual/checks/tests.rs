@@ -15,14 +15,7 @@ fn ui() -> Ui {
 }
 
 fn d(role: Role, label: &str, area: Rect) -> Described {
-    Described {
-        role,
-        label: label.to_string(),
-        area,
-        focused: false,
-        on: None,
-        clip: Rect::new(0, 0, 480, 755),
-    }
+    Described::new(role, label.to_string(), area).clip(Rect::new(0, 0, 480, 755))
 }
 
 fn fill(image: &mut Image, area: Rect, rgb: [u8; 3]) {

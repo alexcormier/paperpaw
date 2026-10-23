@@ -66,13 +66,18 @@ pub fn paperpaw_graphics::Canvas<'a>::stroke_rect(&mut self, i32, i32, u32, u32,
 pub fn paperpaw_graphics::Canvas<'a>::stroke_round(&mut self, paperpaw_platform::geometry::Rect, u32, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::stroke_round_rect(&mut self, i32, i32, u32, u32, u32, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::wash(&mut self, paperpaw_platform::geometry::Rect)
-pub struct paperpaw_graphics::Described
+#[non_exhaustive] pub struct paperpaw_graphics::Described
 pub paperpaw_graphics::Described::area: paperpaw_platform::geometry::Rect
 pub paperpaw_graphics::Described::clip: paperpaw_platform::geometry::Rect
 pub paperpaw_graphics::Described::focused: bool
 pub paperpaw_graphics::Described::label: alloc::string::String
 pub paperpaw_graphics::Described::on: core::option::Option<bool>
 pub paperpaw_graphics::Described::role: paperpaw_graphics::Role
+impl paperpaw_graphics::Described
+pub fn paperpaw_graphics::Described::clip(self, paperpaw_platform::geometry::Rect) -> Self
+pub fn paperpaw_graphics::Described::focused(self, bool) -> Self
+pub fn paperpaw_graphics::Described::new(paperpaw_graphics::Role, impl core::convert::Into<alloc::string::String>, paperpaw_platform::geometry::Rect) -> Self
+pub fn paperpaw_graphics::Described::on(self, core::option::Option<bool>) -> Self
 pub struct paperpaw_graphics::Framebuffer
 impl paperpaw_graphics::Framebuffer
 pub fn paperpaw_graphics::Framebuffer::band(&self) -> paperpaw_platform::geometry::Rect

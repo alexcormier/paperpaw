@@ -17,6 +17,7 @@ use super::{
 /// [`TimePicker::hit`]): the `+` or the `−` of a field, or its value;
 /// fields counted from the left.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum PickerPart {
     Plus(usize),
     Minus(usize),

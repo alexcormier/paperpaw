@@ -142,15 +142,15 @@ fn title_fits(font: &FontHandle<'_>, style: &UiStyle, high: u16, room: f32, titl
 /// `core.next-page`); the screen handles paging like the page buttons.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Header {
-    pub area: Rect,
+    area: Rect,
     /// The note right of the title has the focus (drawn white on black),
     /// for screens where buttons move the focus to it, e.g. a sort order
     /// that opens a menu as a tap on it does.
-    pub note_focused: bool,
+    note_focused: bool,
     /// The note does something when tapped or confirmed (the screen
     /// handles it): told as a button, the header's height high, a
     /// fingertip for touch. Otherwise it is a text, e.g. "3 hits".
-    pub note_button: bool,
+    note_button: bool,
     /// Shows the back arrow.
     back: bool,
     /// Shows arrows for paging.
@@ -181,6 +181,27 @@ impl Header {
             back: back && touch,
             arrows: touch,
         }
+    }
+
+    /// Where it is: across the top of the screen.
+    pub fn area(&self) -> Rect {
+        self.area
+    }
+
+    /// With the note right of the title focused (drawn white on black),
+    /// for screens where buttons move the focus to it, e.g. a sort order
+    /// that opens a menu as a tap on it does.
+    pub fn note_focused(mut self, focused: bool) -> Self {
+        self.note_focused = focused;
+        self
+    }
+
+    /// With a note that does something when tapped or confirmed (the
+    /// screen handles it): told as a button, the header's height high, a
+    /// fingertip for touch. Otherwise it is a text, e.g. "3 hits".
+    pub fn note_button(mut self, button: bool) -> Self {
+        self.note_button = button;
+        self
     }
 
     /// Page `page.0` (0-based) of `page.1`, e.g. "2 / 5".
@@ -444,7 +465,7 @@ impl Header {
 /// page and, on touch screens, has arrows to turn pages.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct Pager {
-    pub area: Rect,
+    area: Rect,
     arrows: bool,
 }
 
@@ -454,6 +475,11 @@ impl Pager {
             area,
             arrows: env.device.input.touch,
         }
+    }
+
+    /// Where it is.
+    pub fn area(&self) -> Rect {
+        self.area
     }
 
     /// The height of a pager.

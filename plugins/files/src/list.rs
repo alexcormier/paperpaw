@@ -260,7 +260,7 @@ impl Layout {
             .map(|f| env.i18n.tr(f.label()).to_string())
             .collect();
         let (chips, filter_row, top) = if sizes.compact {
-            let row = Rect::new(0, header.area.height, display.width, sizes.filter_row);
+            let row = Rect::new(0, header.area().height, display.width, sizes.filter_row);
             (
                 ui::Chips::default(),
                 Some(row),
@@ -274,7 +274,7 @@ impl Layout {
             // As many rows as the words need: none is shortened.
             let band = Rect::new(
                 margin,
-                header.area.height,
+                header.area().height,
                 width,
                 ui::Chips::height_for(env, &style, width, &labels) + gap,
             );
@@ -881,7 +881,7 @@ impl ListScreen {
             let x = (right + (square - icon) / 2).saturating_sub(square);
             return Some(Rect::new(x, row.y, square, square));
         }
-        let a = self.layout.header.area;
+        let a = self.layout.header.area();
         let square = a.height;
         let pages = self.pages();
         let right = if self.len() > 0 && pages > 1 {
@@ -900,7 +900,7 @@ impl ListScreen {
         match self.layout.filter_row {
             Some(row) => row,
             None => {
-                let top = self.layout.header.area.y + self.layout.header.area.height;
+                let top = self.layout.header.area().y + self.layout.header.area().height;
                 let a = self.layout.area;
                 Rect::new(0, top, a.width, a.y.saturating_sub(top))
             }
@@ -1172,7 +1172,7 @@ impl Screen for ListScreen {
             cx.command(Command::RunAction(action));
             return Handled::Yes;
         }
-        if self.layout.header.area.contains(point) {
+        if self.layout.header.area().contains(point) {
             // The search button, else the title: the library's menu.
             if self.find.is_some_and(|b| b.contains(point)) {
                 cx.command(Command::OpenScreen(FIND, Params::new()));

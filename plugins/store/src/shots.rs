@@ -65,7 +65,7 @@ impl ShotsScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area.height + style.gap as u16;
+        let top = header.area().height + style.gap as u16;
         let margin = style.margin as u16;
         let area = Rect::new(
             margin,

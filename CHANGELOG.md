@@ -381,6 +381,14 @@ file to your report.
   feature, and `Canvas`'s drawing internals are hidden. A cover drawn
   small is `ui::draw_small_image`; whether the device has a row of
   button hints is `env.caps.button_row`.
+- SDK: types that may grow are `#[non_exhaustive]`, with constructors
+  where plugins build them: `decorations::{PageWord, PageText,
+  Decorated}::new`, `semantics::Part::new` and `Described::new` (with
+  `.focused()`, `.on()`, `.clip()`); also `decorations::Mark`,
+  `RowLines`, `SliderParts`, `PickerPart`, `Offer`, `Padding`. A match
+  on `Offer` needs an arm for answers to come. `Header` and `Pager` keep
+  their state: `area()` reads it, `Header::note_focused()` and
+  `note_button()` set the note.
 - SDK: `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).

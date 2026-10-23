@@ -20,11 +20,7 @@ fn page<'a>(texts: &'a [String]) -> Vec<PageWord<'a>> {
         .map(|text| {
             let start = Locator::new(0, at);
             at += text.len() as u32 + 1;
-            PageWord {
-                text,
-                start,
-                end: Locator::new(0, at - 1),
-            }
+            PageWord::new(text, start, Locator::new(0, at - 1))
         })
         .collect()
 }

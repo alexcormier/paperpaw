@@ -16,6 +16,7 @@ use paperpaw_platform::Rect;
 
 /// A part of a screen.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Part {
     pub role: Role,
     /// Its text: its own, or that drawn inside it.
@@ -25,6 +26,32 @@ pub struct Part {
     /// Switched on or off, for switches (also a row's) and buttons that
     /// are either.
     pub on: Option<bool>,
+}
+
+impl Part {
+    /// A part in `role` with `label` at `area`: without the focus,
+    /// neither on nor off.
+    pub fn new(role: Role, label: impl Into<String>, area: Rect) -> Self {
+        Self {
+            role,
+            label: label.into(),
+            area,
+            focused: false,
+            on: None,
+        }
+    }
+
+    /// With the focus or not.
+    pub fn focused(mut self, focused: bool) -> Self {
+        self.focused = focused;
+        self
+    }
+
+    /// Switched on or off, or neither.
+    pub fn on(mut self, on: Option<bool>) -> Self {
+        self.on = on;
+        self
+    }
 }
 
 fn inside(inner: Rect, outer: Rect) -> bool {
@@ -141,14 +168,10 @@ mod tests {
     use super::*;
 
     fn d(role: Role, label: &str, area: Rect, focused: bool, on: Option<bool>) -> Described {
-        Described {
-            role,
-            label: String::from(label),
-            area,
-            focused,
-            on,
-            clip: Rect::new(0, 0, 400, 800),
-        }
+        Described::new(role, String::from(label), area)
+            .focused(focused)
+            .on(on)
+            .clip(Rect::new(0, 0, 400, 800))
     }
 
     #[test]

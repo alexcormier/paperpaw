@@ -233,7 +233,8 @@ impl CalibreScreen {
     fn offered(&mut self, chosen: Option<ui::Offer>, cx: &mut Cx<'_, '_>) {
         match chosen {
             Some(ui::Offer::Online) => self.start(cx),
-            Some(ui::Offer::NotNow) => {
+            // Not now, and any answer to come: on without the network.
+            Some(_) => {
                 let env = *cx.env();
                 let key = if env.wifi.is_some() {
                     "calibre.no-network"
@@ -665,7 +666,7 @@ impl CalibreScreen {
     /// The area below the header.
     fn content(&self, env: &Env<'_>) -> Rect {
         let display = env.device.display;
-        let top = self.header.area.height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap as u16;
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
 }
