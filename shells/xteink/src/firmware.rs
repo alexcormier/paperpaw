@@ -649,7 +649,7 @@ impl Firmware {
             self.state.wake_at = effects.wake_at();
             self.state.sleep |= effects.sleep();
             // The cable transfer's answers, as soon as they are there.
-            for line in self.kernel.take_cable_lines() {
+            while let Some(line) = self.kernel.next_cable_line() {
                 esp_println::println!("{line}");
             }
             return;

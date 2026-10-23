@@ -27,8 +27,9 @@ use paperpaw_sdk::{Command, Env, PluginKind, ServerResponse};
 /// How an install stands.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub(crate) enum State {
-    /// The device asks the reader about its code.
-    Asking,
+    /// The device asks the reader about its code, this code (by its
+    /// SHA-256 as installers name it).
+    Asking([u8; 32]),
     Installed {
         code: bool,
     },
@@ -115,9 +116,12 @@ impl Installs {
                         State::Installed { code: done.code },
                         Some(Ask::Installed(String::from(id))),
                     ),
-                    Err(Refusal::NeedsApproval) => {
-                        (State::Asking, Some(Ask::Code(String::from(id))))
-                    }
+                    // Asked about this code: other code put in its place
+                    // meanwhile is refused.
+                    Err(Refusal::NeedsApproval) => match staging.code(env.storage) {
+                        Some(sha256) => (State::Asking(sha256), Some(Ask::Code(String::from(id)))),
+                        None => (State::Refused(Refusal::BadCode), None),
+                    },
                     Err(refusal) => (State::Refused(refusal), None),
                 };
                 self.set(id, state);
@@ -147,15 +151,15 @@ impl Installs {
         let Some(staging) = Staging::new(plugin) else {
             return false;
         };
-        if self.state(plugin) != Some(State::Asking) {
+        let Some(State::Asking(sha256)) = self.state(plugin) else {
             return false;
-        }
+        };
         if !yes {
             staging.abort(env.storage);
             self.set(plugin, State::Refused(Refusal::NeedsApproval));
             return false;
         }
-        let state = match staging.commit(env, Commit::approved(), out) {
+        let state = match staging.commit(env, Commit::approved(sha256), out) {
             Ok(done) => State::Installed { code: done.code },
             Err(refusal) => State::Refused(refusal),
         };
@@ -166,7 +170,7 @@ impl Installs {
 
 fn status(state: State) -> u16 {
     match state {
-        State::Asking => 202,
+        State::Asking(_) => 202,
         State::Installed { .. } => 200,
         State::Refused(_) => 422,
     }
@@ -175,7 +179,7 @@ fn status(state: State) -> u16 {
 fn state_json(state: Option<State>) -> String {
     match state {
         None => String::from("{\"state\":\"none\"}"),
-        Some(State::Asking) => String::from("{\"state\":\"asking\"}"),
+        Some(State::Asking(_)) => String::from("{\"state\":\"asking\"}"),
         Some(State::Installed { code }) => {
             format!("{{\"state\":\"installed\",\"restart\":{code}}}")
         }

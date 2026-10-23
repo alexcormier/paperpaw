@@ -1,7 +1,7 @@
 //! Which installed plugins the store updates: only those it installed
 //! itself (see [`install::origin`]), never one put in place otherwise.
 
-use paperpaw_sdk::install::{self, Origin};
+use paperpaw_sdk::install::{self, Origin, Origins};
 use paperpaw_sdk::{Env, Version};
 
 use crate::catalog::Entry;
@@ -11,9 +11,14 @@ impl Entry {
     /// for a plugin this store installed, never over one put in place
     /// otherwise (see [`install::origin`]).
     pub(crate) fn newer(&self, env: &Env<'_>) -> bool {
+        self.newer_in(env, &Origins::read(env.storage))
+    }
+
+    /// The same, the origins read once for many (a list).
+    pub(crate) fn newer_in(&self, env: &Env<'_>, origins: &Origins) -> bool {
         match (self.installed(env), Version::parse(&self.version)) {
             (Some(installed), Some(offered)) => {
-                offered > installed && self.origin(env, installed) == Origin::Store
+                offered > installed && origins.of(&self.id, installed) == Origin::Store
             }
             _ => false,
         }

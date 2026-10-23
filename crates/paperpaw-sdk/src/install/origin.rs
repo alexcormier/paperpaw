@@ -40,12 +40,37 @@ pub enum Origin {
 
 /// Where `plugin`, installed at `version`, came from.
 pub fn origin(storage: &dyn Storage, plugin: &str, version: Version) -> Origin {
-    let text = crate::read_file(storage, STORE_INSTALLS, 64 * 1024).unwrap_or_default();
-    let ours = String::from_utf8_lossy(&text).lines().any(|line| {
-        line.split_once('\t')
-            .is_some_and(|(id, kept)| id == plugin && Version::parse(kept.trim()) == Some(version))
-    });
-    if ours { Origin::Store } else { Origin::Local }
+    Origins::read(storage).of(plugin, version)
+}
+
+/// The versions a store installed, read once: for asking about many
+/// plugins in a row (a list of them) without reading each time.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub struct Origins {
+    kept: Vec<(String, Version)>,
+}
+
+impl Origins {
+    pub fn read(storage: &dyn Storage) -> Self {
+        let text = crate::read_file(storage, STORE_INSTALLS, 64 * 1024).unwrap_or_default();
+        let kept = String::from_utf8_lossy(&text)
+            .lines()
+            .filter_map(|line| {
+                let (id, version) = line.split_once('\t')?;
+                Some((String::from(id), Version::parse(version.trim())?))
+            })
+            .collect();
+        Self { kept }
+    }
+
+    /// Where `plugin`, installed at `version`, came from.
+    pub fn of(&self, plugin: &str, version: Version) -> Origin {
+        let ours = self
+            .kept
+            .iter()
+            .any(|(id, kept)| id == plugin && *kept == version);
+        if ours { Origin::Store } else { Origin::Local }
+    }
 }
 
 /// Remembers that a store installed `plugin` at `version`; `false` if it

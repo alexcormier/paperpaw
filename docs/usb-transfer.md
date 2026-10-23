@@ -43,11 +43,15 @@ PPT/1 <n> end
 
 The body comes in `data` lines of at most 512 bytes. Answers are JSON
 unless the status says otherwise. One request at a time may have a body
-coming; send the next request once the answer to the last one came.
+coming; send the next request once the answer to the last one came. A
+request sent while a body still comes cuts that body short: its request
+is answered *400*.
 
 When the first request comes, the device opens its USB transfer screen.
 It stays open while requests come, and closes after five minutes without
-one, or when the reader presses *Back*.
+one, or when the reader presses *Back*. After *Back* a computer that goes
+on asking gets *403* "ended on the device"; only a request after a pause
+of ten seconds opens the screen again.
 
 ## Requests
 
@@ -82,34 +86,39 @@ with a body of lines:
 
 ```
 plugin my-plugin
-plugin.ini 112
-i18n/de.ini 40
-code.ppn 20480
-book Some book.epub 512000
+plugin.ini 112 <sha256>
+i18n/de.ini 40 <sha256>
+code.ppn 20480 <sha256>
+book Some book.epub 512000 <sha256>
 ```
 
 `plugin <id>` names a plugin, and each line after it a file of it with
-its size in bytes. `book <name> <size>` names a book (a file name without
-folders). One plugin per offer; books as many as needed.
+its size in bytes and its SHA-256 in hexadecimal; a plugin's paths have no
+spaces. `book <name> <size> <sha256>` names a book (a file name without
+folders, spaces allowed). One plugin per offer; books as many as needed;
+at most 64 files and 8 KiB of offer.
 
 The device shows the names and sizes and asks the reader: *Allow this
 computer to install a plugin / add books?* For a plugin with code it adds
 that the code comes from this computer, not from the store, and runs with
 full access to the device. The answer is *202* `{"state": "asking"}`;
 *400* for an offer that names what may not be written (a path out of the
-plugin's folder, a hidden file, a folder for a book); *507* where there is
-not room for all of it.
+plugin's folder, a hidden file, a folder for a book); *409* while another
+offer is asked about; *507* where there is not room for all of it. Files
+of the plugin sent before the offer are let go.
 
 The computer then asks `GET /api/offer` until the state is `allowed` or
-`refused`. The permission holds for this offer, while the screen is open.
+`refused`. The permission holds for this offer, while the screen is open;
+a question closed without an answer counts as `refused`.
 
 ### Sending
 
-Once allowed, only what was offered is taken, at the size offered, each
-once:
+Once allowed, only what was offered is taken, at the size and SHA-256
+offered, each once:
 
 - `PUT /api/plugin/<id>/<path>?sha256=<hex>`: a file of the plugin, its
-  SHA-256 in hexadecimal. *422* where the file is not what was said.
+  SHA-256 in hexadecimal (it may be left out: the offer's counts). *422*
+  where the file is not what was offered.
 - `POST /api/plugin/<id>`: installs the plugin from the files sent, in one
   step: `{"state": "installed", "restart": false}`. The version before
   stays until the new one is whole; the plugin's own data stays; it is
@@ -117,7 +126,8 @@ once:
   for the device's `fingerprint`; it runs after a restart (`"restart":
   true`). *422* `{"state": "refused", "why": …}` where it was not
   installed; nothing installed changed then.
-- `PUT /api/book/<name>?sha256=<hex>`: a book, into the library folder,
+- `PUT /api/book/<name>?sha256=<hex>`: a book (`sha256` as for a plugin's
+  file), into the library folder,
   under a free name: never over a book there.
   `{"path": "books/Some book (2).epub"}`.
 
@@ -132,7 +142,9 @@ requests, each with the page's key (`k=`), shown on the device:
 - `GET /api/plugins`
 - `PUT /api/plugin/<id>/<path>?sha256=<hex>`
 - `POST /api/plugin/<id>`: installs; for a plugin with code the device
-  asks the reader first, and the answer is *202* `{"state": "asking"}`
+  asks the reader first, and the answer is *202* `{"state": "asking"}`;
+  the answer holds for the code asked about only: code sent again while
+  the question shows is not installed
 - `GET /api/plugin/<id>`: how the last install stands (`none`, `asking`,
   `installed`, `refused`)
 - `DELETE /api/plugin/<id>`: drops the files sent

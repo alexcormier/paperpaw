@@ -10,8 +10,10 @@
 //! 2. Once all are there, [`Staging::commit`] checks the folder holds the
 //!    plugin it says and, for a plugin with code, that its code is whole
 //!    and built for this PaperPaw. Code runs only when the reader agreed
-//!    on the device ([`Commit::approved`]); the code is then named as
-//!    installed, as a store names what it installs.
+//!    on the device to that very code ([`Commit::approved`], by its
+//!    SHA-256: code put in its place after the question is refused); the
+//!    code is then named as installed, as a store names what it installs,
+//!    once the plugin is in place ([`marks`](super::marks)).
 //! 3. The kernel installs it in one step ([`Command::InstallPlugin`]):
 //!    the version before stays until the new one is all there, the
 //!    plugin's own data (in `.paperpaw/plugins/<id>`) is not touched, and
@@ -68,14 +70,17 @@ pub struct Staging {
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Commit {
-    /// The reader agreed on the device to install and run its code.
-    pub approved: bool,
+    /// The code the reader agreed on the device to install and run, by
+    /// its SHA-256 as installers name it ([`Staging::code`]).
+    pub approved: Option<[u8; 32]>,
 }
 
 impl Commit {
-    /// The reader agreed to run the plugin's code.
-    pub fn approved() -> Self {
-        Self { approved: true }
+    /// The reader agreed to run the code named `sha256` ([`Staging::code`]).
+    pub fn approved(sha256: [u8; 32]) -> Self {
+        Self {
+            approved: Some(sha256),
+        }
     }
 }
 
@@ -166,15 +171,17 @@ impl Staging {
         }
         let code = checked?;
         let storage = env.storage;
-        if let Some(sha256) = code
-            && !native::remember_code(storage, &self.plugin, &sha256)
-        {
+        // Those the store installed before origins were kept stay its.
+        super::adopt(env);
+        // Named as installed, and no store's, once it is in place.
+        let mut marks = super::marks::Marks::new(super::marks::From::Local);
+        if let Some(sha256) = code {
+            marks = marks.code(sha256);
+        }
+        if !super::marks::write(storage, &self.folder(), &marks) {
             self.abort(storage);
             return Err(Refusal::Storage);
         }
-        // Those the store installed before origins were kept stay its.
-        super::adopt(env);
-        super::forget_store_install(storage, &self.plugin);
         let id = Id::parse(&self.plugin).map_err(|_| Refusal::Name)?;
         out.push(Command::InstallPlugin(id, self.folder()));
         Ok(Committed {
@@ -213,10 +220,24 @@ impl Staging {
         if header.fingerprint != native.fingerprint.0 {
             return Err(Refusal::OtherBuild);
         }
-        if !commit.approved {
+        if commit.approved != Some(header.sha256) {
             return Err(Refusal::NeedsApproval);
         }
         Ok(Some(header.sha256))
+    }
+
+    /// The code among the files sent, as installers name it (the SHA-256
+    /// its header holds, checked whole): what the reader is asked to let
+    /// run ([`Commit::approved`]). `None` where there is none, or it is
+    /// damaged.
+    pub fn code(&self, storage: &dyn Storage) -> Option<[u8; 32]> {
+        let folder = self.folder();
+        CODE_FILES
+            .iter()
+            .map(|name| format!("{folder}/{name}"))
+            .find(|path| storage.exists(path))
+            .and_then(|path| native::check_file(storage, &path).ok())
+            .map(|(header, _)| header.sha256)
     }
 
     /// Removes the files sent: nothing installed changes.

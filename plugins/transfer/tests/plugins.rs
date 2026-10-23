@@ -117,7 +117,12 @@ fn manifest(id: &str, version: &str) -> String {
 
 /// A plugin file built for this PaperPaw, not signed (one's own build).
 fn ppn() -> Vec<u8> {
-    let image = [0u8; 96];
+    ppn_of(0)
+}
+
+/// The same with an image of bytes `byte`: other code.
+fn ppn_of(byte: u8) -> Vec<u8> {
+    let image = [byte; 96];
     let mut header = Header {
         chip: Chip::Esp32C3,
         fingerprint: BUILD.0,
@@ -415,4 +420,87 @@ fn code_from_the_computer_runs_only_once_the_reader_said_yes() {
     assert!(state.contains(r#""installed","restart":true"#), "{state}");
     assert!(installed_code(&device.storage, "clock").is_some());
     assert!(device.storage.exists("plugins/clock/code.ppn"));
+}
+
+/// Code put in place of the code asked about, while the question shows,
+/// is not installed: the answer was for the code asked about.
+#[test]
+fn code_changed_while_asked_about_is_not_installed() {
+    let mut device = Device::serving(Shared::default());
+    let code = ppn();
+    let ini = manifest("clock", "1.0.0");
+    device.put("clock", "plugin.ini", ini.as_bytes(), ini.as_bytes());
+    device.put("clock", "code.ppn", &code, &code);
+    assert_eq!(device.request("POST", "/api/plugin/clock", None).0, 202);
+    let other = ppn_of(1);
+    assert_eq!(device.put("clock", "code.ppn", &other, &other), 200);
+    device.run(actions::LEFT);
+    device.run(actions::CONFIRM);
+    let (_, state) = device.request("GET", "/api/plugin/clock", None);
+    assert!(state.contains("refused"), "{state}");
+    assert_eq!(installed_code(&device.storage, "clock"), None);
+    assert!(device.kernel.plugins().get("clock").is_none());
+}
+
+/// The SHA-256 a code file's header holds, as installers name its code.
+fn code_name(file: &[u8]) -> [u8; 32] {
+    file[48..80].try_into().unwrap()
+}
+
+/// An update that the kernel refuses (one of its files does not load)
+/// changes nothing kept for the version before: its code stays named as
+/// installed, and it stays the store's.
+#[test]
+fn a_refused_update_keeps_what_was_kept_for_the_version_before() {
+    let storage = Shared::default();
+    let old = ppn_of(2);
+    storage
+        .write(
+            "plugins/clock/plugin.ini",
+            manifest("clock", "1.0.0").as_bytes(),
+        )
+        .unwrap();
+    storage.write("plugins/clock/code.ppn", &old).unwrap();
+    paperpaw_sdk::native::remember_code(&storage, "clock", &code_name(&old));
+    install::remember_store_install(&storage, "clock", Version::new(1, 0, 0));
+    let mut device = Device::serving(storage);
+    let code = ppn();
+    let ini = manifest("clock", "2.0.0");
+    device.put("clock", "plugin.ini", ini.as_bytes(), ini.as_bytes());
+    device.put("clock", "code.ppn", &code, &code);
+    // A catalog that does not load: the kernel refuses the folder.
+    device.put("clock", "i18n/de.ini", b"[meta]\n", b"[meta]\n");
+    assert_eq!(device.request("POST", "/api/plugin/clock", None).0, 202);
+    device.run(actions::LEFT);
+    device.run(actions::CONFIRM);
+    let storage = &device.storage;
+    assert_eq!(installed_code(storage, "clock"), Some(code_name(&old)));
+    assert_eq!(
+        install::origin(storage, "clock", Version::new(1, 0, 0)),
+        Origin::Store
+    );
+    assert_eq!(storage.0.get("plugins/clock/code.ppn").unwrap(), old);
+}
+
+/// An install cut short after the plugin was in place (the power gone
+/// before its marks were kept): kept at the next start.
+#[test]
+fn marks_left_in_a_plugins_folder_are_kept_at_the_next_start() {
+    let storage = Shared::default();
+    let code = ppn();
+    storage
+        .write(
+            "plugins/clock/plugin.ini",
+            manifest("clock", "1.0.0").as_bytes(),
+        )
+        .unwrap();
+    storage.write("plugins/clock/code.ppn", &code).unwrap();
+    let marks = install::marks::Marks::new(install::marks::From::Local).code(code_name(&code));
+    assert!(install::marks::write(&storage, "plugins/clock", &marks));
+    let device = Device::serving(storage);
+    assert_eq!(
+        installed_code(&device.storage, "clock"),
+        Some(code_name(&code))
+    );
+    assert!(!device.storage.exists("plugins/clock/.install-marks"));
 }

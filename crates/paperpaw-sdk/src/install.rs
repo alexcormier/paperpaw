@@ -37,10 +37,11 @@
 //! ```
 
 pub mod local;
+pub mod marks;
 mod origin;
 
 pub use origin::{
-    Origin, adopt, folder_version, forget_store_install, origin, remember_store_install,
+    Origin, Origins, adopt, folder_version, forget_store_install, origin, remember_store_install,
 };
 
 use alloc::format;

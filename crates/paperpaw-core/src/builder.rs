@@ -649,6 +649,10 @@ impl Kernel {
                         continue;
                     }
                 };
+                // An install cut short after the plugin was in place: what
+                // its installer keeps for it is kept now.
+                let id = plugin.manifest().id.clone();
+                paperpaw_sdk::install::marks::settle(storage.as_ref(), id.as_str(), &folder);
                 for problem in plugin.take_problems() {
                     self.warn_runtime(problem);
                 }

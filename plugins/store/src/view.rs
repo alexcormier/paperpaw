@@ -10,7 +10,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{actions, events, params};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::install::Progress;
+use paperpaw_sdk::install::{Origins, Progress};
 use paperpaw_sdk::replies::Typed;
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
@@ -105,6 +105,9 @@ pub(crate) struct ViewScreen {
     queued: Vec<String>,
     /// The plugins of the installed list with an update.
     updates: Vec<String>,
+    /// Which versions the store installed (read with the list, never
+    /// while drawing).
+    origins: Origins,
     /// What the installed list says at its foot of the room left (read
     /// with the list, never while drawing).
     room: Option<String>,
@@ -139,6 +142,7 @@ impl ViewScreen {
             page: Vec::new(),
             job: INSTALLER.progress(env.storage),
             updates: Vec::new(),
+            origins: Origins::default(),
             queued: queue::waiting(env),
             room: None,
         };
@@ -153,6 +157,8 @@ impl ViewScreen {
         };
         let storage = env.storage;
         let mut updates = Vec::new();
+        self.origins = Origins::read(storage);
+        let origins = &self.origins;
         self.hits = match &self.view {
             View::Group(group) => {
                 let group = *group;
@@ -168,7 +174,7 @@ impl ViewScreen {
                 index.pick(
                     storage,
                     |_, e| {
-                        let newer = e.newer(env);
+                        let newer = e.newer_in(env, origins);
                         if newer {
                             updates.push(e.id.clone());
                         }
@@ -376,7 +382,10 @@ impl Screen for ViewScreen {
                     return;
                 }
                 if let Some((_, plugin)) = self.plugin(row) {
-                    rows::draw(canvas, env, &style, rect, focused, plugin, job, queued);
+                    let origins = &self.origins;
+                    rows::draw(
+                        canvas, env, &style, rect, focused, plugin, job, queued, origins,
+                    );
                 }
             });
     }

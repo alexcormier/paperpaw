@@ -1606,15 +1606,16 @@ pub paperpaw_sdk::install::local::Refusal::NotThePlugin
 pub paperpaw_sdk::install::local::Refusal::OtherBuild
 pub paperpaw_sdk::install::local::Refusal::Storage
 #[non_exhaustive] pub struct paperpaw_sdk::install::local::Commit
-pub paperpaw_sdk::install::local::Commit::approved: bool
+pub paperpaw_sdk::install::local::Commit::approved: core::option::Option<[u8; 32]>
 impl paperpaw_sdk::install::local::Commit
-pub fn paperpaw_sdk::install::local::Commit::approved() -> Self
+pub fn paperpaw_sdk::install::local::Commit::approved([u8; 32]) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::install::local::Committed
 pub paperpaw_sdk::install::local::Committed::code: bool
 pub paperpaw_sdk::install::local::Committed::plugin: alloc::string::String
 pub struct paperpaw_sdk::install::local::Staging
 impl paperpaw_sdk::install::local::Staging
 pub fn paperpaw_sdk::install::local::Staging::abort(&self, &dyn paperpaw_platform::storage::Storage)
+pub fn paperpaw_sdk::install::local::Staging::code(&self, &dyn paperpaw_platform::storage::Storage) -> core::option::Option<[u8; 32]>
 pub fn paperpaw_sdk::install::local::Staging::commit(&self, &paperpaw_sdk::Env<'_>, paperpaw_sdk::install::local::Commit, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> core::result::Result<paperpaw_sdk::install::local::Committed, paperpaw_sdk::install::local::Refusal>
 pub fn paperpaw_sdk::install::local::Staging::files(&self, &dyn paperpaw_platform::storage::Storage) -> alloc::vec::Vec<alloc::string::String>
 pub fn paperpaw_sdk::install::local::Staging::folder(&self) -> alloc::string::String
@@ -1622,6 +1623,21 @@ pub fn paperpaw_sdk::install::local::Staging::new(&str) -> core::option::Option<
 pub fn paperpaw_sdk::install::local::Staging::plugin(&self) -> &str
 pub fn paperpaw_sdk::install::local::Staging::put(&self, &dyn paperpaw_platform::storage::Storage, &str, &str, &[u8; 32]) -> core::result::Result<(), paperpaw_sdk::install::local::Refusal>
 pub fn paperpaw_sdk::install::local::file_sha256(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<[u8; 32]>
+pub mod paperpaw_sdk::install::marks
+#[non_exhaustive] pub enum paperpaw_sdk::install::marks::From
+pub paperpaw_sdk::install::marks::From::Local
+pub paperpaw_sdk::install::marks::From::Store(paperpaw_sdk::Version)
+#[non_exhaustive] pub struct paperpaw_sdk::install::marks::Marks
+pub paperpaw_sdk::install::marks::Marks::author: core::option::Option<[u8; 32]>
+pub paperpaw_sdk::install::marks::Marks::code: core::option::Option<[u8; 32]>
+pub paperpaw_sdk::install::marks::Marks::from: paperpaw_sdk::install::marks::From
+impl paperpaw_sdk::install::marks::Marks
+pub fn paperpaw_sdk::install::marks::Marks::author(self, [u8; 32]) -> Self
+pub fn paperpaw_sdk::install::marks::Marks::code(self, [u8; 32]) -> Self
+pub fn paperpaw_sdk::install::marks::Marks::new(paperpaw_sdk::install::marks::From) -> Self
+pub const paperpaw_sdk::install::marks::FILE: &str
+pub fn paperpaw_sdk::install::marks::settle(&dyn paperpaw_platform::storage::Storage, &str, &str) -> bool
+pub fn paperpaw_sdk::install::marks::write(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::install::marks::Marks) -> bool
 pub enum paperpaw_sdk::install::Digest
 pub paperpaw_sdk::install::Digest::Sha1(alloc::string::String)
 pub paperpaw_sdk::install::Digest::Sha256(alloc::string::String)
@@ -1648,6 +1664,10 @@ pub fn paperpaw_sdk::install::Installer::received(&self, &paperpaw_sdk::Env<'_>,
 pub fn paperpaw_sdk::install::Installer::remove(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::Id, &mut alloc::vec::Vec<paperpaw_sdk::Command>)
 pub fn paperpaw_sdk::install::Installer::reply(&self) -> paperpaw_sdk::event::Event<paperpaw_sdk::replies::HttpReply>
 pub fn paperpaw_sdk::install::Installer::start(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::install::Package, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> bool
+pub struct paperpaw_sdk::install::Origins
+impl paperpaw_sdk::install::Origins
+pub fn paperpaw_sdk::install::Origins::of(&self, &str, paperpaw_sdk::Version) -> paperpaw_sdk::install::Origin
+pub fn paperpaw_sdk::install::Origins::read(&dyn paperpaw_platform::storage::Storage) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::install::Package
 pub paperpaw_sdk::install::Package::files: alloc::vec::Vec<paperpaw_sdk::install::PackageFile>
 pub paperpaw_sdk::install::Package::name: alloc::string::String

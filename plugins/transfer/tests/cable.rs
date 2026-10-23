@@ -294,7 +294,7 @@ fn nothing_is_written_before_the_reader_allows_it() {
     let book = b"a book";
     let target = format!("/api/book/a.epub?sha256={}", sha(book));
     assert_eq!(computer.request("PUT", &target, book).0, 403);
-    let offer = format!("book a.epub {}\n", book.len());
+    let offer = format!("book a.epub {} {}\n", book.len(), sha(book));
     let (status, body) = computer.request("POST", "/api/offer", offer.as_bytes());
     assert_eq!((status, body.as_str()), (202, r#"{"state":"asking"}"#));
     assert!(computer.says("Allow this computer to add books?"));
@@ -309,16 +309,24 @@ fn nothing_is_written_before_the_reader_allows_it() {
     assert_eq!(computer.request("PUT", &target, book).0, 403);
     assert_eq!(computer.files_below("books"), 0);
     // Offers that name what may not be written are no offers.
+    let z = "0".repeat(64);
     for bad in [
-        "book ../a.epub 3\n",
-        "book .hidden 3\n",
-        "plugin ../x\nplugin.ini 3\n",
-        "plugin airy\n../paperpaw.ini 3\n",
-        "settings 3\n",
+        format!("book ../a.epub 3 {z}\n"),
+        format!("book .hidden 3 {z}\n"),
+        format!("plugin ../x\nplugin.ini 3 {z}\n"),
+        format!("plugin airy\n../paperpaw.ini 3 {z}\n"),
+        String::from("plugin airy\nplugin.ini 3\n"),
+        format!("settings 3 {z}\n"),
     ] {
         let (status, _) = computer.request("POST", "/api/offer", bad.as_bytes());
         assert_eq!(status, 400, "{bad}");
     }
+    // Sizes past what can be counted are no room.
+    let huge = format!("book a 18446744073709551615 {z}\nbook b 2 {z}\n");
+    assert_eq!(
+        computer.request("POST", "/api/offer", huge.as_bytes()).0,
+        507
+    );
 }
 
 #[test]
@@ -329,9 +337,11 @@ fn what_was_allowed_comes_in_whole_and_nothing_else() {
     computer.request("GET", "/api/hello", b"");
     let book = b"a new book";
     let offer = format!(
-        "plugin airy\nplugin.ini {}\nbook a.epub {}\n",
+        "plugin airy\nplugin.ini {} {}\nbook a.epub {} {}\n",
         INI.len(),
-        book.len()
+        sha(INI.as_bytes()),
+        book.len(),
+        sha(book)
     );
     assert_eq!(
         computer.request("POST", "/api/offer", offer.as_bytes()).0,
@@ -388,9 +398,11 @@ fn code_runs_as_the_reader_allowed_and_back_ends_the_permission() {
     let code = ppn();
     let ini = "[plugin]\nid = clock\nname = Clock\nversion = 1.0.0\n";
     let offer = format!(
-        "plugin clock\nplugin.ini {}\ncode.ppn {}\n",
+        "plugin clock\nplugin.ini {} {}\ncode.ppn {} {}\n",
         ini.len(),
-        code.len()
+        sha(ini.as_bytes()),
+        code.len(),
+        sha(&code)
     );
     assert_eq!(
         computer.request("POST", "/api/offer", offer.as_bytes()).0,
@@ -407,18 +419,87 @@ fn code_runs_as_the_reader_allowed_and_back_ends_the_permission() {
     assert_eq!(status, 200, "{body}");
     assert!(body.contains(r#""restart":true"#), "{body}");
     assert!(installed_code(&computer.storage, "clock").is_some());
-    // Back: the permission ends; the next request asks anew.
+    // Back: the permission ends, and a computer that goes on asking does
+    // not bring the screen back; a new start after a pause does.
     computer.press(actions::BACK);
-    assert_ne!(
-        computer.kernel.active_screen().map(|s| s.as_str()),
-        Some("transfer.cable")
-    );
+    let shown = |c: &Computer| c.kernel.active_screen().map(|s| String::from(s.as_str()));
+    assert_ne!(shown(&computer).as_deref(), Some("transfer.cable"));
+    let (status, body) = computer.request("GET", "/api/offer", b"");
+    assert_eq!((status, body.as_str()), (403, "ended on the device"));
+    assert_ne!(shown(&computer).as_deref(), Some("transfer.cable"));
+    computer.now += 11_000;
+    assert_eq!(computer.request("GET", "/api/hello", b"").0, 200);
+    assert_eq!(shown(&computer).as_deref(), Some("transfer.cable"));
     assert_eq!(
         computer.put_plugin("clock", "plugin.ini", ini.as_bytes()),
         403
     );
+}
+
+/// The reader's answer counts for the offer it was asked about only: no
+/// new offer while one is asked about, an answer naming another changes
+/// nothing, and a question closed without an answer allows nothing.
+#[test]
+fn an_answer_counts_for_its_offer_only() {
+    let mut computer = Computer::new(Shared::default());
+    let book = b"a book";
+    let first = format!("book a.epub {} {}\n", book.len(), sha(book));
+    let second = format!("book b.epub {} {}\n", book.len(), sha(book));
     assert_eq!(
-        computer.kernel.active_screen().map(|s| s.as_str()),
-        Some("transfer.cable")
+        computer.request("POST", "/api/offer", first.as_bytes()).0,
+        202
     );
+    assert_eq!(
+        computer.request("POST", "/api/offer", second.as_bytes()).0,
+        409
+    );
+    // An answer about another offer.
+    let other = paperpaw_sdk::replies::Confirmed::new(
+        true,
+        paperpaw_sdk::Params::new().with("offer", "99"),
+    );
+    computer.now += 100;
+    computer.kernel.send_event(
+        Instant(computer.now),
+        paperpaw_sdk::Id::new_static("transfer.cable-allowed"),
+        paperpaw_sdk::event::EventData::to_params(&other),
+    );
+    assert_eq!(
+        computer.request("GET", "/api/offer", b"").1,
+        r#"{"state":"asking"}"#
+    );
+    // Closed without an answer: not allowed; a new offer is asked about.
+    computer.press(actions::BACK);
+    assert_eq!(
+        computer.request("GET", "/api/offer", b"").1,
+        r#"{"state":"refused"}"#
+    );
+    assert_eq!(
+        computer.request("POST", "/api/offer", second.as_bytes()).0,
+        202
+    );
+    computer.allow(true);
+    let target = format!("/api/book/a.epub?sha256={}", sha(book));
+    assert_eq!(computer.request("PUT", &target, book).0, 403);
+}
+
+/// What was sent for a plugin before an offer does not count: its files
+/// are taken anew, only those the reader was shown.
+#[test]
+fn files_sent_before_an_offer_are_let_go() {
+    let storage = Shared::default();
+    storage
+        .write("plugins/.airy.local/code.ppn", b"not offered")
+        .unwrap();
+    let mut computer = Computer::new(storage);
+    let offer = format!(
+        "plugin airy\nplugin.ini {} {}\n",
+        INI.len(),
+        sha(INI.as_bytes())
+    );
+    assert_eq!(
+        computer.request("POST", "/api/offer", offer.as_bytes()).0,
+        202
+    );
+    assert!(!computer.storage.exists("plugins/.airy.local/code.ppn"));
 }

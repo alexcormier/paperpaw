@@ -11,6 +11,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use paperpaw_sdk::install::marks::{From, Marks};
 use paperpaw_sdk::install::{self, Progress};
 use paperpaw_sdk::native::{self, Author, check_file};
 use paperpaw_sdk::{Command, Env, Storage};
@@ -166,33 +167,32 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
     }
 }
 
-/// Installs the complete job's plugin, remembering its author's key and
-/// naming its code as installed; for one signed by another author, after
-/// the reader said to. `None` where either cannot be kept (its code would
-/// not run): not installed, the job left for another try.
+/// Installs the complete job's plugin; once it is in place (see
+/// [`install::marks`]), its author's key is remembered, its code named as
+/// installed, and it is the store's, which offers its updates. For one
+/// signed by another author, after the reader said to. `None` where that
+/// cannot be written (its code would not run): not installed, the job
+/// left for another try.
 pub(crate) fn install(
     env: &Env<'_>,
     code: Option<Code>,
     out: &mut Vec<Command>,
 ) -> Option<Progress> {
-    let progress = INSTALLER.progress(env.storage)?;
-    if let Some(code) = code
-        && !(native::remember_author(env.storage, &progress.plugin, &code.author)
-            && native::remember_code(env.storage, &progress.plugin, &code.sha256))
-    {
+    let folder = INSTALLER.folder(env.storage)?;
+    install::adopt(env);
+    let from = match install::folder_version(env.storage, &folder) {
+        Some(version) => From::Store(version),
+        None => From::Local,
+    };
+    let mut marks = Marks::new(from);
+    if let Some(code) = code {
+        marks = marks.code(code.sha256).author(code.author);
+    }
+    if !install::marks::write(env.storage, &folder, &marks) {
         return None;
     }
     let _ = env.storage.remove(&expected_path());
-    install::adopt(env);
-    let version = INSTALLER
-        .folder(env.storage)
-        .and_then(|folder| install::folder_version(env.storage, &folder));
-    let installed = INSTALLER.install(env, out)?;
-    // The store's from now on: it offers its updates.
-    if let Some(version) = version {
-        install::remember_store_install(env.storage, &installed.plugin, version);
-    }
-    Some(installed)
+    INSTALLER.install(env, out)
 }
 
 /// Installs the plugin waiting for the reader's word, signed by another

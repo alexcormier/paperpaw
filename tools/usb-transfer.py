@@ -142,11 +142,20 @@ def install(device, folder):
     ini = (folder / "plugin.ini").read_text(encoding="utf-8")
     ids = [l.split("=", 1)[1].strip() for l in ini.splitlines() if l.strip().startswith("id")]
     plugin = ids[0] if ids else folder.name
-    files = sorted(p for p in folder.rglob("*") if p.is_file())
-    names = [p.relative_to(folder).as_posix() for p in files]
-    device.offer([f"plugin {plugin}\n"] + [f"{n} {p.stat().st_size}\n" for n, p in zip(names, files)])
-    for name, path in zip(names, files):
-        data = path.read_bytes()
+    # Hidden files (.git, .DS_Store) are not the plugin's.
+    names = sorted(
+        p.relative_to(folder).as_posix()
+        for p in folder.rglob("*")
+        if p.is_file() and not any(part.startswith(".") for part in p.relative_to(folder).parts)
+    )
+    spaced = [n for n in names if " " in n]
+    if spaced:
+        sys.exit(f"names with spaces are not sent: {', '.join(spaced)}")
+    files = [(name, (folder / name).read_bytes()) for name in names]
+    device.offer(
+        [f"plugin {plugin}\n"] + [f"{name} {len(data)} {sha256(data)}\n" for name, data in files]
+    )
+    for name, data in files:
         target = f"/api/plugin/{plugin}/{quote(name)}?sha256={sha256(data)}"
         status, answer = device.json("PUT", target, data)
         if status != 200:
@@ -161,14 +170,17 @@ def install(device, folder):
 
 def books(device, paths):
     paths = [Path(p) for p in paths]
-    device.offer([f"book {p.name} {p.stat().st_size}\n" for p in paths])
-    for path in paths:
-        data = path.read_bytes()
-        target = f"/api/book/{quote(path.name)}?sha256={sha256(data)}"
+    hidden = [p.name for p in paths if p.name.startswith(".")]
+    if hidden:
+        sys.exit(f"hidden files are not books: {', '.join(hidden)}")
+    files = [(path.name, path.read_bytes()) for path in paths]
+    device.offer([f"book {name} {len(data)} {sha256(data)}\n" for name, data in files])
+    for name, data in files:
+        target = f"/api/book/{quote(name)}?sha256={sha256(data)}"
         status, answer = device.json("PUT", target, data)
         if status != 200:
-            sys.exit(f"{path.name}: {status} {answer}")
-        print(f"{path.name}: {answer.get('path')}")
+            sys.exit(f"{name}: {status} {answer}")
+        print(f"{name}: {answer.get('path')}")
 
 
 def main():

@@ -179,7 +179,9 @@ impl Servers {
     fn stop_at(&mut self, at: usize, out: &mut Vec<Command>) {
         let running = self.running.remove(at);
         if self.cable_server == Some(running.number) {
+            // Ended on the device: not opened again by the next line.
             self.cable_server = None;
+            self.cable.ended = true;
         } else {
             self.calls.push(ServerCall::Stop {
                 server: running.number,
@@ -221,7 +223,7 @@ impl Servers {
             let ct = &response.content_type;
             return self
                 .cable
-                .answer(response.request, status, ct, &body, file.is_some());
+                .answer(response.request, status, ct, body, file.is_some());
         }
         self.calls.push(ServerCall::Respond {
             request: response.request,
@@ -375,7 +377,7 @@ impl Servers {
             let ct = "text/plain";
             return self
                 .cable
-                .answer(request, status, ct, reason.as_bytes(), false);
+                .answer(request, status, ct, reason.as_bytes().to_vec(), false);
         }
         self.calls.push(ServerCall::Respond {
             request,

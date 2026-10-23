@@ -144,10 +144,11 @@ impl ListScreen {
             for &(group, count) in index.runs() {
                 counts.groups[group] += count;
             }
+            let origins = paperpaw_sdk::install::Origins::read(env.storage);
             index.scan(env.storage, &mut |_, entry: Entry| {
                 if entry.installed(env).is_some() {
                     counts.installed += 1;
-                    counts.updates += usize::from(entry.newer(env));
+                    counts.updates += usize::from(entry.newer_in(env, &origins));
                 }
             });
         }

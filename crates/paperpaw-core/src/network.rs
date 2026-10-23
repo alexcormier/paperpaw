@@ -210,6 +210,11 @@ impl Kernel {
         // The computer at the cable is the reader's.
         self.shared.reader = true;
         self.last_activity = now;
+        let cable = &mut self.io.servers.cable;
+        let paused = cable
+            .last
+            .is_none_or(|last| now.0.saturating_sub(last) >= io::cable::PAUSE_MS);
+        cable.last = Some(now.0);
         match line {
             Line::Request {
                 n,
@@ -218,6 +223,14 @@ impl Kernel {
                 len,
             } => {
                 if self.io.servers.cable_server().is_none() {
+                    // Ended on the device: only a new start (after a
+                    // pause) opens it again.
+                    if self.io.servers.cable.ended && !paused {
+                        let cable = &mut self.io.servers.cable;
+                        cable.refuse(n, 403, "ended on the device");
+                        return self.finish();
+                    }
+                    self.io.servers.cable.ended = false;
                     self.output
                         .commands
                         .push(Command::OpenSlot(slots::CABLE, Params::new()));
@@ -235,7 +248,13 @@ impl Kernel {
                     self.io.servers.cable.refuse(n, 507, "not enough room");
                     return self.finish();
                 }
-                let request = self.io.servers.cable.begin(n, len);
+                let (request, cut) = self.io.servers.cable.begin(n, len);
+                // A body still coming, cut short by this request: let go,
+                // and told.
+                if let Some((m, cut)) = cut {
+                    self.cable_cut(m, cut, "cut short by another request");
+                }
+                let storage = &*self.shared.storage;
                 let event = ServerEvent::Request {
                     server,
                     request,
@@ -261,35 +280,43 @@ impl Kernel {
                 }
                 None => {
                     // Its request, if any, is cut short: its body goes.
-                    if let Some(request) = self.io.servers.cable.cut(n) {
-                        let storage = &*self.shared.storage;
-                        let closed = ServerEvent::Closed { request };
-                        self.io
-                            .servers
-                            .event(closed, storage, &mut self.output.commands);
+                    match self.io.servers.cable.cut(n) {
+                        Some(request) => self.cable_cut(n, request, "no such body coming"),
+                        None => self.io.servers.cable.refuse(n, 400, "no such body coming"),
                     }
-                    self.io.servers.cable.refuse(n, 400, "no such body coming");
                 }
             },
-            Line::Bad { n: Some(n), why } => {
-                if let Some(request) = self.io.servers.cable.cut(n) {
-                    let storage = &*self.shared.storage;
-                    let closed = ServerEvent::Closed { request };
-                    self.io
-                        .servers
-                        .event(closed, storage, &mut self.output.commands);
-                }
-                self.io.servers.cable.refuse(n, 400, why);
-            }
+            Line::Bad { n: Some(n), why } => match self.io.servers.cable.cut(n) {
+                Some(request) => self.cable_cut(n, request, why),
+                None => self.io.servers.cable.refuse(n, 400, why),
+            },
             Line::Bad { n: None, .. } => {}
         }
         self.finish()
     }
 
-    /// The lines to send to the computer at the cable, in order: check
-    /// after every kernel call, as [`Kernel::take_io`].
+    /// The cable's request `n` (the kernel's `request`) is cut short: its
+    /// body is let go, and the computer told why.
+    fn cable_cut(&mut self, n: u32, request: u32, why: &str) {
+        let storage = &*self.shared.storage;
+        let closed = ServerEvent::Closed { request };
+        self.io
+            .servers
+            .event(closed, storage, &mut self.output.commands);
+        self.io.servers.cable.refuse(n, 400, why);
+    }
+
+    /// The next line to send to the computer at the cable: send them all
+    /// after every kernel call, as [`Kernel::take_io`] is taken. Answers
+    /// go a line at a time, so a long one is never written out whole.
+    pub fn next_cable_line(&mut self) -> Option<String> {
+        self.io.servers.cable.next_line()
+    }
+
+    /// All the lines to send to the computer at the cable, in order (see
+    /// [`Kernel::next_cable_line`]).
     pub fn take_cable_lines(&mut self) -> Vec<String> {
-        self.io.servers.cable.take()
+        core::iter::from_fn(|| self.io.servers.cable.next_line()).collect()
     }
 
     /// Delivers the answer to a request ([`Io::Http`]).
