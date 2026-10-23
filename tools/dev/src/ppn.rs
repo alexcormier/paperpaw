@@ -168,6 +168,7 @@ mod tests {
             api: 16,
             relocs: 0,
             align: 16,
+            compiler: 1,
             sha256: [0; 32],
         };
         let image = [9u8; 64];

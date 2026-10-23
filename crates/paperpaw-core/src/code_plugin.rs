@@ -685,6 +685,7 @@ version = 2.0.0
             api: 16,
             relocs: 0,
             align: 16,
+            compiler: 1,
             sha256,
         };
         let mut file = header.to_bytes().to_vec();

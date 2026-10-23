@@ -54,6 +54,7 @@ fn ppn(build: Fingerprint, seed: Option<&[u8; 32]>) -> Vec<u8> {
         api: 16,
         relocs: 0,
         align: 16,
+        compiler: 1,
         sha256: [0; 32],
     };
     let mut sha = header.digest();

@@ -14,7 +14,10 @@
 //! - addresses of the plugin built into instructions (on RISC-V, code
 //!   not built with `-C code-model=medium`);
 //! - relative reaches and differences out of the image, which would
-//!   change when it moves.
+//!   change when it moves;
+//! - a plugin that does not say which compiler built it, or says more
+//!   than one (its `.comment`): it runs only on firmware built by the
+//!   same, so its file names it.
 
 use std::collections::{BTreeMap, BTreeSet};
 
@@ -37,6 +40,9 @@ const MAX_TOLD: usize = 20;
 #[derive(Debug)]
 pub struct Packed {
     pub header: Header,
+    /// The compiler it was built with: its release, as
+    /// `paperpaw_native::compiler::release` gives it.
+    pub compiler: String,
     /// The whole file, checked with [`Header::check_file`].
     pub file: Vec<u8>,
 }
@@ -71,6 +77,7 @@ pub fn pack(elf: &[u8]) -> Result<Packed, String> {
         ));
     }
 
+    let compiler = compiler(&elf)?;
     let fingerprint = u64::from(image.word(entry)) | (u64::from(image.word(entry + 4)) << 32);
     let align = [image.rodata.addralign, image.text.addralign, 4]
         .into_iter()
@@ -91,6 +98,7 @@ pub fn pack(elf: &[u8]) -> Result<Packed, String> {
         api,
         relocs: words.len() as u32,
         align,
+        compiler: paperpaw_native::compiler::id(&compiler),
         sha256: [0; 32],
     };
     let mut sha = header.digest();
@@ -100,7 +108,35 @@ pub fn pack(elf: &[u8]) -> Result<Packed, String> {
     file.extend_from_slice(&header.to_bytes());
     file.extend_from_slice(&rest);
     Header::check_file(&file).map_err(|e| format!("the file made does not hold: {e}"))?;
-    Ok(Packed { header, file })
+    Ok(Packed {
+        header,
+        compiler,
+        file,
+    })
+}
+
+/// The release of the one compiler that built `elf`, as its `.comment`
+/// names it: Rust writes its own into every object, the core libraries'
+/// included.
+fn compiler(elf: &Elf<'_>) -> Result<String, String> {
+    let named = match elf.section(".comment") {
+        Some((_, section)) => paperpaw_native::compiler::named_in(elf.data(section)?)
+            .into_iter()
+            .map(String::from)
+            .collect(),
+        None => Vec::new(),
+    };
+    match named.as_slice() {
+        [one] => Ok(one.clone()),
+        [] => Err(
+            "no .comment names the compiler: link the plugin with paperpaw-plugin.x as it is now,              which keeps it"
+                .into(),
+        ),
+        _ => Err(format!(
+            "built by more than one compiler ({}): build the plugin and the core libraries with              the one of PaperPaw's release",
+            named.join(", ")
+        )),
+    }
 }
 
 /// The image: `.rodata`, then `.text`.
@@ -474,6 +510,8 @@ pub(crate) mod tests {
     const DATA: u32 = LINK_BASE + 40;
     const ROM: u32 = 0x4000_1234;
     const FINGERPRINT: u64 = 0x0123_4567_89ab_cdef;
+    /// What the linker keeps of the compilers.
+    const COMMENT: &[u8] = b"Linker: LLD 21.1.0\0rustc version 1.99.0 (b940084d7 2026-09-28)\0";
 
     /// The kinds a test uses, by what they are on each chip.
     struct Kinds {
@@ -499,6 +537,11 @@ pub(crate) mod tests {
     }
 
     fn plugin(machine: u16) -> Plugin {
+        plugin_with(machine, COMMENT)
+    }
+
+    /// The small plugin, with `comment` as its `.comment` (none if empty).
+    fn plugin_with(machine: u16, comment: &[u8]) -> Plugin {
         let k = match machine {
             EM_RISCV => Kinds {
                 word: 1,
@@ -527,6 +570,9 @@ pub(crate) mod tests {
         let mut b = Builder::new(machine, ET_EXEC);
         let ro = b.section(".rodata", SHF_ALLOC, LINK_BASE, &rodata, 16);
         let tx = b.section(".text", SHF_ALLOC | 4, TEXT, &text, 4);
+        if !comment.is_empty() {
+            b.section(".comment", 0x30, 0, comment, 1);
+        }
         let data = b.symbol("DATA", DATA, 8, ro as u16, true);
         let label = b.symbol(".Lpcrel", TEXT + 4, 0, tx as u16, true);
         b.symbol(ENTRY_SYMBOL, LINK_BASE, 16, ro as u16, false);
@@ -549,6 +595,30 @@ pub(crate) mod tests {
             rom,
             k,
         }
+    }
+
+    /// The file names the one compiler that built the plugin, and a
+    /// plugin of none or of two is refused.
+    #[test]
+    fn the_compiler_is_named_and_must_be_one() {
+        let packed = pack(&plugin(EM_RISCV).b.build()).unwrap();
+        assert_eq!(packed.compiler, "1.99.0 (b940084d7 2026-09-28)");
+        assert_eq!(
+            packed.header.compiler,
+            paperpaw_native::compiler::id("1.99.0 (b940084d7 2026-09-28)")
+        );
+        let none = pack(&plugin_with(EM_RISCV, b"Linker: LLD 21.1.0\0").b.build()).unwrap_err();
+        assert!(none.contains("no .comment names the compiler"), "{none}");
+        let two = pack(
+            &plugin_with(
+                EM_XTENSA,
+                b"rustc version 1.99.0 (b940084d7 2026-09-28)\0rustc version 1.97.0-nightly (8ea53bcd7 2026-07-08) (1.97.0.0)\0",
+            )
+            .b
+            .build(),
+        )
+        .unwrap_err();
+        assert!(two.contains("more than one compiler"), "{two}");
     }
 
     /// The packed file of the small plugin for `machine`.

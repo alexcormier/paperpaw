@@ -18,15 +18,36 @@ change the plugin SDK.
   CI on both). A plugin project keeps the linker script
   `paperpaw-plugin.x` beside its `.cargo/config.toml`, as the sample
   does. CI fails where what plugins see changes without the interface
-  raised (`crates/paperpaw-sdk/interface.txt`). A file of another
-  interface says so, in the plugin manager and in `paperpaw-sign plugin`.
+  raised, and by default any change raises it: the public API and the
+  shape of the types (their fields, variants and trait items in order,
+  private fields too) of the SDK and of every crate of PaperPaw below it
+  (`api.txt` and `shape.txt` of each, `tools/interface.py`; kept in
+  `crates/paperpaw-sdk/interface/`). Only a new type, function outside a
+  trait, constant or `impl` goes free; a new trait item never does. A
+  file of another interface says so, in the plugin manager and in
+  `paperpaw-sign plugin`. The interface is 2.
+- A code plugin's file names the compiler that built it (format 2 of
+  `.ppn`): `paperpaw-sign pack` takes it from the plugin's `.comment`,
+  which `paperpaw-plugin.x` now keeps, and refuses a plugin of no
+  compiler or of two. The X4 and X4 Pro load only files of the compiler
+  that built their firmware, the emulator only libraries of its own
+  (by the release in an ELF library, or the commit in the paths of its
+  `std`). Files of format 1 are refused as to be built anew.
+- A service is found by its type's name across builds only where the
+  type is made of the SDK's crates, `core` and `alloc` alone, and has
+  the same size and alignment; a type of a plugin's own crate needs a
+  contract (`ServiceType`). SDK: `native::CROSSING_CRATES`,
+  `native::compiler`.
 - Pre-releases: betas (`0.5.0-beta.1`, `beta.2`, ... `beta.10`) come in
   order before their release, never one back, for updates on the device
-  and Android alike (the APK's version code counts the beta,
-  `shells/android/version-code.sh`). *Beta updates* in the update's
-  settings, off at first ("Betas are for testing; they may have bugs."),
-  asks the update server for them (`"betas": true`); a device running a
-  beta gets the next anyway. About and the update's texts show a beta
+  and Android alike. The APK's version codes follow the update's order
+  exactly (`shells/android/version-code.sh`: of 1.2.3, beta.1 to beta.49,
+  then `-dev`, then rc.1 to rc.48, then the release), and a version they
+  cannot order is refused, as is any number past 99. *Beta updates* in
+  the update's settings, off at first ("Betas are for testing; they may
+  have bugs."), asks the update server for them (`"betas": true`); a
+  device running a pre-release gets the next anyway. The device takes a
+  pre-release only so, whatever the server answers. About and the update's texts show a beta
   calmly, as `0.5.0 Beta 1`. SDK: `firmware::beta`.
 - The workspace publishes to crates.io as a pre-release
   (`tools/publish-dry-run.sh 0.5.0-beta.1`, and the *Publish check*

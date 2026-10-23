@@ -1,0 +1,69 @@
+pub mod paperpaw_i18n
+pub mod paperpaw_i18n::check
+pub enum paperpaw_i18n::check::Issue
+pub paperpaw_i18n::check::Issue::Missing(alloc::string::String)
+pub paperpaw_i18n::check::Issue::Placeholders(alloc::string::String)
+pub paperpaw_i18n::check::Issue::Unknown(alloc::string::String)
+impl core::fmt::Display for paperpaw_i18n::check::Issue
+pub fn paperpaw_i18n::check::Issue::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub fn paperpaw_i18n::check::compare(&paperpaw_i18n::Catalog, &paperpaw_i18n::Catalog) -> alloc::vec::Vec<paperpaw_i18n::check::Issue>
+pub enum paperpaw_i18n::Arg<'a>
+pub paperpaw_i18n::Arg::Int(i64)
+pub paperpaw_i18n::Arg::Str(&'a str)
+#[non_exhaustive] pub enum paperpaw_i18n::CatalogError
+pub paperpaw_i18n::CatalogError::MissingLanguage
+pub paperpaw_i18n::CatalogError::Syntax(paperpaw_config::ParseError)
+pub paperpaw_i18n::CatalogError::UnexpectedSection
+pub paperpaw_i18n::CatalogError::UnexpectedSection::line: u32
+pub paperpaw_i18n::CatalogError::UnknownPluralRule
+pub paperpaw_i18n::CatalogError::UnknownPluralRule::line: u32
+impl core::error::Error for paperpaw_i18n::CatalogError
+impl core::fmt::Display for paperpaw_i18n::CatalogError
+pub fn paperpaw_i18n::CatalogError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub enum paperpaw_i18n::PluralCategory
+pub paperpaw_i18n::PluralCategory::Few
+pub paperpaw_i18n::PluralCategory::Many
+pub paperpaw_i18n::PluralCategory::One
+pub paperpaw_i18n::PluralCategory::Other
+pub paperpaw_i18n::PluralCategory::Two
+pub paperpaw_i18n::PluralCategory::Zero
+impl paperpaw_i18n::PluralCategory
+pub const fn paperpaw_i18n::PluralCategory::id(self) -> &'static str
+#[non_exhaustive] pub enum paperpaw_i18n::PluralRule
+pub paperpaw_i18n::PluralRule::CzechSlovak
+pub paperpaw_i18n::PluralRule::EastSlavic
+pub paperpaw_i18n::PluralRule::OneOther
+pub paperpaw_i18n::PluralRule::Other
+pub paperpaw_i18n::PluralRule::Polish
+pub paperpaw_i18n::PluralRule::ZeroOneOther
+impl paperpaw_i18n::PluralRule
+pub fn paperpaw_i18n::PluralRule::category(self, i64) -> paperpaw_i18n::PluralCategory
+pub fn paperpaw_i18n::PluralRule::from_id(&str) -> core::option::Option<Self>
+pub const fn paperpaw_i18n::PluralRule::id(self) -> &'static str
+pub struct paperpaw_i18n::Catalog
+impl paperpaw_i18n::Catalog
+pub fn paperpaw_i18n::Catalog::get(&self, &str) -> core::option::Option<&str>
+pub fn paperpaw_i18n::Catalog::is_empty(&self) -> bool
+pub fn paperpaw_i18n::Catalog::is_loaded(&self) -> bool
+pub fn paperpaw_i18n::Catalog::keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+pub fn paperpaw_i18n::Catalog::language(&self) -> &str
+pub fn paperpaw_i18n::Catalog::len(&self) -> usize
+pub fn paperpaw_i18n::Catalog::load(&mut self)
+pub fn paperpaw_i18n::Catalog::name(&self) -> &str
+pub fn paperpaw_i18n::Catalog::parse(impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<paperpaw_i18n::Catalog, paperpaw_i18n::CatalogError>
+pub fn paperpaw_i18n::Catalog::plural_rule(&self) -> paperpaw_i18n::PluralRule
+pub fn paperpaw_i18n::Catalog::unload(&mut self)
+pub struct paperpaw_i18n::Translator
+impl paperpaw_i18n::Translator
+pub fn paperpaw_i18n::Translator::add(&mut self, paperpaw_i18n::Catalog)
+pub fn paperpaw_i18n::Translator::catalogs(&self) -> &[paperpaw_i18n::Catalog]
+pub fn paperpaw_i18n::Translator::format(&self, &str, &[(&str, paperpaw_i18n::Arg<'_>)]) -> alloc::string::String
+pub fn paperpaw_i18n::Translator::get(&self, &str) -> core::option::Option<&str>
+pub fn paperpaw_i18n::Translator::language(&self) -> &str
+pub fn paperpaw_i18n::Translator::languages(&self) -> alloc::vec::Vec<(&str, &str)>
+pub fn paperpaw_i18n::Translator::new() -> Self
+pub fn paperpaw_i18n::Translator::plural(&self, &str, i64, &[(&str, paperpaw_i18n::Arg<'_>)]) -> alloc::string::String
+pub fn paperpaw_i18n::Translator::set_language(&mut self, &str)
+pub fn paperpaw_i18n::Translator::shrink_to_fit(&mut self)
+pub fn paperpaw_i18n::Translator::tr<'a>(&'a self, &'a str) -> &'a str
+pub const paperpaw_i18n::FALLBACK_LANGUAGE: &str

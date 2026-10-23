@@ -1,0 +1,61 @@
+pub mod paperpaw_update
+pub enum paperpaw_update::Problem
+pub paperpaw_update::Problem::Length
+pub paperpaw_update::Problem::NewerFormat
+pub paperpaw_update::Problem::NotAnImage
+pub paperpaw_update::Problem::NotAnUpdate
+pub paperpaw_update::Problem::Signature
+impl core::fmt::Display for paperpaw_update::Problem
+pub fn paperpaw_update::Problem::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_update::AppInfo
+pub paperpaw_update::AppInfo::chip: u16
+pub paperpaw_update::AppInfo::project: alloc::string::String
+pub paperpaw_update::AppInfo::version: alloc::string::String
+impl paperpaw_update::AppInfo
+pub fn paperpaw_update::AppInfo::read(&[u8]) -> core::result::Result<Self, paperpaw_update::Problem>
+pub struct paperpaw_update::Check
+impl paperpaw_update::Check
+pub fn paperpaw_update::Check::absorb(&mut self, &[u8])
+pub fn paperpaw_update::Check::finish(self) -> core::result::Result<(), paperpaw_update::Problem>
+pub fn paperpaw_update::Check::new(&paperpaw_update::Trailer) -> core::result::Result<Self, paperpaw_update::Problem>
+impl core::fmt::Debug for paperpaw_update::Check
+pub fn paperpaw_update::Check::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_update::PluginCrate<'a>
+pub paperpaw_update::PluginCrate::name: &'a str
+pub paperpaw_update::PluginCrate::version: &'a str
+pub struct paperpaw_update::Plugins
+impl paperpaw_update::Plugins
+pub fn paperpaw_update::Plugins::is_empty(&self) -> bool
+pub fn paperpaw_update::Plugins::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = paperpaw_update::PluginCrate<'_>>
+pub fn paperpaw_update::Plugins::missing_from<'a>(&'a self, &'a paperpaw_update::Plugins) -> impl core::iter::traits::iterator::Iterator<Item = &'a str>
+pub fn paperpaw_update::Plugins::new(impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
+pub fn paperpaw_update::Plugins::read(&[u8]) -> core::option::Option<Self>
+pub fn paperpaw_update::Plugins::read_static(&'static [u8]) -> core::option::Option<Self>
+pub fn paperpaw_update::Plugins::record<'a>(impl core::iter::traits::collect::IntoIterator<Item = paperpaw_update::PluginCrate<'a>>) -> core::option::Option<alloc::vec::Vec<u8>>
+pub fn paperpaw_update::Plugins::text(&self) -> &str
+pub fn paperpaw_update::Plugins::text_len(&[u8]) -> core::option::Option<usize>
+pub fn paperpaw_update::Plugins::version(&self, &str) -> core::option::Option<&str>
+pub struct paperpaw_update::Trailer
+pub paperpaw_update::Trailer::image_len: u32
+pub paperpaw_update::Trailer::key: [u8; 32]
+pub paperpaw_update::Trailer::signature: [u8; 64]
+impl paperpaw_update::Trailer
+pub fn paperpaw_update::Trailer::read(&[u8], u64) -> core::result::Result<Self, paperpaw_update::Problem>
+pub fn paperpaw_update::Trailer::to_bytes(&self) -> [u8; 128]
+pub const paperpaw_update::APP_HEAD_LEN: usize
+pub const paperpaw_update::CHIP_ESP32_C3: u16
+pub const paperpaw_update::CHIP_ESP32_S3: u16
+pub const paperpaw_update::FORMAT: u32
+pub const paperpaw_update::MAGIC: [u8; 8]
+pub const paperpaw_update::PLUGINS_AT: usize
+pub const paperpaw_update::PLUGINS_FORMAT: u16
+pub const paperpaw_update::PLUGINS_HEAD_LEN: usize
+pub const paperpaw_update::PLUGINS_MAGIC: [u8; 8]
+pub const paperpaw_update::PLUGINS_MAX_LEN: usize
+pub const paperpaw_update::TRAILER_LEN: usize
+pub fn paperpaw_update::check_apart(&[u8], &[u8]) -> core::result::Result<paperpaw_update::Trailer, paperpaw_update::Problem>
+pub fn paperpaw_update::fingerprint(&[u8; 32]) -> alloc::string::String
+pub fn paperpaw_update::key_hex(&[u8; 32]) -> alloc::string::String
+pub fn paperpaw_update::parse_key(&str) -> core::option::Option<[u8; 32]>
+pub fn paperpaw_update::public_key(&[u8; 32]) -> [u8; 32]
+pub fn paperpaw_update::sign(&[u8], &[u8; 32]) -> core::result::Result<paperpaw_update::Trailer, paperpaw_update::Problem>

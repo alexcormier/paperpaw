@@ -1,0 +1,4 @@
+# The shape of this crate's public types, as tools/interface.py writes
+# it: fields, variants and trait items in the source's order, private
+# fields too (ADR 0026).
+struct paperpaw_qr::QrCode { size: usize, modules: alloc::vec::Vec<bool> }

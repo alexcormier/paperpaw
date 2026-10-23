@@ -48,24 +48,59 @@ with that before the betas of 0.5:
   have it; `.cargo/config.toml` links with it by its rustflags, which are
   not in `-C metadata`. The copy is part of the interface: a test keeps
   the repository's copies equal to `paperpaw-native`'s.
-- **The compiler is pinned by the release, not hashed.** Without a build
-  script no constant knows the compiler. Until 1.0 the SDK's Rust types
-  cross as they are, and a new compiler may lay them out or call them
-  otherwise in ways no size or alignment shows (the order in a vtable,
-  how a `repr(Rust)` value is passed). So the compiler is part of the
-  interface: the X4's from `shells/xteink/rust-toolchain.toml`, the X4
-  Pro's from `versions.env`, named by `native::TOOLCHAIN` (a test keeps
-  them equal), and a new one raises the interface. The layout digest
-  catches most of what a compiler changes; the pin covers the rest.
-- **CI fails where what plugins see changes without a raise.**
-  `crates/paperpaw-sdk/interface.txt` keeps, for the interface, the
-  layout digest, the fingerprint (of the SDK's own test build), the
-  linker script's hash and the compilers; `interface-api.txt` keeps the
-  SDK's items (`api.txt`) as they were. A test
-  (`cargo test -p paperpaw-sdk --test interface`) fails where an item
-  went or changed, or one of the others changed: raise `INTERFACE` and
-  write both anew (`PAPERPAW_BLESS=1`). New items are free: a plugin
-  built before does not use them.
+- **The compiler is pinned by the release, and each file names its
+  own.** Until 1.0 the SDK's Rust types cross as they are, and a new
+  compiler may lay them out or call them otherwise in ways no size or
+  alignment shows (the order in a vtable, how a `repr(Rust)` value is
+  passed). So the compiler is part of the interface: the X4's from
+  `shells/xteink/rust-toolchain.toml`, the X4 Pro's from `versions.env`,
+  Android's from its `versions.env`, named by `native::TOOLCHAIN` (a test
+  keeps them equal, and the repository's plugin projects pinned to the
+  X4's), and a new one raises the interface. Without a build script no
+  constant of the SDK knows the compiler, but every object Rust makes
+  names it (`rustc version 1.99.0 (b940084d7 2026-09-28)`, in `.comment`).
+  `paperpaw-sign pack` takes it from there, refuses a plugin built by
+  none or by two, and writes a hash of it into the file's header (format
+  2). The firmware knows its own from its build script, which a shell may
+  have, and loads only files of it. The emulator checks a library built
+  for the computer the same way, by the release an ELF library names or
+  by the commit in the paths of its `std`.
+- **CI fails where what plugins see changes without a raise, and any
+  change raises it.** The crates whose types cross are the SDK and every
+  crate of PaperPaw it depends on (`crates/paperpaw-sdk/interface/
+  crates.txt`; `native::CROSSING_CRATES` names the same). Each keeps
+  `api.txt`, its public API, and `shape.txt`, the shape of its public
+  types: their fields, variants and trait items in the source's order,
+  private fields too, each with its type (`tools/interface.py`, from
+  rustdoc's JSON, on the nightly of CI). `api.txt` alone does not do: it
+  is sorted, so an inserted variant or two fields of one type swapped do
+  not show, and it shows no private field. `interface/` keeps both as
+  they were when the interface was last raised, and `interface.txt` the
+  linker script's hash and the compilers. A test
+  (`cargo test -p paperpaw-sdk --test interface`) compares them. By
+  default a change raises the interface: a field, a variant or an item
+  of a trait that was there, a change of order, of a private field or of
+  a signature, anything gone. Free is only what no plugin built before
+  can rely on: a new type, module or re-export, a new function or
+  constant outside a trait, a new `impl`, and the members of a type that
+  is itself new. A new item of a trait is never free: the firmware would
+  call it through the table of a plugin built before, which does not have
+  it, and the same holds for the firmware's own trait objects a plugin
+  is handed. Either way the files are written anew (`PAPERPAW_BLESS=1`).
+- **The layouts are checked on each chip by the fingerprint.**
+  `native::LAYOUT` is made by the compiler for the chip it builds for,
+  so a plugin for the X4 has the X4's layouts in its fingerprint, and the
+  X4 loads only files with its own. The interface's files do not keep a
+  digest of the computer's layouts: those differ from the chips'
+  (`usize` is 32 bits there) and change with the computer's compiler,
+  while what changes a type's layout on a chip is either in its source,
+  which the gate sees, or the compiler, which the file names.
+- **Services found by name only within the interface.** A service is
+  found across builds by its type's name only where that type is made of
+  the crates that cross, `core` and `alloc` alone, and is of the same
+  size and alignment. A type of a plugin's own crate may be another one
+  of the same name in another build, so such a service needs a contract
+  (`ServiceType`), whose key its author raises when the type changes.
 - **Where a plugin's code lands binds it to nothing.** A `.ppn` file is
   linked at a fixed base and relocated where it is loaded; it reaches the
   firmware only through the table whose address the loader writes into
@@ -84,6 +119,14 @@ with that before the betas of 0.5:
   paths are written as the same (`build.sh`, the rebuild, and
   `tools/reproducible-plugin.py`, which CI runs on both).
 - Raising the interface stays a decision of its own: a pull request that
-  changes a type that crosses fails until it raises it.
+  changes a type that crosses fails until it raises it. Raising is the
+  default, so the gate errs on the side of a new interface: a private
+  field renamed raises it too.
+- The gate sees types and signatures, not behaviour. A plugin carries
+  its own copy of the SDK's code, so a function whose body changes what
+  it writes into a value both sides read (a format, an invariant) is the
+  same item to the gate, and such a change raises the interface by hand.
+- Interface 1 was never released: 2 is the first, with the files of
+  format 2 that name their compiler.
 - The stable, C-shaped plugin API of ADR 0024 for 1.0 is still to come;
   then its major version becomes the interface version.

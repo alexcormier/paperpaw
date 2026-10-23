@@ -913,6 +913,7 @@ fn code_file() -> Vec<u8> {
         api: 16,
         relocs: 0,
         align: 16,
+        compiler: 1,
         sha256: [0; 32],
     };
     let image = [0u8; 128];

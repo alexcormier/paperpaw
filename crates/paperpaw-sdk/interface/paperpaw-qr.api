@@ -1,0 +1,6 @@
+pub mod paperpaw_qr
+pub struct paperpaw_qr::QrCode
+impl paperpaw_qr::QrCode
+pub fn paperpaw_qr::QrCode::dark(&self, usize, usize) -> bool
+pub fn paperpaw_qr::QrCode::new(&[u8]) -> core::option::Option<paperpaw_qr::QrCode>
+pub fn paperpaw_qr::QrCode::size(&self) -> usize

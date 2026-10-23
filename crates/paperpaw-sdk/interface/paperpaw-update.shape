@@ -1,0 +1,9 @@
+# The shape of this crate's public types, as tools/interface.py writes
+# it: fields, variants and trait items in the source's order, private
+# fields too (ADR 0026).
+enum paperpaw_update::Problem { NotAnUpdate, NewerFormat, NotAnImage, Length, Signature }
+struct paperpaw_update::AppInfo { chip: u16, version: alloc::string::String, project: alloc::string::String }
+struct paperpaw_update::Check { state: ed25519_compact::ed25519::VerifyingState, signed: [u8; 48], image_len: u32, absorbed: u64 }
+struct paperpaw_update::Trailer { image_len: u32, key: [u8; 32], signature: [u8; 64] }
+struct paperpaw_update::plugins::PluginCrate<'a> { name: &'a str, version: &'a str }
+struct paperpaw_update::plugins::Plugins { text: alloc::borrow::Cow<'static, str> }

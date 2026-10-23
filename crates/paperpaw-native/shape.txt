@@ -1,0 +1,24 @@
+# The shape of this crate's public types, as tools/interface.py writes
+# it: fields, variants and trait items in the source's order, private
+# fields too (ADR 0026).
+enum paperpaw_native::bundle::BundleProblem { NotABundle, NewerFormat, OtherImage, Length, Damaged, Layout, Name, TooLarge }
+enum paperpaw_native::header::Chip { Esp32C3, Esp32S3 }
+enum paperpaw_native::header::Problem { NotAPlugin, NewerFormat, OlderFormat, UnknownChip, Malformed, Length, Damaged, Relocation, Signature }
+struct paperpaw_native::bundle::Bundle { len: u32, plugins: alloc::vec::Vec<paperpaw_native::bundle::BundlePlugin> }
+struct paperpaw_native::bundle::BundleFile { path: alloc::string::String, at: u32, size: u32, sha256: [u8; 32] }
+struct paperpaw_native::bundle::BundlePlugin { id: alloc::string::String, version: alloc::string::String, files: alloc::vec::Vec<paperpaw_native::bundle::BundleFile> }
+struct paperpaw_native::extent::ImageExtent { len: u32, sha256: bool }
+struct paperpaw_native::header::Header { chip: paperpaw_native::header::Chip, fingerprint: u64, base: u32, image_len: u32, code_at: u32, entry: u32, api: u32, relocs: u32, align: u32, compiler: u32, sha256: [u8; 32] }
+struct paperpaw_native::index::Index { firmware: [u8; 32], placed: alloc::vec::Vec<paperpaw_native::index::Placed> }
+struct paperpaw_native::index::Layout { region: paperpaw_native::index::Region, firmware: [u8; 32], api: u32, old: alloc::vec::Vec<paperpaw_native::index::Placed>, placed: alloc::vec::Vec<paperpaw_native::index::Placed>, same: bool, written: bool }
+struct paperpaw_native::index::NoRoom
+struct paperpaw_native::index::Placed { sha256: [u8; 32], at: u32, len: u32, base: u32, api: u32 }
+struct paperpaw_native::index::Placement { at: u32, base: u32, present: bool, erase_index: bool }
+struct paperpaw_native::index::Region { start: u32, end: u32, base: u32 }
+struct paperpaw_native::interface::Api #{"repr": {"align": null, "int": null, "kind": "c", "packed": null}} { size: u32, alloc: fn(usize, usize) -> *mut u8, dealloc: fn(*mut u8, usize, usize), realloc: fn(*mut u8, usize, usize, usize) -> *mut u8, panic: fn(*const u8, usize) -> never, micros: fn() -> u64, icon: fn(*const u8, usize) -> u32 }
+struct paperpaw_native::interface::Entry #{"repr": {"align": null, "int": null, "kind": "c", "packed": null}} { fingerprint: u64, make: fn() -> *mut core::ffi::c_void }
+struct paperpaw_native::reloc::Relocator<'a> { header: &'a paperpaw_native::header::Header, words: &'a [u32], delta: u32, api: u32 }
+struct paperpaw_native::signature::BadSignature
+struct paperpaw_native::signature::Signature { signed_len: u32, key: [u8; 32], signature: [u8; 64] }
+struct paperpaw_native::signature::SignatureCheck { state: ed25519_compact::ed25519::VerifyingState, signed: [u8; 44], signed_len: u32, absorbed: u64 }
+trait paperpaw_native::bundle::Source { function read }

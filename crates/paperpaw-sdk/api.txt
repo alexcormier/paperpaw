@@ -2234,6 +2234,7 @@ pub use paperpaw_sdk::native::HEADER_LEN
 pub use paperpaw_sdk::native::Header
 pub use paperpaw_sdk::native::Problem
 pub use paperpaw_sdk::native::Signature
+pub use paperpaw_sdk::native::compiler
 pub use paperpaw_sdk::native::signature
 #[non_exhaustive] pub enum paperpaw_sdk::native::Author
 pub paperpaw_sdk::native::Author::Known
@@ -2291,6 +2292,7 @@ pub paperpaw_sdk::native::SafeMode::switched_off: alloc::vec::Vec<paperpaw_sdk::
 impl paperpaw_sdk::native::SafeMode
 pub fn paperpaw_sdk::native::SafeMode::new(paperpaw_sdk::native::SafeModeReason) -> Self
 pub const paperpaw_sdk::native::CODE_FILES: &[&str]
+pub const paperpaw_sdk::native::CROSSING_CRATES: &[&str]
 pub const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint
 pub const paperpaw_sdk::native::INTERFACE: u16
 pub const paperpaw_sdk::native::LAYOUT: u64

@@ -5,7 +5,7 @@
 //! Android loads `code.so`, with the same entry and table as `.ppn` files
 //! on the X4. It must be built by the same compiler, for this computer,
 //! against the same SDK as this emulator ([`FINGERPRINT`], which
-//! `--stdio` says), and installed: only a file whose SHA-256 the card
+//! `--stdio` says; [`built_here`] checks the compiler), and installed: only a file whose SHA-256 the card
 //! has (`native::remember_code`) runs, as on the devices, which
 //! [`trust`] gives every one on a card (`--trust-code`).
 //!
@@ -150,6 +150,10 @@ fn load(storage: &dyn Storage, code: &CodeFile<'_>) -> Result<Box<dyn Plugin>, P
     if paperpaw_core::sdk::digest::sha256::digest(&copied) != code.sha256 {
         return Err(PluginProblem::Changed);
     }
+    if let Err(why) = built_here(&copied) {
+        eprintln!("code plugin {}: {why}", code.id.as_str());
+        return Err(PluginProblem::OtherBuild);
+    }
     // SAFETY: a file the reader installed on the card (`trust`), its
     // SHA-256 the one installed; a code plugin runs as part of
     // PaperPaw, without a sandbox (ADR 0024).
@@ -177,6 +181,54 @@ fn load(storage: &dyn Storage, code: &CodeFile<'_>) -> Result<Box<dyn Plugin>, P
     // is in use.
     std::mem::forget(library);
     Ok(plugin)
+}
+
+/// Whether the library `bytes` was built by the compiler that built the
+/// emulator: Rust types cross as they are until PaperPaw 1.0 (ADR 0026).
+/// A library for Linux or Android names the compiler's release (in
+/// `.comment`); every library names the commit of its `std` in the paths
+/// of its sources (`/rustc/<commit>/library/…`). One that tells neither is
+/// refused too.
+fn built_here(bytes: &[u8]) -> Result<(), String> {
+    let ours = env!("PAPERPAW_RUSTC");
+    let releases = paperpaw_core::sdk::native::compiler::named_in(bytes);
+    if let Some(other) = releases.iter().find(|r| **r != ours) {
+        return Err(format!(
+            "built by rustc {other}, the emulator by rustc {ours}"
+        ));
+    }
+    let commits = commits_in(bytes);
+    let commit = env!("PAPERPAW_RUSTC_COMMIT");
+    if let Some(other) = commits.iter().find(|c| **c != commit) {
+        return Err(format!(
+            "its std is of the compiler {other}, the emulator's of {commit}"
+        ));
+    }
+    if releases.is_empty() && commits.is_empty() {
+        return Err(String::from("it does not tell which compiler built it"));
+    }
+    Ok(())
+}
+
+/// The commits of the compilers whose `std` built into `bytes`, each once.
+fn commits_in(bytes: &[u8]) -> Vec<&str> {
+    const MARK: &[u8] = b"/rustc/";
+    let mut found = Vec::new();
+    let mut at = 0;
+    while let Some(start) = bytes[at..].windows(MARK.len()).position(|w| w == MARK) {
+        let from = at + start + MARK.len();
+        let hash = bytes.get(from..from + 41);
+        if let Some(hash) = hash
+            && hash[40] == b'/'
+            && hash[..40].iter().all(u8::is_ascii_hexdigit)
+            && let Ok(hash) = std::str::from_utf8(&hash[..40])
+            && !found.contains(&hash)
+        {
+            found.push(hash);
+        }
+        at = from;
+    }
+    found
 }
 
 /// Installs every code plugin built for this computer on the card in
@@ -208,6 +260,26 @@ pub fn trust(root: &std::path::Path) -> std::io::Result<Vec<String>> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// A library is loaded only where it names the emulator's compiler,
+    /// by its release or by the commit of its `std`, and none other.
+    #[test]
+    fn only_libraries_of_this_compiler_are_loaded() {
+        let release = format!("rustc version {}\0", env!("PAPERPAW_RUSTC"));
+        let std = format!(
+            "/rustc/{}/library/core/src/str.rs",
+            env!("PAPERPAW_RUSTC_COMMIT")
+        );
+        assert_eq!(built_here(release.as_bytes()), Ok(()));
+        assert_eq!(built_here(std.as_bytes()), Ok(()));
+        let both = format!("{release}{std}{std}");
+        assert_eq!(built_here(both.as_bytes()), Ok(()));
+        let other_release = b"rustc version 1.2.3 (aaaaaaaaa 2020-01-01)\0";
+        assert!(built_here(other_release).is_err());
+        let other_std = format!("{std}/rustc/{}/library/std/src/io.rs", "a".repeat(40));
+        assert!(built_here(other_std.as_bytes()).is_err());
+        assert!(built_here(b"no compiler at all").is_err());
+    }
 
     /// A library that has a code plugin installed runs none of it unless
     /// the one who starts the emulator says so (`--trust-code`): a
@@ -244,8 +316,8 @@ version = 0.1.0
         );
         assert_eq!(
             problem(true),
-            Some(PluginProblem::Damaged),
-            "loaded, and found no library"
+            Some(PluginProblem::OtherBuild),
+            "loaded, and found no library of this compiler"
         );
         crate::device::set_code_plugins(false);
         let _ = std::fs::remove_dir_all(&root);
@@ -267,7 +339,7 @@ version = 0.1.0
             paperpaw_core::sdk::native::installed_code(&storage, "hello"),
             Some(paperpaw_core::sdk::digest::sha256::digest(b"not a library"))
         );
-        // Installed but no library: said, not fatal.
+        // Installed but no library of this compiler: said, not fatal.
         let id = paperpaw_core::sdk::Id::new_static("hello");
         let path = format!("plugins/hello/{}", file_name());
         let code = CodeFile {
@@ -277,7 +349,7 @@ version = 0.1.0
         };
         assert_eq!(
             HostLoader.load(&storage, &code).err(),
-            Some(PluginProblem::Damaged)
+            Some(PluginProblem::OtherBuild)
         );
         let changed = CodeFile {
             sha256: [0; 32],

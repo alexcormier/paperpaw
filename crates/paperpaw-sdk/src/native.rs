@@ -16,7 +16,9 @@
 //! the same chip with the features that change what crosses. Until
 //! PaperPaw 1.0 the SDK's types cross between them as they are, so the
 //! compiler is the release's too (`shells/xteink/rust-toolchain.toml`,
-//! `versions.env`), and a new one is a new interface (ADR 0026).
+//! `versions.env`), and a new one is a new interface (ADR 0026). A plugin
+//! file names the compiler that built it ([`compiler`]), and a device
+//! loads it only where that built the firmware too.
 //! [`FINGERPRINT`] says which, and a device loads only files with its own
 //! ([`Native::fingerprint`]); its top 16 bits are the interface's version,
 //! so a file of another can say so ([`Fingerprint::interface`]). A plugin
@@ -41,6 +43,7 @@ use core::fmt;
 use crate::Id;
 use paperpaw_platform::Storage;
 
+pub use paperpaw_native::compiler;
 pub use paperpaw_native::signature::{self, BadSignature};
 pub use paperpaw_native::{Chip, HEADER_LEN, Header, Problem, Signature};
 
@@ -48,11 +51,39 @@ pub use paperpaw_native::{Chip, HEADER_LEN, Header, Problem, Signature};
 /// against (see the [module documentation](self)). Raised by hand, and
 /// only when what plugins see changes; `crates/paperpaw-sdk/interface.txt`
 /// keeps what it was, and CI fails while they differ (ADR 0026).
-pub const INTERFACE: u16 = 1;
+pub const INTERFACE: u16 = 2;
+
+/// The crates whose types cross between a plugin and PaperPaw, by the
+/// names their paths begin with: the SDK and every crate of PaperPaw it
+/// depends on. The plugin interface keeps their types as they are
+/// (`crates/paperpaw-sdk/interface/crates.txt`, which a test keeps the
+/// same), so a type made of theirs alone is the same in every build of
+/// one interface.
+pub const CROSSING_CRATES: &[&str] = &[
+    "paperpaw_sdk",
+    "paperpaw_platform",
+    "paperpaw_graphics",
+    "paperpaw_i18n",
+    "paperpaw_config",
+    "paperpaw_text",
+    "paperpaw_document",
+    "paperpaw_layout",
+    "paperpaw_xml",
+    "paperpaw_zip",
+    "paperpaw_hyphen",
+    "paperpaw_image",
+    "paperpaw_update",
+    "paperpaw_digest",
+    "paperpaw_json",
+    "paperpaw_qr",
+    "paperpaw_native",
+];
 
 /// The layouts of the types that cross between a plugin and PaperPaw, as
 /// this build lays them out: a digest of their sizes and alignments, and
-/// of where the firmware's table keeps each of its entries.
+/// of where the firmware's table keeps each of its entries. Part of the
+/// fingerprint, so made for each chip as it lays them out: a plugin whose
+/// layouts differ from the firmware's is not loaded.
 pub const LAYOUT: u64 = layout::DIGEST;
 
 /// What this build of the SDK makes plugins fit: the plugin interface, the
@@ -671,7 +702,8 @@ pub unsafe fn take(made: *mut core::ffi::c_void) -> Option<alloc::boxed::Box<dyn
         return None;
     }
     // SAFETY: made by `plugin!` (`support::make`) from this box, with the
-    // same layout: the fingerprint says the same compiler and SDK.
+    // same layout: the fingerprint says the same plugin interface and
+    // layouts, and the shell checked the compiler.
     Some(*unsafe {
         alloc::boxed::Box::from_raw(made.cast::<alloc::boxed::Box<dyn crate::Plugin>>())
     })
@@ -868,6 +900,67 @@ mod layout {
         &'static dyn crate::Storage,
         Api,
         Entry,
+        // What `Env` reaches.
+        crate::firmware::Firmware,
+        crate::formats::Formats,
+        crate::usage::Usage,
+        crate::status::StatusItems,
+        crate::readers::Readers,
+        crate::widgets::Widgets,
+        crate::services::Services,
+        crate::services::Service,
+        crate::power::Power,
+        crate::work::WorkStates,
+        crate::wifi::Wifi,
+        crate::library::BookData,
+        crate::library::service::BookBadge,
+        crate::library::service::BookField,
+        crate::keys::InputSpec,
+        // What a `Contribution` holds: the enum's size hides a change of
+        // a smaller one.
+        crate::action::ActionOverride,
+        crate::action::ObserverSpec,
+        crate::chrome::ChromeSpec,
+        crate::decorations::DecoratorSpec,
+        crate::event::EventHandler,
+        crate::filters::InputFilterSpec,
+        crate::filters::RefreshFilterSpec,
+        crate::filters::TextFilterSpec,
+        crate::fonts::FontFace,
+        crate::fonts::FontSpec,
+        crate::formats::FormatSpec,
+        crate::hyphenation::HyphenationSpec,
+        crate::keys::GestureSpec,
+        crate::layers::PageFrameSpec,
+        crate::layers::PageLayerSpec,
+        crate::lookup::LookupProviderSpec,
+        crate::menus::ItemStateFn,
+        crate::menus::MenuNeed,
+        crate::menus::MenuSection,
+        crate::plugin::Priority,
+        crate::plugin::SlotSpec,
+        crate::presets::Preset,
+        crate::readers::ReaderSpec,
+        crate::services::EventSpec,
+        crate::services::PointSpec,
+        crate::settings::SettingGroupSpec,
+        crate::setup::SetupStepSpec,
+        crate::status::Place,
+        crate::status::StatusItemSpec,
+        crate::status::StatusLineSpec,
+        crate::ui::look::Painters,
+        crate::voices::VoiceSpec,
+        crate::widgets::WidgetCategory,
+        crate::widgets::WidgetPlace,
+        crate::widgets::WidgetSpec,
+        crate::work::WorkSpec,
+        // What trait methods take and give.
+        crate::screen::Hints,
+        crate::screen::Outside,
+        crate::screen::ShowsThrough,
+        crate::screen::CloseCause,
+        paperpaw_platform::PointerEvent,
+        paperpaw_document::Block,
     ];
 
     /// Where the firmware's table keeps each entry: a plugin finds them
@@ -1072,6 +1165,7 @@ mod tests {
             api: 16,
             relocs: 0,
             align,
+            compiler: 1,
             sha256: [0; 32],
         };
         header.to_bytes().to_vec()
@@ -1211,6 +1305,7 @@ mod tests {
             api: 16,
             relocs: 0,
             align: 16,
+            compiler: 1,
             sha256: [0; 32],
         };
         let image = [9u8; 64];

@@ -72,13 +72,22 @@ fn main() {
     // `ready` says it.
     println!("cargo::rerun-if-env-changed=RUSTC");
     let rustc = std::env::var("RUSTC").unwrap_or_else(|_| String::from("rustc"));
-    let first = Command::new(rustc)
-        .arg("-V")
+    let words = Command::new(rustc)
+        .arg("-vV")
         .output()
         .ok()
         .and_then(|o| String::from_utf8(o.stdout).ok())
-        .map(|s| s.trim().to_string())
-        .unwrap_or_else(|| String::from("rustc"));
+        .unwrap_or_default();
+    let first = words.lines().next().unwrap_or("rustc").trim();
     let target = std::env::var("TARGET").unwrap_or_default();
     println!("cargo::rustc-env=PAPERPAW_HOST_TOOLCHAIN={first}, {target}");
+    // And by what a plugin's library tells of its compiler: the release
+    // an ELF library names, the commit the paths of `std` name.
+    let release = paperpaw_native::compiler::release(first).unwrap_or_default();
+    println!("cargo::rustc-env=PAPERPAW_RUSTC={release}");
+    let commit = words
+        .lines()
+        .find_map(|l| l.strip_prefix("commit-hash: "))
+        .unwrap_or_default();
+    println!("cargo::rustc-env=PAPERPAW_RUSTC_COMMIT={}", commit.trim());
 }

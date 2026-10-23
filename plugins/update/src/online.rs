@@ -100,9 +100,16 @@ pub(crate) struct Offer {
     pub builds: Vec<Build>,
 }
 
+/// Whether `version` is a pre-release (`0.5.0-beta.1`, `0.5.0-dev`).
+fn is_pre_release(version: &str) -> bool {
+    version.split('+').next().is_some_and(|v| v.contains('-'))
+}
+
 impl Offer {
-    /// The answer's `body`, if it names an update newer than `firmware`.
-    pub(crate) fn from_answer(body: &str, firmware: &Firmware) -> Option<Self> {
+    /// The answer's `body`, if it names an update newer than `firmware`;
+    /// a pre-release only where the reader asked for `betas` or the
+    /// device runs one already, whatever the server sends.
+    pub(crate) fn from_answer(body: &str, firmware: &Firmware, betas: bool) -> Option<Self> {
         let members = paperpaw_sdk::json::object(body);
         let version = paperpaw_sdk::json::text(&members, "version")?
             .trim()
@@ -113,6 +120,7 @@ impl Offer {
         if !is_version(&version)
             || url.is_empty()
             || !compare_versions(&version, &firmware.version).is_gt()
+            || (is_pre_release(&version) && !betas && !is_pre_release(&firmware.version))
         {
             return None;
         }
@@ -369,7 +377,7 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command>) 
         }
         return;
     }
-    let Some(offer) = Offer::from_answer(&reply.body, firmware) else {
+    let Some(offer) = Offer::from_answer(&reply.body, firmware, env.settings.read(&BETAS)) else {
         let _ = storage.remove(&file(OFFER));
         waiting::clear(storage);
         return;
@@ -526,7 +534,7 @@ mod tests {
         };
         let offer = |answer: &str, running: &str| {
             let body = alloc::format!(r#"{{"version": "{answer}", "url": "u"}}"#);
-            Offer::from_answer(&body, &on(running)).map(|o| o.version)
+            Offer::from_answer(&body, &on(running), true).map(|o| o.version)
         };
         assert_eq!(
             offer("0.5.0-beta.2", "0.5.0-beta.1").as_deref(),
@@ -551,13 +559,38 @@ mod tests {
         }
     }
 
+    /// A pre-release a server offers where the reader did not ask for
+    /// betas is not taken, unless the device runs a pre-release already.
+    #[test]
+    fn betas_are_left_where_the_reader_did_not_ask() {
+        let on = |version: &str| Firmware {
+            version: version.into(),
+            ..firmware()
+        };
+        let offer = |answer: &str, running: &str| {
+            let body = alloc::format!(r#"{{"version": "{answer}", "url": "u"}}"#);
+            Offer::from_answer(&body, &on(running), false).map(|o| o.version)
+        };
+        assert_eq!(offer("0.5.0-beta.1", "0.4.0"), None);
+        assert_eq!(offer("0.5.0-rc.1", "0.4.0"), None);
+        assert_eq!(offer("0.5.0", "0.4.0").as_deref(), Some("0.5.0"));
+        assert_eq!(
+            offer("0.5.0-beta.2", "0.5.0-beta.1").as_deref(),
+            Some("0.5.0-beta.2")
+        );
+        assert_eq!(
+            offer("0.5.0-beta.1", "0.4.0-dev").as_deref(),
+            Some("0.5.0-beta.1")
+        );
+    }
+
     #[test]
     fn an_answer_with_an_update() {
         let body = r#"{"version": "0.5.0", "url": "https://paperpaw.org/u.bin", "size": 6194784,
             "plugins": ["paperpaw-plugin-stats 0.5.0"],
             "missing": ["paperpaw-plugin-chess not-ready"]}"#;
         let firmware = firmware();
-        let offer = Offer::from_answer(body, &firmware).unwrap();
+        let offer = Offer::from_answer(body, &firmware, false).unwrap();
         assert_eq!(offer.version, "0.5.0");
         assert_eq!(offer.size, 6_194_784);
         let storage = paperpaw_sdk::MemoryStorage::new();
@@ -586,11 +619,12 @@ mod tests {
             r#"{"version": "9", "url": "u"}"#,
             "not json",
         ] {
-            assert_eq!(Offer::from_answer(body, &firmware), None, "{body}");
+            assert_eq!(Offer::from_answer(body, &firmware, false), None, "{body}");
         }
         let all = Offer::from_answer(
             r#"{"version": "0.5.0", "url": "u", "plugins": ["paperpaw-plugin-stats 0.5.0", "paperpaw-plugin-chess 1.1.0"]}"#,
             &firmware,
+            false,
         )
         .unwrap();
         let storage = paperpaw_sdk::MemoryStorage::new();

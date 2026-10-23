@@ -1,0 +1,18 @@
+# The shape of this crate's public types, as tools/interface.py writes
+# it: fields, variants and trait items in the source's order, private
+# fields too (ADR 0026).
+enum paperpaw_image::Decoded { Gray(0: paperpaw_image::gray::GrayFile), Color(0: paperpaw_image::color::ColorFile), Alpha(0: paperpaw_image::alpha::AlphaFile) }
+enum paperpaw_image::Format { Jpeg, Png, Gif }
+enum paperpaw_image::ImageError { Invalid(0: &'static str), Unsupported(0: &'static str), Io, Storage(0: paperpaw_platform::storage::StorageError), OutOfMemory, Stopped }
+struct paperpaw_image::Downscaler { width: u32, height: u32, channels: usize, out_width: u32, out_height: u32, columns: alloc::vec::Vec<u16>, counts: alloc::vec::Vec<u16>, sums: alloc::vec::Vec<u32>, rows: u32, seen: u32, out: alloc::vec::Vec<u8> }
+struct paperpaw_image::Fit { short: u32, long: u32 }
+struct paperpaw_image::ImageFile { path: alloc::string::String, width: u32, height: u32, color: bool, alpha: bool }
+struct paperpaw_image::alpha::AlphaFile { path: alloc::string::String, width: u32, height: u32 }
+struct paperpaw_image::alpha::AlphaWriter<'a> { storage: &'a dyn paperpaw_platform::storage::Storage, path: &'a str, buffer: alloc::vec::Vec<u8> }
+struct paperpaw_image::color::ColorFile { path: alloc::string::String, width: u32, height: u32 }
+struct paperpaw_image::color::ColorWriter<'a> { storage: &'a dyn paperpaw_platform::storage::Storage, path: &'a str, buffer: alloc::vec::Vec<u8> }
+struct paperpaw_image::gray::GrayFile { path: alloc::string::String, width: u32, height: u32 }
+struct paperpaw_image::gray::GrayWriter<'a> { storage: &'a dyn paperpaw_platform::storage::Storage, path: &'a str, buffer: alloc::vec::Vec<u8> }
+struct paperpaw_image::png_write::PngWriter { width: u32, rows_left: u32, adler: (u32, u32) }
+trait paperpaw_image::ImageSink { function start, function row, function wants_color, function row_rgb, function wants_alpha, function row_alpha }
+trait paperpaw_image::Source { function read }

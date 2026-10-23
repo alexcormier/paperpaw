@@ -40,5 +40,7 @@ SECTIONS
     .data : { *(.data .data.* .sdata .sdata.*) }
     .bss : { *(.bss .bss.* .sbss .sbss.* COMMON) }
 
-    /DISCARD/ : { *(.eh_frame .eh_frame_hdr .comment) }
+    /* The compilers' names stay (`.comment`, not loaded): the file
+       keeps which built it, and runs only on firmware built by it. */
+    /DISCARD/ : { *(.eh_frame .eh_frame_hdr) }
 }

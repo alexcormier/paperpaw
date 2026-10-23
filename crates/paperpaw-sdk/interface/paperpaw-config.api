@@ -1,0 +1,34 @@
+pub mod paperpaw_config
+#[non_exhaustive] pub enum paperpaw_config::ErrorKind
+pub paperpaw_config::ErrorKind::InvalidEscape
+pub paperpaw_config::ErrorKind::InvalidKey
+pub paperpaw_config::ErrorKind::InvalidLine
+pub paperpaw_config::ErrorKind::InvalidSection
+pub paperpaw_config::ErrorKind::UnterminatedString
+pub struct paperpaw_config::Entry<'a>
+pub paperpaw_config::Entry::key: &'a str
+pub paperpaw_config::Entry::line: u32
+pub paperpaw_config::Entry::section: &'a str
+pub paperpaw_config::Entry::value: paperpaw_config::Value<'a>
+pub struct paperpaw_config::ParseError
+pub paperpaw_config::ParseError::kind: paperpaw_config::ErrorKind
+pub paperpaw_config::ParseError::line: u32
+impl core::error::Error for paperpaw_config::ParseError
+impl core::fmt::Display for paperpaw_config::ParseError
+pub fn paperpaw_config::ParseError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_config::Parser<'a>
+impl<'a> core::iter::traits::iterator::Iterator for paperpaw_config::Parser<'a>
+pub type paperpaw_config::Parser<'a>::Item = core::result::Result<paperpaw_config::Entry<'a>, paperpaw_config::ParseError>
+pub fn paperpaw_config::Parser<'a>::next(&mut self) -> core::option::Option<Self::Item>
+pub struct paperpaw_config::Value<'a>
+impl<'a> paperpaw_config::Value<'a>
+pub fn paperpaw_config::Value<'a>::as_bool(&self) -> core::option::Option<bool>
+pub fn paperpaw_config::Value<'a>::as_i64(&self) -> core::option::Option<i64>
+pub fn paperpaw_config::Value<'a>::as_str(&self) -> alloc::borrow::Cow<'a, str>
+pub fn paperpaw_config::Value<'a>::as_u32(&self) -> core::option::Option<u32>
+pub fn paperpaw_config::Value<'a>::raw(&self) -> &'a str
+pub fn paperpaw_config::parse(&str) -> paperpaw_config::Parser<'_>
+pub fn paperpaw_config::quote(&str) -> alloc::borrow::Cow<'_, str>
+pub fn paperpaw_config::remove(&str, &str, &str) -> alloc::string::String
+pub fn paperpaw_config::set(&str, &str, &str, &str) -> alloc::string::String
+pub fn paperpaw_config::set_all<S, K, V>(&str, impl core::iter::traits::collect::IntoIterator<Item = (S, K, V)>) -> alloc::string::String where S: core::convert::AsRef<str>, K: core::convert::AsRef<str>, V: core::convert::AsRef<str>

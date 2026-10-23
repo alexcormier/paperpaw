@@ -1,0 +1,112 @@
+pub mod paperpaw_graphics
+pub mod paperpaw_graphics::diffuse
+pub struct paperpaw_graphics::diffuse::Atkinson
+impl paperpaw_graphics::diffuse::Atkinson
+pub fn paperpaw_graphics::diffuse::Atkinson::copy_from(&mut self, &paperpaw_graphics::diffuse::Atkinson)
+pub fn paperpaw_graphics::diffuse::Atkinson::new(usize) -> core::option::Option<Self>
+pub fn paperpaw_graphics::diffuse::Atkinson::reset(&mut self)
+pub fn paperpaw_graphics::diffuse::Atkinson::row(&mut self, &[u8], u8, impl core::ops::function::FnMut(usize, u8))
+pub fn paperpaw_graphics::diffuse::Atkinson::width(&self) -> usize
+pub mod paperpaw_graphics::round
+pub const paperpaw_graphics::round::UNIT: i32
+pub fn paperpaw_graphics::round::corner_inset(u32, u32, u32) -> u32
+pub fn paperpaw_graphics::round::point_at(paperpaw_platform::geometry::Point, i32, i32) -> paperpaw_platform::geometry::Point
+pub fn paperpaw_graphics::round::sin_cos(i32) -> (i32, i32)
+#[non_exhaustive] pub enum paperpaw_graphics::GraphicsError
+pub paperpaw_graphics::GraphicsError::OutOfMemory
+pub paperpaw_graphics::GraphicsError::OutOfMemory::bytes: usize
+pub paperpaw_graphics::GraphicsError::UnsupportedFormat(paperpaw_platform::pixel::PixelFormat)
+impl core::error::Error for paperpaw_graphics::GraphicsError
+impl core::fmt::Display for paperpaw_graphics::GraphicsError
+pub fn paperpaw_graphics::GraphicsError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub enum paperpaw_graphics::Role
+pub paperpaw_graphics::Role::Button
+pub paperpaw_graphics::Role::Check
+pub paperpaw_graphics::Role::Dialog
+pub paperpaw_graphics::Role::Field
+pub paperpaw_graphics::Role::Heading
+pub paperpaw_graphics::Role::Image
+pub paperpaw_graphics::Role::Link
+pub paperpaw_graphics::Role::Progress
+pub paperpaw_graphics::Role::Radio
+pub paperpaw_graphics::Role::Row
+pub paperpaw_graphics::Role::Slider
+pub paperpaw_graphics::Role::Switch
+pub paperpaw_graphics::Role::Text
+pub struct paperpaw_graphics::Canvas<'a>
+impl<'a> paperpaw_graphics::Canvas<'a>
+pub fn paperpaw_graphics::Canvas<'a>::clear(&mut self, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::clip(&self) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_graphics::Canvas<'a>::clipped(&mut self, paperpaw_platform::geometry::Rect) -> paperpaw_graphics::Canvas<'_>
+pub fn paperpaw_graphics::Canvas<'a>::describe(&mut self, paperpaw_graphics::Role, &str, paperpaw_platform::geometry::Rect, bool, core::option::Option<bool>)
+pub fn paperpaw_graphics::Canvas<'a>::describing(self, &'a mut alloc::vec::Vec<paperpaw_graphics::Described>) -> Self
+pub fn paperpaw_graphics::Canvas<'a>::draw_gray_alpha_row(&mut self, i32, i32, &[u8], u8)
+pub fn paperpaw_graphics::Canvas<'a>::draw_gray_row(&mut self, i32, i32, &[u8])
+pub fn paperpaw_graphics::Canvas<'a>::draw_hand(&mut self, paperpaw_platform::geometry::Point, i32, u32, u32, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::draw_line(&mut self, paperpaw_platform::geometry::Point, paperpaw_platform::geometry::Point, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::draw_mask(&mut self, i32, i32, u32, u32, paperpaw_platform::pixel::Color, impl core::ops::function::Fn(u32, u32) -> u8)
+pub fn paperpaw_graphics::Canvas<'a>::draw_rgb_row(&mut self, i32, i32, &[u8])
+pub fn paperpaw_graphics::Canvas<'a>::fill(&mut self, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::fill_circle(&mut self, paperpaw_platform::geometry::Point, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::fill_corners(&mut self, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::fill_rect(&mut self, i32, i32, u32, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::fill_ring(&mut self, paperpaw_platform::geometry::Point, u32, u32, i32, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::fill_round(&mut self, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::fill_round_rect(&mut self, i32, i32, u32, u32, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::fill_round_shaded(&mut self, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::fill_shaded(&mut self, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::fill_tint(&mut self, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::is_blind(&self) -> bool
+pub fn paperpaw_graphics::Canvas<'a>::is_describing(&self) -> bool
+pub fn paperpaw_graphics::Canvas<'a>::keep_diffusion(&mut self, u64, i32, paperpaw_graphics::diffuse::Atkinson)
+pub fn paperpaw_graphics::Canvas<'a>::note_picture(&mut self, paperpaw_platform::geometry::Rect)
+pub fn paperpaw_graphics::Canvas<'a>::offset(self, i32, i32) -> Self
+pub fn paperpaw_graphics::Canvas<'a>::origin(&self) -> paperpaw_platform::geometry::Point
+pub fn paperpaw_graphics::Canvas<'a>::picture_levels(&self) -> core::option::Option<u8>
+pub fn paperpaw_graphics::Canvas<'a>::set_pixel(&mut self, paperpaw_platform::geometry::Point, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::small_pictures(&mut self, impl core::ops::function::FnOnce(&mut paperpaw_graphics::Canvas<'_>))
+pub fn paperpaw_graphics::Canvas<'a>::stroke(&mut self, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::stroke_circle(&mut self, paperpaw_platform::geometry::Point, u32, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::stroke_rect(&mut self, i32, i32, u32, u32, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::stroke_round(&mut self, paperpaw_platform::geometry::Rect, u32, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::stroke_round_rect(&mut self, i32, i32, u32, u32, u32, u32, paperpaw_platform::pixel::Color)
+pub fn paperpaw_graphics::Canvas<'a>::take_diffusion(&mut self, u64, i32) -> core::option::Option<paperpaw_graphics::diffuse::Atkinson>
+pub fn paperpaw_graphics::Canvas<'a>::wash(&mut self, paperpaw_platform::geometry::Rect)
+pub struct paperpaw_graphics::Described
+pub paperpaw_graphics::Described::area: paperpaw_platform::geometry::Rect
+pub paperpaw_graphics::Described::clip: paperpaw_platform::geometry::Rect
+pub paperpaw_graphics::Described::focused: bool
+pub paperpaw_graphics::Described::label: alloc::string::String
+pub paperpaw_graphics::Described::on: core::option::Option<bool>
+pub paperpaw_graphics::Described::role: paperpaw_graphics::Role
+pub struct paperpaw_graphics::Framebuffer
+impl paperpaw_graphics::Framebuffer
+pub fn paperpaw_graphics::Framebuffer::band(&self) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_graphics::Framebuffer::banded(u16, u16, u16, paperpaw_platform::pixel::PixelFormat) -> core::result::Result<Self, paperpaw_graphics::GraphicsError>
+pub fn paperpaw_graphics::Framebuffer::blind(u16, u16) -> Self
+pub fn paperpaw_graphics::Framebuffer::bounds(&self) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_graphics::Framebuffer::byte_len(&self) -> usize
+pub fn paperpaw_graphics::Framebuffer::canvas(&mut self) -> paperpaw_graphics::Canvas<'_>
+pub fn paperpaw_graphics::Framebuffer::end_frame(&mut self)
+pub fn paperpaw_graphics::Framebuffer::format(&self) -> paperpaw_platform::pixel::PixelFormat
+pub fn paperpaw_graphics::Framebuffer::height(&self) -> u16
+pub fn paperpaw_graphics::Framebuffer::is_blind(&self) -> bool
+pub fn paperpaw_graphics::Framebuffer::is_inverted(&self) -> bool
+pub fn paperpaw_graphics::Framebuffer::mono_coverage(&self) -> u8
+pub fn paperpaw_graphics::Framebuffer::new(u16, u16, paperpaw_platform::pixel::PixelFormat) -> core::result::Result<Self, paperpaw_graphics::GraphicsError>
+pub fn paperpaw_graphics::Framebuffer::pictures_kept(&self) -> bool
+pub fn paperpaw_graphics::Framebuffer::rows(&self) -> u16
+pub fn paperpaw_graphics::Framebuffer::saturation(&self) -> u16
+pub fn paperpaw_graphics::Framebuffer::set_inverted(&mut self, bool)
+pub fn paperpaw_graphics::Framebuffer::set_mono_coverage(&mut self, u8)
+pub fn paperpaw_graphics::Framebuffer::set_pictures_kept(&mut self, bool)
+pub fn paperpaw_graphics::Framebuffer::set_saturation(&mut self, u16)
+pub fn paperpaw_graphics::Framebuffer::set_top(&mut self, u16)
+pub fn paperpaw_graphics::Framebuffer::take_all_pictured(&mut self) -> u32
+pub fn paperpaw_graphics::Framebuffer::take_dirty(&mut self) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub fn paperpaw_graphics::Framebuffer::take_pictured(&mut self) -> u32
+pub fn paperpaw_graphics::Framebuffer::view(&self) -> paperpaw_platform::display::FrameView<'_>
+pub fn paperpaw_graphics::Framebuffer::view_rows(&self, paperpaw_platform::geometry::Rect) -> paperpaw_platform::display::FrameView<'_>
+pub fn paperpaw_graphics::Framebuffer::width(&self) -> u16
+pub fn paperpaw_graphics::Framebuffer::write_rows(&mut self, u16, paperpaw_platform::display::FrameView<'_>)
+pub const paperpaw_graphics::MONO_COVERAGE: u8

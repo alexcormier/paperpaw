@@ -885,9 +885,13 @@ if let Some(weather) = env.services.get::<Box<dyn Weather>>(WEATHER.as_str()) {
 ```
 
 A service is found by its type's name too, so native code plugins built
-apart from the firmware find it (see *Plugins as files* below). When
-the type of a service changes, give it a new id (`weather.forecast-2`):
-its name alone would not tell.
+apart from the firmware find it (see *Plugins as files* below), but only
+where the type is made of the SDK's crates, `core` and `alloc` alone
+(`native::CROSSING_CRATES`), whose types the plugin interface keeps as
+they are. A type of a plugin's own crate may be another type of the
+same name in another build, so a service of one is published with a
+contract (`services::ServiceType` and `r.provide`), and its key is
+raised when the type changes.
 
 A point is an id a plugin names, with what a contribution there is in
 its documentation (for example one line per entry); others add to it
@@ -1410,9 +1414,12 @@ release notes say so, and so does the plugin manager on the reader:
 *Built for another plugin interface*), and only then. Build with the
 toolchain the release names (the sample's `rust-toolchain.toml`, and
 espup's of `versions.env` for the X4 Pro): until 1.0 a new compiler is a
-new interface. A beta or a release that keeps the interface runs the
-plugin as it is. The store and the update check show which plugins wait
-for a build.
+new interface. The file names the compiler that built it:
+`paperpaw-sign pack` takes it from the plugin's `.comment`, which the
+format's linker script keeps, and a device loads the file only where
+that compiler built the firmware too. A beta or a release that keeps
+the interface runs the plugin as it is. The store and the update check
+show which plugins wait for a build.
 
 ### The file in the emulator
 
@@ -1499,8 +1506,9 @@ though the plugin itself is a screen, an action and a setting.
 - Keep translations and other text in the folder's files rather than in
   the code, where they are needed once.
 
-Services between plugins are found by their type's name too, so a plugin
-built apart finds those of the firmware's plugins (see [Services and
+Services between plugins are found by their type's name too where the
+type is the SDK's, so a plugin built apart finds those of the firmware's
+plugins; one of a plugin's own type needs a contract (see [Services and
 points of your own](#services-and-points-of-your-own)).
 
 ### Publishing a code plugin

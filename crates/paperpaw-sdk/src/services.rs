@@ -42,9 +42,12 @@
 //! A service is found by its type's name as well as by its `TypeId`: a
 //! native code plugin (see [`native`](crate::native)) is built apart from
 //! the firmware, and the same type has another `TypeId` in each build
-//! (cargo's settings for a build are part of it). The name is the same
-//! where the fingerprint is, so a service whose type changes takes a new
-//! id (`weather.forecast-2`), as the type's name would not tell.
+//! (cargo's settings for a build are part of it). By its name only where
+//! the type is made of the crates under the plugin interface
+//! ([`native::CROSSING_CRATES`](crate::native::CROSSING_CRATES), `core`
+//! and `alloc`), whose types the interface keeps as they are, and of the
+//! same size and alignment: a type of a plugin's own crate may be another
+//! of the same name in another build, so it needs a contract.
 //!
 //! **Contracts.** A service type that implements [`ServiceType`] names
 //! its contract in a key that stays the same in every build
@@ -91,16 +94,46 @@ pub trait ServiceType: Any {
     const KEY: &'static str;
 }
 
-/// A service's value, with the name of its type when it was published
-/// with [`Registrar::publish`](crate::Registrar::publish), or its
-/// contract's key, size and version with
+/// A service's value, with the name, size and alignment of its type when
+/// it was published with [`Registrar::publish`](crate::Registrar::publish),
+/// or its contract's key, size and version with
 /// [`Registrar::provide`](crate::Registrar::provide).
 pub struct Service {
     value: Box<dyn Any>,
-    type_name: Option<&'static str>,
+    type_name: Option<Named>,
     /// Its contract and version, where it has them (kept aside: most
     /// services and contributions have none).
     contract: Option<Box<Contract>>,
+}
+
+/// A service's type by its name: the name, size and alignment.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct Named {
+    name: &'static str,
+    size: usize,
+    align: usize,
+}
+
+impl Named {
+    fn of<T>() -> Self {
+        Self {
+            name: type_name::<T>(),
+            size: core::mem::size_of::<T>(),
+            align: core::mem::align_of::<T>(),
+        }
+    }
+}
+
+/// Whether a type of this name is made of types of `core`, `alloc` and the
+/// crates under the plugin interface only: then it is the same type in
+/// every build of the same interface.
+fn under_the_interface(name: &str) -> bool {
+    name.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == ':'))
+        .filter_map(|part| part.split_once("::").map(|(krate, _)| krate))
+        .all(|krate| {
+            matches!(krate, "core" | "alloc" | "std")
+                || crate::native::CROSSING_CRATES.contains(&krate)
+        })
 }
 
 /// A service's contract: its type's key, size and alignment, and the
@@ -118,7 +151,7 @@ impl Service {
     pub fn new<T: Any>(value: T) -> Self {
         Self {
             value: Box::new(value),
-            type_name: Some(type_name::<T>()),
+            type_name: Some(Named::of::<T>()),
             contract: None,
         }
     }
@@ -180,14 +213,16 @@ impl Service {
         if let Some(value) = self.value.downcast_ref::<T>() {
             return Some(value);
         }
-        if self.type_name != Some(type_name::<T>()) {
+        let named = Named::of::<T>();
+        if self.type_name != Some(named) || !under_the_interface(named.name) {
             return None;
         }
         let value: *const dyn Any = &*self.value;
-        // SAFETY: the value is of a type of this name: of `T`, as built by
-        // the same compiler from the same source (a native plugin's
-        // fingerprint says so), only in another build, which gives it
-        // another `TypeId`.
+        // SAFETY: the value is of a type of this name, size and alignment,
+        // made of types of the crates under the plugin interface only: of
+        // `T`, as the interface keeps it (a native plugin's fingerprint
+        // says the same interface, and its compiler the firmware's), only
+        // in another build, which gives it another `TypeId`.
         Some(unsafe { &*value.cast::<T>() })
     }
 }
@@ -456,12 +491,35 @@ mod tests {
         let mut services = Services::new();
         let apart = Service {
             value: Box::new(BuiltApart(7)),
-            type_name: Some(type_name::<Forecast>()),
+            type_name: Some(Named::of::<Forecast>()),
             contract: None,
         };
         services.insert(Id::new_static("w.forecast"), apart);
         assert_eq!(services.get::<Forecast>("w.forecast"), Some(&Forecast(7)));
         assert_eq!(services.get::<u32>("w.forecast"), None);
+    }
+
+    /// By its name only a type of the crates under the interface: one of a
+    /// plugin's own crate may be another type in another build.
+    #[test]
+    fn only_types_under_the_interface_are_found_by_name() {
+        for name in [
+            "u32",
+            "&str",
+            "alloc::boxed::Box<dyn paperpaw_sdk::library::Library>",
+            "core::option::Option<paperpaw_platform::input::Instant>",
+            "(u8, paperpaw_document::Block)",
+        ] {
+            assert!(under_the_interface(name), "{name}");
+        }
+        for name in [
+            "weather::Forecast",
+            "alloc::boxed::Box<dyn weather::Forecast>",
+            "alloc::vec::Vec<paperpaw_plugin_stats::Day>",
+            "paperpaw_sdk::Id2<other::Thing>",
+        ] {
+            assert!(!under_the_interface(name), "{name}");
+        }
     }
 
     /// The same, found by its contract: the key, size and alignment.

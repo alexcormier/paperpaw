@@ -79,16 +79,19 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
    slices, handles), so new APIs take such arguments and keep no
    borrowed host state across calls.
 8. **The SDK changes visibly and compatibly** ([ADR 0020](docs/adr/0020-sdk-compatibility.md)):
-   a change to its public API comes with `crates/paperpaw-sdk/api.txt`
-   brought up to date
-   (`cargo +nightly-2026-10-17 public-api -p paperpaw-sdk -sss > crates/paperpaw-sdk/api.txt`),
-   and so does a change to a crate it passes on (config, document,
-   layout, xml, image, hyphen, zip, json, digest: each its own
-   `api.txt`),
-   and what goes is `#[deprecated]` first. The SDK's features `kernel`
-   and `unstable` add only functions and modules, never a field, variant
-   or trait item: a plugin's fingerprint leaves them out
-   (`ADDING_ONLY` in `crates/paperpaw-sdk/build.rs`).
+   a change to its public API, or to a crate whose types cross with it
+   (`crates/paperpaw-sdk/interface/crates.txt`), comes with that crate's
+   `api.txt` and `shape.txt` brought up to date
+   (`python3 tools/interface.py`, with the nightly it names and
+   cargo-public-api), and what goes is `#[deprecated]` first. What code
+   plugins see is the plugin interface
+   ([ADR 0026](docs/adr/0026-plugin-interface-version.md)): any change
+   to a type that crosses raises `native::INTERFACE`, a new item alone
+   does not, and `cargo test -p paperpaw-sdk --test interface` says which
+   (`PAPERPAW_BLESS=1` writes its files anew). The SDK's features
+   `kernel` and `unstable` add only functions and modules, never a
+   field, variant or trait item: a plugin built without them runs with
+   firmware built with them.
 
 Significant decisions are recorded as [Architecture Decision Records](docs/adr/).
 
