@@ -17,6 +17,7 @@
 //! assert_eq!((ok.width, cancel.x, cancel.right()), (234, 246, 480));
 //! ```
 
+use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_graphics::Canvas;
@@ -342,17 +343,21 @@ pub(crate) fn paint_frame(canvas: &mut Canvas<'_>, style: &UiStyle, area: Rect, 
 /// A row of segments side by side, one of them chosen: a few options to
 /// pick from at a glance, or tabs over a page. Each segment is a button
 /// ([`draw_button`](super::draw_button)), the chosen one on; with the
-/// buttons, left and right move the focus, *Select* chooses.
+/// buttons, left and right move the focus, *Select* chooses. They keep
+/// their labels: drawing and hitting allocate nothing.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Segments {
     cells: Vec<Rect>,
+    labels: Vec<String>,
 }
 
 impl Segments {
-    /// `count` segments in `area`, the style's gap apart.
-    pub fn new(style: &UiStyle, area: Rect, count: usize) -> Self {
+    /// Segments with `labels` in `area`, of equal width, the style's gap
+    /// apart.
+    pub fn new(style: &UiStyle, area: Rect, labels: &[&str]) -> Self {
         Self {
-            cells: columns(area, count, style.gap as u16),
+            cells: columns(area, labels.len(), style.gap as u16),
+            labels: owned(labels),
         }
     }
 
@@ -362,6 +367,7 @@ impl Segments {
     pub fn fitted(env: &Env<'_>, style: &UiStyle, area: Rect, labels: &[&str]) -> Self {
         Self {
             cells: button_cells(env, style, area, labels, style.gap as u16),
+            labels: owned(labels),
         }
     }
 
@@ -402,18 +408,22 @@ impl Segments {
         }
     }
 
-    /// Draws the segments with `labels`, `chosen` on and `focus` (where
-    /// the focus is on them) focused.
+    /// The label of segment `index`.
+    pub fn label(&self, index: usize) -> Option<&str> {
+        self.labels.get(index).map(String::as_str)
+    }
+
+    /// Draws the segments, `chosen` on and `focus` (where the focus is on
+    /// them) focused.
     pub fn draw(
         &self,
         canvas: &mut Canvas<'_>,
         env: &Env<'_>,
         style: &UiStyle,
-        labels: &[&str],
         chosen: usize,
         focus: Option<usize>,
     ) {
-        for (i, (cell, label)) in self.cells.iter().zip(labels).enumerate() {
+        for (i, (cell, label)) in self.cells.iter().zip(&self.labels).enumerate() {
             super::draw_button(
                 canvas,
                 env,
@@ -425,6 +435,11 @@ impl Segments {
             );
         }
     }
+}
+
+/// `labels` as owned strings, for parts that keep them.
+fn owned(labels: &[&str]) -> Vec<String> {
+    labels.iter().map(ToString::to_string).collect()
 }
 
 #[cfg(test)]
@@ -479,7 +494,7 @@ mod tests {
 
     #[test]
     fn segments_hit_and_step_within_their_row() {
-        let segments = Segments::new(&STYLE, Rect::new(0, 0, 300, 40), 3);
+        let segments = Segments::new(&STYLE, Rect::new(0, 0, 300, 40), &["a", "b", "c"]);
         let first = segments.cell(0).unwrap();
         assert_eq!(
             segments.hit(Point::new(i32::from(first.x) + 1, 10)),

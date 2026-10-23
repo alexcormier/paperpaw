@@ -261,8 +261,10 @@ ui::draw_button(canvas, env, &style, cancel, "Cancel", false, focus == 1);
 Tabs over a page, the chosen one on, moved with left and right:
 
 ```rust
-let tabs = ui::Segments::new(&style, Rect::new(margin, top, width, ui::Segments::height(&style)), 3);
-tabs.draw(canvas, env, &style, &["Books", "Shelves", "Notes"], self.tab, self.focus_on_tabs.then_some(self.tab));
+// Made with the layout; it keeps its words.
+let area = Rect::new(margin, top, width, ui::Segments::height(&style));
+let tabs = ui::Segments::new(&style, area, &["Books", "Shelves", "Notes"]);
+tabs.draw(canvas, env, &style, self.tab, self.focus_on_tabs.then_some(self.tab));
 // on_action: if let Some(tab) = tabs.step(self.tab, action) { self.tab = tab; }
 // on_gesture: if let Some(tab) = tabs.hit(gesture.start) { self.tab = tab; }
 ```

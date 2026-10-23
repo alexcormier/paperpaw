@@ -521,10 +521,10 @@ fn segments(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect)
         tr("ui-kit.tab.notes"),
     ];
     let row = stack.take(ui::Segments::height_for(env, style, width, &tabs));
-    ui::Segments::fitted(env, style, row, &tabs).draw(canvas, env, style, &tabs, 0, None);
+    ui::Segments::fitted(env, style, row, &tabs).draw(canvas, env, style, 0, None);
     let sizes = ["S", "M", "L", "XL"];
     let row = stack.take(ui::Segments::height_for(env, style, width, &sizes));
-    ui::Segments::fitted(env, style, row, &sizes).draw(canvas, env, style, &sizes, 1, Some(3));
+    ui::Segments::fitted(env, style, row, &sizes).draw(canvas, env, style, 1, Some(3));
 }
 
 /// Cards in each frame, and a grid with the focus on one cell.
@@ -675,7 +675,7 @@ fn chips(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     let chips_height = ui::Chips::height_for(env, style, inner, &labels);
     let chips_row = stack.take(chips_height + 2 * margin);
     let inside = Rect::new(margin, chips_row.y + margin, inner, chips_height);
-    ui::Chips::new(env, style, inside, &labels).draw(canvas, env, style, &labels, 1, Some(2));
+    ui::Chips::new(env, style, inside, &labels).draw(canvas, env, style, 1, Some(2));
     let rest = stack.rest();
     let text_area = Rect::new(
         margin,
