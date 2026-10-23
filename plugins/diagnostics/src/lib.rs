@@ -10,7 +10,9 @@
 //! one page at a time, for bringing up new devices: the screen, buttons,
 //! touch, light, battery, card, clock, Wi-Fi, sleep and memory. It writes
 //! a report to the card to paste into a pull request
-//! ([`steps::REPORT`]). It is under Tools in the menu.
+//! ([`steps::REPORT`]). It is under Tools where PaperPaw is the device's
+//! firmware, which has this plugin in its builds for developers alone;
+//! elsewhere the action [`OPEN_CHECK`] opens it.
 //!
 //! The test screen binds itself to the home slot with the lowest regular priority, so it
 //! only appears until a real home screen plugin is installed, or when a
@@ -36,8 +38,8 @@ use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
-    MenuEntry, Metrics, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar,
-    Screen, ScreenSpec, SettingSpec,
+    MenuEntry, MenuNeed, Metrics, Params, Plugin, Priority, Rect, RefreshMode, RegisterError,
+    Registrar, Screen, ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("diagnostics");
@@ -97,6 +99,9 @@ impl Plugin for Diagnostics {
             }),
         )?;
         r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN_CHECK).order(99))?;
+        // Apps with this plugin built in (Android) keep their Tools for
+        // readers.
+        r.set_menu_need(OPEN_CHECK, MenuNeed::Firmware)?;
         r.add_icon(OPEN_CHECK, Cow::Borrowed("stethoscope"))?;
         r.add_settings(&SETTINGS)?;
         r.add_keymap(Cow::Borrowed(include_str!("../keymap.ini")))?;

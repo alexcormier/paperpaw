@@ -176,7 +176,9 @@ Pro's. A port to a board like one PaperPaw knows is mostly a board file.
 
 Build the firmware with remote control over USB (the feature `remote`,
 on in the cargo aliases), which also builds in the diagnostics plugin.
-Then open **Tools → Device check** on the device. It walks through
+Then open **Tools → Device check** on the device. In a shell of another
+kind, the action `diagnostics.open-check` opens it (in the emulator:
+`--script run:diagnostics.open-check`). It walks through
 every part one page at a time, with buttons alone or by touch:
 
 | Page | What it checks |

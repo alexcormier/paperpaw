@@ -6,7 +6,8 @@ change the plugin SDK.
 
 ## [Unreleased]
 
-- A guided device check in the diagnostics plugin (under Tools) goes
+- A guided device check in the diagnostics plugin (under Tools in the
+  firmware's builds for developers) goes
   through every part of a device one page at a time: the screen's grays
   and ghosting, every button by name, touch at the corners and edges,
   the front light, the battery and charging, the card's speed, the

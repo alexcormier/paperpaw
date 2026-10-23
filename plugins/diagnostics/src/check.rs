@@ -461,9 +461,14 @@ impl Screen for Check {
         canvas.clear(Color::WHITE);
         let style = self.style;
         if self.step != Some(Step::Touch) {
-            let page = self.step.map(|s| (s.index(), Step::ALL.len()));
+            // Which step, as a note: the header's page arrows would turn
+            // nothing here.
+            let step = self
+                .step
+                .map(|s| format!("{} / {}", s.index() + 1, Step::ALL.len()));
             let title = env.i18n.tr("diagnostics.check.title");
-            self.header.draw(canvas, env, &style, title, None, page);
+            self.header
+                .draw(canvas, env, &style, title, step.as_deref(), None);
         }
         let l = &self.layout;
         let (title, help) = texts(env, self.step);
@@ -1086,24 +1091,23 @@ fn draw_screen_test(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, flipped:
         canvas.fill_rect(x0, y, (x1 - x0) as u32, ramp, Color::gray(gray));
     }
     canvas.stroke_rect(x, y, w, ramp, env.metrics.tenth_mm(3), Color::BLACK);
-    let cell = env.metrics.mm(6).max(4);
+    // Squares of about 6 mm, as many as fill the width exactly.
+    let columns = (w / env.metrics.mm(6).max(4)).max(1);
+    let cell = w / columns;
     let top = y + ramp as i32 + env.metrics.mm(3) as i32;
     let bottom = i32::from(area.y) + i32::from(area.height);
     let mut row = 0;
     let mut cy = top;
     while cy + cell as i32 <= bottom {
-        let mut col = 0;
-        let mut cx = x;
-        while cx + cell as i32 <= x + w as i32 {
+        for col in 0..columns {
             let black = (row + col) % 2 == 0;
             let color = if black != flipped {
                 Color::BLACK
             } else {
                 Color::WHITE
             };
+            let cx = x + (col * cell) as i32;
             canvas.fill_rect(cx, cy, cell, cell, color);
-            cx += cell as i32;
-            col += 1;
         }
         cy += cell as i32;
         row += 1;
