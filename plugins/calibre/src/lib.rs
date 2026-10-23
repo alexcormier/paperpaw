@@ -423,7 +423,7 @@ impl CalibreScreen {
                     .flat_map(|f| f.extensions.iter().map(|e| e.as_ref()))
                     .collect();
                 let version = format!("{}", SDK_VERSION);
-                let name = format!("PaperPaw ({})", env.device.name);
+                let name = env.device_name();
                 let device = protocol::Device {
                     name: &name,
                     extensions: &extensions,
@@ -447,7 +447,7 @@ impl CalibreScreen {
             op::GET_DEVICE_INFORMATION => {
                 let stored = library::device_info(env.storage);
                 let version = format!("{}", SDK_VERSION);
-                let name = format!("PaperPaw ({})", env.device.name);
+                let name = env.device_name();
                 let info = protocol::device_information(stored.as_deref(), &name, &version);
                 self.send(op::OK, &info, cx);
             }

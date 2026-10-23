@@ -1068,6 +1068,16 @@ pub fn paperpaw_sdk::decorations::draw_over(&mut paperpaw_graphics::canvas::Canv
 pub fn paperpaw_sdk::decorations::join_boxes(impl core::iter::traits::collect::IntoIterator<Item = (usize, paperpaw_platform::geometry::Rect)>) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>
 pub type paperpaw_sdk::decorations::DecorateFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::decorations::PageText<'_>) -> alloc::vec::Vec<paperpaw_sdk::decorations::Decorated>>
 pub type paperpaw_sdk::decorations::DecoratorSignatureFn = alloc::boxed::Box<dyn core::ops::function::Fn(&paperpaw_sdk::Env<'_>) -> u64>
+pub mod paperpaw_sdk::device_name
+pub const paperpaw_sdk::device_name::MAX_CHARS: usize
+pub const paperpaw_sdk::device_name::MAX_HOST: usize
+pub const paperpaw_sdk::device_name::MAX_SSID: usize
+pub const paperpaw_sdk::device_name::SETTING: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text>
+pub fn paperpaw_sdk::device_name::chosen(&str, &paperpaw_platform::DeviceInfo) -> alloc::string::String
+pub fn paperpaw_sdk::device_name::default_name(&paperpaw_platform::DeviceInfo) -> alloc::string::String
+pub fn paperpaw_sdk::device_name::host_name(&str) -> alloc::string::String
+pub fn paperpaw_sdk::device_name::setting(alloc::string::String) -> paperpaw_sdk::SettingSpec
+pub fn paperpaw_sdk::device_name::ssid(&str) -> alloc::string::String
 pub mod paperpaw_sdk::digest
 pub use paperpaw_sdk::digest::fnv1a64
 pub use paperpaw_sdk::digest::hex
@@ -4291,6 +4301,7 @@ pub fn paperpaw_sdk::wifi::WifiNetwork::bars(&self) -> u8
 pub const paperpaw_sdk::wifi::NETWORK_WAIT_MS: u64
 pub const paperpaw_sdk::wifi::SECRET_PREFIX: &str
 pub fn paperpaw_sdk::wifi::forget(&str) -> paperpaw_sdk::secrets::SecretChange
+pub fn paperpaw_sdk::wifi::join_code(&str, &str) -> alloc::string::String
 pub fn paperpaw_sdk::wifi::keep(&str, &str) -> paperpaw_sdk::secrets::SecretChange
 pub fn paperpaw_sdk::wifi::known<'a>(impl core::iter::traits::collect::IntoIterator<Item = &'a paperpaw_sdk::secrets::Secret>) -> alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
 pub fn paperpaw_sdk::wifi::secret_id(&str) -> alloc::string::String
@@ -4994,6 +5005,7 @@ pub fn paperpaw_sdk::Env<'_>::plugin_dir(&str) -> alloc::string::String
 pub fn paperpaw_sdk::Env<'_>::plugin_usage(&self) -> alloc::vec::Vec<paperpaw_sdk::usage::PluginUsage>
 pub fn paperpaw_sdk::Env<'_>::top(&self) -> core::option::Option<&paperpaw_sdk::StackEntry>
 impl<'a> paperpaw_sdk::Env<'a>
+pub fn paperpaw_sdk::Env<'a>::device_name(&self) -> alloc::string::String
 pub fn paperpaw_sdk::Env<'a>::device_within(&self, paperpaw_platform::geometry::Rect) -> paperpaw_platform::DeviceInfo
 pub fn paperpaw_sdk::Env<'a>::screen_title(&self, &paperpaw_sdk::Id) -> core::option::Option<&'a str>
 pub fn paperpaw_sdk::Env<'a>::slot_choice(&self, &str) -> core::option::Option<&'a paperpaw_sdk::Id>

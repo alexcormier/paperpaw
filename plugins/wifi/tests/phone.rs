@@ -152,7 +152,6 @@ fn on_to_the_page_once_a_phone_joined(t: &mut Test, ssid: &str, password: &str) 
             .all(|c| paperpaw_sdk::random::READABLE.contains(c))
     };
     assert!(readable(password) && password.len() == 15, "{password}");
-    assert!(readable(ssid.trim_start_matches("PaperPaw-")), "{ssid}");
     // A phone joined (it took an address): on to the page by itself.
     t.wifi(WifiEvent::State(WifiState::Hosting {
         ssid: ssid.to_string(),
@@ -183,7 +182,8 @@ fn a_network_chosen_on_the_phone_is_joined_and_kept() {
     let Some(WifiCommand::Host { ssid, password }) = Test::radio(&io).pop() else {
         panic!("{io:?}");
     };
-    assert!(ssid.starts_with("PaperPaw-"), "{ssid}");
+    // Named as the device is (its model's, none set).
+    assert_eq!(ssid, "Test device");
     assert!(password.len() >= 8);
     // Open: the page is served there (the kernel lets the server go to
     // the shell without a way out).

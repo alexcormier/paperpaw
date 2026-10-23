@@ -19,13 +19,14 @@ use alloc::format;
 use alloc::string::{String, ToString};
 
 use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::device_name;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::qr::QrCode;
 use paperpaw_sdk::random;
 use paperpaw_sdk::replies::ServerNotice;
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets;
-use paperpaw_sdk::wifi::{WifiCommand, WifiState};
+use paperpaw_sdk::wifi::{self, WifiCommand, WifiState};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
     RefreshMode, Screen, ServerResponse,
@@ -52,8 +53,6 @@ const IDLE_MS: u64 = 10 * 60 * 1000;
 /// Letters of the own network's password: 62 bits, three groups of five.
 const PASSWORD_LETTERS: usize = 15;
 const _: () = assert!(PASSWORD_LETTERS >= random::readable_letters(45));
-/// Letters after "PaperPaw-" in its name, to tell it from others near.
-const NAME_LETTERS: usize = 4;
 
 /// The step shown.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -129,15 +128,12 @@ pub(crate) struct PhoneScreen {
 impl PhoneScreen {
     pub(crate) fn new(env: &Env<'_>, policy: Shared) -> Self {
         let style = UiStyle::new(env);
-        let own = env
-            .random
-            .readable(NAME_LETTERS)
-            .zip(env.random.readable(PASSWORD_LETTERS))
-            .map(|(id, password)| {
-                let ssid = format!("PaperPaw-{id}");
-                let qr = QrCode::new(format!("WIFI:T:WPA;S:{ssid};P:{password};;").as_bytes());
-                Own { ssid, password, qr }
-            });
+        // Named as the device is, for the phone to find it.
+        let own = env.random.readable(PASSWORD_LETTERS).map(|password| {
+            let ssid = device_name::ssid(&env.device_name());
+            let qr = QrCode::new(wifi::join_code(&ssid, &password).as_bytes());
+            Own { ssid, password, qr }
+        });
         let manual = policy.borrow().manual;
         Self {
             policy,

@@ -289,6 +289,30 @@ fn the_library_folder_set_before_is_taken_over() {
     assert_eq!(kernel.settings().text("core.library-folder"), "Books");
 }
 
+/// The device's name: its model's until the reader sets one (what the
+/// settings show, too); the one set, trimmed; empty again, the model's.
+#[test]
+fn the_device_is_named_by_its_model_until_named_otherwise() {
+    let kernel = kernel_with(MemoryStorage::new());
+    let model = paperpaw_sdk::device_name::default_name(&kernel.shared.device);
+    assert_eq!(kernel.device_name(), model);
+    assert_eq!(kernel.settings().text("core.device-name"), model);
+    let config = "[core]
+device-name = \" Hannes’ Reader \"
+";
+    let kernel = kernel_with(MemoryStorage::new().with(CONFIG_FILE, config));
+    assert_eq!(kernel.device_name(), "Hannes’ Reader");
+    assert_eq!(
+        paperpaw_sdk::device_name::host_name(&kernel.device_name()),
+        "Hannes-Reader"
+    );
+    let config = "[core]
+device-name =
+";
+    let kernel = kernel_with(MemoryStorage::new().with(CONFIG_FILE, config));
+    assert_eq!(kernel.device_name(), model);
+}
+
 /// The reader's type settings moved to the kernel: what was set under
 /// their old ids is read, unless the new id is set as well.
 #[test]

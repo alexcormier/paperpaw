@@ -86,6 +86,23 @@ impl core::fmt::Debug for WifiCommand {
     }
 }
 
+/// The text of a QR code that joins network `ssid` with `password`
+/// (WPA), as phones' cameras read it: `\`, `;`, `,`, `:` and `"` in them
+/// escaped.
+pub fn join_code(ssid: &str, password: &str) -> String {
+    let escaped = |text: &str| {
+        let mut out = String::with_capacity(text.len());
+        for c in text.chars() {
+            if matches!(c, '\\' | ';' | ',' | ':' | '"') {
+                out.push('\\');
+            }
+            out.push(c);
+        }
+        out
+    };
+    alloc::format!("WIFI:T:WPA;S:{};P:{};;", escaped(ssid), escaped(password))
+}
+
 /// Where the radio is.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 #[non_exhaustive]
@@ -258,6 +275,20 @@ pub fn forget(ssid: &str) -> SecretChange {
 mod tests {
     use super::*;
     use crate::secrets::Secrets;
+
+    /// A name with the code's own signs in it still joins: they are
+    /// escaped.
+    #[test]
+    fn join_codes_escape_their_signs() {
+        assert_eq!(
+            join_code("PaperPaw X4", "acdef"),
+            "WIFI:T:WPA;S:PaperPaw X4;P:acdef;;"
+        );
+        assert_eq!(
+            join_code(r#"Hannes; "Reader": 2"#, r"a,b\c"),
+            r#"WIFI:T:WPA;S:Hannes\; \"Reader\"\: 2;P:a\,b\\c;;"#
+        );
+    }
 
     #[test]
     fn known_networks_are_secrets() {
