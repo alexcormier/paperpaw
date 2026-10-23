@@ -26,7 +26,6 @@
 
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
-use alloc::string::String;
 use alloc::vec::Vec;
 use core::fmt;
 
@@ -37,8 +36,10 @@ use crate::{InputEvent, Rect, RefreshMode};
 
 /// Changes a block before it is laid out.
 pub type TextFilterFn = Box<dyn Fn(&Env<'_>, &mut Block)>;
-/// What a filter does now, as text: empty while it does nothing.
-pub type TextFilterSignatureFn = Box<dyn Fn(&Env<'_>) -> String>;
+/// What a filter does now, as a number that changes when its effect does
+/// (e.g. [`Fnv1a64`](crate::digest::Fnv1a64) of its settings): 0 while it
+/// does nothing.
+pub type TextFilterSignatureFn = Box<dyn Fn(&Env<'_>) -> u64>;
 /// Changes a block before it is laid out, knowing where it is, and says
 /// whether it stays.
 pub type BlockFilterFn = Box<dyn Fn(&Env<'_>, &FilterContext<'_>, &mut Block) -> Verdict>;
@@ -167,19 +168,19 @@ impl TextFilters {
         Verdict::Keep
     }
 
-    /// What the filters do now together; empty if none does anything.
-    pub fn signature(&self, env: &Env<'_>) -> String {
-        let mut out = String::new();
+    /// What the filters do now together; 0 if none does anything.
+    pub fn signature(&self, env: &Env<'_>) -> u64 {
+        let mut hash = crate::digest::Fnv1a64::new();
+        let mut any = false;
         for filter in &self.filters {
             let part = (filter.signature)(env);
-            if !part.is_empty() {
-                out.push_str(filter.id.as_str());
-                out.push('=');
-                out.push_str(&part);
-                out.push(';');
+            if part != 0 {
+                hash.feed(filter.id.as_str().as_bytes());
+                hash.feed(&part.to_le_bytes());
+                any = true;
             }
         }
-        out
+        if any { hash.value() } else { 0 }
     }
 }
 

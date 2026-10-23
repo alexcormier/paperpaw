@@ -230,12 +230,16 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             Box::new(draw_progress),
         )
         .signature(Box::new(|_, cx| {
-            format!(
+            use core::fmt::Write;
+            let mut hash = paperpaw_sdk::digest::Fnv1a64::new();
+            let _ = write!(
+                hash,
                 "{}|{}|{}",
                 cx.get(params::PROGRESS).unwrap_or_default(),
                 cx.get(context::PAGE).unwrap_or_default(),
                 cx.get(context::CHAPTERS).unwrap_or_default().len(),
-            )
+            );
+            hash.value()
         })),
     )?;
     r.add_status_line(
@@ -244,7 +248,7 @@ pub(crate) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
             "reader.status.line.empty",
             Box::new(|_, _, _| {}),
         )
-        .signature(Box::new(|_, _| String::new())),
+        .signature(Box::new(|_, _| 0)),
     )?;
     let text = |value: Option<&str>| value.map(|v| StatusValue::Text(v.to_string()));
     // The book's and the chapter's titles give way first where a line
@@ -498,16 +502,18 @@ pub(crate) fn shown(env: &Env<'_>, top: bool) -> bool {
 }
 
 /// What the lines shown now show, to notice when they need a redraw.
-pub(crate) fn signature(env: &Env<'_>, context: &Params, chosen: &[String; 2]) -> String {
-    let mut out = String::new();
+pub(crate) fn signature(env: &Env<'_>, context: &Params, chosen: &[String; 2]) -> u64 {
+    let mut hash = paperpaw_sdk::digest::Fnv1a64::new();
     for top in [true, false] {
         let id = current(env, top, &chosen[usize::from(!top)]);
-        out.push_str(id);
-        out.push('|');
-        out.push_str(&env.status_items.line_signature(id, env, context));
-        out.push('|');
+        hash.feed(id.as_bytes());
+        hash.feed(
+            &env.status_items
+                .line_signature(id, env, context)
+                .to_le_bytes(),
+        );
     }
-    out
+    hash.value()
 }
 
 #[cfg(test)]

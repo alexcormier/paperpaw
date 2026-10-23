@@ -394,17 +394,26 @@ fn text_filter_signatures_name_those_that_do_something() {
     let mut filters = TextFilters::new();
     let h = common::Harness::new();
     let env = h.env();
-    assert_eq!(filters.signature(&env), "");
-    for (id, signature) in [("f.bold", "on"), ("f.idle", ""), ("f.size", "3")] {
+    assert_eq!(filters.signature(&env), 0);
+    for (id, signature) in [("f.bold", 1), ("f.idle", 0), ("f.size", 3)] {
         filters.add(TextFilterSpec::new(
             Id::new_static(id),
             "",
             Box::new(|_, _| {}),
-            Box::new(move |_| signature.to_string()),
+            Box::new(move |_| signature),
         ));
     }
     filters.shrink_to_fit();
-    assert_eq!(filters.signature(&env), "f.bold=on;f.size=3;");
+    let mut expected = paperpaw_sdk::digest::Fnv1a64::new();
+    for (id, part) in [("f.bold", 1u64), ("f.size", 3)] {
+        expected.feed(id.as_bytes());
+        expected.feed(&part.to_le_bytes());
+    }
+    assert_eq!(
+        filters.signature(&env),
+        expected.value(),
+        "the idle one left out"
+    );
     assert!(format!("{filters:?}").contains("f.bold"));
 }
 

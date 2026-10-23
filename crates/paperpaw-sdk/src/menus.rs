@@ -32,7 +32,7 @@ pub enum MenuPlace {
 #[non_exhaustive]
 pub struct ItemState {
     /// In place of its title, as shown (translated).
-    pub label: Option<String>,
+    pub label: Option<Cow<'static, str>>,
     /// Shown with a switch, on or off.
     pub checked: Option<bool>,
     /// It can be chosen; else it is shown faint.
@@ -40,7 +40,7 @@ pub struct ItemState {
     /// It is shown at all.
     pub shown: bool,
     /// A short text at its right (a count, `new`).
-    pub badge: Option<String>,
+    pub badge: Option<Cow<'static, str>>,
 }
 
 impl Default for ItemState {
@@ -61,7 +61,7 @@ impl ItemState {
         }
     }
 
-    pub fn label(mut self, label: impl Into<String>) -> Self {
+    pub fn label(mut self, label: impl Into<Cow<'static, str>>) -> Self {
         self.label = Some(label.into());
         self
     }
@@ -81,7 +81,7 @@ impl ItemState {
         self
     }
 
-    pub fn badge(mut self, badge: impl Into<String>) -> Self {
+    pub fn badge(mut self, badge: impl Into<Cow<'static, str>>) -> Self {
         self.badge = Some(badge.into());
         self
     }

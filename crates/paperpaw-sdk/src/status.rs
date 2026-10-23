@@ -118,9 +118,10 @@ impl<'a> StatusFrame<'a> {
 /// Draws a status line into its frame's area (cleared before).
 pub type StatusLineFn = Box<dyn Fn(&mut Canvas<'_>, &Env<'_>, &StatusFrame<'_>)>;
 
-/// What a status line shows now, as text: the screen redraws the line
-/// when it changes (e.g. each minute for a clock).
-pub type StatusSignatureFn = Box<dyn Fn(&Env<'_>, &Params) -> String>;
+/// What a status line shows now, as a number that changes with it (e.g.
+/// [`Fnv1a64`](crate::digest::Fnv1a64) of what it shows): the screen
+/// redraws the line when it changes (e.g. each minute for a clock).
+pub type StatusSignatureFn = Box<dyn Fn(&Env<'_>, &Params) -> u64>;
 
 /// The places in a status line drawn in a frame that do something when
 /// tapped (see [`StatusLineSpec::targets`]).
@@ -371,31 +372,36 @@ impl Place {
 
     /// What its line shows now, with `context`: to draw it again when
     /// that changes.
-    pub fn signature(&self, env: &Env<'_>, context: &Params) -> String {
+    pub fn signature(&self, env: &Env<'_>, context: &Params) -> u64 {
         let line = self.current_line(env);
         if line == crate::builtin::status_lines::ITEMS.static_str() {
             return signature(env, &self.lists(env), context);
         }
-        let mut out = String::from(line);
-        out.push('|');
-        out.push_str(&env.status_items.line_signature(line, env, context));
-        out
+        let mut hash = crate::digest::Fnv1a64::new();
+        hash.feed(line.as_bytes());
+        hash.feed(
+            &env.status_items
+                .line_signature(line, env, context)
+                .to_le_bytes(),
+        );
+        hash.value()
     }
 }
 
-/// What the items of `lists` show now, with `context`, as text.
-pub fn signature(env: &Env<'_>, lists: &[&str], context: &Params) -> String {
+/// What the items of `lists` show now, with `context`, as a number that
+/// changes with it.
+pub fn signature(env: &Env<'_>, lists: &[&str], context: &Params) -> u64 {
     use core::fmt::Write;
-    let mut out = String::new();
+    let mut hash = crate::digest::Fnv1a64::new();
     for list in lists {
         for id in item_ids(list) {
             if let Some(value) = env.status_items.value(id, env, context) {
-                let _ = write!(out, "{value:?}|");
+                let _ = write!(hash, "{value:?}|");
             }
         }
-        out.push('/');
+        hash.feed(b"/");
     }
-    out
+    hash.value()
 }
 
 impl fmt::Debug for StatusItemSpec {
@@ -506,10 +512,15 @@ impl StatusItems {
     }
 
     /// What status line `id` shows now (see [`StatusSignatureFn`]).
-    pub fn line_signature(&self, id: &str, env: &Env<'_>, context: &Params) -> String {
+    pub fn line_signature(&self, id: &str, env: &Env<'_>, context: &Params) -> u64 {
+        use core::fmt::Write;
         match self.line(id).and_then(|l| l.signature.as_ref()) {
             Some(signature) => signature(env, context),
-            None => alloc::format!("{context:?}"),
+            None => {
+                let mut hash = crate::digest::Fnv1a64::new();
+                let _ = write!(hash, "{context:?}");
+                hash.value()
+            }
         }
     }
 

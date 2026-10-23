@@ -1651,7 +1651,7 @@ impl Plugin for NoRabbit {
                     false => Verdict::Keep,
                 }
             }),
-            Box::new(|_| String::from("on")),
+            Box::new(|_| 1),
         ))
     }
 }
