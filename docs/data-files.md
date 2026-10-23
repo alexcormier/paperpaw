@@ -119,6 +119,130 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/about/licences.md`, `about/plugins.md`, `plugin-manager/how.txt`, `store/how.txt`, `.paperpaw/tmp/` | about, plugin-manager, store, kernel | written when they are opened to read |
 | `.paperpaw/code-room.txt` | SDK `native` | the room code plugins have, as the shell found it at this start |
 
+## A data plugin's files
+
+A plugin without code is a folder, `plugins/<id>/`, with a `plugin.ini`
+and the files below. The kernel reads them at the start
+(`crates/paperpaw-core/src/data_plugin.rs`), at most 96 KiB together
+besides the translations (512 KiB of their own), each file at most
+64 KiB; `paperpaw-dev check` says where a folder holds a file PaperPaw
+does not read. Some files came with a later version of the data
+formats: they are read only where `plugin.ini` says that version or a
+later one (`formats = 3`), else left out, and PaperPaw says so.
+
+| Path | Format | Read by, for | Since formats |
+|------|--------|--------------|---------------|
+| `plugin.ini` | ini: `[plugin]` with `id`, `name`, `description`, `version`, `formats`; `[extends]`, `[family]` and `[fonts]` (formats 3) where it brings fonts | the kernel: the plugin, its fonts, the fonts bound to roles | 1 |
+| `i18n/<lang>.ini` | a translation catalog: `[meta]` (`language`, `name`, `plural`) and `[messages]` | the kernel: texts of any plugin, also a whole new language | 1 |
+| `settings.ini` | ini: a section per plugin, a key per setting, as `paperpaw.ini` writes them | the kernel: new defaults for any plugin's settings (a theme, a home screen, a logo) | 1 |
+| `keymap.ini` | ini: `[keymap.<layer>]` sections, `button.<name> = <action>` | the kernel: what buttons, taps and swipes do | 1 |
+| `styles.css` | CSS | the reader: a stylesheet for books, after a book's own | 1 |
+| `presets.ini` | ini: a section per preset, `kind`, `name`, `description`, then setting ids and values | the plugin that offers presets of that kind (power modes, themes, looks of widgets) | 1 |
+| `fonts/*.ttf`, `.otf`, `.ttc` | font files, in `fonts/` or one folder below it | the kernel: fonts to read with, where scalable fonts are drawn | 1 |
+| `fonts/*.ppfp` | font packs, named in `plugin.ini` (`[extends]`, `[family]`) | the kernel: letters other fonts lack, a family's faces, icons | 1 |
+| pictures (`.png`, `.jpg`) | a file, or a folder of them, named in `settings.ini` (`logo = plugins/<id>/logo.png`) | the setting that names it: the logo, the sleep screen's pictures | 1 |
+| `marks.ini` | ini: a section per role, `title`, one or more `pattern`, the look (`background`, `line`) | the reader: words marked on book pages | 2 |
+| `menus.ini` | ini: a section per menu, `add = <entry> after <entry>`, `hide = <entry>`; a menu of one's own with `title` and `entries` | the kernel: entries of any menu | 3 |
+| `actions.ini` | ini: a section per action, `title`, `icon`, `run` (steps, at most 16) | the kernel: actions made of steps | 3 |
+| `icons.ini` | ini without sections: `<action or setting> = <icon name>` | the kernel: icons of actions and settings | 3 |
+| `setup.ini` | ini: a section per step, `setting` or `screen`, `order`, `title`, `help` | the first-run setup: steps of its own | 3 |
+| `points/<point>.txt` | text: a line each, `#` lines left out, at most 64 lines in all | the plugin that reads the point (`keyboard.layouts`, `about.lines`) | 3 |
+| `how/<lang>.txt`, `*.md`, `*.txt` | text | people, and the plugin library (How it works); the kernel does not read them | |
+
+A short example of each that a plugin of a few lines might ship:
+
+```ini
+# plugin.ini
+[plugin]
+id = night-reader
+name = Night reader
+description = Reading in the dark, one tap away.
+version = 1.0.0
+formats = 3
+
+# settings.ini
+[core]
+font-size = 14
+
+# keymap.ini
+[keymap.global]
+button.menu = night-reader.night
+
+# presets.ini
+[night]
+kind = core.power-mode
+name = Night
+power.level = offline
+
+# marks.ini
+[names]
+title = Names
+pattern = \b(?:Mr|Mrs|Miss)\. [A-Z]\w+
+background = yellow
+
+# actions.ini
+[night]
+title = Night reading
+icon = moon
+run = core.night-mode=on, core.font-size=14, notify:Good night
+
+# menus.ini
+[core.reader-menu]
+add = night-reader.night after reader.toc
+
+# icons.ini
+night-reader.night = moon
+
+# setup.ini
+[size]
+setting = core.font-size
+order = 35
+```
+
+```text
+# points/about.lines.txt
+Night reader is made by Ada.
+```
+
+### A home screen without code
+
+The home screen keeps its pages in settings (`plugins/home/src/pages.rs`),
+so a `settings.ini` brings a home screen of its own as new defaults:
+`home.page-1` to `home.page-8` (the first always shows, the others where
+they hold something), and the grid they are laid on. Each page is a list
+of items, separated by commas: a widget's id, or `tool:` and an action's
+id, then its column and row and its size in cells (`<column>/<row>
+<width>x<height>`, counted from 0). An item without a place goes into
+the first free cells, as wide as the grid.
+
+```ini
+# settings.ini
+[home]
+columns = 4
+rows = 0
+status-bar = true
+page-1 = home.clock 0/0 4x1, home.continue 0/1 4x2, tool:core.library 0/3 2x1, tool:store.open 2/3 2x1
+page-2 = home.tools
+footer.dots = true
+footer.pencil = true
+```
+
+| Setting | Value |
+|---------|-------|
+| `home.page-1` to `home.page-8` | a page's items, as above |
+| `home.columns` | columns of the grid, 2 to 6 |
+| `home.rows` | rows, at most 12; 0 makes cells about as high as wide |
+| `home.status-bar` | whether the status line shows above the grid |
+| `home.footer.dots`, `home.footer.pencil` | the page dots and the pencil that edits the page, below it |
+| `home.footer.items` | status items of any plugin below the page, their ids separated by commas |
+
+The widgets there are, their ids and the actions a tool can run, are
+those `paperpaw-emu --registry` lists (`widgets`, `actions`); the home
+screen's own are `home.clock`, `home.date`, `home.status`,
+`home.continue`, `home.recent` and `home.tools` (every tool not placed
+otherwise, a cell each). Defaults change only what the reader has not
+chosen: a reader who arranged the home screen by hand keeps that.
+
 ## Foreign
 
 | Files | Owner | Defined by |

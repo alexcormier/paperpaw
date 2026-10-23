@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- `paperpaw-dev check` knows every file the kernel reads in a data
+  plugin: `marks.ini`, `menus.ini`, `actions.ini`, `icons.ini`,
+  `setup.ini` and `points/*.txt` are no longer said to be unread, their
+  syntax is checked, and one of later data formats in a plugin that says
+  an earlier `formats` is an error (PaperPaw leaves it out).
+  `docs/data-files.md` lists a data plugin's files and how a
+  `settings.ini` brings a home screen of its own.
 - PaperPaw's own plugins in the store carry their How it works in
   their folders (`how/<lang>.txt`, `tools/plugin-files/catalogue.py`),
   so the store's page of each and the readers' store show it; a plugin

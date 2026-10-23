@@ -37,13 +37,33 @@ const PLUGIN_KEYS: [&str; 5] = ["id", "name", "description", "version", "formats
 /// The faces of a family, as `[family]` names them.
 const FACES: [&str; 4] = ["regular", "bold", "italic", "bold-italic"];
 /// Files at the top of the folder that the kernel reads.
-const TOP_FILES: [&str; 5] = [
+const TOP_FILES: [&str; 10] = [
     "plugin.ini",
     "settings.ini",
     "keymap.ini",
     "styles.css",
     "presets.ini",
+    "marks.ini",
+    "menus.ini",
+    "actions.ini",
+    "icons.ini",
+    "setup.ini",
 ];
+
+/// The files the kernel reads only for a plugin made for a later version
+/// of the data formats (`formats` in `plugin.ini`), with that version
+/// (`crates/paperpaw-core/src/data_plugin.rs`): `marks.ini` came with 2,
+/// the others with 3. `points/*.txt` came with 3 too.
+const LATER_FORMATS: [(&str, u32); 5] = [
+    ("marks.ini", 2),
+    ("menus.ini", 3),
+    ("actions.ini", 3),
+    ("icons.ini", 3),
+    ("setup.ini", 3),
+];
+
+/// The version of the data formats that brought `points/*.txt`.
+const POINTS_FORMATS: u32 = 3;
 
 /// One file of the folder.
 #[derive(Debug, Clone)]
@@ -128,6 +148,7 @@ pub fn check(plugin: &DataPlugin, report: &mut Report) -> Option<Folder> {
     folder.presets = lines(&folder, "presets.ini", &mut add);
     folder.keymap = lines(&folder, "keymap.ini", &mut add);
     folder.has_presets = folder.file("presets.ini").is_some();
+    later_formats(&folder, &mut add);
     files_and_kinds(plugin, &folder, &mut add);
     catalogs(&folder, &mut add);
     fonts(&folder, &mut add);
@@ -200,6 +221,39 @@ fn parse(source: &str, path: &str, add: &mut dyn FnMut(Finding)) -> Vec<Line> {
         }
     }
     out
+}
+
+/// The files of later data formats: readable INI, and read at all only
+/// where `plugin.ini` says a version of the formats that has them (the
+/// kernel leaves them out otherwise, and says so).
+fn later_formats(folder: &Folder, add: &mut dyn FnMut(Finding)) {
+    let says = folder.manifest.formats.unwrap_or(1);
+    let points = folder
+        .files
+        .iter()
+        .filter(|f| f.path.starts_with("points/") && f.path.ends_with(".txt"))
+        .map(|f| (f.path.as_str(), POINTS_FORMATS));
+    let files = LATER_FORMATS
+        .iter()
+        .filter(|(path, _)| folder.file(path).is_some())
+        .map(|&(path, formats)| (path, formats))
+        .chain(points);
+    for (path, needs) in files {
+        if path.ends_with(".ini") {
+            let _ = lines(folder, path, add);
+        }
+        if says < needs {
+            add(Finding::error(
+                "package.formats",
+                path,
+                format!(
+                    "PaperPaw reads this file only for a plugin made for data formats {needs} or \
+                     later, and plugin.ini says {says}: it is left out. Write `formats = \
+                     {DATA_FORMATS}` in [plugin]."
+                ),
+            ));
+        }
+    }
 }
 
 /// `plugin.ini`: present, readable, its `[plugin]` section as the kernel
@@ -478,6 +532,9 @@ fn read_as(folder: &Folder, path: &str, id: &str) -> Option<&'static str> {
     if parts.len() == 2 && parts[0] == "i18n" && path.ends_with(".ini") {
         return Some("catalog");
     }
+    if parts.len() == 2 && parts[0] == "points" && ext == "txt" {
+        return Some("points");
+    }
     if parts[0] == "fonts" {
         let named = folder
             .manifest
@@ -560,7 +617,8 @@ fn files_and_kinds(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Fin
         } else if read_as(folder, path, &id).is_none() && !["txt", "md"].contains(&ext.as_str()) {
             let hint = match ext.as_str() {
                 "ini" => {
-                    " (it reads plugin.ini, settings.ini, keymap.ini, presets.ini and i18n/*.ini)"
+                    " (it reads plugin.ini, settings.ini, keymap.ini, presets.ini, marks.ini, \
+                     menus.ini, actions.ini, icons.ini, setup.ini and i18n/*.ini)"
                 }
                 "css" => " (it reads styles.css)",
                 "ppfp" => " (packs are read where [extends] or [family] in plugin.ini names them)",
@@ -786,6 +844,82 @@ mod tests {
             .into_iter()
             .map(|f| (f.level, f.check, f.place, f.message))
             .collect()
+    }
+
+    /// Every file the kernel reads for a data plugin (`data_plugin.rs`)
+    /// passes as read, none said to be unread.
+    #[test]
+    fn every_file_the_kernel_reads_passes() {
+        let ini: &[u8] = b"[a]\nb = c\n";
+        let files: [(&str, &[u8]); 12] = [
+            (
+                "plugin.ini",
+                b"[plugin]\nid = every\nname = Every\ndescription = All of them.\nversion = 1.0.0\nformats = 3\n",
+            ),
+            ("settings.ini", b"[core]\nui-size = 14\n"),
+            ("keymap.ini", b"[keymap.global]\nbutton.menu = core.refresh-screen\n"),
+            ("styles.css", b"p { line-height: 1.6 }\n"),
+            ("presets.ini", b"[night]\nkind = core.power-mode\nname = Night\n"),
+            ("marks.ini", ini),
+            ("menus.ini", b"[core.reader-menu]\nadd = every.night\n"),
+            ("actions.ini", b"[night]\ntitle = Night\nrun = core.night-mode=on\n"),
+            ("icons.ini", b"every.night = moon\n"),
+            ("setup.ini", b"[size]\nsetting = core.font-size\n"),
+            ("points/core.about.txt", b"A line of About.\n"),
+            (
+                "i18n/de.ini",
+                b"[meta]\nlanguage = de\nname = Deutsch\nplural = one-other\n\n[messages]\nevery.plugin.name = Alle\n",
+            ),
+        ];
+        let found = findings(&folder("every", &files));
+        assert!(
+            !found
+                .iter()
+                .any(|f| f.3.contains("does not read") || f.1 == "package.formats"),
+            "{found:#?}"
+        );
+        // Each is one the kernel reads.
+        for (path, _) in &files {
+            assert!(
+                read_as(&Folder::default(), path, "every").is_some(),
+                "{path}"
+            );
+        }
+    }
+
+    /// A file of later data formats is read only where plugin.ini says
+    /// those formats: said, for each.
+    #[test]
+    fn files_of_later_formats_need_their_formats() {
+        let files: [(&str, &[u8]); 4] = [
+            (
+                "plugin.ini",
+                b"[plugin]\nid = old\nname = Old\ndescription = Formats 2.\nversion = 1.0.0\nformats = 2\n",
+            ),
+            ("marks.ini", b"[names]\ntitle = Names\n"),
+            ("actions.ini", b"[night]\ntitle = Night\n"),
+            ("points/core.about.txt", b"A line.\n"),
+        ];
+        let found = findings(&folder("old", &files));
+        let formats: Vec<&str> = found
+            .iter()
+            .filter(|f| f.1 == "package.formats")
+            .map(|f| f.2.as_str())
+            .collect();
+        assert_eq!(
+            formats,
+            ["actions.ini", "points/core.about.txt"],
+            "{found:#?}"
+        );
+        // A file of them that does not parse says where.
+        let broken: [(&str, &[u8]); 2] = [files[0], ("menus.ini", b"[core.menu\n")];
+        let found = findings(&folder("old", &broken));
+        assert!(
+            found
+                .iter()
+                .any(|f| f.1 == "package.syntax" && f.2.starts_with("menus.ini:")),
+            "{found:#?}"
+        );
     }
 
     #[test]
