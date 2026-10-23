@@ -6,7 +6,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 use core::fmt;
 
-use super::{Cells, Geometry, Item, What, dragged, draw_tool_focus, draw_tool_lines};
+use super::{Cells, Geometry, Item, What, dragged, draw_cell_focus, draw_tool_lines};
 use crate::builtin::{actions, params, slots};
 use crate::event::Event;
 use crate::ui::choice::Picked;
@@ -428,9 +428,7 @@ impl GridView {
                     .iter()
                     .any(|s| s.area == *area && matches!(s.item.what, What::Tool(_)))
             });
-        // Where the focused tool's icon and name are: its frame goes round
-        // them.
-        let mut tool_ink = None;
+        let mut tool_ink = None; // The focused tool's icon and name.
         for shown in &self.items {
             // Those outside the part drawn are left (e.g. under a menu).
             if shown.area.intersection(&clip).is_none() {
@@ -442,9 +440,9 @@ impl GridView {
                 (What::Widget(_), None) => {}
                 (What::Tool(action), _) => {
                     let ink = draw_tool_lines(canvas, env, shown.area, action, self.labels, 0);
-                    if focused_tool == Some(shown.area) {
-                        tool_ink = Some(ink);
-                    }
+                    tool_ink = (focused_tool == Some(shown.area))
+                        .then_some(ink)
+                        .or(tool_ink);
                     // A button named after its action, also where its
                     // name is not shown (told after its name, which stays
                     // a text of its own).
@@ -504,18 +502,11 @@ impl GridView {
                 .and_then(|shown| shown.widget.as_ref())
                 .zip(self.targets.get(self.focus))
                 .is_some_and(|(widget, (area, _))| widget.draw_focus(canvas, env, *area));
-        if let (false, Some(ink)) = (own, tool_ink) {
-            // A tool's round its icon and name.
-            draw_tool_focus(canvas, &self.style, ink);
-        } else if self.focus_shown
+        if self.focus_shown
             && !own
             && let Some((area, _)) = self.targets.get(self.focus)
         {
-            // Round as the style's corners, a little rounder outside.
-            let out = self.style.line * 2;
-            let frame = area.grow(out as u16);
-            let radius = self.style.corner + out;
-            canvas.stroke_round(frame, self.style.line * 3, radius, Color::BLACK);
+            draw_cell_focus(canvas, &self.style, *area, tool_ink);
         }
     }
 

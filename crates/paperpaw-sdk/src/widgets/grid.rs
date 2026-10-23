@@ -476,6 +476,23 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
     draw_tool_lines(canvas, env, area, action, label, 0);
 }
 
+/// The focus of a cell of the home screen's grid at `area`: round the
+/// icon and name of a tool there (`tool_ink`, see [`draw_tool_focus`]),
+/// else round the cell, as the style's corners, a little rounder outside.
+pub(crate) fn draw_cell_focus(
+    canvas: &mut Canvas<'_>,
+    style: &UiStyle,
+    area: Rect,
+    tool_ink: Option<Rect>,
+) {
+    if let Some(ink) = tool_ink {
+        return draw_tool_focus(canvas, style, ink);
+    }
+    let out = style.line * 2;
+    let frame = area.grow(out as u16);
+    canvas.stroke_round(frame, style.line * 3, style.corner + out, Color::BLACK);
+}
+
 /// The focus of a tool whose icon and name cover `ink` (as
 /// [`draw_tool_lines`] returns it): a frame round them, as far from
 /// their ink on every side, never through it.
