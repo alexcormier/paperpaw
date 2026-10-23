@@ -68,6 +68,12 @@ pub const LAYOUTS_SETTING: Setting<Text> = Setting::new("keyboard.layouts");
 /// Whether the letters a layout types by holding another (German ä, ö, ü,
 /// ß) have keys of their own, in rows of more keys.
 pub const UMLAUT_KEYS: Setting<bool> = Setting::new("keyboard.umlaut-keys");
+/// The shape of keys that are tapped: round (as high as wide, the
+/// default), a little taller than wide, or a little wider than tall.
+pub const KEY_SHAPE: Setting<Text> = Setting::new("keyboard.key-shape");
+pub const SHAPE_TALL: &str = "keyboard.key-shape.tall";
+pub const SHAPE_ROUND: &str = "keyboard.key-shape.round";
+pub const SHAPE_WIDE: &str = "keyboard.key-shape.wide";
 const CHOOSE_SCREEN: Id = Id::new_static("keyboard.choose");
 /// The clipboard's text, asked for by *Paste*.
 const PASTED: Event<Typed> = Event::new("keyboard.pasted");
@@ -132,7 +138,7 @@ pub struct Keyboard;
 
 /// The layouts to type with, chosen on their screen.
 static CHOSEN: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().editor(CHOOSE_SCREEN);
-static SETTINGS: [SettingSpec; 2] = [
+static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::fixed(
         LAYOUTS_SETTING.static_str(),
         "keyboard.setting.layouts",
@@ -149,6 +155,14 @@ static SETTINGS: [SettingSpec; 2] = [
         groups::SYSTEM,
     )
     .described("keyboard.setting.umlaut-keys.help"),
+    SettingSpec::fixed_choice(
+        KEY_SHAPE.static_str(),
+        "keyboard.setting.key-shape",
+        &[SHAPE_ROUND, SHAPE_TALL, SHAPE_WIDE],
+        SHAPE_ROUND,
+        groups::SYSTEM,
+    )
+    .described("keyboard.setting.key-shape.help"),
 ];
 
 /// How it works, by language (see `Manifest::how`).
@@ -231,9 +245,15 @@ const LEAST_KEY_MM: u32 = 6;
 const LEAST_TAP_MM: u32 = 4;
 
 /// How high a key that is tapped is, in hundredths of a letter key's
-/// width: nearly round, so the keyboard leaves much of the screen above
-/// it in view.
-const ROUND: u32 = 110;
+/// width, by its shape ([`KEY_SHAPE`]): nearly round, round or a little
+/// wider, so the keyboard leaves much of the screen above it in view.
+fn height_of(shape: &str) -> u32 {
+    match shape {
+        SHAPE_ROUND => 100,
+        SHAPE_WIDE => 85,
+        _ => 110,
+    }
+}
 
 /// The units of a row of keys.
 fn units(row: &[Slot]) -> u32 {
@@ -373,6 +393,8 @@ struct KeyboardScreen {
     most: u32,
     /// Whether the keys are tapped (else only chosen with buttons).
     touch: bool,
+    /// The shape of the keys where they are tapped ([`KEY_SHAPE`]).
+    shape: String,
 }
 
 impl KeyboardScreen {
@@ -413,10 +435,17 @@ impl KeyboardScreen {
         let widest = rows.iter().map(|row| units(row)).max().unwrap_or(20).max(1);
         let letter = (u32::from(display.width) - 2 * style.margin) * 2 / widest;
         let line = paperpaw_sdk::widgets::line_height(env, style.text);
+        let shape = env.settings.read(&KEY_SHAPE);
+        let border = 2 * ui::button_border(&style) as u16;
         let key_height = if touch {
-            ((letter * ROUND / 100) as u16)
-                .min(touch_row)
-                .max(line + 2 * ui::button_border(&style) as u16)
+            let height = (letter * height_of(shape) / 100) as u16;
+            match shape {
+                // As before: no higher than a touch row, as high as a line.
+                SHAPE_TALL => height.min(touch_row).max(line + border),
+                // As high as wide; high enough for the letter itself.
+                SHAPE_ROUND => height.max(style.text as u16 + border),
+                _ => height.min(touch_row).max(style.text as u16 + border),
+            }
         } else {
             touch_row
         };
@@ -463,6 +492,7 @@ impl KeyboardScreen {
             key_height: keys_height / count as u16,
             most,
             touch,
+            shape: shape.to_string(),
         };
         screen.buttons = screen.field_buttons(env);
         screen
@@ -1011,6 +1041,28 @@ impl KeyboardScreen {
         ))
     }
 
+    /// The style keys `height` high are drawn in, by their shape: round
+    /// (a letter's a circle, wider ones a pill), or with soft corners.
+    fn key_style(&self, height: u16) -> UiStyle {
+        let mut style = self.style;
+        if !self.touch {
+            return style;
+        }
+        match self.shape.as_str() {
+            SHAPE_ROUND => {
+                style.pill = true;
+                style.row = style.row.max(u32::from(height));
+            }
+            SHAPE_WIDE => {
+                style.pill = false;
+                style.corner = u32::from(height) / 4;
+                style.row = style.row.max(u32::from(height));
+            }
+            _ => {}
+        }
+        style
+    }
+
     fn draw_key(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, row: usize, index: usize) {
         let style = self.style;
         let key = self.rows[row][index].0;
@@ -1033,6 +1085,7 @@ impl KeyboardScreen {
             area.width.saturating_sub(2 * pad),
             h,
         );
+        let style = self.key_style(r.height);
         // Shift while on, and *OK* always: the key that ends typing stands
         // out.
         let active = (key == Key::Shift && self.shift) || key == Key::Done;

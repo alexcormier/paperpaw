@@ -6,6 +6,22 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Hints covered by another screen (a plugin's question, a notice opened
+  over them) close and show again when their screen does, instead of
+  staying below it, cut.
+- `paperpaw-dev check` knows every file the kernel reads in a data
+  plugin: `marks.ini`, `menus.ini`, `actions.ini`, `icons.ini`,
+  `setup.ini` and `points/*.txt` are no longer said to be unread, their
+  syntax is checked, and one of later data formats in a plugin that says
+  an earlier `formats` is an error (PaperPaw leaves it out). It says
+  too what makes PaperPaw refuse a plugin or pass over a default: an
+  action of more than 16 steps, one running an action of its own file or
+  emitting another plugin's event (`package.actions`), a default out of
+  its range or not one of its options, with what it takes, and one for
+  one place of a widget (`@2`), which no plugin may give
+  (`package.settings`).
+  `docs/data-files.md` lists a data plugin's files and how a
+  `settings.ini` brings a home screen of its own.
 - PaperPaw's own plugins in the store carry their How it works in
   their folders (`how/<lang>.txt`, `tools/plugin-files/catalogue.py`),
   so the store's page of each and the readers' store show it; a plugin
