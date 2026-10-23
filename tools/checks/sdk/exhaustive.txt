@@ -4,7 +4,7 @@
 # shorter. A type that must stay exhaustive is listed with its reason.
 
 # Exhaustive on purpose
-# (none yet)
+paperpaw_sdk::Handled  # an event is handled or not, and a plugin matches both
 
 # Not decided yet: each leaves as it gets #[non_exhaustive] and a
 # constructor, or moves up with its reason (SDK review A1)
@@ -78,16 +78,11 @@ paperpaw_platform::status::Battery
 paperpaw_platform::status::SystemStatus
 paperpaw_platform::status::WallClock
 paperpaw_platform::storage::DirEntry
-paperpaw_sdk::Chosen
 paperpaw_sdk::Direction
-paperpaw_sdk::HttpReply
-paperpaw_sdk::MenuItem
 paperpaw_sdk::Metrics
 paperpaw_sdk::PluginInfo
 paperpaw_sdk::Priority
-paperpaw_sdk::ServerResponse
 paperpaw_sdk::SettingCheck
-paperpaw_sdk::SocketRead
 paperpaw_sdk::Text
 paperpaw_sdk::Version
 paperpaw_sdk::annotations::Annotation
@@ -97,9 +92,6 @@ paperpaw_sdk::files::Entry
 paperpaw_sdk::firmware::Firmware
 paperpaw_sdk::firmware::FirmwareCommand
 paperpaw_sdk::firmware::Update
-paperpaw_sdk::help::Hint
-paperpaw_sdk::help::Input
-paperpaw_sdk::help::Zone
 paperpaw_sdk::install::Digest
 paperpaw_sdk::install::Progress
 paperpaw_sdk::library::BookData
@@ -109,8 +101,6 @@ paperpaw_sdk::library::listing::Listing
 paperpaw_sdk::memory::MemoryUse
 paperpaw_sdk::native::Fingerprint
 paperpaw_sdk::power::PowerLevel
-paperpaw_sdk::replies::Chosen
-paperpaw_sdk::replies::HttpReply
 paperpaw_sdk::secrets::Listed
 paperpaw_sdk::secrets::Secret
 paperpaw_sdk::secrets::SecretChange
@@ -124,15 +114,7 @@ paperpaw_sdk::usage::Usage
 paperpaw_sdk::wifi::Wifi
 paperpaw_sdk::wifi::WifiCommand
 paperpaw_sdk::wifi::WifiNetwork
-paperpaw_sdk::work::Importance
-paperpaw_sdk::work::Note
 paperpaw_sdk::work::Progress
-paperpaw_sdk::work::Refusal
-paperpaw_sdk::work::Retry
-paperpaw_sdk::work::Step
-paperpaw_sdk::work::Why
-paperpaw_sdk::work::WorkRefused
-paperpaw_sdk::work::WorkState
 paperpaw_text::Glyph
 paperpaw_text::GlyphRef
 paperpaw_text::LineMetrics

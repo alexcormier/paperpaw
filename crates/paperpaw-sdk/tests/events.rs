@@ -189,7 +189,7 @@ proptest! {
     fn answers_come_back(text in "\\PC{0,20}", typed_context in context(&["text"]), chosen_context in context(&["path"])) {
         let typed = Typed::new(text.clone(), typed_context);
         prop_assert_eq!(Typed::from_params(&typed.to_params()), Some(typed));
-        let chosen = Chosen { path: text, context: chosen_context };
+        let chosen = Chosen::new(text, chosen_context);
         prop_assert_eq!(Chosen::from_params(&chosen.to_params()), Some(chosen));
     }
 }

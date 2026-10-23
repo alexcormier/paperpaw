@@ -184,10 +184,7 @@ impl FolderChooser {
                     cx.command(Command::SetSetting(id, value));
                 }
                 if let Some((reply, params)) = &self.reply {
-                    let chosen = Chosen {
-                        path: self.dir.clone(),
-                        context: params.clone(),
-                    };
+                    let chosen = Chosen::new(self.dir.clone(), params.clone());
                     cx.command(Command::Emit(reply.clone(), chosen.to_params()));
                 }
             }

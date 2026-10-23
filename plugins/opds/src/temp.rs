@@ -118,16 +118,9 @@ mod tests {
     use paperpaw_sdk::Params;
 
     fn reply(file: &str) -> HttpReply {
-        HttpReply {
-            status: 200,
-            body: String::new(),
-            etag: None,
-            content_type: None,
-            final_url: None,
-            context: Params::new().with(FILE, file),
-            refused: None,
-            headers: alloc::vec::Vec::new(),
-        }
+        let mut reply = HttpReply::new(200, String::new());
+        reply.context = Params::new().with(FILE, file);
+        reply
     }
 
     #[test]

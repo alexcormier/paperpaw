@@ -178,6 +178,7 @@ impl BitOr for Moments {
 
 /// How much the reader counts on a work.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Importance {
     /// The reader counts on it (a position, an export they sent): it is
     /// done, at the latest by its deadline (made longer by the mode).
@@ -393,6 +394,7 @@ impl Reason {
 
 /// When a refused work or request may be tried again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub enum Retry {
     /// Not before then.
     After(Instant),
@@ -432,6 +434,7 @@ impl Retry {
 
 /// Why a work or a request did not run, and when to try again.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+#[non_exhaustive]
 pub struct Refusal {
     pub reason: Reason,
     pub retry: Retry,
@@ -474,6 +477,7 @@ pub mod params {
 
 /// Why a work runs now, from its event's parameters.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Why {
     /// Its exact time ([`Work::at`]).
     Time,
@@ -510,9 +514,17 @@ impl Why {
 /// A declared work taken out because it can never run
 /// ([`events::WORK_REFUSED`](crate::builtin::events::WORK_REFUSED)).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct WorkRefused {
     pub work: Id,
     pub refusal: Refusal,
+}
+
+impl WorkRefused {
+    /// Work `work` taken out, for `refusal`.
+    pub fn new(work: Id, refusal: Refusal) -> Self {
+        Self { work, refusal }
+    }
 }
 
 impl EventData for WorkRefused {
@@ -533,6 +545,7 @@ impl EventData for WorkRefused {
 /// Where a declared work stands, for a plugin's page ("Waiting for the
 /// next connection", "Held: Offline mode").
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum WorkState {
     /// Queued; at the latest at `due` (none: only when it is cheap).
     Waiting { due: Option<Instant> },
@@ -562,6 +575,7 @@ impl Progress {
 
 /// What a job's step says ([`WorkSpec`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum Step {
     /// More to do: the next step after the frame, when no input waits.
     Continue,
@@ -619,9 +633,20 @@ impl fmt::Debug for WorkSpec {
 /// What a plugin's background work last said, kept by the kernel in
 /// place of a notice: background work never shows one over reading.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Note {
     pub at: Instant,
     pub text: String,
+}
+
+impl Note {
+    /// What a work said at `at`.
+    pub fn new(at: Instant, text: impl Into<String>) -> Self {
+        Self {
+            at,
+            text: text.into(),
+        }
+    }
 }
 
 /// Where every declared work stands, and the plugins' notes, kept by the
