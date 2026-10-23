@@ -742,20 +742,23 @@ fn fit(value: &str) -> &str {
 
 /// Keeps `book` as what the library knows of the book at `path`: values
 /// cut at a kilobyte, the first 32 tags, and what a newer version wrote
-/// there that this one does not know; `false` where it could not be
-/// written (or would be too large to be read back), or the details there
-/// could not be read.
+/// there that this one does not know; an error where it could not be
+/// written (or would be too large to be read back,
+/// [`StorageError::TooLarge`]), or the details there could not be read.
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-pub fn save(storage: &dyn Storage, path: &str, book: &Book) -> bool {
-    write_book(storage, path, book)
+pub fn save(storage: &dyn Storage, path: &str, book: &Book) -> Result<(), crate::data::Error> {
+    write_details(storage, path, book)
 }
 
-/// [`save`], for the library's own changes of a book.
+/// [`save`], for the library's own changes of a book: `false` where it
+/// was not kept.
 fn write_book(storage: &dyn Storage, path: &str, book: &Book) -> bool {
-    let Ok(before) = crate::data::Format::FIRST.load(storage, &book_file(path), MAX_DETAILS) else {
-        return false;
-    };
+    write_details(storage, path, book).is_ok()
+}
+
+fn write_details(storage: &dyn Storage, path: &str, book: &Book) -> Result<(), crate::data::Error> {
+    let before = crate::data::Format::FIRST.load(storage, &book_file(path), MAX_DETAILS)?;
     let mut ini = String::new();
     let mut set = |key: &str, value: &str| ini = config::set(&ini, "book", key, fit(value));
     set("size", &book.size.to_string());
@@ -795,7 +798,10 @@ fn write_book(storage: &dyn Storage, path: &str, book: &Book) -> bool {
             ini = config::set(&ini, entry.section, entry.key, &entry.value.as_str());
         }
     }
-    ini.len() <= MAX_DETAILS && storage.write(&book_file(path), ini.as_bytes()).is_ok()
+    if ini.len() > MAX_DETAILS {
+        return Err(StorageError::TooLarge.into());
+    }
+    Ok(storage.write(&book_file(path), ini.as_bytes())?)
 }
 
 /// Reads title, author, series, tags and cover from the book itself and

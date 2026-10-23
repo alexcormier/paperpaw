@@ -190,7 +190,7 @@ impl Staging {
         if let Some(sha256) = code {
             marks = marks.code(sha256);
         }
-        if !super::marks::write(storage, &self.folder(), &marks) {
+        if super::marks::write(storage, &self.folder(), &marks).is_err() {
             self.abort(storage);
             return Err(Refusal::Storage);
         }

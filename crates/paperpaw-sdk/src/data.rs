@@ -115,6 +115,12 @@ pub enum Error {
     Storage(StorageError),
 }
 
+impl From<StorageError> for Error {
+    fn from(e: StorageError) -> Self {
+        Error::Storage(e)
+    }
+}
+
 impl From<Error> for StorageError {
     /// A file written by a newer PaperPaw, or not as its format says, is
     /// [`StorageError::InvalidData`]: not read, not written over.

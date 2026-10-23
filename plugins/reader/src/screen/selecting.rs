@@ -143,7 +143,10 @@ impl ReaderScreen {
         } else if *item == crate::actions::HIGHLIGHT {
             let highlight = |m: &Mark| m.kind == Kind::Highlight && m.overlaps(start, end);
             // On highlighted text the item removes the highlight.
-            if !annotations::remove(env.storage, &book.path, highlight) {
+            if !matches!(
+                annotations::remove(env.storage, &book.path, highlight),
+                Ok(true)
+            ) {
                 let annotation = Annotation {
                     mark: Mark {
                         kind: Kind::Highlight,
@@ -157,7 +160,7 @@ impl ReaderScreen {
                     text: annotations::snippet(&text),
                     note: String::new(),
                 };
-                if !annotations::add(env.storage, &book.path, annotation) {
+                if annotations::add(env.storage, &book.path, annotation).is_err() {
                     marks_not_saved(cx);
                 }
             }
@@ -171,11 +174,10 @@ impl ReaderScreen {
                 .iter()
                 .find(|m| m.kind == Kind::Highlight && m.overlaps(start, end))
                 .map(|m| m.start);
-            let at = existing.unwrap_or_else(|| {
-                annotations::add(
-                    env.storage,
-                    &book.path,
-                    Annotation {
+            let at = match existing {
+                Some(at) => at,
+                None => {
+                    let highlight = Annotation {
                         mark: Mark {
                             kind: Kind::Highlight,
                             start,
@@ -187,10 +189,13 @@ impl ReaderScreen {
                         updated: 0,
                         text: annotations::snippet(&text),
                         note: String::new(),
-                    },
-                );
-                start
-            });
+                    };
+                    if annotations::add(env.storage, &book.path, highlight).is_err() {
+                        marks_not_saved(cx);
+                    }
+                    start
+                }
+            };
             book.reload_marks(&env);
             cx.command(annotations::changed(&book.path));
             let note = annotations::note_of(env.storage, &book.path, at);

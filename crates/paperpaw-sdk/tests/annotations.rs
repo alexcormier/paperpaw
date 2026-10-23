@@ -90,7 +90,7 @@ proptest! {
     #[test]
     fn saved_annotations_come_back(list in proptest::collection::vec(any_annotation(), 0..8)) {
         let storage = MemoryStorage::new();
-        annotations::save(&storage, BOOK, &list);
+        annotations::save(&storage, BOOK, &list).unwrap();
         let mut expected: Vec<Annotation> = list.into_iter().map(as_read).collect();
         expected.sort_by_key(|a| (a.mark.start, a.mark.end));
         let read = annotations::load(&storage, BOOK);
@@ -111,8 +111,8 @@ proptest! {
     fn notes_with_tabs_and_breaks_stay_one_field(text in "[^\r]{0,30}", note in "[^\r]{0,30}") {
         let storage = MemoryStorage::new();
         let start = Locator::new(1, 10);
-        annotations::add(&storage, BOOK, annotation(Kind::Highlight, (1, 10), (1, 20), &text, ""));
-        prop_assert!(annotations::set_note(&storage, BOOK, start, &note, 5));
+        annotations::add(&storage, BOOK, annotation(Kind::Highlight, (1, 10), (1, 20), &text, "")).unwrap();
+        prop_assert!(annotations::set_note(&storage, BOOK, start, &note, 5).unwrap());
         let all = annotations::load(&storage, BOOK);
         prop_assert_eq!(all.len(), 1);
         prop_assert_eq!(&all[0].text, &annotations::one_line(&text));
@@ -225,7 +225,7 @@ fn more_than_ten_fields_keep_the_rest_in_the_note() {
     assert_eq!(all[0].note, "note\twith\textra");
     // Saved again, the note is one field.
     let storage = MemoryStorage::new();
-    annotations::save(&storage, BOOK, &all);
+    annotations::save(&storage, BOOK, &all).unwrap();
     let again = annotations::load(&storage, BOOK);
     assert_eq!(again[0].note, "note with extra");
     assert_eq!(again[0].text, "text");
@@ -249,16 +249,22 @@ fn invalid_utf8_and_windows_line_ends_are_tolerated() {
 fn a_huge_note_is_cut_and_the_next_annotation_still_read() {
     let note = "n".repeat(100_000);
     let storage = MemoryStorage::new();
-    assert!(annotations::add(
-        &storage,
-        BOOK,
-        annotation(Kind::Highlight, (0, 0), (0, 5), "t", &note),
-    ));
-    assert!(annotations::add(
-        &storage,
-        BOOK,
-        annotation(Kind::Highlight, (1, 0), (1, 5), "u", "short"),
-    ));
+    assert!(
+        annotations::add(
+            &storage,
+            BOOK,
+            annotation(Kind::Highlight, (0, 0), (0, 5), "t", &note),
+        )
+        .is_ok()
+    );
+    assert!(
+        annotations::add(
+            &storage,
+            BOOK,
+            annotation(Kind::Highlight, (1, 0), (1, 5), "u", "short"),
+        )
+        .is_ok()
+    );
     let all = annotations::load(&storage, BOOK);
     assert_eq!(all.len(), 2);
     assert!(all[0].note.len() <= 3 * 1024, "{}", all[0].note.len());
@@ -288,14 +294,8 @@ fn a_huge_line_is_read_and_the_next_line_still_read() {
 fn duplicate_annotations_are_kept_and_the_first_gets_the_note() {
     let a = annotation(Kind::Highlight, (1, 10), (1, 20), "same", "");
     let storage = MemoryStorage::new();
-    annotations::save(&storage, BOOK, &[a.clone(), a]);
-    assert!(annotations::set_note(
-        &storage,
-        BOOK,
-        Locator::new(1, 10),
-        "first",
-        9
-    ));
+    annotations::save(&storage, BOOK, &[a.clone(), a]).unwrap();
+    assert!(annotations::set_note(&storage, BOOK, Locator::new(1, 10), "first", 9).unwrap());
     let all = annotations::load(&storage, BOOK);
     assert_eq!(all.len(), 2);
     assert_eq!(all.iter().filter(|a| a.note == "first").count(), 1);
@@ -304,7 +304,7 @@ fn duplicate_annotations_are_kept_and_the_first_gets_the_note() {
         "first"
     );
     // Removing by position takes both.
-    assert!(annotations::remove(&storage, BOOK, |m| m.start == Locator::new(1, 10)));
+    assert!(annotations::remove(&storage, BOOK, |m| m.start == Locator::new(1, 10)).unwrap());
     assert!(annotations::load(&storage, BOOK).is_empty());
     assert!(!storage.exists(&annotations::file(BOOK)));
 }
@@ -316,35 +316,19 @@ fn notes_go_on_highlights_only() {
         &storage,
         BOOK,
         annotation(Kind::Bookmark, (2, 0), (2, 0), "page", ""),
-    );
-    assert!(!annotations::set_note(
-        &storage,
-        BOOK,
-        Locator::new(2, 0),
-        "x",
-        1
-    ));
-    assert!(!annotations::set_note(
-        &storage,
-        BOOK,
-        Locator::new(9, 0),
-        "x",
-        1
-    ));
+    )
+    .unwrap();
+    assert!(!annotations::set_note(&storage, BOOK, Locator::new(2, 0), "x", 1).unwrap());
+    assert!(!annotations::set_note(&storage, BOOK, Locator::new(9, 0), "x", 1).unwrap());
     assert_eq!(annotations::note_of(&storage, BOOK, Locator::new(2, 0)), "");
     // An empty note takes the mark away.
     annotations::add(
         &storage,
         BOOK,
         annotation(Kind::Highlight, (3, 0), (3, 9), "h", "n"),
-    );
-    assert!(annotations::set_note(
-        &storage,
-        BOOK,
-        Locator::new(3, 0),
-        "  \t ",
-        2
-    ));
+    )
+    .unwrap();
+    assert!(annotations::set_note(&storage, BOOK, Locator::new(3, 0), "  \t ", 2).unwrap());
     let h = annotations::load(&storage, BOOK).pop().unwrap();
     assert!(!h.mark.noted && h.note.is_empty());
 }
@@ -353,7 +337,7 @@ fn notes_go_on_highlights_only() {
 fn nothing_removed_leaves_the_file_as_it_is() {
     let text = b"h\t1\t0\t1\t5\t3\tunusual   spacing\t\n";
     let storage = with_file(text);
-    assert!(!annotations::remove(&storage, BOOK, |_| false));
+    assert!(!annotations::remove(&storage, BOOK, |_| false).unwrap());
     assert_eq!(storage.get(&annotations::file(BOOK)).unwrap(), text);
 }
 
@@ -371,21 +355,18 @@ fn lines_it_cannot_read_survive_every_change() {
         let now = String::from_utf8(storage.get(&path).unwrap_or_default()).unwrap();
         now.lines().any(|l| l == unknown) && now.lines().any(|l| l == damaged)
     };
-    assert!(annotations::set_note(
-        &storage,
-        BOOK,
-        Locator::new(1, 10),
-        "noted",
-        5
-    ));
+    assert!(annotations::set_note(&storage, BOOK, Locator::new(1, 10), "noted", 5).unwrap());
     assert!(kept(&storage));
-    assert!(annotations::add(
-        &storage,
-        BOOK,
-        annotation(Kind::Bookmark, (3, 0), (3, 0), "", ""),
-    ));
+    assert!(
+        annotations::add(
+            &storage,
+            BOOK,
+            annotation(Kind::Bookmark, (3, 0), (3, 0), "", ""),
+        )
+        .is_ok()
+    );
     assert!(kept(&storage));
-    assert!(annotations::remove(&storage, BOOK, |_| true));
+    assert!(annotations::remove(&storage, BOOK, |_| true).unwrap());
     assert!(kept(&storage), "the file was removed with lines in it");
     assert!(annotations::load(&storage, BOOK).is_empty());
 }
@@ -409,7 +390,8 @@ fn files_are_per_book() {
         &storage,
         "a.epub",
         annotation(Kind::Bookmark, (1, 0), (1, 0), "", ""),
-    );
+    )
+    .unwrap();
     assert_eq!(annotations::marks(&storage, "a.epub").len(), 1);
     assert!(annotations::marks(&storage, "b.epub").is_empty());
 }
@@ -434,11 +416,14 @@ fn an_oversized_file_is_not_overwritten_by_add() {
     let big = line.repeat(1100);
     assert!(big.len() > 1 << 20);
     let storage = with_file(big.as_bytes());
-    assert!(!annotations::add(
-        &storage,
-        BOOK,
-        annotation(Kind::Bookmark, (9, 0), (9, 0), "new", ""),
-    ));
+    assert!(
+        !annotations::add(
+            &storage,
+            BOOK,
+            annotation(Kind::Bookmark, (9, 0), (9, 0), "new", ""),
+        )
+        .is_ok()
+    );
     let kept = storage.get(&annotations::file(BOOK)).unwrap();
     assert!(
         kept == big.as_bytes(),
@@ -528,20 +513,10 @@ fn a_highlight_is_found_again_in_another_conversion() {
     let (styled, plain) = conversions();
     let storage = MemoryStorage::new();
     let first = made_in(&styled, 5, 9, "");
-    assert!(annotations::add(&storage, BOOK, first.clone()));
+    assert!(annotations::add(&storage, BOOK, first.clone()).is_ok());
     assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(true));
-    assert!(annotations::set_note(
-        &storage,
-        BOOK,
-        first.mark.start,
-        "mine",
-        7
-    ));
-    assert!(annotations::add(
-        &storage,
-        BOOK,
-        made_in(&styled, 20, 30, "")
-    ));
+    assert!(annotations::set_note(&storage, BOOK, first.mark.start, "mine", 7).unwrap());
+    assert!(annotations::add(&storage, BOOK, made_in(&styled, 20, 30, "")).is_ok());
     assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(true));
     // Nothing to do in the same conversion: the file is not written.
     assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(false));
@@ -593,7 +568,7 @@ fn annotations_of_before_are_never_moved_by_a_guess() {
     );
     // One added there is of that conversion; those of before stay.
     let new = made_in(&plain, 50, 60, "new");
-    assert!(annotations::add(&storage, BOOK, new));
+    assert!(annotations::add(&storage, BOOK, new).is_ok());
     assert_eq!(annotations::relocate(&storage, BOOK, 2, &plain), Ok(true));
     let file = String::from_utf8(storage.get(&annotations::file(BOOK)).unwrap()).unwrap();
     assert!(file.starts_with("# format 2\n"), "{file}");
@@ -611,13 +586,7 @@ fn annotations_of_before_are_never_moved_by_a_guess() {
     );
     assert_eq!(all[2], before[1]);
     // Changed by those who know nothing of conversions, they stay so.
-    assert!(annotations::set_note(
-        &storage,
-        BOOK,
-        before[0].mark.start,
-        "changed",
-        9
-    ));
+    assert!(annotations::set_note(&storage, BOOK, before[0].mark.start, "changed", 9).unwrap());
     assert_eq!(annotations::relocate(&storage, BOOK, 2, &plain), Ok(true));
     let all = annotations::load(&storage, BOOK);
     assert_eq!(
@@ -643,7 +612,8 @@ fn an_annotation_that_cannot_be_found_is_kept() {
         &storage,
         BOOK,
         &[made_in(&styled, 5, 9, ""), lost.clone(), early.clone()],
-    );
+    )
+    .unwrap();
     assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(true));
     assert_eq!(annotations::relocate(&storage, BOOK, 2, &plain), Ok(true));
     let all = annotations::load(&storage, BOOK);
@@ -653,7 +623,7 @@ fn an_annotation_that_cannot_be_found_is_kept() {
     assert!(all.contains(&lost), "{all:?}");
     // Removing the others leaves it, and in its own conversion it is
     // where it was made.
-    assert!(annotations::remove(&storage, BOOK, |m| m.start != lost.mark.start));
+    assert!(annotations::remove(&storage, BOOK, |m| m.start != lost.mark.start).unwrap());
     assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(false));
     assert_eq!(annotations::load(&storage, BOOK), [lost]);
 }

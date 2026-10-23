@@ -437,6 +437,12 @@ file to your report.
   feature, and `Canvas`'s drawing internals are hidden. A cover drawn
   small is `ui::draw_small_image`; whether the device has a row of
   button hints is `env.caps.button_row`.
+- SDK, cleaned up before its first release (data): the writers of data
+  say why they did not write, `Result<(), data::Error>` in place of a
+  `bool`: `annotations::save` and `add`; `annotations::set_note` and
+  `remove` give `Ok(false)` where there was nothing to change;
+  `library::save`, `Index::save`, `install::marks::write` and
+  `catalog::write`. `data::Error` takes a `StorageError` (`?`).
 - SDK, cleaned up before its first release (installers): what only the
   kernel and the plugins that install do comes with the `kernel`
   feature, the reading parts staying for every plugin. `native`:

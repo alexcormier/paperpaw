@@ -283,7 +283,7 @@ mod tests {
                 Record::of(path, &book)
             })
             .collect();
-        catalog::write(&storage, &records);
+        catalog::write(&storage, &records).unwrap();
         let authors = names(&mut |f| catalog::each_at(&storage, f), Shelf::Authors);
         assert_eq!(
             authors,

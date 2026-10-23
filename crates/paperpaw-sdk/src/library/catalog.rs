@@ -285,8 +285,7 @@ const MAX_CHANGES: usize = 1024;
 
 /// What was noted beside the catalog since it was made: each book's last
 /// status, or that it was removed, by its path hashed (FNV-1a, 64 bits,
-/// all of them, so that two books all but never share one: 12 bytes a
-/// book).
+/// all of them, so that two books all but never share one: 12 bytes a book).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct Changes {
@@ -908,17 +907,16 @@ pub fn search_after(
 }
 
 /// Writes `records` as the catalog (emptying the log), e.g. for tests of views.
-#[expect(
-    clippy::let_underscore_must_use,
-    reason = "one not written is made anew by a walk"
-)]
 #[cfg(any(test, feature = "kernel"))]
 #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-pub fn write(storage: &dyn Storage, records: &[Record]) {
+pub fn write(storage: &dyn Storage, records: &[Record]) -> Result<(), crate::data::Error> {
     let mut text = next_header(storage);
     text.extend(records.iter().map(Record::text));
-    let _ = storage.write(&catalog_path(), text.as_bytes());
-    let _ = storage.remove(&log_path());
+    storage.write(&catalog_path(), text.as_bytes())?;
+    match storage.remove(&log_path()) {
+        Ok(()) | Err(StorageError::NotFound) => Ok(()),
+        Err(e) => Err(e.into()),
+    }
 }
 
 // ---- Making the catalog -----------------------------------------------
@@ -1661,7 +1659,8 @@ mod tests {
                 Record::of(&a, &Book::default()),
                 Record::of(&b, &Book::default()),
             ],
-        );
+        )
+        .unwrap();
         note(&storage, &b, Status::new(Some(40), false, true)).unwrap();
         forget(&storage, &a).unwrap();
         let changes = changes(&storage);
@@ -1701,7 +1700,8 @@ mod tests {
                 record.clone(),
                 Record::of("books/Untitled.txt", &Book::default()),
             ],
-        );
+        )
+        .unwrap();
         let mut all = Vec::new();
         each(&storage, &mut |r| all.push(r));
         assert_eq!(all.len(), 2);
@@ -1736,7 +1736,7 @@ mod tests {
         let books: Vec<Record> = (0..5)
             .map(|n| Record::of(&format!("books/{n}.txt"), &Book::default()))
             .collect();
-        write(&storage, &books);
+        write(&storage, &books).unwrap();
         note(&storage, "books/2.txt", Status::new(Some(30), false, true)).unwrap();
         note(&storage, "books/2.txt", Status::new(Some(55), true, true)).unwrap();
         note(&storage, "books/4.txt", Status::new(Some(100), false, true)).unwrap();
@@ -1789,7 +1789,7 @@ mod tests {
             let folder = if n % 3 == 0 { "books/Old" } else { "books" };
             records.push(Record::of(&format!("{folder}/{n}.epub"), &book));
         }
-        write(&storage, &records);
+        write(&storage, &records).unwrap();
         let all = |q: &Query| query(&storage, q, None, 100);
         assert_eq!(all(&Query::new().author("Bob")).len(), 6);
         assert_eq!(all(&Query::new().folder("books/Old")).len(), 4);
@@ -1833,7 +1833,7 @@ mod tests {
         assert_eq!(state(&storage), State::Missing);
         storage.write(&building_path(), b"").unwrap();
         assert_eq!(state(&storage), State::Building);
-        write(&storage, &[]);
+        write(&storage, &[]).unwrap();
         assert!(matches!(state(&storage), State::Ready { .. }));
     }
 
@@ -1851,7 +1851,7 @@ mod tests {
                 Record::of(&format!("books/{i}.epub"), &book)
             })
             .collect();
-        write(&storage, &records);
+        write(&storage, &records).unwrap();
         let by_title = Query::new();
         let mut sorted = records.clone();
         sorted.sort_by_key(|r| by_title.key(r));

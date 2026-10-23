@@ -313,7 +313,7 @@ fn taken_after_removed(removed: usize) -> (usize, usize) {
     for record in &mut records {
         record.title = String::from("OLD");
     }
-    catalog::write(&storage, &records);
+    catalog::write(&storage, &records).unwrap();
     for i in 0..removed {
         storage.remove(&format!("books/Y/b{i:03}.txt")).unwrap();
     }

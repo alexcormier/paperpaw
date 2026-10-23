@@ -497,7 +497,7 @@ fn marks_left_in_a_plugins_folder_are_kept_at_the_next_start() {
         .unwrap();
     storage.write("plugins/clock/code.ppn", &code).unwrap();
     let marks = install::marks::Marks::new(install::marks::From::Local).code(code_name(&code));
-    assert!(install::marks::write(&storage, "plugins/clock", &marks));
+    assert!(install::marks::write(&storage, "plugins/clock", &marks).is_ok());
     let device = Device::serving(storage);
     assert_eq!(
         installed_code(&device.storage, "clock"),

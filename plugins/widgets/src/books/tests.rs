@@ -72,7 +72,7 @@ pub(crate) fn library() -> MemoryStorage {
                 height: COVER_SIZE.1,
             }))
             .progress(progress);
-        library::save(&storage, path, &book);
+        library::save(&storage, path, &book).unwrap();
         records.push(catalog::Record::of(path, &book));
         storage
     };
@@ -96,7 +96,7 @@ pub(crate) fn library() -> MemoryStorage {
     storage = add(storage, "books/s4.epub", "The Fourth", "Tales", "4", None);
     storage = add(storage, "books/a.epub", "Alone", "", "", None);
     storage = add(storage, "books/b.epub", "Begun", "", "", Some(10));
-    catalog::write(&storage, &records);
+    catalog::write(&storage, &records).unwrap();
     let _ = paperpaw_sdk::Storage::write(
         &storage,
         ".paperpaw/library/opened.txt",
@@ -120,7 +120,8 @@ pub(crate) fn library() -> MemoryStorage {
             text: "A sentence worth keeping, of some length.".to_string(),
             note: String::new(),
         },
-    );
+    )
+    .unwrap();
     Position {
         path: "books/s3.epub".to_string(),
         page: Some(40),
@@ -441,7 +442,7 @@ fn a_long_series_is_kept_round_the_book_being_read() {
         })
         .collect();
     let storage = MemoryStorage::new();
-    catalog::write(&storage, &records);
+    catalog::write(&storage, &records).unwrap();
     let h = Harness::new(storage);
     let env = h.env();
     let read = |path: &str| path < "books/long/010.epub";
@@ -513,7 +514,7 @@ fn new_books_in_a_large_library() {
             .collect()
     };
     let storage = MemoryStorage::new();
-    catalog::write(&storage, &books(5000));
+    catalog::write(&storage, &books(5000)).unwrap();
     let mut h = Harness::new(storage);
     h.set(
         "widgets.next.pick",
@@ -537,7 +538,7 @@ fn new_books_in_a_large_library() {
     };
     // The first look: all seen.
     pick(&h);
-    catalog::write(&h.storage, &books(5001));
+    catalog::write(&h.storage, &books(5001)).unwrap();
     paperpaw_sdk::Storage::write(&h.storage, "books/05000.epub", b"a book").unwrap();
     let shown = pick(&h);
     assert!(shown.contains("05000"), "{shown}");
@@ -595,7 +596,8 @@ fn a_highlight_each_time_it_shows_stays_while_it_shows() {
                 text: alloc::format!("Highlight number {n}"),
                 note: String::new(),
             },
-        );
+        )
+        .unwrap();
     }
     let mut h = Harness::new(storage);
     h.set(
