@@ -8,9 +8,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::widgets::grid;
-use paperpaw_sdk::{
-    Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, Screen,
-};
+use paperpaw_sdk::{Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Rect, Screen};
 
 use crate::{blocks, pages};
 
@@ -101,9 +99,10 @@ impl Screen for DrawerScreen {
                 focused,
                 None,
             );
-            blocks::draw_tool_lines(canvas, env, rect, &tools[index], lines);
+            let ink = blocks::draw_tool_lines(canvas, env, rect, &tools[index], lines);
             if focused {
-                canvas.stroke(rect, style.line * 3, Color::BLACK);
+                // Round its icon and name, never through them.
+                paperpaw_sdk::widgets::grid::draw_tool_focus(canvas, &style, ink);
             }
         }
     }

@@ -1289,16 +1289,17 @@ fn draw_placeholder(
 
 /// Draws the tool of `action` in `area`, its name if tools show names,
 /// with room for a name of `lines` lines (see
-/// [`grid::draw_tool_lines`](paperpaw_sdk::widgets::grid::draw_tool_lines)).
+/// [`grid::draw_tool_lines`](paperpaw_sdk::widgets::grid::draw_tool_lines)):
+/// where its icon and name have ink.
 pub(crate) fn draw_tool_lines(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     area: Rect,
     action: &Id,
     lines: usize,
-) {
+) -> Rect {
     let labels = env.settings.read(&TOOL_LABELS);
-    paperpaw_sdk::widgets::grid::draw_tool_lines(canvas, env, area, action, labels, lines);
+    paperpaw_sdk::widgets::grid::draw_tool_lines(canvas, env, area, action, labels, lines)
 }
 
 /// How many lines the name of the tool of `action` takes in `area`.

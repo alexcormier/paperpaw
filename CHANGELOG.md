@@ -12,7 +12,10 @@ change the plugin SDK.
   by their ink; all tools gives every tool room for as many lines as the
   longest name takes, its rows a line higher where that is two
   (`grid::draw_tool_lines`, `grid::tool_name_lines`). German has a
-  short name for Wi-Fi transfer there. `paperpaw-dev visual` takes a
+  short name for Wi-Fi transfer there. A focused tool's frame goes round
+  its icon and name with an even room, never through them
+  (`grid::draw_tool_focus`; `grid::draw_tool_lines` returns where they
+  have ink), on the home screen and in all tools. `paperpaw-dev visual` takes a
   button across the whole width for a row, dotted separators and a
   label's first letter for no icon, looks at a tool's name apart from
   its icon, and accepts a keyboard's keys as narrow as the screen lets
