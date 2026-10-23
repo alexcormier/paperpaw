@@ -1071,9 +1071,12 @@ pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
     let rows: Vec<Rect> = scene.parts(&[Role::Row]).map(|r| r.area).collect();
     // A header's note or arrows follow the header's own layout.
     let headers: Vec<Rect> = scene.parts(&[Role::Heading]).map(|h| h.area).collect();
+    // A button across the whole width (a filter row over a list) is a
+    // row: its words keep the margin, the row reaches the edges.
     let buttons: Vec<&Described> = buttons
         .into_iter()
         .filter(|b| !headers.iter().any(|h| inside(b.area, *h)))
+        .filter(|b| (b.area.x, b.area.width) != (scene.screen.x, scene.screen.width))
         .collect();
     let mut found: Vec<(String, Rect, String)> = Vec::new();
     let (left, right) = (i32::from(screen.x), screen.right() as i32);
