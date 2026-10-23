@@ -10,7 +10,10 @@ change the plugin SDK.
   signed as the emulators are, and holds everything its pages load. Its
   frame loads no inline style or script, so it runs under a strict
   Content-Security-Policy from any path, as paperpaw.org's "Try it out"
-  serves it (docs/web-emulator.md says what a server needs).
+  serves it (docs/web-emulator.md says what a server needs). The frame
+  has no background of its own, its buttons are outlined and labelled as
+  the hint bar shows them, and `start` can leave them out
+  (`buttons: false`).
 ### 0.5.0-beta.1 (draft)
 
 This is a beta, for testers and developers. It is the first release of

@@ -64,7 +64,7 @@ stops the device too), the frame says so before it starts again:
 
 | Message to the frame | Effect | Answer |
 |---|---|---|
-| `{ type: "start", profile, language, dark, plugins: [{ id, files: { path: bytes } }] }` | Starts a device (`xteink-x4`, `xteink-x4-pro`, `boox-go-7`, or another profile of the emulator); each plugin's files go into its storage under `plugins/<id>/`, as a card would have them | `{ device: { id, name, width, height, dpi, grays, color, touch, buttons, row, version } }` |
+| `{ type: "start", profile, language, dark, buttons?, plugins: [{ id, files: { path: bytes } }] }` | Starts a device (`xteink-x4`, `xteink-x4-pro`, `boox-go-7`, or another profile of the emulator); each plugin's files go into its storage under `plugins/<id>/`, as a card would have them; `buttons: false` leaves out the buttons below the screen | `{ device: { id, name, width, height, dpi, grays, color, touch, buttons, row, version } }` |
 | `{ type: "files", id, files }` | Replaces a data plugin's files (whatever of it was on the card goes) and starts the device again (a few milliseconds); `files: {}` takes it off | `{}` |
 | `{ type: "input", event }` | `event`: `{ kind: "button", name, pressed }`, `{ kind: "button", name, hold }` (a long press, held `hold` ms), `{ kind: "key", key, pressed }` (the keyboard's keys as the desktop emulator maps them), `{ kind: "pointer", phase: "down" \| "move" \| "up" \| "cancel", x, y }` (the screen's pixels) | `{}` |
 | `{ type: "screenshot", profile?, dark?, asleep? }` | The panel as it shows, at the device's resolution; with `profile`, `dark` or `asleep`, what that device, night mode or the sleep screen would show with the same card, made apart (what is shown stays) | `{ png }` (bytes) |
@@ -155,7 +155,8 @@ panel shows, in e-ink's tones on gray panels, so its black is lighter
 than a screen's. A full refresh flashes. Screenshots have the panel
 model's own colours. The device's buttons are below it, its keys are on
 the keyboard, and the screen takes touch where the device has a touch
-screen.
+screen. The frame has no background of its own: the device stands on
+the page that embeds it.
 
 **Serving it.** Each release has the module and its pages as
 `paperpaw-web-<version>.zip`, with its SHA-256 and a signature by

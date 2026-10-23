@@ -88,7 +88,7 @@ function tell(message) {
 /// as dropping rows and columns would make strokes look bolder or vanish.
 function fit() {
   const ratio = window.devicePixelRatio || 1;
-  const room = [window.innerWidth - 40, window.innerHeight - 40 - row.offsetHeight - 12];
+  const room = [window.innerWidth - 40, window.innerHeight - 40 - (row.hidden ? 0 : row.offsetHeight + 28)];
   const scale = Math.min((room[0] * ratio) / canvas.width, (room[1] * ratio) / canvas.height);
   const whole = scale >= 1 ? Math.floor(scale) : scale;
   canvas.style.width = `${(canvas.width * whole) / ratio}px`;
@@ -186,13 +186,47 @@ async function fetchFor(call) {
   step();
 }
 
-/// The buttons below the screen: the row the device has, else all.
-function buttons() {
+/// How the buttons below the screen are labelled, as the hint bar shows
+/// their use: a word, or a chevron pointing `left` or `right` with its
+/// name for screen readers; the button's name where none is here.
+const LABELS = {
+  back: { text: "Back" },
+  confirm: { text: "Select" },
+  home: { text: "Home" },
+  menu: { text: "Menu" },
+  power: { text: "Power" },
+  left: { chevron: "left", spoken: "Left" },
+  right: { chevron: "right", spoken: "Right" },
+  "page-back": { chevron: "left", spoken: "Page back" },
+  "page-forward": { chevron: "right", spoken: "Page forward" },
+};
+
+/// A chevron as the hint bar draws it, in the button's colour.
+function chevron(towards) {
+  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+  svg.setAttribute("viewBox", "0 0 10 16");
+  svg.setAttribute("aria-hidden", "true");
+  const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+  line.setAttribute("points", towards === "left" ? "8,2 2,8 8,14" : "2,2 8,8 2,14");
+  svg.append(line);
+  return svg;
+}
+
+/// The buttons below the screen: the row the device has, else all; none
+/// where the page said so (`buttons: false`).
+function buttons(shown) {
   row.replaceChildren();
+  row.hidden = !shown;
   const names = info.row.length ? info.row : info.buttons;
   for (const name of names) {
     const button = document.createElement("button");
-    button.textContent = name;
+    const label = LABELS[name] ?? { text: name };
+    if (label.chevron) {
+      button.append(chevron(label.chevron));
+      button.setAttribute("aria-label", label.spoken);
+    } else {
+      button.textContent = label.text;
+    }
     button.addEventListener("pointerdown", () => press(name, true));
     button.addEventListener("pointerup", () => press(name, false));
     button.addEventListener("pointerleave", (event) => {
@@ -245,14 +279,14 @@ function boot(how, given) {
   for (const [id, files] of Object.entries(given)) put(id, files);
   device.start();
   info = device.device();
-  buttons();
+  buttons(how.buttons ?? true);
   step();
 }
 
 /// Starts a device: the files go to `plugins/<id>/` on its card.
-async function start({ profile, language, dark, plugins: given = [] }) {
+async function start({ profile, language, dark, buttons, plugins: given = [] }) {
   device = await loading;
-  last = { profile, language, dark };
+  last = { profile, language, dark, buttons };
   boot(last, Object.fromEntries(given.map((plugin) => [plugin.id, plugin.files])));
   return { device: info };
 }
