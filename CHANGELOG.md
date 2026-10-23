@@ -97,6 +97,13 @@ change the plugin SDK.
   and its size (it said 64 GB for both). Looking for Calibre in the
   network asks again a few times when no answer comes, since a call
   can be lost on Wi-Fi without a word.
+- Calibre over Wi-Fi (X4, X4 Pro): a book coming in a burst no longer
+  stalls the connection as often (in a test, one drop in about 40 books
+  instead of one in a few): the radio stays awake while a plugin's
+  connection is open. A connection the other side no longer answers
+  ends after 45 seconds instead of waiting for ever on "receiving"
+  (nothing half received stays). Ejecting in Calibre gets its answer
+  before the connection ends.
 - Wi-Fi: a scan that finds no saved network is made again, up to three
   times, before what waits for the network (Calibre, the store, a
   sync) says there is none. On the X4s the first scan after the radio

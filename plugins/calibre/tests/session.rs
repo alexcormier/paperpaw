@@ -139,6 +139,19 @@ impl Peer {
         }
     }
 
+    /// Calibre closes the connection: the device's read gets nothing.
+    fn close(&mut self, kernel: &mut Kernel) {
+        let (socket, _) = self.waiting.take().expect("a read waiting");
+        kernel.socket_event(
+            Instant(6),
+            SocketEvent::Data {
+                socket,
+                data: Vec::new(),
+            },
+        );
+        self.pump(kernel);
+    }
+
     fn say(&mut self, kernel: &mut Kernel, op: u8, args: &str) {
         self.wire.extend_from_slice(&frame(op, args));
         self.pump(kernel);
@@ -322,11 +335,15 @@ fn a_session_with_calibre() {
     );
     assert!(!storage.exists("Ann Author/A Book.epub"));
 
-    // A keep-alive is answered; ejecting ends the connection.
+    // A keep-alive is answered; ejecting is answered, and the device
+    // lets Calibre close (closing first, its answer could be lost on the
+    // way), then closes too.
     calibre.say(&mut kernel, op::NOOP, "{}");
     assert_eq!(calibre.answers().len(), 1);
     calibre.say(&mut kernel, op::NOOP, r#"{"ejecting": true}"#);
     assert_eq!(calibre.answers().len(), 1);
+    assert!(!calibre.closed);
+    calibre.close(&mut kernel);
     assert!(calibre.closed);
 }
 

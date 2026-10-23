@@ -328,6 +328,16 @@ impl CalibreScreen {
         ));
     }
 
+    /// Calibre closed the connection: as it does after ejecting (said so
+    /// already), or else said now.
+    fn closed_by_calibre(&mut self, cx: &mut Cx<'_, '_>) {
+        cx.command(Command::Disconnect(SOCKET));
+        if !matches!(self.state, State::Ended(_)) {
+            let ended = cx.env().i18n.tr("calibre.closed").to_string();
+            self.end(ended, cx);
+        }
+    }
+
     fn on_socket(&mut self, notice: SocketNotice, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
         match notice {
@@ -373,8 +383,7 @@ impl CalibreScreen {
             }
             SocketNotice::Received { text, .. } => {
                 if text.is_empty() {
-                    let ended = env.i18n.tr("calibre.closed").to_string();
-                    return self.end(ended, cx);
+                    return self.closed_by_calibre(cx);
                 }
                 match self.framing.feed(&text) {
                     Ok(Some(message)) => self.handle(message, cx),
@@ -534,8 +543,10 @@ impl CalibreScreen {
             }
             op::NOOP => {
                 if protocol::member(args, "ejecting").is_some() {
+                    // Calibre closes once it has the answer: closed here
+                    // first, the answer could be lost on the way.
                     self.send(op::OK, "{}", cx);
-                    cx.command(Command::Disconnect(SOCKET));
+                    self.read_on(cx);
                     let ended = env.i18n.tr("calibre.ejected").to_string();
                     return self.end(ended, cx);
                 }

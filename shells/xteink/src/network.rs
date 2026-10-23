@@ -138,9 +138,11 @@ impl Network {
     /// kernel's effects for the main loop to apply.
     pub fn step(&mut self, kernel: &mut Kernel, now: Instant) -> Vec<Effects> {
         let mut effects = Vec::new();
-        // The radio sleeps between beacons unless data moves or a page is
-        // served (the transfer, the setup with a phone).
-        let busy = self.moving() || kernel.serving();
+        // The radio sleeps between beacons unless data moves, a page is
+        // served (the transfer, the setup with a phone) or a connection
+        // is open (Calibre): asleep, it missed parts of what came in a
+        // burst, and the connection stalled until the other side gave up.
+        let busy = self.moving() || kernel.serving() || kernel.sockets_open();
         self.radio.save_power(!busy);
         for event in self.radio.poll() {
             #[cfg(feature = "remote")]
