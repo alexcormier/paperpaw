@@ -95,6 +95,9 @@ impl Storage for Card {
     fn size(&self, path: &str) -> Result<u64, StorageError> {
         self.on(|s| s.size(path))
     }
+    fn modified(&self, path: &str) -> Option<i64> {
+        self.on(|s| s.modified(path))
+    }
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
         self.on(|s| s.write(path, data))
     }

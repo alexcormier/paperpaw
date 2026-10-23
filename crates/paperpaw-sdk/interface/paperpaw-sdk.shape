@@ -720,7 +720,8 @@ struct paperpaw_sdk::lookup::LookupProviderSpec { id: paperpaw_sdk::id::Id, titl
 struct paperpaw_sdk::lookup::LookupProviders { list: alloc::vec::Vec<paperpaw_sdk::lookup::LookupProviderSpec> }
 struct paperpaw_sdk::lookup::LookupQuery { word: alloc::string::String, language: core::option::Option<alloc::string::String>, reply: paperpaw_sdk::id::Id }
 struct paperpaw_sdk::memory::Memory { read: core::option::Option<fn() -> core::option::Option<paperpaw_sdk::memory::MemoryUse>> }
-struct paperpaw_sdk::memory::MemoryUse { heap_free: u32, heap_size: u32, stack_free: core::option::Option<u32>, stack_size: core::option::Option<u32> }
+struct paperpaw_sdk::memory::MemoryRegion { free: u32, size: u32, external: bool }
+struct paperpaw_sdk::memory::MemoryUse { heap_free: u32, heap_size: u32, stack_free: core::option::Option<u32>, stack_size: core::option::Option<u32>, largest_free: core::option::Option<u32>, regions: [core::option::Option<paperpaw_sdk::memory::MemoryRegion>; 3] }
 struct paperpaw_sdk::memory_storage::MemoryStorage { files: core::cell::RefCell<alloc::collections::btree::map::BTreeMap<alloc::string::String, alloc::vec::Vec<u8>>> }
 struct paperpaw_sdk::menus::ItemState { label: core::option::Option<alloc::string::String>, checked: core::option::Option<bool>, enabled: bool, shown: bool, badge: core::option::Option<alloc::string::String> }
 struct paperpaw_sdk::menus::MenuEntry { menu: paperpaw_sdk::id::Id, item: paperpaw_sdk::id::Id, order: i16, place: core::option::Option<paperpaw_sdk::menus::MenuPlace> }

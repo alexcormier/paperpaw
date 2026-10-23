@@ -437,6 +437,13 @@ file to your report.
   feature, and `Canvas`'s drawing internals are hidden. A cover drawn
   small is `ui::draw_small_image`; whether the device has a row of
   button hints is `env.caps.button_row`.
+- SDK: a storage tells when a file was last changed: `DirEntry::modified`
+  (`with_modified`) and `Storage::modified`, `None` where it does not
+  tell; the memory card's FAT and the computer's file system say it.
+  `MemoryUse` tells the largest block the heap could give now
+  (`largest_free`) and the heap's regions (`MemoryRegion`: the X4 Pro's
+  internal RAM and PSRAM). `read_file` takes its buffer fallibly: a file
+  the heap cannot take now is `StorageError::TooLarge`, not the end.
 - SDK, cleaned up before its first release (installers): what only the
   kernel and the plugins that install do comes with the `kernel`
   feature, the reading parts staying for every plugin. `native`:

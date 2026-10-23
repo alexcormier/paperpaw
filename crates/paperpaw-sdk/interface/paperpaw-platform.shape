@@ -37,8 +37,8 @@ struct paperpaw_platform::pixel::Color { r: u8, g: u8, b: u8 }
 struct paperpaw_platform::status::Battery { percent: u8, charging: bool, millivolts: core::option::Option<u16> }
 struct paperpaw_platform::status::SystemStatus { clock: core::option::Option<paperpaw_platform::status::WallClock>, battery: core::option::Option<paperpaw_platform::status::Battery> }
 struct paperpaw_platform::status::WallClock { at: paperpaw_platform::input::Instant, unix_millis: i64, utc_offset_minutes: core::option::Option<i32> }
-struct paperpaw_platform::storage::DirEntry<'a> { name: &'a str, is_dir: bool, size: u64 }
+struct paperpaw_platform::storage::DirEntry<'a> { name: &'a str, is_dir: bool, size: u64, modified: core::option::Option<i64> }
 struct paperpaw_platform::storage::Mounted<B, M> { base: B, at: &'static str, mounted: M }
 struct paperpaw_platform::storage::NoStorage
 trait paperpaw_platform::display::Display { function info, function refresh }
-trait paperpaw_platform::storage::Storage { function read_at, function size, function write, function append, function sync, function list, function remove, function exists, function rename, function create_dir, function remove_dir_all, function ignores_case, function free_space, function total_space, function local_path }
+trait paperpaw_platform::storage::Storage { function read_at, function size, function write, function append, function sync, function list, function remove, function modified, function exists, function rename, function create_dir, function remove_dir_all, function ignores_case, function free_space, function total_space, function local_path }
