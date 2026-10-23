@@ -180,7 +180,7 @@ fn caption_room(env: &Env<'_>, widget: &str) -> u16 {
 fn caption<'t>(env: &Env<'_>, widget: &str, area: Rect, texts: &[&'t str]) -> Option<&'t str> {
     let cap = caption_room(env, widget);
     let style = UiStyle::new(env);
-    let least = widgets::line_height(env, style.text);
+    let least = widgets::line_height(env, style.text());
     if cap == 0 || cap + least > area.height {
         return None;
     }
@@ -189,7 +189,7 @@ fn caption<'t>(env: &Env<'_>, widget: &str, area: Rect, texts: &[&'t str]) -> Op
     texts
         .iter()
         .copied()
-        .find(|text| font.measure(style.small, text) <= width)
+        .find(|text| font.measure(style.small(), text) <= width)
 }
 
 /// The room below `caption` in `area` (all of it without one).
@@ -282,10 +282,10 @@ fn text_size(
 ) -> f32 {
     let style = UiStyle::new(env);
     let max = match widgets::size(env, widget) {
-        Size::Fit => f32::from(height).max(style.text),
+        Size::Fit => f32::from(height).max(style.text()),
         size => size.text(&style),
     };
-    sized(font, &style, text, (width, height), (max, style.text))
+    sized(font, &style, text, (width, height), (max, style.text()))
 }
 
 /// The largest size (three times a title's at most, the small size at
@@ -296,7 +296,7 @@ fn fit_size(font: &FontHandle<'_>, style: &UiStyle, text: &str, width: u16, heig
         style,
         text,
         (width, height),
-        (style.title * 3.0, style.small),
+        (style.title() * 3.0, style.small()),
     )
 }
 
@@ -316,8 +316,8 @@ fn sized(
     widgets::largest_size(max, least.min(max), |size| {
         tall(size) && font.measure(size, text) <= wide
     })
-    .or_else(|| widgets::largest_size(max.min(least), style.small, tall))
-    .unwrap_or(style.small.min(max))
+    .or_else(|| widgets::largest_size(max.min(least), style.small(), tall))
+    .unwrap_or(style.small().min(max))
 }
 
 /// `text`, or where it is wider than `width` at `size`, the number it
@@ -345,7 +345,7 @@ fn note_lines(
     most: u16,
 ) -> Option<widgets::Wrapped> {
     let style = UiStyle::new(env);
-    let small = widgets::line_height(env, style.small).max(1);
+    let small = widgets::line_height(env, style.small()).max(1);
     let height = height.min(small * most);
     if text.is_empty() || height < small {
         return None;
@@ -353,8 +353,8 @@ fn note_lines(
     Some(widgets::Wrapped::fitting(
         env,
         text,
-        style.small,
-        style.small,
+        style.small(),
+        style.small(),
         width,
         height,
     ))
@@ -430,7 +430,7 @@ fn draw_arc(
     );
     let (from, sweep) = if gauge { (225, 270) } else { (0, 360) };
     // The track, thin, in the middle of where the ring is drawn.
-    let track = style.line.max(1).min(thick);
+    let track = u32::from(style.line()).max(1).min(thick);
     let track_radius = radius - (thick - track) / 2;
     // Halfway between paper and ink where the panel has grays to show
     // it, else faint (black or white, told apart by its thinness).

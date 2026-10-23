@@ -666,7 +666,7 @@ impl CalibreScreen {
     /// The area below the header.
     fn content(&self, env: &Env<'_>) -> Rect {
         let display = env.device.display;
-        let top = self.header.area().height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap();
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
 }
@@ -704,9 +704,9 @@ impl Screen for CalibreScreen {
             return;
         };
         let area = self.content(env);
-        let margin = style.margin as f32;
+        let margin = style.margin() as f32;
         let width = f32::from(area.width) - 2.0 * margin;
-        let mut y = area.y + style.gap as u16;
+        let mut y = area.y + style.gap();
         let mut line = |canvas: &mut Canvas<'_>, size: f32, text: &str, color: Color| {
             let height = font.line_metrics(size).line_height as u16;
             for range in font.wrap(size, text, width) {
@@ -714,7 +714,7 @@ impl Screen for CalibreScreen {
                 ui::draw_label(canvas, &font, size, margin, row, &text[range], color);
                 y += height;
             }
-            y += style.gap as u16 / 2;
+            y += style.gap() / 2;
         };
         let name = self.name.clone().unwrap_or_else(|| String::from("Calibre"));
         let status = match &self.state {
@@ -746,18 +746,18 @@ impl Screen for CalibreScreen {
             State::Ended(text) => text.clone(),
             State::Offline => String::new(),
         };
-        line(canvas, style.title, &status, Color::BLACK);
+        line(canvas, style.title(), &status, Color::BLACK);
         if let Some(library) = &self.library {
             let text = env
                 .i18n
                 .format("calibre.library", &[("library", Arg::Str(library))]);
-            line(canvas, style.text, &text, style.faint(ui::Ink::Detail));
+            line(canvas, style.text(), &text, style.faint(ui::Ink::Detail));
         }
         if self.received > 0 {
             let text = env
                 .i18n
                 .plural("calibre.received", i64::from(self.received), &[]);
-            line(canvas, style.text, &text, Color::BLACK);
+            line(canvas, style.text(), &text, Color::BLACK);
         }
         let hint = match self.state {
             State::Finding | State::Ended(_) => Some("calibre.hint"),
@@ -768,7 +768,7 @@ impl Screen for CalibreScreen {
         if let Some(hint) = hint {
             line(
                 canvas,
-                style.small,
+                style.small(),
                 env.i18n.tr(hint),
                 style.faint(ui::Ink::Detail),
             );
@@ -789,12 +789,12 @@ impl Screen for CalibreScreen {
                 None
             };
             if let Some(again) = again {
-                line(canvas, style.small, env.i18n.tr(again), Color::BLACK);
+                line(canvas, style.small(), env.i18n.tr(again), Color::BLACK);
             }
         }
         self.password_row = None;
         if self.state == State::Password {
-            let row = Rect::new(area.x, y, area.width, style.row as u16);
+            let row = Rect::new(area.x, y, area.width, style.row());
             ui::draw_value_row(
                 canvas,
                 env,

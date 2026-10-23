@@ -200,8 +200,8 @@ impl TransferScreen {
         }
         let area = self.content(env);
         let style = &self.style;
-        let row = style.touch_row(style.control_row) as u16;
-        let margin = style.margin as u16;
+        let row = style.touch_row(u32::from(style.control_row())) as u16;
+        let margin = style.margin();
         let width = area.width.saturating_sub(2 * margin);
         // A touch row, higher where its words take more lines.
         let label = env.i18n.tr("transfer.without-router");
@@ -260,7 +260,7 @@ impl TransferScreen {
     /// The area below the header.
     fn content(&self, env: &Env<'_>) -> Rect {
         let display = env.device.display;
-        let top = self.header.area().height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap();
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
 
@@ -485,15 +485,15 @@ fn draw_join(
     let Some(font) = style.font(env) else {
         return;
     };
-    let margin = style.margin as u16;
+    let margin = style.margin();
     let width = area.width.saturating_sub(2 * margin);
-    let line = font.line_metrics(style.text).line_height as u16;
-    let small = font.line_metrics(style.small).line_height as u16;
+    let line = font.line_metrics(style.text()).line_height as u16;
+    let small = font.line_metrics(style.small()).line_height as u16;
     let title = env.i18n.tr("transfer.own.join");
     ui::draw_label(
         canvas,
         &font,
-        style.text,
+        style.text(),
         f32::from(margin),
         Rect::new(margin, area.y, width, line),
         title,
@@ -513,7 +513,7 @@ fn draw_join(
     ui::draw_label(
         canvas,
         &font,
-        style.small,
+        style.small(),
         f32::from(margin),
         Rect::new(margin, bottom.saturating_sub(small), width, small),
         &note,
@@ -618,7 +618,7 @@ impl Screen for TransferScreen {
                 area.x,
                 area.y,
                 area.width,
-                button.y.saturating_sub(area.y + style.gap as u16),
+                button.y.saturating_sub(area.y + style.gap()),
             ),
             None => area,
         };

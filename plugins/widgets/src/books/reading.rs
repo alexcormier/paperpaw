@@ -320,11 +320,11 @@ impl Widget for Reading {
     }
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
-        (UiStyle::new(env).row * 3) as u16 + frame_height(env, WIDGET)
+        (u32::from(UiStyle::new(env).row()) * 3) as u16 + frame_height(env, WIDGET)
     }
 
     fn min_height(&self, env: &Env<'_>, _: u16) -> u16 {
-        (UiStyle::new(env).row * 2) as u16 + frame_height(env, WIDGET)
+        (u32::from(UiStyle::new(env).row()) * 2) as u16 + frame_height(env, WIDGET)
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -483,8 +483,8 @@ const DROPPED: [Part; 7] = [
 fn cover_at(env: &Env<'_>, area: Rect, book: &Book) -> Option<Rect> {
     let style = UiStyle::new(env);
     let (w, h) = super::cover_size(book, area.width / 3, area.height);
-    let text_room = area.width.saturating_sub(w + style.gap as u16);
-    (widgets::shows(env, WIDGET, "cover") && f32::from(text_room) >= style.small * 7.0)
+    let text_room = area.width.saturating_sub(w + style.gap());
+    (widgets::shows(env, WIDGET, "cover") && f32::from(text_room) >= style.small() * 7.0)
         .then(|| Rect::new(area.x, area.y + (area.height - h) / 2, w, h))
 }
 
@@ -501,7 +501,7 @@ fn draw(
     covers: &Covers,
 ) {
     let style = UiStyle::new(env);
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let id = WIDGET;
     let area = look.area;
     let rest = match cover_at(env, area, book) {
@@ -524,7 +524,7 @@ fn draw(
     // Whether a small line fits the width whole.
     let whole = |text: &str| {
         font.as_ref()
-            .is_none_or(|font| font.measure(style.small, text) <= width)
+            .is_none_or(|font| font.measure(style.small(), text) <= width)
     };
     let caption_text = env.i18n.tr("widgets.reading.caption");
     let mut parts: Vec<Part> = [
@@ -544,15 +544,15 @@ fn draw(
     .filter(|(_, name, there)| *there && widgets::shows(env, id, name))
     .map(|(part, _, _)| part)
     .collect();
-    let small = widgets::line_height(env, style.small);
+    let small = widgets::line_height(env, style.small());
     let line_gap = gap / 4;
-    let bar_h = (style.line as u16 * 3).max(4);
+    let bar_h = (style.line() * 3).max(4);
     // A title too wide on one line in the body size, as the lines are
     // drawn ([`Lines`]).
     let title_size = text_size(env, id);
     let title_size = match font.as_ref() {
         Some(font) if font.measure(title_size, &book.title) > width => {
-            let least = title_size.min(style.text);
+            let least = title_size.min(style.text());
             widgets::largest_size(title_size, least, |s| font.measure(s, &book.title) <= width)
                 .unwrap_or(least)
         }
@@ -560,7 +560,7 @@ fn draw(
     };
     // A line of the title no higher than the place: smaller in a flat
     // cell, down to a little below the small size.
-    let least = style.small.min(title_size) * 0.8;
+    let least = style.small().min(title_size) * 0.8;
     let title_size = widgets::largest_size(title_size, least, |s| {
         widgets::line_height(env, s) <= rest.height
     })
@@ -641,7 +641,7 @@ fn draw(
             });
             let broken = match (&page, font.as_ref()) {
                 (Some(page), Some(font)) if more > 0 && whole(&percent) => {
-                    let mut broken = super::wrap_words(font, style.small, page, rest.width, more);
+                    let mut broken = super::wrap_words(font, style.small(), page, rest.width, more);
                     broken.push(percent.clone());
                     let fits = broken.len() <= more + 1 && broken.iter().all(|l| whole(l));
                     fits.then_some(broken)
@@ -670,7 +670,7 @@ fn draw(
         Vec::new()
     };
     let chapter = if parts.contains(&Part::Chapter) {
-        wrapped(&mut total, style.small, &position.chapter, true, false)
+        wrapped(&mut total, style.small(), &position.chapter, true, false)
     } else {
         Vec::new()
     };
@@ -681,14 +681,14 @@ fn draw(
         let long = if last {
             Some(env.i18n.tr("widgets.reading.chapter-last").to_string())
         } else {
-            chapter_left_text(env, position, timed, titled, style.small, rest.width)
+            chapter_left_text(env, position, timed, titled, style.small(), rest.width)
         };
         let long = long.unwrap_or_default();
         if whole(&long) {
             alloc::vec![long]
         } else {
-            let lines = wrapped(&mut total, style.small, &long, false, false);
-            let short = chapter_left_text(env, position, timed, titled, style.small, rest.width);
+            let lines = wrapped(&mut total, style.small(), &long, false, false);
+            let short = chapter_left_text(env, position, timed, titled, style.small(), rest.width);
             match short {
                 _ if lines.len() > 1 => lines,
                 Some(short) if whole(&short) => alloc::vec![short],
@@ -704,13 +704,13 @@ fn draw(
     let align = widgets::align(env, id);
     let mut top = Lines::new();
     if has(Part::Caption) {
-        top.add(Role::Caption, style.small, caption_text, look.faint);
+        top.add(Role::Caption, style.small(), caption_text, look.faint);
     }
     for line in title {
         top.add(Role::Title, title_size, line, look.ink);
     }
     if has(Part::Author) {
-        top.add(Role::Note, style.small, book.author.as_str(), look.faint);
+        top.add(Role::Note, style.small(), book.author.as_str(), look.faint);
     }
     let h = top.height(env);
     top.draw(canvas, env, Rect::new(rest.x, y, rest.width, h), align);
@@ -722,17 +722,17 @@ fn draw(
     }
     let mut place = Lines::new();
     for line in pages {
-        place.add(Role::Main, style.small, line, look.ink);
+        place.add(Role::Main, style.small(), line, look.ink);
     }
     if let (true, Some(left)) = (has(Part::Left), left) {
-        place.add(Role::Note, style.small, left, look.faint);
+        place.add(Role::Note, style.small(), left, look.faint);
     }
     let mut chapter_lines = Lines::new();
     for line in chapter {
-        chapter_lines.add(Role::Main, style.small, line, look.ink);
+        chapter_lines.add(Role::Main, style.small(), line, look.ink);
     }
     for line in chapter_left {
-        chapter_lines.add(Role::Main, style.small, line, look.faint);
+        chapter_lines.add(Role::Main, style.small(), line, look.faint);
     }
     y += line_gap;
     for (i, mut lines) in [place, chapter_lines].into_iter().enumerate() {

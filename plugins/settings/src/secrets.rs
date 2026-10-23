@@ -54,7 +54,7 @@ impl SecretList {
     pub(crate) fn new(env: &Env<'_>) -> Self {
         let (style, header, area) = page(env);
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
         }
@@ -168,7 +168,7 @@ impl SecretPage {
         }
         choices.push(Choice::Remove);
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
             id,

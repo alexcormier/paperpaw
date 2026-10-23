@@ -161,15 +161,18 @@ impl SetupScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let gap = style.gap as u16;
+        let gap = style.gap();
         let top = header.area().height + gap;
-        let height = style.row as u16 * ALL.len() as u16;
-        let line = style.row as u16 * 3 / 2;
+        let height = style.row() * ALL.len() as u16;
+        let line = style.row() * 3 / 2;
         let status = Rect::new(0, display.height.saturating_sub(line), display.width, line);
         let help_top = top + height + gap;
         Self {
-            list: ListView::new(Rect::new(0, top, display.width, height), style.row)
-                .focus_on_keys(env),
+            list: ListView::new(
+                Rect::new(0, top, display.width, height),
+                u32::from(style.row()),
+            )
+            .focus_on_keys(env),
             help: Rect::new(
                 0,
                 help_top,
@@ -255,8 +258,7 @@ impl Screen for SetupScreen {
         );
         // The help in small letters, to fit on small screens.
         let help = env.i18n.tr(self.focused().help());
-        let mut small = style;
-        small.text = style.small;
+        let small = style.with_text(style.small());
         ui::draw_message(canvas, env, &small, self.help, help);
         ui::draw_note_line(canvas, env, &style, self.status, &self.message);
     }

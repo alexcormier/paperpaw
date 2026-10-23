@@ -162,7 +162,7 @@ impl GroupList {
                 if e.link.is_none() {
                     heading
                 } else {
-                    style.row as u16
+                    style.row()
                 }
             })
             .collect();

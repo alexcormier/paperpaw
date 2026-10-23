@@ -189,9 +189,9 @@ fn caption_text<'e>(env: &Env<'e>, widget: &str) -> &'e str {
 fn caption_in(env: &Env<'_>, widget: &str, area: Rect) -> u16 {
     let style = UiStyle::new(env);
     let cap = caption_room(env, widget);
-    let least = widgets::line_height(env, style.text);
+    let least = widgets::line_height(env, style.text());
     let fits = style.font(env).is_some_and(|font| {
-        font.measure(style.small, caption_text(env, widget)) <= f32::from(area.width)
+        font.measure(style.small(), caption_text(env, widget)) <= f32::from(area.width)
     });
     if fits && cap + least <= area.height {
         cap
@@ -251,16 +251,16 @@ fn text_size(
 ) -> f32 {
     let style = UiStyle::new(env);
     let max = match widgets::size(env, widget) {
-        Size::Fit => f32::from(height).max(style.text),
+        Size::Fit => f32::from(height).max(style.text()),
         size => size.text(&style),
     };
     let wide = f32::from(width);
     let tall = |size: f32| line(font, size) <= height;
-    widgets::largest_size(max, style.text.min(max), |size| {
+    widgets::largest_size(max, style.text().min(max), |size| {
         tall(size) && font.measure(size, text) <= wide
     })
-    .or_else(|| widgets::largest_size(max.min(style.text), style.small, tall))
-    .unwrap_or(style.small.min(max))
+    .or_else(|| widgets::largest_size(max.min(style.text()), style.small(), tall))
+    .unwrap_or(style.small().min(max))
 }
 
 /// What a widget says without words in `area` (its whole place): that
@@ -284,12 +284,12 @@ fn empty(env: &Env<'_>, widget: &str, area: Rect) -> Wrapped {
         ("vocabulary.widget.empty", "vocabulary.widget.empty.short")
     };
     let long = env.i18n.tr(long);
-    let wrapped = Wrapped::fitting(env, long, style.text, style.small, width, inner.height);
+    let wrapped = Wrapped::fitting(env, long, style.text(), style.small(), width, inner.height);
     if wrapped.whole() {
         return wrapped;
     }
     let short = env.i18n.tr(short);
-    Wrapped::fitting(env, short, style.text, style.small, width, height)
+    Wrapped::fitting(env, short, style.text(), style.small(), width, height)
 }
 
 /// Draws what a widget says without words, as laid out where it was
@@ -401,7 +401,7 @@ fn lay_out(env: &Env<'_>, area: Rect, word: &Word) -> Option<Laid> {
     let style = UiStyle::new(env);
     let font = style.font(env)?;
     let id = WORD_NAME;
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let area = widgets::look::look(env, id, area).area;
     let room = area.height.saturating_sub(caption_in(env, id, area));
     let width = f32::from(area.width);
@@ -421,7 +421,7 @@ fn lay_out(env: &Env<'_>, area: Rect, word: &Word) -> Option<Laid> {
     // The sentence on as many lines as it needs and fit, three at most.
     let fit = (room.saturating_sub(big + book) / small.max(1)).min(3);
     let sentence = (widgets::shows(env, id, "sentence") && !word.sentence.is_empty() && fit > 0)
-        .then(|| Wrapped::new(env, &word.sentence, style.small, area.width, fit * small));
+        .then(|| Wrapped::new(env, &word.sentence, style.small(), area.width, fit * small));
     let sentence_h = sentence.as_ref().map_or(0, |s| s.height(env));
     let (block, caption) = captioned_block(env, id, area, big + sentence_h + book);
     let from = (book > 0).then(|| {
@@ -429,7 +429,7 @@ fn lay_out(env: &Env<'_>, area: Rect, word: &Word) -> Option<Laid> {
             "vocabulary.widget.from",
             &[("title", Arg::Str(&word.title))],
         );
-        ui::fit(&font, style.small, &text, width)
+        ui::fit(&font, style.small(), &text, width)
     });
     Some(Laid {
         block,
@@ -482,7 +482,7 @@ impl Widget for WordWidget {
         };
         let id = WORD_NAME;
         let size = widgets::size(env, id).text(&style);
-        let small = line(&font, style.small);
+        let small = line(&font, style.small());
         let sentence = if widgets::shows(env, id, "sentence") {
             small * 2
         } else {
@@ -551,10 +551,10 @@ fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, laid: &Laid) {
         sentence.draw(canvas, env, row(y, laid.sentence_h), align, look.faint);
     }
     if let Some(book) = &laid.book {
-        let small = line(&font, style.small);
-        let x = align.x(area, font.measure(style.small, book));
+        let small = line(&font, style.small());
+        let x = align.x(area, font.measure(style.small(), book));
         let at = row(y + laid.sentence_h, small);
-        ui::draw_label(canvas, &font, style.small, x, at, book, look.faint);
+        ui::draw_label(canvas, &font, style.small(), x, at, book, look.faint);
     }
 }
 
@@ -610,7 +610,7 @@ impl Widget for Saved {
         frame_height(env, id)
             + caption_room(env, id)
             + line(&font, size)
-            + notes * line(&font, style.small)
+            + notes * line(&font, style.small())
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -672,17 +672,17 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, summary: &Sum
         return;
     };
     let id = SAVED_NAME;
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let area = look.area;
     let room = area.height.saturating_sub(caption_in(env, id, area));
     let headline = env
         .i18n
         .plural("vocabulary.widget.words", summary.count as i64, &[]);
     let width = f32::from(area.width);
-    let fits = |text: &str| text.is_empty() || font.measure(style.small, text) <= width;
+    let fits = |text: &str| text.is_empty() || font.measure(style.small(), text) <= width;
     let mut notes = notes(env, summary, fits);
     notes.retain(|n| !n.is_empty() && fits(n));
-    let least = line(&font, style.text);
+    let least = line(&font, style.text());
     while !notes.is_empty() && least + notes.len() as u16 * small > room {
         notes.pop();
     }
@@ -711,10 +711,10 @@ fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, summary: &Sum
         look.ink,
     );
     for (n, note) in notes.iter().enumerate() {
-        let note = ui::fit(&font, style.small, note, width);
-        let x = align.x(area, font.measure(style.small, &note));
+        let note = ui::fit(&font, style.small(), note, width);
+        let x = align.x(area, font.measure(style.small(), &note));
         let at = row(block.y + big + n as u16 * small, small);
-        ui::draw_label(canvas, &font, style.small, x, at, &note, look.faint);
+        ui::draw_label(canvas, &font, style.small(), x, at, &note, look.faint);
     }
 }
 

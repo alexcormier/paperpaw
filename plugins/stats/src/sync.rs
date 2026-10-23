@@ -547,13 +547,16 @@ impl SyncScreen {
         if koreader_file(env).is_some() {
             rows.push(Row::Import);
         }
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         // No longer than the screen: the list pages where its rows are tall.
-        let height = (style.row as u16 * rows.len() as u16).min(display.height.saturating_sub(top));
-        let note_top = top + height + style.gap as u16;
+        let height = (style.row() * rows.len() as u16).min(display.height.saturating_sub(top));
+        let note_top = top + height + style.gap();
         Self {
-            list: ListView::new(Rect::new(0, top, display.width, height), style.row)
-                .focus_on_keys(env),
+            list: ListView::new(
+                Rect::new(0, top, display.width, height),
+                u32::from(style.row()),
+            )
+            .focus_on_keys(env),
             note: Rect::new(
                 0,
                 note_top,

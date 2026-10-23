@@ -559,6 +559,7 @@ enum paperpaw_sdk::ui::sections::Item { Heading(0: usize), Entry(0: usize) }
 enum paperpaw_sdk::ui::slider::SliderFocus { None, Focused, Editing }
 enum paperpaw_sdk::ui::slider::SliderStep { Moved(0: i64), Same, Chosen(0: i64), Cancelled }
 enum paperpaw_sdk::ui::style::Focus { Fill, Ring, Soft }
+enum paperpaw_sdk::ui::style::HeaderKind { Light, Dark, Plain }
 enum paperpaw_sdk::ui::style::Ink { Text, Paper, Note, Detail, Muted, Faint, Disabled, Rule, Line, LineFaint, OnFocusMuted, OnDarkMuted, Card, Section }
 enum paperpaw_sdk::ui::style::Separators { Line, Inset, None }
 enum paperpaw_sdk::ui::style::TextRole { Caption, Small, Body, Title, Head, Headline, Display, Numeral }

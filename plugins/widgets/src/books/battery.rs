@@ -87,7 +87,7 @@ impl Widget for BatteryWidget {
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
         let style = UiStyle::new(env);
-        widgets::line_height(env, style.title * 2.0) + style.gap as u16 + frame_height(env, WIDGET)
+        widgets::line_height(env, style.title() * 2.0) + style.gap() + frame_height(env, WIDGET)
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -120,15 +120,15 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, chargi
         look,
         env.i18n.tr("widgets.battery.caption"),
     );
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let charging = charging && widgets::shows(env, id, "charging");
     let low = i64::from(percent) <= env.settings.read(&BATTERY_LOW);
     let number = Number {
         font: &font,
         text: percent.to_string(),
         bolt: if charging { 0.55 } else { 0.0 },
-        least: style.small * 0.6,
-        ratio: font.line_metrics(style.text).ascent / style.text.max(1.0),
+        least: style.small() * 0.6,
+        ratio: font.line_metrics(style.text()).ascent / style.text().max(1.0),
     };
     let with_text = widgets::shows(env, id, "percent");
     let align = widgets::align(env, id);
@@ -139,13 +139,13 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, chargi
     let (w, h) = (f32::from(area.width), f32::from(area.height));
     let style_value = chosen(env, id, "style");
     // Not larger than this, however large the place: calm, not loud.
-    let most = fixed.map_or(style.title * 4.0, |f| f * 1.2);
+    let most = fixed.map_or(style.title() * 4.0, |f| f * 1.2);
     if style_value == STYLES[2] {
         // A ring with the number inside; beside it where the ring is
         // too small for it and there is room.
         let d = area.width.min(area.height).min((most * 1.6) as u16);
         let radius = u32::from(d / 2);
-        let thick = (radius / 7).max(style.line * 2).max(2);
+        let thick = (radius / 7).max(u32::from(style.line()) * 2).max(2);
         let inner = radius.saturating_sub(thick + (radius / 8).max(1)) as f32;
         let inside = number
             .largest(fixed.unwrap_or(inner * 0.9), |s| {
@@ -157,7 +157,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, chargi
         let beside_size = number
             .largest(fixed.unwrap_or(h * 0.55), |s| number.width(s) <= room)
             .unwrap_or(0.0);
-        let beside = with_text && inside < style.small && beside_size > 0.0;
+        let beside = with_text && inside < style.small() && beside_size > 0.0;
         if with_text && !beside && inside == 0.0 {
             // Too small for a ring: the number alone.
             let Some(size) = number.largest(most, |s| {
@@ -398,7 +398,9 @@ fn draw_battery(
             ),
         )
     };
-    let line = u32::from(short / 11).max(style.line * 2).max(2);
+    let line = u32::from(short / 11)
+        .max(u32::from(style.line()) * 2)
+        .max(2);
     let radius = u32::from(short / 5);
     canvas.fill_round(knob_at, u32::from(knob / 2), look.ink);
     canvas.fill_round(shell, radius, look.paper);

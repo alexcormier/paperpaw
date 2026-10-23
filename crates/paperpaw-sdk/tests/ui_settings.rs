@@ -261,8 +261,8 @@ fn numbers_above_each_other_get_the_room_of_the_widest() {
     let widest = ["-5 pixels", "40 pixels"]
         .into_iter()
         .max_by(|a, b| {
-            font.measure(style.text, a)
-                .total_cmp(&font.measure(style.text, b))
+            font.measure(style.text(), a)
+                .total_cmp(&font.measure(style.text(), b))
         })
         .unwrap();
     assert_eq!(room, widest);

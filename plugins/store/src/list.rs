@@ -114,7 +114,7 @@ impl ListScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut screen = Self {
             area,
@@ -184,7 +184,7 @@ impl ListScreen {
             },
         ];
         let heading = ui::heading_height(env, &self.style);
-        self.list = Sections::new(self.area, heading, self.style.row as u16, sections);
+        self.list = Sections::new(self.area, heading, self.style.row(), sections);
         self.list.focus_on(focus);
     }
 
@@ -376,7 +376,7 @@ impl Screen for ListScreen {
                     // How many have an update, marked as in their rows.
                     let count = self.counts.updates as i64;
                     let text = env.i18n.plural("store.updates-count", count, &[]);
-                    let right = f32::from(rect.x + rect.width) - style.margin as f32;
+                    let right = f32::from(rect.x + rect.width) - style.margin() as f32;
                     let band = rest;
                     rows::draw_pill(canvas, env, &style, band, right, &text, focused);
                     ui::draw_value_row(canvas, env, &style, rest, focused, name, "");

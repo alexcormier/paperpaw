@@ -425,7 +425,7 @@ impl Widget for Series {
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {
         let count = count(env, WIDGET, "count").clamp(1, 12) as u16;
         let style = UiStyle::new(env);
-        let cover = (width / count).saturating_sub(style.gap as u16) * 3 / 2;
+        let cover = (width / count).saturating_sub(style.gap()) * 3 / 2;
         cover + shelf::label_height(env) + widgets::caption_height(env) + frame_height(env, WIDGET)
     }
 

@@ -82,18 +82,18 @@ pub(crate) fn draw(
         return;
     };
     let band = ui::title_area(style, rect);
-    let margin = style.margin as f32;
+    let margin = style.margin() as f32;
     let right = f32::from(rect.x) + f32::from(rect.width) - margin;
     let ink = style.focus_ink(focused);
     // The mark first, from the right margin; the name gets the rest.
     let mark_left = match state(env, job, queued, plugin, origins) {
         State::Offered(text) | State::Busy(text) => {
-            let width = font.measure(style.small, &text);
+            let width = font.measure(style.small(), &text);
             let x = right - width;
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
+                style.small(),
                 x,
                 band,
                 &text,
@@ -103,12 +103,12 @@ pub(crate) fn draw(
         }
         State::Installed => {
             let text = env.i18n.tr("store.state.installed");
-            let width = font.measure(style.small, text);
-            let icon = style.small * ui::ICON_SCALE;
+            let width = font.measure(style.small(), text);
+            let icon = style.small() * ui::ICON_SCALE;
             let icon_width = ui::icon_width(env, "check", icon);
             let x = right - width;
-            ui::draw_label(canvas, &font, style.small, x, band, text, ink);
-            let icon_x = x - icon_width - style.gap as f32 / 2.0;
+            ui::draw_label(canvas, &font, style.small(), x, band, text, ink);
+            let icon_x = x - icon_width - style.gap() as f32 / 2.0;
             ui::draw_icon(canvas, env, "check", icon, icon_x, band, ink);
             icon_x
         }
@@ -120,13 +120,13 @@ pub(crate) fn draw(
     let name_area = Rect::new(
         band.x,
         band.y,
-        (mark_left - style.gap as f32 - f32::from(band.x)).max(0.0) as u16,
+        (mark_left - style.gap() as f32 - f32::from(band.x)).max(0.0) as u16,
         band.height,
     );
     ui::draw_label(
         canvas,
         &font,
-        style.text,
+        style.text(),
         f32::from(rect.x) + margin,
         name_area,
         &plugin.name,
@@ -140,12 +140,12 @@ pub(crate) fn draw(
         plugin.summary.clone()
     };
     let below = band.y + band.height;
-    let line = (style.small * 1.3) as u16;
+    let line = (style.small() * 1.3) as u16;
     let note = Rect::new(rect.x, below, (right - f32::from(rect.x)) as u16, line);
     ui::draw_label(
         canvas,
         &font,
-        style.small,
+        style.small(),
         f32::from(rect.x) + margin,
         note,
         &summary,
@@ -168,13 +168,13 @@ pub(crate) fn draw_note(
         return;
     };
     let band = ui::title_area(style, rect);
-    let margin = style.margin as u16;
-    let line = (style.small * 1.3) as u16;
+    let margin = style.margin();
+    let line = (style.small() * 1.3) as u16;
     let right = rect.x + rect.width - margin;
     let area = Rect::new(left, band.y + band.height, right.saturating_sub(left), line);
     let x = f32::from(left + margin);
     let color = style.focus_faint(focused, ui::Ink::Detail);
-    ui::draw_label(canvas, &font, style.small, x, area, text, color);
+    ui::draw_label(canvas, &font, style.small(), x, area, text, color);
 }
 
 /// Draws `text` as a small filled label ending at `right`, centred on
@@ -191,9 +191,9 @@ pub(crate) fn draw_pill(
     let Some(font) = style.font(env) else {
         return right;
     };
-    let pad = style.gap as f32;
-    let width = font.measure(style.small, text) + 2.0 * pad;
-    let height = font.line_metrics(style.small).line_height + pad / 2.0;
+    let pad = style.gap() as f32;
+    let width = font.measure(style.small(), text) + 2.0 * pad;
+    let height = font.line_metrics(style.small()).line_height + pad / 2.0;
     let x = right - width;
     let y = f32::from(band.y) + (f32::from(band.height) - height) / 2.0;
     let pill = Rect::new(x as u16, y as u16, width as u16, height as u16);
@@ -203,6 +203,6 @@ pub(crate) fn draw_pill(
         (Color::BLACK, Color::WHITE)
     };
     canvas.fill_round(pill, u32::from(pill.height) / 2, paper);
-    ui::draw_label(canvas, &font, style.small, x + pad, pill, text, letters);
+    ui::draw_label(canvas, &font, style.small(), x + pad, pill, text, letters);
     x
 }

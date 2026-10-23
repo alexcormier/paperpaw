@@ -26,7 +26,7 @@ impl BookList {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height - top);
         let books = store::books(env.storage);
         let seconds = totals::seconds_per_book(env.storage, &books);

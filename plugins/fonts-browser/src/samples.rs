@@ -80,7 +80,7 @@ pub(crate) struct Samples {
 impl Samples {
     pub(crate) fn new(style: &UiStyle) -> Self {
         // A little larger than menu text, for the letters to show.
-        Self::of_size((style.text * 1.3 + 0.5) as u32)
+        Self::of_size((style.text() * 1.3 + 0.5) as u32)
     }
 
     fn of_size(size: u32) -> Self {

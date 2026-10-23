@@ -138,7 +138,7 @@ impl PluginList {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         // A bar along the bottom: its button keeps the side margin from
         // the edge too.
         let bar_height = ui::edge_bar_height(&style);
@@ -205,8 +205,8 @@ impl PluginList {
         }
         let font = self.style.font(env)?;
         let label = env.i18n.tr("plugin-manager.restart");
-        let pad = self.style.margin as u16;
-        let width = font.measure(self.style.text, label) as u16 + 2 * pad;
+        let pad = self.style.margin();
+        let width = font.measure(self.style.text(), label) as u16 + 2 * pad;
         let band = ui::edge_bar_band(&self.style, self.bar, false);
         Some(Rect::new(
             self.bar.width.saturating_sub(width + pad),
@@ -489,7 +489,7 @@ impl Screen for PluginList {
             });
         // The bar: a line above it, the hint or what a restart does, and
         // the button.
-        let line = Rect::new(0, self.bar.y, self.bar.width, (style.line as u16).max(1));
+        let line = Rect::new(0, self.bar.y, self.bar.width, (style.line()).max(1));
         canvas.fill(line, paperpaw_sdk::Color::gray(150));
         let button = self.restart_button(env);
         if let Some(button) = button {
@@ -507,14 +507,14 @@ impl Screen for PluginList {
             let area = Rect::new(
                 0,
                 self.bar.y,
-                right.saturating_sub(style.gap as u16),
+                right.saturating_sub(style.gap()),
                 self.bar.height,
             );
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
-                style.margin as f32,
+                style.small(),
+                style.margin() as f32,
                 area,
                 ui::tr_input(env, key),
                 style.faint(ui::Ink::Note),

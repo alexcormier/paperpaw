@@ -910,9 +910,9 @@ fn titles_break_between_words_only() {
     for width in [40u16, 60, 90, 120, 180, 260, 400] {
         for height in [30u16, 60, 120, 240] {
             let mut lines = Lines::new();
-            lines.add(Role::Caption, style.small, "Next up", Color::BLACK);
-            lines.add(Role::Title, style.title, title, Color::BLACK);
-            lines.add(Role::Note, style.small, "Ann Author", Color::BLACK);
+            lines.add(Role::Caption, style.small(), "Next up", Color::BLACK);
+            lines.add(Role::Title, style.title(), title, Color::BLACK);
+            lines.add(Role::Note, style.small(), "Ann Author", Color::BLACK);
             lines.fit(&env, width, height);
             let font = style.font(&env).unwrap();
             for line in &lines.lines {

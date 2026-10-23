@@ -479,6 +479,15 @@ file to your report.
 - SDK: dates and times as values: `time::Date` and `time::Time`, which
   `ui::DatePicker` and `ui::TimePicker` take and give; `line_at` of a
   page's layers and the widget grid's `cell_at` take a `Point`.
+- SDK: `UiStyle` keeps its fields and is read with methods: sizes in
+  pixels as `u16` (`row()`, `margin()`, `gap()`, `line()`, `corner()`,
+  `header()`, `finger()`, `control_row()`), text sizes as `f32`
+  (`text()`, `small()`, `title()`, `head()`), and its looks
+  (`focus()`, `separators()`, `cards()`, `pill()`, `strong()`,
+  `header_kind()` with `HeaderKind::{Light, Dark, Plain}`). How many
+  grays the panel shows is `black_and_white()` or `smooth_grays()`. A
+  style changed for a screen of its own is made with `with_row`,
+  `with_margin`, `with_corner`, `with_pill`, `with_text` and the like.
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,

@@ -62,13 +62,13 @@ impl FontScreen {
         let header = ui::Header::new(env, &style, true);
         let samples = Samples::new(&style);
         let display = env.device.display;
-        let gap = style.gap as u16;
+        let gap = style.gap();
         let top = header.area().height + gap;
-        let line = (style.row as u16) * 3 / 2;
+        let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         let sample_line = (samples.size as f32 * 1.4) as u16;
         let sample = Rect::new(0, top, display.width, sample_line * SAMPLE_LINES as u16);
-        let info_height = (style.small * 1.4 * 2.0) as u16 + gap;
+        let info_height = (style.small() * 1.4 * 2.0) as u16 + gap;
         let info = Rect::new(
             0,
             sample.y + sample.height + gap,
@@ -84,7 +84,7 @@ impl FontScreen {
         );
         let font = params.get(FONT).and_then(Font::from_param);
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             sample,
             info,
             status,
@@ -257,12 +257,12 @@ impl Screen for FontScreen {
             return;
         };
         // The sentence in the font, or in the menus' until it is here.
-        let margin = style.margin as f32;
+        let margin = style.margin() as f32;
         let width = f32::from(self.sample.width) - 2.0 * margin;
         let sentence = samples::sentence(env);
         let (face, size, color) = match self.samples.get(&font.id) {
             Some(sample) => (Some(sample), self.samples.size as f32, Color::BLACK),
-            None => (style.font(env), style.text, style.faint(ui::Ink::Faint)),
+            None => (style.font(env), style.text(), style.faint(ui::Ink::Faint)),
         };
         let mut bottom = self.sample.y;
         if let Some(face) = face {
@@ -285,23 +285,23 @@ impl Screen for FontScreen {
         }
         // What it is, by whom, under which licence, right below; then
         // what can be done.
-        let gap = style.gap as u16;
+        let gap = style.gap();
         self.info.y = bottom + gap;
         self.list.area().y = self.info.y + self.info.height + gap;
         self.list.area().height = self.status.y.saturating_sub(self.list.area().y);
         if let Some(ui_font) = style.font(env) {
-            let line = style.small * 1.4;
-            let ascent = ui_font.line_metrics(style.small).ascent;
+            let line = style.small() * 1.4;
+            let ascent = ui_font.line_metrics(style.small()).ascent;
             let licence = env.i18n.format(
                 "fonts-browser.licence",
                 &[("licence", Arg::Str(&font.licence))],
             );
             for (n, text) in [list::describe(env, font), licence].iter().enumerate() {
-                let text = ui::fit(&ui_font, style.small, text, width);
+                let text = ui::fit(&ui_font, style.small(), text, width);
                 let baseline = f32::from(self.info.y) + line * n as f32 + ascent;
                 ui_font.draw(
                     canvas,
-                    style.small,
+                    style.small(),
                     margin,
                     baseline as i32,
                     &text,

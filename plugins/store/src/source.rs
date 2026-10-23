@@ -57,47 +57,47 @@ impl Screen for SourceScreen {
             return;
         };
         let display = env.device.display;
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let width = display.width.saturating_sub(2 * margin);
-        let mut y = self.header.area().height + style.gap as u16 * 2;
+        let mut y = self.header.area().height + style.gap() * 2;
         // Who it is from, then the code, then the address in full.
-        let line = font.line_metrics(style.text).line_height as u16;
+        let line = font.line_metrics(style.text()).line_height as u16;
         let name = Rect::new(margin, y, width, line);
         ui::draw_label(
             canvas,
             &font,
-            style.text,
+            style.text(),
             f32::from(margin),
             name,
             &self.title,
             Color::BLACK,
         );
-        y += line + style.gap as u16;
+        y += line + style.gap();
         if let Some(qr) = &self.qr {
             // Three quarters of the width, at most half the height.
             let side = (width * 3 / 4).min(display.height / 2);
             let area = Rect::new((display.width - side) / 2, y, side, side);
             if let Some(drawn) = ui::draw_qr(canvas, qr, area) {
-                y = drawn.y + drawn.height + style.gap as u16;
+                y = drawn.y + drawn.height + style.gap();
             }
         }
         let shown = self.url.strip_prefix("https://").unwrap_or(&self.url);
-        let small = font.line_metrics(style.small).line_height;
+        let small = font.line_metrics(style.small()).line_height;
         for text in [shown, env.i18n.tr("store.source.help")] {
-            for range in font.wrap(style.small, text, f32::from(width)) {
+            for range in font.wrap(style.small(), text, f32::from(width)) {
                 let part = text[range].trim_end();
-                let x =
-                    f32::from(margin) + (f32::from(width) - font.measure(style.small, part)) / 2.0;
+                let x = f32::from(margin)
+                    + (f32::from(width) - font.measure(style.small(), part)) / 2.0;
                 let at = Rect::new(margin, y, width, small as u16);
                 let color = if text == shown {
                     Color::BLACK
                 } else {
                     style.faint(ui::Ink::Detail)
                 };
-                ui::draw_label(canvas, &font, style.small, x, at, part, color);
+                ui::draw_label(canvas, &font, style.small(), x, at, part, color);
                 y += small as u16;
             }
-            y += style.gap as u16;
+            y += style.gap();
         }
     }
 

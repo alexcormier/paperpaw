@@ -206,7 +206,7 @@ impl MenuScreen {
         items.retain(|_| keep.next().unwrap_or(true));
         let style = UiStyle::new(env);
         let display = env.device.display;
-        let border = style.line * 2;
+        let border = u32::from(style.line()) * 2;
         let heading = ui::heading_height(env, &style);
         let icon_width = ui::icon_room(
             env,
@@ -221,7 +221,8 @@ impl MenuScreen {
             .map(|item| {
                 let spec = Self::setting(env, &item.id).filter(|_| !item.heading)?;
                 let room = ui::number_room(env, &style, core::iter::once(spec));
-                let lines = ui::row_lines(env, &style, spec, width, &room, style.row, false);
+                let row = u32::from(style.row());
+                let lines = ui::row_lines(env, &style, spec, width, &room, row, false);
                 Some((lines, room))
             })
             .collect();
@@ -230,7 +231,7 @@ impl MenuScreen {
             .zip(&lines)
             .map(|(item, lines)| {
                 // A number's − and + grow, and its row with them.
-                let row = lines.as_ref().map_or(style.row as u16, |(l, _)| l.height);
+                let row = lines.as_ref().map_or(style.row(), |(l, _)| l.height);
                 if item.heading {
                     heading
                 } else if item.description.is_some() {
@@ -245,17 +246,17 @@ impl MenuScreen {
             .iter()
             .map(|&h| u32::from(h))
             .sum::<u32>()
-            .max(style.row);
-        let wanted = total + 2 * style.gap + border;
+            .max(u32::from(style.row()));
+        let wanted = total + 2 * u32::from(style.gap()) + border;
         // Up to the header of the screen below, which stays in sight.
-        let most = u32::from(display.height).saturating_sub(style.header);
+        let most = u32::from(display.height).saturating_sub(u32::from(style.header()));
         let height = wanted.min(most) as u16;
         let region = Rect::new(0, display.height - height, display.width, height);
         let mut list_area = Rect::new(
             0,
-            region.y + (border + style.gap) as u16,
+            region.y + (border + u32::from(style.gap())) as u16,
             display.width,
-            height.saturating_sub((border + 2 * style.gap) as u16),
+            height.saturating_sub((border + 2 * u32::from(style.gap())) as u16),
         );
         // Too many items: a bar at the bottom shows that there are more
         // pages and turns them.
@@ -372,16 +373,16 @@ impl MenuScreen {
         // The line under it, below the row.
         let rect = match &item.description {
             Some(key) => {
-                let row = laid.map_or(style.row as u16, |(l, _)| l.height);
+                let row = laid.map_or(style.row(), |(l, _)| l.height);
                 let row = row.min(rect.height);
                 let below = Rect::new(rect.x, rect.y + row, rect.width, rect.height - row);
-                let x = f32::from(below.x) + style.margin as f32 + f32::from(self.icon_width);
-                let width = f32::from(below.width) - x - style.margin as f32;
-                let text = ui::fit(&font, style.small, env.i18n.tr(key), width);
+                let x = f32::from(below.x) + style.margin() as f32 + f32::from(self.icon_width);
+                let width = f32::from(below.width) - x - style.margin() as f32;
+                let text = ui::fit(&font, style.small(), env.i18n.tr(key), width);
                 ui::draw_label(
                     canvas,
                     &font,
-                    style.small,
+                    style.small(),
                     x,
                     below,
                     &text,
@@ -445,10 +446,10 @@ impl MenuScreen {
                 ui::draw_value_row(canvas, env, &style, rect, focused, label, "›");
             }
             None => {
-                let x = f32::from(rect.x) + style.margin as f32;
-                let width = f32::from(rect.width) - 2.0 * style.margin as f32;
-                let label = ui::fit(&font, style.text, label, width);
-                ui::draw_label(canvas, &font, style.text, x, rect, &label, ink);
+                let x = f32::from(rect.x) + style.margin() as f32;
+                let width = f32::from(rect.width) - 2.0 * style.margin() as f32;
+                let label = ui::fit(&font, style.text(), label, width);
+                ui::draw_label(canvas, &font, style.text(), x, rect, &label, ink);
             }
         }
     }
@@ -456,8 +457,8 @@ impl MenuScreen {
 
 /// The height of the line under an entry.
 fn description_height(env: &Env<'_>, style: &UiStyle) -> u16 {
-    style.font(env).map_or(style.small as u16, |font| {
-        font.line_metrics(style.small).line_height as u16
+    style.font(env).map_or(style.small() as u16, |font| {
+        font.line_metrics(style.small()).line_height as u16
     })
 }
 
@@ -500,7 +501,7 @@ impl Screen for MenuScreen {
             self.region.x,
             self.region.y,
             self.region.width,
-            style.line.max(1) as u16,
+            u32::from(style.line()).max(1) as u16,
         );
         canvas.fill(border, Color::BLACK);
         if style.font(env).is_none() {
@@ -642,7 +643,7 @@ impl Screen for MenuScreen {
             let x = gesture.start.x;
             // A little room around the buttons: easier to hit.
             let slack = if touch {
-                i32::from(self.style.gap as u16)
+                i32::from(self.style.gap())
             } else {
                 0
             };

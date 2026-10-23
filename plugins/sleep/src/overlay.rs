@@ -186,8 +186,8 @@ fn box_side(env: &Env<'_>) -> u16 {
 fn placed(env: &Env<'_>, w: u16, h: u16) -> Rect {
     let display = env.device.display;
     let style = UiStyle::new(env);
-    let margin = style.margin as u16;
-    let status = paperpaw_sdk::widgets::line_height(env, style.small) + style.gap as u16;
+    let margin = style.margin();
+    let status = paperpaw_sdk::widgets::line_height(env, style.small()) + style.gap();
     let (w, h) = (
         w.min(display.width.saturating_sub(2 * margin)),
         h.min(display.height.saturating_sub(2 * (margin + status))),
@@ -216,7 +216,7 @@ fn placed(env: &Env<'_>, w: u16, h: u16) -> Rect {
 
 /// The padding of a widget's panel.
 fn pad(env: &Env<'_>) -> u16 {
-    UiStyle::new(env).gap as u16 * 2
+    UiStyle::new(env).gap() * 2
 }
 
 /// `area` less `pad` all round.
@@ -330,7 +330,7 @@ impl Picker {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let note = style.noted_row() as u16;
         let failed = paperpaw_sdk::read_file(env.storage, &crate::data("overlay-failed.txt"), 1024)
             .ok()
@@ -348,7 +348,7 @@ impl Picker {
         Self {
             rows,
             failed,
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
         }

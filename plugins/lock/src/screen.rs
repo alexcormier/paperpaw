@@ -119,19 +119,19 @@ impl Layout {
         let display = env.device.display;
         let (w, h) = (display.width, display.height);
         let metrics = Metrics::new(display.dpi);
-        let row = style.row as u16;
-        let gap = style.gap as u16;
+        let row = style.row();
+        let gap = style.gap();
         let mut y = if header {
-            style.header as u16 + gap * 2
+            style.header() + gap * 2
         } else {
             h / 12
         };
         let list_top = y;
-        let clock_size = style.title * 2.6;
+        let clock_size = style.title() * 2.6;
         let clock = if header {
             Rect::new(0, y, w, 0)
         } else {
-            let height = line(env, style, clock_size) + line(env, style, style.small);
+            let height = line(env, style, clock_size) + line(env, style, style.small());
             Rect::new(0, y, w, height)
         };
         y += clock.height + if header { 0 } else { gap * 3 };
@@ -143,9 +143,9 @@ impl Layout {
         y += row + gap;
         // The keypad at the bottom: round keys, at most 15 mm across,
         // three a row with room between them.
-        let bottom = h.saturating_sub((h / 14).max(style.margin as u16 * 2));
+        let bottom = h.saturating_sub((h / 14).max(style.margin() * 2));
         let room = bottom.saturating_sub(y);
-        let width = w.saturating_sub(style.margin as u16 * 4);
+        let width = w.saturating_sub(style.margin() * 4);
         let d = (metrics.mm(15) as u16)
             .min(room * 4 / 19)
             .min(width / 4)
@@ -313,7 +313,7 @@ impl LockScreen {
     /// line between the others.
     fn kind_list(&self) -> ui::ListView {
         let l = &self.layout;
-        let row = self.style.row as u16;
+        let row = self.style.row();
         let area = Rect::new(0, l.list_top, l.dots.width, row * KINDS.len() as u16);
         let mut list = ui::ListView::new(area, u32::from(row));
         list.set_focus(self.focus);
@@ -483,7 +483,7 @@ impl LockScreen {
             if (i as usize) < self.entered.len() {
                 circle(canvas, Point::new(x, y), r, Color::BLACK);
             } else {
-                ring(canvas, Point::new(x, y), r, style.line.max(2));
+                ring(canvas, Point::new(x, y), r, u32::from(style.line()).max(2));
             }
             x += gap;
         }
@@ -507,7 +507,7 @@ impl LockScreen {
                 Color::WHITE
             } else {
                 if digit {
-                    ring(canvas, centre, radius, style.line.max(1));
+                    ring(canvas, centre, radius, u32::from(style.line()).max(1));
                 }
                 Color::BLACK
             };
@@ -542,12 +542,17 @@ impl LockScreen {
         let x = (f32::from(top.width) - font.measure(l.clock_size, &time)) / 2.0;
         ui::draw_label(canvas, &font, l.clock_size, x, top, &time, Color::BLACK);
         if let Some(date) = paperpaw_sdk::time::date_text(env) {
-            let below = Rect::new(top.x, top.y + big, top.width, line(env, style, style.small));
-            let x = (f32::from(below.width) - font.measure(style.small, &date)) / 2.0;
+            let below = Rect::new(
+                top.x,
+                top.y + big,
+                top.width,
+                line(env, style, style.small()),
+            );
+            let x = (f32::from(below.width) - font.measure(style.small(), &date)) / 2.0;
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
+                style.small(),
                 x,
                 below,
                 &date,
@@ -591,10 +596,20 @@ impl LockScreen {
                 Color::BLACK,
             );
             if on {
-                ring(canvas, point, l.radius * 2, self.style.line.max(1));
+                ring(
+                    canvas,
+                    point,
+                    l.radius * 2,
+                    u32::from(self.style.line()).max(1),
+                );
             }
             if self.shown && self.focus == i {
-                ring(canvas, point, l.radius * 3, self.style.line * 2);
+                ring(
+                    canvas,
+                    point,
+                    l.radius * 3,
+                    u32::from(self.style.line()) * 2,
+                );
             }
         }
         if !env.device.input.touch {
@@ -674,9 +689,9 @@ impl Screen for LockScreen {
                     ui::draw_value_row(canvas, env, &style, row, focused, name, "");
                     // The kind in use, ticked.
                     if kind == current {
-                        let size = style.text;
+                        let size = style.text();
                         let x = f32::from(row.x + row.width)
-                            - style.margin as f32
+                            - style.margin() as f32
                             - ui::icon_width(env, "check", size);
                         let ink = style.focus_ink(focused);
                         ui::draw_icon(canvas, env, "check", size, x, row, ink);

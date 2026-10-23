@@ -201,10 +201,10 @@ impl Frame {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height - top);
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
             reorder: Reorder::default(),
@@ -589,20 +589,21 @@ impl EntryScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         // No higher than the screen: the list pages where its rows are tall.
-        let height = (style.row * (OPTIONS.len() as u32 + 1) + style.gap * 2)
+        let height = (u32::from(style.row()) * (OPTIONS.len() as u32 + 1)
+            + u32::from(style.gap()) * 2)
             .min(u32::from(display.height)) as u16;
         let region = Rect::new(0, display.height - height, display.width, height);
         let list_area = Rect::new(
             0,
-            region.y + style.row as u16 + style.gap as u16,
+            region.y + style.row() + style.gap(),
             display.width,
-            height.saturating_sub(style.row as u16 + style.gap as u16),
+            height.saturating_sub(style.row() + style.gap()),
         );
         Self {
             menu: params.get(MENU).unwrap_or_default().to_string(),
             index: params.get(INDEX).and_then(|i| i.parse().ok()).unwrap_or(0),
             refused: false,
-            list: ListView::new(list_area, style.row).focus_on_keys(env),
+            list: ListView::new(list_area, u32::from(style.row())).focus_on_keys(env),
             style,
             region,
         }
@@ -669,7 +670,7 @@ impl Screen for EntryScreen {
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
-            (style.line * 2).max(2),
+            (u32::from(style.line()) * 2).max(2),
             Color::BLACK,
         );
         let Some(font) = style.font(env) else {
@@ -677,13 +678,13 @@ impl Screen for EntryScreen {
         };
         let id = entries(env, &self.menu).get(self.index).cloned();
         let title = id.map_or(String::new(), |id| name(env, id.as_str()));
-        let title_area = Rect::new(r.x, r.y + style.gap as u16, r.width, style.row as u16);
-        let x = style.margin as f32;
-        let title = ui::fit(&font, style.title, &title, f32::from(r.width) - 2.0 * x);
+        let title_area = Rect::new(r.x, r.y + style.gap(), r.width, style.row());
+        let x = style.margin() as f32;
+        let title = ui::fit(&font, style.title(), &title, f32::from(r.width) - 2.0 * x);
         ui::draw_label(
             canvas,
             &font,
-            style.title,
+            style.title(),
             x,
             title_area,
             &title,
@@ -701,7 +702,7 @@ impl Screen for EntryScreen {
             |canvas, index, rect, focused| {
                 let label = env.i18n.tr(OPTIONS[index]);
                 let color = style.focus_ink(focused);
-                ui::draw_label(canvas, &font, style.text, x, rect, label, color);
+                ui::draw_label(canvas, &font, style.text(), x, rect, label, color);
             },
         );
     }

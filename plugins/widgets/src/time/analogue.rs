@@ -101,7 +101,7 @@ pub(super) fn register(r: &mut Registrar) -> Result<(), RegisterError> {
 
 fn height(env: &Env<'_>, width: u16) -> u16 {
     let style = paperpaw_sdk::ui::UiStyle::new(env);
-    let face = width.min((style.row * 4) as u16);
+    let face = width.min((u32::from(style.row()) * 4) as u16);
     face + frame_height(env, ID.as_str())
 }
 
@@ -131,9 +131,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     // face two thirds of the height at least; the face the rest, round.
     let below = match (&font, date, &date_text) {
         (Some(font), "below", Some(text))
-            if font.measure(style.small, text) <= f32::from(area.width) =>
+            if font.measure(style.small(), text) <= f32::from(area.width) =>
         {
-            let below = line(font, style.small) as u16 + style.gap as u16 / 2;
+            let below = line(font, style.small()) as u16 + style.gap() / 2;
             if below * 3 <= area.height { below } else { 0 }
         }
         _ => 0,
@@ -151,7 +151,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let ink = look.ink;
 
     // Rings round the face.
-    let ring = (radius / 40).max(1) + u32::from(style.line > 1);
+    let ring = (radius / 40).max(1) + u32::from(u32::from(style.line()) > 1);
     match chosen_name(env, ID.as_str(), "ring") {
         "one" => canvas.stroke_circle(center, radius, ring, ink),
         "two" => {
@@ -238,9 +238,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 
     // The date below, placed as the face is (it fits whole: see above).
     if let (true, Some(text)) = (below > 0, &date_text) {
-        let gap = style.gap as u16 / 2;
+        let gap = style.gap() / 2;
         let row = Rect::new(area.x, (top + 2 * r) as u16 + gap, area.width, below - gap);
-        let small = style.small;
+        let small = style.small();
         widgets::draw_line(canvas, env, row, align, small, small, text, look.faint);
     }
 }

@@ -294,7 +294,7 @@ impl Widget for PictureWidget {
         let Some(font) = style.font(env) else {
             return;
         };
-        let small = widgets::line_height(env, style.small);
+        let small = widgets::line_height(env, style.small());
         // Just below the picture, wherever its whole leaves it.
         let row = Rect::new(
             area.x,
@@ -302,9 +302,9 @@ impl Widget for PictureWidget {
             area.width,
             small,
         );
-        let name = ui::fit(&font, style.small, &shown.name, f32::from(area.width));
-        let x = widgets::align(env, ID.as_str()).x(area, font.measure(style.small, &name));
-        ui::draw_label(canvas, &font, style.small, x, row, &name, look.faint);
+        let name = ui::fit(&font, style.small(), &shown.name, f32::from(area.width));
+        let x = widgets::align(env, ID.as_str()).x(area, font.measure(style.small(), &name));
+        ui::draw_label(canvas, &font, style.small(), x, row, &name, look.faint);
     }
 
     fn targets(&self, _: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
@@ -318,7 +318,7 @@ fn caption_height(env: &Env<'_>) -> u16 {
         return 0;
     }
     let style = UiStyle::new(env);
-    widgets::line_height(env, style.small) + style.gap as u16 / 2
+    widgets::line_height(env, style.small()) + style.gap() / 2
 }
 
 /// The part of a picture `width` × `height` that has the proportions of

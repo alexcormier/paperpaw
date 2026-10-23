@@ -342,8 +342,8 @@ impl PhoneScreen {
         let Some(font) = style.font(env) else {
             return;
         };
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
+        let margin = style.margin();
+        let gap = style.gap();
         // The button at the bottom keeps the margin from the screen's edge.
         let inner = Rect::new(
             margin,
@@ -352,8 +352,8 @@ impl PhoneScreen {
             area.height.saturating_sub(margin),
         );
         let mut stack = ui::Stack::new(inner, gap);
-        let line = widgets::line_height(env, style.text);
-        let small = widgets::line_height(env, style.small);
+        let line = widgets::line_height(env, style.text());
+        let small = widgets::line_height(env, style.small());
         let width = f32::from(inner.width);
         // Lines of `text` wrapped, together one part of the stack.
         let lines = |canvas: &mut Canvas<'_>,
@@ -382,7 +382,7 @@ impl PhoneScreen {
                 canvas,
                 &mut stack,
                 problem,
-                style.small,
+                style.small(),
                 small,
                 Color::BLACK,
             );
@@ -392,12 +392,12 @@ impl PhoneScreen {
             Step::Open => (2, "wifi.phone.open-title", "wifi.phone.open-note"),
         };
         let title = format!("{number}. {}", env.i18n.tr(title));
-        lines(canvas, &mut stack, &title, style.text, line, Color::BLACK);
+        lines(canvas, &mut stack, &title, style.text(), line, Color::BLACK);
         lines(
             canvas,
             &mut stack,
             env.i18n.tr(note),
-            style.small,
+            style.small(),
             small,
             style.faint(ui::Ink::Note),
         );
@@ -419,10 +419,10 @@ impl PhoneScreen {
         let Some(font) = style.font(env) else {
             return;
         };
-        let (margin, gap) = (style.margin as u16, style.gap as u16);
-        let small = widgets::line_height(env, style.small);
+        let (margin, gap) = (style.margin(), style.gap());
+        let small = widgets::line_height(env, style.small());
         // The name and the password large, to be read and typed.
-        let big = style.text * 1.2;
+        let big = style.text() * 1.2;
         let tall = widgets::line_height(env, big);
         let card = stack.take_bottom(2 * margin + 2 * (small + tall) + gap);
         let inside = ui::draw_card(canvas, &style, card, widgets::Frame::Line);
@@ -437,14 +437,14 @@ impl PhoneScreen {
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
+                style.small(),
                 x,
                 row,
                 env.i18n.tr(key),
                 style.faint(ui::Ink::Note),
             );
             let (size, value) =
-                widgets::fit_line(&font, big, style.small, value, f32::from(inside.width));
+                widgets::fit_line(&font, big, style.small(), value, f32::from(inside.width));
             let row = Rect::new(inside.x, y + small, inside.width, tall);
             ui::draw_label(canvas, &font, size, x, row, &value, Color::BLACK);
             y += small + tall + gap;
@@ -491,18 +491,18 @@ fn draw_opening(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, room: R
     let Some(font) = style.font(env) else {
         return;
     };
-    let margin = style.margin as u16;
+    let margin = style.margin();
     let width = room.width.saturating_sub(2 * margin);
-    let line = font.line_metrics(style.small).line_height as u16;
-    let lines = font.wrap(style.small, text, f32::from(width));
+    let line = font.line_metrics(style.small()).line_height as u16;
+    let lines = font.wrap(style.small(), text, f32::from(width));
     let high = line * lines.len() as u16;
     let mut y = room.y + room.height.saturating_sub(high) / 2;
     for range in lines {
         let part = text[range].trim();
         let x = f32::from(room.x + margin)
-            + (f32::from(width) - font.measure(style.small, part)).max(0.0) / 2.0;
+            + (f32::from(width) - font.measure(style.small(), part)).max(0.0) / 2.0;
         let at = Rect::new(room.x, y, room.width, line);
-        ui::draw_label(canvas, &font, style.small, x, at, part, Color::BLACK);
+        ui::draw_label(canvas, &font, style.small(), x, at, part, Color::BLACK);
         y += line;
     }
 }
@@ -603,7 +603,7 @@ impl Screen for PhoneScreen {
         let title = env.i18n.tr("wifi.phone.title");
         self.header.draw(canvas, env, &style, title, None, None);
         let display = env.device.display;
-        let top = self.header.area().height + style.gap as u16;
+        let top = self.header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let message = |key| env.i18n.tr(key).to_string();
         let text = match (&self.state, &self.own) {

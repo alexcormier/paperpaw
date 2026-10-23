@@ -112,7 +112,7 @@ fn a_drawn_list_tells_its_rows_and_their_texts() {
         ("Font size", "12 pt"),
         ("Language", "English"),
     ];
-    let mut list = ListView::new(Rect::new(0, 100, 480, 600), style.row);
+    let mut list = ListView::new(Rect::new(0, 100, 480, 600), u32::from(style.row()));
     list.set_focus(1);
     let (described, _) = describe(480, 800, |canvas| {
         list.draw(canvas, &style, rows.len(), |canvas, i, rect, focused| {
@@ -374,14 +374,14 @@ proptest! {
             &env,
             below,
             widgets::align(&env, "t.clock"),
-            style.text,
+            style.text(),
             &text,
             look.ink,
         );
-        prop_assert!(drawn <= below.height.max(widgets::line_height(&env, style.text)));
+        prop_assert!(drawn <= below.height.max(widgets::line_height(&env, style.text())));
         // Two pixels of slack for letters reaching past their box.
         let bound = Rect::new(inner.x.saturating_sub(2), inner.y, inner.width + 4, inner.height);
-        if below.height >= widgets::line_height(&env, style.text) {
+        if below.height >= widgets::line_height(&env, style.text()) {
             prop_assert_eq!(drawn_outside(&mut frame, bound), None);
         }
     }
@@ -399,8 +399,8 @@ proptest! {
         let h = Harness::new(Device::TOUCH);
         let env = h.env();
         let style = UiStyle::new(&env);
-        let wrapped = Wrapped::new(&env, &text, style.text, width, height);
-        let line = widgets::line_height(&env, style.text);
+        let wrapped = Wrapped::new(&env, &text, style.text(), width, height);
+        let line = widgets::line_height(&env, style.text());
         prop_assert!(wrapped.height(&env) <= height.max(line));
         let area = Rect::new(20, 10, width, height.max(line));
         let (described, mut frame) = describe(480, 800, |c| {

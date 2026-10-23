@@ -161,10 +161,10 @@ fn shows(env: &Env<'_>) -> String {
 fn height(env: &Env<'_>, _: u16) -> u16 {
     let style = UiStyle::new(env);
     let size = match widgets::size(env, ID.as_str()) {
-        Size::Fit => style.title * 1.6,
+        Size::Fit => style.title() * 1.6,
         size => size.text(&style),
     };
-    let line = below(env).map_or(0, |_| widgets::line_height(env, style.small));
+    let line = below(env).map_or(0, |_| widgets::line_height(env, style.small()));
     widgets::line_height(env, size) + line + frame_height(env, ID.as_str())
 }
 
@@ -184,12 +184,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let width = f32::from(area.width);
     // The date below, where it fits whole (without its weekday if need
     // be) and leaves a line for the greeting.
-    let small_line = widgets::line_height(env, style.small);
+    let small_line = widgets::line_height(env, style.small());
     let below = below(env).and_then(|date| {
-        let fits = |text: &str| ui_font.measure(style.small, text) <= width;
+        let fits = |text: &str| ui_font.measure(style.small(), text) <= width;
         let short = String::from(short_date(&date, fits));
         let room = area.height.saturating_sub(small_line);
-        (fits(&short) && room >= text::line_height(&font, style.small) as u16).then_some(short)
+        (fits(&short) && room >= text::line_height(&font, style.small()) as u16).then_some(short)
     });
     let small = below.as_ref().map_or(0, |_| small_line);
     let room = f32::from(area.height.saturating_sub(small));
@@ -207,7 +207,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let mut icon = widgets::shows(env, ID.as_str(), ICON) && ui::has_icons(env);
     let mut text = greeting(env, part);
     let fits = |text: &str, icon: bool| {
-        font.measure(style.small, text) + icon_width(icon, style.small) <= width
+        font.measure(style.small(), text) + icon_width(icon, style.small()) <= width
     };
     if !fits(&text, icon) {
         text = String::from(env.i18n.tr(part.key()));
@@ -220,8 +220,8 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     // and the height left by the date allow.
     let (max, min) = match widgets::size(env, ID.as_str()) {
         // As large as the room holds, a line of it checked below.
-        Size::Fit => (room.max(style.small), style.small),
-        size => (size.text(&style), size.text(&style).min(style.small)),
+        Size::Fit => (room.max(style.small()), style.small()),
+        size => (size.text(&style), size.text(&style).min(style.small())),
     };
     let one_line = widgets::largest_size(max, min, |size| {
         font.measure(size, &text) + icon_width(size) <= width
@@ -268,12 +268,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         if let Some(below) = &below {
             parts.push(crate::time::Part {
                 lines: alloc::vec![below.as_str()],
-                size: style.small,
+                size: style.small(),
                 color: look.faint,
                 font: Some(&ui_font),
             });
         }
-        let gap = style.gap as f32 / 2.0;
+        let gap = style.gap() as f32 / 2.0;
         crate::time::draw_stack(canvas, &font, area, align, &parts, gap);
         return;
     }
@@ -300,9 +300,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
         );
     }
     if let Some(below) = below {
-        let x = align.x(area, ui_font.measure(style.small, &below));
+        let x = align.x(area, ui_font.measure(style.small(), &below));
         let row = Rect::new(area.x, top + big * count, area.width, small);
-        ui::draw_label(canvas, &ui_font, style.small, x, row, &below, look.faint);
+        ui::draw_label(canvas, &ui_font, style.small(), x, row, &below, look.faint);
     }
 }
 

@@ -127,15 +127,13 @@ impl BookSheet {
         }
 
         let display = env.device.display;
-        let gap = style.gap as u16;
+        let gap = style.gap();
         let head_h = sizes.cover.1 + 2 * gap;
-        let row = style.touch_row(style.row) as u16;
+        let row = style.touch_row(u32::from(style.row())) as u16;
         // As high as its actions need, the header of the screen below
         // still in sight; more actions (plugins add to the book menu) go
         // on pages, with a pager below them.
-        let most = display
-            .height
-            .saturating_sub(style.header as u16 + head_h + gap);
+        let most = display.height.saturating_sub(style.header() + head_h + gap);
         let all = row * actions.len() as u16;
         let pager_h = ui::Pager::height(&style);
         let (rows_h, paged) = if all <= most {
@@ -175,9 +173,9 @@ impl BookSheet {
         let area = self.list.area();
         // As high as the actions' rows, at the sheet's bottom edge (where
         // the actions end, or their pager, which is not shown meanwhile).
-        let row = self.style.touch_row(self.style.row) as u16;
+        let row = self.style.touch_row(u32::from(self.style.row())) as u16;
         let r = self.region;
-        let bottom = (r.y + r.height).saturating_sub(self.style.gap as u16 / 2);
+        let bottom = (r.y + r.height).saturating_sub(self.style.gap() / 2);
         let rows = Rect::new(area.x, bottom.saturating_sub(2 * row), area.width, 2 * row);
         let mut answers = ListView::new(rows, u32::from(row)).focus_on_keys(cx.env());
         answers.set_focus(1);
@@ -280,7 +278,7 @@ impl Screen for BookSheet {
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
-            (style.line * 2).max(2),
+            (u32::from(style.line()) * 2).max(2),
             Color::BLACK,
         );
         // The book as a row of the list, but larger text: its cover, title,
@@ -300,11 +298,11 @@ impl Screen for BookSheet {
             // The question right below the book, above the answers, as
             // long as the room allows (smaller where it needs more).
             let area = self.list.area();
-            let (margin, gap) = (style.margin as u16, style.gap as u16);
+            let (margin, gap) = (style.margin(), style.gap());
             let width = area.width.saturating_sub(2 * margin);
             let room = answers.area().y.saturating_sub(area.y + 2 * gap);
             let text = env.i18n.tr("files.delete.question");
-            let (most, least) = (style.text, style.small);
+            let (most, least) = (style.text(), style.small());
             let question = widgets::Wrapped::fitting(env, text, most, least, width, room);
             // Told as the heading over the answers, across its room (not
             // as a text, which a row of the list below would take in).

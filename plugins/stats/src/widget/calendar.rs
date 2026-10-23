@@ -226,7 +226,7 @@ impl Widget for Calendar {
             0
         };
         // Square days across the width, at most twice a line high.
-        let cell = (inner / 7).min(line(&font, style.small) * 2);
+        let cell = (inner / 7).min(line(&font, style.small()) * 2);
         let cell = match &self.shown {
             Some(s) if s.weeks > 0 => (inner / u16::from(s.weeks + 1)).min(cell),
             _ => cell,
@@ -258,7 +258,7 @@ impl Widget for Calendar {
 
 fn weekdays_height(env: &Env<'_>, font: &FontHandle<'_>, style: &UiStyle) -> u16 {
     if widgets::shows(env, NAME, "weekdays") {
-        line(font, style.small)
+        line(font, style.small())
     } else {
         0
     }
@@ -267,7 +267,7 @@ fn weekdays_height(env: &Env<'_>, font: &FontHandle<'_>, style: &UiStyle) -> u16
 fn footer_height(env: &Env<'_>, font: &FontHandle<'_>, style: &UiStyle) -> u16 {
     let id = NAME;
     if widgets::shows(env, id, "streak") || widgets::shows(env, id, "total") {
-        line(font, style.small) + style.gap as u16 / 2
+        line(font, style.small()) + style.gap() / 2
     } else {
         0
     }
@@ -314,7 +314,7 @@ fn footer_fitting(
 ) -> Option<String> {
     let style = UiStyle::new(env);
     let parts = footer(env, shown);
-    let fits = |text: &str| font.measure(style.small, text) <= f32::from(width);
+    let fits = |text: &str| font.measure(style.small(), text) <= f32::from(width);
     let all = parts.join(" · ");
     if !all.is_empty() && fits(&all) {
         return Some(all);
@@ -328,10 +328,10 @@ fn draw_footer(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, block: Rect,
     let Some(font) = style.font(env) else {
         return;
     };
-    let small = line(&font, style.small);
-    let x = widgets::align(env, NAME).x(block, font.measure(style.small, text));
+    let small = line(&font, style.small());
+    let x = widgets::align(env, NAME).x(block, font.measure(style.small(), text));
     let row = Rect::new(block.x, block.y + block.height - small, block.width, small);
-    ui::draw_label(canvas, &font, style.small, x, row, text, look.faint);
+    ui::draw_label(canvas, &font, style.small(), x, row, text, look.faint);
 }
 
 /// The room a day's shade keeps from its cell's edges.
@@ -348,7 +348,7 @@ fn number_size(font: &FontHandle<'_>, style: &UiStyle, cell: u16) -> Option<f32>
     let inner = cell.saturating_sub(2 * cell_pad(cell));
     let width = f32::from(cell) * 0.7;
     let height = i32::from(inner) * 3 / 5;
-    widgets::largest_size(style.text, style.small * 0.7, |size| {
+    widgets::largest_size(style.text(), style.small() * 0.7, |size| {
         let tall = font
             .ink(size, "30")
             .map_or(i32::MAX, |(top, bottom)| bottom - top);
@@ -411,7 +411,7 @@ fn draw_day(
         canvas.fill_round_shaded(inner, radius(inner), shade(look, level));
     }
     if today {
-        let thick = (style.line * 2).clamp(2, u32::from(pad.max(1)) * 2);
+        let thick = (u32::from(style.line()) * 2).clamp(2, u32::from(pad.max(1)) * 2);
         canvas.stroke_round(cell, thick, radius(cell), look.ink);
     }
     match number {
@@ -489,7 +489,7 @@ fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
         (area.width / 7).min(room / rows.max(1))
     };
     // Where the days would be small, the footer goes, then the weekdays.
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     if cell(header, footer) < small {
         footer = 0;
     }
@@ -513,7 +513,7 @@ fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
     if header > 0 {
         let from = fmt::week_start(env);
         let two = (0..7).all(|w| {
-            font.measure(style.small, fmt::weekday_short(env, w)) * 1.3 <= f32::from(cell)
+            font.measure(style.small(), fmt::weekday_short(env, w)) * 1.3 <= f32::from(cell)
         });
         for col in 0..7u8 {
             let weekday = (from + col) % 7;
@@ -523,10 +523,10 @@ fn draw_month(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
                 super::initial(env, weekday)
             };
             let x = left + cell * u16::from(col);
-            let w = font.measure(style.small, name);
+            let w = font.measure(style.small(), name);
             let row = Rect::new(x, block.y, cell, header);
             let at = f32::from(x) + (f32::from(cell) - w) / 2.0;
-            ui::draw_label(canvas, &font, style.small, at, row, name, look.faint);
+            ui::draw_label(canvas, &font, style.small(), at, row, name, look.faint);
         }
     }
     let month = date.month;
@@ -570,16 +570,16 @@ fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
         0
     };
     // Where the days would be small, the footer goes.
-    if area.height.saturating_sub(footer) / 7 < line(&font, style.small) / 2 {
+    if area.height.saturating_sub(footer) / 7 < line(&font, style.small()) / 2 {
         footer = 0;
     }
     let from = fmt::week_start(env);
     let labels = widgets::shows(env, id, "weekdays");
     let label_w = if labels {
         (0..7)
-            .map(|w| font.measure(style.small, super::initial(env, w)))
+            .map(|w| font.measure(style.small(), super::initial(env, w)))
             .fold(0.0, f32::max) as u16
-            + style.gap as u16 / 2
+            + style.gap() / 2
     } else {
         0
     };
@@ -598,7 +598,7 @@ fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
     let skipped = (u16::from(shown.weeks) - weeks) * 7;
     if labels {
         // Every other weekday where the rows are low.
-        let every = if cell >= line(&font, style.small) {
+        let every = if cell >= line(&font, style.small()) {
             1
         } else {
             2
@@ -609,7 +609,7 @@ fn draw_weeks(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
+                style.small(),
                 f32::from(left),
                 r,
                 name,

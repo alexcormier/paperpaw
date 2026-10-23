@@ -256,7 +256,7 @@ pub(crate) fn thickness(env: &Env<'_>, id: &str, size: u16) -> u32 {
         _ => 10,
     };
     (u32::from(size) / share)
-        .max(UiStyle::new(env).line * 2)
+        .max(u32::from(UiStyle::new(env).line()) * 2)
         .max(2)
 }
 
@@ -395,7 +395,7 @@ impl<'t> Lines<'t> {
     }
 
     fn gap(env: &Env<'_>) -> u16 {
-        UiStyle::new(env).gap as u16 / 4
+        UiStyle::new(env).gap() / 4
     }
 
     /// The lines of a title at `s` that `free` pixels hold, a heading's
@@ -427,7 +427,7 @@ impl<'t> Lines<'t> {
                 continue;
             }
             // Smaller, down to the small size, before it is shortened.
-            let least = line.size.min(style.small);
+            let least = line.size.min(style.small());
             let text = &line.text;
             if let Some(size) = widgets::largest_size(line.size, least, |s| fits(s, text)) {
                 line.size = size;
@@ -443,7 +443,7 @@ impl<'t> Lines<'t> {
                 let line = &self.lines[i];
                 (line.size, line.text.clone(), line.color)
             };
-            let least = size.min(style.small);
+            let least = size.min(style.small());
             // In lines broken between words, where they fit with the main
             // lines and the notes (the caption gives way to them).
             let others: u16 = self
@@ -499,7 +499,7 @@ impl<'t> Lines<'t> {
                 // The title back in one line, shortened.
                 if let Some(i) = self.lines.iter().position(|l| l.role == Role::Title) {
                     self.lines.drain(i + 1..(i + count).min(self.lines.len()));
-                    let least = size.min(style.text);
+                    let least = size.min(style.text());
                     let line = &mut self.lines[i];
                     line.text = Cow::Owned(ui::fit(&font, least, &text, room));
                     line.size = least;
@@ -722,8 +722,8 @@ pub(crate) fn draw_cover(
 /// A book without a cover: a frame with its title inside.
 fn draw_placeholder(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, at: Rect, title: &str) {
     let style = UiStyle::new(env);
-    canvas.stroke(at, style.line.max(2), look.ink);
-    let pad = (style.gap as u16 / 2).min(at.width / 6);
+    canvas.stroke(at, u32::from(style.line()).max(2), look.ink);
+    let pad = (style.gap() / 2).min(at.width / 6);
     let inner = Rect::new(
         at.x + pad,
         at.y + pad,
@@ -733,7 +733,7 @@ fn draw_placeholder(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, at: Rec
     if inner.width < 8 || inner.height < 8 {
         return;
     }
-    let size = style.small.min(f32::from(inner.width) / 3.0);
+    let size = style.small().min(f32::from(inner.width) / 3.0);
     let Some(font) = style.font(env) else {
         return;
     };
@@ -848,7 +848,7 @@ pub(crate) fn draw_ring(
         // No room for a ring.
         return;
     }
-    let fine = style.line.clamp(1, thickness);
+    let fine = u32::from(style.line()).clamp(1, thickness);
     // The fine line in the middle of the ring's width.
     let track = radius - (thickness - fine) / 2;
     canvas.stroke_circle(center, track, fine, look.ink);
@@ -885,7 +885,7 @@ pub(crate) fn draw_ring_percent(
     };
     let number = percent.to_string();
     let room = inner as f32 * 1.5;
-    let least = style.small * 0.6;
+    let least = style.small() * 0.6;
     let sign = |size: f32| (size * 0.45).max(least * 0.8);
     let width = |size: f32| font.measure(size, &number) + font.measure(sign(size), "%");
     // As large as fits inside, measured as drawn (a font of a few sizes
@@ -924,11 +924,20 @@ pub(crate) fn draw_percent_alone(
 ) {
     let style = UiStyle::new(env);
     let text = percent_text(env, percent);
-    let max = widgets::largest_size(style.title * 2.0, style.small, |s| {
+    let max = widgets::largest_size(style.title() * 2.0, style.small(), |s| {
         line_height(env, s) <= area.height
     })
-    .unwrap_or(style.small);
-    widgets::draw_line(canvas, env, area, align, max, style.small, &text, look.ink);
+    .unwrap_or(style.small());
+    widgets::draw_line(
+        canvas,
+        env,
+        area,
+        align,
+        max,
+        style.small(),
+        &text,
+        look.ink,
+    );
 }
 
 /// Draws a bar `percent` full in `area`: a fine line along it, the part
@@ -942,7 +951,7 @@ pub(crate) fn draw_bar(
 ) {
     let style = UiStyle::new(env);
     let h = area.height.max(2);
-    let fine = (style.line as u16).clamp(1, h);
+    let fine = (style.line()).clamp(1, h);
     let middle = area.y + (h - fine) / 2;
     canvas.fill(Rect::new(area.x, middle, area.width, fine), look.ink);
     let done = (u32::from(area.width) * u32::from(percent.min(100)) / 100) as u16;

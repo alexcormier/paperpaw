@@ -174,7 +174,7 @@ pub(super) fn lit(degrees: i32) -> u8 {
 
 fn height(env: &Env<'_>, width: u16) -> u16 {
     let (style, _) = ui(env);
-    (width / 2).min((style.row * 3) as u16) + frame_height(env, ID.as_str())
+    (width / 2).min((u32::from(style.row()) * 3) as u16) + frame_height(env, ID.as_str())
 }
 
 /// The lines of text beside the moon.
@@ -224,9 +224,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let lines = lines(env, &moon, &today);
     let area = look.area;
     let align = widgets::align(env, ID.as_str());
-    let first = style.text;
-    let small = style.small;
-    let gap = style.gap as u16;
+    let first = style.text();
+    let small = style.small();
+    let gap = style.gap();
     // Beside the text where the place is wide, else above it.
     let wide = area.width >= area.height * 3 / 2;
     // The text's rows beside the moon, or below it in `share` of the

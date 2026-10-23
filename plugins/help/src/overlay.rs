@@ -71,9 +71,9 @@ impl Overlay {
         let Some(font) = style.font(env) else {
             return;
         };
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
-        let small = font.line_metrics(style.small).line_height as u16;
+        let margin = style.margin();
+        let gap = style.gap();
+        let small = font.line_metrics(style.small()).line_height as u16;
         for (zone, text, label) in &mut self.zones {
             *zone = Rect::new(
                 zone.x + gap,
@@ -89,7 +89,11 @@ impl Overlay {
             } else {
                 zone.width.saturating_sub(gap)
             };
-            let lines = font.wrap(style.small, text, f32::from(width.saturating_sub(2 * gap)));
+            let lines = font.wrap(
+                style.small(),
+                text,
+                f32::from(width.saturating_sub(2 * gap)),
+            );
             let height = small * lines.len() as u16 + gap * 2;
             let x = if !narrow {
                 zone.x + gap / 2
@@ -171,9 +175,9 @@ impl Screen for Overlay {
         let Some(font) = style.font(env) else {
             return;
         };
-        let line_w = style.line.max(2) * 2;
+        let line_w = u32::from(style.line()).max(2) * 2;
         // The zones: a frame each, its text in its box.
-        let small = font.line_metrics(style.small).line_height as u16;
+        let small = font.line_metrics(style.small()).line_height as u16;
         for (zone, text, label) in &self.zones {
             canvas.stroke_rect(
                 i32::from(zone.x),
@@ -184,17 +188,17 @@ impl Screen for Overlay {
                 Color::BLACK,
             );
             let label = *label;
-            let width = f32::from(label.width.saturating_sub(2 * style.gap as u16));
-            let wrapped = font.wrap(style.small, text, width);
+            let width = f32::from(label.width.saturating_sub(2 * style.gap()));
+            let wrapped = font.wrap(style.small(), text, width);
             canvas.fill(label, Color::WHITE);
-            ui::stroke_round(canvas, &style, label, style.line, Color::BLACK);
-            let mut y = label.y + style.gap as u16;
+            ui::stroke_round(canvas, &style, label, u32::from(style.line()), Color::BLACK);
+            let mut y = label.y + style.gap();
             for range in wrapped {
                 let part = &text[range];
                 let x = f32::from(label.x)
-                    + (f32::from(label.width) - font.measure(style.small, part)).max(0.0) / 2.0;
+                    + (f32::from(label.width) - font.measure(style.small(), part)).max(0.0) / 2.0;
                 let row = Rect::new(label.x, y, label.width, small);
-                ui::draw_label(canvas, &font, style.small, x, row, part, Color::BLACK);
+                ui::draw_label(canvas, &font, style.small(), x, row, part, Color::BLACK);
                 y += small;
             }
         }

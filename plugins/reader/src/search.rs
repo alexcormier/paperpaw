@@ -72,7 +72,7 @@ impl SearchScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = paperpaw_sdk::Rect::new(0, top, display.width, display.height - top);
         let next = (document.is_some() && !needle.is_empty()).then_some(Locator::START);
         Self {
@@ -100,7 +100,7 @@ impl SearchScreen {
         let font = self.style.font(env);
         // The row's title: the list's width less the margins and the gap
         // kept before a value.
-        let width = f32::from(self.list.area().width) - 4.0 * self.style.margin as f32;
+        let width = f32::from(self.list.area().width) - 4.0 * self.style.margin() as f32;
         // The text as the page shows it (see `paperpaw_sdk::filters`).
         let language = document.metadata().language.as_deref().unwrap_or_default();
         let filtered = paperpaw_sdk::reading::FilteredDocument::new(document.as_ref(), env)
@@ -123,7 +123,7 @@ impl SearchScreen {
                                 let at = snippet_at(&block.text, start, end);
                                 match &font {
                                     Some(font) => {
-                                        with_hit(font, self.style.text, &shown, at, width)
+                                        with_hit(font, self.style.text(), &shown, at, width)
                                             .into_owned()
                                     }
                                     None => shown,

@@ -126,7 +126,7 @@ impl ShelfScreen {
             0,
             header.area().height,
             display.width,
-            sizes.small_line + style.gap as u16,
+            sizes.small_line + style.gap(),
         );
         let top = summary.y + summary.height;
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
@@ -349,11 +349,19 @@ impl Screen for ShelfScreen {
             None,
             self.list.paging(len),
         );
-        let x = style.margin as f32;
+        let x = style.margin() as f32;
         let faint = style.faint(ui::Ink::Detail);
         if let Some(font) = style.font(env) {
             let summary = &self.summary_text;
-            ui::draw_label(canvas, &font, style.small, x, self.summary, summary, faint);
+            ui::draw_label(
+                canvas,
+                &font,
+                style.small(),
+                x,
+                self.summary,
+                summary,
+                faint,
+            );
         }
         if len == 0 {
             let (icon, title, text) = match self.kind {

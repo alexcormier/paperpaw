@@ -140,8 +140,8 @@ impl Widget for Now {
         let style = UiStyle::new(env);
         let probe = Rect::new(0, 0, 100, 100);
         let frame = 100 - widgets::look::look(env, ID.as_str(), probe).area.height;
-        let size = temperature_size(env, &style).unwrap_or(style.title * 2.4);
-        digits_height(size) + widgets::line_height(env, style.small) * 3 + frame
+        let size = temperature_size(env, &style).unwrap_or(style.title() * 2.4);
+        digits_height(size) + widgets::line_height(env, style.small()) * 3 + frame
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -173,9 +173,9 @@ impl Widget for Now {
 /// The temperature's size as set; `None` for "as large as it fits".
 fn temperature_size(env: &Env<'_>, style: &UiStyle) -> Option<f32> {
     match widgets::size(env, ID.as_str()) {
-        Size::Small => Some(style.title * 1.6),
-        Size::Medium => Some(style.title * 2.4),
-        Size::Large => Some(style.title * 3.4),
+        Size::Small => Some(style.title() * 1.6),
+        Size::Medium => Some(style.title() * 2.4),
+        Size::Large => Some(style.title() * 3.4),
         Size::Fit => None,
         _ => None,
     }
@@ -215,7 +215,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
     if !caption.is_empty() {
         lines.push(Line {
             text: caption.join(" · "),
-            size: style.small,
+            size: style.small(),
             faint: true,
             rank: 3,
         });
@@ -223,7 +223,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
     if part("condition") {
         lines.push(Line {
             text: env.i18n.tr(data::condition(current.code).0).to_string(),
-            size: style.text,
+            size: style.text(),
             faint: false,
             rank: 5,
         });
@@ -294,7 +294,7 @@ fn lines(env: &Env<'_>, shown: &Shown, current: Current, today: Option<Day>) -> 
     for (text, rank) in details {
         lines.push(Line {
             text,
-            size: style.small,
+            size: style.small(),
             faint: rank < 4,
             rank,
         });
@@ -390,15 +390,15 @@ fn fitting(
     }
     let rest = lines.iter().map(|l| line_height(env, l)).sum::<u16>();
     let by_height = draw::digits_size(f32::from(height.saturating_sub(rest)));
-    let probe = style.title;
-    let gap = style.gap as u16;
+    let probe = style.title();
+    let gap = style.gap();
     let room = width - if inline { f32::from(gap / 2) } else { 0.0 };
     let wide = (temperature_width(font, probe, text, inline, 0)).max(1.0) / probe;
     let by_width = room / wide;
     by_height
         .min(by_width)
         .min(most)
-        .max(style.small.min(by_width))
+        .max(style.small().min(by_width))
 }
 
 /// The small symbol before a temperature `size` pixels large: its side
@@ -458,7 +458,7 @@ fn plan(env: &Env<'_>, font: &FontHandle<'_>, area: Rect, temperature: &str, all
     // The least a temperature should be before lines (or the large
     // symbol) are left out; less where the font has no larger sizes.
     let largest = draw::effective(font, 400.0);
-    let least = (style.title * 1.3).min(largest) * 0.9;
+    let least = (style.title() * 1.3).min(largest) * 0.9;
     let mut last = None;
     for &placing in placings(env, area) {
         let plan = plan_for(env, font, area, temperature, all, placing, least);
@@ -472,7 +472,7 @@ fn plan(env: &Env<'_>, font: &FontHandle<'_>, area: Rect, temperature: &str, all
         // A large symbol at least a line of text high, else not so.
         let seen = match placing {
             Placing::Beside | Placing::Above => {
-                plan.symbol.width >= widgets::line_height(env, style.text)
+                plan.symbol.width >= widgets::line_height(env, style.text())
             }
             _ => true,
         };
@@ -499,7 +499,7 @@ fn plan_for(
     least: f32,
 ) -> Plan {
     let style = UiStyle::new(env);
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let fixed = temperature_size(env, &style);
     // Whether lines are left to leave out from `rank` on.
     let more = |rank: u8| all.iter().any(|l| l.rank >= rank && l.rank > 0) && rank < 6;
@@ -558,7 +558,7 @@ fn plan_for(
             Placing::Beside => (f32::from(side) * 0.55).max(least),
             Placing::Above => (f32::from(side) * 0.6).max(least),
             // Large, not huge.
-            _ => (style.title * 3.5).min(f32::from(text_area.height)),
+            _ => (style.title() * 3.5).min(f32::from(text_area.height)),
         };
         let size = fitting(
             env,
@@ -616,7 +616,7 @@ fn draw_now(
         return;
     };
     let area = look.area;
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let (temperature, plan) = (&laid.temperature, &laid.plan);
     let align = widgets::align(env, ID.as_str());
     let symbol_style = draw::style(env, ID.as_str());
