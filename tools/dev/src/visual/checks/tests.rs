@@ -351,6 +351,30 @@ fn narrow_keys_pass_on_the_keyboard_alone() {
     assert!(touch_targets(&scene).is_empty());
 }
 
+/// A keyboard's keys nearly round, 4 mm and a little more each way (35 px
+/// here), a thin seam apart: neither too small nor too close there; as
+/// buttons elsewhere, both.
+#[test]
+fn low_keys_a_seam_apart_pass_on_the_keyboard_alone() {
+    let image = paper();
+    let mut parts: Vec<_> = (0..10u16)
+        .map(|i| d(Role::Button, "q", Rect::new(28 + i * 42, 400, 38, 41)))
+        .collect();
+    // The row below with fewer, wider keys (the space bar's).
+    parts.extend([
+        d(Role::Button, "123", Rect::new(28, 445, 80, 41)),
+        d(Role::Button, "Space", Rect::new(112, 445, 248, 41)),
+        d(Role::Button, "OK", Rect::new(364, 445, 80, 41)),
+    ]);
+    let mut scene = scene(&image, parts);
+    scene.ui.finger = 61;
+    assert_eq!(checks(&touch_targets(&scene)), [TOUCH_TARGET]);
+    assert_eq!(checks(&button_room(&scene)), [BUTTON_ROOM]);
+    let scene = scene.keyboard(true);
+    assert!(touch_targets(&scene).is_empty());
+    assert!(button_room(&scene).is_empty());
+}
+
 /// A word split onto two lines in a box drawn tight round it is still
 /// found; a button's own label is looked at even where it holds a text
 /// of something else.
