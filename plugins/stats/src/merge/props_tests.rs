@@ -268,7 +268,14 @@ fn books_are_the_same_by_their_fingerprint_not_their_title() {
     store::append(&there, stay(8, 2100)).unwrap();
     here.write("income.db", &export(&there)).unwrap();
     let outcome = merge(&here, Some("income.db"), None, None, DIR).unwrap();
-    assert_eq!(outcome, Outcome { books: 3, stays: 4 });
+    assert_eq!(
+        outcome,
+        Outcome {
+            books: 3,
+            stays: 4,
+            kept: false
+        }
+    );
     let books = store::books(&here);
     let titles: Vec<(&str, &str)> = books
         .iter()
@@ -401,6 +408,13 @@ fn a_book_deleted_on_both_sides_stays_deleted() {
     here.write("cached.db", &export(&before)).unwrap();
     here.write("income.db", &export(&there)).unwrap();
     let outcome = merge(&here, Some("income.db"), Some("cached.db"), None, DIR).unwrap();
-    assert_eq!(outcome, Outcome { books: 1, stays: 2 });
+    assert_eq!(
+        outcome,
+        Outcome {
+            books: 1,
+            stays: 2,
+            kept: false
+        }
+    );
     assert_eq!(fingerprints(&here), ["0000000000000000000000000000000a"]);
 }

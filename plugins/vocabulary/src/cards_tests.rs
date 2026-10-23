@@ -42,7 +42,7 @@ fn decks_and_cards_are_added_changed_and_deleted() {
     assert_eq!(deck_named(&storage, "words"), Ok(words));
     let other = deck_named(&storage, "Phrases").unwrap();
     assert_ne!(other, words);
-    assert_eq!(decks(&storage).len(), 2);
+    assert_eq!(decks(&storage).unwrap().len(), 2);
 
     let added = add(
         &storage,
@@ -76,9 +76,9 @@ fn decks_and_cards_are_added_changed_and_deleted() {
     assert_eq!(sizes(&storage)[&words], 2);
 
     rename_deck(&storage, other, "Sätze").unwrap();
-    assert_eq!(decks(&storage)[1].name, "Sätze");
+    assert_eq!(decks(&storage).unwrap()[1].name, "Sätze");
     delete_deck(&storage, other).unwrap();
-    assert_eq!(decks(&storage).len(), 1);
+    assert_eq!(decks(&storage).unwrap().len(), 1);
     assert_eq!(delete_deck(&storage, other), Err(Problem::Missing));
 }
 
@@ -241,7 +241,97 @@ fn cuts_leave_nothing_lost_nor_overwritten() {
     storage.remove(&list).unwrap();
     storage.write(&files::part_path(&list), &whole).unwrap();
     recover(&storage);
-    assert_eq!(decks(&storage).len(), 2);
+    assert_eq!(decks(&storage).unwrap().len(), 2);
+}
+
+/// A card whose files listed in `unreadable` cannot be read.
+#[derive(Default)]
+struct Unreadable {
+    inner: MemoryStorage,
+    unreadable: core::cell::RefCell<Vec<String>>,
+}
+
+impl Unreadable {
+    fn break_file(&self, path: &str) {
+        self.unreadable.borrow_mut().push(path.into());
+    }
+}
+
+impl Storage for Unreadable {
+    fn read_at(&self, path: &str, offset: u64, buf: &mut [u8]) -> Result<usize, StorageError> {
+        if self.unreadable.borrow().iter().any(|p| p == path) {
+            return Err(StorageError::Io);
+        }
+        self.inner.read_at(path, offset, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, StorageError> {
+        self.inner.size(path)
+    }
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.inner.write(path, data)
+    }
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
+        self.inner.append(path, data)
+    }
+    fn list(
+        &self,
+        dir: &str,
+        visit: &mut dyn FnMut(paperpaw_sdk::DirEntry<'_>),
+    ) -> Result<(), StorageError> {
+        self.inner.list(dir, visit)
+    }
+    fn remove(&self, path: &str) -> Result<(), StorageError> {
+        self.inner.remove(path)
+    }
+    fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        self.inner.rename(from, to)
+    }
+}
+
+/// Answers that cannot be read are not folded in, and not deleted
+/// either: they are folded in once they can be read.
+#[test]
+fn answers_that_cannot_be_read_are_kept() {
+    let storage = Unreadable::default();
+    let deck = add_deck(&storage, "Words").unwrap();
+    add(&storage, deck, [texts("a", "1")]).unwrap();
+    let queue = due(&storage, HUNDRED_DAYS, 20, 100, None);
+    let good = queue[0]
+        .state
+        .answered(Grade::Good, HUNDRED_DAYS, false, Fx::hundredths(90));
+    record(&storage, deck, 0, &good).unwrap();
+    let answers_before = storage.inner.get(&answers());
+    storage.break_file(&answers());
+    assert_eq!(fold(&storage), Err(StorageError::Io));
+    assert_eq!(storage.inner.get(&answers()), answers_before);
+    storage.unreadable.borrow_mut().clear();
+    fold(&storage).unwrap();
+    assert_eq!(page(&storage, deck, 0, 1).0[0].state, good);
+}
+
+/// A list of decks that cannot be read is not written anew from what was
+/// read of it: adding, renaming, deleting or finding a deck fails, and
+/// every deck stays listed.
+#[test]
+fn decks_that_cannot_be_read_are_not_written_over() {
+    let storage = Unreadable::default();
+    let words = add_deck(&storage, "Words").unwrap();
+    add_deck(&storage, "Phrases").unwrap();
+    let list = path("decks.txt");
+    let before = storage.inner.get(&list);
+    storage.break_file(&list);
+    let failed = Err(Problem::Storage(StorageError::Io));
+    assert_eq!(add_deck(&storage, "More"), failed.clone());
+    assert_eq!(deck_named(&storage, "Looked up"), failed.clone());
+    assert_eq!(
+        rename_deck(&storage, words, "Wörter"),
+        failed.clone().map(|_| ())
+    );
+    assert_eq!(delete_deck(&storage, words), failed.clone().map(|_| ()));
+    queue_lookup(&storage, "Hund", "").unwrap();
+    assert_eq!(take_lookups(&storage, "Looked up"), failed.map(|_| 0));
+    assert_eq!(storage.inner.get(&list), before);
+    assert!(storage.exists(&deck_path(words)));
 }
 
 #[test]
@@ -256,7 +346,7 @@ fn words_looked_up_wait_and_become_cards_once() {
     queue_lookup(&storage, "HUND", "").unwrap();
     queue_lookup(&storage, "Katze", "").unwrap();
     assert_eq!(take_lookups(&storage, "Looked up"), Ok(1));
-    let deck = decks(&storage)[0].id;
+    let deck = decks(&storage).unwrap()[0].id;
     let (cards, _) = page(&storage, deck, 0, 9);
     assert_eq!(cards[0].example, "Der Hund bellt.");
     assert_eq!(cards[1].front, "Katze");

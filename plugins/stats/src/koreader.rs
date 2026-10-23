@@ -40,9 +40,22 @@ pub(crate) struct KoStat {
     pub pages: i64,
 }
 
+/// A table's columns lacking one of `needed`: the table is of a kind not
+/// understood (e.g. renamed in a later version), and is not read with
+/// what is missing taken for empty.
+fn require(columns: &[String], needed: &[&str]) -> Result<(), Error> {
+    let has = |name: &&str| columns.iter().any(|c| c.eq_ignore_ascii_case(name));
+    if needed.iter().all(has) {
+        Ok(())
+    } else {
+        Err(Error::Corrupt("a column is missing"))
+    }
+}
+
 /// The books of a statistics database.
 pub(crate) fn books(db: &Database<'_>) -> Result<Vec<KoBook>, Error> {
     let (columns, root) = db.table("book")?;
+    require(&columns, &["title", "authors", "md5"])?;
     let at = |name: &str| columns.iter().position(|c| c.eq_ignore_ascii_case(name));
     let id_column = at("id");
     let mut books = Vec::new();
@@ -82,6 +95,7 @@ pub(crate) fn books(db: &Database<'_>) -> Result<Vec<KoBook>, Error> {
 /// Calls `visit` with every page stay.
 pub(crate) fn stats(db: &Database<'_>, mut visit: impl FnMut(KoStat)) -> Result<(), Error> {
     let (columns, root) = db.table("page_stat_data")?;
+    require(&columns, &["id_book", "page", "start_time", "duration"])?;
     let at = |name: &str| columns.iter().position(|c| c.eq_ignore_ascii_case(name));
     let (book, page, start, duration, pages) = (
         at("id_book"),

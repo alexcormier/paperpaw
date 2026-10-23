@@ -317,6 +317,7 @@ pub(crate) fn answer(
 fn decks_json(storage: &dyn Storage) -> String {
     let sizes = cards::sizes(storage);
     let decks: Vec<String> = cards::decks(storage)
+        .unwrap_or_default()
         .iter()
         .map(|d| {
             format!(
@@ -606,12 +607,12 @@ mod tests {
             .0,
             200
         );
-        assert_eq!(cards::decks(&storage)[0].name, "Words");
+        assert_eq!(cards::decks(&storage).unwrap()[0].name, "Words");
         assert_eq!(
             ask(&storage, "POST", "/api/deck/delete?k=abc&deck=1", None).0,
             200
         );
-        assert!(cards::decks(&storage).is_empty());
+        assert!(cards::decks(&storage).unwrap().is_empty());
         assert_eq!(ask(&storage, "GET", "/nothing?k=abc", None).0, 404);
     }
 }

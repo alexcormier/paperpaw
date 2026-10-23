@@ -9,6 +9,12 @@
 //! later what was deleted there; for that folder and user only. KOReader
 //! does the same, so either may sync first. A downloaded file that cannot
 //! be read ends the sync: nothing is merged and nothing uploaded.
+//!
+//! Nothing counts as deleted there where the download came without an
+//! ETag: the upload could then replace a file changed meanwhile. A file
+//! gone from a folder this device uploaded to is not replaced at once (a
+//! server may say so by mistake): the sync says so, and the next one
+//! uploads.
 
 use alloc::borrow::Cow;
 use alloc::format;
@@ -93,8 +99,13 @@ pub(crate) struct Sync {
     /// The last upload to the folder and user of this sync
     /// ([`last_upload`]).
     last_upload: String,
+    /// The file and the user of this sync, as set when it started.
+    url: String,
+    user: String,
     /// The books there are after the merge.
     books: usize,
+    /// Whether what the file there lacked was kept ([`Outcome::kept`]).
+    kept: bool,
 }
 
 pub(crate) type SharedSync = Rc<RefCell<Sync>>;
@@ -119,7 +130,9 @@ fn save_password(password: &str) -> Command {
 }
 
 /// Moves a password kept in the plugin's folder by earlier versions to
-/// the other passwords and keys.
+/// the other passwords and keys. The old file goes only once the
+/// secrets have a password (at a later start): until then it is the only
+/// copy, e.g. where the secrets could not be saved.
 pub(crate) fn move_password(env: &Env<'_>, out: &mut Vec<Command>) {
     let path = file("webdav.ini");
     let Ok(data) = paperpaw_sdk::read_file(env.storage, &path, 4096) else {
@@ -128,10 +141,11 @@ pub(crate) fn move_password(env: &Env<'_>, out: &mut Vec<Command>) {
     let old = old_password(core::str::from_utf8(&data).unwrap_or_default());
     if !old.is_empty() && env.secrets.get(SECRET).is_none() {
         out.push(save_password(&old));
+        return;
     }
     #[expect(
         clippy::let_underscore_must_use,
-        reason = "the old password is in the secrets now; a file left behind is read once more and changes nothing"
+        reason = "the password is in the secrets (or there was none); a file left behind is read once more and changes nothing"
     )]
     let _ = env.storage.remove(&path);
 }
@@ -145,17 +159,18 @@ fn old_password(text: &str) -> String {
         .unwrap_or_default()
 }
 
-fn request(env: &Env<'_>, method: &str, reply: &Event<HttpReply>) -> HttpRequest {
-    let url = format!("{}/{FILE}", folder(env.settings.read(&URL)));
-    let user = env.settings.read(&USER);
-    let mut request = HttpRequest::new(method, &url, reply);
-    if !user.is_empty() {
-        request.headers.push((
-            String::from("Authorization"),
-            paperpaw_sdk::web::basic_auth(user, password(env)),
-        ));
+impl Sync {
+    /// A request for the file of this sync.
+    fn request(&self, env: &Env<'_>, method: &str, reply: &Event<HttpReply>) -> HttpRequest {
+        let mut request = HttpRequest::new(method, &self.url, reply);
+        if !self.user.is_empty() {
+            request.headers.push((
+                String::from("Authorization"),
+                paperpaw_sdk::web::basic_auth(&self.user, password(env)),
+            ));
+        }
+        request
     }
-    request
 }
 
 fn done(out: &mut Vec<Command>, message: String) {
@@ -211,7 +226,9 @@ impl Sync {
         self.running = true;
         self.attempt += 1;
         self.last_upload = last_upload(env);
-        let mut get = request(env, "GET", &DOWNLOADED);
+        self.url = format!("{}/{FILE}", folder(env.settings.read(&URL)));
+        self.user = env.settings.read(&USER).to_string();
+        let mut get = self.request(env, "GET", &DOWNLOADED);
         get.save_to = Some(file("incoming.sqlite3"));
         out.push(Command::Http(get));
     }
@@ -222,8 +239,27 @@ impl Sync {
             return;
         }
         let incoming = file("incoming.sqlite3");
+        let uploaded_before = env.storage.exists(&self.last_upload);
         let income = match reply.status {
             200 => Some(incoming.as_str()),
+            // Gone from where this device uploaded to (or a server's
+            // mistake): not replaced with this device's alone. Without
+            // the last upload, the next sync uploads.
+            404 if uploaded_before => {
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "a download left behind is written over by the next sync"
+                )]
+                let _ = env.storage.remove(&incoming);
+                #[expect(
+                    clippy::let_underscore_must_use,
+                    reason = "a last upload that cannot be removed only makes the next sync say the same"
+                )]
+                let _ = env.storage.remove(&self.last_upload);
+                self.running = false;
+                self.attempt = 0;
+                return done(out, env.i18n.tr("stats.sync.missing").to_string());
+            }
             // None yet: this is the first.
             404 => None,
             status => {
@@ -235,10 +271,9 @@ impl Sync {
                 return self.fail(env, &status.to_string(), out);
             }
         };
-        let cached = env
-            .storage
-            .exists(&self.last_upload)
-            .then_some(self.last_upload.as_str());
+        // Without an ETag the upload replaces the file whatever came
+        // meanwhile: what it lacks then is not taken for deleted there.
+        let cached = (uploaded_before && reply.etag.is_some()).then_some(self.last_upload.as_str());
         let upload = file(FILE);
         let result = merge::merge(env.storage, income, cached, Some(&upload), &dir());
         #[expect(
@@ -260,7 +295,8 @@ impl Sync {
             }
         };
         self.books = outcome.books;
-        let mut put = request(env, "PUT", &UPLOADED);
+        self.kept = outcome.kept;
+        let mut put = self.request(env, "PUT", &UPLOADED);
         put.body_from = Some(upload);
         match (income, &reply.etag) {
             // There was none: only if there still is none.
@@ -304,8 +340,13 @@ impl Sync {
                 forget_other_uploads(env, &self.last_upload);
                 self.running = false;
                 self.attempt = 0;
+                let key = if self.kept {
+                    "stats.sync.done-kept"
+                } else {
+                    "stats.sync.done"
+                };
                 let text = env.i18n.format(
-                    "stats.sync.done",
+                    key,
                     &[(
                         "books",
                         Arg::Str(&env.i18n.plural("stats.books-count", self.books as i64, &[])),
@@ -364,7 +405,7 @@ fn import(env: &Env<'_>) -> String {
         return env.i18n.tr("stats.import.busy").to_string();
     }
     match merge::merge(env.storage, Some(path), None, None, &dir()) {
-        Ok(Outcome { books, stays }) => env.i18n.format(
+        Ok(Outcome { books, stays, .. }) => env.i18n.format(
             "stats.import.done",
             &[
                 (

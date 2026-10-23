@@ -233,6 +233,73 @@ fn a_newer_file_there_is_merged_and_uploaded_on_condition() {
     assert_eq!(common::stays(&b.storage).len(), 30);
 }
 
+/// A file gone from the folder this device uploaded to (deleted there,
+/// or a server's mistake) is not replaced with this device's statistics
+/// alone at once: the sync says so, and the next one uploads.
+#[test]
+fn a_file_gone_from_the_folder_is_not_replaced_at_once() {
+    let mut app = app(device(&[(1, "Anna Karenina")], 6, 10));
+    let get = app.sync_now();
+    let put = app.answer(&get[0], 404, b"Not Found", None);
+    assert!(app.answer(&put[0], 201, b"", None).is_empty());
+    let get = app.sync_now();
+    assert!(app.answer(&get[0], 404, b"Not Found", None).is_empty());
+    assert!(
+        app.shown().contains("is no longer in the folder"),
+        "{}",
+        app.shown()
+    );
+    assert_eq!(titles(&app), ["Anna Karenina"]);
+    let get = app.sync_now();
+    let put = app.answer(&get[0], 404, b"Not Found", None);
+    assert_eq!(put.len(), 1);
+    assert_eq!(header(&put[0], "If-None-Match"), Some("*"));
+}
+
+/// What a download without an ETag lacks is not taken for deleted there:
+/// the upload could replace a file changed meanwhile, without telling.
+#[test]
+fn without_an_etag_nothing_counts_as_deleted_there() {
+    let three = [(1, "Anna Karenina"), (2, "Effi Briest"), (3, "Faust")];
+    // There, the third book was deleted since this device's upload.
+    let mut other = app(device(&three[..2], 6, 10));
+    let get = other.sync_now();
+    let put = other.answer(&get[0], 404, b"Not Found", None);
+    let two = other.body(&put[0]);
+    for (etag, books) in [(None, 3), (Some("\"v2\""), 2)] {
+        let mut a = app(device(&three, 6, 10));
+        let get = a.sync_now();
+        let put = a.answer(&get[0], 404, b"Not Found", None);
+        assert!(a.answer(&put[0], 201, b"", None).is_empty());
+        let get = a.sync_now();
+        let put = a.answer(&get[0], 200, &two, etag);
+        assert_eq!(put.len(), 1, "{etag:?}");
+        assert_eq!(titles(&a).len(), books, "{etag:?}");
+    }
+}
+
+/// The file in the folder replaced by that of a device that started
+/// anew: what it lacks was not deleted there, so nothing here goes; and
+/// the sync says so.
+#[test]
+fn a_replaced_file_there_deletes_nothing_and_says_so() {
+    let mut fresh = app(device(&[], 6, 10));
+    let get = fresh.sync_now();
+    let put = fresh.answer(&get[0], 404, b"Not Found", None);
+    let empty = fresh.body(&put[0]);
+    let mut a = app(device(&[(1, "Anna Karenina"), (2, "Effi Briest")], 6, 10));
+    let get = a.sync_now();
+    let put = a.answer(&get[0], 404, b"Not Found", None);
+    assert!(a.answer(&put[0], 201, b"", None).is_empty());
+    let before = common::stays(&a.storage);
+    let get = a.sync_now();
+    let put = a.answer(&get[0], 200, &empty, Some("\"v2\""));
+    assert!(a.answer(&put[0], 204, b"", None).is_empty());
+    assert_eq!(titles(&a), ["Anna Karenina", "Effi Briest"]);
+    assert_eq!(common::stays(&a.storage), before);
+    assert!(a.shown().contains("looks replaced"), "{}", a.shown());
+}
+
 #[test]
 fn someone_faster_makes_it_start_over_three_times_at_most() {
     let remote = first_upload();
@@ -377,11 +444,29 @@ fn a_file_there_that_is_no_database_is_not_replaced() {
     assert!(b.shown().contains("cannot be read"), "{}", b.shown());
 }
 
+/// The device started again with the files of `app`'s that matter here:
+/// the secrets and the old password file.
+fn restart(app: &App) -> App {
+    let mut storage = MemoryStorage::new();
+    for path in [FILE.to_string(), format!("{DIR}/webdav.ini")] {
+        if let Some(data) = app.storage.get(&path) {
+            storage = storage.with(&path, data);
+        }
+    }
+    App::new(X4, storage, Some(NOW), "", false)
+}
+
+/// The old file goes once the password is in the secrets, at the next
+/// start: until then it is the only copy (the secrets might not have
+/// been saved).
 #[test]
 fn the_password_of_earlier_versions_moves_to_the_passwords() {
     let v1 = include_str!("../testdata/webdav.ini.v1");
     let storage = MemoryStorage::new().with(&format!("{DIR}/webdav.ini"), v1);
     let app = App::new(X4, storage, Some(NOW), "", false);
+    assert_eq!(app.kernel.secrets().get(SECRET), Some("secret 1"));
+    assert!(app.storage.0.exists(&format!("{DIR}/webdav.ini")));
+    let app = restart(&app);
     assert_eq!(app.kernel.secrets().get(SECRET), Some("secret 1"));
     assert!(!app.storage.0.exists(&format!("{DIR}/webdav.ini")));
 }
@@ -412,7 +497,7 @@ fn an_old_file_without_a_password_just_goes() {
         &format!("{DIR}/webdav.ini"),
         "[webdav]\npassword = \"  \"\n",
     );
-    let app = App::new(X4, storage, Some(NOW), "", false);
+    let app = restart(&App::new(X4, storage, Some(NOW), "", false));
     assert_eq!(app.kernel.secrets().get(SECRET), Some("  "));
     assert!(!app.storage.0.exists(&format!("{DIR}/webdav.ini")));
 }

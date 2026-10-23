@@ -565,9 +565,12 @@ impl Plugin for Stats {
                 s.borrow_mut().finish_page(env);
             })?;
         }
-        // Today's reading told at the start, for those who show it.
+        // Files a cut left beside their place are put there before
+        // anything is recorded; today's reading is told at the start, for
+        // those who show it.
         let s = state.clone();
         r.on(events::STARTED, move |env, _, out| {
+            store::recover(env.storage);
             s.borrow_mut().tell(env, out)
         })?;
         // Only a book still open goes on being read.

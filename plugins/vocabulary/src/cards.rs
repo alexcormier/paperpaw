@@ -355,10 +355,11 @@ pub(crate) struct Deck {
     pub name: String,
 }
 
-/// The decks, in the order they were made.
-pub(crate) fn decks(storage: &dyn Storage) -> Vec<Deck> {
+/// The decks, in the order they were made; an error where the list could
+/// not be read to its end: then it must not be written anew from them.
+pub(crate) fn decks(storage: &dyn Storage) -> Result<Vec<Deck>, StorageError> {
     let mut decks = Vec::new();
-    let _ = each_line(storage, &path("decks.txt"), |_, line| {
+    each_line(storage, &path("decks.txt"), |_, line| {
         let (id, name) = line.split_once('\t').unwrap_or((line, ""));
         if let Ok(id) = id.parse() {
             decks.push(Deck {
@@ -370,8 +371,8 @@ pub(crate) fn decks(storage: &dyn Storage) -> Vec<Deck> {
             return ControlFlow::Break(());
         }
         ControlFlow::Continue(())
-    });
-    decks
+    })?;
+    Ok(decks)
 }
 
 fn write_decks(storage: &dyn Storage, decks: &[Deck]) -> Result<(), StorageError> {
@@ -388,7 +389,7 @@ pub(crate) fn add_deck(storage: &dyn Storage, name: &str) -> Result<u32, Problem
     if name.is_empty() {
         return Err(Problem::Empty);
     }
-    let mut decks = decks(storage);
+    let mut decks = decks(storage)?;
     if decks.len() >= MAX_DECKS {
         return Err(Problem::Full);
     }
@@ -411,7 +412,7 @@ pub(crate) fn add_deck(storage: &dyn Storage, name: &str) -> Result<u32, Problem
 /// The deck named `name` (in any case), made if there is none.
 pub(crate) fn deck_named(storage: &dyn Storage, name: &str) -> Result<u32, Problem> {
     let lower = name.to_lowercase();
-    match decks(storage)
+    match decks(storage)?
         .into_iter()
         .find(|d| d.name.to_lowercase() == lower)
     {
@@ -425,7 +426,7 @@ pub(crate) fn rename_deck(storage: &dyn Storage, deck: u32, name: &str) -> Resul
     if name.is_empty() {
         return Err(Problem::Empty);
     }
-    let mut decks = decks(storage);
+    let mut decks = decks(storage)?;
     let found = decks
         .iter_mut()
         .find(|d| d.id == deck)
@@ -438,7 +439,7 @@ pub(crate) fn rename_deck(storage: &dyn Storage, deck: u32, name: &str) -> Resul
 /// Deletes a deck and its cards.
 pub(crate) fn delete_deck(storage: &dyn Storage, deck: u32) -> Result<(), Problem> {
     fold(storage)?;
-    let mut decks = decks(storage);
+    let mut decks = decks(storage)?;
     let before = decks.len();
     decks.retain(|d| d.id != deck);
     if decks.len() == before {
@@ -572,7 +573,7 @@ impl<'a> Adder<'a> {
         deck: u32,
         mut seen: impl FnMut(&Card),
     ) -> Result<Self, Problem> {
-        if !decks(storage).iter().any(|d| d.id == deck) {
+        if !decks(storage)?.iter().any(|d| d.id == deck) {
             return Err(Problem::Missing);
         }
         let (mut count, mut next) = (0usize, 1u32);
@@ -761,7 +762,7 @@ pub(crate) fn recover(storage: &dyn Storage) {
         recover_whole(storage, &file, &files::part_path(&file));
     }
     recover_whole(storage, &index_file(), &path("due.tmp"));
-    for deck in decks(storage) {
+    for deck in decks(storage).unwrap_or_default() {
         let (file, temporary) = (deck_path(deck.id), deck_temporary(deck.id));
         if !storage.exists(&temporary) {
             continue;
@@ -898,11 +899,15 @@ pub(crate) fn record(
     Ok(())
 }
 
+/// Each card's last state, and when it was due before, by deck and id.
+type Answers = BTreeMap<(u32, u32), (State, i64)>;
+
 /// The answers given since the decks were written: each card's last
 /// state, and when it was due before the first of them, by deck and id.
-fn answered(storage: &dyn Storage) -> BTreeMap<(u32, u32), (State, i64)> {
-    let mut found: BTreeMap<(u32, u32), (State, i64)> = BTreeMap::new();
-    let _ = each_line(storage, &answers(), |_, line| {
+/// An error where they could not be read to their end.
+fn answered(storage: &dyn Storage) -> Result<Answers, StorageError> {
+    let mut found = Answers::new();
+    each_line(storage, &answers(), |_, line| {
         let mut fields = line.split('\t');
         let parsed = (|| {
             let deck: u32 = fields.next()?.parse().ok()?;
@@ -917,16 +922,17 @@ fn answered(storage: &dyn Storage) -> BTreeMap<(u32, u32), (State, i64)> {
                 .or_insert((state, before));
         }
         ControlFlow::Continue(())
-    });
-    found
+    })?;
+    Ok(found)
 }
 
-/// Writes the answers given into their decks.
+/// Writes the answers given into their decks. Answers that cannot be
+/// read are kept for the next time.
 pub(crate) fn fold(storage: &dyn Storage) -> Result<(), StorageError> {
     if !storage.exists(&answers()) {
         return Ok(());
     }
-    let answered = answered(storage);
+    let answered = answered(storage)?;
     let mut decks: Vec<u32> = answered.keys().map(|(deck, _)| *deck).collect();
     decks.dedup();
     for deck in decks {
@@ -968,7 +974,7 @@ pub(crate) fn due(
 ) -> Vec<Due> {
     let _ = fold(storage);
     let (mut reviews, mut fresh) = (Vec::new(), Vec::new());
-    let decks = decks(storage);
+    let decks = decks(storage).unwrap_or_default();
     for deck in decks.iter().filter(|d| only.is_none_or(|o| o == d.id)) {
         let _ = each_card(storage, deck.id, |offset, card| {
             let state = card.state;
@@ -1015,7 +1021,7 @@ pub(crate) fn due_count(storage: &dyn Storage, until: i64, new: usize) -> usize 
             .map(|(_, n)| i64::from(*n))
             .sum::<i64>();
     });
-    for (state, before) in answered(storage).values() {
+    for (state, before) in answered(storage).unwrap_or_default().values() {
         match *before {
             0 => fresh -= 1,
             b if b < until => reviews -= 1,

@@ -739,8 +739,10 @@ impl Due {
 
 impl Widget for Due {
     fn update(&mut self, env: &Env<'_>) -> bool {
-        let count =
-            (!crate::cards::decks(env.storage).is_empty()).then(|| crate::decks::due_now(env));
+        let count = (!crate::cards::decks(env.storage)
+            .unwrap_or_default()
+            .is_empty())
+        .then(|| crate::decks::due_now(env));
         let changed = count != self.count;
         self.count = count;
         if changed {
