@@ -57,7 +57,7 @@ fn height(env: &Env<'_>, _: u16) -> u16 {
     let (style, _) = ui(env);
     let size = big_size(env, None);
     widgets::line_height(env, size)
-        + widgets::line_height(env, style.text) * 2
+        + widgets::line_height(env, style.text()) * 2
         + frame_height(env, ID.as_str())
 }
 
@@ -66,7 +66,7 @@ fn big_size(env: &Env<'_>, room: Option<f32>) -> f32 {
     let (style, _) = ui(env);
     match (widgets::size(env, ID.as_str()), room) {
         (Size::Fit, Some(room)) => room,
-        (Size::Fit, None) => style.title * 2.0,
+        (Size::Fit, None) => style.title() * 2.0,
         (size, _) => size.text(&style) * 1.6,
     }
 }
@@ -117,15 +117,15 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                 width * 0.45,
             );
             let number_w = font.measure(size, &number);
-            let gap = style.gap as f32 * 1.5;
+            let gap = style.gap() as f32 * 1.5;
             // The notes as large as fits beside it, the weekday larger.
             let rest = (width - number_w - gap).max(0.0);
             let note = notes
                 .iter()
-                .map(|n| super::fit_size(&font, style.title * 1.2, n, rest))
-                .fold(style.title * 1.2, f32::min)
+                .map(|n| super::fit_size(&font, style.title() * 1.2, n, rest))
+                .fold(style.title() * 1.2, f32::min)
                 .min(room / (notes.len() as f32 + 0.6))
-                .max(style.small);
+                .max(style.small());
             let lines: f32 = line(&font, note * 1.2) + line(&font, note) * (notes.len() - 1) as f32;
             let total_w = number_w
                 + gap
@@ -198,12 +198,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                 None => date,
             });
             let most = style
-                .text
+                .text()
                 .min(f32::from(area.height) / 3.5)
-                .max(style.small);
+                .max(style.small());
             let fits = |size: f32, text: &str| font.measure(size, text) <= width;
             let date = dates.into_iter().find_map(|date| {
-                widgets::largest_size(most, style.small, |s| fits(s, &date)).map(|s| (s, date))
+                widgets::largest_size(most, style.small(), |s| fits(s, &date)).map(|s| (s, date))
             });
             let height = f32::from(area.height);
             // The weekday as large as set or as fits, a line at least
@@ -218,9 +218,9 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             // The full name at the body size at least, as it heads the date;
             // else the short name.
             let pick = |note_h: f32| {
-                weekday_fits(weekday, note_h, style.text)
+                weekday_fits(weekday, note_h, style.text())
                     .map(|s| (s, weekday))
-                    .or_else(|| weekday_fits(short, note_h, style.small).map(|s| (s, short)))
+                    .or_else(|| weekday_fits(short, note_h, style.small()).map(|s| (s, short)))
             };
             let with_date = date.and_then(|(note, date)| {
                 let note_h = line(&font, note);
@@ -229,16 +229,16 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             let ((size, name), date) = match with_date.or_else(|| pick(0.0).map(|big| (big, None)))
             {
                 Some(found) => found,
-                None => ((style.small, short), None),
+                None => ((style.small(), short), None),
             };
             // The date a step smaller than the weekday, which heads it.
             let date = date.map(|(note, h, date)| {
-                let most = (size * 0.84).max(style.small);
+                let most = (size * 0.84).max(style.small());
                 if note <= most {
                     return (note, h, date);
                 }
-                let note = widgets::largest_size(most, style.small, |s| fits(s, &date))
-                    .unwrap_or(style.small);
+                let note = widgets::largest_size(most, style.small(), |s| fits(s, &date))
+                    .unwrap_or(style.small());
                 (note, line(&font, note), date)
             });
             // The two centred together by their ink, half a gap apart.
@@ -256,7 +256,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
                     font: None,
                 });
             }
-            let gap = style.gap as f32 / 2.0;
+            let gap = style.gap() as f32 / 2.0;
             super::draw_stack(canvas, &font, area, align, &parts, gap);
         }
     }
@@ -288,11 +288,11 @@ fn draw_sheet(
     let align = widgets::align(env, ID.as_str());
     let left = align.x(area, width);
     let sheet = Rect::new(left as u16, area.y, width as u16, area.height);
-    let radius = style.corner.max((width * 0.06) as u32);
+    let radius = u32::from(style.corner()).max((width * 0.06) as u32);
     // The month (with the year where set) on the band where it fits, else
     // in short, else shortened: never wider than the sheet.
     let room = width * 0.85;
-    let band_max = (height * 0.11).max(style.small);
+    let band_max = (height * 0.11).max(style.small());
     let full = super::month_name(env, t.month);
     let short = super::month_short(env, t.month);
     let mut names = Vec::new();
@@ -302,17 +302,17 @@ fn draw_sheet(
     names.push(String::from(full));
     names.push(String::from(short));
     let fits = |text: &String| {
-        widgets::largest_size(band_max, style.small, |s| font.measure(s, text) <= room).is_some()
+        widgets::largest_size(band_max, style.small(), |s| font.measure(s, text) <= room).is_some()
     };
     let month = names
         .iter()
         .find(|text| fits(text))
         .cloned()
-        .unwrap_or_else(|| paperpaw_sdk::ui::fit(font, style.small, short, room));
+        .unwrap_or_else(|| paperpaw_sdk::ui::fit(font, style.small(), short, room));
     let band_size = super::fit_size(font, band_max, &month, room);
     let band_h = (line(font, band_size) * 1.25).min(height * 0.3);
     // The band in ink, the sheet's paper inside a line round it.
-    let thick = style.line * 2;
+    let thick = u32::from(style.line()) * 2;
     canvas.fill_round(sheet, radius, look.ink);
     let inner = Rect::new(
         sheet.x + thick as u16,
@@ -348,7 +348,7 @@ fn draw_sheet(
     }
     let note = super::fit_size(
         font,
-        (height * 0.1).clamp(style.small, style.title),
+        (height * 0.1).clamp(style.small(), style.title()),
         weekday,
         width * 0.85,
     );

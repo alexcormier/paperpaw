@@ -446,7 +446,7 @@ fn an_item_is_taken_along_only_past_another_and_shows_it() {
         .map(|d| d.area)
         .expect("the focused row");
     // The frame's top, a little inside the row, in the focus's ink.
-    let y = row.y + (style.line * 3 + style.line) as u16;
+    let y = row.y + (u32::from(style.line()) * 3 + u32::from(style.line())) as u16;
     let x = row.x + row.width / 2;
     assert_eq!(frame.view().pixel(x, y), style.focus_ink(true));
 }
@@ -478,7 +478,7 @@ fn a_status_line_setting_without_an_id_writes_nothing() {
     assert_eq!(handled, Handled::Yes);
     assert_eq!(written(&commands), None);
     let style = UiStyle::new(&h.env());
-    assert!(style.row > 0);
+    assert!(u32::from(style.row()) > 0);
 }
 
 /// A line kept under an id it had before shows as chosen, by its own; a

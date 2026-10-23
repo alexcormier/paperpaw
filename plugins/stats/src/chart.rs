@@ -25,7 +25,7 @@ pub(crate) fn bars(
     if values.is_empty() {
         return;
     }
-    let label_h = (style.small * 1.4) as u16;
+    let label_h = (style.small() * 1.4) as u16;
     let top_h = label_h;
     let chart = Rect::new(
         area.x,
@@ -39,7 +39,7 @@ pub(crate) fn bars(
     let shift = slot * (slots - values.len()) as f32;
     let bar_w = (slot * 0.6).max(2.0);
     let base_y = i32::from(chart.y + chart.height);
-    let line = style.line.max(1);
+    let line = u32::from(style.line()).max(1);
     canvas.fill_rect(
         i32::from(chart.x),
         base_y,
@@ -51,7 +51,7 @@ pub(crate) fn bars(
     // the last (today).
     let widest = labels
         .iter()
-        .map(|l| font.measure(style.small, l))
+        .map(|l| font.measure(style.small(), l))
         .fold(0.0f32, f32::max);
     let every = if widest > slot * 0.9 { 2 } else { 1 };
     for (i, &value) in values.iter().enumerate() {
@@ -62,14 +62,14 @@ pub(crate) fn bars(
             let h = h.max(line as i32 * 2);
             canvas.fill_rect(x as i32, base_y - h, bar_w as u32, h as u32, Color::BLACK);
             if value == max && !top.is_empty() {
-                let w = font.measure(style.small, top);
+                let w = font.measure(style.small(), top);
                 let tx = (x + bar_w / 2.0 - w / 2.0)
                     .clamp(f32::from(area.x), f32::from(area.x + area.width) - w);
                 let row = Rect::new(area.x, (base_y - h) as u16 - top_h, area.width, top_h);
                 ui::draw_label(
                     canvas,
                     &font,
-                    style.small,
+                    style.small(),
                     tx,
                     row,
                     top,
@@ -90,7 +90,7 @@ pub(crate) fn bars(
         }
         let shown = (values.len() - 1 - i).is_multiple_of(every);
         if let Some(label) = labels.get(i).filter(|_| shown) {
-            let w = font.measure(style.small, label);
+            let w = font.measure(style.small(), label);
             let lx = x + bar_w / 2.0 - w / 2.0;
             let row = Rect::new(area.x, base_y as u16 + line as u16, area.width, label_h);
             let color = if highlight == Some(i) {
@@ -98,7 +98,7 @@ pub(crate) fn bars(
             } else {
                 style.faint(ui::Ink::Muted)
             };
-            ui::draw_label(canvas, &font, style.small, lx, row, label, color);
+            ui::draw_label(canvas, &font, style.small(), lx, row, label, color);
         }
     }
 }

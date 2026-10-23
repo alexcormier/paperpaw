@@ -230,10 +230,8 @@ impl Widget for Library {
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
         let style = UiStyle::new(env);
-        let big = widgets::line_height(env, style.title * 2.0);
-        big + widgets::line_height(env, style.small) * 2
-            + style.gap as u16
-            + frame_height(env, WIDGET)
+        let big = widgets::line_height(env, style.title() * 2.0);
+        big + widgets::line_height(env, style.small()) * 2 + style.gap() + frame_height(env, WIDGET)
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -290,12 +288,12 @@ fn digits_height(font: &FontHandle<'_>, size: f32, digits: f32) -> u16 {
 /// The digits' ink height for the ascent, and the names' ink (its top
 /// above the baseline and its height), measured once.
 fn inks(font: &FontHandle<'_>, style: &UiStyle, labels: &str) -> (f32, (i32, u16)) {
-    let ascent = font.line_metrics(style.text).ascent.max(1.0);
+    let ascent = font.line_metrics(style.text()).ascent.max(1.0);
     let digits = font
-        .ink(style.text, "0123456789")
+        .ink(style.text(), "0123456789")
         .map_or(0.72, |(top, bottom)| (bottom - top) as f32 / ascent);
-    let names = font.ink(style.small, labels).map_or(
-        (-(style.small as i32), style.small as u16),
+    let names = font.ink(style.small(), labels).map_or(
+        (-(style.small() as i32), style.small() as u16),
         |(top, bottom)| (top, (bottom - top) as u16),
     );
     (digits, names)
@@ -309,7 +307,7 @@ fn lay_out(env: &Env<'_>, area: Rect, numbers: &Numbers) -> Option<Laid> {
     // Numbers drawn large alone: at a pack's large sizes for digits too.
     let font = style.font(env)?.display();
     let id = WIDGET;
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let parts = parts(env);
     let count = parts.len();
     if count == 0 {
@@ -317,18 +315,18 @@ fn lay_out(env: &Env<'_>, area: Rect, numbers: &Numbers) -> Option<Laid> {
     }
     let labels: String = parts.iter().map(|(_, l)| *l).collect();
     let (digits, (_, names_h)) = inks(&font, &style, &labels);
-    let bar_room = (style.line as u16 * 3).max(4) + gap;
+    let bar_room = (style.line() * 3).max(4) + gap;
     let wanted_bar = widgets::shows(env, id, "bar") && numbers.books > 0;
     let max = match widgets::size(env, id) {
         // As large as the place holds, its height checked below.
-        Size::Fit => f32::from(area.height).max(style.small),
+        Size::Fit => f32::from(area.height).max(style.small()),
         other => other.text(&style) * 1.4,
     };
     let mut best: Option<(f32, Laid)> = None;
     let shown = count;
     let widest_label = parts
         .iter()
-        .map(|(_, l)| font.measure(style.small, l))
+        .map(|(_, l)| font.measure(style.small(), l))
         .fold(0.0, f32::max);
     let widest = parts
         .iter()
@@ -356,7 +354,7 @@ fn lay_out(env: &Env<'_>, area: Rect, numbers: &Numbers) -> Option<Laid> {
         for bar in [wanted_bar, false] {
             let fixed = if bar { bar_room } else { 0 } + gap * (rows - 1);
             let row = area.height.saturating_sub(fixed) / rows;
-            let size = widgets::largest_size(max, style.small, |s| {
+            let size = widgets::largest_size(max, style.small(), |s| {
                 // A pixel or two to spare: the ink is measured from the
                 // ascent here, as drawn there.
                 let fits = |height: u16| height + gap / 2 + names_h + 2 <= row;
@@ -396,7 +394,7 @@ fn lay_out(env: &Env<'_>, area: Rect, numbers: &Numbers) -> Option<Laid> {
     Some(Laid {
         shown,
         columns: shown as u16,
-        size: style.small,
+        size: style.small(),
         bar: false,
         beside: true,
     })
@@ -415,7 +413,7 @@ fn draw(
         return;
     };
     let id = WIDGET;
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let parts = parts(env);
     let shown = &parts[..laid.shown.min(parts.len())];
     let column = area.width / laid.columns.max(1);
@@ -426,10 +424,10 @@ fn draw(
             let cell = Rect::new(left + i as u16 * column, area.y, column, area.height);
             let number = numbers.of(part).to_string();
             let text = alloc::format!("{number} {label}");
-            if font.measure(style.small, &text) > f32::from(cell.width) {
+            if font.measure(style.small(), &text) > f32::from(cell.width) {
                 // Not even one with its name: the number alone, smaller
                 // where it must be, nothing where even that is too wide.
-                let small = style.small;
+                let small = style.small();
                 let least = small * 0.5;
                 if font.measure(least, &number) <= f32::from(cell.width) {
                     widgets::draw_line(
@@ -445,12 +443,12 @@ fn draw(
                 }
                 continue;
             }
-            let x = Align::Center.x(cell, font.measure(style.small, &text));
-            let baseline = widgets::ink_baseline(&font, style.small, &text, cell);
+            let x = Align::Center.x(cell, font.measure(style.small(), &text));
+            let baseline = widgets::ink_baseline(&font, style.small(), &text, cell);
             canvas.describe(Role::Text, &text, cell);
-            font.draw(canvas, style.small, x, baseline, &number, look.ink);
-            let x = x + font.measure(style.small, &alloc::format!("{number} "));
-            font.draw(canvas, style.small, x, baseline, label, look.faint);
+            font.draw(canvas, style.small(), x, baseline, &number, look.ink);
+            let x = x + font.measure(style.small(), &alloc::format!("{number} "));
+            font.draw(canvas, style.small(), x, baseline, label, look.faint);
         }
         return;
     }
@@ -463,7 +461,7 @@ fn draw(
     let room = f32::from(column.saturating_sub(between));
     let names: Vec<String> = shown
         .iter()
-        .map(|(_, label)| paperpaw_sdk::ui::fit(&font, style.small, label, room))
+        .map(|(_, label)| paperpaw_sdk::ui::fit(&font, style.small(), label, room))
         .collect();
     let named = shown
         .iter()
@@ -477,7 +475,7 @@ fn draw(
     let digits_h = (digits.1 - digits.0) as u16;
     let row_h = digits_h + if named { gap / 2 + names_h } else { 0 };
     let rows = (laid.shown as u16).div_ceil(laid.columns.max(1));
-    let bar_h = (style.line as u16 * 3).max(4);
+    let bar_h = (style.line() * 3).max(4);
     let total = row_h * rows + gap * (rows - 1) + if laid.bar { gap + bar_h } else { 0 };
     let top = area.y + area.height.saturating_sub(total) / 2;
     for (i, (part, label)) in shown.iter().enumerate() {
@@ -493,11 +491,11 @@ fn draw(
         let x = Align::Center.x(cell, font.measure(size, &number));
         font.draw(canvas, size, x, i32::from(y) - digits.0, &number, look.ink);
         let label = &names[i];
-        let label_w = font.measure(style.small, label);
+        let label_w = font.measure(style.small(), label);
         if named && label_w <= f32::from(column) {
             let x = Align::Center.x(cell, label_w);
             let baseline = i32::from(y + digits_h + gap / 2) - names_top;
-            font.draw(canvas, style.small, x, baseline, label, look.faint);
+            font.draw(canvas, style.small(), x, baseline, label, look.faint);
         }
     }
     if laid.bar {
@@ -516,7 +514,7 @@ fn draw(
 /// rest a fine line.
 fn draw_share(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, area: Rect, numbers: &Numbers) {
     let style = UiStyle::new(env);
-    let fine = (style.line as u16).clamp(1, area.height);
+    let fine = (style.line()).clamp(1, area.height);
     canvas.fill(
         Rect::new(area.x, area.y + (area.height - fine) / 2, area.width, fine),
         look.ink,

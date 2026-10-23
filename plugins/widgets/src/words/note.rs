@@ -104,7 +104,7 @@ fn lay_out(env: &Env<'_>, area: Rect) -> Option<Laid> {
     let style = UiStyle::new(env);
     let font = text::font(env, env.settings.read(&FACE))?;
     // The heading where a line of the note fits below it.
-    let least = text::line_height(&font, style.small) as u16;
+    let least = text::line_height(&font, style.small()) as u16;
     let heading = !env.settings.read(&HEADING).trim().is_empty()
         && area.height >= heading_height(env) + least;
     if heading {
@@ -113,7 +113,7 @@ fn lay_out(env: &Env<'_>, area: Rect) -> Option<Laid> {
     }
     let width = f32::from(area.width);
     let size = match widgets::size(env, ID.as_str()) {
-        Size::Fit => text::largest(style.small, style.title * 1.8, |size| {
+        Size::Fit => text::largest(style.small(), style.title() * 1.8, |size| {
             // Broken between words only, every word whole on a line.
             let (lines, too_wide) = text::count_lines(&font, size, note, width);
             !too_wide && lines as f32 * text::line_height(&font, size) <= f32::from(area.height)

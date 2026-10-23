@@ -72,11 +72,14 @@ impl AccountScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         // No longer than the screen: the list pages where its rows are tall.
-        let rows = ((style.row * 6) as u16).min(display.height.saturating_sub(top));
-        let list =
-            ListView::new(Rect::new(0, top, display.width, rows), style.row).focus_on_keys(env);
+        let rows = ((u32::from(style.row()) * 6) as u16).min(display.height.saturating_sub(top));
+        let list = ListView::new(
+            Rect::new(0, top, display.width, rows),
+            u32::from(style.row()),
+        )
+        .focus_on_keys(env);
         let signed_in = env.settings.read(&USER).to_string();
         let mut screen = Self {
             style,
@@ -121,15 +124,11 @@ impl AccountScreen {
     /// whole wherever the screen holds it.
     fn note(&self, env: &Env<'_>, rows: usize) -> Rect {
         let style = &self.style;
-        let shown = (style.row as u16)
+        let shown = (style.row())
             .saturating_mul(rows as u16)
             .min(self.list_area.height);
-        let top = self.list_area.y + shown + style.gap as u16;
-        let bottom = env
-            .device
-            .display
-            .height
-            .saturating_sub(style.margin as u16);
+        let top = self.list_area.y + shown + style.gap();
+        let bottom = env.device.display.height.saturating_sub(style.margin());
         let width = self.list_area.width;
         // As high as the message needs, right below the rows.
         let needs = ui::message_height(env, style, width, &self.message);

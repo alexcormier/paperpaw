@@ -171,7 +171,7 @@ impl Widget for Streak {
         };
         let id = NAME;
         let size = widgets::size(env, id).text(&style);
-        let small = line(&font, style.small);
+        let small = line(&font, style.small());
         frame_height(env, id)
             + caption_room(env, id)
             + line(&font, size)
@@ -217,7 +217,7 @@ fn marks_height(env: &Env<'_>, small: u16, width: u16, weekdays: bool) -> u16 {
         7
     };
     let (_, d) = mark_size(env, width, count);
-    d as u16 + style.gap as u16 / 2 + if weekdays { small } else { 0 }
+    d as u16 + style.gap() / 2 + if weekdays { small } else { 0 }
 }
 
 /// "5 days", and below it "in a row, longest 12" (or how to begin one).
@@ -254,12 +254,12 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         caption = None;
         area = look.area;
     }
-    let small = line(&font, style.small);
-    let gap = style.gap as u16 / 2;
+    let small = line(&font, style.small());
+    let gap = style.gap() / 2;
     let weekdays = widgets::shows(env, id, "weekdays");
     let align = widgets::align(env, id);
     let headline = match widgets::size(env, id) {
-        Size::Fit => style.text,
+        Size::Fit => style.text(),
         size => size.text(&style),
     };
     let least = line(&font, headline) + small;
@@ -270,7 +270,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         // The text two fifths (more where the streak needs it), the marks
         // the rest; the gap between them taken from the marks where the
         // two would not fit together otherwise.
-        let space = style.gap as u16;
+        let space = style.gap();
         let needs = font.measure(headline, &first) as u16 + 1;
         let least_marks = (env.metrics.mm(3) * shown.marks.len() as u32) as u16;
         let side = needs
@@ -352,14 +352,14 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return Texts {
-            size: style.text,
+            size: style.text(),
             first: String::new(),
             second: None,
             width: 0,
             height: 0,
         };
     };
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let width = f32::from(area.width);
     let room = area.height.saturating_sub(small);
     let with_note = super::text_size(env, &font, NAME, first, area.width, room);
@@ -367,7 +367,7 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
     // The note where there is room for it below the streak, and where it
     // does not make the streak smaller than the body's size.
     let note = line(&font, with_note) + small <= area.height
-        && (with_note >= style.text || with_note >= alone);
+        && (with_note >= style.text() || with_note >= alone);
     let size = if note { with_note } else { alone };
     let shown = super::number_if_narrow(&font, size, first, area.width);
     let shown = ui::fit(&font, size, shown, width);
@@ -377,7 +377,7 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
         .then(|| {
             let in_a_row = env.i18n.tr("stats.in-a-row");
             let start = env.i18n.tr("stats.widget.streak.start");
-            let wide = font.measure(style.small, second) > width;
+            let wide = font.measure(style.small(), second) > width;
             if wide && second.starts_with(in_a_row) {
                 in_a_row
             } else if wide && second == start {
@@ -388,12 +388,12 @@ fn lay_texts(env: &Env<'_>, area: Rect, (first, second): (&str, &str)) -> Texts 
         })
         // Left out where not even that fits whole: a note shortened says
         // little.
-        .filter(|text| font.measure(style.small, text) <= width)
+        .filter(|text| font.measure(style.small(), text) <= width)
         .map(String::from);
     let wide = font.measure(size, &shown).max(
         second
             .as_ref()
-            .map_or(0.0, |s| font.measure(style.small, s)),
+            .map_or(0.0, |s| font.measure(style.small(), s)),
     );
     let height = line(&font, size) + if second.is_some() { small } else { 0 };
     Texts {
@@ -419,7 +419,7 @@ fn draw_texts(
     let Some(font) = style.font(env) else {
         return;
     };
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let big = line(&font, laid.size);
     let block = middle(area, laid.height);
     let row = |y: u16, h: u16| Rect::new(area.x, y, area.width, h);
@@ -434,9 +434,9 @@ fn draw_texts(
         look.ink,
     );
     if let Some(second) = &laid.second {
-        let x = align.x(area, font.measure(style.small, second));
+        let x = align.x(area, font.measure(style.small(), second));
         let at = row(block.y + big, small);
-        ui::draw_label(canvas, &font, style.small, x, at, second, look.faint);
+        ui::draw_label(canvas, &font, style.small(), x, at, second, look.faint);
     }
 }
 
@@ -455,19 +455,20 @@ fn draw_marks(
         return;
     };
     let id = NAME;
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let n = marks.len().max(1) as u32;
     let (column, d) = mark_size(env, area.width, marks.len());
     // The weekdays where their letters have room.
     let weekdays = weekdays
-        && (0..7).all(|w| font.measure(style.small, super::initial(env, w)) * 1.3 <= column as f32);
+        && (0..7)
+            .all(|w| font.measure(style.small(), super::initial(env, w)) * 1.3 <= column as f32);
     let labels = if weekdays { small } else { 0 };
     let d = d.min(u32::from(area.height.saturating_sub(labels)));
     if d < 4 {
         return;
     }
     let checks = chosen(env, id, "style") == MARKS[1];
-    let thin = style.line.max(1);
+    let thin = u32::from(style.line()).max(1);
     // Flush with the text: the outer marks' edges on its margins.
     let inset = (column - d) / 2;
     let span = (column * n - 2 * inset) as f32;
@@ -488,13 +489,13 @@ fn draw_marks(
         }
         if weekdays {
             let name = super::initial(env, mark.weekday);
-            let w = font.measure(style.small, name);
+            let w = font.measure(style.small(), name);
             let row = Rect::new(area.x, area.y + d as u16, area.width, labels);
             let color = if mark.today { look.ink } else { look.faint };
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
+                style.small(),
                 cx as f32 - w / 2.0,
                 row,
                 name,

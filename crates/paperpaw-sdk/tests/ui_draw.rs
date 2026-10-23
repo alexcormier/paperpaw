@@ -41,8 +41,8 @@ fn the_ui_font_and_icons_are_there() {
     let style = UiStyle::new(&env);
     assert!(style.font(&env).is_some());
     assert!(ui::has_icons(&env));
-    assert!(ui::icon_width(&env, "settings", style.text) > 0.0);
-    assert_eq!(ui::icon_width(&env, "no-such-icon", style.text), 0.0);
+    assert!(ui::icon_width(&env, "settings", style.text()) > 0.0);
+    assert_eq!(ui::icon_width(&env, "no-such-icon", style.text()), 0.0);
 }
 
 // ---- Shortening -------------------------------------------------------
@@ -58,8 +58,8 @@ proptest! {
         let env = h.env();
         let style = UiStyle::new(&env);
         let font = style.font(&env).unwrap();
-        let shown = ui::fit(&font, style.text, &text, width);
-        prop_assert!(font.measure(style.text, &shown) <= width.max(font.measure(style.text, "…")) + 1.0);
+        let shown = ui::fit(&font, style.text(), &text, width);
+        prop_assert!(font.measure(style.text(), &shown) <= width.max(font.measure(style.text(), "…")) + 1.0);
         if shown != text {
             let start = shown.strip_suffix('…').expect("ends with …");
             prop_assert!(text.starts_with(start));
@@ -79,11 +79,11 @@ proptest! {
         let style = UiStyle::new(&env);
         let font = style.font(&env).unwrap();
         let gap = 16.0;
-        let (t, v, value_width) = ui::fit_pair(&font, style.text, &title, &value, width, gap);
-        let tw = font.measure(style.text, &t);
-        prop_assert!((font.measure(style.text, &v) - value_width).abs() < 0.01);
+        let (t, v, value_width) = ui::fit_pair(&font, style.text(), &title, &value, width, gap);
+        let tw = font.measure(style.text(), &t);
+        prop_assert!((font.measure(style.text(), &v) - value_width).abs() < 0.01);
         // Two pixels of slack: each part has one for rounding.
-        let ellipses = 2.0 * font.measure(style.text, "…");
+        let ellipses = 2.0 * font.measure(style.text(), "…");
         prop_assert!(tw + value_width + gap <= width.max(ellipses + gap) + 2.0, "{tw} + {value_width}");
     }
 }
@@ -120,7 +120,7 @@ proptest! {
         let env = h.env();
         let style = UiStyle::new(&env);
         // At least as high as rows are, those with notes as noted rows.
-        let row = Rect { height: rect.height.max(style.row as u16), ..rect };
+        let row = Rect { height: rect.height.max(style.row()), ..rect };
         let noted = Rect { height: rect.height.max(style.noted_row() as u16), ..rect };
         let draws: [(Rect, Draw<'_>); 6] = [
             (row, &|c| ui::draw_value_row(c, &env, &style, row, focused, &title, &value)),
@@ -157,10 +157,10 @@ fn the_switch_sits_at_the_rows_end_and_the_title_ends_before_it() {
     let h = Harness::new(Device::TOUCH);
     let env = h.env();
     let style = UiStyle::new(&env);
-    let row = Rect::new(0, 100, 480, style.row as u16);
+    let row = Rect::new(0, 100, 480, style.row());
     let switch = ui::switch_rect(&style, row);
     // Flush with the margin, where other rows end their values.
-    assert_eq!(switch.right() + style.margin, row.right());
+    assert_eq!(switch.right() + u32::from(style.margin()), row.right());
     assert_eq!(
         switch.y - row.y,
         (row.bottom() - switch.bottom()) as u16,
@@ -175,7 +175,7 @@ fn the_switch_sits_at_the_rows_end_and_the_title_ends_before_it() {
     // was shortened before it.
     let mut alone = support::frame(480, 800);
     ui::draw_switch(&mut alone.canvas(), &style, row, true, false);
-    let from = switch.x - style.gap as u16;
+    let from = switch.x - style.gap();
     let (view, alone) = (frame.view(), alone.view());
     for y in row.y..row.bottom() as u16 {
         for x in from..row.right() as u16 {
@@ -203,7 +203,7 @@ fn steppers_of_rows_above_each_other_line_up() {
         let row = Rect::new(0, 100 + n as u16 * 70, 480, 70);
         let (minus, plus) = ui::stepper(&env, &style, row, room).unwrap();
         columns.push((minus.x, plus.x));
-        assert_eq!(plus.right() + style.margin, row.right());
+        assert_eq!(plus.right() + u32::from(style.margin()), row.right());
         assert!(minus.right() < u32::from(plus.x));
         let mut frame = frame(480, 800);
         ui::draw_number(
@@ -268,7 +268,7 @@ fn a_long_heading_ends_at_the_right_margin() {
         let h = Harness::new(device);
         let env = h.env();
         let style = UiStyle::new(&env);
-        let row = Rect::new(0, 0, 413, style.row as u16);
+        let row = Rect::new(0, 0, 413, style.row());
         let mut frame = frame(480, 800);
         ui::draw_heading(
             &mut frame.canvas(),
@@ -283,7 +283,7 @@ fn a_long_heading_ends_at_the_right_margin() {
             .rev()
             .find(|&x| (row.y..row.y + row.height).any(|y| view.pixel(x, y) != support::PAPER))
             .unwrap();
-        assert!(last < 413 - style.margin as u16 + 2, "ends at {last}");
+        assert!(last < 413 - style.margin() + 2, "ends at {last}");
     }
 }
 
@@ -299,9 +299,7 @@ fn a_progress_bar_fills_inside_its_track() {
         let env = h.env();
         let base = UiStyle::new(&env);
         for (corner, pill) in [(0, false), (env.metrics.tenth_mm(8), false), (0, true)] {
-            let mut style = base;
-            style.corner = corner;
-            style.pill = pill;
+            let style = base.with_corner(corner as u16).with_pill(pill);
             for (width, height) in [(300u16, 24u16), (120, 12), (400, 40), (60, 9)] {
                 let area = Rect::new(20, 30, width, height);
                 // The track's shape: what a filled track would cover.
@@ -347,8 +345,8 @@ fn row_icons_are_centred_by_their_ink() {
         let h = Harness::new(device);
         let env = h.env();
         let style = UiStyle::new(&env);
-        let size = style.text * ui::ICON_SCALE;
-        let column = f32::from(style.margin as u16) + size / 2.0;
+        let size = style.text() * ui::ICON_SCALE;
+        let column = f32::from(style.margin()) + size / 2.0;
         let room = ui::icon_room(&env, &style, true);
         let mut seen = 0;
         for icon in [
@@ -364,7 +362,7 @@ fn row_icons_are_centred_by_their_ink() {
                 continue;
             }
             seen += 1;
-            let row = Rect::new(0, 100, 480, style.row as u16);
+            let row = Rect::new(0, 100, 480, style.row());
             let mut frame = frame(480, 800);
             ui::draw_row_icon(
                 &mut frame.canvas(),
@@ -438,7 +436,7 @@ proptest! {
         prop_assert_eq!(seen, expected);
         // The title is where no arrow is, from the back arrow or the
         // margin on.
-        let left = if back { a.height } else { style.margin as u16 };
+        let left = if back { a.height } else { style.margin() };
         for (p, action) in across(a).zip(&actions_across) {
             let title = action.is_none() && p.x >= i32::from(left);
             prop_assert_eq!(header.on_title(&env, &style, p, paging), title, "{:?}", p);
@@ -514,11 +512,11 @@ fn the_header_keeps_to_the_content_margins() {
             Some(Paging::new(1, 3)),
         );
         let (first, last) = ink_columns(&arrows, middle.clone());
-        let margin = style.margin as u16;
+        let margin = style.margin();
         assert_eq!(first, margin, "back arrow at {dpi} dpi");
         assert_eq!(last, 480 - margin - 1, "next arrow at {dpi} dpi");
         // A list icon, as rows draw it.
-        let row = Rect::new(0, 100, 480, style.row as u16);
+        let row = Rect::new(0, 100, 480, style.row());
         let mut icon = frame(480, 800);
         let room = ui::icon_room(&env, &style, true);
         let label = ui::draw_row_icon(
@@ -533,7 +531,7 @@ fn the_header_keeps_to_the_content_margins() {
         let (icon_first, _) = ink_columns(&icon, row.y..row.y + row.height);
         // An icon's box begins at the margin, its drawing a little after
         // (the icon's own side bearing), never before.
-        let bearing = (style.text * ui::ICON_SCALE / 4.0) as u16;
+        let bearing = (style.text() * ui::ICON_SCALE / 4.0) as u16;
         assert!(
             (first..=first + bearing).contains(&icon_first),
             "icon {icon_first}, arrow {first} at {dpi} dpi"
@@ -589,7 +587,7 @@ fn header_titles_are_centred_by_their_capitals() {
         // of the letters (gray) one more.
         let (above, below) = (caps, height - 1 - base);
         assert!(
-            above.abs_diff(below) <= style.line as u16 + 2,
+            above.abs_diff(below) <= style.line() + 2,
             "capitals {caps}..{base} in {height} at {dpi} dpi"
         );
     }
@@ -639,7 +637,10 @@ fn a_header_note_is_a_button_only_where_it_does_something() {
         .into_iter()
         .find(|d| d.role == Role::Button && d.label == "3 hits")
         .unwrap();
-    assert!(u32::from(button.area.height) >= style.finger, "{button:?}");
+    assert!(
+        u32::from(button.area.height) >= u32::from(style.finger()),
+        "{button:?}"
+    );
 }
 
 #[test]
@@ -747,7 +748,7 @@ fn hint_ink(frame: &paperpaw_graphics::Framebuffer, area: Rect) -> Vec<u16> {
 fn long_hints_side_by_side_stay_apart() {
     let h = Harness::new(Device::BUTTONS);
     let env = h.env();
-    let gap = UiStyle::new(&env).gap as u16;
+    let gap = UiStyle::new(&env).gap();
     let height = ui::button_hints_height(&env);
     let area = Rect::new(0, 800 - height, 480, height);
     let long = |c: char| Hint::Text(std::iter::repeat_n(c, 30).collect());
@@ -853,7 +854,7 @@ fn noted_rows_grow_with_their_lines() {
     let style = UiStyle::new(&h.env());
     assert_eq!(style.noted_row_of(ui::NOTE_LINES), style.noted_row());
     assert!(style.noted_row_of(1) < style.noted_row());
-    assert!(style.noted_row_of(1) > style.row * 3 / 4);
+    assert!(style.noted_row_of(1) > u32::from(style.row()) * 3 / 4);
 }
 
 /// A QR code takes whole pixels a module, square, inside its area, with
@@ -930,8 +931,7 @@ fn a_look_paints_the_parts_and_keeps_what_they_say() {
         (shown, said)
     };
     let plain = UiStyle::new(&env);
-    let mut looked = plain;
-    looked.look = Look::of(&SQUARE);
+    let looked = plain.with_look(Look::of(&SQUARE));
     let (before, said_before) = at(&plain);
     let (after, said_after) = at(&looked);
     assert_eq!(after, (SWITCH, FOCUS, BUTTON));
@@ -960,22 +960,22 @@ fn the_palette_sets_the_grays_the_parts_draw_in() {
 
     let h = Harness::new(Device::TOUCH);
     let env = h.env();
-    let mut style = UiStyle::new(&env);
-    style.separators = ui::Separators::Line;
-    style.palette = palette;
+    let style = UiStyle::new(&env)
+        .with_separators(ui::Separators::Line)
+        .with_palette(palette);
     let row = Rect::new(0, 0, 480, 80);
     let mut lined = frame(480, 100);
     ui::draw_separator(&mut lined.canvas(), &style, row, 0);
-    let y = row.height - style.line as u16;
+    let y = row.height - style.line();
     assert_eq!(lined.view().pixel(240, y), Color::gray(100));
     assert_eq!(style.ink(Ink::Muted), Color::gray(60));
     // Strong contrast draws gray text black, not the lines.
-    style.strong = true;
+    let style = style.with_strong(true);
     assert_eq!(style.ink(Ink::Muted), Color::BLACK);
     assert_eq!(style.ink(Ink::Line), Color::gray(100));
     // Text of one kind is as large everywhere.
-    assert_eq!(style.size(TextRole::Body), style.text);
-    assert_eq!(style.size(TextRole::Headline), style.title * 1.6);
+    assert_eq!(style.size(TextRole::Body), style.text());
+    assert_eq!(style.size(TextRole::Headline), style.title() * 1.6);
 }
 
 /// Semantic icons: what they say has the drawing a theme names for it,
@@ -1041,7 +1041,11 @@ fn setting_titles_are_never_cut_for_their_control() {
         let env = h.env();
         let style = UiStyle::new(&env);
         for noted in [false, true] {
-            let row = if noted { style.noted_row() } else { style.row };
+            let row = if noted {
+                style.noted_row()
+            } else {
+                u32::from(style.row())
+            };
             for spec in &specs {
                 let side = ui::setting_row(&style, spec, row, noted);
                 let height = ui::setting_height(&env, &style, spec, 480, "", row, noted);
@@ -1100,7 +1104,13 @@ fn a_rows_lines_hold_for_every_value_it_may_show() {
         let env = h.env();
         let style = UiStyle::new(&env);
         seen.push(ui::row_lines(
-            &env, &style, &spec, 480, "", style.row, false,
+            &env,
+            &style,
+            &spec,
+            480,
+            "",
+            u32::from(style.row()),
+            false,
         ));
     }
     assert_eq!(seen[0], seen[1]);
@@ -1122,7 +1132,13 @@ fn a_rows_lines_hold_for_every_value_it_may_show() {
             let env = h.env();
             let style = UiStyle::new(&env);
             seen.push(ui::row_lines(
-                &env, &style, &spec, width, "", style.row, false,
+                &env,
+                &style,
+                &spec,
+                width,
+                "",
+                u32::from(style.row()),
+                false,
             ));
         }
         assert_eq!(seen[0], seen[1], "{width} px");
@@ -1137,7 +1153,7 @@ fn a_numbers_steps_are_hit_where_they_are_drawn() {
     let h = Harness::new(Device::TOUCH);
     let env = h.env();
     let style = UiStyle::new(&env);
-    let rect = Rect::new(0, 100, 480, style.touch_row(style.row) as u16);
+    let rect = Rect::new(0, 100, 480, style.touch_row(u32::from(style.row())) as u16);
     for (room, value) in [("000 %", "• 20 %"), ("100 %", "• 9"), ("", "12345 px")] {
         let (described, _) = describe(480, 800, |c| {
             ui::draw_number(c, &env, &style, rect, "Size", value, room, None);

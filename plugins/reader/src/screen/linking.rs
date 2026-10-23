@@ -233,7 +233,7 @@ pub(super) fn draw_linking(
         i32::from(bar.x),
         i32::from(bar.y),
         u32::from(bar.width),
-        style.line.max(2),
+        u32::from(style.line()).max(2),
         Color::BLACK,
     );
     let Some(font) = style.font(env) else {
@@ -269,17 +269,17 @@ pub(super) fn draw_linking(
         }
         None => env.i18n.tr("reader.link.none").to_string(),
     };
-    let margin = style.margin as f32;
+    let margin = style.margin() as f32;
     let text = ui::fit(
         &font,
-        style.small,
+        style.small(),
         &text,
         f32::from(bar.width) - 2.0 * margin,
     );
     ui::draw_label(
         canvas,
         &font,
-        style.small,
+        style.small(),
         f32::from(bar.x) + margin,
         bar,
         &text,

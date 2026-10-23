@@ -480,7 +480,7 @@ fn draw_zone(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, zone: &str, i
     };
     let cell = (rect.height / 6).max(4);
     let side = cell * 3;
-    let x = rect.x + style.margin as u16;
+    let x = rect.x + style.margin();
     let y = rect.y + (rect.height - side) / 2;
     for i in 0..9u16 {
         let (cx, cy) = (x + (i % 3) * cell, y + (i / 3) * cell);
@@ -533,7 +533,7 @@ impl ListScreen {
     /// The rows for the place chosen.
     fn build(&mut self, env: &Env<'_>) {
         let display = env.device.display;
-        let top = self.header.area().height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let focus = self.rows.focus();
         self.entries = rows(env, self.place().everywhere());
@@ -805,7 +805,7 @@ impl PlaceScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let mut places = places(env);
         for screen in all_screens(env) {
@@ -814,7 +814,7 @@ impl PlaceScreen {
             }
         }
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             places,
             style,
             header,
@@ -1021,13 +1021,13 @@ impl PickScreen {
             entries.push(Pick::Action(id, name));
         }
         let display = env.device.display;
-        let top = self.header.area().height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let heights = entries
             .iter()
             .map(|e| match e {
                 Pick::Heading(_) => ui::heading_height(env, &self.style),
-                _ => self.style.row as u16,
+                _ => self.style.row(),
             })
             .collect();
         let headings = entries

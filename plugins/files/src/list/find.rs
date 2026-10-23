@@ -46,9 +46,9 @@ impl FindScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
-        let row = style.touch_row(style.row) as u16;
+        let margin = style.margin();
+        let gap = style.gap();
+        let row = style.touch_row(u32::from(style.row())) as u16;
         let search = Rect::new(0, header.area().height + gap, display.width, row);
         // Which letters have books: by title (without "The") or surname.
         let mut has = [false; 27];
@@ -135,22 +135,22 @@ impl Screen for FindScreen {
         } else {
             let field = ui::focus_rect(&style, self.search);
             let radius = style.radius(u32::from(field.height));
-            canvas.stroke_round(field, style.line.max(1), radius, Color::BLACK);
+            canvas.stroke_round(field, u32::from(style.line()).max(1), radius, Color::BLACK);
         }
         let ink = style.focus_ink(focused);
-        let margin = style.margin as f32;
-        let size = style.text * ui::ICON_SCALE;
+        let margin = style.margin() as f32;
+        let size = style.text() * ui::ICON_SCALE;
         let w = ui::draw_icon(canvas, env, "search", size, margin, self.search, ink);
-        let x = margin + w + style.gap as f32;
+        let x = margin + w + style.gap() as f32;
         let hint = env.i18n.tr("files.list.find.search");
         let faint = style.focus_faint(focused, ui::Ink::Detail);
-        ui::draw_label(canvas, &font, style.text, x, self.search, hint, faint);
+        ui::draw_label(canvas, &font, style.text(), x, self.search, hint, faint);
         // The letters, the focused one on a dark circle.
-        let big = style.title * 1.2;
+        let big = style.title() * 1.2;
         for (n, (cell, letter)) in self.cells.iter().zip(&self.letters).enumerate() {
             let focused = self.shown && self.focus == n + 1;
             let ink = if focused {
-                let inner = cell.inset(style.gap as u16 / 3, style.gap as u16 / 3);
+                let inner = cell.inset(style.gap() / 3, style.gap() / 3);
                 canvas.fill_round(inner, u32::from(inner.height / 2), Color::BLACK);
                 Color::WHITE
             } else {

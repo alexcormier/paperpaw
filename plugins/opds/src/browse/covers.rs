@@ -24,7 +24,7 @@ impl BrowseScreen {
     /// `image` made small for the cover column of a row, as the panel
     /// shows it.
     fn small_cover(&self, env: &Env<'_>, image: &ImageRef) -> Option<Thumbnail> {
-        let pad = self.style.gap as u16 / 2;
+        let pad = self.style.gap() / 2;
         let height = self.list.row_rect(0).height.saturating_sub(2 * pad);
         let (w, h) = ui::fit_image(image, cover_width(&self.style), height);
         Thumbnail::new(env.storage, image, w, h, env.device.display.format)

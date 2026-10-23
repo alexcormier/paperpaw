@@ -224,8 +224,8 @@ impl Widget for Year {
             .map_or(0, |s| notes(env, s).len() as u16);
         let band = if books_goal(env).is_some() {
             match chosen(env, id, "style") {
-                s if s == STYLES[1] => line(&font, style.title) * 2,
-                s if s == STYLES[2] => line(&font, style.small) * 2,
+                s if s == STYLES[1] => line(&font, style.title()) * 2,
+                s if s == STYLES[2] => line(&font, style.small()) * 2,
                 _ => env.metrics.mm(3) as u16,
             }
         } else {
@@ -235,7 +235,7 @@ impl Widget for Year {
             + caption_room(env, id)
             + line(&font, size)
             + band
-            + notes * line(&font, style.small)
+            + notes * line(&font, style.small())
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -323,7 +323,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
     let goal = books_goal(env);
     let progress = goal.map(|g| shown.done.min(g) * 1000 / g.max(1));
     let style_set = chosen(env, id, "style");
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let align = widgets::align(env, id);
     if style_set == STYLES[1] && goal.is_some() {
         // Beside or below the ring, the notes that fit a line whole (the
@@ -331,7 +331,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         let width = f32::from(area.width);
         let notes: Vec<String> = notes(env, shown)
             .into_iter()
-            .filter(|(note, cut)| *cut || font.measure(style.small, note) <= width)
+            .filter(|(note, cut)| *cut || font.measure(style.small(), note) <= width)
             .map(|(note, _)| note)
             .collect();
         draw_ring(canvas, env, (look, caption), area, shown, progress, &notes);
@@ -343,7 +343,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         .into_iter()
         .filter_map(|(note, cut)| {
             if cut {
-                Some(Wrapped::new(env, &note, style.small, area.width, small))
+                Some(Wrapped::new(env, &note, style.small(), area.width, small))
             } else {
                 super::note_lines(env, &note, area.width, small * 2, 2)
             }
@@ -358,7 +358,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Shown) {
         Some(_) => env.metrics.mm(3) as u16,
         None => 0,
     };
-    let least = line(&font, style.text);
+    let least = line(&font, style.text());
     // As many notes as fit `height` with the rest.
     let kept = |height: u16| {
         let mut kept = 0;
@@ -447,7 +447,7 @@ fn draw_ring(
     let Some(font) = style.font(env) else {
         return;
     };
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let align = widgets::align(env, NAME);
     let wide = area.width >= area.height * 2;
     let notes_h = if wide { 0 } else { notes.len() as u16 * small };
@@ -457,14 +457,14 @@ fn draw_ring(
         area.width.min(area.height.saturating_sub(notes_h))
     };
     let block = super::captioned(canvas, env, NAME, look, caption, d + notes_h);
-    let gap = style.gap as u16;
+    let gap = style.gap();
     // Wide: the ring and the notes beside it placed together, as the
     // alignment says.
     let beside = if wide {
         let room = f32::from(area.width.saturating_sub(d + gap));
         let widest = notes
             .iter()
-            .map(|n| font.measure(style.small, n).min(room))
+            .map(|n| font.measure(style.small(), n).min(room))
             .fold(0.0, f32::max);
         widest as u16
     } else {
@@ -481,7 +481,7 @@ fn draw_ring(
     // The count inside, "of 12" below it.
     let inner = d.saturating_sub(2 * thick as u16 + 4);
     let count = alloc::format!("{}", shown.done);
-    let size = fit_size(&font, &style, "00", inner / 2, inner * 2 / 5).max(style.text);
+    let size = fit_size(&font, &style, "00", inner / 2, inner * 2 / 5).max(style.text());
     let big = line(&font, size);
     let of = books_goal(env).map(|g| {
         env.i18n.format(
@@ -500,9 +500,17 @@ fn draw_ring(
     let r = Rect::new(at.x, inside.y, d, big);
     ui::draw_label(canvas, &font, size, cx - w / 2.0, r, &count, look.ink);
     if let Some(of) = of.filter(|_| of_h > 0) {
-        let w = font.measure(style.small, &of);
+        let w = font.measure(style.small(), &of);
         let r = Rect::new(at.x, inside.y + big, d, small);
-        ui::draw_label(canvas, &font, style.small, cx - w / 2.0, r, &of, look.faint);
+        ui::draw_label(
+            canvas,
+            &font,
+            style.small(),
+            cx - w / 2.0,
+            r,
+            &of,
+            look.faint,
+        );
     }
     // The notes.
     let (text, top) = if wide {
@@ -518,14 +526,14 @@ fn draw_ring(
         (area, block.y + d)
     };
     for (n, note) in notes.iter().enumerate() {
-        let note = ui::fit(&font, style.small, note, f32::from(text.width));
+        let note = ui::fit(&font, style.small(), note, f32::from(text.width));
         let x = if wide {
             f32::from(text.x)
         } else {
-            align.x(text, font.measure(style.small, &note))
+            align.x(text, font.measure(style.small(), &note))
         };
         let r = Rect::new(text.x, top + n as u16 * small, text.width, small);
-        ui::draw_label(canvas, &font, style.small, x, r, &note, look.faint);
+        ui::draw_label(canvas, &font, style.small(), x, r, &note, look.faint);
     }
 }
 
@@ -555,7 +563,7 @@ fn draw_dots(
     }
     let cols = n.div_ceil(rows);
     let radius = (size * 2 / 5).max(2);
-    let thin = style.line.max(1);
+    let thin = u32::from(style.line()).max(1);
     let align = widgets::align(env, NAME);
     let left = align.x(band, (cols * size) as f32) as i32;
     let top = i32::from(band.y) + ((h - rows * size) / 2) as i32;

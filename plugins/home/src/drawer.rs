@@ -29,19 +29,19 @@ impl DrawerScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(
-            style.margin as u16,
+            style.margin(),
             top,
-            display.width.saturating_sub(2 * style.margin as u16),
+            display.width.saturating_sub(2 * style.margin()),
             display.height.saturating_sub(top),
         );
         // About as high as a column is wide; a line higher where a tool's
         // name takes two (its icon as large as the others').
-        let row = (u32::from(area.width) / COLUMNS * 4 / 5).max(style.row);
+        let row = (u32::from(area.width) / COLUMNS * 4 / 5).max(u32::from(style.row()));
         let tools: Vec<Id> = pages::tools(env).into_iter().map(|(id, _)| id).collect();
         // The names' lines as they fall in a row grown by that line.
-        let line = u32::from(paperpaw_sdk::widgets::line_height(env, style.small));
+        let line = u32::from(paperpaw_sdk::widgets::line_height(env, style.small()));
         let width = (u32::from(area.width) / COLUMNS) as u16;
         let cell = Rect::new(0, 0, width, (row + line) as u16);
         let lines = tools

@@ -26,9 +26,7 @@ use support::{Device, Harness, describe, drawn_outside, frame, pointer};
 
 /// Sizes for tests: no fonts needed.
 fn style() -> UiStyle {
-    let mut style = UiStyle::PLAIN;
-    style.corner = 6;
-    style
+    UiStyle::PLAIN.with_corner(6)
 }
 
 fn slider_strategy() -> impl Strategy<Value = Slider> {
@@ -206,7 +204,7 @@ proptest! {
         let SliderParts {
             minus, track, plus, ..
         } = parts(&style(), band);
-        let margin = style().margin;
+        let margin = u32::from(style().margin());
         prop_assert_eq!(u32::from(minus.x), u32::from(band.x) + margin);
         prop_assert_eq!(plus.right() + margin, band.right());
         prop_assert!(minus.right() <= u32::from(track.x));
@@ -234,11 +232,7 @@ proptest! {
         round in any::<bool>(),
     ) {
         let track = Rect::new(40, 20, width, height);
-        let style = {
-            let mut style = style();
-            style.corner = if round { 6 } else { 0 };
-            style
-        };
+        let style = style().with_corner(if round { 6 } else { 0 });
         let ink = if white { Color::WHITE } else { Color::BLACK };
         let mut frame = frame(500, 120);
         slider.draw_track(&mut frame.canvas(), &style, track, value, ink);

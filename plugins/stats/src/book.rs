@@ -103,35 +103,35 @@ impl Screen for BookView {
         let display = env.device.display;
         let title = self.book.as_ref().map_or("", |b| b.title.as_str());
         self.header.draw(canvas, env, &style, title, None, None);
-        let top = self.header.area().height + style.gap as u16;
+        let top = self.header.area().height + style.gap();
         let Some(book) = &self.book else {
             let area = Rect::new(0, top, display.width, display.height - top);
             ui::draw_message(canvas, env, &style, area, env.i18n.tr("stats.no-books"));
             return;
         };
-        let row = style.row as u16 * 4 / 5;
+        let row = style.row() * 4 / 5;
         let rows = self.rows(env, book);
         for (n, (label, value)) in rows.iter().enumerate() {
             let rect = Rect::new(0, top + row * n as u16, display.width, row);
             ui::draw_value_row(canvas, env, &style, rect, false, label, value);
         }
         // The last days it was read.
-        let chart_top = top + row * rows.len() as u16 + style.gap as u16 * 2;
-        let height = display.height.saturating_sub(chart_top + style.gap as u16);
-        if height < style.row as u16 * 2 || self.totals.days.is_empty() {
+        let chart_top = top + row * rows.len() as u16 + style.gap() * 2;
+        let height = display.height.saturating_sub(chart_top + style.gap());
+        if height < style.row() * 2 || self.totals.days.is_empty() {
             return;
         }
         let Some(font) = style.font(env) else {
             return;
         };
-        let margin = style.margin as u16;
-        let title_h = (style.small * 1.6) as u16;
+        let margin = style.margin();
+        let title_h = (style.small() * 1.6) as u16;
         let label_area = Rect::new(margin, chart_top, display.width - 2 * margin, title_h);
         let label = env.i18n.tr("stats.by-day");
         ui::draw_label(
             canvas,
             &font,
-            style.small,
+            style.small(),
             f32::from(margin),
             label_area,
             label,
@@ -159,7 +159,7 @@ impl Screen for BookView {
             margin,
             chart_top + title_h,
             display.width - 2 * margin,
-            height.saturating_sub(title_h).min(style.row as u16 * 5),
+            height.saturating_sub(title_h).min(style.row() * 5),
         );
         chart::bars(
             canvas,

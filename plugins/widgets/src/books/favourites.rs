@@ -181,7 +181,7 @@ impl Widget for Favourites {
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {
         let style = UiStyle::new(env);
         let columns = self.books.len().clamp(3, 6) as u16;
-        let cover = (width / columns).saturating_sub(style.gap as u16) * 3 / 2;
+        let cover = (width / columns).saturating_sub(style.gap()) * 3 / 2;
         let rows = if Self::grid(env) {
             (self.books.len() as u16).div_ceil(columns).max(1)
         } else {

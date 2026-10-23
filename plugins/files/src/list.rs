@@ -254,7 +254,7 @@ impl Layout {
         let sizes = Sizes::new(env, &style);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let gap = style.gap as u16;
+        let gap = style.gap();
         let chip_labels: Vec<String> = Filter::ALL
             .iter()
             .map(|f| env.i18n.tr(f.label()).to_string())
@@ -268,7 +268,7 @@ impl Layout {
             )
         } else {
             // From margin to margin, with room round them for the focus.
-            let margin = style.margin as u16;
+            let margin = style.margin();
             let labels: Vec<&str> = chip_labels.iter().map(String::as_str).collect();
             let width = display.width.saturating_sub(2 * margin);
             // As many rows as the words need: none is shortened.
@@ -875,9 +875,9 @@ impl ListScreen {
         if let Some(row) = self.layout.filter_row {
             // At the end of the filter's row, its icon on the margin.
             let square = row.height;
-            let size = style.title * ui::ICON_SCALE;
+            let size = style.title() * ui::ICON_SCALE;
             let icon = ui::icon_width(env, "search", size) as u16;
-            let right = (row.x + row.width).saturating_sub(style.margin as u16);
+            let right = (row.x + row.width).saturating_sub(style.margin());
             let x = (right + (square - icon) / 2).saturating_sub(square);
             return Some(Rect::new(x, row.y, square, square));
         }
@@ -887,10 +887,10 @@ impl ListScreen {
         let right = if self.len() > 0 && pages > 1 {
             let font = style.font(env)?;
             let label = format!("{} / {pages}", self.page_of(self.focus) + 1);
-            let label = font.measure(style.small, &label) as u16;
+            let label = font.measure(style.small(), &label) as u16;
             (a.x + a.width).saturating_sub(2 * (square * 4 / 5) + label)
         } else {
-            (a.x + a.width).saturating_sub(style.margin as u16)
+            (a.x + a.width).saturating_sub(style.margin())
         };
         Some(Rect::new(right.saturating_sub(square), a.y, square, square))
     }
@@ -987,7 +987,7 @@ impl Screen for ListScreen {
             }
         } else {
             if let Some(button) = self.find {
-                let size = style.title * ui::ICON_SCALE;
+                let size = style.title() * ui::ICON_SCALE;
                 let w = ui::icon_width(env, "search", size);
                 let x = f32::from(button.x) + (f32::from(button.width) - w) / 2.0;
                 let ink = style.header_colors().1;

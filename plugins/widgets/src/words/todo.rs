@@ -410,9 +410,9 @@ impl Widget for TodoWidget {
             let text = env
                 .i18n
                 .format("widgets.todo.more", &[("count", Arg::Int(more as i64))]);
-            let text = ui::fit(&font, style.small, &text, f32::from(row.width));
-            let x = align.x(row, font.measure(style.small, &text));
-            ui::draw_label(canvas, &font, style.small, x, row, &text, look.faint);
+            let text = ui::fit(&font, style.small(), &text, f32::from(row.width));
+            let x = align.x(row, font.measure(style.small(), &text));
+            ui::draw_label(canvas, &font, style.small(), x, row, &text, look.faint);
         }
     }
 
@@ -469,10 +469,10 @@ fn row_height(env: &Env<'_>) -> u16 {
 fn text_size(env: &Env<'_>) -> f32 {
     let style = UiStyle::new(env);
     match widgets::size(env, ID.as_str()) {
-        Size::Small => style.small,
-        Size::Medium | Size::Fit => style.text,
-        Size::Large => style.title,
-        _ => style.text,
+        Size::Small => style.small(),
+        Size::Medium | Size::Fit => style.text(),
+        Size::Large => style.title(),
+        _ => style.text(),
     }
 }
 
@@ -558,7 +558,7 @@ fn draw_item(
         let baseline =
             f32::from(row.y) + (f32::from(row.height) + metrics.ascent - metrics.descent) / 2.0;
         let y = (baseline - size * 0.27) as u16;
-        let line = style.line.max(1) as u16;
+        let line = u32::from(style.line()).max(1) as u16;
         canvas.fill(Rect::new(label.x, y, width as u16, line), color);
     }
 }
@@ -584,7 +584,7 @@ fn items_size(
     boxes: &str,
 ) -> f32 {
     let size = text_size(env);
-    let least = UiStyle::new(env).small.min(size);
+    let least = UiStyle::new(env).small().min(size);
     rows.iter()
         .zip(items)
         .map(|(row, item)| {
@@ -604,7 +604,9 @@ fn draw_box(
     look: &Look,
 ) {
     let style = UiStyle::new(env);
-    let line = (u32::from(place.width) / 10).max(style.line).max(1);
+    let line = (u32::from(place.width) / 10)
+        .max(u32::from(style.line()))
+        .max(1);
     let r = u32::from(place.width / 2);
     let center = Point::new(i32::from(place.x) + r as i32, i32::from(place.y) + r as i32);
     match (square, done) {
@@ -647,13 +649,13 @@ impl TodoScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let loaded = load(env.storage, today(env));
         let unreadable = loaded.is_err();
         let List { items, rest } = loaded.unwrap_or_default();
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
             items,
@@ -751,7 +753,7 @@ impl Screen for TodoScreen {
         self.list
             .draw(canvas, &style, len, |canvas, row, rect, focused| {
                 let (ink, paper) = (style.focus_ink(focused), style.focus_paper(focused));
-                let margin = style.margin as u16;
+                let margin = style.margin();
                 let inner = Rect::new(
                     rect.x + margin,
                     rect.y,
@@ -770,17 +772,17 @@ impl Screen for TodoScreen {
                     widgets::Frame::None,
                 );
                 if row == 0 {
-                    let icon = style.text * 1.1;
+                    let icon = style.text() * 1.1;
                     let width =
                         ui::draw_icon(canvas, env, "plus", icon, f32::from(inner.x), inner, ink);
                     let x = f32::from(inner.x)
                         + if width > 0.0 {
-                            width + style.gap as f32
+                            width + style.gap() as f32
                         } else {
                             0.0
                         };
                     let text = env.i18n.tr("widgets.todo.add");
-                    ui::draw_label(canvas, &font, style.text, x, inner, text, ink);
+                    ui::draw_label(canvas, &font, style.text(), x, inner, text, ink);
                     return;
                 }
                 if let Some(item) = items.get(row - 1) {
@@ -789,7 +791,7 @@ impl Screen for TodoScreen {
                         canvas,
                         env,
                         &font,
-                        style.text,
+                        style.text(),
                         inner,
                         item,
                         boxes,
@@ -806,10 +808,10 @@ impl Screen for TodoScreen {
             };
             let row = self.list.row_rect(1);
             let area = Rect::new(
-                row.x + style.margin as u16,
+                row.x + style.margin(),
                 row.y,
-                row.width.saturating_sub(2 * style.margin as u16),
-                style.row as u16 * 2,
+                row.width.saturating_sub(2 * style.margin()),
+                style.row() * 2,
             );
             let look = Look::new(
                 area,

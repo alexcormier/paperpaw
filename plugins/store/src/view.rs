@@ -118,11 +118,11 @@ impl ViewScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let view = View::of(params);
         // The installed list says at its foot how much room is left.
         let line = if view == View::Installed {
-            (style.small * 1.3) as u16 + style.gap as u16 * 2
+            (style.small() * 1.3) as u16 + style.gap() * 2
         } else {
             0
         };

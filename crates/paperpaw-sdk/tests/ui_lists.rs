@@ -24,9 +24,7 @@ use support::{Device, Harness, drawn_outside, frame, middle};
 
 /// Sizes for tests: no fonts needed.
 fn style() -> UiStyle {
-    let mut style = UiStyle::PLAIN;
-    style.corner = 6;
-    style
+    UiStyle::PLAIN.with_corner(6)
 }
 
 /// Every point of `rect` worth trying: its corners and its middle.

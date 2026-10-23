@@ -304,11 +304,11 @@ impl Widget for HighlightWidget {
     }
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
-        (UiStyle::new(env).row * 3) as u16 + frame_height(env, WIDGET)
+        (u32::from(UiStyle::new(env).row()) * 3) as u16 + frame_height(env, WIDGET)
     }
 
     fn min_height(&self, env: &Env<'_>, _: u16) -> u16 {
-        (UiStyle::new(env).row * 2) as u16 + frame_height(env, WIDGET)
+        (u32::from(UiStyle::new(env).row()) * 2) as u16 + frame_height(env, WIDGET)
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -363,7 +363,7 @@ struct Laid {
 fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     let style = UiStyle::new(env);
     let id = WIDGET;
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let look = widgets::look::look(env, id, area);
     let area = below_caption(env, id, &look);
     // Below: the book (and the note), small.
@@ -377,13 +377,13 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
             (false, false) => String::new(),
         }
     };
-    let small = widgets::line_height(env, style.small);
+    let small = widgets::line_height(env, style.small());
     let mut note = widgets::shows(env, id, "note") && !quote.note.is_empty();
     let mut with_source = !source.is_empty();
     let mut marks = widgets::shows(env, id, "marks");
-    let mark_size = style.title * 2.0;
+    let mark_size = style.title() * 2.0;
     let (max, min) = match widgets::size(env, id) {
-        Size::Fit => (style.title * 1.6, style.small),
+        Size::Fit => (style.title() * 1.6, style.small()),
         other => (other.text(&style), other.text(&style)),
     };
     let (text, lines, size, mark_h, below) = loop {
@@ -450,7 +450,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid
     };
     let id = WIDGET;
     let align = widgets::align(env, id);
-    let gap = style.gap as u16;
+    let gap = style.gap();
     super::caption(
         canvas,
         env,
@@ -459,10 +459,10 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid
         env.i18n.tr("widgets.highlight.caption"),
     );
     let area = laid.block;
-    let small = widgets::line_height(env, style.small);
+    let small = widgets::line_height(env, style.small());
     if laid.marks {
         let mark = "\u{201c}";
-        let mark_size = style.title * 2.0;
+        let mark_size = style.title() * 2.0;
         let w = font.measure(mark_size, mark);
         let x = align.x(area, w);
         let metrics = font.line_metrics(mark_size);
@@ -490,7 +490,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid
             canvas,
             env,
             &font,
-            style.small,
+            style.small(),
             row,
             align,
             &quote.note,
@@ -503,7 +503,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid
             canvas,
             env,
             &font,
-            style.small,
+            style.small(),
             row,
             align,
             source,

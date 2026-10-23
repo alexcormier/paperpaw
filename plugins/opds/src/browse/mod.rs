@@ -96,8 +96,8 @@ impl BrowseScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let line = (style.row as u16) * 3 / 2;
+        let top = header.area().height + style.gap();
+        let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(
             0,
@@ -397,7 +397,7 @@ impl Screen for BrowseScreen {
         let covers = &self.covers;
         // A column for covers, as wide as a book's picture of the row's height.
         let column = if self.with_covers && entries.iter().any(|e| e.thumbnail.is_some()) {
-            cover_width(&style) + style.gap as u16
+            cover_width(&style) + style.gap()
         } else {
             0
         };
@@ -441,7 +441,7 @@ impl Screen for BrowseScreen {
                     Row::Entry(i) if column > 0 => {
                         if let Some(cover) = &covers[i] {
                             let y = rect.y + rect.height.saturating_sub(cover.height()) / 2;
-                            cover.draw(canvas, rect.x + style.margin as u16, y);
+                            cover.draw(canvas, rect.x + style.margin(), y);
                         }
                         Rect::new(
                             rect.x + column,

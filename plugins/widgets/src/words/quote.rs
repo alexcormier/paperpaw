@@ -296,8 +296,8 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     let height = f32::from(area.height);
     // Who said it, where a line of the quote has room above it (the
     // name shortened where it is wider than the place).
-    let author_h = f32::from(widgets::line_height(env, style.small)) + style.gap as f32 * 0.75;
-    let least = style.small * 0.85;
+    let author_h = f32::from(widgets::line_height(env, style.small())) + style.gap() as f32 * 0.75;
+    let least = style.small() * 0.85;
     let author = author.filter(|_| text::line_height(&font, least) + author_h <= height);
     let mut wished = Layout {
         mark: widgets::shows(env, ID.as_str(), MARK),
@@ -321,7 +321,7 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
         Size::Fit => choices
             .iter()
             .find_map(|layout| {
-                widgets::largest_size(style.title * 2.0, least, |size| whole(layout, size))
+                widgets::largest_size(style.title() * 2.0, least, |size| whole(layout, size))
                     .map(|size| (*layout, size))
             })
             .unwrap_or((plain, least)),
@@ -390,10 +390,10 @@ impl Widget for QuoteWidget {
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
         let style = UiStyle::new(env);
-        let line = widgets::line_height(env, style.title);
+        let line = widgets::line_height(env, style.title());
         line * 3
-            + widgets::line_height(env, style.small)
-            + style.gap as u16
+            + widgets::line_height(env, style.small())
+            + style.gap()
             + frame_height(env, ID.as_str())
     }
 
@@ -438,16 +438,16 @@ impl Widget for QuoteWidget {
         }
         top += text::draw_lines(canvas, &font, size, &laid.lines, area, top, align, look.ink);
         if let (Some(author), Some(ui)) = (&laid.author, style.font(env)) {
-            top += (style.gap as f32 * 0.75) as u16;
-            let small = widgets::line_height(env, style.small);
+            top += (style.gap() as f32 * 0.75) as u16;
+            let small = widgets::line_height(env, style.small());
             let row = Rect::new(area.x, top, area.width, small);
             // The whole name where it fits, else the last name alone
             // ("Bacon"), smaller where need be, then shortened.
-            let whole = ui.measure(style.small, author) <= width;
+            let whole = ui.measure(style.small(), author) <= width;
             let last = author.rsplit(' ').next().unwrap_or(author);
             let shown = if whole { author.as_str() } else { last };
             let (size, name) =
-                widgets::fit_line(&ui, style.small, style.small * 0.85, shown, width);
+                widgets::fit_line(&ui, style.small(), style.small() * 0.85, shown, width);
             let x = align.x(area, ui.measure(size, &name));
             paperpaw_sdk::ui::draw_label(canvas, &ui, size, x, row, &name, look.faint);
         }

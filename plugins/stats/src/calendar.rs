@@ -74,13 +74,13 @@ impl Calendar {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let row = style.row as u16;
-        let margin = style.margin as u16;
+        let row = style.row();
+        let margin = style.margin();
         // The month's arrows grow on touch screens, and their row with them.
         let nav_row = style.touch_row(u32::from(row)) as u16;
         let nav = Rect::new(
             0,
-            header.area().height + style.gap as u16,
+            header.area().height + style.gap(),
             display.width,
             nav_row,
         );
@@ -96,7 +96,7 @@ impl Calendar {
             cell * 7,
             cell / 2 + cell * 6,
         );
-        let detail_top = grid.y + grid.height + style.gap as u16;
+        let detail_top = grid.y + grid.height + style.gap();
         let detail = Rect::new(
             0,
             detail_top,
@@ -189,7 +189,7 @@ impl Calendar {
     fn arrows(&self) -> (Rect, Rect) {
         let n = self.nav;
         let size = ui::button_height(&self.style, n);
-        let margin = self.style.margin as u16;
+        let margin = self.style.margin();
         let y = n.y + (n.height - size) / 2;
         (
             Rect::new(margin, y, size * 3 / 2, size),
@@ -234,11 +234,11 @@ impl Calendar {
                 size,
                 size / 2,
             );
-            let x = f32::from(area.x) + (f32::from(size) - font.measure(style.small, name)) / 2.0;
+            let x = f32::from(area.x) + (f32::from(size) - font.measure(style.small(), name)) / 2.0;
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
+                style.small(),
                 x,
                 area,
                 name,
@@ -247,7 +247,7 @@ impl Calendar {
         }
         let first = self.first_shown(env);
         let (year, month) = month_of(self.day);
-        let pad = (style.line * 2).max(2) as u16;
+        let pad = (u32::from(style.line()) * 2).max(2) as u16;
         for index in 0..42 {
             let day = first + index;
             if month_of(day) != (year, month) {
@@ -274,8 +274,8 @@ impl Calendar {
                 // And as a bar, an hour long at most: visible on displays
                 // without grays too.
                 let full = u32::from(inner.width) * 3 / 4;
-                let len = (full * minutes.min(60) / 60).max(style.line.max(2) * 2);
-                let thick = (style.line * 2).max(2);
+                let len = (full * minutes.min(60) / 60).max(u32::from(style.line()).max(2) * 2);
+                let thick = (u32::from(style.line()) * 2).max(2);
                 let bar_ink = if gray < 150 {
                     Color::WHITE
                 } else {
@@ -300,10 +300,10 @@ impl Calendar {
                 .describe(paperpaw_sdk::semantics::Role::Button, &number, r)
                 .focused(day == self.day);
             let x = f32::from(inner.x)
-                + (f32::from(inner.width) - font.measure(style.small, &number)) / 2.0;
+                + (f32::from(inner.width) - font.measure(style.small(), &number)) / 2.0;
             // Above the bar of reading time, if there is one.
             let bar_room = if shade.is_some() {
-                (style.line * 2).max(2) as u16 * 4
+                (u32::from(style.line()) * 2).max(2) as u16 * 4
             } else {
                 0
             };
@@ -313,7 +313,7 @@ impl Calendar {
                 inner.width,
                 inner.height.saturating_sub(bar_room),
             );
-            ui::draw_label(canvas, &font, style.small, x, text, &number, ink);
+            ui::draw_label(canvas, &font, style.small(), x, text, &number, ink);
             let border = ui::button_border(&style);
             if day == self.day {
                 canvas.stroke(r, border * 2, Color::BLACK);
@@ -329,9 +329,9 @@ impl Calendar {
             return;
         };
         let d = self.detail;
-        let row = style.row as u16 * 3 / 4;
+        let row = style.row() * 3 / 4;
         let line = |n: u16| Rect::new(d.x, d.y + row * n, d.width, row);
-        let margin = style.margin as f32;
+        let margin = style.margin() as f32;
         let seconds = self.seconds_on(self.day);
         let summary = if seconds == 0 {
             env.i18n.tr("stats.not-read").to_string()
@@ -347,7 +347,7 @@ impl Calendar {
         ui::draw_label(
             canvas,
             &font,
-            style.text,
+            style.text(),
             margin,
             line(0),
             &title,
@@ -356,7 +356,7 @@ impl Calendar {
         ui::draw_label(
             canvas,
             &font,
-            style.small,
+            style.small(),
             margin,
             line(1),
             &summary,
@@ -365,12 +365,12 @@ impl Calendar {
         for (n, (book, s)) in self.day_books.iter().take(DAY_BOOKS).enumerate() {
             let value = fmt::duration(env, u64::from(*s));
             let width = f32::from(d.width) - 2.0 * margin;
-            let (book, value, vw) = ui::fit_pair(&font, style.small, book, &value, width, margin);
+            let (book, value, vw) = ui::fit_pair(&font, style.small(), book, &value, width, margin);
             let r = line(n as u16 + 2);
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
+                style.small(),
                 margin,
                 r,
                 &book,
@@ -379,7 +379,7 @@ impl Calendar {
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
+                style.small(),
                 f32::from(d.width) - margin - vw,
                 r,
                 &value,
@@ -428,23 +428,23 @@ impl Screen for Calendar {
             let name = format!("{} {year}", fmt::month(env, month));
             // Between the arrows, a gap from each: smaller where it does
             // not fit there.
-            let gap = style.gap as f32;
+            let gap = style.gap() as f32;
             let from = f32::from(left.x + left.width) + gap;
             let room = (f32::from(right.x) - gap - from).max(1.0);
             // On one line, smaller where needed; else month and year on
             // two; else the month's name shortened ("Oct. 2026") so.
             let short = format!("{} {year}", short_month(fmt::month(env, month)));
-            let high = font.line_metrics(style.small).line_height as u16;
-            let least = style.small * 0.7;
+            let high = font.line_metrics(style.small()).line_height as u16;
+            let least = style.small() * 0.7;
             let shown = [&name, &short].into_iter().find_map(|text| {
                 let (size, line) =
-                    paperpaw_sdk::widgets::fit_line(&font, style.title, least, text, room);
+                    paperpaw_sdk::widgets::fit_line(&font, style.title(), least, text, room);
                 if line == *text {
                     return Some((size, alloc::vec![0..text.len()], text));
                 }
-                let lines = font.wrap(style.small, text, room);
+                let lines = font.wrap(style.small(), text, room);
                 (lines.len() == 2 && 2 * high <= self.nav.height).then_some((
-                    style.small,
+                    style.small(),
                     lines,
                     text,
                 ))

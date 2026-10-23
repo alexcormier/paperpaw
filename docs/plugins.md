@@ -185,7 +185,10 @@ Some rules every screen should follow:
   `ui::draw_focus`, what is on a focused row in `style.focus_ink(focused)`
   (white on the dark bar, black on a frame or a light bar), small shapes
   with `style.radius(height)` (pills where corners are round), boxes and
-  cards with `style.corner`, lines between rows with `ui::draw_separator`.
+  cards with `style.corner()`, lines between rows with `ui::draw_separator`.
+  The style's sizes are read with its methods (`style.margin()`,
+  `style.gap()`, `style.row()` in pixels, `style.text()` and
+  `style.small()` for text).
 
 Screens say what they show, for reading the interface aloud,
 automation and tests: the `ui` helpers (list rows, buttons, switches,
@@ -247,7 +250,7 @@ Two buttons side by side, a margin from the screen's sides and bottom:
 use paperpaw_sdk::ui::{self, Stack, UiStyle};
 
 let style = UiStyle::new(env);
-let margin = style.margin as u16;
+let margin = style.margin();
 let screen = Rect::new(margin, 0, display.width - 2 * margin, display.height - margin);
 let row = Stack::new(screen, margin).take_bottom(ui::Segments::height(&style));
 let [ok, cancel] = ui::columns(row, 2, margin)[..] else { return };

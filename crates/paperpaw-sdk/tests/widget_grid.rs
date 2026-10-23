@@ -761,7 +761,7 @@ fn the_grid_draws_inside_its_area_while_edited() {
     let mut frame = frame(480, 800);
     view.draw(&mut frame.canvas(), &env);
     // The focus frame may reach a little past the edge items' cells.
-    let reach = (paperpaw_sdk::ui::UiStyle::new(&env).line * 5) as u16;
+    let reach = (u32::from(paperpaw_sdk::ui::UiStyle::new(&env).line()) * 5) as u16;
     let bound = Rect::new(0, g.area.y - reach, g.area.width, g.area.height + 2 * reach);
     assert_eq!(drawn_outside(&mut frame, bound), None);
 }

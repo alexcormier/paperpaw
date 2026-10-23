@@ -39,9 +39,9 @@ impl Screen for GoalSleep {
         let Some(font) = style.font(env) else {
             return;
         };
-        let margin = style.margin as u16;
-        let line = font.line_metrics(style.text).line_height as u16;
-        let gap = style.gap as u16 * 3;
+        let margin = style.margin();
+        let line = font.line_metrics(style.text()).line_height as u16;
+        let gap = style.gap() * 3;
         // The picture as large as leaves room for the line, both together
         // in the middle.
         let room_w = display.width.saturating_sub(2 * margin);
@@ -60,10 +60,10 @@ impl Screen for GoalSleep {
             canvas.describe(Role::Image, &self.described, area);
         }
         let width = f32::from(room_w);
-        let text = ui::fit(&font, style.text, &self.text, width);
-        let x = f32::from(margin) + (width - font.measure(style.text, &text)).max(0.0) / 2.0;
+        let text = ui::fit(&font, style.text(), &self.text, width);
+        let x = f32::from(margin) + (width - font.measure(style.text(), &text)).max(0.0) / 2.0;
         let row = Rect::new(margin, top + h + gap, room_w, line);
-        ui::draw_label(canvas, &font, style.text, x, row, &text, Color::BLACK);
+        ui::draw_label(canvas, &font, style.text(), x, row, &text, Color::BLACK);
     }
 
     /// Buttons are the sleep screen's (it shows this one in its place).

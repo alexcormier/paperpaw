@@ -139,8 +139,8 @@ impl BrowserScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let line = style.row as u16;
+        let top = header.area().height + style.gap();
+        let line = style.row();
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(
             0,
@@ -155,7 +155,7 @@ impl BrowserScreen {
             session.borrow_mut().pages.clear();
         }
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             status,
             bookmarks_read: bookmarks.is_some(),
             bookmarks: bookmarks.unwrap_or_default(),
@@ -521,8 +521,8 @@ impl Screen for BrowserScreen {
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
-                style.margin as f32,
+                style.small(),
+                style.margin() as f32,
                 self.status,
                 message,
                 style.faint(ui::Ink::Note),

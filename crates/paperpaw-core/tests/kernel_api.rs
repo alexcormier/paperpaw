@@ -347,7 +347,7 @@ struct LookScreen(Rc<std::cell::RefCell<String>>);
 impl paperpaw_core::sdk::Screen for LookScreen {
     fn draw(&mut self, _: &mut paperpaw_core::sdk::Canvas<'_>, env: &paperpaw_core::sdk::Env<'_>) {
         let style = paperpaw_core::sdk::ui::UiStyle::new(env);
-        *self.0.borrow_mut() = format!("{:?}", style.look);
+        *self.0.borrow_mut() = format!("{:?}", style.look());
     }
 
     fn on_action(

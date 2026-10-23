@@ -125,8 +125,8 @@ impl Widget for Forecast {
         let style = UiStyle::new(env);
         let probe = Rect::new(0, 0, 100, 100);
         let frame = 100 - widgets::look::look(env, ID.as_str(), probe).area.height;
-        let small = widgets::line_height(env, style.small);
-        small * 3 + digits_height(style.title) * 2 + frame
+        let small = widgets::line_height(env, style.small());
+        small * 3 + digits_height(style.title()) * 2 + frame
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -199,9 +199,9 @@ fn as_list(env: &Env<'_>, area: Rect, count: usize) -> bool {
 /// The temperatures' size as set; `None` for "as large as it fits".
 fn temperature_size(env: &Env<'_>, style: &UiStyle) -> Option<f32> {
     match widgets::size(env, ID.as_str()) {
-        Size::Small => Some(style.text),
-        Size::Medium => Some(style.title),
-        Size::Large => Some(style.title * 1.4),
+        Size::Small => Some(style.text()),
+        Size::Medium => Some(style.title()),
+        Size::Large => Some(style.title() * 1.4),
         Size::Fit => None,
         _ => None,
     }
@@ -228,7 +228,7 @@ fn draw_forecast(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, shown: &Sh
         days
     } else {
         // As many columns as have room.
-        let least = font.measure(style.small, "-88°") * 1.4;
+        let least = font.measure(style.small(), "-88°") * 1.4;
         let fit = ((f32::from(area.width) / least) as usize).max(1);
         &days[..days.len().min(fit)]
     };
@@ -298,32 +298,32 @@ impl Context<'_, '_> {
         let font = self.font;
         let count = days.len().max(1) as u16;
         let column = area.width / count;
-        let gap = style.gap as u16 / 2;
+        let gap = style.gap() / 2;
         let with_symbol = self.shows("symbol");
         let mut with_low = self.shows("low");
         let with_rain = days.iter().any(|d| self.rain(d).is_some());
         let rain_h = if with_rain {
-            widgets::line_height(self.env, style.small)
+            widgets::line_height(self.env, style.small())
         } else {
             0
         };
         // The temperatures as large as the column allows, as set, and
         // smaller where the column is low; the lowest left out where even
         // the smallest do not fit.
-        let widest = (font.measure(style.title, "-88°") / style.title).max(0.1);
-        let fit = (f32::from(column) * 0.85 / widest).min(style.title * 1.5);
+        let widest = (font.measure(style.title(), "-88°") / style.title()).max(0.1);
+        let fit = (f32::from(column) * 0.85 / widest).min(style.title() * 1.5);
         let mut high = temperature_size(self.env, &style)
             .unwrap_or(fit)
             .min(fit)
-            .max(style.small);
+            .max(style.small());
         let name_of = |high: f32| {
-            if high > style.title * 1.2 {
-                style.text
+            if high > style.title() * 1.2 {
+                style.text()
             } else {
-                style.small
+                style.small()
             }
         };
-        let low_of = |high: f32| (high * 0.8).max(style.small);
+        let low_of = |high: f32| (high * 0.8).max(style.small());
         let words_of = |high: f32, low: bool| {
             widgets::line_height(self.env, name_of(high))
                 + digits_height(draw::effective(font, high))
@@ -334,7 +334,7 @@ impl Context<'_, '_> {
                 }
                 + rain_h
         };
-        while words_of(high, with_low) > area.height && high > style.small * 0.8 {
+        while words_of(high, with_low) > area.height && high > style.small() * 0.8 {
             high -= 1.0;
         }
         // The symbols rather than the largest digits: smaller digits where
@@ -348,7 +348,7 @@ impl Context<'_, '_> {
                     >= name
             };
             let mut smaller = high;
-            while !room(smaller) && smaller > style.text {
+            while !room(smaller) && smaller > style.text() {
                 smaller -= 1.0;
             }
             if room(smaller) {
@@ -445,15 +445,15 @@ impl Context<'_, '_> {
             }
             if let Some(rain) = self.rain(day) {
                 let row = Rect::new(cell.x, y, cell.width, rain_h);
-                let x = centre(font.measure(style.small, &rain));
-                ui::draw_label(canvas, font, style.small, x, row, &rain, self.look.faint);
+                let x = centre(font.measure(style.small(), &rain));
+                ui::draw_label(canvas, font, style.small(), x, row, &rain, self.look.faint);
             }
             if self.shows("lines") && i > 0 {
                 let inset = total / 8;
                 let line = Rect::new(
                     cell.x,
                     top + inset,
-                    style.line.max(1) as u16,
+                    u32::from(style.line()).max(1) as u16,
                     total - 2 * inset,
                 );
                 self.rule(canvas, line);
@@ -472,11 +472,11 @@ impl Context<'_, '_> {
         let font = self.font;
         let env = self.env;
         // As many days as have rows a line of small text high.
-        let least = widgets::line_height(env, style.small).max(1);
+        let least = widgets::line_height(env, style.small()).max(1);
         let days = &days[..days.len().min(usize::from(area.height / least).max(1))];
         let count = days.len().max(1) as u16;
         let height = area.height / count;
-        let gap = style.gap as u16;
+        let gap = style.gap();
         let highs: Vec<String> = days.iter().map(|d| self.degrees(d.high)).collect();
         let lows: Vec<String> = days.iter().map(|d| self.degrees(d.low)).collect();
         let rains: Vec<Option<String>> = days.iter().map(|d| self.rain(d)).collect();
@@ -489,17 +489,17 @@ impl Context<'_, '_> {
         } else {
             0
         };
-        let mut rain_w = widest(&mut rains.iter().flatten(), style.small);
+        let mut rain_w = widest(&mut rains.iter().flatten(), style.small());
         // The text as large as the rows allow, as set, and as the width
         // allows: the names shorter where they would not fit.
-        let by_height = draw::digits_size(f32::from(height) * 0.55).min(style.title * 1.1);
+        let by_height = draw::digits_size(f32::from(height) * 0.55).min(style.title() * 1.1);
         let wanted = temperature_size(env, &style)
             .unwrap_or(by_height)
-            .min(by_height.max(style.small));
-        let probe = style.title;
+            .min(by_height.max(style.small()));
+        let probe = style.title();
         let fixed = f32::from(side + rain_w + gap * 4);
         let (long, initial) = naming(env);
-        let mut size = style.small;
+        let mut size = style.small();
         let mut names = Vec::new();
         for (long, initial) in [(long, initial), (false, initial), (false, true)] {
             names = days
@@ -515,12 +515,12 @@ impl Context<'_, '_> {
                 };
             let by_width = (f32::from(area.width) - fixed) * probe / at_probe.max(1.0);
             size = wanted.min(by_width);
-            if size >= style.small {
+            if size >= style.small() {
                 break;
             }
         }
-        let size = draw::effective(font, size.max(style.small * 0.8));
-        let small = style.small.min(size);
+        let size = draw::effective(font, size.max(style.small() * 0.8));
+        let small = style.small().min(size);
         let name_w = widest(&mut names.iter(), size);
         let high_w = widest(&mut highs.iter(), size);
         let mut low_w = if with_low {
@@ -609,7 +609,7 @@ impl Context<'_, '_> {
             draw_digits(canvas, font, size, x, row, &highs[i], self.look.ink);
             if bars {
                 let mid = i32::from(row.y) + i32::from(row.height) / 2;
-                let track = style.line.max(1) as u16;
+                let track = u32::from(style.line()).max(1) as u16;
                 let y = (mid - i32::from(track) / 2) as u16;
                 self.rule(canvas, Rect::new(bar_x, y, bar_w, track));
                 let thick = (draw::cap(size) * 0.25).max(3.0) as u32;
@@ -624,7 +624,12 @@ impl Context<'_, '_> {
                 canvas.fill_round(bar, thick / 2, self.look.ink);
             }
             if self.shows("lines") && i > 0 {
-                let line = Rect::new(area.x, row.y, area.width, style.line.max(1) as u16);
+                let line = Rect::new(
+                    area.x,
+                    row.y,
+                    area.width,
+                    u32::from(style.line()).max(1) as u16,
+                );
                 self.rule(canvas, line);
             }
         }

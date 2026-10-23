@@ -61,8 +61,8 @@ impl ListScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let line = (style.row as u16) * 3 / 2;
+        let top = header.area().height + style.gap();
+        let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         let area = Rect::new(
             0,
@@ -263,13 +263,13 @@ impl Screen for ListScreen {
                     return;
                 };
                 let ink = style.focus_ink(focused);
-                let margin = style.margin as f32;
+                let margin = style.margin() as f32;
                 let x = f32::from(rect.x) + margin;
                 let room =
-                    f32::from(rect.width) - 3.0 * margin - ui_font.measure(style.text, &state);
+                    f32::from(rect.width) - 3.0 * margin - ui_font.measure(style.text(), &state);
                 let (face, size) = match samples.get(&font.id) {
                     Some(sample) => (sample, size),
-                    None => (ui_font, style.text),
+                    None => (ui_font, style.text()),
                 };
                 let name = ui::fit(&face, size, &font.name, room);
                 ui::draw_label(canvas, &face, size, x, band, &name, ink);

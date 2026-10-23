@@ -271,7 +271,11 @@ fn visible(env: &Env<'_>, spec: &SettingSpec) -> bool {
 /// `noted`.
 fn frame(env: &Env<'_>, noted: bool) -> (UiStyle, ui::Header, ListView) {
     let (style, header, area) = page(env);
-    let row = if noted { style.noted_row() } else { style.row };
+    let row = if noted {
+        style.noted_row()
+    } else {
+        u32::from(style.row())
+    };
     (style, header, ListView::new(area, row).focus_on_keys(env))
 }
 
@@ -280,7 +284,7 @@ fn page(env: &Env<'_>) -> (UiStyle, ui::Header, Rect) {
     let style = UiStyle::new(env);
     let display = env.device.display;
     let header = ui::Header::new(env, &style, true);
-    let top = header.area().height + style.gap as u16;
+    let top = header.area().height + style.gap();
     let height = display.height.saturating_sub(top);
     (style, header, Rect::new(0, top, display.width, height))
 }
