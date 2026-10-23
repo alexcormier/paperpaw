@@ -18,7 +18,8 @@ name: Release
 # (`paperpaw-emu-<version>-<target>.zip`, with paperpaw-dev for
 # `--check`), driven over `--stdio` and loading code plugins built for
 # the computer, and the handbook (`paperpaw-handbook-<version>.zip`:
-# registry, check codes, docs, samples, the SDK's items and source); each
+# registry, check codes, docs, samples, the SDK's items and source,
+# PaperPaw's own plugins as examples); each
 # with its SHA-256 and a signature of its own, made with the firmware's
 # key over a domain of its own (`paperpaw-sign check-asset` reads it). The release notes come from
 # CHANGELOG.md.

@@ -29,7 +29,9 @@ change the plugin SDK.
   silicon), and the handbook
   (`paperpaw-handbook-<version>.zip`, `tools/handbook.py`: the registry,
   the codes of paperpaw-dev's findings, the docs, the samples, the SDK's
-  items and source), each with its SHA-256 and a signature of its own
+  items and source, and PaperPaw's own plugins as examples of good
+  solutions built against the same SDK; no tests, pictures, fonts or
+  sample books, about 2.3 MB), each with its SHA-256 and a signature of its own
   with the firmware's key over a domain of its own, so it never holds as
   a firmware's (`paperpaw-sign sign-asset`, `check-asset`).
 - The desktop emulator loads code plugins built for the computer it runs
