@@ -6,7 +6,10 @@
 //!
 //! [`PROTOCOL`] is the protocol's version, said first (`ready`); a field
 //! is only added, and a request or event whose meaning changes gets a new
-//! name.
+//! name. Version 2 added `slot`, `set`, `setting`, `emit`, `screens`,
+//! `actions`, `wait`, `until`, `expect`, `network`, `fixture` and the
+//! `screen` of `described`, after the X4's remote control
+//! (`tools/x4-remote.py`); what version 1 had is as it was.
 //!
 //! Requests (`op`):
 //!
@@ -20,15 +23,31 @@
 //! | `run` | `action` | runs an action, as a button bound to it would |
 //! | `open` | `screen`, `params` (an object of texts, optional) | opens a screen, as a plugin would |
 //! | `shot` | `path` (optional) | `shot`: the panel as a PNG, written there or in the event |
+//! | `slot` | `slot`, `params` (optional) | opens the screen bound to a slot, as a plugin would (`core.settings`) |
+//! | `set` | `id`, `value` (as configuration files write it) | `set`: a setting set, as the settings screen would |
+//! | `setting` | `id` | `setting`: its value as configuration files write it (`null` if there is none, `•` for a secret) |
+//! | `emit` | `event`, `params` (optional) | sends an event, as a plugin would |
+//! | `screens` | | `screens`: the screens open (`open`, the one shown last), `shown`, and every screen plugins added (`known`) |
+//! | `actions` | `prefix` (optional) | `actions`: every action, its `id` and `title` |
+//! | `wait` | `ms` (at most 600 000) | lets that much time pass, the device going on; `waited` follows with the `ms` it waited |
+//! | `until` | `text` or `screen`, `timeout` (ms, 30 000 if not given, at most 600 000) | waits until the screen shows that text (as `tap-on` finds it) or is that screen; `until` with `found` and `ms` |
+//! | `expect` | `text`, `not` (optional) | `expect` with `ok`: whether the screen shows that text now (or not) |
+//! | `network` | `mode`: `real`, `recorded` or `offline` | where plugins' requests go: the network, the recorded answers (`fixture`; none recorded: failed), nowhere (failed); `network` follows |
+//! | `fixture` | `url` (a `*` at its end matches what starts so), `method`, `status` (200), `body` (text) or `file` (its bytes: a file of at most 16 MB in the folder the device was started on, relative to it), `content_type` | records an answer for `recorded`; `clear: true` forgets them all |
 //! | `quit` | | ends |
 //!
-//! Events (`event`): `ready` (`protocol`, `paperpaw`, `profiles`, and
-//! `fingerprint` and `toolchain`, which code plugins must be built for),
+//! Events (`event`): `ready` (`protocol`, `paperpaw`, `profiles`,
+//! `fingerprint` and `toolchain`, which code plugins must be built for,
+//! and `commit`, the commit of PaperPaw's source it is built from or
+//! `null`, and `release`, whether that is the release of its version, so
+//! tools can pin `paperpaw-sdk` to exactly that source),
 //! `started` (`profile`, `width`, `height`, `buttons`, `touch`), `frame`
-//! (`width`, `height`, `png` in base64), `described` (`parts`: `role`,
-//! `label`, `x`, `y`, `width`, `height`, `focused`, `on`), `shot` (`path`
-//! or `png`), `request` (`method`, `url`), `warning` (`message`), `error`
-//! (`message`, and `op` where a request caused it).
+//! (`width`, `height`, `png` in base64), `described` (`screen`, `parts`:
+//! `role`, `label`, `x`, `y`, `width`, `height`, `focused`, `on`), `shot`
+//! (`path` or `png`), `request` (`method`, `url`, and `answer`: `network`,
+//! `recorded` or `none`), `set`, `setting`, `screens`, `actions`,
+//! `waited`, `until`, `expect`, `network`, `fixture`, `warning`
+//! (`message`), `error` (`message`, and `op` where a request caused it).
 
 use std::io::{BufRead, Write};
 use std::path::{Path, PathBuf};
@@ -38,11 +57,24 @@ use std::time::Duration;
 use paperpaw_core::sdk::json::{self, Value, string};
 use paperpaw_platform::{ButtonState, InputEvent, Point, PointerEvent, PointerPhase, PointerTool};
 
+use paperpaw_core::sdk::Id;
+
 use crate::device::{self, Device};
 use crate::profiles::{self, PROFILES};
 
 /// The protocol's version.
-pub const PROTOCOL: u32 = 1;
+pub const PROTOCOL: u32 = 2;
+
+/// How long `until` waits where it is not told, in milliseconds.
+const UNTIL_MS: u64 = 30_000;
+
+/// The longest `wait` or `until`, in milliseconds: ten minutes. Requests
+/// that come meanwhile are read (`quit` and the end of the input end the
+/// wait) and done after it.
+const MAX_WAIT_MS: u64 = 600_000;
+
+/// The largest file a `fixture` answers with.
+const MAX_FIXTURE: u64 = 16 << 20;
 
 /// How long the loop waits at most between looks when the device asks
 /// for nothing sooner (a clock, an animation).
@@ -128,7 +160,197 @@ pub enum Request {
     Shot {
         path: Option<PathBuf>,
     },
+    Slot {
+        slot: String,
+        params: Vec<(String, String)>,
+    },
+    Set {
+        id: String,
+        value: String,
+    },
+    Setting {
+        id: String,
+    },
+    Emit {
+        event: String,
+        params: Vec<(String, String)>,
+    },
+    Screens,
+    Actions {
+        prefix: String,
+    },
+    Wait {
+        ms: u64,
+    },
+    Until {
+        text: Option<String>,
+        screen: Option<String>,
+        timeout: u64,
+    },
+    Expect {
+        text: String,
+        not: bool,
+    },
+    Network {
+        mode: Network,
+    },
+    Fixture(Option<Fixture>),
+    /// A `fixture` whose body is read from `file`.
+    FixtureFile {
+        fixture: Fixture,
+        file: PathBuf,
+    },
     Quit,
+}
+
+/// Where plugins' requests go (`network`).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Network {
+    /// To the network, as without the protocol.
+    Real,
+    /// To the answers recorded (`fixture`); one with none, failed.
+    Recorded,
+    /// Nowhere: every one fails, as without a network.
+    Offline,
+}
+
+impl Network {
+    fn name(self) -> &'static str {
+        match self {
+            Network::Real => "real",
+            Network::Recorded => "recorded",
+            Network::Offline => "offline",
+        }
+    }
+}
+
+/// An answer recorded for plugins' requests (`fixture`).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Fixture {
+    /// The address it answers; ending in `*`, every one that starts so.
+    pub url: String,
+    /// The method it answers (any where `None`).
+    pub method: Option<String>,
+    pub status: u16,
+    pub body: Vec<u8>,
+    pub content_type: Option<String>,
+}
+
+impl Fixture {
+    fn answers(&self, method: &str, url: &str) -> bool {
+        let address = match self.url.strip_suffix('*') {
+            Some(start) => url.starts_with(start),
+            None => url == self.url,
+        };
+        address
+            && self
+                .method
+                .as_deref()
+                .is_none_or(|m| m.eq_ignore_ascii_case(method))
+    }
+}
+
+/// An `until` request's text or screen and timeout.
+fn until(members: &[(String, Value)]) -> Result<Request, String> {
+    let text = json::text(members, "text").map(String::from);
+    let screen = json::text(members, "screen").map(String::from);
+    if text.is_none() && screen.is_none() {
+        return Err(String::from("`until` waits for a `text` or a `screen`"));
+    }
+    Ok(Request::Until {
+        text,
+        screen,
+        timeout: json::number(members, "timeout")
+            .map_or(UNTIL_MS, |n| n.max(0.0) as u64)
+            .min(MAX_WAIT_MS),
+    })
+}
+
+/// A `network` request's mode.
+fn network(mode: &str) -> Result<Network, String> {
+    match mode {
+        "real" => Ok(Network::Real),
+        "recorded" => Ok(Network::Recorded),
+        "offline" => Ok(Network::Offline),
+        other => Err(format!("no network mode `{other}`")),
+    }
+}
+
+/// A `fixture` request: its answer, its body read from `file` where it
+/// names one (when it is done, in the device's folder).
+fn fixture(members: &[(String, Value)]) -> Result<Request, String> {
+    let text = |key: &str| json::text(members, key).map(String::from);
+    let fixture = Fixture {
+        url: text("url").ok_or_else(|| String::from("`url` is missing"))?,
+        method: text("method"),
+        status: json::number(members, "status").map_or(200, |n| n as u16),
+        body: text("body").unwrap_or_default().into_bytes(),
+        content_type: text("content_type"),
+    };
+    Ok(match text("file").filter(|_| text("body").is_none()) {
+        Some(file) => Request::FixtureFile {
+            fixture,
+            file: PathBuf::from(file),
+        },
+        None => Request::Fixture(Some(fixture)),
+    })
+}
+
+/// The bytes of `file` for a `fixture`: a file (no pipe or device) of at
+/// most [`MAX_FIXTURE`] bytes in `folder` (relative to it), where it is
+/// once links are followed.
+fn fixture_file(folder: &Path, file: &Path) -> Result<Vec<u8>, String> {
+    use std::io::Read as _;
+    let shown = file.display();
+    let folder = folder
+        .canonicalize()
+        .map_err(|e| format!("{}: {e}", folder.display()))?;
+    let path = folder
+        .join(file)
+        .canonicalize()
+        .map_err(|e| format!("{shown}: {e}"))?;
+    if !path.starts_with(&folder) {
+        return Err(format!(
+            "{shown}: not in the folder the device was started on"
+        ));
+    }
+    let large = || format!("{shown}: larger than {} MB", MAX_FIXTURE >> 20);
+    // Looked at before it is opened: opening a pipe waits for a writer.
+    let meta = std::fs::metadata(&path).map_err(|e| format!("{shown}: {e}"))?;
+    if !meta.is_file() {
+        return Err(format!("{shown}: not a file"));
+    }
+    if meta.len() > MAX_FIXTURE {
+        return Err(large());
+    }
+    let opened = std::fs::File::open(&path).map_err(|e| format!("{shown}: {e}"))?;
+    if !opened.metadata().is_ok_and(|m| m.is_file()) {
+        return Err(format!("{shown}: not a file"));
+    }
+    let mut body = Vec::new();
+    opened
+        .take(MAX_FIXTURE + 1)
+        .read_to_end(&mut body)
+        .map_err(|e| format!("{shown}: {e}"))?;
+    if body.len() as u64 > MAX_FIXTURE {
+        return Err(large());
+    }
+    Ok(body)
+}
+
+/// The members of the object `key` of `line` as texts (numbers as they
+/// are written), for parameters.
+fn texts(line: &str, key: &str) -> Vec<(String, String)> {
+    json::raw_member(line, key)
+        .map(json::object)
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(key, value)| match value {
+            Value::Str(text) => Some((key, text)),
+            Value::Num(n) => Some((key, n.to_string())),
+            Value::Other => None,
+        })
+        .collect()
 }
 
 /// `line` as a request, or why it is none.
@@ -174,20 +396,46 @@ pub fn parse(line: &str) -> Result<Request, String> {
         },
         "open" => Request::Open {
             screen: need("screen")?,
-            params: json::raw_member(line, "params")
-                .map(json::object)
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|(key, value)| match value {
-                    Value::Str(text) => Some((key, text)),
-                    Value::Num(n) => Some((key, n.to_string())),
-                    Value::Other => None,
-                })
-                .collect(),
+            params: texts(line, "params"),
         },
         "shot" => Request::Shot {
             path: text("path").map(PathBuf::from),
         },
+        "slot" => Request::Slot {
+            slot: need("slot")?,
+            params: texts(line, "params"),
+        },
+        "set" => Request::Set {
+            id: need("id")?,
+            value: text("value")
+                .or_else(|| json::number(&members, "value").map(|n| n.to_string()))
+                .or_else(|| json::raw_member(line, "value").map(|raw| raw.trim().to_string()))
+                .ok_or_else(|| String::from("`value` is missing"))?,
+        },
+        "setting" => Request::Setting { id: need("id")? },
+        "emit" => Request::Emit {
+            event: need("event")?,
+            params: texts(line, "params"),
+        },
+        "screens" => Request::Screens,
+        "actions" => Request::Actions {
+            prefix: text("prefix").unwrap_or_default(),
+        },
+        "wait" => Request::Wait {
+            ms: json::number(&members, "ms").map_or(0, |n| (n.max(0.0) as u64).min(MAX_WAIT_MS)),
+        },
+        "until" => until(&members)?,
+        "expect" => Request::Expect {
+            text: need("text")?,
+            not: json::raw_member(line, "not").map(str::trim) == Some("true"),
+        },
+        "network" => Request::Network {
+            mode: network(&need("mode")?)?,
+        },
+        "fixture" if json::raw_member(line, "clear").map(str::trim) == Some("true") => {
+            Request::Fixture(None)
+        }
+        "fixture" => fixture(&members)?,
         "quit" => Request::Quit,
         other => return Err(format!("no request `{other}`")),
     })
@@ -197,6 +445,9 @@ pub fn parse(line: &str) -> Result<Request, String> {
 #[derive(Default)]
 pub struct Session {
     device: Option<Device>,
+    /// Where plugins' requests go, and the answers recorded for them,
+    /// shared with the route the device's requests take (`network`).
+    network: std::rc::Rc<std::cell::RefCell<(Option<Network>, Vec<Fixture>)>>,
     /// What the device was started with, for `reload`.
     started: Option<Started>,
     shown: Vec<u8>,
@@ -212,11 +463,16 @@ impl Session {
         let profiles: Vec<String> = PROFILES.iter().map(|p| string(p.device.id)).collect();
         let native = crate::native::native();
         format!(
-            "{{\"event\": \"ready\", \"protocol\": {PROTOCOL}, \"paperpaw\": {}, \"profiles\": [{}], \"fingerprint\": \"{:016x}\", \"toolchain\": {}}}",
+            "{{\"event\": \"ready\", \"protocol\": {PROTOCOL}, \"paperpaw\": {}, \"profiles\": [{}], \"fingerprint\": \"{:016x}\", \"toolchain\": {}, \"commit\": {}, \"release\": {}}}",
             string(env!("CARGO_PKG_VERSION")),
             profiles.join(", "),
             native.fingerprint.0,
-            string(&native.toolchain)
+            string(&native.toolchain),
+            match env!("PAPERPAW_SOURCE_COMMIT") {
+                "" => String::from("null"),
+                commit => string(commit),
+            },
+            env!("PAPERPAW_SOURCE_RELEASE")
         )
     }
 
@@ -269,6 +525,35 @@ impl Session {
                 self.stop();
                 return Ok(None);
             }
+            Request::Network { mode } => {
+                self.network.borrow_mut().0 = (mode != Network::Real).then_some(mode);
+                crate::http::set_route((mode != Network::Real).then(|| {
+                    Box::new(Answers(self.network.clone())) as Box<dyn crate::http::Route>
+                }));
+                let recorded = self.network.borrow().1.len();
+                events.push(format!(
+                    "{{\"event\": \"network\", \"mode\": \"{}\", \"fixtures\": {recorded}}}",
+                    mode.name()
+                ));
+            }
+            Request::FixtureFile { mut fixture, file } => {
+                let started = self.started.as_ref().ok_or_else(|| {
+                    String::from("a `file` is read from the device's folder: start one first")
+                })?;
+                fixture.body = fixture_file(&started.library, &file)?;
+                return self.carry_out(Request::Fixture(Some(fixture)));
+            }
+            Request::Fixture(fixture) => {
+                let mut network = self.network.borrow_mut();
+                match fixture {
+                    Some(fixture) => network.1.push(fixture),
+                    None => network.1.clear(),
+                }
+                events.push(format!(
+                    "{{\"event\": \"fixture\", \"fixtures\": {}}}",
+                    network.1.len()
+                ));
+            }
             request => {
                 let device = self
                     .device
@@ -298,9 +583,17 @@ impl Session {
                 string(&warning.to_string())
             ));
         }
+        let (mode, fixtures) = &*self.network.borrow();
         for (method, url) in device.requests.iter_mut().flat_map(std::mem::take) {
+            let answer = match mode {
+                None => "network",
+                Some(Network::Recorded) if fixtures.iter().any(|f| f.answers(&method, &url)) => {
+                    "recorded"
+                }
+                Some(_) => "none",
+            };
             events.push(format!(
-                "{{\"event\": \"request\", \"method\": {}, \"url\": {}}}",
+                "{{\"event\": \"request\", \"method\": {}, \"url\": {}, \"answer\": \"{answer}\"}}",
                 string(&method),
                 string(&url)
             ));
@@ -321,6 +614,60 @@ impl Session {
             self.shown = rgb;
         }
         events
+    }
+
+    /// Whether the screen shows `text` (as `tap-on` finds it) or is
+    /// `screen`, where given.
+    fn shows(&mut self, text: Option<&str>, screen: Option<&str>) -> bool {
+        let Some(device) = self.device.as_mut() else {
+            return false;
+        };
+        let is_screen =
+            screen.is_none_or(|id| device.kernel.active_screen().map(Id::as_str) == Some(id));
+        let has_text = text.is_none_or(|text| {
+            let parts = device.kernel.describe();
+            paperpaw_core::sdk::semantics::find(&parts, text).is_some()
+        });
+        is_screen && has_text
+    }
+
+    /// Goes on (the device's ticks, what it tells told, the requests that
+    /// come read) until the screen shows `text` or is `screen`, at most
+    /// `timeout` milliseconds, or until the input ends (`quit`, or no
+    /// more): whether it found it, and the milliseconds it took. With
+    /// neither, `timeout` passes.
+    fn until(
+        &mut self,
+        text: Option<&str>,
+        screen: Option<&str>,
+        timeout: u64,
+        input: &mut Input<'_>,
+        tell: &mut dyn FnMut(&str) -> std::io::Result<()>,
+    ) -> std::io::Result<(bool, u64)> {
+        let start = std::time::Instant::now();
+        let looking = text.is_some() || screen.is_some();
+        loop {
+            self.step_into(tell)?;
+            let ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
+            if looking && self.shows(text, screen) {
+                return Ok((true, ms));
+            }
+            if ms >= timeout || input.ended {
+                return Ok((false, ms));
+            }
+            input.listen(Duration::from_millis(self.wait().min(timeout - ms).max(1)));
+        }
+    }
+
+    /// One look at the device ([`Session::step`]), what it tells told.
+    fn step_into(
+        &mut self,
+        tell: &mut dyn FnMut(&str) -> std::io::Result<()>,
+    ) -> std::io::Result<()> {
+        for event in self.step() {
+            tell(&event)?;
+        }
+        Ok(())
     }
 
     /// How long until the device wants a look.
@@ -373,6 +720,10 @@ impl Started {
 
 impl Drop for Session {
     fn drop(&mut self) {
+        // Requests to the network again, as without the protocol.
+        if self.network.borrow().0.is_some() {
+            crate::http::set_route(None);
+        }
         self.stop();
     }
 }
@@ -388,7 +739,50 @@ fn op_name(request: &Request) -> &'static str {
         Request::Run { .. } => "run",
         Request::Open { .. } => "open",
         Request::Shot { .. } => "shot",
+        Request::Slot { .. } => "slot",
+        Request::Set { .. } => "set",
+        Request::Setting { .. } => "setting",
+        Request::Emit { .. } => "emit",
+        Request::Screens => "screens",
+        Request::Actions { .. } => "actions",
+        Request::Wait { .. } => "wait",
+        Request::Until { .. } => "until",
+        Request::Expect { .. } => "expect",
+        Request::Network { .. } => "network",
+        Request::Fixture(_) | Request::FixtureFile { .. } => "fixture",
         Request::Quit => "quit",
+    }
+}
+
+/// Answers plugins' requests as the protocol's `network` says: from the
+/// answers recorded, or not at all.
+struct Answers(std::rc::Rc<std::cell::RefCell<(Option<Network>, Vec<Fixture>)>>);
+
+impl crate::http::Route for Answers {
+    fn start(&mut self, call: paperpaw_core::HttpCall) -> Option<paperpaw_core::HttpResponse> {
+        let (mode, fixtures) = &*self.0.borrow();
+        let failed = |why: &str| paperpaw_core::HttpResponse::failed(call.id, why);
+        Some(match mode {
+            Some(Network::Recorded) => match fixtures
+                .iter()
+                .rev()
+                .find(|f| f.answers(&call.method, &call.url))
+            {
+                Some(fixture) => paperpaw_core::HttpResponse {
+                    id: call.id,
+                    status: fixture.status,
+                    body: fixture.body.clone(),
+                    content_type: fixture.content_type.clone(),
+                    ..paperpaw_core::HttpResponse::default()
+                },
+                None => failed("no answer recorded for this request"),
+            },
+            _ => failed("offline"),
+        })
+    }
+
+    fn later(&mut self) -> Option<paperpaw_core::HttpResponse> {
+        None
     }
 }
 
@@ -466,12 +860,8 @@ fn drive(device: &mut Device, request: Request) -> Result<Option<String>, String
             device.run_action(paperpaw_core::sdk::Id::parse(&action).map_err(|e| e.to_string())?);
         }
         Request::Open { screen, params } => {
-            let screen = paperpaw_core::sdk::Id::parse(&screen).map_err(|e| e.to_string())?;
-            let mut given = paperpaw_core::sdk::Params::new();
-            for (key, value) in params {
-                given = given.with(key, value);
-            }
-            device.open_screen(screen, given);
+            let screen = Id::parse(&screen).map_err(|e| e.to_string())?;
+            device.open_screen(screen, given(params));
         }
         Request::Shot { path } => {
             let rgb = device.panel.rgb_bytes();
@@ -490,9 +880,104 @@ fn drive(device: &mut Device, request: Request) -> Result<Option<String>, String
                 None => format!("{{\"event\": \"shot\", \"png\": \"{}\"}}", base64(&png)),
             }));
         }
-        Request::Start { .. } | Request::Reload | Request::Quit => {}
+        request => return ask(device, request),
     }
     Ok(None)
+}
+
+/// What version 2 asks of a device (`slot`, `set`, `setting`, `emit`,
+/// `screens`, `actions`); an event where the request has one.
+fn ask(device: &mut Device, request: Request) -> Result<Option<String>, String> {
+    match request {
+        Request::Slot { slot, params } => {
+            let slot = Id::parse(&slot).map_err(|e| e.to_string())?;
+            let params = given(params);
+            device.call(|kernel, now| kernel.open_slot(now, slot, params));
+        }
+        Request::Set { id, value } => {
+            let mut why = None;
+            device.call(|kernel, now| match kernel.set_setting(now, &id, &value) {
+                Ok(effects) => effects,
+                Err(e) => {
+                    why = Some(e);
+                    paperpaw_core::Effects::default()
+                }
+            });
+            if let Some(why) = why {
+                return Err(format!("{id}: {why}"));
+            }
+            return Ok(Some(format!(
+                "{{\"event\": \"set\", \"id\": {}, \"value\": {}}}",
+                string(&id),
+                string(&value)
+            )));
+        }
+        Request::Setting { id } => {
+            let settings = device.kernel.settings();
+            let secret = settings.spec(&id).is_some_and(|spec| spec.extra().secret);
+            let value = match settings.get(&id) {
+                Some(_) if secret => string("\u{2022}"),
+                Some(value) => string(&value.to_config_text()),
+                None => String::from("null"),
+            };
+            return Ok(Some(format!(
+                "{{\"event\": \"setting\", \"id\": {}, \"value\": {value}}}",
+                string(&id)
+            )));
+        }
+        Request::Emit { event, params } => {
+            let event = Id::parse(&event).map_err(|e| e.to_string())?;
+            let params = given(params);
+            device.call(|kernel, now| kernel.send_event(now, event, params));
+        }
+        Request::Screens => {
+            let ids = |ids: &mut dyn Iterator<Item = &Id>| {
+                ids.map(|id| string(id.as_str()))
+                    .collect::<Vec<_>>()
+                    .join(", ")
+            };
+            let kernel = &device.kernel;
+            let shown = kernel
+                .active_screen()
+                .map_or_else(|| String::from("null"), |id| string(id.as_str()));
+            return Ok(Some(format!(
+                "{{\"event\": \"screens\", \"open\": [{}], \"shown\": {shown}, \"known\": [{}]}}",
+                ids(&mut kernel.screens()),
+                ids(&mut kernel.known_screens())
+            )));
+        }
+        Request::Actions { prefix } => {
+            let kernel = &device.kernel;
+            let mut actions: Vec<_> = kernel
+                .actions()
+                .iter()
+                .filter(|a| a.id.as_str().starts_with(prefix.as_str()))
+                .map(|a| {
+                    format!(
+                        "{{\"id\": {}, \"title\": {}}}",
+                        string(a.id.as_str()),
+                        string(kernel.translator().tr(&a.title))
+                    )
+                })
+                .collect();
+            actions.sort();
+            return Ok(Some(format!(
+                "{{\"event\": \"actions\", \"actions\": [{}]}}",
+                actions.join(", ")
+            )));
+        }
+        _ => {}
+    }
+    Ok(None)
+}
+
+/// `params` as a request's parameters.
+fn given(params: Vec<(String, String)>) -> paperpaw_core::sdk::Params {
+    let mut given = paperpaw_core::sdk::Params::new();
+    for (key, value) in params {
+        given = given.with(key, value);
+    }
+    given
 }
 
 /// What the screen shows, part by part.
@@ -516,8 +1001,12 @@ fn described(device: &mut Device) -> String {
             )
         })
         .collect();
+    let screen = device
+        .kernel
+        .active_screen()
+        .map_or_else(|| String::from("null"), |id| string(id.as_str()));
     format!(
-        "{{\"event\": \"described\", \"parts\": [{}]}}",
+        "{{\"event\": \"described\", \"screen\": {screen}, \"parts\": [{}]}}",
         parts.join(", ")
     )
 }
@@ -578,6 +1067,43 @@ pub fn run(
     })
 }
 
+/// The requests' lines as they come, and those read while the device
+/// was waited for (`wait`, `until`), to do after it.
+struct Input<'a> {
+    received: &'a Receiver<Result<String, String>>,
+    pending: std::collections::VecDeque<Result<String, String>>,
+    /// `quit` came, or the input ended: what came before is still done,
+    /// without waiting.
+    ended: bool,
+}
+
+impl Input<'_> {
+    /// The next line, at most `wait` from now; what was read before first.
+    fn next(&mut self, wait: Duration) -> Result<Result<String, String>, RecvTimeoutError> {
+        if let Some(line) = self.pending.pop_front() {
+            return Ok(line);
+        }
+        if self.ended {
+            return Err(RecvTimeoutError::Disconnected);
+        }
+        self.received.recv_timeout(wait)
+    }
+
+    /// Reads what comes in `wait`, while the device is waited for: kept
+    /// for after it, but `quit` or the end of the input end it.
+    fn listen(&mut self, wait: Duration) {
+        if self.ended {
+            return;
+        }
+        match self.received.recv_timeout(wait) {
+            Ok(Ok(line)) if parse(&line) == Ok(Request::Quit) => self.ended = true,
+            Ok(line) => self.pending.push_back(line),
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => self.ended = true,
+        }
+    }
+}
+
 /// The loop: requests as they come, the device's ticks when due, its
 /// events as they happen.
 fn serve(
@@ -585,8 +1111,13 @@ fn serve(
     received: &Receiver<Result<String, String>>,
     tell: &mut dyn FnMut(&str) -> std::io::Result<()>,
 ) -> std::io::Result<()> {
+    let mut input = Input {
+        received,
+        pending: std::collections::VecDeque::new(),
+        ended: false,
+    };
     loop {
-        match received.recv_timeout(Duration::from_millis(session.wait())) {
+        match input.next(Duration::from_millis(session.wait())) {
             Ok(Err(message)) => tell(&format!(
                 "{{\"event\": \"error\", \"message\": {}}}",
                 string(&message)
@@ -594,6 +1125,35 @@ fn serve(
             Ok(Ok(line)) if line.trim().is_empty() => {}
             Ok(Ok(line)) => {
                 let events = match parse(&line) {
+                    Ok(Request::Wait { ms }) => {
+                        let (_, ms) = session.until(None, None, ms, &mut input, tell)?;
+                        Some(vec![format!("{{\"event\": \"waited\", \"ms\": {ms}}}")])
+                    }
+                    Ok(Request::Until {
+                        text,
+                        screen,
+                        timeout,
+                    }) => {
+                        let (found, ms) = session.until(
+                            text.as_deref(),
+                            screen.as_deref(),
+                            timeout,
+                            &mut input,
+                            tell,
+                        )?;
+                        Some(vec![format!(
+                            "{{\"event\": \"until\", \"found\": {found}, \"ms\": {ms}}}"
+                        )])
+                    }
+                    Ok(Request::Expect { text, not }) => {
+                        session.step_into(tell)?;
+                        let shows = session.shows(Some(&text), None);
+                        Some(vec![format!(
+                            "{{\"event\": \"expect\", \"text\": {}, \"ok\": {}}}",
+                            string(&text),
+                            shows != not
+                        )])
+                    }
                     Ok(request) => session.handle(request),
                     Err(message) => Some(vec![format!(
                         "{{\"event\": \"error\", \"message\": {}}}",
@@ -738,6 +1298,290 @@ mod tests {
         let _ = std::fs::remove_dir_all(&folder);
     }
 
+    /// Runs `lines` through the protocol on a device of the X4, its events
+    /// in order.
+    fn through(lines: &[String]) -> Vec<String> {
+        let (sender, received) = channel();
+        for line in lines {
+            sender.send(Ok(line.clone())).unwrap();
+        }
+        sender.send(Ok(String::from(r#"{"op": "quit"}"#))).unwrap();
+        let mut events = Vec::new();
+        let mut session = Session::new();
+        serve(&mut session, &received, &mut |event| {
+            events.push(event.to_string());
+            Ok(())
+        })
+        .unwrap();
+        events
+    }
+
+    /// The event named `name`, the first.
+    fn event<'a>(events: &'a [String], name: &str) -> &'a str {
+        let key = format!("\"event\": \"{name}\"");
+        events
+            .iter()
+            .find(|e| e.contains(&key))
+            .unwrap_or_else(|| panic!("no {name}: {events:?}"))
+    }
+
+    /// A wait lasts its time, at most ten minutes, while the requests that
+    /// come meanwhile are read: done after it, but `quit` or the end of
+    /// the input (the program gone) end it at once, and the process.
+    #[test]
+    fn waiting_ends_with_the_input() {
+        let parsed = |line: &str| parse(line).unwrap();
+        assert_eq!(
+            parsed(r#"{"op": "wait", "ms": 1e12}"#),
+            Request::Wait { ms: MAX_WAIT_MS }
+        );
+        assert_eq!(
+            parsed(r#"{"op": "until", "text": "x", "timeout": 1e12}"#),
+            Request::Until {
+                text: Some("x".into()),
+                screen: None,
+                timeout: MAX_WAIT_MS
+            }
+        );
+        // `then` sent `after` the lines, while they are waited for.
+        let served = |lines: &[&str], after: u64, then: Option<&str>| {
+            let (sender, received) = channel();
+            for line in lines {
+                sender.send(Ok((*line).to_string())).unwrap();
+            }
+            let then = then.map(str::to_string);
+            let late = std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(after));
+                if let Some(line) = then {
+                    let _ = sender.send(Ok(line));
+                }
+                // Dropped here: the end of the input.
+            });
+            let start = std::time::Instant::now();
+            let mut events = Vec::new();
+            let mut session = Session::new();
+            serve(&mut session, &received, &mut |event| {
+                events.push(event.to_string());
+                Ok(())
+            })
+            .unwrap();
+            late.join().unwrap();
+            (events, start.elapsed())
+        };
+        let ms = |event: &str| json::number(&json::object(event), "ms").unwrap();
+
+        // Waited for in full, and what came meanwhile done after it.
+        let (events, took) = served(
+            &[r#"{"op": "wait", "ms": 300}"#, r#"{"op": "screens"}"#],
+            600,
+            Some(r#"{"op": "quit"}"#),
+        );
+        assert!(
+            ms(&events[0]) >= 300.0 && took >= Duration::from_millis(300),
+            "{events:?}"
+        );
+        assert!(events[1].contains("\"op\": \"screens\""), "{events:?}");
+        // `quit`, or the program gone, ends a long wait at once.
+        for then in [Some(r#"{"op": "quit"}"#), None] {
+            let (events, took) = served(
+                &[r#"{"op": "until", "text": "never shown", "timeout": 600000}"#],
+                200,
+                then,
+            );
+            assert!(took < Duration::from_secs(10), "{took:?}");
+            assert!(events[0].contains("\"found\": false"), "{events:?}");
+        }
+    }
+
+    /// A recorded answer's file is a file in the device's folder, of at
+    /// most 16 MB; never one outside it, through a link either, nor a
+    /// folder, pipe or device.
+    #[test]
+    fn answers_come_from_files_in_the_device_s_folder() {
+        let folder = crate::private::dir("paperpaw-fixture").unwrap();
+        let outside = crate::private::dir("paperpaw-fixture-outside").unwrap();
+        std::fs::create_dir_all(folder.join("answers")).unwrap();
+        std::fs::write(folder.join("answers/feed.xml"), b"<feed/>").unwrap();
+        std::fs::write(outside.join("secret.txt"), b"secret").unwrap();
+        let big = std::fs::File::create(folder.join("big.bin")).unwrap();
+        big.set_len(MAX_FIXTURE + 1).unwrap();
+        drop(big);
+        let read = |file: &Path| fixture_file(&folder, file);
+        assert_eq!(read(Path::new("answers/feed.xml")).unwrap(), b"<feed/>");
+        assert_eq!(read(&folder.join("answers/feed.xml")).unwrap(), b"<feed/>");
+        assert!(read(Path::new("../secret.txt")).is_err());
+        assert!(
+            read(&outside.join("secret.txt"))
+                .unwrap_err()
+                .contains("not in the folder")
+        );
+        assert!(
+            read(Path::new("answers"))
+                .unwrap_err()
+                .contains("not a file")
+        );
+        assert!(
+            read(Path::new("big.bin"))
+                .unwrap_err()
+                .contains("larger than 16 MB")
+        );
+        assert!(read(Path::new("missing.txt")).is_err());
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(outside.join("secret.txt"), folder.join("link.txt"))
+                .unwrap();
+            assert!(
+                read(Path::new("link.txt"))
+                    .unwrap_err()
+                    .contains("not in the folder")
+            );
+            assert!(read(Path::new("/dev/zero")).is_err());
+        }
+
+        // Over the lines: read where the device was started, none before.
+        let _one = crate::one_device_at_a_time();
+        let library = string(&folder.display().to_string());
+        let events = through(&[
+            String::from(
+                r#"{"op": "fixture", "url": "https://example.org/", "file": "answers/feed.xml"}"#,
+            ),
+            format!(r#"{{"op": "start", "profile": "xteink-x4", "library": {library}}}"#),
+            String::from(
+                r#"{"op": "fixture", "url": "https://example.org/", "file": "answers/feed.xml"}"#,
+            ),
+            String::from(r#"{"op": "fixture", "url": "https://example.org/", "file": "big.bin"}"#),
+        ]);
+        let fixture: Vec<&String> = events.iter().filter(|e| e.contains("fixture")).collect();
+        assert_eq!(fixture.len(), 3, "{events:?}");
+        assert!(fixture[0].contains("start one first"), "{fixture:?}");
+        assert!(fixture[1].contains("\"fixtures\": 1"), "{fixture:?}");
+        assert!(fixture[2].contains("larger than 16 MB"), "{fixture:?}");
+        let _ = std::fs::remove_dir_all(&folder);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    /// Version 2's requests, as x4-remote has them: slots, settings,
+    /// events, the screens and actions there are, waiting for what shows.
+    #[test]
+    fn the_device_is_asked_and_waited_for_over_lines() {
+        let _one = crate::one_device_at_a_time();
+        let folder = crate::private::dir("paperpaw-stdio2").unwrap();
+        let library = string(&folder.display().to_string());
+        let events = through(&[
+            format!(r#"{{"op": "start", "profile": "xteink-x4", "library": {library}}}"#),
+            String::from(r#"{"op": "screens"}"#),
+            String::from(r#"{"op": "actions", "prefix": "core."}"#),
+            String::from(r#"{"op": "slot", "slot": "core.settings"}"#),
+            String::from(r#"{"op": "until", "text": "Display", "timeout": 5000}"#),
+            String::from(r#"{"op": "expect", "text": "Display"}"#),
+            String::from(r#"{"op": "expect", "text": "nothing says this", "not": true}"#),
+            String::from(r#"{"op": "describe"}"#),
+            String::from(r#"{"op": "set", "id": "core.night-mode", "value": "on"}"#),
+            String::from(r#"{"op": "setting", "id": "core.night-mode"}"#),
+            String::from(r#"{"op": "set", "id": "core.no-such-thing", "value": "on"}"#),
+            String::from(r#"{"op": "emit", "event": "core.library-changed"}"#),
+            String::from(r#"{"op": "wait", "ms": 100}"#),
+            String::from(r#"{"op": "until", "text": "nothing says this", "timeout": 200}"#),
+            String::from(r#"{"op": "network", "mode": "offline"}"#),
+            String::from(r#"{"op": "fixture", "url": "https://example.org/*", "body": "hi"}"#),
+            String::from(r#"{"op": "network", "mode": "real"}"#),
+        ]);
+        let screens = event(&events, "screens");
+        assert!(
+            screens.contains("\"known\": [\"") && screens.contains("\"shown\": \""),
+            "{screens}"
+        );
+        assert!(event(&events, "actions").contains("\"id\": \"core."));
+        assert!(
+            event(&events, "until").contains("\"found\": true"),
+            "{events:?}"
+        );
+        let expects: Vec<&String> = events
+            .iter()
+            .filter(|e| e.contains("\"event\": \"expect\""))
+            .collect();
+        assert!(
+            expects.len() == 2 && expects.iter().all(|e| e.contains("\"ok\": true")),
+            "{expects:?}"
+        );
+        let described = event(&events, "described");
+        assert!(described.contains("\"screen\": \""), "{described}");
+        assert!(event(&events, "set").contains("core.night-mode"));
+        assert!(
+            event(&events, "setting").contains("\"value\": \"on\""),
+            "{events:?}"
+        );
+        assert!(
+            events
+                .iter()
+                .any(|e| e.contains("core.no-such-thing") && e.contains("\"op\": \"set\""))
+        );
+        // The quit that came meanwhile ended the wait (see
+        // `waiting_ends_with_the_input`).
+        assert!(event(&events, "waited").contains("\"ms\": "));
+        let untils: Vec<&String> = events
+            .iter()
+            .filter(|e| e.contains("\"event\": \"until\""))
+            .collect();
+        assert!(
+            untils.last().unwrap().contains("\"found\": false"),
+            "{untils:?}"
+        );
+        assert!(event(&events, "network").contains("\"mode\": \"offline\""));
+        assert!(event(&events, "fixture").contains("\"fixtures\": 1"));
+        let _ = std::fs::remove_dir_all(&folder);
+    }
+
+    /// Recorded answers answer what they were recorded for (the last one
+    /// recorded first, `*` a start), others fail, as all do offline.
+    #[test]
+    fn recorded_answers_answer_their_requests() {
+        let call = |method: &str, url: &str| paperpaw_core::HttpCall {
+            id: 7,
+            method: String::from(method),
+            url: String::from(url),
+            headers: Vec::new(),
+            body: None,
+            body_from: None,
+            max_response: 1 << 20,
+            timeout_ms: 1000,
+            want_headers: Vec::new(),
+            save_to: None,
+        };
+        let fixture = |url: &str, method: Option<&str>, body: &str| Fixture {
+            url: String::from(url),
+            method: method.map(String::from),
+            status: 200,
+            body: body.as_bytes().to_vec(),
+            content_type: Some(String::from("text/plain")),
+        };
+        let state = std::rc::Rc::new(std::cell::RefCell::new((
+            Some(Network::Recorded),
+            vec![
+                fixture("https://example.org/*", None, "any"),
+                fixture("https://example.org/feed", Some("GET"), "feed"),
+            ],
+        )));
+        let mut answers = Answers(state.clone());
+        use crate::http::Route as _;
+        let answer = |answers: &mut Answers, method, url| answers.start(call(method, url)).unwrap();
+        let feed = answer(&mut answers, "GET", "https://example.org/feed");
+        assert_eq!(
+            (feed.id, feed.status, feed.body.as_slice()),
+            (7, 200, &b"feed"[..])
+        );
+        assert_eq!(
+            answer(&mut answers, "POST", "https://example.org/feed").body,
+            b"any"
+        );
+        assert_eq!(answer(&mut answers, "GET", "https://other.org/").status, 0);
+        state.borrow_mut().0 = Some(Network::Offline);
+        assert_eq!(
+            answer(&mut answers, "GET", "https://example.org/feed").status,
+            0
+        );
+    }
+
     #[test]
     fn ready_says_the_protocol_and_profiles() {
         let ready = Session::ready();
@@ -748,5 +1592,12 @@ mod tests {
             Some(f64::from(PROTOCOL))
         );
         assert!(ready.contains("\"xteink-x4-pro\""));
+        // Built in a checkout: its commit, as Git writes it.
+        let commit = json::text(&members, "commit").unwrap_or_default();
+        assert!(
+            commit.len() == 40 && commit.bytes().all(|b| b.is_ascii_hexdigit()),
+            "{ready}"
+        );
+        assert!(ready.contains("\"release\": true") || ready.contains("\"release\": false"));
     }
 }

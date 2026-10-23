@@ -127,6 +127,9 @@ jobs:
         shell: bash
         env:
           RUST_TARGET: ${{ matrix.rust }}
+          # What `--stdio` says it is built from (shells/desktop/build.rs;
+          # whether it is the release, Git says by the tag).
+          PAPERPAW_COMMIT: ${{ github.sha }}
         run: |
           version="${GITHUB_REF_NAME#v}"
           built=target/release
@@ -141,9 +144,13 @@ jobs:
           [[ "$RUNNER_OS" == Windows ]] && exe=.exe
           mkdir -p dist/pkg
           cp "$built/paperpaw-emu$exe" "$built/paperpaw-dev$exe" dist/pkg/
-          # Where it runs as built: it answers over --stdio.
+          # Where it runs as built: it answers over --stdio, as the
+          # release of its version (the tag is the workspace's version).
           if [[ -z "$RUST_TARGET" ]]; then
-            printf '%s\n' '{"op": "quit"}' | dist/pkg/paperpaw-emu$exe --stdio | grep -q '"event": "ready"'
+            printf '%s\n' '{"op": "quit"}' | dist/pkg/paperpaw-emu$exe --stdio > ready.json
+            grep -q '"event": "ready"' ready.json
+            grep -q '"release": true' ready.json
+            rm ready.json
           fi
           name="paperpaw-emu-$version-${{ matrix.target }}.zip"
           py="$(command -v python3 || command -v python)"
