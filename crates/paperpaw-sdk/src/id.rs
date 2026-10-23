@@ -100,6 +100,24 @@ impl Borrow<str> for Id {
     }
 }
 
+impl PartialEq<str> for Id {
+    fn eq(&self, other: &str) -> bool {
+        *self.0 == *other
+    }
+}
+
+impl AsRef<str> for Id {
+    fn as_ref(&self) -> &str {
+        &self.0
+    }
+}
+
+impl From<&Id> for Id {
+    fn from(id: &Id) -> Id {
+        id.clone()
+    }
+}
+
 impl fmt::Display for Id {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.write_str(&self.0)

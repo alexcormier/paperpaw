@@ -101,8 +101,7 @@ impl Plugin for Probe {
         )?;
         r.add_translations(
             "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\n\
-             probe.next = Tap here: next\nprobe.both = For all\nprobe.buttons = For buttons\n"
-                .into(),
+             probe.next = Tap here: next\nprobe.both = For all\nprobe.buttons = For buttons\n",
         )
     }
 }

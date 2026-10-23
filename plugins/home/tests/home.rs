@@ -95,7 +95,7 @@ impl Plugin for Probe {
             paperpaw_plugin_home::FOOTER,
             Id::new_static("probe.switch"),
         ))?;
-        r.add_icon(APP, "puzzle".into())?;
+        r.add_icon(APP, "puzzle")?;
         // A whole status line of its own, that counts its drawings.
         r.add_status_line(paperpaw_sdk::StatusLineSpec::new(
             Id::new_static("probe.line"),
@@ -124,8 +124,7 @@ impl Plugin for Probe {
             }),
         )?;
         r.add_translations(
-            "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\nprobe.app = Probe app\n"
-                .into(),
+            "[meta]\nlanguage = en\nname = English\nplural = one-other\n\n[messages]\nprobe.app = Probe app\n",
         )
     }
 }

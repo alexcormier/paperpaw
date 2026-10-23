@@ -1074,7 +1074,7 @@ static MARGINS_ENDS: SettingExtra = SettingExtra::new()
     .unit("core.unit.mm")
     .section(setting_sections::PAGE)
     .slider()
-    .follows(settings::MARGIN.static_str());
+    .follows(Id::new_static(settings::MARGIN.static_str()));
 static IN_PAGE: SettingExtra = SettingExtra::new().section(setting_sections::PAGE);
 /// The reading apps' part of the reading settings: the default one and
 /// one for each format (registered once the formats are known).

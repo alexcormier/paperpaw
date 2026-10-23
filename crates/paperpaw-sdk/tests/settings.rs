@@ -657,7 +657,7 @@ fn settings_show_on_a_condition_and_refuse_what_their_check_refuses() {
             _ => Ok(()),
         }
     }
-    static WHILE_ON: SettingExtra = SettingExtra::new().shown_if("a.on", "true");
+    static WHILE_ON: SettingExtra = SettingExtra::new().shown_if(Id::new_static("a.on"), "true");
     static CHECKED: SettingExtra = SettingExtra::new().check(small);
     let mut s = Settings::new();
     s.define(SettingSpec::switch(&ON, "a.on", false)).unwrap();

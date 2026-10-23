@@ -91,7 +91,7 @@ impl Plugin for Listener {
         // A layout of its own, with variants of its own.
         r.contribute(
             Id::new_static("keyboard.layouts"),
-            "dutch.layout; NL; qwertyuiop asdfghjkl zxcvbnm; i=ïí".into(),
+            "dutch.layout; NL; qwertyuiop asdfghjkl zxcvbnm; i=ïí",
         )?;
         // Far too big, and ids that are there already.
         let rows = ["abcdefghijklmnopqrstuvwxyz"; 30].join(" ");
@@ -100,8 +100,7 @@ impl Plugin for Listener {
             Id::new_static("keyboard.layouts"),
             format!(
                 "huge.layout; HUGE; {rows}; a={variants}\nkeyboard.layout.de; XX; abc\ndutch.layout; NX; abc"
-            )
-            .into(),
+            ),
         )?;
         let heard = self.0.clone();
         r.on(TYPED, move |_, typed, _| {

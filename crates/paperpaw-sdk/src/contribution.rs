@@ -366,7 +366,8 @@ pub struct Registrar {
 
 impl Registrar {
     /// A registrar for plugin `plugin`.
-    pub fn new(plugin: Id) -> Self {
+    pub fn new(plugin: impl Into<Id>) -> Self {
+        let plugin = plugin.into();
         Self {
             plugin,
             contributions: Vec::new(),
@@ -481,10 +482,12 @@ impl Registrar {
     /// wins unless the user configured the slot explicitly.
     pub fn bind_slot(
         &mut self,
-        slot: Id,
-        screen: Id,
+        slot: impl Into<Id>,
+        screen: impl Into<Id>,
         priority: Priority,
     ) -> Result<(), RegisterError> {
+        let slot = slot.into();
+        let screen = screen.into();
         self.add(Contribution::SlotBinding {
             slot,
             screen,
@@ -537,7 +540,11 @@ impl Registrar {
     /// long.back = core.home
     /// tap.center = core.menu
     /// ```
-    pub fn add_keymap(&mut self, source: Cow<'static, str>) -> Result<(), RegisterError> {
+    pub fn add_keymap(
+        &mut self,
+        source: impl Into<Cow<'static, str>>,
+    ) -> Result<(), RegisterError> {
+        let source = source.into();
         self.add(Contribution::Keymap(source))
     }
 
@@ -548,8 +555,9 @@ impl Registrar {
     pub fn add_keymap_when(
         &mut self,
         setting: &crate::setting::Setting<bool>,
-        source: Cow<'static, str>,
+        source: impl Into<Cow<'static, str>>,
     ) -> Result<(), RegisterError> {
+        let source = source.into();
         self.add(Contribution::KeymapWhen {
             setting: setting.into(),
             source,
@@ -559,7 +567,11 @@ impl Registrar {
     /// A stylesheet for books, applied after a book's own (where the
     /// format reads CSS, e.g. EPUB), e.g. for a theme that sets books
     /// apart; see [`Env::stylesheets`](crate::Env).
-    pub fn add_stylesheet(&mut self, css: Cow<'static, str>) -> Result<(), RegisterError> {
+    pub fn add_stylesheet(
+        &mut self,
+        css: impl Into<Cow<'static, str>>,
+    ) -> Result<(), RegisterError> {
+        let css = css.into();
         self.add(Contribution::Stylesheet(css))
     }
 
@@ -628,9 +640,11 @@ impl Registrar {
     /// is the translation of its id.
     pub fn add_keymap_preset(
         &mut self,
-        id: Id,
-        source: Cow<'static, str>,
+        id: impl Into<Id>,
+        source: impl Into<Cow<'static, str>>,
     ) -> Result<(), RegisterError> {
+        let id = id.into();
+        let source = source.into();
         self.add(Contribution::KeymapPreset { id, source })
     }
 
@@ -643,7 +657,13 @@ impl Registrar {
     /// Adds a font file on the storage (OpenType/TrueType): its family and
     /// style are read from its header, and it is loaded only when its
     /// family is chosen for reading. Needs scalable font support.
-    pub fn add_font_file(&mut self, id: Id, path: String) -> Result<(), RegisterError> {
+    pub fn add_font_file(
+        &mut self,
+        id: impl Into<Id>,
+        path: impl Into<String>,
+    ) -> Result<(), RegisterError> {
+        let id = id.into();
+        let path = path.into();
         self.add(Contribution::FontFile { id, path })
     }
 
@@ -652,10 +672,13 @@ impl Registrar {
     /// glyph at a time (see `Fonts::add_extension`).
     pub fn add_font_extension(
         &mut self,
-        id: Id,
-        path: String,
-        extends: Id,
+        id: impl Into<Id>,
+        path: impl Into<String>,
+        extends: impl Into<Id>,
     ) -> Result<(), RegisterError> {
+        let id = id.into();
+        let path = path.into();
+        let extends = extends.into();
         self.add(Contribution::FontExtension { id, path, extends })
     }
 
@@ -671,10 +694,12 @@ impl Registrar {
     /// [`builtin::fonts::UI`](crate::builtin::fonts::UI).
     pub fn bind_font(
         &mut self,
-        role: Id,
-        font: Id,
+        role: impl Into<Id>,
+        font: impl Into<Id>,
         priority: Priority,
     ) -> Result<(), RegisterError> {
+        let role = role.into();
+        let font = font.into();
         self.add(Contribution::FontBinding {
             role,
             font,
@@ -756,8 +781,9 @@ impl Registrar {
     pub fn add_icon(
         &mut self,
         item: impl Into<Id>,
-        icon: Cow<'static, str>,
+        icon: impl Into<Cow<'static, str>>,
     ) -> Result<(), RegisterError> {
+        let icon = icon.into();
         self.add(Contribution::Icon {
             item: item.into(),
             icon,
@@ -780,7 +806,12 @@ impl Registrar {
     /// When `screen` shows the row of hints for the buttons below it
     /// ([`Hints::Shown`](crate::Hints) unless set), and so the size it is
     /// made for.
-    pub fn set_screen_hints(&mut self, screen: Id, hints: Hints) -> Result<(), RegisterError> {
+    pub fn set_screen_hints(
+        &mut self,
+        screen: impl Into<Id>,
+        hints: Hints,
+    ) -> Result<(), RegisterError> {
+        let screen = screen.into();
         self.add(Contribution::ScreenHints { screen, hints })
     }
 
@@ -929,10 +960,11 @@ impl Registrar {
     /// for slots. It gets the params the action was run with.
     pub fn override_action(
         &mut self,
-        action: Id,
+        action: impl Into<Id>,
         handler: impl Fn(&crate::Env<'_>, &crate::Params, &mut crate::Commands) + 'static,
         priority: Priority,
     ) -> Result<(), RegisterError> {
+        let action = action.into();
         self.add(Contribution::ActionOverride(Box::new(
             crate::action::ActionOverride {
                 action,
@@ -1068,7 +1100,8 @@ impl Registrar {
     /// Publishes `service` for other plugins as `id`, usually a trait
     /// object such as `Box<dyn Weather>` (see
     /// [`services`](crate::services)).
-    pub fn publish<T: Any>(&mut self, id: Id, service: T) -> Result<(), RegisterError> {
+    pub fn publish<T: Any>(&mut self, id: impl Into<Id>, service: T) -> Result<(), RegisterError> {
+        let id = id.into();
         self.add(Contribution::Published {
             id,
             service: crate::services::Service::new(service),
@@ -1081,10 +1114,11 @@ impl Registrar {
     /// version others need ([`Services::get_versioned`](crate::services::Services::get_versioned)).
     pub fn provide<T: crate::services::ServiceType>(
         &mut self,
-        id: Id,
+        id: impl Into<Id>,
         service: T,
         version: crate::Version,
     ) -> Result<(), RegisterError> {
+        let id = id.into();
         self.add(Contribution::Published {
             id,
             service: crate::services::Service::typed(service, version),
@@ -1110,9 +1144,11 @@ impl Registrar {
     /// (see [`services`](crate::services)).
     pub fn contribute(
         &mut self,
-        point: Id,
-        contribution: Cow<'static, str>,
+        point: impl Into<Id>,
+        contribution: impl Into<Cow<'static, str>>,
     ) -> Result<(), RegisterError> {
+        let point = point.into();
+        let contribution = contribution.into();
         self.add(Contribution::ToPoint {
             point,
             text: contribution,
@@ -1120,7 +1156,11 @@ impl Registrar {
     }
 
     /// Adds a translation catalog (see `paperpaw-i18n`).
-    pub fn add_translations(&mut self, source: Cow<'static, str>) -> Result<(), RegisterError> {
+    pub fn add_translations(
+        &mut self,
+        source: impl Into<Cow<'static, str>>,
+    ) -> Result<(), RegisterError> {
+        let source = source.into();
         self.add(Contribution::Translations(source))
     }
 
@@ -1130,9 +1170,11 @@ impl Registrar {
     /// plugins are registered.
     pub fn set_setting_default(
         &mut self,
-        setting: Id,
-        value: Cow<'static, str>,
+        setting: impl Into<Id>,
+        value: impl Into<Cow<'static, str>>,
     ) -> Result<(), RegisterError> {
+        let setting = setting.into();
+        let value = value.into();
         self.add(Contribution::SettingDefault { setting, value })
     }
 
@@ -1204,12 +1246,12 @@ mod tests {
         .unwrap();
         r.add_icon(Id::new_static("other.go"), Cow::Borrowed("book"))
             .unwrap();
-        r.add_font_file(Id::new_static("demo.serif"), "a.ttf".into())
+        r.add_font_file(Id::new_static("demo.serif"), "a.ttf")
             .unwrap();
         assert!(matches!(
             r.add_font_extension(
                 Id::new_static("demo.serif"),
-                "b.ppfp".into(),
+                "b.ppfp",
                 Id::new_static("x.y")
             ),
             Ok(())
