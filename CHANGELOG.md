@@ -11,9 +11,12 @@ change the plugin SDK.
   `until` (a text or a screen, with a timeout) and `expect`, as the X4's
   remote control has them; `described` names the screen; `network`
   sends plugins' requests to the network, to answers recorded with
-  `fixture`, or nowhere, and each `request` says how it was answered.
-  `ready` says the commit of PaperPaw's source the emulator is built
-  from and whether it is the release of its version, so tools can pin
+  `fixture` (from a text, or a file of at most 16 MB in the device's
+  folder), or nowhere, and each `request` says how it was answered.
+  `wait` and `until` last at most ten minutes, and `quit` or the end of
+  the input ends them. `ready` says the commit of PaperPaw's source the emulator is built
+  from and whether it is the release of its version (tagged, and nothing
+  changed), so tools can pin
   `paperpaw-sdk` to exactly that source.
 - Each release also brings, for tools that work with it without a build
   of their own (the workshop): the desktop emulator for Windows, macOS

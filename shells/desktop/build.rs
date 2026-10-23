@@ -1,7 +1,7 @@
 //! Tells the emulator the commit of PaperPaw's source it is built from,
 //! and whether that commit is the release of its version (tagged
-//! `v<version>`), for `--stdio`'s `ready`: tools pin `paperpaw-sdk` to
-//! exactly that source. `PAPERPAW_COMMIT` and `PAPERPAW_RELEASE` (`true`
+//! `v<version>`, with nothing changed in the tracked files), for
+//! `--stdio`'s `ready`: tools pin `paperpaw-sdk` to exactly that source. `PAPERPAW_COMMIT` and `PAPERPAW_RELEASE` (`true`
 //! or `false`) say it where there is no Git (the release workflow sets
 //! them); without either, neither is known.
 
@@ -12,6 +12,14 @@ fn git(args: &[&str]) -> Option<String> {
     let output = Command::new("git").args(args).output().ok()?;
     let text = String::from_utf8(output.stdout).ok()?.trim().to_string();
     (output.status.success() && !text.is_empty()).then_some(text)
+}
+
+/// Whether the tracked files are as committed; not where Git cannot say.
+fn clean() -> bool {
+    Command::new("git")
+        .args(["status", "--porcelain", "--untracked-files=no"])
+        .output()
+        .is_ok_and(|o| o.status.success() && o.stdout.iter().all(u8::is_ascii_whitespace))
 }
 
 fn main() {
@@ -29,7 +37,14 @@ fn main() {
         Some("true") => true,
         Some(_) => false,
         None => {
-            git(&["tag", "--points-at", "HEAD"]).is_some_and(|tags| tags.lines().any(|t| t == tag))
+            let tagged = git(&["tag", "--points-at", "HEAD"])
+                .is_some_and(|tags| tags.lines().any(|t| t == tag));
+            // At the tag, a change to a file makes it no release: looked
+            // at in every build there, as Cargo cannot watch every file.
+            if tagged {
+                println!("cargo::rerun-if-changed=.always-look-again");
+            }
+            tagged && clean()
         }
     };
     // Built again when the checkout moves on or is tagged; only what is

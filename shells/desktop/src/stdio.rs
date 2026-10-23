@@ -29,11 +29,11 @@
 //! | `emit` | `event`, `params` (optional) | sends an event, as a plugin would |
 //! | `screens` | | `screens`: the screens open (`open`, the one shown last), `shown`, and every screen plugins added (`known`) |
 //! | `actions` | `prefix` (optional) | `actions`: every action, its `id` and `title` |
-//! | `wait` | `ms` | lets that much time pass, the device going on; `waited` follows |
-//! | `until` | `text` or `screen`, `timeout` (ms, 30 000 if not given) | waits until the screen shows that text (as `tap-on` finds it) or is that screen; `until` with `found` |
+//! | `wait` | `ms` (at most 600 000) | lets that much time pass, the device going on; `waited` follows with the `ms` it waited |
+//! | `until` | `text` or `screen`, `timeout` (ms, 30 000 if not given, at most 600 000) | waits until the screen shows that text (as `tap-on` finds it) or is that screen; `until` with `found` and `ms` |
 //! | `expect` | `text`, `not` (optional) | `expect` with `ok`: whether the screen shows that text now (or not) |
 //! | `network` | `mode`: `real`, `recorded` or `offline` | where plugins' requests go: the network, the recorded answers (`fixture`; none recorded: failed), nowhere (failed); `network` follows |
-//! | `fixture` | `url` (a `*` at its end matches what starts so), `method`, `status` (200), `body` (text) or `file` (its bytes), `content_type` | records an answer for `recorded`; `clear: true` forgets them all |
+//! | `fixture` | `url` (a `*` at its end matches what starts so), `method`, `status` (200), `body` (text) or `file` (its bytes: a file of at most 16 MB in the folder the device was started on, relative to it), `content_type` | records an answer for `recorded`; `clear: true` forgets them all |
 //! | `quit` | | ends |
 //!
 //! Events (`event`): `ready` (`protocol`, `paperpaw`, `profiles`,
@@ -67,6 +67,14 @@ pub const PROTOCOL: u32 = 2;
 
 /// How long `until` waits where it is not told, in milliseconds.
 const UNTIL_MS: u64 = 30_000;
+
+/// The longest `wait` or `until`, in milliseconds: ten minutes. Requests
+/// that come meanwhile are read (`quit` and the end of the input end the
+/// wait) and done after it.
+const MAX_WAIT_MS: u64 = 600_000;
+
+/// The largest file a `fixture` answers with.
+const MAX_FIXTURE: u64 = 16 << 20;
 
 /// How long the loop waits at most between looks when the device asks
 /// for nothing sooner (a clock, an animation).
@@ -187,6 +195,11 @@ pub enum Request {
         mode: Network,
     },
     Fixture(Option<Fixture>),
+    /// A `fixture` whose body is read from `file`.
+    FixtureFile {
+        fixture: Fixture,
+        file: PathBuf,
+    },
     Quit,
 }
 
@@ -247,7 +260,9 @@ fn until(members: &[(String, Value)]) -> Result<Request, String> {
     Ok(Request::Until {
         text,
         screen,
-        timeout: json::number(members, "timeout").map_or(UNTIL_MS, |n| n.max(0.0) as u64),
+        timeout: json::number(members, "timeout")
+            .map_or(UNTIL_MS, |n| n.max(0.0) as u64)
+            .min(MAX_WAIT_MS),
     })
 }
 
@@ -261,20 +276,66 @@ fn network(mode: &str) -> Result<Network, String> {
     }
 }
 
-/// A `fixture` request's answer.
-fn fixture(members: &[(String, Value)]) -> Result<Fixture, String> {
+/// A `fixture` request: its answer, its body read from `file` where it
+/// names one (when it is done, in the device's folder).
+fn fixture(members: &[(String, Value)]) -> Result<Request, String> {
     let text = |key: &str| json::text(members, key).map(String::from);
-    Ok(Fixture {
+    let fixture = Fixture {
         url: text("url").ok_or_else(|| String::from("`url` is missing"))?,
         method: text("method"),
         status: json::number(members, "status").map_or(200, |n| n as u16),
-        body: match (text("body"), text("file")) {
-            (Some(body), _) => body.into_bytes(),
-            (None, Some(file)) => std::fs::read(&file).map_err(|e| format!("{file}: {e}"))?,
-            (None, None) => Vec::new(),
-        },
+        body: text("body").unwrap_or_default().into_bytes(),
         content_type: text("content_type"),
+    };
+    Ok(match text("file").filter(|_| text("body").is_none()) {
+        Some(file) => Request::FixtureFile {
+            fixture,
+            file: PathBuf::from(file),
+        },
+        None => Request::Fixture(Some(fixture)),
     })
+}
+
+/// The bytes of `file` for a `fixture`: a file (no pipe or device) of at
+/// most [`MAX_FIXTURE`] bytes in `folder` (relative to it), where it is
+/// once links are followed.
+fn fixture_file(folder: &Path, file: &Path) -> Result<Vec<u8>, String> {
+    use std::io::Read as _;
+    let shown = file.display();
+    let folder = folder
+        .canonicalize()
+        .map_err(|e| format!("{}: {e}", folder.display()))?;
+    let path = folder
+        .join(file)
+        .canonicalize()
+        .map_err(|e| format!("{shown}: {e}"))?;
+    if !path.starts_with(&folder) {
+        return Err(format!(
+            "{shown}: not in the folder the device was started on"
+        ));
+    }
+    let large = || format!("{shown}: larger than {} MB", MAX_FIXTURE >> 20);
+    // Looked at before it is opened: opening a pipe waits for a writer.
+    let meta = std::fs::metadata(&path).map_err(|e| format!("{shown}: {e}"))?;
+    if !meta.is_file() {
+        return Err(format!("{shown}: not a file"));
+    }
+    if meta.len() > MAX_FIXTURE {
+        return Err(large());
+    }
+    let opened = std::fs::File::open(&path).map_err(|e| format!("{shown}: {e}"))?;
+    if !opened.metadata().is_ok_and(|m| m.is_file()) {
+        return Err(format!("{shown}: not a file"));
+    }
+    let mut body = Vec::new();
+    opened
+        .take(MAX_FIXTURE + 1)
+        .read_to_end(&mut body)
+        .map_err(|e| format!("{shown}: {e}"))?;
+    if body.len() as u64 > MAX_FIXTURE {
+        return Err(large());
+    }
+    Ok(body)
 }
 
 /// The members of the object `key` of `line` as texts (numbers as they
@@ -361,7 +422,7 @@ pub fn parse(line: &str) -> Result<Request, String> {
             prefix: text("prefix").unwrap_or_default(),
         },
         "wait" => Request::Wait {
-            ms: json::number(&members, "ms").map_or(0, |n| n.max(0.0) as u64),
+            ms: json::number(&members, "ms").map_or(0, |n| (n.max(0.0) as u64).min(MAX_WAIT_MS)),
         },
         "until" => until(&members)?,
         "expect" => Request::Expect {
@@ -374,7 +435,7 @@ pub fn parse(line: &str) -> Result<Request, String> {
         "fixture" if json::raw_member(line, "clear").map(str::trim) == Some("true") => {
             Request::Fixture(None)
         }
-        "fixture" => Request::Fixture(Some(fixture(&members)?)),
+        "fixture" => fixture(&members)?,
         "quit" => Request::Quit,
         other => return Err(format!("no request `{other}`")),
     })
@@ -475,6 +536,13 @@ impl Session {
                     mode.name()
                 ));
             }
+            Request::FixtureFile { mut fixture, file } => {
+                let started = self.started.as_ref().ok_or_else(|| {
+                    String::from("a `file` is read from the device's folder: start one first")
+                })?;
+                fixture.body = fixture_file(&started.library, &file)?;
+                return self.carry_out(Request::Fixture(Some(fixture)));
+            }
             Request::Fixture(fixture) => {
                 let mut network = self.network.borrow_mut();
                 match fixture {
@@ -563,29 +631,31 @@ impl Session {
         is_screen && has_text
     }
 
-    /// Goes on (the device's ticks, what it tells told) until the screen
-    /// shows `text` or is `screen`, at most `timeout` milliseconds: the
-    /// milliseconds it took, or `None`. With neither, `timeout` passes.
+    /// Goes on (the device's ticks, what it tells told, the requests that
+    /// come read) until the screen shows `text` or is `screen`, at most
+    /// `timeout` milliseconds, or until the input ends (`quit`, or no
+    /// more): whether it found it, and the milliseconds it took. With
+    /// neither, `timeout` passes.
     fn until(
         &mut self,
         text: Option<&str>,
         screen: Option<&str>,
         timeout: u64,
+        input: &mut Input<'_>,
         tell: &mut dyn FnMut(&str) -> std::io::Result<()>,
-    ) -> std::io::Result<Option<u64>> {
+    ) -> std::io::Result<(bool, u64)> {
         let start = std::time::Instant::now();
         let looking = text.is_some() || screen.is_some();
         loop {
             self.step_into(tell)?;
             let ms = u64::try_from(start.elapsed().as_millis()).unwrap_or(u64::MAX);
             if looking && self.shows(text, screen) {
-                return Ok(Some(ms));
+                return Ok((true, ms));
             }
-            if ms >= timeout {
-                return Ok(None);
+            if ms >= timeout || input.ended {
+                return Ok((false, ms));
             }
-            let rest = self.wait().min(timeout - ms).max(1);
-            std::thread::sleep(Duration::from_millis(rest));
+            input.listen(Duration::from_millis(self.wait().min(timeout - ms).max(1)));
         }
     }
 
@@ -679,7 +749,7 @@ fn op_name(request: &Request) -> &'static str {
         Request::Until { .. } => "until",
         Request::Expect { .. } => "expect",
         Request::Network { .. } => "network",
-        Request::Fixture(_) => "fixture",
+        Request::Fixture(_) | Request::FixtureFile { .. } => "fixture",
         Request::Quit => "quit",
     }
 }
@@ -997,6 +1067,43 @@ pub fn run(
     })
 }
 
+/// The requests' lines as they come, and those read while the device
+/// was waited for (`wait`, `until`), to do after it.
+struct Input<'a> {
+    received: &'a Receiver<Result<String, String>>,
+    pending: std::collections::VecDeque<Result<String, String>>,
+    /// `quit` came, or the input ended: what came before is still done,
+    /// without waiting.
+    ended: bool,
+}
+
+impl Input<'_> {
+    /// The next line, at most `wait` from now; what was read before first.
+    fn next(&mut self, wait: Duration) -> Result<Result<String, String>, RecvTimeoutError> {
+        if let Some(line) = self.pending.pop_front() {
+            return Ok(line);
+        }
+        if self.ended {
+            return Err(RecvTimeoutError::Disconnected);
+        }
+        self.received.recv_timeout(wait)
+    }
+
+    /// Reads what comes in `wait`, while the device is waited for: kept
+    /// for after it, but `quit` or the end of the input end it.
+    fn listen(&mut self, wait: Duration) {
+        if self.ended {
+            return;
+        }
+        match self.received.recv_timeout(wait) {
+            Ok(Ok(line)) if parse(&line) == Ok(Request::Quit) => self.ended = true,
+            Ok(line) => self.pending.push_back(line),
+            Err(RecvTimeoutError::Timeout) => {}
+            Err(RecvTimeoutError::Disconnected) => self.ended = true,
+        }
+    }
+}
+
 /// The loop: requests as they come, the device's ticks when due, its
 /// events as they happen.
 fn serve(
@@ -1004,8 +1111,13 @@ fn serve(
     received: &Receiver<Result<String, String>>,
     tell: &mut dyn FnMut(&str) -> std::io::Result<()>,
 ) -> std::io::Result<()> {
+    let mut input = Input {
+        received,
+        pending: std::collections::VecDeque::new(),
+        ended: false,
+    };
     loop {
-        match received.recv_timeout(Duration::from_millis(session.wait())) {
+        match input.next(Duration::from_millis(session.wait())) {
             Ok(Err(message)) => tell(&format!(
                 "{{\"event\": \"error\", \"message\": {}}}",
                 string(&message)
@@ -1014,7 +1126,7 @@ fn serve(
             Ok(Ok(line)) => {
                 let events = match parse(&line) {
                     Ok(Request::Wait { ms }) => {
-                        session.until(None, None, ms, tell)?;
+                        let (_, ms) = session.until(None, None, ms, &mut input, tell)?;
                         Some(vec![format!("{{\"event\": \"waited\", \"ms\": {ms}}}")])
                     }
                     Ok(Request::Until {
@@ -1022,12 +1134,15 @@ fn serve(
                         screen,
                         timeout,
                     }) => {
-                        let found =
-                            session.until(text.as_deref(), screen.as_deref(), timeout, tell)?;
+                        let (found, ms) = session.until(
+                            text.as_deref(),
+                            screen.as_deref(),
+                            timeout,
+                            &mut input,
+                            tell,
+                        )?;
                         Some(vec![format!(
-                            "{{\"event\": \"until\", \"found\": {}, \"ms\": {}}}",
-                            found.is_some(),
-                            found.unwrap_or(timeout)
+                            "{{\"event\": \"until\", \"found\": {found}, \"ms\": {ms}}}"
                         )])
                     }
                     Ok(Request::Expect { text, not }) => {
@@ -1210,6 +1325,141 @@ mod tests {
             .unwrap_or_else(|| panic!("no {name}: {events:?}"))
     }
 
+    /// A wait lasts its time, at most ten minutes, while the requests that
+    /// come meanwhile are read: done after it, but `quit` or the end of
+    /// the input (the program gone) end it at once, and the process.
+    #[test]
+    fn waiting_ends_with_the_input() {
+        let parsed = |line: &str| parse(line).unwrap();
+        assert_eq!(
+            parsed(r#"{"op": "wait", "ms": 1e12}"#),
+            Request::Wait { ms: MAX_WAIT_MS }
+        );
+        assert_eq!(
+            parsed(r#"{"op": "until", "text": "x", "timeout": 1e12}"#),
+            Request::Until {
+                text: Some("x".into()),
+                screen: None,
+                timeout: MAX_WAIT_MS
+            }
+        );
+        // `then` sent `after` the lines, while they are waited for.
+        let served = |lines: &[&str], after: u64, then: Option<&str>| {
+            let (sender, received) = channel();
+            for line in lines {
+                sender.send(Ok((*line).to_string())).unwrap();
+            }
+            let then = then.map(str::to_string);
+            let late = std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(after));
+                if let Some(line) = then {
+                    let _ = sender.send(Ok(line));
+                }
+                // Dropped here: the end of the input.
+            });
+            let start = std::time::Instant::now();
+            let mut events = Vec::new();
+            let mut session = Session::new();
+            serve(&mut session, &received, &mut |event| {
+                events.push(event.to_string());
+                Ok(())
+            })
+            .unwrap();
+            late.join().unwrap();
+            (events, start.elapsed())
+        };
+        let ms = |event: &str| json::number(&json::object(event), "ms").unwrap();
+
+        // Waited for in full, and what came meanwhile done after it.
+        let (events, took) = served(
+            &[r#"{"op": "wait", "ms": 300}"#, r#"{"op": "screens"}"#],
+            600,
+            Some(r#"{"op": "quit"}"#),
+        );
+        assert!(
+            ms(&events[0]) >= 300.0 && took >= Duration::from_millis(300),
+            "{events:?}"
+        );
+        assert!(events[1].contains("\"op\": \"screens\""), "{events:?}");
+        // `quit`, or the program gone, ends a long wait at once.
+        for then in [Some(r#"{"op": "quit"}"#), None] {
+            let (events, took) = served(
+                &[r#"{"op": "until", "text": "never shown", "timeout": 600000}"#],
+                200,
+                then,
+            );
+            assert!(took < Duration::from_secs(10), "{took:?}");
+            assert!(events[0].contains("\"found\": false"), "{events:?}");
+        }
+    }
+
+    /// A recorded answer's file is a file in the device's folder, of at
+    /// most 16 MB; never one outside it, through a link either, nor a
+    /// folder, pipe or device.
+    #[test]
+    fn answers_come_from_files_in_the_device_s_folder() {
+        let folder = crate::private::dir("paperpaw-fixture").unwrap();
+        let outside = crate::private::dir("paperpaw-fixture-outside").unwrap();
+        std::fs::create_dir_all(folder.join("answers")).unwrap();
+        std::fs::write(folder.join("answers/feed.xml"), b"<feed/>").unwrap();
+        std::fs::write(outside.join("secret.txt"), b"secret").unwrap();
+        let big = std::fs::File::create(folder.join("big.bin")).unwrap();
+        big.set_len(MAX_FIXTURE + 1).unwrap();
+        drop(big);
+        let read = |file: &Path| fixture_file(&folder, file);
+        assert_eq!(read(Path::new("answers/feed.xml")).unwrap(), b"<feed/>");
+        assert_eq!(read(&folder.join("answers/feed.xml")).unwrap(), b"<feed/>");
+        assert!(read(Path::new("../secret.txt")).is_err());
+        assert!(
+            read(&outside.join("secret.txt"))
+                .unwrap_err()
+                .contains("not in the folder")
+        );
+        assert!(
+            read(Path::new("answers"))
+                .unwrap_err()
+                .contains("not a file")
+        );
+        assert!(
+            read(Path::new("big.bin"))
+                .unwrap_err()
+                .contains("larger than 16 MB")
+        );
+        assert!(read(Path::new("missing.txt")).is_err());
+        #[cfg(unix)]
+        {
+            std::os::unix::fs::symlink(outside.join("secret.txt"), folder.join("link.txt"))
+                .unwrap();
+            assert!(
+                read(Path::new("link.txt"))
+                    .unwrap_err()
+                    .contains("not in the folder")
+            );
+            assert!(read(Path::new("/dev/zero")).is_err());
+        }
+
+        // Over the lines: read where the device was started, none before.
+        let _one = crate::one_device_at_a_time();
+        let library = string(&folder.display().to_string());
+        let events = through(&[
+            String::from(
+                r#"{"op": "fixture", "url": "https://example.org/", "file": "answers/feed.xml"}"#,
+            ),
+            format!(r#"{{"op": "start", "profile": "xteink-x4", "library": {library}}}"#),
+            String::from(
+                r#"{"op": "fixture", "url": "https://example.org/", "file": "answers/feed.xml"}"#,
+            ),
+            String::from(r#"{"op": "fixture", "url": "https://example.org/", "file": "big.bin"}"#),
+        ]);
+        let fixture: Vec<&String> = events.iter().filter(|e| e.contains("fixture")).collect();
+        assert_eq!(fixture.len(), 3, "{events:?}");
+        assert!(fixture[0].contains("start one first"), "{fixture:?}");
+        assert!(fixture[1].contains("\"fixtures\": 1"), "{fixture:?}");
+        assert!(fixture[2].contains("larger than 16 MB"), "{fixture:?}");
+        let _ = std::fs::remove_dir_all(&folder);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
     /// Version 2's requests, as x4-remote has them: slots, settings,
     /// events, the screens and actions there are, waiting for what shows.
     #[test]
@@ -1266,7 +1516,9 @@ mod tests {
                 .iter()
                 .any(|e| e.contains("core.no-such-thing") && e.contains("\"op\": \"set\""))
         );
-        assert!(event(&events, "waited").contains("\"ms\": 100"));
+        // The quit that came meanwhile ended the wait (see
+        // `waiting_ends_with_the_input`).
+        assert!(event(&events, "waited").contains("\"ms\": "));
         let untils: Vec<&String> = events
             .iter()
             .filter(|e| e.contains("\"event\": \"until\""))
