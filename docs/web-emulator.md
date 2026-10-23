@@ -15,8 +15,9 @@ shells/web/
   src/network.rs    plugins' requests answered from the page's recorded answers
   src/exports.rs    the module's functions (wasm32 only)
   tests/            the emulator, its commands, network and a code plugin, natively
-  www/              paperpaw-web.js (loader), frame.html and frame.js
-                    (the emulator frame), index.html (a page to try it)
+  www/              paperpaw-web.js (loader), frame.html, frame.css and
+                    frame.js (the emulator frame), index.html with
+                    index.css and index.js (a page to try it)
   build.py          builds the module into www/ (--serve shows it,
                     --limit-mb fails where it grew too large)
 ```
@@ -155,6 +156,18 @@ than a screen's. A full refresh flashes. Screenshots have the panel
 model's own colours. The device's buttons are below it, its keys are on
 the keyboard, and the screen takes touch where the device has a touch
 screen.
+
+**Serving it.** Each release has the module and its pages as
+`paperpaw-web-<version>.zip`, with its SHA-256 and a signature by
+PaperPaw's key over a domain of its own (`paperpaw-sign check-asset`
+reads it). Its URLs are relative, so it runs from any path. It loads no
+inline script or style, so a strict Content-Security-Policy holds for
+the frame: `default-src 'none'; script-src 'self' 'wasm-unsafe-eval';
+style-src 'self'; img-src 'self' data: blob:; connect-src 'self';
+frame-ancestors <the pages that embed it>`. `wasm-unsafe-eval` is what
+compiling the module needs, and only the frame needs it. Serve
+`paperpaw-web.wasm` as `application/wasm` (the loader streams it), and
+compressed: it is 14 MB, about 5.7 MB with gzip and less with Brotli.
 
 A code plugin cannot be added to the running module: WebAssembly shares
 no Rust types between modules. A module of its own is: a crate with

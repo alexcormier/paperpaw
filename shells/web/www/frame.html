@@ -4,22 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>PaperPaw emulator</title>
-<style>
-  html, body { margin: 0; height: 100%; background: #3a3a3c; }
-  body { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; padding: 12px; box-sizing: border-box; }
-  #screen {
-    /* Sized by frame.js: a whole number of screen pixels for each of the
-       device's where it fits (crisp), smoothed where it is made smaller. */
-    background: #e9e6dd; border-radius: 4px;
-    box-shadow: 0 0 0 10px #1d1d1f; touch-action: none; outline: none;
-  }
-  #buttons { display: flex; gap: 8px; flex-wrap: wrap; justify-content: center; }
-  #buttons button {
-    font: 13px system-ui, sans-serif; min-width: 64px; padding: 8px 10px;
-    border: 0; border-radius: 6px; background: #1d1d1f; color: #f2f2f2; cursor: pointer;
-  }
-  #buttons button:active { background: #555; }
-</style>
+<link rel="stylesheet" href="frame.css">
 </head>
 <body>
 <canvas id="screen" tabindex="0" aria-label="The emulated device's screen"></canvas>

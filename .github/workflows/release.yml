@@ -18,7 +18,8 @@ name: Release
 # the plugin library (`paperpaw-<version>-catalogue.zip`). The web
 # emulator (shells/web) comes as its module and its pages
 # (`paperpaw-web-<version>.zip`), for pages that show PaperPaw in a
-# browser. For tools that work with a release without a build of their
+# browser (paperpaw.org's "Try it out"), with its SHA-256 and a signature
+# of its own as the emulators below. For tools that work with a release without a build of their
 # own (the workshop): the desktop emulator for each computer
 # (`paperpaw-emu-<version>-<target>.zip`, with paperpaw-dev for
 # `--check`), driven over `--stdio` and loading code plugins built for
@@ -104,8 +105,9 @@ jobs:
         run: |
           version="${GITHUB_REF_NAME#v}"
           mkdir -p dist
-          (cd shells/web/www && zip -q -X "../../../dist/paperpaw-web-$version.zip" \
-            paperpaw-web.wasm paperpaw-web.js frame.js frame.html index.html)
+          # Everything the pages load, as it lies in its folder, so that it
+          # runs from any path (its URLs are relative).
+          (cd shells/web/www && zip -q -X -r "../../../dist/paperpaw-web-$version.zip" . -x .gitignore)
           (cd dist && sha256sum "paperpaw-web-$version.zip" > "paperpaw-web-$version.zip.sha256")
       - uses: actions/upload-artifact@v7
         with:
@@ -353,11 +355,12 @@ jobs:
             --date "$(date -u +%F)"
           (cd dist/plugins && zip -q -X -r "../paperpaw-$VERSION-catalogue.zip" catalogue)
           mv dist/plugins/SHA256SUMS "dist/paperpaw-$VERSION-plugins.sha256"
-      # The emulators, the handbook and the ESP32-S3's core libraries: a
-      # checksum and a signature of their own each, with the firmware's
-      # key (the workshop and plugin authors pin its public key). The key
-      # is on the disk only while they are signed.
-      - name: Sign the emulators, the handbook and the core libraries
+      # The emulators, the handbook, the web emulator and the ESP32-S3's
+      # core libraries: a checksum and a signature of their own each, with
+      # the firmware's key (the workshop, plugin authors and paperpaw.org
+      # pin its public key). The key is on the disk only while they are
+      # signed.
+      - name: Sign the emulators, the handbook, the web emulator and the core libraries
         env:
           PAPERPAW_SIGNING_KEY: ${{ secrets.PAPERPAW_SIGNING_KEY }}
         run: |
@@ -367,7 +370,7 @@ jobs:
           fi
           cargo build -q --release -p paperpaw-sign
           for file in dist/paperpaw-emu-"$VERSION"-*.zip "dist/paperpaw-handbook-$VERSION.zip" \
-            "dist/paperpaw-xtensa-std-$VERSION.tar.gz"; do
+            "dist/paperpaw-web-$VERSION.zip" "dist/paperpaw-xtensa-std-$VERSION.tar.gz"; do
             target/release/paperpaw-sign sign-asset "$file" "$file.sig"
             target/release/paperpaw-sign check-asset "$file" "$file.sig"
             (cd dist && sha256sum "$(basename "$file")" > "$(basename "$file").sha256")
@@ -404,7 +407,8 @@ jobs:
           assets+=(dist/plugins/*.ppn dist/plugins/*.zip \
             "dist/paperpaw-$VERSION-catalogue.zip" "dist/paperpaw-$VERSION-plugins.sha256")
           # The web emulator: its module and pages.
-          assets+=("dist/paperpaw-web-$VERSION.zip" "dist/paperpaw-web-$VERSION.zip.sha256")
+          assets+=("dist/paperpaw-web-$VERSION.zip" "dist/paperpaw-web-$VERSION.zip.sha256" \
+            "dist/paperpaw-web-$VERSION.zip.sig")
           # The desktop emulators and the handbook, for the workshop.
           for target in windows-x64 macos-arm64 macos-x64 linux-x64; do
             for part in "" .sha256 .sig; do
