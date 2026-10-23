@@ -161,7 +161,7 @@ impl GroupPage {
     pub(super) fn new(env: &Env<'_>, group: Id) -> Self {
         // A placement's group (`widgets.clock@2`): the widget's settings,
         // as that placement has them.
-        let own = group.placed().and_then(|plain| Id::parse(&plain).ok());
+        let own = group.unplaced();
         let of = own.as_ref().unwrap_or(&group);
         let title = env
             .settings

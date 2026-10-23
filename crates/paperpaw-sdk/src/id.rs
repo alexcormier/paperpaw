@@ -77,13 +77,6 @@ impl Id {
         unplaced(self.as_str()).map(|plain| Id(Cow::Owned(plain)))
     }
 
-    /// [`Id::unplaced`] as text: its name before it had the one it has
-    /// now, kept while plugins still call it.
-    #[doc(hidden)]
-    pub fn placed(&self) -> Option<String> {
-        unplaced(self.as_str())
-    }
-
     /// The id of placement `n` of this: `widgets.clock` and 2 make
     /// `widgets.clock@2`, and so does `widgets.clock@5` (another
     /// placement of the same).
@@ -178,7 +171,6 @@ mod tests {
         }
         let id = Id::parse("widgets.clock@2.face").unwrap();
         assert_eq!(id.unplaced(), Some(Id::new_static("widgets.clock.face")));
-        assert_eq!(id.placed().as_deref(), Some("widgets.clock.face"));
         assert_eq!(Id::new_static("widgets.clock").unplaced(), None);
         let clock = Id::new_static("widgets.clock");
         assert_eq!(clock.placement(3).as_str(), "widgets.clock@3");

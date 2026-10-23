@@ -833,9 +833,6 @@ pub paperpaw_sdk::contribution::Contribution::Screen(paperpaw_sdk::ScreenSpec)
 #[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::ScreenHints
 pub paperpaw_sdk::contribution::Contribution::ScreenHints::hints: paperpaw_sdk::Hints
 pub paperpaw_sdk::contribution::Contribution::ScreenHints::screen: paperpaw_sdk::Id
-#[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::Service
-pub paperpaw_sdk::contribution::Contribution::Service::id: paperpaw_sdk::Id
-pub paperpaw_sdk::contribution::Contribution::Service::service: alloc::boxed::Box<dyn core::any::Any>
 pub paperpaw_sdk::contribution::Contribution::Setting(alloc::boxed::Box<paperpaw_sdk::SettingSpec>)
 #[non_exhaustive] pub paperpaw_sdk::contribution::Contribution::SettingDefault
 pub paperpaw_sdk::contribution::Contribution::SettingDefault::setting: paperpaw_sdk::Id
@@ -907,7 +904,6 @@ pub fn paperpaw_sdk::contribution::Registrar::add_presets(&mut self, &'static [p
 pub fn paperpaw_sdk::contribution::Registrar::add_reader(&mut self, paperpaw_sdk::readers::ReaderSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_refresh_filter(&mut self, paperpaw_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_screen(&mut self, paperpaw_sdk::ScreenSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
-pub fn paperpaw_sdk::contribution::Registrar::add_service(&mut self, paperpaw_sdk::Id, alloc::boxed::Box<dyn core::any::Any>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_setting(&mut self, paperpaw_sdk::SettingSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_setting_group(&mut self, paperpaw_sdk::SettingGroupSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_settings(&mut self, &'static [paperpaw_sdk::SettingSpec]) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -2802,7 +2798,6 @@ pub fn paperpaw_sdk::services::PointSpec::doc(self, impl core::convert::Into<all
 pub fn paperpaw_sdk::services::PointSpec::new(paperpaw_sdk::Id, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub struct paperpaw_sdk::services::Service
 impl paperpaw_sdk::services::Service
-pub fn paperpaw_sdk::services::Service::any(alloc::boxed::Box<dyn core::any::Any>) -> Self
 pub fn paperpaw_sdk::services::Service::new<T: core::any::Any>(T) -> Self
 pub fn paperpaw_sdk::services::Service::typed<T: paperpaw_sdk::services::ServiceType>(T, paperpaw_sdk::Version) -> Self
 pub fn paperpaw_sdk::services::Service::version(&self) -> core::option::Option<paperpaw_sdk::Version>
@@ -4796,9 +4791,6 @@ pub paperpaw_sdk::Contribution::Screen(paperpaw_sdk::ScreenSpec)
 #[non_exhaustive] pub paperpaw_sdk::Contribution::ScreenHints
 pub paperpaw_sdk::Contribution::ScreenHints::hints: paperpaw_sdk::Hints
 pub paperpaw_sdk::Contribution::ScreenHints::screen: paperpaw_sdk::Id
-#[non_exhaustive] pub paperpaw_sdk::Contribution::Service
-pub paperpaw_sdk::Contribution::Service::id: paperpaw_sdk::Id
-pub paperpaw_sdk::Contribution::Service::service: alloc::boxed::Box<dyn core::any::Any>
 pub paperpaw_sdk::Contribution::Setting(alloc::boxed::Box<paperpaw_sdk::SettingSpec>)
 #[non_exhaustive] pub paperpaw_sdk::Contribution::SettingDefault
 pub paperpaw_sdk::Contribution::SettingDefault::setting: paperpaw_sdk::Id
@@ -5610,7 +5602,6 @@ pub fn paperpaw_sdk::contribution::Registrar::add_presets(&mut self, &'static [p
 pub fn paperpaw_sdk::contribution::Registrar::add_reader(&mut self, paperpaw_sdk::readers::ReaderSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_refresh_filter(&mut self, paperpaw_sdk::filters::RefreshFilterSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_screen(&mut self, paperpaw_sdk::ScreenSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
-pub fn paperpaw_sdk::contribution::Registrar::add_service(&mut self, paperpaw_sdk::Id, alloc::boxed::Box<dyn core::any::Any>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_setting(&mut self, paperpaw_sdk::SettingSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_setting_group(&mut self, paperpaw_sdk::SettingGroupSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_settings(&mut self, &'static [paperpaw_sdk::SettingSpec]) -> core::result::Result<(), paperpaw_sdk::RegisterError>

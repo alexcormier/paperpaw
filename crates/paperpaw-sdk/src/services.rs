@@ -172,16 +172,6 @@ impl Service {
         }
     }
 
-    /// A boxed value of a type not known here, found by its `TypeId` only
-    /// (so not by native code plugins built apart).
-    pub fn any(value: Box<dyn Any>) -> Self {
-        Self {
-            value,
-            type_name: None,
-            contract: None,
-        }
-    }
-
     /// Its version, where it was published with one.
     pub fn version(&self) -> Option<Version> {
         self.contract.as_ref().map(|contract| contract.version)
@@ -460,8 +450,6 @@ mod tests {
         assert_eq!(services.get::<i64>("a.count"), None, "another type");
         assert_eq!(services.get::<u32>("b.count"), None);
         assert!(services.has("a.count"));
-        services.insert(Id::new_static("a.any"), Service::any(Box::new(5u8)));
-        assert_eq!(services.get::<u8>("a.any"), Some(&5), "by its TypeId");
 
         let point = Id::new_static("a.shapes");
         services.contribute(point.clone(), Id::new_static("b"), Cow::Borrowed("circle"));

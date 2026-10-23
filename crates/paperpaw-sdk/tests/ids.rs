@@ -47,7 +47,7 @@ proptest! {
         prop_assert_eq!(&Id::parse(&id.to_string()).unwrap(), &id);
         prop_assert_eq!(id.namespace(), segments[0].as_str());
         prop_assert!(id.is_owned_by(&Id::parse(&segments[0]).unwrap()));
-        prop_assert_eq!(id.placed(), None);
+        prop_assert_eq!(id.unplaced(), None);
         prop_assert_eq!(id.clone().static_str(), "");
     }
 
@@ -62,9 +62,9 @@ proptest! {
         let id = Id::parse(&segments.join(".")).unwrap();
         let placed = id.placement(n);
         prop_assert!(Id::parse(placed.as_str()).is_ok());
-        prop_assert_eq!(placed.placed(), Some(id.to_string()));
+        prop_assert_eq!(placed.unplaced(), Some(id.clone()));
         let below = Id::parse(&format!("{placed}.{setting}")).unwrap();
-        prop_assert_eq!(below.placed(), Some(format!("{id}.{setting}")));
+        prop_assert_eq!(below.unplaced().map(|i| i.to_string()), Some(format!("{id}.{setting}")));
         // The placement of a plugin's own id is still the plugin's.
         if segments.len() > 1 {
             prop_assert_eq!(placed.namespace(), segments[0].as_str());
