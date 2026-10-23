@@ -164,6 +164,9 @@ file to your report.
   start of the week for the statistics and calendars.
 - New status items: *Battery when low* shows the battery only below a
   level, and a Wi-Fi sign shows while the device is in a network.
+- A plugin's settings group that names no place on the settings' main
+  page is listed at the end of *Customise*, by name, with a plugin's
+  icon, instead of first among the books' groups.
 
 #### Touch, buttons and the keyboard
 
@@ -385,6 +388,9 @@ file to your report.
 - Each release also brings the desktop emulator for Windows, macOS and
   Linux with `paperpaw-dev`, the web emulator and the handbook, each
   signed. `docs/porting.md` says how to add a device.
+- `paperpaw-dev` warns of a settings group without an order or an icon,
+  and of a widget's settings in a group of the main page rather than the
+  widget's own (`widgets::settings_group`). SDK: `Kernel::menus`.
 
 ## [0.3.0] - 2026-10-16
 
