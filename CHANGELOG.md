@@ -6,6 +6,12 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- `paperpaw-emu --stdio` protocol 2 (version 1's requests as they were):
+  `slot`, `set` and `setting`, `emit`, `screens` and `actions`, `wait`,
+  `until` (a text or a screen, with a timeout) and `expect`, as the X4's
+  remote control has them; `described` names the screen; `network`
+  sends plugins' requests to the network, to answers recorded with
+  `fixture`, or nowhere, and each `request` says how it was answered.
 - Each release also brings, for tools that work with it without a build
   of their own (the workshop): the desktop emulator for Windows, macOS
   (Apple silicon and Intel) and Linux with paperpaw-dev beside it
