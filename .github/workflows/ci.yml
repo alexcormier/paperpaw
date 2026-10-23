@@ -203,7 +203,7 @@ jobs:
             "samples/hello-native/rust-toolchain.toml:channel = \"$x4\"" \
             "$template:RUST_X4: \"$x4\"" \
             "$template:RUST_X4_PRO: \"$ESP_RUST_VERSION\"" \
-            "$template:--crosstool-toolchain-version $ESP_GCC_VERSION"; do
+            "$template:ESP_GCC: \"$ESP_GCC_VERSION\""; do
             if ! grep -qF -- "${found#*:}" "${found%%:*}"; then
               echo "::error file=${found%%:*}::should say ${found#*:}, as shells/xteink does"
               status=1

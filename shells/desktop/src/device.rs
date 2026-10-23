@@ -311,14 +311,14 @@ impl Device {
     /// (with simulated time a fixed one, so screenshots repeat) and a
     /// battery at 80 %.
     fn status(&self, now: Instant) -> SystemStatus {
-        let clock = match self.clock {
-            _ if let Some((at, unix_millis, utc_offset_minutes)) = self.wall => WallClock {
+        let clock = match (self.wall, &self.clock) {
+            (Some((at, unix_millis, utc_offset_minutes)), _) => WallClock {
                 at,
                 unix_millis,
                 utc_offset_minutes,
             },
             #[cfg(not(target_arch = "wasm32"))]
-            Clock::Real(_) => {
+            (None, Clock::Real(_)) => {
                 let local = chrono::Local::now();
                 WallClock {
                     at: now,
