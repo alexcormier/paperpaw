@@ -3272,6 +3272,11 @@ impl core::cmp::PartialEq for paperpaw_sdk::ui::look::Look
 pub fn paperpaw_sdk::ui::look::Look::eq(&self, &Self) -> bool
 impl core::fmt::Debug for paperpaw_sdk::ui::look::Look
 pub fn paperpaw_sdk::ui::look::Look::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct paperpaw_sdk::ui::look::PaintCx<'c, 'a>
+pub paperpaw_sdk::ui::look::PaintCx::canvas: &'c mut paperpaw_graphics::canvas::Canvas<'a>
+pub paperpaw_sdk::ui::look::PaintCx::style: &'c paperpaw_sdk::ui::UiStyle
+impl core::fmt::Debug for paperpaw_sdk::ui::look::PaintCx<'_, '_>
+pub fn paperpaw_sdk::ui::look::PaintCx<'_, '_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::ui::look::Painters
 impl paperpaw_sdk::ui::look::Painters
 pub const fn paperpaw_sdk::ui::look::Painters::button(self, paperpaw_sdk::ui::look::InkPainter<paperpaw_sdk::ui::look::ButtonPart>) -> Self
@@ -3304,8 +3309,8 @@ pub paperpaw_sdk::ui::look::SliderPart::track: paperpaw_platform::geometry::Rect
 pub paperpaw_sdk::ui::look::SwitchPart::inverted: bool
 pub paperpaw_sdk::ui::look::SwitchPart::on: bool
 pub paperpaw_sdk::ui::look::SwitchPart::rect: paperpaw_platform::geometry::Rect
-pub type paperpaw_sdk::ui::look::InkPainter<P> = fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, &P) -> core::option::Option<paperpaw_platform::pixel::Color>
-pub type paperpaw_sdk::ui::look::Painter<P> = fn(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, &P) -> bool
+pub type paperpaw_sdk::ui::look::InkPainter<P> = fn(&mut paperpaw_sdk::ui::look::PaintCx<'_, '_>, &P) -> core::option::Option<paperpaw_platform::pixel::Color>
+pub type paperpaw_sdk::ui::look::Painter<P> = fn(&mut paperpaw_sdk::ui::look::PaintCx<'_, '_>, &P) -> bool
 pub mod paperpaw_sdk::ui::offline
 #[non_exhaustive] pub enum paperpaw_sdk::ui::offline::Offer
 pub paperpaw_sdk::ui::offline::Offer::NotNow
