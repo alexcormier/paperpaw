@@ -57,18 +57,23 @@ change the plugin SDK.
     old or its new place after a cut, never at neither, and a move on a
     full card fails before anything changes. Files being written are
     not listed and cannot be deleted by name; what a cut left is
-    settled when a folder is first looked at, a file changed since
-    winning over an older new copy. Temporary files of earlier versions
-    go where they are provably copies.
+    settled when a folder is first looked at: the new copy wins unless
+    the file was changed after it was made (PaperPaw marks it; the card's
+    dates are not trusted), and empty files and a folder that cannot be
+    settled never make a folder unreachable. Temporary files of earlier
+    versions go where they are provably copies.
   - Highlights, bookmarks and notes in EPUB books keep their text when
     the book's own styles are switched on or off: each records the
     conversion it was made in and where it lies in the book, and is
-    found there again (annotations file version 2; older files are
-    taken over without loss).
+    found there again (annotations file version 2). Annotations made
+    before this are never moved by a guess: they stay where they were
+    made.
   - A reading place that cannot be read is tried again, and kept aside
     (`.bad`) before a new one is saved; you are told once.
   - KOReader: removing every highlight on one side now reaches the
-    other; a side that cannot be read still changes nothing.
+    other, but an empty list there deletes here only when KOReader's
+    file had annotations before, and a copy of them is kept first
+    (`.removed`); a fresh or unreadable side changes nothing.
   - Progress sync: *Back* on an offer means not now for that book,
     until the server's place changes; it is not offered at every wake.
   - Statistics sync: a book's statistics deleted in KOReader go here
