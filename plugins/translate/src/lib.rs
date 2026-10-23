@@ -259,8 +259,8 @@ impl Panel {
         let width = self
             .style
             .font(env)
-            .map_or(0.0, |f| f.measure(self.style.small, source));
-        f32::from(self.header().width) - self.style.margin as f32 - width
+            .map_or(0.0, |f| f.measure(self.style.small(), source));
+        f32::from(self.header().width) - self.style.margin() as f32 - width
     }
 
     /// The original in one line, as wide as the header leaves it.
@@ -273,18 +273,18 @@ impl Panel {
             .split_whitespace()
             .collect::<Vec<_>>()
             .join(" ");
-        let room = self.source_x(env) - self.style.margin as f32 * 2.0;
-        ui::fit(&font, self.style.title, &original, room)
+        let room = self.source_x(env) - self.style.margin() as f32 * 2.0;
+        ui::fit(&font, self.style.title(), &original, room)
     }
 
     fn set_text(&mut self, env: &Env<'_>, text: String) {
         self.lines.clear();
         self.top = 0;
         if let Some(font) = self.style.font(env) {
-            let width = f32::from(self.region.width) - 2.0 * self.style.margin as f32;
+            let width = f32::from(self.region.width) - 2.0 * self.style.margin() as f32;
             let mut start = 0;
             for paragraph in text.split('\n') {
-                for range in font.wrap(self.style.text, paragraph, width) {
+                for range in font.wrap(self.style.text(), paragraph, width) {
                     self.lines.push((start + range.start, start + range.end));
                 }
                 start += paragraph.len() + 1;
@@ -348,19 +348,20 @@ impl Panel {
             self.region.x,
             self.region.y,
             self.region.width,
-            self.style.row as u16,
+            self.style.row(),
         )
     }
 
     fn line_height(&self, env: &Env<'_>) -> f32 {
-        self.style.font(env).map_or(self.style.text * 1.3, |f| {
-            f.line_metrics(self.style.text).line_height
+        self.style.font(env).map_or(self.style.text() * 1.3, |f| {
+            f.line_metrics(self.style.text()).line_height
         })
     }
 
     fn rows(&self, env: &Env<'_>) -> usize {
-        let height =
-            f32::from(self.region.height) - f32::from(self.header().height) - self.style.gap as f32;
+        let height = f32::from(self.region.height)
+            - f32::from(self.header().height)
+            - self.style.gap() as f32;
         ((height / self.line_height(env)) as usize).max(1)
     }
 
@@ -408,7 +409,7 @@ impl Screen for Panel {
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
-            (style.line * 2).max(2),
+            (u32::from(style.line()) * 2).max(2),
             Color::BLACK,
         );
         let Some(font) = style.font(env) else {
@@ -416,13 +417,13 @@ impl Screen for Panel {
         };
         // The original on the left, the service on the right.
         let header = self.header();
-        let margin = style.margin as f32;
+        let margin = style.margin() as f32;
         let source = env.i18n.tr("translate.source");
         let right = self.source_x(env);
         ui::draw_label(
             canvas,
             &font,
-            style.small,
+            style.small(),
             right,
             header,
             source,
@@ -431,21 +432,21 @@ impl Screen for Panel {
         ui::draw_label(
             canvas,
             &font,
-            style.title,
+            style.title(),
             margin,
             header,
             &self.heading,
             Color::BLACK,
         );
         let height = self.line_height(env);
-        let ascent = font.line_metrics(style.text).ascent;
-        let top = f32::from(header.y + header.height) + style.gap as f32 / 2.0;
+        let ascent = font.line_metrics(style.text()).ascent;
+        let top = f32::from(header.y + header.height) + style.gap() as f32 / 2.0;
         let rows = self.rows(env);
         for (n, &(start, end)) in self.lines.iter().skip(self.top).take(rows).enumerate() {
             let baseline = top + height * n as f32 + ascent;
             font.draw(
                 canvas,
-                style.text,
+                style.text(),
                 margin,
                 baseline as i32,
                 &self.text[start..end],

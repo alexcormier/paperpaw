@@ -155,7 +155,7 @@ struct Geometry {
 impl Geometry {
     /// The margin at the screen's sides, the style's.
     fn margin(&self) -> u16 {
-        self.style.margin as u16
+        self.style.margin()
     }
 }
 
@@ -289,7 +289,7 @@ impl PanelScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let width = display.width;
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let mut items = env.menus.shown_items(env, menu);
         // A setting shown only while another has a value.
         items.retain(|item| {
@@ -300,7 +300,7 @@ impl PanelScreen {
         // Labels as wide as the longest needs, at most half the row;
         // sliders have their titles above them.
         let font = style.font(env);
-        let measure = |text: &str| font.as_ref().map_or(0.0, |f| f.measure(style.text, text));
+        let measure = |text: &str| font.as_ref().map_or(0.0, |f| f.measure(style.text(), text));
         let longest = items
             .iter()
             .filter_map(|item| spec(env, item.id))
@@ -308,12 +308,12 @@ impl PanelScreen {
             .map(|s| measure(env.i18n.tr(&s.title)))
             .fold(0.0, f32::max);
         let label =
-            ((longest as u16).saturating_add(style.gap as u16 * 2)).min((width - 2 * margin) / 2);
-        let gap = style.gap as u16;
+            ((longest as u16).saturating_add(style.gap() * 2)).min((width - 2 * margin) / 2);
+        let gap = style.gap();
         // As high as a status line at the top of a screen (the home
         // screen's): it stays in sight above the panel.
         let head = if top {
-            paperpaw_sdk::widgets::line_height(env, style.small) + style.gap as u16 / 2
+            paperpaw_sdk::widgets::line_height(env, style.small()) + style.gap() / 2
         } else {
             0
         };
@@ -324,11 +324,11 @@ impl PanelScreen {
             height: display.height,
             gap,
             spacing: if touch { gap } else { gap / 2 },
-            row: style.touch_row(style.row) as u16,
+            row: style.touch_row(u32::from(style.row())) as u16,
             // Without the room below that rows of lists keep: the band
             // has room around its buttons.
             slider: ui::slider::row_height(&style, false).saturating_sub(gap),
-            border: (style.line * 2).max(2) as u16,
+            border: (u32::from(style.line()) * 2).max(2) as u16,
             label,
             head,
             pager: style.touch_row(u32::from(ui::Pager::height(&style))) as u16,
@@ -375,7 +375,10 @@ fn lines(env: &Env<'_>, style: &UiStyle, items: &[MenuItem<'_>], g: Geometry) ->
             _ => String::new(),
         }
     };
-    let small = |text: &str| font.as_ref().map_or(0.0, |f| f.measure(style.small, text));
+    let small = |text: &str| {
+        font.as_ref()
+            .map_or(0.0, |f| f.measure(style.small(), text))
+    };
     // As many buttons to a row as stay readable.
     let per_row = |group: &[Control]| -> usize {
         let inner = f32::from(g.width - 2 * g.margin());
@@ -784,10 +787,10 @@ fn fits_segments(
     if options.is_empty() || options.len() > MAX_SEGMENTS {
         return false;
     }
-    let cell = f32::from(area.width) / options.len() as f32 - 2.0 * style.gap as f32;
+    let cell = f32::from(area.width) / options.len() as f32 - 2.0 * style.gap() as f32;
     options
         .iter()
-        .all(|o| font.measure(style.small, env.i18n.tr(o)) <= cell)
+        .all(|o| font.measure(style.small(), env.i18n.tr(o)) <= cell)
 }
 
 /// `area` without `margin` left and right and a little above and below.
@@ -809,7 +812,7 @@ impl Screen for PanelScreen {
         let style = self.style;
         let r = self.region;
         canvas.fill(r, Color::WHITE);
-        let border = (style.line * 2).max(2);
+        let border = (u32::from(style.line()) * 2).max(2);
         let y = if self.top {
             i32::from(r.y + r.height) - border as i32
         } else {
@@ -848,11 +851,19 @@ impl Screen for PanelScreen {
                     Some((Control::Open(_) | Control::Slide(_), _))
                 )
             {
-                let x = style.margin as f32;
+                let x = style.margin() as f32;
                 let first = row.controls.first().map_or(r.width, |(_, c)| c.x);
-                let room = f32::from(first) - x - style.gap as f32;
-                let name = ui::fit(&font, style.text, env.i18n.tr(&spec.title), room);
-                ui::draw_label(canvas, &font, style.text, x, row.area, &name, Color::BLACK);
+                let room = f32::from(first) - x - style.gap() as f32;
+                let name = ui::fit(&font, style.text(), env.i18n.tr(&spec.title), room);
+                ui::draw_label(
+                    canvas,
+                    &font,
+                    style.text(),
+                    x,
+                    row.area,
+                    &name,
+                    Color::BLACK,
+                );
             }
             for (index, (control, rect)) in (first..).zip(row.controls.iter()) {
                 self.draw_control(canvas, env, control, *rect, self.focus == Some(index));
@@ -1098,8 +1109,7 @@ mod layout_tests {
 
     fn geometry() -> Geometry {
         // Margins of 20: wider than the plain style's.
-        let mut style = UiStyle::PLAIN;
-        style.margin = 20;
+        let style = UiStyle::PLAIN.with_margin(20);
         Geometry {
             width: 480,
             height: 800,

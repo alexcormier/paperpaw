@@ -334,18 +334,14 @@ impl BatteryView {
     fn height(&self, env: &Env<'_>, line: &Line) -> u16 {
         match line {
             Line::Heading(_) => ui::heading_height(env, &self.style),
-            Line::Value(..) | Line::Message(_) => self.style.row as u16,
+            Line::Value(..) | Line::Message(_) => self.style.row(),
         }
     }
 
     /// The room for lines: below the header, above the footer.
     fn room(&self, env: &Env<'_>) -> (u16, u16) {
         let top = self.header.area().y + self.header.area().height;
-        let bottom = env
-            .device
-            .display
-            .height
-            .saturating_sub(self.style.row as u16);
+        let bottom = env.device.display.height.saturating_sub(self.style.row());
         (top, bottom)
     }
 
@@ -400,7 +396,7 @@ impl Screen for BatteryView {
             self.paging(),
         );
         let display = env.device.display;
-        let footer_height = style.row as u16;
+        let footer_height = style.row();
         let (mut y, bottom) = self.room(env);
         let first = self.pages.get(self.page).copied().unwrap_or(0);
         let last = self
@@ -424,8 +420,8 @@ impl Screen for BatteryView {
                         ui::draw_label(
                             canvas,
                             &font,
-                            style.small,
-                            style.margin as f32,
+                            style.small(),
+                            style.margin() as f32,
                             rect,
                             text,
                             style.faint(ui::Ink::Muted),
@@ -440,8 +436,8 @@ impl Screen for BatteryView {
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
-                style.margin as f32,
+                style.small(),
+                style.margin() as f32,
                 rect,
                 &self.footer,
                 style.faint(ui::Ink::Note),

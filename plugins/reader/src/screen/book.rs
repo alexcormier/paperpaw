@@ -41,6 +41,10 @@ pub(super) struct Book {
     pub(super) conversion: u64,
     pub(super) pointed: bool,
     pub(super) xpointer: Option<String>,
+    /// What the book is by its content, kept with its position and
+    /// annotations: taken once when it opens (a few reads of 1 KiB), not
+    /// at every page; `None` where the file cannot be read for it.
+    pub(super) fingerprint: Option<paperpaw_sdk::library::Fingerprint>,
     pub(super) index: Option<PageIndex>,
     /// Where background pagination continues.
     pub(super) indexing: Option<Locator>,
@@ -221,6 +225,7 @@ impl Book {
             conversion: paperpaw_sdk::reading::conversion(env),
             pointed: true,
             xpointer: None,
+            fingerprint: paperpaw_sdk::library::Fingerprint::of(env.storage, path),
             dir,
             title,
             document,
@@ -533,6 +538,13 @@ impl Book {
         let doc = self.document.as_ref();
         let moved =
             annotations::relocate(env.storage, &self.path, self.conversion, doc).unwrap_or(false);
+        if let Some(fingerprint) = &self.fingerprint {
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "which book they are of: where it cannot be written now, it is at the next opening"
+            )]
+            let _ = annotations::stamp(env.storage, &self.path, fingerprint);
+        }
         let marks = annotations::marks(env.storage, &self.path);
         let changed = moved || marks != self.marks;
         self.marks = marks;
@@ -624,7 +636,12 @@ impl Book {
             .conversion(self.conversion)
             .xpointer(self.xpointer.clone().filter(|_| pointed))
             .updated(paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0));
-        let saved = paperpaw_sdk::positions::save(env.storage, &self.path, &position);
+        let saved = paperpaw_sdk::positions::save_with_book(
+            env.storage,
+            &self.path,
+            &position,
+            self.fingerprint.as_ref(),
+        );
         if saved.is_err() && !self.save_failed {
             self.save_failed = true;
             cx.command(Command::Notify(env.i18n.tr("reader.not-saved").to_string()));

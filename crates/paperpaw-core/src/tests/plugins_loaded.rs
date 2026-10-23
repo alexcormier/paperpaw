@@ -241,11 +241,11 @@ fn data_plugins_bring_actions_menus_icons_points_and_steps() {
         )
         .with(
             "plugins/cosy/actions.ini",
-            "[night]\ntitle = Night reading\nicon = moon\nrun = a.level=4, notify:Good night, core.confirm, a.level=nonsense\n",
+            "[night]\ntitle = Night reading\nicon = moon\nrun = a.level=4\nrun = notify:cosy.good-night\nrun = core.confirm\nrun = a.level=nonsense\n",
         )
         .with(
             "plugins/cosy/menus.ini",
-            "[cosy.tools]\ntitle = Tools\nentries = cosy.night, a.special, core.confirm\nadd = core.home after cosy.night\nhide = a.special\n",
+            "[cosy.tools]\ntitle = Tools\nentries = cosy.night\nentries = a.special, core.confirm\n[menu cosy.tools]\nadd = core.home after cosy.night\nhide = a.special\n",
         )
         .with("plugins/cosy/icons.ini", "a.special = star\n")
         .with(

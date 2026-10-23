@@ -185,7 +185,10 @@ Some rules every screen should follow:
   `ui::draw_focus`, what is on a focused row in `style.focus_ink(focused)`
   (white on the dark bar, black on a frame or a light bar), small shapes
   with `style.radius(height)` (pills where corners are round), boxes and
-  cards with `style.corner`, lines between rows with `ui::draw_separator`.
+  cards with `style.corner()`, lines between rows with `ui::draw_separator`.
+  The style's sizes are read with its methods (`style.margin()`,
+  `style.gap()`, `style.row()` in pixels, `style.text()` and
+  `style.small()` for text).
 
 Screens say what they show, for reading the interface aloud,
 automation and tests: the `ui` helpers (list rows, buttons, switches,
@@ -247,7 +250,7 @@ Two buttons side by side, a margin from the screen's sides and bottom:
 use paperpaw_sdk::ui::{self, Stack, UiStyle};
 
 let style = UiStyle::new(env);
-let margin = style.margin as u16;
+let margin = style.margin();
 let screen = Rect::new(margin, 0, display.width - 2 * margin, display.height - margin);
 let row = Stack::new(screen, margin).take_bottom(ui::Segments::height(&style));
 let [ok, cancel] = ui::columns(row, 2, margin)[..] else { return };
@@ -1628,36 +1631,46 @@ brings a home screen of its own.
 core.font-ui-strong = my.semibold
 ```
 
-An action of `actions.ini` runs its steps in order, at most 16:
+An action of `actions.ini` runs its steps in order, a step a `run`
+line (commas and all), at most 16:
 `<setting>=<value>` sets a setting (a value not of its kind is passed
 over, and a setting that keeps the device safe, such as the lock's, is
-never set), `open:<slot>` opens a slot, `notify:<text>` says something,
+never set), `open:<slot>` opens a slot, `notify:<key>` says the text of
+a key of the plugin's translations in the reader's language,
 `emit:<event>` emits an event of the plugin's own (`<plugin>.<name>`),
 and an action's id runs that action (not one of the same file). A
 section names the action. Without the plugin's id in front, it gets
 it: `[night]` in the plugin `my` is `my.night`.
 
-`menus.ini` adds to any menu, places an entry after another and takes
-entries out; `title` and `entries` make a menu
-of one's own, which other menus list by its id:
+`menus.ini` adds to another plugin's menu, a section `[menu <id>]`,
+places an entry after another and takes entries out; any other
+section is a menu of one's own, with `title` and `entries`, which
+other menus list by its id. A list is a key a line
+([data-files.md](data-files.md#lists)):
 
 ```ini
 # actions.ini
 [night]
 title = Night reading
 icon = moon
-run = core.night-mode=on, core.font-size=14, notify:Good night
+run = core.night-mode=on
+run = core.font-size=14
+run = notify:my.good-night
+
+# i18n/en.ini, [messages]
+my.good-night = Good night, sleep well
 
 # menus.ini
-[core.reader-menu]
+[menu core.reader-menu]
 add = my.night after core.toc
 
-[core.reader-more]
+[menu core.reader-more]
 hide = stats.open
 
-[my.tools]
+[tools]
 title = My tools
-entries = my.night, core.library
+entries = my.night
+entries = core.library
 
 # setup.ini
 [size]

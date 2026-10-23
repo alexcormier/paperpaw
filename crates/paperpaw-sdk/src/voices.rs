@@ -1,4 +1,4 @@
-//! Voices: what speaks text aloud ([`Command::Speak`]) besides the
+//! Voices: what speaks text aloud ([`Command::Speak`](crate::Command::Speak)) besides the
 //! system's.
 //!
 //! A plugin's voice ([`VoiceSpec`], `Registrar::add_voice`) gets each
@@ -7,7 +7,7 @@
 //! text's language; the system's voice speaks the rest. It answers as the
 //! system does: once a text is spoken (or could not be), it emits the
 //! text's reply ([`Speech::answer`]). Stopping
-//! ([`Command::StopSpeaking`], or the screen that spoke closing) calls
+//! ([`Command::StopSpeaking`](crate::Command::StopSpeaking), or the screen that spoke closing) calls
 //! its `stop`.
 //!
 //! A device has speech ([`Capabilities::speech`](crate::Capabilities))

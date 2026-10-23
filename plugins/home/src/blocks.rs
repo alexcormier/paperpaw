@@ -264,7 +264,7 @@ pub(crate) fn status_height(env: &Env<'_>, _: u16) -> u16 {
     } else {
         frame_height(env, STATUS)
     };
-    line_height(env, style.small) + style.gap as u16 / 2 + frame
+    line_height(env, style.small()) + style.gap() / 2 + frame
 }
 
 /// The status line above the grid ([`status_height`]): the status items
@@ -283,7 +283,7 @@ pub(crate) fn draw_status(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 /// The status line as a widget in the grid: inside its spacing.
 fn status_widget_height(env: &Env<'_>, _: u16) -> u16 {
     let style = UiStyle::new(env);
-    line_height(env, style.small) + style.gap as u16 / 2 + frame_height(env, STATUS)
+    line_height(env, style.small()) + style.gap() / 2 + frame_height(env, STATUS)
 }
 
 fn draw_status_widget(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -314,7 +314,7 @@ fn status_frame<'a>(
     context: &'a Params,
 ) -> paperpaw_sdk::StatusFrame<'a> {
     let style = UiStyle::new(env);
-    paperpaw_sdk::StatusFrame::new(area, true, style.small, color, context)
+    paperpaw_sdk::StatusFrame::new(area, true, style.small(), color, context)
         .font(paperpaw_sdk::builtin::fonts::UI.static_str())
 }
 
@@ -400,7 +400,7 @@ fn draw_date(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let width = f32::from(area.width);
     let max = widgets::size(env, DATE).text(&style);
     let align = widgets::align(env, DATE);
-    if let Some((size, text)) = fitting_date(env, &font, max, style.text.min(max), width) {
+    if let Some((size, text)) = fitting_date(env, &font, max, style.text().min(max), width) {
         widgets::draw_line(canvas, env, area, align, size, size, &text, look.ink);
     } else if let Some(short) = time::short_date_text(env) {
         // The weekday above the day and the month.
@@ -409,7 +409,7 @@ fn draw_date(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
             None => short,
         };
         let lines =
-            widgets::Wrapped::fitting(env, &short, max, style.small, area.width, area.height);
+            widgets::Wrapped::fitting(env, &short, max, style.small(), area.width, area.height);
         lines.draw(canvas, env, area, align, look.ink);
     }
 }
@@ -475,7 +475,7 @@ impl ClockLayout {
         let clock = time::clock_text(env).unwrap_or_else(|| String::from("--:--"));
         let (digits, rest) = split_time(&clock);
         let display = font.display();
-        let gap = style.gap as i32;
+        let gap = style.gap() as i32;
         let wants_date = env.settings.read(&CLOCK_DATE) && time::local_time(env).is_some();
         // The most it may be: as set, or (as large as fits) up to the
         // width's, its height checked as it is laid out.
@@ -487,7 +487,7 @@ impl ClockLayout {
         let lay = |size: f32, with_date: bool| {
             // In proportion to the size the digits are drawn at (a pack's
             // largest at most), so the date never outgrows them.
-            let small = (display.size_for(size, digits) * DATE_SHARE).max(style.small);
+            let small = (display.size_for(size, digits) * DATE_SHARE).max(style.small());
             let rest_width = if rest.is_empty() {
                 0.0
             } else {
@@ -496,7 +496,7 @@ impl ClockLayout {
             let wide = display.measure(size, digits) + rest_width;
             let digits_ink = ink_of(&display, size, digits);
             let date = with_date
-                .then(|| fitting_date(env, font, small, style.small, width))
+                .then(|| fitting_date(env, font, small, style.small(), width))
                 .flatten();
             let date_ink = date
                 .as_ref()
@@ -514,7 +514,7 @@ impl ClockLayout {
         };
         let fitting = |with_date: bool| {
             let mut found = None;
-            widgets::largest_size(most, style.text.min(most), |size| {
+            widgets::largest_size(most, style.text().min(most), |size| {
                 let (fits, layout) = lay(size, with_date);
                 if fits {
                     found = Some(layout);
@@ -525,7 +525,7 @@ impl ClockLayout {
         };
         fitting(wants_date)
             .or_else(|| fitting(false))
-            .unwrap_or_else(|| lay(style.text, false).1)
+            .unwrap_or_else(|| lay(style.text(), false).1)
     }
 
     /// The height of its ink, the date's and the gap between included.
@@ -541,7 +541,7 @@ impl ClockLayout {
 fn clock_height(env: &Env<'_>, width: u16) -> u16 {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
-        return line_height(env, style.title) + frame_height(env, CLOCK);
+        return line_height(env, style.title()) + frame_height(env, CLOCK);
     };
     // As high as the time and the date need at their size: as large as
     // fits, that is as wide as the place.
@@ -552,8 +552,8 @@ fn clock_height(env: &Env<'_>, width: u16) -> u16 {
     let inner = f32::from(width.saturating_sub(2 * pad));
     let layout = ClockLayout::of(env, &style, &font, inner, f32::MAX);
     // The room above and below the ink a line of text has.
-    let room = line_height(env, style.small) / 2;
-    layout.height(style.gap as i32) as u16 + 2 * room + 2 * pad + frame_height(env, CLOCK)
+    let room = line_height(env, style.small()) / 2;
+    layout.height(style.gap() as i32) as u16 + 2 * room + 2 * pad + frame_height(env, CLOCK)
 }
 
 /// The top and bottom of the ink of `text` at `size` from its baseline
@@ -578,7 +578,7 @@ fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
     let display = font.display();
     // A gap from ink to ink: the date's small letters need the room a
     // gap between lines of text has, or they cling to the digits.
-    let gap = style.gap as i32;
+    let gap = style.gap() as i32;
     let layout = ClockLayout::of(env, &style, &font, width, f32::from(area.height));
     let size = layout.size;
     let (top, bottom) = layout.digits_ink;
@@ -618,7 +618,7 @@ fn draw_clock(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
 // ---- Continue reading -----------------------------------------------------
 
 fn card_height(env: &Env<'_>, _: u16) -> u16 {
-    (UiStyle::new(env).row as f32 * 3.0) as u16
+    (UiStyle::new(env).row() as f32 * 3.0) as u16
 }
 
 /// A book a widget shows, and its cover if it has one (looked up already).
@@ -715,9 +715,9 @@ impl CardParts {
     fn of(env: &Env<'_>, area: Rect, book: &Book) -> Self {
         let style = UiStyle::new(env);
         let r = widgets::look::look(env, CONTINUE, area).area;
-        let gap = style.gap as u16;
+        let gap = style.gap();
         // A few words of a title at the body's size.
-        let least = (style.text * 4.0) as u16;
+        let least = (style.text() * 4.0) as u16;
         let mut parts = Self::default();
         let image = book
             .cover
@@ -737,12 +737,12 @@ impl CardParts {
                 return parts;
             }
         }
-        let small = line_height(env, style.small);
-        let line = line_height(env, style.text);
+        let small = line_height(env, style.small());
+        let line = line_height(env, style.text());
         let caption = env.i18n.tr("home.continue");
         let caption_fits = style
             .font(env)
-            .is_some_and(|font| font.measure(style.small, caption) <= f32::from(text.width));
+            .is_some_and(|font| font.measure(style.small(), caption) <= f32::from(text.width));
         // Half a gap between the rows; none where only that keeps all
         // three (the small rows have room above their letters anyway).
         let all = |gap: u16| caption_fits && line + 2 * (gap + small) <= text.height;
@@ -758,15 +758,16 @@ impl CardParts {
             room -= half + small;
         }
         // Two lines at most; in a flat card, down to the small size.
-        let two = room
-            .min(line_height(env, style.title) + widgets::heading_line_height(env, style.title));
+        let two = room.min(
+            line_height(env, style.title()) + widgets::heading_line_height(env, style.title()),
+        );
         let least = if room >= line {
-            style.text
+            style.text()
         } else {
-            style.small
+            style.small()
         };
         let title = &book.book.title;
-        parts.title = widgets::Wrapped::heading(env, title, style.title, least, text.width, two);
+        parts.title = widgets::Wrapped::heading(env, title, style.title(), least, text.width, two);
         parts.text = Some(text);
         parts
     }
@@ -774,7 +775,7 @@ impl CardParts {
     /// The height its column of text takes.
     fn height(&self, env: &Env<'_>) -> u16 {
         let style = UiStyle::new(env);
-        let small = line_height(env, style.small) + self.gap;
+        let small = line_height(env, style.small()) + self.gap;
         self.title.height(env)
             + if self.caption { small } else { 0 }
             + if self.progress { small } else { 0 }
@@ -884,7 +885,7 @@ fn draw_card(
         return;
     };
     // The lines of text, together in the middle.
-    let label_h = line_height(env, style.small);
+    let label_h = line_height(env, style.small());
     let gap = parts.gap;
     let mut y = centred(r, parts.height(env));
     let align = widgets::align(env, CONTINUE);
@@ -894,8 +895,8 @@ fn draw_card(
         ui::draw_label(
             canvas,
             &font,
-            style.small,
-            align.x(r, font.measure(style.small, label)),
+            style.small(),
+            align.x(r, font.measure(style.small(), label)),
             row(y, label_h),
             label,
             look.faint,
@@ -918,19 +919,19 @@ fn draw_card(
     ui::draw_label(
         canvas,
         &font,
-        style.small,
+        style.small(),
         x,
         row(y, label_h),
         &percent,
         look.faint,
     );
     // The progress bar, beside it.
-    let bar_h = (style.line * 4).max(3);
-    let percent_w = font.measure(style.small, &percent) + style.gap as f32;
+    let bar_h = (u32::from(style.line()) * 4).max(3);
+    let percent_w = font.measure(style.small(), &percent) + style.gap() as f32;
     let bx = (x + percent_w) as i32;
     let by = i32::from(y) + i32::from(label_h) / 2 - bar_h as i32 / 2;
     let w = (f32::from(r.width) - percent_w).max(1.0) as u32;
-    canvas.stroke_rect(bx, by, w, bar_h, style.line.max(1), look.ink);
+    canvas.stroke_rect(bx, by, w, bar_h, u32::from(style.line()).max(1), look.ink);
     let filled = (w as f32 * (book.progress / 100.0).clamp(0.0, 1.0)) as u32;
     canvas.fill_rect(bx, by, filled, bar_h, look.ink);
 }
@@ -979,10 +980,10 @@ impl ShelfParts {
         };
         let (fit, _) = shelf_columns(env, area.width);
         let columns = books.len().clamp(1, fit) as u16;
-        let gap = style.gap as u16;
-        let label = line_height(env, style.small);
+        let gap = style.gap();
+        let label = line_height(env, style.small());
         let heading_fits =
-            font.measure(style.small, env.i18n.tr("home.recent")) <= f32::from(area.width);
+            font.measure(style.small(), env.i18n.tr("home.recent")) <= f32::from(area.width);
         let (mut heading, mut title) = shelf_labels(env);
         if !heading_fits {
             heading = 0;
@@ -1144,9 +1145,9 @@ fn shelf_columns(env: &Env<'_>, width: u16) -> (usize, u16) {
 /// shown).
 fn shelf_labels(env: &Env<'_>) -> (u16, u16) {
     let style = UiStyle::new(env);
-    let label = line_height(env, style.small);
+    let label = line_height(env, style.small());
     let heading = if env.settings.read(&RECENT_HEADING) {
-        label + style.gap as u16 / 2
+        label + style.gap() / 2
     } else {
         0
     };
@@ -1165,7 +1166,7 @@ fn shelf_height(env: &Env<'_>, width: u16, books: &[Book]) -> u16 {
     let style = UiStyle::new(env);
     let (_, cell) = shelf_columns(env, width);
     let (heading, title) = shelf_labels(env);
-    let cover = (cell.saturating_sub(style.gap as u16)) * 4 / 3;
+    let cover = (cell.saturating_sub(style.gap())) * 4 / 3;
     heading + cover + title + frame_height(env, RECENT)
 }
 
@@ -1183,8 +1184,8 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shelf: &Shelf)
     let align = widgets::align(env, RECENT);
     if let Some(row) = shelf.parts.heading {
         let text = env.i18n.tr("home.recent");
-        let x = align.x(row, font.measure(style.small, text));
-        ui::draw_label(canvas, &font, style.small, x, row, text, look.faint);
+        let x = align.x(row, font.measure(style.small(), text));
+        ui::draw_label(canvas, &font, style.small(), x, row, text, look.faint);
     }
     for (i, ((cover, row), Book { book, cover: image })) in
         shelf.parts.places.iter().zip(books).enumerate()
@@ -1204,9 +1205,9 @@ fn draw_shelf(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, shelf: &Shelf)
             }
         }
         if let Some(row) = row {
-            let title = ui::fit(&font, style.small, &book.title, f32::from(row.width));
-            let x = align.x(*row, font.measure(style.small, &title));
-            ui::draw_label(canvas, &font, style.small, x, *row, &title, look.ink);
+            let title = ui::fit(&font, style.small(), &book.title, f32::from(row.width));
+            let x = align.x(*row, font.measure(style.small(), &title));
+            ui::draw_label(canvas, &font, style.small(), x, *row, &title, look.ink);
         }
     }
 }
@@ -1220,11 +1221,11 @@ fn placeholder_lines(env: &Env<'_>, area: Rect, title: &str) -> Vec<String> {
     let Some(font) = style.font(env) else {
         return Vec::new();
     };
-    let pad = style.gap as f32 / 2.0;
+    let pad = style.gap() as f32 / 2.0;
     let width = f32::from(area.width) - 2.0 * pad;
-    let line = font.line_metrics(style.small).line_height;
+    let line = font.line_metrics(style.small()).line_height;
     let fits = ((f32::from(area.height) - 2.0 * pad) / line) as usize;
-    if width < style.small * 2.0 || fits == 0 {
+    if width < style.small() * 2.0 || fits == 0 {
         return Vec::new();
     }
     let words: Vec<&str> = title.split_whitespace().collect();
@@ -1232,21 +1233,21 @@ fn placeholder_lines(env: &Env<'_>, area: Rect, title: &str) -> Vec<String> {
     for (n, word) in words.iter().enumerate() {
         let joined = lines.last().map(|last| format!("{last} {word}"));
         match joined {
-            Some(joined) if font.measure(style.small, &joined) <= width => {
+            Some(joined) if font.measure(style.small(), &joined) <= width => {
                 if let Some(last) = lines.last_mut() {
                     *last = joined;
                 }
             }
-            _ if lines.len() == fits || font.measure(style.small, word) > width => {
+            _ if lines.len() == fits || font.measure(style.small(), word) > width => {
                 // No line left, or a word too wide: the rest shortened
                 // on the last line there is, and no more.
                 let rest = words[n..].join(" ");
                 let full = lines.len() == fits;
                 match lines.last_mut() {
                     Some(last) if full => {
-                        *last = ui::fit(&font, style.small, &format!("{last} {rest}"), width);
+                        *last = ui::fit(&font, style.small(), &format!("{last} {rest}"), width);
                     }
-                    _ => lines.push(ui::fit(&font, style.small, &rest, width)),
+                    _ => lines.push(ui::fit(&font, style.small(), &rest, width)),
                 }
                 break;
             }
@@ -1265,19 +1266,19 @@ fn draw_placeholder(
     lines: &[String],
     ink: Color,
 ) {
-    canvas.stroke(area, style.line.max(2), ink);
+    canvas.stroke(area, u32::from(style.line()).max(2), ink);
     let Some(font) = style.font(env) else {
         return;
     };
-    let pad = style.gap as f32 / 2.0;
-    let line = font.line_metrics(style.small).line_height;
+    let pad = style.gap() as f32 / 2.0;
+    let line = font.line_metrics(style.small()).line_height;
     for (n, text) in lines.iter().enumerate() {
         let y = area.y + pad as u16 + (n as f32 * line) as u16;
         let row = Rect::new(area.x, y, area.width, line as u16);
         ui::draw_label(
             canvas,
             &font,
-            style.small,
+            style.small(),
             f32::from(area.x) + pad,
             row,
             text,

@@ -51,9 +51,9 @@ impl Sizes {
                 .map_or(size * 1.3, |f| f.line_metrics(size).line_height) as u16
         };
         let (text_line, small_line, title_line) =
-            (line(style.text), line(style.small), line(style.title));
-        let gap = style.gap as u16;
-        let finger = style.finger as u16;
+            (line(style.text()), line(style.small()), line(style.title()));
+        let gap = style.gap();
+        let finger = style.finger();
         let pill = (small_line + gap * 2 / 3).max(finger);
         let bar = env.metrics.tenth_mm(9).max(4) as u16;
         let compact = u32::from(env.device.display.width) < env.metrics.mm(COMPACT_MM);
@@ -234,10 +234,10 @@ impl Loaded {
     /// How wide its badges' icons are drawn, the gaps before them
     /// included.
     fn icons_width(&self, env: &Env<'_>, style: &UiStyle) -> u16 {
-        let gap = style.gap as f32 / 3.0;
+        let gap = style.gap() as f32 / 3.0;
         self.badge_icons
             .iter()
-            .map(|icon| gap + ui::icon_width(env, icon, style.small))
+            .map(|icon| gap + ui::icon_width(env, icon, style.small()))
             .sum::<f32>() as u16
     }
 
@@ -296,10 +296,10 @@ pub(crate) fn draw_bar(
     let h = sizes.bar;
     let track = Rect::new(x, area.y + area.height.saturating_sub(h) / 2, width, h);
     let radius = u32::from(h / 2);
-    if style.grays > 2 && ink == Color::BLACK {
+    if !style.black_and_white() && ink == Color::BLACK {
         canvas.fill_round(track, radius, Color::gray(200));
     } else {
-        canvas.stroke_round(track, style.line.max(1), radius, ink);
+        canvas.stroke_round(track, u32::from(style.line()).max(1), radius, ink);
     }
     let read = (u32::from(width) * u32::from(progress.min(100)) / 100) as u16;
     if read > 0 {
@@ -328,8 +328,8 @@ pub(crate) fn draw_tag(
     let Some(font) = style.font(env) else {
         return 0;
     };
-    let size = style.small * 0.9;
-    let pad = style.gap as u16 / 2;
+    let size = style.small() * 0.9;
+    let pad = style.gap() / 2;
     let w = font.measure(size, label) as u16 + 2 * pad;
     let h = area.height.saturating_sub(2);
     let tag = Rect::new(x, area.y + (area.height - h) / 2, w, h);
@@ -338,7 +338,7 @@ pub(crate) fn draw_tag(
         canvas.fill_round(tag, radius, ink);
         paper
     } else {
-        canvas.stroke_round(tag, style.line.max(1), radius, ink);
+        canvas.stroke_round(tag, u32::from(style.line()).max(1), radius, ink);
         ink
     };
     ui::draw_label(canvas, &font, size, f32::from(x + pad), tag, label, text);
@@ -348,7 +348,7 @@ pub(crate) fn draw_tag(
 /// The width of a tag ([`draw_tag`]) saying `label`.
 fn tag_width(env: &Env<'_>, style: &UiStyle, label: &str) -> u16 {
     style.font(env).map_or(0, |font| {
-        font.measure(style.small * 0.9, label) as u16 + style.gap as u16
+        font.measure(style.small() * 0.9, label) as u16 + style.gap()
     })
 }
 
@@ -366,14 +366,14 @@ fn state_width(env: &Env<'_>, style: &UiStyle, bar: u16, book: &Loaded) -> u16 {
     let Some(font) = style.font(env) else {
         return 0;
     };
-    let gap = style.gap as u16;
+    let gap = style.gap();
     match book.progress {
         100 => {
-            let icon = ui::icon_width(env, "circle-check", style.small * 1.15);
-            let label = font.measure(style.small, env.i18n.tr("files.finished"));
+            let icon = ui::icon_width(env, "circle-check", style.small() * 1.15);
+            let label = font.measure(style.small(), env.i18n.tr("files.finished"));
             (icon + label) as u16 + gap / 3
         }
-        p if p > 0 => bar + gap / 2 + font.measure(style.small, &book.percent) as u16,
+        p if p > 0 => bar + gap / 2 + font.measure(style.small(), &book.percent) as u16,
         _ if book.new => tag_width(env, style, env.i18n.tr("files.list.new")),
         _ => 0,
     }
@@ -403,20 +403,20 @@ fn draw_state(
     };
     let ink = style.focus_ink(focused);
     let faint = style.focus_faint(focused, ui::Ink::Detail);
-    let gap = style.gap as u16;
+    let gap = style.gap();
     match book.progress {
         100 => {
-            let size = style.small * 1.15;
+            let size = style.small() * 1.15;
             let w = ui::draw_icon(canvas, env, "circle-check", size, f32::from(x), area, ink);
             let at = f32::from(x) + w + f32::from(gap / 3);
             let label = env.i18n.tr("files.finished");
-            let w = ui::draw_label(canvas, &font, style.small, at, area, label, faint);
+            let w = ui::draw_label(canvas, &font, style.small(), at, area, label, faint);
             (at + w) as u16
         }
         p if p > 0 => {
             draw_bar(canvas, style, sizes, x, area, bar, p, ink);
             let at = f32::from(x + bar + gap / 2);
-            let w = ui::draw_label(canvas, &font, style.small, at, area, &book.percent, ink);
+            let w = ui::draw_label(canvas, &font, style.small(), at, area, &book.percent, ink);
             (at + w) as u16
         }
         _ if book.new => {
@@ -484,7 +484,7 @@ pub(crate) fn state_words<'a>(env: &Env<'a>, book: &'a Loaded) -> &'a str {
 /// Where the text of a row (or card) with a cover `cover` wide starts,
 /// and how wide it is in a row `width` wide.
 fn text_room(style: &UiStyle, cover: u16, width: u16) -> (u16, u16) {
-    let margin = style.margin as u16;
+    let margin = style.margin();
     let x = margin + cover + margin;
     (x, width.saturating_sub(x + margin))
 }
@@ -503,7 +503,7 @@ pub(crate) fn prepare_row(
     next: bool,
 ) {
     let (x, room) = text_room(style, sizes.cover.0, width);
-    book.lines = wrap_lines(env, style, style.text, &book.title, f32::from(room), 2);
+    book.lines = wrap_lines(env, style, style.text(), &book.title, f32::from(room), 2);
     let note = book.with_badges(note);
     let next_word = if next {
         env.i18n.tr("files.list.next")
@@ -522,7 +522,7 @@ pub(crate) fn prepare_row(
         return;
     }
     // The details share their line with how far the book is read.
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let right = x + room;
     let mut end = right;
     let state = state_width(env, style, bar_width(env, sizes, room), book);
@@ -541,12 +541,12 @@ pub(crate) fn prepare_row(
     // Too long beside it, but whole on the line alone: the smaller thing,
     // how far it is read, gives way.
     let whole = (right - x).saturating_sub(book.icons_width(env, style));
-    let width = font.measure(style.small, &book.note);
+    let width = font.measure(style.small(), &book.note);
     if end < right && width > f32::from(room) + 1.0 && width <= f32::from(whole) + 1.0 {
         book.state_hidden = true;
         return;
     }
-    book.note = ui::fit(&font, style.small, &book.note, f32::from(room));
+    book.note = ui::fit(&font, style.small(), &book.note, f32::from(room));
 }
 
 /// Draws a book's note in `area` from `x`, its badges' icons after it.
@@ -567,7 +567,7 @@ fn draw_note(
     ui::draw_label(
         canvas,
         font,
-        style.small,
+        style.small(),
         f32::from(x),
         area,
         &book.note,
@@ -576,10 +576,10 @@ fn draw_note(
     if book.badge_icons.is_empty() {
         return;
     }
-    let mut at = f32::from(x) + font.measure(style.small, &book.note);
+    let mut at = f32::from(x) + font.measure(style.small(), &book.note);
     for icon in &book.badge_icons {
-        at += style.gap as f32 / 3.0;
-        at += ui::draw_icon(canvas, env, icon, style.small, at, area, ink);
+        at += style.gap() as f32 / 3.0;
+        at += ui::draw_icon(canvas, env, icon, style.small(), at, area, ink);
     }
 }
 
@@ -593,7 +593,7 @@ pub(crate) fn prepare_card(
     book: &mut Loaded,
 ) {
     let (_, room) = text_room(style, sizes.card_cover.0, width);
-    book.lines = wrap_lines(env, style, style.title, &book.title, f32::from(room), 2);
+    book.lines = wrap_lines(env, style, style.title(), &book.title, f32::from(room), 2);
     let eyebrow = env.i18n.tr("files.list.continue-reading");
     book.spoken = spoken(&[&book.title, eyebrow, &book.author, &book.percent]);
 }
@@ -627,8 +627,8 @@ pub(crate) fn draw_book_row(
         return;
     };
     let ink = style.focus_ink(focused);
-    let margin = style.margin as u16;
-    let gap = style.gap as u16;
+    let margin = style.margin();
+    let gap = style.gap();
     let (cw, ch) = sizes.cover;
     let place = Rect::new(rect.x + margin, rect.y + (rect.height - ch) / 2, cw, ch);
     draw_cover(canvas, env, style, place, book, ink);
@@ -644,7 +644,7 @@ pub(crate) fn draw_book_row(
     let mut y = rect.y + rect.height.saturating_sub(block) / 2;
     for text in &book.lines {
         let area = Rect::new(x, y, width, sizes.text_line);
-        ui::draw_label(canvas, &font, style.text, f32::from(x), area, text, ink);
+        ui::draw_label(canvas, &font, style.text(), f32::from(x), area, text, ink);
         y += sizes.text_line;
     }
     if !note.is_empty() || !book.badge_icons.is_empty() {
@@ -667,7 +667,15 @@ pub(crate) fn draw_book_row(
         if !tail.is_empty() {
             let x = if end > at { end + gap * 2 / 3 } else { at };
             let faint = style.focus_faint(focused, ui::Ink::Detail);
-            ui::draw_label(canvas, &font, style.small, f32::from(x), area, tail, faint);
+            ui::draw_label(
+                canvas,
+                &font,
+                style.small(),
+                f32::from(x),
+                area,
+                tail,
+                faint,
+            );
         }
     }
 }
@@ -695,8 +703,8 @@ fn draw_compact_row(
     };
     let ink = style.focus_ink(focused);
     let faint = style.focus_faint(focused, ui::Ink::Detail);
-    let margin = style.margin as u16;
-    let gap = style.gap as u16;
+    let margin = style.margin();
+    let gap = style.gap();
     let (cw, ch) = sizes.cover;
     let place = Rect::new(rect.x + margin, rect.y + (rect.height - ch) / 2, cw, ch);
     draw_cover(canvas, env, style, place, book, ink);
@@ -708,7 +716,7 @@ fn draw_compact_row(
     let mut y = rect.y + rect.height.saturating_sub(block) / 2;
     for text in &book.lines {
         let area = Rect::new(x, y, width, sizes.text_line);
-        ui::draw_label(canvas, &font, style.text, f32::from(x), area, text, ink);
+        ui::draw_label(canvas, &font, style.text(), f32::from(x), area, text, ink);
         y += sizes.text_line;
     }
     let line = Rect::new(x, y + gap / 3, width, sizes.small_line);
@@ -756,8 +764,8 @@ fn draw_compact_card(
     }
     let ink = style.focus_ink(focused);
     let faint = style.focus_faint(focused, ui::Ink::Detail);
-    let margin = style.margin as u16;
-    let gap = style.gap as u16;
+    let margin = style.margin();
+    let gap = style.gap();
     let (cw, ch) = sizes.card_cover;
     let place = Rect::new(rect.x + margin, rect.y + (rect.height - ch) / 2, cw, ch);
     draw_cover(canvas, env, style, place, book, ink);
@@ -771,7 +779,7 @@ fn draw_compact_card(
     ui::draw_label(
         canvas,
         &font,
-        style.small,
+        style.small(),
         f32::from(x),
         area,
         eyebrow,
@@ -780,16 +788,16 @@ fn draw_compact_card(
     y += sizes.small_line;
     for text in &book.lines {
         let area = Rect::new(x, y, width, sizes.title_line);
-        ui::draw_label(canvas, &font, style.title, f32::from(x), area, text, ink);
+        ui::draw_label(canvas, &font, style.title(), f32::from(x), area, text, ink);
         y += sizes.title_line;
     }
     y += gap / 2;
     let area = Rect::new(x, y, width, sizes.small_line);
-    let label = font.measure(style.small, &book.percent) as u16;
+    let label = font.measure(style.small(), &book.percent) as u16;
     let bar = width.saturating_sub(label + gap / 2);
     draw_bar(canvas, style, sizes, x, area, bar, book.progress, ink);
     let at = f32::from(right - label);
-    ui::draw_label(canvas, &font, style.small, at, area, &book.percent, ink);
+    ui::draw_label(canvas, &font, style.small(), at, area, &book.percent, ink);
     if !focused {
         ui::draw_separator(canvas, style, rect, 0);
     }
@@ -817,18 +825,18 @@ pub(crate) fn draw_card(
     let Some(font) = style.font(env) else {
         return;
     };
-    let margin = style.margin as u16;
-    let gap = style.gap as u16;
+    let margin = style.margin();
+    let gap = style.gap();
     // A light card where the panel has many grays, else an outline; the
     // focus as every row's.
     let back = ui::focus_rect(style, rect);
     if focused {
         ui::draw_focus(canvas, style, rect);
-    } else if style.grays >= 16 {
+    } else if style.smooth_grays() {
         canvas.fill_round(back, style.radius(u32::from(back.height)), Color::gray(232));
     } else {
         let radius = style.radius(u32::from(back.height));
-        canvas.stroke_round(back, style.line.max(1), radius, Color::BLACK);
+        canvas.stroke_round(back, u32::from(style.line()).max(1), radius, Color::BLACK);
     }
     let ink = style.focus_ink(focused);
     let paper = if focused {
@@ -848,14 +856,14 @@ pub(crate) fn draw_card(
     let mut y = rect.y + rect.height.saturating_sub(block) / 2;
     for text in &book.lines {
         let area = Rect::new(x, y, width, sizes.title_line);
-        ui::draw_label(canvas, &font, style.title, f32::from(x), area, text, ink);
+        ui::draw_label(canvas, &font, style.title(), f32::from(x), area, text, ink);
         y += sizes.title_line;
     }
     let area = Rect::new(x, y, width, sizes.small_line);
     ui::draw_label(
         canvas,
         &font,
-        style.small,
+        style.small(),
         f32::from(x),
         area,
         &book.author,
@@ -866,16 +874,16 @@ pub(crate) fn draw_card(
     let bar = width * 3 / 5;
     draw_bar(canvas, style, sizes, x, area, bar, book.progress, ink);
     let at = f32::from(x + bar + gap / 2);
-    ui::draw_label(canvas, &font, style.small, at, area, &book.percent, ink);
+    ui::draw_label(canvas, &font, style.small(), at, area, &book.percent, ink);
     y += sizes.small_line + gap / 2;
     // The button: dark, or light on the dark focus.
     let label = env.i18n.tr("files.list.continue-reading");
     let pad = gap;
-    let w = font.measure(style.small, label) as u16 + 2 * pad;
+    let w = font.measure(style.small(), label) as u16 + 2 * pad;
     let button = Rect::new(x, y, w, sizes.pill);
     canvas.fill_round(button, u32::from(sizes.pill / 2), ink);
     let at = f32::from(x + pad);
-    ui::draw_label(canvas, &font, style.small, at, button, label, paper);
+    ui::draw_label(canvas, &font, style.small(), at, button, label, paper);
 }
 
 /// Draws the filter's row of a small screen in `rect`: what is shown
@@ -904,25 +912,33 @@ pub(crate) fn draw_filter_row(
     }
     let ink = style.focus_ink(focused);
     let faint = style.focus_faint(focused, ui::Ink::Detail);
-    let margin = style.margin as u16;
-    let gap = style.gap as u16;
+    let margin = style.margin();
+    let gap = style.gap();
     let x = rect.x + margin;
     canvas.describe(Role::Button, label, rect).focused(focused);
-    let w = ui::draw_label(canvas, &font, style.text, f32::from(x), rect, label, ink);
+    let w = ui::draw_label(canvas, &font, style.text(), f32::from(x), rect, label, ink);
     let icon_x = f32::from(x) + w + f32::from(gap / 3);
-    ui::draw_icon(canvas, env, "chevron-down", style.small, icon_x, rect, ink);
+    ui::draw_icon(
+        canvas,
+        env,
+        "chevron-down",
+        style.small(),
+        icon_x,
+        rect,
+        ink,
+    );
     let right = (rect.x + rect.width).saturating_sub(margin);
     match search {
         Some(button) => {
-            let size = style.title * ui::ICON_SCALE;
+            let size = style.title() * ui::ICON_SCALE;
             let w = ui::icon_width(env, "search", size);
             let x = f32::from(button.x) + (f32::from(button.width) - w) / 2.0;
             ui::draw_icon(canvas, env, "search", size, x, button, ink);
         }
         None => {
-            let w = font.measure(style.small, end);
+            let w = font.measure(style.small(), end);
             let at = f32::from(right) - w;
-            ui::draw_label(canvas, &font, style.small, at, rect, end, faint);
+            ui::draw_label(canvas, &font, style.small(), at, rect, end, faint);
         }
     }
     if !focused {

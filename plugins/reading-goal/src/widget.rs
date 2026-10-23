@@ -94,7 +94,7 @@ impl Cat {
     /// The line below the picture, if it shows.
     fn line(env: &Env<'_>) -> u16 {
         if widgets::shows(env, NAME, "minutes") {
-            widgets::line_height(env, UiStyle::new(env).small)
+            widgets::line_height(env, UiStyle::new(env).small())
         } else {
             0
         }
@@ -186,10 +186,10 @@ impl Widget for Cat {
         };
         let text = progress(env, today);
         let width = f32::from(inner.width);
-        let text = ui::fit(&font, style.small, &text, width);
-        let x = f32::from(inner.x) + (width - font.measure(style.small, &text)).max(0.0) / 2.0;
+        let text = ui::fit(&font, style.small(), &text, width);
+        let x = f32::from(inner.x) + (width - font.measure(style.small(), &text)).max(0.0) / 2.0;
         let row = Rect::new(inner.x, inner.y + inner.height - line, inner.width, line);
-        ui::draw_label(canvas, &font, style.small, x, row, &text, look.ink);
+        ui::draw_label(canvas, &font, style.small(), x, row, &text, look.ink);
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {

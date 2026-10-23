@@ -25,6 +25,26 @@ change the plugin SDK.
   whole. Scalable fonts keep every size. For plugins:
   `FontHandle::largest_size`; for the kernel, `Settings::set_range` and
   `Settings::set_description`.
+- A book's position and annotations say which book they are of by its
+  content, its size and KOReader's partial MD5, beside the hash of its
+  path they are named by (`library::Fingerprint`, `positions::book`,
+  `annotations::book`). The reader takes it once when it opens a book
+  (12 reads of 1 KiB at most) and keeps it with the position
+  (`positions::save_with_book`) and the annotations
+  (`annotations::stamp`, a line `# book <size> <md5>`). Both files keep
+  their versions: PaperPaw of before reads them as before.
+- Data plugins of formats 3 (not yet released) are written alike in
+  every file. A list is a key a line: an action's steps are a `run`
+  line each, a line one step with its commas, so a value with a comma
+  needs no escape (`entries` and `hide` of `menus.ini` still read ids
+  separated by commas). `notify:` takes a key of the plugin's
+  translations and says its text in the reader's language. In
+  `menus.ini`, `[menu <id>]` is another plugin's menu (`add`, `hide`)
+  and any other section a menu of one's own (`title`, `entries`);
+  `add` and `hide` in a plain section are still read. `paperpaw-dev
+  check` says where a file is written the earlier way
+  (`package.actions`, `package.menus`). The ini files take a section
+  name of words with single spaces between them.
 - First-run setup: the sample of the font size is in the book's font,
   at the size chosen, as the reader shows it: no longer in the
   interface's font, its second line cut. The card grows with the size
@@ -463,6 +483,9 @@ file to your report.
   (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
   in place of five arguments; parts (`Described`, `semantics::Part`)
   tell whether they are disabled.
+- SDK: what was deprecated is gone: `Registrar::add_service` and
+  `Contribution::Service` (publish with `Registrar::publish`),
+  `Service::any` and `Id::placed` (`Id::unplaced`).
 - SDK: `EnvParts`, `WorkStates::set_works`, `WorkStates::set_note` and
   `ScreenKey::new` come with the `kernel` feature: only the kernel and
   tests make an `Env`, set work states or number screens.
@@ -488,6 +511,15 @@ file to your report.
 - SDK: dates and times as values: `time::Date` and `time::Time`, which
   `ui::DatePicker` and `ui::TimePicker` take and give; `line_at` of a
   page's layers and the widget grid's `cell_at` take a `Point`.
+- SDK: `UiStyle` keeps its fields and is read with methods: sizes in
+  pixels as `u16` (`row()`, `margin()`, `gap()`, `line()`, `corner()`,
+  `header()`, `finger()`, `control_row()`), text sizes as `f32`
+  (`text()`, `small()`, `title()`, `head()`), and its looks
+  (`focus()`, `separators()`, `cards()`, `pill()`, `strong()`,
+  `header_kind()` with `HeaderKind::{Light, Dark, Plain}`). How many
+  grays the panel shows is `black_and_white()` or `smooth_grays()`. A
+  style changed for a screen of its own is made with `with_row`,
+  `with_margin`, `with_corner`, `with_pill`, `with_text` and the like.
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,

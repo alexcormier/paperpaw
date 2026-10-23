@@ -178,7 +178,7 @@ pub(crate) fn bar_area(env: &Env<'_>, style: &UiStyle) -> Rect {
 /// in their parts included, so that what fits here is drawn whole.
 fn items_area(env: &Env<'_>, style: &UiStyle) -> Rect {
     let full = bar_area(env, style);
-    let side = (style.margin as u16).saturating_sub(button_pad(style));
+    let side = (style.margin()).saturating_sub(button_pad(style));
     Rect::new(
         full.x + side,
         full.y,
@@ -189,7 +189,7 @@ fn items_area(env: &Env<'_>, style: &UiStyle) -> Rect {
 
 /// Space around a button in its part of the bar.
 fn button_pad(style: &UiStyle) -> u16 {
-    (style.gap / 4) as u16 + ui::button_border(style) as u16 * 3
+    (u32::from(style.gap()) / 4) as u16 + ui::button_border(style) as u16 * 3
 }
 
 /// How wide the items need to be: their labels with the room a button
@@ -204,7 +204,7 @@ fn natural_widths(env: &Env<'_>, style: &UiStyle, items: &[Item]) -> Vec<f32> {
         .map(|item| {
             let label = font
                 .as_ref()
-                .map_or(0.0, |f| f.measure(style.small, env.i18n.tr(&item.title)));
+                .map_or(0.0, |f| f.measure(style.small(), env.i18n.tr(&item.title)));
             ui::button_width(style, label) + around
         })
         .collect()
@@ -241,7 +241,7 @@ pub(crate) fn draw_bar(
     let style = UiStyle::new(env);
     let bar = bar_area(env, &style);
     canvas.fill(bar, Color::WHITE);
-    let line = style.line.max(2);
+    let line = u32::from(style.line()).max(2);
     canvas.fill_rect(
         i32::from(bar.x),
         i32::from(bar.y),

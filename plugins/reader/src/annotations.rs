@@ -10,7 +10,8 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 pub(crate) use paperpaw_sdk::annotations::{
-    Annotation, Kind, Mark, add, changed, load, marks, note_of, relocate, remove, set_note, snippet,
+    Annotation, Kind, Mark, add, changed, load, marks, note_of, relocate, remove, set_note,
+    snippet, stamp,
 };
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
@@ -86,7 +87,7 @@ impl AnnotationsScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         Self {
             path,

@@ -135,7 +135,7 @@ impl TocScreen {
         let style = UiStyle::new(env);
         let display = env.device.display;
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         // Few entries: the headings may do better.
         let (headings, scan) = if len <= 1 && document.is_some() {
@@ -158,7 +158,7 @@ impl TocScreen {
             visible: Vec::new(),
             style,
             header,
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
         };
         if let Some(current) = locator_of(params) {
             screen.list.set_focus(screen.current(env, current));
@@ -337,10 +337,10 @@ impl Screen for TocScreen {
                     return;
                 };
                 let color = if focused { Color::WHITE } else { Color::BLACK };
-                let indent = style.margin as f32 * (1.0 + 2.0 * f32::from(entry.level.min(4)));
-                let width = f32::from(rect.width) - indent - style.margin as f32;
-                let title = ui::fit(&font, style.text, &entry.title, width);
-                ui::draw_label(canvas, &font, style.text, indent, rect, &title, color);
+                let indent = style.margin() as f32 * (1.0 + 2.0 * f32::from(entry.level.min(4)));
+                let width = f32::from(rect.width) - indent - style.margin() as f32;
+                let title = ui::fit(&font, style.text(), &entry.title, width);
+                ui::draw_label(canvas, &font, style.text(), indent, rect, &title, color);
             });
     }
 

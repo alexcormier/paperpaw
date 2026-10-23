@@ -146,12 +146,12 @@ fn empty(env: &Env<'_>, area: Rect) -> Wrapped {
     // fit whole.
     let inner = widgets::look::look(env, NAME, area).area.height;
     let long = env.i18n.tr("news.widget.empty");
-    let wrapped = Wrapped::fitting(env, long, style.text, style.small, width, inner);
+    let wrapped = Wrapped::fitting(env, long, style.text(), style.small(), width, inner);
     if wrapped.whole() {
         return wrapped;
     }
     let short = env.i18n.tr("news.widget.empty.short");
-    Wrapped::fitting(env, short, style.text, style.small, width, height)
+    Wrapped::fitting(env, short, style.text(), style.small(), width, height)
 }
 
 /// The room for a short message in `area` (the widget's place): as wide
@@ -273,14 +273,14 @@ fn line(font: &FontHandle<'_>, size: f32) -> u16 {
 fn row_height(env: &Env<'_>, font: &FontHandle<'_>, style: &UiStyle) -> u16 {
     let text = line(font, text_size(env, style)) * lines_each(env);
     let source = if widgets::shows(env, NAME, "source") {
-        line(font, style.small)
+        line(font, style.small())
     } else {
         0
     };
     let room = if widgets::shows(env, NAME, "rules") {
-        style.gap as u16
+        style.gap()
     } else {
-        style.gap as u16 / 3
+        style.gap() / 3
     };
     text + source + room
 }
@@ -299,7 +299,7 @@ fn rows(env: &Env<'_>, look: &Look, count: usize) -> (Option<u16>, Vec<Rect>) {
     let row = row_height(env, &font, &style).max(1);
     // The caption where it fits whole, with room for a headline below.
     let caption = caption_room(env);
-    let fits = font.measure(style.small, env.i18n.tr("news.title")) <= f32::from(area.width);
+    let fits = font.measure(style.small(), env.i18n.tr("news.title")) <= f32::from(area.width);
     let caption = if fits && caption + row <= area.height {
         caption
     } else {
@@ -332,16 +332,12 @@ fn draw_row(
         return;
     };
     let size = text_size(env, &style);
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let rules = widgets::shows(env, NAME, "rules");
-    let room = if rules {
-        style.gap as u16
-    } else {
-        style.gap as u16 / 3
-    };
+    let room = if rules { style.gap() } else { style.gap() / 3 };
     if rule && rules {
         // A thin rule, dithered light where the panel has few grays.
-        let thin = style.line.max(1) as u16;
+        let thin = u32::from(style.line()).max(1) as u16;
         let gray = if look.paper.luma() < 128 {
             Color::gray(110)
         } else {
@@ -370,9 +366,9 @@ fn draw_row(
     }
     if source_h > 0 {
         let at = Rect::new(row.x, text.y + text.height, row.width, small);
-        let shown = ui::fit(&font, style.small, source, f32::from(at.width));
-        let x = align.x(at, font.measure(style.small, &shown));
-        ui::draw_label(canvas, &font, style.small, x, at, &shown, look.faint);
+        let shown = ui::fit(&font, style.small(), source, f32::from(at.width));
+        let x = align.x(at, font.measure(style.small(), &shown));
+        ui::draw_label(canvas, &font, style.small(), x, at, &shown, look.faint);
     }
 }
 

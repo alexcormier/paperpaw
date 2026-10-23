@@ -586,9 +586,9 @@ impl UpdatePage {
     fn button_rects(&self, env: &Env<'_>, buttons: &[Button]) -> Vec<Rect> {
         let style = &self.style;
         let display = env.device.display;
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let width = display.width.saturating_sub(2 * margin);
-        let row = style.touch_row(style.control_row) as u16;
+        let row = style.touch_row(u32::from(style.control_row())) as u16;
         let mut bottom = display.height.saturating_sub(ui::edge_room(style, row));
         // From the bottom up, each in a touch row, higher where its word
         // takes more lines.
@@ -701,13 +701,13 @@ impl UpdatePage {
         if let Some(font) = style.font(env) {
             let label = Rect::new(
                 area.x,
-                area.y + area.height + style.gap as u16,
+                area.y + area.height + style.gap(),
                 area.width,
-                style.row as u16,
+                style.row(),
             );
-            let tx =
-                f32::from(area.x) + (f32::from(area.width) - font.measure(style.text, &text)) / 2.0;
-            ui::draw_label(canvas, &font, style.text, tx, label, &text, Color::BLACK);
+            let tx = f32::from(area.x)
+                + (f32::from(area.width) - font.measure(style.text(), &text)) / 2.0;
+            ui::draw_label(canvas, &font, style.text(), tx, label, &text, Color::BLACK);
         }
     }
 }
@@ -795,8 +795,8 @@ impl Screen for UpdatePage {
             .draw(canvas, env, &style, env.i18n.tr("update.title"), None, None);
         // Within the margins other pages keep, below the header as their
         // content.
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
+        let margin = style.margin();
+        let gap = style.gap();
         let width = env.device.display.width.saturating_sub(2 * margin);
         let (title, help) = self.texts(env);
         let mut y = self.header.area().height + gap;
@@ -811,7 +811,7 @@ impl Screen for UpdatePage {
             env,
             &style,
             area,
-            style.title,
+            style.title(),
             &title,
             3,
             Color::BLACK,
@@ -823,14 +823,14 @@ impl Screen for UpdatePage {
             .first()
             .map_or(env.device.display.height, |r| r.y.saturating_sub(gap));
         let area = Rect::new(margin, y, width, bottom.saturating_sub(y));
-        if paragraph_fits(env, &style, area, style.small, &help, HELP_LINES) {
+        if paragraph_fits(env, &style, area, style.small(), &help, HELP_LINES) {
             self.help = None;
             y += paragraph(
                 canvas,
                 env,
                 &style,
                 area,
-                style.small,
+                style.small(),
                 &help,
                 HELP_LINES,
                 style.ink(ui::Ink::Note),

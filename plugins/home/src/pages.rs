@@ -52,12 +52,12 @@ pub(crate) fn draw_dot(
     filled: bool,
 ) {
     let corners = env.settings.text(settings::UI_CORNERS.as_str());
-    let round = style.pill || settings::CORNERS[2..].contains(&corners);
+    let round = style.pill() || settings::CORNERS[2..].contains(&corners);
     let radius = if round { size / 2 } else { 0 };
     if filled {
         canvas.fill_round_rect(x, y, size, size, radius, Color::BLACK);
     } else {
-        let line = style.line.max(1);
+        let line = u32::from(style.line()).max(1);
         canvas.stroke_round_rect(x, y, size, size, line, radius, Color::BLACK);
     }
 }

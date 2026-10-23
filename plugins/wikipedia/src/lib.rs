@@ -232,10 +232,10 @@ impl Summary {
         self.lines.clear();
         self.top = 0;
         if let Some(font) = self.style.font(env) {
-            let width = f32::from(self.region.width) - 2.0 * self.style.margin as f32;
+            let width = f32::from(self.region.width) - 2.0 * self.style.margin() as f32;
             let mut start = 0;
             for paragraph in text.split('\n') {
-                for range in font.wrap(self.style.text, paragraph, width) {
+                for range in font.wrap(self.style.text(), paragraph, width) {
                     self.lines.push((start + range.start, start + range.end));
                 }
                 start += paragraph.len() + 1;
@@ -249,19 +249,20 @@ impl Summary {
             self.region.x,
             self.region.y,
             self.region.width,
-            self.style.row as u16,
+            self.style.row(),
         )
     }
 
     fn line_height(&self, env: &Env<'_>) -> f32 {
-        self.style.font(env).map_or(self.style.text * 1.3, |f| {
-            f.line_metrics(self.style.text).line_height
+        self.style.font(env).map_or(self.style.text() * 1.3, |f| {
+            f.line_metrics(self.style.text()).line_height
         })
     }
 
     fn rows(&self, env: &Env<'_>) -> usize {
-        let height =
-            f32::from(self.region.height) - f32::from(self.header().height) - self.style.gap as f32;
+        let height = f32::from(self.region.height)
+            - f32::from(self.header().height)
+            - self.style.gap() as f32;
         ((height / self.line_height(env)) as usize).max(1)
     }
 
@@ -322,45 +323,45 @@ impl Screen for Summary {
             i32::from(r.x),
             i32::from(r.y),
             u32::from(r.width),
-            (style.line * 2).max(2),
+            (u32::from(style.line()) * 2).max(2),
             Color::BLACK,
         );
         let Some(font) = style.font(env) else {
             return;
         };
         let header = self.header();
-        let margin = style.margin as f32;
+        let margin = style.margin() as f32;
         let source = env.i18n.tr("wikipedia.title");
-        let source_width = font.measure(style.small, source);
+        let source_width = font.measure(style.small(), source);
         let right = f32::from(header.width) - margin - source_width;
         ui::draw_label(
             canvas,
             &font,
-            style.small,
+            style.small(),
             right,
             header,
             source,
             style.faint(ui::Ink::Detail),
         );
-        let word = ui::fit(&font, style.title, &self.word, right - margin * 2.0);
+        let word = ui::fit(&font, style.title(), &self.word, right - margin * 2.0);
         ui::draw_label(
             canvas,
             &font,
-            style.title,
+            style.title(),
             margin,
             header,
             &word,
             Color::BLACK,
         );
         let height = self.line_height(env);
-        let ascent = font.line_metrics(style.text).ascent;
-        let top = f32::from(header.y + header.height) + style.gap as f32 / 2.0;
+        let ascent = font.line_metrics(style.text()).ascent;
+        let top = f32::from(header.y + header.height) + style.gap() as f32 / 2.0;
         let rows = self.rows(env);
         for (n, &(start, end)) in self.lines.iter().skip(self.top).take(rows).enumerate() {
             let baseline = top + height * n as f32 + ascent;
             font.draw(
                 canvas,
-                style.text,
+                style.text(),
                 margin,
                 baseline as i32,
                 &self.text[start..end],

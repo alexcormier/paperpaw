@@ -114,11 +114,11 @@ impl Book {
         let style = UiStyle::new(env);
         let font = style.font(env)?;
         let label = env.i18n.tr("reader.link-back");
-        let pad = style.gap as f32;
-        let width = ui::button_width(&style, font.measure(style.small, label));
+        let pad = style.gap() as f32;
+        let width = ui::button_width(&style, font.measure(style.small(), label));
         // Within the top margin where it is wide enough, so it covers no
         // text.
-        let line = font.line_metrics(style.small).line_height;
+        let line = font.line_metrics(style.small()).line_height;
         let top = self.content_top();
         let height = (line + pad).min(top - 4.0).max(line);
         let y = ((top - height) / 2.0).max(0.0);
@@ -198,7 +198,7 @@ impl Book {
             return;
         }
         let style = UiStyle::new(env);
-        let size = style.small;
+        let size = style.small();
         let columns = &self.typography.columns;
         for mark in highlights.iter().filter(|m| m.noted) {
             if let Some(first) = words.iter().find(|w| mark.overlaps(w.start, w.end)) {
@@ -208,7 +208,7 @@ impl Book {
                     Some(i) if i + 1 < columns.len() => columns[i].right() as f32,
                     _ => self.right_edge(),
                 };
-                let x = right + (style.gap as f32) / 2.0;
+                let x = right + (style.gap() as f32) / 2.0;
                 ui::draw_icon(canvas, env, "note", size, x, first.area, Color::BLACK);
             }
         }

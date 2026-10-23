@@ -210,10 +210,10 @@ use widgets::next_minute;
 /// footer.
 fn frame(env: &Env<'_>) -> (Option<Rect>, Geometry, Rect) {
     let style = UiStyle::new(env);
-    let footer_height = style.row as u16;
+    let footer_height = style.row();
     let display = env.device.display;
-    let margin = style.margin as u16;
-    let gap = style.gap as u16;
+    let margin = style.margin();
+    let gap = style.gap();
     let footer = Rect::new(
         0,
         display.height.saturating_sub(footer_height),
@@ -305,7 +305,7 @@ impl Dashboard {
             .collect();
         // The pencil (done, when editing) at the right of the footer, if
         // it is wanted; add at the left when editing.
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let side = footer.height;
         self.pencil = Rect::new(display.width - margin - side, footer.y, side, side);
         self.plus = Rect::new(margin, footer.y, side, side);
@@ -420,12 +420,12 @@ impl Dashboard {
         if !editing {
             let font = style.font(env);
             if let Some(font) = font {
-                let margin = style.margin as u16;
-                let width = (f.width / 2).saturating_sub(margin + style.gap as u16 * 3);
+                let margin = style.margin();
+                let width = (f.width / 2).saturating_sub(margin + style.gap() * 3);
                 let line = paperpaw_sdk::status::StatusLine::new(
                     Rect::new(margin, f.y, width, f.height),
                     [env.settings.read(&pages::FOOTER_ITEMS), "", ""],
-                    style.small,
+                    style.small(),
                     style.faint(ui::Ink::Note),
                 );
                 line.draw(canvas, env, &font, &Params::new());
@@ -433,7 +433,7 @@ impl Dashboard {
         }
         // A dot a page, the current one filled.
         if self.pages > 1 && (editing || env.settings.read(&pages::FOOTER_DOTS)) {
-            let dot = (style.gap * 2 / 3).max(6);
+            let dot = (u32::from(style.gap()) * 2 / 3).max(6);
             let spacing = dot * 2;
             let total = dot * self.pages as u32 + (spacing - dot) * (self.pages as u32 - 1);
             let mut x = i32::from(f.x) + (i32::from(f.width) - total as i32) / 2;
@@ -443,7 +443,7 @@ impl Dashboard {
                 x += spacing as i32;
             }
         }
-        let size = style.title;
+        let size = style.title();
         let mut icon = |name: &str, area: Rect, ink: Color| {
             let w = ui::icon_width(env, name, size);
             let x = f32::from(area.x) + (f32::from(area.width) - w) / 2.0;

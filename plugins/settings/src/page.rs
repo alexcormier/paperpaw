@@ -63,7 +63,7 @@ impl Preview {
         let heading = Rect::new(area.x, area.y, area.width, heading);
         let shown = Rect::new(area.x, heading.y + heading.height, area.width, height);
         // A line below it, then the settings.
-        let used = heading.height + height + style.gap as u16;
+        let used = heading.height + height + style.gap();
         *area = Rect::new(
             area.x,
             area.y + used,
@@ -91,12 +91,12 @@ impl Preview {
         );
         self.widget.draw(canvas, env, self.area);
         // As the lines between rows.
-        let margin = style.margin as u16;
+        let margin = style.margin();
         let line = Rect::new(
             self.area.x + margin,
-            self.area.y + self.area.height + style.gap as u16 / 2,
+            self.area.y + self.area.height + style.gap() / 2,
             self.area.width.saturating_sub(2 * margin),
-            style.line as u16,
+            style.line(),
         );
         canvas.fill_tint(line, Color::gray(170));
     }
@@ -161,7 +161,7 @@ impl GroupPage {
     pub(super) fn new(env: &Env<'_>, group: Id) -> Self {
         // A placement's group (`widgets.clock@2`): the widget's settings,
         // as that placement has them.
-        let own = group.placed().and_then(|plain| Id::parse(&plain).ok());
+        let own = group.unplaced();
         let of = own.as_ref().unwrap_or(&group);
         let title = env
             .settings
@@ -242,7 +242,11 @@ impl GroupPage {
             .then(|| Preview::of(env, &style, &group, &mut area))
             .flatten();
         let heading = ui::heading_height(env, &style);
-        let row = if noted { style.noted_row() } else { style.row } as u16;
+        let row = if noted {
+            style.noted_row()
+        } else {
+            u32::from(style.row())
+        } as u16;
         let slider_row = ui::slider::row_height(&style, noted);
         let number_room = ui::number_room(
             env,
@@ -284,7 +288,7 @@ impl GroupPage {
                     slider_row
                         + ui::slider::title_extra(env, &style, area.width, title, &number_room)
                 }
-                (Row::Reset | Row::Theme(_) | Row::Action(_), _) => style.row as u16,
+                (Row::Reset | Row::Theme(_) | Row::Action(_), _) => style.row(),
             })
             .collect();
         let headings = entries
@@ -462,20 +466,20 @@ impl Screen for GroupPage {
                     }
                     Row::Reset => {
                         let title = env.i18n.tr("settings.reset-page");
-                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
+                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row());
                         ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
                         return;
                     }
                     Row::Theme(chooser) => {
                         let title = env.i18n.tr(chooser.title());
-                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
+                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row());
                         let name = super::themes::applied_name(env, *chooser);
                         ui::draw_value_row(canvas, env, &style, rect, focused, title, &name);
                         return;
                     }
                     Row::Action(action) => {
                         let title = env.actions.get(action.as_str()).map_or("", |a| &a.title);
-                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row as u16);
+                        let rect = Rect::new(rect.x, rect.y, rect.width, style.row());
                         let title = env.i18n.tr(title);
                         ui::draw_value_row(canvas, env, &style, rect, focused, title, "");
                         return;
@@ -591,7 +595,7 @@ impl Screen for GroupPage {
             if let Some((minus, plus)) = self.steps(&env, index, rect) {
                 let x = gesture.start.x;
                 // A little room around the buttons: easier to hit.
-                let slack = i32::from(self.style.gap as u16);
+                let slack = i32::from(self.style.gap());
                 let within = |r: Rect| x >= i32::from(r.x) - slack && x < r.right() as i32 + slack;
                 if within(minus) {
                     self.change(&env, -1, cx);

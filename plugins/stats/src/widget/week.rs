@@ -141,7 +141,7 @@ impl Widget for Week {
         frame_height(env, id)
             + caption_room(env, id)
             + labels_height(env, &font, &style)
-            + (style.row as f32 * 1.4) as u16
+            + (style.row() as f32 * 1.4) as u16
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -161,7 +161,7 @@ impl Widget for Week {
 /// The height of the row of weekdays below the bars, if it shows.
 fn labels_height(env: &Env<'_>, font: &paperpaw_sdk::FontHandle<'_>, style: &UiStyle) -> u16 {
     if widgets::shows(env, NAME, "labels") {
-        line(font, style.small) + style.gap as u16 / 2
+        line(font, style.small()) + style.gap() / 2
     } else {
         0
     }
@@ -208,7 +208,7 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
     let caption = super::caption(env, id, look.area, &[&full, &time]);
     let area = super::below_caption(env, caption, look.area);
     let area = super::captioned(canvas, env, id, look, caption, area.height);
-    let small = line(&font, style.small);
+    let small = line(&font, style.small());
     let labels = labels_height(env, &font, &style);
     // Where the bars would be low, the weekdays go.
     let labels = if area.height.saturating_sub(labels) < small * 2 {
@@ -216,7 +216,7 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
     } else {
         labels
     };
-    let thin = style.line.max(1);
+    let thin = u32::from(style.line()).max(1);
     // Room above the bars for the goal's line and rounded tops.
     let top = thin as u16 * 2;
     let chart = Rect::new(
@@ -241,11 +241,11 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
     let column_of = |i: u32| (width * i / n, width * (i + 1) / n - width * i / n);
     // Two letters where every column has room for them, else one.
     let (_, narrowest) = column_of(0);
-    let two = (0..7).all(|w| font.measure(style.small, short(w)) * 1.4 <= narrowest as f32);
+    let two = (0..7).all(|w| font.measure(style.small(), short(w)) * 1.4 <= narrowest as f32);
     // Where even one letter a day is crowded, only the weeks' first days
     // and today are named.
-    let every =
-        (0..7).all(|w| font.measure(style.small, super::initial(env, w)) * 1.6 <= narrowest as f32);
+    let every = (0..7)
+        .all(|w| font.measure(style.small(), super::initial(env, w)) * 1.6 <= narrowest as f32);
     let first_day = fmt::week_start(env);
     let base = i32::from(chart.y + chart.height);
     let few_grays = env
@@ -298,7 +298,7 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
             } else {
                 super::initial(env, day.weekday)
             };
-            let w = font.measure(style.small, name);
+            let w = font.measure(style.small(), name);
             // Under its bar, but inside the area (the first and last
             // columns' names may be wider than half a column).
             let right = f32::from(area.x + area.width) - w;
@@ -314,7 +314,7 @@ fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]
             } else {
                 look.faint
             };
-            ui::draw_label(canvas, &font, style.small, at, row, name, color);
+            ui::draw_label(canvas, &font, style.small(), at, row, name, color);
             if day.today && mark_today {
                 // Underlined: seen also where faint text is drawn black.
                 let y = i32::from(row.y + row.height) - thin as i32;

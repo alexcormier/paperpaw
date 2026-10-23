@@ -174,7 +174,7 @@ impl Screens {
     fn new(env: &Env<'_>, params: &Params) -> Self {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let display = env.device.display;
         let area =
             paperpaw_sdk::Rect::new(0, top, display.width, display.height.saturating_sub(top));

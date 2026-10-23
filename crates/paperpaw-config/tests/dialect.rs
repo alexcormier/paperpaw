@@ -166,7 +166,9 @@ fn identifiers_are_ascii_letters_digits_and_four_marks() {
     ] {
         assert_eq!(first_error(bad).kind, ErrorKind::InvalidKey, "{bad}");
     }
-    for bad in ["[]", "[ ]", "[a b]", "[ä]", "[a]]", "[[a]", "[a", "a]"] {
+    for bad in [
+        "[]", "[ ]", "[a  b]", "[a b ]x", "[ä]", "[a]]", "[[a]", "[a", "a]",
+    ] {
         let kind = first_error(bad).kind;
         assert!(
             matches!(kind, ErrorKind::InvalidSection | ErrorKind::InvalidLine),
@@ -174,6 +176,12 @@ fn identifiers_are_ascii_letters_digits_and_four_marks() {
         );
     }
     assert_eq!(entries("[ spaced ]\nk = v\n"), [e("spaced", "k", "v")]);
+    // A section name may be words, one space between each: a menu of
+    // another plugin in a data plugin's menus.ini.
+    assert_eq!(
+        entries("[menu core.reader-menu]\nadd = a.b\n"),
+        [e("menu core.reader-menu", "add", "a.b")]
+    );
 }
 
 #[test]

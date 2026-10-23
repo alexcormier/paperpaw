@@ -153,7 +153,7 @@ impl AddScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         let area = Rect::new(0, top, display.width, display.height.saturating_sub(top));
         let page = params.get(PAGE).and_then(|p| p.parse().ok()).unwrap_or(0);
         let kind = params.get(KIND).map(ToString::to_string);
@@ -180,7 +180,7 @@ impl AddScreen {
             }
         };
         let mut screen = Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             style,
             header,
             page,
@@ -230,8 +230,8 @@ impl AddScreen {
     fn lay_out(&self, env: &Env<'_>, area: Rect) -> Vec<Preview> {
         let style = self.style;
         let (_, geometry, _) = crate::frame(env);
-        let title_h = widgets::line_height(env, style.title) + style.gap as u16 / 2;
-        let gap = style.gap as u16;
+        let title_h = widgets::line_height(env, style.title()) + style.gap() / 2;
+        let gap = style.gap();
         let bottom = area.y + area.height;
         let mut previews = Vec::new();
         let (mut page, mut y) = (0, area.y);
@@ -408,11 +408,11 @@ impl AddScreen {
                     preview.title.union(&preview.area),
                 )
                 .focused(focused);
-            let name = ui::fit(&font, style.title, name, f32::from(preview.title.width));
+            let name = ui::fit(&font, style.title(), name, f32::from(preview.title.width));
             ui::draw_label(
                 canvas,
                 &font,
-                style.title,
+                style.title(),
                 f32::from(preview.title.x),
                 preview.title,
                 &name,
@@ -425,7 +425,7 @@ impl AddScreen {
             if let Some(widget) = &preview.widget {
                 widget.draw(canvas, env, around);
             }
-            let pad = (style.gap / 2) as u16;
+            let pad = (u32::from(style.gap()) / 2) as u16;
             let ring = Rect::new(
                 around.x.saturating_sub(pad),
                 around.y.saturating_sub(pad),
@@ -433,9 +433,21 @@ impl AddScreen {
                 around.height + 2 * pad,
             );
             if focused {
-                ui::stroke_round(canvas, &style, ring, style.line * 3, Color::BLACK);
+                ui::stroke_round(
+                    canvas,
+                    &style,
+                    ring,
+                    u32::from(style.line()) * 3,
+                    Color::BLACK,
+                );
             } else {
-                ui::stroke_round(canvas, &style, ring, style.line, Color::gray(170));
+                ui::stroke_round(
+                    canvas,
+                    &style,
+                    ring,
+                    u32::from(style.line()),
+                    Color::gray(170),
+                );
             }
         }
     }

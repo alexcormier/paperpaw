@@ -82,14 +82,14 @@ impl Layout {
             return Self::default();
         };
         let display = env.device.display;
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
+        let margin = style.margin();
+        let gap = style.gap();
         let width = display.width.saturating_sub(2 * margin);
         let line = |size: f32| font.line_metrics(size).line_height as u16;
         let mut y = header + gap * 2;
 
         // The cover beside title and author.
-        let cover_height = style.row as u16 * 2;
+        let cover_height = style.row() * 2;
         let cover = d.cover.as_ref().map(|image| {
             let (w, h) = ui::fit_image(image, cover_height * 3 / 4, cover_height);
             let at = Rect::new(margin, y, w, h);
@@ -102,20 +102,20 @@ impl Layout {
         let text_width = display.width.saturating_sub(text_x + margin);
         let mut ty = y;
         let mut title = Vec::new();
-        let ranges = font.wrap(style.title, &d.title, f32::from(text_width));
+        let ranges = font.wrap(style.title(), &d.title, f32::from(text_width));
         let count = ranges.len().min(2);
         for (i, range) in ranges.into_iter().take(2).enumerate() {
             title.push((ty, d.title[range].to_string()));
             // Its lines a heading's apart, the author a line below.
             ty += if i + 1 < count {
-                paperpaw_sdk::widgets::heading_line_height(env, style.title)
+                paperpaw_sdk::widgets::heading_line_height(env, style.title())
             } else {
-                line(style.title)
+                line(style.title())
             };
         }
         let author = ty;
         if !d.author.is_empty() {
-            ty += line(style.text);
+            ty += line(style.text());
         }
         y = ty.max(if cover.is_some() { y + cover_height } else { y }) + gap * 2;
 
@@ -123,20 +123,20 @@ impl Layout {
         let label_width = d
             .rows
             .iter()
-            .map(|(key, _)| font.measure(style.small, env.i18n.tr(key.as_ref())))
+            .map(|(key, _)| font.measure(style.small(), env.i18n.tr(key.as_ref())))
             .fold(0.0, f32::max)
             + f32::from(gap) * 2.0;
         let rows = y;
-        y += (line(style.text) + gap / 2) * d.rows.len() as u16;
+        y += (line(style.text()) + gap / 2) * d.rows.len() as u16;
 
         // What the book is about, as far as there is room.
         let mut shown = Vec::new();
         let description_top = y + gap * 2;
         if !description.is_empty() {
             let bottom = display.height.saturating_sub(margin);
-            let lines = font.wrap(style.text, description, f32::from(width));
+            let lines = font.wrap(style.text(), description, f32::from(width));
             let fits =
-                usize::from(bottom.saturating_sub(description_top) / line(style.text).max(1));
+                usize::from(bottom.saturating_sub(description_top) / line(style.text()).max(1));
             for (i, range) in lines.iter().take(fits).enumerate() {
                 let mut text = description[range.clone()].to_string();
                 if i + 1 == fits && lines.len() > fits {
@@ -244,8 +244,8 @@ impl Screen for InfoScreen {
             return;
         };
         let display = env.device.display;
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
+        let margin = style.margin();
+        let gap = style.gap();
         let width = display.width.saturating_sub(2 * margin);
         let x = f32::from(margin);
         let line = |size: f32| font.line_metrics(size).line_height as u16;
@@ -270,16 +270,16 @@ impl Screen for InfoScreen {
         let text_x = layout.text_x;
         let text_width = display.width.saturating_sub(text_x + margin);
         for (top, text) in &layout.title {
-            let row = Rect::new(text_x, *top, text_width, line(style.title));
+            let row = Rect::new(text_x, *top, text_width, line(style.title()));
             let x = f32::from(text_x);
-            ui::draw_label(canvas, &font, style.title, x, row, text, Color::BLACK);
+            ui::draw_label(canvas, &font, style.title(), x, row, text, Color::BLACK);
         }
         if !d.author.is_empty() {
-            let row = Rect::new(text_x, layout.author, text_width, line(style.text));
+            let row = Rect::new(text_x, layout.author, text_width, line(style.text()));
             ui::draw_label(
                 canvas,
                 &font,
-                style.text,
+                style.text(),
                 f32::from(text_x),
                 row,
                 &d.author,
@@ -289,41 +289,41 @@ impl Screen for InfoScreen {
 
         // Label and value in two columns, the values aligned; label and
         // value share a baseline.
-        let ascent = font.line_metrics(style.text).ascent;
+        let ascent = font.line_metrics(style.text()).ascent;
         let mut y = layout.rows;
         for (key, value) in &d.rows {
             let baseline = i32::from(y) + ascent as i32;
             let label = env.i18n.tr(key.as_ref());
-            let row = Rect::new(margin, y, width, line(style.text));
+            let row = Rect::new(margin, y, width, line(style.text()));
             canvas.describe(Role::Text, label, row);
             canvas.describe(Role::Text, value, row);
             font.draw(
                 canvas,
-                style.small,
+                style.small(),
                 x,
                 baseline,
                 label,
                 style.faint(ui::Ink::Detail),
             );
             let room = f32::from(width) - layout.label_width;
-            let value = ui::fit(&font, style.text, value, room);
+            let value = ui::fit(&font, style.text(), value, room);
             font.draw(
                 canvas,
-                style.text,
+                style.text(),
                 x + layout.label_width,
                 baseline,
                 &value,
                 Color::BLACK,
             );
-            y += line(style.text) + gap / 2;
+            y += line(style.text()) + gap / 2;
         }
 
         // What the book is about, as far as there is room.
         let mut y = layout.description_top;
         for text in &layout.description {
-            let row = Rect::new(margin, y, width, line(style.text));
-            ui::draw_label(canvas, &font, style.text, x, row, text, Color::BLACK);
-            y += line(style.text);
+            let row = Rect::new(margin, y, width, line(style.text()));
+            ui::draw_label(canvas, &font, style.text(), x, row, text, Color::BLACK);
+            y += line(style.text());
         }
     }
 

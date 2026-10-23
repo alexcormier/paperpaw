@@ -124,8 +124,8 @@ impl PageScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let line = (style.row as u16) * 3 / 2;
+        let top = header.area().height + style.gap();
+        let line = (style.row()) * 3 / 2;
         let status = Rect::new(0, display.height - line, display.width, line);
         // The rows go below the text, where it ends (see `draw`).
         let area = Rect::new(0, top, display.width, status.y.saturating_sub(top));
@@ -139,7 +139,7 @@ impl PageScreen {
             .and_then(|(n, index)| index.entry(env.storage, n))
             .filter(|plugin| plugin.id == id);
         Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             top,
             status,
             id,
@@ -639,7 +639,7 @@ impl Screen for PageScreen {
         };
         // What it does (or the notice, the warning), then the facts in
         // small print, then what can be done, each right below the other.
-        let margin = style.margin as f32;
+        let margin = style.margin() as f32;
         let width = f32::from(self.list.area().width) - 2.0 * margin;
         let mut y = f32::from(self.top);
         let paragraph = |canvas: &mut Canvas<'_>,
@@ -677,24 +677,24 @@ impl Screen for PageScreen {
             canvas,
             &mut y,
             &text,
-            style.text,
+            style.text(),
             Color::BLACK,
             SUMMARY_LINES,
             0.0,
         );
-        y += style.gap as f32;
+        y += style.gap() as f32;
         // The facts each after its icon, their texts lined up.
         let room = f32::from(ui::icon_room(env, &style, true));
-        let icon_size = style.small * ui::ICON_SCALE;
-        let line = font.line_metrics(style.small).line_height;
+        let icon_size = style.small() * ui::ICON_SCALE;
+        let line = font.line_metrics(style.small()).line_height;
         for (icon, fact) in facts {
             let first = Rect::new(0, y as u16, self.list.area().width, line as u16);
             let ink = style.faint(ui::Ink::Detail);
             ui::draw_icon(canvas, env, icon, icon_size, margin, first, ink);
-            paragraph(canvas, &mut y, &fact, style.small, ink, 3, room);
-            y += style.gap as f32 / 3.0;
+            paragraph(canvas, &mut y, &fact, style.small(), ink, 3, room);
+            y += style.gap() as f32 / 3.0;
         }
-        let gap = style.gap as u16;
+        let gap = style.gap();
         self.list.area().y = y as u16 + gap;
         self.list.area().height = self.status.y.saturating_sub(self.list.area().y);
         let texts: Vec<(String, String)> = rows

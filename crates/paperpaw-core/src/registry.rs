@@ -398,9 +398,6 @@ pub(crate) fn stage(
             Contribution::SetupStep(step) => staging.setup_steps.push(*step),
             Contribution::Preset(preset) => staging.presets.push(*preset),
             Contribution::FixedPresets(list) => staging.fixed_presets.push(list),
-            Contribution::Service { id, service, .. } => staging
-                .services
-                .push((id, paperpaw_sdk::services::Service::any(service))),
             Contribution::Published { id, service, .. } => staging.services.push((id, service)),
             Contribution::ToPoint { point, text, .. } => staging.contributions.push((point, text)),
             Contribution::Point(point) => staging.points.push(*point),

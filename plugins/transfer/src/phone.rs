@@ -68,7 +68,7 @@ impl PhoneScreen {
 
     fn content(&self, env: &Env<'_>) -> Rect {
         let display = env.device.display;
-        let top = self.header.area().height + self.style.gap as u16;
+        let top = self.header.area().height + self.style.gap();
         Rect::new(0, top, display.width, display.height.saturating_sub(top))
     }
 

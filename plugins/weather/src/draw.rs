@@ -201,13 +201,13 @@ pub(crate) fn draw_waiting(
         waiting => String::from(env.i18n.tr(waiting.key())),
     };
     let short = env.i18n.tr(short_key(shown.waiting));
-    let line = widgets::line_height(env, style.text);
-    let gap = style.gap as u16;
+    let line = widgets::line_height(env, style.text());
+    let gap = style.gap();
     // The symbol's ink at least this high, else none.
     let least = line * 3 / 2;
     let below = area.height.saturating_sub(least + gap);
     let lay = |text: &str, height: u16| {
-        Wrapped::fitting(env, text, style.text, style.small, area.width, height)
+        Wrapped::fitting(env, text, style.text(), style.small(), area.width, height)
     };
     let tries = [
         (&long[..], below, true),

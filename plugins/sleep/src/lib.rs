@@ -287,7 +287,7 @@ pub mod cat {
 
     /// The room around the cat on each side, in pixels.
     pub fn margin(env: &Env<'_>) -> u16 {
-        UiStyle::new(env).margin as u16
+        UiStyle::new(env).margin()
     }
 
     /// The cat decoded for this screen.
@@ -528,8 +528,8 @@ impl Screen for SleepScreen {
                 // The logo a little above the middle, the message below it.
                 let side = logo_side(env);
                 let (_, h) = logo.fit(side, side);
-                let line = paperpaw_sdk::widgets::line_height(env, style.text);
-                let gap = style.gap as u16 * 2;
+                let line = paperpaw_sdk::widgets::line_height(env, style.text());
+                let gap = style.gap() * 2;
                 let top = display.height.saturating_sub(h + gap + line) / 2;
                 let area = Rect::new(0, top, display.width, h);
                 logo.draw(canvas, env.storage, area, Color::BLACK);

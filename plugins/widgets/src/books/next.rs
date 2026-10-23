@@ -358,11 +358,11 @@ impl Widget for Next {
     }
 
     fn height(&self, env: &Env<'_>, _: u16) -> u16 {
-        (UiStyle::new(env).row * 3) as u16 + frame_height(env, WIDGET)
+        (u32::from(UiStyle::new(env).row()) * 3) as u16 + frame_height(env, WIDGET)
     }
 
     fn min_height(&self, env: &Env<'_>, _: u16) -> u16 {
-        (UiStyle::new(env).row * 2) as u16 + frame_height(env, WIDGET)
+        (u32::from(UiStyle::new(env).row()) * 2) as u16 + frame_height(env, WIDGET)
     }
 
     fn draw(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect) {
@@ -413,7 +413,7 @@ struct Layout<'b> {
 fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
     let style = UiStyle::new(env);
     let id = WIDGET;
-    let gap = style.gap as u16;
+    let gap = style.gap();
     let area = look.area;
     let align = widgets::align(env, id);
     let mut lines = Lines::new();
@@ -421,7 +421,7 @@ fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
     if caption {
         lines.add(
             Role::Caption,
-            style.small,
+            style.small(),
             env.i18n.tr("widgets.next.caption"),
             look.faint,
         );
@@ -433,10 +433,15 @@ fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
         look.ink,
     );
     if widgets::shows(env, id, "author") {
-        lines.add(Role::Note, style.small, book.author.as_str(), look.faint);
+        lines.add(Role::Note, style.small(), book.author.as_str(), look.faint);
     }
     if widgets::shows(env, id, "series") {
-        lines.add(Role::Note, style.small, series_text(env, book), look.faint);
+        lines.add(
+            Role::Note,
+            style.small(),
+            series_text(env, book),
+            look.faint,
+        );
     }
     if !widgets::shows(env, id, "cover") {
         return Layout {
@@ -447,7 +452,7 @@ fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
     }
     let (w, h) = cover_size(book, area.width * 2 / 5, area.height);
     let text_room = f32::from(area.width.saturating_sub(w + gap));
-    if area.width >= area.height && text_room >= style.small * 7.0 {
+    if area.width >= area.height && text_room >= style.small() * 7.0 {
         // Wide: the cover on the left, the text beside it.
         let shift = (w + gap).min(area.width);
         return Layout {

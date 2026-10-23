@@ -275,13 +275,13 @@ impl Plugin for Files {
 /// The corners of covers, `area` the place of one: the style's, but as
 /// small as a book's, so a narrow cover stays a box.
 pub(crate) fn cover_radius(style: &UiStyle, area: Rect) -> u32 {
-    style.corner.min(u32::from(area.width.min(area.height)) / 8)
+    u32::from(style.corner()).min(u32::from(area.width.min(area.height)) / 8)
 }
 
 /// The corners of covers' pictures: as [`cover_radius`] where corners
 /// are round (at least the gap), square for smaller ones, as before.
 pub(crate) fn picture_radius(style: &UiStyle, area: Rect) -> u32 {
-    if style.corner >= style.gap {
+    if u32::from(style.corner()) >= u32::from(style.gap()) {
         cover_radius(style, area)
     } else {
         0
@@ -336,13 +336,13 @@ pub(crate) fn draw_placeholder(
     });
     let (upper, lower) = (area.height * 3 / 5, area.height * 2 / 5);
     // As large as titles and a bit, or as fits in the upper part.
-    let mut size = style.title * 1.3;
+    let mut size = style.title() * 1.3;
     let height = font.line_metrics(size).line_height;
     if height > f32::from(upper) {
         size *= f32::from(upper) / height;
     }
     match initial {
-        Some(initial) if size >= style.text => {
+        Some(initial) if size >= style.text() => {
             let top = Rect::new(area.x, area.y, area.width, upper);
             ui::draw_label(
                 canvas,
@@ -357,16 +357,16 @@ pub(crate) fn draw_placeholder(
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
-                center(format, style.small),
+                style.small(),
+                center(format, style.small()),
                 bottom,
                 format,
                 color,
             );
         }
         _ => {
-            let x = center(format, style.small);
-            ui::draw_label(canvas, &font, style.small, x, area, format, color);
+            let x = center(format, style.small());
+            ui::draw_label(canvas, &font, style.small(), x, area, format, color);
         }
     }
 }

@@ -78,8 +78,8 @@ fn areas(h: &Harness, list: &str) -> Vec<Rect> {
 #[test]
 fn a_stack_is_in_the_middle_unless_free_space_pushes_it() {
     let h = harness();
-    let gap = paperpaw_sdk::ui::UiStyle::new(&h.env()).gap as u16;
-    let margin = paperpaw_sdk::ui::UiStyle::new(&h.env()).margin as u16;
+    let gap = paperpaw_sdk::ui::UiStyle::new(&h.env()).gap();
+    let margin = paperpaw_sdk::ui::UiStyle::new(&h.env()).margin();
     let two = areas(&h, "t.one, t.one");
     assert_eq!(two.len(), 2);
     let total = 200 + 2 * gap;

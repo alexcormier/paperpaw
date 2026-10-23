@@ -200,7 +200,7 @@ fn shows(env: &Env<'_>) -> String {
 fn height(env: &Env<'_>, width: u16) -> u16 {
     let (style, _) = ui(env);
     let lines = if chosen_name(env, ID.as_str(), "style") == "grid" {
-        return width.min((style.row * 5) as u16) + frame_height(env, ID.as_str());
+        return width.min((u32::from(style.row()) * 5) as u16) + frame_height(env, ID.as_str());
     } else {
         3
     };
@@ -263,10 +263,10 @@ fn draw_text(
     let align = widgets::align(env, ID.as_str());
     let (lead, rest) = text(env, hour, minute);
     // Room for the dots below.
-    let dot = (style.small * 0.22).max(2.0) as u32;
+    let dot = (style.small() * 0.22).max(2.0) as u32;
     let dots_band = if past.is_some() { (dot * 6) as u16 } else { 0 };
     // The caption above, where it leaves a line of the small size.
-    let least = line(font, style.small) as u16;
+    let least = line(font, style.small()) as u16;
     let caption = widgets::caption_height(env);
     if let Some(lead) = lead
         && area.height >= caption + least + dots_band
@@ -282,8 +282,8 @@ fn draw_text(
     // Where the sentence has no room whole even at the small size, the
     // time alone: "It is" says the least.
     let whole = |text: &str| {
-        words_in_lines(font, style.small, text, f32::from(room.width)).is_some_and(|lines| {
-            line(font, style.small) * lines.len() as f32 <= f32::from(room.height)
+        words_in_lines(font, style.small(), text, f32::from(room.width)).is_some_and(|lines| {
+            line(font, style.small()) * lines.len() as f32 <= f32::from(room.height)
         })
     };
     let rest = if whole(&rest) {
@@ -292,8 +292,8 @@ fn draw_text(
         time_alone(env, hour, minute)
     };
     let size = match widgets::size(env, ID.as_str()) {
-        Size::Fit => largest(font, &rest, room, style.small, f32::from(room.height)),
-        size => largest(font, &rest, room, style.small, size.text(&style) * 1.2),
+        Size::Fit => largest(font, &rest, room, style.small(), f32::from(room.height)),
+        size => largest(font, &rest, room, style.small(), size.text(&style) * 1.2),
     };
     let height = line(font, size);
     let mut lines = balanced(font, size, &rest, f32::from(room.width));

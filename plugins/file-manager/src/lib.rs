@@ -153,9 +153,9 @@ impl Browser {
         // The bar of buttons along the bottom: they keep the side margin
         // from the edge too.
         let bar_height = ui::edge_bar_height(&style);
-        let top = header.area().height + style.gap as u16;
+        let top = header.area().height + style.gap();
         // The bar, and a line for messages above it.
-        let bottom = bar_height + style.row as u16 + style.gap as u16;
+        let bottom = bar_height + style.row() + style.gap();
         let area = Rect::new(
             0,
             top,
@@ -163,7 +163,7 @@ impl Browser {
             display.height.saturating_sub(top + bottom),
         );
         let mut browser = Self {
-            list: ListView::new(area, style.row).focus_on_keys(env),
+            list: ListView::new(area, u32::from(style.row())).focus_on_keys(env),
             bar: Rect::new(0, display.height - bar_height, display.width, bar_height),
             dir: params.get(params::PATH).unwrap_or_default().to_string(),
             len: 0,
@@ -269,8 +269,8 @@ impl Browser {
 
     fn button_rect(&self, index: usize) -> Rect {
         let count = self.buttons().len() as u16;
-        let margin = self.style.margin as u16;
-        let gap = self.style.gap as u16 * 2;
+        let margin = self.style.margin();
+        let gap = self.style.gap() * 2;
         let width = (self.bar.width - 2 * margin - gap * (count - 1)) / count;
         let band = ui::edge_bar_band(&self.style, self.bar, false);
         Rect::new(
@@ -649,17 +649,12 @@ impl Screen for Browser {
             });
         // The message line above the bar.
         if let (Some(message), Some(font)) = (&self.message, style.font(env)) {
-            let line = Rect::new(
-                0,
-                self.bar.y - style.row as u16,
-                self.bar.width,
-                style.row as u16,
-            );
+            let line = Rect::new(0, self.bar.y - style.row(), self.bar.width, style.row());
             ui::draw_label(
                 canvas,
                 &font,
-                style.small,
-                style.margin as f32,
+                style.small(),
+                style.margin() as f32,
                 line,
                 message,
                 style.faint(ui::Ink::Note),

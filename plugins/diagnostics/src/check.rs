@@ -528,7 +528,7 @@ impl Screen for Check {
             env,
             &style,
             l.title,
-            style.title,
+            style.title(),
             &title,
             Color::BLACK,
         );
@@ -537,7 +537,7 @@ impl Screen for Check {
             env,
             &style,
             l.help,
-            style.small,
+            style.small(),
             &help,
             style.faint(ui::Ink::Note),
         );
@@ -732,8 +732,8 @@ impl Check {
         let style = &self.style;
         let display = env.device.display;
         // The header's margin, so that everything lines up with its title.
-        let margin = style.margin as u16;
-        let gap = style.gap as u16;
+        let margin = style.margin();
+        let gap = style.gap();
         let width = display.width.saturating_sub(2 * margin);
         let (title_text, help_text) = texts(env, self.step);
         let lines = |size: f32, text: &str| -> u16 {
@@ -746,16 +746,16 @@ impl Check {
         // and its text begins below them.
         let touch = self.step == Some(Step::Touch);
         let mut y = if touch {
-            (env.metrics.mm(TARGET_MM * 2 + 2) + style.gap) as u16
+            (env.metrics.mm(TARGET_MM * 2 + 2) + u32::from(style.gap())) as u16
         } else {
             self.header.area().y + self.header.area().height + gap * 2
         };
-        let title = Rect::new(margin, y, width, lines(style.title, &title_text));
+        let title = Rect::new(margin, y, width, lines(style.title(), &title_text));
         y += title.height + gap;
-        let help = Rect::new(margin, y, width, lines(style.small, &help_text));
+        let help = Rect::new(margin, y, width, lines(style.small(), &help_text));
         y += help.height + gap * 2;
 
-        let button = style.row as u16;
+        let button = style.row();
         let answers = self.answers();
         let tools = self.tools(env);
         // The touch page keeps its edges free for the targets: its
@@ -1139,12 +1139,12 @@ fn draw_lines(
     lines: &[(String, String)],
 ) {
     // A row each, closer where they do not fit so (the end's list).
-    let line = line_height(env, style, style.small);
+    let line = line_height(env, style, style.small());
     let count = u16::try_from(lines.len()).unwrap_or(u16::MAX).max(1);
-    let row = (style.row as u16).min(area.height / count).max(line);
+    let row = (style.row()).min(area.height / count).max(line);
     // A row keeps a margin inside: widened by it, its text lines up with
     // the text above.
-    let inside = style.margin as u16;
+    let inside = style.margin();
     let mut top = area.y;
     for (name, value) in lines {
         if top + row > area.y + area.height {

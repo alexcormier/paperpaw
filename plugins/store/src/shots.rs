@@ -65,13 +65,13 @@ impl ShotsScreen {
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;
-        let top = header.area().height + style.gap as u16;
-        let margin = style.margin as u16;
+        let top = header.area().height + style.gap();
+        let margin = style.margin();
         let area = Rect::new(
             margin,
             top,
             display.width.saturating_sub(2 * margin),
-            display.height.saturating_sub(top + style.gap as u16),
+            display.height.saturating_sub(top + style.gap()),
         );
         let urls = params
             .get(params::TEXT)
@@ -126,7 +126,12 @@ impl Screen for ShotsScreen {
                 let at = Rect::new(self.area.x + (self.area.width - w) / 2, self.area.y, w, h);
                 ui::draw_image(canvas, env.storage, image, at);
                 // A thin frame: the screenshot's own paper apart from ours.
-                canvas.stroke_round(at, style.line.max(1), 0, style.faint(ui::Ink::Rule));
+                canvas.stroke_round(
+                    at,
+                    u32::from(style.line()).max(1),
+                    0,
+                    style.faint(ui::Ink::Rule),
+                );
             }
             Picture::Loading => ui::draw_empty(
                 canvas,

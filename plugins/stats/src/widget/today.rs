@@ -160,7 +160,7 @@ impl Widget for Today {
         let id = NAME;
         let size = widgets::size(env, id).text(&style);
         let note = if widgets::shows(env, id, "note") {
-            line(&font, style.small)
+            line(&font, style.small())
         } else {
             0
         };
@@ -205,7 +205,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &
     let mut area = super::below_caption(env, caption, look.area);
     let (first, second) = lines(env, numbers);
     // Where they do not all fit, the note goes, then the bar.
-    let least = line(&font, style.text);
+    let least = line(&font, style.text());
     // The caption goes before the note: where the note is whole only
     // without it.
     let whole = |area: Rect| {
@@ -236,7 +236,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &
     // The note goes where it makes the numbers smaller than the body's
     // size.
     let alone = super::text_size(env, &font, id, &first, area.width, area.height - band);
-    if size < style.text && alone > size {
+    if size < style.text() && alone > size {
         note = None;
         note_h = 0;
         size = alone;
