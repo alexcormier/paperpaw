@@ -269,7 +269,9 @@ file). A step setting a value of the wrong kind is passed over, and one
 setting what keeps the device safe is never done. An action of more
 than 16 steps, or one that runs an action of its own file, is no
 mistake PaperPaw passes over: the file is refused, and the plugin with
-it, which the plugin manager then shows as *Error*.
+it, which the plugin manager then shows as *Error*. `paperpaw-dev check`
+says so before (`package.actions`), and so it does for a default in
+`settings.ini` that PaperPaw would not take (`package.settings`).
 
 ### A home screen without code
 

@@ -65,6 +65,10 @@ const LATER_FORMATS: [(&str, u32); 5] = [
 /// The version of the data formats that brought `points/*.txt`.
 const POINTS_FORMATS: u32 = 3;
 
+/// The most steps an action of `actions.ini` runs (`MAX_STEPS` in the
+/// kernel's `data_plugin.rs`).
+const MAX_STEPS: usize = 16;
+
 /// One file of the folder.
 #[derive(Debug, Clone)]
 pub struct File {
@@ -149,6 +153,7 @@ pub fn check(plugin: &DataPlugin, report: &mut Report) -> Option<Folder> {
     folder.keymap = lines(&folder, "keymap.ini", &mut add);
     folder.has_presets = folder.file("presets.ini").is_some();
     later_formats(&folder, &mut add);
+    actions(&folder, folder.id(plugin), &mut add);
     files_and_kinds(plugin, &folder, &mut add);
     catalogs(&folder, &mut add);
     fonts(&folder, &mut add);
@@ -252,6 +257,87 @@ fn later_formats(folder: &Folder, add: &mut dyn FnMut(Finding)) {
                      {DATA_FORMATS}` in [plugin]."
                 ),
             ));
+        }
+    }
+}
+
+/// `actions.ini` as the kernel takes it, or refuses it and the plugin
+/// with it: at most [`MAX_STEPS`] steps an action, none running an action
+/// of the same file, events emitted only of the plugin's own.
+fn actions(folder: &Folder, plugin: &str, add: &mut dyn FnMut(Finding)) {
+    if folder.file("actions.ini").is_none() {
+        return;
+    }
+    // Its syntax is told already (`later_formats`).
+    let lines = lines(folder, "actions.ini", &mut |_| {});
+    // As the kernel names them (`own_id`): the section, in the plugin's
+    // namespace.
+    let own = |name: &str| {
+        if name.starts_with(&format!("{plugin}.")) {
+            name.to_string()
+        } else {
+            format!("{plugin}.{name}")
+        }
+    };
+    let mut found: Vec<(String, u32, Vec<String>)> = Vec::new();
+    for line in lines.iter().filter(|l| !l.section.is_empty()) {
+        let id = own(&line.section);
+        if found.last().is_none_or(|(last, ..)| *last != id) {
+            found.push((id, line.line, Vec::new()));
+        }
+        if line.key == "run"
+            && let Some((.., steps)) = found.last_mut()
+        {
+            steps.extend(
+                line.value
+                    .split(',')
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .map(String::from),
+            );
+        }
+    }
+    let ids: Vec<&str> = found.iter().map(|(id, ..)| id.as_str()).collect();
+    let refused = "PaperPaw refuses actions.ini, and with it the whole plugin, which the plugin manager then shows as Error";
+    for (id, line, steps) in &found {
+        let place = format!("actions.ini:{line}");
+        if steps.len() > MAX_STEPS {
+            add(Finding::error(
+                "package.actions",
+                &place,
+                format!(
+                    "`{id}` runs {} steps, at most {MAX_STEPS}: {refused}. Fewer steps fit \
+                     (settings chosen together can be a preset of presets.ini).",
+                    steps.len()
+                ),
+            ));
+        }
+        for step in steps {
+            let ran = ["notify:", "open:", "emit:"]
+                .iter()
+                .all(|p| !step.starts_with(p))
+                && !step.contains('=');
+            if ran && ids.contains(&step.as_str()) {
+                add(Finding::error(
+                    "package.actions",
+                    &place,
+                    format!(
+                        "`{id}` runs `{step}`, an action of this same file: {refused}. Put \
+                         its steps into `{id}` instead."
+                    ),
+                ));
+            }
+            let event = step.strip_prefix("emit:").map(str::trim);
+            if let Some(event) = event.filter(|e| e.split('.').next() != Some(plugin)) {
+                add(Finding::error(
+                    "package.actions",
+                    &place,
+                    format!(
+                        "`{id}` emits `{event}`, an event of another plugin: {refused}. An \
+                         action emits only events of its own plugin (`{plugin}.<name>`)."
+                    ),
+                ));
+            }
         }
     }
 }
@@ -920,6 +1006,55 @@ mod tests {
                 .any(|f| f.1 == "package.syntax" && f.2.starts_with("menus.ini:")),
             "{found:#?}"
         );
+    }
+
+    /// An action of more than 16 steps, one running an action of its own
+    /// file and one emitting another plugin's event are refused by the
+    /// kernel, and said here; a sound file is not.
+    #[test]
+    fn actions_the_kernel_refuses_are_said() {
+        let manifest: &[u8] =
+            b"[plugin]\nid = acts\nname = Acts\ndescription = Actions.\nversion = 1.0.0\nformats = 3\n";
+        let many = vec!["core.home"; MAX_STEPS + 1].join(", ");
+        let source = format!(
+            "[long]\ntitle = Long\nrun = {many}\n\n\
+             [first]\ntitle = First\nrun = core.night-mode=on, acts.second\n\n\
+             [second]\ntitle = Second\nrun = notify:Hello\n\n\
+             [loud]\ntitle = Loud\nrun = emit:core.started\n\n\
+             [fine]\ntitle = Fine\nrun = core.night-mode=on, open:core.library, emit:acts.done, core.home\n"
+        );
+        let found = findings(&folder(
+            "acts",
+            &[("plugin.ini", manifest), ("actions.ini", source.as_bytes())],
+        ));
+        let actions: Vec<(&str, &str)> = found
+            .iter()
+            .filter(|f| f.1 == "package.actions")
+            .map(|f| (f.2.as_str(), f.3.as_str()))
+            .collect();
+        let at =
+            |place: &str, part: &str| actions.iter().any(|(p, m)| *p == place && m.contains(part));
+        assert!(
+            at("actions.ini:2", "runs 17 steps, at most 16"),
+            "{actions:#?}"
+        );
+        assert!(
+            at(
+                "actions.ini:6",
+                "runs `acts.second`, an action of this same file"
+            ),
+            "{actions:#?}"
+        );
+        assert!(
+            !actions.iter().any(|(p, _)| *p == "actions.ini:10"),
+            "{actions:#?}"
+        );
+        assert!(at("actions.ini:14", "emits `core.started`"), "{actions:#?}");
+        assert!(
+            !actions.iter().any(|(p, _)| *p == "actions.ini:18"),
+            "{actions:#?}"
+        );
+        assert!(actions.iter().all(|(_, m)| m.contains("shows as Error")));
     }
 
     #[test]
