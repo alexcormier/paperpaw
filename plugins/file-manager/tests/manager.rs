@@ -15,7 +15,7 @@ use paperpaw_core::{Effects, Kernel};
 use paperpaw_platform::Rotation;
 use paperpaw_sdk::builtin::{events, params};
 use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::ui::choice::Picked;
 use paperpaw_sdk::{
     DeviceInfo, DisplayInfo, Id, InputCaps, Instant, Manifest, MemoryClass, MemoryStorage, Params,
@@ -104,13 +104,12 @@ fn shown(kernel: &mut Kernel) -> Vec<String> {
     kernel.describe().into_iter().map(|p| p.label).collect()
 }
 
+/// What has the focus: on the screen on top, where one is over another.
 fn focused(kernel: &mut Kernel) -> String {
     kernel.render(&mut |_, _| {});
-    kernel
-        .describe()
-        .into_iter()
-        .find(|p| p.focused)
-        .map(|p| p.label)
+    let parts = kernel.describe();
+    paperpaw_sdk::semantics::focused(&parts)
+        .map(|p| p.label.clone())
         .unwrap_or_default()
 }
 
@@ -126,6 +125,27 @@ fn choose(kernel: &mut Kernel, path: &str, option: &str) {
     let event = Id::new_static("file-manager.chosen");
     let effects = kernel.send_event(Instant(0), event, picked.to_params());
     settle(kernel, effects);
+}
+
+/// Answers the question whether to delete `path`: yes, as if asked.
+fn delete(kernel: &mut Kernel, path: &str) {
+    let answer = Confirmed::new(true, Params::new().with(params::PATH, path));
+    let event = Id::new_static("file-manager.delete");
+    let effects = kernel.send_event(Instant(0), event, answer.to_params());
+    settle(kernel, effects);
+}
+
+/// Presses down until the button `label` has the focus, then confirm.
+fn press(kernel: &mut Kernel, label: &str) {
+    for _ in 0..40 {
+        if focused(kernel) == label {
+            let effects = kernel.run_action(Instant(0), Id::new_static("core.confirm"));
+            return settle(kernel, effects);
+        }
+        let effects = kernel.run_action(Instant(0), Id::new_static("core.down"));
+        settle(kernel, effects);
+    }
+    panic!("no button {label}: {:?}", shown(kernel));
 }
 
 /// A folder of many files goes a page at a time, the focus where the
@@ -222,7 +242,7 @@ fn deleting_a_folder_drops_what_was_picked_in_it() {
         "{:?}",
         shown(&mut kernel)
     );
-    choose(&mut kernel, "books/Old", "delete-yes");
+    delete(&mut kernel, "books/Old");
     let after = shown(&mut kernel);
     assert!(!after.iter().any(|l| l == "Paste here"), "{after:?}");
 }
@@ -358,7 +378,7 @@ fn paperpaws_own_folder_is_not_deleted() {
         .with(".paperpaw/annotations/0123456789abcdef", "a note")
         .with("books/b.txt", "B");
     let (mut kernel, _) = manager(storage, "");
-    choose(&mut kernel, ".paperpaw", "delete-yes");
+    delete(&mut kernel, ".paperpaw");
     assert!(
         kernel
             .storage()
@@ -366,4 +386,65 @@ fn paperpaws_own_folder_is_not_deleted() {
     );
     let said = shown(&mut kernel).join(" ");
     assert!(said.contains("PaperPaw"), "{said}");
+}
+
+/// The question whether to delete starts on the safe answer, as every yes
+/// or no question does: confirm pressed at once deletes nothing.
+#[test]
+fn deleting_starts_on_the_safe_answer() {
+    let storage = MemoryStorage::new().with("books/b.txt", "B");
+    let (mut kernel, _) = manager(storage, "books");
+    choose(&mut kernel, "books/b.txt", "delete");
+    assert_eq!(focused(&mut kernel), "Cancel", "{:?}", shown(&mut kernel));
+    let effects = kernel.run_action(Instant(0), Id::new_static("core.confirm"));
+    settle(&mut kernel, effects);
+    assert!(kernel.storage().exists("books/b.txt"));
+}
+
+/// Nothing in PaperPaw's own folder, however deep, nor in the one of its
+/// old name (what was not taken over stays there) is deleted, renamed or
+/// moved: each is refused with the reason.
+#[test]
+fn nothing_in_paperpaws_own_folders_is_deleted_renamed_or_moved() {
+    let paths = [
+        ".paperpaw/plugins/stats/x.txt",
+        ".paperpaw/plugins",
+        ".quireink",
+        ".quireink/plugins/stats/x.txt",
+    ];
+    for path in paths {
+        for how in ["ask", "delete", "rename", "move"] {
+            let storage = MemoryStorage::new()
+                .with(".paperpaw/plugins/stats/x.txt", "new")
+                // Kept under the old name: the new one has it too.
+                .with(".quireink/plugins/stats/x.txt", "old")
+                .with("books/b.txt", "B");
+            let (mut kernel, _) = manager(storage, "books");
+            match how {
+                "ask" => choose(&mut kernel, path, "delete"),
+                "delete" => delete(&mut kernel, path),
+                "rename" => rename(&mut kernel, path, "gone"),
+                _ => {
+                    choose(&mut kernel, path, "move");
+                    press(&mut kernel, "Paste here");
+                }
+            }
+            let storage = kernel.storage();
+            let text = |path: &str| paperpaw_sdk::read_file(storage, path, 8).unwrap();
+            assert_eq!(
+                text(".paperpaw/plugins/stats/x.txt"),
+                b"new",
+                "{how} {path}"
+            );
+            assert_eq!(
+                text(".quireink/plugins/stats/x.txt"),
+                b"old",
+                "{how} {path}"
+            );
+            let gone = ["books/x.txt", "books/plugins", "books/gone"];
+            assert!(!gone.iter().any(|p| storage.exists(p)), "{how} {path}");
+            let said = shown(&mut kernel).join(" ");
+            assert!(said.contains("PaperPaw’s own"), "{how} {path}: {said}");
+        }
+    }
 }

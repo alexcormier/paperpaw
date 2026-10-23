@@ -139,18 +139,21 @@ fn options(app: &mut App, name: &str) {
     assert_eq!(app.screen(), CHOICE, "{}", app.described());
 }
 
-/// Chooses `option` of the overlay shown.
+/// Chooses `option` of the overlay shown: down to it, or up where it is
+/// above the focus (a question's yes is before the no it starts on).
 fn choose(app: &mut App, option: &str) {
     if touch(app) {
         app.tap_on(option);
         return;
     }
-    for _ in 0..12 {
-        if app.focused().as_deref() == Some(option) {
-            app.run(actions::CONFIRM);
-            return;
+    for step in [actions::DOWN, actions::UP] {
+        for _ in 0..12 {
+            if app.focused().as_deref() == Some(option) {
+                app.run(actions::CONFIRM);
+                return;
+            }
+            app.run(step.clone());
         }
-        app.run(actions::DOWN);
     }
     panic!("no option {option}:\n{}", app.described());
 }

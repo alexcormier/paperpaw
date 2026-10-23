@@ -26,7 +26,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::ask;
 use paperpaw_sdk::builtin::{actions, events, groups, menus, params, screens, slots};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::ui::choice;
 use paperpaw_sdk::ui::{self, ListChange, ListView, UiStyle};
 use paperpaw_sdk::{
@@ -50,6 +50,8 @@ const SCREEN: Id = Id::new_static("file-manager.browser");
 const CHOSEN: Event<choice::Picked> = Event::new("file-manager.chosen");
 const RENAMED: Event<Typed> = Event::new("file-manager.renamed");
 const FOLDER_NAMED: Event<Typed> = Event::new("file-manager.folder-named");
+/// The answer to whether to delete the entry at its context's path.
+const DELETE: Event<Confirmed> = Event::new("file-manager.delete");
 /// Translation keys of the choices: this, then the option.
 const OPTION_LABELS: &str = "file-manager.option.";
 
@@ -445,7 +447,7 @@ impl Browser {
                 self.message = Some(env.i18n.format(key, &[("name", Arg::Str(&name))]));
                 self.redraw(cx);
             }
-            "delete" | "delete-yes" if is_own_data(env.storage, path) => {
+            "delete" if is_own_data(env.storage, path) => {
                 self.message = Some(env.i18n.tr("file-manager.error.own-data").to_string());
                 self.redraw(cx);
             }
@@ -460,50 +462,58 @@ impl Browser {
                     "file-manager.delete-question"
                 };
                 let title = env.i18n.format(key, &[("name", Arg::Str(&name))]);
+                // Asked as every yes or no question: the focus starts on
+                // the safe answer.
                 cx.command(
-                    paperpaw_sdk::ask::choice(&title, &CHOSEN)
-                        .about(path)
-                        .options(OPTION_LABELS, &["delete-yes", "cancel"])
+                    ask::confirm(title, &DELETE)
+                        .yes(env.i18n.tr("file-manager.option.delete-yes"))
+                        .no(env.i18n.tr("file-manager.option.cancel"))
+                        .with(params::PATH, path.to_string())
                         .command(),
                 );
             }
-            "delete-yes" => {
-                // The books in it, said gone once it is: what is kept
-                // for them goes too.
-                // At most `MAX_TOLD`: the data of those beyond stays until
-                // the storage is cleaned up.
-                let mut books = Vec::new();
-                paperpaw_sdk::library::books_in(env.storage, env.formats, path, &mut |book| {
-                    if books.len() < MAX_TOLD {
-                        books.push(String::from(book));
-                    }
-                });
-                let at = Entry {
-                    name,
-                    is_dir: ops::is_dir(env.storage, path),
-                    size: 0,
-                };
-                let deleted = ops::delete(env.storage, path);
-                if deleted.is_ok() {
-                    for path in books {
-                        cx.command(events::BOOK_REMOVED.emit(events::BookRemoved::new(path)));
-                    }
-                    cx.command(paperpaw_sdk::library::changed());
-                }
-                self.message = deleted.err().map(|e| error(&env, e));
-                // Picked to be moved or copied, and gone with it.
-                if (self.picked.as_ref())
-                    .is_some_and(|p| ops::is_within(env.storage, &p.path, path))
-                {
-                    self.picked = None;
-                }
-                // The focus where it was.
-                self.load(&env, Some(at));
-                cx.request_redraw();
-                cx.request_refresh(RefreshMode::Partial);
-            }
             _ => {}
         }
+    }
+
+    /// Deletes `path`, as the reader answered yes.
+    fn delete(&mut self, path: &str, cx: &mut Cx<'_, '_>) {
+        let env = *cx.env();
+        if is_own_data(env.storage, path) {
+            self.message = Some(env.i18n.tr("file-manager.error.own-data").to_string());
+            return self.redraw(cx);
+        }
+        // The books in it, said gone once it is: what is kept for them
+        // goes too.
+        // At most `MAX_TOLD`: the data of those beyond stays until the
+        // storage is cleaned up.
+        let mut books = Vec::new();
+        paperpaw_sdk::library::books_in(env.storage, env.formats, path, &mut |book| {
+            if books.len() < MAX_TOLD {
+                books.push(String::from(book));
+            }
+        });
+        let at = Entry {
+            name: ops::name(path).to_string(),
+            is_dir: ops::is_dir(env.storage, path),
+            size: 0,
+        };
+        let deleted = ops::delete(env.storage, path);
+        if deleted.is_ok() {
+            for path in books {
+                cx.command(events::BOOK_REMOVED.emit(events::BookRemoved::new(path)));
+            }
+            cx.command(paperpaw_sdk::library::changed());
+        }
+        self.message = deleted.err().map(|e| error(&env, e));
+        // Picked to be moved or copied, and gone with it.
+        if (self.picked.as_ref()).is_some_and(|p| ops::is_within(env.storage, &p.path, path)) {
+            self.picked = None;
+        }
+        // The focus where it was.
+        self.load(&env, Some(at));
+        cx.request_redraw();
+        cx.request_refresh(RefreshMode::Partial);
     }
 
     fn move_focus(&mut self, delta: isize, cx: &mut Cx<'_, '_>) {
@@ -760,6 +770,11 @@ impl Screen for Browser {
         let env = *cx.env();
         if let Some(picked) = CHOSEN.read(event, params) {
             self.chosen(&picked.option, &picked.path, cx);
+        } else if let Some(answer) = DELETE.read(event, params) {
+            if answer.yes {
+                let path = answer.context.get(params::PATH).unwrap_or_default();
+                self.delete(path, cx);
+            }
         } else if let Some(typed) = RENAMED.read(event, params) {
             let path = typed
                 .context
@@ -815,10 +830,18 @@ impl Screen for Browser {
 /// a folder of more is not moved ([`refused`]).
 const MAX_TOLD: usize = 2000;
 
-/// Whether `path` is PaperPaw's own folder, with every setting, note and
-/// statistic: not deleted, renamed or moved here.
+/// The folder PaperPaw had up to 0.3: taken over as it starts, and where
+/// it could not take a file over (the new folder has one of that name)
+/// the old one stays.
+const OLD_DIR: &str = ".quireink";
+
+/// Whether `path` is PaperPaw's own folder or lies in it, at any depth,
+/// with every setting, note and statistic, or in the folder of its old
+/// name: not deleted, renamed or moved here.
 fn is_own_data(storage: &dyn Storage, path: &str) -> bool {
-    ops::same_path(storage, path.trim_matches('/'), paperpaw_sdk::data::DIR)
+    [paperpaw_sdk::data::DIR, OLD_DIR]
+        .iter()
+        .any(|dir| ops::is_within(storage, path, dir))
 }
 
 /// Why `path` is not moved or renamed, if it is not: PaperPaw's own

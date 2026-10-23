@@ -40,16 +40,21 @@ const OLD_NAME: &str = "quireink"; // now paperpaw
 /// configuration file) to where it is kept now, once: the kernel does it as
 /// it starts. Where the folder is there under both names (a shell may
 /// write to it before the kernel starts), it moves each entry the new one
-/// does not have; what the new one has stays.
+/// does not have, however deep; a file the new one has stays as it is, and
+/// the old one is left under the old name.
 pub fn take_over_old_name(storage: &dyn Storage) {
     let names = [
         (format!(".{OLD_NAME}"), DIR),
         (format!("{OLD_NAME}.ini"), crate::builtin::CONFIG_FILE),
     ];
     for (old, new) in names {
-        take_over(storage, &old, new, 2);
+        take_over(storage, &old, new, TAKE_OVER_DEPTH);
     }
 }
+
+/// How many folders deep the old folder is merged into the new one: deeper
+/// than PaperPaw keeps anything, and a bound on the work at each start.
+const TAKE_OVER_DEPTH: u8 = 8;
 
 /// Moves `old` to `new`. Where both are folders, it moves what `old` holds
 /// entry by entry, down to `depth` folders deep.

@@ -175,6 +175,53 @@ fn the_old_folder_is_taken_over_beside_a_file_already_in_the_new_one() {
     assert_eq!(storage.get(".quireink/crashes.txt").unwrap(), b"old crash");
 }
 
+/// A plugin's folder there under both names is merged however deep it
+/// goes: what only the old one has is moved, what both have stays as the
+/// new one has it, and the old file is kept.
+#[test]
+fn a_plugin_folder_under_both_names_is_merged_without_overwriting() {
+    let storage = MemoryStorage::new()
+        .with(".paperpaw/plugins/stats/x.txt", "new x")
+        .with(".paperpaw/plugins/stats/days/2026.txt", "new day")
+        .with(".quireink/plugins/stats/pages.bin", "pages")
+        .with(".quireink/plugins/stats/x.txt", "old x")
+        .with(".quireink/plugins/stats/days/2025.txt", "old day")
+        .with(".quireink/plugins/stats/days/2026.txt", "old 2026");
+    data::take_over_old_name(&storage);
+    assert_eq!(
+        storage.get(".paperpaw/plugins/stats/pages.bin").unwrap(),
+        b"pages"
+    );
+    assert_eq!(
+        storage.get(".paperpaw/plugins/stats/x.txt").unwrap(),
+        b"new x"
+    );
+    assert_eq!(
+        storage
+            .get(".paperpaw/plugins/stats/days/2025.txt")
+            .unwrap(),
+        b"old day"
+    );
+    assert_eq!(
+        storage
+            .get(".paperpaw/plugins/stats/days/2026.txt")
+            .unwrap(),
+        b"new day"
+    );
+    // The old files that were not taken over stay where they were.
+    assert_eq!(
+        storage.get(".quireink/plugins/stats/x.txt").unwrap(),
+        b"old x"
+    );
+    assert_eq!(
+        storage
+            .get(".quireink/plugins/stats/days/2026.txt")
+            .unwrap(),
+        b"old 2026"
+    );
+    assert!(!storage.exists(".quireink/plugins/stats/pages.bin"));
+}
+
 /// The guard against writing over a newer file reads the first line
 /// however its bytes fall: a character cut at the end of what it reads, or
 /// a byte order mark before the mark.
