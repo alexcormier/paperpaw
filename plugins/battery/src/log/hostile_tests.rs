@@ -222,18 +222,13 @@ fn a_damaged_line_loses_only_itself() {
 
 #[test]
 fn plugin_lines_leave_out_the_idle_and_count_in_whole_units() {
-    let plugins = [PluginUsage {
-        plugin: paperpaw_sdk::Id::new_static("busy"),
-        busy_us: 999,
-        calls: 1,
-        shown_ms: 0,
-        refreshes: [0, 0, 0],
-        pixels: 999,
-        read: 1023,
-        written: 1025,
-        requests: 0,
-        refused: 0,
-    }];
+    let mut busy = PluginUsage::new(paperpaw_sdk::Id::new_static("busy"));
+    busy.busy_us = 999;
+    busy.calls = 1;
+    busy.pixels = 999;
+    busy.read = 1023;
+    busy.written = 1025;
+    let plugins = [busy];
     assert_eq!(plugin_lines(5, &plugins), "5,busy,0,1,0,0,0,0,0,0,1\n");
     assert_eq!(plugin_lines(5, &[]), "");
 }

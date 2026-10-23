@@ -231,7 +231,7 @@ impl BatteryView {
         if !shown.is_empty() {
             lines.push(Line::Heading(tr("battery.by-screen")));
             for p in shown.into_iter().take(PLUGINS_SHOWN) {
-                let refreshes = i64::from(p.refreshes.iter().sum::<u32>());
+                let refreshes = i64::from(p.refreshes.total());
                 lines.push(Line::Value(
                     plugin_name(env, p.plugin.as_str()),
                     env.i18n.plural(

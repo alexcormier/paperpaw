@@ -124,15 +124,10 @@ impl Device {
     /// As [`Device::new`], started at `unix` seconds since 1970 where the
     /// clock is known.
     fn at(storage: Shared, unix: Option<i64>) -> Self {
-        let firmware = Firmware {
-            version: "0.4.0".into(),
-            project: PROJECT.into(),
-            chip: CHIP,
-            keys: vec![paperpaw_update::public_key(&SEED)],
-            room: 1_000_000,
-            plugins: Plugins::new(RUNNING),
-            ..Firmware::default()
-        };
+        let firmware = Firmware::new("0.4.0", PROJECT, CHIP)
+            .keys(vec![paperpaw_update::public_key(&SEED)])
+            .room(1_000_000)
+            .plugins(Plugins::new(RUNNING));
         let mut kernel = Kernel::builder(DEVICE)
             .storage(storage.clone())
             .network(true)
@@ -401,15 +396,10 @@ fn with_code_plugin(storage: Shared, version: &str, config: &str) -> Device {
         .0
         .write("plugins/dict-xl/code.ppn", &code_file())
         .unwrap();
-    let firmware = Firmware {
-        version: version.into(),
-        project: PROJECT.into(),
-        chip: CHIP,
-        keys: vec![paperpaw_update::public_key(&SEED)],
-        room: 1_000_000,
-        plugins: Plugins::new(RUNNING),
-        ..Firmware::default()
-    };
+    let firmware = Firmware::new(version, PROJECT, CHIP)
+        .keys(vec![paperpaw_update::public_key(&SEED)])
+        .room(1_000_000)
+        .plugins(Plugins::new(RUNNING));
     let mut kernel = Kernel::builder(DEVICE)
         .storage(storage.clone())
         .network(true)
@@ -577,11 +567,7 @@ fn an_update_signed_by_another_key_installs_with_the_key_shown() {
     device.run(actions::CONFIRM);
     assert_eq!(
         device.install(),
-        FirmwareCommand::Install {
-            path: "updates/own.bin".into(),
-            key: Some(key),
-            older: false,
-        }
+        FirmwareCommand::install("updates/own.bin", Some(key), false)
     );
 }
 
@@ -606,11 +592,7 @@ fn an_older_update_says_so_and_installs_only_as_chosen() {
     device.run(actions::CONFIRM);
     assert_eq!(
         device.install(),
-        FirmwareCommand::Install {
-            path: "updates/old.bin".into(),
-            key: None,
-            older: true,
-        }
+        FirmwareCommand::install("updates/old.bin", None, true)
     );
 }
 
@@ -956,15 +938,10 @@ fn offer_with_code(size: usize, code: &[u8]) -> String {
 /// PaperPaw `version` with the statistics built in, loading code
 /// plugins, the card as `storage` has it.
 fn with_code(storage: Shared, version: &str) -> Device {
-    let firmware = Firmware {
-        version: version.into(),
-        project: PROJECT.into(),
-        chip: CHIP,
-        keys: vec![paperpaw_update::public_key(&SEED)],
-        room: 1_000_000,
-        plugins: Plugins::new(RUNNING),
-        ..Firmware::default()
-    };
+    let firmware = Firmware::new(version, PROJECT, CHIP)
+        .keys(vec![paperpaw_update::public_key(&SEED)])
+        .room(1_000_000)
+        .plugins(Plugins::new(RUNNING));
     let mut kernel = Kernel::builder(DEVICE)
         .storage(storage.clone())
         .network(true)

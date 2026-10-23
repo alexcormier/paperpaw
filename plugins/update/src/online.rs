@@ -528,13 +528,9 @@ mod tests {
     use super::{Offer, is_version, question};
 
     fn firmware() -> Firmware {
-        Firmware {
-            version: "0.4.0".into(),
-            project: "paperpaw-xteink".into(),
-            chip: 5,
-            plugins: Plugins::new("paperpaw-plugin-stats 0.4.0\npaperpaw-plugin-chess 1.0.0\n"),
-            ..Firmware::default()
-        }
+        Firmware::new("0.4.0", "paperpaw-xteink", 5).plugins(Plugins::new(
+            "paperpaw-plugin-stats 0.4.0\npaperpaw-plugin-chess 1.0.0\n",
+        ))
     }
 
     #[test]
@@ -575,9 +571,10 @@ mod tests {
     fn betas_are_asked_for_and_offered_only_newer() {
         assert!(question(&firmware(), None, &[], true).ends_with(",\"betas\":true}"));
         assert!(!question(&firmware(), None, &[], false).contains("betas"));
-        let on = |version: &str| Firmware {
-            version: version.into(),
-            ..firmware()
+        let on = |version: &str| {
+            let mut firmware = firmware();
+            firmware.version = version.into();
+            firmware
         };
         let offer = |answer: &str, running: &str| {
             let body = alloc::format!(r#"{{"version": "{answer}", "url": "u"}}"#);
@@ -610,9 +607,10 @@ mod tests {
     /// betas is not taken, unless the device runs a pre-release already.
     #[test]
     fn betas_are_left_where_the_reader_did_not_ask() {
-        let on = |version: &str| Firmware {
-            version: version.into(),
-            ..firmware()
+        let on = |version: &str| {
+            let mut firmware = firmware();
+            firmware.version = version.into();
+            firmware
         };
         let offer = |answer: &str, running: &str| {
             let body = alloc::format!(r#"{{"version": "{answer}", "url": "u"}}"#);

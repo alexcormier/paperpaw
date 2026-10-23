@@ -304,15 +304,7 @@ mod tests {
     }
 
     fn at(hour: u8, minute: u8) -> LocalTime {
-        LocalTime {
-            year: 2026,
-            month: 10,
-            day: 14,
-            hour,
-            minute,
-            second: 0,
-            weekday: 3,
-        }
+        LocalTime::new(2026, 10, 14, hour, minute, 0)
     }
 
     #[test]

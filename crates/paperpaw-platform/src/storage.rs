@@ -50,11 +50,18 @@ impl core::error::Error for StorageError {}
 
 /// One entry of a directory listing.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct DirEntry<'a> {
     pub name: &'a str,
     pub is_dir: bool,
     /// Size in bytes (0 for directories).
     pub size: u64,
+}
+
+impl<'a> DirEntry<'a> {
+    pub const fn new(name: &'a str, is_dir: bool, size: u64) -> Self {
+        Self { name, is_dir, size }
+    }
 }
 
 /// Storage provided by a shell.
@@ -238,11 +245,7 @@ impl<B: Storage, M: Storage> Storage for Mounted<B, M> {
             // The root lists the mount point next to the base's entries;
             // a base that cannot be listed is told, not taken for empty.
             let base = self.base.list(dir, visit);
-            visit(DirEntry {
-                name: self.at,
-                is_dir: true,
-                size: 0,
-            });
+            visit(DirEntry::new(self.at, true, 0));
             return base;
         }
         let (storage, dir) = self.route(dir);
@@ -380,11 +383,7 @@ mod tests {
             if !dir.is_empty() {
                 return Err(StorageError::NotFound);
             }
-            visit(DirEntry {
-                name: self.0,
-                is_dir: false,
-                size: self.1,
-            });
+            visit(DirEntry::new(self.0, false, self.1));
             Ok(())
         }
 

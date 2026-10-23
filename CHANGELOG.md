@@ -397,6 +397,31 @@ file to your report.
   feature, and `Canvas`'s drawing internals are hidden. A cover drawn
   small is `ui::draw_small_image`; whether the device has a row of
   button hints is `env.caps.button_row`.
+- SDK, cleaned up before its first release (installers): what only the
+  kernel and the plugins that install do comes with the `kernel`
+  feature, the reading parts staying for every plugin. `native`:
+  `remember_author`, `remember_code`, `remember_fetched`, `fetched_for`,
+  `keep_code_room`, `installed_code_need`, `check_file`,
+  `CROSSING_CRATES`, `LAYOUT` and `CodeRoom`'s constructors (`known_author`,
+  `installed_code`, `code_room` and `CodeRoom`'s reading stay);
+  `install::local` (`Staging`), `install::marks`, `remember_store_install`,
+  `forget_store_install` and `adopt` (`origin`, `Origins` stay);
+  `firmware::Update` and `FirmwareCommand::install`, the one way to ask
+  for an install (`FirmwareCommand::Install` is matched, not built);
+  `data::take_over_old_name`; `Secrets::encode` and `decode`;
+  `library::save`, `catalog::write` and `Index::save`.
+- SDK, cleaned up before its first release (platform): the types that
+  grow are `#[non_exhaustive]`, with constructors where plugins build
+  them: `DirEntry::new`, `files::Entry::new`, `LocalTime::new` (its
+  weekday from the date), `MemoryUse::new` and `with_stack`,
+  `PluginUsage::new`, `WifiNetwork::new`, `Firmware::new` with `keys`,
+  `room`, `undone`, `state` and `plugins`, `BookData::new` and
+  `SecretChange::changeable`; `install::Digest::text` writes a digest as
+  a job keeps it. A match on `WifiCommand`, `PowerLevel`,
+  `served::Access`, `install::Digest`, `FirmwareCommand` or
+  `BookDataKind` needs an arm for what is to come. `Usage::refreshes`
+  and `PluginUsage::refreshes` name their modes (`usage::Refreshes`:
+  `fast`, `partial`, `full`, `total`) in place of an array.
 - SDK: types that may grow are `#[non_exhaustive]`, with constructors
   where plugins build them: `decorations::{PageWord, PageText,
   Decorated}::new`, `semantics::Part::new` and `Described::new` (with

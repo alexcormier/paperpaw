@@ -1251,11 +1251,11 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
                 continue;
             }
             let is_dir = entry.is_dir();
-            visit(DirEntry {
-                name: &name,
+            visit(DirEntry::new(
+                &name,
                 is_dir,
-                size: if is_dir { 0 } else { entry.len() },
-            });
+                if is_dir { 0 } else { entry.len() },
+            ));
         }
         Ok(())
     }

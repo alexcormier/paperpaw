@@ -17,10 +17,21 @@ pub const MAX_LINE: usize = 4096;
 
 /// An entry of a folder.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Entry {
     pub name: String,
     pub is_dir: bool,
     pub size: u64,
+}
+
+impl Entry {
+    pub fn new(name: impl Into<String>, is_dir: bool, size: u64) -> Self {
+        Self {
+            name: name.into(),
+            is_dir,
+            size,
+        }
+    }
 }
 
 /// `dir/name`, or `name` at the top.

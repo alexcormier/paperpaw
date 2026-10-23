@@ -44,7 +44,7 @@
 //! the firmware, and the same type has another `TypeId` in each build
 //! (cargo's settings for a build are part of it). By its name only where
 //! the type is made of the crates under the plugin interface
-//! ([`native::CROSSING_CRATES`](crate::native::CROSSING_CRATES), `core`
+//! (`native::CROSSING_CRATES`, `core`
 //! and `alloc`), whose types the interface keeps as they are, and of the
 //! same size and alignment: a type of a plugin's own crate may be another
 //! of the same name in another build, so it needs a contract.
@@ -131,8 +131,7 @@ fn under_the_interface(name: &str) -> bool {
     name.split(|c: char| !(c.is_ascii_alphanumeric() || c == '_' || c == ':'))
         .filter_map(|part| part.split_once("::").map(|(krate, _)| krate))
         .all(|krate| {
-            matches!(krate, "core" | "alloc" | "std")
-                || crate::native::CROSSING_CRATES.contains(&krate)
+            matches!(krate, "core" | "alloc" | "std") || crate::native::CROSSING.contains(&krate)
         })
 }
 

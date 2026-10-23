@@ -173,16 +173,11 @@ struct Device {
 
 impl Device {
     fn new(storage: Shared, options: Options) -> Self {
-        let firmware = Firmware {
-            version: options.version.into(),
-            project: PROJECT.into(),
-            chip: CHIP,
-            keys: vec![paperpaw_update::public_key(&SEED)],
-            room: 1_000_000,
-            undone: options.undone,
-            plugins: Plugins::new("paperpaw-plugin-stats 0.4.0\n"),
-            ..Firmware::default()
-        };
+        let firmware = Firmware::new(options.version, PROJECT, CHIP)
+            .keys(vec![paperpaw_update::public_key(&SEED)])
+            .room(1_000_000)
+            .undone(options.undone)
+            .plugins(Plugins::new("paperpaw-plugin-stats 0.4.0\n"));
         let said = Rc::default();
         let mut kernel = Kernel::builder(device(options.touch))
             .storage(storage.clone())
@@ -357,11 +352,7 @@ fn installing_shows_its_bar_and_cannot_be_left() {
     d.run(actions::CONFIRM);
     assert_eq!(
         d.firmware_commands(),
-        [FirmwareCommand::Install {
-            path: CARD.to_string(),
-            key: None,
-            older: false,
-        }]
+        [FirmwareCommand::install(CARD.to_string(), None, false)]
     );
     // Kept through the restart, to say how it went.
     assert_eq!(
@@ -441,11 +432,11 @@ fn an_own_build_installs_only_with_its_key_accepted() {
     d.run(actions::CONFIRM);
     assert_eq!(
         d.firmware_commands(),
-        [FirmwareCommand::Install {
-            path: CARD.to_string(),
-            key: Some(paperpaw_update::public_key(&OWN)),
-            older: false,
-        }]
+        [FirmwareCommand::install(
+            CARD.to_string(),
+            Some(paperpaw_update::public_key(&OWN)),
+            false
+        )]
     );
     // Asked again at the next install: nothing on the card trusts a key.
     d.state(FirmwareState::Failed(InstallFailure::Write));

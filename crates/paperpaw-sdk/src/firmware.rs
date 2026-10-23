@@ -15,7 +15,7 @@
 //! reader's own builds) only with that key in the command, which the
 //! reader accepted for this install, shown its fingerprint; and one not
 //! newer than the running firmware only when the reader chose it
-//! ([`Update::may_install`]). Nothing on the card makes a key trusted or
+//! (`Update::may_install`). Nothing on the card makes a key trusted or
 //! an older firmware welcome, so a card changed by someone else cannot
 //! install firmware unasked. The shell writes the new firmware beside the
 //! running one and starts it at the next start; if the new one does not
@@ -37,10 +37,13 @@ pub const UPDATE_DIR: &str = "updates";
 
 /// What the shell is told to do.
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum FirmwareCommand {
     /// Installs the update file at this storage path: checks it
-    /// ([`Update::may_install`]), writes it beside the running firmware
-    /// and makes it the one to start next.
+    /// (`Update::may_install`), writes it beside the running firmware
+    /// and makes it the one to start next. Asked for by
+    /// `FirmwareCommand::install` (the kernel's and its update plugin's).
+    #[non_exhaustive]
     Install {
         path: String,
         /// The key of an update not signed by PaperPaw, which the reader
@@ -55,6 +58,21 @@ pub enum FirmwareCommand {
     /// Restarts the device, e.g. into the new firmware once
     /// [`FirmwareState::Installed`]. What plugins keep is saved first.
     Restart,
+}
+
+impl FirmwareCommand {
+    /// Installs the update file at `path`; `key` the key of an update not
+    /// signed by PaperPaw that the reader accepted, `older` whether they
+    /// chose one not newer than the running firmware.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+    pub fn install(path: impl Into<String>, key: Option<[u8; 32]>, older: bool) -> Self {
+        FirmwareCommand::Install {
+            path: path.into(),
+            key,
+            older,
+        }
+    }
 }
 
 /// Where an install is.
@@ -110,6 +128,7 @@ impl From<Problem> for InstallFailure {
 
 /// Firmware as the kernel knows it ([`Env::firmware`](crate::Env)).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct Firmware {
     /// The running firmware's version, e.g. `0.4.0`.
     pub version: String,
@@ -131,6 +150,47 @@ pub struct Firmware {
     pub plugins: Plugins,
 }
 
+impl Firmware {
+    /// The firmware `project` of `version` on `chip`; nothing else known.
+    pub fn new(version: impl Into<String>, project: impl Into<String>, chip: u16) -> Self {
+        Self {
+            version: version.into(),
+            project: project.into(),
+            chip,
+            ..Self::default()
+        }
+    }
+
+    /// With PaperPaw's keys built in.
+    pub fn keys(mut self, keys: Vec<[u8; 32]>) -> Self {
+        self.keys = keys;
+        self
+    }
+
+    /// With `room` bytes for an update.
+    pub fn room(mut self, room: u64) -> Self {
+        self.room = room;
+        self
+    }
+
+    /// An update before did not start cleanly, if `undone`.
+    pub fn undone(mut self, undone: bool) -> Self {
+        self.undone = undone;
+        self
+    }
+
+    pub fn state(mut self, state: FirmwareState) -> Self {
+        self.state = state;
+        self
+    }
+
+    /// With the code plugins built in.
+    pub fn plugins(mut self, plugins: Plugins) -> Self {
+        self.plugins = plugins;
+        self
+    }
+}
+
 /// Who signed an update.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
@@ -145,6 +205,8 @@ pub enum Signer {
 /// What an update file holds, from its start and its end (its signature
 /// is checked as it is installed).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub struct Update {
     pub path: String,
     pub info: AppInfo,
@@ -154,6 +216,8 @@ pub struct Update {
     pub plugins: Option<Plugins>,
 }
 
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 impl Update {
     /// Reads the update file at `path`.
     pub fn read(storage: &dyn Storage, path: &str) -> Result<Self, InstallFailure> {

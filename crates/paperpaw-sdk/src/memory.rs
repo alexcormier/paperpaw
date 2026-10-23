@@ -13,6 +13,7 @@ use core::fmt;
 
 /// Memory in use and free, in bytes, at the moment it was read.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+#[non_exhaustive]
 pub struct MemoryUse {
     /// Bytes of the heap free now.
     pub heap_free: u32,
@@ -23,6 +24,25 @@ pub struct MemoryUse {
     pub stack_free: Option<u32>,
     /// The stack's size, where the shell knows it.
     pub stack_size: Option<u32>,
+}
+
+impl MemoryUse {
+    /// The heap's free bytes and size; the stack not measured.
+    pub const fn new(heap_free: u32, heap_size: u32) -> Self {
+        Self {
+            heap_free,
+            heap_size,
+            stack_free: None,
+            stack_size: None,
+        }
+    }
+
+    /// With the stack measured: `free` bytes never used of `size`.
+    pub const fn with_stack(mut self, free: u32, size: u32) -> Self {
+        self.stack_free = Some(free);
+        self.stack_size = Some(size);
+        self
+    }
 }
 
 /// The shell's probe of memory; see the [module documentation](self).

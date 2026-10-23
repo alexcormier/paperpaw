@@ -59,7 +59,12 @@ pub const INTERFACE: u16 = 2;
 /// (`crates/paperpaw-sdk/interface/crates.txt`, which a test keeps the
 /// same), so a type made of theirs alone is the same in every build of
 /// one interface.
-pub const CROSSING_CRATES: &[&str] = &[
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub const CROSSING_CRATES: &[&str] = CROSSING;
+
+/// [`CROSSING_CRATES`], for the services' type names.
+pub(crate) const CROSSING: &[&str] = &[
     "paperpaw_sdk",
     "paperpaw_platform",
     "paperpaw_graphics",
@@ -84,6 +89,8 @@ pub const CROSSING_CRATES: &[&str] = &[
 /// of where the firmware's table keeps each of its entries. Part of the
 /// fingerprint, so made for each chip as it lays them out: a plugin whose
 /// layouts differ from the firmware's is not loaded.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub const LAYOUT: u64 = layout::DIGEST;
 
 /// What this build of the SDK makes plugins fit: the plugin interface, the
@@ -99,7 +106,7 @@ pub const FINGERPRINT: Fingerprint = Fingerprint::of(INTERFACE, {
     // switched them on. Colour does not: Android and the emulator draw
     // in colour, and plugins built without it run there.
     hash = hash.number(paperpaw_text::OUTLINES as u64);
-    hash = hash.number(LAYOUT);
+    hash = hash.number(layout::DIGEST);
     hash.0
 });
 
@@ -154,6 +161,8 @@ pub fn fetched_plugin(name: &str) -> Option<&str> {
 /// and fetched by the update plugin ([`remember_fetched`]), not put
 /// there otherwise. Their ids and the SHA-256 of their headers, sorted;
 /// the kernel installs them at the start, before plugins are found.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn fetched_for(storage: &dyn Storage, native: &Native) -> Vec<(String, [u8; 32])> {
     let mut ids: Vec<String> = Vec::new();
     let _ = storage.list(crate::builtin::PLUGIN_DIR, &mut |entry| {
@@ -179,6 +188,8 @@ pub fn fetched_for(storage: &dyn Storage, native: &Native) -> Vec<(String, [u8; 
 /// whether it fits this device and build is for the caller to see
 /// ([`Header::chip`], [`Header::fingerprint`]), and whether the author is
 /// one known (a store remembers the key of the first install).
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn check_file(
     storage: &dyn Storage,
     path: &str,
@@ -257,7 +268,7 @@ pub fn author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> Author {
 }
 
 /// The key of the author of `plugin`'s code, as remembered at its first
-/// install ([`remember_author`]).
+/// install (`remember_author`).
 pub fn known_author(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
     entry(storage, AUTHORS, plugin)
 }
@@ -266,6 +277,8 @@ pub fn known_author(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
 /// known before: at its first install, and when the reader installed an
 /// update by another; `false` if it could not be kept (the file left as
 /// it is where it could not be read).
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn remember_author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> bool {
     keep_entry(storage, AUTHORS, plugin, key)
 }
@@ -276,7 +289,7 @@ pub fn remember_author(storage: &dyn Storage, plugin: &str, key: &[u8; 32]) -> b
 /// the Wi-Fi transfer nor plugins' own folders reach.
 const INSTALLED: &str = crate::data_path!("plugin-code.txt");
 
-/// The code of `plugin` as installed ([`remember_code`]): the SHA-256 of
+/// The code of `plugin` as installed (`remember_code`): the SHA-256 of
 /// its file's header. The kernel loads a code plugin's file only when its
 /// header says the same, so that a file put into a plugin's folder
 /// otherwise (copied there by hand, or over the Wi-Fi transfer) does not
@@ -289,6 +302,8 @@ pub fn installed_code(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
 /// place of the version before: every installer does, once it checked the
 /// file ([`check_file`]) and its author; `false` if it could not be kept
 /// (the file left as it is where it could not be read).
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn remember_code(storage: &dyn Storage, plugin: &str, sha256: &[u8; 32]) -> bool {
     keep_entry(storage, INSTALLED, plugin, sha256)
 }
@@ -302,12 +317,14 @@ const FETCHED: &str = crate::data_path!("plugin-code-fetched.txt");
 /// installs it at its start only when its file is that one, so a folder
 /// put there otherwise does not run (see [`installed_code`]). The code
 /// installed now stays named until then. `false` if it could not be kept.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn remember_fetched(storage: &dyn Storage, plugin: &str, sha256: &[u8; 32]) -> bool {
     keep_entry(storage, FETCHED, plugin, sha256)
 }
 
 /// The code of `plugin` fetched for a firmware update
-/// ([`remember_fetched`]).
+/// (`remember_fetched`).
 pub fn fetched_code(storage: &dyn Storage, plugin: &str) -> Option<[u8; 32]> {
     entry(storage, FETCHED, plugin)
 }
@@ -364,7 +381,7 @@ fn read_exact(
 
 /// The room code plugins run from, as the shell found it when it loaded
 /// them at this start: the X4's flash region behind the firmware, the X4
-/// Pro's PSRAM. The shell keeps it on the storage ([`keep_code_room`]);
+/// Pro's PSRAM. The shell keeps it on the storage (`keep_code_room`);
 /// the store and the plugin manager read it ([`code_room`]) to say how
 /// much is left and to refuse a plugin that would not fit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -392,6 +409,8 @@ impl CodeRoom {
     /// `total` bytes for code plugins, `used` of them taken, each image
     /// taking whole `granule`s; no limit on their number, none placed, not
     /// shared (see [`CodeRoom::with_plugins`], [`CodeRoom::shared`]).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn new(total: u64, used: u64, granule: u32) -> Self {
         Self {
             total,
@@ -405,6 +424,8 @@ impl CodeRoom {
 
     /// The same, with `placed` plugins placed at this start, `most` at
     /// most.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn with_plugins(mut self, placed: u32, most: Option<u32>) -> Self {
         self.placed = placed;
         self.max_plugins = most;
@@ -413,6 +434,8 @@ impl CodeRoom {
 
     /// The same, in memory shared with everything else: what is free is
     /// an estimate (the X4 Pro's PSRAM).
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn shared(mut self) -> Self {
         self.shared = true;
         self
@@ -422,6 +445,8 @@ impl CodeRoom {
     /// sector the index of what lies in it, the images placed from there
     /// up to `images_end` (`placed` of them), each in whole sectors, as
     /// many as the index holds at most.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn in_flash(start: u32, end: u32, images_end: u32, placed: u32) -> Self {
         use paperpaw_native::index::{MAX_PLACED, SECTOR};
         let first = start.saturating_add(SECTOR);
@@ -434,6 +459,8 @@ impl CodeRoom {
     /// The X4 Pro's room: the PSRAM `used` by the `placed` images of this
     /// start, and what was `free` of it beside them (shared with all else,
     /// an estimate), each image aligned to a cache line of 32 bytes.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn in_psram(used: u64, free: u64, placed: u32) -> Self {
         Self::new(used.saturating_add(free), used, 32)
             .with_plugins(placed, None)
@@ -454,7 +481,7 @@ impl CodeRoom {
 
     /// Whether one more plugin of `need` bytes ([`CodeRoom::needs`]) fits
     /// beside `plugins` plugins taking `taken` bytes (see
-    /// [`installed_code_need`]).
+    /// `installed_code_need`).
     pub fn fits(&self, taken: u64, plugins: u32, need: u64) -> bool {
         let count = self.max_plugins.is_none_or(|most| plugins < most);
         count && taken.saturating_add(need) <= self.total
@@ -486,6 +513,8 @@ pub fn code_room(storage: &dyn Storage) -> Option<CodeRoom> {
 /// Keeps `room` for [`code_room`] (`None`: there is none this start):
 /// the shell does, once it loaded the code plugins of this start. `false`
 /// if it could not be written.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn keep_code_room(storage: &dyn Storage, room: Option<&CodeRoom>) -> bool {
     let Some(room) = room else {
         return storage.remove(ROOM).is_ok() || !storage.exists(ROOM);
@@ -510,6 +539,8 @@ pub fn keep_code_room(storage: &dyn Storage, room: Option<&CodeRoom>) -> bool {
 /// the next start would place at most. Folders whose names begin with a
 /// dot (a download being put together, e.g. `.clock.part`) are no plugins
 /// and do not count.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn installed_code_need(storage: &dyn Storage, room: &CodeRoom, file: &str) -> (u64, u32) {
     let mut folders: Vec<String> = Vec::new();
     let _ = storage.list(crate::builtin::PLUGIN_DIR, &mut |entry| {

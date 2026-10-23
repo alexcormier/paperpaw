@@ -235,12 +235,10 @@ fn memory() -> Option<paperpaw_sdk::memory::MemoryUse> {
     let (stack_free, stack_size) = stack::left();
     let bytes = |n: usize| u32::try_from(n).unwrap_or(u32::MAX);
     let free = esp_alloc::HEAP.free();
-    Some(paperpaw_sdk::memory::MemoryUse {
-        heap_free: bytes(free),
-        heap_size: bytes(free + esp_alloc::HEAP.used()),
-        stack_free: Some(bytes(stack_free)),
-        stack_size: Some(bytes(stack_size)),
-    })
+    Some(
+        paperpaw_sdk::memory::MemoryUse::new(bytes(free), bytes(free + esp_alloc::HEAP.used()))
+            .with_stack(bytes(stack_free), bytes(stack_size)),
+    )
 }
 
 /// Microseconds since start, for measuring what plugins take.

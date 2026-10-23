@@ -6,7 +6,7 @@
 //!
 //! On devices of little memory it holds [`cap`] books at most and counts
 //! the others ([`Index::total`]). A view covered by a book can keep it in
-//! a file ([`Index::save`]) and let it go, and read it back when it shows
+//! a file (`Index::save`) and let it go, and read it back when it shows
 //! again ([`Index::load`]).
 
 use alloc::format;
@@ -215,7 +215,7 @@ pub struct Index {
     pub total: usize,
     /// Books in the archive folder, left out.
     pub archived: usize,
-    /// Changed since it was kept in a file ([`Index::save`]).
+    /// Changed since it was kept in a file (`Index::save`).
     pub dirty: bool,
     /// Of which version of the library's books it is
     /// ([`super::Library::version`]): where its keys hold.
@@ -428,7 +428,14 @@ impl Index {
     /// ([`Index::load`]) instead of made anew, so a view holds no memory
     /// for it meanwhile; `archive` is the folder it was made without.
     /// Written a piece at a time; `false` where it could not be.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn save(&self, storage: &dyn Storage, file: &str, archive: &str) -> bool {
+        self.write(storage, file, archive)
+    }
+
+    /// [`Index::save`], for the library's service.
+    pub(crate) fn write(&self, storage: &dyn Storage, file: &str, archive: &str) -> bool {
         let Some(stamp) = self.version else {
             return false;
         };
@@ -472,7 +479,7 @@ impl Index {
         true
     }
 
-    /// The index kept by [`Index::save`] in `file`, if it is of the
+    /// The index kept by `Index::save` in `file`, if it is of the
     /// library's `version` there is now ([`super::Library::version`];
     /// [`catalog_version`] for the catalog) and made without the folder
     /// `archive`.

@@ -27,6 +27,7 @@ use crate::id::Id;
 
 /// How much energy to spend, as plugins see it.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
 pub enum PowerLevel {
     /// Everything as configured.
     #[default]

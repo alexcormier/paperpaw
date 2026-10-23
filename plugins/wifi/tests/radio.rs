@@ -195,11 +195,7 @@ fn the_radio_goes_off_when_no_known_network_is_in_reach() {
 /// joined, without the request failing meanwhile.
 #[test]
 fn a_scan_that_finds_nothing_is_made_again() {
-    let home = [WifiNetwork {
-        ssid: String::from("Home"),
-        signal: -50,
-        secured: true,
-    }];
+    let home = [WifiNetwork::new(String::from("Home"), -50, true)];
     let mut test = Test::new();
     test.want();
     assert_eq!(
@@ -212,11 +208,7 @@ fn a_scan_that_finds_nothing_is_made_again() {
 
 #[test]
 fn the_radio_goes_off_once_joining_failed_for_as_long_as_work_waits() {
-    let home = [WifiNetwork {
-        ssid: String::from("Home"),
-        signal: -50,
-        secured: true,
-    }];
+    let home = [WifiNetwork::new(String::from("Home"), -50, true)];
     let mut test = Test::new();
     test.want();
     let joins = test.event(WifiEvent::Scanned(home.to_vec()));

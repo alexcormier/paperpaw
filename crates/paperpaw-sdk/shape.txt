@@ -377,7 +377,7 @@ const paperpaw_sdk::library::what::STATUS: u32 = 16u32
 const paperpaw_sdk::logo::LOGO: paperpaw_sdk::setting::Setting<paperpaw_sdk::setting::Text> = Setting::new("core.logo")
 const paperpaw_sdk::memory::Memory::NONE: Self = Self { read: None }
 const paperpaw_sdk::native::CODE_FILES: &[&str] = &[ "code.ppn", "code.so", "code-host.dll", "code-host.so", "code-host.dylib", ]
-const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = &[ "paperpaw_sdk", "paperpaw_platform", "paperpaw_graphics", "paperpaw_i18n", "paperpaw_config", "paperpaw_text", "paperpaw_document", "paperpaw_layout", "paperpaw_xml", "paperpaw_zip", "paperpaw_hyphen", "paperpaw_image", "paperpaw_update", "paperpaw_digest", "paperpaw_json", "paperpaw_qr", "paperpaw_native", ]
+const paperpaw_sdk::native::CROSSING_CRATES: &[&str] = CROSSING
 const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint = Fingerprint::of(INTERFACE, { let mut hash = layout::Fnv::new()
 const paperpaw_sdk::native::INTERFACE: u16 = 2u16
 const paperpaw_sdk::native::LAYOUT: u64 = 15_269_956_107_036_351_621u64
@@ -851,8 +851,9 @@ struct paperpaw_sdk::ui::style::UiStyle { text: f32, small: f32, title: f32, hea
 struct paperpaw_sdk::ui::thumbnail::Thumbnail { width: u16, height: u16, depth: paperpaw_sdk::ui::thumbnail::Depth, pixels: alloc::vec::Vec<u8> }
 struct paperpaw_sdk::ui::widget_list::AddScreen { style: paperpaw_sdk::ui::style::UiStyle, header: paperpaw_sdk::ui::header::Header, list: paperpaw_sdk::ui::list::ListView, target: paperpaw_sdk::ui::widget_list::Target, widgets: alloc::vec::Vec<(paperpaw_sdk::id::Id, alloc::string::String)> }
 struct paperpaw_sdk::ui::widget_list::ListScreen { style: paperpaw_sdk::ui::style::UiStyle, header: paperpaw_sdk::ui::header::Header, list: paperpaw_sdk::ui::list::ListView, reorder: paperpaw_sdk::ui::reorder::Reorder, target: paperpaw_sdk::ui::widget_list::Target }
-struct paperpaw_sdk::usage::PluginUsage { plugin: paperpaw_sdk::id::Id, busy_us: u64, calls: u32, shown_ms: u64, refreshes: [u32; 3], pixels: u64, read: u64, written: u64, requests: u32, refused: u32 }
-struct paperpaw_sdk::usage::Usage { refreshes: [u32; 3], pixels: u64, inputs: u32, sleeps: u32, panel_ms: u64 }
+struct paperpaw_sdk::usage::PluginUsage { plugin: paperpaw_sdk::id::Id, busy_us: u64, calls: u32, shown_ms: u64, refreshes: paperpaw_sdk::usage::Refreshes, pixels: u64, read: u64, written: u64, requests: u32, refused: u32 }
+struct paperpaw_sdk::usage::Refreshes { fast: u32, partial: u32, full: u32 }
+struct paperpaw_sdk::usage::Usage { refreshes: paperpaw_sdk::usage::Refreshes, pixels: u64, inputs: u32, sleeps: u32, panel_ms: u64 }
 struct paperpaw_sdk::version::Version { major: u16, minor: u16, patch: u16 }
 struct paperpaw_sdk::voices::VoiceSpec { id: paperpaw_sdk::id::Id, languages: alloc::vec::Vec<alloc::borrow::Cow<'static, str>>, speak: paperpaw_sdk::voices::SpeakFn, stop: paperpaw_sdk::voices::StopFn }
 struct paperpaw_sdk::voices::Voices { list: alloc::vec::Vec<paperpaw_sdk::voices::VoiceSpec> }

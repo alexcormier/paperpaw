@@ -521,12 +521,11 @@ fn codes_kept_with_a_salt_of_the_code_are_kept_anew_at_random() {
     let fresh = stored(&test);
     assert!(fresh.starts_with("pin:v2."), "{fresh}");
     let old = "0123456789abcdef";
-    test.kernel.set_secret(paperpaw_sdk::secrets::SecretChange {
-        id: String::from("lock.code"),
-        label: String::from("lock.secret"),
-        value: Some(format!("pin:{old}:{}", hashed(old, "2580"))),
-        changeable: false,
-    });
+    let value = format!("pin:{old}:{}", hashed(old, "2580"));
+    test.kernel.set_secret(
+        paperpaw_sdk::secrets::SecretChange::keep("lock.code", "lock.secret", &value)
+            .changeable(false),
+    );
     test.lock_now();
     test.enter("1111");
     assert!(test.open(&LOCK), "a wrong code opens nothing");

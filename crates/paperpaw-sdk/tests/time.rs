@@ -24,16 +24,7 @@ const HOUR: i64 = 3600;
 const DAY: i64 = 86_400;
 
 fn at(year: i32, month: u8, day: u8, hour: u8, minute: u8, second: u8) -> i64 {
-    LocalTime {
-        year,
-        month,
-        day,
-        hour,
-        minute,
-        second,
-        weekday: 0,
-    }
-    .to_seconds()
+    LocalTime::new(year, month, day, hour, minute, second).to_seconds()
 }
 
 fn date(seconds: i64) -> (i32, u8, u8, u8, u8, u8, u8) {

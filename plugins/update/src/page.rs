@@ -656,11 +656,11 @@ impl UpdatePage {
                 write_pair(env.storage, INSTALLING, &update.path, &update.info.version);
                 // What the reader saw and chose: the key shown, a version
                 // not newer said to be so.
-                cx.command(Command::Firmware(FirmwareCommand::Install {
-                    path: update.path.clone(),
-                    key: (*signer == Signer::Unknown).then_some(update.trailer.key),
-                    older: !age.is_gt(),
-                }));
+                cx.command(Command::Firmware(FirmwareCommand::install(
+                    update.path.clone(),
+                    (*signer == Signer::Unknown).then_some(update.trailer.key),
+                    !age.is_gt(),
+                )));
                 self.view = View::Installing {
                     done: 0,
                     total: u64::from(update.trailer.image_len),

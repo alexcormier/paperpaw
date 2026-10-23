@@ -70,7 +70,11 @@ pub(crate) struct Counts {
 impl Counts {
     pub fn of(usage: &Usage) -> Self {
         Self {
-            refreshes: usage.refreshes,
+            refreshes: [
+                usage.refreshes.fast,
+                usage.refreshes.partial,
+                usage.refreshes.full,
+            ],
             pixels: usage.pixels,
             inputs: usage.inputs,
             panel_ms: usage.panel_ms,
@@ -169,9 +173,9 @@ pub(crate) fn plugin_lines(ms: u64, plugins: &[PluginUsage]) -> String {
             p.plugin,
             p.calls,
             p.shown_ms,
-            p.refreshes[0],
-            p.refreshes[1],
-            p.refreshes[2],
+            p.refreshes.fast,
+            p.refreshes.partial,
+            p.refreshes.full,
             p.pixels / 1000,
             p.read / 1024,
             p.written / 1024,
@@ -414,22 +418,18 @@ mod tests {
     #[test]
     fn plugin_lines_for_those_that_took_anything() {
         let plugins = [
-            PluginUsage {
-                plugin: paperpaw_sdk::Id::new_static("reader"),
-                busy_us: 2_500_000,
-                calls: 40,
-                shown_ms: 600_000,
-                refreshes: [5, 30, 2],
-                pixels: 12_000_000,
-                read: 300 * 1024,
-                written: 2048,
-                requests: 0,
-                refused: 0,
+            {
+                let mut p = PluginUsage::new(paperpaw_sdk::Id::new_static("reader"));
+                p.busy_us = 2_500_000;
+                p.calls = 40;
+                p.shown_ms = 600_000;
+                p.refreshes = paperpaw_sdk::usage::Refreshes::new(5, 30, 2);
+                p.pixels = 12_000_000;
+                p.read = 300 * 1024;
+                p.written = 2048;
+                p
             },
-            PluginUsage {
-                plugin: paperpaw_sdk::Id::new_static("idle"),
-                ..PluginUsage::default()
-            },
+            PluginUsage::new(paperpaw_sdk::Id::new_static("idle")),
         ];
         assert_eq!(
             plugin_lines(61_000, &plugins),

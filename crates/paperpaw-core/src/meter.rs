@@ -80,10 +80,7 @@ impl Meter {
             return i;
         }
         let id = Id::parse(plugin).unwrap_or(Id::new_static(CORE));
-        table.push(PluginUsage {
-            plugin: id,
-            ..PluginUsage::default()
-        });
+        table.push(PluginUsage::new(id));
         table.len() - 1
     }
 
@@ -151,13 +148,7 @@ impl Meter {
         let index = self.index(plugin);
         let mut table = self.table.borrow_mut();
         let p = &mut table[index];
-        let at = match mode {
-            RefreshMode::Fast => 0,
-            RefreshMode::Full => 2,
-            // Partial, and modes to come between fast and full.
-            _ => 1,
-        };
-        p.refreshes[at] = p.refreshes[at].saturating_add(1);
+        p.refreshes.count(mode);
         p.pixels = p
             .pixels
             .saturating_add(u64::from(area.width) * u64::from(area.height));
@@ -286,7 +277,10 @@ mod tests {
         assert_eq!(row("stats").busy_us, 50);
         assert_eq!((row("stats").read, row("reader").read), (10, 5));
         assert_eq!((row("reader").written, row("core").read), (7, 1));
-        assert_eq!(row("reader").refreshes, [0, 1, 0]);
+        assert_eq!(
+            row("reader").refreshes,
+            paperpaw_sdk::usage::Refreshes::new(0, 1, 0)
+        );
         assert_eq!((row("reader").pixels, row("reader").shown_ms), (200, 1500));
         assert_eq!((row("reader").calls, row("stats").calls), (1, 1));
     }

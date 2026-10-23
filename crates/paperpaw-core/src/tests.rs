@@ -3231,11 +3231,7 @@ fn scans_and_failures_reach_plugins() {
     use crate::{JoinFailure, WifiEvent, WifiNetwork};
     let log = log();
     let mut kernel = wifi_kernel(&log);
-    let net = |ssid: &str, signal| WifiNetwork {
-        ssid: String::from(ssid),
-        signal,
-        secured: true,
-    };
+    let net = |ssid: &str, signal| WifiNetwork::new(String::from(ssid), signal, true);
     kernel.wifi_event(
         Instant(1),
         WifiEvent::Scanned(alloc::vec![

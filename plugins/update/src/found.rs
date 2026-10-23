@@ -48,13 +48,7 @@ mod tests {
     const CHIP: u16 = 5;
 
     fn firmware() -> Firmware {
-        Firmware {
-            version: "0.3.0".into(),
-            project: "paperpaw-xteink".into(),
-            chip: CHIP,
-            room: 1_000_000,
-            ..Firmware::default()
-        }
+        Firmware::new("0.3.0", "paperpaw-xteink", CHIP).room(1_000_000)
     }
 
     /// A signed update file of `version` for `project`.

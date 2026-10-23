@@ -246,14 +246,31 @@ pub fn key(path: &str) -> String {
 /// ([`clean_up_unused`]): a cache by itself, the reader's data only when
 /// the reader says so.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct BookData {
     pub folder: alloc::borrow::Cow<'static, str>,
     pub prefix: alloc::borrow::Cow<'static, str>,
     pub kind: BookDataKind,
 }
 
+impl BookData {
+    /// Data of `kind` in `folder`, named `prefix` and the book's id.
+    pub fn new(
+        folder: impl Into<alloc::borrow::Cow<'static, str>>,
+        prefix: impl Into<alloc::borrow::Cow<'static, str>>,
+        kind: BookDataKind,
+    ) -> Self {
+        Self {
+            folder: folder.into(),
+            prefix: prefix.into(),
+            kind,
+        }
+    }
+}
+
 /// What a folder of [`BookData`] holds.
 #[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum BookDataKind {
     /// The reader's: a place, notes, settings for the book, a sync's
     /// state. A book not found may be on a card not inserted, or renamed
@@ -726,7 +743,14 @@ fn fit(value: &str) -> &str {
 /// there that this one does not know; `false` where it could not be
 /// written (or would be too large to be read back), or the details there
 /// could not be read.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn save(storage: &dyn Storage, path: &str, book: &Book) -> bool {
+    write_book(storage, path, book)
+}
+
+/// [`save`], for the library's own changes of a book.
+fn write_book(storage: &dyn Storage, path: &str, book: &Book) -> bool {
     let Ok(before) = crate::data::Format::FIRST.load(storage, &book_file(path), MAX_DETAILS) else {
         return false;
     };
@@ -801,7 +825,7 @@ pub fn index(env: &Env<'_>, path: &str) -> Book {
         book.cover = document.cover(storage).ok().flatten();
     }
     if known {
-        save(storage, path, &book);
+        write_book(storage, path, &book);
     }
     book
 }
@@ -897,7 +921,7 @@ pub fn provide(storage: &dyn Storage, path: &str, provided: Provided) {
     }
     // Read from the book anew, keeping this where it names nothing.
     book.indexed = false;
-    save(storage, path, &book);
+    write_book(storage, path, &book);
 }
 
 /// Sets field `id` of the book at `path` (a plugin's, e.g.
@@ -910,7 +934,7 @@ pub fn set_field(storage: &dyn Storage, path: &str, id: &str, value: &str) {
     if !value.is_empty() {
         book.fields.push((id.to_string(), value.to_string()));
     }
-    save(storage, path, &book);
+    write_book(storage, path, &book);
 }
 
 /// Records a reading event (`core.book-opened`, `core.page-turned`): the
@@ -941,7 +965,7 @@ pub fn record(env: &Env<'_>, reading: &crate::builtin::events::Reading, opened: 
         changed = true;
     }
     if changed {
-        save(storage, path, &book);
+        write_book(storage, path, &book);
     }
     // Opened: the catalog knows it at once (a page turned does not write
     // there; the book's closing does, [`note_status`]).
@@ -1003,7 +1027,7 @@ pub fn moved(storage: &dyn Storage, from: &str, to: &str) {
         && cover.path.contains(&key(from))
     {
         cover.path = cover.path.replace(&key(from), &key(to));
-        save(storage, to, &book);
+        write_book(storage, to, &book);
     }
     let replace = |list: &mut Vec<String>| {
         for p in list.iter_mut().filter(|p| *p == from) {
@@ -1034,7 +1058,7 @@ pub fn set_finished(storage: &dyn Storage, path: &str, finished: bool) {
         return;
     };
     book.progress = finished.then_some(100);
-    save(storage, path, &book);
+    write_book(storage, path, &book);
     noted_status(storage, path);
 }
 

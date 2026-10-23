@@ -304,11 +304,7 @@ impl Storage for Folding {
 
 #[test]
 fn clean_up_keeps_what_any_spelling_or_format_needs() {
-    let data = [BookData {
-        folder: "cache".into(),
-        prefix: "".into(),
-        kind: BookDataKind::Cache,
-    }];
+    let data = [BookData::new("cache", "", BookDataKind::Cache)];
     let kept = |path: &str| format!("cache/{}.ini", key(path));
     // The card names the folder `Books`; the library's setting says
     // `books`, and the reader opened the book by it.
@@ -349,21 +345,9 @@ fn clean_up_keeps_what_any_spelling_or_format_needs() {
 #[test]
 fn caches_go_by_themselves_the_readers_data_only_when_asked() {
     let data = [
-        BookData {
-            folder: "notes".into(),
-            prefix: "".into(),
-            kind: BookDataKind::UserData,
-        },
-        BookData {
-            folder: "places".into(),
-            prefix: "".into(),
-            kind: BookDataKind::UserData,
-        },
-        BookData {
-            folder: "cache".into(),
-            prefix: "".into(),
-            kind: BookDataKind::Cache,
-        },
+        BookData::new("notes", "", BookDataKind::UserData),
+        BookData::new("places", "", BookDataKind::UserData),
+        BookData::new("cache", "", BookDataKind::Cache),
     ];
     let gone = key("books/renamed.epub");
     let storage = MemoryStorage::new()
@@ -386,11 +370,7 @@ fn caches_go_by_themselves_the_readers_data_only_when_asked() {
 /// Books in hidden folders are found: what is kept for them stays.
 #[test]
 fn clean_up_finds_books_in_hidden_folders() {
-    let data = [BookData {
-        folder: "cache".into(),
-        prefix: "".into(),
-        kind: BookDataKind::Cache,
-    }];
+    let data = [BookData::new("cache", "", BookDataKind::Cache)];
     let kept = |path: &str| format!("cache/{}.ini", key(path));
     let storage = MemoryStorage::new()
         .with(".hidden/a.epub", "book")

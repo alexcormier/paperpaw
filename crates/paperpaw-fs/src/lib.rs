@@ -287,11 +287,7 @@ impl Storage for DirStorage {
         }
         entries.sort_unstable_by(|a, b| a.0.cmp(&b.0));
         for (name, is_dir, size) in &entries {
-            visit(DirEntry {
-                name,
-                is_dir: *is_dir,
-                size: *size,
-            });
+            visit(DirEntry::new(name, *is_dir, *size));
         }
         Ok(())
     }

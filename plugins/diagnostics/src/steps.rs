@@ -580,11 +580,12 @@ mod tests {
 
     #[test]
     fn memory_fails_with_a_stack_near_running_over() {
-        let m = |stack_free| MemoryUse {
-            heap_free: 100 * 1024,
-            heap_size: 256 * 1024,
-            stack_free,
-            stack_size: stack_free.map(|_| 16 * 1024),
+        let m = |stack_free: Option<u32>| {
+            let heap = MemoryUse::new(100 * 1024, 256 * 1024);
+            match stack_free {
+                Some(free) => heap.with_stack(free, 16 * 1024),
+                None => heap,
+            }
         };
         assert_eq!(
             memory(Some(m(Some(4096)))),

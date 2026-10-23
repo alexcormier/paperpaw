@@ -7,7 +7,6 @@
 //! over the folder keeps only the `n` entries that follow (or precede) a
 //! known one in that order.
 
-use alloc::string::ToString;
 use alloc::vec::Vec;
 use core::cmp::Ordering;
 
@@ -155,11 +154,7 @@ impl Folder<'_> {
 }
 
 fn entry(is_dir: bool, name: &str, size: u64) -> Entry {
-    Entry {
-        name: name.to_string(),
-        is_dir,
-        size,
-    }
+    Entry::new(name, is_dir, size)
 }
 
 #[cfg(test)]

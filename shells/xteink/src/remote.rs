@@ -244,13 +244,15 @@ impl Remote {
             }
             Command::Usage => {
                 let u = kernel.usage();
-                let [fast, partial, full] = u.refreshes;
+                let r = u.refreshes;
+                let (fast, partial, full) = (r.fast, r.partial, r.full);
                 println!(
                     "PP:USAGE {fast} {partial} {full} {} {} {} {}",
                     u.pixels, u.inputs, u.sleeps, u.panel_ms
                 );
                 for p in &kernel.plugin_usage() {
-                    let [fast, partial, full] = p.refreshes;
+                    let r = p.refreshes;
+                    let (fast, partial, full) = (r.fast, r.partial, r.full);
                     println!(
                         "PP:USE {} {} {} {} {fast} {partial} {full} {} {}",
                         p.plugin, p.busy_us, p.calls, p.shown_ms, p.read, p.written
