@@ -342,6 +342,7 @@ const paperpaw_sdk::icons::BUSY: &str = "core.icon.busy"
 const paperpaw_sdk::icons::DELETE: &str = "core.icon.delete"
 const paperpaw_sdk::icons::HOLD: &str = "core.icon.hold"
 const paperpaw_sdk::icons::NEXT: &str = "core.icon.next"
+const paperpaw_sdk::icons::PAW: &str = "paw"
 const paperpaw_sdk::icons::PREV: &str = "core.icon.prev"
 const paperpaw_sdk::icons::SHIFT: &str = "core.icon.shift"
 const paperpaw_sdk::icons::SPACE: &str = "core.icon.space"
@@ -426,8 +427,6 @@ const paperpaw_sdk::ui::confirm::ANSWER: &str = "answer"
 const paperpaw_sdk::ui::confirm::FOCUS_YES: &str = "focus-yes"
 const paperpaw_sdk::ui::confirm::NO_LABEL: &str = "no-label"
 const paperpaw_sdk::ui::confirm::YES_LABEL: &str = "yes-label"
-const paperpaw_sdk::ui::hints::HOLD_ICON: &str = "hand-click"
-const paperpaw_sdk::ui::hints::PAW_ICON: &str = "paw"
 const paperpaw_sdk::ui::items::LINES: &str = "lines"
 const paperpaw_sdk::ui::style::Ink::ALL: [paperpaw_sdk::ui::style::Ink; 14] = [ Ink::Text, Ink::Paper, Ink::Note, Ink::Muted, Ink::Faint, Ink::Disabled, Ink::Rule, Ink::Line, Ink::LineFaint, Ink::OnFocusMuted, Ink::OnDarkMuted, Ink::Card, Ink::CardPattern, Ink::Section, ]
 const paperpaw_sdk::ui::style::Palette::DEFAULT: paperpaw_sdk::ui::style::Palette = Palette([ 0, 255, 60, 90, 120, 150, 150, 190, 210, 215, 200, 225, 240, 238, ])
@@ -828,6 +827,7 @@ struct paperpaw_sdk::ui::look::ProgressPart { area: paperpaw_platform::geometry:
 struct paperpaw_sdk::ui::look::SeparatorPart { row: paperpaw_platform::geometry::Rect, indent: u16 }
 struct paperpaw_sdk::ui::look::SliderPart { track: paperpaw_platform::geometry::Rect, knob_x: i32, ink: paperpaw_platform::pixel::Color }
 struct paperpaw_sdk::ui::look::SwitchPart { rect: paperpaw_platform::geometry::Rect, on: bool, inverted: bool }
+struct paperpaw_sdk::ui::number_edit::NumberEdit { before: core::option::Option<paperpaw_sdk::settings::SettingValue> }
 struct paperpaw_sdk::ui::offline::OfflineOffer { buttons: [paperpaw_platform::geometry::Rect; 2], focus: usize, chosen: bool }
 struct paperpaw_sdk::ui::picker::DatePicker { wheels: paperpaw_sdk::ui::picker::Wheels, given: (i32, u8, u8), year: i32, month: u8, day: u8, years: (i32, i32), order: paperpaw_sdk::ui::picker::DateOrder }
 struct paperpaw_sdk::ui::picker::TimePicker { wheels: paperpaw_sdk::ui::picker::Wheels, hour: u8, minute: u8, twelve: bool }

@@ -714,9 +714,7 @@ pub(crate) fn draw_cover(
     }
     match (&book.cover, covers.at(at)) {
         (Some(_), Some(small)) => small.draw(canvas, at.x, at.y),
-        (Some(cover), None) => canvas.small_pictures(|canvas| {
-            ui::draw_image(canvas, env.storage, cover, at);
-        }),
+        (Some(cover), None) => ui::draw_small_image(canvas, env.storage, cover, at),
         (None, _) => draw_placeholder(canvas, env, look, at, &book.title),
     }
 }

@@ -36,6 +36,8 @@ fn inside(inner: Rect, outer: Rect) -> bool {
 
 /// The parts of what was drawn, in drawing order: rows, headings and
 /// buttons with the text and switches drawn inside them.
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
 pub fn parts(described: Vec<Described>) -> Vec<Part> {
     let mut parts: Vec<Part> = Vec::new();
     // Whether a part's text is its own (the text drawn inside it is then

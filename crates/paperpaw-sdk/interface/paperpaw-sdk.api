@@ -1042,7 +1042,6 @@ impl paperpaw_sdk::decorations::Decorators
 pub fn paperpaw_sdk::decorations::Decorators::decorate(&self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::decorations::PageText<'_>) -> alloc::vec::Vec<paperpaw_sdk::decorations::Mark>
 pub fn paperpaw_sdk::decorations::Decorators::get(&self, &paperpaw_sdk::Id) -> core::option::Option<&paperpaw_sdk::decorations::DecoratorSpec>
 pub fn paperpaw_sdk::decorations::Decorators::is_empty(&self) -> bool
-pub fn paperpaw_sdk::decorations::Decorators::new() -> Self
 pub fn paperpaw_sdk::decorations::Decorators::signature(&self, &paperpaw_sdk::Env<'_>) -> u64
 pub struct paperpaw_sdk::decorations::Mark
 pub paperpaw_sdk::decorations::Mark::decorator: paperpaw_sdk::Id
@@ -1574,6 +1573,7 @@ pub const paperpaw_sdk::icons::BUSY: &str
 pub const paperpaw_sdk::icons::DELETE: &str
 pub const paperpaw_sdk::icons::HOLD: &str
 pub const paperpaw_sdk::icons::NEXT: &str
+pub const paperpaw_sdk::icons::PAW: &str
 pub const paperpaw_sdk::icons::PREV: &str
 pub const paperpaw_sdk::icons::SHIFT: &str
 pub const paperpaw_sdk::icons::SPACE: &str
@@ -1824,7 +1824,6 @@ pub fn paperpaw_sdk::layers::PageLayers::has_frames(&self) -> bool
 pub fn paperpaw_sdk::layers::PageLayers::is_empty(&self) -> bool
 pub fn paperpaw_sdk::layers::PageLayers::is_idle(&self) -> bool
 pub fn paperpaw_sdk::layers::PageLayers::key(&self, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect) -> alloc::string::String
-pub fn paperpaw_sdk::layers::PageLayers::new() -> Self
 pub fn paperpaw_sdk::layers::PageLayers::on<'s>(&'s self, &'s paperpaw_sdk::Env<'_>) -> impl core::iter::traits::iterator::Iterator<Item = &'s paperpaw_sdk::layers::PageLayerSpec>
 pub fn paperpaw_sdk::layers::PageLayers::rooms(&self, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect) -> (alloc::vec::Vec<(paperpaw_sdk::Id, paperpaw_platform::geometry::Rect)>, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::layers::PageLayers::tapped<'s>(&'s self, &paperpaw_sdk::Env<'_>, &[(paperpaw_sdk::Id, paperpaw_platform::geometry::Rect)], i32, i32) -> core::option::Option<&'s paperpaw_sdk::Id>
@@ -2795,7 +2794,6 @@ pub paperpaw_sdk::semantics::Part::on: core::option::Option<bool>
 pub paperpaw_sdk::semantics::Part::role: paperpaw_graphics::canvas::Role
 pub fn paperpaw_sdk::semantics::find<'a>(&'a [paperpaw_sdk::semantics::Part], &str) -> core::option::Option<&'a paperpaw_sdk::semantics::Part>
 pub fn paperpaw_sdk::semantics::focused(&[paperpaw_sdk::semantics::Part]) -> core::option::Option<&paperpaw_sdk::semantics::Part>
-pub fn paperpaw_sdk::semantics::parts(alloc::vec::Vec<paperpaw_graphics::canvas::Described>) -> alloc::vec::Vec<paperpaw_sdk::semantics::Part>
 pub fn paperpaw_sdk::semantics::role_name(paperpaw_graphics::canvas::Role) -> &'static str
 pub mod paperpaw_sdk::served
 pub enum paperpaw_sdk::served::Access
@@ -3616,6 +3614,14 @@ pub fn paperpaw_sdk::ui::ListView::set_focus(&mut self, usize) -> paperpaw_sdk::
 pub fn paperpaw_sdk::ui::ListView::set_len(&mut self, usize)
 pub fn paperpaw_sdk::ui::ListView::set_shown(&mut self, bool)
 pub fn paperpaw_sdk::ui::ListView::shown(&self) -> bool
+pub struct paperpaw_sdk::ui::NumberEdit
+impl paperpaw_sdk::ui::NumberEdit
+pub fn paperpaw_sdk::ui::NumberEdit::active(&self) -> bool
+pub fn paperpaw_sdk::ui::NumberEdit::finish(&mut self, &paperpaw_sdk::Env<'_>, core::option::Option<&paperpaw_sdk::SettingSpec>, bool, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::NumberEdit::hint(&self, &paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
+pub fn paperpaw_sdk::ui::NumberEdit::leave(&mut self, &paperpaw_sdk::Env<'_>, &mut paperpaw_sdk::Cx<'_, '_>)
+pub fn paperpaw_sdk::ui::NumberEdit::on_action(&mut self, &paperpaw_sdk::Env<'_>, core::option::Option<&paperpaw_sdk::SettingSpec>, &paperpaw_sdk::Id, &mut paperpaw_sdk::Cx<'_, '_>) -> paperpaw_sdk::Handled
+pub fn paperpaw_sdk::ui::NumberEdit::start(&mut self, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::SettingSpec, &mut paperpaw_sdk::Cx<'_, '_>)
 pub struct paperpaw_sdk::ui::OfflineOffer
 impl paperpaw_sdk::ui::offline::OfflineOffer
 pub fn paperpaw_sdk::ui::offline::OfflineOffer::draw(&mut self, &mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect)
@@ -3817,17 +3823,14 @@ pub fn paperpaw_sdk::ui::UiStyle::noted_row_of(&self, usize) -> u32
 pub fn paperpaw_sdk::ui::UiStyle::radius(&self, u32) -> u32
 pub fn paperpaw_sdk::ui::UiStyle::size(&self, paperpaw_sdk::ui::TextRole) -> f32
 pub fn paperpaw_sdk::ui::UiStyle::touch_row(&self, u32) -> u32
-pub const paperpaw_sdk::ui::HOLD_ICON: &str
 pub const paperpaw_sdk::ui::ICON_SCALE: f32
 pub const paperpaw_sdk::ui::NOTE_LINES: usize
-pub const paperpaw_sdk::ui::PAW_ICON: &str
 pub fn paperpaw_sdk::ui::address_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str, &str, core::option::Option<&str>) -> u16
 pub fn paperpaw_sdk::ui::button_border(&paperpaw_sdk::ui::UiStyle) -> u32
 pub fn paperpaw_sdk::ui::button_cells(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &[&str], u16) -> alloc::vec::Vec<paperpaw_platform::geometry::Rect>
 pub fn paperpaw_sdk::ui::button_cells_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &[&str], u16) -> u16
 pub fn paperpaw_sdk::ui::button_height(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> u16
 pub fn paperpaw_sdk::ui::button_height_for(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str) -> u16
-pub fn paperpaw_sdk::ui::button_hints_height(&paperpaw_sdk::Env<'_>) -> u16
 pub fn paperpaw_sdk::ui::button_in_slot(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::button_slot_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str) -> u16
 pub fn paperpaw_sdk::ui::button_width(&paperpaw_sdk::ui::UiStyle, f32) -> f32
@@ -3838,7 +3841,6 @@ pub fn paperpaw_sdk::ui::columns(paperpaw_platform::geometry::Rect, usize, u16) 
 pub fn paperpaw_sdk::ui::draw_address(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, core::option::Option<&paperpaw_qr::QrCode>, &str, core::option::Option<&str>)
 pub fn paperpaw_sdk::ui::draw_arrow(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, (i32, i32), &str, bool, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::draw_button(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, bool, bool)
-pub fn paperpaw_sdk::ui::draw_button_hints(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, &[paperpaw_sdk::Hint], core::option::Option<usize>)
 pub fn paperpaw_sdk::ui::draw_card(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::widgets::look::Frame) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::draw_check(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, bool)
 pub fn paperpaw_sdk::ui::draw_check_row(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, &str, &str, bool)
@@ -3867,6 +3869,7 @@ pub fn paperpaw_sdk::ui::draw_qr(&mut paperpaw_graphics::canvas::Canvas<'_>, &pa
 pub fn paperpaw_sdk::ui::draw_row_icon(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, u16, core::option::Option<&str>, paperpaw_platform::pixel::Color) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_sdk::ui::draw_separator(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, u16)
 pub fn paperpaw_sdk::ui::draw_setting_row(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::ui::RowLines, bool, &str, &str, &str)
+pub fn paperpaw_sdk::ui::draw_small_image(&mut paperpaw_graphics::canvas::Canvas<'_>, &dyn paperpaw_platform::storage::Storage, &paperpaw_document::ImageRef, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_sdk::ui::draw_stepper(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, &str, &str, &str, bool)
 pub fn paperpaw_sdk::ui::draw_stepper_lines(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_sdk::ui::RowLines, &str, &str, &str, bool)
 pub fn paperpaw_sdk::ui::draw_switch(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, bool, bool)
@@ -3878,8 +3881,8 @@ pub fn paperpaw_sdk::ui::edge_bar_band(&paperpaw_sdk::ui::UiStyle, paperpaw_plat
 pub fn paperpaw_sdk::ui::edge_bar_height(&paperpaw_sdk::ui::UiStyle) -> u16
 pub fn paperpaw_sdk::ui::edge_room(&paperpaw_sdk::ui::UiStyle, u16) -> u16
 pub fn paperpaw_sdk::ui::edit_text(&str, &str, &paperpaw_sdk::event::Event<paperpaw_sdk::replies::Typed>) -> paperpaw_sdk::Command
+pub fn paperpaw_sdk::ui::editing_hint(&paperpaw_sdk::Id, &paperpaw_sdk::Env<'_>) -> paperpaw_sdk::Hint
 pub fn paperpaw_sdk::ui::empty_height(&paperpaw_sdk::Env<'_>, &paperpaw_sdk::ui::UiStyle, u16, &str, &str) -> u16
-pub fn paperpaw_sdk::ui::fill(&mut paperpaw_graphics::canvas::Canvas<'_>, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::fill_round(&mut paperpaw_graphics::canvas::Canvas<'_>, &paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
 pub fn paperpaw_sdk::ui::fit(&paperpaw_sdk::FontHandle<'_>, f32, &str, f32) -> alloc::string::String
 pub fn paperpaw_sdk::ui::fit_image(&paperpaw_document::ImageRef, u16, u16) -> (u16, u16)
@@ -4306,7 +4309,6 @@ pub fn paperpaw_sdk::widgets::Widgets::has(&self, &str) -> bool
 pub fn paperpaw_sdk::widgets::Widgets::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&paperpaw_sdk::Id, &str)>
 pub fn paperpaw_sdk::widgets::Widgets::kinds(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
 pub fn paperpaw_sdk::widgets::Widgets::make(&self, &str, &paperpaw_sdk::Env<'_>) -> core::option::Option<alloc::boxed::Box<dyn paperpaw_sdk::widgets::Widget>>
-pub fn paperpaw_sdk::widgets::Widgets::new() -> Self
 pub fn paperpaw_sdk::widgets::Widgets::place(&self, &str) -> core::option::Option<&paperpaw_sdk::widgets::WidgetPlace>
 pub fn paperpaw_sdk::widgets::Widgets::places(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::widgets::WidgetPlace>
 pub fn paperpaw_sdk::widgets::Widgets::preview(&self, &str) -> core::option::Option<&paperpaw_sdk::Id>

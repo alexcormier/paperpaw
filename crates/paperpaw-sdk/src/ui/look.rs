@@ -122,9 +122,8 @@ pub struct HeaderPart {
     pub area: Rect,
 }
 
-/// The background of the row of button hints
-/// ([`draw_button_hints`](super::draw_button_hints)), with the line that
-/// sets it apart; the hints come after.
+/// The background of the row of button hints below the screen, with the
+/// line that sets it apart; the hints come after.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct HintsPart {

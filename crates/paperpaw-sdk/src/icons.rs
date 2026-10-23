@@ -30,6 +30,8 @@ pub const NEXT: &str = "core.icon.next";
 pub const HOLD: &str = "core.icon.hold";
 /// In a button's hint while its press is being worked on.
 pub const BUSY: &str = "core.icon.busy";
+/// PaperPaw's paw: the busy mark in a corner of the screen.
+pub const PAW: &str = "paw";
 /// The keyboard's keys.
 pub const SHIFT: &str = "core.icon.shift";
 pub const DELETE: &str = "core.icon.delete";

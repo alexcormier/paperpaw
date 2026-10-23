@@ -777,7 +777,7 @@ impl Screen for CalibreScreen {
         if let Some((touch, buttons)) = keys {
             let again = if env.device.input.touch {
                 Some(touch)
-            } else if ui::button_hints_height(env) == 0 {
+            } else if !env.caps.button_row {
                 Some(buttons)
             } else {
                 None

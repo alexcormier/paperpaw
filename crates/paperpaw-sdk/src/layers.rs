@@ -313,6 +313,8 @@ pub struct PageLayers {
 }
 
 impl PageLayers {
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub fn new() -> Self {
         Self::default()
     }

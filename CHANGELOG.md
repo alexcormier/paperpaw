@@ -372,6 +372,15 @@ file to your report.
 
 #### For developers
 
+- SDK, cleaned up before its first release (UI): `ui::fill` and
+  `ui::HOLD_ICON` are gone (`Canvas::fill`, `icons::HOLD`);
+  `ui::PAW_ICON` is `icons::PAW`. What only the kernel uses is no longer
+  part of the plugin API: `ui::draw_button_hints`,
+  `ui::button_hints_height`, `semantics::parts` and the constructors of
+  `PageLayers`, `Decorators` and `Widgets` come with the `kernel`
+  feature, and `Canvas`'s drawing internals are hidden. A cover drawn
+  small is `ui::draw_small_image`; whether the device has a row of
+  button hints is `env.caps.button_row`.
 - SDK: `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).

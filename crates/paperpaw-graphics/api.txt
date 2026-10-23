@@ -39,7 +39,6 @@ pub fn paperpaw_graphics::Canvas<'a>::clear(&mut self, paperpaw_platform::pixel:
 pub fn paperpaw_graphics::Canvas<'a>::clip(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_graphics::Canvas<'a>::clipped(&mut self, paperpaw_platform::geometry::Rect) -> paperpaw_graphics::Canvas<'_>
 pub fn paperpaw_graphics::Canvas<'a>::describe(&mut self, paperpaw_graphics::Role, &str, paperpaw_platform::geometry::Rect, bool, core::option::Option<bool>)
-pub fn paperpaw_graphics::Canvas<'a>::describing(self, &'a mut alloc::vec::Vec<paperpaw_graphics::Described>) -> Self
 pub fn paperpaw_graphics::Canvas<'a>::draw_gray_alpha_row(&mut self, i32, i32, &[u8], u8)
 pub fn paperpaw_graphics::Canvas<'a>::draw_gray_row(&mut self, i32, i32, &[u8])
 pub fn paperpaw_graphics::Canvas<'a>::draw_hand(&mut self, paperpaw_platform::geometry::Point, i32, u32, u32, u32, paperpaw_platform::pixel::Color)
@@ -56,21 +55,16 @@ pub fn paperpaw_graphics::Canvas<'a>::fill_round_rect(&mut self, i32, i32, u32, 
 pub fn paperpaw_graphics::Canvas<'a>::fill_round_shaded(&mut self, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::fill_shaded(&mut self, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::fill_tint(&mut self, paperpaw_platform::geometry::Rect, paperpaw_platform::pixel::Color)
-pub fn paperpaw_graphics::Canvas<'a>::is_blind(&self) -> bool
 pub fn paperpaw_graphics::Canvas<'a>::is_describing(&self) -> bool
-pub fn paperpaw_graphics::Canvas<'a>::keep_diffusion(&mut self, u64, i32, paperpaw_graphics::diffuse::Atkinson)
-pub fn paperpaw_graphics::Canvas<'a>::note_picture(&mut self, paperpaw_platform::geometry::Rect)
 pub fn paperpaw_graphics::Canvas<'a>::offset(self, i32, i32) -> Self
 pub fn paperpaw_graphics::Canvas<'a>::origin(&self) -> paperpaw_platform::geometry::Point
 pub fn paperpaw_graphics::Canvas<'a>::picture_levels(&self) -> core::option::Option<u8>
 pub fn paperpaw_graphics::Canvas<'a>::set_pixel(&mut self, paperpaw_platform::geometry::Point, paperpaw_platform::pixel::Color)
-pub fn paperpaw_graphics::Canvas<'a>::small_pictures(&mut self, impl core::ops::function::FnOnce(&mut paperpaw_graphics::Canvas<'_>))
 pub fn paperpaw_graphics::Canvas<'a>::stroke(&mut self, paperpaw_platform::geometry::Rect, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::stroke_circle(&mut self, paperpaw_platform::geometry::Point, u32, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::stroke_rect(&mut self, i32, i32, u32, u32, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::stroke_round(&mut self, paperpaw_platform::geometry::Rect, u32, u32, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::stroke_round_rect(&mut self, i32, i32, u32, u32, u32, u32, paperpaw_platform::pixel::Color)
-pub fn paperpaw_graphics::Canvas<'a>::take_diffusion(&mut self, u64, i32) -> core::option::Option<paperpaw_graphics::diffuse::Atkinson>
 pub fn paperpaw_graphics::Canvas<'a>::wash(&mut self, paperpaw_platform::geometry::Rect)
 pub struct paperpaw_graphics::Described
 pub paperpaw_graphics::Described::area: paperpaw_platform::geometry::Rect
