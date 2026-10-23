@@ -53,11 +53,21 @@ fn fixture(name: &str) -> PathBuf {
 fn a_plugin_wrong_everywhere_is_caught() {
     let report = run(&context("broken", &[fixture("broken-theme")]));
     let text = report.text(Level::Info);
-    // As files.
+    // As files: a font pack in fonts/ is taken, but this one does not
+    // load on the device.
+    assert!(
+        !has(
+            &report,
+            "package.website",
+            "fonts/cyrillic.ppfp",
+            Level::Error
+        ),
+        "{text}"
+    );
     assert!(
         has(
             &report,
-            "package.website",
+            "package.device",
             "fonts/cyrillic.ppfp",
             Level::Error
         ),

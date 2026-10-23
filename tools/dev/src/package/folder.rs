@@ -25,8 +25,11 @@ use crate::target::DataPlugin;
 pub const MAX_DATA_FILE: u64 = 64 * 1024;
 /// Largest `plugin.ini` the kernel reads.
 pub const MAX_MANIFEST: u64 = 4 * 1024;
-/// The kinds of files the plugin library takes in a package.
-pub const WEBSITE_KINDS: [&str; 8] = ["ini", "css", "ttf", "otf", "ttc", "txt", "md", "png"];
+/// The kinds of files the plugin library takes in a package; font packs
+/// (`ppfp`) only in `fonts/`, as the kernel reads them.
+pub const WEBSITE_KINDS: [&str; 9] = [
+    "ini", "css", "ttf", "otf", "ttc", "ppfp", "txt", "md", "png",
+];
 /// The most a package may hold unpacked, at the plugin library.
 pub const WEBSITE_MAX_CONTENT: u64 = 40 * 1024 * 1024;
 /// The longest id the plugin library takes.
@@ -681,18 +684,20 @@ fn files_and_kinds(plugin: &DataPlugin, folder: &Folder, add: &mut dyn FnMut(Fin
         }
         let ext = extension(path);
         if !WEBSITE_KINDS.contains(&ext.as_str()) {
-            let message = if ext == "ppfp" {
-                format!(
-                    "The plugin library at paperpaw.org takes no font packs (.ppfp) in a plugin, only {} files; a font's packs come from its font catalogue.",
-                    WEBSITE_KINDS.join(", ")
-                )
-            } else {
+            add(Finding::error(
+                "package.website",
+                path,
                 format!(
                     "The plugin library at paperpaw.org takes only {} files in a data plugin.",
                     WEBSITE_KINDS.join(", ")
-                )
-            };
-            add(Finding::error("package.website", path, message));
+                ),
+            ));
+        } else if ext == "ppfp" && !path.starts_with("fonts/") {
+            add(Finding::error(
+                "package.website",
+                path,
+                "Font packs (.ppfp) belong in fonts/, where the kernel reads them.",
+            ));
         }
         if is_test(path) {
             add(Finding::warning(
@@ -1113,6 +1118,7 @@ mod tests {
                 (".DS_Store", b""),
                 ("run.exe", b"MZ"),
                 ("fonts/a.ppfp", b"PPFP"),
+                ("loose.ppfp", b"PPFP"),
                 ("fonts/b.ttf", b"nope"),
                 ("style.css", b"p {}"),
                 ("i18n/de.ini", b"[messages]\nx = y\n"),
@@ -1131,7 +1137,9 @@ mod tests {
         assert!(has("package.manifest", "plugin.ini:5", Level::Warning));
         assert!(has("package.files", ".DS_Store", Level::Error));
         assert!(has("package.website", "run.exe", Level::Error));
-        assert!(has("package.website", "fonts/a.ppfp", Level::Error));
+        // A font pack is taken in fonts/, not elsewhere.
+        assert!(!has("package.website", "fonts/a.ppfp", Level::Error));
+        assert!(has("package.website", "loose.ppfp", Level::Error));
         assert!(has("package.files", "fonts/a.ppfp", Level::Warning));
         assert!(has("package.fonts", "fonts/b.ttf", Level::Error));
         assert!(has("package.files", "style.css", Level::Warning));

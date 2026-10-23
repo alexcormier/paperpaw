@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- `paperpaw-dev` takes font packs (`.ppfp`) in a data plugin's `fonts/`,
+  where the kernel reads them, and names one elsewhere. It no longer
+  checks the X4 Classic by default, and `--list-profiles` says it is not
+  supported yet. A release no longer lists the X4 Classic's firmware:
+  it is built, but not yet tried on one.
 - Your data is safer: an audit of everything PaperPaw keeps found ways
   it could lose notes, places, statistics, cards or passwords, and they
   are closed, each with a test.
