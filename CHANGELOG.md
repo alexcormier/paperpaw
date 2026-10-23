@@ -6,6 +6,17 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The web emulator's release asset (`paperpaw-web-<version>.zip`) is
+  signed as the emulators are, and holds everything its pages load. Its
+  frame loads no inline style or script, so it runs under a strict
+  Content-Security-Policy from any path, as paperpaw.org's "Try it out"
+  serves it (docs/web-emulator.md says what a server needs). The frame
+  has no background of its own.
+- The emulators' device profiles say where each physical key sits on
+  the device's body and which computer keys press it (`body` in
+  `paperpaw-emu --registry` and in the web emulator's device). The web
+  emulator's frame draws the body with the keys there, for the mouse,
+  touch and the keyboard, in the embedding page's colours (`look`).
 ### 0.5.0-beta.1 (draft)
 
 This is a beta, for testers and developers. It is the first release of

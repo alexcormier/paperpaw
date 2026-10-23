@@ -31,6 +31,217 @@ const X4_BUTTONS: [&str; 7] = [
     buttons::POWER,
 ];
 
+/// The device's body as emulators draw it around the screen, with its
+/// physical keys where they sit (the web emulator's frame, the plugin
+/// workshop; docs/web-emulator.md describes it as they get it).
+#[derive(Debug, Clone, Copy)]
+pub struct Body {
+    /// The bezel around the screen, top, right, bottom and left, in
+    /// hundredths of the screen's width.
+    pub bezel: [u8; 4],
+    /// The keys on the body.
+    pub keys: &'static [Key],
+}
+
+/// A physical key on a device's body.
+#[derive(Debug, Clone, Copy)]
+pub struct Key {
+    /// The button it is (one of the profile's `buttons`).
+    pub button: &'static str,
+    /// Where on the body it sits.
+    pub place: Place,
+    /// Its middle along that place, in hundredths of the body's length
+    /// there: from the left on the top, the bottom and the face below the
+    /// screen; from the top on the sides and the face beside the screen.
+    pub at: u8,
+    /// Its length along that place, in hundredths of the same.
+    pub length: u8,
+    /// The computer's keys that press it, as browsers name them
+    /// (`KeyboardEvent.key`).
+    pub keys: &'static [&'static str],
+}
+
+/// Where on a device's body a key sits.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Place {
+    /// On an edge of the body, out of its side.
+    Top,
+    Right,
+    Bottom,
+    Left,
+    /// On the face, in the bezel below the screen.
+    Below,
+    /// On the face, in the bezel right of the screen.
+    Beside,
+}
+
+impl Place {
+    /// Its name in the data emulators get.
+    pub fn name(self) -> &'static str {
+        match self {
+            Self::Top => "top",
+            Self::Right => "right",
+            Self::Bottom => "bottom",
+            Self::Left => "left",
+            Self::Below => "below",
+            Self::Beside => "beside",
+        }
+    }
+}
+
+impl Body {
+    /// A body of even bezels with no key drawn on it.
+    pub const PLAIN: Self = Self {
+        bezel: [6, 6, 6, 6],
+        keys: &[],
+    };
+
+    /// As JSON, as emulators get it (docs/web-emulator.md): `{"bezel":
+    /// [top, right, bottom, left], "keys": [{"button", "place", "at",
+    /// "length", "keys"}]}`.
+    pub fn json(&self) -> String {
+        use paperpaw_core::sdk::json::string;
+        let keys: Vec<String> = self
+            .keys
+            .iter()
+            .map(|key| {
+                let pressed: Vec<String> = key.keys.iter().map(|k| string(k)).collect();
+                format!(
+                    "{{\"button\":{},\"place\":{},\"at\":{},\"length\":{},\"keys\":[{}]}}",
+                    string(key.button),
+                    string(key.place.name()),
+                    key.at,
+                    key.length,
+                    pressed.join(","),
+                )
+            })
+            .collect();
+        let [top, right, bottom, left] = self.bezel;
+        format!(
+            "{{\"bezel\":[{top},{right},{bottom},{left}],\"keys\":[{}]}}",
+            keys.join(",")
+        )
+    }
+}
+
+/// The X4 and the X4 Classic: the four front keys in two rockers below
+/// the screen (back and select, left and right), a rocker on the right
+/// edge (page back above page forward) and the power key above it, near
+/// the top (as reviews and the device show them).
+const X4_BODY: Body = Body {
+    bezel: [7, 7, 30, 7],
+    keys: &[
+        Key {
+            button: buttons::BACK,
+            place: Place::Below,
+            at: 19,
+            length: 17,
+            keys: &["Escape", "Backspace"],
+        },
+        Key {
+            button: buttons::CONFIRM,
+            place: Place::Below,
+            at: 37,
+            length: 17,
+            keys: &["Enter"],
+        },
+        Key {
+            button: buttons::LEFT,
+            place: Place::Below,
+            at: 63,
+            length: 17,
+            keys: &["ArrowLeft"],
+        },
+        Key {
+            button: buttons::RIGHT,
+            place: Place::Below,
+            at: 81,
+            length: 17,
+            keys: &["ArrowRight"],
+        },
+        Key {
+            button: buttons::POWER,
+            place: Place::Right,
+            at: 14,
+            length: 8,
+            keys: &["p"],
+        },
+        Key {
+            button: buttons::PAGE_BACK,
+            place: Place::Right,
+            at: 36,
+            length: 13,
+            keys: &["PageUp", "ArrowUp"],
+        },
+        Key {
+            button: buttons::PAGE_FORWARD,
+            place: Place::Right,
+            at: 50,
+            length: 13,
+            keys: &["PageDown", "ArrowDown", " "],
+        },
+    ],
+};
+
+/// The X4 Pro: a page key on each edge (back on the left, forward on the
+/// right, as the X3's), the power key on the top edge and home touched
+/// below the screen.
+const X4_PRO_BODY: Body = Body {
+    bezel: [7, 7, 16, 7],
+    keys: &[
+        Key {
+            button: buttons::PAGE_BACK,
+            place: Place::Left,
+            at: 45,
+            length: 14,
+            keys: &["PageUp", "ArrowLeft", "ArrowUp"],
+        },
+        Key {
+            button: buttons::PAGE_FORWARD,
+            place: Place::Right,
+            at: 45,
+            length: 14,
+            keys: &["PageDown", "ArrowRight", "ArrowDown", " "],
+        },
+        Key {
+            button: buttons::POWER,
+            place: Place::Top,
+            at: 78,
+            length: 14,
+            keys: &["p"],
+        },
+        Key {
+            button: buttons::HOME,
+            place: Place::Below,
+            at: 50,
+            length: 22,
+            keys: &["h", "Escape"],
+        },
+    ],
+};
+
+/// The Boox Go 7: its page keys on the wide bezel beside the screen;
+/// back is Android's (a gesture) and so is its power key, not drawn.
+const BOOX_GO_7_BODY: Body = Body {
+    bezel: [5, 16, 5, 5],
+    keys: &[
+        Key {
+            button: buttons::PAGE_BACK,
+            place: Place::Beside,
+            at: 43,
+            length: 12,
+            keys: &["PageUp", "ArrowLeft", "ArrowUp"],
+        },
+        Key {
+            button: buttons::PAGE_FORWARD,
+            place: Place::Beside,
+            at: 57,
+            length: 12,
+            keys: &["PageDown", "ArrowRight", "ArrowDown", " "],
+        },
+    ],
+};
+
 /// The firmware's setting defaults (the X4, X4 Pro and X4 Classic).
 const X4_SETTINGS: [(&str, &str); 10] = [
     // A 4.3" screen: smaller text, so menus and pages hold enough.
@@ -110,6 +321,8 @@ pub struct Profile {
     pub button_row: &'static [&'static str],
     /// The device's front light, if it has one.
     pub light: Option<Light>,
+    /// Its body and keys, as emulators draw it.
+    pub body: Body,
     /// One-line description for `--list-profiles`.
     pub summary: &'static str,
 }
@@ -160,6 +373,7 @@ pub const PROFILES: &[Profile] = &[
         sleep: true,
         button_row: &X4_ROW,
         light: None,
+        body: X4_BODY,
         summary: "ESP32-C3, 4.3\" 800x480, buttons only, 256 KiB heap budget",
     },
     Profile {
@@ -211,6 +425,7 @@ pub const PROFILES: &[Profile] = &[
             percent: true,
             warmth: Some(5),
         }),
+        body: X4_PRO_BODY,
         summary: "ESP32-S3 with 8 MB PSRAM, 4.3\" 800x480, touch + buttons, 10 MiB heap budget",
     },
     Profile {
@@ -249,6 +464,7 @@ pub const PROFILES: &[Profile] = &[
         sleep: true,
         button_row: &X4_ROW,
         light: None,
+        body: X4_BODY,
         summary: "not supported yet: ESP32-S3 with 8 MB PSRAM, 4.3\" 800x480, buttons only, 10 MiB heap budget",
     },
     Profile {
@@ -295,6 +511,7 @@ pub const PROFILES: &[Profile] = &[
             percent: false,
             warmth: Some(1),
         }),
+        body: BOOX_GO_7_BODY,
         summary: "Android, 7\" Carta 1300 1264x1680, touch + page buttons",
     },
     Profile {
@@ -335,6 +552,7 @@ pub const PROFILES: &[Profile] = &[
         sleep: true,
         button_row: &[],
         light: None,
+        body: Body::PLAIN,
         summary: "Linux, 7\" Kaleido 3 colour 1264x1680, touch + page buttons",
     },
     Profile {
@@ -372,6 +590,7 @@ pub const PROFILES: &[Profile] = &[
         sleep: true,
         button_row: &[],
         light: None,
+        body: Body::PLAIN,
         summary: "Linux, 6.8\" 1236x1648, touch only",
     },
     Profile {
@@ -409,6 +628,7 @@ pub const PROFILES: &[Profile] = &[
         sleep: true,
         button_row: &[],
         light: None,
+        body: Body::PLAIN,
         summary: "Linux, 6\" 1072x1448, touch only",
     },
     Profile {
@@ -447,10 +667,63 @@ pub const PROFILES: &[Profile] = &[
         sleep: true,
         button_row: &[],
         light: None,
+        body: Body::PLAIN,
         summary: "Generic 6\" 600x800, only page buttons (also: Bluetooth page turners)",
     },
 ];
 
 pub fn find(id: &str) -> Option<&'static Profile> {
     PROFILES.iter().find(|p| p.device.id == id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Each key drawn is a button the device has, lies on its body, and
+    /// no computer key presses two of them.
+    #[test]
+    fn the_keys_on_a_body_are_the_device_s() {
+        for profile in PROFILES {
+            let id = profile.device.id;
+            let mut taken = Vec::new();
+            for key in profile.body.keys {
+                assert!(
+                    profile.buttons.contains(&key.button),
+                    "{id}: {}",
+                    key.button
+                );
+                let half = key.length / 2;
+                assert!(
+                    key.at >= half && key.at + half <= 100,
+                    "{id}: {}",
+                    key.button
+                );
+                for pressed in key.keys {
+                    assert!(!taken.contains(pressed), "{id}: {pressed} twice");
+                    taken.push(*pressed);
+                }
+            }
+        }
+        let x4 = find("xteink-x4").unwrap().body;
+        assert_eq!(x4.keys.len(), 7, "every key of the X4");
+        let pro = find("xteink-x4-pro").unwrap().body;
+        let side = |button| pro.keys.iter().find(|k| k.button == button).unwrap().place;
+        assert_eq!(side(buttons::PAGE_BACK), Place::Left);
+        assert_eq!(side(buttons::PAGE_FORWARD), Place::Right);
+    }
+
+    #[test]
+    fn a_body_is_given_as_json() {
+        let json = find("xteink-x4").unwrap().body.json();
+        assert!(
+            json.starts_with("{\"bezel\":[7,7,30,7],\"keys\":["),
+            "{json}"
+        );
+        assert!(
+            json.contains("{\"button\":\"page-back\",\"place\":\"right\",\"at\":36,\"length\":13,\"keys\":[\"PageUp\",\"ArrowUp\"]}"),
+            "{json}"
+        );
+        assert_eq!(Body::PLAIN.json(), "{\"bezel\":[6,6,6,6],\"keys\":[]}");
+    }
 }
