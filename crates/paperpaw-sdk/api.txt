@@ -1510,13 +1510,13 @@ pub const paperpaw_sdk::firmware::UPDATE_DIR: &str
 pub fn paperpaw_sdk::firmware::beta(&str) -> core::option::Option<(&str, &str)>
 pub fn paperpaw_sdk::firmware::compare_versions(&str, &str) -> core::cmp::Ordering
 pub mod paperpaw_sdk::help
-pub enum paperpaw_sdk::help::Input
+#[non_exhaustive] pub enum paperpaw_sdk::help::Input
 pub paperpaw_sdk::help::Input::Any
 pub paperpaw_sdk::help::Input::Buttons
 pub paperpaw_sdk::help::Input::Touch
 impl paperpaw_sdk::help::Input
 pub fn paperpaw_sdk::help::Input::fits(self, &paperpaw_sdk::Env<'_>) -> bool
-pub struct paperpaw_sdk::help::Hint
+#[non_exhaustive] pub struct paperpaw_sdk::help::Hint
 pub paperpaw_sdk::help::Hint::input: paperpaw_sdk::help::Input
 pub paperpaw_sdk::help::Hint::text: alloc::string::String
 pub paperpaw_sdk::help::Hint::zone: core::option::Option<paperpaw_sdk::help::Zone>
@@ -1527,7 +1527,7 @@ pub fn paperpaw_sdk::help::Hint::line(&self, &str) -> alloc::string::String
 pub fn paperpaw_sdk::help::Hint::parse(&str) -> core::option::Option<(&str, paperpaw_sdk::help::Hint)>
 pub fn paperpaw_sdk::help::Hint::touch(&str) -> Self
 pub fn paperpaw_sdk::help::Hint::zone(self, paperpaw_sdk::help::Zone) -> Self
-pub struct paperpaw_sdk::help::Zone
+#[non_exhaustive] pub struct paperpaw_sdk::help::Zone
 pub paperpaw_sdk::help::Zone::h: u16
 pub paperpaw_sdk::help::Zone::w: u16
 pub paperpaw_sdk::help::Zone::x: u16
@@ -2699,9 +2699,11 @@ pub fn paperpaw_sdk::replies::SocketNotice::socket(&self) -> &paperpaw_sdk::Id
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::SocketNotice
 pub fn paperpaw_sdk::replies::SocketNotice::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::SocketNotice::to_params(&self) -> paperpaw_sdk::Params
-pub struct paperpaw_sdk::replies::Chosen
+#[non_exhaustive] pub struct paperpaw_sdk::replies::Chosen
 pub paperpaw_sdk::replies::Chosen::context: paperpaw_sdk::Params
 pub paperpaw_sdk::replies::Chosen::path: alloc::string::String
+impl paperpaw_sdk::replies::Chosen
+pub fn paperpaw_sdk::replies::Chosen::new(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Params) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Chosen
 pub fn paperpaw_sdk::replies::Chosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Chosen::to_params(&self) -> paperpaw_sdk::Params
@@ -2713,7 +2715,7 @@ pub fn paperpaw_sdk::replies::Confirmed::new(bool, paperpaw_sdk::Params) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Confirmed
 pub fn paperpaw_sdk::replies::Confirmed::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Confirmed::to_params(&self) -> paperpaw_sdk::Params
-pub struct paperpaw_sdk::replies::HttpReply
+#[non_exhaustive] pub struct paperpaw_sdk::replies::HttpReply
 pub paperpaw_sdk::replies::HttpReply::body: alloc::string::String
 pub paperpaw_sdk::replies::HttpReply::content_type: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::replies::HttpReply::context: paperpaw_sdk::Params
@@ -2725,6 +2727,7 @@ pub paperpaw_sdk::replies::HttpReply::status: u16
 impl paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::failed(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Params) -> Self
 pub fn paperpaw_sdk::replies::HttpReply::header(&self, &str) -> core::option::Option<&str>
+pub fn paperpaw_sdk::replies::HttpReply::new(u16, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::replies::HttpReply::ok(&self) -> bool
 pub fn paperpaw_sdk::replies::HttpReply::refused(paperpaw_sdk::work::Refusal, paperpaw_sdk::Params) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpReply
@@ -4474,7 +4477,7 @@ pub const paperpaw_sdk::work::params::REFUSED: &str
 pub const paperpaw_sdk::work::params::RETRY: &str
 pub const paperpaw_sdk::work::params::WHY: &str
 pub const paperpaw_sdk::work::params::WORK: &str
-pub enum paperpaw_sdk::work::Importance
+#[non_exhaustive] pub enum paperpaw_sdk::work::Importance
 pub paperpaw_sdk::work::Importance::Expected
 pub paperpaw_sdk::work::Importance::Optional
 #[non_exhaustive] pub enum paperpaw_sdk::work::Reason
@@ -4489,26 +4492,26 @@ pub paperpaw_sdk::work::Reason::TooOften
 impl paperpaw_sdk::work::Reason
 pub fn paperpaw_sdk::work::Reason::as_str(self) -> &'static str
 pub fn paperpaw_sdk::work::Reason::parse(&str) -> core::option::Option<paperpaw_sdk::work::Reason>
-pub enum paperpaw_sdk::work::Retry
+#[non_exhaustive] pub enum paperpaw_sdk::work::Retry
 pub paperpaw_sdk::work::Retry::After(paperpaw_platform::input::Instant)
 pub paperpaw_sdk::work::Retry::At(paperpaw_sdk::work::Moments)
 pub paperpaw_sdk::work::Retry::Never
 pub paperpaw_sdk::work::Retry::WhenAllowed
-pub enum paperpaw_sdk::work::Step
+#[non_exhaustive] pub enum paperpaw_sdk::work::Step
 pub paperpaw_sdk::work::Step::Continue
 pub paperpaw_sdk::work::Step::Done
 pub paperpaw_sdk::work::Step::Failed(alloc::string::String)
 pub paperpaw_sdk::work::Step::Progress(paperpaw_sdk::work::Progress)
 pub paperpaw_sdk::work::Step::Wait(paperpaw_platform::input::Instant)
 pub paperpaw_sdk::work::Step::WaitFor(paperpaw_sdk::Id)
-pub enum paperpaw_sdk::work::Why
+#[non_exhaustive] pub enum paperpaw_sdk::work::Why
 pub paperpaw_sdk::work::Why::Deadline
 pub paperpaw_sdk::work::Why::Moment(paperpaw_sdk::work::Moments)
 pub paperpaw_sdk::work::Why::Time
 impl paperpaw_sdk::work::Why
 pub fn paperpaw_sdk::work::Why::read(&paperpaw_sdk::Params) -> core::option::Option<paperpaw_sdk::work::Why>
 pub fn paperpaw_sdk::work::Why::write(self, &mut paperpaw_sdk::Params)
-pub enum paperpaw_sdk::work::WorkState
+#[non_exhaustive] pub enum paperpaw_sdk::work::WorkState
 pub paperpaw_sdk::work::WorkState::Held(paperpaw_sdk::work::Refusal)
 pub paperpaw_sdk::work::WorkState::Running
 pub paperpaw_sdk::work::WorkState::Running::progress: core::option::Option<paperpaw_sdk::work::Progress>
@@ -4535,15 +4538,17 @@ pub fn paperpaw_sdk::work::Moments::parse(&str) -> paperpaw_sdk::work::Moments
 impl core::ops::bit::BitOr for paperpaw_sdk::work::Moments
 pub type paperpaw_sdk::work::Moments::Output = paperpaw_sdk::work::Moments
 pub fn paperpaw_sdk::work::Moments::bitor(self, paperpaw_sdk::work::Moments) -> paperpaw_sdk::work::Moments
-pub struct paperpaw_sdk::work::Note
+#[non_exhaustive] pub struct paperpaw_sdk::work::Note
 pub paperpaw_sdk::work::Note::at: paperpaw_platform::input::Instant
 pub paperpaw_sdk::work::Note::text: alloc::string::String
+impl paperpaw_sdk::work::Note
+pub fn paperpaw_sdk::work::Note::new(paperpaw_platform::input::Instant, impl core::convert::Into<alloc::string::String>) -> Self
 pub struct paperpaw_sdk::work::Progress
 pub paperpaw_sdk::work::Progress::done: u32
 pub paperpaw_sdk::work::Progress::of: u32
 impl paperpaw_sdk::work::Progress
 pub fn paperpaw_sdk::work::Progress::percent(self) -> u8
-pub struct paperpaw_sdk::work::Refusal
+#[non_exhaustive] pub struct paperpaw_sdk::work::Refusal
 pub paperpaw_sdk::work::Refusal::reason: paperpaw_sdk::work::Reason
 pub paperpaw_sdk::work::Refusal::retry: paperpaw_sdk::work::Retry
 impl paperpaw_sdk::work::Refusal
@@ -4577,9 +4582,11 @@ pub fn paperpaw_sdk::work::Work::retry(self, u32, u8) -> Self
 pub fn paperpaw_sdk::work::Work::when_cheap(impl core::convert::Into<paperpaw_sdk::Id>, core::time::Duration) -> Self
 pub fn paperpaw_sdk::work::Work::with(self, paperpaw_sdk::Params) -> Self
 pub fn paperpaw_sdk::work::Work::within(self, core::time::Duration) -> Self
-pub struct paperpaw_sdk::work::WorkRefused
+#[non_exhaustive] pub struct paperpaw_sdk::work::WorkRefused
 pub paperpaw_sdk::work::WorkRefused::refusal: paperpaw_sdk::work::Refusal
 pub paperpaw_sdk::work::WorkRefused::work: paperpaw_sdk::Id
+impl paperpaw_sdk::work::WorkRefused
+pub fn paperpaw_sdk::work::WorkRefused::new(paperpaw_sdk::Id, paperpaw_sdk::work::Refusal) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::work::WorkRefused
 pub fn paperpaw_sdk::work::WorkRefused::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::work::WorkRefused::to_params(&self) -> paperpaw_sdk::Params
@@ -4855,7 +4862,7 @@ pub paperpaw_sdk::GestureKind::Pinch::out: bool
 pub paperpaw_sdk::GestureKind::Swipe(paperpaw_sdk::Direction)
 pub paperpaw_sdk::GestureKind::Tap
 pub paperpaw_sdk::GestureKind::TwoFingerTap
-#[non_exhaustive] pub enum paperpaw_sdk::Handled
+pub enum paperpaw_sdk::Handled
 pub paperpaw_sdk::Handled::No
 pub paperpaw_sdk::Handled::Yes
 #[non_exhaustive] pub enum paperpaw_sdk::Hint
@@ -5005,7 +5012,7 @@ pub fn paperpaw_sdk::replies::SocketNotice::socket(&self) -> &paperpaw_sdk::Id
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::SocketNotice
 pub fn paperpaw_sdk::replies::SocketNotice::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::SocketNotice::to_params(&self) -> paperpaw_sdk::Params
-pub enum paperpaw_sdk::SocketRead
+#[non_exhaustive] pub enum paperpaw_sdk::SocketRead
 pub paperpaw_sdk::SocketRead::File
 pub paperpaw_sdk::SocketRead::File::len: u64
 pub paperpaw_sdk::SocketRead::File::path: alloc::string::String
@@ -5076,9 +5083,11 @@ pub paperpaw_sdk::Capabilities::speech: bool
 pub paperpaw_sdk::Capabilities::system_clipboard: bool
 pub paperpaw_sdk::Capabilities::touch: bool
 pub paperpaw_sdk::Capabilities::wifi: bool
-pub struct paperpaw_sdk::Chosen
+#[non_exhaustive] pub struct paperpaw_sdk::Chosen
 pub paperpaw_sdk::Chosen::context: paperpaw_sdk::Params
 pub paperpaw_sdk::Chosen::path: alloc::string::String
+impl paperpaw_sdk::replies::Chosen
+pub fn paperpaw_sdk::replies::Chosen::new(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Params) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::Chosen
 pub fn paperpaw_sdk::replies::Chosen::from_params(&paperpaw_sdk::Params) -> core::option::Option<Self>
 pub fn paperpaw_sdk::replies::Chosen::to_params(&self) -> paperpaw_sdk::Params
@@ -5289,7 +5298,7 @@ pub fn paperpaw_sdk::Gesture::new(paperpaw_sdk::GestureKind, paperpaw_platform::
 pub paperpaw_sdk::HttpOptions::max_body: core::option::Option<usize>
 pub paperpaw_sdk::HttpOptions::timeout: core::option::Option<core::time::Duration>
 pub paperpaw_sdk::HttpOptions::want_headers: alloc::vec::Vec<alloc::string::String>
-pub struct paperpaw_sdk::HttpReply
+#[non_exhaustive] pub struct paperpaw_sdk::HttpReply
 pub paperpaw_sdk::HttpReply::body: alloc::string::String
 pub paperpaw_sdk::HttpReply::content_type: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::HttpReply::context: paperpaw_sdk::Params
@@ -5301,6 +5310,7 @@ pub paperpaw_sdk::HttpReply::status: u16
 impl paperpaw_sdk::replies::HttpReply
 pub fn paperpaw_sdk::replies::HttpReply::failed(impl core::convert::Into<alloc::string::String>, paperpaw_sdk::Params) -> Self
 pub fn paperpaw_sdk::replies::HttpReply::header(&self, &str) -> core::option::Option<&str>
+pub fn paperpaw_sdk::replies::HttpReply::new(u16, impl core::convert::Into<alloc::string::String>) -> Self
 pub fn paperpaw_sdk::replies::HttpReply::ok(&self) -> bool
 pub fn paperpaw_sdk::replies::HttpReply::refused(paperpaw_sdk::work::Refusal, paperpaw_sdk::Params) -> Self
 impl paperpaw_sdk::event::EventData for paperpaw_sdk::replies::HttpReply
@@ -5434,7 +5444,7 @@ impl paperpaw_sdk::MenuEntry
 pub fn paperpaw_sdk::MenuEntry::new(paperpaw_sdk::Id, paperpaw_sdk::Id) -> Self
 pub fn paperpaw_sdk::MenuEntry::order(self, i16) -> Self
 pub fn paperpaw_sdk::MenuEntry::place(self, paperpaw_sdk::MenuPlace) -> Self
-pub struct paperpaw_sdk::MenuItem<'a>
+#[non_exhaustive] pub struct paperpaw_sdk::MenuItem<'a>
 pub paperpaw_sdk::MenuItem::icon: core::option::Option<&'a str>
 pub paperpaw_sdk::MenuItem::id: &'a paperpaw_sdk::Id
 pub paperpaw_sdk::MenuItem::section: bool
@@ -5642,7 +5652,7 @@ pub fn paperpaw_sdk::ScreenSpec::new(paperpaw_sdk::Id, impl core::convert::Into<
 pub fn paperpaw_sdk::ScreenSpec::refresh_on_open(self, paperpaw_platform::display::RefreshMode) -> Self
 impl core::fmt::Debug for paperpaw_sdk::ScreenSpec
 pub fn paperpaw_sdk::ScreenSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
-pub struct paperpaw_sdk::ServerResponse
+#[non_exhaustive] pub struct paperpaw_sdk::ServerResponse
 pub paperpaw_sdk::ServerResponse::body: alloc::vec::Vec<u8>
 pub paperpaw_sdk::ServerResponse::body_from: core::option::Option<alloc::string::String>
 pub paperpaw_sdk::ServerResponse::content_type: alloc::string::String

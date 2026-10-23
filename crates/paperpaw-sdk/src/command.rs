@@ -143,6 +143,7 @@ impl HttpRequest {
 /// The answer to a request a plugin's server received (see
 /// [`Command::Serve`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub struct ServerResponse {
     /// The request's number ([`server_params::REQUEST`]).
     pub request: u32,
@@ -190,6 +191,7 @@ pub mod server_params {
 
 /// What a socket is to read next (see [`Command::SocketRead`]).
 #[derive(Debug, Clone, PartialEq, Eq)]
+#[non_exhaustive]
 pub enum SocketRead {
     /// What has come, up to `max` bytes, as text (UTF-8; invalid bytes
     /// replaced): the event [`socket_params::RECEIVED`] with it.

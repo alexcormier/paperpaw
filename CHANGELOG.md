@@ -409,6 +409,13 @@ file to your report.
   (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
   in place of five arguments; parts (`Described`, `semantics::Part`)
   tell whether they are disabled.
+- SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
+  and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
+  `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,
+  `Refusal`, `WorkRefused` and `Note` (with `new`), `Step` and
+  `Importance`. A match on them needs an arm for what comes later.
+  `Handled` is exhaustive: an event is handled or not, and a plugin
+  matches both.
 - SDK: `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).

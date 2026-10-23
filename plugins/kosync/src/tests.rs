@@ -323,16 +323,9 @@ impl Harness {
 
     /// The server answers `request` with `status` and `body`.
     fn answer(&self, request: &HttpRequest, status: u16, body: &str) -> Vec<Command> {
-        let reply = HttpReply {
-            status,
-            body: body.to_string(),
-            etag: None,
-            content_type: Some("application/json".to_string()),
-            final_url: None,
-            context: request.params.clone(),
-            refused: None,
-            headers: Vec::new(),
-        };
+        let mut reply = HttpReply::new(status, body);
+        reply.content_type = Some("application/json".to_string());
+        reply.context = request.params.clone();
         self.dispatch(&request.reply, &reply.to_params())
     }
 
