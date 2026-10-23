@@ -96,7 +96,8 @@ fn summary(env: &Env<'_>, reply: &HttpReply) -> Result<(Option<String>, String),
     let why = |key: &str| env.i18n.tr(key).to_string();
     match reply.status {
         200..=299 => {
-            let members = json::object(&reply.body);
+            let text = reply.text();
+            let members = json::object(&text);
             match json::text(&members, "extract").filter(|t| !t.trim().is_empty()) {
                 Some(extract) => Ok((
                     json::text(&members, "title").map(|t| t.to_string()),

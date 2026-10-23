@@ -28,6 +28,7 @@ use std::cell::RefCell;
 use std::collections::VecDeque;
 use std::rc::Rc;
 
+use paperpaw_core::sdk::HttpError;
 use paperpaw_core::{HttpCall, HttpResponse};
 use paperpaw_dev::report::json_string;
 use paperpaw_emulator::http::Route;
@@ -263,8 +264,15 @@ impl Network {
             .map(|(name, value)| (name.trim().to_string(), value.trim().to_string()))
             .collect();
         let from = (!url.is_empty()).then_some(url);
-        self.later
-            .push_back(response(&call, status, &headers, Cow::Owned(body), from));
+        let answer = if status == 0 {
+            // The page could not fetch it: no network, or the address
+            // refused the page (its CORS).
+            let reason = String::from_utf8_lossy(&body);
+            HttpResponse::failed(call.id, HttpError::Refused, &reason)
+        } else {
+            response(&call, status, &headers, Cow::Owned(body), from)
+        };
+        self.later.push_back(answer);
         true
     }
 
@@ -302,7 +310,7 @@ impl Network {
                 let timeout = u64::from(call.timeout_ms);
                 if delay > timeout {
                     let reason = "timed out (the recorded answer takes longer)";
-                    (Some(HttpResponse::failed(call.id, reason)), timeout)
+                    (Some(HttpResponse::failed(call.id, HttpError::Timeout, reason)), timeout)
                 } else {
                     let from = (url != call.url).then_some(url.as_str());
                     let body = Cow::Borrowed(&*fixture.body);
@@ -320,7 +328,7 @@ impl Network {
                     "no recorded answer for {} {url} (no network in the browser's emulator)",
                     call.method
                 );
-                (Some(HttpResponse::failed(call.id, &reason)), 0)
+                (Some(HttpResponse::failed(call.id, HttpError::NoNetwork, &reason)), 0)
             }
         };
         self.seen.push(seen);
@@ -347,8 +355,10 @@ fn response(
     from: Option<&str>,
 ) -> HttpResponse {
     if body.len() > call.max_response && call.save_to.is_some() {
-        return HttpResponse::failed(call.id, "the answer is larger than the request takes");
+        let reason = "the answer is larger than the request takes";
+        return HttpResponse::failed(call.id, HttpError::Refused, reason);
     }
+    let truncated = body.len() > call.max_response;
     let body = match body {
         Cow::Borrowed(bytes) => bytes[..bytes.len().min(call.max_response)].to_vec(),
         Cow::Owned(mut bytes) => {
@@ -369,6 +379,7 @@ fn response(
             .iter()
             .filter_map(|name| Some((name.to_ascii_lowercase(), text(name)?)))
             .collect(),
+        truncated,
         ..HttpResponse::default()
     }
 }

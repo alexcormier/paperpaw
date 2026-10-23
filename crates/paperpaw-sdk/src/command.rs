@@ -242,6 +242,11 @@ pub mod http_params {
     /// Before a header's name in lower case, for the headers asked for
     /// ([`HttpOptions::want_headers`](crate::HttpOptions::want_headers)), e.g. `header:last-modified`.
     pub const HEADER: &str = "header:";
+    /// Why there was no answer, as [`HttpError::as_str`](crate::HttpError::as_str)
+    /// writes it.
+    pub const ERROR: &str = "error";
+    /// `true` where the body was cut to the most the request takes.
+    pub const TRUNCATED: &str = "truncated";
 }
 
 /// Text to speak aloud (see [`Command::Speak`]).

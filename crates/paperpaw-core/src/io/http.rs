@@ -9,7 +9,7 @@ use alloc::vec::Vec;
 
 use paperpaw_platform::{Storage, StorageError};
 use paperpaw_sdk::event::EventData;
-use paperpaw_sdk::{Command, HttpOptions, HttpReply, HttpRequest, Id, Params, http_params};
+use paperpaw_sdk::{Command, HttpError, HttpOptions, HttpReply, HttpRequest, Id, Params};
 
 /// Longest response body passed on to plugins.
 pub const MAX_RESPONSE: usize = 1 << 20;
@@ -84,7 +84,8 @@ impl HttpCall {
 }
 
 /// What came back. `status` 0 means the request failed (no network, no
-/// such host, timeout); `body` then holds a short reason.
+/// such host, timeout): `error` says why, where the shell knows, and
+/// `body` holds a short reason.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct HttpResponse {
     pub id: u32,
@@ -102,15 +103,21 @@ pub struct HttpResponse {
     /// The headers asked for ([`HttpCall::want_headers`]) that the answer
     /// had, their names in lower case.
     pub headers: Vec<(String, String)>,
+    /// The body was cut to [`HttpCall::max_response`].
+    pub truncated: bool,
+    /// Why it failed (status 0).
+    pub error: Option<HttpError>,
 }
 
 impl HttpResponse {
-    /// The answer of a request that failed (status 0), and why.
-    pub fn failed(id: u32, reason: &str) -> Self {
+    /// The answer of a request that failed (status 0): `error`, and
+    /// `reason` to say more.
+    pub fn failed(id: u32, error: HttpError, reason: &str) -> Self {
         Self {
             id,
             status: 0,
             body: reason.as_bytes().to_vec(),
+            error: Some(error),
             ..Self::default()
         }
     }
@@ -177,7 +184,7 @@ impl Http {
         if !network {
             return reply(
                 request.reply,
-                HttpReply::failed("no network", request.params),
+                HttpReply::failed(HttpError::NoNetwork, "no network", request.params),
                 out,
             );
         }
@@ -185,7 +192,7 @@ impl Http {
         if let Some(path) = &request.body_from
             && let Err(e) = storage.size(path)
         {
-            let failed = HttpReply::failed(format!("{e}"), request.params);
+            let failed = HttpReply::failed(HttpError::Io, format!("{e}"), request.params);
             return reply(request.reply, failed, out);
         }
         // Two answers in one file (and in one partial file of the shell)
@@ -200,7 +207,8 @@ impl Http {
         {
             let older = self.awaiting.remove(at);
             self.calls.retain(|call| call.id != older.id);
-            let failed = HttpReply::failed("replaced by a newer request", older.context);
+            let reason = "replaced by a newer request";
+            let failed = HttpReply::failed(HttpError::Replaced, reason, older.context);
             reply(older.reply, failed, out);
         }
         let HttpOptions {
@@ -251,7 +259,8 @@ impl Http {
 
     /// Turns a request's answer into the plugin's event; a successful
     /// body for a file is written there. The body moves on without a copy
-    /// (it may be most of the memory left).
+    /// (it may be most of the memory left), to the plugin's handler too
+    /// (see [`EventData::into_params`]).
     pub fn answer(
         &mut self,
         response: HttpResponse,
@@ -263,35 +272,41 @@ impl Http {
         };
         let awaiting = self.awaiting.remove(at);
         let mut status = response.status;
-        let mut body = response.body;
+        let mut error = response.error;
+        let mut truncated = response.truncated;
         let body = match awaiting.save_to {
             // Answers that are files: written where asked.
             Some(path) if (200..300).contains(&status) => {
                 if response.saved {
-                    String::new()
-                } else if let Err(e) = storage.write(&path, &body) {
+                    Vec::new()
+                } else if let Err(e) = storage.write(&path, &response.body) {
                     status = 0;
-                    format!("{e}")
+                    error = Some(HttpError::Io);
+                    format!("{e}").into_bytes()
                 } else {
-                    String::new()
+                    Vec::new()
                 }
             }
             // A failure's reason, or an error's body (not the file).
             Some(_) => {
-                body.truncate(MAX_RESPONSE);
-                text(body)
+                let mut body = response.body;
+                if body.len() > MAX_RESPONSE {
+                    body.truncate(MAX_RESPONSE);
+                    truncated = true;
+                }
+                body
             }
-            None => text(body),
+            None => response.body,
         };
-        let mut answer = HttpReply::new(status, String::new());
+        let mut answer = HttpReply::new(status, body);
+        answer.truncated = truncated;
+        answer.error = error;
         answer.etag = response.etag;
         answer.content_type = response.content_type;
         answer.final_url = response.url;
         answer.context = awaiting.context;
         answer.headers = response.headers;
-        let mut params = answer.to_params();
-        params.set(http_params::BODY, body);
-        out.push(Command::Emit(awaiting.reply, params));
+        out.push(Command::Emit(awaiting.reply, answer.into_params()));
     }
 
     /// Takes back the requests whose reply is `reply`, each answered with
@@ -312,7 +327,7 @@ impl Http {
                 paperpaw_sdk::work::Retry::Never,
             );
             let answer = HttpReply::refused(refusal, awaiting.context);
-            out.push(Command::Emit(awaiting.reply, answer.to_params()));
+            out.push(Command::Emit(awaiting.reply, answer.into_params()));
         }
     }
 
@@ -344,18 +359,14 @@ impl Http {
     /// Fails the requests still waiting for the shell, for `reason`.
     pub fn fail_waiting(&mut self, reason: &str, storage: &dyn Storage, out: &mut Vec<Command>) {
         for call in self.take() {
-            self.answer(HttpResponse::failed(call.id, reason), storage, out);
+            let failed = HttpResponse::failed(call.id, HttpError::NoNetwork, reason);
+            self.answer(failed, storage, out);
         }
     }
 }
 
 fn reply(event: Id, answer: HttpReply, out: &mut Vec<Command>) {
-    out.push(Command::Emit(event, answer.to_params()));
-}
-
-/// `bytes` as text, in place where they are UTF-8.
-fn text(bytes: Vec<u8>) -> String {
-    String::from_utf8(bytes).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned())
+    out.push(Command::Emit(event, answer.into_params()));
 }
 
 #[cfg(test)]
@@ -371,13 +382,18 @@ mod tests {
         request
     }
 
-    /// The reply's status and body.
-    fn replied(out: &[Command]) -> (u16, String) {
+    /// The reply, as its hearer gets it.
+    fn reply_of(out: &[Command]) -> HttpReply {
         let Some(Command::Emit(_, params)) = out.last() else {
             panic!("no reply");
         };
-        let reply = HttpReply::from_params(params).unwrap();
-        (reply.status, reply.body)
+        params.carried::<HttpReply>().cloned().unwrap()
+    }
+
+    /// The reply's status and body.
+    fn replied(out: &[Command]) -> (u16, String) {
+        let reply = reply_of(out);
+        (reply.status, reply.text().into_owned())
     }
 
     fn answer(status: u16, body: &[u8]) -> HttpResponse {
@@ -424,11 +440,7 @@ mod tests {
             ..HttpResponse::default()
         };
         http.answer(response, &storage, &mut out);
-        let Some(Command::Emit(_, params)) = out.last() else {
-            panic!("no reply");
-        };
-        let reply = HttpReply::from_params(params).unwrap();
-        assert_eq!(reply.header("Last-Modified"), Some("Tue"));
+        assert_eq!(reply_of(&out).header("Last-Modified"), Some("Tue"));
     }
 
     #[test]

@@ -76,7 +76,7 @@ fn http_errors_are_told_with_their_status() {
 #[test]
 fn no_answer_names_the_host() {
     let (mut h, call) = browse();
-    h.reply(HttpResponse::failed(call.id, "timed out"));
+    h.reply(HttpResponse::failed(call.id, paperpaw_sdk::HttpError::Timeout, "timed out"));
     let shown = h.said();
     assert!(
         shown.contains("www.gutenberg.org could not be reached"),
@@ -224,7 +224,11 @@ fn javascript_links_lead_nowhere_harmful() {
             // The link is not made into an address on the catalog's host.
             assert!(!call.url.starts_with("https://www.gutenberg.org/javascript"));
             // The shell cannot fetch it.
-            h.reply(HttpResponse::failed(call.id, "unsupported scheme"));
+            h.reply(HttpResponse::failed(
+                call.id,
+                paperpaw_sdk::HttpError::Refused,
+                "unsupported scheme",
+            ));
         }
         // The feed stays; nothing was saved.
         assert!(h.shows("Script list"));

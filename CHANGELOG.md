@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: an HTTP answer's body is bytes as they came (`HttpReply::body`
+  is a `Vec<u8>`, `text()` reads it as text), no longer decoded with
+  losses, and it reaches the plugin's handler without a copy: an event
+  may carry its data as it is (`Params::carrying`,
+  `EventData::into_params`), which observers do not see. A failed
+  request says why (`HttpReply::error`, an `HttpError`: no network,
+  DNS, TLS, timeout, refused, replaced, cancelled, I/O), and a body cut
+  to the most the request takes says so (`truncated`). `EventData`
+  types are `Clone`.
 - Font size offers only the sizes the reading font has: on the X4 and
   X4 Pro, whose built-in fonts stop at about 12 pt, no larger ones that
   looked the same. A size set before past them gives way to the

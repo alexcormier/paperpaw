@@ -324,7 +324,8 @@ impl Panel {
 
     /// DeepL answered: the translation, or why not.
     fn answered(&mut self, env: &Env<'_>, reply: &HttpReply) {
-        let body = reply.body.as_str();
+        let text = reply.text();
+        let body = text.as_ref();
         let key = match reply.status {
             200..=299 => match translation(body) {
                 Some(text) => return self.set_text(env, text),

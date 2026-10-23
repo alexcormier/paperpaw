@@ -517,11 +517,12 @@ impl State {
         if self.current.as_ref().is_none_or(|c| c.path != path) {
             if let Some(at) = self.left.iter().position(|h| h.path == path) {
                 let left = self.left.swap_remove(at);
-                let body = json::object(&reply.body);
+                let text = reply.text();
+                let body = json::object(&text);
                 let from_here = json::text(&body, "device_id") == Some(self.device_id.as_str());
                 if let Some(position) = left.position
                     && reply.status == 200
-                    && remote_progress(&reply.body, &body).is_some_and(|remote| {
+                    && remote_progress(&text, &body).is_some_and(|remote| {
                         (from_here && position.progress > FURTHER)
                             || remote <= position.progress + FURTHER
                     })
@@ -540,8 +541,9 @@ impl State {
             self.unread(path, hold);
             return;
         }
-        let body = json::object(&reply.body);
-        let Some(remote) = remote_progress(&reply.body, &body) else {
+        let text = reply.text();
+        let body = json::object(&text);
+        let Some(remote) = remote_progress(&text, &body) else {
             // Not knowing the server's progress, nothing may overwrite it.
             if manual {
                 out.push(message(env, "kosync.unreadable", status));

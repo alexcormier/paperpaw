@@ -133,7 +133,7 @@ proptest! {
         final_url in proptest::option::of("https://[a-z./]{0,12}"),
         context in context(HTTP_KEYS),
     ) {
-        let mut reply = HttpReply::failed(body, context);
+        let mut reply = HttpReply::failed(paperpaw_sdk::HttpError::Timeout, body, context);
         reply.status = status;
         reply.etag = etag;
         reply.content_type = content_type;
@@ -276,7 +276,11 @@ fn replies_without_their_own_parameters_are_refused() {
     // A status alone is a reply with an empty body.
     let reply = HttpReply::from_params(&Params::new().with("status", "204")).unwrap();
     assert!(reply.ok() && reply.body.is_empty());
-    let failed = HttpReply::failed("offline", Params::new().with("run", "1"));
+    let failed = HttpReply::failed(
+        paperpaw_sdk::HttpError::NoNetwork,
+        "offline",
+        Params::new().with("run", "1"),
+    );
     assert!(!failed.ok());
     assert_eq!(failed.context.get("run"), Some("1"));
     for params in [

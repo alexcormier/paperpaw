@@ -962,7 +962,7 @@ impl Screen for UpdatePage {
                     View::Unreachable {
                         status: reply.status,
                         reason: if reply.status == 0 {
-                            reply.body.clone()
+                            reply.text().into_owned()
                         } else {
                             String::new()
                         },

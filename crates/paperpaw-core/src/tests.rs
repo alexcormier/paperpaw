@@ -1881,7 +1881,7 @@ fn files_go_up_and_come_down() {
             content_type: Some(String::from("application/epub+zip")),
             url: Some(String::from("https://example.org/g")),
             saved: false,
-            headers: Vec::new(),
+            ..crate::HttpResponse::default()
         },
     );
     let storage = kernel.shared.storage.as_ref();

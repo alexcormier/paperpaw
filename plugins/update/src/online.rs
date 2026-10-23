@@ -408,7 +408,8 @@ pub(crate) fn checked(env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
         }
         return;
     }
-    let Some(offer) = Offer::from_answer(&reply.body, firmware, env.settings.read(&BETAS)) else {
+    let text = reply.text();
+    let Some(offer) = Offer::from_answer(&text, firmware, env.settings.read(&BETAS)) else {
         let _ = storage.remove(&file(OFFER));
         waiting::clear(storage);
         return;

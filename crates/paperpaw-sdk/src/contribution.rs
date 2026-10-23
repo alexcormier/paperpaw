@@ -829,9 +829,14 @@ impl Registrar {
     ) -> Result<(), RegisterError> {
         self.subscribe(
             event.id().clone(),
-            Box::new(move |env, params, out| {
-                if let Some(data) = P::from_params(params) {
-                    handler(env, &data, out);
+            // What the event carries as it is, without a copy; else as
+            // written.
+            Box::new(move |env, params, out| match params.carried::<P>() {
+                Some(data) => handler(env, data, out),
+                None => {
+                    if let Some(data) = P::from_params(params) {
+                        handler(env, &data, out);
+                    }
                 }
             }),
         )

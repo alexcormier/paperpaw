@@ -744,11 +744,7 @@ fn wanted_the_radio_joins_the_saved_network_and_goes_off_after() {
             id: device.requests[0],
             status: 200,
             body: b"ok".to_vec(),
-            etag: None,
-            content_type: None,
-            url: None,
-            saved: false,
-            headers: Vec::new(),
+            ..paperpaw_core::HttpResponse::default()
         },
     );
     device.settle(effects);

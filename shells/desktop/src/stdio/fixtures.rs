@@ -102,8 +102,9 @@ pub(super) struct Answers(
 
 impl crate::http::Route for Answers {
     fn start(&mut self, call: paperpaw_core::HttpCall) -> Option<paperpaw_core::HttpResponse> {
+        use paperpaw_core::sdk::HttpError::{NoNetwork, Refused};
         let (mode, fixtures) = &*self.0.borrow();
-        let failed = |why: &str| paperpaw_core::HttpResponse::failed(call.id, why);
+        let failed = |error, why: &str| paperpaw_core::HttpResponse::failed(call.id, error, why);
         Some(match mode {
             Some(Network::Recorded) => match fixtures
                 .iter()
@@ -117,9 +118,9 @@ impl crate::http::Route for Answers {
                     content_type: fixture.content_type.clone(),
                     ..paperpaw_core::HttpResponse::default()
                 },
-                None => failed("no answer recorded for this request"),
+                None => failed(Refused, "no answer recorded for this request"),
             },
-            _ => failed("offline"),
+            _ => failed(NoNetwork, "offline"),
         })
     }
 

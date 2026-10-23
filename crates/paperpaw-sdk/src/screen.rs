@@ -530,7 +530,7 @@ pub struct Cx<'a, 'e> {
 }
 
 /// No params, for a context without an action's.
-static NO_PARAMS: Params = Params::new();
+const NO_PARAMS: &Params = &Params::new();
 
 impl<'a, 'e> Cx<'a, 'e> {
     /// Used by the kernel and by tests.
@@ -539,7 +539,7 @@ impl<'a, 'e> Cx<'a, 'e> {
             env,
             output,
             key: None,
-            params: &NO_PARAMS,
+            params: NO_PARAMS,
         }
     }
 

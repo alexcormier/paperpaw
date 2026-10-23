@@ -668,7 +668,9 @@ impl Device {
                     }
                     if let Err(e) = call.load_body(self.kernel.storage()) {
                         let now = self.now();
-                        let failed = paperpaw_core::HttpResponse::failed(call.id, &e.to_string());
+                        let error = paperpaw_core::sdk::HttpError::Io;
+                        let failed =
+                            paperpaw_core::HttpResponse::failed(call.id, error, &e.to_string());
                         let effects = budget::track(|| self.kernel.http_response(now, failed));
                         self.execute(effects);
                         continue;
