@@ -476,6 +476,16 @@ pub fn draw_tool(canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, action: &Id
     draw_tool_lines(canvas, env, area, action, label, 0);
 }
 
+/// The focus of a tool whose icon and name cover `ink` (as
+/// [`draw_tool_lines`] returns it): a frame round them, as far from
+/// their ink on every side, never through it.
+pub fn draw_tool_focus(canvas: &mut Canvas<'_>, style: &UiStyle, ink: Rect) {
+    let thick = style.line * 3;
+    let frame = ink.grow((style.gap / 2 + thick) as u16);
+    let radius = style.corner + style.line * 2;
+    canvas.stroke_round(frame, thick, radius, Color::BLACK);
+}
+
 /// How many lines the name of the tool of `action` takes in `area` (see
 /// [`draw_tool`]): one, two where it does not fit on one and the tool is
 /// high enough for its icon and two lines; none without `label`.
@@ -492,7 +502,9 @@ pub fn tool_name_lines(env: &Env<'_>, area: Rect, action: &Id, label: bool) -> u
 
 /// [`draw_tool`] with room kept for a name of `lines` lines (where more
 /// than its own): tools side by side given the most any of them takes
-/// ([`tool_name_lines`]) keep their icons and names on one line.
+/// ([`tool_name_lines`]) keep their icons and names on one line. Returns
+/// where its icon and name have ink, for its focus
+/// ([`draw_tool_focus`]).
 pub fn draw_tool_lines(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -500,10 +512,10 @@ pub fn draw_tool_lines(
     action: &Id,
     label: bool,
     lines: usize,
-) {
+) -> Rect {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
-        return;
+        return area;
     };
     let icon = env.menus.icon(action.as_str()).and_then(|name| {
         let font = env.fonts.bound(crate::builtin::fonts::ICONS.as_str())?;
@@ -555,19 +567,27 @@ pub fn draw_tool_lines(
     let (size, top, bottom) = icon_size(&style, icon.as_ref(), room);
     let group = (bottom - top) + text_room;
     let y = i32::from(area.y) + (i32::from(area.height) - group).div_euclid(2);
+    let middle = f32::from(area.x) + f32::from(area.width) / 2.0;
+    let mut covered: Option<Rect> = None;
     if let Some((icon_font, ch)) = &icon {
         let mut text = [0u8; 4];
         let ch = ch.encode_utf8(&mut text);
         // Centred by its ink, as icons are everywhere.
-        let middle = f32::from(area.x) + f32::from(area.width) / 2.0;
-        let x = match icon_font.ink_across(size, ch) {
-            Some((first, last)) => middle - (first + last) as f32 / 2.0,
-            None => middle - icon_font.measure(size, ch) / 2.0,
-        };
+        let (first, last) = icon_font
+            .ink_across(size, ch)
+            .unwrap_or((0, icon_font.measure(size, ch) as i32));
+        let x = middle - (first + last) as f32 / 2.0;
         icon_font.draw(canvas, size, x, y - top, ch, ink);
+        let left = (x as i32 + first).max(0) as u16;
+        covered = Some(Rect::new(
+            left,
+            y.max(0) as u16,
+            (last - first).max(0) as u16,
+            (bottom - top).max(0) as u16,
+        ));
     }
     let Some((size, name, lines)) = name else {
-        return;
+        return covered.unwrap_or(area);
     };
     let baseline = y + (bottom - top) + inner + cap;
     let step = i32::from(crate::widgets::line_height(env, size));
@@ -583,14 +603,22 @@ pub fn draw_tool_lines(
     );
     canvas.describe(crate::semantics::Role::Text, &name, at, false, None);
     // Each line centred by its ink, as the icon above it.
-    let middle = f32::from(area.x) + f32::from(area.width) / 2.0;
     for (n, line) in lines.iter().enumerate() {
-        let x = match font.ink_across(size, line) {
-            Some((first, last)) => middle - (first + last) as f32 / 2.0,
-            None => middle - font.measure(size, line) / 2.0,
-        };
-        font.draw(canvas, size, x, baseline + n as i32 * step, line, ink);
+        let (first, last) = font
+            .ink_across(size, line)
+            .unwrap_or((0, font.measure(size, line) as i32));
+        let x = middle - (first + last) as f32 / 2.0;
+        let line_y = baseline + n as i32 * step;
+        font.draw(canvas, size, x, line_y, line, ink);
+        let ink = Rect::new(
+            (x as i32 + first).max(0) as u16,
+            (line_y - cap).max(0) as u16,
+            (last - first).max(0) as u16,
+            (cap + descent).max(0) as u16,
+        );
+        covered = Some(covered.map_or(ink, |c| c.union(&ink)));
     }
+    covered.unwrap_or(area)
 }
 
 /// The name of the tool of `action` in `area`: its size, the whole name
