@@ -31,8 +31,6 @@ tracking.
 > but not yet tried on one. The app for Android e-readers follows after
 > the first release.
 
-PaperPaw was called QuireInk up to version 0.3.
-
 ## Three ways in
 
 | I just want to read | I want to tinker | I want to develop |
