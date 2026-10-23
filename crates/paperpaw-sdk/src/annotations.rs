@@ -17,7 +17,9 @@
 //! which conversion its offsets are in (16 hex digits, see
 //! [`relocate`]) and its start and end as XPointers, which fit every
 //! conversion (empty where there are none; the end is empty where it is
-//! the start). A file without any of that stays in version 1.
+//! the start). The conversion is empty for one added since, and `?` for
+//! one kept before conversions were, whose conversion is not known. A
+//! file with only those of before stays in version 1.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -82,11 +84,12 @@ pub struct Annotation {
     pub note: String,
 }
 
-/// Which conversion of the book an annotation's offsets are in, and its
-/// start and end as XPointers (either empty where there is none).
+/// Which conversion of the book an annotation's offsets are in (`None`
+/// for one kept before conversions were: not known), and its start and
+/// end as XPointers (either empty where there is none).
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct Anchor {
-    conversion: u64,
+    conversion: Option<u64>,
     start: String,
     end: String,
 }
@@ -210,8 +213,8 @@ fn parse(line: &str, version: u32) -> Option<Annotation> {
     parse_anchored(line, version).map(|(a, _)| a)
 }
 
-/// The annotation a line describes, and where it was made, if that is
-/// known.
+/// The annotation a line describes, and where it was made; `None` for
+/// one added since (in the conversion of whoever added it).
 fn parse_anchored(line: &str, version: u32) -> Option<(Annotation, Option<Anchor>)> {
     let (mark, fields) = fields(line, version)?;
     let number = |i: usize| fields.get(i)?.parse::<i64>().ok();
@@ -223,16 +226,20 @@ fn parse_anchored(line: &str, version: u32) -> Option<(Annotation, Option<Anchor
         (0, 0)
     };
     let field = |i: usize| fields.get(i).copied().unwrap_or_default().to_string();
-    let anchor = if rest == 11 {
-        u64::from_str_radix(fields[8], 16)
-            .ok()
-            .map(|conversion| Anchor {
-                conversion,
-                start: field(9),
-                end: field(10),
-            })
-    } else {
-        None
+    // Kept before conversions were (a line of version 1, or marked so):
+    // made in a conversion not known.
+    let anchor = match fields.get(8) {
+        Some(&"") if rest == 11 => None,
+        Some(conversion) if rest == 11 => Some(Anchor {
+            conversion: u64::from_str_radix(conversion, 16).ok(),
+            start: field(9),
+            end: field(10),
+        }),
+        _ => Some(Anchor {
+            conversion: None,
+            start: String::new(),
+            end: String::new(),
+        }),
     };
     let annotation = Annotation {
         mark,
@@ -296,7 +303,10 @@ fn write(
     unread: &[String],
 ) -> bool {
     all.sort_by_key(|(a, _)| (a.mark.start, a.mark.end));
-    let anchored = all.iter().any(|(_, anchor)| anchor.is_some());
+    // Only those of before: version 1, as they were.
+    let anchored = all
+        .iter()
+        .any(|(_, anchor)| anchor.as_ref().is_none_or(|x| x.conversion.is_some()));
     let mut out = String::new();
     if anchored {
         out.push_str(&format!("{}{VERSION}\n", crate::data::MARK));
@@ -317,9 +327,14 @@ fn write(
             a.updated,
         ));
         match anchor {
-            Some(x) => out.push_str(&format!("{:016x}\t{}\t{}\t", x.conversion, x.start, x.end)),
-            None if anchored => out.push_str("\t\t\t"),
-            None => {}
+            Some(x) if anchored => match x.conversion {
+                Some(conversion) => {
+                    out.push_str(&format!("{conversion:016x}\t{}\t{}\t", x.start, x.end));
+                }
+                None => out.push_str(&format!("?\t{}\t{}\t", x.start, x.end)),
+            },
+            None => out.push_str("\t\t\t"),
+            Some(_) => {}
         }
         out.push_str(&format!(
             "{}\t{}\n",
@@ -437,10 +452,11 @@ pub fn remove(storage: &dyn Storage, book: &str, remove: impl Fn(&Mark) -> bool)
 /// Finds the annotations of the book at `book` in conversion
 /// `conversion` of it (as `reading::conversion` names it), opened as
 /// `doc`: those made in another conversion by their XPointers, so that
-/// they cover the same text. Those not known in any conversion yet
-/// (added since, or kept before conversions were) are taken as of this
-/// one, and their XPointers kept. One that cannot be found stays as it
-/// is, never removed. `Ok(true)` where they changed and are saved; an
+/// they cover the same text. Those added since are taken as of this one,
+/// and their XPointers kept. Those kept before conversions were may be
+/// made in any: they are never taken as of one by a guess, and stay where
+/// they are, as before. One that cannot be found stays as it is, never
+/// removed. `Ok(true)` where they changed and are saved; an
 /// error where the file cannot be read or written, nothing changed then.
 ///
 /// A reader calls it when it opens a book and after annotations were
@@ -463,11 +479,12 @@ pub fn relocate(
         Ok(size) if size > MAX_FILE => return Err(StorageError::TooLarge),
         Ok(_) => {}
     }
+    // In another conversion, with XPointers to find it by.
+    let elsewhere =
+        |x: &Anchor| x.conversion.is_some_and(|c| c != conversion) && !x.start.is_empty();
     let due = |line: &str, version| {
         let (_, anchor) = parse_anchored(line, version)?;
-        anchor
-            .is_none_or(|x| x.conversion != conversion && !x.start.is_empty())
-            .then_some(())
+        anchor.as_ref().is_none_or(elsewhere).then_some(())
     };
     if each(storage, book, due)?.is_empty() {
         return Ok(false);
@@ -486,11 +503,11 @@ pub fn relocate(
     let mut changed = false;
     for (a, anchor) in &mut all {
         match anchor {
-            Some(x) if x.conversion == conversion || x.start.is_empty() => {}
+            Some(x) if !elsewhere(x) => {}
             Some(x) => {
                 if let Some((start, end)) = found(storage, doc, x) {
                     (a.mark.start, a.mark.end) = (start, end);
-                    x.conversion = conversion;
+                    x.conversion = Some(conversion);
                     changed = true;
                 }
             }
@@ -536,7 +553,7 @@ fn anchor_of(storage: &dyn Storage, doc: &dyn Document, conversion: u64, mark: &
     };
     let (start, end) = xpointer(mark.start).zip(end).unwrap_or_default();
     Anchor {
-        conversion,
+        conversion: Some(conversion),
         start,
         end,
     }

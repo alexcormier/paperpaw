@@ -710,13 +710,55 @@ fn everything_removed_in_koreader_goes_here_too() {
     storage
         .write(SIDECAR, b"return { [\"annotations\"] = {} }")
         .unwrap();
+    let before = text(&storage, &annotations::file(BOOK));
+    // Kept aside before, and not over one kept aside earlier.
+    let earlier = format!("{}.removed", annotations::file(BOOK));
+    storage.write(&earlier, b"earlier").unwrap();
     assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Ok(Some(true)));
     assert!(annotations::load(&storage, BOOK).is_empty());
     assert!(!storage.exists(EXCHANGE), "nothing to tell KOReader");
+    assert_eq!(text(&storage, &earlier), "earlier");
+    let aside = annotations::file(BOOK).replace(".txt", ".txt (2).removed");
+    assert_eq!(text(&storage, &aside), before);
     // A new one in KOReader comes over.
     storage.write(SIDECAR, METADATA.as_bytes()).unwrap();
     assert_eq!(try_run(&storage, NOW + 30, MAX_FILE), Ok(Some(true)));
     assert_eq!(annotations::load(&storage, BOOK).len(), 2);
+}
+
+/// An empty list in a KOReader file never seen with annotations is no
+/// sign of anything removed there: KOReader writes one for every book it
+/// opened. A fresh file (the book opened in KOReader elsewhere, or reset
+/// there) that came by a sync, which also took the file for KOReader
+/// away, removes nothing here: what both had is offered to KOReader
+/// again.
+#[test]
+fn a_fresh_koreader_file_removes_nothing() {
+    let storage = storage();
+    let fresh = b"return { [\"annotations\"] = {}, [\"percent_finished\"] = 0 }";
+    storage.write(SIDECAR, fresh).unwrap();
+    let tired = highlight(
+        &storage,
+        "/body/DocFragment[1]/body/p[1]/text().32",
+        "/body/DocFragment[1]/body/p[1]/text().37",
+        "mine",
+    );
+    annotations::add(&storage, BOOK, tired);
+    assert!(!run(&storage, NOW));
+    assert_eq!(items(&storage, EXCHANGE).len(), 1);
+    // The sync: KOReader's fresh file stays, the file for it is gone.
+    storage.remove(EXCHANGE).unwrap();
+    assert!(!run(&storage, NOW + 10));
+    let ours = annotations::load(&storage, BOOK);
+    assert_eq!(ours.len(), 1, "{ours:?}");
+    assert_eq!(ours[0].note, "mine");
+    assert_eq!(items(&storage, EXCHANGE)[0].str("note"), Some("mine"));
+    // KOReader takes it over; removed there after, it goes here too.
+    koreader_takes_over(&storage);
+    assert!(!run(&storage, NOW + 20));
+    storage.write(SIDECAR, fresh).unwrap();
+    assert!(run(&storage, NOW + 30));
+    assert!(annotations::load(&storage, BOOK).is_empty());
 }
 
 /// Every annotation removed here, as the reader tells: KOReader is told

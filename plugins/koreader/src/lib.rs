@@ -22,8 +22,13 @@
 //! So does a missing one of KOReader (as while a sync has brought the
 //! folder but not yet the file in it), and one side without any of what
 //! both had (book data moved halfway, a sync not complete), unless that
-//! side removed them all: KOReader's file then keeps an empty list, and
-//! here the reader said so. What could
+//! side removed them all: here the reader said so, and KOReader's file
+//! keeps an empty list where it was seen with annotations at the last
+//! exchange. KOReader writes an empty list for every book it opened, so
+//! one in a file never seen with any (a fresh one from another device)
+//! removes nothing: what both had is offered to KOReader again. Before
+//! everything is removed here, the annotations are kept aside
+//! (`<key>.txt.removed` beside them). What could
 //! not be written for KOReader is not taken as known, so it goes again
 //! next time. Annotations go to KOReader with the time they were made:
 //! while neither they nor the clock tell it, they wait here.
@@ -177,16 +182,36 @@ fn fingerprint(note: &str) -> u64 {
 /// The line in what is known telling that every annotation here was
 /// removed since the last exchange.
 const EMPTIED: &str = "emptied";
+/// The start of the line in what is known telling how many annotations
+/// KOReader's own file had at the last exchange that read it.
+const THEIRS: &str = "theirs ";
+
+/// What is known of the last exchange.
+#[derive(Debug, Default)]
+struct Last {
+    /// What both sides had.
+    known: Vec<Known>,
+    /// Whether every annotation here was removed since.
+    emptied: bool,
+    /// How many annotations KOReader's own file had at the last exchange
+    /// that read it (not the file for KOReader); 0 if not known.
+    seen: u32,
+}
 
 /// What both sides had at the last exchange, a line each: kind, start,
 /// end and the note's fingerprint (`b 3 120 3 120 5d2c…`). And whether
-/// every annotation here was removed since ([`EMPTIED`]).
-fn load_known(storage: &dyn Storage, book: &str) -> Result<(Vec<Known>, bool), Unreadable> {
+/// every annotation here was removed since ([`EMPTIED`]), and how many
+/// KOReader's own file had ([`THEIRS`]).
+fn load_known(storage: &dyn Storage, book: &str) -> Result<Last, Unreadable> {
     let Some(data) = load(storage, &known_file(book), MAX_KNOWN)? else {
-        return Ok((Vec::new(), false));
+        return Ok(Last::default());
     };
     let text = core::str::from_utf8(&data).map_err(|_| Unreadable)?;
     let emptied = text.lines().any(|line| line == EMPTIED);
+    let seen = text
+        .lines()
+        .find_map(|line| line.strip_prefix(THEIRS)?.parse().ok())
+        .unwrap_or(0);
     let known = text
         .lines()
         .filter_map(|line| {
@@ -208,7 +233,11 @@ fn load_known(storage: &dyn Storage, book: &str) -> Result<(Vec<Known>, bool), U
             })
         })
         .collect();
-    Ok((known, emptied))
+    Ok(Last {
+        known,
+        emptied,
+        seen,
+    })
 }
 
 /// Whether there are no annotations here of the book at `book`.
@@ -227,7 +256,12 @@ fn note_emptied(storage: &dyn Storage, book: &str) {
     if !none_here(storage, book) {
         return;
     }
-    let Ok((known, false)) = load_known(storage, book) else {
+    let Ok(Last {
+        known,
+        emptied: false,
+        ..
+    }) = load_known(storage, book)
+    else {
         return;
     };
     if known.is_empty() {
@@ -240,8 +274,11 @@ fn note_emptied(storage: &dyn Storage, book: &str) {
     let _ = storage.append(&known_file(book), format!("{EMPTIED}\n").as_bytes());
 }
 
-fn save_known(storage: &dyn Storage, book: &str, known: &[Known]) {
+fn save_known(storage: &dyn Storage, book: &str, known: &[Known], seen: u32) {
     let mut out = String::new();
+    if seen > 0 {
+        out.push_str(&format!("{THEIRS}{seen}\n"));
+    }
     for Known {
         key: (kind, start, end),
         note,
@@ -587,14 +624,32 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
         pending,
         listed,
     } = theirs;
-    let (known, emptied) = load_known(storage, book)?;
+    let last = load_known(storage, book)?;
+    let emptied = last.emptied;
     let mut ours = load_ours(storage, book)?;
+    // KOReader writes an empty list for every book it opened: everything
+    // removed there only where its own file had annotations at the last
+    // exchange. Else (a fresh file of another device, say) what both had
+    // is not taken as known there, and goes to KOReader again.
+    let empty_there = listed && theirs.is_empty() && !last.known.is_empty();
+    let removed_there = empty_there && !pending && last.seen > 0;
+    let known: &[Known] = if empty_there && !removed_there {
+        &[]
+    } else {
+        &last.known
+    };
     // None at all on one side of what both had is rather a move of book
     // data halfway or a sync not complete than everything removed there,
     // unless that side tells so.
     if !known.is_empty() && ((ours.is_empty() && !emptied) || (theirs.is_empty() && !listed)) {
         return Err(Unreadable);
     }
+    // What KOReader's own file has now, for the next exchange.
+    let seen = if pending {
+        last.seen
+    } else {
+        u32::try_from(theirs.len()).unwrap_or(u32::MAX)
+    };
     let known_of = |key: Key| known.iter().find(|k| k.key == key);
     let mut matched = alloc::vec![false; ours.len()];
     let (mut ours_changed, mut theirs_changed) = (false, false);
@@ -689,6 +744,11 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
             kept.push(a);
         }
     }
+    // Everything removed in KOReader: kept aside first, never removed
+    // here without a copy.
+    if removed_there && ours_changed && !keep_aside(storage, book) {
+        return Err(Unreadable);
+    }
     // Not kept here, what came from KOReader must not count as known:
     // the next exchange would take it for removed here.
     if ours_changed && !annotations::save(storage, book, &kept) {
@@ -709,10 +769,20 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
     // Not passed on, what was offered must not count as known: the next
     // exchange would take it for removed in KOReader. What is known from
     // before stays true, and it all goes again next time.
-    if passed && (shared != known || emptied) {
-        save_known(storage, book, &shared);
+    if passed && (shared != last.known || emptied || seen != last.seen) {
+        save_known(storage, book, &shared, seen);
     }
     Ok(ours_changed)
+}
+
+/// Keeps a copy of the annotations here of the book at `book` beside
+/// them (`<key>.txt.removed`, numbered where there is one), never over
+/// another; `false` where it could not be made.
+fn keep_aside(storage: &dyn Storage, book: &str) -> bool {
+    let from = annotations::file(book);
+    let (dir, name) = from.rsplit_once('/').unwrap_or(("", &from));
+    let to = paperpaw_sdk::files::free_path(storage, dir, &format!("{name}.removed"));
+    !storage.exists(&to) && paperpaw_sdk::files::copy(storage, &from, &to).is_ok()
 }
 
 /// Exchanges the annotations of the book at `book` with KOReader's, if

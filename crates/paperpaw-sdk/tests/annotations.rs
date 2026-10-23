@@ -567,14 +567,16 @@ fn a_highlight_is_found_again_in_another_conversion() {
 }
 
 /// Annotations kept before conversions were (version 1, 8 and 10
-/// fields) are taken as of the conversion the book is opened in first,
-/// and none is lost: each keeps its text, note and times, lines not
-/// understood stay as they are, and in another conversion each is found
-/// again.
+/// fields) may be made in any conversion: the one the book is opened in
+/// first is a guess. So they are never taken as of one, and their places
+/// never changed: each stays where it was made, with its text, note and
+/// times, as before conversions were. Those added since are found again
+/// in another conversion, and lines not understood stay as they are.
 #[test]
-fn annotations_of_before_are_taken_over_without_loss() {
+fn annotations_of_before_are_never_moved_by_a_guess() {
     let (styled, plain) = conversions();
     let unknown = "u\t1\t12\t1\t20\t9\t0\t0\tunderlined by a newer version\tmy note";
+    // Made with the book's own styles.
     let text = format!(
         "h\t1\t20\t1\t40\t12\tA note of old\n\
          b\t2\t10\t2\t10\t20\t1760000000\t1760000500\tChapter 2\t\n\
@@ -583,28 +585,47 @@ fn annotations_of_before_are_taken_over_without_loss() {
     let storage = with_file(text.as_bytes());
     let before = annotations::load(&storage, BOOK);
     assert_eq!(before.len(), 2);
-    assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(true));
-    assert_eq!(annotations::load(&storage, BOOK), before);
+    // Opened without them first: nothing to do, the file stays as it is.
+    assert_eq!(annotations::relocate(&storage, BOOK, 2, &plain), Ok(false));
+    assert_eq!(
+        storage.get(&annotations::file(BOOK)).unwrap(),
+        text.as_bytes()
+    );
+    // One added there is of that conversion; those of before stay.
+    let new = made_in(&plain, 50, 60, "new");
+    assert!(annotations::add(&storage, BOOK, new));
+    assert_eq!(annotations::relocate(&storage, BOOK, 2, &plain), Ok(true));
     let file = String::from_utf8(storage.get(&annotations::file(BOOK)).unwrap()).unwrap();
     assert!(file.starts_with("# format 2\n"), "{file}");
     assert!(file.lines().any(|l| l == unknown), "{file}");
+    assert_eq!(annotations::relocate(&storage, BOOK, 2, &plain), Ok(false));
+    // Back with the styles: the new one is found again, those of before
+    // are where they were made.
+    assert_eq!(annotations::relocate(&storage, BOOK, 1, &styled), Ok(true));
+    let all = annotations::load(&storage, BOOK);
+    assert_eq!(all.len(), 3);
+    assert_eq!(all[0], before[0]);
+    assert_eq!(
+        (all[1].mark.start, all[1].mark.end, all[1].note.as_str()),
+        (styled.at(1, 50), styled.at(1, 60), "new")
+    );
+    assert_eq!(all[2], before[1]);
+    // Changed by those who know nothing of conversions, they stay so.
+    assert!(annotations::set_note(
+        &storage,
+        BOOK,
+        before[0].mark.start,
+        "changed",
+        9
+    ));
     assert_eq!(annotations::relocate(&storage, BOOK, 2, &plain), Ok(true));
     let all = annotations::load(&storage, BOOK);
-    assert_eq!(all.len(), 2);
     assert_eq!(
-        (all[0].mark.start, all[0].mark.end),
-        (plain.at(1, 5), plain.at(1, 15))
+        (all[0].mark.start, all[0].mark.end, all[0].note.as_str()),
+        (before[0].mark.start, before[0].mark.end, "changed")
     );
-    assert_eq!(
-        (all[1].mark.start, all[1].mark.end),
-        (plain.at(2, 0), plain.at(2, 0))
-    );
-    for (a, b) in all.iter().zip(&before) {
-        assert_eq!(
-            (&a.text, &a.note, a.created, a.updated),
-            (&b.text, &b.note, b.created, b.updated)
-        );
-    }
+    assert_eq!(all[1].mark.start, plain.at(1, 50));
+    assert_eq!(all[2], before[1]);
 }
 
 /// An annotation that cannot be found in the conversion the book is
