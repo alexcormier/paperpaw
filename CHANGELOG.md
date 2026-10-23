@@ -6,6 +6,21 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- A guided device check in the diagnostics plugin (under Tools) goes
+  through every part of a device one page at a time: the screen's grays
+  and ghosting, every button by name, touch at the corners and edges,
+  the front light, the battery and charging, the card's speed, the
+  clock, Wi-Fi, sleep and memory. Each step is passed, failed or skipped
+  (parts a device lacks are skipped), and a report goes to
+  `.paperpaw/device-check.txt` for pull requests that add a device
+  ([docs/porting.md](docs/porting.md)).
+- SDK: screens can take buttons by name (`Screen::takes_buttons`,
+  `Screen::on_button`), held ones told apart, before the key map turns
+  them into actions. `Env::memory` says the heap and the stack free
+  where the shell can tell (`paperpaw_sdk::memory`,
+  `KernelBuilder::memory`; the X4s and the emulator do), and
+  `Env::clock` is a monotonic clock in microseconds for measuring work
+  (`paperpaw_sdk::time::Clock`).
 - Hints covered by another screen (a plugin's question, a notice opened
   over them) close and show again when their screen does, instead of
   staying below it, cut.
