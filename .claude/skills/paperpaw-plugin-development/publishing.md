@@ -327,6 +327,10 @@ compiler; each PaperPaw release lists the fingerprints in its files
   `shells/xteink/rust-toolchain.toml`; the workflow's `RUST_X4`,
   `RUST_X4_PRO` and `ESP_GCC` as the release's `shells/xteink/versions.env`
   (`ESP_RUST_VERSION`, `ESP_GCC_VERSION`); `PAPERPAW` its version.
+- For the X4 Pro, install the release's core libraries
+  (`paperpaw-xtensa-std-<version>.tar.gz`, with its `.sig`) into the
+  `esp` toolchain: PaperPaw's `tools/xtensa-std/install.sh`, or as its
+  README says; the sample's CI job does it. The X4's come from rustup.
 - One file for each reader. The X4 Classic has the X4 Pro's chip but a
   firmware of its own: give it a build only with the fingerprint its
   *About* shows.
@@ -347,10 +351,11 @@ as the same everywhere: `build.sh` adds to the flags of
 |---|---|
 | the source's top (the repository, `git rev-parse --show-toplevel`) | `/plugin` |
 | Cargo's home (`$CARGO_HOME`, else `~/.cargo`) | `/cargo` |
-| the X4 Pro's toolchain (`rustc +esp --print sysroot`), whose `core` and `alloc` are built with the plugin | `/rust` |
 
 with `--remap-path-prefix`, given through `cargo --config` so that the
-flags that link the plugin stay. So:
+flags that link the plugin stay. The core libraries come built, the
+same for everyone (rustup's for the X4, the release's for the X4 Pro),
+and the rebuild installs the same. So:
 
 - **Build with `build.sh`** (or the sample's CI job, which runs it), in
   any folder, on Linux or macOS. On Windows, paths inside the source

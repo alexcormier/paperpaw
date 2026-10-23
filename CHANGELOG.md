@@ -25,6 +25,18 @@ change the plugin SDK.
   started (`paperpaw_sdk::power::Start`: switched on, woken, started
   again by a watchdog or a panic; `KernelBuilder::started`, from the
   chip's reset reason on the X4s).
+- Code plugins for the X4 Pro and the X4 Classic build without
+  `-Zbuild-std`, against core libraries each release builds once on
+  Linux and publishes, signed (`paperpaw-xtensa-std-<version>.tar.gz`,
+  `tools/xtensa-std`, installed into espup's `esp` toolchain). With
+  `-Zbuild-std`, Cargo hashed the libraries' folder as the system writes
+  it, so no build on Windows could match the plugin library's rebuild;
+  now the X4 Pro is as the X4: a Windows build matches where every
+  folder's paths are remapped and Cargo is told the Linux host, which
+  the sample's `build.sh` does not do (see the tool's README). The
+  sample's alias and CI job, the store's plugins
+  and the authors' documents follow; CI checks that a plugin's file is
+  the same in any folder (`tools/plugin-files/anywhere.sh`).
 - Hints covered by another screen (a plugin's question, a notice opened
   over them) close and show again when their screen does, instead of
   staying below it, cut.
