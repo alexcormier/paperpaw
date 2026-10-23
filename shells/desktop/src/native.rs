@@ -33,6 +33,7 @@ pub fn file_name() -> String {
 pub fn native() -> Native {
     let mut native = Native::new(file_name());
     native.toolchain = std::borrow::Cow::Borrowed(env!("PAPERPAW_HOST_TOOLCHAIN"));
+    native.compiler = paperpaw_core::sdk::native::compiler::id(env!("PAPERPAW_RUSTC"));
     native
 }
 

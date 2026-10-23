@@ -49,6 +49,9 @@ const QUEUE: &str = "fetch.txt";
 const CURRENT: &str = "fetch-current.txt";
 /// The names of those that could not be fetched, a line each.
 const FAILED: &str = "fetch-failed.txt";
+/// The fingerprint and compiler the update's code plugins must have, where
+/// the server named them: `<16 hex digits> <8 hex digits>`.
+const WANTED: &str = "fetch-native.txt";
 /// A crate of a first-party plugin, named after it.
 const CRATE_PREFIX: &str = "paperpaw-plugin-";
 
@@ -277,6 +280,7 @@ pub(crate) fn start(
     env: &Env<'_>,
     version: &str,
     builds: &[Build],
+    native: Option<(u64, u32)>,
     out: &mut Vec<Command>,
 ) -> bool {
     if builds.is_empty() {
@@ -285,6 +289,13 @@ pub(crate) fn start(
     let storage = env.storage;
     let _ = storage.create_dir(&paperpaw_sdk::Env::plugin_dir(PLUGIN.as_str()));
     let _ = storage.remove(&file(FAILED));
+    let _ = match native {
+        Some((abi, compiler)) => storage.write(
+            &file(WANTED),
+            format!("{abi:016x} {compiler:08x}").as_bytes(),
+        ),
+        None => storage.remove(&file(WANTED)),
+    };
     let (builds, no_room) = fitting(env, builds.to_vec());
     for name in no_room {
         failed(storage, &name);
@@ -434,6 +445,17 @@ fn place(env: &Env<'_>, plugin: &str) -> bool {
     else {
         return false;
     };
+    // Of the update's fingerprint and compiler, as the server names them,
+    // else of the running firmware's: never a file the update would not
+    // load.
+    let mut wanted = native_build.clone();
+    if let Some((abi, compiler)) = wanted_native(storage) {
+        wanted.fingerprint = native::Fingerprint(abi);
+        wanted.compiler = compiler;
+    }
+    if !wanted.fits(&header) {
+        return false;
+    }
     let author_ok = match native::author(storage, plugin, &signature.key) {
         Author::Known => true,
         Author::Other => false,
@@ -449,6 +471,17 @@ fn place(env: &Env<'_>, plugin: &str) -> bool {
     let target = native::fetched_folder(plugin);
     let _ = storage.remove_dir_all(&target);
     storage.rename(&folder, &target).is_ok()
+}
+
+/// The fingerprint and compiler the update's code plugins must have, as
+/// [`start`] kept them.
+fn wanted_native(storage: &dyn Storage) -> Option<(u64, u32)> {
+    let text = paperpaw_sdk::read_file(storage, &file(WANTED), 64).ok()?;
+    let text = core::str::from_utf8(&text).ok()?;
+    let mut parts = text.split_whitespace();
+    let abi = u64::from_str_radix(parts.next()?, 16).ok()?;
+    let compiler = u32::from_str_radix(parts.next()?, 16).ok()?;
+    Some((abi, compiler))
 }
 
 /// Whether the server named `key` as the author of `plugin`, new here.

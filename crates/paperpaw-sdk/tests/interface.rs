@@ -79,6 +79,7 @@ fn now() -> Option<String> {
         "ESP_RUST_VERSION",
     );
     let android = value(&read("../../shells/android/versions.env")?, "RUST_VERSION");
+    let third = third_party().join(", ");
     Some(format!(
         "# What code plugins see at this plugin interface (ADR 0026), beside\n\
          # the crates of interface/: kept so that CI fails where it changes\n\
@@ -88,9 +89,49 @@ fn now() -> Option<String> {
          linker = {:016x}\n\
          x4 = rustc {x4}\n\
          x4-pro = esp {esp}\n\
-         android = rustc {android}\n",
+         android = rustc {android}\n\
+         third-party = {third}\n",
         fnv(&linker)
     ))
+}
+
+/// The crates of others the crossing crates depend on, as `name version`:
+/// their types may lie inside those that cross, so each is pinned to one
+/// version (`=x.y.z`), and a new one raises the interface. Panics where one
+/// is not pinned so.
+fn third_party() -> Vec<String> {
+    let mut found = BTreeSet::new();
+    for crate_ in crates() {
+        let Some(manifest) = read(&format!("../{crate_}/Cargo.toml")) else {
+            continue;
+        };
+        for line in dependencies(&manifest).lines() {
+            let line = line.trim();
+            if line.is_empty() || line.starts_with('#') || line.starts_with("paperpaw-") {
+                continue;
+            }
+            let name = line.split([' ', '=', '.']).next().unwrap_or_default();
+            let version = line
+                .split_once("version = \"")
+                .or_else(|| line.split_once("= \""))
+                .and_then(|(_, rest)| rest.split('"').next())
+                .unwrap_or_default();
+            let exact = version.strip_prefix('=').unwrap_or_else(|| {
+                panic!("{crate_} takes {name} as {version:?}: pin it, as `={version}`")
+            });
+            found.insert(format!("{name} {exact}"));
+        }
+    }
+    found.into_iter().collect()
+}
+
+/// A manifest's `[dependencies]`.
+fn dependencies(manifest: &str) -> &str {
+    manifest
+        .split("\n[dependencies]\n")
+        .nth(1)
+        .map(|rest| rest.split("\n[").next().unwrap_or_default())
+        .unwrap_or_default()
 }
 
 /// The path an item's line names: its first path, generics and all after
@@ -116,23 +157,36 @@ fn parent(path: &str) -> &str {
     path.rsplit_once("::").map_or("", |(parent, _)| parent)
 }
 
-/// The types of a crate's `shape.txt`: their path, and the line that
-/// says their kind and what they hold.
-fn types(shape: &str) -> BTreeMap<&str, &str> {
+/// The lines of a crate's `shape.txt` by what they say: a type by its
+/// kind and path (`struct a::B`), a constant by its path and the trait
+/// it belongs to (`const a::B::C (a::T)`).
+fn types(shape: &str) -> BTreeMap<String, &str> {
     shape
         .lines()
         .filter(|l| !l.starts_with('#') && !l.is_empty())
         .filter_map(|line| {
-            let (_, rest) = line.split_once(' ')?;
-            Some((path_of(rest), line))
+            let (kind, rest) = line.split_once(' ')?;
+            let name = if kind == "const" {
+                rest.split_once(": ").map_or(rest, |(name, _)| name)
+            } else {
+                path_of(rest)
+            };
+            Some((format!("{kind} {name}"), line))
         })
         .collect()
+}
+
+/// Whether `kept` has a type of this path, of any kind.
+fn has_type(kept: &BTreeMap<String, &str>, path: &str) -> bool {
+    ["struct", "enum", "union", "trait"]
+        .iter()
+        .any(|kind| kept.contains_key(&format!("{kind} {path}")))
 }
 
 /// Whether an item's line, new in `api.txt`, leaves what a plugin built
 /// before relies on as it was: a new item that is not part of a trait or
 /// of a type that was there (`kept`, the types as they were).
-fn is_free(line: &str, kept: &BTreeMap<&str, &str>) -> bool {
+fn is_free(line: &str, kept: &BTreeMap<String, &str>) -> bool {
     let mut rest = line;
     while let Some(after) = rest.strip_prefix("#[") {
         rest = after.split_once("] ").map_or("", |(_, r)| r);
@@ -143,7 +197,7 @@ fn is_free(line: &str, kept: &BTreeMap<&str, &str>) -> bool {
     let Some(rest) = rest.strip_prefix("pub ") else {
         return false;
     };
-    let is_trait = |path: &str| kept.get(path).is_some_and(|l| l.starts_with("trait "));
+    let is_trait = |path: &str| kept.contains_key(&format!("trait {path}"));
     for keyword in [
         "struct ", "enum ", "union ", "trait ", "mod ", "use ", "macro ", "static ",
     ] {
@@ -170,7 +224,7 @@ fn is_free(line: &str, kept: &BTreeMap<&str, &str>) -> bool {
     // A field or a variant: free only in a type that is itself new.
     let path = path_of(rest);
     let holder = parent(path);
-    !kept.contains_key(holder) && !kept.contains_key(parent(holder))
+    !has_type(kept, holder) && !has_type(kept, parent(holder))
 }
 
 /// What changed in one crate from `kept` to `now` (its `api.txt` and
@@ -240,7 +294,7 @@ fn what_plugins_see_changes_only_with_the_interface() {
         files.push((format!("interface/{crate_}.shape"), shape));
     }
     let rest_same = value(&now, "linker") == value(&kept, "linker")
-        && ["x4", "x4-pro", "android"]
+        && ["x4", "x4-pro", "android", "third-party"]
             .iter()
             .all(|key| value(&now, key) == value(&kept, key));
     let breaking = !all.breaking.is_empty() || !rest_same;
@@ -265,7 +319,8 @@ fn what_plugins_see_changes_only_with_the_interface() {
         !breaking,
         "what plugins built before rely on changed, so they would not run: raise \
          native::INTERFACE to {} and write the files anew (PAPERPAW_BLESS=1 cargo test -p \
-         paperpaw-sdk --test interface). The linker script and the compilers {}. Changed:\n{}",
+         paperpaw-sdk --test interface). The linker script, the compilers and the crates of \
+         others {}. Changed:\n{}",
         INTERFACE + 1,
         if rest_same {
             "are as they were"
@@ -303,12 +358,7 @@ fn every_crate_below_the_sdk_is_kept() {
     );
     for crate_ in &listed {
         let manifest = read(&format!("../{crate_}/Cargo.toml")).unwrap();
-        let dependencies = manifest
-            .split("\n[dependencies]\n")
-            .nth(1)
-            .map(|rest| rest.split("\n[").next().unwrap_or_default())
-            .unwrap_or_default();
-        for line in dependencies.lines() {
+        for line in dependencies(&manifest).lines() {
             let name = line.split(['.', '=', ' ']).next().unwrap_or_default();
             if name.starts_with("paperpaw-") {
                 assert!(
@@ -342,7 +392,11 @@ fn the_toolchains_named_are_the_releases() {
         "native::TOOLCHAIN names esp {esp}"
     );
     assert!(!TOOLCHAIN.is_empty());
-    for project in ["../../samples/hello-native", "../../tools/plugin-files"] {
+    for project in [
+        "../..",
+        "../../samples/hello-native",
+        "../../tools/plugin-files",
+    ] {
         let pinned = value(
             &read(&format!("{project}/rust-toolchain.toml")).unwrap(),
             "channel",
@@ -356,6 +410,11 @@ fn the_toolchains_named_are_the_releases() {
     assert!(
         ci.contains(&format!("NIGHTLY: {nightly}")),
         "tools/interface.py and ci.yml name the same nightly"
+    );
+    let public_api = value(&script, "PUBLIC_API");
+    assert!(
+        ci.contains(&format!("cargo-public-api@{public_api}")),
+        "tools/interface.py and ci.yml name the same cargo-public-api"
     );
 }
 
@@ -423,4 +482,11 @@ trait a::T { function f }
     assert_eq!(found.breaking.len(), 1);
     let found = changes("a", ("pub fn a::gone()", kept_shape), ("", kept_shape));
     assert_eq!(found.breaking.len(), 1);
+    // A constant's value, and one of a generic type beside the type.
+    let with = |value: u8| {
+        format!("{kept_shape}const a::S<T>::MAX: u8 = {value}\nconst a::LIMIT: u8 = 3\n")
+    };
+    let found = changes("a", ("", &with(1)), ("", &with(2)));
+    assert_eq!(found.breaking.len(), 1, "{:?}", found.breaking);
+    assert!(types(&with(1)).contains_key("struct a::S"));
 }

@@ -12,11 +12,13 @@
 //! ```json
 //! {"project": "paperpaw-xteink", "chip": 5, "version": "0.4.0",
 //!  "plugins": ["paperpaw-plugin-stats 0.4.0", "..."],
-//!  "abi": "f1f6cd5dd377bb4d", "code": ["hello 0.1.0", "..."]}
+//!  "abi": "f1f6cd5dd377bb4d", "compiler": "6a1f03c2",
+//!  "code": ["hello 0.1.0", "..."]}
 //! ```
 //!
 //! `abi` is the fingerprint native code plugins must have to run here
-//! (ADR 0024), `code` the code plugins installed with their versions, so
+//! (ADR 0024), `compiler` the compiler they must name (ADR 0026), `code`
+//! the code plugins installed with their versions, so
 //! the server can say which have builds for an update; both are left out
 //! where the firmware loads no code plugins.
 //!
@@ -30,6 +32,12 @@
 //! ```
 //!
 //! `url` may be a path on the server (`/api/v1/updates/…`).
+//! `abi` and `compiler` may say what code plugins must have to run on the
+//! update: its fingerprint (16 hexadecimal digits) and its compiler
+//! (`paperpaw_native::compiler::id`, 8). A build fetched for it is placed
+//! only where it has them; where the answer does not say, only where it
+//! has the running firmware's, which an update of the same plugin
+//! interface shares.
 //! `waiting` may name code plugins of the question (`id version`) that
 //! have no build for the update yet: with one of them still in use, or
 //! with a crate built in now `missing` as `not-ready`, the update waits
@@ -98,6 +106,9 @@ pub(crate) struct Offer {
     /// The builds for it of the code plugins this device has, and of
     /// plugins built in now that it has as files ([`fetch`]).
     pub builds: Vec<Build>,
+    /// The fingerprint and the compiler its code plugins must have, where
+    /// the server says.
+    pub native: Option<(u64, u32)>,
 }
 
 /// Whether `version` is a pre-release (`0.5.0-beta.1`, `0.5.0-dev`).
@@ -143,6 +154,12 @@ impl Offer {
             missing: lines("missing"),
             waiting: lines("waiting"),
             builds: fetch::parse(body),
+            native: paperpaw_sdk::json::text(&members, "abi")
+                .and_then(|abi| u64::from_str_radix(abi.trim(), 16).ok())
+                .zip(
+                    paperpaw_sdk::json::text(&members, "compiler")
+                        .and_then(|c| u32::from_str_radix(c.trim(), 16).ok()),
+                ),
         })
     }
 
@@ -190,6 +207,9 @@ impl Offer {
         for line in self.waiting.lines() {
             text.push_str(&format!("waiting {line}\n"));
         }
+        if let Some((abi, compiler)) = self.native {
+            text.push_str(&format!("native {abi:016x} {compiler:08x}\n"));
+        }
         text.push_str(&fetch::to_text(&self.builds));
         text
     }
@@ -203,7 +223,16 @@ impl Offer {
             return None;
         }
         let (mut plugins, mut missing, mut waiting) = (String::new(), String::new(), String::new());
+        let mut native = None;
         for line in lines {
+            if let Some(rest) = line.strip_prefix("native ") {
+                let mut parts = rest.split_whitespace();
+                native = parts
+                    .next()
+                    .and_then(|a| u64::from_str_radix(a, 16).ok())
+                    .zip(parts.next().and_then(|c| u32::from_str_radix(c, 16).ok()));
+                continue;
+            }
             let (list, rest) = if let Some(rest) = line.strip_prefix("plugin ") {
                 (&mut plugins, rest)
             } else if let Some(rest) = line.strip_prefix("missing ") {
@@ -224,6 +253,7 @@ impl Offer {
             missing,
             waiting,
             builds: fetch::from_lines(text.lines()),
+            native,
         })
     }
 }
@@ -320,8 +350,9 @@ fn question(
             .map(|(id, version)| paperpaw_sdk::json::string(&format!("{id} {version}")))
             .collect();
         body.push_str(&format!(
-            ",\"abi\":\"{}\",\"code\":[{}]",
+            ",\"abi\":\"{}\",\"compiler\":\"{:08x}\",\"code\":[{}]",
             native.fingerprint,
+            native.compiler,
             code.join(",")
         ));
     }
@@ -462,11 +493,14 @@ pub(crate) fn downloaded(env: &Env<'_>, reply: &HttpReply, out: &mut Vec<Command
         let _ = storage.remove(&path);
         if storage.rename(PART, &path).is_ok() {
             // The code plugins for it next; it is ready once they are here.
-            let builds = offer(storage, firmware)
+            let offer = offer(storage, firmware);
+            let builds = offer
+                .as_ref()
                 .map(|o| fetch::wanted(env, &o.builds))
                 .unwrap_or_default();
+            let native = offer.and_then(|o| o.native);
             let _ = storage.remove(&file(OFFER));
-            if !fetch::start(env, version, &builds, out) {
+            if !fetch::start(env, version, &builds, native, out) {
                 out.push(Command::Notify(env.i18n.format(
                     "update.downloaded",
                     &[(
@@ -513,13 +547,26 @@ mod tests {
         // Where code plugins load: the fingerprint and those installed.
         let mut native = Native::new("code.ppn");
         native.fingerprint = Fingerprint(0xf1f6_cd5d_d377_bb4d);
+        native.compiler = 0x6a1f_03c2;
         let code = [("hello", String::from("0.1.0"))];
         assert_eq!(
             question(&firmware(), Some(&native), &code, false),
             "{\"project\":\"paperpaw-xteink\",\"chip\":5,\"version\":\"0.4.0\",\
              \"plugins\":[\"paperpaw-plugin-stats 0.4.0\",\"paperpaw-plugin-chess 1.0.0\"],\
-             \"abi\":\"f1f6cd5dd377bb4d\",\"code\":[\"hello 0.1.0\"]}"
+             \"abi\":\"f1f6cd5dd377bb4d\",\"compiler\":\"6a1f03c2\",\"code\":[\"hello 0.1.0\"]}"
         );
+    }
+
+    /// The fingerprint and compiler an update's code plugins must have,
+    /// where the server says, kept with the offer.
+    #[test]
+    fn an_update_names_what_its_code_plugins_must_have() {
+        let body = r#"{"version": "0.5.0", "url": "u", "abi": "0002aabbccddeeff", "compiler": "6a1f03c2"}"#;
+        let offer = Offer::from_answer(body, &firmware(), false).unwrap();
+        assert_eq!(offer.native, Some((0x0002_aabb_ccdd_eeff, 0x6a1f_03c2)));
+        assert_eq!(Offer::from_text(&offer.to_text()), Some(offer));
+        let unsaid = Offer::from_answer(r#"{"version": "0.5.0", "url": "u"}"#, &firmware(), false);
+        assert_eq!(unsaid.unwrap().native, None);
     }
 
     /// Betas asked for where the reader wants them; offered only when

@@ -1,6 +1,15 @@
-# The shape of this crate's public types, as tools/interface.py writes
-# it: fields, variants and trait items in the source's order, private
-# fields too (ADR 0026).
+# The shape of this crate's types and the values of its constants, as
+# tools/interface.py writes them: fields, variants and trait items in
+# the source's order, private fields and the private types they reach
+# too, every feature on (ADR 0026).
+const paperpaw_document::Locator::START: paperpaw_document::Locator = Locator { section: 0, offset: 0, }
+const paperpaw_document::MAX_FAMILIES: u8 = 31u8
+const paperpaw_document::OffsetMap::IDENTITY: paperpaw_document::OffsetMap = OffsetMap { checkpoints: Vec::new(), }
+const paperpaw_document::TextStyle::BOLD: paperpaw_document::TextStyle = TextStyle(1)
+const paperpaw_document::TextStyle::BOLD_ITALIC: paperpaw_document::TextStyle = TextStyle(3)
+const paperpaw_document::TextStyle::ITALIC: paperpaw_document::TextStyle = TextStyle(2)
+const paperpaw_document::TextStyle::REGULAR: paperpaw_document::TextStyle = TextStyle(0)
+const paperpaw_document::TextStyle::SMALL_CAPS: paperpaw_document::TextStyle = TextStyle(0b1000_0000)
 enum paperpaw_document::Align { Auto, Start, Center, End, Justify }
 enum paperpaw_document::BlockKind { Paragraph, Heading(0: u8), Preformatted, Image }
 enum paperpaw_document::DocumentError { Storage(0: paperpaw_platform::storage::StorageError), Malformed(0: alloc::borrow::Cow<'static, str>), UnsupportedFormat, OutOfMemory, NotReady }

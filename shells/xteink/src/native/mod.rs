@@ -46,6 +46,14 @@ static EXPORTED_FINGERPRINT: [u8; 8] = FINGERPRINT.0.to_le_bytes();
 /// its release (`build.rs`).
 const COMPILER: &str = env!("PAPERPAW_RUSTC");
 
+/// How this firmware loads code plugins: files named `code.ppn` of its
+/// fingerprint and of its compiler.
+pub fn this_firmware() -> paperpaw_sdk::native::Native {
+    let mut native = paperpaw_sdk::native::Native::new("code.ppn");
+    native.compiler = paperpaw_native::compiler::id(COMPILER);
+    native
+}
+
 /// The chip plugin files must be made for.
 #[cfg(feature = "x4")]
 const CHIP: Chip = Chip::Esp32C3;
@@ -286,7 +294,14 @@ fn internal_free() -> usize {
 /// What the plugin manager says for a file that is not right.
 fn problem(problem: Problem) -> PluginProblem {
     match problem {
-        Problem::NewerFormat | Problem::OlderFormat | Problem::UnknownChip => {
+        Problem::OlderFormat => {
+            warn!(
+                "native: a plugin file of an older format, made for an older PaperPaw: it needs a new build"
+            );
+            PluginProblem::OtherBuild
+        }
+        Problem::NewerFormat | Problem::UnknownChip => {
+            warn!("native: {problem}");
             PluginProblem::OtherBuild
         }
         _ => PluginProblem::Damaged,

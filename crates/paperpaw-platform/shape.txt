@@ -1,6 +1,20 @@
-# The shape of this crate's public types, as tools/interface.py writes
-# it: fields, variants and trait items in the source's order, private
-# fields too (ADR 0026).
+# The shape of this crate's types and the values of its constants, as
+# tools/interface.py writes them: fields, variants and trait items in
+# the source's order, private fields and the private types they reach
+# too, every feature on (ADR 0026).
+const paperpaw_platform::input::buttons::BACK: &str = "back"
+const paperpaw_platform::input::buttons::CONFIRM: &str = "confirm"
+const paperpaw_platform::input::buttons::DOWN: &str = "down"
+const paperpaw_platform::input::buttons::HOME: &str = "home"
+const paperpaw_platform::input::buttons::LEFT: &str = "left"
+const paperpaw_platform::input::buttons::MENU: &str = "menu"
+const paperpaw_platform::input::buttons::PAGE_BACK: &str = "page-back"
+const paperpaw_platform::input::buttons::PAGE_FORWARD: &str = "page-forward"
+const paperpaw_platform::input::buttons::POWER: &str = "power"
+const paperpaw_platform::input::buttons::RIGHT: &str = "right"
+const paperpaw_platform::input::buttons::UP: &str = "up"
+const paperpaw_platform::pixel::Color::BLACK: paperpaw_platform::pixel::Color = Color::gray(0)
+const paperpaw_platform::pixel::Color::WHITE: paperpaw_platform::pixel::Color = Color::gray(255)
 enum paperpaw_platform::MemoryClass { Small, Large }
 enum paperpaw_platform::display::RefreshMode { Mono, Fast, Partial, Gray, Full, Clear }
 enum paperpaw_platform::display::Rotation { Deg0, Deg90, Deg180, Deg270 }

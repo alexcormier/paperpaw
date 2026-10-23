@@ -15,16 +15,17 @@ pub const MARK: &str = "rustc version ";
 
 /// The release and commit of a compiler's own words, `rustc version 1.99.0
 /// (b940084d7 2026-09-28)` in an object or `rustc 1.99.0 (b940084d7
-/// 2026-09-28)` from `rustc -V`: `1.99.0 (b940084d7 2026-09-28)`, to the
-/// first closing bracket (espup's toolchain adds another).
+/// 2026-09-28)` from `rustc -V`: `1.99.0 (b940084d7 2026-09-28)`, all of
+/// it. espup's toolchain adds its own version (`(1.97.0.0)`), which stays:
+/// two of its releases may build on the same commit of Rust with another
+/// LLVM.
 pub fn release(words: &str) -> Option<&str> {
     let words = words.trim();
-    let rest = words
+    let release = words
         .strip_prefix(MARK)
         .or_else(|| words.strip_prefix("rustc "))?;
-    let end = rest.find(')')?;
-    let release = &rest[..=end];
-    (release.contains(" (") && !release.starts_with(' ')).then_some(release)
+    (release.contains(" (") && release.ends_with(')') && !release.starts_with(' '))
+        .then_some(release)
 }
 
 /// The hash a plugin file keeps of a compiler's [`release`]: FNV-1a with
@@ -78,10 +79,15 @@ mod tests {
         let asked = "rustc 1.99.0 (b940084d7 2026-09-28)\n";
         assert_eq!(release(object), Some("1.99.0 (b940084d7 2026-09-28)"));
         assert_eq!(release(object), release(asked));
-        // espup's adds its own version after it.
+        // espup's adds its own version after it, which tells two of its
+        // releases on one commit of Rust apart.
         assert_eq!(
             release("rustc 1.97.0-nightly (8ea53bcd7 2026-07-08) (1.97.0.0)"),
-            Some("1.97.0-nightly (8ea53bcd7 2026-07-08)")
+            Some("1.97.0-nightly (8ea53bcd7 2026-07-08) (1.97.0.0)")
+        );
+        assert_ne!(
+            release("rustc 1.97.0-nightly (8ea53bcd7 2026-07-08) (1.97.0.0)"),
+            release("rustc 1.97.0-nightly (8ea53bcd7 2026-07-08) (1.97.0.1)")
         );
         for words in [
             "",

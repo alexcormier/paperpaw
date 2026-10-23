@@ -167,9 +167,8 @@ pub fn fetched_for(storage: &dyn Storage, native: &Native) -> Vec<(String, [u8; 
     ids.into_iter()
         .filter_map(|id| {
             let header = read_header(storage, &native.path(&fetched_folder(&id)))?;
-            (header.fingerprint == native.fingerprint.0
-                && fetched_code(storage, &id) == Some(header.sha256))
-            .then_some((id, header.sha256))
+            (native.fits(&header) && fetched_code(storage, &id) == Some(header.sha256))
+                .then_some((id, header.sha256))
         })
         .collect()
 }
@@ -598,6 +597,10 @@ pub struct Native {
     pub fingerprint: Fingerprint,
     /// What they must be built with ([`TOOLCHAIN`] of the shell's build).
     pub toolchain: Cow<'static, str>,
+    /// The compiler plugin files must name ([`compiler::id`] of the
+    /// release of the one that built the shell, [`Header::compiler`]); 0
+    /// where the shell does not say.
+    pub compiler: u32,
     /// The code's file in a plugin's folder, e.g. `code.ppn`.
     pub file: Cow<'static, str>,
     /// This start went without code plugins, and why.
@@ -612,10 +615,20 @@ impl Native {
         Self {
             fingerprint: FINGERPRINT,
             toolchain: Cow::Borrowed(TOOLCHAIN),
+            compiler: 0,
             file: file.into(),
             safe_mode: None,
             not_installed: Vec::new(),
         }
+    }
+
+    /// Whether a plugin file with `header` runs here: of this fingerprint,
+    /// and of this compiler where the shell names one. Installers check
+    /// it before a file is installed or placed, as the shell does before
+    /// it loads one.
+    pub fn fits(&self, header: &Header) -> bool {
+        header.fingerprint == self.fingerprint.0
+            && (self.compiler == 0 || header.compiler == self.compiler)
     }
 
     /// The path of the code of the plugin in `folder`.

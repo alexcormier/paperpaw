@@ -1,6 +1,8 @@
-# The shape of this crate's public types, as tools/interface.py writes
-# it: fields, variants and trait items in the source's order, private
-# fields too (ADR 0026).
+# The shape of this crate's types and the values of its constants, as
+# tools/interface.py writes them: fields, variants and trait items in
+# the source's order, private fields and the private types they reach
+# too, every feature on (ADR 0026).
+const paperpaw_layout::VERSION: u32 = 6u32
 struct paperpaw_layout::Face { style: paperpaw_document::TextStyle, heading: u8, size: u16 }
 struct paperpaw_layout::LayoutContext<'a> { document: &'a dyn paperpaw_document::Document, storage: &'a dyn paperpaw_platform::storage::Storage, width: f32, style: &'a paperpaw_layout::Style, typesetter: &'a dyn paperpaw_layout::Typesetter, hyphenate: core::option::Option<paperpaw_text::layout::Hyphenate<'a>> }
 struct paperpaw_layout::LineRun { start: usize, end: usize, face: paperpaw_layout::Face }

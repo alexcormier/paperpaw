@@ -351,7 +351,7 @@ enum CodePlugins {
 fn native(
     not_installed: alloc::vec::Vec<paperpaw_sdk::native::NotInstalled>,
 ) -> paperpaw_sdk::native::Native {
-    let mut native = paperpaw_sdk::native::Native::new("code.ppn");
+    let mut native = crate::native::this_firmware();
     native.not_installed = not_installed;
     native
 }

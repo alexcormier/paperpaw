@@ -20,7 +20,9 @@ change the plugin SDK.
   does. CI fails where what plugins see changes without the interface
   raised, and by default any change raises it: the public API and the
   shape of the types (their fields, variants and trait items in order,
-  private fields too) of the SDK and of every crate of PaperPaw below it
+  private fields and the private types they reach too, functions'
+  pointers with their ABI, every feature on) and the values of the
+  constants of the SDK and of every crate of PaperPaw below it
   (`api.txt` and `shape.txt` of each, `tools/interface.py`; kept in
   `crates/paperpaw-sdk/interface/`). Only a new type, function outside a
   trait, constant or `impl` goes free; a new trait item never does. A
@@ -29,10 +31,18 @@ change the plugin SDK.
 - A code plugin's file names the compiler that built it (format 2 of
   `.ppn`): `paperpaw-sign pack` takes it from the plugin's `.comment`,
   which `paperpaw-plugin.x` now keeps, and refuses a plugin of no
-  compiler or of two. The X4 and X4 Pro load only files of the compiler
+  compiler or of two. The store installs, and an update fetches, only
+  files of the firmware's fingerprint and compiler (`Native::fits`,
+  `Native::compiler`); an update answer may name them (`abi`,
+  `compiler`), and the update question sends the device's. The
+  repository's `rust-toolchain.toml` pins the release's compiler, 1.99.0.
+  The crates of others whose types cross (skrifa with read-fonts and
+  font-types, miniz_oxide, ed25519-compact) are pinned to one version
+  each. The X4 and X4 Pro load only files of the compiler
   that built their firmware, the emulator only libraries of its own
   (by the release in an ELF library, or the commit in the paths of its
-  `std`). Files of format 1 are refused as to be built anew.
+  `std`). Files of format 1 are refused as to be built anew: the store
+  says the plugin was built for an older PaperPaw, and the X4 logs why.
 - A service is found by its type's name across builds only where the
   type is made of the SDK's crates, `core` and `alloc` alone, and has
   the same size and alignment; a type of a plugin's own crate needs a

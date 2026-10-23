@@ -115,7 +115,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/joplin/info.json`, `locks.txt`, `found.md`, `note.md` | joplin | fetched or written again with each sending, removed after it |
 | `.paperpaw/plugins/readwise/body.json`, `answer.json` | readwise | a request's body and Readwise's answer, written again with each request |
 | `.paperpaw/plugins/update/offer.txt`, `updates/.download` | update | the update server's last answer and a download until it is whole, fetched again; let go once the version is no longer newer |
-| `.paperpaw/plugins/update/fetch.txt`, `fetch-current.txt`, `fetch-failed.txt`, `plugins/.<id>.next/` | update | the code plugins left to fetch for a downloaded update, the one being fetched, those that could not be; the folders fetched, installed by the updated firmware |
+| `.paperpaw/plugins/update/fetch.txt`, `fetch-current.txt`, `fetch-failed.txt`, `fetch-native.txt`, `plugins/.<id>.next/` | update | the code plugins left to fetch for a downloaded update, the one being fetched, those that could not be, the fingerprint and compiler the update's need; the folders fetched, installed by the updated firmware |
 | `.paperpaw/plugins/about/licences.md`, `about/plugins.md`, `plugin-manager/how.txt`, `store/how.txt`, `.paperpaw/tmp/` | about, plugin-manager, store, kernel | written when they are opened to read |
 | `.paperpaw/code-room.txt` | SDK `native` | the room code plugins have, as the shell found it at this start |
 

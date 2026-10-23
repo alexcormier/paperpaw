@@ -1,6 +1,8 @@
-# The shape of this crate's public types, as tools/interface.py writes
-# it: fields, variants and trait items in the source's order, private
-# fields too (ADR 0026).
+# The shape of this crate's types and the values of its constants, as
+# tools/interface.py writes them: fields, variants and trait items in
+# the source's order, private fields and the private types they reach
+# too, every feature on (ADR 0026).
+enum paperpaw_xml::Skip { Tag(0: core::option::Option<u8>), Until { end: &'static [u8], seen: [u8; 2] } }
 enum paperpaw_xml::Token<'a> { Start { name: &'a str, attrs: paperpaw_xml::Attrs<'a>, self_closing: bool }, End { name: &'a str }, Text(0: alloc::borrow::Cow<'a, str>), CData(0: &'a str) }
 struct paperpaw_xml::Attrs<'a>(0: &'a str)
 struct paperpaw_xml::Tokenizer { pending: alloc::vec::Vec<u8>, skip: core::option::Option<paperpaw_xml::Skip>, html: bool, raw: core::option::Option<&'static str> }

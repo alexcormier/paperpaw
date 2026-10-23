@@ -935,6 +935,7 @@ fn offer_with_code(size: usize, code: &[u8]) -> String {
     format!(
         r#"{{"version": "0.5.0", "url": "/api/v1/updates/paperpaw-x4-0.5.0-update.bin",
             "size": {size}, "plugins": ["chess-for-paperpaw 1.1.0"],
+            "abi": "0000000000005eed", "compiler": "00000001",
             "code": [{{"id": "stats", "name": "Statistics", "version": "0.5.0",
               "author_key": "{author}",
               "files": [

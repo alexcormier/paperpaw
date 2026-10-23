@@ -4,17 +4,22 @@ a plugin and PaperPaw (ADR 0026), as the plugin interface's test
 (`cargo test -p paperpaw-sdk --test interface`) compares it:
 
 - `api.txt`, the crate's public API, as cargo-public-api lists it;
-- `shape.txt`, the shape of its public types, from rustdoc's JSON: their
-  fields, variants and trait items in the order the source has them,
-  private fields too, each with its type. Order and private fields change
-  how a type is laid out and how a trait's table of functions is made,
-  which `api.txt` does not show: it is sorted, and public only.
+- `shape.txt`, the shape of its types, from rustdoc's JSON with every
+  feature on: the fields, variants and trait items of its public types
+  and of every private type their fields reach, in the order the source
+  has them, private fields too, each with its type (functions' pointers
+  with their ABI); and the values of its public constants. Order,
+  private fields and values change how a type is laid out, how a trait's
+  table of functions is made and what both sides take a value for,
+  which `api.txt` does not show: it is sorted, public only and without
+  values.
 
     python3 tools/interface.py           # writes both files of each crate
     python3 tools/interface.py --check   # fails where one is not current
 
 The crates are those `crates/paperpaw-sdk/interface/crates.txt` names.
-Needs the nightly Rust that `NIGHTLY` names, with cargo-public-api.
+Needs the nightly Rust that `NIGHTLY` names, with cargo-public-api of the
+version `PUBLIC_API` names (as CI installs it).
 """
 
 import json
@@ -26,17 +31,30 @@ import tempfile
 
 REPO = pathlib.Path(__file__).resolve().parent.parent
 NIGHTLY = "nightly-2026-10-17"
+PUBLIC_API = "0.52.0"
 CRATES = REPO / "crates" / "paperpaw-sdk" / "interface" / "crates.txt"
 HEADER = (
-    "# The shape of this crate's public types, as tools/interface.py writes\n"
-    "# it: fields, variants and trait items in the source's order, private\n"
-    "# fields too (ADR 0026).\n"
+    "# The shape of this crate's types and the values of its constants, as\n"
+    "# tools/interface.py writes them: fields, variants and trait items in\n"
+    "# the source's order, private fields and the private types they reach\n"
+    "# too, every feature on (ADR 0026).\n"
 )
 
 
 def crates():
     lines = CRATES.read_text(encoding="utf-8").splitlines()
     return [l.strip() for l in lines if l.strip() and not l.startswith("#")]
+
+
+def check_public_api():
+    """cargo-public-api is the version CI has: another may list otherwise."""
+    run = subprocess.run(
+        ["cargo", f"+{NIGHTLY}", "public-api", "--version"],
+        cwd=REPO, capture_output=True, text=True, encoding="utf-8", check=True,
+    )
+    if PUBLIC_API not in run.stdout.split():
+        sys.exit(f"cargo-public-api is {run.stdout.strip()}, not {PUBLIC_API}: "
+                 f"cargo install cargo-public-api@{PUBLIC_API} --locked")
 
 
 def api(crate):
@@ -49,9 +67,10 @@ def api(crate):
 
 
 def rustdoc(crate, target):
-    """The crate's rustdoc JSON, private items included."""
+    """The crate's rustdoc JSON, private items included, every feature on."""
     subprocess.run(
-        ["cargo", f"+{NIGHTLY}", "rustdoc", "-q", "-p", crate, "--lib", "--",
+        ["cargo", f"+{NIGHTLY}", "rustdoc", "-q", "-p", crate, "--lib",
+         "--all-features", "--",
          "-Z", "unstable-options", "--output-format", "json",
          "--document-private-items"],
         cwd=REPO, check=True, env={**os.environ, "CARGO_TARGET_DIR": target},
@@ -78,17 +97,43 @@ def is_repr(attr):
     return "repr" in (attr if isinstance(attr, str) else json.dumps(attr))
 
 
+def ids_in(value):
+    """The ids of the paths a type names, at any depth."""
+    if isinstance(value, dict):
+        for k, v in value.items():
+            if k in ("resolved_path", "trait") and isinstance(v, dict) and "id" in v:
+                yield v["id"]
+            yield from ids_in(v)
+    elif isinstance(value, list):
+        for v in value:
+            yield from ids_in(v)
+
+
+def abi(header):
+    """A function's pointer's ABI and kind: `unsafe extern "C" `."""
+    text = "unsafe " if header.get("is_unsafe") else ""
+    which = header.get("abi", "Rust")
+    if which != "Rust":
+        (name, _), = which.items() if isinstance(which, dict) else ((which, None),)
+        text += f'extern "{name}" '
+        if isinstance(which, dict) and (which[name] or {}).get("unwind"):
+            text += "unwind "
+    return text
+
+
 class Shapes:
-    """The types of one crate's rustdoc JSON, as lines."""
+    """The types and constants of one crate's rustdoc JSON, as lines."""
 
     def __init__(self, doc):
         self.index = doc["index"]
         self.paths = doc["paths"]
 
+    def path(self, id_, fallback):
+        entry = self.paths.get(str(id_))
+        return "::".join(entry["path"]) if entry else fallback
+
     def name(self, path):
-        entry = self.paths.get(str(path.get("id")))
-        name = "::".join(entry["path"]) if entry else path["path"]
-        return name + self.args(path.get("args"))
+        return self.path(path.get("id"), path["path"]) + self.args(path.get("args"))
 
     def ty(self, t):
         (kind, v), = t.items()
@@ -114,7 +159,11 @@ class Shapes:
         if kind == "function_pointer":
             sig = v["sig"]
             out = " -> " + self.ty(sig["output"]) if sig.get("output") else ""
-            return "fn(" + ", ".join(self.ty(x[1]) for x in sig["inputs"]) + ")" + out
+            params = [p["name"] for p in v.get("generic_params", [])]
+            hrtb = "for<" + ", ".join(params) + "> " if params else ""
+            variadic = ", ..." if sig.get("is_c_variadic") else ""
+            inputs = ", ".join(self.ty(x[1]) for x in sig["inputs"])
+            return hrtb + abi(v.get("header", {})) + "fn(" + inputs + variadic + ")" + out
         if kind == "qualified_path":
             return "<" + self.ty(v["self_type"]) + ">::" + v["name"]
         return raw(t)
@@ -163,14 +212,46 @@ class Shapes:
         (kind, _), = item["inner"].items()
         return kind + " " + item["name"]
 
+    def is_type(self, item):
+        return item["crate_id"] == 0 and next(iter(item["inner"])) in (
+            "struct", "enum", "union", "trait")
+
+    def reached(self, item):
+        """The ids of the types an item's fields and variants name."""
+        (kind, v), = item["inner"].items()
+        members = []
+        if kind == "struct" and isinstance(v["kind"], dict):
+            (form, f), = v["kind"].items()
+            members = f if form == "tuple" else f["fields"]
+        elif kind == "union":
+            members = v["fields"]
+        elif kind == "enum":
+            for variant in v["variants"]:
+                vk = self.index[str(variant)]["inner"]["variant"]["kind"]
+                if isinstance(vk, dict):
+                    (form, f), = vk.items()
+                    members += f if form == "tuple" else f["fields"]
+        for member in members:
+            if member is not None:
+                yield from ids_in(self.index[str(member)]["inner"])
+
+    def wanted(self):
+        """The public types, and every private one their fields reach."""
+        todo = [i for i in self.index.values()
+                if self.is_type(i) and i["visibility"] == "public"]
+        seen = {i["id"] for i in todo}
+        while todo:
+            item = todo.pop()
+            for id_ in self.reached(item):
+                other = self.index.get(str(id_))
+                if other and self.is_type(other) and other["id"] not in seen:
+                    seen.add(other["id"])
+                    todo.append(other)
+        return [self.index[str(i)] for i in seen]
+
     def line(self, item):
         (kind, v), = item["inner"].items()
-        entry = self.paths.get(str(item["id"]))
-        if kind not in ("struct", "enum", "union", "trait") or entry is None:
-            return None
-        if item["visibility"] != "public":
-            return None
-        head = kind + " " + "::".join(entry["path"])
+        head = kind + " " + self.path(item["id"], item["name"])
         params = [p["name"] for p in v.get("generics", {}).get("params", [])]
         if params:
             head += "<" + ", ".join(params) + ">"
@@ -185,17 +266,74 @@ class Shapes:
             body = " { " + ", ".join(self.member(x) for x in v["items"]) + " }"
         return head + body
 
+    def constants(self):
+        """`const <path>: <type> = <value>` of the public constants, and of
+        the associated ones of every `impl`."""
+        lines = []
+        for item in self.index.values():
+            if item["crate_id"] != 0:
+                continue
+            (kind, v), = item["inner"].items()
+            if kind == "constant" and item["visibility"] == "public":
+                path = self.path(item["id"], item["name"])
+                lines.append(f"const {path}: {self.ty(v['type'])} = {value(v['const'], item)}")
+            elif kind == "impl":
+                owner = self.ty(v["for"])
+                trait = f" ({self.name(v['trait'])})" if v.get("trait") else ""
+                for member in v["items"]:
+                    m = self.index.get(str(member))
+                    if not m or "assoc_const" not in m["inner"]:
+                        continue
+                    if not trait and m["visibility"] != "public":
+                        continue
+                    c = m["inner"]["assoc_const"]
+                    said = c.get("value")
+                    if not said or said == "_":
+                        said = source_value(m)
+                    lines.append(f"const {owner}::{m['name']}{trait}: {self.ty(c['type'])} = "
+                                 f"{said}")
+        return lines
+
+
+def value(const, item=None):
+    """A constant's value as rustdoc says it: evaluated where it can, else
+    the expression it is written as."""
+    if const.get("value"):
+        return const["value"]
+    if const.get("expr") and const["expr"] != "_":
+        return const["expr"]
+    return source_value(item) if item else "?"
+
+
+def source_value(item):
+    """What a constant is set to in its source, where rustdoc does not say
+    (`Uses(1 << 0)`): the text after its `=`, its spaces made one."""
+    span = item.get("span")
+    if not span:
+        return "?"
+    path = REPO / span["filename"].replace("\\", "/")
+    try:
+        lines = path.read_text(encoding="utf-8").splitlines()
+    except OSError:
+        return "?"
+    text = " ".join(lines[span["begin"][0] - 1:span["end"][0]])
+    at = text.find(f"const {item['name']}")
+    if at < 0 or "=" not in text[at:]:
+        return "?"
+    said = text[at:].split("=", 1)[1].split(";", 1)[0]
+    return " ".join(said.split()) or "?"
+
 
 def shape(crate, target):
     doc = rustdoc(crate, target)
     shapes = Shapes(doc)
-    lines = {shapes.line(i) for i in doc["index"].values() if i["crate_id"] == 0}
-    lines.discard(None)
+    lines = {shapes.line(i) for i in shapes.wanted()} | set(shapes.constants())
     return HEADER + "".join(line + "\n" for line in sorted(lines))
 
 
 def main():
     check = "--check" in sys.argv[1:]
+    check_public_api()
     stale = []
     with tempfile.TemporaryDirectory(prefix="interface-") as target:
         for crate in crates():

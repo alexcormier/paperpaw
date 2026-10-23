@@ -61,22 +61,36 @@ with that before the betas of 0.5:
   names it (`rustc version 1.99.0 (b940084d7 2026-09-28)`, in `.comment`).
   `paperpaw-sign pack` takes it from there, refuses a plugin built by
   none or by two, and writes a hash of it into the file's header (format
-  2). The firmware knows its own from its build script, which a shell may
-  have, and loads only files of it. The emulator checks a library built
-  for the computer the same way, by the release an ELF library names or
-  by the commit in the paths of its `std`.
+  2). The whole release counts, espup's own version too, which tells two
+  of its releases on one commit of Rust apart. The firmware knows its own
+  from its build script, which a shell may have, and loads only files of
+  it (`Native::compiler`). The store installs, and an update fetches,
+  only files that fit that way (`Native::fits`); an update answer names
+  the fingerprint and compiler of its firmware (`abi`, `compiler`), and
+  where it does not, a fetched file must have the running firmware's.
+  The emulator checks a library built for the computer the same way, by
+  the release an ELF library names or by the commit in the paths of its
+  `std`; the repository's own `rust-toolchain.toml` pins the release's
+  compiler too, so that the emulator and the plugin projects agree.
 - **CI fails where what plugins see changes without a raise, and any
   change raises it.** The crates whose types cross are the SDK and every
   crate of PaperPaw it depends on (`crates/paperpaw-sdk/interface/
   crates.txt`; `native::CROSSING_CRATES` names the same). Each keeps
-  `api.txt`, its public API, and `shape.txt`, the shape of its public
-  types: their fields, variants and trait items in the source's order,
-  private fields too, each with its type (`tools/interface.py`, from
-  rustdoc's JSON, on the nightly of CI). `api.txt` alone does not do: it
-  is sorted, so an inserted variant or two fields of one type swapped do
-  not show, and it shows no private field. `interface/` keeps both as
-  they were when the interface was last raised, and `interface.txt` the
-  linker script's hash and the compilers. A test
+  `api.txt`, its public API, and `shape.txt`: the fields, variants and
+  trait items of its public types and of every private type their fields
+  reach, in the source's order, private fields too, each with its type,
+  functions' pointers with their ABI; and the values of its public and
+  associated constants (`tools/interface.py`, from rustdoc's JSON with
+  every feature on, on the nightly and the cargo-public-api of CI).
+  `api.txt` alone does not do: it is sorted, so an inserted variant or
+  two fields of one type swapped do not show, and it shows no private
+  field and no value. `interface/` keeps both as they were when the
+  interface was last raised, and `interface.txt` the linker script's
+  hash, the compilers and the crates of others the crossing crates take.
+  Their types may lie inside those that cross (skrifa's in an outline
+  font, ed25519-compact's in a signature's check, miniz_oxide's in a
+  ZIP's reader), so each is pinned to one version (`=x.y.z`, the test
+  sees to it), and a new version raises the interface. A test
   (`cargo test -p paperpaw-sdk --test interface`) compares them. By
   default a change raises the interface: a field, a variant or an item
   of a trait that was there, a change of order, of a private field or of
