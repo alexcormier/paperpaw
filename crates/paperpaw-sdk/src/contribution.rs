@@ -188,13 +188,6 @@ pub enum Contribution {
     Preset(Box<Preset>),
     /// Presets kept in the program.
     FixedPresets(&'static [Preset]),
-    /// A service found by its type's `TypeId` alone (see
-    /// `Registrar::add_service`).
-    #[non_exhaustive]
-    Service {
-        id: Id,
-        service: Box<dyn Any>,
-    },
     /// A service with the name of its type (see [`Registrar::publish`]).
     #[non_exhaustive]
     Published {
@@ -281,7 +274,7 @@ impl Contribution {
             Contribution::Widget(_) => "widget",
             Contribution::SetupStep(_) => "setup-step",
             Contribution::Preset(_) | Contribution::FixedPresets(_) => "preset",
-            Contribution::Service { .. } | Contribution::Published { .. } => "service",
+            Contribution::Published { .. } => "service",
             Contribution::ToPoint { .. } => "to-point",
             Contribution::Point(_) => "point",
             Contribution::EventDeclared(_) => "event",
@@ -333,7 +326,7 @@ impl Contribution {
             Contribution::Widget(w) => &w.id,
             Contribution::SetupStep(s) => &s.id,
             Contribution::Preset(p) => &p.id,
-            Contribution::Service { id, .. } | Contribution::Published { id, .. } => id,
+            Contribution::Published { id, .. } => id,
             Contribution::Point(p) => &p.id,
             Contribution::EventDeclared(e) => &e.id,
             _ => return None,
@@ -1070,16 +1063,6 @@ impl Registrar {
         category: crate::widgets::WidgetCategory,
     ) -> Result<(), RegisterError> {
         self.add(Contribution::WidgetCategory(Box::new(category)))
-    }
-
-    /// Publishes a service for other plugins as `id`, found by its type
-    /// alone: not by native code plugins built apart from it.
-    #[deprecated(
-        since = "0.4.0",
-        note = "use `Registrar::publish`, whose services every plugin finds"
-    )]
-    pub fn add_service(&mut self, id: Id, service: Box<dyn Any>) -> Result<(), RegisterError> {
-        self.add(Contribution::Service { id, service })
     }
 
     /// Publishes `service` for other plugins as `id`, usually a trait

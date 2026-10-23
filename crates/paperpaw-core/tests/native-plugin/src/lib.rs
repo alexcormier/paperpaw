@@ -20,12 +20,7 @@ impl Plugin for Probe {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         Hello.register(r)?;
-        r.publish(Id::new_static("hello.version"), Version::new(1, 2, 3))?;
-        #[expect(deprecated, reason = "to show what it does not find")]
-        r.add_service(
-            Id::new_static("hello.by-type-id"),
-            alloc::boxed::Box::new(Version::new(1, 2, 3)),
-        )
+        r.publish(Id::new_static("hello.version"), Version::new(1, 2, 3))
     }
 }
 
