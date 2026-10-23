@@ -19,9 +19,10 @@ const JOIN_MS: u64 = 1000;
 
 /// The address the emulated device gets.
 const ADDRESS: &str = "192.168.1.42";
-/// The address of the emulated device's own network (`WifiCommand::Host`):
-/// its servers listen on this computer.
-const HOST_ADDRESS: &str = "127.0.0.1";
+/// The device's address in its own network (`WifiCommand::Host`), as the
+/// X4 has it: what its pages are shown at there (`served_at`), though
+/// they are served on this computer.
+const HOST_ADDRESS: &str = "192.168.4.1";
 
 fn networks() -> Vec<WifiNetwork> {
     let net = |ssid: &str, signal, secured| WifiNetwork {
@@ -118,7 +119,12 @@ impl Wifi {
     /// A phone joins the device's own network and is given an address
     /// (the script's `phone-joins`): there is no phone here.
     pub fn phone_joins(&mut self, now: Instant) {
-        if let WifiState::Hosting { ssid, address, guests } = &self.state {
+        if let WifiState::Hosting {
+            ssid,
+            address,
+            guests,
+        } = &self.state
+        {
             let state = WifiState::Hosting {
                 ssid: ssid.clone(),
                 address: address.clone(),
@@ -139,6 +145,17 @@ impl Wifi {
     fn report(&mut self, at: Instant, event: WifiEvent) {
         let place = self.due.partition_point(|(due, _)| *due <= at);
         self.due.insert(place, (at, event));
+    }
+
+    /// Where a server that started at `address` (this computer's, with
+    /// its port) is shown: in the device's own network at the device's
+    /// address there, as on the X4, never at this computer's (a phone in
+    /// that network knows no other).
+    pub fn served_at(&self, address: &str) -> String {
+        match address.rsplit_once(':') {
+            Some((_, port)) if self.state.is_hosting() => format!("{HOST_ADDRESS}:{port}"),
+            _ => String::from(address),
+        }
     }
 
     /// When something is to be reported next.
@@ -166,6 +183,26 @@ mod tests {
             events.push(event);
         }
         events
+    }
+
+    /// Pages served in the device's own network show at its address
+    /// there, as on the X4; in another network, at this computer's.
+    #[test]
+    fn pages_in_the_own_network_show_at_its_address() {
+        let mut wifi = Wifi::default();
+        wifi.apply(WifiCommand::On, Instant(0));
+        run(&mut wifi, 1000);
+        assert_eq!(wifi.served_at("192.168.178.48:80"), "192.168.178.48:80");
+        wifi.apply(
+            WifiCommand::Host {
+                ssid: String::from("PaperPaw X4"),
+                password: String::from("acdefhkmnprtwxy"),
+            },
+            Instant(1000),
+        );
+        run(&mut wifi, 2000);
+        assert_eq!(wifi.served_at("192.168.178.48:80"), "192.168.4.1:80");
+        assert_eq!(wifi.served_at("192.168.178.48:8081"), "192.168.4.1:8081");
     }
 
     #[test]

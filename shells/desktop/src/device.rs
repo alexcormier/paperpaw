@@ -442,7 +442,11 @@ impl Device {
     /// Passes requests to plugins' servers on, and what their sockets
     /// brought.
     pub fn poll_servers(&mut self) {
-        while let Some(event) = self.servers.next() {
+        while let Some(mut event) = self.servers.next() {
+            // In the device's own network at the device's address there.
+            if let paperpaw_core::ServerEvent::Started { address, .. } = &mut event {
+                *address = self.wifi.served_at(address);
+            }
             let now = self.now();
             let effects = budget::track(|| self.kernel.server_event(now, event));
             self.execute(effects);
