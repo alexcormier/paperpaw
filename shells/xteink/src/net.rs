@@ -284,7 +284,9 @@ impl Net {
     /// it (0 in another network).
     pub fn guests(&self) -> u8 {
         let seconds = u64::try_from(now().total_millis() / 1000).unwrap_or(0);
-        self.server.as_ref().map_or(0, |(_, server)| server.guests(seconds))
+        self.server
+            .as_ref()
+            .map_or(0, |(_, server)| server.guests(seconds))
     }
 
     /// In the device's own network: answers those asking for an address.
