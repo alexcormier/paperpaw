@@ -478,9 +478,10 @@ fn the_progress_goes_at_most_once_a_minute_and_again_after_a_failure() {
     );
     assert_eq!(paperpaw_sdk::json::number(&sent, "percentage"), Some(0.25));
     assert_eq!(paperpaw_sdk::json::text(&sent, "progress"), Some(""));
+    // The device's name (its model's, none set).
     assert_eq!(
         paperpaw_sdk::json::text(&sent, "device"),
-        Some("PaperPaw (Test device)")
+        Some("Test device")
     );
     assert_eq!(
         paperpaw_sdk::json::text(&sent, "device_id"),

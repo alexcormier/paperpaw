@@ -512,7 +512,11 @@ pub fn wifi_state(state: &WifiState) {
         WifiState::On => println!("PP:WIFI on"),
         WifiState::Joining { ssid } => println!("PP:WIFI joining {ssid}"),
         WifiState::Online { ssid, address } => println!("PP:WIFI online {ssid} {address}"),
-        WifiState::Hosting { ssid, address } => println!("PP:WIFI hosting {ssid} {address}"),
+        WifiState::Hosting {
+            ssid,
+            address,
+            guests,
+        } => println!("PP:WIFI hosting {ssid} {address} {guests}"),
         _ => println!("PP:WIFI other"),
     }
 }

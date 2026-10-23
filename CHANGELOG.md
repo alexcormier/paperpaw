@@ -6,6 +6,33 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The reader can name the device (*Device name* under System; by default
+  the model's, "PaperPaw X4 Pro", "PaperPaw X4", on other devices the
+  model). Calibre, the progress server (kosync), the Wi-Fi transfer
+  page's title and the reader's own network for a phone show it; the X4
+  and X4 Pro give it to the router as their host name (DHCP's option 12,
+  letters, digits and hyphens: "Hannes’ Reader" is `Hannes-Reader`).
+  A change counts from the next time the device connects. Plugins take
+  it from `Env::device_name` (`device_name::SETTING`,
+  `device_name::host_name`, `device_name::ssid`); `wifi::join_code`
+  makes the QR code that joins a network, its signs escaped.
+
+- Setting up Wi-Fi with a phone goes a step at a time: first the code
+  that joins the reader's own network, its name and password large below
+  it, then, once a phone joined it, the code that opens the page with its
+  address. *Next* (Select, the page buttons, a tap) goes on where the
+  phone does not say so. `WifiState::Hosting` says how many devices took
+  an address in the own network (`guests`), on the X4 and X4 Pro from
+  their DHCP server; the emulator's script step `phone-joins` makes one
+  join.
+- What a person reads off the screen and types is drawn from letters not
+  taken for one another (no 0 o 1 l i j 2 z 5 s 6 b 8 9 g q u v):
+  `Random::readable`, `random::READABLE`, `random::readable_letters`,
+  shown in groups of five (`random::grouped`). The own network's name
+  and its password of 15 letters (62 bits) in the phone setup and the
+  transfer without a router, and the keys of served pages
+  (`served::KEY_LETTERS`, 16 letters now) use them.
+
 - A combining mark with no character before it (a caption or line
   that begins with one) sits at the start of its text instead of
   reaching back past it, as drawn and as measured by

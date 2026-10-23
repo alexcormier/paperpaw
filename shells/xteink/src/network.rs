@@ -123,6 +123,12 @@ impl Network {
         self.radio.is_on()
     }
 
+    /// The host name the router lists the device by, from the next time
+    /// a network is joined.
+    pub fn set_host_name(&mut self, name: &str) {
+        self.radio.set_host_name(name);
+    }
+
     /// What the kernel asks of the network (from `Kernel::take_io`),
     /// carried out with the next step.
     pub fn ask(&mut self, io: NetworkIo) {

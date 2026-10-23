@@ -970,6 +970,16 @@ impl Kernel {
         &self.shared.settings
     }
 
+    /// The device's name as others see it (`Env::device_name`), e.g. for
+    /// a shell that gives it to the router as its host name.
+    pub fn device_name(&self) -> String {
+        let value = self
+            .shared
+            .settings
+            .text(paperpaw_sdk::device_name::SETTING.as_str());
+        paperpaw_sdk::device_name::chosen(value, &self.shared.device)
+    }
+
     /// The passwords and keys (see [`paperpaw_sdk::secrets`]), e.g. for a
     /// shell that joins networks itself.
     pub fn secrets(&self) -> &paperpaw_sdk::secrets::Secrets {

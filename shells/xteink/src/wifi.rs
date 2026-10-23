@@ -107,6 +107,10 @@ pub struct Radio {
     reported: WifiState,
     /// What to report.
     events: Vec<WifiEvent>,
+    /// The host name the router lists the device by, and its DHCP option
+    /// (kept for the network's life: made anew only when the name
+    /// changes).
+    host: Option<(String, &'static [smoltcp::wire::DhcpOption<'static>])>,
 }
 
 /// `future`'s outcome, or `None` if it takes longer than `ms`.
@@ -151,6 +155,7 @@ impl Radio {
             stopping: false,
             reported: WifiState::Off,
             events: Vec::new(),
+            host: None,
         }
     }
 
@@ -175,6 +180,35 @@ impl Radio {
     /// The network, once there is an address.
     pub fn online(&mut self) -> Option<&mut Net> {
         self.net().filter(|net| net.address().is_some())
+    }
+
+    /// The host name `name` (letters, digits and hyphens) for the router,
+    /// from the next time a network is joined.
+    pub fn set_host_name(&mut self, name: &str) {
+        if self.host.as_ref().is_some_and(|(kept, _)| kept == name) {
+            return;
+        }
+        let data: &'static [u8] = Box::leak(name.as_bytes().to_vec().into_boxed_slice());
+        let option: &'static [smoltcp::wire::DhcpOption<'static>] =
+            Box::leak(Box::new([smoltcp::wire::DhcpOption { kind: 12, data }]));
+        self.host = Some((String::from(name), option));
+        if let Some(on) = &mut self.on {
+            on.net.set_host_name(option);
+        }
+    }
+
+    /// The DHCP option naming the device, if it has a name yet.
+    fn host_option(&self) -> Option<&'static [smoltcp::wire::DhcpOption<'static>]> {
+        self.host.as_ref().map(|(_, option)| *option)
+    }
+
+    /// A station's network, named as the device is (`host`).
+    fn station(host: Option<&'static [smoltcp::wire::DhcpOption<'static>]>) -> Net {
+        let mut net = Net::new(esp_radio::wifi::Interface::station());
+        if let Some(option) = host {
+            net.set_host_name(option);
+        }
+        net
     }
 
     /// Does what the kernel asked (now, or once the task going on is
@@ -220,9 +254,10 @@ impl Radio {
         }
         mark(at::RADIO_STARTED);
         log::info!("wifi: on");
+        let net = Self::station(self.host_option());
         self.on = Some(On {
             work: Work::Idle(Box::leak(Box::new(controller))),
-            net: Net::new(esp_radio::wifi::Interface::station()),
+            net,
             ssid: None,
             linked: false,
             hosting: None,
@@ -312,6 +347,7 @@ impl Radio {
 
     /// Starts the next command queued, if nothing goes on.
     fn next_task(&mut self) {
+        let host = self.host_option();
         let Some(on) = &mut self.on else {
             return;
         };
@@ -330,7 +366,7 @@ impl Radio {
         if closing {
             log::info!("wifi: own network closed");
             on.hosting = None;
-            on.net = Net::new(esp_radio::wifi::Interface::station());
+            on.net = Self::station(host);
             if !matches!(command, WifiCommand::Join { .. })
                 && let Err(e) = controller.set_config(&Config::Station(StationConfig::default()))
             {
@@ -492,6 +528,8 @@ impl Radio {
                     .address()
                     .map(|a| alloc::format!("{}", a.address()))
                     .unwrap_or_default(),
+                // A phone that took an address: reported as it joins.
+                guests: net.guests(),
             },
             Some(on) => match (&on.ssid, on.linked, on.net.address()) {
                 (Some(ssid), true, Some(address)) => WifiState::Online {

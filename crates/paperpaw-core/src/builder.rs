@@ -620,7 +620,9 @@ impl Kernel {
             .flat_map(|c| plugin_switches(c, true))
             .collect();
         disabled.extend(off.into_iter().filter(|id| !on.contains(id)));
-        let core: Box<dyn Plugin> = Box::new(CorePlugin);
+        // The device's name the default of its setting.
+        let name = paperpaw_sdk::device_name::default_name(&self.shared.device);
+        let core: Box<dyn Plugin> = Box::new(CorePlugin(name));
         for plugin in core::iter::once(core).chain(plugins) {
             self.add_plugin(plugin.as_ref(), &disabled);
         }
