@@ -6,6 +6,40 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Each release also brings, for tools that work with it without a build
+  of their own (the workshop): the desktop emulator for Windows, macOS
+  (Apple silicon and Intel) and Linux with paperpaw-dev beside it
+  (`paperpaw-emu-<version>-<target>.zip`, Intel Macs built on Apple
+  silicon), and the handbook
+  (`paperpaw-handbook-<version>.zip`, `tools/handbook.py`: the registry,
+  the codes of paperpaw-dev's findings, the docs, the samples, the SDK's
+  items and source), each with its SHA-256 and a signature of its own
+  with the firmware's key over a domain of its own, so it never holds as
+  a firmware's (`paperpaw-sign sign-asset`, `check-asset`).
+- The desktop emulator loads code plugins built for the computer it runs
+  on (`plugins/<id>/code-host.dll`, `.so` or `.dylib`, the same `plugin!`
+  entry as `.ppn` files), only when the one who starts it says so:
+  `--trust-code`, or `"trust_code": true` when starting over `--stdio`
+  (which installs them first), never by default; copies are loaded from
+  a fresh folder of the process's own. `ready` over `--stdio` now
+  says the fingerprint and compiler they must be built with
+  (`native::CODE_FILES` names them too).
+- `paperpaw-emu --check <plugin folder> [--profile <id>]...` checks a
+  plugin with paperpaw-dev (which the release puts beside it) and writes
+  its findings as JSON on standard output.
+- `paperpaw-emu --stdio`: the emulator driven by another program over its
+  standard input and output, a JSON object a line (protocol version 1):
+  start a profile on a folder, buttons, touches, reload, describe, run,
+  open, shot, quit; it tells frames (only when the panel changed),
+  warnings, plugins' requests and errors. A request line is read up to
+  16 MB; a longer one is said and passed over.
+- `paperpaw-emu --registry <file>` writes what the app offers data
+  plugins as JSON (registry version 2): every setting, widget, action and
+  device profile, for tools that work with a release (the handbook, the
+  workshop) without a build of their own. Profiles say whether their
+  screen is a colour panel (`colour_screen`: the Kobo Libra Colour, not
+  the Boox Go 7) and whether black and white are shown in the colours set
+  (`tinted`; `colors`, which said that, is kept).
 - The reader can name the device (*Device name* under System; by default
   the model's, "PaperPaw X4 Pro", "PaperPaw X4", on other devices the
   model). Calibre, the progress server (kosync), the Wi-Fi transfer

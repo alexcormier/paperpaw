@@ -57,9 +57,16 @@ pub const FINGERPRINT: Fingerprint = {
 pub const TOOLCHAIN: &str = env!("PAPERPAW_NATIVE_TOOLCHAIN");
 
 /// The names a plugin folder's code has: `code.ppn` on the X4 and the X4
-/// Pro, `code.so` on Android. A folder with one is a code plugin's, also
-/// where PaperPaw loads none.
-pub const CODE_FILES: &[&str] = &["code.ppn", "code.so"];
+/// Pro, `code.so` on Android, `code-host.dll`, `.so` or `.dylib` built for
+/// a computer (the desktop emulator). A folder with one is a code plugin's,
+/// also where PaperPaw loads none.
+pub const CODE_FILES: &[&str] = &[
+    "code.ppn",
+    "code.so",
+    "code-host.dll",
+    "code-host.so",
+    "code-host.dylib",
+];
 
 /// The folder in the plugins' folder where code plugins fetched for a
 /// firmware update wait for it (`plugins/.stats.next`), which PaperPaw
