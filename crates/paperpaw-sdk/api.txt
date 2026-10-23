@@ -3089,6 +3089,15 @@ pub fn paperpaw_sdk::time::Clock::micros(&self) -> core::option::Option<u64>
 pub const fn paperpaw_sdk::time::Clock::new(fn() -> u64) -> Self
 impl core::fmt::Debug for paperpaw_sdk::time::Clock
 pub fn paperpaw_sdk::time::Clock::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+#[non_exhaustive] pub struct paperpaw_sdk::time::Date
+pub paperpaw_sdk::time::Date::day: u8
+pub paperpaw_sdk::time::Date::month: u8
+pub paperpaw_sdk::time::Date::year: i32
+impl paperpaw_sdk::time::Date
+pub const fn paperpaw_sdk::time::Date::day(&self) -> u8
+pub const fn paperpaw_sdk::time::Date::month(&self) -> u8
+pub const fn paperpaw_sdk::time::Date::new(i32, u8, u8) -> Self
+pub const fn paperpaw_sdk::time::Date::year(&self) -> i32
 pub struct paperpaw_sdk::time::LocalTime
 pub paperpaw_sdk::time::LocalTime::day: u8
 pub paperpaw_sdk::time::LocalTime::hour: u8
@@ -3100,6 +3109,16 @@ pub paperpaw_sdk::time::LocalTime::year: i32
 impl paperpaw_sdk::time::LocalTime
 pub fn paperpaw_sdk::time::LocalTime::from_seconds(i64) -> Self
 pub fn paperpaw_sdk::time::LocalTime::to_seconds(&self) -> i64
+#[non_exhaustive] pub struct paperpaw_sdk::time::Time
+pub paperpaw_sdk::time::Time::hour: u8
+pub paperpaw_sdk::time::Time::minute: u8
+pub paperpaw_sdk::time::Time::second: u8
+impl paperpaw_sdk::time::Time
+pub const fn paperpaw_sdk::time::Time::hour(&self) -> u8
+pub const fn paperpaw_sdk::time::Time::minute(&self) -> u8
+pub const fn paperpaw_sdk::time::Time::new(u8, u8) -> Self
+pub const fn paperpaw_sdk::time::Time::second(&self) -> u8
+pub const fn paperpaw_sdk::time::Time::with_second(self, u8) -> Self
 pub struct paperpaw_sdk::time::TimeZone
 impl paperpaw_sdk::time::TimeZone
 pub fn paperpaw_sdk::time::TimeZone::offset_at(&self, i64) -> i32

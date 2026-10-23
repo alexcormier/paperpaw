@@ -799,9 +799,11 @@ struct paperpaw_sdk::status::StatusLine<'a> { area: paperpaw_platform::geometry:
 struct paperpaw_sdk::status::StatusLineSpec { id: paperpaw_sdk::id::Id, title: alloc::borrow::Cow<'static, str>, draw: paperpaw_sdk::status::StatusLineFn, signature: core::option::Option<paperpaw_sdk::status::StatusSignatureFn>, targets: core::option::Option<paperpaw_sdk::status::StatusTargetsFn>, also: core::option::Option<paperpaw_sdk::id::Id> }
 struct paperpaw_sdk::status::StatusTarget { area: paperpaw_platform::geometry::Rect, command: paperpaw_sdk::command::Command }
 struct paperpaw_sdk::time::Clock { micros: core::option::Option<fn() -> u64> }
+struct paperpaw_sdk::time::Date { year: i32, month: u8, day: u8 }
 struct paperpaw_sdk::time::LocalTime { year: i32, month: u8, day: u8, hour: u8, minute: u8, second: u8, weekday: u8 }
 struct paperpaw_sdk::time::Rule { day: paperpaw_sdk::time::Day, time: i32 }
 struct paperpaw_sdk::time::Summer { offset: i32, start: paperpaw_sdk::time::Rule, end: paperpaw_sdk::time::Rule }
+struct paperpaw_sdk::time::Time { hour: u8, minute: u8, second: u8 }
 struct paperpaw_sdk::time::TimeZone { standard: i32, summer: core::option::Option<paperpaw_sdk::time::Summer> }
 struct paperpaw_sdk::ui::chips::Chips { cells: alloc::vec::Vec<paperpaw_platform::geometry::Rect> }
 struct paperpaw_sdk::ui::choice::Choice { style: paperpaw_sdk::ui::style::UiStyle, region: paperpaw_platform::geometry::Rect, title: paperpaw_platform::geometry::Rect, list: paperpaw_sdk::ui::list::ListView, pager: core::option::Option<paperpaw_sdk::ui::header::Pager>, title_text: alloc::string::String, path: alloc::string::String, reply: core::option::Option<paperpaw_sdk::id::Id>, labels: alloc::string::String, options: alloc::vec::Vec<alloc::string::String> }

@@ -79,6 +79,77 @@ pub const TIME_ZONES: &[(&str, &str)] = &[
     ("core.tz.auckland", "NZST-12NZDT,M9.5.0,M4.1.0/3"),
 ];
 
+/// A day of the calendar: year, month (1 to 12) and day (1 to 31).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub struct Date {
+    pub year: i32,
+    /// 1 to 12.
+    pub month: u8,
+    /// 1 to 31.
+    pub day: u8,
+}
+
+impl Date {
+    /// Day `day` of month `month` (1 to 12) of `year`.
+    pub const fn new(year: i32, month: u8, day: u8) -> Self {
+        Self { year, month, day }
+    }
+
+    pub const fn year(&self) -> i32 {
+        self.year
+    }
+
+    pub const fn month(&self) -> u8 {
+        self.month
+    }
+
+    pub const fn day(&self) -> u8 {
+        self.day
+    }
+}
+
+/// A time of day: hour (0 to 23), minute and second (0 to 59).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, PartialOrd, Ord, Hash)]
+#[non_exhaustive]
+pub struct Time {
+    /// 0 to 23.
+    pub hour: u8,
+    /// 0 to 59.
+    pub minute: u8,
+    /// 0 to 59.
+    pub second: u8,
+}
+
+impl Time {
+    /// `hour`:`minute`, at its first second.
+    pub const fn new(hour: u8, minute: u8) -> Self {
+        Self {
+            hour,
+            minute,
+            second: 0,
+        }
+    }
+
+    /// The same time at `second`.
+    pub const fn with_second(mut self, second: u8) -> Self {
+        self.second = second;
+        self
+    }
+
+    pub const fn hour(&self) -> u8 {
+        self.hour
+    }
+
+    pub const fn minute(&self) -> u8 {
+        self.minute
+    }
+
+    pub const fn second(&self) -> u8 {
+        self.second
+    }
+}
+
 /// A date and time of day.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct LocalTime {
