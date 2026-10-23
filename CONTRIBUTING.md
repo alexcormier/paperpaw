@@ -159,7 +159,13 @@ Pebble theme's in `crates/paperpaw-app/i18n/pebble`, the shells' in
 A language can also come as a data plugin, without changing PaperPaw
 ([docs/plugins.md](docs/plugins.md#plugins-without-code)).
 
-## Adding a device profile
+## Adding a device
+
+[docs/porting.md](docs/porting.md) says what a port to another device
+touches and what it leaves alone, how the X4 Pro was added step by step,
+the pitfalls met on the way, how to check a port on the device (the
+diagnostics plugin's device check) and what a pull request for a new
+device brings.
 
 Emulator profiles live in `shells/desktop/src/profiles.rs`. Please state
 where the specifications come from and mark values you could not verify.

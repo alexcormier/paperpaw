@@ -108,7 +108,8 @@ today's reading: sad, so-so, content or happy.
 - **One codebase, many devices.** Today: the Xteink X4 and X4 Pro, and
   the desktop emulator. Planned: Android e-readers such as Boox, in
   grayscale and colour e-ink, the Xteink X3 and X4 Classic, Kobo, Kindle
-  (jailbroken), PocketBook and reMarkable.
+  (jailbroken), PocketBook and reMarkable. To add a device, see
+  [docs/porting.md](docs/porting.md).
 
 ## Get it
 
