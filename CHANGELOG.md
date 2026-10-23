@@ -6,6 +6,9 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- `paperpaw-emu --check <plugin folder> [--profile <id>]...` checks a
+  plugin with paperpaw-dev (which the release puts beside it) and writes
+  its findings as JSON on standard output.
 - `paperpaw-emu --stdio`: the emulator driven by another program over its
   standard input and output, a JSON object a line (protocol version 1):
   start a profile on a folder, buttons, touches, reload, describe, run,
