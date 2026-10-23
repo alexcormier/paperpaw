@@ -29,9 +29,11 @@ pub fn file_name() -> String {
 }
 
 /// How the emulator loads code plugins: files named [`file_name`], fit
-/// for this build.
+/// for this build, built by the compiler that built it.
 pub fn native() -> Native {
-    Native::new(file_name())
+    let mut native = Native::new(file_name());
+    native.toolchain = std::borrow::Cow::Borrowed(env!("PAPERPAW_HOST_TOOLCHAIN"));
+    native
 }
 
 /// The largest code plugin file read.

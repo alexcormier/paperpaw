@@ -182,11 +182,12 @@ impl Loader {
         let mut head = [0; HEADER_LEN];
         read_exact(storage, path, 0, &mut head).map_err(|_| PluginProblem::Damaged)?;
         let header = Header::read(&head).map_err(problem)?;
-        if header.chip != CHIP || header.fingerprint != FINGERPRINT.0 {
-            warn!(
-                "native: {path} is for {} {:016x}, this firmware {CHIP} {FINGERPRINT} ({TOOLCHAIN})",
-                header.chip, header.fingerprint
-            );
+        if header.chip != CHIP {
+            warn!("native: {path} is for chip {}, this firmware's is {CHIP}", header.chip);
+            return Err(PluginProblem::OtherBuild);
+        }
+        if let Some(why) = paperpaw_sdk::native::Fingerprint(header.fingerprint).misfit() {
+            warn!("native: {path} is {why} ({FINGERPRINT}, {TOOLCHAIN})");
             return Err(PluginProblem::OtherBuild);
         }
         // The file installed, its content checked against its header

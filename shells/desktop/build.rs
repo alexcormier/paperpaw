@@ -67,4 +67,18 @@ fn main() {
         commit.unwrap_or_default()
     );
     println!("cargo::rustc-env=PAPERPAW_SOURCE_RELEASE={release}");
+    // The compiler code plugins for this computer must be built with
+    // (the SDK, without a build script, cannot know it): `--stdio`'s
+    // `ready` says it.
+    println!("cargo::rerun-if-env-changed=RUSTC");
+    let rustc = std::env::var("RUSTC").unwrap_or_else(|_| String::from("rustc"));
+    let first = Command::new(rustc)
+        .arg("-V")
+        .output()
+        .ok()
+        .and_then(|o| String::from_utf8(o.stdout).ok())
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|| String::from("rustc"));
+    let target = std::env::var("TARGET").unwrap_or_default();
+    println!("cargo::rustc-env=PAPERPAW_HOST_TOOLCHAIN={first}, {target}");
 }

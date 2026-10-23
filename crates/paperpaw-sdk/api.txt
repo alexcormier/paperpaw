@@ -2263,6 +2263,9 @@ pub fn paperpaw_sdk::native::CodeRoom::shared(self) -> Self
 pub fn paperpaw_sdk::native::CodeRoom::with_plugins(self, u32, core::option::Option<u32>) -> Self
 pub struct paperpaw_sdk::native::Fingerprint(pub u64)
 impl paperpaw_sdk::native::Fingerprint
+pub const fn paperpaw_sdk::native::Fingerprint::interface(self) -> u16
+pub fn paperpaw_sdk::native::Fingerprint::misfit(self) -> core::option::Option<alloc::string::String>
+pub const fn paperpaw_sdk::native::Fingerprint::of(u16, u64) -> paperpaw_sdk::native::Fingerprint
 pub fn paperpaw_sdk::native::Fingerprint::parse(&str) -> core::option::Option<paperpaw_sdk::native::Fingerprint>
 impl core::fmt::Display for paperpaw_sdk::native::Fingerprint
 pub fn paperpaw_sdk::native::Fingerprint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
@@ -2289,6 +2292,8 @@ impl paperpaw_sdk::native::SafeMode
 pub fn paperpaw_sdk::native::SafeMode::new(paperpaw_sdk::native::SafeModeReason) -> Self
 pub const paperpaw_sdk::native::CODE_FILES: &[&str]
 pub const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint
+pub const paperpaw_sdk::native::INTERFACE: u16
+pub const paperpaw_sdk::native::LAYOUT: u64
 pub const paperpaw_sdk::native::TOOLCHAIN: &str
 pub fn paperpaw_sdk::native::author(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32]) -> paperpaw_sdk::native::Author
 pub fn paperpaw_sdk::native::check_file(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<(paperpaw_native::header::Header, core::option::Option<paperpaw_native::signature::Signature>), paperpaw_native::header::Problem>

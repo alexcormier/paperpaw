@@ -3,9 +3,14 @@
    instruction bus's view of the same memory (0x06000000 further on), so
    the two make one image that keeps its shape wherever it is loaded.
 
-   A plugin crate links with it through its rustflags
-   (`-C link-arg=-Tpaperpaw-plugin.x`, with `-Wl,` for the X4 Pro's GCC);
-   paperpaw-native's build script puts it where the linker finds it. */
+   A plugin's project keeps a copy of it at its top, beside its
+   `.cargo/config.toml`, whose rustflags link with it
+   (`-C link-arg=-Tpaperpaw-plugin.x`, with `-Wl,` for the X4 Pro's GCC).
+   No build script brings it: one in a plugin's dependencies would be
+   built for the computer, whose name Cargo hashes into every crate's
+   metadata, and a build on Windows would differ from one on Linux. It is
+   part of the plugin interface (native::INTERFACE): a copy that differs
+   from this one makes plugins that do not run. */
 
 ENTRY(PAPERPAW_ENTRY)
 

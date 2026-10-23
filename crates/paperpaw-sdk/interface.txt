@@ -1,0 +1,12 @@
+# What code plugins see at this plugin interface (ADR 0028): kept so
+# that CI fails where it changes without native::INTERFACE raised.
+# Written by `PAPERPAW_BLESS=1 cargo test -p paperpaw-sdk --test
+# interface`, with interface-api.txt (the SDK's items, api.txt as
+# it was), only once INTERFACE is raised.
+interface = 1
+features = outlines true, colour false
+layout = b74c4d9b4743fe90
+fingerprint = 0001463bab2c95b0
+linker = ecd2a8372db2705d
+x4 = rustc 1.99.0
+x4-pro = esp 1.97.0.0

@@ -58,6 +58,8 @@ pub fn show(path: &str) -> Result<(), String> {
     sha.update(&file);
     println!("chip:        {} ({})", header.chip, header.chip.id());
     println!("fingerprint: {:016x}", header.fingerprint);
+    // The plugin interface it was built for: the fingerprint's top bits.
+    println!("interface:   {}", header.fingerprint >> 48);
     println!(
         "image:       {} bytes: {} of data, {} of code, linked at {:#010x}, aligned to {}",
         header.image_len,

@@ -83,6 +83,11 @@ jobs:
             cargo "+$NIGHTLY" public-api -p "$crate" -sss > api.txt
             diff -u "crates/$crate/api.txt" api.txt
           done
+      - name: What code plugins see changes only with the plugin interface
+        # The SDK's items (none gone or changed), the layouts of the types
+        # that cross, the linker script and the release's compilers, as
+        # interface.txt keeps them for native::INTERFACE (ADR 0028).
+        run: cargo test -p paperpaw-sdk --test interface
 
   embedded:
     name: no_std targets

@@ -17,6 +17,9 @@ pub mod round;
 pub use canvas::{Canvas, Described, Role};
 pub use framebuffer::{Framebuffer, MONO_COVERAGE};
 
+/// Whether this build draws colour pixel formats (Rgb565, Rgb888).
+pub const COLOR: bool = cfg!(feature = "color");
+
 use core::fmt;
 use paperpaw_platform::PixelFormat;
 

@@ -10,8 +10,9 @@ homepage.workspace = true
 authors.workspace = true
 categories = ["no-std", "embedded"]
 keywords = ["plugin", "loader", "relocation", "esp32", "e-reader"]
-# The linker script for plugins goes with the format (build.rs).
-include = ["src", "build.rs", "paperpaw-plugin.x", "tests"]
+# The linker script for plugins goes with the format; a plugin's project
+# keeps a copy of it (no build script, see paperpaw-plugin.x).
+include = ["src", "paperpaw-plugin.x", "tests"]
 
 [dependencies]
 paperpaw-digest.workspace = true
