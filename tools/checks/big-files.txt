@@ -8,6 +8,5 @@
 1922 crates/paperpaw-sdk/src/widgets/grid/view.rs
 1874 crates/paperpaw-sdk/src/library/catalog.rs
 1765 plugins/reader/tests/reading.rs
-1596 crates/paperpaw-sdk/src/builtin.rs
 1566 crates/paperpaw-sdk/src/settings.rs
 1525 plugins/store/src/catalog.rs
