@@ -379,7 +379,7 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         Ok(())
     }
 
-    // Modified for PaperPaw: `remove_entries` and `replace` added.
+    // Modified for PaperPaw: `remove_entries`, `unlink`, `replace` and `free_short_name` added.
 
     /// Marks the long and short name entries of `e` deleted, leaving its data.
     fn remove_entries(&self, e: &DirEntry<'a, IO, TP, OCC>) -> Result<(), Error<IO::Error>> {
@@ -396,13 +396,30 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         Ok(())
     }
 
+    /// Removes the entries of `name` (a file or a directory), leaving its data: for an entry whose
+    /// data another entry holds too, as a `rename` cut off between leaves it.
+    /// Make sure there is no reference to it (no File instance) or filesystem corruption can happen.
+    ///
+    /// # Errors
+    ///
+    /// Errors that can be returned:
+    ///
+    /// * `Error::NotFound` will be returned if `name` names no entry.
+    /// * `Error::Io` will be returned if the underlying storage object returned an I/O error.
+    pub fn unlink(&self, name: &str) -> Result<(), Error<IO::Error>> {
+        trace!("Dir::unlink {}", name);
+        let e = self.find_entry(name, None, None)?;
+        self.remove_entries(&e)
+    }
+
     /// Puts file `src_name` in the place of file `dst_name`, both in this directory, removing the
     /// file that was there.
     ///
-    /// Unlike `rename`, the entry of `dst_name` is written before the entry of `src_name` is
-    /// removed: cut off at any point (power lost), `dst_name` is the old file, or the new one, or
-    /// is missing while `src_name` is still there; or both names are the new file. Called again
-    /// then, `replace` finishes the work: it only removes `src_name`.
+    /// The new entry of `dst_name` is written before the old one and the entry of `src_name` are
+    /// removed: cut off at any point (power lost), `dst_name` is the old file or the new one,
+    /// never missing; the old file and the new one may both be named `dst_name` for a moment
+    /// (the new one holding the data of `src_name`, still there), or both names be the new file.
+    /// Called again then, `replace` finishes the work. The old data is freed last.
     /// Make sure there is no reference to either file (no File instance) or filesystem corruption
     /// can happen.
     ///
@@ -420,29 +437,57 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         // Refused before anything is changed.
         validate_long_name(dst_name)?;
         let src = self.find_entry(src_name, Some(false), None)?;
-        let short_name = match self.check_for_existence(dst_name, Some(false))? {
-            DirEntryOrShortName::ShortName(short_name) => short_name,
-            DirEntryOrShortName::DirEntry(dst) => {
-                if dst.is_same_entry(&src) {
-                    return Ok(());
-                }
-                if dst.first_cluster().is_some() && dst.first_cluster() == src.first_cluster() {
-                    // An earlier replace was cut off after it wrote the new entry.
-                    return self.remove_entries(&src);
-                }
-                // As `remove`: the entries first, then the data.
-                self.remove_entries(&dst)?;
-                if let Some(n) = dst.first_cluster() {
-                    self.fs.free_cluster_chain(n)?;
-                }
-                match self.check_for_existence(dst_name, Some(false))? {
-                    DirEntryOrShortName::ShortName(short_name) => short_name,
-                    DirEntryOrShortName::DirEntry(_) => return Err(Error::AlreadyExists),
-                }
+        // The old file, and whether the new one is there already (an earlier replace cut off
+        // after it wrote the new entry): both may be named `dst_name`.
+        let mut old = None;
+        let mut new_there = false;
+        for r in self.iter() {
+            let e = r?;
+            if !e.eq_name(dst_name) {
+                continue;
             }
-        };
-        self.write_entry(dst_name, src.data.renamed(short_name))?;
-        self.remove_entries(&src)
+            if e.is_same_entry(&src) {
+                return Ok(());
+            }
+            if e.is_dir() {
+                return Err(Error::InvalidInput);
+            }
+            if e.first_cluster().is_some() && e.first_cluster() == src.first_cluster() {
+                new_there = true;
+            } else if old.is_none() {
+                old = Some(e);
+            } else {
+                return Err(Error::AlreadyExists);
+            }
+        }
+        if !new_there {
+            let short_name = self.free_short_name(dst_name)?;
+            self.write_entry(dst_name, src.data.renamed(short_name))?;
+        }
+        // As `remove`: the entries first, then the data.
+        if let Some(old) = &old {
+            self.remove_entries(old)?;
+        }
+        self.remove_entries(&src)?;
+        if let Some(n) = old.and_then(|old| old.first_cluster()) {
+            self.fs.free_cluster_chain(n)?;
+        }
+        Ok(())
+    }
+
+    /// A short name for a new entry `name` that no entry has, whether or not an entry is named
+    /// `name`.
+    fn free_short_name(&self, name: &str) -> Result<[u8; SFN_SIZE], Error<IO::Error>> {
+        let mut short_name_gen = ShortNameGenerator::new(name);
+        loop {
+            for r in self.iter() {
+                short_name_gen.add_existing(r?.raw_short_name());
+            }
+            if let Ok(short_name) = short_name_gen.generate() {
+                return Ok(short_name);
+            }
+            short_name_gen.next_iteration();
+        }
     }
 
     /// Renames or moves existing file or directory.
@@ -504,20 +549,12 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
             // destionation file does not exist, short name has been generated
             DirEntryOrShortName::ShortName(short_name) => short_name,
         };
-        // free long and short name entries
-        let mut stream = self.stream.clone();
-        stream.seek(SeekFrom::Start(e.offset_range.0))?;
-        let num = ((e.offset_range.1 - e.offset_range.0) / u64::from(DIR_ENTRY_SIZE)) as usize;
-        for _ in 0..num {
-            let mut data = DirEntryData::deserialize(&mut stream)?;
-            trace!("removing LFN entry {:?}", data);
-            data.set_deleted();
-            stream.seek(SeekFrom::Current(-i64::from(DIR_ENTRY_SIZE)))?;
-            data.serialize(&mut stream)?;
-        }
-        // save new directory entry
+        // Modified for PaperPaw: the new entry is written before the old one is removed, as in
+        // `replace`. Cut off between (power lost), the entry is at both places, pointing at the same
+        // data, never at neither; the caller settles which one stays (see `unlink`).
         let sfn_entry = e.data.renamed(short_name);
         dst_dir.write_entry(dst_name, sfn_entry)?;
+        self.remove_entries(&e)?;
         if e.is_dir() {
             let parent_cluster = if dst_dir.stream.is_root_dir() {
                 None
@@ -806,10 +843,34 @@ fn validate_long_name<E: IoError>(name: &str) -> Result<(), Error<E>> {
     // check if there are only valid characters
     for c in name.chars() {
         match c {
-            'a'..='z' | 'A'..='Z' | '0'..='9'
+            'a'..='z'
+            | 'A'..='Z'
+            | '0'..='9'
             | '\u{80}'..='\u{FFFF}'
-            | '$' | '%' | '\'' | '-' | '_' | '@' | '~' | '`' | '!' | '(' | ')' | '{' | '}' | '.' | ' ' | '+' | ','
-            | ';' | '=' | '[' | ']' | '^' | '#' | '&' => {},
+            | '$'
+            | '%'
+            | '\''
+            | '-'
+            | '_'
+            | '@'
+            | '~'
+            | '`'
+            | '!'
+            | '('
+            | ')'
+            | '{'
+            | '}'
+            | '.'
+            | ' '
+            | '+'
+            | ','
+            | ';'
+            | '='
+            | '['
+            | ']'
+            | '^'
+            | '#'
+            | '&' => {}
             _ => return Err(Error::UnsupportedFileNameCharacter),
         }
     }

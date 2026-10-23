@@ -1,4 +1,3 @@
-
 extern crate std;
 
 use super::*;
@@ -313,15 +312,6 @@ fn read<'a>(files: &'a [(String, Vec<u8>)], path: &str) -> Option<&'a [u8]> {
     files.iter().find(|(p, _)| p == path).map(|(_, d)| &d[..])
 }
 
-/// Asserts that the cuts that leave a file not whole (`windows`) come
-/// one after the other, up to the last block written: the order of
-/// rust-fatfs's own changes, which cannot be changed here.
-fn at_the_end(windows: &[usize], cuts: usize) {
-    if let Some(&first) = windows.first() {
-        assert!(windows.iter().copied().eq(first..cuts - 1), "{windows:?}");
-    }
-}
-
 /// Two contents over several clusters (2 KB on this card).
 fn old_and_new() -> (Vec<u8>, Vec<u8>) {
     let old = (0..7000u32).map(|i| (i % 251) as u8).collect();
@@ -329,31 +319,32 @@ fn old_and_new() -> (Vec<u8>, Vec<u8>) {
     (old, new)
 }
 
-/// A file moved, cut off at any point, is whole at one of its places;
-/// into another folder, where rust-fatfs removes its entry before it
-/// adds the new one, for a moment at neither.
-#[test]
-fn a_file_moved_is_whole_after_any_cut() {
-    let (old, _) = old_and_new();
-    let files = [("Books/a.txt", &old[..]), ("notes.txt", b"notes")];
-    for (to, beside) in [("Books/c.txt", true), ("Moved/c.txt", false)] {
-        let cuts = cuts(&files, |s| s.rename("Books/a.txt", to).unwrap());
-        let mut windows = Vec::new();
-        for (n, files) in cuts.iter().enumerate() {
-            assert_eq!(read(files, "notes.txt"), Some(&b"notes"[..]), "{n}");
-            let found = [read(files, "Books/a.txt"), read(files, to)];
-            match found {
-                [Some(a), None] | [None, Some(a)] if a == old => {}
-                [None, None] => windows.push(n),
-                _ => panic!("{to}, cut after {n}: {found:?}"),
-            }
+/// Free clusters on `s`, as its FAT says.
+fn free_clusters(s: &FatStorage<Disk>) -> u32 {
+    s.fs.stats().unwrap().free_clusters()
+}
+
+/// Asserts that no two files on `s` share a cluster and that no
+/// cluster is lost but up to `taken` bytes in whole clusters: once all
+/// is removed, all others are free again. (FAT takes a cluster before
+/// an entry holds it, and the patched rust-fatfs removes an entry before
+/// it frees its clusters: cut off between, they stay taken by none.)
+fn assert_nothing_lost(s: &FatStorage<Disk>, taken: u32, cut: usize) {
+    assert_eq!(cross_linked(s), Vec::<String>::new(), "{cut}");
+    for (name, is_dir, _) in names(s, "") {
+        match is_dir {
+            true => s.remove_dir_all(&name).unwrap(),
+            false => s.remove(&name).unwrap(),
         }
-        if beside {
-            assert!(windows.is_empty(), "{windows:?}");
-        }
-        at_the_end(&windows, cuts.len());
-        assert_eq!(read(&cuts[cuts.len() - 1], to), Some(&old[..]));
     }
+    // The record of moves, the storage's own.
+    match s.root().remove(JOURNAL) {
+        Ok(()) | Err(fatfs::Error::NotFound) => {}
+        Err(e) => panic!("{e:?}"),
+    }
+    let fresh = mounted(Cut::formatted(FormatVolumeOptions::new()).image());
+    let lost = free_clusters(&fresh) - free_clusters(s);
+    assert!(lost <= taken.div_ceil(s.fs.cluster_size()), "{cut}: {lost}");
 }
 
 /// A file removed, cut off at any point, is whole or gone.
@@ -524,11 +515,12 @@ fn a_write_after_a_cut_harms_nothing() {
 }
 
 /// A file moved over another, cut off at any point, leaves the other
-/// with its old content or the new one, whole; in its own folder, the
-/// new content is never lost: where the other is still the old one,
-/// it is still where it was, or beside the other as its new content
-/// (taking its place when the other is next written, moved or
-/// removed).
+/// with its old content or the new one, whole, and the new content is
+/// never lost: where the other is still the old one, it is still where
+/// it was, or beside the other as its new content, until the next
+/// change settles it. Settled, the new content is at one place, no two
+/// files share a cluster and none is lost (but the old content's, cut
+/// off between its entry removed and its clusters freed).
 #[test]
 fn a_file_replaced_by_rename_is_found_after_any_cut() {
     let (old, new) = old_and_new();
@@ -536,28 +528,39 @@ fn a_file_replaced_by_rename_is_found_after_any_cut() {
         ("Books/a.part", false),
         ("Books/a.part", true),
         ("Inbox/a.part", false),
+        ("Inbox/a.part", true),
     ] {
         let image = prepared(|s| {
             beside(s, crowded);
             s.write(A, &old).unwrap();
             s.write(from, &new).unwrap();
+            // A move before: the card holds its record of moves.
+            s.write("Inbox/d.txt", b"d").unwrap();
+            s.rename("Inbox/d.txt", "Inbox/e.txt").unwrap();
         });
         let cuts = cut_images(image, |s| s.rename(from, A).unwrap());
         let last = cuts.len() - 1;
+        let new_beside = format!("Books/{}", Temps::of(name(A)).ready());
         for (n, image) in cuts.into_iter().enumerate() {
             let s = mounted(image);
             let a = whole(&s, A);
             assert!(a == Ok(old.clone()) || a == Ok(new.clone()), "{from} {n}");
-            if a == Ok(old.clone()) && !crowded && from.starts_with("Books") {
-                let new_beside = format!("Books/{}", Temps::of(name(A)).ready());
+            if a == Ok(old.clone()) {
                 let kept = [whole(&s, from), whole(&s, &new_beside)];
                 assert!(kept.contains(&Ok(new.clone())), "{from} {n}");
             }
+            assert_beside(&s, crowded, n);
+            // The next change settles it.
+            s.write("other.txt", b"other").unwrap();
+            let found = (whole(&s, A), whole(&s, from).ok());
+            let settled =
+                found == (Ok(new.clone()), None) || found == (Ok(old.clone()), Some(new.clone()));
+            assert!(settled, "{from} {n}");
             if n == last {
-                assert_eq!(a, Ok(new.clone()));
-                assert!(!s.exists(from));
+                assert_eq!(found, (Ok(new.clone()), None));
             }
             assert_beside(&s, crowded, n);
+            assert_nothing_lost(&s, old.len() as u32, n);
         }
     }
 }
@@ -586,6 +589,14 @@ fn leftover_temporaries_do_not_pile_up() {
     }
     s.write(A, b"last").unwrap();
     assert_eq!(whole(&s, A).as_deref(), Ok(&b"last"[..]));
+}
+
+/// Writes file `name` in folder `dir` of `s` as rust-fatfs does, past
+/// the storage (as an earlier version wrote its temporary files).
+fn write_raw(s: &FatStorage<Disk>, dir: &str, name: &str, data: &[u8]) {
+    let mut file = s.dir(dir).unwrap().create_file(name).unwrap();
+    file.write_all(data).unwrap();
+    file.flush().unwrap();
 }
 
 /// A file whose clusters were freed but whose entry stayed (cut off
@@ -1331,3 +1342,5 @@ fn short_names_alone_are_names() {
     s.remove("BOOKS/NOTES.TXT").unwrap();
     assert!(names(&s, "books").is_empty());
 }
+
+mod after_cuts;

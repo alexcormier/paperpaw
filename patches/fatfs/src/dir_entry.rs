@@ -621,7 +621,10 @@ impl<'a, IO: ReadWriteSeek, TP, OCC: OemCpConverter> DirEntry<'a, IO, TP, OCC> {
         self.data.is_file()
     }
 
-    pub(crate) fn first_cluster(&self) -> Option<u32> {
+    // Modified for PaperPaw: public.
+    /// Returns the first cluster of its data, if it has any.
+    #[must_use]
+    pub fn first_cluster(&self) -> Option<u32> {
         self.data.first_cluster(self.fs.fat_type())
     }
 
