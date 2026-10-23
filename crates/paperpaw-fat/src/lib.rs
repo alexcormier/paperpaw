@@ -27,7 +27,7 @@
 //! [`Storage::append`]) and on `sync`.
 //!
 //! Files are written through files beside them named after them
-//! ([`Temps`]): the new content is written whole under one name (`.TMP`)
+//! (`Temps`): the new content is written whole under one name (`.TMP`)
 //! and synced. A new file then takes its name; a file there is replaced:
 //! the content is named whole (`.NEW`), then takes the place of the old
 //! file (rust-fatfs's `Dir::replace`, as patched for PaperPaw, writes the
@@ -651,7 +651,7 @@ fn remove_found<IO: ReadWriteSeek + 'static>(
 
 /// The file in the root that records a move while it is made (see the
 /// [crate documentation](crate)). Hidden, and written in its place once
-/// made, so recording takes no cluster: [`MOVE`], the length of what
+/// made, so recording takes no cluster: `PPMV`, the length of what
 /// follows and its hash (`fnv`'s lower half) as 4 bytes each, then the
 /// paths moved from and to, a line each. Cleared, it begins with zeros.
 pub const JOURNAL: &str = "~PPMOVE.BIN";
