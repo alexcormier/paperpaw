@@ -17,6 +17,7 @@
 extern crate alloc;
 
 mod phone;
+mod plugins;
 mod web;
 
 use alloc::borrow::Cow;
@@ -28,12 +29,12 @@ use alloc::vec::Vec;
 use paperpaw_qr::QrCode;
 use paperpaw_sdk::builtin::{actions, events, menus, slots};
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::ServerNotice;
+use paperpaw_sdk::replies::{Confirmed, ServerNotice};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
     MenuEntry, Params, Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen,
-    ScreenSpec, Version,
+    ScreenSpec, ServerResponse, Version,
 };
 
 use paperpaw_sdk::served::{self, Guard};
@@ -44,6 +45,9 @@ pub const OPEN: Id = Id::new_static("transfer.open");
 const SCREEN: Id = Id::new_static("transfer.screen");
 const SERVER: Id = Id::new_static("transfer.server");
 const SERVER_EVENT: Event<ServerNotice> = Event::new("transfer.server-event");
+/// The reader's answer whether to install a plugin's code sent from the
+/// computer.
+const CODE_APPROVED: Event<Confirmed> = Event::new("transfer.code-approved");
 /// Typing on a phone for the keyboard.
 const PHONE_SCREEN: Id = Id::new_static("transfer.phone");
 
@@ -138,6 +142,8 @@ struct TransferScreen {
     page: String,
     /// What happened last.
     last: Option<String>,
+    /// Plugins installed from the computer.
+    installs: plugins::Installs,
     started: bool,
 }
 
@@ -153,6 +159,7 @@ impl TransferScreen {
             guard: None,
             page: page(env),
             last: None,
+            installs: plugins::Installs::default(),
             started: false,
         }
     }
@@ -290,6 +297,10 @@ impl TransferScreen {
                 let Some(guard) = &mut self.guard else {
                     return;
                 };
+                let path = target.split_once('?').map_or(target.as_str(), |(p, _)| p);
+                if plugins::is_plugin_request(path) {
+                    return self.plugin_request(request, &method, &target, body_file, cx);
+                }
                 let request = web::Request {
                     number: request,
                     method: &method,
@@ -338,6 +349,78 @@ impl TransferScreen {
             }
             _ => {}
         }
+    }
+}
+
+impl TransferScreen {
+    /// A request about plugins (see `plugins`), its key checked first.
+    fn plugin_request(
+        &mut self,
+        number: u32,
+        method: &str,
+        target: &str,
+        body_file: Option<String>,
+        cx: &mut Cx<'_, '_>,
+    ) {
+        let env = *cx.env();
+        let Some(guard) = &mut self.guard else {
+            return;
+        };
+        let text = |status, body: &str| {
+            ServerResponse::new(number, status, "text/plain; charset=utf-8", body.into())
+        };
+        let refused = match guard.check_target(target, env.now) {
+            served::Access::Granted => None,
+            served::Access::Locked => {
+                Some(text(429, "Too many wrong keys: try again in a minute."))
+            }
+            _ => Some(text(
+                403,
+                "The key is missing or wrong: open the address shown on the device.",
+            )),
+        };
+        if let Some(response) = refused {
+            if let Some(body) = body_file {
+                let _ = env.storage.remove(&body);
+            }
+            return cx.command(Command::Respond(response));
+        }
+        let mut out = Vec::new();
+        let (response, ask) =
+            self.installs
+                .answer(&env, number, method, target, body_file.as_deref(), &mut out);
+        out.push(Command::Respond(response));
+        for command in out {
+            cx.command(command);
+        }
+        match ask {
+            Some(plugins::Ask::Code(id)) => {
+                let question = String::from(env.i18n.tr("transfer.code.question"));
+                let text = env
+                    .i18n
+                    .format("transfer.code.text", &[("name", Arg::Str(&id))]);
+                cx.command(
+                    paperpaw_sdk::ask::confirm(question, &CODE_APPROVED)
+                        .text(text)
+                        .yes(env.i18n.tr("transfer.code.install"))
+                        .with(paperpaw_sdk::builtin::params::ID, id)
+                        .command(),
+                );
+            }
+            Some(plugins::Ask::Installed(id)) => self.installed(&env, &id, cx),
+            None => {}
+        }
+    }
+
+    /// Says on the device that plugin `id` was installed.
+    fn installed(&mut self, env: &Env<'_>, id: &str, cx: &mut Cx<'_, '_>) {
+        self.last = Some(
+            env.i18n
+                .format("transfer.plugin-installed", &[("name", Arg::Str(id))]),
+        );
+        let area = self.content(env);
+        cx.request_redraw_area(area);
+        cx.request_refresh(RefreshMode::Fast);
     }
 }
 
@@ -618,6 +701,20 @@ impl Screen for TransferScreen {
             && *notice.server() == SERVER
         {
             self.on_server_event(notice, cx);
+        } else if let Some(answer) = CODE_APPROVED.read(event, params) {
+            let env = *cx.env();
+            let Some(id) = answer.context.get(paperpaw_sdk::builtin::params::ID) else {
+                return;
+            };
+            let id = String::from(id);
+            let mut out = Vec::new();
+            let installed = self.installs.approved(&env, &id, answer.yes, &mut out);
+            for command in out {
+                cx.command(command);
+            }
+            if installed {
+                self.installed(&env, &id, cx);
+            }
         } else if *event == events::WIFI_CHANGED
             && self.own.is_some()
             && matches!(self.state, State::Starting)

@@ -107,6 +107,15 @@ change the plugin SDK.
 - SDK: `install::origin`, `remember_store_install`,
   `forget_store_install` and `folder_version` tell and keep where an
   installed plugin came from.
+- Wi-Fi transfer: plugins can be installed from the computer (e.g.
+  one's own build, from the workshop). Each file comes with its
+  SHA-256 (`PUT /api/plugin/<id>/<path>`), and `POST /api/plugin/<id>`
+  installs them in one step: the version before stays until the new one
+  is whole, the plugin's own data stays, and it is loaded at once. A
+  plugin with code is installed only after you say yes on the device.
+  `GET /api/plugins` lists what is installed and where it came from.
+- SDK: `install::local::Staging` installs a plugin sent file by file,
+  with the same checks for every way it comes.
 - SDK: `Storage::total_space` tells a storage's size, as `free_space`
   tells what it has free.
 - SDK: `builtin::events::TYPE_TEXT` types text into the text field

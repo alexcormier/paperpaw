@@ -1593,6 +1593,34 @@ pub fn paperpaw_sdk::image::picture_from_bytes(&dyn paperpaw_platform::storage::
 pub fn paperpaw_sdk::image::picture_from_file(&dyn paperpaw_platform::storage::Storage, &str, &str, paperpaw_image::Fit, bool) -> core::option::Option<paperpaw_document::ImageRef>
 pub fn paperpaw_sdk::image::picture_with_alpha(&dyn paperpaw_platform::storage::Storage, &str, &str, paperpaw_image::Fit) -> core::result::Result<paperpaw_document::ImageRef, paperpaw_image::ImageError>
 pub mod paperpaw_sdk::install
+pub mod paperpaw_sdk::install::local
+#[non_exhaustive] pub enum paperpaw_sdk::install::local::Refusal
+pub paperpaw_sdk::install::local::Refusal::BadCode
+pub paperpaw_sdk::install::local::Refusal::BuiltIn
+pub paperpaw_sdk::install::local::Refusal::Damaged
+pub paperpaw_sdk::install::local::Refusal::Name
+pub paperpaw_sdk::install::local::Refusal::NeedsApproval
+pub paperpaw_sdk::install::local::Refusal::NoCode
+pub paperpaw_sdk::install::local::Refusal::NotThePlugin
+pub paperpaw_sdk::install::local::Refusal::OtherBuild
+pub paperpaw_sdk::install::local::Refusal::Storage
+#[non_exhaustive] pub struct paperpaw_sdk::install::local::Commit
+pub paperpaw_sdk::install::local::Commit::approved: bool
+impl paperpaw_sdk::install::local::Commit
+pub fn paperpaw_sdk::install::local::Commit::approved() -> Self
+#[non_exhaustive] pub struct paperpaw_sdk::install::local::Committed
+pub paperpaw_sdk::install::local::Committed::code: bool
+pub paperpaw_sdk::install::local::Committed::plugin: alloc::string::String
+pub struct paperpaw_sdk::install::local::Staging
+impl paperpaw_sdk::install::local::Staging
+pub fn paperpaw_sdk::install::local::Staging::abort(&self, &dyn paperpaw_platform::storage::Storage)
+pub fn paperpaw_sdk::install::local::Staging::commit(&self, &paperpaw_sdk::Env<'_>, paperpaw_sdk::install::local::Commit, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> core::result::Result<paperpaw_sdk::install::local::Committed, paperpaw_sdk::install::local::Refusal>
+pub fn paperpaw_sdk::install::local::Staging::files(&self, &dyn paperpaw_platform::storage::Storage) -> alloc::vec::Vec<alloc::string::String>
+pub fn paperpaw_sdk::install::local::Staging::folder(&self) -> alloc::string::String
+pub fn paperpaw_sdk::install::local::Staging::new(&str) -> core::option::Option<Self>
+pub fn paperpaw_sdk::install::local::Staging::plugin(&self) -> &str
+pub fn paperpaw_sdk::install::local::Staging::put(&self, &dyn paperpaw_platform::storage::Storage, &str, &str, &[u8; 32]) -> core::result::Result<(), paperpaw_sdk::install::local::Refusal>
+pub fn paperpaw_sdk::install::local::file_sha256(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<[u8; 32]>
 pub enum paperpaw_sdk::install::Digest
 pub paperpaw_sdk::install::Digest::Sha1(alloc::string::String)
 pub paperpaw_sdk::install::Digest::Sha256(alloc::string::String)

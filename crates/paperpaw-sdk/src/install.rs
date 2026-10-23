@@ -36,6 +36,7 @@
 //! // })?;
 //! ```
 
+pub mod local;
 mod origin;
 
 pub use origin::{Origin, folder_version, forget_store_install, origin, remember_store_install};
