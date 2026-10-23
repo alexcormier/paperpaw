@@ -222,3 +222,11 @@ opt-level = 3
 # (patches/jni-macros, "Modified for PaperPaw"), for reproducible builds.
 [patch.crates-io]
 jni-macros = { path = "patches/jni-macros" }
+
+# rust-fatfs freed a removed file's clusters before it removed its entry
+# and took no file in another's place: cut off between (an empty battery
+# on the X4), a file read short or was lost. This copy removes the entry
+# first and adds `Dir::replace` (patches/fatfs, "Modified for PaperPaw").
+# The X4's firmware, a workspace of its own, patches it the same way.
+[patch."https://github.com/rafalh/rust-fatfs"]
+fatfs = { path = "patches/fatfs" }

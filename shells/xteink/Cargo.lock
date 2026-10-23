@@ -1436,7 +1436,6 @@ checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 [[package]]
 name = "fatfs"
 version = "0.4.0"
-source = "git+https://github.com/rafalh/rust-fatfs?rev=38b3a7950bf0e765e34286d1dfe76c519ee347e2#38b3a7950bf0e765e34286d1dfe76c519ee347e2"
 dependencies = [
  "bitflags 2.13.2",
  "log",
@@ -2029,6 +2028,7 @@ dependencies = [
  "paperpaw-plugin-format-epub",
  "paperpaw-plugin-format-txt",
  "paperpaw-plugin-format-xtc",
+ "paperpaw-plugin-help",
  "paperpaw-plugin-home",
  "paperpaw-plugin-hyphenation",
  "paperpaw-plugin-keyboard",
@@ -2203,6 +2203,13 @@ dependencies = [
 
 [[package]]
 name = "paperpaw-plugin-format-xtc"
+version = "0.4.0-dev"
+dependencies = [
+ "paperpaw-sdk",
+]
+
+[[package]]
+name = "paperpaw-plugin-help"
 version = "0.4.0-dev"
 dependencies = [
  "paperpaw-sdk",

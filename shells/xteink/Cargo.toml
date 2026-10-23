@@ -127,3 +127,9 @@ opt-level = "s"
 lto = "fat"
 codegen-units = 1
 debug = 2
+
+# rust-fatfs as the workspace patches it (patches/fatfs, "Modified for
+# PaperPaw"): a removed file's entry goes before its clusters, and
+# `Dir::replace` takes a file's place without a gap.
+[patch."https://github.com/rafalh/rust-fatfs"]
+fatfs = { path = "../../patches/fatfs" }
