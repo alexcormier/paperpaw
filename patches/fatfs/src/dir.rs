@@ -419,7 +419,10 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
     /// removed: cut off at any point (power lost), `dst_name` is the old file or the new one,
     /// never missing; the old file and the new one may both be named `dst_name` for a moment
     /// (the new one holding the data of `src_name`, still there), or both names be the new file.
-    /// Called again then, `replace` finishes the work. The old data is freed last.
+    /// Called again then, `replace` finishes the work. The old data is freed last. An empty new
+    /// file holds no data that tells its new entry: an empty one named `dst_name` is taken for it
+    /// (the same content). The new entry has the creation time of the old file, where there is one;
+    /// else that of `src_name`, but where it holds a mark (see `File::set_mark`): the time now.
     /// Make sure there is no reference to either file (no File instance) or filesystem corruption
     /// can happen.
     ///
@@ -452,7 +455,12 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
             if e.is_dir() {
                 return Err(Error::InvalidInput);
             }
-            if e.first_cluster().is_some() && e.first_cluster() == src.first_cluster() {
+            let holds_src = match src.first_cluster() {
+                Some(_) => e.first_cluster() == src.first_cluster(),
+                // Once: a second one is the old file, empty too.
+                None => !new_there && e.first_cluster().is_none() && e.len() == 0,
+            };
+            if holds_src {
                 new_there = true;
             } else if old.is_none() {
                 old = Some(e);
@@ -462,7 +470,16 @@ impl<'a, IO: ReadWriteSeek, TP: TimeProvider, OCC: OemCpConverter> Dir<'a, IO, T
         }
         if !new_there {
             let short_name = self.free_short_name(dst_name)?;
-            self.write_entry(dst_name, src.data.renamed(short_name))?;
+            let mut data = src.data.renamed(short_name);
+            match &old {
+                Some(old) => data = data.with_created_of(&old.data),
+                // A mark the caller gave `src_name` is not left to the file.
+                None if data.mark().is_some() => {
+                    data.set_created(self.fs.options.time_provider.get_current_date_time());
+                }
+                None => {}
+            }
+            self.write_entry(dst_name, data)?;
         }
         // As `remove`: the entries first, then the data.
         if let Some(old) = &old {

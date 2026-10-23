@@ -172,6 +172,17 @@ impl<'a, IO: ReadWriteSeek, TP, OCC> File<'a, IO, TP, OCC> {
         }
     }
 
+    // Modified for PaperPaw: added.
+    /// Gives this file a mark of the caller's own, kept in its creation time instead (whose
+    /// hundredths of a second tell it from a time). Written with the directory entry, when the file
+    /// is flushed or dropped; read with `DirEntry::mark`. Kept when the entry is renamed; not by
+    /// `Dir::replace` (see there).
+    pub fn set_mark(&mut self, mark: u32) {
+        if let Some(ref mut e) = self.entry {
+            e.set_mark(mark);
+        }
+    }
+
     /// Returns the attributes of this file.
     ///
     /// The root directory, which has no directory entry, reports `FileAttributes::DIRECTORY`.

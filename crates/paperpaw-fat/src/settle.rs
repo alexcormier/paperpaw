@@ -175,7 +175,11 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     }
 
     /// Settles a move cut off before, as [`JOURNAL`] records it: once
-    /// after the start, before the card is changed otherwise.
+    /// after the start, before the card is changed otherwise. Where it
+    /// cannot be settled, its record is kept for the next start and its
+    /// paths are held up until then (see `held_up`): all else goes on.
+    /// Where the record cannot be read, it fails, tried again at the
+    /// next change.
     pub(super) fn settle_moves(&self) -> Result<(), StorageError> {
         if self.moves_settled.get() || self.settling.get() {
             return Ok(());
@@ -183,31 +187,72 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         // No folder is settled meanwhile: a file's new content there may
         // be the file moved, which only the record tells.
         self.settling.set(true);
-        let done = self.recorded().and_then(|recorded| match recorded {
-            Some((from, to)) => {
-                self.finish_move(&from, &to)?;
-                self.write_move(&[0; 4])
+        let recorded = self.recorded();
+        if let Ok(Some((from, to))) = &recorded {
+            let settled = self
+                .finish_move(from, to)
+                .and_then(|()| self.write_move(&[0; 4]));
+            if settled.is_err() {
+                *self.stuck.borrow_mut() = Some((from.clone(), to.clone()));
             }
-            None => Ok(()),
-        });
+        }
         self.settling.set(false);
-        self.moves_settled.set(done.is_ok());
-        done
+        self.moves_settled.set(recorded.is_ok());
+        recorded.map(|_| ())
+    }
+
+    /// Whether `path` is held up by a move that could not be settled
+    /// (see `settle_moves`): it is at either of its paths, or lies in
+    /// them, or they lie in it.
+    pub(super) fn held_up(&self, path: &str) -> bool {
+        self.stuck.borrow().as_ref().is_some_and(|(from, to)| {
+            [from, to]
+                .into_iter()
+                .any(|held| is_within(path, held) || is_within(held, path))
+        })
+    }
+
+    /// Refuses `path` where it is [`held_up`](Self::held_up).
+    pub(super) fn hold(&self, path: &str) -> Result<(), StorageError> {
+        match self.held_up(path) {
+            true => Err(StorageError::Io),
+            false => Ok(()),
+        }
     }
 
     /// Settles folder `path` (`dir`) when first looked at after the start,
     /// before any file in it is opened: what cuts left of writes of its
     /// files is finished (see `settled`). Its entries read once; again
-    /// only for files written through files beside them.
-    pub(super) fn settle_folder(&self, path: &str, dir: &FatDir<IO>) -> Result<(), StorageError> {
-        self.settle_moves()?;
+    /// only for files written through files beside them. Never where the
+    /// record of moves cannot be read: a file's new content may be the
+    /// file moved, which only the record tells. A file that cannot be
+    /// settled is left as it is (whole, its old content or its new) and
+    /// tried again when the folder is next looked up: the folder stays
+    /// in reach.
+    pub(super) fn settle_folder(&self, path: &str, dir: &FatDir<IO>) {
         let key = hash(path);
-        if self.settling.get() || self.settled_folders.borrow().contains(&key) {
-            return Ok(());
+        let moves = self.settle_moves();
+        if moves.is_err() || self.settling.get() || self.settled_folders.borrow().contains(&key) {
+            return;
         }
+        if !self.settle_files(path, dir) {
+            return;
+        }
+        let mut folders = self.settled_folders.borrow_mut();
+        if folders.len() == SETTLED {
+            folders.remove(0);
+        }
+        folders.push(key);
+    }
+
+    /// Settles the files of folder `path` (`dir`) that cuts left written
+    /// through files beside them (see `settle_folder`): whether all are.
+    fn settle_files(&self, path: &str, dir: &FatDir<IO>) -> bool {
         let mut temps = Vec::new();
         for entry in entries(dir) {
-            let entry = entry?;
+            let Ok(entry) = entry else {
+                return false;
+            };
             let short = entry.short_file_name_as_bytes();
             if entry.is_file() && core::str::from_utf8(short).is_ok_and(is_temp_name) {
                 temps.push(short.to_ascii_uppercase());
@@ -216,7 +261,9 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         let mut names = Vec::new();
         if !temps.is_empty() {
             for entry in entries(dir) {
-                let entry = entry?;
+                let Ok(entry) = entry else {
+                    return false;
+                };
                 let name = entry.file_name();
                 let of = Temps::of(&name);
                 let has = |temp: &str| temps.iter().any(|t| t == temp.as_bytes());
@@ -225,16 +272,12 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
                 }
             }
         }
+        let mut all = true;
         for name in names {
-            self.close(&child(path, &name))?;
-            settled(dir, &name)?;
+            let file = child(path, &name);
+            all &= !self.held_up(&file) && self.close(&file).is_ok() && settled(dir, &name).is_ok();
         }
-        let mut folders = self.settled_folders.borrow_mut();
-        if folders.len() == SETTLED {
-            folders.remove(0);
-        }
-        folders.push(key);
-        Ok(())
+        all
     }
 
     /// Finishes the move from `from` to `to` that [`JOURNAL`] records:

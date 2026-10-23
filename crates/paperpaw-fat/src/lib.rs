@@ -37,7 +37,11 @@
 //! file's write is finished (`settled`) when its folder is first looked
 //! at after a start (`settle_folder`), before any file in it is opened:
 //! `.NEW` takes the file's place, unless the file was changed after it
-//! elsewhere (a newer time, as a computer sets it; the X4 sets none).
+//! was made, elsewhere or not: `.NEW` is marked with the file's time,
+//! size and first cluster as they were (not told by times alone, as the
+//! X4 sets none). A file that cannot be settled is left as it is, its
+//! folder in reach; so are the paths of a move that cannot be settled,
+//! held up until the next start (`held_up`).
 //! The next write, move or removal of a file does the same, so at most
 //! one of each is ever left beside it. They are neither listed nor taken
 //! by name: one may hold the clusters of the file itself. rust-fatfs, as
@@ -149,6 +153,9 @@ pub struct FatStorage<IO: ReadWriteSeek + 'static> {
     /// (`settle_folder`); none while a move is settled.
     settled_folders: RefCell<Vec<u64>>,
     settling: Cell<bool>,
+    /// The paths of a move that could not be settled: held up until the
+    /// next start (see `held_up`).
+    stuck: RefCell<Option<(String, String)>>,
     /// The folders whose temporary files of earlier versions were looked
     /// at since the start, by a hash of their paths (`clean_old`).
     cleaned: RefCell<Vec<u64>>,
@@ -466,13 +473,15 @@ fn settled<IO: ReadWriteSeek + 'static>(
     // write ever began there then), nor over a folder.
     let folder = found.entry.as_ref().is_some_and(FatEntry::is_dir);
     if let Some(ready) = found.ready.as_ref().filter(|_| !found.others && !folder) {
-        // The file changed since, elsewhere (a newer time, as a computer
-        // sets it): its new content of before is let go.
+        // The file changed since its new content was made, elsewhere or
+        // by PaperPaw (not as that is marked, see `state`): that is let
+        // go. Not by times: the X4 sets none, so any file a computer
+        // wrote is newer. Unmarked, a file moved there, it takes its
+        // place.
         let changed = !found.twice
-            && found
-                .entry
-                .as_ref()
-                .is_some_and(|entry| !shares(entry, ready) && newer(entry, ready));
+            && found.entry.as_ref().is_some_and(|entry| {
+                !shares(entry, ready) && ready.mark().is_some_and(|mark| mark != state(entry))
+            });
         match changed {
             true => dir.remove(temps.ready()),
             false => dir.replace(temps.ready(), name),
@@ -488,21 +497,22 @@ fn settled<IO: ReadWriteSeek + 'static>(
     }
 }
 
-/// Whether entry `a` was changed after entry `b`, by their times.
-fn newer<IO: ReadWriteSeek + 'static>(a: &FatEntry<IO>, b: &FatEntry<IO>) -> bool {
-    let at = |e: &FatEntry<IO>| {
-        let fatfs::DateTime { date, time, .. } = e.modified();
-        (
-            date.year,
-            date.month,
-            date.day,
-            time.hour,
-            time.min,
-            time.sec,
-            time.millis,
-        )
-    };
-    at(a) > at(b)
+/// What tells whether file `entry` was changed: a hash of its time,
+/// size and first cluster. The new content of a file is marked with it
+/// ([`fatfs::File::set_mark`]): where the file is no longer so after a
+/// cut, it was changed since and is kept (see `settled`).
+fn state<IO: ReadWriteSeek + 'static>(entry: &FatEntry<IO>) -> u32 {
+    let fatfs::DateTime { date, time, .. } = entry.modified();
+    let cluster = entry.first_cluster().unwrap_or(0);
+    let words = [
+        date.year, date.month, date.day, time.hour, time.min, time.sec,
+    ];
+    let bytes = words
+        .into_iter()
+        .flat_map(u16::to_le_bytes)
+        .chain(cluster.to_le_bytes())
+        .chain(entry.len().to_le_bytes());
+    fnv(bytes) as u32
 }
 
 /// Whether `name` is one of a file a write goes through ([`Temps`]):
@@ -663,6 +673,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
             moves_settled: Cell::new(false),
             settled_folders: RefCell::new(Vec::new()),
             settling: Cell::new(false),
+            stuck: RefCell::new(None),
             cleaned: RefCell::new(Vec::new()),
         }
     }
@@ -777,7 +788,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         let path = path.trim_matches('/');
         if path.is_empty() {
             let root = self.root();
-            self.settle_folder("", &root)?;
+            self.settle_folder("", &root);
             return Ok(root);
         }
         {
@@ -793,7 +804,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         // Looked up in its folder, kept too: the folders of many books'
         // data are not each looked up from the root.
         let dir = open_dir(&self.dir(parent(path))?, name(path))?;
-        self.settle_folder(path, &dir)?;
+        self.settle_folder(path, &dir);
         let mut folders = self.folders.borrow_mut();
         if folders.len() == FOLDERS {
             folders.remove(0);
@@ -839,6 +850,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
                 // Checked once, when opened: a book is read 4 bytes at a
                 // time, many times a page.
                 check(path)?;
+                self.hold(path)?;
                 if create {
                     self.create_dirs(parent(path))?;
                 }
@@ -911,6 +923,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         let found = settled(&dir, name)?;
         let old = found.old;
         let there = found.entry.is_some();
+        let mark = found.entry.as_ref().map(state);
         if found.others || found.entry.is_some_and(|entry| entry.is_dir()) {
             return Err(StorageError::InvalidPath);
         }
@@ -920,7 +933,14 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
         let written = dir
             .create_file(temps.tmp())
             .map_err(error)
-            .and_then(|mut file| Self::write_all(&mut file, data));
+            .and_then(|mut file| {
+                // The file it replaces, as it is now: changed after a
+                // cut, it is kept (see `settled`).
+                if let Some(mark) = mark {
+                    file.set_mark(mark);
+                }
+                Self::write_all(&mut file, data)
+            });
         if let Err(e) = written {
             // A card that is full keeps no part of the new content.
             #[expect(
@@ -950,6 +970,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     /// left to take its place later.
     fn remove_entry(&self, path: &str, settle: bool) -> Result<(), StorageError> {
         check(path)?;
+        self.hold(path)?;
         self.close(path)?;
         self.forget(path);
         match self.dir(parent(path)) {
@@ -1049,6 +1070,7 @@ impl<IO: ReadWriteSeek + 'static> FatStorage<IO> {
     /// [`Storage::remove_dir_all`], its blocks not yet written back.
     fn remove_tree(&self, path: &str) -> Result<(), StorageError> {
         check(path)?;
+        self.hold(path)?;
         self.close(path)?;
         self.forget(path);
         let dir = match self.dir(path) {
@@ -1134,6 +1156,7 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
     fn write(&self, path: &str, data: &[u8]) -> Result<(), StorageError> {
         check(path)?;
         self.settle_moves()?;
+        self.hold(path)?;
         let before = self.len_of(path);
         let made = self.new_dirs(parent(path));
         let written = self.written(self.write_whole(path, data));
@@ -1218,6 +1241,10 @@ impl<IO: ReadWriteSeek + 'static> Storage for FatStorage<IO> {
 
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
         self.settle_moves()?;
+        // None while a move is held up: it would be recorded over it.
+        if self.stuck.borrow().is_some() {
+            return Err(StorageError::Io);
+        }
         // A file it takes the place of is gone.
         let replaced = if from.eq_ignore_ascii_case(to) {
             0

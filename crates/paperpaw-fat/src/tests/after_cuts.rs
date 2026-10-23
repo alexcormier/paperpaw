@@ -284,3 +284,203 @@ fn a_folder_removed_after_a_cut_frees_each_cluster_once() {
         }
     }
 }
+
+/// An empty file written over another, cut off at any point, leaves
+/// its folder usable and the file with its old content or none, listed
+/// once: an empty file holds no cluster that tells its two entries
+/// apart.
+#[test]
+fn an_empty_file_written_over_another_is_found_after_any_cut() {
+    let (old, _) = old_and_new();
+    for before in [&old[..], b""] {
+        let image = prepared(|s| {
+            beside(s, false);
+            s.write(A, before).unwrap();
+        });
+        let cuts = cut_images(image, |s| s.write(A, b"").unwrap());
+        for (n, image) in cuts.into_iter().enumerate() {
+            let s = mounted(image);
+            let a = whole(&s, A);
+            assert!(a == Ok(before.to_vec()) || a == Ok(Vec::new()), "{n}");
+            assert_beside(&s, false, n);
+            s.write("Books/other.txt", b"other").unwrap();
+            let a = whole(&s, A);
+            assert!(a == Ok(before.to_vec()) || a == Ok(Vec::new()), "{n}");
+            let listed = names(&s, "Books")
+                .into_iter()
+                .filter(|(file, ..)| file == name(A))
+                .count();
+            assert_eq!(listed, 1, "{n}");
+            assert_eq!(cross_linked(&s), Vec::<String>::new(), "{n}");
+        }
+    }
+}
+
+/// An empty file moved over another, cut off at any point, leaves the
+/// card usable: the other is kept or replaced, the empty one at one
+/// place once the next change settles it.
+#[test]
+fn an_empty_file_moved_over_another_is_found_after_any_cut() {
+    let (old, _) = old_and_new();
+    let from = "Books/e.part";
+    let image = prepared(|s| {
+        beside(s, false);
+        s.write(A, &old).unwrap();
+        s.write(from, b"").unwrap();
+        // A move before: the card holds its record of moves.
+        s.write("Inbox/d.txt", b"d").unwrap();
+        s.rename("Inbox/d.txt", "Inbox/e.txt").unwrap();
+    });
+    let cuts = cut_images(image, |s| s.rename(from, A).unwrap());
+    let last = cuts.len() - 1;
+    for (n, image) in cuts.into_iter().enumerate() {
+        let s = mounted(image);
+        s.write("other.txt", b"other").unwrap();
+        let found = (whole(&s, A), whole(&s, from).ok());
+        let settled =
+            found == (Ok(Vec::new()), None) || found == (Ok(old.clone()), Some(Vec::new()));
+        assert!(settled, "{n}: {:?}", (found.0.map(|a| a.len()), found.1));
+        if n == last {
+            assert_eq!(found, (Ok(Vec::new()), None));
+        }
+        let listed = names(&s, "Books")
+            .into_iter()
+            .filter(|(file, ..)| file == name(A))
+            .count();
+        assert_eq!(listed, 1, "{n}");
+        assert_beside(&s, false, n);
+        assert_eq!(cross_linked(&s), Vec::<String>::new(), "{n}");
+    }
+}
+
+/// A card whose folder `BOOKS` cannot be settled: three entries named
+/// `A.TXT` (as a damaged card may hold them) and new content of it
+/// beside them. A move to `BOOKS/A.TXT` recorded, where `journal`.
+fn unsettleable(journal: bool) -> FatStorage<Disk> {
+    let card = Cut::formatted(FormatVolumeOptions::new());
+    let s = card.storage();
+    for (path, data) in [
+        ("BOOKS/A.TXT", &b"a"[..]),
+        ("BOOKS/B.TXT", b"b"),
+        ("BOOKS/C.TXT", b"c"),
+        ("BOOKS/D.TXT", b"d"),
+        ("NOTES.TXT", b"notes"),
+    ] {
+        s.write(path, data).unwrap();
+    }
+    let temps = Temps::of("A.TXT");
+    let mut file = s.dir("BOOKS").unwrap().create_file(temps.ready()).unwrap();
+    file.write_all(b"new").unwrap();
+    file.flush().unwrap();
+    drop(file);
+    if journal {
+        let record = settle::move_record("INBOX/A.TXT", "BOOKS/A.TXT").unwrap();
+        s.write_move(&record).unwrap();
+    }
+    s.sync().unwrap();
+    let mut bytes = card.image();
+    for entry in bytes.as_chunks_mut::<32>().0 {
+        // Long names taken away (see `short_names_only`).
+        if entry[11] == 0x0F && entry[12] == 0 && entry[26..28] == [0, 0] && entry[0] != 0 {
+            entry[0] = 0xE5;
+        }
+        if entry[..11] == *b"B       TXT" || entry[..11] == *b"C       TXT" {
+            entry[..11].copy_from_slice(b"A       TXT");
+        }
+    }
+    mounted(bytes)
+}
+
+/// A folder that cannot be settled stays readable and writable: its
+/// files as they are, each whole.
+#[test]
+fn a_folder_that_cannot_be_settled_stays_usable() {
+    let s = unsettleable(false);
+    let listed: Vec<_> = names(&s, "BOOKS").into_iter().map(|(n, ..)| n).collect();
+    assert_eq!(listed, ["A.TXT", "A.TXT", "A.TXT", "D.TXT"]);
+    assert_eq!(whole(&s, "BOOKS/D.TXT").as_deref(), Ok(&b"d"[..]));
+    s.write("BOOKS/E.TXT", b"e").unwrap();
+    assert_eq!(whole(&s, "BOOKS/E.TXT").as_deref(), Ok(&b"e"[..]));
+    assert_eq!(whole(&s, "NOTES.TXT").as_deref(), Ok(&b"notes"[..]));
+}
+
+/// A move that cannot be settled holds up changes at its own paths
+/// only, and other moves (which would be recorded over it): all else
+/// is read and written.
+#[test]
+fn a_move_that_cannot_be_settled_holds_up_its_paths_only() {
+    let s = unsettleable(true);
+    assert_eq!(whole(&s, "NOTES.TXT").as_deref(), Ok(&b"notes"[..]));
+    assert_eq!(whole(&s, "BOOKS/D.TXT").as_deref(), Ok(&b"d"[..]));
+    assert_eq!(names(&s, "BOOKS").len(), 4);
+    s.write("NOTES.TXT", b"more notes").unwrap();
+    s.append("BOOKS/D.TXT", b"d").unwrap();
+    s.remove("BOOKS/E.TXT").unwrap();
+    assert_eq!(whole(&s, "NOTES.TXT").as_deref(), Ok(&b"more notes"[..]));
+    assert_eq!(whole(&s, "BOOKS/D.TXT").as_deref(), Ok(&b"dd"[..]));
+    assert!(s.write("BOOKS/A.TXT", b"x").is_err());
+    assert!(s.remove("BOOKS/A.TXT").is_err());
+    assert!(s.remove_dir_all("BOOKS").is_err());
+    assert!(s.rename("NOTES.TXT", "OTHER.TXT").is_err());
+    assert!(s.size("BOOKS/A.TXT").is_err());
+    // Still recorded: tried again at the next change.
+    assert!(s.recorded().unwrap().is_some());
+}
+
+/// The card `image` after `op`, cut off once the new content of file
+/// `A` is whole beside it (named `.NEW`), before it takes its place.
+fn new_content_beside(image: Vec<u8>, op: impl FnOnce(&FatStorage<SharedDisk<Cut>>)) -> Vec<u8> {
+    let temps = Temps::of(name(A));
+    cut_images(image, op)
+        .into_iter()
+        .find(|image| {
+            let s = mounted(image.clone());
+            let books = s.fs.root_dir().open_dir("Books").unwrap();
+            let entries: Vec<_> = books.iter().map(Result::unwrap).collect();
+            let has = |n: &str| entries.iter().any(|e| e.short_file_name() == n);
+            let named = entries.iter().filter(|e| e.file_name() == name(A)).count();
+            has(temps.ready()) && !has(temps.tmp()) && named == 1
+        })
+        .unwrap()
+}
+
+/// A file stamped by a computer (any time is newer than the X4's),
+/// written by PaperPaw, cut off once its new content is whole beside
+/// it: the new content takes its place.
+#[test]
+fn a_file_stamped_elsewhere_takes_its_new_content_after_a_cut() {
+    let (old, new) = old_and_new();
+    let image = prepared(|s| {
+        beside(s, false);
+        s.write(A, &old).unwrap();
+        let mut file = s.dir("Books").unwrap().open_file(name(A)).unwrap();
+        let date = fatfs::Date::new(2025, 5, 6);
+        file.set_modified(fatfs::DateTime::new(date, fatfs::Time::new(8, 0, 0, 0)));
+        file.flush().unwrap();
+    });
+    let s = mounted(new_content_beside(image, |s| s.write(A, &new).unwrap()));
+    assert_eq!(whole(&s, A), Ok(new));
+}
+
+/// A file appended to after its new content was made beside it (past
+/// the storage; the X4 stamps no time): it keeps what was appended.
+#[test]
+fn a_file_appended_to_after_its_new_content_was_made_is_kept() {
+    let (old, new) = old_and_new();
+    let image = prepared(|s| {
+        beside(s, false);
+        s.write(A, &old).unwrap();
+    });
+    let image = new_content_beside(image, |s| s.write(A, &new).unwrap());
+    let disk = StdIoWrapper::from(Cursor::new(image));
+    let fs: &'static _ = Box::leak(Box::new(FileSystem::new(disk, FsOptions::new()).unwrap()));
+    {
+        let books = fs.root_dir().open_dir("Books").unwrap();
+        let mut file = books.open_file(name(A)).unwrap();
+        file.seek(SeekFrom::End(0)).unwrap();
+        file.write_all(b" more").unwrap();
+        file.flush().unwrap();
+    }
+    let s = FatStorage::new(fs);
+    assert_eq!(whole(&s, A), Ok([&old[..], b" more"].concat()));
+}

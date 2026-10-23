@@ -125,6 +125,11 @@ impl ShortName {
     }
 }
 
+// Modified for PaperPaw: added.
+/// Hundredths of a second of the creation time that tell a mark of the caller's own (see
+/// `File::set_mark`): never a time's, which go up to 199.
+const MARK: u8 = 0xFF;
+
 #[allow(dead_code)]
 #[derive(Clone, Debug, Default)]
 pub(crate) struct DirFileEntryData {
@@ -249,6 +254,27 @@ impl DirFileEntryData {
     pub(crate) fn set_modified(&mut self, date_time: DateTime) {
         self.modify_date = date_time.date.encode();
         self.modify_time = date_time.time.encode().0;
+    }
+
+    // Modified for PaperPaw: `mark`, `set_mark` and `with_created_of` added.
+
+    /// The caller's mark in the creation time fields, where `set_mark` put one.
+    pub(crate) fn mark(&self) -> Option<u32> {
+        (self.create_time_0 == MARK).then(|| (u32::from(self.create_date) << 16) | u32::from(self.create_time_1))
+    }
+
+    pub(crate) fn set_mark(&mut self, mark: u32) {
+        self.create_time_0 = MARK;
+        self.create_time_1 = mark as u16;
+        self.create_date = (mark >> 16) as u16;
+    }
+
+    /// This entry with the creation date and time of `other`.
+    pub(crate) fn with_created_of(mut self, other: &Self) -> Self {
+        self.create_time_0 = other.create_time_0;
+        self.create_time_1 = other.create_time_1;
+        self.create_date = other.create_date;
+        self
     }
 
     pub(crate) fn attributes(&self) -> FileAttributes {
@@ -520,6 +546,14 @@ impl DirEntryEditor {
         }
     }
 
+    // Modified for PaperPaw: added.
+    pub(crate) fn set_mark(&mut self, mark: u32) {
+        if self.data.mark() != Some(mark) {
+            self.data.set_mark(mark);
+            self.dirty = true;
+        }
+    }
+
     pub(crate) fn set_attributes(&mut self, attrs: FileAttributes) {
         if attrs != self.data.attrs {
             self.data.set_attributes(attrs);
@@ -696,6 +730,13 @@ impl<'a, IO: ReadWriteSeek, TP, OCC: OemCpConverter> DirEntry<'a, IO, TP, OCC> {
     #[must_use]
     pub fn modified(&self) -> DateTime {
         self.data.modified()
+    }
+
+    // Modified for PaperPaw: added.
+    /// Returns the mark `File::set_mark` gave it, if any.
+    #[must_use]
+    pub fn mark(&self) -> Option<u32> {
+        self.data.mark()
     }
 
     pub(crate) fn raw_short_name(&self) -> &[u8; SFN_SIZE] {
