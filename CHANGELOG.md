@@ -415,6 +415,10 @@ file to your report.
   and reads as a slice. Its fields are private, so it can carry more
   later without a new signature. A closure such as `|env, out|` stays as
   it is; a parameter typed `&mut Vec<Command>` becomes `&mut Commands`.
+  tell whether they are disabled, and `canvas.disabling(true)` tells
+  everything drawn into it so. Faint menu and quick panel entries are
+  told as disabled, and the remote control's `describe` (and the web
+  emulator's) says `disabled` in a part's state.
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,

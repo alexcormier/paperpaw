@@ -99,6 +99,13 @@ pub fn parts(described: Vec<Described>) -> Vec<Part> {
         if d.role == Role::Text && !d.label.chars().any(char::is_alphanumeric) {
             continue;
         }
+        // What is drawn inside a part that does nothing now: the part
+        // does nothing now (a row drawn by the list, its text faint).
+        if let Some(i) = container
+            && d.disabled
+        {
+            parts[i].disabled = true;
+        }
         match (d.role, container) {
             (Role::Text, Some(i)) => {
                 if !own[i] && !d.label.trim().is_empty() {
