@@ -43,11 +43,52 @@ pub(super) struct GroupList {
     pub(super) covered: Covered,
 }
 
+/// Where a group that names no order is listed: at the end of the section
+/// for customising PaperPaw (from 201), after those that name one, by
+/// name.
+const UNORDERED: i32 = 10_000;
+
+/// The icon of a group that names none.
+const GROUP_ICON: &str = "puzzle";
+
+/// The groups with settings to show, as the main page places them: by
+/// their order, a group that names none at the end of the section for
+/// customising, by name; each with its icon, or a plugin's.
+fn groups(env: &Env<'_>) -> Vec<(i32, bool, Entry)> {
+    let mut found: Vec<(i32, bool, Entry)> = env
+        .settings
+        .groups()
+        // A widget's own settings are opened where it is edited.
+        .filter(|group| !env.widgets.has(group.id.as_str()))
+        .filter(|group| {
+            env.settings
+                .specs()
+                .any(|spec| env.settings.group_of(spec) == group.id && visible(env, spec))
+        })
+        .map(|group| {
+            let order = if group.order == 0 {
+                UNORDERED
+            } else {
+                group.order
+            };
+            let icon = env.menus.icon(group.id.as_str()).unwrap_or(GROUP_ICON);
+            (
+                order,
+                true,
+                Entry {
+                    link: Some(Link::Group(group.id.clone())),
+                    title: env.i18n.tr(&group.title).to_string(),
+                    icon: Some(String::from(icon)),
+                },
+            )
+        })
+        .collect();
+    // By name where the order is the same; the main page's sort keeps it.
+    found.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.2.title.cmp(&b.2.title)));
+    found
+}
+
 impl GroupList {
-    #[expect(
-        clippy::too_many_lines,
-        reason = "longer than the limit from before it was set; split it when it is next changed"
-    )]
     pub(super) fn new(env: &Env<'_>) -> Self {
         let (style, header, area) = page(env);
         let settings_menu = menus::SETTINGS;
@@ -72,28 +113,7 @@ impl GroupList {
                 )
             })
             .collect();
-        placed.extend(
-            env.settings
-                .groups()
-                // A widget's own settings are opened where it is edited.
-                .filter(|group| !env.widgets.has(group.id.as_str()))
-                .filter(|group| {
-                    env.settings
-                        .specs()
-                        .any(|spec| env.settings.group_of(spec) == group.id && visible(env, spec))
-                })
-                .map(|group| {
-                    (
-                        group.order,
-                        true,
-                        Entry {
-                            link: Some(Link::Group(group.id.clone())),
-                            title: env.i18n.tr(&group.title).to_string(),
-                            icon: env.menus.icon(group.id.as_str()).map(String::from),
-                        },
-                    )
-                }),
-        );
+        placed.extend(groups(env));
         placed.push((
             i32::MIN,
             true,

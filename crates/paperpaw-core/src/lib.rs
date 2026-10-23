@@ -1060,6 +1060,12 @@ impl Kernel {
         &self.shared.widgets
     }
 
+    /// The menus every plugin added to, with their icons (e.g. for a tool
+    /// that checks a plugin's).
+    pub fn menus(&self) -> &Menus {
+        &self.shared.menus
+    }
+
     /// Every plugin with its state, `core` first.
     pub fn plugins(&self) -> &Plugins {
         &self.shared.plugins
