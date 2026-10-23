@@ -113,6 +113,7 @@ fn ppn() -> Vec<u8> {
         api: 16,
         relocs: 0,
         align: 16,
+        compiler: 1,
         sha256: [0; 32],
     };
     let mut digest = header.digest();

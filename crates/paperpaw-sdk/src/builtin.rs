@@ -797,7 +797,10 @@ pub mod groups {
 
 /// Sections of the settings' main page, with the setting groups and the
 /// pages in [`menus::SETTINGS`] placed by their order: reading 1 to 49,
-/// the device 51 to 199, customising PaperPaw from 201.
+/// the device 51 to 199, customising PaperPaw from 201. A group whose
+/// order is 0, the default, names none: it is listed at the end of the
+/// section for customising, by name. A group shows the icon its plugin
+/// gives it (`Registrar::add_icon` with its id), else a plugin's.
 pub mod settings_sections {
     use crate::Id;
 
