@@ -24,7 +24,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, FontHandle, Id, Rect, RegisterError, Registrar, SettingSpec,
@@ -49,7 +49,7 @@ const PICKS: [&str; 2] = ["vocabulary.pick.daily", "vocabulary.pick.newest"];
 static WORD_SETTINGS: [SettingSpec; 8] = [
     widgets::frame_spec("vocabulary.widget.word.frame", WORD, Frame::None),
     widgets::padding_spec("vocabulary.widget.word.padding", WORD, Padding::Auto),
-    widgets::size_spec("vocabulary.widget.word.size", WORD, Size::Medium, true),
+    widgets::size_spec("vocabulary.widget.word.size", WORD, TextSize::Medium, true),
     widgets::align_spec("vocabulary.widget.word.align", WORD, Align::Left),
     SettingSpec::fixed_choice(
         "vocabulary.widget.word.pick",
@@ -83,7 +83,12 @@ static WORD_SETTINGS: [SettingSpec; 8] = [
 static SAVED_SETTINGS: [SettingSpec; 8] = [
     widgets::frame_spec("vocabulary.widget.saved.frame", SAVED, Frame::None),
     widgets::padding_spec("vocabulary.widget.saved.padding", SAVED, Padding::Auto),
-    widgets::size_spec("vocabulary.widget.saved.size", SAVED, Size::Medium, true),
+    widgets::size_spec(
+        "vocabulary.widget.saved.size",
+        SAVED,
+        TextSize::Medium,
+        true,
+    ),
     widgets::align_spec("vocabulary.widget.saved.align", SAVED, Align::Left),
     widgets::part_spec(
         "vocabulary.widget.saved.caption",
@@ -115,7 +120,7 @@ static SAVED_SETTINGS: [SettingSpec; 8] = [
 static DUE_SETTINGS: [SettingSpec; 5] = [
     widgets::frame_spec("vocabulary.widget.due.frame", DUE, Frame::None),
     widgets::padding_spec("vocabulary.widget.due.padding", DUE, Padding::Auto),
-    widgets::size_spec("vocabulary.widget.due.size", DUE, Size::Medium, true),
+    widgets::size_spec("vocabulary.widget.due.size", DUE, TextSize::Medium, true),
     widgets::align_spec("vocabulary.widget.due.align", DUE, Align::Left),
     widgets::part_spec(
         "vocabulary.widget.due.caption",
@@ -224,7 +229,7 @@ fn captioned(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     widget: &str,
-    look: &Look,
+    look: &WidgetLook,
     text: &str,
     height: u16,
 ) -> Rect {
@@ -251,7 +256,7 @@ fn text_size(
 ) -> f32 {
     let style = UiStyle::new(env);
     let max = match widgets::size(env, widget) {
-        Size::Fit => f32::from(height).max(style.text()),
+        TextSize::Fit => f32::from(height).max(style.text()),
         size => size.text(&style),
     };
     let wide = f32::from(width);
@@ -271,7 +276,7 @@ fn empty(env: &Env<'_>, widget: &str, area: Rect) -> Wrapped {
     // A short message as wide as the spacing leaves, as high as half of
     // it: the lines' own room above and below the letters keeps them clear of the edges
     // (two lines fit a low place then).
-    let inner = widgets::look::look(env, widget, area).area;
+    let inner = widgets::widget_look(env, widget, area).area;
     let (width, height) = (inner.width, (inner.height + area.height) / 2);
     // The sentence inside the spacing, the short form where it does not
     // fit whole.
@@ -297,7 +302,7 @@ fn empty(env: &Env<'_>, widget: &str, area: Rect) -> Wrapped {
 fn draw_empty(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    (widget, look, area): (&str, &Look, Rect),
+    (widget, look, area): (&str, &WidgetLook, Rect),
     laid: Option<&(Rect, Wrapped)>,
 ) {
     let laid = match laid {
@@ -402,7 +407,7 @@ fn lay_out(env: &Env<'_>, area: Rect, word: &Word) -> Option<Laid> {
     let font = style.font(env)?;
     let id = WORD_NAME;
     let small = line(&font, style.small());
-    let area = widgets::look::look(env, id, area).area;
+    let area = widgets::widget_look(env, id, area).area;
     let room = area.height.saturating_sub(caption_in(env, id, area));
     let width = f32::from(area.width);
     let book = if widgets::shows(env, id, "book") && !word.title.is_empty() {
@@ -520,7 +525,7 @@ impl Widget for WordWidget {
 }
 
 /// The caption, the word, its sentence and its book, as laid out.
-fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, laid: &Laid) {
+fn draw_word(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, laid: &Laid) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -666,7 +671,7 @@ fn notes(env: &Env<'_>, summary: &Summary, fits: impl Fn(&str) -> bool) -> Vec<S
 }
 
 /// "128 words", and the notes below.
-fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, summary: &Summary) {
+fn draw_saved(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, summary: &Summary) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;

@@ -13,7 +13,7 @@ use core::cell::RefCell;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
@@ -40,7 +40,7 @@ static SETTINGS: [SettingSpec; 12] = [
     widgets::align_spec("widgets.series.align", ID, Align::Center),
     widgets::frame_spec("widgets.series.frame", ID, Frame::None),
     widgets::padding_spec("widgets.series.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.series.size", ID, Size::Medium, false),
+    widgets::size_spec("widgets.series.size", ID, TextSize::Medium, false),
     SettingSpec::fixed_text(
         "widgets.series.name",
         "widgets.books.setting.series-name",
@@ -358,7 +358,7 @@ impl Series {
     fn make_covers(&mut self, env: &Env<'_>) {
         self.covers = match self.area {
             Some(area) if self.shown.empty.is_none() => {
-                let look = widgets::look::look(env, WIDGET, area);
+                let look = widgets::widget_look(env, WIDGET, area);
                 let (places, books) = self.places(env, self.content(env, &look));
                 shelf::covers(env, &places, books)
             }
@@ -389,7 +389,7 @@ impl Series {
     }
 
     /// The area below the caption.
-    fn content(&self, env: &Env<'_>, look: &Look) -> Rect {
+    fn content(&self, env: &Env<'_>, look: &WidgetLook) -> Rect {
         if widgets::shows(env, WIDGET, "caption")
             && look.area.height >= 3 * widgets::caption_height(env)
         {
@@ -448,7 +448,7 @@ impl Widget for Series {
     }
 
     fn targets(&self, env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
-        let look = widgets::look::look(env, WIDGET, area);
+        let look = widgets::widget_look(env, WIDGET, area);
         let rest = self.content(env, &look);
         let (places, books) = self.places(env, rest);
         places

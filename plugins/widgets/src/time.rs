@@ -133,7 +133,7 @@ fn chosen_name<'a>(env: &'a Env<'_>, widget: &str, key: &str) -> &'a str {
 
 /// The colour lighter of the look's ink and paper, and the darker one:
 /// e.g. the lit and the dark part of the moon.
-fn light_and_dark(look: &widgets::Look) -> (Color, Color) {
+fn light_and_dark(look: &widgets::WidgetLook) -> (Color, Color) {
     if look.ink.luma() > look.paper.luma() {
         (look.ink, look.paper)
     } else {
@@ -281,7 +281,7 @@ fn twelve(hour: u8) -> u8 {
 /// Draws in `look`'s area that the time is not known yet, in place of
 /// what a widget would show of it: on a device without a clock of its
 /// own, until Wi-Fi sets it.
-fn draw_no_time(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look) {
+fn draw_no_time(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::WidgetLook) {
     widgets::draw_message(canvas, env, look, env.i18n.tr("widgets.time.unknown"));
 }
 

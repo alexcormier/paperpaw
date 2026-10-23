@@ -17,7 +17,7 @@ use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::library;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{Arg, Canvas, Command, Env, Id, Rect, RegisterError, Registrar, Storage};
 
@@ -53,7 +53,7 @@ static SETTINGS: [SettingSpec; 9] = [
     widgets::align_spec("widgets.next.align", ID, Align::Left),
     widgets::frame_spec("widgets.next.frame", ID, Frame::None),
     widgets::padding_spec("widgets.next.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.next.size", ID, Size::Medium, false),
+    widgets::size_spec("widgets.next.size", ID, TextSize::Medium, false),
     SettingSpec::fixed_choice(
         "widgets.next.pick",
         "widgets.books.setting.pick",
@@ -299,7 +299,7 @@ impl Next {
     fn make_covers(&mut self, env: &Env<'_>) {
         self.covers = match (self.area, &self.book) {
             (Some(area), Some(book)) => {
-                let look = widgets::look::look(env, WIDGET, area);
+                let look = widgets::widget_look(env, WIDGET, area);
                 let at = layout(env, &look, book).cover;
                 Covers::make(env, at.map(|at| (book, at)))
             }
@@ -410,7 +410,7 @@ struct Layout<'b> {
 /// the text alone; where wide enough, the cover on the left and the text
 /// beside it; else the cover above and the text below (what fits in
 /// half), or the cover alone.
-fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
+fn layout<'b>(env: &Env<'b>, look: &WidgetLook, book: &'b Book) -> Layout<'b> {
     let style = UiStyle::new(env);
     let id = WIDGET;
     let gap = style.gap();
@@ -489,7 +489,7 @@ fn layout<'b>(env: &Env<'b>, look: &Look, book: &'b Book) -> Layout<'b> {
     }
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, book: &Book, covers: &Covers) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, book: &Book, covers: &Covers) {
     let Layout {
         cover,
         mut lines,

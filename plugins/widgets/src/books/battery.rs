@@ -9,7 +9,9 @@ use alloc::string::{String, ToString};
 
 use paperpaw_sdk::builtin::settings::BATTERY_LOW;
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec,
+};
 use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar};
 
 use super::{add_settings, caption, chosen, draw_message, draw_ring, frame_height};
@@ -30,7 +32,7 @@ static SETTINGS: [SettingSpec; 8] = [
     widgets::align_spec("widgets.battery.align", ID, Align::Center),
     widgets::frame_spec("widgets.battery.frame", ID, Frame::None),
     widgets::padding_spec("widgets.battery.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.battery.size", ID, Size::Fit, true),
+    widgets::size_spec("widgets.battery.size", ID, TextSize::Fit, true),
     SettingSpec::fixed_choice(
         "widgets.battery.style",
         "widgets.books.setting.style",
@@ -107,7 +109,7 @@ const LYING: u32 = 212;
     clippy::too_many_lines,
     reason = "longer than the limit from before it was set; split it when it is next changed"
 )]
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, charging: bool) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, percent: u8, charging: bool) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -133,7 +135,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, percent: u8, chargi
     let with_text = widgets::shows(env, id, "percent");
     let align = widgets::align(env, id);
     let fixed = match widgets::size(env, id) {
-        Size::Fit => None,
+        TextSize::Fit => None,
         other => Some(other.text(&style) * 1.4),
     };
     let (w, h) = (f32::from(area.width), f32::from(area.height));
@@ -334,7 +336,7 @@ impl Number<'_, '_> {
 /// percent sign small after it.
 fn draw_charge_text(
     canvas: &mut Canvas<'_>,
-    look: &Look,
+    look: &WidgetLook,
     number: &Number<'_, '_>,
     x: f32,
     band: Rect,
@@ -366,7 +368,7 @@ fn draw_charge_text(
 fn draw_battery(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     body: Rect,
     percent: u8,
     low: bool,

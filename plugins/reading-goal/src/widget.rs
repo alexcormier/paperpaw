@@ -106,7 +106,7 @@ impl Cat {
         let (Some(area), Some(today)) = (self.area, self.today) else {
             return;
         };
-        let inner = widgets::look::look(env, NAME, area).area;
+        let inner = widgets::widget_look(env, NAME, area).area;
         let room = Rect::new(
             inner.x,
             inner.y,

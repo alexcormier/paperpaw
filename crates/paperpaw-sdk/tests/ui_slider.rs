@@ -15,10 +15,14 @@ mod support;
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
+use paperpaw_sdk::ui::UiStyle;
+use paperpaw_sdk::ui::slider::Slider;
+use paperpaw_sdk::ui::slider::SliderDrag;
+use paperpaw_sdk::ui::slider::SliderFocus;
+use paperpaw_sdk::ui::slider::SliderParts;
+use paperpaw_sdk::ui::slider::SliderStep;
+use paperpaw_sdk::ui::slider::SliderView;
 use paperpaw_sdk::ui::slider::{self, key_step, parts};
-use paperpaw_sdk::ui::{
-    Slider, SliderDrag, SliderFocus, SliderParts, SliderStep, SliderView, UiStyle,
-};
 use paperpaw_sdk::{Color, PointerPhase, Rect, SettingSpec};
 use proptest::prelude::*;
 

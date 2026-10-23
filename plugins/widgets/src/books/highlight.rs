@@ -18,7 +18,7 @@ use paperpaw_sdk::library;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget, Wrapped,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget, Wrapped,
 };
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, Storage};
 
@@ -50,7 +50,7 @@ static SETTINGS: [SettingSpec; 11] = [
     widgets::align_spec("widgets.highlight.align", ID, Align::Center),
     widgets::frame_spec("widgets.highlight.frame", ID, Frame::None),
     widgets::padding_spec("widgets.highlight.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.highlight.size", ID, Size::Fit, true),
+    widgets::size_spec("widgets.highlight.size", ID, TextSize::Fit, true),
     SettingSpec::fixed_choice(
         "widgets.highlight.source",
         "widgets.books.setting.highlight-source",
@@ -364,7 +364,7 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     let style = UiStyle::new(env);
     let id = WIDGET;
     let gap = style.gap();
-    let look = widgets::look::look(env, id, area);
+    let look = widgets::widget_look(env, id, area);
     let area = below_caption(env, id, &look);
     // Below: the book (and the note), small.
     let source = {
@@ -383,7 +383,7 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     let mut marks = widgets::shows(env, id, "marks");
     let mark_size = style.title() * 2.0;
     let (max, min) = match widgets::size(env, id) {
-        Size::Fit => (style.title() * 1.6, style.small()),
+        TextSize::Fit => (style.title() * 1.6, style.small()),
         other => (other.text(&style), other.text(&style)),
     };
     let (text, lines, size, mark_h, below) = loop {
@@ -443,7 +443,7 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
     })
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid: &Laid) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, quote: &Quote, laid: &Laid) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;

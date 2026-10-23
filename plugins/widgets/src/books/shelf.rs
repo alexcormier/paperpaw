@@ -6,7 +6,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{Align, Look, line_height};
+use paperpaw_sdk::widgets::{Align, WidgetLook, line_height};
 use paperpaw_sdk::{Canvas, Env, Point, Rect};
 
 use super::{Book, Covers, cover_size, draw_cover, draw_line, least_cover_width};
@@ -177,7 +177,7 @@ pub(crate) fn draw_caption(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     id: &str,
-    look: &Look,
+    look: &WidgetLook,
     rest: Rect,
     places: &[Place],
     text: &str,
@@ -237,7 +237,7 @@ pub(crate) fn covers(env: &Env<'_>, places: &[Place], books: &[Shelved]) -> Cove
 pub(crate) fn draw(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     places: &[Place],
     books: &[Shelved],
     covers: &Covers,
@@ -300,7 +300,7 @@ pub(crate) fn draw(
 }
 
 /// A round mark with a tick at the top right corner of a cover: read.
-fn draw_read_mark(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, cover: Rect) {
+fn draw_read_mark(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, cover: Rect) {
     let style = UiStyle::new(env);
     let radius = u32::from(cover.width / 6)
         .min(style.small() as u32 * 2 / 3)

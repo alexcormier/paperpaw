@@ -6,7 +6,7 @@ use alloc::format;
 use alloc::string::String;
 
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Look, Wrapped};
+use paperpaw_sdk::widgets::{self, WidgetLook, Wrapped};
 use paperpaw_sdk::{Canvas, Color, Env, FontHandle, Id, Rect, SettingSpec, time};
 
 use crate::data::Symbol;
@@ -182,7 +182,7 @@ pub(crate) fn draw_waiting(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     widget: &str,
-    (look, place): (&Look, Rect),
+    (look, place): (&WidgetLook, Rect),
     shown: &Shown,
 ) {
     let style = UiStyle::new(env);

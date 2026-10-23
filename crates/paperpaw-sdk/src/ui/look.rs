@@ -138,7 +138,7 @@ pub struct ProgressPart {
     pub ink: Color,
 }
 
-/// A slider's track and knob ([`Slider::draw_track`](super::Slider::draw_track)).
+/// A slider's track and knob ([`Slider::draw_track`](super::slider::Slider::draw_track)).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct SliderPart {

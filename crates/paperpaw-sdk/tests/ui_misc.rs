@@ -20,7 +20,7 @@ use paperpaw_sdk::logo::{self, Logo};
 use paperpaw_sdk::replies::{Chosen, Typed};
 use paperpaw_sdk::semantics::{self, Role};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Size, WidgetSpec, Wrapped};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, TextSize, WidgetSpec, Wrapped};
 use paperpaw_sdk::{
     Canvas, Capabilities, Color, Command, Env, Id, MenuEntry, MenuNeed, MenuSection, Menus, Params,
     Rect, Storage, ask, icons,
@@ -458,12 +458,12 @@ fn frames_and_sizes_read_from_settings_fall_back_when_unknown() {
     let env = h.env();
     assert_eq!(widgets::frame(&env, "t.clock"), Frame::None);
     assert_eq!(widgets::align(&env, "t.clock"), Align::Left);
-    assert_eq!(widgets::size(&env, "t.clock"), Size::Medium);
+    assert_eq!(widgets::size(&env, "t.clock"), TextSize::Medium);
     assert!(!widgets::shows(&env, "t.clock", "date"));
     let style = UiStyle::new(&env);
-    assert!(Size::Small.text(&style) < Size::Medium.text(&style));
-    assert!(Size::Medium.text(&style) < Size::Large.text(&style));
-    assert_eq!(Size::Fit.text(&style), Size::Large.text(&style));
+    assert!(TextSize::Small.text(&style) < TextSize::Medium.text(&style));
+    assert!(TextSize::Medium.text(&style) < TextSize::Large.text(&style));
+    assert_eq!(TextSize::Fit.text(&style), TextSize::Large.text(&style));
 }
 
 fn shows_the_placement(env: &Env<'_>) -> String {

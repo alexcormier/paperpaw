@@ -6,7 +6,9 @@ use alloc::boxed::Box;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Look, Padding, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, Widget, WidgetLook, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, chosen, frame_height, goal, line, shade};
@@ -197,7 +199,7 @@ fn label(env: &Env<'_>, days: &[Shown]) -> alloc::string::String {
     clippy::too_many_lines,
     reason = "longer than the limit from before it was set; split it when it is next changed"
 )]
-fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, days: &[Shown]) {
+fn draw_week(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, days: &[Shown]) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;

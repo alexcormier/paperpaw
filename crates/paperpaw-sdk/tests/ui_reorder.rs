@@ -11,8 +11,10 @@
 
 mod support;
 
+use paperpaw_sdk::ui::reorder::Reorder;
+use paperpaw_sdk::ui::reorder::ReorderStep;
 use paperpaw_sdk::ui::reorder::moved;
-use paperpaw_sdk::ui::{ListView, Reorder, ReorderStep, UiStyle};
+use paperpaw_sdk::ui::{ListView, UiStyle};
 use paperpaw_sdk::{PointerPhase, Rect};
 use proptest::prelude::*;
 

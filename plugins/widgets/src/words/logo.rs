@@ -9,7 +9,7 @@ use alloc::string::{String, ToString};
 use paperpaw_sdk::logo::{LOGO, Logo};
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::{self, Thumbnail, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec};
+use paperpaw_sdk::widgets::{self, Align, Frame, Padding, TextSize, Widget, WidgetSpec};
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::frame_height;
@@ -34,7 +34,7 @@ static SETTINGS: [SettingSpec; 6] = [
         ID,
     )
     .described("widgets.setting.face-font.help"),
-    widgets::size_spec("widgets.logo.size", ID, Size::Medium, true),
+    widgets::size_spec("widgets.logo.size", ID, TextSize::Medium, true),
     widgets::align_spec("widgets.logo.align", ID, Align::Center),
     widgets::frame_spec("widgets.logo.frame", ID, Frame::None),
     widgets::padding_spec("widgets.logo.padding", ID, Padding::Auto),
@@ -61,7 +61,7 @@ struct LogoWidget {
 
 impl LogoWidget {
     fn read(&mut self, env: &Env<'_>, area: Rect) {
-        let side = side(env, widgets::look::look(env, ID.as_str(), area).area);
+        let side = side(env, widgets::widget_look(env, ID.as_str(), area).area);
         let logo = Logo::read(env, side, side);
         let small = match &logo {
             Logo::Picture(image) => {
@@ -123,7 +123,7 @@ fn sizes(env: &Env<'_>) -> (f32, u16) {
     let chosen = widgets::size(env, ID.as_str());
     let size = chosen.text(&UiStyle::new(env));
     let side = match chosen {
-        Size::Fit => u16::MAX,
+        TextSize::Fit => u16::MAX,
         _ => widgets::line_height(env, size) * 3 / 2,
     };
     (size, side)
@@ -132,7 +132,7 @@ fn sizes(env: &Env<'_>) -> (f32, u16) {
 fn height(env: &Env<'_>, width: u16) -> u16 {
     let side = match widgets::size(env, ID.as_str()) {
         // As high as wide, a third of the screen at most.
-        Size::Fit => width.min(env.device.display.height / 3),
+        TextSize::Fit => width.min(env.device.display.height / 3),
         _ => sizes(env).1,
     };
     side + frame_height(env, ID.as_str())

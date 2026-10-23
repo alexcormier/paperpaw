@@ -14,7 +14,7 @@ mod support;
 use paperpaw_sdk::builtin::events;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::widgets::{
-    self, FILL, PlaceKind, Refresh, Stack, Widget, WidgetPlace, WidgetSpec, WidgetTarget,
+    self, FILL, PlaceKind, Refresh, Widget, WidgetPlace, WidgetSpec, WidgetStack, WidgetTarget,
 };
 use paperpaw_sdk::{Canvas, Command, Env, Id, Params, Rect, SettingSpec, SettingValue};
 
@@ -68,7 +68,7 @@ fn harness() -> Harness {
 /// Where the widgets of a stack of `list` go in an 800 high screen.
 fn areas(h: &Harness, list: &str) -> Vec<Rect> {
     let env = h.env();
-    Stack::new(&env, list, Rect::new(0, 0, 480, 800))
+    WidgetStack::new(&env, list, Rect::new(0, 0, 480, 800))
         .targets(&env)
         .into_iter()
         .map(|t| t.area)
@@ -228,7 +228,7 @@ fn plugins_add_kinds_of_widgets_with_their_icons() {
 fn one_frame_for_all_widgets_unless_one_has_its_own() {
     use paperpaw_sdk::builtin::settings::WIDGET_FRAME;
     use paperpaw_sdk::widgets::Frame;
-    use paperpaw_sdk::widgets::look::{ALL_FRAMES, FRAMES, OWN_FRAME};
+    use paperpaw_sdk::widgets::{ALL_FRAMES, FRAMES, OWN_FRAME};
     let mut h = harness();
     h.settings
         .define(SettingSpec::fixed_choice(

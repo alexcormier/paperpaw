@@ -223,9 +223,9 @@ shortened.
 | Parts one below the other, from the top and the bottom | `ui::Stack` (`take`, `take_bottom`, `rest`) |
 | Equal columns side by side, e.g. two buttons | `ui::columns(area, count, gap)` |
 | A list that pages and holds the focus | `ui::ListView`, `ui::list_step` |
-| Rows of a list or of settings | `ui::draw_value_row`, `ui::draw_noted_row`, `ui::draw_switch_row`, `ui::draw_setting_row`, `ui::draw_stepper`, `ui::Slider` |
-| Sections with headings | `ui::Sections`, `ui::draw_heading` |
-| A grid of cells (covers, tiles) | `ui::Grid` (`cell`, `hit`, `step`) |
+| Rows of a list or of settings | `ui::draw_value_row`, `ui::draw_noted_row`, `ui::draw_switch_row`, `ui::draw_setting_row`, `ui::draw_stepper`, `ui::slider::Slider` |
+| Sections with headings | `ui::sections::Sections`, `ui::draw_heading` |
+| A grid of cells (covers, tiles) | `ui::CellGrid` (`cell`, `hit`, `step`) |
 | A group on a card or in a frame | `ui::draw_card(canvas, &style, area, Frame::Card)` returns where its parts go |
 | A button, on, focused, faint, with an icon | `ui::draw_button`, `ui::draw_faint_button`, `ui::draw_icon_button` |
 | A few options to pick at a glance, or tabs | `ui::Segments` |
@@ -239,7 +239,7 @@ shortened.
 | A message where content would be, an empty list | `ui::draw_message`, `ui::draw_empty` |
 | Progress | `ui::draw_progress` |
 | An address to open on a phone, with its QR code | `ui::draw_address`, `ui::draw_qr` |
-| Offering to go online where something needs the network | `ui::OfflineOffer` |
+| Offering to go online where something needs the network | `ui::offline::OfflineOffer` |
 | What the buttons do, at the bottom | the screen's `hint` (the kernel draws the row) |
 | First-time hints over a screen | `help::add` (see [Hints for a screen](#hints-for-a-screen)) |
 | A widget's frame | `widgets::draw_frame` |
@@ -665,7 +665,7 @@ as the run's artifact, also when a check failed.
 | Refresh filters | `add_refresh_filter` | Change how the panel is refreshed, e.g. in full on a screen of your own |
 | Status items, lines and places | `add_status_item`, `add_status_line`, `add_status_place` | What status lines show, what a tap on an item does, how much it matters where a line is full; places where items show (`status::Place`) |
 | A look | `set_ui_look` | Another look for switches, the focus, separators, buttons, headers, button hints, progress bars, sliders and widgets' frames on every screen (`ui::look`) |
-| Widgets and their places | `add_widget`, `add_widget_place`, `add_widget_category` | Blocks for the home screen and the sleep screen; places that show widgets (`widgets::WidgetPlace`), in a grid or above each other (`widgets::Stack`), which plugins ask whether they show theirs (`Widgets::shown`); kinds of widgets of one's own, with their icon |
+| Widgets and their places | `add_widget`, `add_widget_place`, `add_widget_category` | Blocks for the home screen and the sleep screen; places that show widgets (`widgets::WidgetPlace`), in a grid or above each other (`widgets::WidgetStack`), which plugins ask whether they show theirs (`Widgets::shown`); kinds of widgets of one's own, with their icon |
 | Setup steps | `add_setup_step` | A page of the first-run setup: a setting to choose or a screen of the plugin's, where the device needs it |
 | Services | `publish` | Anything one plugin offers others, found with `env.services.get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |
@@ -1181,9 +1181,9 @@ of their own that place widgets use `Id::placement` and forget a
 placement's values when it goes (`Settings::placement_values`).
 
 `widgets::shows(env, id, "author")` reads a part's switch,
-`widgets::choice` makes other choices of the widget's own, and
+`widgets::choice_setting` makes other choices of the widget's own, and
 `widgets::draw_message` says kindly what is not there yet. A widget's
-`height` counts its frame (`widgets::look::look` gives the area inside
+`height` counts its frame (`widgets::widget_look` gives the area inside
 it without drawing). For round things there are `Canvas::fill_circle`,
 `stroke_circle`, `fill_ring` (arcs, e.g. a progress ring) and
 `draw_hand`, with angles as on a clock face (`paperpaw_sdk::round`);

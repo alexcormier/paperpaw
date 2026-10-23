@@ -18,7 +18,7 @@ use alloc::vec::Vec;
 use paperpaw_sdk::builtin::{params, slots};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{
     Arg, Canvas, Command, Env, Id, Params, Rect, RegisterError, Registrar, SettingSpec,
@@ -40,7 +40,7 @@ const LINES: [&str; 3] = ["stats.line.thin", "stats.line.medium", "stats.line.th
 static SETTINGS: [SettingSpec; 9] = [
     widgets::frame_spec("stats.widget.goal.frame", RING, Frame::None),
     widgets::padding_spec("stats.widget.goal.padding", RING, Padding::Auto),
-    widgets::size_spec("stats.widget.goal.size", RING, Size::Fit, true),
+    widgets::size_spec("stats.widget.goal.size", RING, TextSize::Fit, true),
     widgets::align_spec("stats.widget.goal.align", RING, Align::Center),
     SettingSpec::fixed_choice(
         "stats.widget.goal.style",
@@ -159,9 +159,9 @@ impl Widget for Ring {
 fn largest(env: &Env<'_>, style: &UiStyle, font: &paperpaw_sdk::FontHandle<'_>) -> u16 {
     let title = line(font, style.title());
     match widgets::size(env, NAME) {
-        Size::Small => title * 3,
-        Size::Medium | Size::Fit => title * 9 / 2,
-        Size::Large => title * 6,
+        TextSize::Small => title * 3,
+        TextSize::Medium | TextSize::Fit => title * 9 / 2,
+        TextSize::Large => title * 6,
         _ => title * 9 / 2,
     }
 }
@@ -216,7 +216,7 @@ fn time_text(env: &Env<'_>, numbers: Numbers) -> String {
     }
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, numbers: Numbers) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &WidgetLook, numbers: Numbers) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;
@@ -226,7 +226,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, numbers: Numbers) {
     let caption = super::caption(env, id, look.area, &[title]);
     let area = super::below_caption(env, caption, look.area);
     let note = note(env, numbers);
-    let limit = if widgets::size(env, id) == Size::Fit {
+    let limit = if widgets::size(env, id) == TextSize::Fit {
         u16::MAX
     } else {
         largest(env, &style, &font)
@@ -333,7 +333,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, numbers: Numbers) {
 fn draw_time(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    (look, caption): (&Look, Option<&str>),
+    (look, caption): (&WidgetLook, Option<&str>),
     area: Rect,
     numbers: Numbers,
     note: Option<widgets::Wrapped>,
@@ -395,7 +395,7 @@ fn draw_time(
 fn draw_ring(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
-    look: &Look,
+    look: &WidgetLook,
     at: Rect,
     progress: Option<u32>,
     seconds: u64,

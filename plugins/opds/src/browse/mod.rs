@@ -87,7 +87,7 @@ pub(crate) struct BrowseScreen {
     /// The files the answers are written to.
     temp: TempFiles,
     /// Offline mode: the offer to go online, and the feed to load then.
-    offer: ui::OfflineOffer,
+    offer: ui::offline::OfflineOffer,
     offline: Option<(String, bool)>,
 }
 
@@ -123,7 +123,7 @@ impl BrowseScreen {
                 && env.settings.read(&crate::COVERS),
             fetching: None,
             failed: Vec::new(),
-            offer: ui::OfflineOffer::new(),
+            offer: ui::offline::OfflineOffer::new(),
             offline: None,
             temp,
             catalog,
@@ -161,7 +161,7 @@ impl BrowseScreen {
 
     /// What the reader chose on the offer: the feed loaded now, or said
     /// to need the network.
-    fn offered(&mut self, chosen: Option<ui::Offer>, cx: &mut Cx<'_, '_>) {
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
         let Some(chosen) = chosen else {
             return;
         };
@@ -169,7 +169,7 @@ impl BrowseScreen {
             return;
         };
         match chosen {
-            ui::Offer::Online => self.load(&url, back, cx),
+            ui::offline::Offer::Online => self.load(&url, back, cx),
             // Not now, and any answer to come: on without the network.
             _ => {
                 let message = cx.env().i18n.tr("opds.no-network").to_string();

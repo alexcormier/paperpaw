@@ -7,7 +7,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::time;
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, Size};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, TextSize};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar};
 
 use paperpaw_sdk::SettingSpec;
@@ -37,7 +37,7 @@ static SETTINGS: [SettingSpec; 8] = [
         ID,
     )
     .described("widgets.day.style.help"),
-    widgets::size_spec("widgets.day.size", ID, Size::Fit, true),
+    widgets::size_spec("widgets.day.size", ID, TextSize::Fit, true),
     super::date_format_spec("widgets.day.date-format", ID, super::DATE_FORMATS[0]),
     widgets::part_spec("widgets.day.year", ID, "widgets.setting.year", true),
     widgets::part_spec("widgets.day.week", ID, "widgets.setting.week-number", false),
@@ -65,8 +65,8 @@ fn height(env: &Env<'_>, _: u16) -> u16 {
 fn big_size(env: &Env<'_>, room: Option<f32>) -> f32 {
     let (style, _) = ui(env);
     match (widgets::size(env, ID.as_str()), room) {
-        (Size::Fit, Some(room)) => room,
-        (Size::Fit, None) => style.title() * 2.0,
+        (TextSize::Fit, Some(room)) => room,
+        (TextSize::Fit, None) => style.title() * 2.0,
         (size, _) => size.text(&style) * 1.6,
     }
 }
@@ -272,7 +272,7 @@ fn draw_sheet(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &paperpaw_sdk::FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     t: &paperpaw_sdk::time::LocalTime,
     with_year: bool,
     week: Option<&str>,

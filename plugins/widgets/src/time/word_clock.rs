@@ -17,7 +17,7 @@ use alloc::string::String;
 use alloc::vec::Vec;
 
 use paperpaw_sdk::time;
-use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, Size};
+use paperpaw_sdk::widgets::{self, Align, Drawn, Frame, Padding, TextSize};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Env, FontHandle, Id, Point, Rect, RegisterError, Registrar, Translator,
 };
@@ -63,7 +63,7 @@ static SETTINGS: [SettingSpec; 9] = [
         ID,
     )
     .described("widgets.word-clock.style.help"),
-    widgets::size_spec("widgets.word-clock.size", ID, Size::Fit, true),
+    widgets::size_spec("widgets.word-clock.size", ID, TextSize::Fit, true),
     SettingSpec::fixed_choice(
         "widgets.word-clock.lead",
         "widgets.setting.word-clock-lead",
@@ -253,7 +253,7 @@ fn draw_text(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     hour: u8,
     minute: u8,
     past: Option<u8>,
@@ -292,7 +292,7 @@ fn draw_text(
         time_alone(env, hour, minute)
     };
     let size = match widgets::size(env, ID.as_str()) {
-        Size::Fit => largest(font, &rest, room, style.small(), f32::from(room.height)),
+        TextSize::Fit => largest(font, &rest, room, style.small(), f32::from(room.height)),
         size => largest(font, &rest, room, style.small(), size.text(&style) * 1.2),
     };
     let height = line(font, size);
@@ -454,7 +454,7 @@ fn draw_grid(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     hour: u8,
     minute: u8,
     past: Option<u8>,

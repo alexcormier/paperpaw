@@ -139,7 +139,7 @@ impl Turns {
 /// down to the small size, broken between words only
 /// ([`widgets::draw_message`]).
 /// Nothing where not even a line has room.
-fn draw_empty(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, text: &str) {
+fn draw_empty(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::WidgetLook, text: &str) {
     let small = paperpaw_sdk::ui::UiStyle::new(env).small();
     if widgets::line_height(env, small) <= look.area.height {
         widgets::draw_message(canvas, env, look, text);

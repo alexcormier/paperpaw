@@ -253,7 +253,7 @@ impl Widget for PictureWidget {
 
     fn height(&self, env: &Env<'_>, width: u16) -> u16 {
         // As high as wide, with the frame and the caption.
-        let look = widgets::look::look(env, ID.as_str(), Rect::new(0, 0, width, width));
+        let look = widgets::widget_look(env, ID.as_str(), Rect::new(0, 0, width, width));
         width.min(env.device.display.height / 3) + caption_height(env) + (width - look.area.width)
     }
 

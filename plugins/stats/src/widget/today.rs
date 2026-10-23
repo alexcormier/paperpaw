@@ -8,7 +8,9 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, TextSize, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Arg, Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::{caption_room, frame_height, goal, line, shade};
@@ -24,7 +26,7 @@ const NAME: &str = "stats.widget.today";
 static SETTINGS: [SettingSpec; 8] = [
     widgets::frame_spec("stats.widget.today.frame", TODAY, Frame::None),
     widgets::padding_spec("stats.widget.today.padding", TODAY, Padding::Auto),
-    widgets::size_spec("stats.widget.today.size", TODAY, Size::Medium, true),
+    widgets::size_spec("stats.widget.today.size", TODAY, TextSize::Medium, true),
     widgets::align_spec("stats.widget.today.align", TODAY, Align::Left),
     widgets::part_spec(
         "stats.widget.today.caption",
@@ -194,7 +196,7 @@ fn progress(env: &Env<'_>, numbers: &Numbers) -> u64 {
     goal(env).map_or(0, |goal| (numbers.today * 1000 / goal.max(1)).min(1000))
 }
 
-fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::Look, numbers: &Numbers) {
+fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &widgets::WidgetLook, numbers: &Numbers) {
     let style = UiStyle::new(env);
     let Some(font) = style.font(env) else {
         return;

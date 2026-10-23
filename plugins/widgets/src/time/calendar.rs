@@ -276,7 +276,7 @@ fn draw_month(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     area: Rect,
     month: &MonthGrid,
     today: Option<u8>,
@@ -394,7 +394,7 @@ fn draw_today(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     font: &FontHandle<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     area: Rect,
     month: &MonthGrid,
     day: u8,
@@ -452,7 +452,7 @@ fn draw_today(
 )]
 fn draw_mark(
     canvas: &mut Canvas<'_>,
-    look: &widgets::Look,
+    look: &widgets::WidgetLook,
     mark: &str,
     x: f32,
     y: f32,

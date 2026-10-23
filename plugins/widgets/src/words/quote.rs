@@ -16,7 +16,9 @@ use paperpaw_sdk::event::Event;
 use paperpaw_sdk::files::for_each_line;
 use paperpaw_sdk::setting::{Setting, Text};
 use paperpaw_sdk::ui::UiStyle;
-use paperpaw_sdk::widgets::{self, Align, Frame, Padding, Size, Widget, WidgetSpec, WidgetTarget};
+use paperpaw_sdk::widgets::{
+    self, Align, Frame, Padding, TextSize, Widget, WidgetSpec, WidgetTarget,
+};
 use paperpaw_sdk::{Canvas, Env, Id, Rect, RegisterError, Registrar, SettingSpec};
 
 use super::text::{self, FACES};
@@ -110,7 +112,7 @@ static SETTINGS: [SettingSpec; 11] = [
         ID,
     )
     .described("widgets.setting.face-font.help"),
-    widgets::size_spec("widgets.quote.size", ID, Size::Fit, true),
+    widgets::size_spec("widgets.quote.size", ID, TextSize::Fit, true),
     widgets::align_spec("widgets.quote.align", ID, Align::Center),
     widgets::frame_spec("widgets.quote.frame", ID, Frame::None),
     widgets::padding_spec("widgets.quote.padding", ID, Padding::Auto),
@@ -275,7 +277,7 @@ struct Laid {
 /// says (or as fits); where a line of it would not fit with them, the
 /// large mark and who said it go.
 fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
-    let look = widgets::look::look(env, ID.as_str(), area);
+    let look = widgets::widget_look(env, ID.as_str(), area);
     let mut area = look.area;
     let caption = widgets::shows(env, ID.as_str(), CAPTION);
     if caption {
@@ -318,7 +320,7 @@ fn lay_out(env: &Env<'_>, area: Rect, quote: &Quote) -> Option<Laid> {
         !too_wide && layout.height(&font, size, lines) <= height
     };
     let (layout, size) = match widgets::size(env, ID.as_str()) {
-        Size::Fit => choices
+        TextSize::Fit => choices
             .iter()
             .find_map(|layout| {
                 widgets::largest_size(style.title() * 2.0, least, |size| whole(layout, size))

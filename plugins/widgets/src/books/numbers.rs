@@ -18,7 +18,7 @@ use paperpaw_sdk::library;
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::ui::UiStyle;
 use paperpaw_sdk::widgets::{
-    self, Align, Frame, Look, Padding, Size, Widget, WidgetSpec, WidgetTarget,
+    self, Align, Frame, Padding, TextSize, Widget, WidgetLook, WidgetSpec, WidgetTarget,
 };
 use paperpaw_sdk::{Canvas, Color, Command, Env, FontHandle, Id, Rect, RegisterError, Registrar};
 
@@ -44,7 +44,7 @@ static SETTINGS: [SettingSpec; 10] = [
     widgets::align_spec("widgets.library.align", ID, Align::Center),
     widgets::frame_spec("widgets.library.frame", ID, Frame::None),
     widgets::padding_spec("widgets.library.padding", ID, Padding::Auto),
-    widgets::size_spec("widgets.library.size", ID, Size::Fit, true),
+    widgets::size_spec("widgets.library.size", ID, TextSize::Fit, true),
     widgets::part_spec(
         "widgets.library.books",
         ID,
@@ -163,7 +163,7 @@ impl Library {
     fn lay_out(&mut self, env: &Env<'_>) {
         self.laid = match (self.area, &self.numbers) {
             (Some(area), Some(numbers)) => {
-                let look = widgets::look::look(env, WIDGET, area);
+                let look = widgets::widget_look(env, WIDGET, area);
                 lay_out(env, super::below_caption(env, WIDGET, &look), numbers)
             }
             _ => None,
@@ -319,7 +319,7 @@ fn lay_out(env: &Env<'_>, area: Rect, numbers: &Numbers) -> Option<Laid> {
     let wanted_bar = widgets::shows(env, id, "bar") && numbers.books > 0;
     let max = match widgets::size(env, id) {
         // As large as the place holds, its height checked below.
-        Size::Fit => f32::from(area.height).max(style.small()),
+        TextSize::Fit => f32::from(area.height).max(style.small()),
         other => other.text(&style) * 1.4,
     };
     let mut best: Option<(f32, Laid)> = None;
@@ -404,7 +404,7 @@ fn draw(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
     area: Rect,
-    look: &Look,
+    look: &WidgetLook,
     numbers: &Numbers,
     laid: &Laid,
 ) {
@@ -512,7 +512,13 @@ fn draw(
 
 /// A bar of the books: those read dark, those being read shaded, the
 /// rest a fine line.
-fn draw_share(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, area: Rect, numbers: &Numbers) {
+fn draw_share(
+    canvas: &mut Canvas<'_>,
+    env: &Env<'_>,
+    look: &WidgetLook,
+    area: Rect,
+    numbers: &Numbers,
+) {
     let style = UiStyle::new(env);
     let fine = (style.line()).clamp(1, area.height);
     canvas.fill(

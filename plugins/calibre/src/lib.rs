@@ -205,7 +205,7 @@ struct CalibreScreen {
     /// The *Type the password* row, where it shows.
     password_row: Option<Rect>,
     /// Offline mode: the offer to go online.
-    offer: ui::OfflineOffer,
+    offer: ui::offline::OfflineOffer,
 }
 
 impl CalibreScreen {
@@ -224,15 +224,15 @@ impl CalibreScreen {
             tries: 0,
             started: false,
             password_row: None,
-            offer: ui::OfflineOffer::new(),
+            offer: ui::offline::OfflineOffer::new(),
         }
     }
 
     /// What the reader chose on the offer to go online: Calibre found
     /// now, or said to need the network.
-    fn offered(&mut self, chosen: Option<ui::Offer>, cx: &mut Cx<'_, '_>) {
+    fn offered(&mut self, chosen: Option<ui::offline::Offer>, cx: &mut Cx<'_, '_>) {
         match chosen {
-            Some(ui::Offer::Online) => self.start(cx),
+            Some(ui::offline::Offer::Online) => self.start(cx),
             // Not now, and any answer to come: on without the network.
             Some(_) => {
                 let env = *cx.env();

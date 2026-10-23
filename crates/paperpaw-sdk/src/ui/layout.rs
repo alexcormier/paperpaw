@@ -1,6 +1,6 @@
 //! Placing parts without computing positions by hand: a column of parts
 //! one below the other ([`Stack`]), equal columns side by side
-//! ([`columns`]), a grid of cells the focus moves through ([`Grid`]), a
+//! ([`columns`]), a grid of cells the focus moves through ([`CellGrid`]), a
 //! group on a card or in a frame ([`draw_card`]) and a row of segments,
 //! one of them chosen, e.g. tabs over a page ([`Segments`]).
 //!
@@ -200,14 +200,14 @@ impl Stack {
 /// focus goes with the buttons (left and right along the cells, up and
 /// down a row).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub struct Grid {
+pub struct CellGrid {
     area: Rect,
     columns: u16,
     cell_height: u16,
     gap: u16,
 }
 
-impl Grid {
+impl CellGrid {
     /// The grid in `area`; at least one column, cells at least a pixel
     /// tall.
     pub fn new(area: Rect, columns: u16, cell_height: u16, gap: u16) -> Self {
@@ -460,7 +460,7 @@ mod tests {
 
     #[test]
     fn a_grid_places_hits_and_steps() {
-        let grid = Grid::new(Rect::new(0, 0, 310, 220), 3, 100, 5);
+        let grid = CellGrid::new(Rect::new(0, 0, 310, 220), 3, 100, 5);
         assert_eq!((grid.rows(), grid.per_page()), (2, 6));
         assert_eq!(grid.cell(4), Rect::new(105, 105, 100, 100));
         // Page 1 begins anew at the top.
