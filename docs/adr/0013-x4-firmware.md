@@ -1,6 +1,7 @@
 # 0013. The Xteink X4's firmware
 
-- Status: Accepted
+- Status: Accepted; the X4 Pro is built from the same firmware crate
+  (feature `x4-pro`), and the UC8179 driver is in `paperpaw-x4`
 - Date: 2026-10-15
 
 ## Context

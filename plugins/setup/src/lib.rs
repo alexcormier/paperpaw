@@ -63,7 +63,7 @@ static HOW: [(&str, &str); 2] = [
 impl Plugin for Setup {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Setup", Version::new(0, 1, 0))
-            .description("A short guide through the settings that matter.")
+            .description("A short guide through the settings that matter, on the first start.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }

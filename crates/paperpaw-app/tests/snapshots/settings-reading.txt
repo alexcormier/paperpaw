@@ -2,6 +2,6 @@ screen settings.group
 Heading "Reading"
 Heading "Preview"
 Heading "Text"
-Row "Font, Book's font, The book's font uses the fonts a book brings (else Literata); any other font is used for all text. Add your own: put .ttf or .otf files into the fonts folder." (focused)
+Row "Font, Book's font, The book's font is Literata, or the fonts a book brings on devices that draw them (not the X4 and X4 Pro). Any other font is used for all text." (focused)
 Row "Font size, 11 pt, Size of the book text."
 Row "Font weight, +0, Darker, bolder text with any font; helps on light screens."

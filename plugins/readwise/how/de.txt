@@ -2,4 +2,4 @@ Readwise schickt deine Markierungen an Readwise, mit ihren Notizen und ihrer Ste
 
 Beim ersten Export fragt es nach deinem Zugangstoken (readwise.io/access_token); er wird mit den anderen Passwörtern und Schlüsseln aufbewahrt. Readwise behält jede Markierung nur einmal, ein weiterer Export schickt also nur Neues.
 
-Das Plugin ist zunächst ausgeschaltet: Schalte es unter Plugins ein. Ohne Netzwerk oder wenn Readwise nicht erreichbar ist, warten die Markierungen und werden später geschickt.
+Das Plugin ist anfangs aus: Füge es mit Mehr Plugins hinzu, oder schalte es unter Plugins ein, wenn es dort steht. Ohne Netzwerk oder wenn Readwise nicht erreichbar ist, warten die Markierungen und werden später geschickt.

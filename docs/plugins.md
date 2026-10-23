@@ -93,8 +93,9 @@ emit an event, run an action, show a short message, make an HTTP
 request, keep a password, and so on. The kernel runs the commands after
 the plugin's code returns.
 
-This keeps plugins simple to test and the API message-based, so the same
-model works for sandboxed plugins later.
+This keeps plugins simple to test and the API message-based. It does
+not confine them: a plugin runs as native code without a sandbox (see
+[Plugins as files](#plugins-as-files)).
 
 ### Screens
 
@@ -1297,7 +1298,7 @@ showing as it was opened is closed.
 
 ### Firmware updates
 
-Where PaperPaw is the device's firmware (the X4), `env.firmware` says
+Where PaperPaw is the device's firmware (the X4s), `env.firmware` says
 which version runs and how an install goes; elsewhere it is `None`.
 `Command::Firmware(FirmwareCommand::Install { path, key, older })`
 installs a signed update file: `key` is the key of one not signed by
@@ -1430,10 +1431,11 @@ plugins/my-plugin/
   i18n/*.ini     translations, settings.ini, … as for data plugins
 ```
 
-Copy the folder onto the card (over USB: `python tools/x4-remote.py
---push my-plugin plugins/my-plugin`) and restart. The plugin manager
-lists it as one with code, and says why one does not run (built for
-another PaperPaw, damaged, no room). Over USB, `native` (and `--info`)
+Copy the folder onto the card, name its code as installed and restart
+(over USB: `python tools/x4-remote.py --push my-plugin plugins/my-plugin
+--trust-code my-plugin`). The plugin manager lists it as one with code,
+and says why one does not run (built for another PaperPaw, damaged, no
+room, not installed, changed since it was installed). Over USB, `native` (and `--info`)
 says where each plugin lies and what loading it took.
 
 A panic's calls inside a plugin are kept with its name and the offset
@@ -1498,7 +1500,7 @@ plugins/large-print/
   menus.ini      entries of menus, a menu of one's own (formats 3)
   actions.ini    actions made of steps (formats 3)
   icons.ini      icons of actions and settings: item = icon-name (formats 3)
-  points/*.txt   lines for a point, one a line, e.g. core.about.txt (formats 3)
+  points/*.txt   lines for a point, one a line, e.g. about.lines.txt (formats 3)
   setup.ini      steps of the first-run setup (formats 3)
 ```
 
@@ -1642,8 +1644,8 @@ sleep.overlay-size = 40
 ```
 
 The picture's clear parts show the page, so a PNG with transparency
-looks best. [`samples/plugins`](../samples/plugins) has large print and
-three themes (airy, paw, calm ink).
+looks best. [`samples/plugins`](../samples/plugins) has large print,
+three themes (airy, paw, calm ink) and a home screen (reading nook).
 
 ## Publishing
 
@@ -1765,7 +1767,7 @@ job attaches them to the tag's release with their SHA-256. Building twice, in tw
 comparing the files with `cmp` shows that the build holds.
 
 [`Plugin`]: ../crates/paperpaw-sdk/src/plugin.rs
-[`Registrar`]: ../crates/paperpaw-sdk/src/plugin.rs
+[`Registrar`]: ../crates/paperpaw-sdk/src/contribution.rs
 [`Env`]: ../crates/paperpaw-sdk/src/env.rs
 [`Command`]: ../crates/paperpaw-sdk/src/command.rs
 [`Screen`]: ../crates/paperpaw-sdk/src/screen.rs

@@ -51,8 +51,9 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 - **The internet.** The device connects out only (catalogs, sync,
   updates, news), over TLS where the address says `https`, with the
   certificates checked against the clock (set over the network first).
-  An update search sends the version, the plugin crates built in and the
-  code plugins installed with their versions, no identifier: when the
+  An update search sends the chip, the version, the plugin crates built
+  in, the fingerprint code plugins need and the code plugins installed
+  with their versions, no identifier: when the
   reader asks, and once a day while an update found waits for plugins
   ([ADR 0022](adr/0022-plugins-in-updates.md)). The store asks for its
   list with the kind of device and the language, no identifier either.
@@ -65,22 +66,26 @@ are reported as [SECURITY.md](../SECURITY.md) says.
 - **Code plugins** run with the kernel's rights: all of the card, the
   network, the passwords through the SDK, and past the SDK, as native
   code without a sandbox. They are built into the firmware (or the app),
-  or on the X4s come as plugin files (`code.ppn`) from the store or the
-  web flasher ([ADR 0024](adr/0024-native-code-plugins.md)). Each file
-  is signed by its author (Ed25519, `paperpaw-sign`); PaperPaw's own
-  plugin files are signed with the project's plugin key. The store
-  installs a file only when it is made for this firmware and signed by
-  the key the plugin library names for its author; the device remembers
+  or on the X4s come as plugin files (`code.ppn`) from the store, with a
+  firmware update or from the web flasher
+  ([ADR 0024](adr/0024-native-code-plugins.md)). A published file is
+  signed by its author (Ed25519, `paperpaw-sign`); PaperPaw's own plugin
+  files are signed with the project's plugin key. The store and a
+  firmware update install a file only when it is made for this firmware
+  and signed by the key the plugin library names for its author; the device remembers
   that key at the first install, and an update signed by another waits
-  until the reader, warned, installs it anyway. Only code installed so
-  runs: a file put into a plugin's folder by hand is not loaded (test
+  until the reader, warned, installs it anyway. From the web flasher the
+  firmware also takes a file not signed (one's own build), but only for
+  a plugin that has no author's key remembered yet. Only code installed
+  so runs: a file put into a plugin's folder by hand is not loaded (test
   firmware can name one over USB). Code plugins are trusted as their
   author is.
 - **Data plugins** (folders with `plugin.ini`) carry no code: translations,
   key maps, defaults of settings, presets, menus, actions made of steps,
-  fonts and stylesheets. They can change what PaperPaw shows and does
-  through those, not reach past them, and never set a setting that keeps
-  the device safe (such as the lock's).
+  marks in the text, icons, steps of the first-run setup, lines for
+  other plugins' points, fonts and stylesheets. They can change what
+  PaperPaw shows and does through those, not reach past them, and never
+  set a setting that keeps the device safe (such as the lock's).
 
 ## The screen lock
 

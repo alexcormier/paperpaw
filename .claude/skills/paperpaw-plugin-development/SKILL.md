@@ -54,8 +54,7 @@ Read, in this order, and skim what is relevant to the task:
   the table in `docs/plugins.md` lists them).
 - **Read through `Env`, change through `Command`s.** Plugins never change
   the kernel's state directly; the kernel runs the commands after the
-  plugin's code returns. This keeps plugins testable and works over a
-  message boundary (sandboxed plugins later).
+  plugin's code returns. This keeps plugins testable.
 - **Screens** draw, react to actions (buttons, gestures bound to actions),
   gestures and events. **Slots** are roles (home, reader, library, menu,
   …) that screens fill: binding to a slot is how a plugin replaces
@@ -192,8 +191,8 @@ section of `docs/plugins.md`. A plugin that should run there:
   steps such as button names, `long:<button>`, `wait:<ms>`, taps,
   `shot:<file>` (relative paths; a drive letter's colon reads as a step
   separator).
-- `--library <dir>`: the folder that stands for the device's storage (a
-  copy, so tests start fresh); `--set key=value` and `--config` for
+- `--library <dir>`: the folder that stands for the device's storage
+  (the emulator writes into it: give it a copy, so tests start fresh); `--set key=value` and `--config` for
   settings.
 - Memory: the profile's heap budget is enforced; the run ends with the
   heap now and its peak. `--heap-budget none` measures beyond the limit;

@@ -20,9 +20,9 @@
 //!   may bind a screen to any slot; the user's configuration has the final
 //!   word.
 //! - **Commands** ([`Command`]): plugins never mutate kernel state directly.
-//!   They read through [`Env`] and request changes with commands. This keeps
-//!   the API message-based, so the same model works for sandboxed
-//!   WebAssembly plugins.
+//!   They read through [`Env`] and request changes with commands, which the
+//!   kernel applies after the plugin returns. Plugins loaded from files are
+//!   native code too, without a sandbox (ADR 0024).
 
 #![cfg_attr(docsrs, feature(doc_cfg))]
 // Without the `kernel` feature (as plugins build it) what only the

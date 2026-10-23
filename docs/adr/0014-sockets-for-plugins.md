@@ -1,6 +1,7 @@
 # 0014. Sockets for plugins
 
-- Status: Accepted
+- Status: Accepted; the X4 now has sockets too
+  (`shells/xteink/src/sockets.rs`)
 - Date: 2026-10-16
 
 ## Context
