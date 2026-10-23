@@ -595,8 +595,13 @@ fn draw(
     let mut total = height(&parts);
     // In more lines where there is room: whole words, else (with `cut`)
     // up to the word that has to be shortened; else one line.
-    let wrapped = |total: &mut u16, size: f32, text: &str, cut: bool| -> Vec<String> {
-        let line = widgets::line_height(env, size) + line_gap;
+    // `heading`: the title's lines, as a heading's closer than others.
+    let wrapped = |total: &mut u16, size: f32, text: &str, cut: bool, heading: bool| {
+        let line = if heading {
+            widgets::heading_line_height(env, size)
+        } else {
+            widgets::line_height(env, size) + line_gap
+        };
         let more = usize::from(rest.height.saturating_sub(*total) / line);
         let lines = match font.as_ref() {
             Some(font) if more > 0 => {
@@ -612,7 +617,7 @@ fn draw(
         *total += line * (lines.len() as u16 - 1);
         lines
     };
-    let title = wrapped(&mut total, title_size, &book.title, true);
+    let title = wrapped(&mut total, title_size, &book.title, true, true);
     // The page and the percentage: on a line, the percentage below the
     // page (in lines broken between words where it needs them), as
     // "5/395 · 2 %", as "5/395"; else shortened.
@@ -667,7 +672,7 @@ fn draw(
         Vec::new()
     };
     let chapter = if parts.contains(&Part::Chapter) {
-        wrapped(&mut total, style.small, &position.chapter, true)
+        wrapped(&mut total, style.small, &position.chapter, true, false)
     } else {
         Vec::new()
     };
@@ -684,7 +689,7 @@ fn draw(
         if whole(&long) {
             alloc::vec![long]
         } else {
-            let lines = wrapped(&mut total, style.small, &long, false);
+            let lines = wrapped(&mut total, style.small, &long, false, false);
             let short = chapter_left_text(env, position, timed, titled, style.small, rest.width);
             match short {
                 _ if lines.len() > 1 => lines,
@@ -704,7 +709,7 @@ fn draw(
         top.add(Role::Caption, style.small, caption_text, look.faint);
     }
     for line in title {
-        top.add(Role::Main, title_size, line, look.ink);
+        top.add(Role::Title, title_size, line, look.ink);
     }
     if has(Part::Author) {
         top.add(Role::Note, style.small, book.author.as_str(), look.faint);

@@ -102,13 +102,16 @@ impl Layout {
         let text_width = display.width.saturating_sub(text_x + margin);
         let mut ty = y;
         let mut title = Vec::new();
-        for range in font
-            .wrap(style.title, &d.title, f32::from(text_width))
-            .into_iter()
-            .take(2)
-        {
+        let ranges = font.wrap(style.title, &d.title, f32::from(text_width));
+        let count = ranges.len().min(2);
+        for (i, range) in ranges.into_iter().take(2).enumerate() {
             title.push((ty, d.title[range].to_string()));
-            ty += line(style.title);
+            // Its lines a heading's apart, the author a line below.
+            ty += if i + 1 < count {
+                paperpaw_sdk::widgets::heading_line_height(env, style.title)
+            } else {
+                line(style.title)
+            };
         }
         let author = ty;
         if !d.author.is_empty() {

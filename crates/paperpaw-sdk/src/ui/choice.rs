@@ -105,16 +105,18 @@ impl Choice {
         // A long title takes up to three lines.
         let lines = style.font(env).map_or((1, 0.0), |font| {
             let width = f32::from(display.width) - 2.0 * style.margin as f32;
-            let line = font.line_metrics(style.title).line_height;
             let count = font
                 .wrap(style.title, &title_text, width)
                 .len()
                 .clamp(1, TITLE_LINES);
-            (count, line)
+            // Its lines a heading's apart.
+            let line = font.line_metrics(style.title).line_height;
+            let apart = font.heading_line_height(style.title);
+            (count, line + apart * (count - 1) as f32)
         });
         let title_height = match lines {
             (1, _) => row,
-            (count, line) => (count as f32 * line) as u16 + style.gap as u16,
+            (_, tall) => tall as u16 + style.gap as u16,
         };
         // As many options as the screen holds below the title; more go on
         // pages, with a pager below them.
@@ -223,6 +225,7 @@ impl Screen for Choice {
                 let more = lines.len() > TITLE_LINES;
                 lines.truncate(TITLE_LINES);
                 let line = font.line_metrics(style.title).line_height;
+                let apart = font.heading_line_height(style.title);
                 let count = lines.len();
                 for (n, range) in lines.into_iter().enumerate() {
                     let text = if more && n + 1 == count {
@@ -236,7 +239,7 @@ impl Screen for Choice {
                     } else {
                         alloc::borrow::Cow::Borrowed(&self.title_text[range])
                     };
-                    let y = self.title.y + (n as f32 * line) as u16;
+                    let y = self.title.y + (n as f32 * apart) as u16;
                     let area = Rect::new(0, y, self.title.width, line as u16);
                     ui::draw_label(
                         canvas,
