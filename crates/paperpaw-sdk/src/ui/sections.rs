@@ -253,7 +253,9 @@ impl Sections {
         for (n, &(item, rect)) in visible.iter().enumerate() {
             let focused = focus && item == Item::Entry(self.focus);
             if let Item::Entry(_) = item {
-                canvas.describe(crate::semantics::Role::Row, "", rect, focused, None);
+                canvas
+                    .describe(crate::semantics::Role::Row, "", rect)
+                    .focused(focused);
             }
             if focused {
                 super::rows::draw_entry_focus(canvas, style, rect);

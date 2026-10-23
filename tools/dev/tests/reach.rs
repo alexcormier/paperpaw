@@ -60,7 +60,9 @@ impl Plugin for Trapped {
 fn rows(canvas: &mut Canvas<'_>, labels: &[&str], focused: Option<usize>) {
     for (i, label) in labels.iter().enumerate() {
         let area = Rect::new(0, 100 + 60 * i as u16, 480, 60);
-        canvas.describe(Role::Row, label, area, focused == Some(i), None);
+        canvas
+            .describe(Role::Row, label, area)
+            .focused(focused == Some(i));
     }
 }
 

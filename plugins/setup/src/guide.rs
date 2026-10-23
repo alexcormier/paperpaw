@@ -111,7 +111,7 @@ fn draw_sample(
     let Some(font) = sample_font(env, style) else {
         return;
     };
-    canvas.describe(Role::Text, text, area, false, None);
+    canvas.describe(Role::Text, text, area);
     let height = font.line_metrics(size).line_height.max(1.0);
     let fit = ((f32::from(area.height) / height) as usize).max(1);
     let mut top = area.y;
@@ -152,7 +152,7 @@ fn paragraph(
     let Some(font) = style.font(env) else {
         return;
     };
-    canvas.describe(Role::Text, text, area, false, None);
+    canvas.describe(Role::Text, text, area);
     let height = font.line_metrics(size).line_height;
     let mut top = area.y;
     for range in font
@@ -542,7 +542,7 @@ impl Guide {
             (_, Some(spec)) => (ui::setting_value(env, spec), ui::opens_screen(env, spec)),
             _ => (String::new(), false),
         };
-        canvas.describe(Role::Button, &label, card, focused, None);
+        canvas.describe(Role::Button, &label, card).focused(focused);
         if let (Some(options), Some((left, right)), Some(spec)) =
             (self.two(env), self.layout.segments, self.setting(env))
         {

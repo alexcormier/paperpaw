@@ -498,7 +498,7 @@ impl LockScreen {
                 i32::from(rect.y) + i32::from(rect.height) / 2,
             );
             let radius = i32::from(rect.width) / 2;
-            canvas.describe(Role::Button, key, rect, focused, None);
+            canvas.describe(Role::Button, key, rect).focused(focused);
             // Digits in a thin ring; delete and OK as plain signs. Chosen
             // with the buttons, a key is filled.
             let digit = *key != DELETE && *key != "OK";
@@ -563,18 +563,18 @@ impl LockScreen {
             canvas.draw_line(l.points[last], at, line, Color::gray(110));
         }
         for (i, &point) in l.points.iter().enumerate() {
-            canvas.describe(
-                Role::Button,
-                "",
-                Rect::new(
-                    (point.x - l.radius * 3).max(0) as u16,
-                    (point.y - l.radius * 3).max(0) as u16,
-                    (l.radius * 6) as u16,
-                    (l.radius * 6) as u16,
-                ),
-                self.shown && self.focus == i,
-                None,
-            );
+            canvas
+                .describe(
+                    Role::Button,
+                    "",
+                    Rect::new(
+                        (point.x - l.radius * 3).max(0) as u16,
+                        (point.y - l.radius * 3).max(0) as u16,
+                        (l.radius * 6) as u16,
+                        (l.radius * 6) as u16,
+                    ),
+                )
+                .focused(self.shown && self.focus == i);
             let on = chosen.contains(&i);
             circle(
                 canvas,

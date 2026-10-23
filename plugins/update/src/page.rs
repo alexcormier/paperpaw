@@ -697,7 +697,7 @@ impl UpdatePage {
         let permille = (done * 1000).checked_div(total).unwrap_or(0).min(1000) as u16;
         ui::draw_progress(canvas, style, area, permille, Color::BLACK);
         let text = alloc::format!("{percent} %");
-        canvas.describe(Role::Text, &text, area, false, None);
+        canvas.describe(Role::Text, &text, area);
         if let Some(font) = style.font(env) {
             let label = Rect::new(
                 area.x,
@@ -770,8 +770,6 @@ fn paragraph(
         Role::Text,
         text,
         Rect::new(area.x, area.y, area.width, used),
-        false,
-        None,
     );
     let mut top = area.y;
     for (n, range) in lines.into_iter().take(max).enumerate() {

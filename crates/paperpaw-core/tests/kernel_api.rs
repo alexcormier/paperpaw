@@ -670,7 +670,9 @@ impl paperpaw_core::sdk::Screen for TwoButtons {
         use paperpaw_core::sdk::semantics::Role;
         for (i, label) in ["First", "Second"].iter().enumerate() {
             let area = paperpaw_core::sdk::Rect::new(0, 40 * i as u16, 100, 40);
-            canvas.describe(Role::Button, label, area, self.0 == i, None);
+            canvas
+                .describe(Role::Button, label, area)
+                .focused(self.0 == i);
         }
     }
 

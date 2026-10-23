@@ -310,7 +310,7 @@ impl Screen for BookSheet {
             // as a text, which a row of the list below would take in).
             let heading = paperpaw_sdk::semantics::Role::Heading;
             let room_rect = Rect::new(margin, area.y, width, room + 2 * gap);
-            canvas.describe(heading, text, room_rect, false, None);
+            canvas.describe(heading, text, room_rect);
             let at = Rect::new(margin, area.y + gap, width, question.height(env).min(room));
             question.draw(canvas, env, at, widgets::Align::Left, Color::BLACK);
             answers.draw(

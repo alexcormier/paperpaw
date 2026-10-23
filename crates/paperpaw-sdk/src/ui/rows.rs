@@ -173,7 +173,9 @@ impl Rows {
         for (n, &(index, rect)) in visible.iter().enumerate() {
             let focused = focus && index == self.focus && !self.is_heading(index);
             if !self.is_heading(index) {
-                canvas.describe(crate::semantics::Role::Row, "", rect, focused, None);
+                canvas
+                    .describe(crate::semantics::Role::Row, "", rect)
+                    .focused(focused);
             }
             if focused {
                 draw_entry_focus(canvas, style, rect);

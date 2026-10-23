@@ -24,7 +24,7 @@ pub fn draw_progress(
     // Its share in words only for those who ask: no text made each draw.
     if canvas.is_describing() {
         let done = format!("{}%", done / 10);
-        canvas.describe(Role::Progress, &done, area, false, None);
+        canvas.describe(Role::Progress, &done, area);
     }
     let part = super::look::ProgressPart {
         area,

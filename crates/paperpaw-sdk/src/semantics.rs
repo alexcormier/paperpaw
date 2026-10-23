@@ -26,6 +26,8 @@ pub struct Part {
     /// Switched on or off, for switches (also a row's) and buttons that
     /// are either.
     pub on: Option<bool>,
+    /// It does nothing now (drawn faint).
+    pub disabled: bool,
 }
 
 impl Part {
@@ -38,6 +40,7 @@ impl Part {
             area,
             focused: false,
             on: None,
+            disabled: false,
         }
     }
 
@@ -50,6 +53,12 @@ impl Part {
     /// Switched on or off, or neither.
     pub fn on(mut self, on: Option<bool>) -> Self {
         self.on = on;
+        self
+    }
+
+    /// Doing nothing now, or not.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
         self
     }
 }
@@ -105,6 +114,7 @@ pub fn parts(described: Vec<Described>) -> Vec<Part> {
                     area: d.area,
                     focused: d.focused,
                     on: d.on,
+                    disabled: d.disabled,
                 });
             }
         }

@@ -123,7 +123,7 @@ pub fn draw_heading(
         rect.width,
         line,
     );
-    canvas.describe(Role::Heading, text, area, false, None);
+    canvas.describe(Role::Heading, text, area);
     // Ending at the right margin, where the rows' values end: what a last
     // letter reaches past its width stays in the row.
     let margin = style.margin as u16;
@@ -165,7 +165,7 @@ pub fn switch_rect(style: &UiStyle, row: Rect) -> Rect {
 /// for a focused (black) row.
 pub fn draw_switch(canvas: &mut Canvas<'_>, style: &UiStyle, row: Rect, on: bool, inverted: bool) {
     let r = switch_rect(style, row);
-    canvas.describe(Role::Switch, "", r, false, Some(on));
+    canvas.describe(Role::Switch, "", r).on(Some(on));
     let part = super::look::SwitchPart {
         rect: r,
         on,
@@ -322,7 +322,7 @@ pub fn draw_label(
 ) -> f32 {
     let room = f32::from(area.x) + f32::from(area.width) - x;
     let at = Rect::new(x.max(0.0) as u16, area.y, room.max(0.0) as u16, area.height);
-    canvas.describe(Role::Text, text, at, false, None);
+    canvas.describe(Role::Text, text, at);
     draw_text(canvas, font, size, x, area, text, color)
 }
 
@@ -382,7 +382,7 @@ pub(super) fn draw_label_on(
 ) -> f32 {
     let room = f32::from(area.x) + f32::from(area.width) - x;
     let at = Rect::new(x.max(0.0) as u16, area.y, room.max(0.0) as u16, area.height);
-    canvas.describe(Role::Text, text, at, false, None);
+    canvas.describe(Role::Text, text, at);
     if room > 0.0 && font.measure(size, text) > room + 1.0 {
         let text = fit(font, size, text, room);
         return font.draw(canvas, size, x, baseline, &text, color);
@@ -459,13 +459,7 @@ pub fn draw_message(
         font.draw(canvas, style.text, x, baseline as i32, &line, Color::BLACK);
         baseline += line_height;
     }
-    canvas.describe(
-        Role::Text,
-        &as_shown(text, &lines, cut, &last),
-        area,
-        false,
-        None,
-    );
+    canvas.describe(Role::Text, &as_shown(text, &lines, cut, &last), area);
 }
 
 /// What a block of `text` wrapped on `lines` says as it is drawn: all of
@@ -558,13 +552,7 @@ pub fn draw_note_line(
         );
         y += line;
     }
-    canvas.describe(
-        Role::Text,
-        &as_shown(text, &lines, cut, &last),
-        block,
-        false,
-        None,
-    );
+    canvas.describe(Role::Text, &as_shown(text, &lines, cut, &last), block);
 }
 
 /// `text` shortened with an ellipsis to fit `width` pixels.
@@ -787,5 +775,5 @@ pub fn draw_empty(
         );
         y += line;
     }
-    canvas.describe(Role::Text, text, block, false, None);
+    canvas.describe(Role::Text, text, block);
 }

@@ -295,8 +295,8 @@ impl Screen for InfoScreen {
             let baseline = i32::from(y) + ascent as i32;
             let label = env.i18n.tr(key.as_ref());
             let row = Rect::new(margin, y, width, line(style.text));
-            canvas.describe(Role::Text, label, row, false, None);
-            canvas.describe(Role::Text, value, row, false, None);
+            canvas.describe(Role::Text, label, row);
+            canvas.describe(Role::Text, value, row);
             font.draw(canvas, style.small, x, baseline, label, style.faint(80));
             let room = f32::from(width) - layout.label_width;
             let value = ui::fit(&font, style.text, value, room);

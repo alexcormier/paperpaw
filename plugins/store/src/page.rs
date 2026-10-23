@@ -660,7 +660,7 @@ impl Screen for PageScreen {
                 width as u16,
                 (metrics.line_height * shown as f32) as u16,
             );
-            canvas.describe(Role::Text, text, area, false, None);
+            canvas.describe(Role::Text, text, area);
             for (n, range) in lines.iter().take(shown).enumerate() {
                 let text = if n + 1 == shown && lines.len() > shown {
                     ui::fit(&font, size, text[range.start..].trim_end(), width)

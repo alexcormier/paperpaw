@@ -358,7 +358,7 @@ pub(super) fn draw_note_below(
     } else {
         note
     };
-    canvas.describe(Role::Text, said, at, false, None);
+    canvas.describe(Role::Text, said, at);
 }
 
 /// Draws a row: `title` on the left, `value` right-aligned.
@@ -685,7 +685,7 @@ fn draw_own_title(
         return;
     }
     let wrapped = font.wrap(style.text, title, room);
-    canvas.describe(Role::Text, title, line, false, None);
+    canvas.describe(Role::Text, title, line);
     let metrics = font.line_metrics(style.text);
     let count = wrapped.len().clamp(1, TITLE_LINES);
     // The lines centred in the line's height, as one line is.

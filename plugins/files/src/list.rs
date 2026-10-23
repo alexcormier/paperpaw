@@ -939,7 +939,7 @@ impl ListScreen {
     ) {
         let style = &self.layout.style;
         // A row, whose words are those drawn in it.
-        canvas.describe(Role::Row, "", rect, focused, None);
+        canvas.describe(Role::Row, "", rect).focused(focused);
         let ink = style.focus_ink(focused);
         let room = ui::icon_room(env, style, true);
         let band = ui::title_area(style, rect);

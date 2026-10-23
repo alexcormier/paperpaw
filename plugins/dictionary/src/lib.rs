@@ -754,13 +754,9 @@ impl Screen for Popup {
                 let focused = !env.device.input.touch
                     && self.more_shown(env).map(|m| m.begins)
                         == self.more_at(self.top + n).map(|m| m.begins);
-                canvas.describe(
-                    paperpaw_sdk::semantics::Role::Button,
-                    text,
-                    area,
-                    focused,
-                    None,
-                );
+                canvas
+                    .describe(paperpaw_sdk::semantics::Role::Button, text, area)
+                    .focused(focused);
             }
         }
     }

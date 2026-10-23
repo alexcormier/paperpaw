@@ -308,7 +308,7 @@ impl Header {
             }
             _ => String::from(title),
         };
-        canvas.describe(Role::Heading, &told, self.area, false, None);
+        canvas.describe(Role::Heading, &told, self.area);
         style.header_background(canvas, self.area);
         let ink = style.header_colors().1;
         let Some(font) = style.font(env) else {
@@ -382,7 +382,9 @@ impl Header {
             if self.note_button || self.note_focused {
                 // As high as the bar, where a tap on it is taken.
                 let target = Rect::new(around.x, band.y, around.width, band.height);
-                canvas.describe(Role::Button, note, target, self.note_focused, None);
+                canvas
+                    .describe(Role::Button, note, target)
+                    .focused(self.note_focused);
             }
             let note_ink = if self.note_focused {
                 canvas.fill_round(around, style.radius(u32::from(around.height)), ink);

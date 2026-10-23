@@ -124,12 +124,12 @@ pub fn draw_text_field(
 ) {
     let Some(font) = style.font(env) else {
         let (_, field, _) = text_field_layout(style, row, 0.0, 1, 0);
-        canvas.describe(Role::Field, value, field, focused, None);
+        canvas.describe(Role::Field, value, field).focused(focused);
         return;
     };
     let (lines, widest, line) = title_lines(&font, style, title, row.width);
     let (title_area, field, below) = text_field_layout(style, row, widest, lines, line);
-    canvas.describe(Role::Field, value, field, focused, None);
+    canvas.describe(Role::Field, value, field).focused(focused);
     let ink = style.focus_ink(focused);
     if below {
         draw_lines(canvas, &font, style.text, title_area, line, title, ink);
@@ -259,7 +259,7 @@ fn check_text_width(style: &UiStyle, row: Rect) -> u16 {
 /// (black) row. A look of a plugin's own may paint it
 /// ([`Painters::check`](super::look::Painters::check)).
 pub fn draw_check(canvas: &mut Canvas<'_>, style: &UiStyle, rect: Rect, on: bool, inverted: bool) {
-    canvas.describe(Role::Check, "", rect, false, Some(on));
+    canvas.describe(Role::Check, "", rect).on(Some(on));
     let part = super::look::CheckPart { rect, on, inverted };
     if style.look.check(canvas, style, part) {
         return;

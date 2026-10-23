@@ -471,7 +471,7 @@ fn draw(canvas: &mut Canvas<'_>, env: &Env<'_>, look: &Look, quote: &Quote, laid
     }
     // The text's lines, told as one text.
     let text_area = Rect::new(area.x, area.y + laid.mark_h, area.width, laid.text_h);
-    canvas.describe(Role::Text, &laid.text, text_area, false, None);
+    canvas.describe(Role::Text, &laid.text, text_area);
     let line = widgets::line_height(env, laid.size);
     let metrics = font.line_metrics(laid.size);
     for (n, shown) in laid.lines.iter().enumerate() {

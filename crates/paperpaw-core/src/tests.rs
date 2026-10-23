@@ -978,13 +978,7 @@ struct BaseScreen {
 impl Screen for BaseScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
         let clip = canvas.clip();
-        canvas.describe(
-            paperpaw_sdk::semantics::Role::Text,
-            "base",
-            clip,
-            false,
-            None,
-        );
+        canvas.describe(paperpaw_sdk::semantics::Role::Text, "base", clip);
         self.log
             .borrow_mut()
             .push(alloc::format!("draw base {}x{}", clip.width, clip.height));
@@ -1015,13 +1009,7 @@ impl Screen for HalfOverlay {
     fn draw(&mut self, canvas: &mut Canvas<'_>, _: &Env<'_>) {
         canvas.fill_rect(0, 45, 90, 45, Color::BLACK);
         let area = Rect::new(0, 45, 90, 45);
-        canvas.describe(
-            paperpaw_sdk::semantics::Role::Text,
-            "overlay",
-            area,
-            false,
-            None,
-        );
+        canvas.describe(paperpaw_sdk::semantics::Role::Text, "overlay", area);
     }
 
     fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {

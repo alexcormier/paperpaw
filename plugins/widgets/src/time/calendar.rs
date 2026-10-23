@@ -271,10 +271,6 @@ fn grid(env: &Env<'_>, font: &FontHandle<'_>, area: Rect, rows: u8, all: bool) -
     clippy::too_many_arguments,
     reason = "its inputs are separate things; a struct of them would serve this call alone"
 )]
-#[expect(
-    clippy::too_many_lines,
-    reason = "longer than the limit from before it was set; split it when it is next changed"
-)]
 fn draw_month(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -286,13 +282,7 @@ fn draw_month(
     weeks_shown: u8,
 ) {
     let label = format!("{} {}", super::month_name(env, month.month), month.year);
-    canvas.describe(
-        paperpaw_sdk::semantics::Role::Text,
-        &label,
-        area,
-        false,
-        None,
-    );
+    canvas.describe(paperpaw_sdk::semantics::Role::Text, &label, area);
     let whole = grid(env, font, area, weeks_shown, true);
     let (grid, rows) = match (whole, today) {
         (Some(grid), _) => (grid, 0..month.weeks),

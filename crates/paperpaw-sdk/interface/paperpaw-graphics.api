@@ -38,7 +38,7 @@ impl<'a> paperpaw_graphics::Canvas<'a>
 pub fn paperpaw_graphics::Canvas<'a>::clear(&mut self, paperpaw_platform::pixel::Color)
 pub fn paperpaw_graphics::Canvas<'a>::clip(&self) -> paperpaw_platform::geometry::Rect
 pub fn paperpaw_graphics::Canvas<'a>::clipped(&mut self, paperpaw_platform::geometry::Rect) -> paperpaw_graphics::Canvas<'_>
-pub fn paperpaw_graphics::Canvas<'a>::describe(&mut self, paperpaw_graphics::Role, &str, paperpaw_platform::geometry::Rect, bool, core::option::Option<bool>)
+pub fn paperpaw_graphics::Canvas<'a>::describe<'c>(&'c mut self, paperpaw_graphics::Role, &'c str, paperpaw_platform::geometry::Rect) -> paperpaw_graphics::canvas::Describe<'c>
 pub fn paperpaw_graphics::Canvas<'a>::draw_gray_alpha_row(&mut self, i32, i32, &[u8], u8)
 pub fn paperpaw_graphics::Canvas<'a>::draw_gray_row(&mut self, i32, i32, &[u8])
 pub fn paperpaw_graphics::Canvas<'a>::draw_hand(&mut self, paperpaw_platform::geometry::Point, i32, u32, u32, u32, paperpaw_platform::pixel::Color)
@@ -69,12 +69,14 @@ pub fn paperpaw_graphics::Canvas<'a>::wash(&mut self, paperpaw_platform::geometr
 #[non_exhaustive] pub struct paperpaw_graphics::Described
 pub paperpaw_graphics::Described::area: paperpaw_platform::geometry::Rect
 pub paperpaw_graphics::Described::clip: paperpaw_platform::geometry::Rect
+pub paperpaw_graphics::Described::disabled: bool
 pub paperpaw_graphics::Described::focused: bool
 pub paperpaw_graphics::Described::label: alloc::string::String
 pub paperpaw_graphics::Described::on: core::option::Option<bool>
 pub paperpaw_graphics::Described::role: paperpaw_graphics::Role
 impl paperpaw_graphics::Described
 pub fn paperpaw_graphics::Described::clip(self, paperpaw_platform::geometry::Rect) -> Self
+pub fn paperpaw_graphics::Described::disabled(self, bool) -> Self
 pub fn paperpaw_graphics::Described::focused(self, bool) -> Self
 pub fn paperpaw_graphics::Described::new(paperpaw_graphics::Role, impl core::convert::Into<alloc::string::String>, paperpaw_platform::geometry::Rect) -> Self
 pub fn paperpaw_graphics::Described::on(self, core::option::Option<bool>) -> Self

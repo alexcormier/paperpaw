@@ -405,6 +405,10 @@ file to your report.
   on `Offer` needs an arm for answers to come. `Header` and `Pager` keep
   their state: `area()` reads it, `Header::note_focused()` and
   `note_button()` set the note.
+- SDK: `canvas.describe(role, text, area)` says more by its builder
+  (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
+  in place of five arguments; parts (`Described`, `semantics::Part`)
+  tell whether they are disabled.
 - SDK: `ui::NumberEdit` changes a number setting with the buttons as
   the settings pages do (Select, a preview while it moves, Keep or
   Cancel), with its hint bar (`ui::editing_hint`).

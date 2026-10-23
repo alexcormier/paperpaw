@@ -465,13 +465,7 @@ impl Dashboard {
                     .menus
                     .title(action.as_str())
                     .map_or(action.as_str(), |t| env.i18n.tr(t));
-                canvas.describe(
-                    paperpaw_sdk::semantics::Role::Button,
-                    title,
-                    *area,
-                    false,
-                    None,
-                );
+                canvas.describe(paperpaw_sdk::semantics::Role::Button, title, *area);
             }
         }
     }
