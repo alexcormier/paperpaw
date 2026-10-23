@@ -5646,8 +5646,6 @@ pub fn paperpaw_sdk::RequiredFor::insert(&mut self, &paperpaw_sdk::Id) -> bool
 pub fn paperpaw_sdk::RequiredFor::is_empty(&self) -> bool
 pub fn paperpaw_sdk::RequiredFor::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &'static paperpaw_sdk::Id> + '_
 pub struct paperpaw_sdk::ScreenKey(_)
-impl paperpaw_sdk::ScreenKey
-pub const fn paperpaw_sdk::ScreenKey::new(u32) -> Self
 #[non_exhaustive] pub struct paperpaw_sdk::ScreenSpec
 pub paperpaw_sdk::ScreenSpec::factory: paperpaw_sdk::ScreenFactory
 pub paperpaw_sdk::ScreenSpec::id: paperpaw_sdk::Id

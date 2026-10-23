@@ -896,7 +896,7 @@ mod layout {
     /// back, and the boxes and trait objects they come in.
     const CROSSING: &[(u64, u64)] = &layouts![
         crate::Env<'static>,
-        crate::EnvParts<'static>,
+        crate::env::EnvParts<'static>,
         crate::Capabilities,
         crate::Metrics,
         crate::Registrar,

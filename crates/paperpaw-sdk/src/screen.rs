@@ -151,6 +151,8 @@ pub struct ScreenKey(u32);
 
 impl ScreenKey {
     /// The key numbered `serial`; the kernel numbers the screens it opens.
+    #[cfg(any(test, feature = "kernel"))]
+    #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
     pub const fn new(serial: u32) -> Self {
         Self(serial)
     }

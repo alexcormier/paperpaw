@@ -119,7 +119,10 @@ pub use command::{
 };
 pub use commands::Commands;
 pub use contribution::{Contribution, Registrar};
-pub use env::{Capabilities, Env, EnvParts, Metrics};
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use env::EnvParts;
+pub use env::{Capabilities, Env, Metrics};
 pub use event::{Event, EventData, EventHandler};
 pub use fonts::{FontFace, FontHandle, FontSet, FontSpec, Fonts};
 pub use formats::{
