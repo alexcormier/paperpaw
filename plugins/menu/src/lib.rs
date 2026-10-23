@@ -137,8 +137,9 @@ struct MenuScreen {
     rows: ui::Rows,
     /// Shown when the items need more than one page.
     pager: Option<ui::Pager>,
-    /// The focused number is being changed with buttons.
-    editing: bool,
+    /// The focused number being changed with buttons, as on the settings
+    /// pages.
+    edit: ui::NumberEdit,
     /// The focus is shown: always with buttons only, on touch screens
     /// once buttons are used (a tap needs no focus).
     keys: bool,
@@ -277,7 +278,7 @@ impl MenuScreen {
             region,
             rows,
             pager,
-            editing: false,
+            edit: ui::NumberEdit::default(),
             keys: !env.device.input.touch,
             icon_width,
             lines,
@@ -340,9 +341,8 @@ impl MenuScreen {
         }
         match spec.kind {
             SettingKind::Int { .. } => {
-                self.editing = !self.editing;
-                cx.request_redraw();
-                cx.request_refresh(RefreshMode::Fast);
+                let spec = spec.clone();
+                self.edit.start(&env, &spec, cx);
             }
             _ => self.step(&env, spec, 1, cx),
         }
@@ -415,7 +415,7 @@ impl MenuScreen {
             }
             Some(spec) if focused && number(spec) => {
                 let value = ui::setting_value(env, spec);
-                let editing = self.editing;
+                let editing = self.edit.active();
                 ui::draw_stepper_lines(canvas, env, &style, lines, label, &value, room, editing);
             }
             // On touch screens − and + are always there.
@@ -469,6 +469,11 @@ pub(crate) fn is_menu(env: &Env<'_>, id: &Id) -> bool {
 }
 
 impl Screen for MenuScreen {
+    fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
+        // While the buttons change a number: what each does to it.
+        self.edit.hint(action, env)
+    }
+
     fn region(&self, _: &Env<'_>) -> Option<Rect> {
         Some(self.region)
     }
@@ -518,35 +523,14 @@ impl Screen for MenuScreen {
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
         let a = action;
-        if self.editing {
+        if self.edit.active() {
             let env = *cx.env();
             let spec = self
                 .items
                 .get(self.rows.focus())
-                .and_then(|item| Self::setting(&env, &item.id));
-            let decrease = [
-                actions::LEFT,
-                actions::DOWN,
-                actions::PREV_PAGE,
-                actions::PREVIOUS,
-            ];
-            let increase = [
-                actions::RIGHT,
-                actions::UP,
-                actions::NEXT_PAGE,
-                actions::NEXT,
-            ];
-            match spec {
-                Some(spec) if decrease.contains(a) => self.step(&env, spec, -1, cx),
-                Some(spec) if increase.contains(a) => self.step(&env, spec, 1, cx),
-                _ if *a == actions::CONFIRM || *a == actions::BACK => {
-                    self.editing = false;
-                    cx.request_redraw();
-                    cx.request_refresh(RefreshMode::Fast);
-                }
-                _ => return Handled::No,
-            }
-            return Handled::Yes;
+                .and_then(|item| Self::setting(&env, &item.id))
+                .cloned();
+            return self.edit.on_action(&env, spec.as_ref(), a, cx);
         }
         // Directions, not pages: turning pages (also by swiping) keeps the
         // focus hidden on touch screens.
@@ -610,7 +594,7 @@ impl Screen for MenuScreen {
         });
         let Some(spec) = number else {
             self.rows.set_focus(index);
-            self.editing = false;
+            self.edit.leave(&env, cx);
             self.run(index, cx);
             return Handled::Yes;
         };
@@ -620,7 +604,7 @@ impl Screen for MenuScreen {
         if !touch && (index != self.rows.focus() || !self.keys) {
             self.rows.set_focus(index);
             self.keys = true;
-            self.editing = false;
+            self.edit.leave(&env, cx);
             cx.request_redraw();
             cx.request_refresh(RefreshMode::Fast);
             return Handled::Yes;
@@ -637,7 +621,7 @@ impl Screen for MenuScreen {
         let value = ui::setting_value(&env, spec);
         if touch {
             self.rows.set_focus(index);
-            self.editing = false;
+            self.edit.leave(&env, cx);
         }
         let (line, room) = match self.lines.get(index).and_then(Option::as_ref) {
             Some((lines, room)) => (lines.at(rect).control, room.as_str()),

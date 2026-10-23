@@ -224,6 +224,15 @@ fn a_number_in_a_menu_changes_by_buttons_once_chosen() {
     assert_eq!(app.kernel.settings().int(size), before + 1);
     assert!(app.focused().unwrap().starts_with("Library"));
     assert!(app.storage.config().contains("ui-size ="));
+    // Back while changing it: the value before again, as on the settings
+    // pages.
+    app.run(actions::UP);
+    app.run(actions::CONFIRM);
+    app.run(actions::RIGHT);
+    assert_eq!(app.kernel.settings().int(size), before + 2);
+    app.run(actions::BACK);
+    assert_eq!(app.kernel.settings().int(size), before + 1);
+    assert_eq!(app.screen(), MENU);
 }
 
 #[test]

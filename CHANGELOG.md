@@ -184,6 +184,11 @@ file to your report.
 - The quick panel by the buttons: hold Right (on the X4), or choose
   *Quick panel* at the top of the main menu. The tips on the home screen
   and in a book say so.
+- A number in the first-run setup and in a menu is changed with the
+  buttons as on the settings pages: Select starts, left and right change
+  it, Select keeps it, Back goes back to the value before, and the hint
+  bar says so. Left and right no longer stay on a number in the setup,
+  and the quick panel's sliders name Keep and Cancel too.
 - The keyboard on touch screens has round keys and takes less of the
   screen; *Shape of keys* makes them a little taller or wider.
   *Keyboard size* (Small, Medium, Large) makes it a quarter lower or
@@ -367,6 +372,9 @@ file to your report.
 
 #### For developers
 
+- SDK: `ui::NumberEdit` changes a number setting with the buttons as
+  the settings pages do (Select, a preview while it moves, Keep or
+  Cancel), with its hint bar (`ui::editing_hint`).
 - SDK: `Version::parse` reads a version with a pre-release or build
   after its three numbers as those numbers, so a plugin of a beta loads.
   `install::folder_release` gives the version as `plugin.ini` writes it;
