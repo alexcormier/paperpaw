@@ -408,7 +408,10 @@ file to your report.
 - SDK: `canvas.describe(role, text, area)` says more by its builder
   (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
   in place of five arguments; parts (`Described`, `semantics::Part`)
-  tell whether they are disabled.
+  tell whether they are disabled, and `canvas.disabling(true)` tells
+  everything drawn into it so. Faint menu and quick panel entries are
+  told as disabled, and the remote control's `describe` (and the web
+  emulator's) says `disabled` in a part's state.
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,

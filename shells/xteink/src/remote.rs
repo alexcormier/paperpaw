@@ -540,7 +540,7 @@ fn describe(kernel: &mut Kernel) {
     // they say.
     let secret = kernel.is_secret();
     for part in kernel.describe() {
-        let state = part_state(part.focused, part.on);
+        let state = part_state(part.focused, part.on, part.disabled);
         let a = part.area;
         let label = if secret {
             String::from("•")

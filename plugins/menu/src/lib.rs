@@ -362,6 +362,9 @@ impl MenuScreen {
             return;
         };
         let state = env.menus.state(env, item.id.as_str());
+        // Faint: told as doing nothing now, however it is drawn.
+        let mut canvas = canvas.disabling(!state.enabled);
+        let canvas = &mut canvas;
         let ink = match state.enabled {
             true => style.focus_ink(focused),
             false => style.faint(ui::Ink::Note),
