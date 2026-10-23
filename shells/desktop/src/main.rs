@@ -24,10 +24,9 @@ OPTIONS:
     --check <dir> [--profile <id>]...
                           Check a plugin with paperpaw-dev (beside this program),
                           its findings as JSON on standard output
-    --trust-code          Install the code plugins built for this computer in the
-                          library (plugins/<id>/code-host.dll, .so or .dylib)
-    --no-code-plugins     Load no code plugins (the same About screen whatever
-                          the build)
+    --trust-code          Load code plugins built for this computer from the
+                          library (plugins/<id>/code-host.dll, .so or .dylib),
+                          those there installed first; without it, none
     --stdio               Be driven by another program over standard input and
                           output, a JSON object a line (see the `stdio` module)
     --registry <file>     Write what the app offers data plugins (settings,
@@ -102,6 +101,7 @@ fn run() -> Result<(), String> {
         .clone()
         .unwrap_or_else(|| PathBuf::from("samples/library"));
     if options.trust_code {
+        device::set_code_plugins(true);
         let installed = paperpaw_emulator::native::trust(&library)
             .map_err(|e| format!("library {}: {e}", library.display()))?;
         eprintln!("code plugins installed: {}", installed.join(", "));
@@ -195,7 +195,8 @@ fn check(args: &[String]) -> Result<i32, String> {
             dev.display()
         ));
     }
-    let out = std::env::temp_dir().join(format!("paperpaw-check-{}", std::process::id()));
+    let out = paperpaw_emulator::private::dir("paperpaw-check")
+        .map_err(|e| format!("--check: a folder for its report: {e}"))?;
     let ran = std::process::Command::new(&dev)
         .arg("check")
         .args(args)
@@ -271,7 +272,6 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
             }
             "--heap-report" => options.heap_report = true,
             "--trust-code" => options.trust_code = true,
-            "--no-code-plugins" => device::set_code_plugins(false),
             "--free-space" => {
                 let bytes = value("--free-space")?;
                 device::set_free_space(

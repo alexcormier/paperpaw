@@ -26,8 +26,8 @@ pub const VERSION: u32 = 2;
 /// every device has; profiles add defaults, not settings), its card in a
 /// folder of its own for the time it takes.
 pub fn registry() -> Result<String, String> {
-    let dir = std::env::temp_dir().join(format!("paperpaw-registry-{}", std::process::id()));
-    std::fs::create_dir_all(&dir).map_err(|e| format!("a folder for the card: {e}"))?;
+    let dir = crate::private::dir("paperpaw-registry")
+        .map_err(|e| format!("a folder for the card: {e}"))?;
     let made = library(&dir)
         .map_err(|e| format!("the emulated card: {e}"))
         .and_then(|storage| {

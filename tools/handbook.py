@@ -25,6 +25,7 @@ A field or file is only added; FORMAT counts up where one changes.
 
 import json
 import re
+import subprocess
 import sys
 import zipfile
 from pathlib import Path
@@ -50,9 +51,17 @@ def check_codes(dev: Path) -> list:
 
 
 def files(folder: Path):
-    """The files of `folder`, without builds and checkouts."""
-    for path in sorted(folder.rglob("*")):
-        if path.is_file() and not SKIP.intersection(path.relative_to(folder).parts):
+    """The files of `folder` that git keeps (never a build, nor what a
+    local run left: a library's `.paperpaw` state, keys), without
+    dot-folders."""
+    listed = subprocess.run(
+        ["git", "ls-files", "-z", "--", folder.relative_to(ROOT).as_posix()],
+        cwd=ROOT, check=True, capture_output=True,
+    ).stdout.decode("utf-8")
+    for name in sorted(filter(None, listed.split("\0"))):
+        path = ROOT / name
+        parts = path.relative_to(folder).parts
+        if path.is_file() and not any(p.startswith(".") for p in parts)                 and not SKIP.intersection(parts):
             yield path
 
 

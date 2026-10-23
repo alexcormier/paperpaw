@@ -30,11 +30,12 @@ pub fn set_free_space(bytes: u64) {
 }
 
 /// Whether the emulated device loads code plugins built for this computer
-/// (`native`); off for pictures that must not change with every build
-/// (`--no-code-plugins`: *About* shows the fingerprint, which changes).
-static CODE_PLUGINS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+/// (`native`): only where the one who starts it says so (`--trust-code`,
+/// `trust_code` over `--stdio`), never because a library says it has
+/// them installed (a library copied from elsewhere would run its code).
+static CODE_PLUGINS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
 
-/// Loads code plugins built for this computer, or none.
+/// Loads code plugins built for this computer, or none (by default).
 pub fn set_code_plugins(on: bool) {
     CODE_PLUGINS.store(on, std::sync::atomic::Ordering::Relaxed);
 }

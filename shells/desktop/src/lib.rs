@@ -17,6 +17,7 @@ pub mod light;
 #[cfg(not(target_arch = "wasm32"))]
 pub mod native;
 pub mod panel;
+pub mod private;
 pub mod profiles;
 pub mod registry;
 pub mod stdio;

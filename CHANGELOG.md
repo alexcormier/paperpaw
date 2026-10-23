@@ -9,15 +9,19 @@ change the plugin SDK.
 - Each release also brings, for tools that work with it without a build
   of their own (the workshop): the desktop emulator for Windows, macOS
   (Apple silicon and Intel) and Linux with paperpaw-dev beside it
-  (`paperpaw-emu-<version>-<target>.zip`), and the handbook
+  (`paperpaw-emu-<version>-<target>.zip`, Intel Macs built on Apple
+  silicon), and the handbook
   (`paperpaw-handbook-<version>.zip`, `tools/handbook.py`: the registry,
   the codes of paperpaw-dev's findings, the docs, the samples, the SDK's
   items and source), each with its SHA-256 and a signature of its own
-  with the firmware's key (`paperpaw-sign check`).
+  with the firmware's key over a domain of its own, so it never holds as
+  a firmware's (`paperpaw-sign sign-asset`, `check-asset`).
 - The desktop emulator loads code plugins built for the computer it runs
   on (`plugins/<id>/code-host.dll`, `.so` or `.dylib`, the same `plugin!`
-  entry as `.ppn` files), once installed: `--trust-code`, or
-  `"trust_code": true` when starting over `--stdio`, whose `ready` now
+  entry as `.ppn` files), only when the one who starts it says so:
+  `--trust-code`, or `"trust_code": true` when starting over `--stdio`
+  (which installs them first), never by default; copies are loaded from
+  a fresh folder of the process's own. `ready` over `--stdio` now
   says the fingerprint and compiler they must be built with
   (`native::CODE_FILES` names them too).
 - `paperpaw-emu --check <plugin folder> [--profile <id>]...` checks a
@@ -27,7 +31,8 @@ change the plugin SDK.
   standard input and output, a JSON object a line (protocol version 1):
   start a profile on a folder, buttons, touches, reload, describe, run,
   open, shot, quit; it tells frames (only when the panel changed),
-  warnings, plugins' requests and errors.
+  warnings, plugins' requests and errors. A request line is read up to
+  16 MB; a longer one is said and passed over.
 - `paperpaw-emu --registry <file>` writes what the app offers data
   plugins as JSON (registry version 2): every setting, widget, action and
   device profile, for tools that work with a release (the handbook, the

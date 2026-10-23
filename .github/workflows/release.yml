@@ -16,11 +16,11 @@ name: Release
 # browser. For tools that work with a release without a build of their
 # own (the workshop): the desktop emulator for each computer
 # (`paperpaw-emu-<version>-<target>.zip`, with paperpaw-dev for
-# `--check`), driven over `--stdio` and loading code plugins built for the
-# computer, and the handbook (`paperpaw-handbook-<version>.zip`:
+# `--check`), driven over `--stdio` and loading code plugins built for
+# the computer, and the handbook (`paperpaw-handbook-<version>.zip`:
 # registry, check codes, docs, samples, the SDK's items and source); each
 # with its SHA-256 and a signature of its own, made with the firmware's
-# key (`paperpaw-sign check` reads it). The release notes come from
+# key over a domain of its own (`paperpaw-sign check-asset` reads it). The release notes come from
 # CHANGELOG.md.
 on:
   push:
@@ -111,11 +111,13 @@ jobs:
     runs-on: ${{ matrix.os }}
     strategy:
       matrix:
+        # Intel Macs from an Apple silicon runner (GitHub has retired the
+        # Intel ones): built for x86_64-apple-darwin there, not run.
         include:
-          - { os: windows-latest, target: windows-x64 }
-          - { os: macos-14, target: macos-arm64 }
-          - { os: macos-13, target: macos-x64 }
-          - { os: ubuntu-latest, target: linux-x64 }
+          - { os: windows-latest, target: windows-x64, rust: "" }
+          - { os: macos-14, target: macos-arm64, rust: "" }
+          - { os: macos-14, target: macos-x64, rust: x86_64-apple-darwin }
+          - { os: ubuntu-latest, target: linux-x64, rust: "" }
     steps:
       - uses: actions/checkout@v7
       # The toolchain of rust-toolchain.toml: code plugins built for the
@@ -123,19 +125,29 @@ jobs:
       - uses: dtolnay/rust-toolchain@stable
       - name: Build the emulator and paperpaw-dev
         shell: bash
+        env:
+          RUST_TARGET: ${{ matrix.rust }}
         run: |
           version="${GITHUB_REF_NAME#v}"
-          cargo build --release -p paperpaw-emulator -p paperpaw-dev
+          built=target/release
+          if [[ -n "$RUST_TARGET" ]]; then
+            rustup target add "$RUST_TARGET"
+            cargo build --release --target "$RUST_TARGET" -p paperpaw-emulator -p paperpaw-dev
+            built="target/$RUST_TARGET/release"
+          else
+            cargo build --release -p paperpaw-emulator -p paperpaw-dev
+          fi
           exe=""
           [[ "$RUNNER_OS" == Windows ]] && exe=.exe
           mkdir -p dist/pkg
-          cp "target/release/paperpaw-emu$exe" "target/release/paperpaw-dev$exe" dist/pkg/
-          # It runs where it is built: its registry, and a frame over --stdio.
-          dist/pkg/paperpaw-emu$exe --registry dist/pkg/registry.json
-          printf '%s\n' '{"op": "quit"}' | dist/pkg/paperpaw-emu$exe --stdio | grep -q '"event": "ready"'
+          cp "$built/paperpaw-emu$exe" "$built/paperpaw-dev$exe" dist/pkg/
+          # Where it runs as built: it answers over --stdio.
+          if [[ -z "$RUST_TARGET" ]]; then
+            printf '%s\n' '{"op": "quit"}' | dist/pkg/paperpaw-emu$exe --stdio | grep -q '"event": "ready"'
+          fi
           name="paperpaw-emu-$version-${{ matrix.target }}.zip"
           py="$(command -v python3 || command -v python)"
-          (cd dist/pkg && "$py" -m zipfile -c "../$name" "paperpaw-emu$exe" "paperpaw-dev$exe" registry.json)
+          (cd dist/pkg && "$py" -m zipfile -c "../$name" "paperpaw-emu$exe" "paperpaw-dev$exe")
           rm -r dist/pkg
       - uses: actions/upload-artifact@v7
         with:
@@ -303,8 +315,8 @@ jobs:
           fi
           cargo build -q --release -p paperpaw-sign
           for file in dist/paperpaw-emu-"$VERSION"-*.zip "dist/paperpaw-handbook-$VERSION.zip"; do
-            target/release/paperpaw-sign sign-apart "$file" "$file.sig"
-            target/release/paperpaw-sign check "$file" "$file.sig"
+            target/release/paperpaw-sign sign-asset "$file" "$file.sig"
+            target/release/paperpaw-sign check-asset "$file" "$file.sig"
             (cd dist && sha256sum "$(basename "$file")" > "$(basename "$file").sha256")
           done
       - name: Release notes from CHANGELOG.md

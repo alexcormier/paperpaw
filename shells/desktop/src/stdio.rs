@@ -47,6 +47,56 @@ pub const PROTOCOL: u32 = 1;
 /// How long the loop waits at most between looks when the device asks
 /// for nothing sooner (a clock, an animation).
 const IDLE_MS: u64 = 50;
+/// The longest request line read, in bytes: a longer one is said to be
+/// too long and passed over, up to its end.
+pub const MAX_LINE: usize = 16 << 20;
+
+/// The next line of `input` (without its end), at most `max` bytes: `None`
+/// at the input's end, `Err` for one longer (read to its end and dropped,
+/// so the next one is read as it is) or not UTF-8.
+pub fn read_line(
+    input: &mut impl BufRead,
+    max: usize,
+) -> std::io::Result<Option<Result<String, String>>> {
+    let mut line = Vec::new();
+    let mut long = false;
+    let mut any = false;
+    loop {
+        let buf = input.fill_buf()?;
+        if buf.is_empty() {
+            break;
+        }
+        any = true;
+        let (part, end) = match buf.iter().position(|&b| b == b'\n') {
+            Some(at) => (&buf[..at], Some(at + 1)),
+            None => (buf, None),
+        };
+        if !long && line.len() + part.len() > max {
+            long = true;
+            line = Vec::new();
+        }
+        if !long {
+            line.extend_from_slice(part);
+        }
+        let used = end.unwrap_or(buf.len());
+        input.consume(used);
+        if end.is_some() {
+            break;
+        }
+    }
+    if !any {
+        return Ok(None);
+    }
+    if long {
+        return Ok(Some(Err(format!("a request longer than {max} bytes"))));
+    }
+    if line.last() == Some(&b'\r') {
+        line.pop();
+    }
+    Ok(Some(
+        String::from_utf8(line).map_err(|_| String::from("a request not in UTF-8")),
+    ))
+}
 
 /// A request, as read from a line.
 #[derive(Debug, Clone, PartialEq)]
@@ -311,6 +361,8 @@ impl Started {
     /// installed first where asked (also at every `reload`, so a new
     /// build runs).
     fn device(&self) -> Result<Device, String> {
+        // Code plugins only where the caller says so, for this device.
+        crate::device::set_code_plugins(self.trust_code);
         if self.trust_code {
             crate::native::trust(&self.library)
                 .map_err(|e| format!("{}: {e}", self.library.display()))?;
@@ -503,13 +555,15 @@ fn base64(bytes: &[u8]) -> String {
 
 /// Runs the protocol over `input` and `output` until `quit` or the end of
 /// the input.
-pub fn run(input: impl BufRead + Send + 'static, mut output: impl Write) -> std::io::Result<()> {
+pub fn run(
+    mut input: impl BufRead + Send + 'static,
+    mut output: impl Write,
+) -> std::io::Result<()> {
     let (lines, received) = channel();
     std::thread::Builder::new()
         .name("stdin".into())
         .spawn(move || {
-            for line in input.lines() {
-                let Ok(line) = line else { break };
+            while let Ok(Some(line)) = read_line(&mut input, MAX_LINE) {
                 if lines.send(line).is_err() {
                     break;
                 }
@@ -528,13 +582,17 @@ pub fn run(input: impl BufRead + Send + 'static, mut output: impl Write) -> std:
 /// events as they happen.
 fn serve(
     session: &mut Session,
-    received: &Receiver<String>,
+    received: &Receiver<Result<String, String>>,
     tell: &mut dyn FnMut(&str) -> std::io::Result<()>,
 ) -> std::io::Result<()> {
     loop {
         match received.recv_timeout(Duration::from_millis(session.wait())) {
-            Ok(line) if line.trim().is_empty() => {}
-            Ok(line) => {
+            Ok(Err(message)) => tell(&format!(
+                "{{\"event\": \"error\", \"message\": {}}}",
+                string(&message)
+            ))?,
+            Ok(Ok(line)) if line.trim().is_empty() => {}
+            Ok(Ok(line)) => {
                 let events = match parse(&line) {
                     Ok(request) => session.handle(request),
                     Err(message) => Some(vec![format!(
@@ -594,6 +652,29 @@ mod tests {
         assert!(parse(r#"{"op": "button"}"#).is_err());
     }
 
+    /// Lines are read up to their end, a long one said and passed over,
+    /// the next one read as it is.
+    #[test]
+    fn long_lines_are_passed_over_to_their_end() {
+        let mut text = format!("{{\"op\": \"quit\"}}\r\n{}\nshort\n", "x".repeat(40)).into_bytes();
+        // A byte that is no UTF-8.
+        text.extend_from_slice(b"\xff\ntail");
+        let mut input = std::io::BufReader::with_capacity(8, text.as_slice());
+        let mut lines = Vec::new();
+        while let Some(line) = read_line(&mut input, 20).unwrap() {
+            lines.push(line);
+        }
+        assert_eq!(lines[0], Ok(String::from(r#"{"op": "quit"}"#)));
+        assert!(
+            lines[1]
+                .as_ref()
+                .is_err_and(|e| e.contains("longer than 20"))
+        );
+        assert_eq!(lines[2], Ok(String::from("short")));
+        assert_eq!(lines.len(), 5);
+        assert_eq!(lines[4], Ok(String::from("tail")));
+    }
+
     #[test]
     fn base64_is_rfc_4648() {
         assert_eq!(base64(b""), "");
@@ -623,7 +704,7 @@ mod tests {
             String::from(r#"{"op": "shot"}"#),
             String::from(r#"{"op": "quit"}"#),
         ] {
-            lines.send(line).unwrap();
+            lines.send(Ok(line)).unwrap();
         }
         let mut events = Vec::new();
         let mut session = Session::new();
