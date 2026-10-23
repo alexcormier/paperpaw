@@ -156,8 +156,15 @@ impl Device {
             .find(|l| l.contains("k="))
             .unwrap_or_else(|| panic!("no address: {shown:?}"));
         device.key = address.rsplit("k=").next().unwrap().to_string();
-        // 13 letters of 5 bits: 65 bits.
-        assert_eq!(device.key.len(), 13, "{address}");
+        // 16 letters of about 4.17 bits: 66 bits, none taken for another.
+        assert_eq!(device.key.len(), 16, "{address}");
+        assert!(
+            device
+                .key
+                .chars()
+                .all(|c| paperpaw_sdk::random::READABLE.contains(c)),
+            "{address}"
+        );
         device
     }
 
@@ -509,6 +516,7 @@ fn a_transfer_without_a_router_opens_the_readers_own_network() {
         WifiEvent::State(WifiState::Hosting {
             ssid: ssid.clone(),
             address: "192.168.4.1".into(),
+            guests: 0,
         }),
     );
     // The server waiting for a network goes; the one in the own network

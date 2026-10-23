@@ -243,6 +243,15 @@ impl Typing {
         self.run(actions::CONFIRM);
     }
 
+    /// The rows drawn since the screen was last drawn, as bands from one
+    /// row to another.
+    fn redrawn(&mut self) -> Vec<(u16, u16)> {
+        let mut rows = Vec::new();
+        self.kernel
+            .render(&mut |top, view| rows.push((top, top + view.height)));
+        rows
+    }
+
     /// Whether some text on the screen says exactly `text`.
     fn says(&mut self, text: &str) -> bool {
         self.parts().iter().any(|p| p.label == text)
@@ -679,6 +688,48 @@ fn the_layout_key_by_buttons() {
     assert!(!typing.says("Hold for ö"));
     typing.press_by_buttons("OK");
     assert_eq!(typing.answer(), "öy");
+}
+
+/// A touch screen with buttons as well (a Boox).
+const BOTH: DeviceInfo = DeviceInfo {
+    input: InputCaps {
+        touch: true,
+        ..BUTTONS.input
+    },
+    ..BUTTONS
+};
+
+/// Buttons, then a tap: the field's hint of the letters held on the key
+/// that had the focus goes with the focus.
+#[test]
+fn a_tap_takes_the_hint_of_held_letters_with_the_focus() {
+    let mut typing = Typing::with_config(
+        BOTH,
+        "[keyboard]
+layouts = keyboard.layout.de
+",
+    );
+    typing.open(&[]);
+    typing.run(actions::DOWN);
+    typing.focus_by_buttons("a");
+    assert!(typing.says("Hold for ä"));
+    let field = typing
+        .parts()
+        .into_iter()
+        .find(|p| p.role == Role::Field)
+        .unwrap()
+        .area;
+    // Beside the keys, where a tap presses nothing: the field is drawn
+    // again.
+    let beside = Point::new(2, typing.center("a").y);
+    typing.tap_at(beside);
+    let rows = typing.redrawn();
+    assert!(
+        rows.iter()
+            .any(|(top, bottom)| *top <= field.y && field.y < *bottom),
+        "{rows:?} {field:?}"
+    );
+    assert!(!typing.says("Hold for ä"));
 }
 
 /// German with *Umlaut keys*: ä, ö, ü and ß have keys of their own.

@@ -1236,6 +1236,10 @@ impl Screen for KeyboardScreen {
         let key = self.key_at(gesture.start);
         if let Some((r, i)) = self.focus.take() {
             self.redraw(cx, self.key_area(r, i));
+            // Its hint of letters held goes with it.
+            if r != PASTE_ROW && self.has_held(r, i) {
+                self.redraw(cx, self.field);
+            }
         }
         match (gesture.kind, key) {
             (GestureKind::Tap, Some((PASTE_ROW, index))) => {

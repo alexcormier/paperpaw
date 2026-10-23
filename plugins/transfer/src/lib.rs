@@ -202,11 +202,13 @@ impl TransferScreen {
     /// network).
     fn without_router(&mut self, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let Some((id, password)) = env.random.token(4).zip(env.random.token(10)) else {
+        // Letters not taken for one another: read off the screen, typed.
+        let Some(password) = env.random.readable(15) else {
             return;
         };
-        let ssid = format!("PaperPaw-{id}");
-        let qr = QrCode::new(format!("WIFI:T:WPA;S:{ssid};P:{password};;").as_bytes());
+        // Named as the device is, for the phone to find it.
+        let ssid = paperpaw_sdk::device_name::ssid(&env.device_name());
+        let qr = QrCode::new(paperpaw_sdk::wifi::join_code(&ssid, &password).as_bytes());
         cx.command(Command::StopServing(SERVER));
         if !env.wifi.is_some_and(|w| w.state.is_on()) {
             cx.command(Command::Wifi(paperpaw_sdk::wifi::WifiCommand::On));
@@ -365,6 +367,11 @@ fn page(env: &Env<'_>) -> String {
         }
         json.push_str(&format!("{name}:{}", served::json_string(env.i18n.tr(key))));
     }
+    // The page's title: the device, as it is called.
+    json.push_str(&format!(
+        ",name:{}",
+        served::json_string(&env.device_name())
+    ));
     json.push('}');
     PAGE.replace("/*STRINGS*/{}", &json)
 }
@@ -399,7 +406,10 @@ fn draw_join(
         "transfer.own.network",
         &[
             ("ssid", Arg::Str(&own.ssid)),
-            ("password", Arg::Str(&own.password)),
+            (
+                "password",
+                Arg::Str(&paperpaw_sdk::random::grouped(&own.password)),
+            ),
         ],
     );
     let bottom = area.y + area.height;

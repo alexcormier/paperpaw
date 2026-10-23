@@ -31,11 +31,13 @@ const ACK: u8 = 5;
 const NAK: u8 = 6;
 const RELEASE: u8 = 7;
 
-/// An address given (or offered) to a device, until a time (seconds).
+/// An address given (or offered) to a device, until a time (seconds);
+/// `taken` once the device took it (a phone that joined).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct Lease {
     hardware: [u8; 6],
     until: u64,
+    taken: bool,
 }
 
 /// The server: its own address (the network is its /24) and the
@@ -89,7 +91,10 @@ impl Server {
                         renewing
                     });
                 match self.lease(hardware, now, u64::from(LEASE_SECONDS)) {
-                    Some(given) if given == wanted => Some(self.reply(request, ACK, given)),
+                    Some(given) if given == wanted => {
+                        self.take(hardware);
+                        Some(self.reply(request, ACK, given))
+                    }
                     _ => Some(self.reply(request, NAK, [0; 4])),
                 }
             }
@@ -104,6 +109,30 @@ impl Server {
                 None
             }
             _ => None,
+        }
+    }
+
+    /// How many devices took an address and still have it at `now`
+    /// (seconds, as [`Server::answer`]'s): the phones in the network.
+    pub fn guests(&self, now: u64) -> u8 {
+        let taken = self
+            .leases
+            .iter()
+            .flatten()
+            .filter(|l| l.taken && l.until > now)
+            .count();
+        u8::try_from(taken).unwrap_or(u8::MAX)
+    }
+
+    /// Device `hardware` took the address it was given.
+    fn take(&mut self, hardware: [u8; 6]) {
+        if let Some(lease) = self
+            .leases
+            .iter_mut()
+            .flatten()
+            .find(|l| l.hardware == hardware)
+        {
+            lease.taken = true;
         }
     }
 
@@ -124,12 +153,13 @@ impl Server {
                 .iter()
                 .position(|l| l.is_none_or(|l| l.until <= now))?,
         };
-        let kept = self.leases[slot]
-            .filter(|l| l.hardware == hardware)
-            .map_or(0, |l| l.until);
+        let (kept, taken) = self.leases[slot]
+            .filter(|l| l.hardware == hardware && l.until > now)
+            .map_or((0, false), |l| (l.until, l.taken));
         self.leases[slot] = Some(Lease {
             hardware,
             until: until.max(kept),
+            taken,
         });
         let [a, b, c, _] = self.address;
         Some([a, b, c, 2 + slot as u8])
@@ -311,5 +341,25 @@ mod tests {
         let after = u64::from(LEASE_SECONDS) + 1;
         let next = server.answer(&message(DISCOVER, [51; 6], &[]), after);
         assert!(next.is_some());
+    }
+
+    /// A device counts as a guest once it took its address, until its
+    /// lease ends or it gives it back; an offer alone is no guest.
+    #[test]
+    fn guests_are_those_that_took_an_address() {
+        let mut server = Server::new(SERVER);
+        let phone = [1; 6];
+        server.answer(&message(DISCOVER, phone, &[]), 0).unwrap();
+        server.answer(&message(DISCOVER, [2; 6], &[]), 0).unwrap();
+        assert_eq!(server.guests(0), 0);
+        let take = &[50, 4, 192, 168, 4, 2];
+        server.answer(&message(REQUEST, phone, take), 0).unwrap();
+        assert_eq!(server.guests(1), 1);
+        // Offered again (renewing): still a guest.
+        server.answer(&message(DISCOVER, phone, &[]), 10).unwrap();
+        assert_eq!(server.guests(10), 1);
+        assert_eq!(server.guests(u64::from(LEASE_SECONDS) + 1), 0);
+        server.answer(&message(RELEASE, phone, &[]), 20);
+        assert_eq!(server.guests(20), 0);
     }
 }

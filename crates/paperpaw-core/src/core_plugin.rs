@@ -24,7 +24,7 @@ use paperpaw_sdk::{
 pub(crate) const CORE: Id = Id::new_static("core");
 
 #[derive(Debug)]
-pub(crate) struct CorePlugin;
+pub(crate) struct CorePlugin(pub(crate) String);
 
 impl Plugin for CorePlugin {
     fn manifest(&self) -> Manifest {
@@ -42,6 +42,7 @@ impl Plugin for CorePlugin {
         register_screens(r)?;
         register_menus(r)?;
         register_general_settings(r)?;
+        r.add_setting(paperpaw_sdk::device_name::setting(self.0.clone()))?;
         register_look_settings(r)?;
         register_device_settings(r)?;
         register_spaces(r)?;
@@ -51,8 +52,7 @@ impl Plugin for CorePlugin {
         register_time_and_battery(r)?;
         register_keymaps_and_setup(r)?;
         r.add_presets(&POWER_MODES)?;
-        // Text typed for a setting (`ui::setting_opens`), whichever screen
-        // asked.
+        // Text typed for a setting (`ui::setting_opens`), whichever screen asked.
         r.on(events::SETTING_TYPED, |env, typed, out| {
             // Only once the reader is done typing, not at each key.
             if typed.typing {

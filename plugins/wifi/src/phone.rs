@@ -5,19 +5,28 @@
 //! phone's keyboard; the device closes its own network and joins that
 //! one, keeping the password once joined (as the Wi-Fi page does).
 //!
-//! The own network has a password drawn anew each time, shown with its
-//! code, so only who sees the screen joins it. Joining fails: the own
-//! network opens again, to try once more from the phone.
+//! It goes a step at a time: first the code that joins the own network,
+//! with its name and password large; once a phone joined (it took an
+//! address there, `WifiState::Hosting`'s guests), the code that opens the
+//! page. *Next* goes on where the phone does not say so.
+//!
+//! The own network has a password drawn anew each time, of letters not
+//! taken for one another (`random::READABLE`), shown with its code, so
+//! only who sees the screen joins it. Joining fails: the own network opens
+//! again, to try once more from the phone.
 
 use alloc::format;
 use alloc::string::{String, ToString};
 
 use paperpaw_sdk::builtin::actions;
+use paperpaw_sdk::device_name;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::qr::QrCode;
+use paperpaw_sdk::random;
 use paperpaw_sdk::replies::ServerNotice;
 use paperpaw_sdk::ui::{self, UiStyle};
-use paperpaw_sdk::wifi::{WifiCommand, WifiState};
+use paperpaw_sdk::widgets;
+use paperpaw_sdk::wifi::{self, WifiCommand, WifiState};
 use paperpaw_sdk::{
     Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Rect,
     RefreshMode, Screen, ServerResponse,
@@ -41,6 +50,28 @@ const MAX_FORM: usize = 1024;
 /// Without a request from the phone this long, the own network closes
 /// (and the screen with it): it is not left open by mistake.
 const IDLE_MS: u64 = 10 * 60 * 1000;
+/// Letters of the own network's password: 62 bits, three groups of five.
+const PASSWORD_LETTERS: usize = 15;
+const _: () = assert!(PASSWORD_LETTERS >= random::readable_letters(45));
+
+/// The step shown.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Step {
+    /// The phone joins the own network.
+    Join,
+    /// The phone opens the page.
+    Open,
+}
+
+impl Step {
+    /// What its button says (and does: the other step).
+    fn button(self) -> &'static str {
+        match self {
+            Step::Join => "wifi.phone.next",
+            Step::Open => "wifi.phone.back-step",
+        }
+    }
+}
 
 /// Not `Debug`: it holds a password.
 enum State {
@@ -86,20 +117,23 @@ pub(crate) struct PhoneScreen {
     token: String,
     /// When the phone asked last (or the own network opened).
     active: paperpaw_sdk::Instant,
+    step: Step,
+    /// Whether a phone joined and the step went on by itself: once only,
+    /// not again after the reader went back to the first.
+    moved_on: bool,
+    /// Where the step's button is, for taps.
+    button: core::cell::Cell<Rect>,
 }
 
 impl PhoneScreen {
     pub(crate) fn new(env: &Env<'_>, policy: Shared) -> Self {
         let style = UiStyle::new(env);
-        let own = env
-            .random
-            .token(4)
-            .zip(env.random.token(10))
-            .map(|(id, password)| {
-                let ssid = format!("PaperPaw-{id}");
-                let qr = QrCode::new(format!("WIFI:T:WPA;S:{ssid};P:{password};;").as_bytes());
-                Own { ssid, password, qr }
-            });
+        // Named as the device is, for the phone to find it.
+        let own = env.random.readable(PASSWORD_LETTERS).map(|password| {
+            let ssid = device_name::ssid(&env.device_name());
+            let qr = QrCode::new(wifi::join_code(&ssid, &password).as_bytes());
+            Own { ssid, password, qr }
+        });
         let manual = policy.borrow().manual;
         Self {
             policy,
@@ -112,6 +146,9 @@ impl PhoneScreen {
             started: false,
             token: env.random.token(13).unwrap_or_default(),
             active: env.now,
+            step: Step::Join,
+            moved_on: false,
+            button: core::cell::Cell::new(Rect::new(0, 0, 0, 0)),
         }
     }
 
@@ -145,10 +182,23 @@ impl PhoneScreen {
             return;
         };
         match (&self.state, &wifi.state) {
-            (State::Opening, WifiState::Hosting { .. }) => {
+            (State::Opening, WifiState::Hosting { guests, .. }) => {
                 self.state = State::Hosting { page: None };
                 cx.command(Command::serve(SERVER, PORT, SERVER_EVENT.into()));
                 self.touched(cx);
+                if *guests > 0 {
+                    self.moved_on = true;
+                    self.step = Step::Open;
+                }
+            }
+            // A phone joined: on to opening the page, once.
+            (State::Hosting { .. }, WifiState::Hosting { guests, .. })
+                if *guests > 0 && !self.moved_on =>
+            {
+                self.moved_on = true;
+                self.touched(cx);
+                self.go(Step::Open, cx);
+                return;
             }
             (State::Joining(ssid), WifiState::Online { ssid: joined, .. }) if ssid == joined => {
                 self.state = State::Joined(joined.clone());
@@ -268,99 +318,165 @@ impl PhoneScreen {
         cx.command(Command::Back);
     }
 
-    fn draw_codes(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, own: &Own) {
+    /// The page's address and code, once served.
+    fn page(&self) -> Option<&(String, Option<QrCode>)> {
+        match &self.state {
+            State::Hosting { page } => page.as_ref(),
+            _ => None,
+        }
+    }
+
+    /// Goes to `step`, where it is another.
+    fn go(&mut self, step: Step, cx: &mut Cx<'_, '_>) {
+        if self.step != step {
+            self.step = step;
+            Self::redraw(cx);
+        }
+    }
+
+    /// The step shown, its title and line at the top, its button at the
+    /// bottom: joining shows the code to join and the network's name and
+    /// password large; opening the page's code and its address.
+    fn draw_step(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, area: Rect, own: &Own) {
         let style = self.style;
         let Some(font) = style.font(env) else {
             return;
         };
         let margin = style.margin as u16;
-        let width = area.width.saturating_sub(2 * margin);
-        let line = font.line_metrics(style.text).line_height as u16;
-        let small = font.line_metrics(style.small).line_height as u16;
-        let mut y = area.y;
+        let gap = style.gap as u16;
+        // The button at the bottom keeps the margin from the screen's edge.
+        let inner = Rect::new(
+            margin,
+            area.y,
+            area.width.saturating_sub(2 * margin),
+            area.height.saturating_sub(margin),
+        );
+        let mut stack = ui::Stack::new(inner, gap);
+        let line = widgets::line_height(env, style.text);
+        let small = widgets::line_height(env, style.small);
+        let width = f32::from(inner.width);
+        // Lines of `text` wrapped, together one part of the stack.
+        let lines = |canvas: &mut Canvas<'_>,
+                     stack: &mut ui::Stack,
+                     text: &str,
+                     size: f32,
+                     high: u16,
+                     ink: Color| {
+            let wrapped = font.wrap(size, text, width);
+            let block = stack.take(high * wrapped.len() as u16);
+            for (i, range) in wrapped.into_iter().enumerate() {
+                let row = Rect::new(block.x, block.y + i as u16 * high, block.width, high);
+                ui::draw_label(
+                    canvas,
+                    &font,
+                    size,
+                    f32::from(row.x),
+                    row,
+                    text[range].trim(),
+                    ink,
+                );
+            }
+        };
         if let Some(problem) = &self.problem {
-            let rect = Rect::new(margin, y, width, line * 2);
+            lines(
+                canvas,
+                &mut stack,
+                problem,
+                style.small,
+                small,
+                Color::BLACK,
+            );
+        }
+        let (number, title, note) = match self.step {
+            Step::Join => (1, "wifi.phone.join-title", "wifi.phone.join-note"),
+            Step::Open => (2, "wifi.phone.open-title", "wifi.phone.open-note"),
+        };
+        let title = format!("{number}. {}", env.i18n.tr(title));
+        lines(canvas, &mut stack, &title, style.text, line, Color::BLACK);
+        lines(
+            canvas,
+            &mut stack,
+            env.i18n.tr(note),
+            style.small,
+            small,
+            style.faint(60),
+        );
+        let label = env.i18n.tr(self.step.button());
+        let button = stack.take_bottom(ui::button_height_for(env, &style, inner.width, label));
+        ui::draw_button(canvas, env, &style, button, label, false, false);
+        self.button.set(button);
+        match self.step {
+            Step::Join => self.draw_join(canvas, env, &mut stack, own),
+            Step::Open => self.draw_open(canvas, env, &stack, area),
+        }
+    }
+
+    /// The step to join, below its title: the network's name and password
+    /// large on a card above the button, to be read and typed; its code
+    /// above them.
+    fn draw_join(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, stack: &mut ui::Stack, own: &Own) {
+        let style = self.style;
+        let Some(font) = style.font(env) else {
+            return;
+        };
+        let (margin, gap) = (style.margin as u16, style.gap as u16);
+        let small = widgets::line_height(env, style.small);
+        // The name and the password large, to be read and typed.
+        let big = style.text * 1.2;
+        let tall = widgets::line_height(env, big);
+        let card = stack.take_bottom(2 * margin + 2 * (small + tall) + gap);
+        let inside = ui::draw_card(canvas, &style, card, widgets::Frame::Line);
+        let password = random::grouped(&own.password);
+        let x = f32::from(inside.x);
+        let mut y = inside.y;
+        for (key, value) in [
+            ("wifi.phone.name", own.ssid.as_str()),
+            ("wifi.phone.password", password.as_str()),
+        ] {
+            let row = Rect::new(inside.x, y, inside.width, small);
             ui::draw_label(
                 canvas,
                 &font,
                 style.small,
-                f32::from(margin),
-                rect,
-                problem,
-                Color::BLACK,
+                x,
+                row,
+                env.i18n.tr(key),
+                style.faint(60),
             );
-            y += line * 2;
+            let (size, value) =
+                widgets::fit_line(&font, big, style.small, value, f32::from(inside.width));
+            let row = Rect::new(inside.x, y + small, inside.width, tall);
+            ui::draw_label(canvas, &font, size, x, row, &value, Color::BLACK);
+            y += small + tall + gap;
         }
-        let page = match &self.state {
-            State::Hosting { page } => page.as_ref(),
-            _ => None,
-        };
-        let half = area.bottom().saturating_sub(u32::from(y)) as u16 / 2;
-        let join = env.i18n.tr("wifi.phone.step-join");
-        let note = env.i18n.format(
-            "wifi.phone.network",
-            &[
-                ("ssid", Arg::Str(&own.ssid)),
-                ("password", Arg::Str(&own.password)),
-            ],
-        );
-        let open = env.i18n.tr("wifi.phone.step-open");
-        let steps = [
-            (join, note, own.qr.as_ref()),
-            (
-                open,
-                page.map_or_else(String::new, |(url, _)| url.clone()),
-                page.and_then(|(_, qr)| qr.as_ref()),
+        let rest = stack.rest();
+        match own.qr.as_ref() {
+            Some(qr) => {
+                ui::draw_qr(canvas, qr, rest);
+            }
+            None => draw_opening(canvas, env, &style, rest),
+        }
+    }
+
+    /// The step to open the page, below its title: its code with the
+    /// address below, across the screen (its own margins).
+    fn draw_open(&self, canvas: &mut Canvas<'_>, env: &Env<'_>, stack: &ui::Stack, area: Rect) {
+        let style = self.style;
+        // The address's own margins: across the screen.
+        let rest = stack.rest();
+        let full = Rect::new(area.x, rest.y, area.width, rest.height);
+        match self.page() {
+            Some((url, qr)) => ui::draw_address(
+                canvas,
+                env,
+                &style,
+                full,
+                url,
+                qr.as_ref(),
+                env.i18n.tr("wifi.phone.type-address"),
+                None,
             ),
-        ];
-        for (n, (title, note, qr)) in steps.into_iter().enumerate() {
-            let top = y + half * n as u16;
-            // The step and its note whole, wrapped; the code between them
-            // as large as what is left.
-            let titles = font.wrap(style.text, title, f32::from(width));
-            let notes = font.wrap(style.small, &note, f32::from(width));
-            let title_high = line * titles.len() as u16;
-            let note_high = small * notes.len() as u16;
-            for (i, range) in titles.into_iter().enumerate() {
-                let row = Rect::new(margin, top + i as u16 * line, width, line);
-                let text = title[range].trim();
-                ui::draw_label(
-                    canvas,
-                    &font,
-                    style.text,
-                    f32::from(margin),
-                    row,
-                    text,
-                    Color::BLACK,
-                );
-            }
-            let note_top = (top + half).saturating_sub(note_high);
-            for (i, range) in notes.into_iter().enumerate() {
-                let row = Rect::new(margin, note_top + i as u16 * small, width, small);
-                let text = note[range].trim();
-                let faint = style.faint(60);
-                ui::draw_label(
-                    canvas,
-                    &font,
-                    style.small,
-                    f32::from(margin),
-                    row,
-                    text,
-                    faint,
-                );
-            }
-            let room = Rect::new(
-                margin,
-                top + title_high,
-                width,
-                half.saturating_sub(title_high + note_high),
-            );
-            match qr {
-                Some(qr) => {
-                    ui::draw_qr(canvas, qr, room);
-                }
-                None => draw_opening(canvas, env, &style, room),
-            }
+            None => draw_opening(canvas, env, &style, full),
         }
     }
 }
@@ -468,8 +584,17 @@ fn choose_page(env: &Env<'_>, again: bool, token: &str) -> String {
 }
 
 impl Screen for PhoneScreen {
-    fn hint(&self, action: &Id, _: &Env<'_>) -> paperpaw_sdk::Hint {
-        paperpaw_sdk::Hint::only_back(action)
+    fn hint(&self, action: &Id, env: &Env<'_>) -> paperpaw_sdk::Hint {
+        let steps = matches!(self.state, State::Opening | State::Hosting { .. });
+        match self.step {
+            _ if !steps => paperpaw_sdk::Hint::only_back(action),
+            _ if *action == actions::CONFIRM => {
+                paperpaw_sdk::Hint::Text(env.i18n.tr(self.step.button()).into())
+            }
+            Step::Join if *action == actions::NEXT_PAGE => paperpaw_sdk::Hint::Default,
+            Step::Open if *action == actions::PREV_PAGE => paperpaw_sdk::Hint::Default,
+            _ => paperpaw_sdk::Hint::only_back(action),
+        }
     }
 
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
@@ -486,7 +611,7 @@ impl Screen for PhoneScreen {
             (State::Searching, _) => message("wifi.state.searching"),
             (State::Opening, _) if self.problem.is_none() => message("wifi.phone.opening"),
             (State::Opening | State::Hosting { .. }, Some(own)) => {
-                return self.draw_codes(canvas, env, area, own);
+                return self.draw_step(canvas, env, area, own);
             }
             (State::Leaving { ssid, .. } | State::Joining(ssid), _) => env
                 .i18n
@@ -562,8 +687,22 @@ impl Screen for PhoneScreen {
     }
 
     fn on_action(&mut self, action: &Id, cx: &mut Cx<'_, '_>) -> Handled {
+        let steps = matches!(self.state, State::Opening | State::Hosting { .. });
         if *action == actions::BACK {
             self.close(cx);
+            Handled::Yes
+        } else if steps && *action == actions::CONFIRM {
+            let other = match self.step {
+                Step::Join => Step::Open,
+                Step::Open => Step::Join,
+            };
+            self.go(other, cx);
+            Handled::Yes
+        } else if steps && *action == actions::NEXT_PAGE {
+            self.go(Step::Open, cx);
+            Handled::Yes
+        } else if steps && *action == actions::PREV_PAGE {
+            self.go(Step::Join, cx);
             Handled::Yes
         } else {
             Handled::No
@@ -579,6 +718,15 @@ impl Screen for PhoneScreen {
             } else {
                 cx.command(Command::RunAction(action));
             }
+            return Handled::Yes;
+        }
+        let steps = matches!(self.state, State::Opening | State::Hosting { .. });
+        if steps && gesture.kind == GestureKind::Tap && self.button.get().contains(gesture.start) {
+            let other = match self.step {
+                Step::Join => Step::Open,
+                Step::Open => Step::Join,
+            };
+            self.go(other, cx);
             return Handled::Yes;
         }
         Handled::No

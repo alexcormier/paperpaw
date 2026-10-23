@@ -409,6 +409,15 @@ impl fmt::Debug for Env<'_> {
 }
 
 impl<'a> Env<'a> {
+    /// The device's name as others see it, the one the reader set
+    /// ([`device_name::SETTING`](crate::device_name::SETTING)) or its
+    /// model's: what a plugin tells a server or a computer, never one it
+    /// makes itself (see [`device_name`](crate::device_name)).
+    pub fn device_name(&self) -> alloc::string::String {
+        let set = self.settings.read(&crate::device_name::SETTING);
+        crate::device_name::chosen(set, self.device)
+    }
+
     /// The device as a screen made for `area` sees it: the display as
     /// large as `area` (see [`Env::within`]).
     pub fn device_within(&self, area: paperpaw_platform::Rect) -> paperpaw_platform::DeviceInfo {

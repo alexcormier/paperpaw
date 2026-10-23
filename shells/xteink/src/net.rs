@@ -136,6 +136,16 @@ impl Net {
         net
     }
 
+    /// The name the router lists the device by (DHCP's option 12,
+    /// `host`), from the next time DHCP asks (joining a network).
+    pub fn set_host_name(&mut self, host: &'static [smoltcp::wire::DhcpOption<'static>]) {
+        if let Some(handle) = self.dhcp {
+            self.sockets
+                .get_mut::<dhcpv4::Socket<'static>>(handle)
+                .set_outgoing_options(host);
+        }
+    }
+
     /// The device's own network, on the access point's interface: its
     /// address `address` (the network is its /24), addresses given to
     /// those that join. `None` without memory for the server's socket.
@@ -268,6 +278,15 @@ impl Net {
                 self.stack.routes_mut().remove_default_ipv4_route();
             }
         }
+    }
+
+    /// In the device's own network: how many phones took an address from
+    /// it (0 in another network).
+    pub fn guests(&self) -> u8 {
+        let seconds = u64::try_from(now().total_millis() / 1000).unwrap_or(0);
+        self.server
+            .as_ref()
+            .map_or(0, |(_, server)| server.guests(seconds))
     }
 
     /// In the device's own network: answers those asking for an address.

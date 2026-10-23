@@ -50,6 +50,7 @@ mod command;
 pub mod contribution;
 pub mod data;
 pub mod decorations;
+pub mod device_name;
 mod env;
 pub mod event;
 pub mod files;
