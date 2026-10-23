@@ -5,4 +5,11 @@
 # authors build with (ADR 0026).
 channel = "1.99.0"
 components = ["rustfmt", "clippy"]
-targets = ["riscv32imc-unknown-none-elf", "wasm32-unknown-unknown"]
+# Every target CI builds for with this toolchain: the X4's, the web
+# emulator's and Android's (CI's runners have them only for their own
+# stable otherwise).
+targets = [
+    "riscv32imc-unknown-none-elf",
+    "wasm32-unknown-unknown",
+    "aarch64-linux-android",
+]

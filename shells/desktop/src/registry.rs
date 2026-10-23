@@ -126,7 +126,7 @@ fn profile_json(p: &Profile) -> String {
         .catalog_device
         .map_or_else(|| String::from("null"), string);
     format!(
-        "{{\"id\": {}, \"name\": {}, \"width\": {}, \"height\": {}, \"dpi\": {}, \"touch\": {}, \"buttons\": [{}], \"colour_screen\": {}, \"tinted\": {}, \"colors\": {}, \"store\": {store}, \"summary\": {}}}",
+        "{{\"id\": {}, \"name\": {}, \"width\": {}, \"height\": {}, \"dpi\": {}, \"touch\": {}, \"buttons\": [{}], \"colour_screen\": {}, \"tinted\": {}, \"colors\": {}, \"store\": {store}, \"body\": {}, \"summary\": {}}}",
         string(d.id),
         string(d.name),
         d.display.width,
@@ -137,6 +137,7 @@ fn profile_json(p: &Profile) -> String {
         colour_screen(p),
         p.colors,
         p.colors,
+        p.body.json(),
         string(p.summary),
     )
 }
@@ -192,5 +193,9 @@ mod tests {
         );
         assert!(text.contains("\"id\": \"core.device-name\""));
         assert_eq!(text.matches("\"colour_screen\":").count(), PROFILES.len());
+        assert_eq!(
+            text.matches("\"body\": {\"bezel\":").count(),
+            PROFILES.len()
+        );
     }
 }

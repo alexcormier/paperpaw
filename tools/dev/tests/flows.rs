@@ -119,7 +119,7 @@ fn flows_pass_and_fail_where_they_should() {
     let failure = failed[0];
     assert!(failure.place.ends_with("wrong.flow:4"), "{}", failure.place);
     assert!(
-        failure.message.contains("\"Home\""),
+        failure.message.contains("\"Quick panel\""),
         "the focused row is named: {}",
         failure.message
     );

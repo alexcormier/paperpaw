@@ -1,7 +1,8 @@
 screen menu.list
 Text "Start reading"
 Text "Choose a book from your library."
-Row "Home" (focused)
+Row "Quick panel" (focused)
+Row "Home"
 Row "Library"
 Row "Tools"
 Row "Edit home screen"

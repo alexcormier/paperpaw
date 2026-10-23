@@ -954,6 +954,8 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
         paperpaw_sdk::ItemState::new().shown(!env.menus.items(menus::APPS.as_str()).is_empty())
     })?;
     for (action, order, icon) in [
+        // The quick panel at the top: found without its gesture or key.
+        (actions::QUICK_PANEL, 5, "adjustments-horizontal"),
         (actions::HOME, 10, "home"),
         (actions::LIBRARY, 20, "books"),
         (actions::TOOLS, 30, "apps"),
@@ -976,10 +978,6 @@ fn register_menus(r: &mut Registrar) -> Result<(), RegisterError> {
     ] {
         r.add_menu_entry(MenuEntry::new(menus::QUICK, item).order(order))?;
     }
-    r.add_icon(
-        actions::QUICK_PANEL,
-        Cow::Borrowed("adjustments-horizontal"),
-    )?;
     r.add_icon(actions::REFRESH_SCREEN, Cow::Borrowed("sparkles"))?;
 
     // The settings' main page: reading, the device, customising.

@@ -80,6 +80,8 @@ cp -r "$root/samples/hello-plugin/how" "$root/samples/hello-plugin/i18n" "$plugi
 printf '#![no_std]\n#![no_main]\n\nextern crate alloc;\n\nmod hello;\n\npaperpaw_sdk::plugin!(hello::Hello);\n' \
     > "$plugin/src/main.rs"
 cp "$root/samples/hello-native/.cargo/config.toml" "$plugin/.cargo/config.toml"
+# The format's linker script, which the configuration links with.
+cp "$root/samples/hello-native/paperpaw-plugin.x" "$plugin/"
 printf '\n[source.crates-io]\nreplace-with = "vendored"\n\n[source.vendored]\ndirectory = "vendor"\n' \
     >> "$plugin/.cargo/config.toml"
 (cd "$plugin" && cargo "$toolchain" generate-lockfile --offline -q)

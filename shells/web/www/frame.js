@@ -7,8 +7,10 @@
 // a fresh instance, starts the device again as it was last started, with
 // the data plugins it had, and tells the page ({ type: "restarted" }).
 
+import { apply, bezels, keys, margins, place } from "./body.js";
 import { KEYS, PaperPawDevice } from "./paperpaw-web.js";
 
+const shell = document.getElementById("device");
 const canvas = document.getElementById("screen");
 const context = canvas.getContext("2d");
 const row = document.getElementById("buttons");
@@ -16,6 +18,10 @@ const started = performance.now();
 
 let device = null;
 let info = null;
+/// The keys drawn on the body, by button; the computer's keys bound to
+/// the body's, by key.
+let drawn = new Map();
+let bound = new Map();
 /// How the device was last started, and the data plugins on its card by
 /// id (their files): what a restart after a trap starts again.
 let last = null;
@@ -77,23 +83,41 @@ const LOCAL =
 
 function tell(message) {
   if (window.parent === window) return;
-  // Before any page wrote: only that the module is ready, nothing else.
+  // Before any page wrote: only that the module is ready, or that it
+  // could not be loaded, nothing else.
   if (embedder) window.parent.postMessage(message, embedder);
-  else if (message.type === "ready") window.parent.postMessage(message, "*");
+  else if (message.type === "ready" || message.type === "error") window.parent.postMessage(message, "*");
 }
 
-/// Sizes the canvas on the page: each of the device's pixels as a whole
-/// number of the screen's own (devicePixelRatio counted), drawn crisp,
-/// where it fits at least once; smoothed where it has to be made smaller,
-/// as dropping rows and columns would make strokes look bolder or vanish.
+/// The body of a device whose profile draws none.
+const PLAIN = { bezel: [6, 6, 6, 6], keys: [] };
+
+/// Sizes the canvas on the page, the body around it and the keys on it:
+/// each of the device's pixels as a whole number of the screen's own
+/// (devicePixelRatio counted), drawn crisp, where it fits at least once;
+/// smoothed where it has to be made smaller, as dropping rows and columns
+/// would make strokes look bolder or vanish.
 function fit() {
   const ratio = window.devicePixelRatio || 1;
-  const room = [window.innerWidth - 40, window.innerHeight - 40 - row.offsetHeight - 12];
-  const scale = Math.min((room[0] * ratio) / canvas.width, (room[1] * ratio) / canvas.height);
+  const body = info?.body ?? PLAIN;
+  const [top, right, bottom, left] = margins({ keys: drawn.size ? body.keys : [] });
+  const below = row.hidden ? 0 : row.offsetHeight + 20;
+  const room = [window.innerWidth - 24 - left - right, window.innerHeight - 24 - top - bottom - below];
+  // The body for each of the device's pixels across: its bezels are
+  // hundredths of the screen's width.
+  const [bt, br, bb, bl] = body.bezel;
+  const wide = canvas.width * (1 + (bl + br) / 100);
+  const high = canvas.height + (canvas.width * (bt + bb)) / 100;
+  const scale = Math.min((room[0] * ratio) / wide, (room[1] * ratio) / high);
   const whole = scale >= 1 ? Math.floor(scale) : scale;
-  canvas.style.width = `${(canvas.width * whole) / ratio}px`;
-  canvas.style.height = `${(canvas.height * whole) / ratio}px`;
+  const [width, height] = [(canvas.width * whole) / ratio, (canvas.height * whole) / ratio];
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
   canvas.style.imageRendering = scale >= 1 ? "pixelated" : "auto";
+  const bezel = bezels(body, width);
+  shell.style.padding = bezel.map((part) => `${part}px`).join(" ");
+  shell.style.margin = [top, right, bottom, left].map((part) => `${part}px`).join(" ");
+  place(drawn, width + bezel[1] + bezel[3], height + bezel[0] + bezel[2], bezel);
 }
 
 window.addEventListener("resize", () => canvas.width && fit());
@@ -186,13 +210,23 @@ async function fetchFor(call) {
   step();
 }
 
-/// The buttons below the screen: the row the device has, else all.
-function buttons() {
+/// The device's keys: on its body where its profile places them, else
+/// in a row below it (the row it has, else all its buttons); none where
+/// the page said so (`buttons: false`). The computer's keys the profile
+/// binds press them either way.
+function buttons(shown) {
+  const body = info.body ?? PLAIN;
+  bound = new Map(body.keys.flatMap((key) => key.keys.map((pressed) => [pressed, key.button])));
+  for (const key of shell.querySelectorAll(".key")) key.remove();
+  drawn = shown ? keys(shell, body, press) : new Map();
   row.replaceChildren();
+  row.hidden = !shown || body.keys.length > 0;
+  if (row.hidden) return;
   const names = info.row.length ? info.row : info.buttons;
   for (const name of names) {
     const button = document.createElement("button");
     button.textContent = name;
+    button.dataset.button = name;
     button.addEventListener("pointerdown", () => press(name, true));
     button.addEventListener("pointerup", () => press(name, false));
     button.addEventListener("pointerleave", (event) => {
@@ -228,9 +262,20 @@ for (const [type, phase] of [
 
 for (const type of ["keydown", "keyup"]) {
   window.addEventListener(type, (event) => {
-    const name = KEYS[event.key];
-    if (!name || !device || event.repeat) return;
+    // The browser's own shortcuts stay its own.
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    // A key of the device reached by the keyboard: Enter and Space press
+    // it (one clicked does not keep them).
+    const focused = event.target instanceof Element ? event.target.closest("[data-button]") : null;
+    const own =
+      focused?.matches(":focus-visible") && (event.key === "Enter" || event.key === " ") ? focused.dataset.button : null;
+    // Letters as they are bound, Caps Lock or Shift or not.
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    const name = own ?? bound.get(key) ?? KEYS[key];
+    if (!name || !device) return;
     event.preventDefault();
+    // Held: pressed once, as the device's buttons are.
+    if (event.repeat) return;
     press(name, type === "keydown");
   });
 }
@@ -245,14 +290,16 @@ function boot(how, given) {
   for (const [id, files] of Object.entries(given)) put(id, files);
   device.start();
   info = device.device();
-  buttons();
+  buttons(how.buttons ?? true);
+  if (canvas.width) fit();
   step();
 }
 
 /// Starts a device: the files go to `plugins/<id>/` on its card.
-async function start({ profile, language, dark, plugins: given = [] }) {
+async function start({ profile, language, dark, buttons, look, plugins: given = [] }) {
   device = await loading;
-  last = { profile, language, dark };
+  apply(look);
+  last = { profile, language, dark, buttons };
   boot(last, Object.fromEntries(given.map((plugin) => [plugin.id, plugin.files])));
   return { device: info };
 }
@@ -399,7 +446,10 @@ window.addEventListener("message", async (event) => {
 // Ready for messages once the module is loaded.
 loading.then(
   (loaded) => tell({ type: "ready", version: loaded.version() }),
-  (error) => console.error("paperpaw:", error),
+  (error) => {
+    console.error("paperpaw:", error);
+    tell({ type: "error", error: String(error.message ?? error) });
+  },
 );
 
 // Opened on its own (not in a frame): a device to try, from the address
