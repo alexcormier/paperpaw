@@ -178,6 +178,11 @@ file to your report.
 - A plugin's settings group that names no place on the settings' main
   page is listed at the end of *Customise*, by name, with a plugin's
   icon, instead of first among the books' groups.
+- No explanation is cut short any more. Every setting's description fits
+  the two lines of its row on the X4 and the X4 Pro, in English and
+  German, and a test keeps it so. The text below *Progress sync*'s rows
+  takes the room there is; where it still has none, a row *More about
+  this* shows it whole.
 
 #### Touch, buttons and the keyboard
 
@@ -466,6 +471,12 @@ file to your report.
 - `paperpaw-dev` warns of a settings group without an order or an icon,
   and of a widget's settings in a group of the main page rather than the
   widget's own (`widgets::settings_group`). SDK: `Kernel::menus`.
+- `paperpaw-dev` finds an explanation of several lines cut short
+  (`visual.explanation-cut`, an error): the SDK's text blocks now say
+  what they draw, "…" included, and a text of the language with a "…" of
+  its own no longer passes every "…" as one. It warns of a setting's
+  description longer than its row (`lint.help-cut`). SDK:
+  `ui::note_fits`, `ask::confirm(…).only_yes()`.
 
 ## [0.3.0] - 2026-10-16
 

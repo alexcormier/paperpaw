@@ -226,6 +226,25 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
     for finding in groups::groups(kernel, &ours) {
         report.add(finding);
     }
+    // Descriptions their rows cut, measured with the X4's letters.
+    let mut session = session;
+    crate::cases::show_screen(&mut session, crate::probe::HELP.as_str(), &[])?;
+    for (id, text) in crate::probe::cut_help() {
+        let Some(plugin) = ours(&id) else {
+            continue;
+        };
+        report.add(
+            Finding::warning(
+                "lint.help-cut",
+                id,
+                format!(
+                    "The description is longer than the two lines of its row on the X4, so it \
+                     is cut short: make it shorter (detail goes in How it works): \"{text}\""
+                ),
+            )
+            .plugin(&plugin),
+        );
+    }
     if let Some(english) = &english {
         for finding in texts::missing(&used, english) {
             report.add(finding);

@@ -254,7 +254,7 @@ fn by_touch_one_signs_out_and_in_once_while_waiting() {
     let shown = sync.shown();
     assert!(!shown.contains("Sign out"), "{shown}");
     assert!(
-        shown.contains("Enter the user name and password"),
+        shown.contains("Sign in with your account"),
         "{shown}"
     );
 
@@ -290,4 +290,45 @@ fn buttons_reach_sign_out_at_the_end_of_the_rows() {
     sync.kernel.render(&mut |_, _| {});
     let parts = sync.kernel.describe();
     assert!(parts.iter().any(|p| p.focused), "{parts:?}");
+}
+
+/// The explanation below the rows shows whole where the screen holds it:
+/// never cut to "…".
+#[test]
+fn the_explanation_shows_whole() {
+    let mut sync = signed_out();
+    let shown = sync.shown();
+    assert!(
+        shown.contains("Only a hash of the password is kept."),
+        "{shown}"
+    );
+    assert!(!shown.contains('…'), "{shown}");
+}
+
+/// Where letters are so large that the explanation has no room, a row
+/// shows it whole, to read.
+#[test]
+fn an_explanation_without_room_is_read_by_its_row() {
+    let mut sync = open(Options {
+        config: "[core]\nui-size = 24\n",
+        key: None,
+        ..Options::default()
+    });
+    // The rows page there: the last one is it.
+    for _ in 0..5 {
+        sync.run(actions::DOWN);
+    }
+    let shown = sync.shown();
+    assert!(shown.contains("More about this"), "{shown}");
+    assert!(!shown.contains('…'), "{shown}");
+    sync.run(actions::CONFIRM);
+    assert_eq!(sync.screen(), Some("core.confirm-dialog"));
+    // All of it, the page buttons scrolling to its end.
+    let mut read = sync.shown();
+    for _ in 0..10 {
+        sync.run(actions::NEXT_PAGE);
+        read.push_str(&sync.shown());
+    }
+    assert!(read.contains("hash"), "{read}");
+    assert!(read.contains("kept."), "{read}");
 }

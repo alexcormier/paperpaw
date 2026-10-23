@@ -31,6 +31,9 @@ pub const NO_LABEL: &str = "no-label";
 /// Set: the focus starts on yes, where yes is the answer to expect and
 /// harmless.
 pub const FOCUS_YES: &str = "focus-yes";
+/// Set: one button only, yes (by default *OK*): a text shown to be read
+/// whole, which the page buttons scroll where it is long.
+pub const ONLY_YES: &str = "only-yes";
 /// The answer in a [`Confirmed`]'s parameters: `yes` or `no`.
 pub const ANSWER: &str = "answer";
 
@@ -60,8 +63,16 @@ impl Confirm {
                 _ => String::from(env.i18n.tr(fallback)),
             }
         };
+        let only_yes = params.get(ONLY_YES).is_some();
         let (yes, no) = (
-            label(YES_LABEL, "core.confirm.yes"),
+            label(
+                YES_LABEL,
+                if only_yes {
+                    "core.confirm.ok"
+                } else {
+                    "core.confirm.yes"
+                },
+            ),
             label(NO_LABEL, "core.confirm.no"),
         );
         let text: Vec<&str> = params
@@ -70,14 +81,19 @@ impl Confirm {
             .map(|t| t.split('\n').collect())
             .unwrap_or_default();
         let title = params.get(params::TITLE).unwrap_or_default();
-        let mut dialog = Dialog::new(env, &style, title, &text, &[yes.as_str(), no.as_str()]);
+        let buttons: &[&str] = if only_yes {
+            &[yes.as_str()]
+        } else {
+            &[yes.as_str(), no.as_str()]
+        };
+        let mut dialog = Dialog::new(env, &style, title, &text, buttons);
         // In the middle of the screen; at the top when it is taller.
         let room = env.device.display.height.saturating_sub(dialog.height());
         dialog.place(room / 2);
         Self {
             style,
             dialog,
-            focus: if params.get(FOCUS_YES).is_some() {
+            focus: if only_yes || params.get(FOCUS_YES).is_some() {
                 YES
             } else {
                 NO

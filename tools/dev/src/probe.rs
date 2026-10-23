@@ -1,6 +1,8 @@
 //! The tool's own plugin in the app: a widget that draws nothing and
 //! notes the area it is given, so that checks know a widget's cell
-//! exactly (the grid gives every widget of a size the same area).
+//! exactly (the grid gives every widget of a size the same area); and a
+//! screen that notes the settings' descriptions their rows would cut
+//! ([`HELP`]), measured with the device's own letters.
 //!
 //! Sessions add it besides the plugins being checked (see [`add`]); the
 //! checks leave its namespace, [`PLUGIN`], out.
@@ -9,12 +11,16 @@
 //! on one thread, and sessions on other threads (tests run side by side)
 //! must not change which plugins a device gets or the area it notes.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use paperpaw_core::KernelBuilder;
 use paperpaw_platform::Rect;
+use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::widgets::{Widget, WidgetSpec};
-use paperpaw_sdk::{Canvas, Env, Id, Manifest, Plugin, RegisterError, Registrar, Version};
+use paperpaw_sdk::{
+    Canvas, Cx, Env, Handled, Id, Manifest, Plugin, RegisterError, Registrar, Screen, ScreenSpec,
+    Version,
+};
 
 use crate::AddPlugins;
 
@@ -23,12 +29,23 @@ pub const PLUGIN: &str = "paperpaw-dev";
 
 /// The widget that notes its area.
 pub const WIDGET: Id = Id::new_static("paperpaw-dev.probe");
+/// The screen that notes the descriptions their rows cut.
+pub const HELP: Id = Id::new_static("paperpaw-dev.help");
 
 thread_local! {
     /// The area the probe was last drawn in.
     static AREA: Cell<Option<Rect>> = const { Cell::new(None) };
     /// The plugins of the target, added after the probe (see [`add`]).
     static TARGET: Cell<Option<AddPlugins>> = const { Cell::new(None) };
+    /// The settings whose description their row cuts, with it, as [`HELP`]
+    /// last found them.
+    static CUT_HELP: RefCell<Vec<(String, String)>> = const { RefCell::new(Vec::new()) };
+}
+
+/// The settings whose description a row cuts (id, text), as [`HELP`]
+/// found them when it was last drawn.
+pub fn cut_help() -> Vec<(String, String)> {
+    CUT_HELP.take()
 }
 
 /// Sets what [`add`] adds besides the probe, on this thread.
@@ -72,7 +89,36 @@ impl Plugin for Probe {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_widget(WidgetSpec::new(WIDGET, "paperpaw-dev.probe", |_| {
             Box::new(Noting)
-        }))
+        }))?;
+        r.add_screen(ScreenSpec::new(
+            HELP,
+            "paperpaw-dev.help",
+            Box::new(|_, _| Box::new(Measuring)),
+        ))
+    }
+}
+
+/// Measures every setting's description against its row's lines.
+struct Measuring;
+
+impl Screen for Measuring {
+    fn draw(&mut self, _: &mut Canvas<'_>, env: &Env<'_>) {
+        let style = UiStyle::new(env);
+        let width = env.device.display.width;
+        let cut: Vec<(String, String)> = env
+            .settings
+            .specs()
+            .filter_map(|spec| {
+                let text = env.i18n.tr(spec.description.as_deref()?);
+                (!ui::note_fits(env, &style, width, text))
+                    .then(|| (spec.id.to_string(), text.to_string()))
+            })
+            .collect();
+        CUT_HELP.set(cut);
+    }
+
+    fn on_action(&mut self, _: &Id, _: &mut Cx<'_, '_>) -> Handled {
+        Handled::No
     }
 }
 

@@ -10,6 +10,7 @@ use crate::image::Image;
 
 pub const TEXT_CUT: &str = "visual.text-cut";
 pub const ELLIPSIS: &str = "visual.ellipsis";
+pub const EXPLANATION_CUT: &str = "visual.explanation-cut";
 pub const WRAP: &str = "visual.wrap";
 pub const OUTSIDE_CELL: &str = "visual.outside-cell";
 pub const OFF_SCREEN: &str = "visual.off-screen";
@@ -227,12 +228,17 @@ pub fn ellipsis(scene: &Scene<'_>) -> Vec<Issue> {
             continue;
         }
         // A line that ends at a "…" of the text itself (after what fills
-        // its last blank, "Loading {host} …").
+        // its last blank, "Loading {host} …"): it begins as the text does
+        // before its first blank, so that not every "…" passes as one.
         let own = |text: &String| {
             text.contains(label)
-                || text
-                    .rsplit_once('}')
-                    .is_some_and(|(_, tail)| tail.contains('…') && label.ends_with(tail.trim_end()))
+                || text.rsplit_once('}').is_some_and(|(_, tail)| {
+                    let head = text.split('{').next().unwrap_or_default().trim_start();
+                    tail.contains('…')
+                        && label.ends_with(tail.trim_end())
+                        && !head.is_empty()
+                        && label.starts_with(head)
+                })
         };
         if scene.ellipses.iter().any(own) {
             continue;
@@ -243,6 +249,19 @@ pub fn ellipsis(scene: &Scene<'_>) -> Vec<Issue> {
         let Some((run, height)) = text_run(scene, d, INK) else {
             continue;
         };
+        // A text of several lines cut short: an explanation, which must be
+        // read whole, wherever its last line ends.
+        if run.height > height + height / 2 {
+            let message = format!(
+                "{} is cut short: an explanation shows whole; give it the room there is, or a \
+                 way to read all of it (a row that opens it)",
+                quote(label)
+            );
+            if !issues.iter().any(|i| i.message == message) {
+                issues.push(Issue::error(EXPLANATION_CUT, run, message));
+            }
+            continue;
+        }
         let room_end = scene
             .visible(d)
             .map_or(d.area.right(), |v| v.right().min(d.area.right()));
