@@ -1,0 +1,21 @@
+# The crates whose types cross between a code plugin and PaperPaw (ADR
+# 0026): the SDK and every crate of PaperPaw it depends on. Each keeps
+# api.txt and shape.txt (tools/interface.py writes them), and this folder
+# keeps both as they were when the plugin interface was last raised.
+paperpaw-sdk
+paperpaw-platform
+paperpaw-graphics
+paperpaw-i18n
+paperpaw-config
+paperpaw-text
+paperpaw-document
+paperpaw-layout
+paperpaw-xml
+paperpaw-zip
+paperpaw-hyphen
+paperpaw-image
+paperpaw-update
+paperpaw-digest
+paperpaw-json
+paperpaw-qr
+paperpaw-native

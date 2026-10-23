@@ -426,7 +426,8 @@ impl UpdatePage {
         reason = "longer than the limit from before it was set; split it when it is next changed"
     )]
     fn texts(&self, env: &Env<'_>) -> (String, String) {
-        let current = env.firmware.map_or("", |f| f.version.as_str());
+        let current =
+            &crate::shown_version(env.i18n, env.firmware.map_or("", |f| f.version.as_str()));
         let tr = |key: &str| env.i18n.tr(key).to_string();
         let with = |key: &str, args: &[(&str, Arg<'_>)]| env.i18n.format(key, args);
         match &self.view {
@@ -520,7 +521,10 @@ impl UpdatePage {
                 (
                     with(
                         "update.offer.title",
-                        &[("version", Arg::Str(&offer.version))],
+                        &[(
+                            "version",
+                            Arg::Str(&crate::shown_version(env.i18n, &offer.version)),
+                        )],
                     ),
                     help,
                 )
@@ -541,7 +545,10 @@ impl UpdatePage {
                 (
                     with(
                         "update.waiting.title",
-                        &[("version", Arg::Str(&offer.version))],
+                        &[(
+                            "version",
+                            Arg::Str(&crate::shown_version(env.i18n, &offer.version)),
+                        )],
                     ),
                     help,
                 )
@@ -549,7 +556,10 @@ impl UpdatePage {
             View::Downloading(version) => (
                 with(
                     "update.downloading.title",
-                    &[("version", Arg::Str(version))],
+                    &[(
+                        "version",
+                        Arg::Str(&crate::shown_version(env.i18n, version)),
+                    )],
                 ),
                 tr("update.downloading.help"),
             ),

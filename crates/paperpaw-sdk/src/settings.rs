@@ -793,7 +793,7 @@ pub struct SettingGroupSpec {
     pub id: Id,
     /// Translation key of the group's name.
     pub title: Cow<'static, str>,
-    /// Groups are listed by order, smallest first.
+    /// By order, smallest first; 0 names none (`builtin::settings_sections`).
     pub order: i32,
     /// A screen of the group's plugin shown instead of the generated page
     /// (opened with [`params::ID`](crate::builtin::params::ID), the

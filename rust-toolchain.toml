@@ -1,4 +1,8 @@
 [toolchain]
-channel = "stable"
+# The compiler of PaperPaw's release, as the firmware's and the plugin
+# projects' (shells/xteink, samples/hello-native, tools/plugin-files): the
+# emulator loads only code plugins of its own compiler, so it is the one
+# authors build with (ADR 0026).
+channel = "1.99.0"
 components = ["rustfmt", "clippy"]
 targets = ["riscv32imc-unknown-none-elf", "wasm32-unknown-unknown"]

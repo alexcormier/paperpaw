@@ -133,6 +133,7 @@ fn ppn_of(byte: u8) -> Vec<u8> {
         api: 16,
         relocs: 0,
         align: 16,
+        compiler: 1,
         sha256: [0; 32],
     };
     let mut digest = header.digest();
@@ -503,4 +504,34 @@ fn marks_left_in_a_plugins_folder_are_kept_at_the_next_start() {
         Some(code_name(&code))
     );
     assert!(!device.storage.exists("plugins/clock/.install-marks"));
+}
+
+/// A plugin offered over the cable, its screen open, is not sent over
+/// Wi-Fi meanwhile: the two never put the same plugin together.
+#[test]
+fn a_plugin_offered_over_the_cable_is_not_sent_over_wifi_meanwhile() {
+    let mut device = Device::serving(Shared::default());
+    let ini = manifest("clock", "1.0.0");
+    device.now += 100;
+    let effects = device.kernel.open_screen(
+        Instant(device.now),
+        Id::new_static("transfer.cable"),
+        paperpaw_sdk::Params::new(),
+    );
+    device.settle(effects);
+    // As the cable's offer names it.
+    let offered = ".paperpaw/plugins/transfer/cable-offer.txt";
+    device.storage.write(offered, b"clock").unwrap();
+    assert_eq!(
+        device.put("clock", "plugin.ini", ini.as_bytes(), ini.as_bytes()),
+        409
+    );
+    assert_eq!(device.request("POST", "/api/plugin/clock", None).0, 409);
+    assert!(!device.storage.exists("plugins/.clock.local/plugin.ini"));
+    // The cable's screen closed, it may.
+    device.run(actions::BACK);
+    assert_eq!(
+        device.put("clock", "plugin.ini", ini.as_bytes(), ini.as_bytes()),
+        200
+    );
 }

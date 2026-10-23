@@ -428,6 +428,18 @@ mod tests {
         assert_eq!(AppInfo::read(&other[..100]), Err(Problem::NotAnImage));
     }
 
+    /// A beta's image says its whole version (the descriptor's field has
+    /// 32 bytes), and its update is signed and checked as a release's.
+    #[test]
+    fn a_beta_is_an_image_as_a_release_is() {
+        let mut beta = image(APP_HEAD_LEN + 64);
+        beta[48..80].fill(0);
+        beta[48..61].copy_from_slice(b"0.5.0-beta.10");
+        assert_eq!(AppInfo::read(&beta).unwrap().version, "0.5.0-beta.10");
+        let file = update(&beta);
+        assert_eq!(check(&file, 7), Ok(()));
+    }
+
     #[test]
     fn keys_as_text() {
         let key = public_key(&SEED);

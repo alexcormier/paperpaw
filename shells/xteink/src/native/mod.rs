@@ -42,6 +42,18 @@ use paperpaw_sdk::{Plugin, PluginProblem};
 #[unsafe(export_name = "PAPERPAW_NATIVE_FINGERPRINT")]
 static EXPORTED_FINGERPRINT: [u8; 8] = FINGERPRINT.0.to_le_bytes();
 
+/// The compiler plugin files must be built with: this firmware's own, by
+/// its release (`build.rs`).
+const COMPILER: &str = env!("PAPERPAW_RUSTC");
+
+/// How this firmware loads code plugins: files named `code.ppn` of its
+/// fingerprint and of its compiler.
+pub fn this_firmware() -> paperpaw_sdk::native::Native {
+    let mut native = paperpaw_sdk::native::Native::new("code.ppn");
+    native.compiler = paperpaw_native::compiler::id(COMPILER);
+    native
+}
+
 /// The chip plugin files must be made for.
 #[cfg(feature = "x4")]
 const CHIP: Chip = Chip::Esp32C3;
@@ -102,7 +114,9 @@ fn set_room(room: Room) {
 /// control over USB).
 #[cfg(feature = "remote")]
 pub fn describe(line: &mut dyn FnMut(&str)) {
-    line(&alloc::format!("fingerprint {FINGERPRINT} {TOOLCHAIN}"));
+    line(&alloc::format!(
+        "fingerprint {FINGERPRINT} {TOOLCHAIN}, rustc {COMPILER}"
+    ));
     let room = critical_section::with(|cs| ROOM.borrow(cs).get());
     line(&match room {
         Room::Unknown => String::from("room unknown"),
@@ -182,10 +196,20 @@ impl Loader {
         let mut head = [0; HEADER_LEN];
         read_exact(storage, path, 0, &mut head).map_err(|_| PluginProblem::Damaged)?;
         let header = Header::read(&head).map_err(problem)?;
-        if header.chip != CHIP || header.fingerprint != FINGERPRINT.0 {
+        if header.chip != CHIP {
             warn!(
-                "native: {path} is for {} {:016x}, this firmware {CHIP} {FINGERPRINT} ({TOOLCHAIN})",
-                header.chip, header.fingerprint
+                "native: {path} is for chip {}, this firmware's is {CHIP}",
+                header.chip
+            );
+            return Err(PluginProblem::OtherBuild);
+        }
+        if let Some(why) = paperpaw_sdk::native::Fingerprint(header.fingerprint).misfit() {
+            warn!("native: {path} is {why} ({FINGERPRINT}, {TOOLCHAIN})");
+            return Err(PluginProblem::OtherBuild);
+        }
+        if header.compiler != paperpaw_native::compiler::id(COMPILER) {
+            warn!(
+                "native: {path} is built by another compiler than rustc {COMPILER}, this firmware's"
             );
             return Err(PluginProblem::OtherBuild);
         }
@@ -217,8 +241,9 @@ impl Loader {
                 took: None,
             })
         });
-        // SAFETY: a plugin of this firmware's compiler, target and SDK
-        // (its fingerprint), placed as its file says.
+        // SAFETY: a plugin of this firmware's plugin interface, chip and
+        // layouts (its fingerprint) and of its compiler (its header),
+        // placed as its file says.
         let plugin =
             unsafe { paperpaw_sdk::native::take((entry.make)()) }.ok_or(PluginProblem::Damaged)?;
         let took = Took {
@@ -269,7 +294,16 @@ fn internal_free() -> usize {
 /// What the plugin manager says for a file that is not right.
 fn problem(problem: Problem) -> PluginProblem {
     match problem {
-        Problem::NewerFormat | Problem::UnknownChip => PluginProblem::OtherBuild,
+        Problem::OlderFormat => {
+            warn!(
+                "native: a plugin file of an older format, made for an older PaperPaw: it needs a new build"
+            );
+            PluginProblem::OtherBuild
+        }
+        Problem::NewerFormat | Problem::UnknownChip => {
+            warn!("native: {problem}");
+            PluginProblem::OtherBuild
+        }
         _ => PluginProblem::Damaged,
     }
 }

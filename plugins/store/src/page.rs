@@ -538,7 +538,9 @@ fn facts(
         Some("unverified") => facts.push(("circle", i18n.tr("store.verified.not").to_string())),
         _ => {}
     }
-    if !plugin.author.is_empty() {
+    if plugin.official {
+        facts.push(("paw", i18n.tr("store.official").to_string()));
+    } else if !plugin.author.is_empty() {
         let by = match more.filter(|m| m.author_since > 0) {
             Some(more) => {
                 let year = (more.author_since / 10000).to_string();

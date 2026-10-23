@@ -132,7 +132,13 @@ pub(crate) fn draw(
         &plugin.name,
         ink,
     );
-    // What it does: one line, shortened where longer.
+    // What it does: one line, shortened where longer; PaperPaw's own
+    // say so first.
+    let summary = if plugin.official {
+        format!("{} · {}", env.i18n.tr("store.official"), plugin.summary)
+    } else {
+        plugin.summary.clone()
+    };
     let below = band.y + band.height;
     let line = (style.small * 1.3) as u16;
     let note = Rect::new(rect.x, below, (right - f32::from(rect.x)) as u16, line);
@@ -142,7 +148,7 @@ pub(crate) fn draw(
         style.small,
         f32::from(rect.x) + margin,
         note,
-        &plugin.summary,
+        &summary,
         style.focus_faint(focused, 80),
     );
 }

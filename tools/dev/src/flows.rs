@@ -11,7 +11,7 @@
 //!
 //! ```text
 //! # Night mode from the menu, with buttons.
-//! profiles: xteink-x4, xteink-x4-classic
+//! profiles: xteink-x4, xteink-x4-pro
 //! set: core.ui-corners = core.corners.square
 //!
 //! long:confirm
@@ -923,7 +923,7 @@ mod tests {
         let flow = parse(
             "night",
             "# Night mode\n\
-             profiles: xteink-x4, xteink-x4-classic\n\
+             profiles: xteink-x4, xteink-x4-pro\n\
              set: core.ui-corners = core.corners.square\n\
              \n\
              long:confirm\n\
@@ -939,7 +939,7 @@ mod tests {
              expect picture menu\n",
         )
         .unwrap();
-        assert_eq!(flow.profiles, ["xteink-x4", "xteink-x4-classic"]);
+        assert_eq!(flow.profiles, ["xteink-x4", "xteink-x4-pro"]);
         assert_eq!(
             flow.settings,
             [("core.ui-corners".into(), "core.corners.square".into())]

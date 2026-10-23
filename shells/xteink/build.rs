@@ -20,7 +20,8 @@
 //! crates built in (`plugins.rs`, see `paperpaw_update::Plugins`): those
 //! of the app as built here (`paperpaw-app`'s, by `links`), with their
 //! versions from the firmware's lockfile, which names optional crates
-//! whether they are built or not.
+//! whether they are built or not. And the compiler it is built with
+//! (`PAPERPAW_RUSTC`): code plugins run only where it built them too.
 
 use std::path::PathBuf;
 
@@ -36,6 +37,7 @@ fn main() {
     println!("cargo::rerun-if-changed=../../Cargo.toml");
     println!("cargo::rerun-if-changed=memory-x4.x");
     plugins();
+    compiler();
     if std::env::var_os("CARGO_FEATURE_ESP32S3").is_some() {
         println!("cargo::rustc-link-arg=-nostartfiles");
         println!("cargo::rustc-link-arg=-Wl,-Tlinkall.x");
@@ -45,6 +47,20 @@ fn main() {
     std::fs::copy("memory-x4.x", out.join("memory.x")).expect("memory-x4.x");
     println!("cargo::rustc-link-search={}", out.display());
     println!("cargo::rustc-link-arg=-Tlinkall.x");
+}
+
+/// Gives the firmware the release of the compiler that builds it, as
+/// plugin files name theirs (`paperpaw_native::compiler::release`).
+fn compiler() {
+    let rustc = std::env::var_os("RUSTC").expect("RUSTC");
+    let out = std::process::Command::new(rustc)
+        .arg("-vV")
+        .output()
+        .expect("rustc -vV");
+    let words = String::from_utf8(out.stdout).expect("rustc -vV says text");
+    let first = words.lines().next().unwrap_or_default();
+    let release = paperpaw_native::compiler::release(first).expect("rustc -vV names its release");
+    println!("cargo::rustc-env=PAPERPAW_RUSTC={release}");
 }
 
 /// Writes `plugins.rs`: the list of the plugin crates built in, the

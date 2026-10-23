@@ -4,7 +4,7 @@
      (Cargo.toml), its code 1.2.3 → 10203; build-apk.sh checks both. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
     package="org.paperpaw.app"
-    android:versionCode="400"
+    android:versionCode="40050"
     android:versionName="0.4.0-dev">
 
     <!-- The shared Books folder: "All files access" from Android 11 on, the

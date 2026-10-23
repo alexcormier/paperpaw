@@ -913,6 +913,7 @@ fn code_file() -> Vec<u8> {
         api: 16,
         relocs: 0,
         align: 16,
+        compiler: 1,
         sha256: [0; 32],
     };
     let image = [0u8; 128];
@@ -934,6 +935,7 @@ fn offer_with_code(size: usize, code: &[u8]) -> String {
     format!(
         r#"{{"version": "0.5.0", "url": "/api/v1/updates/paperpaw-x4-0.5.0-update.bin",
             "size": {size}, "plugins": ["chess-for-paperpaw 1.1.0"],
+            "abi": "0000000000005eed", "compiler": "00000001",
             "code": [{{"id": "stats", "name": "Statistics", "version": "0.5.0",
               "author_key": "{author}",
               "files": [
@@ -1110,6 +1112,37 @@ fn a_plugin_without_room_for_its_code_is_not_fetched() {
         "{shown}"
     );
     assert!(!device.storage.exists("plugins/.stats.next/plugin.ini"));
+}
+
+/// With *Beta updates* on, the question asks for betas; a beta offered
+/// shows as one, calmly, where its version shows.
+#[test]
+fn betas_are_asked_for_when_wanted_and_shown_as_betas() {
+    let mut device = Device::new(Shared::default());
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    let question = String::from_utf8(call.body.clone().unwrap_or_default()).unwrap();
+    assert!(!question.contains("betas"), "off at first: {question}");
+
+    let mut device = Device::new(Shared::default());
+    let _ = device
+        .kernel
+        .set_setting(Instant(1), "update.betas", "true");
+    device.run(OPEN);
+    device.run(actions::CONFIRM);
+    let call = device.request();
+    let question = String::from_utf8(call.body.clone().unwrap_or_default()).unwrap();
+    assert!(question.ends_with(r#","betas":true}"#), "{question}");
+    let file = update_file("0.5.0-beta.2", &[("paperpaw-plugin-stats", "0.5.0-beta.2")]);
+    let answer = offer(file.len()).replace("0.5.0", "0.5.0-beta.2");
+    device.answer(&call, 200, answer.as_bytes());
+    let shown = device.shown();
+    assert!(
+        shown.contains("PaperPaw 0.5.0 Beta 2 is available"),
+        "{shown}"
+    );
+    assert!(!shown.contains("0.5.0-beta.2"), "{shown}");
 }
 
 /// A code plugin the store did not install (local, as one in development

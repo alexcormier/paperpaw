@@ -99,8 +99,12 @@ struct WithData {
 }
 
 impl Plugin for WithData {
+    /// The code's, at the version its `plugin.ini` names: the one the
+    /// store, the installer and updates go by.
     fn manifest(&self) -> Manifest {
-        self.code.manifest()
+        let mut manifest = self.code.manifest();
+        manifest.version = self.data.manifest().version;
+        manifest
     }
 
     fn register(&self, registrar: &mut Registrar) -> Result<(), RegisterError> {
@@ -176,6 +180,17 @@ impl Kernel {
             });
             match loaded {
                 Ok(code) => {
+                    // Its `plugin.ini` names its version (0.1.0 where it
+                    // names none); code saying another is the author's slip
+                    // (`paperpaw-dev package` finds it), told, not refused.
+                    let (declared, built) = (plugin.manifest().version, code.manifest().version);
+                    if built != declared {
+                        let message = format!(
+                            "{path}: its code says version {built}, its plugin.ini {declared}: \
+                             taken as {declared}"
+                        );
+                        self.warn(WarningSource::Plugin(id.clone()), None, message);
+                    }
                     let plugin = WithData { code, data: plugin };
                     let manifest = plugin.manifest();
                     self.register_plugin(&plugin, manifest);
@@ -361,9 +376,15 @@ mod tests {
 
     fn storage() -> MemoryStorage {
         let storage = MemoryStorage::new()
-            .with("plugins/zeta/plugin.ini", "[plugin]\nname = Zeta\n")
+            .with(
+                "plugins/zeta/plugin.ini",
+                "[plugin]\nname = Zeta\nversion = 1.0.0\n",
+            )
             .with("plugins/zeta/code.ppn", "PPNP")
-            .with("plugins/hello/plugin.ini", "[plugin]\nname = Hello\n")
+            .with(
+                "plugins/hello/plugin.ini",
+                "[plugin]\nname = Hello\nversion = 1.0.0\n",
+            )
             .with("plugins/hello/code.ppn", "PPNP")
             .with(
                 "plugins/hello/i18n/en.ini",
@@ -462,6 +483,39 @@ mod tests {
             (PluginState::Failed, Some(PluginProblem::Unsupported))
         );
         assert!(kernel.shared.native.is_none());
+    }
+
+    /// The version its `plugin.ini` names is the plugin's (the store,
+    /// the installer and updates go by it): code that says another runs
+    /// at that version, and it is told; nothing is refused for it.
+    #[test]
+    fn code_of_another_version_than_its_folder_says_runs_at_the_folders() {
+        let loader = loader();
+        let storage = storage()
+            .with(
+                "plugins/hello/plugin.ini",
+                "[plugin]\nname = Hello\nversion = 2.0.0\n",
+            )
+            .with("plugins/zeta/plugin.ini", "[plugin]\nname = Zeta\n");
+        let mut kernel = kernel_on(storage, &loader, "");
+        let hello = info(&kernel, "hello");
+        assert_eq!(
+            (hello.state, hello.problem, hello.manifest.version),
+            (PluginState::Running, None, Version::new(2, 0, 0))
+        );
+        assert!(kernel.shared.actions.contains("hello.hello"));
+        // Where it names none, 0.1.0, as for any plugin.
+        assert_eq!(
+            info(&kernel, "zeta").manifest.version,
+            Version::new(0, 1, 0)
+        );
+        let warnings = kernel.take_warnings();
+        assert!(
+            warnings.iter().any(|w| w
+                .message
+                .contains("its code says version 1.0.0, its plugin.ini 2.0.0")),
+            "{warnings:?}"
+        );
     }
 
     #[test]
@@ -605,7 +659,7 @@ mod tests {
             )
             .with(
                 "plugins/.hello.part/plugin.ini",
-                "[plugin]\nname = Hello\nversion = 0.2.0\n",
+                "[plugin]\nname = Hello\nversion = 1.0.0\n",
             )
             .with("plugins/.hello.part/code.ppn", "PPNP")
             .with("plugins/.other.part/plugin.ini", "[plugin]\nid = zeta\n");
@@ -628,7 +682,7 @@ mod tests {
         let storage = kernel.storage();
         assert!(!storage.exists("plugins/.hello.part/plugin.ini"));
         let ini = paperpaw_sdk::read_file(storage, "plugins/hello/plugin.ini", 512).unwrap();
-        assert!(String::from_utf8(ini).unwrap().contains("0.2.0"));
+        assert!(String::from_utf8(ini).unwrap().contains("1.0.0"));
         // Not what it says it is: refused, its folder gone.
         assert!(!storage.exists("plugins/.other.part/plugin.ini"));
         assert!(kernel.plugins().get("other").is_none());
@@ -685,6 +739,7 @@ version = 2.0.0
             api: 16,
             relocs: 0,
             align: 16,
+            compiler: 1,
             sha256,
         };
         let mut file = header.to_bytes().to_vec();
@@ -698,7 +753,7 @@ version = 2.0.0
         let storage = storage()
             .with(
                 "plugins/.stats.next/plugin.ini",
-                "[plugin]\nid = stats\nname = Statistics\nversion = 0.5.0\n",
+                "[plugin]\nid = stats\nname = Statistics\nversion = 1.0.0\n",
             )
             .with(".paperpaw/plugins/stats/statistics.sqlite3", "kept");
         storage

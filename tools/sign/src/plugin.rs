@@ -39,12 +39,13 @@ pub fn pack(elf: &str, out: &str, key_file: Option<&str>) -> Result<(), String> 
     };
     write(out, &file)?;
     println!(
-        "{out}: {} bytes of data, {} of code, {} words to relocate, fingerprint {:016x}, {}",
+        "{out}: {} bytes of data, {} of code, {} words to relocate, fingerprint {:016x}, {},          built by rustc {}",
         header.code_at,
         header.image_len - header.code_at,
         header.relocs,
         header.fingerprint,
-        header.chip
+        header.chip,
+        packed.compiler
     );
     if let Some(signed) = signed {
         print_signer(&signed);
@@ -58,6 +59,9 @@ pub fn show(path: &str) -> Result<(), String> {
     sha.update(&file);
     println!("chip:        {} ({})", header.chip, header.chip.id());
     println!("fingerprint: {:016x}", header.fingerprint);
+    // The plugin interface it was built for: the fingerprint's top bits.
+    println!("interface:   {}", header.fingerprint >> 48);
+    println!("compiler:    {:08x}", header.compiler);
     println!(
         "image:       {} bytes: {} of data, {} of code, linked at {:#010x}, aligned to {}",
         header.image_len,

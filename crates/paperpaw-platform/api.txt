@@ -1,0 +1,498 @@
+pub mod paperpaw_platform
+pub mod paperpaw_platform::buttons
+pub const paperpaw_platform::buttons::BACK: &str
+pub const paperpaw_platform::buttons::CONFIRM: &str
+pub const paperpaw_platform::buttons::DOWN: &str
+pub const paperpaw_platform::buttons::HOME: &str
+pub const paperpaw_platform::buttons::LEFT: &str
+pub const paperpaw_platform::buttons::MENU: &str
+pub const paperpaw_platform::buttons::PAGE_BACK: &str
+pub const paperpaw_platform::buttons::PAGE_FORWARD: &str
+pub const paperpaw_platform::buttons::POWER: &str
+pub const paperpaw_platform::buttons::RIGHT: &str
+pub const paperpaw_platform::buttons::UP: &str
+pub mod paperpaw_platform::display
+#[non_exhaustive] pub enum paperpaw_platform::display::RefreshMode
+pub paperpaw_platform::display::RefreshMode::Clear
+pub paperpaw_platform::display::RefreshMode::Fast
+pub paperpaw_platform::display::RefreshMode::Full
+pub paperpaw_platform::display::RefreshMode::Gray
+pub paperpaw_platform::display::RefreshMode::Mono
+pub paperpaw_platform::display::RefreshMode::Partial
+impl paperpaw_platform::display::RefreshMode
+pub fn paperpaw_platform::display::RefreshMode::cleans(self) -> bool
+pub enum paperpaw_platform::display::Rotation
+pub paperpaw_platform::display::Rotation::Deg0
+pub paperpaw_platform::display::Rotation::Deg180
+pub paperpaw_platform::display::Rotation::Deg270
+pub paperpaw_platform::display::Rotation::Deg90
+pub struct paperpaw_platform::display::ColorPanel
+pub paperpaw_platform::display::ColorPanel::color_divisor: u8
+pub paperpaw_platform::display::ColorPanel::saturation_percent: u8
+impl paperpaw_platform::display::ColorPanel
+pub fn paperpaw_platform::display::ColorPanel::boost_percent(&self) -> u16
+pub struct paperpaw_platform::display::DisplayInfo
+pub paperpaw_platform::display::DisplayInfo::color: core::option::Option<paperpaw_platform::display::ColorPanel>
+pub paperpaw_platform::display::DisplayInfo::dpi: u16
+pub paperpaw_platform::display::DisplayInfo::format: paperpaw_platform::pixel::PixelFormat
+pub paperpaw_platform::display::DisplayInfo::height: u16
+pub paperpaw_platform::display::DisplayInfo::rotation: paperpaw_platform::display::Rotation
+pub paperpaw_platform::display::DisplayInfo::width: u16
+pub struct paperpaw_platform::display::FrameView<'a>
+pub paperpaw_platform::display::FrameView::data: &'a [u8]
+pub paperpaw_platform::display::FrameView::format: paperpaw_platform::pixel::PixelFormat
+pub paperpaw_platform::display::FrameView::height: u16
+pub paperpaw_platform::display::FrameView::stride: usize
+pub paperpaw_platform::display::FrameView::width: u16
+impl paperpaw_platform::display::FrameView<'_>
+pub fn paperpaw_platform::display::FrameView<'_>::pixel(&self, u16, u16) -> paperpaw_platform::pixel::Color
+pub trait paperpaw_platform::display::Display
+pub fn paperpaw_platform::display::Display::info(&self) -> paperpaw_platform::display::DisplayInfo
+pub fn paperpaw_platform::display::Display::refresh(&mut self, paperpaw_platform::display::FrameView<'_>, paperpaw_platform::geometry::Rect, paperpaw_platform::display::RefreshMode)
+pub mod paperpaw_platform::geometry
+pub struct paperpaw_platform::geometry::Point
+pub paperpaw_platform::geometry::Point::x: i32
+pub paperpaw_platform::geometry::Point::y: i32
+impl paperpaw_platform::geometry::Point
+pub const fn paperpaw_platform::geometry::Point::new(i32, i32) -> Self
+pub struct paperpaw_platform::geometry::Rect
+pub paperpaw_platform::geometry::Rect::height: u16
+pub paperpaw_platform::geometry::Rect::width: u16
+pub paperpaw_platform::geometry::Rect::x: u16
+pub paperpaw_platform::geometry::Rect::y: u16
+impl paperpaw_platform::geometry::Rect
+pub const fn paperpaw_platform::geometry::Rect::area(&self) -> u32
+pub const fn paperpaw_platform::geometry::Rect::bottom(&self) -> u32
+pub const fn paperpaw_platform::geometry::Rect::contains(&self, paperpaw_platform::geometry::Point) -> bool
+pub const fn paperpaw_platform::geometry::Rect::from_size(u16, u16) -> Self
+pub const fn paperpaw_platform::geometry::Rect::grow(&self, u16) -> paperpaw_platform::geometry::Rect
+pub const fn paperpaw_platform::geometry::Rect::inset(&self, u16, u16) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_platform::geometry::Rect::intersection(&self, &paperpaw_platform::geometry::Rect) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub const fn paperpaw_platform::geometry::Rect::is_empty(&self) -> bool
+pub const fn paperpaw_platform::geometry::Rect::new(u16, u16, u16, u16) -> Self
+pub const fn paperpaw_platform::geometry::Rect::right(&self) -> u32
+pub fn paperpaw_platform::geometry::Rect::union(&self, &paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
+pub mod paperpaw_platform::input
+pub mod paperpaw_platform::input::buttons
+pub const paperpaw_platform::input::buttons::BACK: &str
+pub const paperpaw_platform::input::buttons::CONFIRM: &str
+pub const paperpaw_platform::input::buttons::DOWN: &str
+pub const paperpaw_platform::input::buttons::HOME: &str
+pub const paperpaw_platform::input::buttons::LEFT: &str
+pub const paperpaw_platform::input::buttons::MENU: &str
+pub const paperpaw_platform::input::buttons::PAGE_BACK: &str
+pub const paperpaw_platform::input::buttons::PAGE_FORWARD: &str
+pub const paperpaw_platform::input::buttons::POWER: &str
+pub const paperpaw_platform::input::buttons::RIGHT: &str
+pub const paperpaw_platform::input::buttons::UP: &str
+pub enum paperpaw_platform::input::ButtonState
+pub paperpaw_platform::input::ButtonState::Pressed
+pub paperpaw_platform::input::ButtonState::Released
+#[non_exhaustive] pub enum paperpaw_platform::input::InputEvent
+pub paperpaw_platform::input::InputEvent::Button
+pub paperpaw_platform::input::InputEvent::Button::name: &'static str
+pub paperpaw_platform::input::InputEvent::Button::state: paperpaw_platform::input::ButtonState
+pub paperpaw_platform::input::InputEvent::Pointer(paperpaw_platform::input::PointerEvent)
+pub enum paperpaw_platform::input::PointerPhase
+pub paperpaw_platform::input::PointerPhase::Cancel
+pub paperpaw_platform::input::PointerPhase::Down
+pub paperpaw_platform::input::PointerPhase::Move
+pub paperpaw_platform::input::PointerPhase::Up
+#[non_exhaustive] pub enum paperpaw_platform::input::PointerTool
+pub paperpaw_platform::input::PointerTool::Eraser
+pub paperpaw_platform::input::PointerTool::Finger
+pub paperpaw_platform::input::PointerTool::Mouse
+pub paperpaw_platform::input::PointerTool::Pen
+pub struct paperpaw_platform::input::InputCaps
+pub paperpaw_platform::input::InputCaps::buttons: bool
+pub paperpaw_platform::input::InputCaps::keys: &'static [&'static str]
+pub paperpaw_platform::input::InputCaps::pen: bool
+pub paperpaw_platform::input::InputCaps::touch: bool
+pub struct paperpaw_platform::input::Instant(pub u64)
+impl paperpaw_platform::input::Instant
+pub const fn paperpaw_platform::input::Instant::add_millis(self, u64) -> paperpaw_platform::input::Instant
+pub const fn paperpaw_platform::input::Instant::millis(self) -> u64
+pub const fn paperpaw_platform::input::Instant::since(self, paperpaw_platform::input::Instant) -> u64
+pub struct paperpaw_platform::input::PointerEvent
+pub paperpaw_platform::input::PointerEvent::id: u8
+pub paperpaw_platform::input::PointerEvent::phase: paperpaw_platform::input::PointerPhase
+pub paperpaw_platform::input::PointerEvent::point: paperpaw_platform::geometry::Point
+pub paperpaw_platform::input::PointerEvent::pressure: u16
+pub paperpaw_platform::input::PointerEvent::tool: paperpaw_platform::input::PointerTool
+pub mod paperpaw_platform::pixel
+#[non_exhaustive] pub enum paperpaw_platform::pixel::PixelFormat
+pub paperpaw_platform::pixel::PixelFormat::Gray2
+pub paperpaw_platform::pixel::PixelFormat::Gray4
+pub paperpaw_platform::pixel::PixelFormat::Gray8
+pub paperpaw_platform::pixel::PixelFormat::Mono1
+pub paperpaw_platform::pixel::PixelFormat::Rgb565
+pub paperpaw_platform::pixel::PixelFormat::Rgb888
+impl paperpaw_platform::pixel::PixelFormat
+pub const fn paperpaw_platform::pixel::PixelFormat::bits_per_pixel(self) -> u8
+pub const fn paperpaw_platform::pixel::PixelFormat::gray_levels(self) -> core::option::Option<u16>
+pub const fn paperpaw_platform::pixel::PixelFormat::is_color(self) -> bool
+pub const fn paperpaw_platform::pixel::PixelFormat::stride(self, u16) -> usize
+pub struct paperpaw_platform::pixel::Color
+pub paperpaw_platform::pixel::Color::b: u8
+pub paperpaw_platform::pixel::Color::g: u8
+pub paperpaw_platform::pixel::Color::r: u8
+impl paperpaw_platform::pixel::Color
+pub const paperpaw_platform::pixel::Color::BLACK: paperpaw_platform::pixel::Color
+pub const paperpaw_platform::pixel::Color::WHITE: paperpaw_platform::pixel::Color
+pub const fn paperpaw_platform::pixel::Color::gray(u8) -> Self
+pub const fn paperpaw_platform::pixel::Color::inverted(self) -> Self
+pub const fn paperpaw_platform::pixel::Color::luma(self) -> u8
+pub const fn paperpaw_platform::pixel::Color::rgb(u8, u8, u8) -> Self
+pub mod paperpaw_platform::status
+pub struct paperpaw_platform::status::Battery
+pub paperpaw_platform::status::Battery::charging: bool
+pub paperpaw_platform::status::Battery::millivolts: core::option::Option<u16>
+pub paperpaw_platform::status::Battery::percent: u8
+pub struct paperpaw_platform::status::SystemStatus
+pub paperpaw_platform::status::SystemStatus::battery: core::option::Option<paperpaw_platform::status::Battery>
+pub paperpaw_platform::status::SystemStatus::clock: core::option::Option<paperpaw_platform::status::WallClock>
+pub struct paperpaw_platform::status::WallClock
+pub paperpaw_platform::status::WallClock::at: paperpaw_platform::input::Instant
+pub paperpaw_platform::status::WallClock::unix_millis: i64
+pub paperpaw_platform::status::WallClock::utc_offset_minutes: core::option::Option<i32>
+impl paperpaw_platform::status::WallClock
+pub fn paperpaw_platform::status::WallClock::unix_millis_at(&self, paperpaw_platform::input::Instant) -> i64
+pub mod paperpaw_platform::storage
+#[non_exhaustive] pub enum paperpaw_platform::storage::StorageError
+pub paperpaw_platform::storage::StorageError::Full
+pub paperpaw_platform::storage::StorageError::InvalidData
+pub paperpaw_platform::storage::StorageError::InvalidPath
+pub paperpaw_platform::storage::StorageError::Io
+pub paperpaw_platform::storage::StorageError::NotFound
+pub paperpaw_platform::storage::StorageError::TooLarge
+pub paperpaw_platform::storage::StorageError::Unsupported
+impl core::error::Error for paperpaw_platform::storage::StorageError
+impl core::fmt::Display for paperpaw_platform::storage::StorageError
+pub fn paperpaw_platform::storage::StorageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_platform::storage::DirEntry<'a>
+pub paperpaw_platform::storage::DirEntry::is_dir: bool
+pub paperpaw_platform::storage::DirEntry::name: &'a str
+pub paperpaw_platform::storage::DirEntry::size: u64
+pub struct paperpaw_platform::storage::Mounted<B, M>
+impl<B: paperpaw_platform::storage::Storage, M: paperpaw_platform::storage::Storage> paperpaw_platform::storage::Mounted<B, M>
+pub fn paperpaw_platform::storage::Mounted<B, M>::new(B, &'static str, M) -> Self
+impl<B: paperpaw_platform::storage::Storage, M: paperpaw_platform::storage::Storage> paperpaw_platform::storage::Storage for paperpaw_platform::storage::Mounted<B, M>
+pub fn paperpaw_platform::storage::Mounted<B, M>::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::exists(&self, &str) -> bool
+pub fn paperpaw_platform::storage::Mounted<B, M>::free_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::ignores_case(&self) -> bool
+pub fn paperpaw_platform::storage::Mounted<B, M>::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::Mounted<B, M>::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::rename(&self, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub struct paperpaw_platform::storage::NoStorage
+impl paperpaw_platform::storage::Storage for paperpaw_platform::storage::NoStorage
+pub fn paperpaw_platform::storage::NoStorage::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::exists(&self, &str) -> bool
+pub fn paperpaw_platform::storage::NoStorage::free_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::ignores_case(&self) -> bool
+pub fn paperpaw_platform::storage::NoStorage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::NoStorage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::rename(&self, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub trait paperpaw_platform::storage::Storage
+pub fn paperpaw_platform::storage::Storage::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Storage::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Storage::exists(&self, &str) -> bool
+pub fn paperpaw_platform::storage::Storage::free_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Storage::ignores_case(&self) -> bool
+pub fn paperpaw_platform::storage::Storage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Storage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::Storage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Storage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Storage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Storage::rename(&self, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Storage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Storage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Storage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Storage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+impl paperpaw_platform::storage::Storage for paperpaw_platform::storage::NoStorage
+pub fn paperpaw_platform::storage::NoStorage::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::exists(&self, &str) -> bool
+pub fn paperpaw_platform::storage::NoStorage::free_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::ignores_case(&self) -> bool
+pub fn paperpaw_platform::storage::NoStorage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::NoStorage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::rename(&self, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+impl<B: paperpaw_platform::storage::Storage, M: paperpaw_platform::storage::Storage> paperpaw_platform::storage::Storage for paperpaw_platform::storage::Mounted<B, M>
+pub fn paperpaw_platform::storage::Mounted<B, M>::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::exists(&self, &str) -> bool
+pub fn paperpaw_platform::storage::Mounted<B, M>::free_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::ignores_case(&self) -> bool
+pub fn paperpaw_platform::storage::Mounted<B, M>::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::Mounted<B, M>::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::rename(&self, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::is_reserved_name(&str) -> bool
+pub fn paperpaw_platform::storage::is_valid_path(&str) -> bool
+pub enum paperpaw_platform::ButtonState
+pub paperpaw_platform::ButtonState::Pressed
+pub paperpaw_platform::ButtonState::Released
+#[non_exhaustive] pub enum paperpaw_platform::InputEvent
+pub paperpaw_platform::InputEvent::Button
+pub paperpaw_platform::InputEvent::Button::name: &'static str
+pub paperpaw_platform::InputEvent::Button::state: paperpaw_platform::input::ButtonState
+pub paperpaw_platform::InputEvent::Pointer(paperpaw_platform::input::PointerEvent)
+#[non_exhaustive] pub enum paperpaw_platform::MemoryClass
+pub paperpaw_platform::MemoryClass::Large
+pub paperpaw_platform::MemoryClass::Small
+#[non_exhaustive] pub enum paperpaw_platform::PixelFormat
+pub paperpaw_platform::PixelFormat::Gray2
+pub paperpaw_platform::PixelFormat::Gray4
+pub paperpaw_platform::PixelFormat::Gray8
+pub paperpaw_platform::PixelFormat::Mono1
+pub paperpaw_platform::PixelFormat::Rgb565
+pub paperpaw_platform::PixelFormat::Rgb888
+impl paperpaw_platform::pixel::PixelFormat
+pub const fn paperpaw_platform::pixel::PixelFormat::bits_per_pixel(self) -> u8
+pub const fn paperpaw_platform::pixel::PixelFormat::gray_levels(self) -> core::option::Option<u16>
+pub const fn paperpaw_platform::pixel::PixelFormat::is_color(self) -> bool
+pub const fn paperpaw_platform::pixel::PixelFormat::stride(self, u16) -> usize
+pub enum paperpaw_platform::PointerPhase
+pub paperpaw_platform::PointerPhase::Cancel
+pub paperpaw_platform::PointerPhase::Down
+pub paperpaw_platform::PointerPhase::Move
+pub paperpaw_platform::PointerPhase::Up
+#[non_exhaustive] pub enum paperpaw_platform::PointerTool
+pub paperpaw_platform::PointerTool::Eraser
+pub paperpaw_platform::PointerTool::Finger
+pub paperpaw_platform::PointerTool::Mouse
+pub paperpaw_platform::PointerTool::Pen
+#[non_exhaustive] pub enum paperpaw_platform::RefreshMode
+pub paperpaw_platform::RefreshMode::Clear
+pub paperpaw_platform::RefreshMode::Fast
+pub paperpaw_platform::RefreshMode::Full
+pub paperpaw_platform::RefreshMode::Gray
+pub paperpaw_platform::RefreshMode::Mono
+pub paperpaw_platform::RefreshMode::Partial
+impl paperpaw_platform::display::RefreshMode
+pub fn paperpaw_platform::display::RefreshMode::cleans(self) -> bool
+pub enum paperpaw_platform::Rotation
+pub paperpaw_platform::Rotation::Deg0
+pub paperpaw_platform::Rotation::Deg180
+pub paperpaw_platform::Rotation::Deg270
+pub paperpaw_platform::Rotation::Deg90
+#[non_exhaustive] pub enum paperpaw_platform::StorageError
+pub paperpaw_platform::StorageError::Full
+pub paperpaw_platform::StorageError::InvalidData
+pub paperpaw_platform::StorageError::InvalidPath
+pub paperpaw_platform::StorageError::Io
+pub paperpaw_platform::StorageError::NotFound
+pub paperpaw_platform::StorageError::TooLarge
+pub paperpaw_platform::StorageError::Unsupported
+impl core::error::Error for paperpaw_platform::storage::StorageError
+impl core::fmt::Display for paperpaw_platform::storage::StorageError
+pub fn paperpaw_platform::storage::StorageError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+pub struct paperpaw_platform::Battery
+pub paperpaw_platform::Battery::charging: bool
+pub paperpaw_platform::Battery::millivolts: core::option::Option<u16>
+pub paperpaw_platform::Battery::percent: u8
+pub struct paperpaw_platform::Color
+pub paperpaw_platform::Color::b: u8
+pub paperpaw_platform::Color::g: u8
+pub paperpaw_platform::Color::r: u8
+impl paperpaw_platform::pixel::Color
+pub const paperpaw_platform::pixel::Color::BLACK: paperpaw_platform::pixel::Color
+pub const paperpaw_platform::pixel::Color::WHITE: paperpaw_platform::pixel::Color
+pub const fn paperpaw_platform::pixel::Color::gray(u8) -> Self
+pub const fn paperpaw_platform::pixel::Color::inverted(self) -> Self
+pub const fn paperpaw_platform::pixel::Color::luma(self) -> u8
+pub const fn paperpaw_platform::pixel::Color::rgb(u8, u8, u8) -> Self
+pub struct paperpaw_platform::ColorPanel
+pub paperpaw_platform::ColorPanel::color_divisor: u8
+pub paperpaw_platform::ColorPanel::saturation_percent: u8
+impl paperpaw_platform::display::ColorPanel
+pub fn paperpaw_platform::display::ColorPanel::boost_percent(&self) -> u16
+pub struct paperpaw_platform::DeviceInfo
+pub paperpaw_platform::DeviceInfo::display: paperpaw_platform::display::DisplayInfo
+pub paperpaw_platform::DeviceInfo::id: &'static str
+pub paperpaw_platform::DeviceInfo::input: paperpaw_platform::input::InputCaps
+pub paperpaw_platform::DeviceInfo::memory: paperpaw_platform::MemoryClass
+pub paperpaw_platform::DeviceInfo::name: &'static str
+pub struct paperpaw_platform::DirEntry<'a>
+pub paperpaw_platform::DirEntry::is_dir: bool
+pub paperpaw_platform::DirEntry::name: &'a str
+pub paperpaw_platform::DirEntry::size: u64
+pub struct paperpaw_platform::DisplayInfo
+pub paperpaw_platform::DisplayInfo::color: core::option::Option<paperpaw_platform::display::ColorPanel>
+pub paperpaw_platform::DisplayInfo::dpi: u16
+pub paperpaw_platform::DisplayInfo::format: paperpaw_platform::pixel::PixelFormat
+pub paperpaw_platform::DisplayInfo::height: u16
+pub paperpaw_platform::DisplayInfo::rotation: paperpaw_platform::display::Rotation
+pub paperpaw_platform::DisplayInfo::width: u16
+pub struct paperpaw_platform::FrameView<'a>
+pub paperpaw_platform::FrameView::data: &'a [u8]
+pub paperpaw_platform::FrameView::format: paperpaw_platform::pixel::PixelFormat
+pub paperpaw_platform::FrameView::height: u16
+pub paperpaw_platform::FrameView::stride: usize
+pub paperpaw_platform::FrameView::width: u16
+impl paperpaw_platform::display::FrameView<'_>
+pub fn paperpaw_platform::display::FrameView<'_>::pixel(&self, u16, u16) -> paperpaw_platform::pixel::Color
+pub struct paperpaw_platform::InputCaps
+pub paperpaw_platform::InputCaps::buttons: bool
+pub paperpaw_platform::InputCaps::keys: &'static [&'static str]
+pub paperpaw_platform::InputCaps::pen: bool
+pub paperpaw_platform::InputCaps::touch: bool
+pub struct paperpaw_platform::Instant(pub u64)
+impl paperpaw_platform::input::Instant
+pub const fn paperpaw_platform::input::Instant::add_millis(self, u64) -> paperpaw_platform::input::Instant
+pub const fn paperpaw_platform::input::Instant::millis(self) -> u64
+pub const fn paperpaw_platform::input::Instant::since(self, paperpaw_platform::input::Instant) -> u64
+pub struct paperpaw_platform::Mounted<B, M>
+impl<B: paperpaw_platform::storage::Storage, M: paperpaw_platform::storage::Storage> paperpaw_platform::storage::Mounted<B, M>
+pub fn paperpaw_platform::storage::Mounted<B, M>::new(B, &'static str, M) -> Self
+impl<B: paperpaw_platform::storage::Storage, M: paperpaw_platform::storage::Storage> paperpaw_platform::storage::Storage for paperpaw_platform::storage::Mounted<B, M>
+pub fn paperpaw_platform::storage::Mounted<B, M>::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::exists(&self, &str) -> bool
+pub fn paperpaw_platform::storage::Mounted<B, M>::free_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::ignores_case(&self) -> bool
+pub fn paperpaw_platform::storage::Mounted<B, M>::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::Mounted<B, M>::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::rename(&self, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub struct paperpaw_platform::NoStorage
+impl paperpaw_platform::storage::Storage for paperpaw_platform::storage::NoStorage
+pub fn paperpaw_platform::storage::NoStorage::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::exists(&self, &str) -> bool
+pub fn paperpaw_platform::storage::NoStorage::free_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::ignores_case(&self) -> bool
+pub fn paperpaw_platform::storage::NoStorage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::NoStorage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::rename(&self, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub struct paperpaw_platform::Point
+pub paperpaw_platform::Point::x: i32
+pub paperpaw_platform::Point::y: i32
+impl paperpaw_platform::geometry::Point
+pub const fn paperpaw_platform::geometry::Point::new(i32, i32) -> Self
+pub struct paperpaw_platform::PointerEvent
+pub paperpaw_platform::PointerEvent::id: u8
+pub paperpaw_platform::PointerEvent::phase: paperpaw_platform::input::PointerPhase
+pub paperpaw_platform::PointerEvent::point: paperpaw_platform::geometry::Point
+pub paperpaw_platform::PointerEvent::pressure: u16
+pub paperpaw_platform::PointerEvent::tool: paperpaw_platform::input::PointerTool
+pub struct paperpaw_platform::Rect
+pub paperpaw_platform::Rect::height: u16
+pub paperpaw_platform::Rect::width: u16
+pub paperpaw_platform::Rect::x: u16
+pub paperpaw_platform::Rect::y: u16
+impl paperpaw_platform::geometry::Rect
+pub const fn paperpaw_platform::geometry::Rect::area(&self) -> u32
+pub const fn paperpaw_platform::geometry::Rect::bottom(&self) -> u32
+pub const fn paperpaw_platform::geometry::Rect::contains(&self, paperpaw_platform::geometry::Point) -> bool
+pub const fn paperpaw_platform::geometry::Rect::from_size(u16, u16) -> Self
+pub const fn paperpaw_platform::geometry::Rect::grow(&self, u16) -> paperpaw_platform::geometry::Rect
+pub const fn paperpaw_platform::geometry::Rect::inset(&self, u16, u16) -> paperpaw_platform::geometry::Rect
+pub fn paperpaw_platform::geometry::Rect::intersection(&self, &paperpaw_platform::geometry::Rect) -> core::option::Option<paperpaw_platform::geometry::Rect>
+pub const fn paperpaw_platform::geometry::Rect::is_empty(&self) -> bool
+pub const fn paperpaw_platform::geometry::Rect::new(u16, u16, u16, u16) -> Self
+pub const fn paperpaw_platform::geometry::Rect::right(&self) -> u32
+pub fn paperpaw_platform::geometry::Rect::union(&self, &paperpaw_platform::geometry::Rect) -> paperpaw_platform::geometry::Rect
+pub struct paperpaw_platform::SystemStatus
+pub paperpaw_platform::SystemStatus::battery: core::option::Option<paperpaw_platform::status::Battery>
+pub paperpaw_platform::SystemStatus::clock: core::option::Option<paperpaw_platform::status::WallClock>
+pub struct paperpaw_platform::WallClock
+pub paperpaw_platform::WallClock::at: paperpaw_platform::input::Instant
+pub paperpaw_platform::WallClock::unix_millis: i64
+pub paperpaw_platform::WallClock::utc_offset_minutes: core::option::Option<i32>
+impl paperpaw_platform::status::WallClock
+pub fn paperpaw_platform::status::WallClock::unix_millis_at(&self, paperpaw_platform::input::Instant) -> i64
+pub trait paperpaw_platform::Display
+pub fn paperpaw_platform::Display::info(&self) -> paperpaw_platform::display::DisplayInfo
+pub fn paperpaw_platform::Display::refresh(&mut self, paperpaw_platform::display::FrameView<'_>, paperpaw_platform::geometry::Rect, paperpaw_platform::display::RefreshMode)
+pub trait paperpaw_platform::Storage
+pub fn paperpaw_platform::Storage::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::Storage::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::Storage::exists(&self, &str) -> bool
+pub fn paperpaw_platform::Storage::free_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::Storage::ignores_case(&self) -> bool
+pub fn paperpaw_platform::Storage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::Storage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::Storage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::Storage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::Storage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::Storage::rename(&self, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::Storage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::Storage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::Storage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::Storage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+impl paperpaw_platform::storage::Storage for paperpaw_platform::storage::NoStorage
+pub fn paperpaw_platform::storage::NoStorage::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::exists(&self, &str) -> bool
+pub fn paperpaw_platform::storage::NoStorage::free_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::ignores_case(&self) -> bool
+pub fn paperpaw_platform::storage::NoStorage::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::NoStorage::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::rename(&self, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::NoStorage::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::NoStorage::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+impl<B: paperpaw_platform::storage::Storage, M: paperpaw_platform::storage::Storage> paperpaw_platform::storage::Storage for paperpaw_platform::storage::Mounted<B, M>
+pub fn paperpaw_platform::storage::Mounted<B, M>::append(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::create_dir(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::exists(&self, &str) -> bool
+pub fn paperpaw_platform::storage::Mounted<B, M>::free_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::ignores_case(&self) -> bool
+pub fn paperpaw_platform::storage::Mounted<B, M>::list(&self, &str, &mut dyn core::ops::function::FnMut(paperpaw_platform::storage::DirEntry<'_>)) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::local_path(&self, &str, &mut dyn core::ops::function::FnMut(&str))
+pub fn paperpaw_platform::storage::Mounted<B, M>::read_at(&self, &str, u64, &mut [u8]) -> core::result::Result<usize, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::remove(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::remove_dir_all(&self, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::rename(&self, &str, &str) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::size(&self, &str) -> core::result::Result<u64, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::sync(&self) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
+pub fn paperpaw_platform::storage::Mounted<B, M>::total_space(&self) -> core::option::Option<u64>
+pub fn paperpaw_platform::storage::Mounted<B, M>::write(&self, &str, &[u8]) -> core::result::Result<(), paperpaw_platform::storage::StorageError>

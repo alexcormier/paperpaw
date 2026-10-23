@@ -2,7 +2,9 @@ name: Release
 
 # A tag `v1.2.3` (the workspace's version) makes a GitHub release with the
 # Android app signed with the release key and the firmware of the Xteink
-# X4, X4 Pro and X4 Classic. For each device: one image for its whole
+# X4 and X4 Pro. The X4 Classic's firmware is built too, but not part of
+# the release, as it is not yet tried on one: its files stay with the
+# workflow's run. For each device: one image for its whole
 # flash (which paperpaw.org offers for flashing in the browser) with a
 # signature file of its own, and the update file, both signed with the
 # firmware's key (the update is installed on the device); the list of the
@@ -208,7 +210,8 @@ jobs:
     runs-on: ubuntu-latest
     strategy:
       matrix:
-        # As the release step lists them.
+        # As the release step lists them, and the X4 Classic, built but
+        # not released.
         device: [x4, x4-pro, x4-classic]
     env:
       DEVICE: ${{ matrix.device }}
@@ -388,8 +391,9 @@ jobs:
           prerelease=()
           [[ "$VERSION" == 0.* || "$VERSION" == *-* ]] && prerelease=(--prerelease)
           assets=("dist/paperpaw-$VERSION.apk" "dist/paperpaw-$VERSION.apk.sha256")
-          # The devices of the firmware job.
-          for device in x4 x4-pro x4-classic; do
+          # The devices of the firmware job, but the X4 Classic, which
+          # is not yet supported.
+          for device in x4 x4-pro; do
             for part in .bin .bin.sha256 .bin.sig -update.bin -update.bin.sha256 -plugins.txt \
               -abi.txt; do
               assets+=("dist/paperpaw-$device-$VERSION$part")

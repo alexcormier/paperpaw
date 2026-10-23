@@ -76,13 +76,16 @@ jobs:
             fi
           done
           cargo semver-checks "${packages[@]}"
-      - name: The SDK's public API, and that of the crates it passes on, is each crate's api.txt
-        run: |
-          for crate in paperpaw-sdk paperpaw-config paperpaw-document paperpaw-layout \
-            paperpaw-xml paperpaw-image paperpaw-hyphen paperpaw-zip paperpaw-json paperpaw-digest; do
-            cargo "+$NIGHTLY" public-api -p "$crate" -sss > api.txt
-            diff -u "crates/$crate/api.txt" api.txt
-          done
+      - name: The public API and the shape of the types of every crate that crosses are its api.txt and shape.txt
+        # The crates of crates/paperpaw-sdk/interface/crates.txt: the SDK
+        # and every crate of PaperPaw it depends on. tools/interface.py
+        # names the nightly it builds with; it is this job's.
+        run: python3 tools/interface.py --check
+      - name: What code plugins see changes only with the plugin interface
+        # Those files, the linker script and the release's compilers, as
+        # interface.txt and interface/ keep them for native::INTERFACE
+        # (ADR 0026): any change raises it, a new item alone does not.
+        run: cargo test -p paperpaw-sdk --test interface
 
   embedded:
     name: no_std targets
@@ -253,6 +256,16 @@ jobs:
         run: python3 -m unittest discover -s tools/plugin-files
       - name: The handbook holds the SDK and PaperPaw's own plugins, without tests
         run: python3 -m unittest discover -s tools -p "test_handbook.py"
+      - name: Android takes each version over the ones before it, as the update plugin orders them
+        # The order itself against compare_versions: crates/paperpaw-sdk/tests/android_codes.rs.
+        run: |
+          for pair in "0.4.0-dev 40050" "0.5.0-beta.1 50001" "0.5.0-beta.2 50002" \
+            "0.5.0-beta.10 50010" "0.5.0-dev 50050" "0.5.0-rc.1 50051" "0.5.0 50099" \
+            "0.5.1-beta.1 50101"; do
+            set -- $pair
+            got="$(shells/android/version-code.sh "$1")"
+            [[ "$got" == "$2" ]] || { echo "::error::$1 has version code $got, not $2"; exit 1; }
+          done
 
   emulator:
     name: Emulator (${{ matrix.os }})

@@ -10,13 +10,16 @@ homepage.workspace = true
 authors.workspace = true
 categories = ["no-std", "embedded"]
 keywords = ["plugin", "loader", "relocation", "esp32", "e-reader"]
-# The linker script for plugins goes with the format (build.rs).
-include = ["src", "build.rs", "paperpaw-plugin.x", "tests"]
+# The linker script for plugins goes with the format; a plugin's project
+# keeps a copy of it (no build script, see paperpaw-plugin.x).
+include = ["src", "paperpaw-plugin.x", "tests"]
 
 [dependencies]
 paperpaw-digest.workspace = true
 # Authors' signatures (`signature`). Small code, as the firmware's.
-ed25519-compact = { version = "2.6", default-features = false, features = ["opt_size"] }
+# An exact version: its verifying state lies inside types that cross
+# between a code plugin and PaperPaw (ADR 0026).
+ed25519-compact = { version = "=2.6.0", default-features = false, features = ["opt_size"] }
 
 [lints]
 workspace = true

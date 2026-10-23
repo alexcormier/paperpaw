@@ -1,0 +1,7 @@
+# The shape of this crate's types and the values of its constants, as
+# tools/interface.py writes them: fields, variants and trait items in
+# the source's order, private fields and the private types they reach
+# too, every feature on (ADR 0026).
+const paperpaw_hyphen::BLOCK: usize = 16usize
+struct paperpaw_hyphen::InvalidPatterns
+struct paperpaw_hyphen::Patterns<'a> { data: &'a [u8], left_min: usize, right_min: usize, max_len: usize, blocks: usize, exceptions: (usize, usize) }

@@ -25,6 +25,9 @@ pub(crate) enum Refusal {
     Damaged,
     /// Its code was built for another PaperPaw or device.
     OtherBuild,
+    /// Its code is of an older plugin file's format, which an older
+    /// PaperPaw made: it needs a new build.
+    Older,
     /// Its code is not signed.
     Unsigned,
     /// Its code is signed by another key than the library names.
@@ -44,6 +47,7 @@ impl Refusal {
         match self {
             Refusal::Damaged => "store.refused.damaged",
             Refusal::OtherBuild => "store.refused.other-build",
+            Refusal::Older => "store.refused.older",
             Refusal::Unsigned => "store.refused.unsigned",
             Refusal::NotTheAuthor => "store.refused.not-the-author",
             Refusal::Unsupported => "store.refused.unsupported",
@@ -134,9 +138,16 @@ pub(crate) fn verdict(env: &Env<'_>, plugin: &str, folder: &str) -> Verdict {
     };
     let (header, signature) = match check_file(storage, &code) {
         Ok(checked) => checked,
+        Err(paperpaw_sdk::native::Problem::OlderFormat) => {
+            return Verdict::Refused(Refusal::Older);
+        }
+        Err(paperpaw_sdk::native::Problem::NewerFormat) => {
+            return Verdict::Refused(Refusal::OtherBuild);
+        }
         Err(_) => return Verdict::Refused(Refusal::Damaged),
     };
-    if header.fingerprint != native.fingerprint.0 {
+    // Of this firmware's fingerprint and compiler.
+    if !native.fits(&header) {
         return Verdict::Refused(Refusal::OtherBuild);
     }
     // Where the room for code is known, it must fit beside the others

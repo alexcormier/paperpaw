@@ -113,6 +113,7 @@ fn ppn() -> Vec<u8> {
         api: 16,
         relocs: 0,
         align: 16,
+        compiler: 1,
         sha256: [0; 32],
     };
     let mut digest = header.digest();
@@ -178,6 +179,17 @@ impl Computer {
     fn request(&mut self, method: &str, target: &str, body: &[u8]) -> (u16, String) {
         let n = self.next;
         self.next += 1;
+        self.request_numbered(n, method, target, body)
+    }
+
+    /// The same, numbered `n` by the computer.
+    fn request_numbered(
+        &mut self,
+        n: u32,
+        method: &str,
+        target: &str,
+        body: &[u8],
+    ) -> (u16, String) {
         self.line(&format!("PPT/1 {n} {method} {target} {}", body.len()));
         for part in body.chunks(512) {
             let hex: String = part.iter().map(|b| format!("{b:02x}")).collect();
@@ -489,7 +501,7 @@ fn an_answer_counts_for_its_offer_only() {
 fn files_sent_before_an_offer_are_let_go() {
     let storage = Shared::default();
     storage
-        .write("plugins/.airy.local/code.ppn", b"not offered")
+        .write("plugins/.airy.cable/code.ppn", b"not offered")
         .unwrap();
     let mut computer = Computer::new(storage);
     let offer = format!(
@@ -501,5 +513,170 @@ fn files_sent_before_an_offer_are_let_go() {
         computer.request("POST", "/api/offer", offer.as_bytes()).0,
         202
     );
-    assert!(!computer.storage.exists("plugins/.airy.local/code.ppn"));
+    assert!(!computer.storage.exists("plugins/.airy.cable/code.ppn"));
+}
+
+/// What is installed is what was offered, checked when it is installed:
+/// a file changed in the plugin's folder after it came (another way of
+/// sending, say), or one put beside it, is not installed.
+#[test]
+fn only_files_as_offered_are_installed() {
+    for (name, change) in [
+        ("plugin.ini", INI.replace("Airy", "Other")),
+        (
+            "extra.ini",
+            String::from(
+                "[x]
+",
+            ),
+        ),
+    ] {
+        let mut computer = Computer::new(Shared::default());
+        let offer = format!(
+            "plugin airy
+plugin.ini {} {}
+",
+            INI.len(),
+            sha(INI.as_bytes())
+        );
+        assert_eq!(
+            computer.request("POST", "/api/offer", offer.as_bytes()).0,
+            202
+        );
+        computer.allow(true);
+        assert_eq!(
+            computer.put_plugin("airy", "plugin.ini", INI.as_bytes()),
+            200
+        );
+        computer
+            .storage
+            .write(&format!("plugins/.airy.cable/{name}"), change.as_bytes())
+            .unwrap();
+        let (status, body) = computer.request("POST", "/api/plugin/airy", b"");
+        assert_eq!(
+            (status, body.as_str()),
+            (422, r#"{"why":"not as offered"}"#),
+            "{name}"
+        );
+        assert!(computer.kernel.plugins().get("airy").is_none(), "{name}");
+    }
+}
+
+/// The cable and the Wi-Fi transfer never send the same plugin at once:
+/// an offer of a plugin the open Wi-Fi transfer is being sent waits.
+#[test]
+fn a_plugin_sent_over_wifi_is_not_offered_over_the_cable_meanwhile() {
+    let storage = Shared::default();
+    storage
+        .write("plugins/.airy.local/plugin.ini", INI.as_bytes())
+        .unwrap();
+    let mut computer = Computer::new(storage);
+    computer.now += 100;
+    let effects = computer.kernel.open_screen(
+        Instant(computer.now),
+        paperpaw_sdk::Id::new_static("transfer.screen"),
+        paperpaw_sdk::Params::new(),
+    );
+    computer.settle(effects);
+    let offer = format!(
+        "plugin airy\nplugin.ini {} {}\n",
+        INI.len(),
+        sha(INI.as_bytes())
+    );
+    let (status, body) = computer.request("POST", "/api/offer", offer.as_bytes());
+    assert_eq!(
+        (status, body.as_str()),
+        (409, r#"{"why":"being sent over Wi-Fi"}"#)
+    );
+    // Its files there are left as they are.
+    assert!(computer.storage.exists("plugins/.airy.local/plugin.ini"));
+}
+
+/// A request given the number of one whose body was still coming takes
+/// its place: the new one is answered, and the cut one's body goes.
+#[test]
+fn a_number_given_again_ends_the_request_before_only() {
+    let mut computer = Computer::new(Shared::default());
+    computer.line("PPT/1 50 PUT /api/book/a.epub 10");
+    computer.line("PPT/1 50 data 6162636465");
+    let (status, body) = computer.request_numbered(50, "GET", "/api/hello", b"");
+    assert_eq!(status, 200, "{body}");
+    assert!(body.contains("\"protocol\":1"), "{body}");
+    assert_eq!(computer.files_below(".paperpaw/tmp"), 0);
+}
+
+/// Long offers are read a line at a time: a plugin and many books are
+/// asked about at once, but not more books than an offer may hold (the
+/// others go in the offers after), nor more files than a plugin may have.
+#[test]
+fn long_offers_are_read_in_parts() {
+    let mut computer = Computer::new(Shared::default());
+    let z = "0".repeat(64);
+    let files: String = (0..64).map(|n| format!("f{n}.ini 10 {z}\n")).collect();
+    let books: String = (0..64)
+        .map(|n| format!("book A book with a long name, number {n}.epub 10 {z}\n"))
+        .collect();
+    let offer = format!("plugin airy\n{files}{books}");
+    assert!(offer.len() > 8 * 1024);
+    assert_eq!(
+        computer.request("POST", "/api/offer", offer.as_bytes()).0,
+        202
+    );
+    // Offered here: the Wi-Fi transfer leaves it alone meanwhile.
+    let offered = ".paperpaw/plugins/transfer/cable-offer.txt";
+    assert!(computer.storage.exists(offered));
+    computer.allow(false);
+    assert!(!computer.storage.exists(offered));
+
+    let too_many: String = (0..65)
+        .map(|n| format!("book b{n}.epub 10 {z}\n"))
+        .collect();
+    assert_eq!(
+        computer
+            .request("POST", "/api/offer", too_many.as_bytes())
+            .0,
+        400
+    );
+    let files: String = (0..65).map(|n| format!("f{n}.ini 10 {z}\n")).collect();
+    let plugin = format!("plugin airy\n{files}");
+    assert_eq!(
+        computer.request("POST", "/api/offer", plugin.as_bytes()).0,
+        400
+    );
+}
+
+/// Only closing the question refuses: a screen shown over it (another
+/// dialog, a menu) does not.
+#[test]
+fn a_screen_over_the_question_does_not_refuse() {
+    let mut computer = Computer::new(Shared::default());
+    let book = b"a book";
+    let offer = format!("book a.epub {} {}\n", book.len(), sha(book));
+    assert_eq!(
+        computer.request("POST", "/api/offer", offer.as_bytes()).0,
+        202
+    );
+    computer.now += 100;
+    const CHOSEN: paperpaw_sdk::event::Event<paperpaw_sdk::ui::choice::Picked> =
+        paperpaw_sdk::event::Event::new("test.chosen");
+    let ask = paperpaw_sdk::ask::choice("Which?", &CHOSEN)
+        .options("test.", &["a", "b"])
+        .command();
+    let paperpaw_sdk::Command::OpenSlot(slot, params) = ask else {
+        panic!("{ask:?}");
+    };
+    let effects = computer
+        .kernel
+        .open_slot(Instant(computer.now), slot, params);
+    computer.settle(effects);
+    let shown: Vec<String> = computer.kernel.screens().map(|s| s.to_string()).collect();
+    assert_eq!(shown.last().map(String::as_str), Some("core.choice-dialog"));
+    let state = |c: &mut Computer| c.request("GET", "/api/offer", b"").1;
+    assert_eq!(state(&mut computer), r#"{"state":"asking"}"#);
+    // The one over it closes: still asking.
+    computer.press(actions::BACK);
+    assert_eq!(state(&mut computer), r#"{"state":"asking"}"#);
+    // The question closes without an answer: refused.
+    computer.press(actions::BACK);
+    assert_eq!(state(&mut computer), r#"{"state":"refused"}"#);
 }

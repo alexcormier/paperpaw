@@ -10,8 +10,8 @@ use crate::signature::Signature;
 
 /// A plugin file's first bytes.
 pub const MAGIC: [u8; 4] = *b"PPNP";
-/// The format this crate reads and writes.
-pub const FORMAT: u16 = 1;
+/// The format this crate reads and writes: 2 names the compiler.
+pub const FORMAT: u16 = 2;
 /// The header's length.
 pub const HEADER_LEN: usize = 80;
 /// The bytes of the header its digest covers (all before the digest).
@@ -76,6 +76,9 @@ pub enum Problem {
     NotAPlugin,
     /// It is a plugin file of a newer format than this one reads.
     NewerFormat,
+    /// It is a plugin file of an older format, which does not say its
+    /// compiler: it needs a new build.
+    OlderFormat,
     /// It is made for a chip this crate does not know.
     UnknownChip,
     /// Its header does not hold together.
@@ -95,6 +98,7 @@ impl fmt::Display for Problem {
         f.write_str(match self {
             Problem::NotAPlugin => "not a plugin file",
             Problem::NewerFormat => "a plugin file of a newer format",
+            Problem::OlderFormat => "a plugin file of an older format, to be built anew",
             Problem::UnknownChip => "made for an unknown chip",
             Problem::Malformed => "its header does not hold together",
             Problem::Length => "not as long as it says",
@@ -128,6 +132,9 @@ pub struct Header {
     pub relocs: u32,
     /// What the image's address must be a multiple of.
     pub align: u32,
+    /// The compiler it was built with ([`compiler::id`](crate::compiler::id)
+    /// of its release).
+    pub compiler: u32,
     /// SHA-256 of the header's first 48 bytes and of all after the header
     /// (see [`Header::digest`]).
     pub sha256: [u8; 32],
@@ -147,8 +154,10 @@ impl Header {
         if bytes[..4] != MAGIC {
             return Err(Problem::NotAPlugin);
         }
-        if le16(bytes, 4) != FORMAT {
-            return Err(Problem::NewerFormat);
+        match le16(bytes, 4) {
+            FORMAT => {}
+            format if format < FORMAT => return Err(Problem::OlderFormat),
+            _ => return Err(Problem::NewerFormat),
         }
         let chip = Chip::from_id(le16(bytes, 6)).ok_or(Problem::UnknownChip)?;
         let mut sha256 = [0; 32];
@@ -163,9 +172,10 @@ impl Header {
             api: le32(bytes, 32),
             relocs: le32(bytes, 36),
             align: le32(bytes, 40),
+            compiler: le32(bytes, 44),
             sha256,
         };
-        if le32(bytes, 44) != 0 || !header.holds_together() {
+        if header.compiler == 0 || !header.holds_together() {
             return Err(Problem::Malformed);
         }
         Ok(header)
@@ -225,6 +235,7 @@ impl Header {
             self.api,
             self.relocs,
             self.align,
+            self.compiler,
         ]
         .into_iter()
         .enumerate()
@@ -344,6 +355,7 @@ pub(crate) mod tests {
             api: 16,
             relocs,
             align: 16,
+            compiler: crate::compiler::id("1.99.0 (b940084d7 2026-09-28)"),
             sha256: [0; 32],
         }
     }
@@ -381,8 +393,11 @@ pub(crate) mod tests {
         assert_eq!(Header::read(b"PPNP\x01\x00"), Err(Problem::Length));
         assert_eq!(Header::read(b""), Err(Problem::Length));
         let mut newer = file();
-        newer[4] = 2;
+        newer[4] = 3;
         assert_eq!(Header::read(&newer), Err(Problem::NewerFormat));
+        let mut older = file();
+        older[4] = 1;
+        assert_eq!(Header::read(&older), Err(Problem::OlderFormat));
         let mut chip = file();
         chip[6] = 7;
         assert_eq!(Header::read(&chip), Err(Problem::UnknownChip));
@@ -436,9 +451,12 @@ pub(crate) mod tests {
                 "{header:?}"
             );
         }
-        let mut reserved = good.to_bytes();
-        reserved[44] = 1;
-        assert_eq!(Header::read(&reserved), Err(Problem::Malformed));
+        // No compiler named.
+        let unnamed = Header {
+            compiler: 0,
+            ..good
+        };
+        assert_eq!(Header::read(&unnamed.to_bytes()), Err(Problem::Malformed));
     }
 
     #[test]

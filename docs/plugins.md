@@ -455,9 +455,9 @@ device: see [Checking your plugin](#checking-your-plugin).
 
 `paperpaw-dev` ([`tools/dev`](../tools/dev/src/lib.rs)) looks at a
 plugin the way its users will meet it, before it is published. It runs
-PaperPaw's standard app with the plugin added on emulated devices (the
-emulator's profiles: the X4, X4 Pro and the Boox among them by
-default), draws everything the plugin adds and checks it. It finds what
+PaperPaw's standard app with the plugin added on emulated devices (by default
+the X4, X4 Pro and Boox profiles), draws everything the plugin adds and
+checks it. It finds what
 is easy to miss on one's own device: a label that fits in English but not
 in German, a widget that spills out of its cell at 1x1, a screen that
 cannot be left with the X4's buttons, a frame that reads the card in
@@ -502,7 +502,7 @@ the default look. `--set <id>=<value>` sets a setting for every run.
 |---|---|
 | `gallery` | Contact sheets: every screen the plugin adds and every widget in every size it can take, in every variant, as HTML pages (`gallery/index.html`) and one PNG sheet a plugin and device. |
 | `visual` | What is drawn, checked: text cut at its box or the screen (`visual.text-cut`), shortened (`visual.ellipsis`) or broken where it should not be (`visual.wrap`); ink outside a widget's cell (`visual.outside-cell`) or the screen (`visual.off-screen`); parts over each other (`visual.overlap`); margins off the interface's (`visual.margin`) and rows out of line (`visual.align`); labels and icons off centre by their ink (`visual.ink-centre`); touch targets under 7 mm (`visual.touch-target`); buttons without the room around them (`visual.button-room`); a focus that does not show with buttons (`visual.focus`); text that dithers away on black and white or is too light on grays (`visual.contrast`). |
-| `lint` | Texts and ids: translations missing or left over, placeholders and plural forms; keys shown as they are because English has no text for them (`lint.missing-key`); settings without help (`lint.setting-help`); plugins with code that say nothing or little of how they work (`lint.how-it-works`); ids outside the plugin's namespace; dashes (`lint.dash`); and in the pseudo-language, text that fits in English but not once it is longer (`lint.pseudo-overflow`) and text drawn without going through the catalogs (`lint.hardcoded`). |
+| `lint` | Texts and ids: translations missing or left over, placeholders and plural forms; keys shown as they are because English has no text for them (`lint.missing-key`); settings without help (`lint.setting-help`); setting groups without an order or an icon (`settings.group-order`, `settings.group-icon`), and a widget's settings in a group of the main page rather than the widget's own (`settings.widget-group`); plugins with code that say nothing or little of how they work (`lint.how-it-works`); ids outside the plugin's namespace; dashes (`lint.dash`); and in the pseudo-language, text that fits in English but not once it is longer (`lint.pseudo-overflow`) and text drawn without going through the catalogs (`lint.hardcoded`). |
 | `reach` | With buttons alone: every screen the plugin adds can be reached from the home screen (`reach.unreachable`) and closed with *Back* (`reach.no-close`), the focus visits every row and button (`reach.focus-skips`) and does not get stuck (`reach.focus-trap`); a screen whose focus moves but which tells nothing of its rows (`reach.undescribed`). |
 | `explore` | A cheap baseline beside the flows: every target of every screen the plugin adds (at most 20 a screen, 200 a device) used once, each from a fresh start, by touch or with the buttons; then the home screen must be reached again. A panic, an allocation the device would refuse or no way back home is an error (`explore.failed`). |
 | `perf` | Budgets on the X4: storage read while drawing (`perf.draw-io`, the rule of `crates/paperpaw-app/tests/draw.rs`), the heap a screen takes against what the X4 has free (`perf.heap`), heap kept after it closes (`perf.leak`), frames estimated slow on an X4 (`perf.frame-time`), many reads before the first frame (`perf.open-io`); the top costs in `perf/index.html`. |
@@ -632,7 +632,7 @@ as the run's artifact, also when a check failed.
 | Menu entries and sections | `add_menu_entry`, `add_menu_section`, `place_menu_entry`, `hide_menu_entry` | Actions, settings and submenus in any menu, by order or beside other entries (`MenuPlace`: after, before, in a section, first, last); another plugin's entry taken out. A menu the user redefined shows entries added later too |
 | What entries show now | `set_item_state`, `describe_item` | A label, a switch, faint, hidden or a badge of the plugin's own entries as things are now (`ItemState`); a line under an entry |
 | Icons | `add_icon` | The icon of an action, setting group or menu; of a semantic icon (`icons::BACK`, `NEXT`, `SHIFT`, …) for a theme; `U+F8000` names a code point of one's own |
-| Settings and groups | `add_setting`, `add_setting_group` | Shown and saved by the kernel |
+| Settings and groups | `add_setting`, `add_setting_group` | Shown and saved by the kernel. A group names its order in the sections of the main page (`SettingGroupSpec::order`: books 1 to 49, the device 51 to 199, customising from 201) and an icon (`add_icon` with its id); one that names no order is listed at the end of customising, by name, with a plugin's icon |
 | Setting defaults | `set_setting_default` | New defaults for other plugins' settings (themes) |
 | Event handlers | `on`, `subscribe` | React to events |
 | Key maps | `add_keymap`, `add_keymap_preset`, `add_keymap_when` | What buttons, taps and swipes do; bindings that apply while a switch is on |
@@ -912,14 +912,16 @@ if let Some(weather) = env.services.get::<Box<dyn Weather>>(WEATHER.as_str()) {
 }
 ```
 
-A service is found by its type's name too. A native code plugin built
-apart from the firmware finds it, as long as its fingerprint is the
-firmware's (see *Plugins as files* below). When the type of a service
-changes, give it a new id (`weather.forecast-2`). A service that such
-plugins must find safely implements `services::ServiceType`, a key like
-`"weather.forecast/1"`. Publish it with
-`r.provide(id, service, version)`, and find it with
-`env.services.get_typed` or `get_versioned`. Its size and alignment are then checked.
+A service is found by its type's name too, so native code plugins built
+apart from the firmware find it (see *Plugins as files* below), but only
+where the type is made of the SDK's crates, `core` and `alloc` alone
+(`native::CROSSING_CRATES`), whose types the plugin interface keeps as
+they are. A type of a plugin's own crate may be another type of the
+same name in another build, so a service of one implements
+`services::ServiceType`, a key like `"weather.forecast/1"`, raised when
+the type changes. Publish it with `r.provide(id, service, version)`, and
+find it with `env.services.get_typed` or `get_versioned`; its size and
+alignment are then checked.
 
 A point is an id a plugin names, with what a contribution there is in
 its documentation (for example one line per entry); others add to it
@@ -1421,9 +1423,11 @@ paperpaw_sdk::plugin!(my_plugin::MyPlugin::default());
 
 `plugin!` gives the file its entry, its heap (the kernel's: what the
 plugin boxes, the kernel may drop) and its panic handler. The crate's
-`.cargo/config.toml` links it as a plugin: copy the sample's, which
-links with `paperpaw-plugin.x` (the SDK brings it), keeps the
-relocations, and on the X4 builds with the medium code model and frame
+`.cargo/config.toml` links it as a plugin: copy the sample's, and the
+sample's `paperpaw-plugin.x` beside it at the top of the project (the
+PaperPaw release's own, from `paperpaw-native`; no build script brings
+it, so a build on Windows is the same as one on Linux). It links with
+it, keeps the relocations, and on the X4 builds with the medium code model and frame
 pointers. It also sets `--cfg paperpaw_plugin`, with which the SDK asks
 the firmware for what it has already instead of copying it into the
 file (the names of all icons, some 125 KB in a plugin that draws an icon
@@ -1444,16 +1448,26 @@ them, `cargo +esp x4pro` finds no `core`.
 
 ### Which build fits
 
-Until PaperPaw 1.0 a plugin file runs only on the PaperPaw it was built
-for: the same compiler for the same chip from the same SDK with the same
-features (but `kernel` and `unstable`, which only add functions). Its
-fingerprint says so, and a device loads only files with its own;
-*About* shows the device's fingerprint and the compiler to build with.
-Build against the SDK of the release (`paperpaw-sdk = "0.4"`) with the
-toolchain that release names, and build again for every release, until
-1.0: the fingerprint holds the SDK's version, so a release loads no file
-built for another. The
-store and the update check show which plugins wait for a build.
+A plugin file runs on every PaperPaw of the plugin interface it was
+built for ([ADR 0026](adr/0026-plugin-interface-version.md)),
+whichever release made it: its fingerprint holds the interface's
+version (`native::INTERFACE`, in its top 16 bits), the chip and the
+features that change what crosses (`outline`, colour), and a digest of
+the layouts of the types that cross. A device loads only files with its
+own fingerprint; *About* shows it and the compiler to build with, and
+`paperpaw-sign plugin` names a file's interface.
+
+**When to rebuild:** when a release raises the plugin interface (its
+release notes say so, and so does the plugin manager on the reader:
+*Built for another plugin interface*), and only then. Build with the
+toolchain the release names (the sample's `rust-toolchain.toml`, and
+espup's of `versions.env` for the X4 Pro): until 1.0 a new compiler is a
+new interface. The file names the compiler that built it:
+`paperpaw-sign pack` takes it from the plugin's `.comment`, which the
+format's linker script keeps, and a device loads the file only where
+that compiler built the firmware too. A beta or a release that keeps
+the interface runs the plugin as it is. The store and the update check
+show which plugins wait for a build.
 
 ### The file in the emulator
 
@@ -1508,6 +1522,11 @@ plugins/my-plugin/
   i18n/*.ini     translations, settings.ini, … as for data plugins
 ```
 
+`plugin.ini`'s version is the plugin's: the store, the installer and
+updates go by it, and the device shows it. The code's manifest must name
+the same version (`paperpaw-dev package` with the folder and `--plugin`
+says where it does not).
+
 Send the folder from a computer and say yes on the device
 (`python tools/usb-transfer.py install my-plugin`, or the Wi-Fi
 transfer); it is loaded at once. A firmware built for development also
@@ -1543,8 +1562,9 @@ though the plugin itself is a screen, an action and a setting.
 - Keep translations and other text in the folder's files rather than in
   the code, where they are needed once.
 
-Services between plugins are found by their type's name too, so a plugin
-built apart finds those of the firmware's plugins (see [Services and
+Services between plugins are found by their type's name too where the
+type is the SDK's, so a plugin built apart finds those of the firmware's
+plugins; one of a plugin's own type needs a contract (see [Services and
 points of your own](#services-and-points-of-your-own)).
 
 ### Publishing a code plugin

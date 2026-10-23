@@ -1502,6 +1502,7 @@ pub fn paperpaw_sdk::firmware::Update::may_install(&self, &paperpaw_sdk::firmwar
 pub fn paperpaw_sdk::firmware::Update::read(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<Self, paperpaw_sdk::firmware::InstallFailure>
 pub fn paperpaw_sdk::firmware::Update::signer(&self, &paperpaw_sdk::firmware::Firmware) -> paperpaw_sdk::firmware::Signer
 pub const paperpaw_sdk::firmware::UPDATE_DIR: &str
+pub fn paperpaw_sdk::firmware::beta(&str) -> core::option::Option<(&str, &str)>
 pub fn paperpaw_sdk::firmware::compare_versions(&str, &str) -> core::cmp::Ordering
 pub mod paperpaw_sdk::help
 pub enum paperpaw_sdk::help::Input
@@ -1625,6 +1626,7 @@ pub paperpaw_sdk::install::local::Committed::plugin: alloc::string::String
 pub struct paperpaw_sdk::install::local::Staging
 impl paperpaw_sdk::install::local::Staging
 pub fn paperpaw_sdk::install::local::Staging::abort(&self, &dyn paperpaw_platform::storage::Storage)
+pub fn paperpaw_sdk::install::local::Staging::apart(&str, &'static str) -> core::option::Option<Self>
 pub fn paperpaw_sdk::install::local::Staging::code(&self, &dyn paperpaw_platform::storage::Storage) -> core::option::Option<[u8; 32]>
 pub fn paperpaw_sdk::install::local::Staging::commit(&self, &paperpaw_sdk::Env<'_>, paperpaw_sdk::install::local::Commit, &mut alloc::vec::Vec<paperpaw_sdk::Command>) -> core::result::Result<paperpaw_sdk::install::local::Committed, paperpaw_sdk::install::local::Refusal>
 pub fn paperpaw_sdk::install::local::Staging::files(&self, &dyn paperpaw_platform::storage::Storage) -> alloc::vec::Vec<alloc::string::String>
@@ -1678,6 +1680,7 @@ pub struct paperpaw_sdk::install::Origins
 impl paperpaw_sdk::install::Origins
 pub fn paperpaw_sdk::install::Origins::of(&self, &str, paperpaw_sdk::Version) -> paperpaw_sdk::install::Origin
 pub fn paperpaw_sdk::install::Origins::read(&dyn paperpaw_platform::storage::Storage) -> Self
+pub fn paperpaw_sdk::install::Origins::release(&self, &str, paperpaw_sdk::Version) -> core::option::Option<&str>
 #[non_exhaustive] pub struct paperpaw_sdk::install::Package
 pub paperpaw_sdk::install::Package::files: alloc::vec::Vec<paperpaw_sdk::install::PackageFile>
 pub paperpaw_sdk::install::Package::name: alloc::string::String
@@ -1705,12 +1708,13 @@ pub paperpaw_sdk::install::Progress::total: usize
 pub const paperpaw_sdk::install::MAX_FILES: usize
 pub fn paperpaw_sdk::install::adopt(&paperpaw_sdk::Env<'_>) -> bool
 pub fn paperpaw_sdk::install::fits(&str, u32) -> bool
+pub fn paperpaw_sdk::install::folder_release(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<alloc::string::String>
 pub fn paperpaw_sdk::install::folder_version(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_sdk::Version>
 pub fn paperpaw_sdk::install::forget_store_install(&dyn paperpaw_platform::storage::Storage, &str) -> bool
 pub fn paperpaw_sdk::install::is_plugin_name(&str) -> bool
 pub fn paperpaw_sdk::install::is_safe_path(&str) -> bool
 pub fn paperpaw_sdk::install::origin(&dyn paperpaw_platform::storage::Storage, &str, paperpaw_sdk::Version) -> paperpaw_sdk::install::Origin
-pub fn paperpaw_sdk::install::remember_store_install(&dyn paperpaw_platform::storage::Storage, &str, paperpaw_sdk::Version) -> bool
+pub fn paperpaw_sdk::install::remember_store_install(&dyn paperpaw_platform::storage::Storage, &str, impl core::fmt::Display) -> bool
 pub mod paperpaw_sdk::json
 pub use paperpaw_sdk::json::Value
 pub use paperpaw_sdk::json::number
@@ -2324,6 +2328,7 @@ pub use paperpaw_sdk::native::HEADER_LEN
 pub use paperpaw_sdk::native::Header
 pub use paperpaw_sdk::native::Problem
 pub use paperpaw_sdk::native::Signature
+pub use paperpaw_sdk::native::compiler
 pub use paperpaw_sdk::native::signature
 #[non_exhaustive] pub enum paperpaw_sdk::native::Author
 pub paperpaw_sdk::native::Author::Known
@@ -2353,16 +2358,21 @@ pub fn paperpaw_sdk::native::CodeRoom::shared(self) -> Self
 pub fn paperpaw_sdk::native::CodeRoom::with_plugins(self, u32, core::option::Option<u32>) -> Self
 pub struct paperpaw_sdk::native::Fingerprint(pub u64)
 impl paperpaw_sdk::native::Fingerprint
+pub const fn paperpaw_sdk::native::Fingerprint::interface(self) -> u16
+pub fn paperpaw_sdk::native::Fingerprint::misfit(self) -> core::option::Option<alloc::string::String>
+pub const fn paperpaw_sdk::native::Fingerprint::of(u16, u64) -> paperpaw_sdk::native::Fingerprint
 pub fn paperpaw_sdk::native::Fingerprint::parse(&str) -> core::option::Option<paperpaw_sdk::native::Fingerprint>
 impl core::fmt::Display for paperpaw_sdk::native::Fingerprint
 pub fn paperpaw_sdk::native::Fingerprint::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 #[non_exhaustive] pub struct paperpaw_sdk::native::Native
+pub paperpaw_sdk::native::Native::compiler: u32
 pub paperpaw_sdk::native::Native::file: alloc::borrow::Cow<'static, str>
 pub paperpaw_sdk::native::Native::fingerprint: paperpaw_sdk::native::Fingerprint
 pub paperpaw_sdk::native::Native::not_installed: alloc::vec::Vec<paperpaw_sdk::native::NotInstalled>
 pub paperpaw_sdk::native::Native::safe_mode: core::option::Option<paperpaw_sdk::native::SafeMode>
 pub paperpaw_sdk::native::Native::toolchain: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::native::Native
+pub fn paperpaw_sdk::native::Native::fits(&self, &paperpaw_native::header::Header) -> bool
 pub fn paperpaw_sdk::native::Native::new(impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> Self
 pub fn paperpaw_sdk::native::Native::path(&self, &str) -> alloc::string::String
 #[non_exhaustive] pub struct paperpaw_sdk::native::NotInstalled
@@ -2378,7 +2388,10 @@ pub paperpaw_sdk::native::SafeMode::switched_off: alloc::vec::Vec<paperpaw_sdk::
 impl paperpaw_sdk::native::SafeMode
 pub fn paperpaw_sdk::native::SafeMode::new(paperpaw_sdk::native::SafeModeReason) -> Self
 pub const paperpaw_sdk::native::CODE_FILES: &[&str]
+pub const paperpaw_sdk::native::CROSSING_CRATES: &[&str]
 pub const paperpaw_sdk::native::FINGERPRINT: paperpaw_sdk::native::Fingerprint
+pub const paperpaw_sdk::native::INTERFACE: u16
+pub const paperpaw_sdk::native::LAYOUT: u64
 pub const paperpaw_sdk::native::TOOLCHAIN: &str
 pub fn paperpaw_sdk::native::author(&dyn paperpaw_platform::storage::Storage, &str, &[u8; 32]) -> paperpaw_sdk::native::Author
 pub fn paperpaw_sdk::native::check_file(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<(paperpaw_native::header::Header, core::option::Option<paperpaw_native::signature::Signature>), paperpaw_native::header::Problem>

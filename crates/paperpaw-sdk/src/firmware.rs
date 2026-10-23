@@ -253,10 +253,20 @@ fn read_exact(
     }
 }
 
+/// The release and the number of a beta (`0.5.0-beta.2` is `0.5.0` and
+/// `2`), for showing it as one; none for any other version, a release or
+/// another pre-release (`0.5.0-dev`).
+pub fn beta(version: &str) -> Option<(&str, &str)> {
+    let version = version.split('+').next()?;
+    let (release, pre) = version.split_once('-')?;
+    let number = pre.strip_prefix("beta.")?;
+    (!number.is_empty() && number.bytes().all(|b| b.is_ascii_digit())).then_some((release, number))
+}
+
 /// Compares versions such as `0.4.0` and `0.10.1` number by number; a
 /// pre-release such as `0.4.0-dev` comes before its release, and
 /// pre-releases are ordered as SemVer orders them (`rc.9` before
-/// `rc.10`).
+/// `rc.10`, `beta.2` before `beta.10`).
 pub fn compare_versions(a: &str, b: &str) -> Ordering {
     /// The numbers, and the pre-release if there is one; build metadata
     /// left out.
@@ -445,5 +455,42 @@ mod tests {
             compare_versions("0.5.0-rc.007", "0.5.0-rc.7"),
             Ordering::Equal
         );
+    }
+
+    /// The betas before a release: each after the one before, by number,
+    /// and the release after all of them; never one back.
+    #[test]
+    fn betas_come_in_order_and_before_their_release() {
+        let order = [
+            "0.4.0",
+            "0.5.0-beta.1",
+            "0.5.0-beta.2",
+            "0.5.0-beta.10",
+            "0.5.0",
+            "0.5.1-beta.1",
+        ];
+        for (i, a) in order.iter().enumerate() {
+            for (j, b) in order.iter().enumerate() {
+                assert_eq!(compare_versions(a, b), i.cmp(&j), "{a} and {b}");
+            }
+        }
+        // As SemVer orders words: a build in work named `-dev` comes after
+        // the betas of its release, before the release.
+        assert_eq!(
+            compare_versions("0.5.0-dev", "0.5.0-beta.10"),
+            Ordering::Greater
+        );
+        assert_eq!(compare_versions("0.5.0-dev", "0.5.0"), Ordering::Less);
+        assert_eq!(beta("0.5.0-beta.10"), Some(("0.5.0", "10")));
+        assert_eq!(beta("0.5.0-beta.2+x4"), Some(("0.5.0", "2")));
+        for none in [
+            "0.5.0",
+            "0.5.0-dev",
+            "0.5.0-beta",
+            "0.5.0-beta.x",
+            "0.5.0-rc.1",
+        ] {
+            assert_eq!(beta(none), None, "{none}");
+        }
     }
 }

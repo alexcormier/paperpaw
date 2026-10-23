@@ -1,0 +1,24 @@
+pub mod paperpaw_xml
+pub enum paperpaw_xml::Token<'a>
+pub paperpaw_xml::Token::CData(&'a str)
+pub paperpaw_xml::Token::End
+pub paperpaw_xml::Token::End::name: &'a str
+pub paperpaw_xml::Token::Start
+pub paperpaw_xml::Token::Start::attrs: paperpaw_xml::Attrs<'a>
+pub paperpaw_xml::Token::Start::name: &'a str
+pub paperpaw_xml::Token::Start::self_closing: bool
+pub paperpaw_xml::Token::Text(alloc::borrow::Cow<'a, str>)
+pub struct paperpaw_xml::Attrs<'a>(_)
+impl<'a> paperpaw_xml::Attrs<'a>
+pub fn paperpaw_xml::Attrs<'a>::get(&self, &str) -> core::option::Option<alloc::borrow::Cow<'a, str>>
+pub fn paperpaw_xml::Attrs<'a>::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = (&'a str, &'a str)>
+pub struct paperpaw_xml::Tokenizer
+impl paperpaw_xml::Tokenizer
+pub fn paperpaw_xml::Tokenizer::feed(&mut self, &[u8], &mut dyn core::ops::function::FnMut(paperpaw_xml::Token<'_>))
+pub fn paperpaw_xml::Tokenizer::finish(&mut self, &mut dyn core::ops::function::FnMut(paperpaw_xml::Token<'_>))
+pub fn paperpaw_xml::Tokenizer::html() -> Self
+pub fn paperpaw_xml::Tokenizer::new() -> Self
+pub fn paperpaw_xml::Tokenizer::parse(&[u8], &mut dyn core::ops::function::FnMut(paperpaw_xml::Token<'_>))
+pub fn paperpaw_xml::decode(&str) -> alloc::borrow::Cow<'_, str>
+pub fn paperpaw_xml::escape(&str, &mut alloc::string::String)
+pub fn paperpaw_xml::local_name(&str) -> &str

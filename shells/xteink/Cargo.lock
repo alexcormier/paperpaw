@@ -2374,8 +2374,10 @@ dependencies = [
 name = "paperpaw-text"
 version = "0.4.0-dev"
 dependencies = [
+ "font-types",
  "paperpaw-graphics",
  "paperpaw-platform",
+ "read-fonts",
  "skrifa",
 ]
 

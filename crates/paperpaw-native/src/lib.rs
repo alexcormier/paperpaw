@@ -17,9 +17,9 @@
 //! | Bytes | What |
 //! |-------|------|
 //! | 0..4 | `PPNP` |
-//! | 4..6 | the format, 1 |
+//! | 4..6 | the format, 2 |
 //! | 6..8 | the chip ([`Chip`]: 5 the ESP32-C3 of the X4, 9 the ESP32-S3 of the X4 Pro) |
-//! | 8..16 | the fingerprint: the compiler, target and SDK it was built with (the SDK's `native::FINGERPRINT`) |
+//! | 8..16 | the fingerprint: the plugin interface, the chip and the layouts it was built for (the SDK's `native::FINGERPRINT`) |
 //! | 16..20 | `base`: the data address the image is linked at |
 //! | 20..24 | `image_len`: the image's bytes |
 //! | 24..28 | `code_at`: where the code begins in the image |
@@ -27,7 +27,7 @@
 //! | 32..36 | `api`: the word in the image the loader writes the address of the firmware's [`Api`] into |
 //! | 36..40 | `relocs`: how many words are to relocate |
 //! | 40..44 | `align`: what the image's address must be a multiple of (4 to 4096) |
-//! | 44..48 | zero |
+//! | 44..48 | the compiler it was built with: [`compiler::id`] of its release, never 0 |
 //! | 48..80 | SHA-256 of bytes 0..48 and of everything after the header |
 //! | 80.. | the image: read-only data, then code from `code_at` |
 //! | then | `relocs` offsets into the image (u32 each, increasing) of the 32-bit words that hold an address in the plugin |
@@ -56,6 +56,7 @@
 extern crate alloc;
 
 pub mod bundle;
+pub mod compiler;
 mod extent;
 mod header;
 pub mod index;

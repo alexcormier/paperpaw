@@ -149,11 +149,11 @@ echo "Packaging"
 # The workspace's version, which the app shares.
 version="$(sed -n '/^\[workspace.package\]/,/^\[/s/^version = "\(.*\)"/\1/p' Cargo.toml)"
 [[ "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+ ]] || fail "no version in Cargo.toml"
-# Android installs a version over another only if its code is higher:
-# 1.2.3 is 10203 (a pre-release counts as its release). The manifest has
-# both, where F-Droid looks for them; they must be the workspace's.
-IFS=. read -r major minor patch <<< "${version%%-*}"
-version_code=$((major * 10000 + minor * 100 + patch))
+# Android installs a version over another only if its code is higher,
+# so a beta's code is below its release's and above the beta before
+# (version-code.sh). The manifest has both, where F-Droid looks for
+# them; they must be the workspace's.
+version_code="$(shells/android/version-code.sh "$version")" || fail "no version code for $version"
 manifest=shells/android/AndroidManifest.xml
 manifest_name="$(sed -n 's/.*android:versionName="\([^"]*\)".*/\1/p' "$manifest")"
 manifest_code="$(sed -n 's/.*android:versionCode="\([^"]*\)".*/\1/p' "$manifest")"

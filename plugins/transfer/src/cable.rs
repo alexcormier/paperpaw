@@ -13,7 +13,8 @@
 //! - `GET /api/plugins`: the plugins installed, as over Wi-Fi;
 //! - `POST /api/offer`, its body lines `plugin <id>`, `<path> <size>
 //!   <sha256>` for each of its files, `book <name> <size> <sha256>`: what
-//!   the computer means to send, at most [`MAX_OFFER`] bytes. The device
+//!   the computer means to send, at most [`MAX_FILES`] lines, read a
+//!   line at a time. The device
 //!   asks the reader, with the names and sizes, and answers *202*
 //!   `{"state": "asking"}`; *507* where there is not room for it all;
 //!   *409* while it asks about another; `GET /api/offer` says `asking`,
@@ -27,7 +28,9 @@
 //!
 //! Nothing else is read or written: no other files, no settings. The
 //! permission holds while the screen is open; *Back* ends it, and so does
-//! a while without a request.
+//! a while without a request. A plugin's files are put together in a
+//! folder of the cable's own ([`STAGING`]): what the Wi-Fi transfer is
+//! sent never mixes with them, and they install only as offered.
 
 use alloc::format;
 use alloc::string::{String, ToString};
@@ -42,7 +45,7 @@ use paperpaw_sdk::served::{CABLE_PORT, json_string, param};
 use paperpaw_sdk::ui::{self, UiStyle};
 use paperpaw_sdk::{
     Arg, Canvas, Command, Cx, Env, Handled, Id, Instant, Params, Rect, RefreshMode, Screen,
-    ServerResponse, files,
+    ScreenKey, ServerResponse, files,
 };
 
 use crate::plugins;
@@ -55,79 +58,142 @@ const OFFER: &str = "offer";
 /// Without a request this long, the screen closes and the permission
 /// with it.
 const IDLE_MS: u64 = 5 * 60 * 1000;
-/// Files of an offer at most.
-const MAX_FILES: usize = 64;
-/// The longest offer read: room for [`MAX_FILES`] lines.
-const MAX_OFFER: usize = 8 * 1024;
+/// Books of an offer at most (more go in the offers after): each is kept
+/// in [`Book`]'s 56 bytes while it is waited for.
+const MAX_BOOKS: usize = 64;
+/// Lines of an offer at most: its plugin's files (no more than a plugin
+/// may have, [`install::MAX_FILES`]) and its books.
+const MAX_FILES: usize = install::MAX_FILES + MAX_BOOKS + 1;
+/// The longest line of an offer: a book's name (200 bytes), its size and
+/// its SHA-256, with room to spare.
+const MAX_LINE: usize = 320;
+/// The longest offer read, a line at a time: [`MAX_FILES`] lines.
+const MAX_OFFER: u64 = (MAX_FILES * MAX_LINE) as u64;
 /// Books named on the device at most; the others are counted.
 const NAMED: usize = 8;
+/// The cable's own staging folders ([`Staging::apart`]).
+pub(crate) const STAGING: &str = "cable";
+
+/// The file naming the plugin of the offer open over the cable, if any:
+/// for the Wi-Fi transfer to leave it alone meanwhile.
+fn offered_file() -> String {
+    format!(
+        "{}/cable-offer.txt",
+        Env::plugin_dir(crate::PLUGIN.as_str())
+    )
+}
+
+/// The plugin of the offer open over the cable (see [`offered_file`]).
+pub(crate) fn offered_plugin(env: &Env<'_>) -> Option<String> {
+    let bytes = paperpaw_sdk::read_file(env.storage, &offered_file(), 128).ok()?;
+    Some(String::from(core::str::from_utf8(&bytes).ok()?.trim()))
+}
 
 /// A file offered: its name or path, size and SHA-256.
 type Offered = (String, u64, [u8; 32]);
+
+/// A book offered while it is waited for: its name by part of the name's
+/// SHA-256 (so that many take little memory), its size and SHA-256.
+type Book = ([u8; 16], u64, [u8; 32]);
+
+/// What a book's name is kept as ([`Book`]).
+fn name_key(name: &str) -> [u8; 16] {
+    let digest = paperpaw_sdk::digest::sha256::digest(name.as_bytes());
+    let mut key = [0; 16];
+    key.copy_from_slice(&digest[..16]);
+    key
+}
 
 /// What the computer means to send.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 struct Offer {
     /// A plugin: its id and files.
     plugin: Option<(String, Vec<Offered>)>,
-    books: Vec<Offered>,
+    books: Vec<Book>,
+    /// The first books' names and sizes, as the reader is shown them.
+    named: Vec<(String, u64)>,
 }
 
 impl Offer {
-    /// The offer in `text`, if every line is understood and names only
-    /// what may be written.
-    fn parse(text: &str) -> Option<Offer> {
+    /// The offer in the file at `path`, read a line at a time, if every
+    /// line is understood and names only what may be written.
+    fn read(storage: &dyn paperpaw_sdk::Storage, path: &str) -> Option<Offer> {
+        if storage.size(path).ok()? > MAX_OFFER {
+            return None;
+        }
         let mut offer = Offer::default();
-        let mut files = 0;
-        for line in text.lines().map(str::trim).filter(|l| !l.is_empty()) {
-            files += 1;
-            if files > MAX_FILES {
-                return None;
+        let mut lines = 0;
+        let mut understood = true;
+        files::for_each_line(storage, path, &mut |line| {
+            let line = line.trim();
+            if line.is_empty() {
+                return core::ops::ControlFlow::Continue(());
             }
-            let (word, rest) = line.split_once(' ')?;
-            // `<name> <size> <sha256>`: a book's name may hold spaces.
-            let sized = |rest: &str| -> Option<Offered> {
-                let (rest, sha256) = rest.rsplit_once(' ')?;
-                let (name, size) = rest.rsplit_once(' ')?;
-                Some((
-                    String::from(name.trim()),
-                    size.parse().ok()?,
-                    digest(sha256)?,
-                ))
-            };
-            match word {
-                "plugin" if offer.plugin.is_none() => {
-                    let id = rest.trim();
-                    Staging::new(id)?;
-                    offer.plugin = Some((String::from(id), Vec::new()));
+            lines += 1;
+            understood = lines <= MAX_FILES && line.len() <= MAX_LINE && offer.take(line).is_some();
+            if understood {
+                core::ops::ControlFlow::Continue(())
+            } else {
+                core::ops::ControlFlow::Break(())
+            }
+        })
+        .ok()?;
+        let empty = offer.plugin.as_ref().is_none_or(|(_, f)| f.is_empty());
+        (understood && !(empty && offer.books.is_empty())).then_some(offer)
+    }
+
+    /// Takes a line of the offer, if it is understood.
+    fn take(&mut self, line: &str) -> Option<()> {
+        let (word, rest) = line.split_once(' ')?;
+        // `<name> <size> <sha256>`: a book's name may hold spaces.
+        let sized = |rest: &str| -> Option<Offered> {
+            let (rest, sha256) = rest.rsplit_once(' ')?;
+            let (name, size) = rest.rsplit_once(' ')?;
+            Some((
+                String::from(name.trim()),
+                size.parse().ok()?,
+                digest(sha256)?,
+            ))
+        };
+        match word {
+            "plugin" if self.plugin.is_none() => {
+                let id = rest.trim();
+                Staging::apart(id, STAGING)?;
+                self.plugin = Some((String::from(id), Vec::new()));
+            }
+            "book" => {
+                let (name, size, sha256) = sized(rest)?;
+                if !is_book_name(&name) || self.books.len() >= MAX_BOOKS {
+                    return None;
                 }
-                "book" => {
-                    let book = sized(rest)?;
-                    if !is_book_name(&book.0) {
-                        return None;
-                    }
-                    offer.books.push(book);
+                self.books.push((name_key(&name), size, sha256));
+                if self.named.len() < NAMED {
+                    self.named.push((name, size));
                 }
-                path => {
-                    let (_, plugin_files) = offer.plugin.as_mut()?;
-                    let file = sized(line)?;
-                    if file.0 != path || !install::is_safe_path(path) {
-                        return None;
-                    }
-                    plugin_files.push(file);
+            }
+            path => {
+                let (_, plugin_files) = self.plugin.as_mut()?;
+                let file = sized(line)?;
+                if file.0 != path
+                    || !install::is_safe_path(path)
+                    || plugin_files.len() >= install::MAX_FILES
+                {
+                    return None;
                 }
+                plugin_files.push(file);
             }
         }
-        let empty = offer.plugin.as_ref().is_none_or(|(_, f)| f.is_empty());
-        (!(empty && offer.books.is_empty())).then_some(offer)
+        Some(())
     }
 
     /// The bytes of all of it; `None` past what can be counted.
     fn size(&self) -> Option<u64> {
         let plugin = self.plugin.iter().flat_map(|(_, files)| files.iter());
+        let books = self.books.iter().map(|(_, size, _)| *size);
         plugin
-            .chain(self.books.iter())
-            .try_fold(0u64, |sum, (_, size, _)| sum.checked_add(*size))
+            .map(|(_, size, _)| *size)
+            .chain(books)
+            .try_fold(0u64, u64::checked_add)
     }
 
     /// Whether the plugin offered has code.
@@ -151,8 +217,26 @@ impl Offer {
 
     /// The size and SHA-256 offered of book `name`.
     fn book(&self, name: &str) -> Option<(u64, [u8; 32])> {
-        let found = self.books.iter().find(|(n, ..)| n == name);
+        let key = name_key(name);
+        let found = self.books.iter().find(|(k, ..)| *k == key);
         found.map(|(_, size, sha)| (*size, *sha))
+    }
+
+    /// Whether the files staged for its plugin are those offered, each
+    /// with the SHA-256 offered, and no others: what the reader allowed.
+    fn staged_as_offered(&self, storage: &dyn paperpaw_sdk::Storage, staging: &Staging) -> bool {
+        let Some((_, offered)) = &self.plugin else {
+            return false;
+        };
+        let staged = staging.files(storage);
+        let folder = staging.folder();
+        staged.len() == offered.len()
+            && offered.iter().all(|(path, size, sha256)| {
+                let at = format!("{folder}/{path}");
+                staged.contains(path)
+                    && storage.size(&at).ok() == Some(*size)
+                    && file_sha256(storage, &at) == Some(*sha256)
+            })
     }
 }
 
@@ -183,6 +267,9 @@ pub(crate) struct CableScreen {
     /// counts for the one it was asked about only.
     serial: u32,
     permission: Permission,
+    /// The question asked about the offer, once seen above this screen:
+    /// closed without an answer, it refuses.
+    question: Option<ScreenKey>,
     /// What happened last, said on the screen.
     last: Option<String>,
     active: Instant,
@@ -198,6 +285,7 @@ impl CableScreen {
             offer: None,
             serial: 0,
             permission: Permission::None,
+            question: None,
             last: None,
             active: env.now,
             started: false,
@@ -226,14 +314,28 @@ impl CableScreen {
         let env = *cx.env();
         self.active = env.now;
         cx.wake_at(env.now.add_millis(IDLE_MS));
-        // A question closed without an answer (Back): not allowed.
-        let asked = env
-            .stack
-            .last()
-            .is_some_and(|top| top.slot == Some(slots::CONFIRM));
-        if self.permission == Permission::Asking && !asked {
-            self.forget_offer(&env);
-            self.permission = Permission::Refused;
+        // The question closed without an answer (Back): not allowed. Only
+        // its closing counts, not a screen shown over it.
+        if self.permission == Permission::Asking {
+            if self.question.is_none() {
+                let mine = env
+                    .stack
+                    .iter()
+                    .rposition(|e| e.screen == crate::CABLE_SCREEN);
+                // The first question above it (another screen may have
+                // come between).
+                let above = mine.and_then(|at| env.stack.get(at + 1..));
+                self.question = above
+                    .and_then(|above| above.iter().find(|e| e.slot == Some(slots::CONFIRM)))
+                    .map(|entry| entry.key);
+            }
+            let open = self
+                .question
+                .is_some_and(|key| env.stack.iter().any(|entry| entry.key == key));
+            if !open {
+                self.forget_offer(&env);
+                self.permission = Permission::Refused;
+            }
         }
         let (path, query) = target.split_once('?').unwrap_or((target, ""));
         let json = |status, body: String| {
@@ -291,23 +393,36 @@ impl CableScreen {
         if self.permission == Permission::Asking {
             return json(409, "{\"why\":\"asking about another offer\"}");
         }
-        let text = body
-            .and_then(|path| paperpaw_sdk::read_file(env.storage, path, MAX_OFFER).ok())
-            .and_then(|bytes| String::from_utf8(bytes).ok());
-        let Some(offer) = text.as_deref().and_then(Offer::parse) else {
+        // A new offer ends the one before, what was sent for it too: never
+        // both in memory.
+        self.forget_offer(env);
+        self.permission = Permission::None;
+        let Some(offer) = body.and_then(|path| Offer::read(env.storage, path)) else {
             return json(400, "{\"why\":\"not an offer\"}");
         };
+        // The Wi-Fi transfer is sent this plugin now: not both at once.
+        let id = offer.plugin.as_ref().map(|(id, _)| id.as_str());
+        if id.is_some_and(|id| crate::plugins::staged_over_wifi(env, id)) {
+            return json(409, "{\"why\":\"being sent over Wi-Fi\"}");
+        }
         let room = env.storage.free_space();
         match offer.size() {
             Some(size) if room.is_none_or(|free| size <= free) => {}
             _ => return json(507, "{\"why\":\"not enough room\"}"),
         }
-        // Nothing sent before counts: a plugin's files are taken anew.
-        self.forget_offer(env);
-        if let Some(staging) = offer.plugin.as_ref().and_then(|(id, _)| Staging::new(id)) {
+        // Nothing sent before counts: a plugin's files are taken anew. Named
+        // as offered: the Wi-Fi transfer leaves it alone meanwhile.
+        if let Some(staging) = id.and_then(|id| Staging::apart(id, STAGING)) {
             staging.abort(env.storage);
+            let _ = env
+                .storage
+                .create_dir(&Env::plugin_dir(crate::PLUGIN.as_str()));
+            let _ = env
+                .storage
+                .write(&offered_file(), staging.plugin().as_bytes());
         }
         self.serial = self.serial.wrapping_add(1);
+        self.question = None;
         let (question, text) = question(env, &offer);
         cx.command(
             paperpaw_sdk::ask::confirm(question, &ALLOWED)
@@ -328,8 +443,9 @@ impl CableScreen {
             .take()
             .and_then(|offer| offer.plugin)
             .map(|(id, _)| id);
-        if let Some(staging) = id.as_deref().and_then(Staging::new) {
+        if let Some(staging) = id.and_then(|id| Staging::apart(&id, STAGING)) {
             staging.abort(env.storage);
+            let _ = env.storage.remove(&offered_file());
         }
     }
 
@@ -350,8 +466,8 @@ impl CableScreen {
             return json(404, String::from("{\"why\":\"not found\"}"));
         };
         let offered = self.offer.as_ref().and_then(|o| o.plugin_file(id, file));
-        let (Some((size, sha256)), Some(body), Some(staging)) = (offered, body, Staging::new(id))
-        else {
+        let staging = Staging::apart(id, STAGING);
+        let (Some((size, sha256)), Some(body), Some(staging)) = (offered, body, staging) else {
             return json(403, String::from("{\"why\":\"not offered\"}"));
         };
         if env.storage.size(body).ok() != Some(size) || !same_digest(query, &sha256) {
@@ -386,11 +502,18 @@ impl CableScreen {
             .as_ref()
             .and_then(|o| o.plugin.as_ref())
             .is_some_and(|(p, _)| p == id);
-        let (true, Some(staging)) = (offered, Staging::new(id)) else {
+        let (true, Some(staging)) = (offered, Staging::apart(id, STAGING)) else {
             return json(403, String::from("{\"why\":\"not offered\"}"));
         };
-        // The reader allowed its code with the offer: the code sent is the
-        // one offered (its SHA-256 checked as it came).
+        // The reader allowed what was offered: what is staged must be it,
+        // file by file, its code too, checked now (not only as it came).
+        if !self
+            .offer
+            .as_ref()
+            .is_some_and(|offer| offer.staged_as_offered(env.storage, &staging))
+        {
+            return json(422, String::from("{\"why\":\"not as offered\"}"));
+        }
         let code = staging.code(env.storage);
         let commit = match code {
             Some(sha256) if self.offer.as_ref().is_some_and(Offer::code) => {
@@ -457,7 +580,8 @@ impl CableScreen {
             Ok(()) => {
                 // Offered once, taken once.
                 if let Some(offer) = &mut self.offer {
-                    offer.books.retain(|(n, ..)| *n != name);
+                    let key = name_key(&name);
+                    offer.books.retain(|(k, ..)| *k != key);
                 }
                 out.push(paperpaw_sdk::library::added(&at, "transfer"));
                 let text = env
@@ -497,11 +621,11 @@ fn question(env: &Env<'_>, offer: &Offer) -> (String, String) {
             lines.push(i18n.tr("transfer.cable.code").to_string());
         }
     }
-    for (name, size, _) in offer.books.iter().take(NAMED) {
+    for (name, size) in &offer.named {
         lines.push(format!("{name} ({})", files::size(*size, decimal)));
     }
-    if offer.books.len() > NAMED {
-        let more = (offer.books.len() - NAMED) as i64;
+    if offer.books.len() > offer.named.len() {
+        let more = (offer.books.len() - offer.named.len()) as i64;
         lines.push(i18n.format("transfer.cable.more", &[("count", Arg::Int(more))]));
     }
     (i18n.tr(key).to_string(), lines.join("\n"))

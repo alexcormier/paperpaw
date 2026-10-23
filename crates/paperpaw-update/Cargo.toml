@@ -14,7 +14,9 @@ keywords = ["firmware", "update", "ota", "ed25519", "esp32"]
 [dependencies]
 # Small code (no forced inlining): on the X4 over 1 MB less, a check
 # of a few seconds per update all the same.
-ed25519-compact = { version = "2.6", default-features = false, features = ["opt_size"] }
+# An exact version: its verifying state lies inside types that cross
+# between a code plugin and PaperPaw (ADR 0026).
+ed25519-compact = { version = "=2.6.0", default-features = false, features = ["opt_size"] }
 
 [lints]
 workspace = true

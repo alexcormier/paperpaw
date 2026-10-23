@@ -10,13 +10,21 @@
 //! paperpaw_sdk::plugin!(my_plugin::MyPlugin::default());
 //! ```
 //!
-//! A plugin file fits a PaperPaw only when both were built by the same
-//! compiler for the same chip from the same SDK with the same features,
-//! but `kernel` and `unstable`, which only add functions and modules
-//! (until PaperPaw 1.0, the SDK's types cross between them as they are):
+//! A plugin file fits a PaperPaw of the same plugin interface
+//! ([`INTERFACE`]: what of the SDK plugins see, the layouts of the types
+//! that cross, the firmware's table, how a plugin is linked), built for
+//! the same chip with the features that change what crosses. Until
+//! PaperPaw 1.0 the SDK's types cross between them as they are, so the
+//! compiler is the release's too (`shells/xteink/rust-toolchain.toml`,
+//! `versions.env`), and a new one is a new interface (ADR 0026). A plugin
+//! file names the compiler that built it ([`compiler`]), and a device
+//! loads it only where that built the firmware too.
 //! [`FINGERPRINT`] says which, and a device loads only files with its own
-//! ([`Native::fingerprint`]). `docs/plugins.md` says how a plugin is
-//! built, packed (`paperpaw-sign pack`), signed and published.
+//! ([`Native::fingerprint`]); its top 16 bits are the interface's version,
+//! so a file of another can say so ([`Fingerprint::interface`]). A plugin
+//! built for an interface runs on every PaperPaw of it, whichever release
+//! made the plugin. `docs/plugins.md` says how a plugin is built, packed
+//! (`paperpaw-sign pack`), signed and published.
 //!
 //! A code plugin is a folder like a data plugin's (`plugin.ini`,
 //! translations, settings) with its code as [`Native::file`]; the kernel
@@ -35,26 +43,79 @@ use core::fmt;
 use crate::Id;
 use paperpaw_platform::Storage;
 
+pub use paperpaw_native::compiler;
 pub use paperpaw_native::signature::{self, BadSignature};
 pub use paperpaw_native::{Chip, HEADER_LEN, Header, Problem, Signature};
 
-/// What this build of the SDK makes plugins fit: the compiler, target,
-/// SDK version and features (see the [module documentation](self)).
-pub const FINGERPRINT: Fingerprint = {
-    let build = match u64::from_str_radix(env!("PAPERPAW_NATIVE_BUILD"), 16) {
-        Ok(build) => build,
-        Err(_) => panic!("PAPERPAW_NATIVE_BUILD is not hexadecimal"),
-    };
-    // Features of crates below the SDK that change their types' layouts,
-    // whichever crate switched them on.
-    let outlines = paperpaw_text::OUTLINES as u64;
-    Fingerprint((build ^ outlines).wrapping_mul(0x0100_0000_01b3))
-};
+/// The version of the plugin interface: what code plugins are built
+/// against (see the [module documentation](self)). Raised by hand, and
+/// only when what plugins see changes; `crates/paperpaw-sdk/interface.txt`
+/// keeps what it was, and CI fails while they differ (ADR 0026).
+pub const INTERFACE: u16 = 2;
 
-/// The compiler and target this build of the SDK was made with, e.g.
-/// `rustc 1.99.0 (b940084d7 2026-09-28), riscv32imc-unknown-none-elf`:
-/// what a plugin must be built with to fit it.
-pub const TOOLCHAIN: &str = env!("PAPERPAW_NATIVE_TOOLCHAIN");
+/// The crates whose types cross between a plugin and PaperPaw, by the
+/// names their paths begin with: the SDK and every crate of PaperPaw it
+/// depends on. The plugin interface keeps their types as they are
+/// (`crates/paperpaw-sdk/interface/crates.txt`, which a test keeps the
+/// same), so a type made of theirs alone is the same in every build of
+/// one interface.
+pub const CROSSING_CRATES: &[&str] = &[
+    "paperpaw_sdk",
+    "paperpaw_platform",
+    "paperpaw_graphics",
+    "paperpaw_i18n",
+    "paperpaw_config",
+    "paperpaw_text",
+    "paperpaw_document",
+    "paperpaw_layout",
+    "paperpaw_xml",
+    "paperpaw_zip",
+    "paperpaw_hyphen",
+    "paperpaw_image",
+    "paperpaw_update",
+    "paperpaw_digest",
+    "paperpaw_json",
+    "paperpaw_qr",
+    "paperpaw_native",
+];
+
+/// The layouts of the types that cross between a plugin and PaperPaw, as
+/// this build lays them out: a digest of their sizes and alignments, and
+/// of where the firmware's table keeps each of its entries. Part of the
+/// fingerprint, so made for each chip as it lays them out: a plugin whose
+/// layouts differ from the firmware's is not loaded.
+pub const LAYOUT: u64 = layout::DIGEST;
+
+/// What this build of the SDK makes plugins fit: the plugin interface, the
+/// chip and the features that change what crosses (see the [module
+/// documentation](self)). From constants alone: no build script, so the
+/// computer it is built on changes nothing.
+pub const FINGERPRINT: Fingerprint = Fingerprint::of(INTERFACE, {
+    let mut hash = layout::Fnv::new();
+    hash = hash.text(layout::TARGET);
+    hash = hash.number(core::mem::size_of::<usize>() as u64);
+    // Features of crates below the SDK that change what a plugin's own
+    // copy of their code does with what crosses, whichever crate
+    // switched them on. Colour does not: Android and the emulator draw
+    // in colour, and plugins built without it run there.
+    hash = hash.number(paperpaw_text::OUTLINES as u64);
+    hash = hash.number(LAYOUT);
+    hash.0
+});
+
+/// The compiler of PaperPaw's release a plugin for this chip is built
+/// with (the X4's `shells/xteink/rust-toolchain.toml`, the X4 Pro's
+/// `versions.env`; a test keeps them so), and the chip's target: what a
+/// plugin must be built with to fit. A shell that knows better (the
+/// emulator, built by the computer's compiler) says so in
+/// [`Native::toolchain`].
+pub const TOOLCHAIN: &str = if cfg!(target_arch = "riscv32") {
+    "rustc 1.99.0, riscv32imc-unknown-none-elf"
+} else if cfg!(target_arch = "xtensa") {
+    "esp 1.97.0.0, xtensa-esp32s3-none-elf"
+} else {
+    "the compiler of PaperPaw's release, for this computer"
+};
 
 /// The names a plugin folder's code has: `code.ppn` on the X4 and the X4
 /// Pro, `code.so` on Android, `code-host.dll`, `.so` or `.dylib` built for
@@ -106,9 +167,8 @@ pub fn fetched_for(storage: &dyn Storage, native: &Native) -> Vec<(String, [u8; 
     ids.into_iter()
         .filter_map(|id| {
             let header = read_header(storage, &native.path(&fetched_folder(&id)))?;
-            (header.fingerprint == native.fingerprint.0
-                && fetched_code(storage, &id) == Some(header.sha256))
-            .then_some((id, header.sha256))
+            (native.fits(&header) && fetched_code(storage, &id) == Some(header.sha256))
+                .then_some((id, header.sha256))
         })
         .collect()
 }
@@ -481,6 +541,35 @@ pub fn read_header(storage: &dyn Storage, path: &str) -> Option<Header> {
 pub struct Fingerprint(pub u64);
 
 impl Fingerprint {
+    /// The fingerprint of plugin interface `interface` and of `build` (a
+    /// hash of the chip and the features): the interface in the top 16
+    /// bits, so that a file of another says which it was made for.
+    pub const fn of(interface: u16, build: u64) -> Fingerprint {
+        Fingerprint(((interface as u64) << 48) | (build & 0x0000_ffff_ffff_ffff))
+    }
+
+    /// The plugin interface it was made for (see [`INTERFACE`]).
+    pub const fn interface(self) -> u16 {
+        (self.0 >> 48) as u16
+    }
+
+    /// Why a plugin file of this fingerprint does not run on this build,
+    /// in a sentence for the log and for authors; `None` where it fits.
+    pub fn misfit(self) -> Option<String> {
+        if self == FINGERPRINT {
+            None
+        } else if self.interface() != INTERFACE {
+            Some(alloc::format!(
+                "built for plugin interface {}, and this PaperPaw has {INTERFACE}: it needs a build for this one",
+                self.interface()
+            ))
+        } else {
+            Some(String::from(
+                "built for another chip, or with other features, of the same plugin interface",
+            ))
+        }
+    }
+
     /// From 16 hexadecimal digits, as the plugin library lists builds.
     pub fn parse(text: &str) -> Option<Fingerprint> {
         let text = text.trim();
@@ -508,6 +597,10 @@ pub struct Native {
     pub fingerprint: Fingerprint,
     /// What they must be built with ([`TOOLCHAIN`] of the shell's build).
     pub toolchain: Cow<'static, str>,
+    /// The compiler plugin files must name ([`compiler::id`] of the
+    /// release of the one that built the shell, [`Header::compiler`]); 0
+    /// where the shell does not say.
+    pub compiler: u32,
     /// The code's file in a plugin's folder, e.g. `code.ppn`.
     pub file: Cow<'static, str>,
     /// This start went without code plugins, and why.
@@ -522,10 +615,20 @@ impl Native {
         Self {
             fingerprint: FINGERPRINT,
             toolchain: Cow::Borrowed(TOOLCHAIN),
+            compiler: 0,
             file: file.into(),
             safe_mode: None,
             not_installed: Vec::new(),
         }
+    }
+
+    /// Whether a plugin file with `header` runs here: of this fingerprint,
+    /// and of this compiler where the shell names one. Installers check
+    /// it before a file is installed or placed, as the shell does before
+    /// it loads one.
+    pub fn fits(&self, header: &Header) -> bool {
+        header.fingerprint == self.fingerprint.0
+            && (self.compiler == 0 || header.compiler == self.compiler)
     }
 
     /// The path of the code of the plugin in `folder`.
@@ -612,7 +715,8 @@ pub unsafe fn take(made: *mut core::ffi::c_void) -> Option<alloc::boxed::Box<dyn
         return None;
     }
     // SAFETY: made by `plugin!` (`support::make`) from this box, with the
-    // same layout: the fingerprint says the same compiler and SDK.
+    // same layout: the fingerprint says the same plugin interface and
+    // layouts, and the shell checked the compiler.
     Some(*unsafe {
         alloc::boxed::Box::from_raw(made.cast::<alloc::boxed::Box<dyn crate::Plugin>>())
     })
@@ -685,6 +789,219 @@ macro_rules! plugin {
                 fingerprint: $crate::native::FINGERPRINT.0,
                 make: paperpaw_make,
             };
+    };
+}
+
+/// The layouts [`LAYOUT`] digests, and the hash the fingerprint is made
+/// with.
+mod layout {
+    use core::mem::{align_of, offset_of, size_of};
+
+    use paperpaw_native::{Api, Entry};
+
+    /// FNV-1a with 64 bits, at compile time (as `paperpaw_digest`'s).
+    #[derive(Clone, Copy)]
+    pub(super) struct Fnv(pub(super) u64);
+
+    impl Fnv {
+        pub(super) const fn new() -> Fnv {
+            Fnv(0xcbf2_9ce4_8422_2325)
+        }
+
+        const fn byte(self, b: u8) -> Fnv {
+            Fnv((self.0 ^ b as u64).wrapping_mul(0x0100_0000_01b3))
+        }
+
+        pub(super) const fn number(self, n: u64) -> Fnv {
+            let mut hash = self;
+            let mut i = 0;
+            while i < 8 {
+                hash = hash.byte((n >> (8 * i)) as u8);
+                i += 1;
+            }
+            hash
+        }
+
+        pub(super) const fn text(self, text: &str) -> Fnv {
+            let bytes = text.as_bytes();
+            let mut hash = self;
+            let mut i = 0;
+            while i < bytes.len() {
+                hash = hash.byte(bytes[i]);
+                i += 1;
+            }
+            hash.byte(0)
+        }
+    }
+
+    /// The chip, as the compiler sees it.
+    pub(super) const TARGET: &str = if cfg!(target_arch = "riscv32") {
+        "riscv32"
+    } else if cfg!(target_arch = "xtensa") {
+        "xtensa"
+    } else if cfg!(all(target_arch = "aarch64", target_os = "android")) {
+        "aarch64-android"
+    } else if cfg!(target_arch = "aarch64") {
+        "aarch64"
+    } else if cfg!(target_arch = "x86_64") {
+        "x86_64"
+    } else if cfg!(target_arch = "arm") {
+        "arm"
+    } else if cfg!(target_arch = "wasm32") {
+        "wasm32"
+    } else {
+        "other"
+    };
+
+    /// Sizes and alignments of `$t`, in order.
+    macro_rules! layouts {
+        ($($t:ty),* $(,)?) => {
+            [$((size_of::<$t>() as u64, align_of::<$t>() as u64)),*]
+        };
+    }
+
+    /// The types that cross between a plugin and PaperPaw: what the SDK
+    /// gives a plugin (by reference or by value), what a plugin gives
+    /// back, and the boxes and trait objects they come in.
+    const CROSSING: &[(u64, u64)] = &layouts![
+        crate::Env<'static>,
+        crate::EnvParts<'static>,
+        crate::Capabilities,
+        crate::Metrics,
+        crate::Registrar,
+        crate::Contribution,
+        crate::Command,
+        crate::Cx<'static, 'static>,
+        crate::screen::Output,
+        crate::StackEntry,
+        crate::ScreenKey,
+        crate::Canvas<'static>,
+        crate::Settings,
+        crate::SettingSpec,
+        crate::SettingValue,
+        crate::SettingKind,
+        crate::Translator,
+        crate::Fonts,
+        crate::FontHandle<'static>,
+        crate::Params,
+        crate::Id,
+        crate::Version,
+        crate::Manifest,
+        crate::PluginInfo,
+        crate::Plugins,
+        crate::ScreenSpec,
+        crate::ActionSpec,
+        crate::MenuEntry,
+        crate::Menus,
+        crate::Actions,
+        crate::RegisterError,
+        crate::HttpRequest,
+        crate::HttpReply,
+        crate::Gesture,
+        crate::Handled,
+        crate::Hint,
+        crate::Rect,
+        crate::Point,
+        crate::Color,
+        crate::InputEvent,
+        crate::DeviceInfo,
+        crate::Instant,
+        super::Native,
+        super::Fingerprint,
+        alloc::boxed::Box<dyn crate::Plugin>,
+        alloc::boxed::Box<dyn crate::Screen>,
+        &'static dyn crate::Storage,
+        Api,
+        Entry,
+        // What `Env` reaches.
+        crate::firmware::Firmware,
+        crate::formats::Formats,
+        crate::usage::Usage,
+        crate::status::StatusItems,
+        crate::readers::Readers,
+        crate::widgets::Widgets,
+        crate::services::Services,
+        crate::services::Service,
+        crate::power::Power,
+        crate::work::WorkStates,
+        crate::wifi::Wifi,
+        crate::library::BookData,
+        crate::library::service::BookBadge,
+        crate::library::service::BookField,
+        crate::keys::InputSpec,
+        // What a `Contribution` holds: the enum's size hides a change of
+        // a smaller one.
+        crate::action::ActionOverride,
+        crate::action::ObserverSpec,
+        crate::chrome::ChromeSpec,
+        crate::decorations::DecoratorSpec,
+        crate::event::EventHandler,
+        crate::filters::InputFilterSpec,
+        crate::filters::RefreshFilterSpec,
+        crate::filters::TextFilterSpec,
+        crate::fonts::FontFace,
+        crate::fonts::FontSpec,
+        crate::formats::FormatSpec,
+        crate::hyphenation::HyphenationSpec,
+        crate::keys::GestureSpec,
+        crate::layers::PageFrameSpec,
+        crate::layers::PageLayerSpec,
+        crate::lookup::LookupProviderSpec,
+        crate::menus::ItemStateFn,
+        crate::menus::MenuNeed,
+        crate::menus::MenuSection,
+        crate::plugin::Priority,
+        crate::plugin::SlotSpec,
+        crate::presets::Preset,
+        crate::readers::ReaderSpec,
+        crate::services::EventSpec,
+        crate::services::PointSpec,
+        crate::settings::SettingGroupSpec,
+        crate::setup::SetupStepSpec,
+        crate::status::Place,
+        crate::status::StatusItemSpec,
+        crate::status::StatusLineSpec,
+        crate::ui::look::Painters,
+        crate::voices::VoiceSpec,
+        crate::widgets::WidgetCategory,
+        crate::widgets::WidgetPlace,
+        crate::widgets::WidgetSpec,
+        crate::work::WorkSpec,
+        // What trait methods take and give.
+        crate::screen::Hints,
+        crate::screen::Outside,
+        crate::screen::ShowsThrough,
+        crate::screen::CloseCause,
+        paperpaw_platform::PointerEvent,
+        paperpaw_document::Block,
+    ];
+
+    /// Where the firmware's table keeps each entry: a plugin finds them
+    /// there.
+    const TABLE: [u64; 8] = [
+        Api::SIZE as u64,
+        offset_of!(Api, size) as u64,
+        offset_of!(Api, alloc) as u64,
+        offset_of!(Api, dealloc) as u64,
+        offset_of!(Api, realloc) as u64,
+        offset_of!(Api, panic) as u64,
+        offset_of!(Api, micros) as u64,
+        offset_of!(Api, icon) as u64,
+    ];
+
+    pub(super) const DIGEST: u64 = {
+        let mut hash = Fnv::new();
+        let mut i = 0;
+        while i < CROSSING.len() {
+            hash = hash.number(CROSSING[i].0).number(CROSSING[i].1);
+            i += 1;
+        }
+        let mut i = 0;
+        while i < TABLE.len() {
+            hash = hash.number(TABLE[i]);
+            i += 1;
+        }
+        hash.0
     };
 }
 
@@ -861,6 +1178,7 @@ mod tests {
             api: 16,
             relocs: 0,
             align,
+            compiler: 1,
             sha256: [0; 32],
         };
         header.to_bytes().to_vec()
@@ -1000,6 +1318,7 @@ mod tests {
             api: 16,
             relocs: 0,
             align: 16,
+            compiler: 1,
             sha256: [0; 32],
         };
         let image = [9u8; 64];
@@ -1096,11 +1415,28 @@ mod tests {
     fn this_build_names_itself() {
         let native = Native::new("code.ppn");
         assert_eq!(native.fingerprint, FINGERPRINT);
-        assert!(
-            native.toolchain.starts_with("rustc "),
-            "{}",
-            native.toolchain
-        );
+        assert_eq!(native.toolchain, TOOLCHAIN);
         assert_eq!(native.path("plugins/hello/"), "plugins/hello/code.ppn");
+    }
+
+    /// A file of this interface fits, of another it says which; the
+    /// interface is in the fingerprint's top bits.
+    #[test]
+    fn a_file_of_another_interface_says_so() {
+        assert_eq!(FINGERPRINT.interface(), INTERFACE);
+        assert_eq!(FINGERPRINT.misfit(), None);
+        let build = FINGERPRINT.0 & 0x0000_ffff_ffff_ffff;
+        let next = Fingerprint::of(INTERFACE + 1, build);
+        let message = next.misfit().unwrap();
+        assert!(
+            message.contains(&alloc::format!("plugin interface {}", INTERFACE + 1)),
+            "{message}"
+        );
+        assert!(
+            message.contains(&alloc::format!("has {INTERFACE}")),
+            "{message}"
+        );
+        let other = Fingerprint::of(INTERFACE, build ^ 1);
+        assert!(other.misfit().unwrap().contains("same plugin interface"));
     }
 }

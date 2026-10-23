@@ -164,6 +164,9 @@ file to your report.
   start of the week for the statistics and calendars.
 - New status items: *Battery when low* shows the battery only below a
   level, and a Wi-Fi sign shows while the device is in a network.
+- A plugin's settings group that names no place on the settings' main
+  page is listed at the end of *Customise*, by name, with a plugin's
+  icon, instead of first among the books' groups.
 
 #### Touch, buttons and the keyboard
 
@@ -206,6 +209,20 @@ file to your report.
 
 #### Wi-Fi, sync and the store
 
+- The store tells betas apart: a plugin's versions are compared whole,
+  pre-release included (`0.5.0-beta.2` after `0.5.0-beta.1`, `0.5.0`
+  after both), as firmware updates are. A newer beta is offered only
+  where the device runs a beta or takes betas (*Beta updates*). Its
+  message for code built for another plugin interface or compiler says
+  so.
+- The store marks PaperPaw's own plugins *By PaperPaw*, on their row
+  and their page. The mark is taken only from PaperPaw's own library
+  (paperpaw.org, over HTTPS), and for a plugin with code only where its
+  key is PaperPaw's: a list from elsewhere cannot give it.
+- A code plugin's version is its `plugin.ini`'s, everywhere: the
+  plugin manager, the store's updates and the transfer's list all go by
+  it. Code whose manifest names another version runs at `plugin.ini`'s,
+  with a warning in the log; `paperpaw-dev package` finds it before.
 - Wi-Fi on the X4 and X4 Pro: the radio is off while you read. It comes
   on when something needs the network, joins the strongest saved
   network and goes off a minute after the last use. HTTPS works, with
@@ -259,6 +276,12 @@ file to your report.
 
 #### Devices and updates
 
+- Transfer over USB, further: a plugin's files are put together in a
+  folder of the cable's own and installed only if they are those
+  offered, each with the SHA-256 offered; the cable and the open Wi-Fi
+  transfer never send the same plugin at once. Offers are read a line
+  at a time (up to 64 files and 64 books each), and only closing the
+  question refuses an offer.
 - The Xteink X4 Pro is supported: its display, touch screen, buttons,
   card, battery gauge, clock chip, front light with warmth, sleep and
   Wi-Fi. Its front light dims evenly in single percents.
@@ -285,6 +308,14 @@ file to your report.
   the cable installs a plugin or adds books. The device shows what is to
   come, with names and sizes, and writes nothing until you allow it,
   never over a book.
+- Betas: *Beta updates* in the update's settings, off at first, asks
+  for betas; a device on a pre-release gets the next anyway, and the
+  device takes a pre-release only so, whatever the server answers.
+  Betas come in order before their release (`0.5.0-beta.2` after
+  `beta.1`, `0.5.0` after both) and show calmly, as `0.5.0 Beta 1`.
+  Android's version codes follow the same order (of 1.2.3: beta.1 to
+  beta.49, then `-dev`, then rc.1 to rc.48, then the release), and a
+  version they cannot order is refused.
 
 #### Your data and security
 
@@ -322,6 +353,18 @@ file to your report.
 
 #### For developers
 
+- SDK: `Version::parse` reads a version with a pre-release or build
+  after its three numbers as those numbers, so a plugin of a beta loads.
+  `install::folder_release` gives the version as `plugin.ini` writes it;
+  `Origins::release` the version a store named;
+  `remember_store_install` takes either. `install::local::Staging::apart`
+  puts a plugin's files together in a folder of its own, for one way of
+  sending.
+- `paperpaw-dev` takes font packs (`.ppfp`) in a data plugin's `fonts/`,
+  where the kernel reads them, and names one elsewhere. It no longer
+  checks the X4 Classic by default, and `--list-profiles` says it is not
+  supported yet. A release no longer lists the X4 Classic's firmware:
+  it is built, but not yet tried on one.
 - `paperpaw-dev` checks a plugin on the emulated X4, X4 Pro and Boox, in
   every language, light and dark. It finds cut text, uneven margins,
   small touch targets, missing translations and screens that buttons
@@ -353,6 +396,41 @@ file to your report.
 - Each release also brings the desktop emulator for Windows, macOS and
   Linux with `paperpaw-dev`, the web emulator and the handbook, each
   signed. `docs/porting.md` says how to add a device.
+- Code plugins are bound to a plugin interface, not to a release
+  (ADR 0026): a plugin file runs on every PaperPaw of its interface
+  (`native::INTERFACE`, 2, in the fingerprint's top bits), betas and
+  releases alike, and authors rebuild only when a release raises it. The
+  SDK and `paperpaw-native` have no build scripts, so a plugin built on
+  Windows is the same as one built on Linux (`tools/reproducible-plugin.py`,
+  in CI on both); a plugin project keeps `paperpaw-plugin.x` beside its
+  `.cargo/config.toml`. CI fails where what plugins see changes without
+  the interface raised, and by default any change raises it: the public
+  API and the shape of the types (fields, variants and trait items in
+  order, private ones too, functions' pointers with their ABI) and the
+  values of the constants of the SDK and every crate of PaperPaw below
+  it, with every feature on (`api.txt` and `shape.txt` of each,
+  `tools/interface.py`), and the crates of others whose types cross,
+  each pinned to one version. Only a new type, a function outside a
+  trait, a constant or an `impl` goes free.
+- A code plugin's file names the compiler that built it (format 2 of
+  `.ppn`, taken by `paperpaw-sign pack` from `.comment`, which
+  `paperpaw-plugin.x` now keeps). The X4s, the store and an update's
+  fetch take only files of the firmware's fingerprint and compiler
+  (`Native::fits`), the emulator only libraries of its own compiler; an
+  update answer may name both (`abi`, `compiler`). Files of format 1 are
+  refused as built for an older PaperPaw. The repository's
+  `rust-toolchain.toml` pins the release's compiler, 1.99.0.
+- A service is found by its type's name across builds only where the
+  type is made of the SDK's crates, `core` and `alloc`, with the same
+  size and alignment; a plugin's own type needs a contract
+  (`ServiceType`). SDK: `native::CROSSING_CRATES`, `native::compiler`,
+  `firmware::beta`.
+- The workspace publishes to crates.io as a pre-release
+  (`tools/publish-dry-run.sh 0.5.0-beta.1`, and the *Publish check*
+  workflow).
+- `paperpaw-dev` warns of a settings group without an order or an icon,
+  and of a widget's settings in a group of the main page rather than the
+  widget's own (`widgets::settings_group`). SDK: `Kernel::menus`.
 
 ## [0.3.0] - 2026-10-16
 

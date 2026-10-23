@@ -337,6 +337,28 @@ compiler; each PaperPaw release lists the fingerprints in its files
 - After every release until 1.0, build again with its SDK and compilers
   and publish a new version (section 7).
 
+**From PaperPaw 0.5.0-beta.1 on** (ADR 0026), this changes:
+
+- The fingerprint is the **plugin interface** in its top 16 bits, and
+  below them the chip and the layouts of the types that cross. A file
+  runs on every PaperPaw of its interface, whichever release made it, so
+  build again only when a release raises the interface (its release
+  notes say so; `paperpaw-sign show` prints a file's `interface`).
+- The file also names the **compiler** that built it, taken from the ELF
+  by `paperpaw-sign pack`. A reader loads it only where the same
+  compiler built the firmware; the release's are still those of
+  `shells/xteink/rust-toolchain.toml` and `versions.env`.
+- The SDK has no build script any more, so nothing brings the linker
+  script: copy `paperpaw-plugin.x` of the release (as
+  `samples/hello-native` keeps it) to the top of the plugin's project,
+  beside `.cargo/config.toml`, whose rustflags link with it
+  (`-C link-arg=-Tpaperpaw-plugin.x`, with `-Wl,` for the X4 Pro). Use the
+  release's copy unchanged: it keeps the compiler's names (`.comment`),
+  which `pack` needs, and a build linked with an older copy is refused
+  with "no .comment names the compiler".
+- Files of the older format (made by a `paperpaw-sign` before 0.5.0) are
+  refused as "of an older format, to be built anew".
+
 ### So the rebuild matches
 
 The site rebuilds each build from the kept source in a container with

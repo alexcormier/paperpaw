@@ -9,13 +9,16 @@ repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 categories = ["no-std"]
-include = ["src", "i18n"]
+include = ["src", "how", "i18n"]
 
 [dependencies]
 paperpaw-sdk.workspace = true
 
 [dev-dependencies]
-paperpaw-app.workspace = true
+# By path alone: the app has this plugin built in, so a version here
+# would make the two wait for each other on crates.io; cargo publish
+# leaves a dev-dependency without one out.
+paperpaw-app = { path = "../../crates/paperpaw-app" }
 paperpaw-core.workspace = true
 paperpaw-i18n.workspace = true
 paperpaw-platform.workspace = true
