@@ -445,7 +445,12 @@ fn pin_by_touch_is_asked_for_at_start_and_kept_as_a_hash() {
     assert!(!device.locked());
     let (kind, salt, hash) = split(&device.kept().unwrap());
     assert_eq!(kind, "pin");
-    assert!(is_hex(&salt, 16), "{salt}");
+    // A salt of its own, not of the code: `v2.` and 16 random letters.
+    let letters = salt.strip_prefix("v2.").unwrap_or_else(|| panic!("{salt}"));
+    assert!(
+        letters.len() == 16 && letters.bytes().all(|b| b.is_ascii_alphanumeric()),
+        "{salt}"
+    );
     assert!(is_hex(&hash, 40), "{hash}");
     assert!(!device.storage.contains("pin:0012"));
 

@@ -12,6 +12,7 @@
 
 use std::process::ExitCode;
 
+mod asset;
 mod elf;
 mod firmware;
 mod pack;
@@ -38,6 +39,13 @@ USAGE:
         signature file of its own; the key as for sign.
     paperpaw-sign check <flash.bin> <flash.bin.sig>
         Shows the signer of a whole flash image and whether its signature
+        holds.
+    paperpaw-sign sign-asset <file> <file.sig> [--key <secret-key-file>]
+        Signs a release asset (an emulator, the handbook) with a signature
+        file of its own, over \"paperpaw-asset-v1\" and a line end before the
+        file: it never holds as a firmware's; the key as for sign.
+    paperpaw-sign check-asset <file> <file.sig>
+        Shows the signer of a release asset and whether its signature
         holds.
     paperpaw-sign plugins <image.bin>
         Lists the plugin crates an app image or update file has built in;
@@ -92,6 +100,9 @@ fn run(args: Vec<String>) -> Result<(), String> {
             firmware::sign_apart(image, signature, Some(file))
         }
         ["check", image, signature] => firmware::check(image, signature),
+        ["sign-asset", file, signature] => asset::sign(file, signature, None),
+        ["sign-asset", file, signature, "--key", key] => asset::sign(file, signature, Some(key)),
+        ["check-asset", file, signature] => asset::check(file, signature),
         ["plugins", image] => firmware::plugins(image),
         ["fingerprint", elf] => firmware::fingerprint(elf),
         ["pack", elf, out] => plugin::pack(elf, out, None),

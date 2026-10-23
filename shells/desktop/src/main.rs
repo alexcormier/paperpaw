@@ -21,6 +21,16 @@ USAGE:
 OPTIONS:
     --profile <id>        Device to emulate (default: xteink-x4)
     --list-profiles       List available device profiles
+    --check <dir> [--profile <id>]...
+                          Check a plugin with paperpaw-dev (beside this program),
+                          its findings as JSON on standard output
+    --trust-code          Load code plugins built for this computer from the
+                          library (plugins/<id>/code-host.dll, .so or .dylib),
+                          those there installed first; without it, none
+    --stdio               Be driven by another program over standard input and
+                          output, a JSON object a line (see the `stdio` module)
+    --registry <file>     Write what the app offers data plugins (settings,
+                          widgets, actions, device profiles) as JSON
     --config <file>       User configuration file (paperpaw.ini)
     --set <key>=<value>   Override configuration, e.g. --set core.language=de
                           or --set slots.core.home=core.placeholder
@@ -64,6 +74,8 @@ struct Options {
     /// `Some(None)` removes the budget.
     heap_budget: Option<Option<usize>>,
     heap_report: bool,
+    /// Install the code plugins built for this computer on the card.
+    trust_code: bool,
 }
 
 fn main() -> ExitCode {
@@ -88,6 +100,12 @@ fn run() -> Result<(), String> {
         .library
         .clone()
         .unwrap_or_else(|| PathBuf::from("samples/library"));
+    if options.trust_code {
+        device::set_code_plugins(true);
+        let installed = paperpaw_emulator::native::trust(&library)
+            .map_err(|e| format!("library {}: {e}", library.display()))?;
+        eprintln!("code plugins installed: {}", installed.join(", "));
+    }
     let storage =
         device::library(&library).map_err(|e| format!("library {}: {e}", library.display()))?;
     if options.record.is_some() && options.headless {
@@ -163,6 +181,44 @@ fn user_config(options: &Options) -> Result<Option<String>, String> {
     Ok(Some(config))
 }
 
+/// `--check <plugin folder> [--profile <id>]...`: paperpaw-dev's checks
+/// of a plugin (`paperpaw-dev check`, which the release puts beside this
+/// program), their findings as JSON on standard output (its
+/// `report.json`), what it tells on the way on standard error; the exit
+/// code its (0: passed, 1: findings, 2: it could not check).
+fn check(args: &[String]) -> Result<i32, String> {
+    let exe = std::env::current_exe().map_err(|e| format!("--check: {e}"))?;
+    let dev = beside(&exe, "paperpaw-dev");
+    if !dev.exists() {
+        return Err(format!(
+            "--check needs {} beside this program (both are in the release's zip)",
+            dev.display()
+        ));
+    }
+    let out = paperpaw_emulator::private::dir("paperpaw-check")
+        .map_err(|e| format!("--check: a folder for its report: {e}"))?;
+    let ran = std::process::Command::new(&dev)
+        .arg("check")
+        .args(args)
+        .arg("--out")
+        .arg(&out)
+        .output()
+        .map_err(|e| format!("{}: {e}", dev.display()))?;
+    eprint!("{}", String::from_utf8_lossy(&ran.stdout));
+    eprint!("{}", String::from_utf8_lossy(&ran.stderr));
+    let report = std::fs::read_to_string(out.join("report.json"));
+    let _ = std::fs::remove_dir_all(&out);
+    if let Ok(report) = report {
+        print!("{report}");
+    }
+    Ok(ran.status.code().unwrap_or(2))
+}
+
+/// The program `name` in the folder of `exe` (with `.exe` on Windows).
+fn beside(exe: &std::path::Path, name: &str) -> PathBuf {
+    exe.with_file_name(format!("{name}{}", std::env::consts::EXE_SUFFIX))
+}
+
 fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>, String> {
     let mut options = Options::default();
     while let Some(arg) = args.next() {
@@ -173,6 +229,22 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
         match arg.as_str() {
             "-h" | "--help" => {
                 print!("{USAGE}");
+                return Ok(None);
+            }
+            "--check" => {
+                let rest: Vec<String> = args.by_ref().collect();
+                std::process::exit(check(&rest)?);
+            }
+            "--stdio" => {
+                let stdin = std::io::BufReader::new(std::io::stdin());
+                paperpaw_emulator::stdio::run(stdin, std::io::stdout().lock())
+                    .map_err(|e| format!("--stdio: {e}"))?;
+                return Ok(None);
+            }
+            "--registry" => {
+                let out = PathBuf::from(value("--registry")?);
+                let json = paperpaw_emulator::registry::registry()?;
+                std::fs::write(&out, json).map_err(|e| format!("{}: {e}", out.display()))?;
                 return Ok(None);
             }
             "--list-profiles" => {
@@ -199,6 +271,7 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
                 options.screenshot_dir = Some(PathBuf::from(value("--screenshot-dir")?));
             }
             "--heap-report" => options.heap_report = true,
+            "--trust-code" => options.trust_code = true,
             "--free-space" => {
                 let bytes = value("--free-space")?;
                 device::set_free_space(
@@ -231,4 +304,20 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
         }
     }
     Ok(Some(options))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// paperpaw-dev for `--check` is looked for in this program's folder.
+    #[test]
+    fn a_program_beside_is_in_the_same_folder() {
+        let suffix = std::env::consts::EXE_SUFFIX;
+        let exe = std::path::Path::new("dist").join(format!("paperpaw-emu{suffix}"));
+        assert_eq!(
+            beside(&exe, "paperpaw-dev"),
+            std::path::Path::new("dist").join(format!("paperpaw-dev{suffix}"))
+        );
+    }
 }

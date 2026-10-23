@@ -370,10 +370,15 @@ impl LockScreen {
                 }
                 if !code::check(&env, &entered) {
                     self.failed(cx);
-                } else if self.step == Step::Unlock {
-                    self.unlock(cx);
-                    return;
                 } else {
+                    // Kept with a salt made from it: kept anew, at random.
+                    if let Some(renewed) = code::renewed(&env, &entered) {
+                        cx.command(renewed);
+                    }
+                    if self.step == Step::Unlock {
+                        self.unlock(cx);
+                        return;
+                    }
                     self.succeeded(&env);
                     self.step = Step::Choose;
                     self.focus = 0;

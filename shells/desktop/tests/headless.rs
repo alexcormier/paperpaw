@@ -102,7 +102,7 @@ fn run(name: &str, profile: &str, script: &str, args: &[&str]) -> Run {
 
 /// A PNG's width and height.
 fn size(path: &Path) -> (u32, u32) {
-    let decoder = png::Decoder::new(File::open(path).unwrap());
+    let decoder = png::Decoder::new(std::io::BufReader::new(File::open(path).unwrap()));
     let reader = decoder.read_info().unwrap();
     let info = reader.info();
     (info.width, info.height)
