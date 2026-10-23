@@ -21,6 +21,8 @@ USAGE:
 OPTIONS:
     --profile <id>        Device to emulate (default: xteink-x4)
     --list-profiles       List available device profiles
+    --stdio               Be driven by another program over standard input and
+                          output, a JSON object a line (see the `stdio` module)
     --registry <file>     Write what the app offers data plugins (settings,
                           widgets, actions, device profiles) as JSON
     --config <file>       User configuration file (paperpaw.ini)
@@ -175,6 +177,12 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
         match arg.as_str() {
             "-h" | "--help" => {
                 print!("{USAGE}");
+                return Ok(None);
+            }
+            "--stdio" => {
+                let stdin = std::io::BufReader::new(std::io::stdin());
+                paperpaw_emulator::stdio::run(stdin, std::io::stdout().lock())
+                    .map_err(|e| format!("--stdio: {e}"))?;
                 return Ok(None);
             }
             "--registry" => {

@@ -17,6 +17,7 @@ pub mod light;
 pub mod panel;
 pub mod profiles;
 pub mod registry;
+pub mod stdio;
 pub mod trace;
 pub mod wifi;
 

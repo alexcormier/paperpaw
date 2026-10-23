@@ -6,6 +6,11 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- `paperpaw-emu --stdio`: the emulator driven by another program over its
+  standard input and output, a JSON object a line (protocol version 1):
+  start a profile on a folder, buttons, touches, reload, describe, run,
+  open, shot, quit; it tells frames (only when the panel changed),
+  warnings, plugins' requests and errors.
 - `paperpaw-emu --registry <file>` writes what the app offers data
   plugins as JSON (registry version 2): every setting, widget, action and
   device profile, for tools that work with a release (the handbook, the

@@ -163,6 +163,9 @@ pub struct Device {
     wall: Option<(Instant, i64, Option<i32>)>,
     /// HTTP requests in flight.
     pub http: crate::http::Http,
+    /// The requests plugins made (method and address), kept where someone
+    /// asks (`--stdio`): none by default.
+    pub requests: Option<Vec<(String, String)>>,
     /// Plugins' servers.
     pub servers: paperpaw_serve::Servers,
     pub sockets: paperpaw_serve::Sockets,
@@ -261,6 +264,7 @@ impl Device {
             gray_shown: false,
             wake_at: None,
             http: crate::http::Http::new(),
+            requests: None,
             servers: servers(),
             sockets: paperpaw_serve::Sockets::new(|| {}),
             wifi: crate::wifi::Wifi::default(),
@@ -618,6 +622,9 @@ impl Device {
         for io in self.kernel.take_io() {
             match io {
                 Io::Http(mut call) => {
+                    if let Some(requests) = &mut self.requests {
+                        requests.push((call.method.clone(), call.url.clone()));
+                    }
                     if let Err(e) = call.load_body(self.kernel.storage()) {
                         let now = self.now();
                         let failed = paperpaw_core::HttpResponse::failed(call.id, &e.to_string());
