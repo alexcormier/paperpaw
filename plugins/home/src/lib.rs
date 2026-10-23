@@ -161,6 +161,7 @@ impl Plugin for Home {
                 help::Hint::buttons("home.tips.move"),
                 help::Hint::buttons("home.tips.select"),
                 help::Hint::buttons("home.tips.menu"),
+                help::Hint::buttons("home.tips.panel"),
             ],
         )?;
         r.add_menu_entry(MenuEntry::new(ACTIONS, actions::LIBRARY).order(10))?;

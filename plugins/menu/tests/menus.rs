@@ -73,6 +73,7 @@ fn the_main_menu_lists_its_entries_on_both_devices() {
         assert_eq!(
             shown,
             [
+                "Quick panel",
                 "Home",
                 "Library",
                 "Tools",
@@ -89,6 +90,7 @@ fn the_main_menu_lists_its_entries_on_both_devices() {
 #[test]
 fn every_entry_of_the_main_menu_opens_what_it_says() {
     let expected = [
+        ("Quick panel", "menu.panel"),
         ("Home", "home.dashboard"),
         ("Library", "files.browser"),
         ("Tools", MENU),
@@ -376,7 +378,9 @@ fn menus_as_tiles_open_as_a_bar_with_every_entry() {
         if device.input.touch {
             app.tap_on("Library");
         } else {
-            // The focus on the first; right to the second.
+            // The focus on the first (the quick panel); right to the
+            // library, the third.
+            app.run(actions::RIGHT);
             app.run(actions::RIGHT);
             app.run(actions::CONFIRM);
         }

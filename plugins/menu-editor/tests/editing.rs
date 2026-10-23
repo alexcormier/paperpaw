@@ -18,7 +18,8 @@ use common::*;
 const MENUS: &str = "menu-editor.menus";
 const ENTRIES: &str = "menu-editor.entries";
 const ENTRY: &str = "menu-editor.entry";
-const MAIN: [&str; 6] = [
+const MAIN: [&str; 7] = [
+    "Quick panel",
     "Home",
     "Library",
     "Tools",
@@ -122,20 +123,20 @@ fn an_entry_moved_up_is_kept_and_read_back_by_a_new_kernel() {
         let storage = Shared::memory("", &[]);
         let mut app = main_menu_editor(device, storage.clone());
         let mut expected: Vec<String> = MAIN.iter().map(|s| s.to_string()).collect();
-        assert_eq!(rows(&mut app)[..6], expected[..]);
+        assert_eq!(rows(&mut app)[..7], expected[..]);
         choose(&mut app, "Library");
         assert_eq!(app.screen(), ENTRY);
         choose(&mut app, "Move up");
         assert_eq!(app.screen(), ENTRIES);
-        expected.swap(0, 1);
-        assert_eq!(rows(&mut app)[..6], expected[..]);
+        expected.swap(1, 2);
+        assert_eq!(rows(&mut app)[..7], expected[..]);
         // The focus went along (buttons).
         if !device.input.touch {
             assert_eq!(app.focused().as_deref(), Some("Library"));
         }
         let config = storage.config();
         assert!(
-            config.contains("[menus]\ncore.main = core.library, core.home,"),
+            config.contains("[menus]\ncore.main = core.quick-panel, core.library, core.home,"),
             "{config}"
         );
         assert_eq!(shown_main_menu(&mut app), expected);
@@ -149,12 +150,12 @@ fn moving_past_either_end_changes_nothing() {
     for device in DEVICES {
         let storage = Shared::memory("", &[]);
         let mut app = main_menu_editor(device, storage.clone());
-        choose(&mut app, "Home");
+        choose(&mut app, "Quick panel");
         choose(&mut app, "Move up");
         choose(&mut app, "Settings");
         choose(&mut app, "Move down");
         assert_eq!(app.screen(), ENTRIES);
-        assert_eq!(rows(&mut app)[..6], MAIN[..]);
+        assert_eq!(rows(&mut app)[..7], MAIN[..]);
         assert!(
             !storage.config().contains("[menus]"),
             "{}",
@@ -170,11 +171,18 @@ fn an_entry_removed_is_gone_from_the_menu_and_stays_gone() {
         let mut app = main_menu_editor(device, storage.clone());
         choose(&mut app, "Night mode");
         choose(&mut app, "Remove");
-        let expected = ["Home", "Library", "Tools", "Edit home screen", "Settings"];
+        let expected = [
+            "Quick panel",
+            "Home",
+            "Library",
+            "Tools",
+            "Edit home screen",
+            "Settings",
+        ];
         assert_eq!(shown_main_menu(&mut app), expected);
         assert!(
             storage.config().contains(
-                "core.main = core.home, core.library, core.tools, home.edit-pages, core.settings"
+                "core.main = core.quick-panel, core.home, core.library, core.tools, home.edit-pages, core.settings"
             ),
             "{}",
             storage.config()
@@ -250,7 +258,7 @@ fn a_menu_reset_is_as_its_plugins_define_it_again() {
         choose(&mut app, "Night mode");
         choose(&mut app, "Remove");
         choose(&mut app, "Reset this menu");
-        assert_eq!(rows(&mut app)[..6], MAIN[..]);
+        assert_eq!(rows(&mut app)[..7], MAIN[..]);
         assert!(!rows(&mut app).iter().any(|r| r == "Reset this menu"));
         assert!(
             !storage.config().contains("core.main ="),
@@ -298,8 +306,9 @@ fn an_entry_dragged_by_its_grip_moves_by_touch() {
     app.drag(Point::new(465, home.y), Point::new(465, night.y));
     let shown = rows(&mut app);
     assert_eq!(
-        shown[..6],
+        shown[..7],
         [
+            "Quick panel",
             "Library",
             "Tools",
             "Edit home screen",
@@ -311,7 +320,7 @@ fn an_entry_dragged_by_its_grip_moves_by_touch() {
     assert!(
         storage
             .config()
-            .contains("core.main = core.library, core.tools, home.edit-pages, core.night-mode, core.home, core.settings"),
+            .contains("core.main = core.quick-panel, core.library, core.tools, home.edit-pages, core.night-mode, core.home, core.settings"),
         "{}",
         storage.config()
     );

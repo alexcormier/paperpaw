@@ -323,3 +323,18 @@ fn a_thumb_resting_at_an_edge_leaves_long_presses_elsewhere() {
     assert_eq!(*log.borrow(), ["LongPress 45,45", "LongPress 45,45"]);
     assert!(nothing_held(&kernel));
 }
+
+#[test]
+fn right_held_opens_the_quick_panel_and_pressed_still_goes_right() {
+    let log = log();
+    let mut kernel = shown_kernel(&log);
+    // The quick panel by the buttons, as down from the top edge.
+    let held = crate::keymap::InputKey::LongButton(Cow::Borrowed("right"));
+    assert_eq!(kernel.resolve(&held), Some(&actions::QUICK_PANEL));
+    // Pressed briefly: right, as before (when it is let go).
+    button(&mut kernel, 1200, "right", ButtonState::Pressed);
+    button(&mut kernel, 1250, "right", ButtonState::Released);
+    kernel.tick(Instant(3000));
+    assert_eq!(*log.borrow(), ["a:core.right"]);
+    assert!(nothing_held(&kernel));
+}
