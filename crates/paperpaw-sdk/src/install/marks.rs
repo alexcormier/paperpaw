@@ -64,9 +64,9 @@ impl Marks {
     }
 }
 
-/// Writes `marks` into `folder`, the plugin about to be installed;
-/// `false` if they could not be written (then do not install it).
-pub fn write(storage: &dyn Storage, folder: &str, marks: &Marks) -> bool {
+/// Writes `marks` into `folder`, the plugin about to be installed; an
+/// error if they could not be written (then do not install it).
+pub fn write(storage: &dyn Storage, folder: &str, marks: &Marks) -> Result<(), crate::data::Error> {
     let hex = paperpaw_digest::hex::encode;
     let mut text = match marks.from {
         From::Store(version) => format!("from store {version}\n"),
@@ -79,7 +79,7 @@ pub fn write(storage: &dyn Storage, folder: &str, marks: &Marks) -> bool {
         text.push_str(&format!("author {}\n", hex(&author)));
     }
     let path = format!("{}/{FILE}", folder.trim_end_matches('/'));
-    storage.write(&path, text.as_bytes()).is_ok()
+    Ok(storage.write(&path, text.as_bytes())?)
 }
 
 /// Keeps what an installer wrote into the folder of plugin `id`, now in
@@ -145,17 +145,13 @@ mod tests {
     fn marks_are_kept_once_the_plugin_is_in_place() {
         let storage = MemoryStorage::new();
         let v = Version::new(1, 2, 0);
-        assert!(write(
-            &storage,
-            "plugins/dark/",
-            &Marks::new(From::Store(v))
-        ));
+        assert!(write(&storage, "plugins/dark/", &Marks::new(From::Store(v))).is_ok());
         assert_eq!(origin(&storage, "dark", v), Origin::Local);
         assert!(settle(&storage, "dark", "plugins/dark"));
         assert_eq!(origin(&storage, "dark", v), Origin::Store);
         assert!(!storage.exists("plugins/dark/.install-marks"));
         assert!(!settle(&storage, "dark", "plugins/dark"));
-        assert!(write(&storage, "plugins/dark", &Marks::new(From::Local)));
+        assert!(write(&storage, "plugins/dark", &Marks::new(From::Local)).is_ok());
         settle(&storage, "dark", "plugins/dark");
         assert_eq!(origin(&storage, "dark", v), Origin::Local);
     }
@@ -166,7 +162,7 @@ mod tests {
     fn code_is_named_only_for_the_code_in_the_folder() {
         let storage = MemoryStorage::new();
         let marks = Marks::new(From::Local).code([7; 32]);
-        assert!(write(&storage, "plugins/clock", &marks));
+        assert!(write(&storage, "plugins/clock", &marks).is_ok());
         settle(&storage, "clock", "plugins/clock");
         assert_eq!(native::installed_code(&storage, "clock"), None);
     }

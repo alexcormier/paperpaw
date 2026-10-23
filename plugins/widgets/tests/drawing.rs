@@ -665,14 +665,15 @@ fn filled() -> MemoryStorage {
             height: 90,
         })
         .progress(40);
-    paperpaw_sdk::library::save(&storage, "books/one.epub", &book);
+    paperpaw_sdk::library::save(&storage, "books/one.epub", &book).unwrap();
     paperpaw_sdk::library::catalog::write(
         &storage,
         &[paperpaw_sdk::library::catalog::Record::of(
             "books/one.epub",
             &book,
         )],
-    );
+    )
+    .unwrap();
     let _ = storage.write(".paperpaw/library/opened.txt", b"books/one.epub");
     storage
         .write(

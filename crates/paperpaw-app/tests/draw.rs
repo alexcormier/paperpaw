@@ -418,7 +418,7 @@ fn card() -> Vec<(String, Vec<u8>)> {
         text: annotations::snippet(text),
         note: "The very beginning".to_string(),
     };
-    annotations::add(storage, EPUB, highlight);
+    annotations::add(storage, EPUB, highlight).unwrap();
     let words = [("peeped", "en"), ("Ungeziefer", "de")]
         .map(|(word, language)| {
             format!(

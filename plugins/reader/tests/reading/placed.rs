@@ -99,7 +99,7 @@ fn a_highlight_keeps_its_text_when_the_books_styles_are_switched() {
         text: text.clone(),
         note: String::from("mine"),
     };
-    assert!(annotations::add(&storage, EPUB, highlight));
+    assert!(annotations::add(&storage, EPUB, highlight).is_ok());
     let mut reading = Reading::with_book(storage.clone(), EPUB, epub);
     reading.open();
     reading.run(core_actions::BACK);

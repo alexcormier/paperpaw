@@ -43,7 +43,7 @@ fn details_belong_to_one_file_version() {
         added: Some(20_000),
         fields: alloc::vec![("stars.rating".into(), "4".into())],
     };
-    save(&storage, "books/a.txt", &book);
+    save(&storage, "books/a.txt", &book).unwrap();
     let read = super::book(&storage, "books/a.txt");
     assert_eq!(read, Some(book));
     assert_eq!(read.unwrap().field("stars.rating"), Some("4"));
@@ -232,7 +232,8 @@ fn removed_books_are_forgotten() {
             size: 5,
             ..Book::default()
         },
-    );
+    )
+    .unwrap();
     set_favourite(&storage, "books/a.txt", true);
     let _ = storage.write(
         &opened_file(),
@@ -429,7 +430,7 @@ fn details_keep_what_cannot_be_read_again() {
         fields: alloc::vec![("stars.rating".into(), "4".into())],
         ..Book::default()
     };
-    save(&kept, "books/a.txt", &book);
+    save(&kept, "books/a.txt", &book).unwrap();
     let before = kept.get(&book_file("books/a.txt"));
     let storage = Sizeless(kept);
     set_finished(&storage, "books/a.txt", true);
@@ -509,7 +510,7 @@ fn details_of_many_tags_are_read_back() {
         fields: alloc::vec![("stars.rating".into(), "4".into())],
         ..Book::default()
     };
-    assert!(save(&storage, "books/a.txt", &book));
+    assert!(save(&storage, "books/a.txt", &book).is_ok());
     let read = super::book(&storage, "books/a.txt").expect("read back");
     assert_eq!(read.tags.len(), MAX_TAGS);
     assert_eq!(read.title.as_deref().map(str::len), Some(MAX_VALUE));

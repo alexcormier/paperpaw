@@ -306,7 +306,10 @@ impl ReaderScreen {
         };
         let (start, end) = (book.page.start, book.page.end);
         let on_page = |m: &Mark| m.kind == Kind::Bookmark && m.start >= start && m.start < end;
-        if !annotations::remove(env.storage, &book.path, on_page) {
+        if !matches!(
+            annotations::remove(env.storage, &book.path, on_page),
+            Ok(true)
+        ) {
             let text = page_text(&book.page.lines);
             let kept = annotations::add(
                 env.storage,
@@ -325,7 +328,7 @@ impl ReaderScreen {
                     note: String::new(),
                 },
             );
-            if !kept {
+            if kept.is_err() {
                 marks_not_saved(cx);
             }
         }
@@ -956,7 +959,10 @@ impl ReaderScreen {
             let env = *cx.env();
             let note = typed.text.as_str();
             let now = paperpaw_sdk::time::unix_seconds(&env).unwrap_or(0);
-            if !annotations::set_note(env.storage, &book.path, at, note, now) {
+            if !matches!(
+                annotations::set_note(env.storage, &book.path, at, note, now),
+                Ok(true)
+            ) {
                 marks_not_saved(cx);
             }
             book.marks = annotations::marks(env.storage, &book.path);

@@ -427,17 +427,28 @@ impl Index {
     /// Keeps the index in the file `file`, to be read again
     /// ([`Index::load`]) instead of made anew, so a view holds no memory
     /// for it meanwhile; `archive` is the folder it was made without.
-    /// Written a piece at a time; `false` where it could not be.
+    /// Written a piece at a time; an error where it could not be (an
+    /// index not made yet: [`StorageError::InvalidData`](crate::StorageError::InvalidData)).
     #[cfg(any(test, feature = "kernel"))]
     #[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
-    pub fn save(&self, storage: &dyn Storage, file: &str, archive: &str) -> bool {
+    pub fn save(
+        &self,
+        storage: &dyn Storage,
+        file: &str,
+        archive: &str,
+    ) -> Result<(), crate::data::Error> {
         self.write(storage, file, archive)
     }
 
     /// [`Index::save`], for the library's service.
-    pub(crate) fn write(&self, storage: &dyn Storage, file: &str, archive: &str) -> bool {
+    pub(crate) fn write(
+        &self,
+        storage: &dyn Storage,
+        file: &str,
+        archive: &str,
+    ) -> Result<(), crate::data::Error> {
         let Some(stamp) = self.version else {
-            return false;
+            return Err(crate::StorageError::InvalidData.into());
         };
         let mut head = Vec::with_capacity(HEAD);
         head.extend_from_slice(MAGIC);
@@ -447,9 +458,7 @@ impl Index {
         head.extend_from_slice(&(self.total as u32).to_le_bytes());
         head.extend_from_slice(&(self.items.len() as u32).to_le_bytes());
         head.extend_from_slice(&(self.series.len() as u16).to_le_bytes());
-        if storage.write(file, &head).is_err() {
-            return false;
-        }
+        storage.write(file, &head)?;
         let mut piece: Vec<u8> = Vec::with_capacity(64 * ITEM_BYTES);
         for chunk in self.items.chunks(64) {
             piece.clear();
@@ -463,20 +472,16 @@ impl Index {
                 piece.push(item.recent);
                 piece.push(item.flags);
             }
-            if storage.append(file, &piece).is_err() {
-                return false;
-            }
+            storage.append(file, &piece)?;
         }
         for name in &self.series {
             piece.clear();
             let name = &name.as_bytes()[..name.len().min(usize::from(u16::MAX))];
             piece.extend_from_slice(&(name.len() as u16).to_le_bytes());
             piece.extend_from_slice(name);
-            if storage.append(file, &piece).is_err() {
-                return false;
-            }
+            storage.append(file, &piece)?;
         }
-        true
+        Ok(())
     }
 
     /// The index kept by `Index::save` in `file`, if it is of the
@@ -615,7 +620,7 @@ mod tests {
                 Record::of(&format!("{folder}/Book {n:04}.txt"), &book).with_status(status)
             })
             .collect();
-        catalog::write(&storage, &records);
+        catalog::write(&storage, &records).unwrap();
         storage
     }
 
@@ -675,7 +680,8 @@ mod tests {
                 Record::of("b/x.txt", &Book::default().series(Some("Other".into())))
                     .with_status(status(None)),
             ],
-        );
+        )
+        .unwrap();
         let index = Index::build(&storage, 100, "");
         let next = index.next_in_series(false);
         assert_eq!(next.len(), 1, "the other series is not begun");
@@ -697,7 +703,7 @@ mod tests {
         let version = catalog_version(&storage).unwrap();
         assert_eq!(index.version, Some(version));
         index.set_progress(index.items[2].hash, Some(42));
-        assert!(index.save(&storage, "kept.bin", "books/Archive"));
+        assert!(index.save(&storage, "kept.bin", "books/Archive").is_ok());
         let kept = Index::load(&storage, "kept.bin", "books/Archive", version).unwrap();
         assert_eq!(kept.items, index.items);
         assert_eq!(kept.series, index.series);
@@ -725,7 +731,7 @@ mod tests {
             catalog::each(&storage, &mut |r| all.push(r));
             all
         };
-        catalog::write(&storage, &records);
+        catalog::write(&storage, &records).unwrap();
         assert_ne!(catalog_version(&storage), Some(version));
     }
 

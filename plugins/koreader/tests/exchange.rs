@@ -323,7 +323,8 @@ fn changes_here_are_passed_on_to_koreader() {
             text: String::from("she"),
             note: String::from("Quote \"this\"\\"),
         },
-    );
+    )
+    .unwrap();
     let changed = AnnotationsChanged::new(BOOK.to_string());
     device.send(events::ANNOTATIONS_CHANGED, &changed);
     let passed = device.passed();
@@ -383,7 +384,7 @@ fn everything_removed_on_one_side_goes_on_the_other() {
 
     let mut device = Device::new(Some(METADATA.as_bytes()));
     device.open();
-    assert!(annotations::remove(&device.storage, BOOK, |_| true));
+    assert!(annotations::remove(&device.storage, BOOK, |_| true).unwrap());
     let changed = AnnotationsChanged::new(BOOK.to_string());
     device.send(events::ANNOTATIONS_CHANGED, &changed);
     assert!(device.storage.exists(EXCHANGE));
@@ -505,7 +506,8 @@ fn what_koreader_has_and_paperpaw_does_not_know_is_passed_on_unchanged() {
             text: String::new(),
             note: String::new(),
         },
-    );
+    )
+    .unwrap();
     device.open();
     let passed = device.passed();
     assert_eq!(passed.len(), 2);

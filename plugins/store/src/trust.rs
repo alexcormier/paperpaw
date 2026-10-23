@@ -194,7 +194,7 @@ pub(crate) fn install(env: &Env<'_>, code: Option<Code>, out: &mut Commands) -> 
     if let Some(code) = code {
         marks = marks.code(code.sha256).author(code.author);
     }
-    if !install::marks::write(env.storage, &folder, &marks) {
+    if install::marks::write(env.storage, &folder, &marks).is_err() {
         return None;
     }
     let _ = env.storage.remove(&expected_path());
