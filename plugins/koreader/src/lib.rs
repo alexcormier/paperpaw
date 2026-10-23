@@ -26,9 +26,13 @@
 //! keeps an empty list where it was seen with annotations at the last
 //! exchange. KOReader writes an empty list for every book it opened, so
 //! one in a file never seen with any (a fresh one from another device)
-//! removes nothing: what both had is offered to KOReader again. Before
-//! everything is removed here, the annotations are kept aside
-//! (`<key>.txt.removed` beside them). What could
+//! removes nothing: what both had is offered to KOReader again. Where
+//! KOReader's file, seen with annotations before, has none any more
+//! (removed there, or a fresh file synced in from another device), the
+//! reader is asked in the book whether to remove them here too; nothing
+//! changes before, *Keep* (where the focus starts) offers them to
+//! KOReader again. Before everything is removed here, the annotations
+//! are kept aside (`<key>.txt.removed` beside them). What could
 //! not be written for KOReader is not taken as known, so it goes again
 //! next time. Annotations go to KOReader with the time they were made:
 //! while neither they nor the clock tell it, they wait here.
@@ -414,6 +418,9 @@ fn load_ours(storage: &dyn Storage, book: &str) -> Result<Vec<Annotation>, Unrea
 /// What an exchange works with.
 pub struct Exchange<'a> {
     pub storage: &'a dyn Storage,
+    /// What to do where KOReader's file has none any more of what both
+    /// had.
+    pub removal: Removal,
     /// The book, opened.
     pub doc: &'a dyn Document,
     /// Seconds since 1970 (UTC) now, 0 if not known.
@@ -633,6 +640,11 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
     // is not taken as known there, and goes to KOReader again.
     let empty_there = listed && theirs.is_empty() && !last.known.is_empty();
     let removed_there = empty_there && !pending && last.seen > 0;
+    // The reader decides, in the book: nothing changes before.
+    if removed_there && !ours.is_empty() && x.removal == Removal::Ask {
+        return Ok(false);
+    }
+    let removed_there = removed_there && x.removal == Removal::Remove;
     let known: &[Known] = if empty_there && !removed_there {
         &[]
     } else {
@@ -775,6 +787,33 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
     Ok(ours_changed)
 }
 
+/// What an exchange does where KOReader's file, seen with annotations
+/// before, has none any more: removed there, or a fresh file synced in
+/// from another device, which cannot be told apart.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Removal {
+    /// Nothing changes on either side (the reader is asked:
+    /// [`removed_there`]).
+    Ask,
+    /// Removed here too, a copy kept aside.
+    Remove,
+    /// Kept here, and offered to KOReader again.
+    Keep,
+}
+
+/// Whether KOReader's side `theirs` has none any more of what both had,
+/// while there are annotations here: the reader is asked before anything
+/// changes ([`Removal`]).
+pub fn removed_there(
+    storage: &dyn Storage,
+    book: &str,
+    theirs: &Theirs,
+) -> Result<bool, Unreadable> {
+    let last = load_known(storage, book)?;
+    let empty_there = theirs.listed && theirs.items.is_empty() && !last.known.is_empty();
+    Ok(empty_there && !theirs.pending && last.seen > 0 && !load_ours(storage, book)?.is_empty())
+}
+
 /// Keeps a copy of the annotations here of the book at `book` beside
 /// them (`<key>.txt.removed`, numbered where there is one), never over
 /// another; `false` where it could not be made.
@@ -785,31 +824,45 @@ fn keep_aside(storage: &dyn Storage, book: &str) -> bool {
     !storage.exists(&to) && paperpaw_sdk::files::copy(storage, &from, &to).is_ok()
 }
 
+/// What an exchange of a book came to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Exchanged {
+    Same,
+    Changed,
+    /// KOReader's file has none any more of what both had: the reader is
+    /// to say whether to remove them here too.
+    Ask,
+}
+
 /// Exchanges the annotations of the book at `book` with KOReader's, if
-/// KOReader keeps any for it; `true` if those here changed.
-fn exchange_book(env: &Env<'_>, book: &str) -> bool {
+/// KOReader keeps any for it.
+fn exchange_book(env: &Env<'_>, book: &str, removal: Removal) -> Exchanged {
     // KOReader's side first: most books have none, and then the book
     // need not be opened.
     let limit = max_file(env.device.memory);
     let Ok(Some(theirs)) = read_theirs(env.storage, book, limit) else {
-        return false;
+        return Exchanged::Same;
     };
+    if removal == Removal::Ask && removed_there(env.storage, book, &theirs) == Ok(true) {
+        return Exchanged::Ask;
+    }
     // As the reader opens it: the places of marks are those of its
     // conversion of the book.
     let options = paperpaw_sdk::reading::open_options(env);
     let Ok(doc) = env.formats.open_with(env.storage, book, &options) else {
-        return false;
+        return Exchanged::Same;
     };
     // Ours at their places in this conversion first, where KOReader's are
     // found: made in another (the book's own styles switched since, say),
     // they would be taken for others there, and ours for removed.
     let conversion = paperpaw_sdk::reading::conversion(env);
     if annotations::relocate(env.storage, book, conversion, doc.as_ref()).is_err() {
-        return false;
+        return Exchanged::Same;
     }
     let local = |unix| time::local_seconds(env, unix);
     let x = Exchange {
         storage: env.storage,
+        removal,
         doc: doc.as_ref(),
         now: time::unix_seconds(env).unwrap_or(0),
         local: &local,
@@ -833,8 +886,46 @@ fn exchange_book(env: &Env<'_>, book: &str) -> bool {
             reason = "those taken over keep their XPointers; where that cannot be written now, the reader takes them as of its conversion when it shows them"
         )]
         let _ = annotations::relocate(env.storage, book, conversion, x.doc);
+        return Exchanged::Changed;
     }
-    changed
+    Exchanged::Same
+}
+
+/// The reader's answer whether to remove here what KOReader's file has
+/// no more, with the book as its `path`.
+const REMOVAL_ANSWER: paperpaw_sdk::event::Event<paperpaw_sdk::replies::Confirmed> =
+    paperpaw_sdk::event::Event::new("koreader.removal-answer");
+const PATH: &str = "path";
+
+/// Exchanges `book`'s annotations as `removal` says; where the reader is
+/// to decide, asks once in this run (the question's *Back* keeps them).
+fn exchange_or_ask(
+    env: &Env<'_>,
+    book: &str,
+    removal: Removal,
+    asked: &RefCell<Vec<String>>,
+    announced: &Announced,
+    out: &mut Vec<paperpaw_sdk::Command>,
+) {
+    match exchange_book(env, book, removal) {
+        Exchanged::Changed => {
+            announced.set(book);
+            out.push(annotations::changed(book));
+        }
+        Exchanged::Ask if !asked.borrow().iter().any(|b| b == book) => {
+            asked.borrow_mut().push(String::from(book));
+            let i18n = env.i18n;
+            out.push(
+                paperpaw_sdk::ask::confirm(i18n.tr("koreader.removed-there"), &REMOVAL_ANSWER)
+                    .text(i18n.tr("koreader.removed-there.text"))
+                    .yes(i18n.tr("koreader.removed-there.remove"))
+                    .no(i18n.tr("koreader.removed-there.keep"))
+                    .with(PATH, book)
+                    .command(),
+            );
+        }
+        Exchanged::Ask | Exchanged::Same => {}
+    }
 }
 
 /// The book whose annotations this plugin announced as changed last: the
@@ -936,22 +1027,33 @@ impl Plugin for KoReader {
         // removed with it.
         r.add_book_data(Env::plugin_dir(PLUGIN.as_str()), "")?;
         let announced = Rc::new(Announced::default());
-        let opened = Rc::clone(&announced);
+        // Books whose reader was asked in this run whether to remove what
+        // KOReader's file has no more.
+        let asked = Rc::new(RefCell::new(Vec::new()));
+        let (opened, opened_asked) = (Rc::clone(&announced), Rc::clone(&asked));
         r.on(events::BOOK_OPENED, move |env, reading, out| {
-            if exchange_book(env, &reading.path) {
-                opened.set(&reading.path);
-                out.push(annotations::changed(&reading.path));
-            }
+            let book = &reading.path;
+            exchange_or_ask(env, book, Removal::Ask, &opened_asked, &opened, out);
+        })?;
+        let (answered, answered_asked) = (Rc::clone(&announced), Rc::clone(&asked));
+        r.on(REMOVAL_ANSWER, move |env, answer, out| {
+            let Some(book) = answer.context.get(PATH) else {
+                return;
+            };
+            let removal = if answer.yes {
+                Removal::Remove
+            } else {
+                Removal::Keep
+            };
+            let book = String::from(book);
+            exchange_or_ask(env, &book, removal, &answered_asked, &answered, out);
         })?;
         r.on(events::ANNOTATIONS_CHANGED, move |env, changed, out| {
             if announced.is_own(&changed.path) {
                 return;
             }
             note_emptied(env.storage, &changed.path);
-            if exchange_book(env, &changed.path) {
-                announced.set(&changed.path);
-                out.push(annotations::changed(&changed.path));
-            }
+            exchange_or_ask(env, &changed.path, Removal::Ask, &asked, &announced, out);
         })?;
         r.on(events::BOOK_MOVED, |env, moved, _| {
             moved_book(env.storage, &moved.from, &moved.path);

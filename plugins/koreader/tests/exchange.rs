@@ -210,6 +210,28 @@ impl Device {
         self.send(events::BOOK_OPENED, &reading);
     }
 
+    /// The reader answers the question shown: remove, or keep (where the
+    /// focus starts).
+    fn answer(&mut self, remove: bool) {
+        for action in [
+            remove.then_some(paperpaw_sdk::builtin::actions::LEFT),
+            Some(paperpaw_sdk::builtin::actions::CONFIRM),
+        ]
+        .into_iter()
+        .flatten()
+        {
+            self.now += 100;
+            self.kernel.run_action(Instant(self.now), action);
+            self.kernel.render(&mut |_, _| {});
+        }
+    }
+
+    /// Whether a question shows (about KOReader's empty file: the only
+    /// one this plugin asks).
+    fn asked(&mut self) -> bool {
+        self.kernel.active_screen().map(Id::as_str) == Some("core.confirm-dialog")
+    }
+
     fn ours(&self) -> Vec<Annotation> {
         annotations::load(&self.storage, BOOK)
     }
@@ -316,9 +338,31 @@ fn changes_here_are_passed_on_to_koreader() {
     assert_eq!(device.locate(new.str("pos1").unwrap()), end);
 }
 
+/// KOReader's file empty again (a fresh one synced in, say), and the
+/// reader keeps them: they stay here and go to KOReader again; not asked
+/// twice for it.
+#[test]
+fn kept_they_stay_and_go_to_koreader_again() {
+    let mut device = Device::new(Some(METADATA.as_bytes()));
+    device.open();
+    device
+        .storage
+        .write(SIDECAR, b"return { [\"annotations\"] = {} }")
+        .unwrap();
+    device.open();
+    assert!(device.asked());
+    device.answer(false);
+    assert!(!device.asked());
+    assert_eq!(device.ours().len(), 2);
+    assert_eq!(device.passed().len(), 2);
+    device.open();
+    assert!(!device.asked());
+    assert_eq!(device.ours().len(), 2);
+}
+
 /// Every annotation removed on one side goes on the other too: in
-/// KOReader, they go here when the book is opened; here, KOReader is told
-/// when the reader says so.
+/// KOReader, they go here once the reader said so in the book; here,
+/// KOReader is told when the reader says so.
 #[test]
 fn everything_removed_on_one_side_goes_on_the_other() {
     let mut device = Device::new(Some(METADATA.as_bytes()));
@@ -329,6 +373,10 @@ fn everything_removed_on_one_side_goes_on_the_other() {
         .write(SIDECAR, b"return { [\"annotations\"] = {} }")
         .unwrap();
     device.open();
+    // Asked in the book first: nothing goes meanwhile.
+    assert!(device.asked());
+    assert_eq!(device.ours().len(), 2);
+    device.answer(true);
     assert!(device.ours().is_empty());
     assert_eq!(device.changed.borrow().len(), 2);
     assert!(!device.storage.exists(EXCHANGE));
