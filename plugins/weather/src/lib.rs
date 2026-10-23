@@ -409,7 +409,7 @@ fn fetched(env: &Env<'_>, state: &Shared, reply: &HttpReply, out: &mut Commands)
     let fetched = time::unix_seconds(env).unwrap_or(0);
     let weather = reply
         .ok()
-        .then(|| data::parse_forecast(reply.body.as_bytes(), &coordinates, fetched))
+        .then(|| data::parse_forecast(&reply.body, &coordinates, fetched))
         .flatten();
     let told = reply.context.get(TOLD).is_some();
     // Shown at once, the new weather or that it failed.

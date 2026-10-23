@@ -15,6 +15,7 @@ use std::{
     thread,
 };
 
+use paperpaw_core::sdk::HttpError;
 use paperpaw_core::{HttpCall, HttpResponse};
 
 /// Where requests go instead of the system's network ([`set_route`]).
@@ -92,7 +93,8 @@ impl Http {
     /// has no network of its own.
     #[cfg(target_arch = "wasm32")]
     fn system(&mut self, call: HttpCall) {
-        let failed = HttpResponse::failed(call.id, "no network in the browser's emulator");
+        let reason = "no network in the browser's emulator";
+        let failed = HttpResponse::failed(call.id, HttpError::NoNetwork, reason);
         let _ = self.sender.send(failed);
     }
 
@@ -117,12 +119,7 @@ impl Http {
 /// Makes the request with `curl`; status 0 with the reason if it fails.
 #[cfg(not(target_arch = "wasm32"))]
 fn run(call: HttpCall) -> HttpResponse {
-    let failed = |reason: String| HttpResponse {
-        id: call.id,
-        status: 0,
-        body: reason.into_bytes(),
-        ..HttpResponse::default()
-    };
+    let failed = |error, reason: String| HttpResponse::failed(call.id, error, &reason);
     let mut command = Command::new("curl");
     let seconds = call.timeout_ms.div_ceil(1000).max(1).to_string();
     // The status, the ETag, the content type, the final address and the
@@ -155,17 +152,21 @@ fn run(call: HttpCall) -> HttpResponse {
     }
     let mut child = match command.spawn() {
         Ok(child) => child,
-        Err(e) => return failed(format!("curl: {e}")),
+        Err(e) => return failed(HttpError::Io, format!("curl: {e}")),
     };
     if let (Some(body), Some(mut stdin)) = (&call.body, child.stdin.take()) {
         let _ = stdin.write_all(body);
     }
     let output = match child.wait_with_output() {
         Ok(output) => output,
-        Err(e) => return failed(format!("curl: {e}")),
+        Err(e) => return failed(HttpError::Io, format!("curl: {e}")),
     };
     if !output.status.success() {
-        return failed(String::from_utf8_lossy(&output.stderr).trim().to_string());
+        let error = curl_error(output.status.code());
+        return failed(
+            error,
+            String::from_utf8_lossy(&output.stderr).trim().to_string(),
+        );
     }
     answer(&call, output.stdout)
 }
@@ -195,8 +196,9 @@ fn answer(call: &HttpCall, mut out: Vec<u8>) -> HttpResponse {
     if out.len() > call.max_response && call.save_to.is_some() {
         // A file cut short would be saved as if whole.
         let reason = format!("the answer is larger than {} bytes", call.max_response);
-        return HttpResponse::failed(call.id, &reason);
+        return HttpResponse::failed(call.id, HttpError::Refused, &reason);
     }
+    let truncated = out.len() > call.max_response;
     out.truncate(call.max_response);
     HttpResponse {
         id: call.id,
@@ -205,8 +207,21 @@ fn answer(call: &HttpCall, mut out: Vec<u8>) -> HttpResponse {
         etag,
         content_type,
         url,
-        saved: false,
         headers,
+        truncated,
+        ..HttpResponse::default()
+    }
+}
+
+/// Why `curl` failed, by its exit code.
+#[cfg(not(target_arch = "wasm32"))]
+fn curl_error(code: Option<i32>) -> HttpError {
+    match code {
+        Some(6) => HttpError::Dns,
+        Some(7 | 47) => HttpError::Refused,
+        Some(28) => HttpError::Timeout,
+        Some(35 | 51 | 53 | 54 | 58 | 59 | 60 | 66 | 77 | 80 | 82 | 83 | 90 | 91) => HttpError::Tls,
+        _ => HttpError::Io,
     }
 }
 

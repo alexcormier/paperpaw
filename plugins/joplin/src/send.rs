@@ -293,7 +293,8 @@ impl Run {
         }
         match reply.status {
             200..=299 => {
-                let body = paperpaw_sdk::json::object(&reply.body);
+                let text = reply.text();
+                let body = paperpaw_sdk::json::object(&text);
                 match paperpaw_sdk::json::text(&body, "id") {
                     Some(id) if !id.is_empty() => {
                         self.session = Some(id.to_string());

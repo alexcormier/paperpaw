@@ -266,7 +266,7 @@ impl BrowserScreen {
         // An error's page comes as text, not saved to the download file
         // (so a download never holds an error page): kept there to show.
         if status >= 400 {
-            let _ = env.storage.write(&tmp, reply.body.as_bytes());
+            let _ = env.storage.write(&tmp, &reply.body);
         }
         let mut head = [0u8; 512];
         let n = env.storage.read_at(&tmp, 0, &mut head).unwrap_or(0);

@@ -160,11 +160,12 @@ impl Harness {
 
 /// `params` as `key=value` pairs, in their order.
 pub fn describe(params: &Params) -> String {
-    params
-        .iter()
-        .map(|(k, v)| format!("{k}={v}"))
-        .collect::<Vec<_>>()
-        .join(" ")
+    let mut told: Vec<String> = params.iter().map(|(k, v)| format!("{k}={v}")).collect();
+    // An HTTP answer's body goes along unwritten, as it came.
+    if let Some(reply) = params.carried::<paperpaw_core::sdk::HttpReply>() {
+        told.push(format!("body={} bytes={}", reply.text(), reply.body.len()));
+    }
+    told.join(" ")
 }
 
 /// The test plugin `drv`.

@@ -330,8 +330,9 @@ impl Fetch {
     }
 
     fn token(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
+        let text = reply.text();
         let token = Self::ok(reply)
-            .and_then(|_| json::text(&json::object(&reply.body), "access_token").map(String::from));
+            .and_then(|_| json::text(&json::object(&text), "access_token").map(String::from));
         let Some(token) = token else {
             self.running = false;
             let key = match reply.status {

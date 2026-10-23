@@ -138,7 +138,7 @@ pub use menus::{
 pub use params::Params;
 pub use plugin::{Manifest, Plugin, Priority, RegisterError, SlotSpec, Uses};
 pub use plugins::{PluginInfo, PluginKind, PluginProblem, PluginState, Plugins, RequiredFor};
-pub use replies::{Chosen, HttpReply, ServerNotice, SocketNotice, Typed};
+pub use replies::{Chosen, HttpError, HttpReply, ServerNotice, SocketNotice, Typed};
 pub use screen::{
     CloseCause, Cx, Handled, Hint, Hints, Output, Outside, Screen, ScreenFactory, ScreenKey,
     ScreenSpec, ShowsThrough, StackEntry,

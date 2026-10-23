@@ -14,6 +14,7 @@
 use alloc::string::String;
 use alloc::vec::Vec;
 
+use paperpaw_core::sdk::HttpError;
 use paperpaw_core::{HttpCall, HttpResponse};
 use paperpaw_http::{Parser, Url};
 use paperpaw_platform::Storage;
@@ -211,7 +212,7 @@ impl Calls {
                             let host = host.split(['/', '?']).next().unwrap_or(host);
                             log::warn!("http {} {host}: {reason}", call.call.method);
                             call.discard(storage);
-                            HttpResponse::failed(call.call.id, reason)
+                            HttpResponse::failed(call.call.id, error_of(reason), reason)
                         }
                     });
                 }
@@ -458,7 +459,11 @@ impl Call {
     /// made whole (the old one replaced only then).
     fn finish(self, mut answer: HttpResponse, storage: &dyn Storage) -> HttpResponse {
         match self.sink {
-            Sink::Memory(body, _) => answer.body = body,
+            Sink::Memory(body, _) => {
+                // Kept to the most the request takes.
+                answer.truncated = self.got > body.len() as u64;
+                answer.body = body;
+            }
             Sink::File { part, buf, started } => {
                 let path = self.call.save_to.as_deref().unwrap_or_default();
                 let written = if started {
@@ -472,7 +477,8 @@ impl Call {
                 });
                 if replaced.is_err() {
                     let _ = storage.remove(&part);
-                    return HttpResponse::failed(self.call.id, "could not write the file");
+                    let reason = "could not write the file";
+                    return HttpResponse::failed(self.call.id, HttpError::Io, reason);
                 }
                 answer.saved = true;
             }
@@ -490,6 +496,19 @@ impl Call {
         {
             let _ = storage.remove(part);
         }
+    }
+}
+
+/// What kind of failure `reason` is: of this module's texts, the
+/// connection's ([`Link`]) and the secure session's.
+fn error_of(reason: &str) -> HttpError {
+    match reason {
+        "no network" => HttpError::NoNetwork,
+        "no such host" | "not an address" => HttpError::Dns,
+        "timed out" => HttpError::Timeout,
+        "could not connect" | "too many redirects" | "too large" => HttpError::Refused,
+        _ if reason.contains("certificate") || reason.contains("secure") => HttpError::Tls,
+        _ => HttpError::Io,
     }
 }
 

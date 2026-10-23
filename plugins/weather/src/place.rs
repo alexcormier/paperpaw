@@ -155,7 +155,7 @@ fn outcome(reply: &HttpReply, name: String) -> (Vec<Place>, Search) {
     if !reply.ok() {
         return (Vec::new(), Search::Failed);
     }
-    let places = data::parse_places(reply.body.as_bytes());
+    let places = data::parse_places(&reply.body);
     let search = if places.is_empty() {
         Search::Nothing(name)
     } else {
@@ -286,7 +286,12 @@ mod tests {
         let (places, search) = outcome(&reply(200, r#"{"generationtime_ms":0.3}"#), name());
         assert!(places.is_empty());
         assert_eq!(search, Search::Nothing(name()));
-        let (_, search) = outcome(&HttpReply::failed("no network", Params::new()), name());
+        let failed = HttpReply::failed(
+            paperpaw_sdk::HttpError::NoNetwork,
+            "no network",
+            Params::new(),
+        );
+        let (_, search) = outcome(&failed, name());
         assert_eq!(search, Search::Failed);
     }
 }

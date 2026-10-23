@@ -482,10 +482,10 @@ pub fn wifi_state(state: &WifiState) {
 
 /// The answer of a request asked over USB.
 pub fn http_answer(answer: &HttpResponse, ms: u64) {
-    let why = if answer.status == 0 {
-        String::from_utf8_lossy(&answer.body).into_owned()
-    } else {
-        String::new()
+    let why = match answer.error {
+        Some(error) => alloc::format!("{error}: {}", String::from_utf8_lossy(&answer.body)),
+        None if answer.status == 0 => String::from_utf8_lossy(&answer.body).into_owned(),
+        None => String::new(),
     };
     println!(
         "PP:HTTP {} {} saved {} {ms} ms heap {} {} {why}",

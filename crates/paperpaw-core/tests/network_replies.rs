@@ -16,7 +16,7 @@ mod common;
 use common::{DEVICE, Harness, REPLY};
 use paperpaw_core::sdk::wifi::{NETWORK_WAIT_MS, WifiState};
 use paperpaw_core::sdk::{
-    Command, HttpRequest, Id, MemoryStorage, Params, ServerResponse, SocketRead, Speech,
+    Command, HttpError, HttpRequest, Id, MemoryStorage, Params, ServerResponse, SocketRead, Speech,
 };
 use paperpaw_core::{
     HttpResponse, Io, Kernel, KernelBuilder, ServerCall, ServerEvent, SocketCall, SocketEvent,
@@ -85,7 +85,10 @@ fn an_http_answer_given_twice_or_for_no_request_is_heard_once() {
         (23, ok(calls[0].id, "A again")),
         (24, ok(0, "nobody")),
         (25, ok(u32::MAX, "nobody")),
-        (26, HttpResponse::failed(calls[0].id, "late failure")),
+        (
+            26,
+            HttpResponse::failed(calls[0].id, HttpError::Timeout, "late failure"),
+        ),
     ] {
         kernel.http_response(Instant(at), response);
     }
@@ -96,7 +99,7 @@ fn an_http_answer_given_twice_or_for_no_request_is_heard_once() {
 }
 
 #[test]
-fn an_answer_that_is_not_utf8_reaches_the_plugin_as_text() {
+fn an_answer_that_is_not_utf8_reaches_the_plugin_whole() {
     let harness = Harness::new();
     let mut kernel = kernel(&harness, |b| b.network(true));
     harness.run(&mut kernel, 10, [get("a")]);
@@ -112,7 +115,10 @@ fn an_answer_that_is_not_utf8_reaches_the_plugin_as_text() {
     );
     let replies = replies(&harness);
     assert_eq!(replies.len(), 1);
-    assert!(replies[0].contains("ok"), "{replies:?}");
+    assert!(
+        replies[0].contains("ok") && replies[0].contains("bytes=5"),
+        "{replies:?}"
+    );
 }
 
 #[test]
@@ -156,7 +162,10 @@ fn a_failed_download_writes_nothing_where_the_file_was_to_go() {
         )],
     );
     let call = http_calls(&mut kernel).remove(0);
-    kernel.http_response(Instant(20), HttpResponse::failed(call.id, "timed out"));
+    kernel.http_response(
+        Instant(20),
+        HttpResponse::failed(call.id, HttpError::Timeout, "timed out"),
+    );
     let kept = paperpaw_core::sdk::read_file(kernel.storage(), "books/kept.epub", 1024).unwrap();
     assert_eq!(kept, b"the old book");
     assert!(replies(&harness)[0].contains("status=0"));

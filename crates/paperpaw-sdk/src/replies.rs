@@ -12,7 +12,9 @@
 //! request come back as [`HttpReply::context`] (and so on), to tell its
 //! requests apart.
 
+use alloc::borrow::Cow;
 use alloc::string::{String, ToString};
+use alloc::vec::Vec;
 
 use crate::builtin::params;
 use crate::command::{http_params, server_params, socket_params};
@@ -40,16 +42,90 @@ fn text(params: &Params, key: &str) -> Option<String> {
     params.get(key).map(String::from)
 }
 
+/// Why an HTTP request had no answer ([`HttpReply::error`]).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+#[non_exhaustive]
+pub enum HttpError {
+    /// No network to send it on.
+    NoNetwork,
+    /// The host's name was not found.
+    Dns,
+    /// The secure connection failed (e.g. a certificate refused).
+    Tls,
+    /// No answer in time.
+    Timeout,
+    /// Refused on the way: by the host (a connection refused), too many
+    /// redirects, an answer larger than a file may be, or not sent at
+    /// all ([`HttpReply::refused`] says why).
+    Refused,
+    /// A newer request with the same reply took its place.
+    Replaced,
+    /// Taken back before it was answered.
+    Cancelled,
+    /// Reading or writing failed (e.g. the file it was saved to).
+    Io,
+}
+
+impl HttpError {
+    const ALL: [HttpError; 8] = [
+        HttpError::NoNetwork,
+        HttpError::Dns,
+        HttpError::Tls,
+        HttpError::Timeout,
+        HttpError::Refused,
+        HttpError::Replaced,
+        HttpError::Cancelled,
+        HttpError::Io,
+    ];
+
+    /// Its name, e.g. `no-network`, as an event's parameters write it.
+    pub fn as_str(self) -> &'static str {
+        match self {
+            HttpError::NoNetwork => "no-network",
+            HttpError::Dns => "dns",
+            HttpError::Tls => "tls",
+            HttpError::Timeout => "timeout",
+            HttpError::Refused => "refused",
+            HttpError::Replaced => "replaced",
+            HttpError::Cancelled => "cancelled",
+            HttpError::Io => "io",
+        }
+    }
+
+    /// The error named `name` (see [`as_str`](Self::as_str)).
+    pub fn parse(name: &str) -> Option<Self> {
+        Self::ALL.into_iter().find(|e| e.as_str() == name)
+    }
+}
+
+impl core::fmt::Display for HttpError {
+    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+        f.write_str(self.as_str())
+    }
+}
+
 /// The answer to an HTTP request ([`Command::Http`](crate::Command::Http)).
+///
+/// Heard with [`Registrar::on`](crate::Registrar::on), its body comes as
+/// the shell gave it, without a copy. Observers of events see its other
+/// values, not the body.
 #[derive(Debug, Clone, PartialEq, Eq)]
 #[non_exhaustive]
 pub struct HttpReply {
-    /// The status, e.g. 200; 0 if there was no answer (no network, a
-    /// refused certificate …), with the reason as the body.
+    /// The status, e.g. 200; 0 if there was no answer: then [`error`]
+    /// says why, and the body may say more, as text.
+    ///
+    /// [`error`]: Self::error
     pub status: u16,
-    /// The body as text, unless it was saved to a file
-    /// ([`HttpRequest::save_to`](crate::HttpRequest)).
-    pub body: String,
+    /// The body as it came, unless it was saved to a file
+    /// ([`HttpRequest::save_to`](crate::HttpRequest)); see
+    /// [`text`](Self::text).
+    pub body: Vec<u8>,
+    /// The body was cut to the most the request takes
+    /// ([`HttpOptions::max_response`](crate::HttpOptions)).
+    pub truncated: bool,
+    /// Why there was no answer (status 0), where it is known.
+    pub error: Option<HttpError>,
     /// The `ETag` header, if there was one.
     pub etag: Option<String>,
     /// The `Content-Type` header, if there was one.
@@ -71,10 +147,12 @@ pub struct HttpReply {
 
 impl HttpReply {
     /// An answer with `status` and `body`, without headers or context.
-    pub fn new(status: u16, body: impl Into<String>) -> Self {
+    pub fn new(status: u16, body: impl Into<Vec<u8>>) -> Self {
         Self {
             status,
             body: body.into(),
+            truncated: false,
+            error: None,
             etag: None,
             content_type: None,
             final_url: None,
@@ -84,9 +162,11 @@ impl HttpReply {
         }
     }
 
-    const KEYS: [&'static str; 7] = [
+    const KEYS: [&'static str; 9] = [
         http_params::STATUS,
         http_params::BODY,
+        http_params::ERROR,
+        http_params::TRUNCATED,
         http_params::ETAG,
         http_params::CONTENT_TYPE,
         http_params::FINAL_URL,
@@ -94,11 +174,14 @@ impl HttpReply {
         crate::work::params::RETRY,
     ];
 
-    /// No answer (status 0), for `reason`.
-    pub fn failed(reason: impl Into<String>, context: Params) -> Self {
+    /// No answer (status 0), for `error`; `reason` says more, as the
+    /// body.
+    pub fn failed(error: HttpError, reason: impl Into<String>, context: Params) -> Self {
         Self {
             status: 0,
-            body: reason.into(),
+            body: reason.into().into_bytes(),
+            truncated: false,
+            error: Some(error),
             etag: None,
             content_type: None,
             final_url: None,
@@ -110,10 +193,21 @@ impl HttpReply {
 
     /// Not sent, for `refusal` (status 0, its reason as the body).
     pub fn refused(refusal: crate::work::Refusal, context: Params) -> Self {
+        let error = match refusal.reason {
+            crate::work::Reason::Cancelled => HttpError::Cancelled,
+            crate::work::Reason::NoNetwork => HttpError::NoNetwork,
+            _ => HttpError::Refused,
+        };
         Self {
             refused: Some(refusal),
-            ..Self::failed(refusal.reason.as_str(), context)
+            ..Self::failed(error, refusal.reason.as_str(), context)
         }
+    }
+
+    /// The body as text: as it is where it is UTF-8, with `�` for what
+    /// is not.
+    pub fn text(&self) -> Cow<'_, str> {
+        String::from_utf8_lossy(&self.body)
     }
 
     /// The header `name` of the answer, if it was asked for and came.
@@ -130,11 +224,17 @@ impl HttpReply {
     }
 }
 
-impl EventData for HttpReply {
-    fn to_params(&self) -> Params {
+impl HttpReply {
+    /// Its values but the body, as an event's parameters write them.
+    fn written(&self) -> Params {
         let mut params = with_context(Params::new(), &self.context)
-            .with(http_params::STATUS, self.status.to_string())
-            .with(http_params::BODY, self.body.clone());
+            .with(http_params::STATUS, self.status.to_string());
+        if self.truncated {
+            params.set(http_params::TRUNCATED, "true");
+        }
+        if let Some(error) = self.error {
+            params.set(http_params::ERROR, error.as_str());
+        }
         for (key, value) in [
             (http_params::ETAG, &self.etag),
             (http_params::CONTENT_TYPE, &self.content_type),
@@ -155,11 +255,30 @@ impl EventData for HttpReply {
         }
         params
     }
+}
+
+impl EventData for HttpReply {
+    /// Its body as text (where it is not UTF-8, as [`HttpReply::text`]).
+    fn to_params(&self) -> Params {
+        self.written()
+            .with(http_params::BODY, self.text().into_owned())
+    }
+
+    /// Its body goes along as it is, not copied (nor written for
+    /// observers).
+    fn into_params(self) -> Params {
+        self.written().carrying(self)
+    }
 
     fn from_params(params: &Params) -> Option<Self> {
         Some(Self {
             status: params.get(http_params::STATUS)?.parse().ok()?,
-            body: text(params, http_params::BODY).unwrap_or_default(),
+            body: params
+                .get(http_params::BODY)
+                .map(|body| body.as_bytes().to_vec())
+                .unwrap_or_default(),
+            truncated: params.get(http_params::TRUNCATED) == Some("true"),
+            error: params.get(http_params::ERROR).and_then(HttpError::parse),
             etag: text(params, http_params::ETAG),
             content_type: text(params, http_params::CONTENT_TYPE),
             final_url: text(params, http_params::FINAL_URL),
@@ -531,6 +650,8 @@ mod tests {
         let reply = HttpReply {
             status: 200,
             body: "{}".into(),
+            truncated: true,
+            error: None,
             etag: Some("x1".into()),
             content_type: None,
             final_url: None,
@@ -542,6 +663,17 @@ mod tests {
         assert_eq!(back, reply);
         assert!(back.ok());
         assert_eq!(back.header("Last-Modified"), Some("Tue"));
+        // As emitted: the body goes along as it is, not written; read
+        // back whole, also where it is no text.
+        let binary = HttpReply::new(200, alloc::vec![0xff, 0, 0xfe]);
+        let params = binary.clone().into_params();
+        assert_eq!(params.get(http_params::BODY), None);
+        assert_eq!(params.carried::<HttpReply>(), Some(&binary));
+        assert_eq!(binary.text(), "\u{fffd}\0\u{fffd}");
+        let failed = HttpReply::failed(HttpError::Dns, "no such host", Params::new());
+        let back = HttpReply::from_params(&failed.to_params()).unwrap();
+        assert_eq!(back.error, Some(HttpError::Dns));
+        assert_eq!(back.text(), "no such host");
         let refusal = crate::work::Refusal::new(
             crate::work::Reason::Offline,
             crate::work::Retry::WhenAllowed,

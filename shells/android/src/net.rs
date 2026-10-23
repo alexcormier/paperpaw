@@ -12,6 +12,7 @@ use android_activity::{AndroidApp, AndroidAppWaker};
 use jni::JNIEnv;
 use jni::JavaVM;
 use jni::objects::{JObject, JValue};
+use paperpaw_core::sdk::HttpError;
 use paperpaw_core::{HttpCall, HttpResponse, MAX_RESPONSE};
 
 /// Requests in flight and their answers.
@@ -40,7 +41,7 @@ impl Net {
             // SAFETY: the process's Java VM, valid while the app runs.
             let response = match unsafe { JavaVM::from_raw(vm as *mut jni::sys::JavaVM) } {
                 Ok(vm) => perform(&vm, call),
-                Err(_) => failed(&call, "no Java VM"),
+                Err(_) => failed(&call, HttpError::Io, "no Java VM"),
             };
             let _ = sender.send(response);
             waker.wake();
@@ -60,13 +61,23 @@ impl Net {
     }
 }
 
-fn failed(call: &HttpCall, reason: &str) -> HttpResponse {
-    HttpResponse {
-        id: call.id,
-        status: 0,
-        body: reason.as_bytes().to_vec(),
-        ..HttpResponse::default()
-    }
+fn failed(call: &HttpCall, error: HttpError, reason: &str) -> HttpResponse {
+    HttpResponse::failed(call.id, error, reason)
+}
+
+/// Why a request failed, from the Java exception it threw.
+fn exception_error(env: &mut JNIEnv<'_>, exception: &JObject<'_>) -> HttpError {
+    let kinds = [
+        ("java/net/UnknownHostException", HttpError::Dns),
+        ("java/net/SocketTimeoutException", HttpError::Timeout),
+        ("javax/net/ssl/SSLException", HttpError::Tls),
+        ("java/net/ConnectException", HttpError::Refused),
+        ("java/net/NoRouteToHostException", HttpError::NoNetwork),
+    ];
+    kinds
+        .into_iter()
+        .find(|(class, _)| env.is_instance_of(exception, *class).unwrap_or(false))
+        .map_or(HttpError::Io, |(_, error)| error)
 }
 
 /// Redirects followed at most.
@@ -74,19 +85,24 @@ const MAX_REDIRECTS: u32 = 10;
 
 fn perform(vm: &JavaVM, mut call: HttpCall) -> HttpResponse {
     let Ok(mut env) = vm.attach_current_thread() else {
-        return failed(&call, "cannot attach to the Java VM");
+        return failed(&call, HttpError::Io, "cannot attach to the Java VM");
     };
     match request(&mut env, &mut call) {
         Ok(response) => response,
         Err(e) => {
             // E.g. no network or an unknown host (an IOException).
+            let mut error = HttpError::Io;
             if env.exception_check().unwrap_or(false) {
+                let exception = env.exception_occurred();
                 let _ = env.exception_clear();
+                if let Ok(exception) = exception {
+                    error = exception_error(&mut env, &exception);
+                }
             }
             // The host only: addresses may carry keys.
             let host = paperpaw_http::Url::parse(&call.url).map_or("?", |url| url.host);
             log::warn!("{} {host}: {e}", call.method);
-            failed(&call, "request failed")
+            failed(&call, error, "request failed")
         }
     }
 }
@@ -140,7 +156,7 @@ fn request(env: &mut JNIEnv<'_>, call: &mut HttpCall) -> jni::errors::Result<Htt
         let body = call.body.is_some();
         let redirect = match paperpaw_http::follow(&url, status, &location, &call.method, body) {
             Ok(redirect) => redirect,
-            Err(refusal) => return Ok(failed(call, refusal.reason())),
+            Err(refusal) => return Ok(failed(call, HttpError::Refused, refusal.reason())),
         };
         if redirect.to_get {
             call.method = String::from("GET");
@@ -149,7 +165,7 @@ fn request(env: &mut JNIEnv<'_>, call: &mut HttpCall) -> jni::errors::Result<Htt
         redirect.keep(&mut call.headers);
         url = redirect.url;
     }
-    Ok(failed(call, "too many redirects"))
+    Ok(failed(call, HttpError::Refused, "too many redirects"))
 }
 
 /// Sends the request to `url` and takes the answer, or where it redirects.
@@ -321,7 +337,7 @@ fn answer(
     }
     env.call_method(conn, "disconnect", "()V", &[])?;
     if too_long && whole {
-        return Ok(failed(call, "too large"));
+        return Ok(failed(call, HttpError::Refused, "too large"));
     }
     Ok(HttpResponse {
         id: call.id,
@@ -329,8 +345,8 @@ fn answer(
         body,
         etag,
         content_type,
-        url: None,
-        saved: false,
         headers,
+        truncated: too_long,
+        ..HttpResponse::default()
     })
 }

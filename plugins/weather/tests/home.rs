@@ -200,7 +200,11 @@ fn a_failed_fetch_keeps_what_was_kept() {
     let mut app = App::new(PLACE, true, 5 * 60);
     let requests = app.requests();
     assert_eq!(requests.len(), 1);
-    let failed = HttpResponse::failed(requests[0].0, "no network");
+    let failed = HttpResponse::failed(
+        requests[0].0,
+        paperpaw_sdk::HttpError::NoNetwork,
+        "no network",
+    );
     let _ = app.kernel.http_response(Instant(app.now), failed);
     let texts = app.texts();
     assert!(texts.iter().any(|t| t == "12°"), "{texts:?}");
