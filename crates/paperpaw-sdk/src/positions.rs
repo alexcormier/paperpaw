@@ -11,12 +11,18 @@
 //! conversion = 00000000000000ff
 //! xpointer = "/body/DocFragment[8]/body/p[3]/text()[1].12"
 //! updated = 1760000000
+//! book = 482133 0b6e8f2a6c1d4e5f8a9b0c1d2e3f4a5b
 //! ```
+//!
+//! `book` is which book it is of by its content, its [`Fingerprint`]
+//! (the file is named by the book's path): a reader keeps it with
+//! [`save_with_book`], and [`book`] reads it.
 
 use alloc::format;
 use alloc::string::{String, ToString};
 
 use crate::document::Locator;
+use crate::library::Fingerprint;
 use crate::{Storage, StorageError};
 
 /// The folder of the positions (registered as book data by the kernel).
@@ -147,8 +153,34 @@ pub fn load_for_update(
 
 /// Keeps where the book at `book` was left.
 pub fn save(storage: &dyn Storage, book: &str, position: &Position) -> Result<(), StorageError> {
+    save_with_book(storage, book, position, None)
+}
+
+/// Keeps where the book at `book` was left, and which book it is of by
+/// its content, `fingerprint`, where it is known.
+pub fn save_with_book(
+    storage: &dyn Storage,
+    book: &str,
+    position: &Position,
+    fingerprint: Option<&Fingerprint>,
+) -> Result<(), StorageError> {
     let _ = storage.create_dir(DIR);
-    storage.write(&file(book), position.text().as_bytes())
+    let mut text = position.text();
+    if let Some(fingerprint) = fingerprint {
+        text.push_str(&format!("book = {}\n", fingerprint.text()));
+    }
+    storage.write(&file(book), text.as_bytes())
+}
+
+/// Which book the position kept of the book at `book` is of, by its
+/// content, where it says.
+pub fn book(storage: &dyn Storage, book: &str) -> Option<Fingerprint> {
+    let data = crate::read_file(storage, &file(book), LIMIT).ok()?;
+    let text = core::str::from_utf8(crate::files::without_bom(&data)).ok()?;
+    crate::config::parse(text)
+        .filter_map(Result::ok)
+        .find(|entry| entry.section == "position" && entry.key == "book")
+        .and_then(|entry| Fingerprint::parse(&entry.value.as_str()))
 }
 
 #[cfg(test)]
@@ -165,8 +197,15 @@ mod tests {
             .xpointer(String::from("/body/DocFragment[8]/body/p[3]/text()[1].12"))
             .updated(1_760_000_000);
         save(&storage, "books/a.epub", &position).unwrap();
-        assert_eq!(load(&storage, "books/a.epub"), Some(position));
+        assert_eq!(load(&storage, "books/a.epub"), Some(position.clone()));
         assert!(file("books/a.epub").starts_with(".paperpaw/positions/"));
+        assert_eq!(book(&storage, "books/a.epub"), None);
+        // With which book it is of; read as before by those who do not
+        // ask.
+        let fingerprint = Fingerprint::parse("482133 0b6e8f2a6c1d4e5f8a9b0c1d2e3f4a5b");
+        save_with_book(&storage, "books/a.epub", &position, fingerprint.as_ref()).unwrap();
+        assert_eq!(load(&storage, "books/a.epub"), Some(position));
+        assert_eq!(book(&storage, "books/a.epub"), fingerprint);
     }
 
     /// A reader's `progress.ini` of version 1 reads as a position.

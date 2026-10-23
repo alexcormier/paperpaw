@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- A book's position and annotations say which book they are of by its
+  content, its size and KOReader's partial MD5, beside the hash of its
+  path they are named by (`library::Fingerprint`, `positions::book`,
+  `annotations::book`). The reader takes it once when it opens a book
+  (12 reads of 1 KiB at most) and keeps it with the position
+  (`positions::save_with_book`) and the annotations
+  (`annotations::stamp`, a line `# book <size> <md5>`). Both files keep
+  their versions: PaperPaw of before reads them as before.
 - Data plugins of formats 3 (not yet released) are written alike in
   every file. A list is a key a line: an action's steps are a `run`
   line each, a line one step with its commas, so a value with a comma
