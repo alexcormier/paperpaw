@@ -135,9 +135,9 @@ impl Plugin for Store {
         r.add_icon(OPEN, Cow::Borrowed("cloud-download"))?;
         r.add_action(
             ActionSpec::new(DISCOVER_FONTS, "store.discover-fonts").handler(
-                |env: &Env<'_>, out: &mut Commands| {
+                |env: &Env<'_>, _: &Params, out: &mut Commands| {
                     if env.actions.contains(FONTS.as_str()) {
-                        out.push(Command::RunAction(FONTS));
+                        out.push(Command::run(FONTS));
                     } else {
                         let page = Params::new().with(params::ID, "fonts-browser");
                         out.push(Command::OpenScreen(PAGE_SCREEN, page));
