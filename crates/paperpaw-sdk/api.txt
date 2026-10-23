@@ -1847,7 +1847,7 @@ pub paperpaw_sdk::layers::PageView::top_status: core::option::Option<paperpaw_pl
 impl<'a> paperpaw_sdk::layers::PageView<'a>
 pub fn paperpaw_sdk::layers::PageView<'a>::columns(self, &'a [paperpaw_platform::geometry::Rect]) -> Self
 pub fn paperpaw_sdk::layers::PageView<'a>::language(self, &'a str) -> Self
-pub fn paperpaw_sdk::layers::PageView<'a>::line_at(&self, i32, i32) -> core::option::Option<&paperpaw_sdk::layers::LineBox>
+pub fn paperpaw_sdk::layers::PageView<'a>::line_at(&self, paperpaw_platform::geometry::Point) -> core::option::Option<&paperpaw_sdk::layers::LineBox>
 pub fn paperpaw_sdk::layers::PageView<'a>::lines(self, &'a [paperpaw_sdk::layers::LineBox]) -> Self
 pub fn paperpaw_sdk::layers::PageView<'a>::new(&'a str, paperpaw_document::Locator, paperpaw_document::Locator, paperpaw_platform::geometry::Rect) -> Self
 pub fn paperpaw_sdk::layers::PageView<'a>::room(self, core::option::Option<paperpaw_platform::geometry::Rect>) -> Self
@@ -3586,13 +3586,13 @@ pub fn paperpaw_sdk::ui::DatePicker::draw(&self, &mut paperpaw_graphics::canvas:
 pub fn paperpaw_sdk::ui::DatePicker::focus(&self) -> usize
 pub fn paperpaw_sdk::ui::DatePicker::height(&paperpaw_sdk::ui::UiStyle) -> u16
 pub fn paperpaw_sdk::ui::DatePicker::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<paperpaw_sdk::ui::PickerPart>
-pub fn paperpaw_sdk::ui::DatePicker::new(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, (i32, u8, u8)) -> Self
+pub fn paperpaw_sdk::ui::DatePicker::new(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::time::Date) -> Self
 pub fn paperpaw_sdk::ui::DatePicker::next_field(&mut self) -> bool
 pub fn paperpaw_sdk::ui::DatePicker::on_action(&mut self, &paperpaw_sdk::Id) -> bool
 pub fn paperpaw_sdk::ui::DatePicker::on_tap(&mut self, paperpaw_platform::geometry::Point) -> bool
 pub fn paperpaw_sdk::ui::DatePicker::order(self, paperpaw_sdk::ui::DateOrder) -> Self
 pub fn paperpaw_sdk::ui::DatePicker::set_focus(&mut self, usize)
-pub fn paperpaw_sdk::ui::DatePicker::value(&self) -> (i32, u8, u8)
+pub fn paperpaw_sdk::ui::DatePicker::value(&self) -> paperpaw_sdk::time::Date
 pub fn paperpaw_sdk::ui::DatePicker::years(self, i32, i32) -> Self
 pub struct paperpaw_sdk::ui::Dialog
 impl paperpaw_sdk::ui::Dialog
@@ -3824,13 +3824,13 @@ pub fn paperpaw_sdk::ui::TimePicker::draw(&self, &mut paperpaw_graphics::canvas:
 pub fn paperpaw_sdk::ui::TimePicker::focus(&self) -> usize
 pub fn paperpaw_sdk::ui::TimePicker::height(&paperpaw_sdk::ui::UiStyle) -> u16
 pub fn paperpaw_sdk::ui::TimePicker::hit(&self, paperpaw_platform::geometry::Point) -> core::option::Option<paperpaw_sdk::ui::PickerPart>
-pub fn paperpaw_sdk::ui::TimePicker::new(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, (u8, u8)) -> Self
+pub fn paperpaw_sdk::ui::TimePicker::new(&paperpaw_sdk::ui::UiStyle, paperpaw_platform::geometry::Rect, paperpaw_sdk::time::Time) -> Self
 pub fn paperpaw_sdk::ui::TimePicker::next_field(&mut self) -> bool
 pub fn paperpaw_sdk::ui::TimePicker::on_action(&mut self, &paperpaw_sdk::Id) -> bool
 pub fn paperpaw_sdk::ui::TimePicker::on_tap(&mut self, paperpaw_platform::geometry::Point) -> bool
 pub fn paperpaw_sdk::ui::TimePicker::set_focus(&mut self, usize)
 pub fn paperpaw_sdk::ui::TimePicker::twelve_hours(self, bool) -> Self
-pub fn paperpaw_sdk::ui::TimePicker::value(&self) -> (u8, u8)
+pub fn paperpaw_sdk::ui::TimePicker::value(&self) -> paperpaw_sdk::time::Time
 #[non_exhaustive] pub struct paperpaw_sdk::ui::UiStyle
 pub paperpaw_sdk::ui::UiStyle::cards: bool
 pub paperpaw_sdk::ui::UiStyle::control_row: u32
@@ -4072,7 +4072,7 @@ pub paperpaw_sdk::widgets::grid::Geometry::columns: u8
 pub paperpaw_sdk::widgets::grid::Geometry::gap: u16
 pub paperpaw_sdk::widgets::grid::Geometry::rows: u8
 impl paperpaw_sdk::widgets::grid::Geometry
-pub fn paperpaw_sdk::widgets::grid::Geometry::cell_at(&self, i32, i32) -> core::option::Option<(u8, u8)>
+pub fn paperpaw_sdk::widgets::grid::Geometry::cell_at(&self, paperpaw_platform::geometry::Point) -> core::option::Option<(u8, u8)>
 pub fn paperpaw_sdk::widgets::grid::Geometry::new(&paperpaw_sdk::Env<'_>, paperpaw_platform::geometry::Rect, u8, u8) -> Self
 pub fn paperpaw_sdk::widgets::grid::Geometry::of(paperpaw_platform::geometry::Rect, u8, u8, u16) -> Self
 pub fn paperpaw_sdk::widgets::grid::Geometry::rect(&self, paperpaw_sdk::widgets::grid::Cells) -> paperpaw_platform::geometry::Rect

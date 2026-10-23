@@ -148,9 +148,10 @@ impl<'a> PageView<'a> {
         self
     }
 
-    /// The line at height `y` nearest to `x` (in the column `x` is in),
-    /// e.g. the one beside a tap in a margin.
-    pub fn line_at(&self, x: i32, y: i32) -> Option<&LineBox> {
+    /// The line at the height of `point` nearest to it (in the column it
+    /// is in), e.g. the one beside a tap in a margin.
+    pub fn line_at(&self, point: crate::Point) -> Option<&LineBox> {
+        let (x, y) = (point.x, point.y);
         let beside = |line: &&LineBox| i32::from(line.area.y) <= y && y < line.area.bottom() as i32;
         let distance = |line: &&LineBox| {
             let (left, right) = (i32::from(line.area.x), line.area.right() as i32);
@@ -547,9 +548,18 @@ mod tests {
             LineBox::new(Rect::new(130, 10, 100, 20), at(20), at(30)),
         ];
         let page = PageView::new("b", at(0), at(30), Rect::new(10, 10, 220, 40)).lines(&lines);
-        assert_eq!(page.line_at(5, 35).map(|l| l.start), Some(at(10)));
-        assert_eq!(page.line_at(240, 15).map(|l| l.start), Some(at(20)));
-        assert_eq!(page.line_at(5, 15).map(|l| l.start), Some(at(0)));
-        assert!(page.line_at(5, 60).is_none());
+        assert_eq!(
+            page.line_at(crate::Point::new(5, 35)).map(|l| l.start),
+            Some(at(10))
+        );
+        assert_eq!(
+            page.line_at(crate::Point::new(240, 15)).map(|l| l.start),
+            Some(at(20))
+        );
+        assert_eq!(
+            page.line_at(crate::Point::new(5, 15)).map(|l| l.start),
+            Some(at(0))
+        );
+        assert!(page.line_at(crate::Point::new(5, 60)).is_none());
     }
 }

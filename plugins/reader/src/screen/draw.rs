@@ -81,10 +81,7 @@ impl Book {
                 i32::from(room.y) + i32::from(room.height) / 2,
             )
         });
-        let line = self
-            .page_view(self.lines())
-            .line_at(at.x, at.y)
-            .map(|l| l.start);
+        let line = self.page_view(self.lines()).line_at(at).map(|l| l.start);
         let mut tapped = events::PageLayerTapped::new(layer.clone(), self.path.clone(), at.x, at.y);
         if let Some(line) = line {
             tapped = tapped.section(line.section).offset(line.offset);

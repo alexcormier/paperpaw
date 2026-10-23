@@ -5,7 +5,7 @@ use core::fmt::{self, Write};
 use crate::builtin::actions;
 use crate::fonts::FontHandle;
 use crate::id::Id;
-use crate::time::days_in_month;
+use crate::time::{Date, Time, days_in_month};
 use crate::widgets::largest_size;
 use crate::{Canvas, Env, Point, Rect};
 
@@ -308,14 +308,15 @@ enum DateField {
 ///
 /// ```
 /// use paperpaw_sdk::builtin::actions;
+/// use paperpaw_sdk::time::Time;
 /// use paperpaw_sdk::ui::{TimePicker, UiStyle};
 /// use paperpaw_platform::Rect;
 ///
 /// let style = UiStyle::PLAIN;
 /// let area = Rect::new(0, 0, 300, TimePicker::height(&style));
-/// let mut picker = TimePicker::new(&style, area, (23, 59));
+/// let mut picker = TimePicker::new(&style, area, Time::new(23, 59));
 /// assert!(picker.on_action(&actions::UP));
-/// assert_eq!(picker.value(), (0, 59));
+/// assert_eq!(picker.value(), Time::new(0, 59));
 /// ```
 ///
 /// Small and copied freely; laid out once when made.
@@ -333,11 +334,11 @@ pub struct DatePicker {
 }
 
 impl DatePicker {
-    /// A picker for `(year, month, day)` at the top of `area`,
-    /// [`height`](Self::height) high: day, month, year from the left,
-    /// years 1900 to 2199. A date that does not exist becomes the nearest
-    /// that does.
-    pub fn new(style: &UiStyle, area: Rect, (year, month, day): (i32, u8, u8)) -> Self {
+    /// A picker for `date` at the top of `area`, [`height`](Self::height)
+    /// high: day, month, year from the left, years 1900 to 2199. A date
+    /// that does not exist becomes the nearest that does.
+    pub fn new(style: &UiStyle, area: Rect, date: Date) -> Self {
+        let (year, month, day) = (date.year, date.month, date.day);
         let mut picker = Self {
             wheels: Wheels::new(style, area, 3),
             given: (year, month, day),
@@ -370,9 +371,9 @@ impl DatePicker {
         picker_height(style)
     }
 
-    /// The date: year, month (1 to 12), day (1 to 31).
-    pub fn value(&self) -> (i32, u8, u8) {
-        (self.year, self.month, self.day)
+    /// The date picked.
+    pub fn value(&self) -> Date {
+        Date::new(self.year, self.month, self.day)
     }
 
     /// The focused field, from the left.
@@ -510,14 +511,14 @@ pub struct TimePicker {
 }
 
 impl TimePicker {
-    /// A picker for `(hour, minute)` (0 to 23, 0 to 59; larger ones are
-    /// the largest) at the top of `area`, [`height`](Self::height) high,
-    /// the hour shown 0 to 23.
-    pub fn new(style: &UiStyle, area: Rect, (hour, minute): (u8, u8)) -> Self {
+    /// A picker for the hour and minute of `time` (larger ones than 23
+    /// and 59 are the largest) at the top of `area`,
+    /// [`height`](Self::height) high, the hour shown 0 to 23.
+    pub fn new(style: &UiStyle, area: Rect, time: Time) -> Self {
         Self {
             wheels: Wheels::new(style, area, 2),
-            hour: hour.min(23),
-            minute: minute.min(59),
+            hour: time.hour.min(23),
+            minute: time.minute.min(59),
             twelve: false,
         }
     }
@@ -534,9 +535,9 @@ impl TimePicker {
         picker_height(style)
     }
 
-    /// The time: hour (0 to 23), minute.
-    pub fn value(&self) -> (u8, u8) {
-        (self.hour, self.minute)
+    /// The time picked (hour 0 to 23).
+    pub fn value(&self) -> Time {
+        Time::new(self.hour, self.minute)
     }
 
     /// The focused field: 0 the hour, 1 the minute.
@@ -667,16 +668,16 @@ mod tests {
 
     #[test]
     fn buttons_choose_the_field_and_change_it() {
-        let mut date = DatePicker::new(&STYLE, area(), (2026, 10, 22));
+        let mut date = DatePicker::new(&STYLE, area(), Date::new(2026, 10, 22));
         assert!(date.on_action(&actions::UP));
-        assert_eq!(date.value(), (2026, 10, 23));
+        assert_eq!(date.value(), Date::new(2026, 10, 23));
         assert!(date.on_action(&actions::RIGHT));
         assert_eq!(date.focus(), 1);
         assert!(date.on_action(&actions::NEXT_PAGE));
-        assert_eq!(date.value(), (2026, 11, 23));
+        assert_eq!(date.value(), Date::new(2026, 11, 23));
         assert!(date.on_action(&actions::RIGHT));
         assert!(date.on_action(&actions::DOWN));
-        assert_eq!(date.value(), (2025, 11, 23));
+        assert_eq!(date.value(), Date::new(2025, 11, 23));
         // Round from the last field to the first, and back.
         assert!(date.on_action(&actions::RIGHT));
         assert_eq!(date.focus(), 0);
@@ -684,78 +685,82 @@ mod tests {
         assert_eq!(date.focus(), 2);
         assert!(!date.on_action(&actions::CONFIRM));
         // Years stay within the range.
-        let mut date = DatePicker::new(&STYLE, area(), (2030, 1, 1)).years(2000, 2030);
+        let mut date = DatePicker::new(&STYLE, area(), Date::new(2030, 1, 1)).years(2000, 2030);
         date.set_focus(2);
         assert!(!date.on_action(&actions::UP));
-        assert_eq!(date.value(), (2030, 1, 1));
+        assert_eq!(date.value(), Date::new(2030, 1, 1));
     }
 
     #[test]
     fn days_keep_within_their_month_and_leap_years() {
-        let mut date = DatePicker::new(&STYLE, area(), (2024, 1, 31));
+        let mut date = DatePicker::new(&STYLE, area(), Date::new(2024, 1, 31));
         date.set_focus(1);
         assert!(date.on_action(&actions::UP));
-        assert_eq!(date.value(), (2024, 2, 29));
+        assert_eq!(date.value(), Date::new(2024, 2, 29));
         date.set_focus(2);
         assert!(date.on_action(&actions::UP));
-        assert_eq!(date.value(), (2025, 2, 28));
+        assert_eq!(date.value(), Date::new(2025, 2, 28));
         // Days go round within the month.
         date.set_focus(0);
         assert!(date.on_action(&actions::UP));
-        assert_eq!(date.value(), (2025, 2, 1));
+        assert_eq!(date.value(), Date::new(2025, 2, 1));
         assert!(date.on_action(&actions::DOWN));
-        assert_eq!(date.value(), (2025, 2, 28));
+        assert_eq!(date.value(), Date::new(2025, 2, 28));
         // Months go round without changing the year; 1900 is no leap year,
         // 2000 is.
-        let mut date = DatePicker::new(&STYLE, area(), (2000, 2, 29));
-        assert_eq!(date.value(), (2000, 2, 29));
+        let mut date = DatePicker::new(&STYLE, area(), Date::new(2000, 2, 29));
+        assert_eq!(date.value(), Date::new(2000, 2, 29));
         date.set_focus(1);
         date.on_action(&actions::DOWN);
         date.on_action(&actions::DOWN);
-        assert_eq!(date.value(), (2000, 12, 29));
+        assert_eq!(date.value(), Date::new(2000, 12, 29));
         assert_eq!(
-            DatePicker::new(&STYLE, area(), (1900, 2, 29)).value(),
-            (1900, 2, 28)
+            DatePicker::new(&STYLE, area(), Date::new(1900, 2, 29)).value(),
+            Date::new(1900, 2, 28)
         );
         assert_eq!(
-            DatePicker::new(&STYLE, area(), (2026, 4, 31)).value(),
-            (2026, 4, 30)
+            DatePicker::new(&STYLE, area(), Date::new(2026, 4, 31)).value(),
+            Date::new(2026, 4, 30)
         );
         assert_eq!(
-            DatePicker::new(&STYLE, area(), (2026, 0, 0)).value(),
-            (2026, 1, 1)
+            DatePicker::new(&STYLE, area(), Date::new(2026, 0, 0)).value(),
+            Date::new(2026, 1, 1)
         );
     }
 
     #[test]
     fn the_order_says_which_field_is_where() {
-        let mut date = DatePicker::new(&STYLE, area(), (2026, 3, 9)).order(DateOrder::YearMonthDay);
+        let mut date =
+            DatePicker::new(&STYLE, area(), Date::new(2026, 3, 9)).order(DateOrder::YearMonthDay);
         assert!(date.on_action(&actions::UP));
-        assert_eq!(date.value(), (2027, 3, 9));
+        assert_eq!(date.value(), Date::new(2027, 3, 9));
         date.set_focus(2);
         assert!(date.on_action(&actions::UP));
-        assert_eq!(date.value(), (2027, 3, 10));
+        assert_eq!(date.value(), Date::new(2027, 3, 10));
     }
 
     #[test]
     fn hours_and_minutes_go_round() {
-        let mut time = TimePicker::new(&STYLE, area(), (23, 59));
+        let mut time = TimePicker::new(&STYLE, area(), Time::new(23, 59));
         assert!(time.on_action(&actions::UP));
-        assert_eq!(time.value(), (0, 59));
+        assert_eq!(time.value(), Time::new(0, 59));
         assert!(time.on_action(&actions::PREVIOUS));
-        assert_eq!(time.value(), (23, 59));
+        assert_eq!(time.value(), Time::new(23, 59));
         assert!(time.next_field());
         assert!(!time.next_field());
         assert!(time.on_action(&actions::NEXT));
-        assert_eq!(time.value(), (23, 0));
+        assert_eq!(time.value(), Time::new(23, 0));
         assert!(time.on_action(&actions::PREV_PAGE));
-        assert_eq!(time.value(), (23, 59));
-        assert_eq!(TimePicker::new(&STYLE, area(), (30, 75)).value(), (23, 59));
+        assert_eq!(time.value(), Time::new(23, 59));
+        assert_eq!(
+            TimePicker::new(&STYLE, area(), Time::new(30, 75)).value(),
+            Time::new(23, 59)
+        );
     }
 
     #[test]
     fn taps_on_plus_and_minus_change_their_field() {
-        let mut time = TimePicker::new(&STYLE, area(), (7, 30));
+        let mut time = TimePicker::new(&STYLE, area(), Time::new(7, 30));
         let (plus, value, minus) = time.wheels.parts(1);
         // Each part lies where it is drawn, the value between.
         assert!(plus.bottom() < u32::from(value.y));
@@ -763,23 +768,23 @@ mod tests {
         assert_eq!(minus.bottom(), u32::from(area().height));
         assert_eq!(time.hit(middle(plus)), Some(PickerPart::Plus(1)));
         assert!(time.on_tap(middle(plus)));
-        assert_eq!((time.value(), time.focus()), ((7, 31), 1));
+        assert_eq!((time.value(), time.focus()), (Time::new(7, 31), 1));
         assert!(time.on_tap(middle(minus)));
         assert!(time.on_tap(middle(minus)));
-        assert_eq!(time.value(), (7, 29));
+        assert_eq!(time.value(), Time::new(7, 29));
         // A tap on a value focuses it; one beside the picker does nothing.
         let (_, hour, _) = time.wheels.parts(0);
         assert_eq!(time.hit(middle(hour)), Some(PickerPart::Value(0)));
         assert!(time.on_tap(middle(hour)));
         assert!(!time.on_tap(middle(hour)));
-        assert_eq!((time.value(), time.focus()), ((7, 29), 0));
+        assert_eq!((time.value(), time.focus()), (Time::new(7, 29), 0));
         assert!(!time.on_tap(Point::new(10, 400)));
         // The minus of a date's year.
-        let mut date = DatePicker::new(&STYLE, area(), (2026, 10, 22));
+        let mut date = DatePicker::new(&STYLE, area(), Date::new(2026, 10, 22));
         let (_, _, minus) = date.wheels.parts(2);
         assert_eq!(date.hit(middle(minus)), Some(PickerPart::Minus(2)));
         assert!(date.on_tap(middle(minus)));
-        assert_eq!(date.value(), (2025, 10, 22));
+        assert_eq!(date.value(), Date::new(2025, 10, 22));
     }
 
     #[test]
@@ -788,11 +793,11 @@ mod tests {
             finger: 50,
             ..STYLE
         };
-        let mut time = TimePicker::new(&touch, area(), (7, 30));
+        let mut time = TimePicker::new(&touch, area(), Time::new(7, 30));
         assert!(time.on_action(&actions::UP));
-        assert_eq!(time.value(), (7, 30));
+        assert_eq!(time.value(), Time::new(7, 30));
         assert!(time.on_action(&actions::UP));
-        assert_eq!(time.value(), (8, 30));
+        assert_eq!(time.value(), Time::new(8, 30));
     }
 
     #[test]
@@ -801,7 +806,7 @@ mod tests {
             finger: 50,
             ..STYLE
         };
-        let mut date = DatePicker::new(&touch, area(), (2026, 10, 22));
+        let mut date = DatePicker::new(&touch, area(), Date::new(2026, 10, 22));
         assert!(!date.wheels.shown);
         let (_, month, _) = date.wheels.parts(1);
         assert!(date.on_tap(middle(month)));
@@ -811,13 +816,13 @@ mod tests {
 
     #[test]
     fn years_keep_a_date_outside_the_default_range() {
-        let date = DatePicker::new(&STYLE, area(), (1850, 6, 15)).years(1800, 1900);
-        assert_eq!(date.value(), (1850, 6, 15));
+        let date = DatePicker::new(&STYLE, area(), Date::new(1850, 6, 15)).years(1800, 1900);
+        assert_eq!(date.value(), Date::new(1850, 6, 15));
         // Clamped once the range is known.
-        let date = DatePicker::new(&STYLE, area(), (1850, 6, 15)).years(1870, 1900);
-        assert_eq!(date.value(), (1870, 6, 15));
-        let leap = DatePicker::new(&STYLE, area(), (1896, 2, 29)).years(1800, 1900);
-        assert_eq!(leap.value(), (1896, 2, 29));
+        let date = DatePicker::new(&STYLE, area(), Date::new(1850, 6, 15)).years(1870, 1900);
+        assert_eq!(date.value(), Date::new(1870, 6, 15));
+        let leap = DatePicker::new(&STYLE, area(), Date::new(1896, 2, 29)).years(1800, 1900);
+        assert_eq!(leap.value(), Date::new(1896, 2, 29));
     }
 
     #[test]

@@ -416,6 +416,9 @@ file to your report.
   `pages`, `is_first()`, `is_last()`), in place of a pair of numbers:
   `Rows::paging()`, `Sections::paging()`, `ListView::paging()`, and what
   `Header` and `Pager` draw and hit.
+- SDK: dates and times as values: `time::Date` and `time::Time`, which
+  `ui::DatePicker` and `ui::TimePicker` take and give; `line_at` of a
+  page's layers and the widget grid's `cell_at` take a `Point`.
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,
