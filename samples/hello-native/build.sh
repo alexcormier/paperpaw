@@ -11,16 +11,18 @@
 # aliases (`cargo x4`, `cargo +esp x4pro`, with --locked) and compares.
 # Paths end up in a build (in panic messages), so they are written as the
 # same on every computer, in whatever folder: the source's top (the
-# repository) as /plugin, Cargo's home as /cargo, and the X4 Pro's
-# toolchain (whose core and alloc are built with the plugin) as /rust.
-# The rebuild does the same.
+# repository) as /plugin and Cargo's home as /cargo. The rebuild does the
+# same. The core libraries come built: rustup's for the X4, the PaperPaw
+# release's for the X4 Pro.
 #
 # Needs: Linux or macOS (on Windows, paths in the code keep their `\`,
 # so a build there matches only other builds on Windows), the X4's Rust
 # from rust-toolchain.toml, espup's `esp` toolchain with its environment
-# (`. ~/export-esp.sh`), paperpaw-sign of the PaperPaw release built for,
-# and zip. Never set RUSTFLAGS: it would replace .cargo/config.toml's
-# flags, which link the plugin.
+# (`. ~/export-esp.sh`) and the release's core libraries for it
+# (paperpaw-xtensa-std-<version>.tar.gz, installed with PaperPaw's
+# tools/xtensa-std/install.sh), paperpaw-sign of the PaperPaw release
+# built for, and zip. Never set RUSTFLAGS: it would replace
+# .cargo/config.toml's flags, which link the plugin.
 set -euo pipefail
 cd "$(dirname "$0")"
 
@@ -43,12 +45,16 @@ version=$(ini version)
 # The paths remapped, added to .cargo/config.toml's flags for a target.
 top=$(git rev-parse --show-toplevel 2>/dev/null || pwd)
 cargo_home=${CARGO_HOME:-$HOME/.cargo}
-sysroot=$(rustc +esp --print sysroot)
 if command -v cygpath >/dev/null; then
     # Git Bash on Windows: the paths as the compiler sees them (C:/...).
     top=$(cygpath -m "$top")
     cargo_home=$(cygpath -m "$cargo_home")
-    sysroot=$(cygpath -m "$sysroot")
+fi
+std="$(rustc +esp --print sysroot)/lib/rustlib/xtensa-esp32s3-none-elf/lib"
+if [[ ! -d "$std" ]]; then
+    echo "no core libraries for the X4 Pro in the esp toolchain: install the PaperPaw" >&2
+    echo "release's paperpaw-xtensa-std-<version>.tar.gz with tools/xtensa-std/install.sh" >&2
+    exit 1
 fi
 remap() {
     local target=$1
@@ -59,8 +65,7 @@ remap() {
 }
 
 cargo x4 --locked --config "$(remap riscv32imc-unknown-none-elf)"
-cargo +esp x4pro --locked --config "$(remap xtensa-esp32s3-none-elf \
-    "--remap-path-prefix=$sysroot=/rust")"
+cargo +esp x4pro --locked --config "$(remap xtensa-esp32s3-none-elf)"
 
 rm -rf dist
 mkdir dist

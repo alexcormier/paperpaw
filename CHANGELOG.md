@@ -6,6 +6,15 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Code plugins for the X4 Pro and the X4 Classic build without
+  `-Zbuild-std`, against core libraries each release builds once on
+  Linux and publishes, signed (`paperpaw-xtensa-std-<version>.tar.gz`,
+  `tools/xtensa-std`, installed into espup's `esp` toolchain). A plugin's
+  file is then the same on Windows as on Linux, so the plugin library's
+  rebuild can verify it: Cargo hashed the libraries' folder as the
+  system writes it. The sample's alias and CI job, the store's plugins
+  and the authors' documents follow; CI checks that a plugin's file is
+  the same in any folder (`tools/plugin-files/anywhere.sh`).
 - Hints covered by another screen (a plugin's question, a notice opened
   over them) close and show again when their screen does, instead of
   staying below it, cut.
