@@ -204,3 +204,30 @@ fn ppn_files_are_checked_and_releases_must_be_versions() {
     assert_eq!(report.findings.len(), 2, "{}", report.text(Level::Info));
     let _ = std::fs::remove_dir_all(&dir);
 }
+
+/// A code plugin's folder and its code name the same version: the
+/// device loads no code of another.
+#[test]
+fn a_code_plugins_folder_names_its_codes_version() {
+    let version = paperpaw_sdk::package_version!();
+    let folder = |name: &str, version: &str| {
+        let ini = format!(
+            "[plugin]\nid = weather\nname = Weather\ndescription = The weather.\nversion = {version}\n"
+        );
+        let mut context = context(name, &[]);
+        context.target.plugins = vec!["weather".into()];
+        context.target.data = vec![paperpaw_dev::target::DataPlugin::new(
+            "weather",
+            [(String::from("plugin.ini"), ini.into_bytes())],
+        )];
+        run(&context)
+    };
+    let report = folder("version-same", &version.to_string());
+    assert!(!has(&report, "package.version", "plugin.ini", Level::Error));
+    let report = folder("version-other", "9.9.9");
+    assert!(
+        has(&report, "package.version", "plugin.ini", Level::Error),
+        "{}",
+        report.text(Level::Info)
+    );
+}

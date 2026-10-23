@@ -9,4 +9,3 @@
 1874 crates/paperpaw-sdk/src/library/catalog.rs
 1765 plugins/reader/tests/reading.rs
 1566 crates/paperpaw-sdk/src/settings.rs
-1517 plugins/store/src/catalog.rs

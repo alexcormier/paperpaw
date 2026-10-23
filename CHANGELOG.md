@@ -206,6 +206,20 @@ file to your report.
 
 #### Wi-Fi, sync and the store
 
+- The store tells betas apart: a plugin's versions are compared whole,
+  pre-release included (`0.5.0-beta.2` after `0.5.0-beta.1`, `0.5.0`
+  after both), as firmware updates are. A newer beta is offered only
+  where the device runs a beta or takes betas (*Beta updates*). Its
+  message for code built for another plugin interface or compiler says
+  so.
+- The store marks PaperPaw's own plugins *By PaperPaw*, on their row
+  and their page. The mark is taken only from PaperPaw's own library
+  (paperpaw.org, over HTTPS), and for a plugin with code only where its
+  key is PaperPaw's: a list from elsewhere cannot give it.
+- A code plugin's version is its `plugin.ini`'s, everywhere: the
+  plugin manager, the store's updates and the transfer's list all go by
+  it. Code whose manifest names another version runs at `plugin.ini`'s,
+  with a warning in the log; `paperpaw-dev package` finds it before.
 - Wi-Fi on the X4 and X4 Pro: the radio is off while you read. It comes
   on when something needs the network, joins the strongest saved
   network and goes off a minute after the last use. HTTPS works, with
@@ -259,6 +273,12 @@ file to your report.
 
 #### Devices and updates
 
+- Transfer over USB, further: a plugin's files are put together in a
+  folder of the cable's own and installed only if they are those
+  offered, each with the SHA-256 offered; the cable and the open Wi-Fi
+  transfer never send the same plugin at once. Offers are read a line
+  at a time (up to 64 files and 64 books each), and only closing the
+  question refuses an offer.
 - The Xteink X4 Pro is supported: its display, touch screen, buttons,
   card, battery gauge, clock chip, front light with warmth, sleep and
   Wi-Fi. Its front light dims evenly in single percents.
@@ -322,6 +342,13 @@ file to your report.
 
 #### For developers
 
+- SDK: `Version::parse` reads a version with a pre-release or build
+  after its three numbers as those numbers, so a plugin of a beta loads.
+  `install::folder_release` gives the version as `plugin.ini` writes it;
+  `Origins::release` the version a store named;
+  `remember_store_install` takes either. `install::local::Staging::apart`
+  puts a plugin's files together in a folder of its own, for one way of
+  sending.
 - `paperpaw-dev` takes font packs (`.ppfp`) in a data plugin's `fonts/`,
   where the kernel reads them, and names one elsewhere. It no longer
   checks the X4 Classic by default, and `--list-profiles` says it is not

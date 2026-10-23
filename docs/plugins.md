@@ -1508,6 +1508,11 @@ plugins/my-plugin/
   i18n/*.ini     translations, settings.ini, … as for data plugins
 ```
 
+`plugin.ini`'s version is the plugin's: the store, the installer and
+updates go by it, and the device shows it. The code's manifest must name
+the same version (`paperpaw-dev package` with the folder and `--plugin`
+says where it does not).
+
 Send the folder from a computer and say yes on the device
 (`python tools/usb-transfer.py install my-plugin`, or the Wi-Fi
 transfer); it is loaded at once. A firmware built for development also

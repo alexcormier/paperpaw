@@ -43,7 +43,7 @@ use paperpaw_sdk::served::{self, Guard};
 pub const PLUGIN: Id = Id::new_static("transfer");
 /// Opens the transfer screen.
 pub const OPEN: Id = Id::new_static("transfer.open");
-const SCREEN: Id = Id::new_static("transfer.screen");
+pub(crate) const SCREEN: Id = Id::new_static("transfer.screen");
 const SERVER: Id = Id::new_static("transfer.server");
 const SERVER_EVENT: Event<ServerNotice> = Event::new("transfer.server-event");
 /// The reader's answer whether to install a plugin's code sent from the
@@ -52,7 +52,7 @@ const CODE_APPROVED: Event<Confirmed> = Event::new("transfer.code-approved");
 /// Typing on a phone for the keyboard.
 const PHONE_SCREEN: Id = Id::new_static("transfer.phone");
 /// Transfer over the cable (USB).
-const CABLE_SCREEN: Id = Id::new_static("transfer.cable");
+pub(crate) const CABLE_SCREEN: Id = Id::new_static("transfer.cable");
 
 /// The port asked for; the next free one is taken if it is in use.
 pub(crate) const PORT: u16 = 8080;

@@ -143,7 +143,16 @@ impl Shopping {
         list: &str,
         storage: Shared,
     ) -> Self {
-        Self::of(DEVICE, device, native, list, storage)
+        Self::of(DEVICE, device, native, list, storage, None)
+    }
+
+    /// The store on the X4 running firmware `version`.
+    pub fn on_firmware(version: &str, list: &str, storage: Shared) -> Self {
+        let firmware = paperpaw_sdk::firmware::Firmware {
+            version: String::from(version),
+            ..Default::default()
+        };
+        Self::of(DEVICE, Some("x4"), None, list, storage, Some(firmware))
     }
 
     /// The store on the X4 Pro (touch and buttons), its list answered with
@@ -151,7 +160,7 @@ impl Shopping {
     pub fn touch(list: &str) -> Self {
         let mut pro = DEVICE;
         pro.input.touch = true;
-        Self::of(pro, Some("x4-pro"), None, list, Shared::default())
+        Self::of(pro, Some("x4-pro"), None, list, Shared::default(), None)
     }
 
     fn of(
@@ -160,6 +169,7 @@ impl Shopping {
         native: Option<Native>,
         list: &str,
         storage: Shared,
+        firmware: Option<paperpaw_sdk::firmware::Firmware>,
     ) -> Self {
         let mut builder = Kernel::builder(info)
             .storage(storage.clone())
@@ -176,6 +186,9 @@ impl Shopping {
         }
         if let Some(native) = native {
             builder = builder.code_plugins(native, Box::new(NoCode));
+        }
+        if let Some(firmware) = firmware {
+            builder = builder.firmware(firmware);
         }
         let mut kernel = builder.build().unwrap();
         kernel.start(Instant(0));

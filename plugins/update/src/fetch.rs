@@ -453,7 +453,7 @@ fn place(env: &Env<'_>, plugin: &str) -> bool {
     }
     // The store's at the version fetched too: it is still once the new
     // firmware puts it in place.
-    let version = install::folder_version(storage, &folder);
+    let version = install::folder_release(storage, &folder);
     let target = native::fetched_folder(plugin);
     let _ = storage.remove_dir_all(&target);
     if storage.rename(&folder, &target).is_err() {

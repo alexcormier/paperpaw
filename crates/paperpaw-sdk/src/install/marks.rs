@@ -99,8 +99,14 @@ pub fn settle(storage: &dyn Storage, id: &str, folder: &str) -> bool {
         let (key, value) = line.split_once(' ').unwrap_or((line, ""));
         kept &= match key {
             "from" => match value.split_once(' ') {
-                Some(("store", version)) => Version::parse(version.trim())
-                    .is_none_or(|v| super::remember_store_install(storage, id, v)),
+                // As its plugin.ini writes it, where that is the version
+                // marked (a beta's pre-release with it).
+                Some(("store", version)) => Version::parse(version.trim()).is_none_or(|v| {
+                    let written = super::folder_release(storage, folder)
+                        .filter(|written| Version::parse(written) == Some(v))
+                        .unwrap_or_else(|| format!("{v}"));
+                    super::remember_store_install(storage, id, written)
+                }),
                 _ => super::forget_store_install(storage, id),
             },
             "code" => match bytes32(value) {

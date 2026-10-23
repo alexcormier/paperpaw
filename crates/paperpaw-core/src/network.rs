@@ -250,9 +250,12 @@ impl Kernel {
                 }
                 let (request, cut) = self.io.servers.cable.begin(n, len);
                 // A body still coming, cut short by this request: let go,
-                // and told.
-                if let Some((m, cut)) = cut {
-                    self.cable_cut(m, cut, "cut short by another request");
+                // and told, unless the computer gave this request its
+                // number (it gave the other up): the answer is the new one's.
+                match cut {
+                    Some((m, cut)) if m == n => self.cable_close(cut),
+                    Some((m, cut)) => self.cable_cut(m, cut, "cut short by another request"),
+                    None => {}
                 }
                 let storage = &*self.shared.storage;
                 let event = ServerEvent::Request {
@@ -298,12 +301,18 @@ impl Kernel {
     /// The cable's request `n` (the kernel's `request`) is cut short: its
     /// body is let go, and the computer told why.
     fn cable_cut(&mut self, n: u32, request: u32, why: &str) {
+        self.cable_close(request);
+        self.io.servers.cable.refuse(n, 400, why);
+    }
+
+    /// The kernel's request `request` of the cable ends: its body is let
+    /// go, its plugin told.
+    fn cable_close(&mut self, request: u32) {
         let storage = &*self.shared.storage;
         let closed = ServerEvent::Closed { request };
         self.io
             .servers
             .event(closed, storage, &mut self.output.commands);
-        self.io.servers.cable.refuse(n, 400, why);
     }
 
     /// The next line to send to the computer at the cable: send them all

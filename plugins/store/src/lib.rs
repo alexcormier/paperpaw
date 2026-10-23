@@ -65,7 +65,7 @@ pub const CATALOG: Setting<paperpaw_sdk::setting::Text> = Setting::new("store.ca
 static SETTINGS: [SettingSpec; 1] = [SettingSpec::fixed_text(
     CATALOG.static_str(),
     "store.setting.catalog",
-    "https://paperpaw.org/api/v1/plugins.json",
+    catalog::OFFICIAL_LIST,
     groups::DEVELOPER,
 )
 .described("store.setting.catalog.help")];

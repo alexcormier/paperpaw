@@ -52,12 +52,23 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
         },
         None => None,
     };
+    // A code plugin's folder, named with it: its version and its code's.
+    let mut folders = Vec::new();
     for plugin in &context.target.data {
         let files = folder::check(plugin, report);
         if let Some(release) = &release {
             data_release(plugin, files.as_ref(), release, report);
         }
+        let version = files.as_ref().and_then(|f| f.manifest.version.as_deref());
+        if let Some(version) = version.and_then(|v| Version::parse(v.trim()))
+            && context.target.plugins.contains(&plugin.id)
+        {
+            folders.push((plugin.id.clone(), version));
+        }
         device::check(context, plugin, files.as_ref(), report)?;
+    }
+    if !folders.is_empty() {
+        device::code_versions(context, &folders, report)?;
     }
     let code: Vec<&String> = context
         .target
