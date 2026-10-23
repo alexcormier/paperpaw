@@ -65,6 +65,9 @@ pub struct TextStyle<'a> {
     /// bolder text with any font, also bitmap packs. Advances stay as
     /// they are.
     pub bolder: u16,
+    /// The text goes on from one with a character before it, which
+    /// combining marks at its start sit on (see [`glyph_x`]).
+    pub based: bool,
 }
 
 impl<'a> TextStyle<'a> {
@@ -77,6 +80,7 @@ impl<'a> TextStyle<'a> {
             size,
             color,
             bolder: 0,
+            based: false,
         }
     }
 
@@ -85,6 +89,36 @@ impl<'a> TextStyle<'a> {
         self.bolder = extra;
         self
     }
+
+    /// Going on from a text with a character before it (see
+    /// [`TextStyle::based`]).
+    pub fn based(mut self, based: bool) -> Self {
+        self.based = based;
+        self
+    }
+}
+
+/// Whether `ch` is a combining mark, drawn onto the character before it
+/// (an accent, a diaeresis below): the combining blocks of Unicode.
+pub fn is_mark(ch: char) -> bool {
+    matches!(
+        ch,
+        '\u{0300}'..='\u{036F}'
+            | '\u{1AB0}'..='\u{1AFF}'
+            | '\u{1DC0}'..='\u{1DFF}'
+            | '\u{20D0}'..='\u{20FF}'
+            | '\u{FE20}'..='\u{FE2F}'
+    )
+}
+
+/// Where a glyph whose bitmap begins `left` pixels from the pen at `pen`
+/// is drawn across. A combining mark with no character before it
+/// (`lone`) would reach back onto nothing: it sits on a base of no width
+/// at the pen instead, never left of where its text begins.
+pub fn glyph_x(pen: f32, left: i16, lone: bool) -> i32 {
+    let at = raster::floor(pen + 0.5);
+    let x = at.saturating_add(i32::from(left));
+    if lone { x.max(at) } else { x }
 }
 
 impl core::fmt::Debug for TextStyle<'_> {
@@ -115,12 +149,15 @@ pub fn draw_text(
         size,
         color,
         bolder: extra,
+        mut based,
     } = *style;
     let mut pen = x;
     for ch in text.chars() {
         let glyph = cache.glyph(font_index, font, ch, size);
+        let mark = is_mark(ch);
         // Saturating: a pen far out (absurd advances) draws nothing.
-        let gx = raster::floor(pen + 0.5).saturating_add(i32::from(glyph.left));
+        let gx = glyph_x(pen, glyph.left, mark && !based);
+        based |= !mark;
         let gy = baseline.saturating_add(i32::from(glyph.top));
         if !glyph.is_empty() && extra == 0 {
             // The usual weight: each pixel's own coverage.

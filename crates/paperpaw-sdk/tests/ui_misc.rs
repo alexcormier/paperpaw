@@ -415,6 +415,22 @@ proptest! {
     }
 }
 
+/// Found by the property above: a caption of a combining mark alone (a
+/// diaeresis below) reached back past the area's left edge, onto a
+/// letter that is not there. It sits on the start of its line instead.
+#[test]
+fn a_caption_of_a_lone_mark_keeps_to_its_area() {
+    let h = look_harness("core.frame.none", "");
+    let env = h.env();
+    let area = Rect::new(3, 0, 100, 99);
+    let mut frame = frame(480, 800);
+    let look = widgets::draw_frame(&mut frame.canvas(), &env, "t.clock", area);
+    let mut frame = support::frame(480, 800);
+    widgets::draw_caption(&mut frame.canvas(), &env, "t.clock", &look, "\u{324}");
+    assert!(drawn_in(&frame, look.area), "the mark is drawn");
+    assert_eq!(drawn_outside(&mut frame, look.area), None);
+}
+
 #[test]
 fn frames_and_sizes_read_from_settings_fall_back_when_unknown() {
     let h = look_harness("core.frame.cloud", "sideways");
