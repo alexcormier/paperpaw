@@ -195,6 +195,8 @@ fn a_plugin_of_ones_own_is_no_update_until_the_store_version_is_chosen() {
     storage
         .write("plugins/airy/plugin.ini", manifest("0.9.0").as_bytes())
         .unwrap();
+    // Origins are kept on this device (none of the store's yet).
+    storage.write(".paperpaw/plugin-origin.txt", b"").unwrap();
     let mut shopping = Shopping::with(Some("x4"), None, &list("1.0.0"), storage);
     let shown = shopping.shown();
     assert!(shown.contains("Installed"), "{shown}");
@@ -212,6 +214,20 @@ fn a_plugin_of_ones_own_is_no_update_until_the_store_version_is_chosen() {
     shopping.run(OPEN);
     let call = shopping.request(LIST);
     shopping.answer(&call, 200, list("1.1.0").as_bytes());
+    let shown = shopping.shown();
+    assert!(shown.contains("Installed, 1 update"), "{shown}");
+}
+
+/// On a device that kept no origins yet (its store installed plugins
+/// before they were kept), the plugins there are taken for the store's
+/// once: they keep its updates.
+#[test]
+fn plugins_installed_before_origins_were_kept_keep_the_stores_updates() {
+    let storage = Shared::default();
+    storage
+        .write("plugins/airy/plugin.ini", manifest("0.9.0").as_bytes())
+        .unwrap();
+    let mut shopping = Shopping::with(Some("x4"), None, &list("1.0.0"), storage);
     let shown = shopping.shown();
     assert!(shown.contains("Installed, 1 update"), "{shown}");
 }

@@ -183,6 +183,7 @@ impl PluginList {
             )
         });
         self.plugins = plugins.iter().map(|p| p.manifest.id.clone()).collect();
+        install::adopt(env);
         self.origins = plugins
             .iter()
             .filter(|p| p.kind != PluginKind::BuiltIn)

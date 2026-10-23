@@ -61,7 +61,10 @@ change the plugin SDK.
     the file was changed after it was made (PaperPaw marks it; the card's
     dates are not trusted), and empty files and a folder that cannot be
     settled never make a folder unreachable. Temporary files of earlier
-    versions go where they are provably copies.
+    versions go where they are provably copies; a new copy an earlier
+    version left unmarked never replaces the file, it is kept beside it
+    as `<name>.unsaved`. The card's free space is counted a sector at a
+    time, so a Calibre transfer never needs a large piece of memory.
   - Highlights, bookmarks and notes in EPUB books keep their text when
     the book's own styles are switched on or off: each records the
     conversion it was made in and where it lies in the book, and is
@@ -71,9 +74,11 @@ change the plugin SDK.
   - A reading place that cannot be read is tried again, and kept aside
     (`.bad`) before a new one is saved; you are told once.
   - KOReader: removing every highlight on one side now reaches the
-    other, but an empty list there deletes here only when KOReader's
-    file had annotations before, and a copy of them is kept first
-    (`.removed`); a fresh or unreadable side changes nothing.
+    other, but where KOReader's file had annotations before and has
+    none any more (removed there, or a fresh file from another device),
+    you are asked in the book first (*Keep* or *Remove*, *Keep* where
+    the focus starts); removed, a copy is kept (`.removed`). A fresh or
+    unreadable side changes nothing.
   - Progress sync: *Back* on an offer means not now for that book,
     until the server's place changes; it is not offered at every wake.
   - Statistics sync: a book's statistics deleted in KOReader go here
@@ -102,11 +107,12 @@ change the plugin SDK.
   is local: its version is never counted or installed as an update, and
   its page in the store offers *Use the store version* instead. The
   plugin manager says of each plugin whether it is from the store or
-  local. Plugins the store installed before this version count as
-  local until the store installs them again.
+  local. On a device that kept no origins yet, the plugins there are
+  taken for the store's once, so those it installed before keep its
+  updates. A firmware update fetches no new build of a local plugin.
 - SDK: `install::origin`, `remember_store_install`,
-  `forget_store_install` and `folder_version` tell and keep where an
-  installed plugin came from.
+  `forget_store_install`, `adopt` and `folder_version` tell and keep
+  where an installed plugin came from.
 - Wi-Fi transfer: plugins can be installed from the computer (e.g.
   one's own build, from the workshop). Each file comes with its
   SHA-256 (`PUT /api/plugin/<id>/<path>`), and `POST /api/plugin/<id>`

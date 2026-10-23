@@ -39,7 +39,9 @@
 pub mod local;
 mod origin;
 
-pub use origin::{Origin, folder_version, forget_store_install, origin, remember_store_install};
+pub use origin::{
+    Origin, adopt, folder_version, forget_store_install, origin, remember_store_install,
+};
 
 use alloc::format;
 use alloc::string::{String, ToString};

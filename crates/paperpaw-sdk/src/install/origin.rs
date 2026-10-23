@@ -8,7 +8,9 @@
 //! neither the Wi-Fi transfer nor plugins' folders reach: a plugin counts
 //! as the store's only while its version is one of those. One put in
 //! place otherwise counts as local even before its installer said so
-//! ([`forget_store_install`]), as long as its version differs.
+//! ([`forget_store_install`]), as long as its version differs. On a
+//! device that kept none yet, the plugins installed are taken for the
+//! store's once ([`adopt`]): those it installed before keep its updates.
 
 use alloc::format;
 use alloc::string::String;
@@ -16,7 +18,7 @@ use alloc::vec::Vec;
 
 use paperpaw_platform::Storage;
 
-use crate::Version;
+use crate::{Env, PluginKind, Version};
 
 /// Lines `<id>\t<version>`, the versions a store installed.
 const STORE_INSTALLS: &str = crate::data_path!("plugin-origin.txt");
@@ -57,6 +59,29 @@ pub fn remember_store_install(storage: &dyn Storage, plugin: &str, version: Vers
 /// that could not be kept.
 pub fn forget_store_install(storage: &dyn Storage, plugin: &str) -> bool {
     change(storage, plugin, None)
+}
+
+/// Takes every plugin installed (with data or code, not one built in) for
+/// the store's at its version, where no origin was ever kept on this
+/// device: before PaperPaw kept them, the plugins the store installed
+/// went unnamed, and they keep its updates. Installers and those who
+/// look at origins call it first; once kept, it does nothing. `false` if
+/// it could not be kept.
+pub fn adopt(env: &Env<'_>) -> bool {
+    if env.storage.exists(STORE_INSTALLS) {
+        return true;
+    }
+    let text: String = env
+        .plugins
+        .iter()
+        .filter(|info| matches!(info.kind, PluginKind::Data | PluginKind::Code))
+        .map(|info| {
+            let version = info.update.unwrap_or(info.manifest.version);
+            format!("{}\t{version}\n", info.manifest.id)
+        })
+        .collect();
+    let _ = env.storage.create_dir(crate::data::DIR);
+    env.storage.write(STORE_INSTALLS, text.as_bytes()).is_ok()
 }
 
 /// The version `plugin.ini` in `folder` says, e.g. of a plugin about to be

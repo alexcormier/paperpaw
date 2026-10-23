@@ -109,6 +109,8 @@ pub(crate) struct ListScreen {
 
 impl ListScreen {
     pub(crate) fn new(env: &Env<'_>) -> Self {
+        // Those installed before origins were kept: the store's.
+        paperpaw_sdk::install::adopt(env);
         let style = UiStyle::new(env);
         let header = ui::Header::new(env, &style, true);
         let display = env.device.display;

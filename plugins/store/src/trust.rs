@@ -183,6 +183,7 @@ pub(crate) fn install(
         return None;
     }
     let _ = env.storage.remove(&expected_path());
+    install::adopt(env);
     let version = INSTALLER
         .folder(env.storage)
         .and_then(|folder| install::folder_version(env.storage, &folder));

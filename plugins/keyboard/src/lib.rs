@@ -611,7 +611,6 @@ impl KeyboardScreen {
         cx.command(Command::ReadClipboard(PASTED.into(), Params::new()));
     }
 
-    /// Inserts pasted text: one line, digits only for numbers.
     /// Text typed from outside (keys of a keyboard, a remote control): as
     /// the keys would add it, without what is no text.
     fn typed(&mut self, text: &str, cx: &mut Cx<'_, '_>) {
@@ -623,6 +622,7 @@ impl KeyboardScreen {
         self.insert(&text, cx);
     }
 
+    /// Inserts pasted text: one line, digits only for numbers.
     fn pasted(&mut self, text: &str, cx: &mut Cx<'_, '_>) {
         let line: String = text
             .chars()

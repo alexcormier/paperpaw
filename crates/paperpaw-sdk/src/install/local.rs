@@ -172,6 +172,8 @@ impl Staging {
             self.abort(storage);
             return Err(Refusal::Storage);
         }
+        // Those the store installed before origins were kept stay its.
+        super::adopt(env);
         super::forget_store_install(storage, &self.plugin);
         let id = Id::parse(&self.plugin).map_err(|_| Refusal::Name)?;
         out.push(Command::InstallPlugin(id, self.folder()));

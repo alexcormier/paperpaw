@@ -1673,6 +1673,7 @@ pub paperpaw_sdk::install::Progress::name: alloc::string::String
 pub paperpaw_sdk::install::Progress::plugin: alloc::string::String
 pub paperpaw_sdk::install::Progress::total: usize
 pub const paperpaw_sdk::install::MAX_FILES: usize
+pub fn paperpaw_sdk::install::adopt(&paperpaw_sdk::Env<'_>) -> bool
 pub fn paperpaw_sdk::install::fits(&str, u32) -> bool
 pub fn paperpaw_sdk::install::folder_version(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_sdk::Version>
 pub fn paperpaw_sdk::install::forget_store_install(&dyn paperpaw_platform::storage::Storage, &str) -> bool
