@@ -69,6 +69,21 @@ pub(crate) fn mark_seen(storage: &dyn Storage, screen: &str) {
     }
 }
 
+/// The hints of `screen` count as not shown: they were covered before
+/// the reader could read them.
+pub(crate) fn forget_seen(storage: &dyn Storage, screen: &str) {
+    let Ok(text) = paperpaw_sdk::read_file(storage, &seen_file(), 64 * 1024) else {
+        return;
+    };
+    let text = String::from_utf8_lossy(&text);
+    let kept: String = text
+        .lines()
+        .filter(|line| line.trim() != screen)
+        .map(|line| format!("{line}\n"))
+        .collect();
+    let _ = storage.write(&seen_file(), kept.as_bytes());
+}
+
 /// The plugin.
 #[derive(Debug, Default)]
 pub struct Help;
@@ -90,6 +105,7 @@ impl Plugin for Help {
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         r.add_settings(&SETTINGS)?;
         r.on(events::SCREEN_SHOWN, |env, shown, out| {
+            covered(env, &shown.screen, out);
             if !help::waits(env, shown.screen.as_str()) {
                 explain(env, &shown.screen, out);
             }
@@ -125,6 +141,24 @@ fn explain(env: &Env<'_>, screen: &Id, out: &mut Vec<Command>) {
     }
     let params = Params::new().with(params::ID, screen.as_str());
     out.push(Command::OpenScreen(OVERLAY, params));
+}
+
+/// Closes the hints that another screen, `shown`, now covers (a
+/// plugin's question, a notice opened over them): what they explain is
+/// hidden, so they show the next time instead.
+fn covered(env: &Env<'_>, shown: &Id, out: &mut Vec<Command>) {
+    if *shown == OVERLAY {
+        return;
+    }
+    for (index, entry) in env.stack.iter().enumerate() {
+        if entry.screen != OVERLAY {
+            continue;
+        }
+        if let Some(below) = index.checked_sub(1).and_then(|i| env.stack.get(i)) {
+            forget_seen(env.storage, below.screen.as_str());
+        }
+        out.push(Command::Close(entry.key));
+    }
 }
 
 /// Has every screen's hints shown again.

@@ -284,3 +284,20 @@ fn hints_show_again_when_asked() {
     device.open(OTHER);
     assert_eq!(device.on_top(), "help.overlay");
 }
+
+/// Another screen opened over the hints (a plugin's question, a notice)
+/// covers what they explain: they close, the screen on top stays, and
+/// they show again when the screen they explain does.
+#[test]
+fn a_screen_opened_over_the_hints_closes_them_for_next_time() {
+    let mut device = Device::new(TOUCH, "");
+    device.open(OTHER);
+    assert_eq!(device.on_top(), "help.overlay");
+    device.open(HOME);
+    assert_eq!(device.on_top(), "probe.home", "the one opened stays");
+    let open: Vec<String> = device.kernel.screens().map(|id| id.to_string()).collect();
+    assert!(!open.iter().any(|s| s == "help.overlay"), "{open:?}");
+    // Back to the screen they explain: they show again.
+    device.run(actions::BACK);
+    assert_eq!(device.on_top(), "help.overlay", "shown again");
+}

@@ -5,7 +5,9 @@
 //! beside it where the part is narrow. The others are lines in a box with
 //! *Got it* and *No more hints* below them, at the bottom, the middle or
 //! the top of the screen, wherever it covers the zones least. Drawn once,
-//! without pictures.
+//! without pictures. Another screen opened over it (a plugin's question,
+//! a notice) covers what it explains: it closes, its hints shown the next
+//! time.
 
 use alloc::string::String;
 use alloc::vec::Vec;
