@@ -35,7 +35,8 @@ with that before the betas of 0.5:
   interface in its top 16 bits, and below them a hash of the chip
   (`cfg!(target_arch)`), the pointer width, the features that change what
   a plugin's own copy of the code does with what crosses
-  (`paperpaw_text::OUTLINES`, `paperpaw_graphics::COLOR`), and
+  (`paperpaw_text::OUTLINES`; colour does not: Android and the emulator
+  draw in colour, and plugins built without it run there), and
   `native::LAYOUT`: a digest, made at compile time, of the sizes and
   alignments of the types that cross (`Env`, `Registrar`, `Command`,
   `Canvas`, `Settings`, `Box<dyn Plugin>` and the others) and of where

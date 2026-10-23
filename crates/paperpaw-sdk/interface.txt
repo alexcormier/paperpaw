@@ -4,9 +4,9 @@
 # interface`, with interface-api.txt (the SDK's items, api.txt as
 # it was), only once INTERFACE is raised.
 interface = 1
-features = outlines true, colour false
+features = outlines true
 layout = b74c4d9b4743fe90
-fingerprint = 0001463bab2c95b0
+fingerprint = 000138844071fe90
 linker = ecd2a8372db2705d
 x4 = rustc 1.99.0
 x4-pro = esp 1.97.0.0

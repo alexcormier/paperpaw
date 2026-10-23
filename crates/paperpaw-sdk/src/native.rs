@@ -65,9 +65,9 @@ pub const FINGERPRINT: Fingerprint = Fingerprint::of(INTERFACE, {
     hash = hash.number(core::mem::size_of::<usize>() as u64);
     // Features of crates below the SDK that change what a plugin's own
     // copy of their code does with what crosses, whichever crate
-    // switched them on.
+    // switched them on. Colour does not: Android and the emulator draw
+    // in colour, and plugins built without it run there.
     hash = hash.number(paperpaw_text::OUTLINES as u64);
-    hash = hash.number(paperpaw_graphics::COLOR as u64);
     hash = hash.number(LAYOUT);
     hash.0
 });

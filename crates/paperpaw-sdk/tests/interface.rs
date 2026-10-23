@@ -75,15 +75,11 @@ fn now() -> Option<String> {
     ))
 }
 
-/// The features that change what crosses, as this test is built with:
-/// `cargo test -p paperpaw-sdk` builds it so, a test of the whole
-/// workspace may switch on more (colour, which the emulator draws).
+/// The features that change what crosses, as this test is built with
+/// (`cargo test -p paperpaw-sdk`; a test of the whole workspace may switch
+/// on others).
 fn features() -> String {
-    format!(
-        "outlines {}, colour {}",
-        paperpaw_text::OUTLINES,
-        paperpaw_graphics::COLOR
-    )
+    format!("outlines {}", paperpaw_text::OUTLINES)
 }
 
 #[test]
