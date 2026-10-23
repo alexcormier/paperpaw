@@ -83,9 +83,10 @@ const LOCAL =
 
 function tell(message) {
   if (window.parent === window) return;
-  // Before any page wrote: only that the module is ready, nothing else.
+  // Before any page wrote: only that the module is ready, or that it
+  // could not be loaded, nothing else.
   if (embedder) window.parent.postMessage(message, embedder);
-  else if (message.type === "ready") window.parent.postMessage(message, "*");
+  else if (message.type === "ready" || message.type === "error") window.parent.postMessage(message, "*");
 }
 
 /// The body of a device whose profile draws none.
@@ -261,12 +262,20 @@ for (const [type, phase] of [
 
 for (const type of ["keydown", "keyup"]) {
   window.addEventListener(type, (event) => {
-    // A key of the device focused: Enter and Space press it.
+    // The browser's own shortcuts stay its own.
+    if (event.ctrlKey || event.metaKey || event.altKey) return;
+    // A key of the device reached by the keyboard: Enter and Space press
+    // it (one clicked does not keep them).
     const focused = event.target instanceof Element ? event.target.closest("[data-button]") : null;
-    const own = focused && (event.key === "Enter" || event.key === " ") ? focused.dataset.button : null;
-    const name = own ?? bound.get(event.key) ?? KEYS[event.key];
-    if (!name || !device || event.repeat) return;
+    const own =
+      focused?.matches(":focus-visible") && (event.key === "Enter" || event.key === " ") ? focused.dataset.button : null;
+    // Letters as they are bound, Caps Lock or Shift or not.
+    const key = event.key.length === 1 ? event.key.toLowerCase() : event.key;
+    const name = own ?? bound.get(key) ?? KEYS[key];
+    if (!name || !device) return;
     event.preventDefault();
+    // Held: pressed once, as the device's buttons are.
+    if (event.repeat) return;
     press(name, type === "keydown");
   });
 }
@@ -437,7 +446,10 @@ window.addEventListener("message", async (event) => {
 // Ready for messages once the module is loaded.
 loading.then(
   (loaded) => tell({ type: "ready", version: loaded.version() }),
-  (error) => console.error("paperpaw:", error),
+  (error) => {
+    console.error("paperpaw:", error);
+    tell({ type: "error", error: String(error.message ?? error) });
+  },
 );
 
 // Opened on its own (not in a frame): a device to try, from the address

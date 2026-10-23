@@ -60,7 +60,8 @@ started with the data plugins it had, and sends
 `{ type: "restarted", reason }`. The device's heap budget holds in the
 browser as on the X4; where it ran out with no way around it (what
 stops the device too), the frame says so before it starts again:
-`{ type: "out-of-memory", bytes, device }`. Before `start`, only
+`{ type: "out-of-memory", bytes, device }`; where the module cannot be
+loaded, `{ type: "error", error }` in place of `ready`. Before `start`, only
 `fixtures` and `network` are taken; other messages answer with `error`.
 
 | Message to the frame | Effect | Answer |
