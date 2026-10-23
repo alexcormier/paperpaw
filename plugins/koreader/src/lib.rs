@@ -20,9 +20,11 @@
 //! A file of either side that is there but cannot be read or understood
 //! stops the exchange: nothing changes on either side until it can be.
 //! So does a missing one of KOReader (as while a sync has brought the
-//! folder but not yet the file in it). Annotations go to KOReader with
-//! the time they were made: while neither they nor the clock tell it,
-//! they wait here.
+//! folder but not yet the file in it), and one side without any of what
+//! both had (book data moved halfway, a sync not complete). What could
+//! not be written for KOReader is not taken as known, so it goes again
+//! next time. Annotations go to KOReader with the time they were made:
+//! while neither they nor the clock tell it, they wait here.
 
 // What goes wrong with the user's data is told, never dropped unseen:
 // a result left unread says why (see CONTRIBUTING.md).
@@ -134,6 +136,13 @@ fn known_file(book: &str) -> String {
         Env::plugin_dir(PLUGIN.as_str()),
         paperpaw_sdk::library::key(book)
     )
+}
+
+/// The note of KOReader's annotation `item` as it is kept here: on one
+/// line, cut as `annotations::save` cuts it (ending in `…`). Compared so,
+/// a long note is not taken for one changed here.
+fn note_of(item: &Table) -> String {
+    annotations::stored_note(item.str("note").unwrap_or_default())
 }
 
 /// What an annotation is known by: its kind and place.
@@ -436,7 +445,7 @@ fn locate(x: &Exchange<'_>, item: &Table) -> Option<Key> {
 /// KOReader's annotation `item` as one here, at `key`.
 fn annotation_of(x: &Exchange<'_>, item: &Table, (kind, start, end): Key) -> Annotation {
     let (doc, storage) = (x.doc, x.storage);
-    let note = annotations::one_line(item.str("note").unwrap_or_default());
+    let note = note_of(item);
     let text = match kind {
         Kind::Highlight => item
             .str("text")
@@ -532,6 +541,11 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
     } = theirs;
     let known = load_known(storage, book)?;
     let mut ours = load_ours(storage, book)?;
+    // None at all on one side of what both had is rather a move of book
+    // data halfway or a sync not complete than everything removed there.
+    if !known.is_empty() && (ours.is_empty() || theirs.is_empty()) {
+        return Err(Unreadable);
+    }
     let known_of = |key: Key| known.iter().find(|k| k.key == key);
     let mut matched = alloc::vec![false; ours.len()];
     let (mut ours_changed, mut theirs_changed) = (false, false);
@@ -546,7 +560,7 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
         if let Some(i) = ours.iter().position(|a| key_of(&a.mark) == key) {
             matched[i] = true;
             let a = &mut ours[i];
-            let note = annotations::one_line(item.str("note").unwrap_or_default());
+            let note = note_of(&item);
             let mut same = true;
             if note != a.note {
                 let changed = item
@@ -631,6 +645,7 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
     if ours_changed && !annotations::save(storage, book, &kept) {
         return Err(Unreadable);
     }
+    let mut passed = true;
     if theirs_changed {
         let at = known_time([x.now]).map(|now| lua::string(&datetime(x, now)));
         let file = lua::table([
@@ -638,13 +653,14 @@ pub fn exchange(x: &Exchange<'_>, book: &str, theirs: Theirs) -> Result<bool, Un
             ("datetime", at.unwrap_or(Value::Nil)),
             ("device_id", lua::string(DEVICE)),
         ]);
-        #[expect(
-            clippy::let_underscore_must_use,
-            reason = "kept as it was when this check came in; decide whether the user should hear of a failure here when this is next changed"
-        )]
-        let _ = storage.write(&exchange_file(book), lua::write(&file).as_bytes());
+        passed = storage
+            .write(&exchange_file(book), lua::write(&file).as_bytes())
+            .is_ok();
     }
-    if shared != known {
+    // Not passed on, what was offered must not count as known: the next
+    // exchange would take it for removed in KOReader. What is known from
+    // before stays true, and it all goes again next time.
+    if passed && shared != known {
         save_known(storage, book, &shared);
     }
     Ok(ours_changed)
@@ -710,11 +726,41 @@ impl Announced {
     }
 }
 
+/// Whether a book at `book` shares KOReader's folder with another format
+/// of it beside it (`Book.epub` and `Book.pdf`).
+fn shares_sidecar(storage: &dyn Storage, book: &str) -> bool {
+    let stem = |name: &str| name.rsplit_once('.').map(|(stem, _)| String::from(stem));
+    let own = stem(paperpaw_sdk::files::name(book));
+    let Ok(entries) = paperpaw_sdk::files::list(storage, paperpaw_sdk::files::parent(book), true)
+    else {
+        return false;
+    };
+    entries
+        .iter()
+        .any(|e| !e.is_dir && stem(&e.name) == own && e.name != paperpaw_sdk::files::name(book))
+}
+
 /// A book moved: KOReader's folder goes along (what is known moves as
-/// book data).
-fn moved_book(env: &Env<'_>, from: &str, to: &str) {
-    let storage = env.storage;
-    if has_entries(storage, &sidecar(from)) {
+/// book data), or only the book's own files in it where another format
+/// of the book shares it.
+fn moved_book(storage: &dyn Storage, from: &str, to: &str) {
+    if has_entries(storage, &sidecar(from)) && shares_sidecar(storage, from) {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "there already, or not made: then the moves below fail and the files stay where KOReader finds them with the other format"
+        )]
+        let _ = storage.create_dir(&sidecar(to));
+        for (old, new) in [
+            (metadata_file(from), metadata_file(to)),
+            (exchange_file(from), exchange_file(to)),
+        ] {
+            #[expect(
+                clippy::let_underscore_must_use,
+                reason = "kept as it was when this check came in; decide whether the user should hear of a failure here when this is next changed"
+            )]
+            let _ = storage.rename(&old, &new);
+        }
+    } else if has_entries(storage, &sidecar(from)) {
         #[expect(
             clippy::let_underscore_must_use,
             reason = "kept as it was when this check came in; decide whether the user should hear of a failure here when this is next changed"
@@ -770,7 +816,7 @@ impl Plugin for KoReader {
             }
         })?;
         r.on(events::BOOK_MOVED, |env, moved, _| {
-            moved_book(env, &moved.from, &moved.path);
+            moved_book(env.storage, &moved.from, &moved.path);
         })?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

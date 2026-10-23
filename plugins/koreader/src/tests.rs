@@ -608,3 +608,102 @@ fn translations_are_complete() {
     let issues = check::compare(&en, &de);
     assert!(issues.is_empty(), "{issues:?}");
 }
+
+/// The exchange file cannot be written (the card is full, its name too
+/// long): what was to go to KOReader is not known to both, so the next
+/// exchange does not take it for removed there.
+#[test]
+fn what_cannot_be_passed_on_is_not_known() {
+    let storage = storage();
+    let tired = highlight(
+        &storage,
+        "/body/DocFragment[1]/body/p[1]/text().32",
+        "/body/DocFragment[1]/body/p[1]/text().37",
+        "my own note",
+    );
+    assert!(annotations::add(&storage, BOOK, tired));
+    let card = Unwritable {
+        storage: &storage,
+        path: String::from(EXCHANGE),
+    };
+    // KOReader's come over all the same.
+    assert_eq!(try_run(&card, NOW, MAX_FILE), Ok(Some(true)));
+    assert!(!storage.exists(EXCHANGE));
+    // With room again, it is passed on, not removed here.
+    run(&storage, NOW + 10);
+    let ours = annotations::load(&storage, BOOK);
+    assert!(ours.iter().any(|a| a.note == "my own note"), "{ours:?}");
+    assert!(
+        items(&storage, EXCHANGE)
+            .iter()
+            .any(|i| i.str("note") == Some("my own note"))
+    );
+}
+
+/// A note of KOReader longer than PaperPaw keeps is cut here; that is no
+/// change here to pass back, which would cut KOReader's note too.
+#[test]
+fn a_long_note_of_koreader_is_not_cut_there() {
+    let storage = storage();
+    let long = "x".repeat(5000);
+    storage
+        .write(SIDECAR, METADATA.replace("Her name", &long).as_bytes())
+        .unwrap();
+    assert!(run(&storage, NOW));
+    let ours = annotations::load(&storage, BOOK);
+    assert!(
+        ours.iter()
+            .any(|a| a.note.len() < long.len() && a.note.starts_with("xxx"))
+    );
+    for later in [10, 20] {
+        assert!(!run(&storage, NOW + later));
+        assert!(!storage.exists(EXCHANGE));
+    }
+    assert_eq!(items(&storage, SIDECAR)[0].str("note"), Some(long.as_str()));
+}
+
+/// One side has none at all of what both had (book data moved halfway, a
+/// synced folder not complete yet): nothing is taken for removed.
+#[test]
+fn all_gone_on_one_side_changes_nothing() {
+    // None here.
+    let storage = exchanged();
+    storage.remove(&annotations::file(BOOK)).unwrap();
+    let before = state(&storage);
+    assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Err(Unreadable));
+    assert_eq!(state(&storage), before);
+    assert!(!storage.exists(EXCHANGE));
+    // None in KOReader's file.
+    let storage = exchanged();
+    storage
+        .write(SIDECAR, b"return { [\"annotations\"] = {} }")
+        .unwrap();
+    let before = state(&storage);
+    assert_eq!(try_run(&storage, NOW + 20, MAX_FILE), Err(Unreadable));
+    assert_eq!(state(&storage), before);
+    assert!(!storage.exists(EXCHANGE));
+}
+
+/// A book moved whose folder KOReader shares with another format of it:
+/// only its own files go along.
+#[test]
+fn a_shared_folder_stays_with_the_other_format() {
+    let storage = exchanged();
+    let pdf_metadata = "books/alice.sdr/metadata.pdf.lua";
+    storage.write("books/alice.pdf", b"%PDF-1.4").unwrap();
+    storage.write(pdf_metadata, b"return {}").unwrap();
+    let theirs = text(&storage, SIDECAR);
+    let to = "moved/alice.epub";
+    storage.rename(BOOK, to).unwrap();
+    moved_book(&storage, BOOK, to);
+    assert_eq!(text(&storage, pdf_metadata), "return {}");
+    assert!(!storage.exists(SIDECAR));
+    assert_eq!(text(&storage, "moved/alice.sdr/metadata.epub.lua"), theirs);
+
+    // Alone in it, the whole folder goes.
+    let storage = exchanged();
+    storage.rename(BOOK, to).unwrap();
+    moved_book(&storage, BOOK, to);
+    assert!(!storage.exists(SIDECAR));
+    assert_eq!(text(&storage, "moved/alice.sdr/metadata.epub.lua"), theirs);
+}

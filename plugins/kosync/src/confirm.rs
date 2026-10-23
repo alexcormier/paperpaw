@@ -25,17 +25,18 @@ pub(crate) const PERCENTAGE: &str = "percentage";
 pub(crate) const XPOINTER: &str = "xpointer";
 
 /// Emitted when an offer closes, with the book's path, [`PERCENTAGE`] and
-/// whether the user stays: a position stayed away from is not offered
-/// again.
+/// what the user chose: a position stayed away from is not offered again.
 pub(crate) const ANSWERED: Event<Answered> = Event::new("kosync.answered");
 
 paperpaw_sdk::event_data! {
-    /// The book and the position on another device offered, and whether
-    /// the user stays where they are ([`ANSWERED`]): also when the offer
-    /// is left without a choice, as reading on overwrites it anyway.
+    /// The book and the position on another device offered, and what
+    /// the user chose ([`ANSWERED`]): gone there, or stayed where they
+    /// are. Neither when the offer was left without a choice (or going
+    /// there failed): nothing may overwrite the further position then.
     pub(crate) struct Answered {
         pub(crate) path: String,
         pub(crate) percentage: String,
+        pub(crate) went: bool,
         pub(crate) stay: bool,
     }
 }
@@ -51,6 +52,8 @@ pub(crate) struct ConfirmScreen {
     offer: Option<(String, String, f64)>,
     /// The user went where the offer leads.
     went: bool,
+    /// The user chose to stay where they are.
+    stay: bool,
     focus: usize,
 }
 
@@ -93,6 +96,7 @@ impl ConfirmScreen {
             buttons,
             offer,
             went: false,
+            stay: false,
             focus: 0,
         }
     }
@@ -120,10 +124,11 @@ impl ConfirmScreen {
         Rect::new(x, row.y + (row.height - height) / 2, width, height)
     }
 
-    /// Closes with the button at `index`; staying is told on closing.
+    /// Closes with the button at `index`; the choice is told on closing.
     fn choose(&mut self, index: usize, cx: &mut Cx<'_, '_>) {
         cx.command(Command::Back);
         if index != 0 {
+            self.stay = true;
             return;
         }
         let env = *cx.env();
@@ -243,7 +248,8 @@ impl Screen for ConfirmScreen {
             cx.command(ANSWERED.emit(Answered {
                 path: path.clone(),
                 percentage: format!("{percentage}"),
-                stay: !self.went,
+                went: self.went,
+                stay: self.stay,
             }));
         }
     }

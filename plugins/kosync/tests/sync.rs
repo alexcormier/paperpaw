@@ -110,26 +110,136 @@ fn books_are_identified_by_koreaders_partial_md5() {
     }
 }
 
-#[test]
-fn offline_holds_the_progress_back_and_sends_it_once_allowed() {
-    let mut sync = with_books();
-    opened(&mut sync, BOOK, 10.0);
+/// The fetch of each book among `calls`, by its digest.
+fn fetch_of<'a>(calls: &'a [HttpCall], storage: &Shared, path: &str) -> &'a HttpCall {
+    let digest = paperpaw_sdk::digest::md5::partial(storage, path).unwrap();
+    let fetches: Vec<&HttpCall> = calls
+        .iter()
+        .filter(|c| c.method == "GET" && c.url.ends_with(&digest))
+        .collect();
+    assert_eq!(fetches.len(), 1, "{path}: {calls:?}");
+    fetches[0]
+}
+
+/// Reads on offline, switches books, and goes back to Normal: the
+/// requests then made.
+fn offline_then_normal(sync: &mut Sync) -> Vec<HttpCall> {
+    opened(sync, BOOK, 10.0);
     assert!(sync.set("power.mode", "power.mode.offline").is_empty());
     sync.later(120_000);
     // Nothing goes out: not while reading, not for another book.
     assert!(sync.turn(BOOK, 20.0).is_empty());
     assert!(sync.open(OTHER, 5.0).is_empty());
     assert!(sync.reading(events::BOOK_CLOSED, OTHER, 6.0).is_empty());
-    // Back to Normal: the book switched from, then the open one's latest
-    // fetched, its own progress waiting for that answer.
-    let calls = sync.set("power.mode", "power.mode.normal");
+    sync.set("power.mode", "power.mode.normal")
+}
+
+#[test]
+fn offline_holds_the_progress_back_and_sends_it_once_allowed() {
+    let mut sync = with_books();
+    let calls = offline_then_normal(&mut sync);
+    // Back to Normal: the latest of both books fetched first, nothing
+    // sent before their answers.
+    assert!(!calls.iter().any(|c| c.method == "PUT"), "{calls:?}");
     let digest = |path| paperpaw_sdk::digest::md5::partial(&sync.storage, path).unwrap();
     let (book, other) = (digest(BOOK), digest(OTHER));
-    assert!(body(sending(&calls)).contains(&book), "{calls:?}");
-    assert!(fetch(&calls).url.ends_with(&other));
-    let get = fetch(&calls).clone();
-    let after = sync.answer(&get, 200, "{}");
+    let left = fetch_of(&calls, &sync.storage, BOOK).clone();
+    let open = fetch_of(&calls, &sync.storage, OTHER).clone();
+    let after = sync.answer(&left, 200, "{}");
+    assert!(body(sending(&after)).contains(&book), "{after:?}");
+    let after = sync.answer(&open, 200, "{}");
     assert!(body(sending(&after)).contains(&other), "{after:?}");
+}
+
+/// A book read offline is further on another device meanwhile: its
+/// position kept here does not overwrite that one.
+#[test]
+fn a_position_kept_offline_does_not_overwrite_a_further_one() {
+    let mut sync = with_books();
+    let calls = offline_then_normal(&mut sync);
+    let left = fetch_of(&calls, &sync.storage, BOOK).clone();
+    let after = sync.answer(&left, 200, &remote("0.8", "KOBO"));
+    assert!(!after.iter().any(|c| c.method == "PUT"), "{after:?}");
+}
+
+/// A fetch that fails (server error, no answer, an unreadable one) leaves
+/// the server's progress unknown: nothing is sent over it, the latest is
+/// fetched again first.
+#[test]
+fn nothing_is_sent_after_a_failed_fetch() {
+    for (status, answer) in [(500u16, ""), (0, ""), (200, "garbage")] {
+        let mut sync = with_books();
+        let calls = sync.open(BOOK, 10.0);
+        assert!(sync.answer(fetch(&calls), status, answer).is_empty());
+        sync.later(120_000);
+        let calls = sync.turn(BOOK, 11.0);
+        assert!(
+            !calls.iter().any(|c| c.method == "PUT"),
+            "{status}: {calls:?}"
+        );
+        // Fetched again; once the server answers, the position goes.
+        let get = fetch(&calls).clone();
+        let after = sync.answer(&get, 200, "{}");
+        sending(&after);
+    }
+}
+
+/// After the sleep the fetch fails (Wi-Fi not back yet): a position read
+/// on another device meanwhile is not overwritten.
+#[test]
+fn nothing_is_sent_after_a_failed_fetch_on_waking() {
+    let mut sync = with_books();
+    opened(&mut sync, BOOK, 10.0);
+    let now = sync.later(100);
+    sync.kernel.resume(now);
+    let calls = sync.calls();
+    assert!(sync.answer(fetch(&calls), 0, "").is_empty());
+    sync.later(10_000);
+    let calls = sync.turn(BOOK, 11.0);
+    assert!(!calls.iter().any(|c| c.method == "PUT"), "{calls:?}");
+    assert!(
+        sync.reading(events::BOOK_CLOSED, BOOK, 11.0)
+            .iter()
+            .all(|c| c.method != "PUT")
+    );
+}
+
+/// The server has this device's position, but here the book starts at
+/// the beginning (copied anew, its position lost): it is offered, not
+/// overwritten.
+#[test]
+fn an_own_position_is_offered_when_the_book_starts_here_anew() {
+    let mut sync = with_books();
+    let calls = sync.open(BOOK, 0.0);
+    assert!(
+        sync.answer(fetch(&calls), 200, &remote("0.8", DEVICE_ID))
+            .is_empty()
+    );
+    assert_eq!(sync.screen(), Some(CONFIRM));
+    sync.later(120_000);
+    let calls = sync.turn(BOOK, 0.5);
+    assert!(!calls.iter().any(|c| c.method == "PUT"), "{calls:?}");
+}
+
+/// An offer left with Back is no choice: nothing is sent over the
+/// further position, and it is offered again at the next opening.
+#[test]
+fn leaving_the_offer_without_a_choice_sends_nothing() {
+    let mut sync = with_books();
+    let calls = sync.open(BOOK, 0.0);
+    sync.answer(fetch(&calls), 200, &remote("0.8", "KOBO"));
+    assert_eq!(sync.screen(), Some(CONFIRM));
+    let calls = sync.run(actions::BACK);
+    assert!(calls.is_empty(), "{calls:?}");
+    assert_ne!(sync.screen(), Some(CONFIRM));
+    sync.later(120_000);
+    assert!(sync.turn(BOOK, 1.0).is_empty());
+    let now = sync.later(100);
+    sync.kernel.suspend(now);
+    assert!(sync.calls().iter().all(|c| c.method != "PUT"));
+    let calls = sync.open(BOOK, 1.0);
+    sync.answer(fetch(&calls), 200, &remote("0.8", "KOBO"));
+    assert_eq!(sync.screen(), Some(CONFIRM));
 }
 
 #[test]
@@ -575,6 +685,13 @@ fn a_key_kept_by_earlier_versions_moves_to_the_secrets() {
     let kept = sync.kernel.secrets().iter().find(|s| s.id == "kosync.key");
     // A hash: not to be typed anew in the list.
     assert!(!kept.unwrap().changeable);
+    // The old file goes once the key is seen kept, at the next start.
+    assert!(storage.exists(&format!("{DIR}/account.ini")));
+    let sync = Sync::on(storage.clone(), Options::default());
+    assert_eq!(
+        sync.secret().as_deref(),
+        Some("5f4dcc3b5aa765d61d8327deb882cf99")
+    );
     assert!(!storage.exists(&format!("{DIR}/account.ini")));
 
     // A key kept already wins over the old file, which goes all the same.
@@ -585,6 +702,28 @@ fn a_key_kept_by_earlier_versions_moves_to_the_secrets() {
     let sync = Sync::on(storage.clone(), Options::default());
     assert_eq!(sync.secret().as_deref(), Some(KEY));
     assert!(!storage.exists(&format!("{DIR}/account.ini")));
+}
+
+/// The secrets could not be saved with the key moved: the old file still
+/// has it, and it is moved again at the next start.
+#[test]
+fn a_key_not_kept_in_the_secrets_stays_in_the_old_file() {
+    let old = include_str!("../testdata/account.ini.v1");
+    let storage = Shared::default();
+    let file = format!("{DIR}/account.ini");
+    storage.write(&file, old.as_bytes()).unwrap();
+    let options = || Options {
+        key: None,
+        ..Options::default()
+    };
+    drop(Sync::on(storage.clone(), options()));
+    // As if the secrets file had not been written.
+    storage.remove(paperpaw_sdk::secrets::FILE).unwrap();
+    let sync = Sync::on(storage.clone(), options());
+    assert_eq!(
+        sync.secret().as_deref(),
+        Some("5f4dcc3b5aa765d61d8327deb882cf99")
+    );
 }
 
 #[test]

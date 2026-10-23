@@ -12,8 +12,9 @@
 //!   opens and when the app comes back. If another device is further, a dialog offers to
 //!   go there (once for each position).
 //! - Nothing is sent for a book while its progress is being fetched, nor
-//!   while the dialog is open: a further position on the server is never
-//!   overwritten before the user chose to stay.
+//!   while the dialog is open, nor before the server's progress was read
+//!   (a failed fetch is tried again first): a further position on the
+//!   server is never overwritten before the user chose to stay.
 //! - *Sync progress* in the reading menu's *More* fetches the latest, then
 //!   sends this device's position unless another device is further.
 //! - The account (settings → *Progress sync*) keeps the user name in the
@@ -130,6 +131,18 @@ struct Hold {
     position: Option<Position>,
 }
 
+impl Hold {
+    /// A hold for the book at `path` with nothing to send yet.
+    fn new(path: &str) -> Self {
+        Self {
+            path: path.to_string(),
+            send: false,
+            force: false,
+            position: None,
+        }
+    }
+}
+
 #[derive(Debug, Default)]
 struct State {
     loaded: bool,
@@ -143,6 +156,10 @@ struct State {
     last_push: Option<Instant>,
     /// The book last fetched for, and when.
     last_pull: Option<(String, Instant)>,
+    /// The open book whose progress on the server was read since it was
+    /// opened, and not failed to be read since: only then is its position
+    /// sent without fetching first.
+    read: Option<String>,
     hold: Option<Hold>,
     /// Holds of books left while their fetch was out: their position is
     /// sent when the answer says no other device is further.
@@ -209,7 +226,10 @@ fn move_key(env: &Env<'_>, out: &mut Vec<Command>) {
         return;
     };
     if !old.is_empty() && key(env).is_none() {
+        // The file goes at a start that finds the key kept: if the
+        // secrets cannot be saved, it is moved again from here.
         out.push(save_key(Some(&old)));
+        return;
     }
     #[expect(
         clippy::let_underscore_must_use,
@@ -265,8 +285,14 @@ impl State {
         if !self.may_send(env) {
             return;
         }
+        // Fetched first as well: each is sent unless another device is
+        // further there (see `pulled`). The open book's own fetch below
+        // covers it.
+        let open = self.current.as_ref().map(|c| c.path.clone());
         for position in core::mem::take(&mut self.unsent) {
-            self.transmit(env, out, position, false);
+            if open.as_ref() != Some(&position.path) {
+                self.pull_left(env, out, position);
+            }
         }
         // The latest first: what this device sends waits for it (`Hold`).
         if let Some(path) = self.current.as_ref().map(|c| c.path.clone()) {
@@ -306,11 +332,22 @@ impl State {
     }
 
     /// Sends the current position, unless it was sent already or is held
-    /// back (see [`Hold`]).
+    /// back (see [`Hold`]). The server's progress not read yet for the
+    /// book (its fetch failed, say), it is fetched first.
     fn push(&mut self, env: &Env<'_>, out: &mut Vec<Command>, force: bool) {
         let Some(position) = self.current.clone() else {
             return;
         };
+        if self.read.as_ref() != Some(&position.path) {
+            if !self.pulled_lately(env, &position.path) {
+                self.pull(env, out, &position.path, false);
+            }
+            if self.hold.as_ref().is_none_or(|h| h.path != position.path) {
+                // Not fetched now (tried a moment ago): held all the same.
+                let held = self.hold_for(&position.path);
+                self.hold = Some(held.unwrap_or_else(|| Hold::new(&position.path)));
+            }
+        }
         if let Some(hold) = self.hold.as_mut().filter(|h| h.path == position.path) {
             // Sent when the hold ends, if this position is kept.
             hold.send = true;
@@ -392,30 +429,15 @@ impl State {
     /// its sending until the answer; *Sync progress* (`manual`) sends after
     /// it unless another device is further.
     fn pull(&mut self, env: &Env<'_>, out: &mut Vec<Command>, path: &str, manual: bool) {
-        let Some(digest) = self.digest(env, path) else {
-            return;
-        };
         let local = self
             .current
             .as_ref()
             .filter(|c| c.path == path)
             .map_or(0.0, |c| c.progress);
-        let params = Params::new()
-            .with(params::PATH, path.to_string())
-            .with(LOCAL, format!("{local}"))
-            .with(MANUAL, if manual { "1" } else { "0" });
-        let target = format!("/syncs/progress/{digest}");
-        if let Some(command) = self.request(env, "GET", &target, None, &PULLED, params) {
+        if let Some(command) = self.fetch(env, path, local, manual) {
             out.push(command);
             self.last_pull = Some((path.to_string(), env.now));
-            let mut held = self.hold.take();
-            // Another book's hold: its answer is still to come.
-            if let Some(other) = held.take_if(|h| h.path != path)
-                && other.send
-            {
-                self.left.retain(|h| h.path != other.path);
-                self.left.push(other);
-            }
+            let held = self.hold_for(path);
             self.hold = Some(Hold {
                 path: path.to_string(),
                 send: manual || held.as_ref().is_some_and(|h| h.send),
@@ -423,6 +445,66 @@ impl State {
                 position: held.and_then(|h| h.position),
             });
         }
+    }
+
+    /// Asks for the latest position of a book switched from: `position`
+    /// is sent with the answer unless another device is further there.
+    fn pull_left(&mut self, env: &Env<'_>, out: &mut Vec<Command>, position: Position) {
+        if let Some(command) = self.fetch(env, &position.path, position.progress, false) {
+            out.push(command);
+            self.left.retain(|h| h.path != position.path);
+            let hold = Hold::new(&position.path);
+            self.left.push(Hold {
+                send: true,
+                position: Some(position),
+                ..hold
+            });
+        }
+    }
+
+    /// The request for the latest position of the book at `path`, with
+    /// the progress here (`local`, 0..1).
+    fn fetch(&mut self, env: &Env<'_>, path: &str, local: f64, manual: bool) -> Option<Command> {
+        let digest = self.digest(env, path)?;
+        let params = Params::new()
+            .with(params::PATH, path.to_string())
+            .with(LOCAL, format!("{local}"))
+            .with(MANUAL, if manual { "1" } else { "0" });
+        let target = format!("/syncs/progress/{digest}");
+        self.request(env, "GET", &target, None, &PULLED, params)
+    }
+
+    /// Takes the hold of the book at `path`, also one kept among the books
+    /// left; another book's hold is kept there, its answer still to come.
+    fn hold_for(&mut self, path: &str) -> Option<Hold> {
+        let mut held = self.hold.take();
+        if let Some(other) = held.take_if(|h| h.path != path)
+            && other.send
+        {
+            self.left.retain(|h| h.path != other.path);
+            self.left.push(other);
+        }
+        held.or_else(|| {
+            let at = self.left.iter().position(|h| h.path == path)?;
+            Some(self.left.swap_remove(at))
+        })
+    }
+
+    /// Whether the book at `path` was fetched for less than a while ago.
+    fn pulled_lately(&self, env: &Env<'_>, path: &str) -> bool {
+        self.last_pull
+            .as_ref()
+            .is_some_and(|(p, at)| p == path && env.now.since(*at) < PULL_EVERY_MS)
+    }
+
+    /// The server's progress of the open book at `path` could not be read:
+    /// its sending stays held back until a fetch succeeds.
+    fn unread(&mut self, path: &str, hold: Option<Hold>) {
+        if self.read.as_deref() == Some(path) {
+            self.read = None;
+        }
+        let held = hold.or_else(|| self.hold_for(path));
+        self.hold = Some(held.unwrap_or_else(|| Hold::new(path)));
     }
 
     /// Handles the server's answer to a fetch.
@@ -439,8 +521,10 @@ impl State {
                 let from_here = json::text(&body, "device_id") == Some(self.device_id.as_str());
                 if let Some(position) = left.position
                     && reply.status == 200
-                    && remote_progress(&reply.body, &body)
-                        .is_some_and(|remote| from_here || remote <= position.progress + FURTHER)
+                    && remote_progress(&reply.body, &body).is_some_and(|remote| {
+                        (from_here && position.progress > FURTHER)
+                            || remote <= position.progress + FURTHER
+                    })
                 {
                     self.send(env, out, position, left.force);
                 }
@@ -453,6 +537,7 @@ impl State {
             if manual {
                 out.push(message(env, failure(status), status));
             }
+            self.unread(path, hold);
             return;
         }
         let body = json::object(&reply.body);
@@ -461,14 +546,19 @@ impl State {
             if manual {
                 out.push(message(env, "kosync.unreadable", status));
             }
+            self.unread(path, hold);
             return;
         };
+        self.read = Some(path.to_string());
         let local: f64 = reply
             .context
             .get(LOCAL)
             .and_then(|l| l.parse().ok())
             .unwrap_or(0.0);
-        let from_here = json::text(&body, "device_id") == Some(self.device_id.as_str());
+        // Sent from here, unless the book starts here anew: copied again,
+        // say, its position lost.
+        let from_here =
+            json::text(&body, "device_id") == Some(self.device_id.as_str()) && local > FURTHER;
         let declined = self
             .declined
             .as_ref()
@@ -486,12 +576,7 @@ impl State {
                     .with(confirm::PERCENTAGE, format!("{remote}"))
                     .with(confirm::DEVICE, device.to_string()),
             ));
-            self.hold = Some(hold.unwrap_or(Hold {
-                path: path.to_string(),
-                send: false,
-                force: false,
-                position: None,
-            }));
+            self.hold = Some(hold.unwrap_or_else(|| Hold::new(path)));
             return;
         }
         if manual {
@@ -504,9 +589,20 @@ impl State {
 
     /// The user closed the offer to go where another device is.
     fn answered(&mut self, env: &Env<'_>, answer: &confirm::Answered, out: &mut Vec<Command>) {
-        self.hold.take_if(|h| h.path == answer.path);
+        let hold = self.hold.take_if(|h| h.path == answer.path);
         // Gone there: the reader tells the new position as it shows it.
+        if answer.went {
+            return;
+        }
         if !answer.stay {
+            // Left without a choice: held back still, and offered again
+            // when the book is next opened.
+            if self.hold.is_none() {
+                self.hold = Some(hold.unwrap_or_else(|| Hold::new(&answer.path)));
+            } else {
+                // Another book's hold meanwhile: fetched first again.
+                self.read = None;
+            }
             return;
         }
         self.declined = Some((answer.path.clone(), answer.percentage.clone()));
@@ -724,12 +820,11 @@ impl Plugin for Kosync {
                 }
             }
             let path = position.path.clone();
+            if other {
+                state.read = None;
+            }
             state.current = Some(position);
-            let recent = state
-                .last_pull
-                .as_ref()
-                .is_some_and(|(p, at)| *p == path && env.now.since(*at) < PULL_EVERY_MS);
-            if !recent && state.may_send(env) {
+            if !state.pulled_lately(env, &path) && state.may_send(env) {
                 state.pull(env, out, &path, false);
             }
         })?;

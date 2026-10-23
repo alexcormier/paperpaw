@@ -409,6 +409,7 @@ fn stay(path: &str) -> confirm::Answered {
     confirm::Answered {
         path: path.to_string(),
         percentage: "0.8".to_string(),
+        went: false,
         stay: true,
     }
 }
@@ -455,6 +456,7 @@ fn nothing_is_sent_before_the_fetch_on_opening_is_answered() {
     assert!(requests(&h.emit(&events::BOOK_CLOSED, reading(21.0))).is_empty());
     // Gone there: the reader's next position is sent.
     let gone = confirm::Answered {
+        went: true,
         stay: false,
         ..stay(BOOK)
     };
@@ -503,7 +505,7 @@ fn an_unreadable_answer_sends_nothing() {
 }
 
 #[test]
-fn a_failed_fetch_sends_nothing_and_ends_the_hold() {
+fn a_failed_fetch_sends_nothing_until_a_fetch_succeeds() {
     let mut h = Harness::new(true);
     h.emit(&events::BOOK_OPENED, reading(20.0));
     let out = h.sync_now();
@@ -513,12 +515,15 @@ fn a_failed_fetch_sends_nothing_and_ends_the_hold() {
         .format("kosync.server-error", &[("status", Arg::Str("500"))]);
     assert_eq!(shown(&out), Some(error.as_str()));
     assert_eq!(sent(&out), None);
-    // Reading on sends again.
+    // Reading on sends nothing over the progress not read.
     h.now += 1_000;
-    assert_eq!(
-        sent(&h.emit(&events::PAGE_TURNED, reading(22.0))),
-        Some(0.22)
-    );
+    assert!(requests(&h.emit(&events::PAGE_TURNED, reading(22.0))).is_empty());
+    // A while later it is fetched again first, then sent.
+    h.now += PULL_EVERY_MS;
+    let out = h.emit(&events::PAGE_TURNED, reading(23.0));
+    assert_eq!(sent(&out), None);
+    let behind = r#"{"percentage":0.1,"device":"Phone","device_id":"PHONE"}"#;
+    assert_eq!(sent(&h.answer(fetch(&out), 200, behind)), Some(0.23));
 }
 
 #[test]
