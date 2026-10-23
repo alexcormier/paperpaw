@@ -1,8 +1,5 @@
 <p align="center">
-  <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/banner-dark.png">
-    <img src="docs/images/readme/banner.png" width="720" alt="A cat on a cushion, reading on an e-reader beside a pile of books">
-  </picture>
+  <img src="docs/images/readme/banner.png" width="720" alt="A cat on a cushion, reading on an e-reader beside a pile of books">
 </p>
 
 <h1 align="center">PaperPaw</h1>
@@ -64,10 +61,7 @@ PaperPaw was called QuireInk up to version 0.3.
 
 ### Everything is a plugin
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/plugins-dark.png">
-  <img align="right" width="160" src="docs/images/readme/plugins.png" alt="A cat arranging puzzle pieces">
-</picture>
+<img align="right" width="160" src="docs/images/readme/plugins.png" alt="A cat arranging puzzle pieces">
 
 The core is a small kernel. The home screen, library, reader, menus, file
 formats, themes, key maps and translations are plugins, and first-party
@@ -79,10 +73,7 @@ is a signed file from the plugin store: no firmware rebuild.
 
 ### Wi-Fi set up with a phone
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/phone-dark.png">
-  <img align="left" width="160" src="docs/images/readme/phone.png" alt="A cat tapping a phone beside an e-reader">
-</picture>
+<img align="left" width="160" src="docs/images/readme/phone.png" alt="A cat tapping a phone beside an e-reader">
 
 Join a network by scanning a code and typing the password on your phone.
 Books go over from a phone or a computer, with or without a router; Calibre
@@ -92,10 +83,7 @@ sends them over Wi-Fi as to any wireless reader.
 
 ### Vocabulary
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/cards-dark.png">
-  <img align="right" width="160" src="docs/images/readme/cards.png" alt="A cat looking at a flash card, a pile of cards beside it">
-</picture>
+<img align="right" width="160" src="docs/images/readme/cards.png" alt="A cat looking at a flash card, a pile of cards beside it">
 
 Every word you look up is kept with its sentence. Learn them as flash
 cards, edit them on a phone, or bring an Anki deck along; a card that is
@@ -105,10 +93,7 @@ due can show while the reader sleeps.
 
 ### Reading goal
 
-<picture>
-  <source media="(prefers-color-scheme: dark)" srcset="docs/images/readme/goal-dark.png">
-  <img align="left" width="160" src="docs/images/readme/goal.png" alt="A content cat beside an open book and an alarm clock">
-</picture>
+<img align="left" width="160" src="docs/images/readme/goal.png" alt="A content cat beside an open book and an alarm clock">
 
 Minutes to read a day, and a cat on the home screen whose mood follows
 today's reading: sad, so-so, content or happy.
