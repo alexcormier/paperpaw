@@ -184,15 +184,13 @@ pub(crate) fn staged_over_wifi(env: &Env<'_>, id: &str) -> bool {
     open && Staging::new(id).is_some_and(|staging| !staging.files(env.storage).is_empty())
 }
 
-/// Whether the cable transfer, open, has an offer of plugin `id` (its
-/// folder is made for it).
+/// Whether the cable transfer, open, has an offer of plugin `id`.
 fn staged_over_cable(env: &Env<'_>, id: &str) -> bool {
     let open = env
         .stack
         .iter()
         .any(|entry| entry.screen == crate::CABLE_SCREEN);
-    let staging = Staging::apart(id, crate::cable::STAGING);
-    open && staging.is_some_and(|staging| env.storage.exists(&staging.folder()))
+    open && crate::cable::offered_plugin(env).as_deref() == Some(id)
 }
 
 fn status(state: State) -> u16 {

@@ -604,25 +604,30 @@ fn a_number_given_again_ends_the_request_before_only() {
     assert_eq!(computer.files_below(".paperpaw/tmp"), 0);
 }
 
-/// Long offers are read a line at a time: many books are asked about at
-/// once, but not more lines than an offer may have, nor more files than
-/// a plugin may have.
+/// Long offers are read a line at a time: a plugin and many books are
+/// asked about at once, but not more books than an offer may hold (the
+/// others go in the offers after), nor more files than a plugin may have.
 #[test]
 fn long_offers_are_read_in_parts() {
     let mut computer = Computer::new(Shared::default());
     let z = "0".repeat(64);
-    let books: String = (0..200)
-        .map(|n| format!("book b{n}.epub 10 {z}\n"))
+    let files: String = (0..64).map(|n| format!("f{n}.ini 10 {z}\n")).collect();
+    let books: String = (0..64)
+        .map(|n| format!("book A book with a long name, number {n}.epub 10 {z}\n"))
         .collect();
-    assert!(books.len() > 8 * 1024);
+    let offer = format!("plugin airy\n{files}{books}");
+    assert!(offer.len() > 8 * 1024);
     assert_eq!(
-        computer.request("POST", "/api/offer", books.as_bytes()).0,
+        computer.request("POST", "/api/offer", offer.as_bytes()).0,
         202
     );
-    assert!(computer.says("192"), "the books not named are counted");
+    // Offered here: the Wi-Fi transfer leaves it alone meanwhile.
+    let offered = ".paperpaw/plugins/transfer/cable-offer.txt";
+    assert!(computer.storage.exists(offered));
     computer.allow(false);
+    assert!(!computer.storage.exists(offered));
 
-    let too_many: String = (0..257)
+    let too_many: String = (0..65)
         .map(|n| format!("book b{n}.epub 10 {z}\n"))
         .collect();
     assert_eq!(

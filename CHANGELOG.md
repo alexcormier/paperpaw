@@ -12,8 +12,9 @@ change the plugin SDK.
     offered, and no others: nothing sent another way (the Wi-Fi
     transfer) is installed as what you allowed. The cable and the open
     Wi-Fi transfer never send the same plugin at once (*409*).
-  - Offers are read a line at a time: up to 256 lines (a plugin of up
-    to 64 files and books), each book kept in a few bytes.
+  - Offers are read a line at a time: a plugin of up to 64 files and
+    up to 64 books, each book kept in a few bytes; a new offer lets go
+    of the one before first.
   - Only closing the question refuses an offer; a screen shown over it
     does not.
   - A request given the number of one whose body was still coming
@@ -23,14 +24,13 @@ change the plugin SDK.
   in a folder of its own, for one way of sending.
 - A code plugin's version is its `plugin.ini`'s, everywhere: the
   plugin manager, the store's updates and the transfer's list all go by
-  it. Code whose manifest names another version is not loaded, and the
-  plugin manager says why; `paperpaw-dev package` finds it before
+  it. Code whose manifest names another version runs at `plugin.ini`'s,
+  with a warning in the log; `paperpaw-dev package` finds it before
   (`package.version`).
-- SDK: `PluginProblem::OtherVersion`.
 - The store marks PaperPaw's own plugins *By PaperPaw*, on their row
-  and their page. The mark is taken only where the plugin library says
-  so and the plugin's key is PaperPaw's own, so another list cannot
-  give it.
+  and their page. The mark is taken only from PaperPaw's own library
+  (paperpaw.org, over HTTPS), and for a plugin with code only where its
+  key is PaperPaw's: a list from elsewhere cannot give it.
 - Your data is safer: an audit of everything PaperPaw keeps found ways
   it could lose notes, places, statistics, cards or passwords, and they
   are closed, each with a test.

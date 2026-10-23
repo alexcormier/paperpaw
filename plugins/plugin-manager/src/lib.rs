@@ -425,7 +425,6 @@ fn problem_key(problem: PluginProblem) -> &'static str {
         PluginProblem::Crashed => "plugin-manager.code.crashed",
         PluginProblem::NotInstalled => "plugin-manager.code.not-installed",
         PluginProblem::Changed => "plugin-manager.code.changed",
-        PluginProblem::OtherVersion => "plugin-manager.code.other-version",
         _ => "plugin-manager.failed",
     }
 }

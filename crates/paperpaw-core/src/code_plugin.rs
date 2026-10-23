@@ -99,8 +99,12 @@ struct WithData {
 }
 
 impl Plugin for WithData {
+    /// The code's, at the version its `plugin.ini` names: the one the
+    /// store, the installer and updates go by.
     fn manifest(&self) -> Manifest {
-        self.code.manifest()
+        let mut manifest = self.code.manifest();
+        manifest.version = self.data.manifest().version;
+        manifest
     }
 
     fn register(&self, registrar: &mut Registrar) -> Result<(), RegisterError> {
@@ -167,37 +171,34 @@ impl Kernel {
                 path: &path,
                 sha256,
             };
-            // Its `plugin.ini` names the version everything else goes by
-            // (the store, the installer, updates): the code must be it.
-            let declared = paperpaw_sdk::install::folder_version(storage.as_ref(), plugin.folder());
             let loaded = loader.load(storage.as_ref(), &file).and_then(|code| {
-                let built = code.manifest();
-                match declared {
-                    _ if built.id != id => Err(PluginProblem::Mismatch),
-                    Some(declared) if declared != built.version => {
-                        let message = format!(
-                            "{path}: not loaded: its code is version {}, its plugin.ini says \
-                             {declared}",
-                            built.version,
-                        );
-                        self.warn(WarningSource::Plugin(id.clone()), None, message);
-                        Err(PluginProblem::OtherVersion)
-                    }
-                    _ => Ok(code),
+                if code.manifest().id == id {
+                    Ok(code)
+                } else {
+                    Err(PluginProblem::Mismatch)
                 }
             });
             match loaded {
                 Ok(code) => {
+                    // Its `plugin.ini` names its version (0.1.0 where it
+                    // names none); code saying another is the author's slip
+                    // (`paperpaw-dev package` finds it), told, not refused.
+                    let (declared, built) = (plugin.manifest().version, code.manifest().version);
+                    if built != declared {
+                        let message = format!(
+                            "{path}: its code says version {built}, its plugin.ini {declared}: \
+                             taken as {declared}"
+                        );
+                        self.warn(WarningSource::Plugin(id.clone()), None, message);
+                    }
                     let plugin = WithData { code, data: plugin };
                     let manifest = plugin.manifest();
                     self.register_plugin(&plugin, manifest);
                     self.set_code_info(&id, None);
                 }
                 Err(problem) => {
-                    if problem != PluginProblem::OtherVersion {
-                        let message = format!("{path}: not loaded ({problem:?})");
-                        self.warn(WarningSource::Plugin(id.clone()), None, message);
-                    }
+                    let message = format!("{path}: not loaded ({problem:?})");
+                    self.warn(WarningSource::Plugin(id.clone()), None, message);
                     self.list_code_plugin(&plugin, disabled, PluginState::Failed, problem);
                 }
             }
@@ -375,9 +376,15 @@ mod tests {
 
     fn storage() -> MemoryStorage {
         let storage = MemoryStorage::new()
-            .with("plugins/zeta/plugin.ini", "[plugin]\nname = Zeta\n")
+            .with(
+                "plugins/zeta/plugin.ini",
+                "[plugin]\nname = Zeta\nversion = 1.0.0\n",
+            )
             .with("plugins/zeta/code.ppn", "PPNP")
-            .with("plugins/hello/plugin.ini", "[plugin]\nname = Hello\n")
+            .with(
+                "plugins/hello/plugin.ini",
+                "[plugin]\nname = Hello\nversion = 1.0.0\n",
+            )
             .with("plugins/hello/code.ppn", "PPNP")
             .with(
                 "plugins/hello/i18n/en.ini",
@@ -479,41 +486,34 @@ mod tests {
     }
 
     /// The version its `plugin.ini` names is the plugin's (the store,
-    /// the installer and updates go by it): code of another version is
-    /// not loaded, and the plugin is listed at the version named.
+    /// the installer and updates go by it): code that says another runs
+    /// at that version, and it is told; nothing is refused for it.
     #[test]
-    fn code_of_another_version_than_its_folder_says_is_not_loaded() {
+    fn code_of_another_version_than_its_folder_says_runs_at_the_folders() {
         let loader = loader();
         let storage = storage()
             .with(
                 "plugins/hello/plugin.ini",
                 "[plugin]\nname = Hello\nversion = 2.0.0\n",
             )
-            .with(
-                "plugins/zeta/plugin.ini",
-                "[plugin]\nname = Zeta\nversion = 1.0.0\n",
-            );
+            .with("plugins/zeta/plugin.ini", "[plugin]\nname = Zeta\n");
         let mut kernel = kernel_on(storage, &loader, "");
         let hello = info(&kernel, "hello");
         assert_eq!(
             (hello.state, hello.problem, hello.manifest.version),
-            (
-                PluginState::Failed,
-                Some(PluginProblem::OtherVersion),
-                Version::new(2, 0, 0)
-            )
+            (PluginState::Running, None, Version::new(2, 0, 0))
         );
-        assert!(!kernel.shared.actions.contains("hello.hello"));
-        let zeta = info(&kernel, "zeta");
+        assert!(kernel.shared.actions.contains("hello.hello"));
+        // Where it names none, 0.1.0, as for any plugin.
         assert_eq!(
-            (zeta.state, zeta.manifest.version),
-            (PluginState::Running, Version::new(1, 0, 0))
+            info(&kernel, "zeta").manifest.version,
+            Version::new(0, 1, 0)
         );
         let warnings = kernel.take_warnings();
         assert!(
             warnings.iter().any(|w| w
                 .message
-                .contains("version 1.0.0, its plugin.ini says 2.0.0")),
+                .contains("its code says version 1.0.0, its plugin.ini 2.0.0")),
             "{warnings:?}"
         );
     }

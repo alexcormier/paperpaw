@@ -111,9 +111,6 @@ pub enum PluginProblem {
     NotInstalled,
     /// Its code is not the file installed: changed since.
     Changed,
-    /// Its code is another version than its folder's `plugin.ini` says
-    /// (the version the store, the installer and updates go by).
-    OtherVersion,
 }
 
 /// A plugin and its state.

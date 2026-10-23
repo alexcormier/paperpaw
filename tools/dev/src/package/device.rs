@@ -442,8 +442,8 @@ fn extends(kernel: &Kernel, lines: &[Line], out: &mut Vec<Finding>) {
 /// Plugins with code named with `--plugin`: the SDK each was built for,
 /// against this PaperPaw and the release.
 /// Code plugins of the app with their folders (`plugin.ini`'s version):
-/// the code's manifest must name the same version, or the device does
-/// not load it.
+/// the code's manifest must name the same version (the device goes by
+/// `plugin.ini`'s).
 pub fn code_versions(
     context: &Context,
     folders: &[(String, Version)],
@@ -470,7 +470,7 @@ pub fn code_versions(
                     "package.version",
                     "plugin.ini",
                     format!(
-                        "plugin.ini says version {declared}, its code's manifest {built}: the device does not load code of another version. Give both the same."
+                        "plugin.ini says version {declared}, its code's manifest {built}: the device and the store go by plugin.ini's. Give both the same."
                     ),
                 )
                 .plugin(id.as_str()),

@@ -95,9 +95,9 @@ book Some book.epub 512000 <sha256>
 `plugin <id>` names a plugin, and each line after it a file of it with
 its size in bytes and its SHA-256 in hexadecimal; a plugin's paths have no
 spaces. `book <name> <size> <sha256>` names a book (a file name without
-folders, spaces allowed). One plugin per offer, with at most 64 files;
-books as many as fit: at most 256 lines in all, each of at most 320
-bytes. The device reads the offer a line at a time.
+folders, spaces allowed). One plugin per offer, with at most 64 files,
+and at most 64 books (send more in the offers after); each line of at
+most 320 bytes. The device reads the offer a line at a time.
 
 The device shows the names and sizes and asks the reader: *Allow this
 computer to install a plugin / add books?* For a plugin with code it adds

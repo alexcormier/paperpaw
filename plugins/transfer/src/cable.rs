@@ -58,9 +58,12 @@ const OFFER: &str = "offer";
 /// Without a request this long, the screen closes and the permission
 /// with it.
 const IDLE_MS: u64 = 5 * 60 * 1000;
+/// Books of an offer at most (more go in the offers after): each is kept
+/// in [`Book`]'s 56 bytes while it is waited for.
+const MAX_BOOKS: usize = 64;
 /// Lines of an offer at most: its plugin's files (no more than a plugin
 /// may have, [`install::MAX_FILES`]) and its books.
-const MAX_FILES: usize = 256;
+const MAX_FILES: usize = install::MAX_FILES + MAX_BOOKS + 1;
 /// The longest line of an offer: a book's name (200 bytes), its size and
 /// its SHA-256, with room to spare.
 const MAX_LINE: usize = 320;
@@ -70,6 +73,21 @@ const MAX_OFFER: u64 = (MAX_FILES * MAX_LINE) as u64;
 const NAMED: usize = 8;
 /// The cable's own staging folders ([`Staging::apart`]).
 pub(crate) const STAGING: &str = "cable";
+
+/// The file naming the plugin of the offer open over the cable, if any:
+/// for the Wi-Fi transfer to leave it alone meanwhile.
+fn offered_file() -> String {
+    format!(
+        "{}/cable-offer.txt",
+        Env::plugin_dir(crate::PLUGIN.as_str())
+    )
+}
+
+/// The plugin of the offer open over the cable (see [`offered_file`]).
+pub(crate) fn offered_plugin(env: &Env<'_>) -> Option<String> {
+    let bytes = paperpaw_sdk::read_file(env.storage, &offered_file(), 128).ok()?;
+    Some(String::from(core::str::from_utf8(&bytes).ok()?.trim()))
+}
 
 /// A file offered: its name or path, size and SHA-256.
 type Offered = (String, u64, [u8; 32]);
@@ -145,7 +163,7 @@ impl Offer {
             }
             "book" => {
                 let (name, size, sha256) = sized(rest)?;
-                if !is_book_name(&name) {
+                if !is_book_name(&name) || self.books.len() >= MAX_BOOKS {
                     return None;
                 }
                 self.books.push((name_key(&name), size, sha256));
@@ -304,9 +322,11 @@ impl CableScreen {
                     .stack
                     .iter()
                     .rposition(|e| e.screen == crate::CABLE_SCREEN);
-                let above = mine.and_then(|at| env.stack.get(at + 1));
+                // The first question above it (another screen may have
+                // come between).
+                let above = mine.and_then(|at| env.stack.get(at + 1..));
                 self.question = above
-                    .filter(|entry| entry.slot == Some(slots::CONFIRM))
+                    .and_then(|above| above.iter().find(|e| e.slot == Some(slots::CONFIRM)))
                     .map(|entry| entry.key);
             }
             let open = self
@@ -373,6 +393,10 @@ impl CableScreen {
         if self.permission == Permission::Asking {
             return json(409, "{\"why\":\"asking about another offer\"}");
         }
+        // A new offer ends the one before, what was sent for it too: never
+        // both in memory.
+        self.forget_offer(env);
+        self.permission = Permission::None;
         let Some(offer) = body.and_then(|path| Offer::read(env.storage, path)) else {
             return json(400, "{\"why\":\"not an offer\"}");
         };
@@ -386,10 +410,16 @@ impl CableScreen {
             Some(size) if room.is_none_or(|free| size <= free) => {}
             _ => return json(507, "{\"why\":\"not enough room\"}"),
         }
-        // Nothing sent before counts: a plugin's files are taken anew.
-        self.forget_offer(env);
+        // Nothing sent before counts: a plugin's files are taken anew. Named
+        // as offered: the Wi-Fi transfer leaves it alone meanwhile.
         if let Some(staging) = id.and_then(|id| Staging::apart(id, STAGING)) {
             staging.abort(env.storage);
+            let _ = env
+                .storage
+                .create_dir(&Env::plugin_dir(crate::PLUGIN.as_str()));
+            let _ = env
+                .storage
+                .write(&offered_file(), staging.plugin().as_bytes());
         }
         self.serial = self.serial.wrapping_add(1);
         self.question = None;
@@ -415,6 +445,7 @@ impl CableScreen {
             .map(|(id, _)| id);
         if let Some(staging) = id.and_then(|id| Staging::apart(&id, STAGING)) {
             staging.abort(env.storage);
+            let _ = env.storage.remove(&offered_file());
         }
     }
 

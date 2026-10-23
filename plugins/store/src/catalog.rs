@@ -17,9 +17,10 @@
 //! `author_key` its author signs with; it is listed where a build fits
 //! this device and PaperPaw.
 //!
-//! `"official": true` marks PaperPaw's own plugins. It is taken only
-//! where the plugin's `author_key` is also PaperPaw's
-//! ([`FIRST_PARTY_KEY`]), so a list made elsewhere cannot give the mark.
+//! `"official": true` marks PaperPaw's own plugins. It is taken only from
+//! PaperPaw's own library ([`OFFICIAL_LIST`], over HTTPS), and for a code
+//! plugin only where its `author_key` is PaperPaw's ([`FIRST_PARTY_KEY`]):
+//! a list made elsewhere cannot give the mark, whatever it says.
 //!
 //! The plugins that fit go to an index on the storage: a line each, and
 //! where each line begins (4 bytes each). In memory are only the runs of
@@ -63,6 +64,10 @@ const WRITE_AT: usize = 2048;
 /// the last run.
 const MAX_RUNS: usize = 32;
 
+/// PaperPaw's own plugin library: the only list whose word that a plugin
+/// is PaperPaw's is taken.
+pub(crate) const OFFICIAL_LIST: &str = "https://paperpaw.org/api/v1/plugins.json";
+
 /// The public key PaperPaw's own plugins are signed with (the first-party
 /// plugin key of its releases).
 pub(crate) const FIRST_PARTY_KEY: [u8; 32] = [
@@ -93,6 +98,8 @@ pub(crate) struct Device<'a> {
     pub fingerprint: Option<Fingerprint>,
     pub code_file: &'a str,
     pub plugins: Option<&'a Plugins>,
+    /// The list is PaperPaw's own library ([`OFFICIAL_LIST`]).
+    pub official: bool,
 }
 
 impl<'a> Device<'a> {
@@ -103,6 +110,7 @@ impl<'a> Device<'a> {
             fingerprint: env.native.map(|native| native.fingerprint),
             code_file: env.native.map_or("", |native| &native.file),
             plugins: Some(env.plugins),
+            official: env.settings.read(&crate::CATALOG).trim() == OFFICIAL_LIST,
         })
     }
 }
@@ -455,12 +463,15 @@ impl Item {
     }
 
     /// The plugin as listed: its code's size counted in.
-    fn finish(mut self) -> Entry {
+    fn finish(mut self, device: &Device<'_>) -> Entry {
         if let Some(code) = &self.code {
             self.entry.code = true;
             self.entry.size = self.entry.size.saturating_add(code.size);
         }
-        self.entry.official = self.official && key(&self.author_key) == Some(FIRST_PARTY_KEY);
+        // PaperPaw's, where its own library says so (code signed with its
+        // key, as the library names it, which the install checks).
+        let signed = !self.entry.code || key(&self.author_key) == Some(FIRST_PARTY_KEY);
+        self.entry.official = self.official && device.official && signed;
         self.entry
     }
 }
@@ -513,7 +524,7 @@ fn read_list(
         Event::Open([list, at]) if list == "plugins" && at == "[]" => item = Some(Item::new()),
         Event::Close([list, at]) if list == "plugins" && at == "[]" => {
             if let Some(done) = item.take().filter(|item| item.fits(device)) {
-                found(done.finish());
+                found(done.finish(device));
             }
         }
         Event::Close([list, at, rest @ ..])
@@ -587,7 +598,7 @@ fn read_plugin(
     for shot in &mut more.shots {
         shot.url = join_url(base, &shot.url);
     }
-    let entry = item.finish();
+    let entry = item.finish(device);
     let package = Package::new(entry.id.clone(), entry.name.clone()).files(files);
     // A code plugin names the key its author signs with.
     let whole = package.is_valid() && (!code || author_key.is_some());
@@ -1025,6 +1036,7 @@ mod tests {
         fingerprint: Some(Fingerprint(0x0123_4567_89ab_cdef)),
         code_file: "code.ppn",
         plugins: None,
+        official: true,
     };
 
     fn plugin(id: &str, group: &str, extra: &str) -> String {
@@ -1129,11 +1141,27 @@ mod tests {
             [
                 ("own", true),
                 ("forged", false),
-                ("data", false),
+                ("data", true),
                 ("unsaid", false)
             ]
         );
         assert!(entries[0].code);
+        // From another list, with PaperPaw's key and its word: no mark.
+        let elsewhere = Device {
+            official: false,
+            ..X4
+        };
+        let forged = list(&[
+            official(code("own", core::slice::from_ref(&fits)).replace(KEY, ours)),
+            official(plugin(
+                "data",
+                "reading",
+                &format!(r#""author_key": "{ours}","#),
+            )),
+        ]);
+        let (entries, _) = entries_for(&forged, &elsewhere);
+        assert_eq!(entries.len(), 2);
+        assert!(entries.iter().all(|e| !e.official), "{entries:?}");
         // Lines an index kept before the mark read as they did.
         let old = "0\t30\t1\t0\t0\tclock\t1.0.0\t0.4\tA\tMIT\tClock\tTells the time.";
         let entry = Entry::parse(old).unwrap();
