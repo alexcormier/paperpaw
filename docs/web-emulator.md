@@ -11,19 +11,22 @@ a device looks and behaves as it does there.
 ```
 shells/web/
   src/emulator.rs   the device and what a page asks of it (tested natively)
+  src/emulator/commands.rs  the remote control's commands, as on an X4
   src/network.rs    plugins' requests answered from the page's recorded answers
   src/exports.rs    the module's functions (wasm32 only)
+  tests/            the emulator, its commands, network and a code plugin, natively
   www/              paperpaw-web.js (loader), frame.html and frame.js
                     (the emulator frame), index.html (a page to try it)
   build.py          builds the module into www/ (--serve shows it,
                     --limit-mb fails where it grew too large)
 ```
 
-`python shells/web/build.py --serve` builds the module (the `web`
-profile: as release, function names stripped) and serves `www/`
-on `http://localhost:8000`: `frame.html` is a device alone
-(`frame.html?profile=boox-go-7&language=de&dark`), `index.html` a page
-around it that loads a data plugin's folder and checks it.
+`python shells/web/build.py --serve` builds the module with the `web`
+profile, which is the release profile with symbols stripped. It then
+serves `www/` on `http://localhost:8000`. There, `frame.html` is a
+device alone, as in `frame.html?profile=boox-go-7&language=de&dark`.
+`index.html` is a page around it that loads a data plugin's folder and
+checks it.
 
 ## The device model
 
@@ -45,8 +48,9 @@ false`, no `winit`) and for `wasm32`:
 
 The frame runs in an iframe, best of an origin of its own, and speaks
 `postMessage` with the window that embeds it, and with no other. Every
-message may carry a `request` (any value); the answer has the same
-`type` and `request`, and `error` (a text) where it failed. Once its module is loaded the frame
+message may carry a `request`, which can be any value. The answer has
+the same `type` and `request`, and an `error` text where it failed.
+Once its module is loaded the frame
 sends `{ type: "ready", version }` (PaperPaw's version and the commit
 the module was built from). A panic stops a WebAssembly module for good:
 the frame then makes a fresh instance, starts the device as it was last
@@ -84,11 +88,11 @@ and `url` match. `url` is a pattern for the whole address, its query
 too, `*` standing for any text: `https://api.example.com/v1/feed*`
 matches `…/v1/feed?page=2`, `…/v1/feed` does not. Scheme and host are
 compared in any case, path and query as written. `status` is 200 unless
-said, `headers` an object (`content-type`, `etag` and the headers a
-plugin asks for come from it), `body` text, bytes (an `ArrayBuffer` or
-a typed array; read a `Blob` first) or an object (sent as JSON), `delay`
-in ms of the device's time (longer than the request waits: it fails as
-timed out then). A redirect (a 3xx with `location`) is followed through
+said. `headers` is an object: `content-type`, `etag` and the headers a
+plugin asks for come from it. `body` is text, bytes or an object, which
+is sent as JSON. Bytes are an `ArrayBuffer` or a typed array; read a
+`Blob` first. `delay` is in ms of the device's time. A delay longer
+than the request waits makes it fail as timed out. A redirect (a 3xx with `location`) is followed through
 the table, at most ten, as the desktop's `curl -L` does: the plugin gets
 the last answer, with the address it came from. Answers are cut to what
 a request takes, as a device does. A request no recorded answer answers
@@ -100,9 +104,9 @@ leaves out, fail with status 0 and the reason), so a local setup can let
 plugins reach the internet; paperpaw.org forwards nothing. Every request
 is told to the page as it is made:
 
-`{ type: "request", id, method, url, source, status }`: `source` is
-`"fixture"` (with its `status`), `"none"` (failed, `status` 0) or
-`"fetch"` (fetched by the frame, `status` null).
+`{ type: "request", id, method, url, source, status }`. Here `source` is
+one of three: `"fixture"` with the fixture's `status`; `"none"`, failed
+with `status` 0; or `"fetch"`, fetched by the frame with `status` null.
 
 The frame serves the page that wrote to it first: messages from other
 origins are passed over, and what it tells (plugins' addresses among
@@ -115,10 +119,11 @@ that waits for Wi-Fi asks for it to be joined first (the pretend radio's
 network `PaperPaw Test`, any password but an empty one or `wrong`); on the Boox the
 network is the system's.
 
-**Commands.** `command` takes the remote control's lines, parsed as on
-an X4 (`paperpaw_x4::remote`) and carried out with the same kernel
-calls; texts that may hold spaces are hexadecimal (`-` for none), as on
-the device, which `slot`, `show`, `open`, `set` and `emit` do for a page.
+**Commands.** `command` takes the remote control's lines. They are
+parsed as on an X4 (`paperpaw_x4::remote`) and carried out with the
+same kernel calls. As on the device, texts that may hold spaces are
+written in hexadecimal, and `-` stands for none. The messages `slot`,
+`show`, `open`, `set` and `emit` do this for a page.
 They answer in JSON:
 
 | Line | Answer |
@@ -141,14 +146,15 @@ Secrets are never said (`•`), and while a PIN or a password is entered
 `describe` gives where the parts are, not what they say. What only a
 device has (its panel, radio, flash, sleep) answers with `error`.
 
-The frame draws at the device's resolution: each of its pixels a whole
-number of the screen's (devicePixelRatio counted), crisp, where it fits
-at least once, smoothed where it has to be made smaller; in the grays
-the panel shows, in e-ink's tones on gray panels (its black lighter than
-a screen's), a full refresh flashing; screenshots are the panel model's
-own colours; the
-device's buttons are below it, its keys on the keyboard, and the screen
-takes touch where the device has a touch screen.
+The frame draws at the device's resolution. Where the device fits on
+the screen at least once, each of its pixels covers a whole number of
+the screen's pixels, with devicePixelRatio counted, and is drawn crisp.
+Where it has to be made smaller, it is smoothed. It shows the grays the
+panel shows, in e-ink's tones on gray panels, so its black is lighter
+than a screen's. A full refresh flashes. Screenshots have the panel
+model's own colours. The device's buttons are below it, its keys are on
+the keyboard, and the screen takes touch where the device has a touch
+screen.
 
 A code plugin cannot be added to the running module: WebAssembly shares
 no Rust types between modules. A module of its own is: a crate with
@@ -187,7 +193,8 @@ device lets time pass to then first, so that a press is as long as it
 was held, also after a while in which nothing was due. A full
 refresh flashes by the page's clock (`animating()` while it does).
 
-The module imports `paperpaw.random(ptr, len)` (fills memory with random
-bytes, returns 1), `paperpaw.log(ptr, len)` (a panic's message) and
-`paperpaw.now()` (`performance.now()`: the panel's animations, the time
-plugins take, which `perf` measures).
+The module imports three functions. `paperpaw.random(ptr, len)` fills
+memory with random bytes and returns 1. `paperpaw.log(ptr, len)` takes a
+panic's message. `paperpaw.now()` is `performance.now()`, for the
+panel's animations and for the time plugins take, which `perf`
+measures.

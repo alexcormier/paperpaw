@@ -1,7 +1,6 @@
 # The ESP32-S3's core libraries for code plugins
 
-Code plugins for the X4 Pro and the X4 Classic (`xtensa-esp32s3-none-elf`)
-link with `core`, `alloc` and `compiler_builtins`. rustup has no build of
+Code plugins for the X4 Pro (`xtensa-esp32s3-none-elf`) link with `core`, `alloc` and `compiler_builtins`. rustup has no build of
 them for this target, and espup's `esp` toolchain has their source only,
 so plugins used to build them with `-Zbuild-std`. A build so is not the
 same on every computer: Cargo hashes the libraries' folder in the
@@ -16,12 +15,12 @@ into the `esp` toolchain, they are where rustc finds a target's
 libraries, as rustup puts the X4's: plugins build without `-Zbuild-std`
 (the alias `cargo +esp x4pro` of `samples/hello-native`). The X4 Pro is
 then where the X4 is: a file built on Linux or macOS with the sample's
-`build.sh` matches the rebuild. On Windows two more things must hold, as
-for the X4, which `build.sh` does not do: every folder with Rust files
-remapped on its own (else the paths below the top keep their `\`), and
-Cargo told the Linux host (a `rustc` that says `host:
-x86_64-unknown-linux-gnu` in `-vV`, else the build scripts' hashes
-differ). With both, and the SDK from a registry, a Windows build and a
+`build.sh` matches the rebuild. On Windows, two more things must hold,
+as for the X4, and `build.sh` does not do them. First, every folder with
+Rust files is remapped on its own. Else the paths below the top keep
+their `\`. Second, Cargo is told the Linux host: a `rustc` that says
+`host: x86_64-unknown-linux-gnu` in `-vV`. Else the build scripts'
+hashes differ. With both, and the SDK from a registry, a Windows build and a
 Linux build of the sample packed to the same file, byte for byte
 (measured 2026-10-23, `esp` 1.97.0.0). The firmware still builds its own
 with `-Zbuild-std`; the libraries installed do not change that.

@@ -19,8 +19,8 @@ its driver crates. A port touches these:
 
 | Part | Where | What it holds |
 |---|---|---|
-| The board | `shells/xteink/src/board_<name>.rs` | Which pin and unit does what, in one place, with a table at the top |
-| A cargo feature | `shells/xteink/Cargo.toml`, `.cargo/config.toml` | The device's feature, its chip's crates, build aliases |
+| The board | `shells/xteink/src/board_<name>.rs` (the X4's is `board.rs`) | Which pin and unit does what, in one place, with a table at the top |
+| A cargo feature | `shells/xteink/Cargo.toml`, `shells/xteink/.cargo/config.toml` | The device's feature, its chip's crates, build aliases |
 | The display controller | `crates/paperpaw-x4` (`display`, `uc8179`, `panel`, `probe`) | The controller's driver, tested against a simulated controller |
 | Input | the board, `shells/xteink/src/input.rs`, `paperpaw_x4::buttons`, `gt911` | Buttons by pin or by ADC ladder, touch, their names |
 | Power and battery | the board, `power.rs`, `usb_power.rs`, `paperpaw_x4::cw2017` | The power latch, the battery's charge, outer power, sleep |
@@ -32,16 +32,16 @@ its driver crates. A port touches these:
 | Updates | `ota.rs`, `partitions.csv` | The chip and the firmware's name each update is checked against |
 | Code plugins | `shells/xteink/versions.env`, `rust-toolchain.toml` | The toolchain, and so the fingerprint plugin files must have |
 | The emulator | `shells/desktop/src/profiles.rs` | A profile as the firmware builds the device |
-| CI and releases | `.github/workflows/ci.yml`, `release.yml`, `.github/actions/xteink-tools` | The device in each matrix: lint, build, images, updates, plugins |
+| CI and releases | `.github/workflows/ci.yml`, `release.yml`, `.github/actions/xteink-tools`, and `xtensa-std` for an ESP32-S3 | The device in each matrix: lint, build, images, updates, plugins |
 | Documents | ADR 0013, `shells/xteink/README.md`, `CHANGELOG.md`, `README.md` | What works, what was tried on a device, what is to come |
 
-What a port **does not touch**: the kernel (`crates/paperpaw-core`), the
-SDK (`crates/paperpaw-sdk`) and the plugins (`plugins/`). They know no
-device by name and have no `cfg` for one. What they need to know about a
-device comes from `DeviceInfo` and the kernel's capabilities
-(`KernelBuilder::frontlight`, `wifi`, `sleep`, `button_row` and the
-like), or from a probe a shell gives the kernel (`KernelBuilder::clock`,
-`random`, `memory`). Where a device has something no capability or SDK
+What a port **does not touch**: the kernel, the SDK and the plugins, in
+`crates/paperpaw-core`, `crates/paperpaw-sdk` and `plugins/`. They know
+no device by name and have no `cfg` for one. What they need to know
+about a device comes from `DeviceInfo` and the kernel's capabilities,
+such as `KernelBuilder::frontlight`, `wifi`, `sleep` and `button_row`.
+The rest comes from probes a shell gives the kernel:
+`KernelBuilder::clock`, `random`, `memory` and `started`. Where a device has something no capability or SDK
 API says yet, the SDK gains one, so that every device and every plugin
 can use it (see [CONTRIBUTING.md](../CONTRIBUTING.md), architecture
 rule 3); a port does not reach around it.
@@ -75,14 +75,15 @@ network, updates and remote control stay one. In the order it was done:
    Xteink ships the same device with different controllers, batch by
    batch: the firmware asks the panel which it has at start
    (`paperpaw_x4::probe`) and logs the answer.
-4. **Input.** The X4 Pro's page buttons are on pins
-   (`buttons::State::pins`); the X4's are on two resistor ladders read by
-   the ADC (`State::read`). Touch (`gt911`) is read in the same timer
+4. **Input.** The X4 Pro's page buttons are on pins, read by
+   `buttons::State::pins`. The X4's are on two resistor ladders read by
+   the ADC, with `State::read`. Touch (`gt911`) is read in the same timer
    interrupt as the buttons, so a touch while PaperPaw is busy is not
    lost; its frame is mapped onto the screen by a `Transform`. The touch
    controller also reports the home key below the screen.
-5. **The card.** The ESP32-S3 has an SD host (`card_pro.rs`) where the X4
-   uses SPI; mounting the FAT file system is shared (`volume.rs`).
+5. **The card.** The ESP32-S3 has an SD host (`card_pro.rs`), where the
+   X4 uses SPI. Both mount the FAT file system the same way, in
+   `volume.rs`.
    `paperpaw-fat` learned to read a partition that says it goes past the
    card's end, as the X4 Pro's cards come formatted.
 6. **Power.** The battery's power latch is held through resets (a pad
@@ -93,15 +94,18 @@ network, updates and remote control stay one. In the order it was done:
    clock chip share an I²C bus with the touch controller. The front light
    is PWM on two pins (`light.rs`), cool and warm.
 8. **What the kernel is told.** `main.rs` gives the device's
-   `DeviceInfo` (id `xteink-x4-pro`, name, 800 by 480 at 217 dpi,
-   `PixelFormat::Mono1`, touch and its four keys, `MemoryClass::Large`),
-   makes PSRAM the heap before anything allocates, and names the device
-   for plugin libraries (`catalog_device("x4-pro")`). Defaults that suit
+   `DeviceInfo`: the id `xteink-x4-pro`, the name, 800 by 480 pixels at
+   217 dpi, `PixelFormat::Mono1`, touch and its four keys, and
+   `MemoryClass::Large`. It makes PSRAM the heap before anything
+   allocates. It names the device for plugin libraries with
+   `catalog_device("x4-pro")`, and says how the device started with
+   `started`. Defaults that suit
    the device go here too (`setting_default`), never into a plugin.
-9. **Updates.** `ota.rs` names the chip (`CHIP_ESP32_S3`) and the
-   firmware (`paperpaw-xteink-pro`) each update is checked against: the
-   X4 Pro and the X4 Classic share their chip but not their board, so
-   each refuses the other's firmware.
+9. **Updates.** `ota.rs` names the chip and the firmware that each
+   update is checked against: `CHIP_ESP32_S3` and `paperpaw-xteink-pro`.
+   The X4 Pro and the X4 Classic share their chip but not their board.
+   So each has a firmware name of its own and refuses the other's
+   firmware.
 10. **Code plugins.** A plugin file runs only on firmware built by the
     same compiler from the same SDK
     ([ADR 0024](adr/0024-native-code-plugins.md)): the firmware exports
@@ -112,8 +116,8 @@ network, updates and remote control stay one. In the order it was done:
     so plugins can be tried for the device without it.
 12. **CI and releases.** The device joins the matrices of `ci.yml` and
     `release.yml` (`device: [x4, x4-pro, x4-classic]`) and the
-    `xteink-tools` action, which picks its toolchain, target and chip. A
-    release then has its flash image, its signed update, its plugin files
+    `xteink-tools` action, which picks its toolchain, target and chip. An
+    ESP32-S3 device also takes the `xtensa-std` action. A release then has its flash image, its signed update, its plugin files
     and its fingerprint.
 13. **Fixes found on the device**, each a lesson for the next port (see
     the pitfalls below): the fuel gauge's battery profile written when
@@ -123,11 +127,12 @@ network, updates and remote control stay one. In the order it was done:
     coalesced while the panel refreshes, the light in steps the eye sees
     as even.
 
-The X4 Classic took a day after that: an ESP32-S3 board with the X4
+The X4 Classic took a day after that. It is not part of the beta: its
+firmware is built but not yet tried on one. It is an ESP32-S3 board with the X4
 Pro's glass, card, gauge and clock, the panel on other pins, and the
-X4's seven buttons each on a pin. It is a board file
-(`board_classic.rs`), a feature (`x4-classic`), its id and firmware name,
-its emulator profile and its place in CI. Everything else was the X4
+X4's seven buttons each on a pin. It is a board file, `board_classic.rs`,
+and a feature, `x4-classic`, with its id and firmware name, its emulator
+profile and its place in CI. Everything else was the X4
 Pro's. A port to a board like one PaperPaw knows is mostly a board file.
 
 ## Pitfalls
@@ -201,10 +206,10 @@ skipped, with the reason. After each answer the check writes its report
 to `.paperpaw/device-check.txt` on the card, and it goes on where it was
 when opened again.
 
-`tools/x4-remote.py` takes screenshots, fetches the report
-(`--pull .paperpaw/device-check.txt .`, the file and the folder to put
-it in) and the log, and says the heap's
-peak (`--help` lists it all).
+`tools/x4-remote.py` takes screenshots and fetches the log and the
+report. `--get .paperpaw/device-check.txt device-check.txt` copies the
+report. `--script heap` says the heap's peak and the stack never used,
+and `--help` lists all it does.
 
 ## The pull request
 
@@ -225,9 +230,9 @@ A pull request that adds a device is ready for review when it has:
       page, `x4-remote.py`).
 - [ ] **The device check's report**, the whole of
       `.paperpaw/device-check.txt`.
-- [ ] **Photos of the Screen page**: as it opens (the grays), after
-      flipping the pattern a few times (ghosting), and after a full
-      refresh.
+- [ ] **Photos of the Screen page**: one as it opens, to show the
+      grays; one after flipping the pattern a few times, to show
+      ghosting; and one after a full refresh.
 - [ ] **The log line naming the display controller**, e.g.
       `display: UC8179 (FLG 13, REV 00 00 01 FF FF, BUSY high at rest),
       driven as UC8179`.

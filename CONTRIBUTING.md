@@ -21,12 +21,16 @@ expect from contributions.
    cargo fmt --all --check
    cargo clippy --workspace --all-targets -- -D warnings
    cargo test --workspace
+   RUSTDOCFLAGS="-D warnings" cargo doc --workspace --no-deps
+   rustfmt --edition 2024 --check shells/xteink/src/main.rs
    cargo build --release --target riscv32imc-unknown-none-elf -p paperpaw-app --no-default-features --features packs,store-plugins,diagnostics
    ```
 
    The last builds the kernel and every first-party plugin for the X4's
    chip (`no_std`). The firmware itself (`shells/xteink`) is a workspace
-   of its own; its README says how to build it.
+   of its own; its README says how to build it. CI also builds with the
+   oldest supported Rust (1.88), compares each API file, builds the
+   firmware and the Android app, fuzzes the parsers and checks licences.
 
 3. Try your change in the emulator:
    `cargo run -p paperpaw-emulator -- --profile xteink-x4`.
@@ -36,11 +40,12 @@ expect from contributions.
 
 ## Tools
 
-- **Emulators.** `shells/desktop` (`paperpaw-emulator`, the binary
-  `paperpaw-emu`) runs the kernel and plugins on an emulated device, in
-  a window or headless (`--help` lists the options, `--list-profiles` the
-  devices); `shells/web` builds the same device model for a browser
-  ([docs/web-emulator.md](docs/web-emulator.md)).
+- **Emulators.** `shells/desktop` is the package `paperpaw-emulator`
+  with the binary `paperpaw-emu`. It runs the kernel and plugins on an
+  emulated device, in a window or headless. `--help` lists the options,
+  and `--list-profiles` lists the devices. `shells/web` builds the same
+  device model for a browser; see
+  [docs/web-emulator.md](docs/web-emulator.md).
 - **`paperpaw-dev`** (`tools/dev`) checks plugins on emulated devices:
   texts, layout, reach with buttons alone, memory and frame time, flows
   ([docs/plugins.md](docs/plugins.md#checking-your-plugin)):
@@ -49,6 +54,10 @@ expect from contributions.
   signing keys, and packs and signs plugin files (`--help`).
 - **`tools/plugin-files`** builds PaperPaw's own plugins that the X4s
   install from the store as files, for every release (its README).
+- **`tools/xtensa-std`** builds and installs the X4 Pro's core libraries
+  for code plugins (its README).
+- **`tools/fontgen`** converts fonts into bitmap font packs (`.ppfp`) for
+  small devices.
 - **`tools/x4-remote.py`** drives an X4 over USB with firmware built
   with the `remote` feature: buttons, screenshots, files, the log, the
   heap (`--help`).
@@ -65,8 +74,8 @@ These keep PaperPaw small, portable and extensible. Reviews check them.
    plugin can. First-party plugins have no special access.
 3. **If a community plugin could not build a feature, extend the SDK first.**
 4. **Core crates are `no_std`.** They must build for
-   `riscv32imc-unknown-none-elf` (the X4's ESP32-C3, with 256 KiB of
-   heap). Avoid hidden allocations in hot paths and never load whole
+   `riscv32imc-unknown-none-elf` (the X4's ESP32-C3, with a heap of
+   256 KiB). Avoid hidden allocations in hot paths and never load whole
    files into memory.
 5. **Namespaced ids** (`plugin-id.name`) for every contribution; `core.*` is
    reserved for the kernel.
@@ -123,11 +132,12 @@ may exceed them. Existing code is not reworked for them in bulk.
    clippy's `allow_attributes_without_reason`.
 6. **Names and paths are constants**, not the same literal written in
    two places: a file a plugin keeps, a setting's id, an action's.
-7. **Memory is the limit on the X4** (a heap of 262 KB, of which opening
-   a book takes up to 179 KB): no hidden allocations in paths that run
-   for every page or frame, nothing kept in memory while it is not used,
-   large buffers allocated fallibly. Measure new features on the
-   `xteink-x4` profile of the emulator.
+7. **Memory is the limit on the X4** (a heap of 256 KiB): no hidden
+   allocations in paths that run for every page or frame, nothing kept
+   in memory while it is not used, large buffers allocated fallibly.
+   Measure new features on the `xteink-x4` profile of the emulator. The
+   memory tests (`shells/desktop/tests/memory.rs`) fail when opening and
+   reading a book takes more than 85 % of the heap.
 8. **No panics on bad input**: see architecture rule 6.
 9. **Comments in plain English**, written for readers whose first
    language is not English. English comes first everywhere, other
