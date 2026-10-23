@@ -793,7 +793,12 @@ pub struct SettingGroupSpec {
     pub id: Id,
     /// Translation key of the group's name.
     pub title: Cow<'static, str>,
-    /// Groups are listed by order, smallest first.
+    /// Groups are listed by order, smallest first, in the sections of
+    /// [`settings_sections`](crate::builtin::settings_sections): reading 1
+    /// to 49, the device 51 to 199, customising PaperPaw from 201. 0, the
+    /// default, names none: the settings list such a group at the end of
+    /// the section for customising, by name. A group shows the icon its
+    /// plugin gives it (`Registrar::add_icon` with its id), else a plugin's.
     pub order: i32,
     /// A screen of the group's plugin shown instead of the generated page
     /// (opened with [`params::ID`](crate::builtin::params::ID), the

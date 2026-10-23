@@ -164,6 +164,9 @@ file to your report.
   start of the week for the statistics and calendars.
 - New status items: *Battery when low* shows the battery only below a
   level, and a Wi-Fi sign shows while the device is in a network.
+- A plugin's settings group that names no place on the settings' main
+  page is listed at the end of *Customise*, by name, with a plugin's
+  icon, instead of first among the books' groups.
 
 #### Touch, buttons and the keyboard
 
@@ -425,6 +428,9 @@ file to your report.
 - The workspace publishes to crates.io as a pre-release
   (`tools/publish-dry-run.sh 0.5.0-beta.1`, and the *Publish check*
   workflow).
+- `paperpaw-dev` warns of a settings group without an order or an icon,
+  and of a widget's settings in a group of the main page rather than the
+  widget's own (`widgets::settings_group`). SDK: `Kernel::menus`.
 
 ## [0.3.0] - 2026-10-16
 

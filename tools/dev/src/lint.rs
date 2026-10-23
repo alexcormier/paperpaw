@@ -18,6 +18,7 @@
 pub(crate) mod catalogs;
 mod drawn;
 mod files;
+mod groups;
 pub mod pseudo;
 mod texts;
 
@@ -220,6 +221,9 @@ pub fn run(context: &Context, report: &mut Report) -> Result<(), String> {
     };
     let (used, findings) = texts::registered(kernel, &ours);
     for finding in findings {
+        report.add(finding);
+    }
+    for finding in groups::groups(kernel, &ours) {
         report.add(finding);
     }
     if let Some(english) = &english {
