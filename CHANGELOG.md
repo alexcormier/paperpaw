@@ -6,6 +6,202 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Your data is safer: an audit of everything PaperPaw keeps found ways
+  it could lose notes, places, statistics, cards or passwords, and they
+  are closed, each with a test.
+  - The X4's card: a file being saved is whole again after a power cut
+    at any moment (an empty battery, a reset). A removed file's entry
+    goes before its space is freed, and a file takes another's place
+    without a gap (rust-fatfs patched, `patches/fatfs`).
+  - *Clean up storage* runs by itself only for what can be made again
+    (covers, laid out pages). The notes, places and settings of books
+    not found (renamed or moved on a computer, on a card not in) go
+    only when you agree; it says how many books that is.
+  - Reading places: a position file that cannot be read is no longer
+    written over with the start of the book; the old `progress.ini`
+    never wins over a newer place.
+  - Progress sync: after a fetch that failed, nothing is sent until the
+    server's place was read; leaving the offer with *Back* sends
+    nothing; a book that starts here anew is offered the server's
+    place even when this device sent it; places kept while offline are
+    fetched first.
+  - KOReader: a highlight that could not be passed on is not taken for
+    one removed there; long notes are not cut on KOReader's side; one
+    side with no annotations at all deletes nothing on the other.
+  - Statistics sync: a file on the server that was replaced or restored
+    from a backup deletes nothing here, and you are told; stays read
+    since the last upload always stay; a file missing on the server is
+    not overwritten at once.
+  - Wallabag keeps the book of an article you highlighted when it is
+    archived, and never removes another article's book. Books Calibre
+    removes keep their notes, which come back when the book is sent
+    again. Removing a news feed keeps its book.
+  - Lines a file has that PaperPaw does not understand (from a newer
+    version, or written by hand) are kept in annotations, passwords,
+    rules and book details, and a newer file is always recognised.
+  - Passwords: an old copy (Wi-Fi, progress sync, statistics, catalogs,
+    settings) goes only once the passwords file holds it. An empty
+    password prompt and a refused Readwise token no longer delete the
+    one kept.
+  - Home pages keep the widgets of plugins not loaded right now (safe
+    mode, an update on trial) when a page is edited.
+  - The file manager says what deleting removes, refuses to delete or
+    move PaperPaw's own folder, and refuses to move a folder of more
+    than 2000 books; a renamed book always keeps its notes.
+  - Smaller ones: browser bookmarks are not replaced by the defaults
+    after a read error; vocabulary decks and review answers are not
+    written over after a read error; the word list says it keeps 2000
+    words; an OPDS answer that is no book is not saved as one; the
+    QuireInk folder is taken over even beside a new one.
+  - The X4's card, further: a file or folder moved or renamed is at its
+    old or its new place after a cut, never at neither, and a move on a
+    full card fails before anything changes. Files being written are
+    not listed and cannot be deleted by name; what a cut left is
+    settled when a folder is first looked at: the new copy wins unless
+    the file was changed after it was made (PaperPaw marks it; the card's
+    dates are not trusted), and empty files and a folder that cannot be
+    settled never make a folder unreachable. Temporary files of earlier
+    versions go where they are provably copies; a new copy an earlier
+    version left unmarked never replaces the file, it is kept beside it
+    as `<name>.unsaved`. The card's free space is counted a sector at a
+    time, so a Calibre transfer never needs a large piece of memory.
+  - Highlights, bookmarks and notes in EPUB books keep their text when
+    the book's own styles are switched on or off: each records the
+    conversion it was made in and where it lies in the book, and is
+    found there again (annotations file version 2). Annotations made
+    before this are never moved by a guess: they stay where they were
+    made.
+  - A reading place that cannot be read is tried again, and kept aside
+    (`.bad`) before a new one is saved; you are told once.
+  - KOReader: removing every highlight on one side now reaches the
+    other, but where KOReader's file had annotations before and has
+    none any more (removed there, or a fresh file from another device),
+    you are asked in the book first (*Keep* or *Remove*, *Keep* where
+    the focus starts); removed, a copy is kept (`.removed`). A fresh or
+    unreadable side changes nothing.
+  - Progress sync: *Back* on an offer means not now for that book,
+    until the server's place changes; it is not offered at every wake.
+  - Statistics sync: a book's statistics deleted in KOReader go here
+    too; where the server file cannot be told from a reset, you are
+    asked (*Remove* or *Keep*).
+  - Vocabulary: card and deck ids are never given twice, and a phone
+    tab that did not see a change cannot change a card; deleting a word
+    asks first.
+  - *Reset to defaults* keeps folders, accounts and passwords.
+    Removing a profile, saving the current settings in one and removing
+    a password ask first. The file manager protects everything in
+    PaperPaw's folders (also the old QuireInk one) and starts its
+    delete question on *Cancel*. The QuireInk folder is merged in at
+    any depth without overwriting.
+- Calibre: the device tells Calibre how much its card really has free,
+  and its size (it said 64 GB for both). Looking for Calibre in the
+  network asks again a few times when no answer comes, since a call
+  can be lost on Wi-Fi without a word.
+- Calibre over Wi-Fi (X4, X4 Pro): a book coming in a burst no longer
+  stalls the connection as often (in a test, one drop in about 40 books
+  instead of one in a few): the radio stays awake while a plugin's
+  connection is open. A connection the other side no longer answers
+  ends after 45 seconds instead of waiting for ever on "receiving"
+  (nothing half received stays). Ejecting in Calibre gets its answer
+  before the connection ends.
+- Wi-Fi: a scan that finds no saved network is made again, up to three
+  times, before what waits for the network (Calibre, the store, a
+  sync) says there is none. On the X4s the first scan after the radio
+  comes on often found nothing, and Calibre said *no network* while
+  the device joined a few seconds later.
+- The store updates only the plugins it installed. A plugin put in
+  place otherwise (the Wi-Fi transfer, a memory card, one's own build)
+  is local: its version is never counted or installed as an update, and
+  its page in the store offers *Use the store version* instead. The
+  plugin manager says of each plugin whether it is from the store or
+  local. On a device that kept no origins yet, the plugins there are
+  taken for the store's once, so those it installed before keep its
+  updates. A firmware update fetches no new build of a local plugin.
+  Where a plugin came from is kept only once it is in place: an install
+  that fails or is refused changes nothing of it, also after a power cut
+  in between (the next start settles it).
+- SDK: `install::origin`, `Origins` (read once, for a list),
+  `remember_store_install`, `forget_store_install`, `adopt` and
+  `folder_version` tell and keep where an installed plugin came from.
+  `install::marks` says it with the files of an install, for the kernel
+  to keep once the plugin is in place.
+- Wi-Fi transfer: plugins can be installed from the computer (e.g.
+  one's own build, from the workshop). Each file comes with its
+  SHA-256 (`PUT /api/plugin/<id>/<path>`), and `POST /api/plugin/<id>`
+  installs them in one step: the version before stays until the new one
+  is whole, the plugin's own data stays, and it is loaded at once. A
+  plugin with code is installed only after you say yes on the device,
+  and only the code you were asked about.
+  `GET /api/plugins` lists what is installed and where it came from.
+- SDK: `install::local::Staging` installs a plugin sent file by file,
+  with the same checks for every way it comes; `Commit::approved` names
+  the code the reader allowed (`Staging::code`).
+- Transfer over USB (X4, X4 Pro, in every firmware): a computer at the
+  other end of the cable (the workshop, `tools/usb-transfer.py`) installs
+  a plugin or adds books. The device shows what it means to send, with
+  names and sizes, and writes nothing until you allow it; only the
+  plugins and books offered are taken, each as offered (its size and
+  SHA-256), never over a book. Your answer counts for the offer you saw
+  only, and a question closed without one allows nothing. *Back* ends
+  it: a computer that goes on asking does not bring it back. Requests
+  and answers are lines over the USB serial link (`docs/usb-transfer.md`),
+  sent a line at a time, so little memory is needed. The emulator speaks
+  the same with `--cable`.
+- SDK: `served::CABLE_PORT` serves over the cable instead of the
+  network; the slot `slots::CABLE` is opened when a computer speaks
+  there. `Kernel::next_cable_line` gives the lines to send one by one.
+- SDK: `Storage::total_space` tells a storage's size, as `free_space`
+  tells what it has free.
+- SDK: `builtin::events::TYPE_TEXT` types text into the text field
+  shown, as if on its keys (the keyboard confirms it when told to);
+  `Kernel::type_text` sends it while a keyboard shows. Testing: the
+  X4's USB remote (`type`, `type-enter`, steps `type:` and
+  `type-enter:` in `tools/x4-remote.py`), the emulator's scripts and
+  flows and the web emulator type with it.
+- SDK: `Registrar::add_book_cache` names book data that is made again
+  from the book (cleaned up by itself); `add_book_data` is for the
+  reader's own data, removed only when the reader agrees.
+  `library::BookDataKind`, `library::unused_books`,
+  `annotations::stored_note`, `positions::load_for_update` and
+  `Secrets::saved` are new, and `annotations::relocate` finds a book's
+  annotations again in another conversion. `SettingSpec::kept_on_reset`
+  keeps a setting through resets (secrets always are). Book data folders
+  outside `.paperpaw/` are refused at registration. Breaking:
+  `library::clean_up_unused` takes
+  the kind to remove. `files::put_in_place` and `files::copy` keep the
+  new file where a failed move took the old one.
+
+- A guided device check in the diagnostics plugin (under Tools in the
+  firmware's builds for developers) goes
+  through every part of a device one page at a time: the screen's grays
+  and ghosting, every button by name, touch at the corners and edges,
+  the front light, the battery and charging, the card's speed, the
+  clock, Wi-Fi, sleep and memory. Each step is passed, failed or skipped
+  (parts a device lacks are skipped), and a report goes to
+  `.paperpaw/device-check.txt` for pull requests that add a device
+  ([docs/porting.md](docs/porting.md)).
+- SDK: screens can take buttons by name (`Screen::takes_buttons`,
+  `Screen::on_button`), held ones told apart, before the key map turns
+  them into actions. `Env::memory` says the heap and the stack free
+  where the shell can tell (`paperpaw_sdk::memory`,
+  `KernelBuilder::memory`; the X4s and the emulator do), and
+  `Env::clock` is a monotonic clock in microseconds for measuring work
+  (`paperpaw_sdk::time::Clock`). `Env::started` says how PaperPaw
+  started (`paperpaw_sdk::power::Start`: switched on, woken, started
+  again by a watchdog or a panic; `KernelBuilder::started`, from the
+  chip's reset reason on the X4s).
+- Code plugins for the X4 Pro and the X4 Classic build without
+  `-Zbuild-std`, against core libraries each release builds once on
+  Linux and publishes, signed (`paperpaw-xtensa-std-<version>.tar.gz`,
+  `tools/xtensa-std`, installed into espup's `esp` toolchain). With
+  `-Zbuild-std`, Cargo hashed the libraries' folder as the system writes
+  it, so no build on Windows could match the plugin library's rebuild;
+  now the X4 Pro is as the X4: a Windows build matches where every
+  folder's paths are remapped and Cargo is told the Linux host, which
+  the sample's `build.sh` does not do (see the tool's README). The
+  sample's alias and CI job, the store's plugins
+  and the authors' documents follow; CI checks that a plugin's file is
+  the same in any folder (`tools/plugin-files/anywhere.sh`).
 - Hints covered by another screen (a plugin's question, a notice opened
   over them) close and show again when their screen does, instead of
   staying below it, cut.
@@ -110,10 +306,15 @@ change the plugin SDK.
   reaching back past it, as drawn and as measured by
   `FontHandle::ink_across` (`paperpaw_text::is_mark`,
   `paperpaw_text::glyph_x`, `TextStyle::based`).
-- The keyboard's keys are nearly round where they are tapped (about
-  4.7 mm wide and 5.2 mm high on the X4 Pro), every key as wide in every row and a
-  thin seam between them, so the keyboard takes much less of the
-  screen; with buttons only (the X4) the keys stay as they were. German
+- The keyboard's keys are round where they are tapped (about 4.9 mm
+  wide and 4.8 mm high on the X4 Pro), every key as wide in every row
+  and a thin seam between them, so the keyboard takes much less of the
+  screen; with buttons only (the X4) the keys stay as they were. The
+  setting *Shape of keys* makes them a little taller or a little wider
+  instead. *Keyboard size* (Small, Medium, Large) makes the keyboard a
+  quarter lower or higher: with round keys about 30 %, 40 % or 50 % of
+  the screen. Keys never get narrower or lower than 4 mm, nor than
+  their letter, and the keyboard never takes more than half the screen. German
   has ten keys a row, as English: ä, ö, ü and ß come from holding a, o,
   u and s, first in their lists, and with buttons the field says so on
   those letters. The setting *Umlaut keys* (off by default) gives them

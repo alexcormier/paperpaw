@@ -164,7 +164,7 @@ fn every_kind_of_contribution_says_what_it_is() {
     r.add_keymap_preset(Id::new_static("demo.keys"), Cow::Borrowed(""))
         .unwrap();
     r.add_stylesheet(Cow::Borrowed("p {}")).unwrap();
-    r.add_book_data("cache", "demo-").unwrap();
+    r.add_book_data(".paperpaw/cache", "demo-").unwrap();
     r.bind_font(
         Id::new_static("core.ui"),
         Id::new_static("x.font"),

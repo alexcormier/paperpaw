@@ -54,7 +54,7 @@ struct Test {
 }
 
 impl Test {
-    fn new(storage: MemoryStorage) -> Self {
+    fn new(storage: impl Storage + 'static) -> Self {
         let mut kernel = Kernel::builder(DEVICE)
             .storage(storage)
             .network(true)
@@ -430,6 +430,57 @@ fn a_wifi_file_too_large_to_read_goes_unread() {
     let storage = MemoryStorage::new().with("wifi.ini", "x".repeat(20_000));
     let t = Test::new(storage);
     assert!(!t.kernel.storage().exists("wifi.ini"));
+}
+
+/// Keeps everything but the passwords and keys file, which it refuses to
+/// write (a full card, say).
+struct NoSecrets(MemoryStorage);
+
+impl Storage for NoSecrets {
+    fn read_at(
+        &self,
+        path: &str,
+        offset: u64,
+        buf: &mut [u8],
+    ) -> Result<usize, paperpaw_sdk::StorageError> {
+        self.0.read_at(path, offset, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, paperpaw_sdk::StorageError> {
+        self.0.size(path)
+    }
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_sdk::StorageError> {
+        if path == FILE {
+            return Err(paperpaw_sdk::StorageError::Full);
+        }
+        self.0.write(path, data)
+    }
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_sdk::StorageError> {
+        self.0.append(path, data)
+    }
+    fn list(
+        &self,
+        dir: &str,
+        visit: &mut dyn FnMut(paperpaw_sdk::DirEntry<'_>),
+    ) -> Result<(), paperpaw_sdk::StorageError> {
+        self.0.list(dir, visit)
+    }
+    fn remove(&self, path: &str) -> Result<(), paperpaw_sdk::StorageError> {
+        self.0.remove(path)
+    }
+    fn create_dir(&self, path: &str) -> Result<(), paperpaw_sdk::StorageError> {
+        self.0.create_dir(path)
+    }
+}
+
+/// Networks on the card whose passwords cannot be saved with the others
+/// stay in the file: removed, they would be gone at the next restart.
+#[test]
+fn networks_on_the_card_stay_while_their_passwords_cannot_be_saved() {
+    let wifi_ini = "ssid = Home Net\npassword = pw 1\n";
+    let t = Test::new(NoSecrets(MemoryStorage::new().with("wifi.ini", wifi_ini)));
+    let storage = t.kernel.storage();
+    assert_eq!(storage.read_to_vec("wifi.ini"), wifi_ini.as_bytes());
+    assert!(!storage.exists(FILE));
 }
 
 /// The token in the page's form.

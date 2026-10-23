@@ -266,6 +266,32 @@ fn failed_downloads_are_counted_and_tried_again_next_time() {
     );
 }
 
+/// A page the server answers with instead of the book (a sign-in, an
+/// error) is not kept as one, nor remembered: it is tried again.
+#[test]
+fn an_answer_that_is_no_book_is_not_kept() {
+    let mut h = Harness::new(one_catalog());
+    let page = books_feed("Shelf", None, &[("urn:a", "Alpha", "a.epub")]);
+    h.run(SYNC);
+    let feed = h.request();
+    h.answer(&feed, 200, page.as_bytes());
+    let book = h.request();
+    h.answer(
+        &book,
+        200,
+        b"<!DOCTYPE html><html><body>Sign in</body></html>",
+    );
+    assert!(h.requests().is_empty());
+    assert!(books(&h.storage).is_empty(), "{:?}", books(&h.storage));
+    assert!(remembered(&h.storage, SHELF).is_empty());
+    h.run(SYNC);
+    let feed = h.request();
+    h.answer(&feed, 200, page.as_bytes());
+    let book = h.request();
+    h.answer(&book, 200, b"PK alpha");
+    assert_eq!(books(&h.storage), ["Synced/Alpha.epub"]);
+}
+
 #[test]
 fn an_unreachable_catalog_does_not_stop_the_others() {
     let storage = Shared::with(&[(
@@ -447,12 +473,23 @@ fn passwords_of_old_lists_move_to_the_secrets_and_go_with_requests() {
         CATALOGS,
         &catalogs(&[["Calibre", SHELF, "reader", "s3cr3t-pw", "", "sync", ""]]),
     )]);
+    let h = Harness::new(storage.clone());
+    // Kept with the other secrets, veiled; the list lets go of it only
+    // once they hold it, at a later start.
+    let id = format!("opds.{}", &paperpaw_sdk::digest::md5::of(SHELF)[..16]);
+    assert_eq!(h.kernel.secrets().get(&id), Some("s3cr3t-pw"));
+    assert!(h.storage.text(CATALOGS).unwrap().contains("s3cr3t-pw"));
+    drop(h);
+    // The secrets were not saved (a full card): the list still has it.
+    storage.0.remove(FILE).unwrap();
+    let h = Harness::new(storage.clone());
+    assert!(h.storage.text(CATALOGS).unwrap().contains("s3cr3t-pw"));
+    assert_eq!(h.kernel.secrets().get(&id), Some("s3cr3t-pw"));
+    drop(h);
     let mut h = Harness::new(storage);
     let list = h.storage.text(CATALOGS).unwrap();
     assert!(!list.contains("s3cr3t-pw"), "{list}");
     assert!(list.contains("reader"), "{list}");
-    // Kept with the other secrets, veiled.
-    let id = format!("opds.{}", &paperpaw_sdk::digest::md5::of(SHELF)[..16]);
     assert_eq!(h.kernel.secrets().get(&id), Some("s3cr3t-pw"));
     let file = h.storage.text(FILE).unwrap();
     assert!(!file.contains("s3cr3t-pw"), "{file}");

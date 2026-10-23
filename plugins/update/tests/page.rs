@@ -1111,3 +1111,42 @@ fn a_plugin_without_room_for_its_code_is_not_fetched() {
     );
     assert!(!device.storage.exists("plugins/.stats.next/plugin.ini"));
 }
+
+/// A code plugin the store did not install (local, as one in development
+/// is) is never put in place by the update's build of it; one of the
+/// store's is fetched, and stays the store's at the version fetched.
+#[test]
+fn only_the_stores_code_plugins_are_fetched_for_an_update() {
+    let v031 = paperpaw_sdk::Version::new(0, 3, 1);
+    for (origins, fetched) in [("", false), ("dict-xl\t0.3.1\n", true)] {
+        let storage = Shared::default();
+        storage
+            .0
+            .write(".paperpaw/plugin-origin.txt", origins.as_bytes())
+            .unwrap();
+        let mut device = with_code_plugin(storage, "0.4.0", "");
+        device.run(OPEN);
+        device.run(actions::CONFIRM);
+        let call = device.request();
+        let file = update_file("0.5.0", &[("chess-for-paperpaw", "1.1.0")]);
+        let code = code_file();
+        let offer = offer_with_code(file.len(), &code).replace("\"stats\"", "\"dict-xl\"");
+        device.answer(&call, 200, offer.as_bytes());
+        device.run(actions::CONFIRM);
+        let call = device.request();
+        device.answer(&call, 200, &file);
+        let storage = device.storage.0.clone();
+        if !fetched {
+            device.no_request();
+            assert!(!storage.exists("plugins/.dict-xl.next/code.ppn"));
+            continue;
+        }
+        let call = device.request();
+        device.answer(&call, 200, PLUGIN_INI.as_bytes());
+        let call = device.request();
+        device.answer(&call, 200, &code);
+        assert!(storage.exists("plugins/.dict-xl.next/code.ppn"));
+        let origin = |v| paperpaw_sdk::install::origin(storage.as_ref(), "dict-xl", v);
+        assert_eq!(origin(v031), paperpaw_sdk::install::Origin::Store);
+    }
+}

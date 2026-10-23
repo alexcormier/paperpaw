@@ -431,3 +431,112 @@ proptest! {
         prop_assert!(kernel.active_screen().is_some());
     }
 }
+
+/// A storage that refuses to write the passwords and keys file while
+/// `.1` says so, and keeps everything else.
+#[derive(Clone, Default)]
+struct NoSecrets(
+    std::rc::Rc<MemoryStorage>,
+    std::rc::Rc<std::cell::Cell<bool>>,
+);
+
+impl paperpaw_platform::Storage for NoSecrets {
+    fn read_at(
+        &self,
+        path: &str,
+        offset: u64,
+        buf: &mut [u8],
+    ) -> Result<usize, paperpaw_platform::StorageError> {
+        self.0.read_at(path, offset, buf)
+    }
+    fn size(&self, path: &str) -> Result<u64, paperpaw_platform::StorageError> {
+        self.0.size(path)
+    }
+    fn write(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_platform::StorageError> {
+        if self.1.get() && path == paperpaw_core::sdk::secrets::FILE {
+            return Err(paperpaw_platform::StorageError::Full);
+        }
+        self.0.write(path, data)
+    }
+    fn append(&self, path: &str, data: &[u8]) -> Result<(), paperpaw_platform::StorageError> {
+        self.0.append(path, data)
+    }
+    fn list(
+        &self,
+        dir: &str,
+        visit: &mut dyn FnMut(paperpaw_platform::DirEntry<'_>),
+    ) -> Result<(), paperpaw_platform::StorageError> {
+        self.0.list(dir, visit)
+    }
+    fn remove(&self, path: &str) -> Result<(), paperpaw_platform::StorageError> {
+        self.0.remove(path)
+    }
+    fn rename(&self, from: &str, to: &str) -> Result<(), paperpaw_platform::StorageError> {
+        self.0.rename(from, to)
+    }
+    fn create_dir(&self, path: &str) -> Result<(), paperpaw_platform::StorageError> {
+        self.0.create_dir(path)
+    }
+}
+
+static SECRET: paperpaw_core::sdk::SettingExtra = paperpaw_core::sdk::SettingExtra::new().secret();
+
+/// A plugin (`keeper`) with a secret setting, `keeper.key`.
+struct Keeper;
+
+impl Plugin for Keeper {
+    fn manifest(&self) -> Manifest {
+        common::manifest("keeper")
+    }
+
+    fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
+        r.add_setting(
+            SettingSpec::fixed_text(
+                "keeper.key",
+                "keeper.key",
+                "",
+                paperpaw_core::sdk::builtin::groups::OTHER,
+            )
+            .with_extra(&SECRET),
+        )
+    }
+}
+
+/// A secret setting kept in `paperpaw.ini` before stays there while the
+/// passwords and keys file cannot be written: it is moved only once it
+/// is saved with the secrets.
+#[test]
+fn a_secret_setting_stays_in_the_file_until_the_secrets_are_saved() {
+    use paperpaw_core::sdk::builtin::CONFIG_FILE;
+    use paperpaw_core::sdk::secrets::FILE;
+    use paperpaw_platform::Storage as _;
+    let storage = NoSecrets::default();
+    storage.1.set(true);
+    storage
+        .0
+        .write(CONFIG_FILE, b"[keeper]\nkey = old-k\n")
+        .unwrap();
+    let start = |storage: &NoSecrets| {
+        let mut kernel = Kernel::builder(DEVICE)
+            .plugin(Keeper)
+            .storage(storage.clone())
+            .build()
+            .unwrap();
+        kernel.start(Instant(0));
+        kernel
+    };
+    let config =
+        |storage: &NoSecrets| String::from_utf8(storage.0.get(CONFIG_FILE).unwrap()).unwrap();
+    let kernel = start(&storage);
+    assert_eq!(kernel.secrets().get("keeper.key"), Some("old-k"));
+    assert!(!kernel.secrets().saved("keeper.key"));
+    assert!(!storage.0.exists(FILE));
+    assert!(config(&storage).contains("old-k"), "{}", config(&storage));
+    drop(kernel);
+    // Writable again: moved at the next start.
+    storage.1.set(false);
+    let kernel = start(&storage);
+    assert!(kernel.secrets().saved("keeper.key"));
+    assert!(storage.0.exists(FILE));
+    assert!(!config(&storage).contains("old-k"), "{}", config(&storage));
+}

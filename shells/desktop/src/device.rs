@@ -132,6 +132,9 @@ impl Storage for Card {
     fn free_space(&self) -> Option<u64> {
         self.on(|s| s.free_space())
     }
+    fn total_space(&self) -> Option<u64> {
+        self.on(|s| s.total_space())
+    }
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         self.on(|s| s.local_path(path, with));
     }
@@ -403,6 +406,33 @@ impl Device {
         let kernel = &mut self.kernel;
         let effects = budget::track(|| call(kernel, now));
         self.execute(effects);
+    }
+
+    /// A line from the computer at the cable (`--cable`): the cable
+    /// transfer's requests (see `paperpaw_core::Kernel::cable_line`); the
+    /// answers wait in [`Device::take_cable_lines`].
+    pub fn cable_line(&mut self, line: &str) {
+        let now = self.now();
+        let kernel = &mut self.kernel;
+        let effects = budget::track(|| kernel.cable_line(now, line));
+        self.execute(effects);
+    }
+
+    /// The cable transfer's lines for the computer, in order.
+    pub fn take_cable_lines(&mut self) -> Vec<String> {
+        self.kernel.take_cable_lines()
+    }
+
+    /// Types `text` into the text field shown, then confirms it with
+    /// `done` (scripts' `type`, the remote's): whether one was shown.
+    pub fn type_text(&mut self, text: &str, done: bool) -> bool {
+        let now = self.now();
+        let kernel = &mut self.kernel;
+        let Some(effects) = budget::track(|| kernel.type_text(now, text, done)) else {
+            return false;
+        };
+        self.execute(effects);
+        true
     }
 
     /// A phone joins the device's own network, where it has one open
@@ -803,6 +833,7 @@ fn build_kernel(
             .storage(crate::trace::Traced(storage))
             .clock(crate::host::micros)
             .random(crate::host::random)
+            .memory(budget::memory_use)
             .glyph_cache(profile.glyph_cache)
             .busy_mark(profile.busy_mark)
             .colors(profile.colors)

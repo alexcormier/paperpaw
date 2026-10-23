@@ -378,19 +378,73 @@ fn updating_and_removing_a_profile() {
     device.set(NIGHT, "on");
     device.hold("Profile 1");
     device.tap("Save the current settings");
+    device.tap("Replace");
     assert_eq!(device.on_top(), Some("profiles.list"));
     let saved = device.read("profiles.ini").unwrap();
     let first = saved.split("[profile.2]").next().unwrap();
     assert!(first.contains("core.night-mode = on"), "{saved}");
     device.hold("Profile 1");
     device.tap("Remove");
+    device.tap("Remove");
     let rows = device.rows();
     assert!(rows[0].starts_with("Profile 2"), "{rows:?}");
     device.hold("Profile 2");
     device.tap("Remove");
+    device.tap("Remove");
     assert!(device.parts().iter().any(|p| p.label == "No profiles yet"));
     let saved = device.read("profiles.ini").unwrap();
     assert_eq!(saved, "# format 2\n");
+}
+
+#[test]
+fn updating_and_removing_a_profile_ask_first() {
+    for device in [TOUCH, BUTTONS] {
+        let mut device = Device::new(device);
+        device.open();
+        device.add();
+        device.set(NIGHT, "on");
+        let saved = device.read("profiles.ini").unwrap();
+        let touch = device.kernel.device().input.touch;
+        for (option, keep) in [("Save the current settings", "Cancel"), ("Remove", "Keep")] {
+            if touch {
+                device.hold("Profile 1");
+                device.tap(option);
+            } else {
+                device.focus("Profile 1");
+                device.run(actions::MENU);
+                device.focus(option);
+                device.run(actions::CONFIRM);
+            }
+            assert_eq!(device.on_top(), Some("core.confirm-dialog"));
+            let parts = device.parts();
+            assert!(
+                parts.iter().any(|p| p.label.contains("Profile 1")),
+                "{parts:?}"
+            );
+            // Not the answer: nothing changes.
+            if touch {
+                device.tap(keep);
+            } else {
+                device.run(actions::CONFIRM);
+            }
+            assert_eq!(device.on_top(), Some("profiles.list"));
+            assert_eq!(device.read("profiles.ini").unwrap(), saved);
+        }
+        // Yes, by buttons too: up to it and confirm.
+        if !touch {
+            device.focus("Profile 1");
+            device.run(actions::MENU);
+            device.focus("Remove");
+            device.run(actions::CONFIRM);
+            device.run(actions::UP);
+            device.run(actions::CONFIRM);
+            assert_eq!(
+                device.read("profiles.ini").unwrap(),
+                "# format 2
+"
+            );
+        }
+    }
 }
 
 #[test]

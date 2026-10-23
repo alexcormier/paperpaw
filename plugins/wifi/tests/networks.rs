@@ -772,7 +772,11 @@ fn a_saved_network_not_in_reach_is_said_when_wanted() {
         .set_secret(paperpaw_sdk::wifi::keep("Home", "pw"));
     device.run(FETCH);
     device.radio(WifiEvent::State(WifiState::On));
-    device.radio(WifiEvent::Scanned(vec![network("Other", -40, true)]));
+    // Looked for a few times first.
+    for _ in 0..3 {
+        assert!(device.notices.borrow().is_empty());
+        device.radio(WifiEvent::Scanned(vec![network("Other", -40, true)]));
+    }
     assert_eq!(
         device.notices.borrow().last().map(String::as_str),
         Some("No saved Wi-Fi network in reach.")

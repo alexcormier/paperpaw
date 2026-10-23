@@ -337,6 +337,8 @@ const commands = {
   open: ({ path }) => line(["open", hex(path)]),
   set: ({ setting, value }) => line(["set", setting, hex(value)]),
   emit: ({ event, params }) => line(["emit", event, ...pairs(params)]),
+  /// Text into the text field shown, as if typed; confirmed with `enter`.
+  type: ({ text, enter }) => line([enter ? "type-enter" : "type", hex(text)]),
   /// Waits until the screen is `text` (its id) or shows it, at most
   /// `timeout` ms of the page's time, the device running meanwhile.
   until: async ({ text, timeout = 30000 }) => {

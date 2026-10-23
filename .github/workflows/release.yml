@@ -7,7 +7,10 @@ name: Release
 # signature file of its own, and the update file, both signed with the
 # firmware's key (the update is installed on the device); the list of the
 # plugins built in; the fingerprint native code plugins must have to run
-# on it (ADR 0024); their checksums. PaperPaw's own plugins that the store
+# on it (ADR 0024); their checksums. The core libraries code plugins for
+# the ESP32-S3 link with (`paperpaw-xtensa-std-<version>.tar.gz`,
+# tools/xtensa-std), built once here, with a checksum and a signature of
+# their own. PaperPaw's own plugins that the store
 # offers (tools/plugin-files) come as files for each device, signed with
 # the first-party plugin key, with their folders and their entries for
 # the plugin library (`paperpaw-<version>-catalogue.zip`). The web
@@ -180,8 +183,28 @@ jobs:
           name: handbook
           path: dist/paperpaw-handbook-*.zip
 
+  # The core libraries code plugins for the ESP32-S3 link with, built once
+  # on Linux: plugins built against them are the same on every computer,
+  # which -Zbuild-std is not (Cargo hashes the libraries' folder as the
+  # system writes it).
+  xtensa-std:
+    name: Core libraries for the ESP32-S3
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: ./.github/actions/xteink-tools
+        with:
+          device: x4-pro
+      - name: Build them
+        run: tools/xtensa-std/build.sh dist
+      - uses: actions/upload-artifact@v7
+        with:
+          name: xtensa-std
+          path: dist/paperpaw-xtensa-std-*.tar.gz
+
   firmware:
     name: Firmware (${{ matrix.device }})
+    needs: [xtensa-std]
     runs-on: ubuntu-latest
     strategy:
       matrix:
@@ -205,6 +228,17 @@ jobs:
         with:
           device: ${{ matrix.device }}
           espflash: true
+      # The release's core libraries, which its store plugins for the
+      # ESP32-S3 link with.
+      - uses: actions/download-artifact@v8
+        if: matrix.device != 'x4'
+        with:
+          name: xtensa-std
+          path: ${{ runner.temp }}/xtensa-std
+      - uses: ./.github/actions/xtensa-std
+        if: matrix.device != 'x4'
+        with:
+          archive: ${{ runner.temp }}/xtensa-std/paperpaw-xtensa-std-${{ env.VERSION }}.tar.gz
       # One image for the whole flash (with the partitions of
       # `partitions.csv`, from `espflash.toml`), and the app alone for
       # updates.
@@ -286,10 +320,16 @@ jobs:
         with:
           name: plugins-${{ matrix.device }}
           path: dist/plugins/*.ppn
+      # espup's toolchain is cached between runs (xteink-tools): the core
+      # libraries installed into it go again, so that no run finds those
+      # of another commit.
+      - name: The core libraries out of the cached toolchain
+        if: always() && matrix.device != 'x4'
+        run: rm -rf "$(rustc +esp --print sysroot)/lib/rustlib/xtensa-esp32s3-none-elf"
 
   release:
     name: Release
-    needs: [android, firmware, web, emulator, handbook]
+    needs: [android, xtensa-std, firmware, web, emulator, handbook]
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
@@ -310,10 +350,11 @@ jobs:
             --date "$(date -u +%F)"
           (cd dist/plugins && zip -q -X -r "../paperpaw-$VERSION-catalogue.zip" catalogue)
           mv dist/plugins/SHA256SUMS "dist/paperpaw-$VERSION-plugins.sha256"
-      # The emulators and the handbook: a checksum and a signature of
-      # their own each, with the firmware's key (the workshop pins its
-      # public key). The key is on the disk only while they are signed.
-      - name: Sign the emulators and the handbook
+      # The emulators, the handbook and the ESP32-S3's core libraries: a
+      # checksum and a signature of their own each, with the firmware's
+      # key (the workshop and plugin authors pin its public key). The key
+      # is on the disk only while they are signed.
+      - name: Sign the emulators, the handbook and the core libraries
         env:
           PAPERPAW_SIGNING_KEY: ${{ secrets.PAPERPAW_SIGNING_KEY }}
         run: |
@@ -322,7 +363,8 @@ jobs:
             exit 1
           fi
           cargo build -q --release -p paperpaw-sign
-          for file in dist/paperpaw-emu-"$VERSION"-*.zip "dist/paperpaw-handbook-$VERSION.zip"; do
+          for file in dist/paperpaw-emu-"$VERSION"-*.zip "dist/paperpaw-handbook-$VERSION.zip" \
+            "dist/paperpaw-xtensa-std-$VERSION.tar.gz"; do
             target/release/paperpaw-sign sign-asset "$file" "$file.sig"
             target/release/paperpaw-sign check-asset "$file" "$file.sig"
             (cd dist && sha256sum "$(basename "$file")" > "$(basename "$file").sha256")
@@ -367,6 +409,10 @@ jobs:
           done
           for part in "" .sha256 .sig; do
             assets+=("dist/paperpaw-handbook-$VERSION.zip$part")
+          done
+          # The ESP32-S3's core libraries, for building code plugins.
+          for part in "" .sha256 .sig; do
+            assets+=("dist/paperpaw-xtensa-std-$VERSION.tar.gz$part")
           done
           gh release create "$GITHUB_REF_NAME" "${prerelease[@]}" \
             --title "PaperPaw $VERSION" --notes-file dist/notes.md "${assets[@]}"

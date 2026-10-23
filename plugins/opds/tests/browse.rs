@@ -152,6 +152,27 @@ fn a_book_is_downloaded_into_the_library() {
     assert_eq!(browsing.storage.get(&book).unwrap(), b"PK the book");
 }
 
+/// A page the server answers with instead of the book is not saved as
+/// one.
+#[test]
+fn an_answer_that_is_no_book_is_not_saved() {
+    let (mut browsing, call) = browse_start();
+    browsing.answer(&call, 200, FEED);
+    browsing.run(actions::DOWN);
+    browsing.run(actions::DOWN);
+    browsing.run(actions::CONFIRM);
+    let call = browsing.request();
+    browsing.answer(&call, 200, "<html><body>Please sign in</body></html>");
+    let mut saved = 0;
+    let _listed = browsing
+        .storage
+        .list("Project Gutenberg", &mut |_| saved += 1);
+    assert_eq!(saved, 0);
+    assert!(!browsing.storage.exists(call.save_to.as_deref().unwrap()));
+    let shown = browsing.shown().join(" | ");
+    assert!(shown.contains("no book"), "{shown}");
+}
+
 #[test]
 fn what_goes_wrong_is_said() {
     let (mut browsing, call) = browse_start();

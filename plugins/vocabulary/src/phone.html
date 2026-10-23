@@ -145,7 +145,7 @@ function cardItem(card) {
   remove.textContent = S.delete;
   remove.onclick = async () => {
     if (!confirm(S.deleteCard + '\n' + card.front)) return;
-    await run(() => api('/api/card/delete?deck=' + deck.id + '&id=' + card.id, ''));
+    await run(() => api('/api/card/delete?deck=' + deck.id + '&id=' + card.id + '&v=' + card.v, ''));
     showDeck(deck);
   };
   const buttons = document.createElement('div');
@@ -202,7 +202,7 @@ $('delete-deck').onclick = async () => {
 $('card').onsubmit = async e => {
   e.preventDefault();
   const fields = { front: $('front').value, back: $('back-text').value, example: $('example').value };
-  if (editing) fields.id = editing.id;
+  if (editing) { fields.id = editing.id; fields.v = editing.v; }
   await run(() => api('/api/card?deck=' + deck.id, form(fields)));
   showDeck(deck);
 };

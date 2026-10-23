@@ -31,6 +31,12 @@ cargo +esp x4pro          # the X4 Pro: xtensa-esp32s3-none-elf, espup's toolcha
 cargo x4 --example crash  # an example, the same way
 ```
 
+The X4 Pro's build needs the core libraries of the PaperPaw release in
+the `esp` toolchain, installed once for each release
+(`tools/xtensa-std/install.sh paperpaw-xtensa-std-<version>.tar.gz`, see
+[its README](../../tools/xtensa-std/README.md)); the X4's come from
+rustup.
+
 Then the plugin's folder with the file in it, signed with the author's
 key (`paperpaw-sign key` makes one), onto the card (from the
 repository's top):

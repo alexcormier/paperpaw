@@ -496,7 +496,7 @@ impl Plugin for XtcFormat {
 
     fn register(&self, r: &mut Registrar) -> Result<(), RegisterError> {
         // What is decoded of each book, moved and removed with it.
-        r.add_book_data(Env::plugin_dir(PLUGIN.as_str()), "")?;
+        r.add_book_cache(Env::plugin_dir(PLUGIN.as_str()), "")?;
         r.add_format(
             FormatSpec::new(
                 FORMAT,

@@ -10,7 +10,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 pub(crate) use paperpaw_sdk::annotations::{
-    Annotation, Kind, Mark, add, changed, load, marks, note_of, remove, set_note, snippet,
+    Annotation, Kind, Mark, add, changed, load, marks, note_of, relocate, remove, set_note, snippet,
 };
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};

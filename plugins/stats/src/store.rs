@@ -25,12 +25,18 @@
 //! What cannot be read is never written over: changes to the books go
 //! through [`update_books`], which leaves `books.ini` as it is when it
 //! cannot be read whole.
+//!
+//! `books.ini` and a log written anew are written beside their place
+//! first (`books.new`, `pages.new`) and then put there. Where the old file
+//! is gone and the new one is not in its place yet (a power cut, or a
+//! rename that failed after taking the old file away), [`recover`] puts it
+//! there at the next start.
 
 use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_sdk::{Env, Storage, StorageError};
+use paperpaw_sdk::{Env, Storage, StorageError, files};
 
 /// A stay on a page (KOReader: a row of `page_stat_data`).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -253,6 +259,9 @@ pub(crate) fn update_books(
     storage: &dyn Storage,
     change: impl FnOnce(&mut Vec<Book>) -> bool,
 ) -> Result<bool, StorageError> {
+    // Books waiting beside their place are put there first: a new list
+    // would take their place.
+    recover_file(storage, &path("books.ini"), &path("books.new"));
     let mut books = load_books(storage)?;
     if !change(&mut books) {
         return Ok(false);
@@ -280,7 +289,76 @@ pub(crate) fn save_books(storage: &dyn Storage, books: &[Book]) -> Result<(), St
             b.finished,
         ));
     }
-    storage.write(&path("books.ini"), text.as_bytes())
+    let new = path("books.new");
+    if let Err(e) = storage.write(&new, text.as_bytes()) {
+        remove_temporary(storage, &new);
+        return Err(e);
+    }
+    let file = path("books.ini");
+    match storage.rename(&new, &file) {
+        // Where files cannot be renamed, written in place.
+        Err(StorageError::Unsupported) => {
+            remove_temporary(storage, &new);
+            storage.write(&file, text.as_bytes())
+        }
+        Err(e) => {
+            keep_if_gone(storage, &new, &file);
+            Err(e)
+        }
+        Ok(()) => Ok(()),
+    }
+}
+
+/// Puts the file written at `new` in the place of `file`. Where that
+/// fails, `new` goes only while `file` is still there: a failed rename
+/// may have taken it away (FAT removes it first), and then `new` is all
+/// there is, put in place by [`recover`].
+fn put_in_place(storage: &dyn Storage, new: &str, file: &str) -> Result<(), StorageError> {
+    let moved = files::move_to(storage, new, file);
+    if moved.is_err() {
+        keep_if_gone(storage, new, file);
+    }
+    moved
+}
+
+/// After a failed move of `new` to `file`: `new` goes, unless `file` is
+/// gone and `new` is all there is.
+fn keep_if_gone(storage: &dyn Storage, new: &str, file: &str) {
+    if storage.exists(file) {
+        remove_temporary(storage, new);
+    }
+}
+
+fn remove_temporary(storage: &dyn Storage, new: &str) {
+    #[expect(
+        clippy::let_underscore_must_use,
+        reason = "a temporary file left behind is written over the next time"
+    )]
+    let _ = storage.remove(new);
+}
+
+/// After a cut while `file` was written anew: the new one where the old
+/// one is gone already, else the unfinished new one goes.
+fn recover_file(storage: &dyn Storage, file: &str, new: &str) {
+    if !storage.exists(new) {
+        return;
+    }
+    if storage.exists(file) {
+        remove_temporary(storage, new);
+    } else {
+        #[expect(
+            clippy::let_underscore_must_use,
+            reason = "a file that cannot be moved now stays beside its place for the next try"
+        )]
+        let _ = storage.rename(new, file);
+    }
+}
+
+/// Puts the log and the books written anew in their place where a cut
+/// left them beside it. Called at start.
+pub(crate) fn recover(storage: &dyn Storage) {
+    recover_file(storage, &path("pages.bin"), &path("pages.new"));
+    recover_file(storage, &path("books.ini"), &path("books.new"));
 }
 
 /// An id for a new book: above those of `books` and of every stay in the
@@ -322,16 +400,13 @@ fn drop_cut_record(storage: &dyn Storage, log: &str, size: u64) -> Result<(), St
             storage.append(&new, &chunk[..n])?;
             at += n as u64;
         }
-        storage.rename(&new, log)
+        Ok(())
     })();
-    if copied.is_err() {
-        #[expect(
-            clippy::let_underscore_must_use,
-            reason = "a temporary file left behind is written over the next time"
-        )]
-        let _ = storage.remove(&new);
+    if let Err(e) = copied {
+        remove_temporary(storage, &new);
+        return Err(e);
     }
-    copied
+    put_in_place(storage, &new, log)
 }
 
 /// Replaces the log with the stays in `file` (records of book, page,
@@ -340,15 +415,12 @@ fn drop_cut_record(storage: &dyn Storage, log: &str, size: u64) -> Result<(), St
 /// After an error the log is as it was.
 pub(crate) fn replace_log(storage: &dyn Storage, file: &str) -> Result<(), StorageError> {
     let new = path("pages.new");
-    let result = write_log(storage, file, &new);
-    if result.is_err() {
-        #[expect(
-            clippy::let_underscore_must_use,
-            reason = "a temporary file left behind is written over the next time"
-        )]
-        let _ = storage.remove(&new);
+    if let Err(e) = write_log(storage, file, &new) {
+        remove_temporary(storage, &new);
+        return Err(e);
     }
-    result
+    // Swapped in at once, by a rename where the storage can.
+    put_in_place(storage, &new, &path("pages.bin"))
 }
 
 fn write_log(storage: &dyn Storage, file: &str, new: &str) -> Result<(), StorageError> {
@@ -372,7 +444,9 @@ fn write_log(storage: &dyn Storage, file: &str, new: &str) -> Result<(), Storage
             out.extend_from_slice(&stat.encode());
         }
         storage.append(new, &out)?;
-        if whole == 0 || n < chunk.len() {
+        // Only a read without a whole record is the end: a read may
+        // return less than asked for.
+        if whole == 0 {
             break;
         }
         at += whole as u64;
@@ -380,11 +454,9 @@ fn write_log(storage: &dyn Storage, file: &str, new: &str) -> Result<(), Storage
     // The day totals go first: whatever happens next, they are never
     // taken for those of the new log.
     match storage.remove(&path("days.bin")) {
-        Ok(()) | Err(StorageError::NotFound) => {}
-        Err(e) => return Err(e),
+        Ok(()) | Err(StorageError::NotFound) => Ok(()),
+        Err(e) => Err(e),
     }
-    // Swapped in at once, by a rename where the storage can.
-    paperpaw_sdk::files::move_to(storage, new, &path("pages.bin"))
 }
 
 /// Bytes before the days in `days.bin`.
@@ -554,7 +626,9 @@ pub(crate) fn scan(
         for record in chunk[..whole].as_chunks::<RECORD>().0 {
             visit(&PageStat::decode(record));
         }
-        if n < chunk.len() || whole == 0 {
+        // Only a read without a whole record is the end: a read may
+        // return less than asked for.
+        if whole == 0 {
             return Ok(());
         }
         at += whole as u64;
@@ -1046,6 +1120,132 @@ mod tests {
         let mut recent = 0;
         scan_recent(&storage, 1000 + 150 * 10, |_| recent += 1);
         assert_eq!(recent, 50);
+    }
+
+    /// A rename that takes the log away and then fails (as FAT may): the
+    /// new log stays, as it is all there is, and is put in place at the
+    /// next start; also where a cut record was dropped.
+    #[test]
+    fn a_failed_rename_leaves_the_new_log() {
+        let merged: Vec<u8> = [[1u32, 1, 100, 10, 300], [1, 2, 200, 20, 300]]
+            .iter()
+            .flat_map(|r| r.iter().flat_map(|v| v.to_be_bytes()))
+            .collect();
+        let storage = Faulty::new(MemoryStorage::new().with("merged", merged));
+        append(&storage, stat(1, 1, 100, 10)).unwrap();
+        storage.drop_target_on_rename();
+        assert!(replace_log(&storage, "merged").is_err());
+        assert!(storage.exists(&path("pages.bin")) || storage.exists(&path("pages.new")));
+        recover(&storage.inner);
+        let mut all = Vec::new();
+        scan(&storage, |s| all.push(*s)).unwrap();
+        assert_eq!(all, [stat(1, 1, 100, 10), stat(1, 2, 200, 20)]);
+        // A cut record dropped.
+        let storage = Faulty::new(MemoryStorage::new());
+        append(&storage, stat(1, 1, 100, 10)).unwrap();
+        storage
+            .inner
+            .append(&path("pages.bin"), &[1, 2, 3])
+            .unwrap();
+        storage.drop_target_on_rename();
+        assert!(append(&storage, stat(1, 2, 200, 20)).is_err());
+        assert!(storage.exists(&path("pages.bin")) || storage.exists(&path("pages.new")));
+        recover(&storage.inner);
+        let mut all = Vec::new();
+        scan(&storage, |s| all.push(*s)).unwrap();
+        assert_eq!(all, [stat(1, 1, 100, 10)]);
+        // The books, too.
+        let storage = Faulty::new(MemoryStorage::new());
+        let one = [Book {
+            id: 1,
+            title: String::from("Eins"),
+            ..Book::default()
+        }];
+        save_books(&storage, &one).unwrap();
+        storage.drop_target_on_rename();
+        let two = [
+            one[0].clone(),
+            Book {
+                id: 2,
+                ..Book::default()
+            },
+        ];
+        assert!(save_books(&storage, &two).is_err());
+        recover(&storage.inner);
+        assert_eq!(load_books(&storage.inner).unwrap(), two);
+    }
+
+    /// After a power cut between taking the old file away and putting the
+    /// new one in its place, the new one is put there; an unfinished new
+    /// one beside the old goes.
+    #[test]
+    fn files_left_beside_their_place_are_recovered() {
+        let storage = MemoryStorage::new();
+        let log = stat(1, 1, 100, 10).encode();
+        storage.write(&path("pages.new"), &log).unwrap();
+        storage
+            .write(
+                &path("books.new"),
+                b"[book.1]
+title = Eins
+",
+            )
+            .unwrap();
+        recover(&storage);
+        assert_eq!(storage.get(&path("pages.bin")).unwrap(), log);
+        assert_eq!(load_books(&storage).unwrap()[0].title, "Eins");
+        assert!(!storage.exists(&path("pages.new")));
+        assert!(!storage.exists(&path("books.new")));
+        // Unfinished, beside the old ones.
+        storage.write(&path("pages.new"), &[1, 2]).unwrap();
+        storage.write(&path("books.new"), b"[book.1").unwrap();
+        recover(&storage);
+        assert_eq!(storage.get(&path("pages.bin")).unwrap(), log);
+        assert_eq!(load_books(&storage).unwrap()[0].title, "Eins");
+        assert!(!storage.exists(&path("pages.new")));
+        assert!(!storage.exists(&path("books.new")));
+        // A change to the books before the next start recovers them first,
+        // rather than starting a new list.
+        let storage = MemoryStorage::new();
+        storage
+            .write(
+                &path("books.new"),
+                b"[book.1]
+title = Eins
+",
+            )
+            .unwrap();
+        let added = update_books(&storage, |books| {
+            books.push(Book {
+                id: 2,
+                ..Book::default()
+            });
+            true
+        });
+        assert_eq!(added, Ok(true));
+        assert_eq!(load_books(&storage).unwrap().len(), 2);
+    }
+
+    /// Reads that return less than asked for are no end of the log.
+    #[test]
+    fn short_reads_are_read_on() {
+        let storage = Faulty::new(MemoryStorage::new());
+        for i in 0..100u32 {
+            append(&storage, stat(1, i + 1, 1000 + i * 10, 9)).unwrap();
+        }
+        storage.read_short(100);
+        let mut count = 0;
+        scan(&storage, |_| count += 1).unwrap();
+        assert_eq!(count, 100);
+        let merged: Vec<u8> = (0..100u32)
+            .flat_map(|i| [1u32, i + 1, 2000 + i, 5, 300])
+            .flat_map(u32::to_be_bytes)
+            .collect();
+        storage.inner.write("merged", &merged).unwrap();
+        replace_log(&storage, "merged").unwrap();
+        let mut count = 0;
+        scan(&storage.inner, |_| count += 1).unwrap();
+        assert_eq!(count, 100);
     }
 }
 

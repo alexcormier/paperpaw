@@ -278,37 +278,61 @@ pub(crate) fn load(storage: &dyn Storage) -> Result<Vec<Rule>, StorageError> {
 }
 
 fn parse(text: &str) -> Vec<Rule> {
-    text.lines()
-        .filter_map(|line| {
-            let mut fields = line.split('\t');
-            let trigger = Trigger::parse(fields.next()?)?;
-            let kind = fields.next()?;
-            let target = fields.next()?;
-            let id = || Id::parse(target.trim()).ok();
-            let effect = match kind {
-                "action" => Effect::Action(id()?),
-                "switch-on" => Effect::Switch(id()?, true),
-                "switch-off" => Effect::Switch(id()?, false),
-                "set" => {
-                    let (id, value) = target.split_once('=')?;
-                    Effect::Number(Id::parse(id.trim()).ok()?, value.trim().parse().ok()?)
-                }
-                "message" => Effect::Message(target.to_string()),
-                _ => return None,
-            };
-            let on = fields.next().is_none_or(|f| f.trim() != "off");
-            let condition = Condition::parse(fields.next().unwrap_or_default())?;
-            Some(Rule {
-                trigger,
-                effect,
-                on,
-                condition,
-            })
-        })
-        .collect()
+    text.lines().filter_map(parse_line).collect()
 }
 
+/// The rule a line of the file describes, if this version reads it.
+fn parse_line(line: &str) -> Option<Rule> {
+    let mut fields = line.split('\t');
+    let trigger = Trigger::parse(fields.next()?)?;
+    let kind = fields.next()?;
+    let target = fields.next()?;
+    let id = || Id::parse(target.trim()).ok();
+    let effect = match kind {
+        "action" => Effect::Action(id()?),
+        "switch-on" => Effect::Switch(id()?, true),
+        "switch-off" => Effect::Switch(id()?, false),
+        "set" => {
+            let (id, value) = target.split_once('=')?;
+            Effect::Number(Id::parse(id.trim()).ok()?, value.trim().parse().ok()?)
+        }
+        "message" => Effect::Message(target.to_string()),
+        _ => return None,
+    };
+    let on = fields.next().is_none_or(|f| f.trim() != "off");
+    let condition = Condition::parse(fields.next().unwrap_or_default())?;
+    Some(Rule {
+        trigger,
+        effect,
+        on,
+        condition,
+    })
+}
+
+/// The lines of the file this version does not read (a newer version's,
+/// or damaged), as they are; an error where it cannot be read.
+fn unread_lines(storage: &dyn Storage) -> Result<Vec<u8>, StorageError> {
+    let data = match paperpaw_sdk::read_file(storage, &path(), 64 * 1024) {
+        Ok(data) => data,
+        Err(StorageError::NotFound) => return Ok(Vec::new()),
+        Err(error) => return Err(error),
+    };
+    let mut unread = Vec::new();
+    for line in data.split(|&b| b == b'\n') {
+        let text = core::str::from_utf8(line.strip_suffix(b"\r").unwrap_or(line)).ok();
+        let read = text.is_some_and(|t| t.trim().is_empty() || parse_line(t).is_some());
+        if !read {
+            unread.extend_from_slice(line);
+            unread.push(b'\n');
+        }
+    }
+    Ok(unread)
+}
+
+/// Keeps `rules`, with the lines of the file this version does not read
+/// as they are; nothing is written where the file cannot be read.
 pub(crate) fn save(storage: &dyn Storage, rules: &[Rule]) -> Result<(), StorageError> {
+    let unread = unread_lines(storage)?;
     let mut text = String::new();
     for rule in rules {
         let (kind, target) = match &rule.effect {
@@ -331,7 +355,9 @@ pub(crate) fn save(storage: &dyn Storage, rules: &[Rule]) -> Result<(), StorageE
         text.push_str(&line);
         text.push('\n');
     }
-    storage.write(&path(), text.as_bytes())
+    let mut data = text.into_bytes();
+    data.extend_from_slice(&unread);
+    storage.write(&path(), &data)
 }
 
 /// The rules, read once and kept: every event looks at them, and only
@@ -562,5 +588,36 @@ mod tests {
         );
         assert!(!rules[4].on);
         assert_eq!(rules[4].condition, Condition::Charging);
+    }
+
+    /// Lines it does not read (a trigger, effect or condition of a newer
+    /// version, or damaged) are written back as they are when the rules
+    /// it reads are changed, even all of them removed.
+    #[test]
+    fn lines_it_cannot_read_are_kept() {
+        let newer = "moon full\tmessage\tLook up\ton";
+        let condition = "start\tmessage\tHello\ton\tif-raining";
+        let broken = b"time 25:00\tswitch-on\tcore.night-mode\ton\t\xff";
+        let mut text = include_bytes!("../testdata/rules.txt.v1").to_vec();
+        for line in [newer.as_bytes(), condition.as_bytes(), broken] {
+            text.extend_from_slice(line);
+            text.push(b'\n');
+        }
+        let storage = MemoryStorage::new().with(&path(), text);
+        let mut rules = load(&storage).unwrap();
+        assert_eq!(rules.len(), 5);
+        rules.remove(0);
+        save(&storage, &rules).unwrap();
+        assert_eq!(load(&storage).unwrap().len(), 4);
+        save(&storage, &[]).unwrap();
+        let kept = storage.get(&path()).unwrap();
+        let lines: Vec<&[u8]> = kept.split(|&b| b == b'\n').collect();
+        for line in [newer.as_bytes(), condition.as_bytes(), broken] {
+            assert!(lines.contains(&line), "{}", String::from_utf8_lossy(&kept));
+        }
+        // Not written over where the file cannot be read.
+        let unreadable = MemoryStorage::new().with(&path(), alloc::vec![b'x'; 70 * 1024]);
+        assert!(save(&unreadable, &[]).is_err());
+        assert_eq!(unreadable.get(&path()).unwrap().len(), 70 * 1024);
     }
 }

@@ -6,7 +6,15 @@
 //! test pages* says); a held *Select* or a held finger starts
 //! it over.
 //!
-//! It binds itself to the home slot with the lowest regular priority, so it
+//! A guided device check (`check`) walks through every part of a device
+//! one page at a time, for bringing up new devices: the screen, buttons,
+//! touch, light, battery, card, clock, Wi-Fi, sleep and memory. It writes
+//! a report to the card to paste into a pull request
+//! ([`steps::REPORT`]). It is under Tools where PaperPaw is the device's
+//! firmware, which has this plugin in its builds for developers alone;
+//! elsewhere the action [`OPEN_CHECK`] opens it.
+//!
+//! The test screen binds itself to the home slot with the lowest regular priority, so it
 //! only appears until a real home screen plugin is installed, or when a
 //! user binds it explicitly:
 //!
@@ -19,20 +27,27 @@
 
 extern crate alloc;
 
+mod check;
+pub mod steps;
+
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
-use paperpaw_sdk::builtin::{actions, fonts, groups, slots};
+use paperpaw_sdk::builtin::{actions, fonts, groups, menus, slots};
 use paperpaw_sdk::semantics::Role;
 use paperpaw_sdk::setting::Setting;
 use paperpaw_sdk::{
-    ActionSpec, Arg, Canvas, Color, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest, Metrics,
-    Plugin, Priority, Rect, RefreshMode, RegisterError, Registrar, Screen, ScreenSpec, SettingSpec,
+    ActionSpec, Arg, Canvas, Color, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Manifest,
+    MenuEntry, MenuNeed, Metrics, Params, Plugin, Priority, Rect, RefreshMode, RegisterError,
+    Registrar, Screen, ScreenSpec, SettingSpec,
 };
 
 pub const PLUGIN: Id = Id::new_static("diagnostics");
 pub const SCREEN: Id = Id::new_static("diagnostics.screen");
 pub const RESET: Id = Id::new_static("diagnostics.reset");
+/// The device check's screen, and the action that opens it.
+pub const CHECK: Id = Id::new_static("diagnostics.check");
+pub const OPEN_CHECK: Id = Id::new_static("diagnostics.open-check");
 pub const PAGES: Setting<i64> = Setting::new("diagnostics.pages");
 
 /// The diagnostics plugin.
@@ -60,7 +75,7 @@ static HOW: [(&str, &str); 2] = [
 impl Plugin for Diagnostics {
     fn manifest(&self) -> Manifest {
         Manifest::new(PLUGIN, "Diagnostics", paperpaw_sdk::package_version!())
-            .description("A test screen for gray levels, buttons, touch and refresh modes.")
+            .description("A test screen and a guided check of every part of a device.")
             .how(&HOW)
             .uses(paperpaw_sdk::Uses::NOTHING)
     }
@@ -73,6 +88,21 @@ impl Plugin for Diagnostics {
         ))?;
         r.bind_slot(slots::HOME, SCREEN, Priority::FALLBACK)?;
         r.add_action(ActionSpec::new(RESET, "diagnostics.action.reset"))?;
+        r.add_screen(ScreenSpec::new(
+            CHECK,
+            "diagnostics.check.title",
+            Box::new(|env, _| check::make(env)),
+        ))?;
+        r.add_action(
+            ActionSpec::new(OPEN_CHECK, "diagnostics.check.title").handler(|_, out| {
+                out.push(Command::OpenScreen(CHECK, Params::new()));
+            }),
+        )?;
+        r.add_menu_entry(MenuEntry::new(menus::TOOLS, OPEN_CHECK).order(99))?;
+        // Apps with this plugin built in (Android) keep their Tools for
+        // readers.
+        r.set_menu_need(OPEN_CHECK, MenuNeed::Firmware)?;
+        r.add_icon(OPEN_CHECK, Cow::Borrowed("list-check"))?;
         r.add_settings(&SETTINGS)?;
         r.add_keymap(Cow::Borrowed(include_str!("../keymap.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;

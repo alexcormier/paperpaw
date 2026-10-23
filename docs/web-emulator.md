@@ -72,6 +72,7 @@ stops the device too), the frame says so before it starts again:
 | `{ type: "open", path }` | Opens a book of the card in the reader | `{ answer: {} }` |
 | `{ type: "set", setting, value }` | Sets a setting, the value as configuration files write it (`"on"`, `"14"`) | `{ answer: {} }`, or `error` with why |
 | `{ type: "emit", event, params? }` | Sends an event, as a plugin would | `{ answer: {} }` |
+| `{ type: "type", text, enter? }` | Types into the text field shown (the keyboard's) as if on its keys; with `enter: true` then confirms it | `{ answer: {} }`, or `error` (`no text field`) |
 | `{ type: "until", text, timeout? }` | Waits until the screen is `text` (its id) or shows it in a part's label, the device running meanwhile; at most `timeout` ms (30000) | `{}`, or `error` (`not shown in … ms`) |
 | `{ type: "expect", text }` | The same, now | `{}`, or `error` (`not shown`) |
 | `{ type: "fixtures", fixtures: [{ method?, url, status?, headers?, body?, delay? }] }` | Recorded answers for plugins' requests, in place of those before; kept for every device started after (also before `start`) | `{}` |
@@ -122,7 +123,7 @@ They answer in JSON:
 
 | Line | Answer |
 |---|---|
-| `run <action>`, `slot <slot> [<key>=<hex> …]`, `show <screen> [<key>=<hex> …]`, `open <hex path>`, `set <setting> <hex value>`, `emit <event> [<key>=<hex> …]`, `press <button>`, `hold <button> <ms>`, `touch <down\|move\|up> <x> <y>`, `time set <unix ms>`, `mkdir <path>`, `rm <path>`, `mv <hex> <hex>` | `{}` |
+| `run <action>`, `slot <slot> [<key>=<hex> …]`, `show <screen> [<key>=<hex> …]`, `open <hex path>`, `set <setting> <hex value>`, `emit <event> [<key>=<hex> …]`, `type <hex>`, `type-enter <hex>`, `press <button>`, `hold <button> <ms>`, `touch <down\|move\|up> <x> <y>`, `time set <unix ms>`, `mkdir <path>`, `rm <path>`, `mv <hex> <hex>` | `{}` |
 | `screen` | `{ "screen": id }` |
 | `screens` | `{ "screens": [ids, the one shown last] }` |
 | `describe` | `{ "screen": id, "parts": [{ "role", "x", "y", "width", "height", "state", "focused", "on", "label" }] }`; `state` is `focused`, `on`, `off` joined by `+`, or `-`, the same as `focused` (true, false) and `on` (true, false, null: no switch) |

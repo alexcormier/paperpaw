@@ -351,7 +351,11 @@ fn a_page_reset_asks_first_and_sets_its_settings_back() {
         search(&mut app, "font size");
         choose(&mut app, "Font size");
         choose(&mut app, "Reset to defaults");
-        assert!(app.shows("Reset the settings of"), "{}", app.described());
+        assert!(
+            app.shows("accounts and passwords stay."),
+            "{}",
+            app.described()
+        );
         choose(&mut app, "Cancel");
         assert!(app.kernel.settings().is_set("core.font-size"));
         choose(&mut app, "Reset to defaults");
@@ -373,12 +377,103 @@ fn everything_reset_keeps_the_language() {
         let mut app = App::new(device, storage.clone());
         app.run(actions::SETTINGS);
         choose(&mut app, "Alle Einstellungen zurücksetzen");
-        assert!(app.shows("Sprache bleibt"), "{}", app.described());
+        assert!(app.shows("Passwörter bleiben."), "{}", app.described());
         choose(&mut app, "Ja, zurücksetzen");
         let settings = app.kernel.settings();
         assert!(!settings.is_set("core.font-size"));
         assert!(!settings.is_set("files.sort"));
         assert_eq!(settings.text("core.language"), "de");
+    }
+}
+
+/// A plugin with an account: a server typed in (kept on a reset), a
+/// password (a secret) and a number (reset), on a page of its own.
+struct Account;
+
+const ACCOUNT_PAGE: Id = Id::new_static("acct.page");
+static ACCOUNT_SECRET: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().secret();
+static ACCOUNT_SETTINGS: [paperpaw_sdk::SettingSpec; 3] = [
+    paperpaw_sdk::SettingSpec::fixed_text("acct.server", "Server", "", ACCOUNT_PAGE)
+        .kept_on_reset(),
+    paperpaw_sdk::SettingSpec::fixed_text("acct.password", "Password", "", ACCOUNT_PAGE)
+        .with_extra(&ACCOUNT_SECRET),
+    paperpaw_sdk::SettingSpec::fixed_number("acct.count", "Count", 1, 50, 10, ACCOUNT_PAGE),
+];
+
+impl paperpaw_sdk::Plugin for Account {
+    fn manifest(&self) -> paperpaw_sdk::Manifest {
+        paperpaw_sdk::Manifest::new(
+            Id::new_static("acct"),
+            "Account",
+            paperpaw_sdk::Version::new(0, 1, 0),
+        )
+        .uses(paperpaw_sdk::Uses::NOTHING)
+    }
+
+    fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
+        r.add_setting_group(paperpaw_sdk::SettingGroupSpec::new(ACCOUNT_PAGE, "Account"))?;
+        r.add_settings(&ACCOUNT_SETTINGS)
+    }
+}
+
+/// The app with an account set up: its server, its password and a count.
+fn with_account(device: DeviceInfo, config: &str) -> App {
+    let config = format!(
+        "{config}[acct]
+server = https://example.org
+count = 20
+"
+    );
+    let mut app = App::with_plugin(device, Shared::memory(&config, &[]), Account);
+    app.kernel
+        .set_secret(paperpaw_sdk::secrets::SecretChange::keep(
+            "acct.password",
+            "Password",
+            "hunter2",
+        ));
+    app
+}
+
+#[test]
+fn a_page_reset_keeps_the_account_and_its_password() {
+    for device in DEVICES {
+        let mut app = with_account(device, "");
+        app.open_screen(
+            Id::new_static(GROUP),
+            Params::new().with(params::ID, ACCOUNT_PAGE.as_str()),
+        );
+        choose(&mut app, "Reset to defaults");
+        choose(&mut app, "Yes, reset");
+        let settings = app.kernel.settings();
+        assert!(!settings.is_set("acct.count"));
+        assert_eq!(settings.text("acct.server"), "https://example.org");
+        assert_eq!(app.kernel.secrets().get("acct.password"), Some("hunter2"));
+        assert!(
+            app.storage
+                .config()
+                .contains("server = https://example.org")
+        );
+    }
+}
+
+#[test]
+fn everything_reset_keeps_accounts_folders_and_passwords() {
+    for device in DEVICES {
+        let mut app = with_account(
+            device,
+            "[core]
+library-folder = Books/Mine
+",
+        );
+        app.run(actions::SETTINGS);
+        choose(&mut app, "Reset all settings");
+        assert!(app.shows("passwords stay"), "{}", app.described());
+        choose(&mut app, "Yes, reset");
+        let settings = app.kernel.settings();
+        assert!(!settings.is_set("acct.count"));
+        assert_eq!(settings.text("acct.server"), "https://example.org");
+        assert_eq!(settings.text("core.library-folder"), "Books/Mine");
+        assert_eq!(app.kernel.secrets().get("acct.password"), Some("hunter2"));
     }
 }
 

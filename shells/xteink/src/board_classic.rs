@@ -135,7 +135,7 @@ pub struct Board {
     pub timers1: TimerGroup<'static, esp_hal::peripherals::TIMG1<'static>>,
     pub rtc: RTC_TIMER<'static>,
     pub low_power: LPWR<'static>,
-    #[cfg(feature = "remote")]
+    /// The USB serial unit: the log, the cable transfer, the remote.
     pub usb: esp_hal::peripherals::USB_DEVICE<'static>,
     pub radio: (
         esp_hal::peripherals::WIFI<'static>,
@@ -233,7 +233,6 @@ impl Board {
             timers1: TimerGroup::new(p.TIMG1),
             rtc: p.RTC_TIMER,
             low_power: p.LPWR,
-            #[cfg(feature = "remote")]
             usb: p.USB_DEVICE,
             radio: (p.WIFI, p.FROM_CPU_INTR0),
             delay,

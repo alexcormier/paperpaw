@@ -220,6 +220,39 @@ fn an_item_moves_by_buttons_and_is_kept() {
     );
 }
 
+/// A widget of a plugin not loaded now (switched off, safe mode, an
+/// update on trial) is not shown, and stays on the page when another
+/// item moves or one is added: it shows again once its plugin is back.
+#[test]
+fn widgets_of_plugins_not_loaded_stay_when_the_page_is_edited() {
+    let config = PAGE.replace(
+        "home.continue 0/3 4x2",
+        "home.continue 0/3 4x2, x.unknown 3/3 1x1",
+    );
+    let mut app = App::new(X4, Shared::memory(&config, &[]));
+    edit(&mut app);
+    options_of(&mut app, "Files");
+    choose(&mut app, "Move");
+    app.run(actions::RIGHT);
+    app.run(actions::CONFIRM);
+    assert_eq!(
+        item(&app, "tool:file-manager.open").as_deref(),
+        Some("tool:file-manager.open 1/1 1x1")
+    );
+    assert_eq!(
+        item(&app, "x.unknown").as_deref(),
+        Some("x.unknown 3/3 1x1")
+    );
+    // Removed from the page: the hidden widget stays too.
+    options_of(&mut app, "Files");
+    choose(&mut app, "Remove");
+    assert_eq!(item(&app, "tool:file-manager.open"), None);
+    assert_eq!(
+        item(&app, "x.unknown").as_deref(),
+        Some("x.unknown 3/3 1x1")
+    );
+}
+
 #[test]
 fn an_item_is_sized_by_buttons_and_is_kept() {
     let mut app = App::new(X4, Shared::memory(PAGE, &[]));

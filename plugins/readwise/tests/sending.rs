@@ -218,8 +218,11 @@ fn an_empty_token_is_not_kept() {
     assert_eq!(h.kernel.secrets().get(SECRET), None);
 }
 
+/// A refused token is kept (Readwise may refuse it for a while, or the
+/// reader may have typed the right one wrong): nothing is sent by itself
+/// until the next export, which asks for it anew.
 #[test]
-fn a_refused_token_is_removed_and_asked_for_again() {
+fn a_refused_token_is_kept_and_asked_for_again() {
     for status in [401, 403] {
         let mut h = Harness::with_token("old");
         let calls = h.export(NOTES);
@@ -229,10 +232,57 @@ fn a_refused_token_is_removed_and_asked_for_again() {
             "{}",
             h.told()
         );
-        assert_eq!(h.kernel.secrets().get(SECRET), None);
+        assert_eq!(h.kernel.secrets().get(SECRET), Some("old"));
+        h.send("readwise.retry", ());
+        assert!(h.requests().is_empty(), "no retries");
         assert!(h.export(NOTES).is_empty());
         assert!(h.told().contains("enter your access token"));
+        assert_eq!(h.kernel.secrets().get(SECRET), Some("old"));
+        h.send(
+            "readwise.token-entered",
+            Typed::new(String::from("new"), Params::new()),
+        );
+        let calls = h.requests();
+        assert_eq!(calls.len(), 1, "{calls:?}");
+        assert!(
+            calls[0]
+                .headers
+                .contains(&(String::from("Authorization"), String::from("Token new")))
+        );
     }
+}
+
+/// A new token kept after one was refused (entered on the passwords and
+/// keys page, say) is sent by itself again; so is the refused one once
+/// entered anew, also when nothing waits then.
+#[test]
+fn a_new_token_after_a_refused_one_is_sent_by_itself() {
+    let mut h = Harness::with_token("old");
+    let calls = h.export(NOTES);
+    h.answer(&calls[0], 401);
+    h.kernel
+        .set_secret(SecretChange::keep(SECRET, "readwise.token", "new"));
+    h.send("readwise.retry", ());
+    let calls = h.requests();
+    assert_eq!(calls.len(), 1, "{calls:?}");
+    assert!(
+        calls[0]
+            .headers
+            .contains(&(String::from("Authorization"), String::from("Token new")))
+    );
+    h.answer(&calls[0], 401);
+    // Nothing waits when the same token is entered anew.
+    h.kernel
+        .storage()
+        .remove(".paperpaw/plugins/readwise/waiting.txt")
+        .unwrap();
+    h.send(
+        "readwise.token-entered",
+        Typed::new(String::from("new"), Params::new()),
+    );
+    assert!(h.requests().is_empty());
+    let calls = h.export(NOTES);
+    assert_eq!(calls.len(), 1, "{calls:?}");
 }
 
 #[test]

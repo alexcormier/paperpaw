@@ -376,9 +376,9 @@ fn what_is_typed_is_kept_trimmed_and_the_password_as_a_secret() {
     // The password is no setting.
     let config = String::from_utf8(d.storage.0.get("paperpaw.ini").unwrap_or_default()).unwrap();
     assert!(!config.contains("new secret"), "{config}");
-    // Typed empty: removed.
+    // Typed empty (confirmed by mistake): kept.
     d.typed("password", "   ");
-    assert_eq!(d.password(), None);
+    assert_eq!(d.password().as_deref(), Some("new secret"));
     assert!(d.shown().contains("Password"));
     // Fields that do not exist change nothing.
     d.typed("service", "joplin.service.cloud");

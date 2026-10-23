@@ -219,4 +219,8 @@ impl Storage for Traced {
     fn free_space(&self) -> Option<u64> {
         self.0.free_space()
     }
+
+    fn total_space(&self) -> Option<u64> {
+        self.0.total_space()
+    }
 }

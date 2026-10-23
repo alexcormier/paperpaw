@@ -167,6 +167,39 @@ fn nothing_typed_keeps_the_secret_as_it_was() {
     }
 }
 
+/// Answers the question shown: yes (up to it and confirm, or a tap on
+/// `yes`), or no.
+fn answer(app: &mut App, yes: bool, label: &str) {
+    assert_eq!(app.screen(), "core.confirm-dialog", "{}", app.described());
+    if touch(app) {
+        let button = app
+            .parts()
+            .into_iter()
+            .find(|p| p.role == Role::Button && p.label == label)
+            .unwrap_or_else(|| panic!("no button {label}"));
+        app.tap(center(button.area));
+    } else {
+        if yes {
+            app.run(actions::UP);
+        }
+        app.run(actions::CONFIRM);
+    }
+}
+
+#[test]
+fn removing_a_secret_asks_first() {
+    for device in DEVICES {
+        let mut app = with_secret(device);
+        choose(&mut app, "Test service key");
+        choose(&mut app, "Remove");
+        assert!(app.shows("Remove “Test service"), "{}", app.described());
+        answer(&mut app, false, "Keep");
+        assert_eq!(app.screen(), "settings.secret");
+        assert_eq!(app.kernel.secrets().get("test.key"), Some(VALUE));
+        hidden_everywhere(&mut app, VALUE);
+    }
+}
+
 #[test]
 fn a_secret_removed_is_gone_with_its_file_and_entry() {
     for device in DEVICES {
@@ -174,6 +207,7 @@ fn a_secret_removed_is_gone_with_its_file_and_entry() {
         assert!(app.storage.exists(FILE));
         choose(&mut app, "Test service key");
         choose(&mut app, "Remove");
+        answer(&mut app, true, "Remove");
         assert_eq!(app.screen(), "settings.secrets");
         assert_eq!(app.kernel.secrets().get("test.key"), None);
         assert!(

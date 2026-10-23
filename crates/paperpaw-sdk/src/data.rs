@@ -38,18 +38,51 @@ const OLD_NAME: &str = "quireink"; // now paperpaw
 
 /// Moves what PaperPaw kept on the card under its old name (its folder and
 /// configuration file) to where it is kept now, once: the kernel does it as
-/// it starts.
+/// it starts. Where the folder is there under both names (a shell may
+/// write to it before the kernel starts), it moves each entry the new one
+/// does not have, however deep; a file the new one has stays as it is, and
+/// the old one is left under the old name.
 pub fn take_over_old_name(storage: &dyn Storage) {
-    // A file or a directory.
-    let there = |path: &str| storage.exists(path) || storage.list(path, &mut |_| {}).is_ok();
     let names = [
         (format!(".{OLD_NAME}"), DIR),
         (format!("{OLD_NAME}.ini"), crate::builtin::CONFIG_FILE),
     ];
     for (old, new) in names {
-        if !there(new) && there(&old) {
-            let _ = storage.rename(&old, new);
-        }
+        take_over(storage, &old, new, TAKE_OVER_DEPTH);
+    }
+}
+
+/// How many folders deep the old folder is merged into the new one: deeper
+/// than PaperPaw keeps anything, and a bound on the work at each start.
+const TAKE_OVER_DEPTH: u8 = 8;
+
+/// Moves `old` to `new`. Where both are folders, it moves what `old` holds
+/// entry by entry, down to `depth` folders deep.
+fn take_over(storage: &dyn Storage, old: &str, new: &str, depth: u8) {
+    let folder = |path: &str| storage.list(path, &mut |_| {}).is_ok();
+    // A file or a folder.
+    let there = |path: &str| storage.exists(path) || folder(path);
+    if !there(old) {
+        return;
+    }
+    if !there(new) {
+        // Not moved: tried again at the next start.
+        let _ = storage.rename(old, new);
+        return;
+    }
+    if depth == 0 || storage.exists(old) || storage.exists(new) {
+        return;
+    }
+    let mut names = alloc::vec::Vec::new();
+    if storage
+        .list(old, &mut |entry| names.push(String::from(entry.name)))
+        .is_err()
+    {
+        return;
+    }
+    for name in names {
+        let (old, new) = (format!("{old}/{name}"), format!("{new}/{name}"));
+        take_over(storage, &old, &new, depth - 1);
     }
 }
 
@@ -175,10 +208,13 @@ impl Format {
     pub fn save(&self, storage: &dyn Storage, path: &str, body: &str) -> Result<(), Error> {
         let mut head = [0u8; 32];
         if let Ok(n) = storage.read_at(path, 0, &mut head) {
-            let head = core::str::from_utf8(&head[..n]).unwrap_or_default();
-            // The first line may be cut: only a whole one counts.
-            if head.contains('\n') {
-                let version = Self::version_of(head);
+            let head = &head[..n];
+            let head = head.strip_prefix("\u{feff}".as_bytes()).unwrap_or(head);
+            // The first line may be cut: only a whole one counts. What
+            // follows it may be a character cut in two, so it is left out.
+            if let Some(end) = head.iter().position(|&b| b == b'\n') {
+                let line = core::str::from_utf8(&head[..end]).unwrap_or_default();
+                let version = Self::version_of(line);
                 if version > self.version {
                     return Err(Error::Newer(version));
                 }

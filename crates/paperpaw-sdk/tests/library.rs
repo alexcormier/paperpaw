@@ -468,6 +468,7 @@ fn book_data_entries_are_named_by_sixteen_small_hex_digits() {
     let data = BookData {
         folder: Cow::Borrowed("cache"),
         prefix: Cow::Borrowed("epub-"),
+        ..BookData::default()
     };
     let key = "0123456789abcdef";
     assert_eq!(data.key_of(&format!("epub-{key}")), Some((key, "")));

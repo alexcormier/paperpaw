@@ -232,7 +232,9 @@ pub(crate) fn each(
         for record in chunk[..whole].chunks_exact(size) {
             visit(record);
         }
-        if whole == 0 || n < chunk.len() {
+        // Only a read without a whole record is the end: a read may
+        // return less than asked for.
+        if whole == 0 {
             return Ok(());
         }
         at += whole as u64;

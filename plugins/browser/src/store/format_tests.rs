@@ -18,7 +18,7 @@ use super::{Entry, HISTORY, history_path, load, page_path, remember, save};
 fn history_of_version_1_is_read_and_written_alike() {
     let v1 = include_str!("../../testdata/history.txt.v1");
     let storage = MemoryStorage::new().with(&history_path(), v1);
-    let entries = load(&storage, &history_path()).unwrap();
+    let entries = load(&storage, &history_path()).unwrap().unwrap();
     assert_eq!(entries.len(), 3);
     assert_eq!(
         entries[0].title,
@@ -40,7 +40,7 @@ fn history_of_version_1_is_read_and_written_alike() {
 fn bookmarks_of_version_1_are_written_alike() {
     let v1 = include_str!("../../testdata/bookmarks.txt.v1");
     let storage = MemoryStorage::new().with("b.txt", v1);
-    let entries = load(&storage, "b.txt").unwrap();
+    let entries = load(&storage, "b.txt").unwrap().unwrap();
     save(&storage, "again.txt", &entries);
     assert_eq!(storage.get("again.txt").unwrap(), v1.as_bytes());
 }
@@ -48,9 +48,26 @@ fn bookmarks_of_version_1_are_written_alike() {
 #[test]
 fn a_list_never_saved_is_none_and_an_empty_one_is_empty() {
     let storage = MemoryStorage::new();
-    assert_eq!(load(&storage, "never.txt"), None);
+    assert_eq!(load(&storage, "never.txt"), Ok(None));
     save(&storage, "empty.txt", &[]);
-    assert_eq!(load(&storage, "empty.txt"), Some(Vec::new()));
+    assert_eq!(load(&storage, "empty.txt"), Ok(Some(Vec::new())));
+}
+
+/// A list that cannot be read is no list at all, and the history is
+/// not written over it.
+#[test]
+fn an_unreadable_list_is_an_error_and_kept() {
+    let kept = b"Caf\xe9\thttps://c.example/\n".to_vec();
+    let storage = MemoryStorage::new().with(&history_path(), kept.clone());
+    assert_eq!(
+        load(&storage, &history_path()),
+        Err(paperpaw_sdk::StorageError::InvalidData)
+    );
+    assert_eq!(
+        remember(&storage, Entry::new("T", "https://t.example/")),
+        None
+    );
+    assert_eq!(storage.get(&history_path()).unwrap(), kept);
 }
 
 fn text() -> impl Strategy<Value = String> {
@@ -66,12 +83,22 @@ proptest! {
         let storage = MemoryStorage::new();
         save(&storage, "l.txt", &entries);
         let clean = |s: &str| s.replace(['\t', '\n', '\r'], " ");
+        // A byte order mark that starts the file is read as one, not as
+        // part of the first title.
         let expected: Vec<Entry> = entries
             .iter()
-            .filter(|e| !e.url.is_empty())
-            .map(|e| Entry::new(&clean(&e.title), &clean(&e.url)))
+            .enumerate()
+            .filter(|(_, e)| !e.url.is_empty())
+            .map(|(i, e)| {
+                let title = clean(&e.title);
+                let title = match title.strip_prefix('\u{feff}') {
+                    Some(rest) if i == 0 => String::from(rest),
+                    _ => title,
+                };
+                Entry::new(&title, &clean(&e.url))
+            })
             .collect();
-        prop_assert_eq!(load(&storage, "l.txt").unwrap(), expected);
+        prop_assert_eq!(load(&storage, "l.txt").unwrap().unwrap(), expected);
     }
 
     #[test]
@@ -81,7 +108,7 @@ proptest! {
         for n in &urls {
             let url = format!("https://h.example/{n}");
             storage.write(&page_path(&url), b"page").unwrap();
-            last = remember(&storage, Entry::new("T", &url));
+            last = remember(&storage, Entry::new("T", &url)).unwrap();
         }
         prop_assert!(last.len() <= HISTORY);
         let first = format!("https://h.example/{}", urls[urls.len() - 1]);

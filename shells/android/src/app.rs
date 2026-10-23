@@ -829,6 +829,10 @@ impl Storage for Volumes {
         self.0.free_space()
     }
 
+    fn total_space(&self) -> Option<u64> {
+        self.0.total_space()
+    }
+
     fn local_path(&self, path: &str, with: &mut dyn FnMut(&str)) {
         self.0.local_path(path, with);
     }

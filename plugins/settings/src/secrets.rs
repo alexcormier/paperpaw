@@ -8,7 +8,7 @@ use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::event::Event;
-use paperpaw_sdk::replies::Typed;
+use paperpaw_sdk::replies::{Confirmed, Typed};
 use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{Canvas, Command, Cx, Env, Gesture, GestureKind, Handled, Id, Params, Screen};
@@ -24,6 +24,8 @@ pub(crate) const OPEN: Id = Id::new_static("settings.secrets.open");
 /// Emitted by the keyboard with a secret typed anew (parameters `id` and
 /// `text`).
 pub(crate) const ENTERED: Event<Typed> = Event::new("settings.secret-entered");
+/// The answer to "remove it?": it cannot be had back.
+const REMOVE: Event<Confirmed> = Event::new("settings.secret-remove");
 
 /// How a kept secret shows.
 const HIDDEN: &str = "••••••";
@@ -181,12 +183,29 @@ impl SecretPage {
                     .with(ID, self.id.clone())
                     .command(),
             ),
-            Some(Choice::Remove) => {
-                cx.command(Command::SetSecret(SecretChange::remove(&self.id)));
-                cx.command(Command::Back);
+            // Kept: asked first, as it cannot be had back.
+            Some(Choice::Remove) if cx.env().secrets.has(&self.id) => {
+                let env = *cx.env();
+                let question = env.i18n.format(
+                    "settings.secret.remove.question",
+                    &[("name", paperpaw_sdk::Arg::Str(&self.title))],
+                );
+                cx.command(
+                    paperpaw_sdk::ask::confirm(question, &REMOVE)
+                        .text(env.i18n.tr("settings.secret.remove.text"))
+                        .yes(env.i18n.tr("settings.secret.remove"))
+                        .no(env.i18n.tr("settings.secret.keep"))
+                        .command(),
+                );
             }
+            Some(Choice::Remove) => self.remove(cx),
             None => {}
         }
+    }
+
+    fn remove(&self, cx: &mut Cx<'_, '_>) {
+        cx.command(Command::SetSecret(SecretChange::remove(&self.id)));
+        cx.command(Command::Back);
     }
 }
 
@@ -247,10 +266,13 @@ impl Screen for SecretPage {
         }
     }
 
-    fn on_event(&mut self, event: &Id, _: &Params, cx: &mut Cx<'_, '_>) {
+    fn on_event(&mut self, event: &Id, params: &Params, cx: &mut Cx<'_, '_>) {
         // Typed anew: back to the list.
         if *event == ENTERED {
             cx.command(Command::Back);
+        }
+        if REMOVE.read(event, params).is_some_and(|answer| answer.yes) {
+            self.remove(cx);
         }
     }
 }

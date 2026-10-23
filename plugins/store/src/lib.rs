@@ -18,6 +18,7 @@ extern crate alloc;
 
 mod catalog;
 mod list;
+mod origin;
 mod page;
 mod queue;
 mod room;

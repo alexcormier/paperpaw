@@ -291,6 +291,9 @@ impl Harness {
             secrets: &self.secrets,
             running: &paperpaw_sdk::secrets::Anyone,
             random: paperpaw_sdk::random::Random::NONE,
+            memory: paperpaw_sdk::memory::Memory::NONE,
+            clock: paperpaw_sdk::time::Clock::NONE,
+            started: paperpaw_sdk::power::Start::Unknown,
             storage: &self.storage,
         })
     }
@@ -409,6 +412,7 @@ fn stay(path: &str) -> confirm::Answered {
     confirm::Answered {
         path: path.to_string(),
         percentage: "0.8".to_string(),
+        went: false,
         stay: true,
     }
 }
@@ -455,6 +459,7 @@ fn nothing_is_sent_before_the_fetch_on_opening_is_answered() {
     assert!(requests(&h.emit(&events::BOOK_CLOSED, reading(21.0))).is_empty());
     // Gone there: the reader's next position is sent.
     let gone = confirm::Answered {
+        went: true,
         stay: false,
         ..stay(BOOK)
     };
@@ -503,7 +508,7 @@ fn an_unreadable_answer_sends_nothing() {
 }
 
 #[test]
-fn a_failed_fetch_sends_nothing_and_ends_the_hold() {
+fn a_failed_fetch_sends_nothing_until_a_fetch_succeeds() {
     let mut h = Harness::new(true);
     h.emit(&events::BOOK_OPENED, reading(20.0));
     let out = h.sync_now();
@@ -513,12 +518,15 @@ fn a_failed_fetch_sends_nothing_and_ends_the_hold() {
         .format("kosync.server-error", &[("status", Arg::Str("500"))]);
     assert_eq!(shown(&out), Some(error.as_str()));
     assert_eq!(sent(&out), None);
-    // Reading on sends again.
+    // Reading on sends nothing over the progress not read.
     h.now += 1_000;
-    assert_eq!(
-        sent(&h.emit(&events::PAGE_TURNED, reading(22.0))),
-        Some(0.22)
-    );
+    assert!(requests(&h.emit(&events::PAGE_TURNED, reading(22.0))).is_empty());
+    // A while later it is fetched again first, then sent.
+    h.now += PULL_EVERY_MS;
+    let out = h.emit(&events::PAGE_TURNED, reading(23.0));
+    assert_eq!(sent(&out), None);
+    let behind = r#"{"percentage":0.1,"device":"Phone","device_id":"PHONE"}"#;
+    assert_eq!(sent(&h.answer(fetch(&out), 200, behind)), Some(0.23));
 }
 
 #[test]
@@ -533,6 +541,45 @@ fn a_position_stayed_away_from_is_not_offered_again() {
     // Asked for, it is.
     let out = h.sync_now();
     assert!(offers(&h.answer(fetch(&out), 200, FURTHER_THERE)));
+}
+
+/// Back on the offer means not now for this book: the same position is
+/// not offered again (not after every wake either), and nothing is sent
+/// over it while it is undecided. Moved on the server, it is offered.
+#[test]
+fn an_offer_left_with_back_comes_again_only_when_the_server_moves() {
+    let mut h = Harness::new(true);
+    let request = fetch(&h.emit(&events::BOOK_OPENED, reading(20.0))).clone();
+    assert!(offers(&h.answer(&request, 200, FURTHER_THERE)));
+    let back = confirm::Answered {
+        stay: false,
+        ..stay(BOOK)
+    };
+    assert_eq!(sent(&h.emit(&confirm::ANSWERED, back)), None);
+    // Woken soon after: not even fetched again.
+    h.now += 1_000;
+    assert!(requests(&h.emit(&events::RESUME, ())).is_empty());
+    // Woken later: fetched, but the same position is not offered.
+    h.now += PULL_EVERY_MS;
+    let out = h.emit(&events::RESUME, ());
+    let out = h.answer(fetch(&out), 200, FURTHER_THERE);
+    assert!(!offers(&out));
+    assert_eq!(sent(&out), None);
+    // Nor when the book is opened again.
+    h.now += PULL_EVERY_MS;
+    let out = h.emit(&events::BOOK_OPENED, reading(21.0));
+    assert!(!offers(&h.answer(fetch(&out), 200, FURTHER_THERE)));
+    // Nothing goes over it meanwhile.
+    h.now += PUSH_EVERY_MS;
+    assert_eq!(sent(&h.emit(&events::PAGE_TURNED, reading(22.0))), None);
+    assert_eq!(sent(&h.emit(&events::SUSPEND, ())), None);
+    // Further still on the server: offered again.
+    h.now += PULL_EVERY_MS;
+    let out = h.emit(&events::RESUME, ());
+    let further = FURTHER_THERE.replace("0.8", "0.9");
+    let out = h.answer(fetch(&out), 200, &further);
+    assert!(offers(&out));
+    assert_eq!(sent(&out), None);
 }
 
 #[test]

@@ -523,7 +523,8 @@ expect no warnings
 
 Steps are those of the emulator's scripts (a button's name, `long:`,
 `tap:x:y`, `tap-on:<text>`, `swipe:`, `wait:<ms>`, `run:<action>`,
-`open:<screen>`); assertions are `expect screen`, `stack`, `text`,
+`open:<screen>`, `type:<text>` into the keyboard shown and `type-enter:`
+to confirm it); assertions are `expect screen`, `stack`, `text`,
 `no text`, `focus`, `on`, `off`, `setting`, `no warnings` and
 `picture <name>` (compared with a snapshot). `paperpaw-emu --record
 my.flow` writes what one does in the emulator's window as a flow, to be
@@ -632,7 +633,7 @@ as the run's artifact, also when a check failed.
 | Services | `publish` | Anything one plugin offers others, found with `env.services.get` |
 | Contributions | `contribute` | Additions to a point another plugin defined |
 | Translations | `add_translations` | Catalogs for any language |
-| Book data | `add_book_data` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book, cleaned up when it is gone |
+| Book data | `add_book_data`, `add_book_cache` | Where the plugin keeps something for each book (named by `library::key`): moved and removed with the book. What `add_book_cache` names (made again from the book when needed) is cleaned up by itself when the book is gone; what `add_book_data` names (the reader's own: notes, places) only when the reader agrees, in *Clean up storage* |
 | Book fields | `add_book_field` | A value kept with books (`library::set_field`), shown on their information page and, where `in_catalog`, kept in the catalog to filter by |
 | Book badges | `add_book_badge` | A few letters or an icon on books' rows in views of the library |
 
@@ -1392,6 +1393,14 @@ cargo x4                  # riscv32imc-unknown-none-elf, the X4
 cargo +esp x4pro          # xtensa-esp32s3-none-elf, the X4 Pro and X4 Classic (espup's toolchain)
 ```
 
+The X4's core libraries (`core`, `alloc`) come from rustup, with the
+target in the sample's `rust-toolchain.toml`. The X4 Pro's come with each
+PaperPaw release, built once and signed
+(`paperpaw-xtensa-std-<version>.tar.gz`): install them into the `esp`
+toolchain once for each release, with PaperPaw's
+`tools/xtensa-std/install.sh` or by hand as its README says. Without
+them, `cargo +esp x4pro` finds no `core`.
+
 ### Which build fits
 
 Until PaperPaw 1.0 a plugin file runs only on the PaperPaw it was built
@@ -1770,9 +1779,10 @@ source*, *Not rebuilt* or *Rebuilt, but does not match its source*.
 Paths end up in a build (in its panic messages), so the sample's
 `build.sh` and the rebuild write them as the same everywhere, with
 `--remap-path-prefix` added to the flags of `.cargo/config.toml`
-(through `cargo --config`): the source's top as `/plugin`, Cargo's home
-as `/cargo`, and the X4 Pro's toolchain, whose `core` and `alloc` are
-built with the plugin, as `/rust`. So:
+(through `cargo --config`): the source's top as `/plugin` and Cargo's
+home as `/cargo`. The core libraries come built, the same for everyone:
+rustup's for the X4, the release's for the X4 Pro, which the rebuild
+installs as authors do (see [The crate](#the-crate)). So:
 
 - build with `build.sh`, or the sample's CI job
   (`samples/hello-native/.github/workflows/build.yml`) that runs it, from
@@ -1781,9 +1791,10 @@ built with the plugin, as `/rust`. So:
   on Windows);
 - commit `Cargo.lock`;
 - keep the release's compilers pinned (`rust-toolchain.toml`, the job's
-  `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`) and its SDK
-  (`paperpaw-sdk = "0.4"`), and build again for every release until 1.0
-  (see [Which build fits](#which-build-fits));
+  `RUST_X4`, `RUST_X4_PRO`, `ESP_GCC`), its SDK
+  (`paperpaw-sdk = "0.4"`) and, for the X4 Pro, its core libraries
+  installed, and build again for every release until 1.0 (see
+  [Which build fits](#which-build-fits));
 - never set `RUSTFLAGS`, which would replace the flags that link the
   plugin, and never publish a build made without the remapped paths;
 - put nothing of the moment or the computer into the code (a build

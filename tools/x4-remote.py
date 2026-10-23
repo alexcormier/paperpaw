@@ -38,6 +38,9 @@ STEPS, separated by commas:
                      value as configuration files write it; `\,` for a
                      comma in it, e.g. a home page's widgets)
   setting:reader.font-size print a setting's value
+  type:hello world   text into the text field shown (the keyboard's), as if
+                     typed on its keys (`\,` for a comma)
+  type-enter:hello   the same, then confirmed (`type-enter:` confirms only)
   wait:500           500 ms pass
   screen             print the screen's id
   describe           print what the screen shows, part by part
@@ -519,6 +522,8 @@ def run(x4, step):
             # The id, then key=value parameters (values may hold colons).
             ident, _, given = rest.partition(":")
             x4.ask(" ".join([kind, ident, *hex_pairs(given)]), "OK")
+        case ["type" | "type-enter" as kind, *_]:
+            x4.ask(f"{kind} {rest.encode().hex() or '-'}", "OK")
         case ["drag", x1, y1, x2, y2, steps, ms]:
             x4.ask(f"drag {x1} {y1} {x2} {y2} {steps} {ms}", "OK")
             # Down, the moves and the lift, each read on the interrupt's

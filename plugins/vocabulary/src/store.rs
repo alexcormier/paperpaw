@@ -230,14 +230,19 @@ fn rewrite(storage: &dyn Storage, mut keep: impl FnMut(&Word) -> bool) -> Result
             Err(e) => return Err(e),
         }
         appended?;
-        storage.append(&temporary, out.as_bytes())?;
-        storage.rename(&temporary, &file)
+        storage.append(&temporary, out.as_bytes())
     };
-    let result = written();
-    if result.is_err() {
+    if let Err(e) = written() {
+        let _ = storage.remove(&temporary);
+        return Err(e);
+    }
+    let renamed = storage.rename(&temporary, &file);
+    // A failed rename may have taken the list away (FAT removes it
+    // first): then the new one is all there is, taken at start.
+    if renamed.is_err() && storage.exists(&file) {
         let _ = storage.remove(&temporary);
     }
-    result
+    renamed
 }
 
 /// Whether the list ends with a line break (or is empty): else a line cut
@@ -366,12 +371,14 @@ mod tests {
     }
 
     /// A card that fails on purpose: reads of the words from byte
-    /// `read_fails_at` on, and appends to the new list after `appends`
-    /// of them.
+    /// `read_fails_at` on, appends to the new list after `appends` of
+    /// them, and with `rename_drops_target` renames that remove the file
+    /// they replace and then fail (as FAT may).
     struct Failing {
         inner: MemoryStorage,
         read_fails_at: Option<u64>,
         appends: Cell<Option<usize>>,
+        rename_drops_target: bool,
     }
 
     impl Failing {
@@ -380,6 +387,7 @@ mod tests {
                 inner,
                 read_fails_at: None,
                 appends: Cell::new(None),
+                rename_drops_target: false,
             }
         }
     }
@@ -415,6 +423,10 @@ mod tests {
             self.inner.remove(path)
         }
         fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+            if self.rename_drops_target {
+                let _ = self.inner.remove(to);
+                return Err(StorageError::Io);
+            }
             self.inner.rename(from, to)
         }
     }
@@ -486,6 +498,34 @@ mod tests {
         assert_eq!(remove(&storage, &word("w0")), Err(StorageError::Full));
         assert_eq!(storage.inner.get(&file()), Some(list.into_bytes()));
         assert!(!storage.exists(&temporary()));
+    }
+
+    /// The help says how many words the list keeps: beyond that the
+    /// oldest go, and nobody should find that out by losing them.
+    #[test]
+    fn the_help_says_how_many_words_are_kept() {
+        let en = format!("{},{:03}", MAX_WORDS / 1000, MAX_WORDS % 1000);
+        let de = format!("{MAX_WORDS}");
+        for (text, number) in [
+            (include_str!("../how/en.txt"), &en),
+            (include_str!("../how/de.txt"), &de),
+            (include_str!("../i18n/en.ini"), &en),
+            (include_str!("../i18n/de.ini"), &de),
+        ] {
+            assert!(text.contains(&format!("{number} ")), "{number}: {text}");
+        }
+    }
+
+    /// A rename that takes the list away and then fails: the new list is
+    /// kept, as it is all there is, and taken at the next start.
+    #[test]
+    fn a_failed_rename_keeps_the_new_list() {
+        let mut storage = Failing::new(MemoryStorage::new().with(&file(), many(3)));
+        storage.rename_drops_target = true;
+        assert_eq!(remove(&storage, &word("w0")), Err(StorageError::Io));
+        assert!(storage.exists(&temporary()));
+        recover(&storage.inner);
+        assert_eq!(words(&storage.inner), ["w1", "w2"]);
     }
 
     /// The list cannot be read to its end: nothing is written anew from

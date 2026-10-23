@@ -94,9 +94,20 @@ fn a_plugin_installed_while_the_list_is_open_is_listed() {
     assert!(!shown_before.contains("Airy"), "{shown_before}");
     kernel.run_action(Instant(200), INSTALL);
     assert!(kernel.plugins().get("airy").is_some());
+    let shown_after = shown(&mut kernel);
+    assert!(shown_after.contains("Airy"), "{shown_after}");
+    assert!(shown_after.contains("Roomy."), "{shown_after}");
+    // Not installed by a store: local; built-in plugins say neither.
+    assert!(shown_after.contains("Local"), "{shown_after}");
+    assert_eq!(shown_after.matches("Local").count(), 1, "{shown_after}");
+    assert!(!shown_after.contains("From the store"), "{shown_after}");
+    // Installed by a store at that version: the store's.
+    paperpaw_sdk::install::remember_store_install(kernel.storage(), "airy", Version::new(1, 0, 0));
+    kernel.run_action(Instant(300), paperpaw_sdk::builtin::actions::BACK);
+    kernel.run_action(Instant(400), OPEN);
     let shown = shown(&mut kernel);
-    assert!(shown.contains("Airy"), "{shown}");
-    assert!(shown.contains("Roomy."), "{shown}");
+    assert!(shown.contains("From the store."), "{shown}");
+    assert!(!shown.contains("Local"), "{shown}");
 }
 
 /// Says how it works, at length.

@@ -120,6 +120,9 @@ struct BrowserScreen {
     /// The line for messages at the bottom.
     status: Rect,
     bookmarks: Vec<Entry>,
+    /// The bookmarks were read: they may be saved. Not where they could
+    /// not be, or what they held would be lost.
+    bookmarks_read: bool,
     history: Vec<Entry>,
     session: Rc<RefCell<Session>>,
     /// An address to load once shown (opened for a link).
@@ -146,6 +149,7 @@ impl BrowserScreen {
             display.height.saturating_sub(top + line),
         );
         let start = params.get(params::URL).map(ToString::to_string);
+        let bookmarks = store::bookmarks(env);
         if start.is_none() {
             // Opened from the menu: a new start.
             session.borrow_mut().pages.clear();
@@ -153,8 +157,12 @@ impl BrowserScreen {
         Self {
             list: ListView::new(area, style.row).focus_on_keys(env),
             status,
-            bookmarks: store::bookmarks(env),
-            history: store::load(env.storage, &store::history_path()).unwrap_or_default(),
+            bookmarks_read: bookmarks.is_some(),
+            bookmarks: bookmarks.unwrap_or_default(),
+            history: store::load(env.storage, &store::history_path())
+                .ok()
+                .flatten()
+                .unwrap_or_default(),
             session,
             start,
             showing: false,
@@ -224,7 +232,9 @@ impl BrowserScreen {
     /// Shows page `entry` (already loaded) in the reader.
     fn show(&mut self, entry: Entry, cx: &mut Cx<'_, '_>) {
         let path = store::page_path(&entry.url);
-        self.history = store::remember(cx.env().storage, entry.clone());
+        if let Some(history) = store::remember(cx.env().storage, entry.clone()) {
+            self.history = history;
+        }
         self.session.borrow_mut().pages.push(entry);
         self.showing = true;
         self.message = None;
@@ -407,6 +417,7 @@ impl BrowserScreen {
                 self.session.borrow_mut().pages.clear();
                 self.load(&entry.url, cx);
             }
+            ("history", "bookmark") | ("bookmark", "delete") if !self.bookmarks_read => {}
             ("history", "bookmark") => {
                 self.bookmarks.retain(|b| b.url != entry.url);
                 self.bookmarks.push(entry);
@@ -537,7 +548,10 @@ impl Screen for BrowserScreen {
             Some(page) if env.storage.exists(&store::page_path(&page.url)) => self.show(page, cx),
             Some(page) => self.load(&page.url, cx),
             None => {
-                self.history = store::load(env.storage, &store::history_path()).unwrap_or_default();
+                self.history = store::load(env.storage, &store::history_path())
+                    .ok()
+                    .flatten()
+                    .unwrap_or_default();
                 self.redraw(cx);
             }
         }

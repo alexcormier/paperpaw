@@ -28,6 +28,10 @@ const BUFFERS: net::Buffers = net::Buffers {
 const PART: usize = 16 * 1024;
 /// How long finding the host and connecting may take.
 const CONNECT_MS: u64 = 10_000;
+/// A quiet connection asks the other side this often whether it is there.
+const KEEP_ALIVE_MS: u64 = 15_000;
+/// A connection whose other side answers nothing for this long ends.
+const GIVE_UP_MS: u64 = 45_000;
 /// Answers to a broadcast taken at most, and their bytes in all.
 const ANSWERS: usize = 8;
 const ANSWER_BYTES: usize = 1024;
@@ -261,7 +265,16 @@ fn failed(socket: u32, reason: &str) -> SocketEvent {
 /// Starts connecting to `address`.
 fn connect(net: &mut Net, address: IpAddress, port: u16) -> Result<Phase, &'static str> {
     match net.open((address, port), BUFFERS) {
-        Ok(handle) => Ok(Phase::Connecting(handle)),
+        Ok(handle) => {
+            // A connection the other side no longer answers ends, instead
+            // of waiting for ever (e.g. while a book comes, with its end
+            // lost on the way): asked every while it is quiet, it is given
+            // up once nothing comes back.
+            let socket = net.socket(handle);
+            socket.set_keep_alive(Some(smoltcp::time::Duration::from_millis(KEEP_ALIVE_MS)));
+            socket.set_timeout(Some(smoltcp::time::Duration::from_millis(GIVE_UP_MS)));
+            Ok(Phase::Connecting(handle))
+        }
         Err(net::Error::Memory) => Err("not enough memory for a connection"),
         Err(_) => Err("could not connect"),
     }
@@ -334,12 +347,20 @@ impl Socket {
         let socket = net.socket(handle);
         while let Some(data) = self.sends.front() {
             if !socket.may_send() {
+                log::info!(
+                    "socket {number}: lost (no more sending), {:?}",
+                    socket.state()
+                );
                 events.push(failed(number, "connection lost"));
                 return false;
             }
             match socket.send_slice(&data[self.sent..]) {
                 Ok(n) => self.sent += n,
                 Err(_) => {
+                    log::info!(
+                        "socket {number}: lost (sending failed), {:?}",
+                        socket.state()
+                    );
                     events.push(failed(number, "connection lost"));
                     return false;
                 }
@@ -386,6 +407,7 @@ impl Socket {
                 break;
             } else if socket.state() == tcp::State::Closed {
                 // Reset (or gone after both sides closed).
+                log::info!("socket {number}: lost (closed), {:?}", socket.state());
                 events.push(failed(number, "connection lost"));
                 return false;
             } else if !socket.may_recv() {

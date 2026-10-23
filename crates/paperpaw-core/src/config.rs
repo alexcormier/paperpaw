@@ -105,7 +105,15 @@ impl Kernel {
         }
         if let Some((section, key)) = id.as_str().split_once('.') {
             self.update_config(&format_args!("`{id}`"), |source| {
-                paperpaw_config::remove(source, section, key)
+                let mut source = paperpaw_config::remove(source, section, key);
+                // Kept under the id it had before it moved: that goes too,
+                // or it would be read again at the next start.
+                for (old, _) in MOVED.iter().filter(|(_, now)| *now == id.as_str()) {
+                    if let Some((section, key)) = old.split_once('.') {
+                        source = paperpaw_config::remove(&source, section, key);
+                    }
+                }
+                source
             });
         }
         self.setting_changed(id);
@@ -549,6 +557,10 @@ impl Kernel {
             self.set_secret(paperpaw_sdk::secrets::SecretChange::keep(
                 &id, &label, &value,
             ));
+            // Left in the file until it is with the secrets on the card.
+            if !self.shared.secrets.saved(&id) {
+                continue;
+            }
             if let Some((section, key)) = id.split_once('.') {
                 self.update_config(&format_args!("`{id}`"), |source| {
                     paperpaw_config::remove(source, section, key)

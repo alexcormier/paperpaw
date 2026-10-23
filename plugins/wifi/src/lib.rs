@@ -320,9 +320,11 @@ impl Plugin for Wifi {
                     return;
                 };
                 let known = wifi::known(env.secrets.iter());
-                let kept = wifi_file_networks(&bytes)
-                    .iter()
-                    .all(|(ssid, _)| known.iter().any(|(k, _)| k == ssid));
+                // Kept on the card, not only until the device restarts.
+                let kept = wifi_file_networks(&bytes).iter().all(|(ssid, _)| {
+                    known.iter().any(|(k, _)| k == ssid)
+                        && env.secrets.saved(&wifi::secret_id(ssid))
+                });
                 if kept {
                     let _ = env.storage.remove(WIFI_FILE);
                 }
@@ -402,6 +404,13 @@ impl Plugin for Wifi {
             match policy.scanned(&wifi.networks, &known) {
                 Some(commands) => wifi_commands(out, commands),
                 None => {
+                    policy.scans += 1;
+                    if policy.still_wanted(wifi, env.now) && policy.scans < policy::SCANS {
+                        // The first scans after the radio came on may
+                        // find nothing.
+                        wifi_commands(out, alloc::vec![WifiCommand::Scan]);
+                        return;
+                    }
                     policy.goal = Goal::Nothing;
                     if policy.still_wanted(wifi, env.now) {
                         out.push(Command::Notify(env.i18n.tr("wifi.none-in-reach").into()));

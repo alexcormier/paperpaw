@@ -334,3 +334,16 @@ fn settings_set_under_their_old_ids_are_kept() {
         "{warnings:?}"
     );
 }
+
+/// A setting kept under the id it had before it moved, reset, does not
+/// come back from that id at the next start.
+#[test]
+fn a_moved_setting_reset_stays_reset() {
+    let config = "[core]\nlanguage = en\n\n[reader]\nmargin = 9\n";
+    let mut kernel = kernel_with(MemoryStorage::new().with(CONFIG_FILE, config));
+    assert_eq!(kernel.settings().int("core.margin"), 9);
+    kernel.reset_setting(&Id::new_static("core.margin"));
+    let left = String::from_utf8(bytes(&kernel, CONFIG_FILE)).unwrap();
+    assert!(!left.contains("margin"), "{left}");
+    assert!(left.contains("language = en"), "{left}");
+}
