@@ -92,14 +92,18 @@ fn sample_font<'a>(env: &Env<'a>, style: &UiStyle) -> Option<paperpaw_sdk::FontH
         .or_else(|| style.font(env))
 }
 
-/// The height of `lines` lines of the sample at `size`.
-fn sample_lines(env: &Env<'_>, style: &UiStyle, size: f32, lines: u16) -> u16 {
-    sample_font(env, style).map_or(size * 1.3, |f| f.line_metrics(size).line_height) as u16 * lines
+/// The height of the whole sample `text` at `size`, wrapped to `width`.
+fn sample_height(env: &Env<'_>, style: &UiStyle, size: f32, width: u16, text: &str) -> u16 {
+    let Some(font) = sample_font(env, style) else {
+        return (size * 1.3) as u16 * 2;
+    };
+    let lines = font.wrap(size, text, f32::from(width)).len().max(1);
+    font.line_metrics(size).line_height as u16 * lines as u16
 }
 
 /// Draws the sample `text` at `size` in the reading font in `area`,
-/// wrapped: the lines that fit (fewer words at large sizes), at least
-/// one.
+/// wrapped: the lines that fit, at least one, the last ending in "…"
+/// where the rest does not fit (at large sizes).
 fn draw_sample(
     canvas: &mut Canvas<'_>,
     env: &Env<'_>,
@@ -114,22 +118,26 @@ fn draw_sample(
     canvas.describe(Role::Text, text, area);
     let height = font.line_metrics(size).line_height.max(1.0);
     let fit = ((f32::from(area.height) / height) as usize).max(1);
+    let width = f32::from(area.width);
+    let lines = font.wrap(size, text, width);
+    let cut = lines.len() > fit;
     let mut top = area.y;
-    for range in font
-        .wrap(size, text, f32::from(area.width))
-        .into_iter()
-        .take(fit)
-    {
+    for (i, range) in lines.into_iter().take(fit).enumerate() {
         let row = Rect::new(area.x, top, area.width, height as u16);
-        ui::draw_label(
-            canvas,
-            &font,
-            size,
-            f32::from(area.x),
-            row,
-            &text[range],
-            Color::BLACK,
-        );
+        let mut line = String::from(text[range].trim_end());
+        // The last line shown, with more after it: words go until "…"
+        // fits after them.
+        if cut && i + 1 == fit {
+            while font.measure(size, &alloc::format!("{line}…")) > width {
+                match line.rfind(' ') {
+                    Some(end) => line.truncate(end),
+                    None => break,
+                }
+            }
+            line.push('…');
+        }
+        let x = f32::from(area.x);
+        ui::draw_label(canvas, &font, size, x, row, &line, Color::BLACK);
         top += height as u16;
     }
 }
@@ -347,11 +355,14 @@ impl Guide {
             None => (None, None, None),
             Some(_) => {
                 let number = self.is_number(env);
-                // A number: − value + on a row, a sample below it: two
-                // lines of the text at that size, in the reading font (the
-                // card as high as there is room for, then fewer words).
+                // A number: − value + on a row, a sample below it: the
+                // whole text at that size, in the reading font, as far as
+                // there is room (then it ends in "…").
                 let below = match self.sample_size(env) {
-                    Some(size) => sample_lines(env, style, size, 2),
+                    Some(size) => {
+                        let inner = width.saturating_sub(2 * style.margin as u16);
+                        sample_height(env, style, size, inner, env.i18n.tr("setup.sample"))
+                    }
                     None => line(env, style, style.text) * 2,
                 };
                 let height = if number {

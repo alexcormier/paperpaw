@@ -6,6 +6,16 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Font size offers only the sizes the reading font has: on the X4 and
+  X4 Pro, whose built-in fonts stop at about 12 pt, no larger ones that
+  looked the same. A size set before past them gives way to the
+  largest. At the largest, the help says that a font with larger sizes
+  gives more, and *Discover fonts* on the reading settings opens the
+  font browser (or its page in the store, where it is not installed).
+  The setup's sample of the font size is a shorter sentence, shown
+  whole. Scalable fonts keep every size. For plugins:
+  `FontHandle::largest_size`; for the kernel, `Settings::set_range` and
+  `Settings::set_description`.
 - First-run setup: the sample of the font size is in the book's font,
   at the size chosen, as the reader shows it: no longer in the
   interface's font, its second line cut. The card grows with the size

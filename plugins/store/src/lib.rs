@@ -32,7 +32,7 @@ mod view;
 use alloc::borrow::Cow;
 use alloc::boxed::Box;
 
-use paperpaw_sdk::builtin::{events, groups, menus};
+use paperpaw_sdk::builtin::{events, groups, menus, params};
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::install::{Installer, Progress, Received};
 use paperpaw_sdk::replies::HttpReply;
@@ -53,6 +53,10 @@ const SOURCE_SCREEN: Id = Id::new_static("store.source");
 const SHOTS_SCREEN: Id = Id::new_static("store.shots");
 /// The fonts browser's list, offered as the entry *Fonts*.
 pub(crate) const FONTS: Id = Id::new_static("fonts-browser.open");
+/// Fonts with larger sizes, from the reading settings: the fonts browser,
+/// or its page here where it is not installed (a store plugin on lean
+/// firmware).
+pub const DISCOVER_FONTS: Id = Id::new_static("store.discover-fonts");
 /// The plugin manager's list of other places to get plugins.
 const MANAGER_MORE: Id = Id::new_static("plugin-manager.more");
 
@@ -129,6 +133,22 @@ impl Plugin for Store {
             r.add_menu_entry(MenuEntry::new(menu, OPEN).order(order))?;
         }
         r.add_icon(OPEN, Cow::Borrowed("cloud-download"))?;
+        r.add_action(
+            ActionSpec::new(DISCOVER_FONTS, "store.discover-fonts").handler(
+                |env: &Env<'_>, out: &mut Commands| {
+                    if env.actions.contains(FONTS.as_str()) {
+                        out.push(Command::RunAction(FONTS));
+                    } else {
+                        let page = Params::new().with(params::ID, "fonts-browser");
+                        out.push(Command::OpenScreen(PAGE_SCREEN, page));
+                    }
+                },
+            ),
+        )?;
+        // On the reading settings, below the font size, whose largest
+        // sizes are the font's.
+        r.add_menu_entry(MenuEntry::new(groups::READING, DISCOVER_FONTS))?;
+        r.add_icon(DISCOVER_FONTS, Cow::Borrowed("typography"))?;
         // Downloads go on while no screen of the store is open; one cut
         // off by a restart is begun anew from the plugin's page.
         r.on(DOWNLOADED, received)?;

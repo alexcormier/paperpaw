@@ -760,6 +760,13 @@ impl<'a> FontHandle<'a> {
         self.font
     }
 
+    /// The largest size text can be set in, in pixels: a font pack has
+    /// the sizes it was made in; `None` for a scalable font, which has
+    /// every size.
+    pub fn largest_size(&self) -> Option<f32> {
+        self.font().largest_size()
+    }
+
     /// Ascent, descent and line height at `size` pixels: of the size text
     /// is drawn at (see [`FontHandle::size_for`]; for a display, the size
     /// asked).

@@ -447,8 +447,16 @@ impl Plugin for Reader {
         let font_step = |step: i64| -> paperpaw_sdk::ActionHandler {
             Box::new(
                 move |env: &Env<'_>, _: &paperpaw_sdk::Params, out: &mut Commands| {
+                    // Within the sizes the reading font has (see the setting).
+                    let (min, max) = match env.settings.spec(settings::FONT_SIZE.as_str()) {
+                        Some(paperpaw_sdk::SettingSpec {
+                            kind: paperpaw_sdk::SettingKind::Int { min, max },
+                            ..
+                        }) => (*min, *max),
+                        _ => (6, 40),
+                    };
                     let size = env.settings.read(&settings::FONT_SIZE) + step;
-                    out.push(Command::set(&settings::FONT_SIZE, size.clamp(6, 40)));
+                    out.push(Command::set(&settings::FONT_SIZE, size.clamp(min, max)));
                 },
             )
         };
