@@ -373,8 +373,8 @@ impl BatteryView {
     }
 
     /// The page and the number of pages, where there are several.
-    fn paging(&self) -> Option<(usize, usize)> {
-        (self.pages.len() > 1).then_some((self.page, self.pages.len()))
+    fn paging(&self) -> Option<ui::Paging> {
+        (self.pages.len() > 1).then_some(ui::Paging::new(self.page, self.pages.len()))
     }
 }
 

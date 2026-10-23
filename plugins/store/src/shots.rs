@@ -118,7 +118,7 @@ impl Screen for ShotsScreen {
     fn draw(&mut self, canvas: &mut Canvas<'_>, env: &Env<'_>) {
         let style = self.style;
         let title = env.i18n.tr("store.shots");
-        let paging = Some((self.at, self.urls.len()));
+        let paging = Some(ui::Paging::new(self.at, self.urls.len()));
         self.header.draw(canvas, env, &style, title, None, paging);
         match &self.picture {
             Picture::Here(image) => {
@@ -185,7 +185,7 @@ impl Screen for ShotsScreen {
         if gesture.kind != GestureKind::Tap {
             return Handled::No;
         }
-        let paging = Some((self.at, self.urls.len()));
+        let paging = Some(ui::Paging::new(self.at, self.urls.len()));
         if let Some(action) = self
             .header
             .tap(cx.env(), &self.style, gesture.start, paging)

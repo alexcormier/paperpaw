@@ -264,7 +264,7 @@ impl Screen for Choice {
             },
         );
         if let Some(pager) = &self.pager {
-            let page = (self.list.page(), self.list.pages(options.len()));
+            let page = ui::Paging::new(self.list.page(), self.list.pages(options.len()));
             pager.draw(canvas, env, &style, page);
         }
     }

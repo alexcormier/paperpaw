@@ -691,11 +691,11 @@ fn chips(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
 fn pickers(canvas: &mut Canvas<'_>, env: &Env<'_>, style: &UiStyle, area: Rect) {
     let mut stack = ui::Stack::new(area, style.margin as u16 * 2);
     let date = stack.take(ui::DatePicker::height(style));
-    let mut picker = ui::DatePicker::new(style, date, (2026, 10, 22));
+    let mut picker = ui::DatePicker::new(style, date, paperpaw_sdk::time::Date::new(2026, 10, 22));
     picker.set_focus(0);
     picker.draw(canvas, env, style);
     let time = stack.take(ui::TimePicker::height(style));
-    let mut picker = ui::TimePicker::new(style, time, (22, 30));
+    let mut picker = ui::TimePicker::new(style, time, paperpaw_sdk::time::Time::new(22, 30));
     picker.set_focus(1);
     picker.draw(canvas, env, style);
 }

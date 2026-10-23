@@ -16,7 +16,7 @@ mod support;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::ui::sections::{Item, Section, Sections};
-use paperpaw_sdk::ui::{ListChange, ListView, Rows, UiStyle, list_step, step_focus};
+use paperpaw_sdk::ui::{ListChange, ListView, Paging, Rows, UiStyle, list_step, step_focus};
 use paperpaw_sdk::{Cx, Id, Output, Point, Rect, RefreshMode};
 use proptest::prelude::*;
 
@@ -230,7 +230,7 @@ proptest! {
 fn an_empty_list_has_one_page_and_nothing_to_focus_or_hit() {
     let mut list = ListView::new(Rect::new(0, 0, 400, 300), 50);
     assert_eq!(list.pages(0), 1);
-    assert_eq!(list.paging(0), Some((0, 1)));
+    assert_eq!(list.paging(0), Some(Paging::new(0, 1)));
     for delta in [-1, 1, -6, 6] {
         assert_eq!(list.move_focus(delta, 0), ListChange::None);
     }
@@ -346,7 +346,7 @@ proptest! {
             return Ok(());
         }
         let pages = rows_pages(&mut rows);
-        prop_assert_eq!(pages.len(), rows.paging().1);
+        prop_assert_eq!(pages.len(), rows.paging().pages);
         let mut seen = Vec::new();
         for page in &pages {
             let mut y = ROWS_AREA.y;
@@ -383,12 +383,12 @@ proptest! {
         prop_assert_eq!(rows.focus(), entries[0]);
         let mut visited = vec![rows.focus()];
         for _ in 0..entries.len() {
-            let page = rows.paging().0;
+            let page = rows.paging().page;
             let change = rows.step(forward);
             prop_assert!(!headings[rows.focus()]);
             let expected = if entries.len() == 1 {
                 ListChange::None
-            } else if rows.paging().0 == page {
+            } else if rows.paging().page == page {
                 ListChange::Focus
             } else {
                 ListChange::Page
@@ -459,7 +459,7 @@ proptest! {
 fn rows_without_any_go_nowhere() {
     let mut rows = Rows::new(ROWS_AREA, Vec::new(), Vec::new());
     assert!(rows.is_empty());
-    assert_eq!(rows.paging(), (0, 1));
+    assert_eq!(rows.paging(), Paging::new(0, 1));
     assert!(rows.visible().is_empty());
     assert_eq!(rows.step(true), ListChange::None);
     assert_eq!(rows.turn(true), ListChange::None);
@@ -548,11 +548,11 @@ proptest! {
             prop_assert_eq!(list.focus(), entries.end, "turned to the first entry");
         }
         prop_assert_eq!(next, len, "the last page ends the list");
-        prop_assert_eq!(list.paging(), (pages - 1, pages));
+        prop_assert_eq!(list.paging(), Paging::new(pages - 1, pages));
         // And back again, page by page.
         for page in (0..pages - 1).rev() {
             prop_assert_ne!(list.turn(false), ListChange::None);
-            prop_assert_eq!(list.paging().0, page);
+            prop_assert_eq!(list.paging().page, page);
         }
         prop_assert_eq!(list.turn(false), ListChange::None);
     }
@@ -664,13 +664,12 @@ fn a_long_list_turns_to_its_last_page_and_back_to_its_first() {
     let mut list = Sections::new(Rect::new(0, 0, 300, 400), 20, 50, sections);
     list.focus_on(usize::MAX);
     assert_eq!(list.focus(), 6_999);
-    let (page, pages) = list.paging();
-    assert_eq!(page + 1, pages);
+    assert!(list.paging().is_last());
     assert_eq!(list.page_entries().end, 7_000);
     assert_eq!(list.turn(true), ListChange::None);
     list.step(true);
     assert_eq!(list.focus(), 0, "on from the last: the first");
-    assert_eq!(list.paging().0, 0);
+    assert_eq!(list.paging().page, 0);
 }
 
 // ---- What a move asks to be drawn ---------------------------------------

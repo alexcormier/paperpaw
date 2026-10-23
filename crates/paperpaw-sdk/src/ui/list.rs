@@ -187,8 +187,8 @@ impl ListView {
 
     /// The page and the number of pages, e.g. for [`Header::draw`]; always
     /// `Some` (a list of one page shows no page number there).
-    pub fn paging(&self, len: usize) -> Option<(usize, usize)> {
-        Some((self.page(), self.pages(len)))
+    pub fn paging(&self, len: usize) -> Option<super::Paging> {
+        Some(super::Paging::new(self.page(), self.pages(len)))
     }
 
     pub fn pages(&self, len: usize) -> usize {

@@ -98,8 +98,8 @@ impl Rows {
     }
 
     /// The page with the focus, and the number of pages.
-    pub fn paging(&self) -> (usize, usize) {
-        (self.page_of(self.focus), self.pages.len())
+    pub fn paging(&self) -> super::Paging {
+        super::Paging::new(self.page_of(self.focus), self.pages.len())
     }
 
     /// The rows of the page with the focus and where they are.
@@ -441,7 +441,7 @@ mod tests {
         assert_eq!(rows.len(), 2);
         // Rows adding up past what a u16 holds still go on pages.
         let rows = Rows::new(area, alloc::vec![u16::MAX; 3], alloc::vec![]);
-        assert_eq!(rows.paging().1, 3);
+        assert_eq!(rows.paging().pages, 3);
     }
 
     #[test]
@@ -455,7 +455,7 @@ mod tests {
         assert_eq!(rows.step(true), ListChange::Focus);
         assert_eq!(rows.step(true), ListChange::Page, "over the heading");
         assert_eq!(rows.focus, 4);
-        assert_eq!(rows.paging(), (1, 2));
+        assert_eq!(rows.paging(), super::super::Paging::new(1, 2));
         assert_eq!(rows.turn(false), ListChange::Page);
         assert_eq!(rows.focus, 1);
         let visible = rows.visible();

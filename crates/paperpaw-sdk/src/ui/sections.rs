@@ -170,10 +170,10 @@ impl Sections {
     }
 
     /// The page with the focus, and the number of pages.
-    pub fn paging(&self) -> (usize, usize) {
+    pub fn paging(&self) -> super::Paging {
         let (page, _) = self.page_of(self.focus);
         let (last, _) = self.page_of(self.len().saturating_sub(1));
-        (page, last + 1)
+        super::Paging::new(page, last + 1)
     }
 
     /// What the page with the focus shows, and where.
@@ -375,7 +375,7 @@ mod tests {
         );
         list.turn(true);
         assert_eq!(page(&list), [Item::Heading(3), Item::Entry(4)]);
-        assert_eq!(list.paging(), (2, 3));
+        assert_eq!(list.paging(), crate::ui::Paging::new(2, 3));
         assert_eq!(list.turn(true), ListChange::None);
         assert_eq!(list.section_of(4), Some((3, 0)));
         list.turn(false);
@@ -423,8 +423,7 @@ mod tests {
     fn many_entries_take_no_more_memory() {
         let mut list = list(&[(true, 100_000)]);
         list.focus_on(99_999);
-        let (page, pages) = list.paging();
-        assert_eq!(page + 1, pages);
+        assert!(list.paging().is_last());
         assert_eq!(list.page_entries().end, 100_000);
         let empty = Sections::new(Rect::new(0, 0, 100, 5), 10, 20, alloc::vec![]);
         assert!(empty.is_empty());

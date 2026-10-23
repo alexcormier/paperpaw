@@ -262,9 +262,12 @@ impl Geometry {
         )
     }
 
-    /// The cell at a point, if it is on the grid.
-    pub fn cell_at(&self, x: i32, y: i32) -> Option<(u8, u8)> {
-        let (dx, dy) = (x - i32::from(self.area.x), y - i32::from(self.area.y));
+    /// The cell (column, row) at `point`, if it is on the grid.
+    pub fn cell_at(&self, point: Point) -> Option<(u8, u8)> {
+        let (dx, dy) = (
+            point.x - i32::from(self.area.x),
+            point.y - i32::from(self.area.y),
+        );
         if dx < 0 || dy < 0 {
             return None;
         }
@@ -325,7 +328,7 @@ pub fn dragged(
     point: Point,
     resize: bool,
 ) -> Option<Cells> {
-    let (col, row) = geometry.cell_at(point.x, point.y)?;
+    let (col, row) = geometry.cell_at(point)?;
     if resize {
         return Some(Cells {
             w: (col + 1).saturating_sub(from.col).max(1),
@@ -333,7 +336,7 @@ pub fn dragged(
             ..from
         });
     }
-    let (start_col, start_row) = geometry.cell_at(start.x, start.y)?;
+    let (start_col, start_row) = geometry.cell_at(start)?;
     let col = (i32::from(from.col) + i32::from(col) - i32::from(start_col)).max(0) as u8;
     let row = (i32::from(from.row) + i32::from(row) - i32::from(start_row)).max(0) as u8;
     Some(Cells { col, row, ..from })
@@ -806,8 +809,8 @@ mod tests {
         assert_eq!(free_place(&g, &taken, 4, 1), Some(Cells::new(0, 2, 4, 1)));
         assert_eq!(free_place(&g, &taken, 4, 2), None);
         assert_eq!(g.rect(Cells::new(1, 1, 2, 1)), Rect::new(105, 105, 190, 90));
-        assert_eq!(g.cell_at(250, 150), Some((2, 1)));
-        assert_eq!(g.cell_at(450, 150), None);
+        assert_eq!(g.cell_at(Point::new(250, 150)), Some((2, 1)));
+        assert_eq!(g.cell_at(Point::new(450, 150)), None);
     }
 
     #[test]

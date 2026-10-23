@@ -15,7 +15,7 @@ mod support;
 
 use paperpaw_sdk::builtin::actions;
 use paperpaw_sdk::semantics::{self, Role};
-use paperpaw_sdk::ui::{self, Header, Pager, UiStyle};
+use paperpaw_sdk::ui::{self, Header, Pager, Paging, UiStyle};
 use paperpaw_sdk::{Color, Hint, Point, Rect};
 use proptest::prelude::*;
 
@@ -415,7 +415,7 @@ proptest! {
         let env = h.env();
         let style = UiStyle::new(&env);
         let header = Header::new(&env, &style, back);
-        let paging = (pages > 0).then_some((page % pages.max(1), pages));
+        let paging = (pages > 0).then_some(Paging::new(page % pages.max(1), pages));
         let a = header.area();
         let actions_across: Vec<Option<paperpaw_sdk::Id>> =
             across(a).map(|p| header.tap(&env, &style, p, paging)).collect();
@@ -466,7 +466,7 @@ proptest! {
         let env = h.env();
         let style = UiStyle::new(&env);
         let header = Header::new(&env, &style, back);
-        let paging = Some((page % pages, pages));
+        let paging = Some(Paging::new(page % pages, pages));
         for p in across(header.area()) {
             prop_assert_eq!(header.tap(&env, &style, p, paging), None);
         }
@@ -505,7 +505,14 @@ fn the_header_keeps_to_the_content_margins() {
         let area = header.area();
         let middle = area.y + area.height / 4..area.y + area.height * 3 / 4;
         let mut arrows = frame(480, 800);
-        header.draw(&mut arrows.canvas(), &env, &style, "", None, Some((1, 3)));
+        header.draw(
+            &mut arrows.canvas(),
+            &env,
+            &style,
+            "",
+            None,
+            Some(Paging::new(1, 3)),
+        );
         let (first, last) = ink_columns(&arrows, middle.clone());
         let margin = style.margin as u16;
         assert_eq!(first, margin, "back arrow at {dpi} dpi");
@@ -658,7 +665,8 @@ fn the_pager_turns_by_halves_on_touch_screens_only() {
             assert_eq!(pager.tap(right), None);
         }
         assert_eq!(pager.tap(outside), None);
-        for page in [(0, 1), (0, 3), (2, 3), (9, 3)] {
+        for (page, pages) in [(0, 1), (0, 3), (2, 3), (9, 3)] {
+            let page = Paging::new(page, pages);
             let mut frame = frame(480, 800);
             pager.draw(&mut frame.canvas(), &env, &style, page);
             assert_eq!(drawn_outside(&mut frame, area), None, "{page:?}");
@@ -822,7 +830,7 @@ fn the_page_number_is_hit_where_it_is_drawn() {
     let env = h.env();
     let style = UiStyle::new(&env);
     let header = Header::new(&env, &style, true);
-    let page = Some((1, 30));
+    let page = Some(Paging::new(1, 30));
     let (described, _) = describe(480, 800, |c| {
         header.draw(c, &env, &style, "Reading", None, page);
     });

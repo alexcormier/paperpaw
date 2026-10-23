@@ -268,12 +268,12 @@ proptest! {
                 prop_assert!(r.y >= g.area.y && r.bottom() <= g.area.bottom());
                 if !r.is_empty() {
                     let m = middle(r);
-                    prop_assert_eq!(g.cell_at(m.x, m.y), Some((col, row)));
+                    prop_assert_eq!(g.cell_at(m), Some((col, row)));
                 }
             }
         }
-        prop_assert_eq!(g.cell_at(i32::from(x) - 1, i32::from(y)), None);
-        prop_assert_eq!(g.cell_at(i32::from(x), g.area.bottom() as i32 + 1), None);
+        prop_assert_eq!(g.cell_at(Point::new(i32::from(x) - 1, i32::from(y))), None);
+        prop_assert_eq!(g.cell_at(Point::new(i32::from(x), g.area.bottom() as i32 + 1)), None);
     }
 
     /// However the layout text says, the items shown never overlap or
