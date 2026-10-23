@@ -49,7 +49,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/reader/books/<hash>/settings.ini` | kernel (a book's own settings) | ini, as `paperpaw.ini` | version 1 |
 | `.paperpaw/plugins/stats/books.ini` | stats | ini: a section per book (title, authors, md5, pages, language, series, `last-open`, path; `finished`, when it was last read to the end, added later) | version 1 |
 | `.paperpaw/plugins/stats/pages.bin` | stats | 16 bytes per stay on a page | version 1 |
-| `.paperpaw/plugins/stats/webdav.ini` | stats | ini of earlier versions: its password moves to the passwords and keys, then it goes | version 1 |
+| `.paperpaw/plugins/stats/webdav.ini` | stats | ini of earlier versions: its password moves to the passwords and keys; the file goes at a later start, once the password is kept there | version 1 |
 | `.paperpaw/plugins/profiles/profiles.ini` | profiles | ini: a section per profile, its name and values | versions 1 and 2 |
 | `.paperpaw/plugins/profiles/last.txt` | profiles | the profile applied last | version 1 |
 | `.paperpaw/plugins/rules/rules.txt` | rules | a rule per line: trigger, effect, target, on, condition (tab separated) | version 1 |
@@ -69,6 +69,7 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/browser/bookmarks.txt`, `history.txt` | browser | a page per line: title, address | version 1 |
 | `.paperpaw/plugins/kosync/device.ini`, `account.ini` | kosync | ini: the device's id; the key of earlier versions (moved to the passwords and keys) | version 1 |
 | `.paperpaw/plugins/wallabag/articles.txt`, `finished.txt` | wallabag | an article per line: id and path; ids read to the end | version 1 |
+| `.paperpaw/plugins/wallabag/account.txt` | wallabag | the server and the user name the lists belong to, one a line: another account starts them anew | |
 | `.paperpaw/plugins/joplin/sent.txt`, `sending.txt`, `waiting.txt`, `notebook.txt` | joplin | a book per line: notes file, note id, MD5 of the note's text (tab separated); the same for notes sent whose answer did not come; a notes file per line; the notebook's name and id | version 1 |
 | `.paperpaw/plugins/readwise/waiting.txt` | readwise | the notes files whose highlights wait to be sent, a path per line | |
 | `.paperpaw/plugins/battery/log.csv` | battery | CSV with a header | version 1 |
@@ -118,6 +119,8 @@ plugin converts books differently; a plugin must keep that mapping.
 | `.paperpaw/plugins/update/fetch.txt`, `fetch-current.txt`, `fetch-failed.txt`, `plugins/.<id>.next/` | update | the code plugins left to fetch for a downloaded update, the one being fetched, those that could not be; the folders fetched, installed by the updated firmware |
 | `.paperpaw/plugins/about/licences.md`, `about/plugins.md`, `plugin-manager/how.txt`, `store/how.txt`, `.paperpaw/tmp/` | about, plugin-manager, store, kernel | written when they are opened to read |
 | `.paperpaw/code-room.txt` | SDK `native` | the room code plugins have, as the shell found it at this start |
+| `.paperpaw/plugins/stats/pages.new`, `books.new` | stats | `pages.bin` and `books.ini` while they are written anew: put in place at the start where the file itself is missing, else removed |
+| `~<hash>.TMP`, `~<hash>.NEW` beside a file (the X4's card; seven letters from the file's name) | `paperpaw-fat` | a file while it is written: `.NEW` is whole and takes the file's place where the file is missing |
 
 ## Foreign
 

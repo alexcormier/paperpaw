@@ -58,6 +58,7 @@ pub fn paperpaw_sdk::annotations::remove(&dyn paperpaw_platform::storage::Storag
 pub fn paperpaw_sdk::annotations::save(&dyn paperpaw_platform::storage::Storage, &str, &[paperpaw_sdk::annotations::Annotation]) -> bool
 pub fn paperpaw_sdk::annotations::set_note(&dyn paperpaw_platform::storage::Storage, &str, paperpaw_document::Locator, &str, i64) -> bool
 pub fn paperpaw_sdk::annotations::snippet(&str) -> alloc::string::String
+pub fn paperpaw_sdk::annotations::stored_note(&str) -> alloc::string::String
 pub mod paperpaw_sdk::ask
 pub struct paperpaw_sdk::ask::ChoiceQuestion
 impl paperpaw_sdk::ask::ChoiceQuestion
@@ -861,6 +862,7 @@ impl paperpaw_sdk::contribution::Registrar
 pub fn paperpaw_sdk::contribution::Registrar::add(&mut self, paperpaw_sdk::contribution::Contribution) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_action(&mut self, paperpaw_sdk::ActionSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_book_badge(&mut self, paperpaw_sdk::library::service::BookBadge) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_book_cache(&mut self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_book_data(&mut self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_book_field(&mut self, paperpaw_sdk::library::service::BookField) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_choice(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
@@ -2023,6 +2025,9 @@ pub const paperpaw_sdk::library::what::STATUS: u32
 #[non_exhaustive] pub enum paperpaw_sdk::library::Badge
 pub paperpaw_sdk::library::Badge::Icon(&'static str)
 pub paperpaw_sdk::library::Badge::Text(alloc::string::String)
+pub enum paperpaw_sdk::library::BookDataKind
+pub paperpaw_sdk::library::BookDataKind::Cache
+pub paperpaw_sdk::library::BookDataKind::UserData
 #[non_exhaustive] pub struct paperpaw_sdk::library::Book
 pub paperpaw_sdk::library::Book::added: core::option::Option<u32>
 pub paperpaw_sdk::library::Book::author: core::option::Option<alloc::string::String>
@@ -2061,6 +2066,7 @@ impl core::fmt::Debug for paperpaw_sdk::library::service::BookBadge
 pub fn paperpaw_sdk::library::service::BookBadge::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub struct paperpaw_sdk::library::BookData
 pub paperpaw_sdk::library::BookData::folder: alloc::borrow::Cow<'static, str>
+pub paperpaw_sdk::library::BookData::kind: paperpaw_sdk::library::BookDataKind
 pub paperpaw_sdk::library::BookData::prefix: alloc::borrow::Cow<'static, str>
 impl paperpaw_sdk::library::BookData
 pub fn paperpaw_sdk::library::BookData::key_of<'n>(&self, &'n str) -> core::option::Option<(&'n str, &'n str)>
@@ -2134,7 +2140,7 @@ pub fn paperpaw_sdk::library::books_in(&dyn paperpaw_platform::storage::Storage,
 pub fn paperpaw_sdk::library::changed() -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::library::changed_book(&str, u32) -> paperpaw_sdk::Command
 pub fn paperpaw_sdk::library::clean_up(&dyn paperpaw_platform::storage::Storage, &[paperpaw_sdk::library::BookData], &dyn core::ops::function::Fn(&str) -> bool) -> u32
-pub fn paperpaw_sdk::library::clean_up_unused(&dyn paperpaw_platform::storage::Storage, &[paperpaw_sdk::library::BookData], &str) -> core::result::Result<u32, paperpaw_platform::storage::StorageError>
+pub fn paperpaw_sdk::library::clean_up_unused(&dyn paperpaw_platform::storage::Storage, &[paperpaw_sdk::library::BookData], &str, paperpaw_sdk::library::BookDataKind) -> core::result::Result<u32, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::library::cover(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::library::Book, u16, u16, paperpaw_platform::pixel::PixelFormat) -> core::option::Option<paperpaw_sdk::ui::Thumbnail>
 pub fn paperpaw_sdk::library::cover_variant(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::library::Book, u16, u16, paperpaw_platform::pixel::PixelFormat, &str) -> core::option::Option<paperpaw_sdk::ui::Thumbnail>
 pub fn paperpaw_sdk::library::favourites(&dyn paperpaw_platform::storage::Storage) -> alloc::vec::Vec<alloc::string::String>
@@ -2162,6 +2168,7 @@ pub fn paperpaw_sdk::library::set_field(&dyn paperpaw_platform::storage::Storage
 pub fn paperpaw_sdk::library::set_finished(&dyn paperpaw_platform::storage::Storage, &str, bool)
 pub fn paperpaw_sdk::library::take_over_old(&dyn paperpaw_platform::storage::Storage)
 pub fn paperpaw_sdk::library::today(&paperpaw_sdk::Env<'_>) -> core::option::Option<u32>
+pub fn paperpaw_sdk::library::unused_books(&dyn paperpaw_platform::storage::Storage, &[paperpaw_sdk::library::BookData], &str, paperpaw_sdk::library::BookDataKind) -> core::result::Result<u32, paperpaw_platform::storage::StorageError>
 pub mod paperpaw_sdk::logo
 #[non_exhaustive] pub enum paperpaw_sdk::logo::Logo
 pub paperpaw_sdk::logo::Logo::Drawn
@@ -2335,6 +2342,7 @@ pub fn paperpaw_sdk::positions::Position::xpointer(self, impl core::convert::Int
 pub const paperpaw_sdk::positions::DIR: &str
 pub fn paperpaw_sdk::positions::file(&str) -> alloc::string::String
 pub fn paperpaw_sdk::positions::load(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_sdk::positions::Position>
+pub fn paperpaw_sdk::positions::load_for_update(&dyn paperpaw_platform::storage::Storage, &str) -> core::result::Result<core::option::Option<paperpaw_sdk::positions::Position>, paperpaw_platform::storage::StorageError>
 pub fn paperpaw_sdk::positions::save(&dyn paperpaw_platform::storage::Storage, &str, &paperpaw_sdk::positions::Position) -> core::result::Result<(), paperpaw_platform::storage::StorageError>
 pub mod paperpaw_sdk::power
 pub enum paperpaw_sdk::power::PowerLevel
@@ -2643,6 +2651,7 @@ pub fn paperpaw_sdk::secrets::Secrets::encode(&self) -> alloc::string::String
 pub fn paperpaw_sdk::secrets::Secrets::get(&self, &str) -> core::option::Option<&str>
 pub fn paperpaw_sdk::secrets::Secrets::is_empty(&self) -> bool
 pub fn paperpaw_sdk::secrets::Secrets::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &paperpaw_sdk::secrets::Secret>
+pub fn paperpaw_sdk::secrets::Secrets::saved(&self, &str) -> bool
 pub struct paperpaw_sdk::secrets::Visible<'a>
 impl<'a> paperpaw_sdk::secrets::Visible<'a>
 pub fn paperpaw_sdk::secrets::Visible<'a>::get(&self, &str) -> core::option::Option<&'a str>
@@ -2651,6 +2660,7 @@ pub fn paperpaw_sdk::secrets::Visible<'a>::is_empty(&self) -> bool
 pub fn paperpaw_sdk::secrets::Visible<'a>::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &'a paperpaw_sdk::secrets::Secret> + '_
 pub fn paperpaw_sdk::secrets::Visible<'a>::listed(&self) -> impl core::iter::traits::iterator::Iterator<Item = paperpaw_sdk::secrets::Listed<'a>> + 'a
 pub fn paperpaw_sdk::secrets::Visible<'a>::new(&'a paperpaw_sdk::secrets::Secrets, &'a dyn paperpaw_sdk::secrets::Running) -> Self
+pub fn paperpaw_sdk::secrets::Visible<'a>::saved(&self, &str) -> bool
 impl core::fmt::Debug for paperpaw_sdk::secrets::Visible<'_>
 pub fn paperpaw_sdk::secrets::Visible<'_>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
 pub const paperpaw_sdk::secrets::FILE: &str
@@ -5379,6 +5389,7 @@ impl paperpaw_sdk::contribution::Registrar
 pub fn paperpaw_sdk::contribution::Registrar::add(&mut self, paperpaw_sdk::contribution::Contribution) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_action(&mut self, paperpaw_sdk::ActionSpec) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_book_badge(&mut self, paperpaw_sdk::library::service::BookBadge) -> core::result::Result<(), paperpaw_sdk::RegisterError>
+pub fn paperpaw_sdk::contribution::Registrar::add_book_cache(&mut self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_book_data(&mut self, impl core::convert::Into<alloc::borrow::Cow<'static, str>>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_book_field(&mut self, paperpaw_sdk::library::service::BookField) -> core::result::Result<(), paperpaw_sdk::RegisterError>
 pub fn paperpaw_sdk::contribution::Registrar::add_choice(&mut self, impl core::convert::Into<paperpaw_sdk::Id>, impl core::convert::Into<alloc::borrow::Cow<'static, str>>) -> core::result::Result<(), paperpaw_sdk::RegisterError>

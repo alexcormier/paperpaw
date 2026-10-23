@@ -6,6 +6,62 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Your data is safer: an audit of everything PaperPaw keeps found ways
+  it could lose notes, places, statistics, cards or passwords, and they
+  are closed, each with a test.
+  - The X4's card: a file being saved is whole again after a power cut
+    at any moment (an empty battery, a reset). A removed file's entry
+    goes before its space is freed, and a file takes another's place
+    without a gap (rust-fatfs patched, `patches/fatfs`).
+  - *Clean up storage* runs by itself only for what can be made again
+    (covers, laid out pages). The notes, places and settings of books
+    not found (renamed or moved on a computer, on a card not in) go
+    only when you agree; it says how many books that is.
+  - Reading places: a position file that cannot be read is no longer
+    written over with the start of the book; the old `progress.ini`
+    never wins over a newer place.
+  - Progress sync: after a fetch that failed, nothing is sent until the
+    server's place was read; leaving the offer with *Back* sends
+    nothing; a book that starts here anew is offered the server's
+    place even when this device sent it; places kept while offline are
+    fetched first.
+  - KOReader: a highlight that could not be passed on is not taken for
+    one removed there; long notes are not cut on KOReader's side; one
+    side with no annotations at all deletes nothing on the other.
+  - Statistics sync: a file on the server that was replaced or restored
+    from a backup deletes nothing here, and you are told; stays read
+    since the last upload always stay; a file missing on the server is
+    not overwritten at once.
+  - Wallabag keeps the book of an article you highlighted when it is
+    archived, and never removes another article's book. Books Calibre
+    removes keep their notes, which come back when the book is sent
+    again. Removing a news feed keeps its book.
+  - Lines a file has that PaperPaw does not understand (from a newer
+    version, or written by hand) are kept in annotations, passwords,
+    rules and book details, and a newer file is always recognised.
+  - Passwords: an old copy (Wi-Fi, progress sync, statistics, catalogs,
+    settings) goes only once the passwords file holds it. An empty
+    password prompt and a refused Readwise token no longer delete the
+    one kept.
+  - Home pages keep the widgets of plugins not loaded right now (safe
+    mode, an update on trial) when a page is edited.
+  - The file manager says what deleting removes, refuses to delete or
+    move PaperPaw's own folder, and refuses to move a folder of more
+    than 2000 books; a renamed book always keeps its notes.
+  - Smaller ones: browser bookmarks are not replaced by the defaults
+    after a read error; vocabulary decks and review answers are not
+    written over after a read error; the word list says it keeps 2000
+    words; an OPDS answer that is no book is not saved as one; the
+    QuireInk folder is taken over even beside a new one.
+- SDK: `Registrar::add_book_cache` names book data that is made again
+  from the book (cleaned up by itself); `add_book_data` is for the
+  reader's own data, removed only when the reader agrees.
+  `library::BookDataKind`, `library::unused_books`,
+  `annotations::stored_note`, `positions::load_for_update` and
+  `Secrets::saved` are new. Breaking: `library::clean_up_unused` takes
+  the kind to remove. `files::put_in_place` and `files::copy` keep the
+  new file where a failed move took the old one.
+
 - No building block shortens a label any more, even at the largest
   text: header bars set a long title on two lines, smaller where needed;
   value, noted and switch rows wrap their titles and grow
