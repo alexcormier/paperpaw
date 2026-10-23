@@ -166,7 +166,9 @@ fn identifiers_are_ascii_letters_digits_and_four_marks() {
     ] {
         assert_eq!(first_error(bad).kind, ErrorKind::InvalidKey, "{bad}");
     }
-    for bad in ["[]", "[ ]", "[a  b]", "[a b ]x", "[ä]", "[a]]", "[[a]", "[a", "a]"] {
+    for bad in [
+        "[]", "[ ]", "[a  b]", "[a b ]x", "[ä]", "[a]]", "[[a]", "[a", "a]",
+    ] {
         let kind = first_error(bad).kind;
         assert!(
             matches!(kind, ErrorKind::InvalidSection | ErrorKind::InvalidLine),

@@ -273,7 +273,9 @@ fn several_steps(value: &str) -> bool {
     let step = |part: &str| {
         let part = part.trim();
         let id = part.split_once('=').map_or(part, |(id, _)| id).trim();
-        ["notify:", "open:", "emit:"].iter().any(|p| part.starts_with(p))
+        ["notify:", "open:", "emit:"]
+            .iter()
+            .any(|p| part.starts_with(p))
             || (!id.is_empty()
                 && id.contains('.')
                 && id
@@ -1203,10 +1205,21 @@ mod tests {
             .collect();
         let at =
             |place: &str, part: &str| actions.iter().any(|(p, m)| *p == place && m.contains(part));
-        assert!(at("actions.ini:3", "a `run` line of its own"), "{actions:#?}");
-        assert!(at("actions.ini:4", "`notify:Good night` names no text"), "{actions:#?}");
+        assert!(
+            at("actions.ini:3", "a `run` line of its own"),
+            "{actions:#?}"
+        );
+        assert!(
+            at("actions.ini:4", "`notify:Good night` names no text"),
+            "{actions:#?}"
+        );
         assert_eq!(actions.len(), 2, "{actions:#?}");
-        assert!(found.iter().filter(|f| f.1 == "package.actions").all(|f| f.0 == Level::Warning));
+        assert!(
+            found
+                .iter()
+                .filter(|f| f.1 == "package.actions")
+                .all(|f| f.0 == Level::Warning)
+        );
     }
 
     /// Another plugin's menu changed in a plain section is said, a menu
@@ -1235,7 +1248,8 @@ mod tests {
         assert!(
             menus.iter().any(|f| f.0 == Level::Error
                 && f.2 == "menus.ini:10"
-                && f.3.contains("[menu core.library-menu] is another plugin's menu")),
+                && f.3
+                    .contains("[menu core.library-menu] is another plugin's menu")),
             "{menus:#?}"
         );
     }

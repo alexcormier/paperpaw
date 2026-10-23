@@ -166,23 +166,22 @@ fn vet(plugin: &Id, found: &[ReadAction]) -> Result<(), RegisterError> {
     let ids: Vec<&Id> = found.iter().map(|action| &action.id).collect();
     for action in found {
         let id = &action.id;
-        let problem = if action
-            .steps
-            .iter()
-            .any(|step| matches!(step, Step::Emit(event) if event.namespace() != plugin.as_str()))
-        {
-            Some(format!("`{id}`: emits only events of its own"))
-        } else if action.steps.len() > MAX_STEPS {
-            Some(format!("`{id}`: more than {MAX_STEPS} steps"))
-        } else if action
-            .steps
-            .iter()
-            .any(|step| matches!(step, Step::Run(other) if ids.contains(&other)))
-        {
-            Some(format!("`{id}`: runs an action of the same file"))
-        } else {
-            None
-        };
+        let problem =
+            if action.steps.iter().any(
+                |step| matches!(step, Step::Emit(event) if event.namespace() != plugin.as_str()),
+            ) {
+                Some(format!("`{id}`: emits only events of its own"))
+            } else if action.steps.len() > MAX_STEPS {
+                Some(format!("`{id}`: more than {MAX_STEPS} steps"))
+            } else if action
+                .steps
+                .iter()
+                .any(|step| matches!(step, Step::Run(other) if ids.contains(&other)))
+            {
+                Some(format!("`{id}`: runs an action of the same file"))
+            } else {
+                None
+            };
         if let Some(message) = problem {
             return Err(RegisterError::Parse {
                 line: action.line,
