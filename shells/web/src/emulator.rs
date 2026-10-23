@@ -446,7 +446,7 @@ impl Emulator {
 
     /// The device as the page shows it, as JSON: its name, screen size,
     /// grays and dpi, whether it has touch, its buttons and those in a
-    /// row below the screen.
+    /// row below the screen, and its body with the keys on it.
     pub fn device_json(&self) -> String {
         let device = &self.profile.device;
         let (width, height) = self.size();
@@ -464,7 +464,7 @@ impl Emulator {
                 .join(",")
         };
         format!(
-            "{{\"id\":{},\"name\":{},\"width\":{width},\"height\":{height},\"dpi\":{},\"grays\":{grays},\"color\":{},\"touch\":{},\"buttons\":[{}],\"row\":[{}],\"version\":{}}}",
+            "{{\"id\":{},\"name\":{},\"width\":{width},\"height\":{height},\"dpi\":{},\"grays\":{grays},\"color\":{},\"touch\":{},\"buttons\":[{}],\"row\":[{}],\"body\":{},\"version\":{}}}",
             json_string(device.id),
             json_string(device.name),
             device.display.dpi,
@@ -472,6 +472,7 @@ impl Emulator {
             device.input.touch,
             list(self.profile.buttons),
             list(self.profile.button_row),
+            self.profile.body.json(),
             json_string(&version()),
         )
     }

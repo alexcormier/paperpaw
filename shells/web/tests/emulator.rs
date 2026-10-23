@@ -66,6 +66,9 @@ fn the_devices_are_as_their_profiles_say() {
     assert!(json.contains("\"grays\":2"), "{json}");
     assert!(json.contains("\"touch\":false"), "{json}");
     assert!(json.contains("\"power\""), "{json}");
+    // Its body, with the keys where they sit.
+    assert!(json.contains("\"body\":{\"bezel\":["), "{json}");
+    assert!(json.contains("\"place\":\"right\""), "{json}");
     let boox = Emulator::new("boox-go-7", "de", true).unwrap();
     let json = boox.device_json();
     assert!(json.contains("\"touch\":true"), "{json}");

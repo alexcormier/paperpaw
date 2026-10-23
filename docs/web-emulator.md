@@ -15,9 +15,10 @@ shells/web/
   src/network.rs    plugins' requests answered from the page's recorded answers
   src/exports.rs    the module's functions (wasm32 only)
   tests/            the emulator, its commands, network and a code plugin, natively
-  www/              paperpaw-web.js (loader), frame.html, frame.css and
-                    frame.js (the emulator frame), index.html with
-                    index.css and index.js (a page to try it)
+  www/              paperpaw-web.js (loader), frame.html, frame.css,
+                    frame.js and body.js (the emulator frame, the device's
+                    body), index.html with index.css and index.js (a page
+                    to try it)
   build.py          builds the module into www/ (--serve shows it,
                     --limit-mb fails where it grew too large)
 ```
@@ -64,7 +65,7 @@ stops the device too), the frame says so before it starts again:
 
 | Message to the frame | Effect | Answer |
 |---|---|---|
-| `{ type: "start", profile, language, dark, buttons?, plugins: [{ id, files: { path: bytes } }] }` | Starts a device (`xteink-x4`, `xteink-x4-pro`, `boox-go-7`, or another profile of the emulator); each plugin's files go into its storage under `plugins/<id>/`, as a card would have them; `buttons: false` leaves out the buttons below the screen | `{ device: { id, name, width, height, dpi, grays, color, touch, buttons, row, version } }` |
+| `{ type: "start", profile, language, dark, buttons?, look?, plugins: [{ id, files: { path: bytes } }] }` | Starts a device (`xteink-x4`, `xteink-x4-pro`, `boox-go-7`, or another profile of the emulator); each plugin's files go into its storage under `plugins/<id>/`, as a card would have them; `buttons: false` leaves out the keys drawn, `look` colours the body and its keys (see below) | `{ device: { id, name, width, height, dpi, grays, color, touch, buttons, row, body, version } }` |
 | `{ type: "files", id, files }` | Replaces a data plugin's files (whatever of it was on the card goes) and starts the device again (a few milliseconds); `files: {}` takes it off | `{}` |
 | `{ type: "input", event }` | `event`: `{ kind: "button", name, pressed }`, `{ kind: "button", name, hold }` (a long press, held `hold` ms), `{ kind: "key", key, pressed }` (the keyboard's keys as the desktop emulator maps them), `{ kind: "pointer", phase: "down" \| "move" \| "up" \| "cancel", x, y }` (the screen's pixels) | `{}` |
 | `{ type: "screenshot", profile?, dark?, asleep? }` | The panel as it shows, at the device's resolution; with `profile`, `dark` or `asleep`, what that device, night mode or the sleep screen would show with the same card, made apart (what is shown stays) | `{ png }` (bytes) |
@@ -153,10 +154,45 @@ the screen's pixels, with devicePixelRatio counted, and is drawn crisp.
 Where it has to be made smaller, it is smoothed. It shows the grays the
 panel shows, in e-ink's tones on gray panels, so its black is lighter
 than a screen's. A full refresh flashes. Screenshots have the panel
-model's own colours. The device's buttons are below it, its keys are on
-the keyboard, and the screen takes touch where the device has a touch
-screen. The frame has no background of its own: the device stands on
-the page that embeds it.
+model's own colours. The screen takes touch where the device has a
+touch screen. The frame has no background of its own: the device stands
+on the page that embeds it.
+
+**The body and its keys.** The frame draws the device's body around the
+screen and its keys where they sit on the real one (`body.js`), from the
+profile's body: on the edges, and on the face below or beside the
+screen. Each key takes the mouse, touch, and the computer's keys its
+profile binds; Enter and Space press a key that has the focus. A device
+whose profile places no keys has its buttons in a row below it.
+`start`'s `look` (`{ ink, body, onBody, font }`, CSS values) colours the
+keys at the edges (`ink`), the body (`body`) and the keys on it
+(`onBody`). The data is the same in `device.body` (from `start`) and in
+`paperpaw-emu --registry` under each profile's `body`, for other
+emulators that draw the device (the plugin workshop):
+
+```json
+{"bezel": [7, 7, 30, 7],
+ "keys": [{"button": "page-back", "place": "right", "at": 36, "length": 13,
+           "keys": ["PageUp", "ArrowUp"]}]}
+```
+
+- `bezel`: the body around the screen, top, right, bottom and left, in
+  hundredths of the screen's width.
+- `button`: the button the key presses (one of the device's `buttons`).
+- `place`: `top`, `right`, `bottom` or `left` (an edge, the key out of
+  its side), `below` or `beside` (on the face, in the bezel below or
+  right of the screen).
+- `at`, `length`: the key's middle and its length along that place, in
+  hundredths of the body's length there, from the left (`top`,
+  `bottom`, `below`) or from the top (`left`, `right`, `beside`).
+- `keys`: the computer's keys that press it, as `KeyboardEvent.key`
+  names them.
+
+The Xteink X4 has its four front keys below the screen, a rocker on the
+right edge (page back above page forward) and the power key above it;
+the X4 Pro a page key on each edge (back left, forward right), power on
+the top edge and home touched below the screen; the Boox Go 7 its page
+keys beside the screen.
 
 **Serving it.** Each release has the module and its pages as
 `paperpaw-web-<version>.zip`, with its SHA-256 and a signature by

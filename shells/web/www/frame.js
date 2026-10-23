@@ -7,8 +7,10 @@
 // a fresh instance, starts the device again as it was last started, with
 // the data plugins it had, and tells the page ({ type: "restarted" }).
 
+import { apply, bezels, keys, margins, place } from "./body.js";
 import { KEYS, PaperPawDevice } from "./paperpaw-web.js";
 
+const shell = document.getElementById("device");
 const canvas = document.getElementById("screen");
 const context = canvas.getContext("2d");
 const row = document.getElementById("buttons");
@@ -16,6 +18,10 @@ const started = performance.now();
 
 let device = null;
 let info = null;
+/// The keys drawn on the body, by button; the computer's keys bound to
+/// the body's, by key.
+let drawn = new Map();
+let bound = new Map();
 /// How the device was last started, and the data plugins on its card by
 /// id (their files): what a restart after a trap starts again.
 let last = null;
@@ -82,18 +88,35 @@ function tell(message) {
   else if (message.type === "ready") window.parent.postMessage(message, "*");
 }
 
-/// Sizes the canvas on the page: each of the device's pixels as a whole
-/// number of the screen's own (devicePixelRatio counted), drawn crisp,
-/// where it fits at least once; smoothed where it has to be made smaller,
-/// as dropping rows and columns would make strokes look bolder or vanish.
+/// The body of a device whose profile draws none.
+const PLAIN = { bezel: [6, 6, 6, 6], keys: [] };
+
+/// Sizes the canvas on the page, the body around it and the keys on it:
+/// each of the device's pixels as a whole number of the screen's own
+/// (devicePixelRatio counted), drawn crisp, where it fits at least once;
+/// smoothed where it has to be made smaller, as dropping rows and columns
+/// would make strokes look bolder or vanish.
 function fit() {
   const ratio = window.devicePixelRatio || 1;
-  const room = [window.innerWidth - 40, window.innerHeight - 40 - (row.hidden ? 0 : row.offsetHeight + 28)];
-  const scale = Math.min((room[0] * ratio) / canvas.width, (room[1] * ratio) / canvas.height);
+  const body = info?.body ?? PLAIN;
+  const [top, right, bottom, left] = margins({ keys: drawn.size ? body.keys : [] });
+  const below = row.hidden ? 0 : row.offsetHeight + 20;
+  const room = [window.innerWidth - 24 - left - right, window.innerHeight - 24 - top - bottom - below];
+  // The body for each of the device's pixels across: its bezels are
+  // hundredths of the screen's width.
+  const [bt, br, bb, bl] = body.bezel;
+  const wide = canvas.width * (1 + (bl + br) / 100);
+  const high = canvas.height + (canvas.width * (bt + bb)) / 100;
+  const scale = Math.min((room[0] * ratio) / wide, (room[1] * ratio) / high);
   const whole = scale >= 1 ? Math.floor(scale) : scale;
-  canvas.style.width = `${(canvas.width * whole) / ratio}px`;
-  canvas.style.height = `${(canvas.height * whole) / ratio}px`;
+  const [width, height] = [(canvas.width * whole) / ratio, (canvas.height * whole) / ratio];
+  canvas.style.width = `${width}px`;
+  canvas.style.height = `${height}px`;
   canvas.style.imageRendering = scale >= 1 ? "pixelated" : "auto";
+  const bezel = bezels(body, width);
+  shell.style.padding = bezel.map((part) => `${part}px`).join(" ");
+  shell.style.margin = [top, right, bottom, left].map((part) => `${part}px`).join(" ");
+  place(drawn, width + bezel[1] + bezel[3], height + bezel[0] + bezel[2], bezel);
 }
 
 window.addEventListener("resize", () => canvas.width && fit());
@@ -186,47 +209,23 @@ async function fetchFor(call) {
   step();
 }
 
-/// How the buttons below the screen are labelled, as the hint bar shows
-/// their use: a word, or a chevron pointing `left` or `right` with its
-/// name for screen readers; the button's name where none is here.
-const LABELS = {
-  back: { text: "Back" },
-  confirm: { text: "Select" },
-  home: { text: "Home" },
-  menu: { text: "Menu" },
-  power: { text: "Power" },
-  left: { chevron: "left", spoken: "Left" },
-  right: { chevron: "right", spoken: "Right" },
-  "page-back": { chevron: "left", spoken: "Page back" },
-  "page-forward": { chevron: "right", spoken: "Page forward" },
-};
-
-/// A chevron as the hint bar draws it, in the button's colour.
-function chevron(towards) {
-  const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
-  svg.setAttribute("viewBox", "0 0 10 16");
-  svg.setAttribute("aria-hidden", "true");
-  const line = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
-  line.setAttribute("points", towards === "left" ? "8,2 2,8 8,14" : "2,2 8,8 2,14");
-  svg.append(line);
-  return svg;
-}
-
-/// The buttons below the screen: the row the device has, else all; none
-/// where the page said so (`buttons: false`).
+/// The device's keys: on its body where its profile places them, else
+/// in a row below it (the row it has, else all its buttons); none where
+/// the page said so (`buttons: false`). The computer's keys the profile
+/// binds press them either way.
 function buttons(shown) {
+  const body = info.body ?? PLAIN;
+  bound = new Map(body.keys.flatMap((key) => key.keys.map((pressed) => [pressed, key.button])));
+  for (const key of shell.querySelectorAll(".key")) key.remove();
+  drawn = shown ? keys(shell, body, press) : new Map();
   row.replaceChildren();
-  row.hidden = !shown;
+  row.hidden = !shown || body.keys.length > 0;
+  if (row.hidden) return;
   const names = info.row.length ? info.row : info.buttons;
   for (const name of names) {
     const button = document.createElement("button");
-    const label = LABELS[name] ?? { text: name };
-    if (label.chevron) {
-      button.append(chevron(label.chevron));
-      button.setAttribute("aria-label", label.spoken);
-    } else {
-      button.textContent = label.text;
-    }
+    button.textContent = name;
+    button.dataset.button = name;
     button.addEventListener("pointerdown", () => press(name, true));
     button.addEventListener("pointerup", () => press(name, false));
     button.addEventListener("pointerleave", (event) => {
@@ -262,7 +261,10 @@ for (const [type, phase] of [
 
 for (const type of ["keydown", "keyup"]) {
   window.addEventListener(type, (event) => {
-    const name = KEYS[event.key];
+    // A key of the device focused: Enter and Space press it.
+    const focused = event.target instanceof Element ? event.target.closest("[data-button]") : null;
+    const own = focused && (event.key === "Enter" || event.key === " ") ? focused.dataset.button : null;
+    const name = own ?? bound.get(event.key) ?? KEYS[event.key];
     if (!name || !device || event.repeat) return;
     event.preventDefault();
     press(name, type === "keydown");
@@ -280,12 +282,14 @@ function boot(how, given) {
   device.start();
   info = device.device();
   buttons(how.buttons ?? true);
+  if (canvas.width) fit();
   step();
 }
 
 /// Starts a device: the files go to `plugins/<id>/` on its card.
-async function start({ profile, language, dark, buttons, plugins: given = [] }) {
+async function start({ profile, language, dark, buttons, look, plugins: given = [] }) {
   device = await loading;
+  apply(look);
   last = { profile, language, dark, buttons };
   boot(last, Object.fromEntries(given.map((plugin) => [plugin.id, plugin.files])));
   return { device: info };
