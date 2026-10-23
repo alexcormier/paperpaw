@@ -484,3 +484,33 @@ fn a_file_appended_to_after_its_new_content_was_made_is_kept() {
     let s = FatStorage::new(fs);
     assert_eq!(whole(&s, A), Ok([&old[..], b" more"].concat()));
 }
+
+/// New content an older firmware left beside a file, unmarked: whether
+/// the file changed since (on a computer) cannot be told, so the file
+/// stays as it is. The new content is set aside under a name of its own,
+/// listed: never lost, never put in the file's place.
+#[test]
+fn unmarked_new_content_of_an_older_firmware_is_set_aside() {
+    let (old, new) = old_and_new();
+    let image = prepared(|s| {
+        beside(s, false);
+        s.write(A, &old).unwrap();
+    });
+    let disk = StdIoWrapper::from(Cursor::new(image));
+    let fs: &'static _ = Box::leak(Box::new(FileSystem::new(disk, FsOptions::new()).unwrap()));
+    {
+        let books = fs.root_dir().open_dir("Books").unwrap();
+        let mut file = books.create_file(Temps::of(name(A)).ready()).unwrap();
+        file.write_all(&new).unwrap();
+        file.flush().unwrap();
+    }
+    let s = FatStorage::new(fs);
+    assert_eq!(whole(&s, A), Ok(old.clone()));
+    let aside = format!("{A}.unsaved");
+    assert_eq!(whole(&s, &aside), Ok(new.clone()));
+    // Settled once: written again, the file is the new one, the content
+    // set aside stays.
+    s.write(A, b"again").unwrap();
+    assert_eq!(whole(&s, A).as_deref(), Ok(&b"again"[..]));
+    assert_eq!(whole(&s, &aside), Ok(new));
+}

@@ -191,6 +191,45 @@ fn a_card_not_unmounted_is_counted_a_part_at_a_time() {
     );
 }
 
+/// The FAT is counted a sector at a time, into a buffer of that size:
+/// nothing large is taken from the heap, which on the X4 is small and in
+/// pieces while the radio is up.
+#[test]
+fn free_space_is_counted_without_a_large_buffer() {
+    for card in [
+        fat32(),
+        Cut::formatted_of(
+            8 << 20,
+            FormatVolumeOptions::new().fat_type(fatfs::FatType::Fat16),
+        ),
+        Cut::formatted_of(
+            8 << 20,
+            FormatVolumeOptions::new().fat_type(fatfs::FatType::Fat12),
+        ),
+    ] {
+        let image = card.image();
+        let largest = alloc::rc::Rc::new(core::cell::Cell::new(0));
+        let seen = largest.clone();
+        let read = move |at: u64, buf: &mut [u8]| {
+            seen.set(seen.get().max(buf.len()));
+            let at = at as usize;
+            buf.copy_from_slice(&image[at..at + buf.len()]);
+            true
+        };
+        let mut free = free::Free::default();
+        for _ in 0..100 {
+            free.ask(&read);
+            if free.exact() {
+                break;
+            }
+        }
+        assert!(free.exact());
+        assert!(largest.get() <= BLOCK, "{} bytes at once", largest.get());
+        let s = card.storage();
+        assert_eq!(free.ask(&read), Some(counted(&s)));
+    }
+}
+
 /// FAT12 and FAT16 keep no count: theirs is counted.
 #[test]
 fn small_cards_are_counted() {

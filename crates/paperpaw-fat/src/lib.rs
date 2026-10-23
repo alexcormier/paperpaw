@@ -39,7 +39,9 @@
 //! `.NEW` takes the file's place, unless the file was changed after it
 //! was made, elsewhere or not: `.NEW` is marked with the file's time,
 //! size and first cluster as they were (not told by times alone, as the
-//! X4 sets none). A file that cannot be settled is left as it is, its
+//! X4 sets none). New content an earlier version left unmarked is set
+//! aside as `<name>.unsaved`, the file kept: whether it changed since
+//! cannot be told. A file that cannot be settled is left as it is, its
 //! folder in reach; so are the paths of a move that cannot be settled,
 //! held up until the next start (`held_up`).
 //! The next write, move or removal of a file does the same, so at most
@@ -476,17 +478,27 @@ fn settled<IO: ReadWriteSeek + 'static>(
         // The file changed since its new content was made, elsewhere or
         // by PaperPaw (not as that is marked, see `state`): that is let
         // go. Not by times: the X4 sets none, so any file a computer
-        // wrote is newer. Unmarked, a file moved there, it takes its
-        // place.
-        let changed = !found.twice
-            && found.entry.as_ref().is_some_and(|entry| {
-                !shares(entry, ready) && ready.mark().is_some_and(|mark| mark != state(entry))
-            });
-        match changed {
-            true => dir.remove(temps.ready()),
-            false => dir.replace(temps.ready(), name),
+        // wrote is newer. Unmarked (left by an earlier version), whether
+        // the file changed cannot be told: the file stays, and the new
+        // content is set aside under a name of its own.
+        let other = !found.twice && found.entry.as_ref().is_some_and(|e| !shares(e, ready));
+        let mark = ready.mark();
+        let changed = other
+            && found
+                .entry
+                .as_ref()
+                .is_some_and(|entry| mark.is_some_and(|mark| mark != state(entry)));
+        if other && mark.is_none() {
+            if let Some(aside) = aside_name(dir, name)? {
+                dir.rename(temps.ready(), dir, &aside).map_err(error)?;
+            }
+        } else {
+            match changed {
+                true => dir.remove(temps.ready()),
+                false => dir.replace(temps.ready(), name),
+            }
+            .map_err(error)?;
         }
-        .map_err(error)?;
     }
     if found.tmp.is_some() || found.ready.is_some() {
         let mut found_now = lookup(dir, name, true)?;
@@ -495,6 +507,25 @@ fn settled<IO: ReadWriteSeek + 'static>(
     } else {
         Ok(found)
     }
+}
+
+/// A free name beside file `name` for new content set aside: `<name>.unsaved`,
+/// else with a number; `None` where none of a few is free (it stays
+/// hidden beside the file then).
+fn aside_name<IO: ReadWriteSeek + 'static>(
+    dir: &FatDir<IO>,
+    name: &str,
+) -> Result<Option<String>, StorageError> {
+    for n in 1..10 {
+        let aside = match n {
+            1 => format!("{name}.unsaved"),
+            n => format!("{name}.unsaved{n}"),
+        };
+        if lookup(dir, &aside, false)?.entry.is_none() {
+            return Ok(Some(aside));
+        }
+    }
+    Ok(None)
 }
 
 /// What tells whether file `entry` was changed: a hash of its time,
