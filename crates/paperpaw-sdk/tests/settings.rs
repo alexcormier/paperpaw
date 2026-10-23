@@ -682,3 +682,25 @@ fn settings_show_on_a_condition_and_refuse_what_their_check_refuses() {
     s.set("a.size", SettingValue::Int(4)).unwrap();
     assert_eq!(s.int("a.size"), 4);
 }
+
+/// The reader's own (an account, a folder) and every secret are left as
+/// they are by the resets of the settings pages; the rest is not.
+#[test]
+fn accounts_folders_and_secrets_are_kept_on_reset() {
+    static SECRET: SettingExtra = SettingExtra::new().secret();
+    static FIXED: [SettingSpec; 3] = [
+        SettingSpec::fixed_text("a.server", "a.server", "", groups::OTHER).kept_on_reset(),
+        SettingSpec::fixed_text("a.key", "a.key", "", groups::OTHER).with_extra(&SECRET),
+        SettingSpec::fixed_number("a.count", "a.count", 0, 9, 1, groups::OTHER),
+    ];
+    let kept: Vec<bool> = FIXED.iter().map(SettingSpec::is_kept_on_reset).collect();
+    assert_eq!(kept, [true, true, false]);
+    let built = SettingSpec::text(&NAME, "a.name", "").kept_on_reset();
+    assert!(built.is_kept_on_reset() && built.kept_on_reset);
+    assert!(
+        SettingSpec::text(&NAME, "a.name", "")
+            .secret()
+            .is_kept_on_reset()
+    );
+    assert!(!SettingSpec::text(&NAME, "a.name", "").is_kept_on_reset());
+}

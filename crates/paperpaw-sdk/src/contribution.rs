@@ -426,6 +426,19 @@ impl Registrar {
                 });
             }
         }
+        // The clean-up removes what is named like a book's key there: a
+        // folder outside PaperPaw's own would take the reader's files.
+        if let Contribution::BookData(data) = &contribution
+            && !in_own_folder(&data.folder)
+        {
+            return Err(RegisterError::Invalid {
+                message: Cow::Owned(alloc::format!(
+                    "book data in `{}`, outside `{}/`",
+                    data.folder,
+                    crate::data::DIR
+                )),
+            });
+        }
         if let Some(id) = contribution.id() {
             // The kernel's services a plugin may stand in for (the
             // library) are published under the kernel's ids.
@@ -566,6 +579,10 @@ impl Registrar {
     /// computer or on a card not inserted is not found either
     /// ([`library::BookData`](crate::library::BookData)). For what is
     /// made again from the book, [`add_book_cache`](Self::add_book_cache).
+    /// The folder must be inside `.paperpaw/` (usually
+    /// [`Env::plugin_dir`](crate::Env::plugin_dir)): one elsewhere is
+    /// refused with [`RegisterError::Invalid`], so that no file of the
+    /// reader's is taken for a book's data.
     pub fn add_book_data(
         &mut self,
         folder: impl Into<Cow<'static, str>>,
@@ -1154,6 +1171,22 @@ impl Registrar {
     }
 }
 
+/// Whether `folder` is a folder inside PaperPaw's own
+/// ([`data::DIR`](crate::data::DIR)), named plainly: no `..`, `.` or
+/// empty parts, no backslash.
+fn in_own_folder(folder: &str) -> bool {
+    let Some(rest) = folder
+        .strip_prefix(crate::data::DIR)
+        .and_then(|rest| rest.strip_prefix('/'))
+    else {
+        return false;
+    };
+    !rest.contains('\\')
+        && rest
+            .split('/')
+            .all(|part| !part.is_empty() && part != "." && part != "..")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1231,5 +1264,51 @@ mod tests {
                 "font-face"
             ]
         );
+    }
+
+    /// The clean-up removes what is named like a book's key in a book
+    /// data folder: one outside PaperPaw's own folder is refused, or it
+    /// could take the reader's files.
+    #[test]
+    fn book_data_is_kept_only_in_paperpaws_folder() {
+        let mut r = Registrar::new(Id::new_static("demo"));
+        r.add_book_data(".paperpaw/plugins/demo", "").unwrap();
+        r.add_book_cache(".paperpaw/plugins/demo/pages", "p-")
+            .unwrap();
+        for folder in [
+            "books",
+            "",
+            ".paperpaw",
+            ".paperpaw/",
+            "/.paperpaw/plugins/demo",
+            ".paperpaw/../books",
+            ".paperpaw/plugins/../../books",
+            ".paperpaw//x",
+            ".paperpaw/./x",
+            ".paperpaw\\..\\books",
+            ".paperpawish/x",
+        ] {
+            assert!(
+                matches!(
+                    r.add_book_data(folder, ""),
+                    Err(RegisterError::Invalid { .. })
+                ),
+                "{folder:?}"
+            );
+            assert!(
+                matches!(
+                    r.add_book_cache(folder, ""),
+                    Err(RegisterError::Invalid { .. })
+                ),
+                "{folder:?}"
+            );
+            let data = Contribution::BookData(crate::library::BookData {
+                folder: Cow::Owned(folder.into()),
+                prefix: Cow::Borrowed(""),
+                kind: crate::library::BookDataKind::UserData,
+            });
+            assert!(r.add(data).is_err(), "{folder:?}");
+        }
+        assert_eq!(r.contributions().len(), 2);
     }
 }

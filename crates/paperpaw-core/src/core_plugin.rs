@@ -1165,7 +1165,8 @@ static GENERAL: [SettingSpec; 9] = [
     .described("core.setting.edge.help"),
 ];
 
-/// The library folder, chosen with the folder chooser.
+/// The library folder, chosen with the folder chooser: the reader's own,
+/// kept when the settings are reset.
 static FOLDER_EDITOR: SettingExtra = SettingExtra::new().editor(screens::FOLDER_EDITOR);
 static LIBRARY: [SettingSpec; 1] = [SettingSpec::fixed_text(
     settings::LIBRARY_FOLDER.static_str(),
@@ -1174,6 +1175,7 @@ static LIBRARY: [SettingSpec; 1] = [SettingSpec::fixed_text(
     groups::LIBRARY,
 )
 .with_extra(&FOLDER_EDITOR)
+.kept_on_reset()
 .described("core.setting.library-folder.help")];
 
 fn register_general_settings(r: &mut Registrar) -> Result<(), RegisterError> {

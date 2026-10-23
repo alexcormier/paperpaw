@@ -138,6 +138,7 @@ static SETTINGS: [SettingSpec; 2] = [
     )
     .advanced()
     .with_extra(&IN_AIDS)
+    .kept_on_reset()
     .described("aids.setting.replace.help"),
 ];
 

@@ -597,9 +597,11 @@ static ON_SETUP: paperpaw_sdk::SettingExtra = paperpaw_sdk::SettingExtra::new().
 static SETTINGS: [SettingSpec; 3] = [
     SettingSpec::fixed_text(SERVER.static_str(), "wallabag.server", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
+        .kept_on_reset()
         .described("wallabag.server.help"),
     SettingSpec::fixed_text(USER.static_str(), "wallabag.user", "", groups::LIBRARY)
         .with_extra(&ON_SETUP)
+        .kept_on_reset()
         .advanced()
         .described("wallabag.user.help"),
     SettingSpec::fixed_text(
@@ -609,6 +611,7 @@ static SETTINGS: [SettingSpec; 3] = [
         groups::LIBRARY,
     )
     .with_extra(&ON_SETUP)
+    .kept_on_reset()
     .advanced()
     .described("wallabag.client-id.help"),
 ];
