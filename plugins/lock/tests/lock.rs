@@ -101,6 +101,7 @@ impl Test {
     fn with(device: DeviceInfo, storage: MemoryStorage) -> Self {
         let mut kernel = Kernel::builder(device)
             .storage(storage)
+            .random(random)
             .sleep(true)
             .plugin(paperpaw_plugin_fonts_default::DefaultFonts)
             .plugin(Lock)
@@ -321,6 +322,31 @@ impl Test {
     }
 }
 
+/// Random bytes, other ones every time.
+fn random(buf: &mut [u8]) -> bool {
+    static NEXT: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(7);
+    for byte in buf {
+        *byte = NEXT.fetch_add(37, std::sync::atomic::Ordering::Relaxed);
+    }
+    true
+}
+
+/// The lock's hash of `code` with `salt`: a salted SHA-1, 2000 times.
+fn hashed(salt: &str, code: &str) -> String {
+    use paperpaw_sdk::digest::sha1::{Sha1, hex};
+    let mut sha = Sha1::new();
+    sha.update(salt.as_bytes());
+    sha.update(code.as_bytes());
+    let mut digest = sha.finish();
+    for _ in 1..2000 {
+        let mut sha = Sha1::new();
+        sha.update(salt.as_bytes());
+        sha.update(&digest);
+        digest = sha.finish();
+    }
+    hex(&digest)
+}
+
 /// Copies every file of `dir` from `from` to `to`.
 fn copy(from: &dyn Storage, dir: &str, to: &mut MemoryStorage) {
     let mut entries = Vec::new();
@@ -481,6 +507,41 @@ fn the_kind_changed_elsewhere_goes_back() {
         .unwrap();
     assert_eq!(test.kernel.settings().text("lock.kind"), "lock.kind.pin");
     test.lock_now();
+}
+
+/// A code kept with a salt made from it (as before salts were random:
+/// of the device's id, the time and the code) opens the lock as it did,
+/// and is kept anew with a random salt then; a wrong one changes
+/// nothing. One kept now has a random salt from the start.
+#[test]
+fn codes_kept_with_a_salt_of_the_code_are_kept_anew_at_random() {
+    let mut test = Test::new(X4);
+    test.set_up_pin("2580");
+    let stored = |test: &Test| test.kernel.secrets().get("lock.code").unwrap().to_string();
+    let fresh = stored(&test);
+    assert!(fresh.starts_with("pin:v2."), "{fresh}");
+    let old = "0123456789abcdef";
+    test.kernel.set_secret(paperpaw_sdk::secrets::SecretChange {
+        id: String::from("lock.code"),
+        label: String::from("lock.secret"),
+        value: Some(format!("pin:{old}:{}", hashed(old, "2580"))),
+        changeable: false,
+    });
+    test.lock_now();
+    test.enter("1111");
+    assert!(test.open(&LOCK), "a wrong code opens nothing");
+    assert!(stored(&test).contains(old), "and changes nothing");
+    test.enter("2580");
+    assert!(!test.open(&LOCK), "the code kept before opens");
+    let renewed = stored(&test);
+    assert!(
+        renewed.starts_with("pin:v2.") && !renewed.contains(old),
+        "{renewed}"
+    );
+    assert_ne!(renewed, fresh, "a salt of its own");
+    test.lock_now();
+    test.enter("2580");
+    assert!(!test.open(&LOCK), "and opens kept anew");
 }
 
 #[test]

@@ -40,6 +40,10 @@ change the plugin SDK.
   screen is a colour panel (`colour_screen`: the Kobo Libra Colour, not
   the Boox Go 7) and whether black and white are shown in the colours set
   (`tinted`; `colors`, which said that, is kept).
+- The screen lock keeps its code with a random salt: the salt was made
+  from the device's id, the time and the code itself, which let a guess
+  be tried with one SHA-1 instead of all 2000 rounds. A code kept so
+  opens the lock as before and is kept anew with a random salt then.
 - The reader can name the device (*Device name* under System; by default
   the model's, "PaperPaw X4 Pro", "PaperPaw X4", on other devices the
   model). Calibre, the progress server (kosync), the Wi-Fi transfer
