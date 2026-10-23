@@ -6,6 +6,18 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- The store tells betas apart: a plugin's versions are compared whole,
+  pre-release included (`0.5.0-beta.2` after `0.5.0-beta.1`, `0.5.0`
+  after both), as firmware updates are. A newer beta is offered only
+  where the device runs a beta or takes betas (*Beta updates*); the
+  record of what the store installed keeps the version as it named it.
+  Its message for code built for another plugin interface or compiler
+  says so.
+- SDK: `Version::parse` reads a version with a pre-release or build
+  after its three numbers (`0.5.0-beta.2`) as those numbers, so a
+  plugin of a beta loads. `install::folder_release` gives the version as
+  `plugin.ini` writes it; `Origins::release` the version a store named;
+  `remember_store_install` takes either.
 - Transfer over USB, further:
   - A plugin's files are put together in a folder of the cable's own,
     and installed only if they are those offered, each with the SHA-256

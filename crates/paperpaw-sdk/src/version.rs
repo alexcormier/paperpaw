@@ -47,9 +47,21 @@ impl Version {
         value
     }
 
-    /// Parses `1`, `1.2` or `1.2.3`.
+    /// Parses `1`, `1.2` or `1.2.3`; after three numbers a pre-release or
+    /// build (`1.2.3-beta.1`, `1.2.3+abc`) is left out: betas of one
+    /// release have its numbers (to order such versions whole, see
+    /// [`firmware::compare_versions`](crate::firmware::compare_versions)).
     pub fn parse(text: &str) -> Option<Version> {
-        let mut parts = text.trim().split('.');
+        let text = text.trim();
+        let numbers = text.split(['-', '+']).next().unwrap_or_default();
+        let rest = &text[numbers.len()..];
+        let label = |c: char| c.is_ascii_alphanumeric() || matches!(c, '.' | '-' | '+');
+        if !rest.is_empty()
+            && (numbers.split('.').count() != 3 || rest.len() < 2 || !rest.chars().all(label))
+        {
+            return None;
+        }
+        let mut parts = numbers.split('.');
         let major = parts.next()?.parse().ok()?;
         let minor = parts.next().map_or(Some(0), |p| p.parse().ok())?;
         let patch = parts.next().map_or(Some(0), |p| p.parse().ok())?;
@@ -111,6 +123,17 @@ mod tests {
             number(env!("CARGO_PKG_VERSION_PATCH")).unwrap(),
         );
         assert_eq!(crate_version, SDK_VERSION);
+    }
+
+    #[test]
+    fn pre_releases_have_their_releases_numbers() {
+        assert_eq!(Version::parse("0.5.0-beta.2"), Some(Version::new(0, 5, 0)));
+        assert_eq!(Version::parse("1.2.3+abc"), Some(Version::new(1, 2, 3)));
+        assert_eq!(Version::parse(" 1.2 "), Some(Version::new(1, 2, 0)));
+        assert_eq!(Version::parse("1.2-beta"), None);
+        assert_eq!(Version::parse("-1.2.3"), None);
+        assert_eq!(Version::parse("1.2.3-"), None);
+        assert_eq!(Version::parse("1.2.3-b c"), None);
     }
 
     #[test]

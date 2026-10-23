@@ -47,7 +47,9 @@ pub fn origin(storage: &dyn Storage, plugin: &str, version: Version) -> Origin {
 /// plugins in a row (a list of them) without reading each time.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Origins {
-    kept: Vec<(String, Version)>,
+    /// Each plugin's versions kept: their numbers, and as written (a
+    /// pre-release with them).
+    kept: Vec<(String, Version, String)>,
 }
 
 impl Origins {
@@ -57,7 +59,12 @@ impl Origins {
             .lines()
             .filter_map(|line| {
                 let (id, version) = line.split_once('\t')?;
-                Some((String::from(id), Version::parse(version.trim())?))
+                let written = version.trim();
+                Some((
+                    String::from(id),
+                    Version::parse(written)?,
+                    String::from(written),
+                ))
             })
             .collect();
         Self { kept }
@@ -68,15 +75,32 @@ impl Origins {
         let ours = self
             .kept
             .iter()
-            .any(|(id, kept)| id == plugin && *kept == version);
+            .any(|(id, kept, _)| id == plugin && *kept == version);
         if ours { Origin::Store } else { Origin::Local }
+    }
+
+    /// The version of `plugin` a store installed with the numbers of
+    /// `version`, as the store named it (`0.5.0-beta.2`: betas of one
+    /// release share their numbers); the last such one kept.
+    pub fn release(&self, plugin: &str, version: Version) -> Option<&str> {
+        self.kept
+            .iter()
+            .rev()
+            .find(|(id, kept, _)| id == plugin && *kept == version)
+            .map(|(_, _, written)| written.as_str())
     }
 }
 
-/// Remembers that a store installed `plugin` at `version`; `false` if it
-/// could not be kept (the file left as it is where it could not be read).
-pub fn remember_store_install(storage: &dyn Storage, plugin: &str, version: Version) -> bool {
-    change(storage, plugin, Some(version))
+/// Remembers that a store installed `plugin` at `version` (a
+/// [`Version`], or the version as the store named it, pre-release
+/// included); `false` if it could not be kept (the file left as it is
+/// where it could not be read).
+pub fn remember_store_install(
+    storage: &dyn Storage,
+    plugin: &str,
+    version: impl core::fmt::Display,
+) -> bool {
+    change(storage, plugin, Some(format!("{version}")))
 }
 
 /// Forgets every version a store installed of `plugin`: an installer of
@@ -112,18 +136,25 @@ pub fn adopt(env: &Env<'_>) -> bool {
 /// The version `plugin.ini` in `folder` says, e.g. of a plugin about to be
 /// installed.
 pub fn folder_version(storage: &dyn Storage, folder: &str) -> Option<Version> {
+    folder_release(storage, folder).and_then(|written| Version::parse(&written))
+}
+
+/// The same as `plugin.ini` writes it, a pre-release included
+/// (`0.5.0-beta.2`), if it is a version.
+pub fn folder_release(storage: &dyn Storage, folder: &str) -> Option<String> {
     let path = format!("{}/plugin.ini", folder.trim_end_matches('/'));
     let bytes = crate::read_file(storage, &path, MAX_MANIFEST).ok()?;
     let source = core::str::from_utf8(&bytes).ok()?;
     paperpaw_config::parse(source)
         .filter_map(Result::ok)
         .find(|entry| entry.section == "plugin" && entry.key == "version")
-        .and_then(|entry| Version::parse(entry.value.as_str().trim()))
+        .map(|entry| String::from(entry.value.as_str().trim()))
+        .filter(|written| Version::parse(written).is_some())
 }
 
 /// Keeps `version` for `plugin` (the oldest of its versions going past
 /// [`VERSIONS_KEPT`]), or forgets all of its versions.
-fn change(storage: &dyn Storage, plugin: &str, version: Option<Version>) -> bool {
+fn change(storage: &dyn Storage, plugin: &str, version: Option<String>) -> bool {
     let Ok(kept) = crate::files::load_text_for_update(storage, STORE_INSTALLS, 64 * 1024) else {
         return false;
     };
@@ -137,8 +168,7 @@ fn change(storage: &dyn Storage, plugin: &str, version: Option<Version>) -> bool
         }
     }
     match version {
-        Some(version) => {
-            let new = format!("{version}");
+        Some(new) => {
             versions.retain(|kept| *kept != new);
             versions.push(new);
             let first = versions.len().saturating_sub(VERSIONS_KEPT);

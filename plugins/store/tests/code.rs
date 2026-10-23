@@ -270,7 +270,7 @@ fn code_that_cannot_be_trusted_is_not_installed() {
     refused(&ppn(BUILD, None), "not signed by its author");
     refused(
         &ppn(Fingerprint(1), Some(&AUTHOR)),
-        "made for another version of PaperPaw",
+        "built for another plugin interface or compiler",
     );
     let mut damaged = ppn(BUILD, Some(&AUTHOR));
     damaged[100] ^= 0xFF;

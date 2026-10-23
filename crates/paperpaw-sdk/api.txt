@@ -1679,6 +1679,7 @@ pub struct paperpaw_sdk::install::Origins
 impl paperpaw_sdk::install::Origins
 pub fn paperpaw_sdk::install::Origins::of(&self, &str, paperpaw_sdk::Version) -> paperpaw_sdk::install::Origin
 pub fn paperpaw_sdk::install::Origins::read(&dyn paperpaw_platform::storage::Storage) -> Self
+pub fn paperpaw_sdk::install::Origins::release(&self, &str, paperpaw_sdk::Version) -> core::option::Option<&str>
 #[non_exhaustive] pub struct paperpaw_sdk::install::Package
 pub paperpaw_sdk::install::Package::files: alloc::vec::Vec<paperpaw_sdk::install::PackageFile>
 pub paperpaw_sdk::install::Package::name: alloc::string::String
@@ -1706,12 +1707,13 @@ pub paperpaw_sdk::install::Progress::total: usize
 pub const paperpaw_sdk::install::MAX_FILES: usize
 pub fn paperpaw_sdk::install::adopt(&paperpaw_sdk::Env<'_>) -> bool
 pub fn paperpaw_sdk::install::fits(&str, u32) -> bool
+pub fn paperpaw_sdk::install::folder_release(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<alloc::string::String>
 pub fn paperpaw_sdk::install::folder_version(&dyn paperpaw_platform::storage::Storage, &str) -> core::option::Option<paperpaw_sdk::Version>
 pub fn paperpaw_sdk::install::forget_store_install(&dyn paperpaw_platform::storage::Storage, &str) -> bool
 pub fn paperpaw_sdk::install::is_plugin_name(&str) -> bool
 pub fn paperpaw_sdk::install::is_safe_path(&str) -> bool
 pub fn paperpaw_sdk::install::origin(&dyn paperpaw_platform::storage::Storage, &str, paperpaw_sdk::Version) -> paperpaw_sdk::install::Origin
-pub fn paperpaw_sdk::install::remember_store_install(&dyn paperpaw_platform::storage::Storage, &str, paperpaw_sdk::Version) -> bool
+pub fn paperpaw_sdk::install::remember_store_install(&dyn paperpaw_platform::storage::Storage, &str, impl core::fmt::Display) -> bool
 pub mod paperpaw_sdk::json
 pub use paperpaw_sdk::json::Value
 pub use paperpaw_sdk::json::number

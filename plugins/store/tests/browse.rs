@@ -445,3 +445,60 @@ fn the_queue_goes_on_after_a_stop_and_a_restart() {
     let asked: Vec<String> = shopping.requests().into_iter().map(|c| c.url).collect();
     assert!(asked.contains(&page_url("cherry")), "{asked:?}");
 }
+
+/// Apple, installed by the store as `version`.
+fn with_apple(version: &str) -> Shared {
+    let storage = Shared::default();
+    let path = "plugins/apple/plugin.ini";
+    storage
+        .write(path, manifest("apple", version).as_bytes())
+        .unwrap();
+    paperpaw_sdk::install::remember_store_install(&storage, "apple", version);
+    storage
+}
+
+/// Betas of one release are told apart by their whole version: a newer
+/// beta is an update where the device runs a beta (or takes betas), the
+/// release is one over any of its betas, an older beta never.
+#[test]
+fn betas_are_updates_where_the_device_takes_them() {
+    let offered = |version: &str| {
+        list(&[entry(
+            "apple",
+            "reading",
+            version,
+            "2025-01-01",
+            "2026-01-01",
+            300,
+        )])
+    };
+    let updates = |shopping: &mut Shopping| shopping.shown().contains("1 update");
+    // A release firmware: no beta, but the release.
+    let mut shopping = Shopping::with(
+        Some("x4"),
+        None,
+        &offered("1.0.0-beta.2"),
+        with_apple("1.0.0-beta.1"),
+    );
+    assert!(!updates(&mut shopping), "{}", shopping.shown());
+    let mut shopping = Shopping::with(
+        Some("x4"),
+        None,
+        &offered("1.0.0"),
+        with_apple("1.0.0-beta.1"),
+    );
+    assert!(updates(&mut shopping), "{}", shopping.shown());
+    // A beta firmware: the newer beta, never an older one.
+    let mut shopping = Shopping::on_firmware(
+        "0.5.0-beta.1",
+        &offered("1.0.0-beta.2"),
+        with_apple("1.0.0-beta.1"),
+    );
+    assert!(updates(&mut shopping), "{}", shopping.shown());
+    let mut shopping = Shopping::on_firmware(
+        "0.5.0-beta.1",
+        &offered("1.0.0-beta.1"),
+        with_apple("1.0.0-beta.2"),
+    );
+    assert!(!updates(&mut shopping), "{}", shopping.shown());
+}
