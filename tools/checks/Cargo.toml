@@ -1,6 +1,6 @@
 [package]
 name = "paperpaw-checks"
-description = "Checks of PaperPaw's own source, run with the workspace's tests: file sizes and stray control characters, as a ratchet"
+description = "Checks of PaperPaw's own source, run with the workspace's tests: file sizes, stray control characters and the SDK's design rules, as a ratchet"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

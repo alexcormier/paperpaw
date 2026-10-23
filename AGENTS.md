@@ -7,7 +7,8 @@ There are two kinds of work here; tell which one a task is.
   its architecture rules and the checks to run. Put a change at the
   layer where it belongs; when a plugin cannot do something well, extend
   the SDK (with its API file and CHANGELOG brought up to date) rather
-  than working around it in the plugin.
+  than working around it in the plugin. For SDK changes, follow
+  [docs/sdk-design.md](docs/sdk-design.md).
 - **A plugin for PaperPaw as it is**, written outside the project without
   changing PaperPaw (e.g. a community plugin in its own repository):
   follow the skill in

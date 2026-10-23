@@ -1,0 +1,24 @@
+# Public items that take `&mut Vec<Command>` (docs/sdk-design.md,
+# rule 9). The list may only get shorter: each leaves as it gets a
+# context that can grow (SDK review B2).
+paperpaw_sdk::ActionHandler
+paperpaw_sdk::ActionParamsHandler
+paperpaw_sdk::ActionSpec::handler
+paperpaw_sdk::ActionSpec::handler_with
+paperpaw_sdk::EventHandler
+paperpaw_sdk::Observer
+paperpaw_sdk::ObserverSpec::new
+paperpaw_sdk::contribution::Registrar::on
+paperpaw_sdk::contribution::Registrar::override_action
+paperpaw_sdk::event::EventHandler
+paperpaw_sdk::install::Installer::install
+paperpaw_sdk::install::Installer::received
+paperpaw_sdk::install::Installer::remove
+paperpaw_sdk::install::Installer::start
+paperpaw_sdk::install::local::Staging::commit
+paperpaw_sdk::voices::SpeakFn
+paperpaw_sdk::voices::StopFn
+paperpaw_sdk::voices::VoiceSpec::new
+paperpaw_sdk::widgets::Widget::on_input
+paperpaw_sdk::work::StepFn
+paperpaw_sdk::work::WorkSpec::new

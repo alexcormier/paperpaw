@@ -372,6 +372,12 @@ file to your report.
 
 #### For developers
 
+- The SDK's design rules ([Designing the plugin SDK](docs/sdk-design.md)):
+  how it grows without breaking plugins. Tests check four of them over
+  the crates whose types cross: growing types are `#[non_exhaustive]`,
+  handlers take no `&mut Vec<Command>`, nothing is `#[doc(hidden)]`
+  outside the `kernel` feature, and no deprecated item reaches a
+  release. What they found before is listed and may only get less.
 - SDK, cleaned up before its first release (UI): `ui::fill` and
   `ui::HOLD_ICON` are gone (`Canvas::fill`, `icons::HOLD`);
   `ui::PAW_ICON` is `icons::PAW`. What only the kernel uses is no longer
