@@ -498,6 +498,8 @@ file to your report.
   `choice`), `WidgetStack` (was `widgets::Stack`, apart from
   `ui::Stack`). `ui::Grid` is `ui::CellGrid`, apart from the widgets'
   `grid`.
+- SDK: `ui::choice::open` and `GridView::new` are gone (`ask::choice`,
+  `GridView::asking`).
 - SDK: more types that may grow are `#[non_exhaustive]`: `HttpReply`
   and `Chosen` (with `new`), `ServerResponse`, `SocketRead`, `MenuItem`,
   `help::{Input, Zone, Hint}` and in `work` `WorkState`, `Retry`, `Why`,
