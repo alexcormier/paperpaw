@@ -316,6 +316,148 @@ fn unread_articles_beyond_the_newest_stay() {
     assert!(storage.0.get("Wallabag/Newer.epub").is_some());
 }
 
+const ARTICLES: &str = ".paperpaw/plugins/wallabag/articles.txt";
+
+/// Highlights, notes or bookmarks made in an article keep its book when
+/// it is archived, read here or elsewhere: Wallabag lets go of it, and
+/// the notes stay.
+#[test]
+fn annotated_articles_keep_their_books() {
+    let (mut kernel, storage) = fetched();
+    let line = "h\t1\t0\t1\t20\t5\t0\t0\tSome text\tMy note\n";
+    for book in BOOKS {
+        let file = paperpaw_sdk::annotations::file(book);
+        storage.0.write(&file, line.as_bytes()).unwrap();
+    }
+    storage
+        .0
+        .write(".paperpaw/plugins/wallabag/finished.txt", b"7\n")
+        .unwrap();
+    let calls = fetch(&mut kernel, 10);
+    let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "U"}"#);
+    assert_eq!(calls[0].method, "PATCH");
+    let calls = answer(&mut kernel, &calls[0], 200, "{}");
+    let calls = answer(
+        &mut kernel,
+        &calls[0],
+        200,
+        r#"{"_embedded": {"items": []}}"#,
+    );
+    assert_eq!(calls[0].url, "https://wb.example/api/entries/9.json");
+    let calls = answer(
+        &mut kernel,
+        &calls[0],
+        200,
+        r#"{"id": 9, "is_archived": 1}"#,
+    );
+    assert!(calls.is_empty());
+    for book in BOOKS {
+        assert!(storage.0.get(book).is_some(), "{book}");
+        let file = paperpaw_sdk::annotations::file(book);
+        assert_eq!(storage.0.get(&file).unwrap(), line.as_bytes(), "{book}");
+    }
+    assert_eq!(storage.0.get(ARTICLES).unwrap(), b"");
+    // Nothing more is asked about them.
+    let calls = fetch(&mut kernel, 20);
+    let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "V"}"#);
+    let calls = answer(
+        &mut kernel,
+        &calls[0],
+        200,
+        r#"{"_embedded": {"items": []}}"#,
+    );
+    assert!(calls.is_empty(), "{calls:?}");
+}
+
+/// The reader deletes article 7's book; a new article of the same title
+/// does not take its name, so 7 archived elsewhere later does not take
+/// the new one's book with it.
+#[test]
+fn stale_path_removes_another_article() {
+    let (mut kernel, storage) = fetched();
+    storage.0.remove("Wallabag/Older.epub").unwrap();
+    let list = r#"{"_embedded": {"items": [{"id": 11, "title": "Older"}, {"id": 9, "title": "Newer"}, {"id": 7, "title": "Older"}]}}"#;
+    let calls = fetch(&mut kernel, 10);
+    let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "U"}"#);
+    let calls = answer(&mut kernel, &calls[0], 200, list);
+    assert_eq!(
+        calls[0].url,
+        "https://wb.example/api/entries/11/export.epub"
+    );
+    let calls = answer(&mut kernel, &calls[0], 200, "EPUB 11");
+    assert!(calls.is_empty());
+    let list =
+        r#"{"_embedded": {"items": [{"id": 11, "title": "Older"}, {"id": 9, "title": "Newer"}]}}"#;
+    let calls = fetch(&mut kernel, 20);
+    let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "V"}"#);
+    let calls = answer(&mut kernel, &calls[0], 200, list);
+    assert_eq!(calls[0].url, "https://wb.example/api/entries/7.json");
+    let calls = answer(
+        &mut kernel,
+        &calls[0],
+        200,
+        r#"{"id": 7, "is_archived": 1}"#,
+    );
+    assert!(calls.is_empty());
+    assert_eq!(
+        storage.0.get("Wallabag/Older (11).epub").unwrap(),
+        b"EPUB 11"
+    );
+
+    // A list an older version wrote, with two articles at one path: the
+    // one archived leaves the other's book.
+    storage
+        .0
+        .write(
+            ARTICLES,
+            b"9\tWallabag/Newer.epub\n12\tWallabag/Newer.epub\n",
+        )
+        .unwrap();
+    let calls = fetch(&mut kernel, 30);
+    let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "W"}"#);
+    let list = r#"{"_embedded": {"items": [{"id": 12, "title": "Newer"}]}}"#;
+    let calls = answer(&mut kernel, &calls[0], 200, list);
+    assert_eq!(calls[0].url, "https://wb.example/api/entries/9.json");
+    let calls = answer(&mut kernel, &calls[0], 404, r#"{"code": 404}"#);
+    assert!(calls.is_empty());
+    assert_eq!(storage.0.get("Wallabag/Newer.epub").unwrap(), b"EPUB 9");
+}
+
+/// Another server or account: the articles fetched from the old one are
+/// let go of, not asked about there, and their books stay.
+#[test]
+fn another_account_keeps_the_books_fetched() {
+    let (kernel, storage) = fetched();
+    drop(kernel);
+    let config = CONFIG.replace("wb.example", "other.example");
+    let mut kernel = Kernel::builder(DEVICE)
+        .storage(storage.clone())
+        .user_config(&config)
+        .network(true)
+        .plugin(Wallabag)
+        .build()
+        .unwrap();
+    kernel.start(Instant(0));
+    let calls = fetch(&mut kernel, 10);
+    let calls = answer(&mut kernel, &calls[0], 200, r#"{"access_token": "U"}"#);
+    assert!(
+        calls[0]
+            .url
+            .starts_with("https://other.example/api/entries.json")
+    );
+    let calls = answer(
+        &mut kernel,
+        &calls[0],
+        200,
+        r#"{"_embedded": {"items": []}}"#,
+    );
+    assert!(calls.is_empty(), "{calls:?}");
+    for book in BOOKS {
+        assert!(storage.0.get(book).is_some(), "{book}");
+    }
+    assert_eq!(storage.0.get(ARTICLES).unwrap(), b"");
+}
+
 /// A list of fetched articles that cannot be read stops the fetch before
 /// anything is written over it.
 #[test]

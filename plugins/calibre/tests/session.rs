@@ -49,6 +49,11 @@ const fn device(memory: MemoryClass) -> DeviceInfo {
     }
 }
 
+thread_local! {
+    /// Renames fail on this test's thread, as on a failing card.
+    static FAIL_RENAME: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
 /// A storage the test looks into while the kernel has it.
 #[derive(Clone)]
 struct Shared(Rc<MemoryStorage>);
@@ -76,6 +81,9 @@ impl Storage for Shared {
         self.0.exists(path)
     }
     fn rename(&self, from: &str, to: &str) -> Result<(), StorageError> {
+        if FAIL_RENAME.get() {
+            return Err(StorageError::Io);
+        }
         self.0.rename(from, to)
     }
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
@@ -492,6 +500,59 @@ fn calibre_touches_only_its_own_books() {
     // In step all along.
     calibre.say(&mut kernel, op::NOOP, "{}");
     assert_eq!(calibre.answers().len(), 3, "DELETE_BOOK twice, NOOP");
+}
+
+/// A book Calibre deletes leaves the reader's notes and place in it: sent
+/// again, it has them.
+#[test]
+fn books_calibre_deletes_keep_their_notes() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"one");
+    let notes = paperpaw_sdk::annotations::file("Bo/New.epub");
+    let line = b"h\t1\t0\t1\t20\t5\t0\t0\tSome text\tMy note\n";
+    storage.write(&notes, line).unwrap();
+    calibre.say(
+        &mut kernel,
+        op::DELETE_BOOK,
+        r#"{"lpaths": ["Bo/New.epub"]}"#,
+    );
+    kernel.tick(Instant(20));
+    assert!(!storage.exists("Bo/New.epub"));
+    assert_eq!(storage.0.get(&notes).as_deref(), Some(&line[..]));
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"one");
+    assert!(storage.exists("Bo/New.epub"));
+    assert_eq!(storage.0.get(&notes).as_deref(), Some(&line[..]));
+}
+
+/// A book sent again that cannot be put in place leaves the one there
+/// as it was, and no part behind.
+#[test]
+fn a_failed_replacement_keeps_the_old_book() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"one");
+    FAIL_RENAME.set(true);
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"two");
+    FAIL_RENAME.set(false);
+    assert_eq!(storage.0.get("Bo/New.epub").as_deref(), Some(&b"one"[..]));
+    assert!(!storage.exists("Bo/New.epub.part"));
+}
+
+/// A book without its length is refused: it would be taken as empty and
+/// replace the one sent before.
+#[test]
+fn a_book_without_its_length_is_refused() {
+    let storage = Shared(Rc::new(MemoryStorage::new()));
+    let (mut kernel, mut calibre) = connected(DEVICE, &storage);
+    send_book(&mut calibre, &mut kernel, "Bo/New.epub", b"one");
+    calibre.say(
+        &mut kernel,
+        op::SEND_BOOK,
+        r#"{"lpath": "Bo/New.epub", "metadata": {"lpath": "Bo/New.epub", "title": "T"}}"#,
+    );
+    assert_eq!(storage.0.get("Bo/New.epub").as_deref(), Some(&b"one"[..]));
+    assert!(calibre.closed);
 }
 
 #[test]

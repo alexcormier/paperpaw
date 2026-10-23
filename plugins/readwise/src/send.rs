@@ -21,7 +21,6 @@ use core::ops::ControlFlow;
 use paperpaw_sdk::event::Event;
 use paperpaw_sdk::files::for_each_line;
 use paperpaw_sdk::replies::HttpReply;
-use paperpaw_sdk::secrets::SecretChange;
 use paperpaw_sdk::{Arg, Command, Env, HttpRequest, Params, Storage, StorageError};
 
 use crate::{PLUGIN, Parser, SECRET, TOKEN_ENTERED};
@@ -157,6 +156,9 @@ pub struct Run {
     /// Highlights sent, notes files not sent.
     sent: i64,
     failed: usize,
+    /// Readwise refused the token kept: it stays kept, but is not sent
+    /// by itself again; the next export asks for one.
+    refused: bool,
 }
 
 impl Run {
@@ -182,7 +184,8 @@ impl Run {
         if waiting.is_empty() {
             return;
         }
-        let Some(token) = token.or_else(|| env.secrets.get(SECRET)) else {
+        let kept = env.secrets.get(SECRET).filter(|_| !self.refused);
+        let Some(token) = token.or(kept) else {
             if start == Start::Export {
                 out.push(Command::Notify(
                     env.i18n.tr("readwise.needs-token").to_string(),
@@ -266,9 +269,10 @@ impl Run {
                 self.next(env, out);
             }
             401 | 403 => {
-                // Asked for anew with the next export.
-                out.push(Command::SetSecret(SecretChange::remove(SECRET)));
+                // Asked for anew with the next export; kept meanwhile, as
+                // Readwise may refuse it only for a while.
                 self.end(env, "readwise.bad-token", out);
+                self.refused = true;
             }
             0 => self.end(env, "readwise.unreachable", out),
             _ => {

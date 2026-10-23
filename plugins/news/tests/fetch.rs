@@ -237,7 +237,14 @@ fn a_feed_removed_during_a_fetch_moves_no_answer() {
 fn feeds_of_one_name_keep_a_page_each() {
     let (mut kernel, storage) = kernel(&format!("{ALPHA}\tDaily\n{BETA}\tDaily\n"));
     storage
-        .write(&format!("{FOLDER}/Daily.html"), b"old")
+        .write(
+            &format!("{FOLDER}/Daily.html"),
+            b"<!DOCTYPE html>
+<html>
+<head>
+<meta charset=\"utf-8\"/>
+<title>Daily</title>",
+        )
         .unwrap();
     let calls = fetch(&mut kernel, 1);
     serve(&mut kernel, &storage, calls);

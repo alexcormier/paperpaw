@@ -75,6 +75,9 @@ impl Storage for Shared {
     fn create_dir(&self, path: &str) -> Result<(), StorageError> {
         self.0.create_dir(path)
     }
+    fn remove_dir_all(&self, path: &str) -> Result<(), StorageError> {
+        self.0.remove_dir_all(path)
+    }
 }
 
 /// An answer the plugin gave: its status and body.
@@ -405,6 +408,22 @@ fn files_are_sent_listed_and_deleted() {
     assert_eq!(deleted.status, 200);
     assert!(!device.storage.exists("Books/a.epub"));
     assert!(device.says("a.epub"));
+}
+
+/// A folder deleted from the web page takes its books' files; what the
+/// reader noted in them stays, as when a computer deletes them.
+#[test]
+fn a_folder_deleted_keeps_the_notes_of_its_books() {
+    let mut device = Device::serving();
+    let key = device.key.clone();
+    let notes = paperpaw_sdk::annotations::file("Books/a.epub");
+    let line = b"h\t1\t0\t1\t20\t5\t0\t0\tText\tNote\n";
+    device.storage.write(&notes, line).unwrap();
+    let deleted = device.request("POST", &format!("/api/delete?k={key}&path=Books"), None);
+    assert_eq!(deleted.status, 200);
+    assert!(!device.storage.exists("Books/a.epub"));
+    assert_eq!(device.storage.0.get(&notes).as_deref(), Some(&line[..]));
+    assert!(device.says("Books"));
 }
 
 #[test]

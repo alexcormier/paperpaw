@@ -362,8 +362,13 @@ impl CalibreScreen {
             SocketNotice::Saved { path, .. } => {
                 match self.coming.take() {
                     Some(coming) => {
-                        let _ = env.storage.remove(&coming.path);
-                        if env.storage.rename(&coming.part, &coming.path).is_ok() {
+                        // The book there stays until the new one is in place.
+                        let placed = paperpaw_sdk::files::put_in_place(
+                            env.storage,
+                            &coming.part,
+                            &coming.path,
+                        );
+                        if placed.is_ok() {
                             library::remember(env.storage, &coming.lpath, &coming.metadata);
                             paperpaw_sdk::library::provide(
                                 env.storage,
@@ -482,23 +487,26 @@ impl CalibreScreen {
             op::SEND_BOOK => return self.book(args, cx),
             op::DELETE_BOOK => {
                 self.send(op::OK, "{}", cx);
+                let mut removed = false;
                 for lpath in protocol::strings(args, "lpaths") {
                     // Only books Calibre sent: never the reader's own.
                     if library::sent(env.storage, &lpath)
                         && let Some(path) = protocol::safe_path(&lpath)
                     {
                         let path = paperpaw_sdk::files::join(library_folder(&env), &path);
-                        if env.storage.remove(&path).is_ok() {
-                            // What plugins keep for it goes too.
-                            cx.command(
-                                paperpaw_sdk::builtin::events::BOOK_REMOVED
-                                    .emit(paperpaw_sdk::builtin::events::BookRemoved::new(path)),
-                            );
-                        }
+                        // Only the file: the reader's place and notes in it
+                        // stay, and are there again when Calibre sends it
+                        // again.
+                        removed |= env.storage.remove(&path).is_ok();
                     }
                     let uuid = library::forget(env.storage, &lpath).unwrap_or_default();
                     let reply = format!("{{\"uuid\": {}}}", paperpaw_sdk::json::string(&uuid));
                     self.send(op::OK, &reply, cx);
+                }
+                if removed {
+                    // Gone without a word: the catalog is made anew.
+                    cx.command(paperpaw_sdk::library::request_catalog_anew());
+                    cx.command(paperpaw_sdk::library::changed());
                 }
             }
             op::NOOP => {
@@ -546,7 +554,13 @@ impl CalibreScreen {
     /// A book is about to come: its bytes go to a part file first.
     fn book(&mut self, args: &str, cx: &mut Cx<'_, '_>) {
         let env = *cx.env();
-        let length = protocol::number(args, "length").unwrap_or(0);
+        // Without its length, the bytes cannot be told from what follows,
+        // and an empty book would replace the one sent before.
+        let Some(length) = protocol::number(args, "length") else {
+            cx.command(Command::Disconnect(SOCKET));
+            let ended = env.i18n.tr("calibre.not-calibre").to_string();
+            return self.end(ended, cx);
+        };
         let lpath = protocol::text(args, "lpath").unwrap_or_default();
         let metadata = protocol::member(args, "metadata")
             .unwrap_or("{}")

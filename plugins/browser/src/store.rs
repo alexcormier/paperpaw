@@ -5,7 +5,7 @@ use alloc::format;
 use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
-use paperpaw_sdk::{Env, Storage};
+use paperpaw_sdk::{Env, Storage, StorageError};
 
 use crate::PLUGIN;
 
@@ -45,17 +45,19 @@ pub(crate) fn page_path(url: &str) -> String {
     format!("{}/pages/{}", dir(), crate::web::page_name(url))
 }
 
-/// A list, or `None` if it was never saved.
-pub(crate) fn load(storage: &dyn Storage, path: &str) -> Option<Vec<Entry>> {
-    let data = paperpaw_sdk::read_file(storage, path, 256 * 1024).ok()?;
-    let text = String::from_utf8_lossy(&data);
-    Some(
+/// A list, or `None` if it was never saved; an error where it is there
+/// but cannot be read, so it is not written over.
+pub(crate) fn load(storage: &dyn Storage, path: &str) -> Result<Option<Vec<Entry>>, StorageError> {
+    let Some(text) = paperpaw_sdk::files::load_text_for_update(storage, path, 256 * 1024)? else {
+        return Ok(None);
+    };
+    Ok(Some(
         text.lines()
             .filter_map(|line| line.split_once('\t'))
             .filter(|(_, url)| !url.is_empty())
             .map(|(title, url)| Entry::new(title, url))
             .collect(),
-    )
+    ))
 }
 
 pub(crate) fn save(storage: &dyn Storage, path: &str, entries: &[Entry]) {
@@ -68,9 +70,11 @@ pub(crate) fn save(storage: &dyn Storage, path: &str, entries: &[Entry]) {
 }
 
 /// The bookmarks; until the user changes them, a few places to start
-/// from, in the language of the device.
-pub(crate) fn bookmarks(env: &Env<'_>) -> Vec<Entry> {
-    load(env.storage, &bookmarks_path()).unwrap_or_else(|| {
+/// from, in the language of the device. `None` where they cannot be read:
+/// then none are shown, and none saved over them.
+pub(crate) fn bookmarks(env: &Env<'_>) -> Option<Vec<Entry>> {
+    let saved = load(env.storage, &bookmarks_path()).ok()?;
+    Some(saved.unwrap_or_else(|| {
         let language = env.i18n.language();
         let language = language.split(['-', '_']).next().unwrap_or("en");
         Vec::from([
@@ -78,20 +82,20 @@ pub(crate) fn bookmarks(env: &Env<'_>) -> Vec<Entry> {
             Entry::new("Project Gutenberg", "https://www.gutenberg.org/"),
             Entry::new("Standard Ebooks", "https://standardebooks.org/ebooks"),
         ])
-    })
+    }))
 }
 
 /// Puts `entry` first in the history; pages that drop out of it are
-/// deleted.
-pub(crate) fn remember(storage: &dyn Storage, entry: Entry) -> Vec<Entry> {
-    let mut history = load(storage, &history_path()).unwrap_or_default();
+/// deleted. Where the history cannot be read, nothing changes: `None`.
+pub(crate) fn remember(storage: &dyn Storage, entry: Entry) -> Option<Vec<Entry>> {
+    let mut history = load(storage, &history_path()).ok()?.unwrap_or_default();
     history.retain(|e| e.url != entry.url);
     history.insert(0, entry);
     for old in history.drain(HISTORY.min(history.len())..) {
         let _ = storage.remove(&page_path(&old.url));
     }
     save(storage, &history_path(), &history);
-    history
+    Some(history)
 }
 
 #[cfg(test)]
@@ -105,10 +109,10 @@ mod tests {
         for n in 0..HISTORY + 2 {
             let url = format!("https://a.org/{n}");
             storage.write(&page_path(&url), b"page").unwrap();
-            remember(&storage, Entry::new("A\tB", &url));
+            remember(&storage, Entry::new("A\tB", &url)).unwrap();
         }
         // Visited again: first, once.
-        let history = remember(&storage, Entry::new("Again", "https://a.org/5"));
+        let history = remember(&storage, Entry::new("Again", "https://a.org/5")).unwrap();
         assert_eq!(history.len(), HISTORY);
         assert_eq!(history[0], Entry::new("Again", "https://a.org/5"));
         assert_eq!(
@@ -121,7 +125,7 @@ mod tests {
         // The oldest pages are gone.
         assert!(!storage.exists(&page_path("https://a.org/0")));
         assert!(storage.exists(&page_path("https://a.org/31")));
-        let loaded = load(&storage, &history_path()).unwrap();
+        let loaded = load(&storage, &history_path()).unwrap().unwrap();
         assert_eq!(loaded, history);
         assert_eq!(loaded[1].title, "A B");
     }
@@ -133,7 +137,9 @@ mod tests {
             &super::bookmarks_path(),
             include_str!("../testdata/bookmarks.txt.v1"),
         );
-        let entries = super::load(&storage, &super::bookmarks_path()).unwrap();
+        let entries = super::load(&storage, &super::bookmarks_path())
+            .unwrap()
+            .unwrap();
         assert_eq!(entries.len(), 2);
         assert_eq!(entries[0].title, "Wikipedia");
         assert_eq!(entries[1].url, "https://www.gutenberg.org/");

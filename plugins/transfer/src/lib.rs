@@ -301,8 +301,9 @@ impl TransferScreen {
                 cx.command(Command::Respond(response));
                 if let Some(done) = done {
                     // The library follows: a book added, a book removed (what
-                    // plugins keep for it goes too; a folder removed, its
-                    // books with it).
+                    // plugins keep for it goes too), a folder removed (its
+                    // books' files only: the reader's places and notes in
+                    // them stay, the catalog is made anew).
                     match &done {
                         web::Done::Received(path) => {
                             cx.command(paperpaw_sdk::library::added(path, "transfer"));
@@ -310,6 +311,10 @@ impl TransferScreen {
                         web::Done::Deleted(path) => {
                             let removed = events::BookRemoved::new(path.clone());
                             cx.command(events::BOOK_REMOVED.emit(removed));
+                            cx.command(paperpaw_sdk::library::changed());
+                        }
+                        web::Done::DeletedFolder(_) => {
+                            cx.command(paperpaw_sdk::library::request_catalog_anew());
                             cx.command(paperpaw_sdk::library::changed());
                         }
                         web::Done::Folder(_) | web::Done::Sent(_) | web::Done::NotReceived(_) => {}
@@ -320,7 +325,7 @@ impl TransferScreen {
                         }
                         web::Done::Sent(name) => ("transfer.sent", name.as_str()),
                         web::Done::Folder(name) => ("transfer.folder", name.as_str()),
-                        web::Done::Deleted(path) => {
+                        web::Done::Deleted(path) | web::Done::DeletedFolder(path) => {
                             ("transfer.deleted", paperpaw_sdk::files::name(path))
                         }
                         web::Done::NotReceived(name) => ("transfer.not-received", name.as_str()),

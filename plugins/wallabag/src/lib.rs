@@ -7,7 +7,9 @@
 //! too, see the keyboard) and fetches: each unread article comes as an
 //! EPUB Wallabag makes, with its pictures. Articles read to the end are
 //! archived with the next fetch and their books removed, as are those
-//! Wallabag says are archived or deleted elsewhere. The password and the
+//! Wallabag says are archived or deleted elsewhere; a book with the
+//! reader's highlights, notes or bookmarks stays in the library, let go
+//! of by Wallabag. The password and the
 //! client's secret are kept with the other passwords and keys (see
 //! `paperpaw_sdk::secrets`).
 //!
@@ -136,12 +138,42 @@ fn articles(storage: &dyn Storage) -> Result<Vec<Article>, StorageError> {
         .collect())
 }
 
-fn save_articles(env: &Env<'_>, list: &[Article]) {
+fn save_articles(env: &Env<'_>, list: &[Article]) -> Result<(), StorageError> {
     let text: String = list
         .iter()
         .map(|a| format!("{}\t{}\n", a.id, a.path))
         .collect();
-    let _ = env.storage.write(&data("articles.txt"), text.as_bytes());
+    env.storage.write(&data("articles.txt"), text.as_bytes())
+}
+
+/// Whose the articles fetched are: the server and the user name, one a
+/// line, in `account.txt` beside them.
+fn account(env: &Env<'_>) -> String {
+    format!("{}\n{}\n", server(env), env.settings.read(&USER))
+}
+
+/// The articles fetched and those read to the end, from this account.
+/// Those of another server or user (the settings changed) are let go of
+/// first: their books stay in the library, never asked about at a server
+/// that does not know them.
+fn lists_of_account(env: &Env<'_>) -> Result<(Vec<Article>, Vec<String>), StorageError> {
+    let (fetched, finished) = (articles(env.storage)?, finished(env.storage)?);
+    let account = account(env);
+    let kept = load_for_update(env.storage, "account.txt", 4 * 1024)?;
+    if kept == account {
+        return Ok((fetched, finished));
+    }
+    // An older version kept no account: its lists are this one's.
+    let (fetched, finished) = if kept.is_empty() {
+        (fetched, finished)
+    } else {
+        save_articles(env, &[])?;
+        env.storage.write(&data("finished.txt"), b"")?;
+        (Vec::new(), Vec::new())
+    };
+    env.storage
+        .write(&data("account.txt"), account.as_bytes())?;
+    Ok((fetched, finished))
 }
 
 /// The ids of articles read to the end, to archive.
@@ -183,6 +215,40 @@ fn page_turned(env: &Env<'_>, reading: &events::Reading) {
         ids.push(article.id);
         save_finished(env, &ids);
     }
+}
+
+/// Whether the reader made highlights, notes or bookmarks in the book at
+/// `path`, or that cannot be told: then it is kept too.
+fn annotated(storage: &dyn Storage, path: &str) -> bool {
+    match storage.size(&paperpaw_sdk::annotations::file(path)) {
+        Err(StorageError::NotFound) => false,
+        Err(_) => true,
+        Ok(_) => !paperpaw_sdk::annotations::marks(storage, path).is_empty(),
+    }
+}
+
+/// Where the book of article `id`, titled `name`, goes in `dir`: `name`,
+/// or `name (id)` where that is taken, by a file or by an article
+/// fetched before (whose book the reader may have deleted); a free name
+/// in any case, so no file is replaced. `None` where both are an
+/// article's.
+fn book_path(
+    storage: &dyn Storage,
+    dir: &str,
+    name: &str,
+    id: &str,
+    list: &[Article],
+) -> Option<String> {
+    let listed = |path: &str| {
+        list.iter()
+            .any(|a| paperpaw_sdk::files::same_path(storage, &a.path, path))
+    };
+    let plain = format!("{dir}/{name}.epub");
+    if !storage.exists(&plain) && !listed(&plain) {
+        return Some(plain);
+    }
+    let path = paperpaw_sdk::files::free_path(storage, dir, &format!("{name} ({id}).epub"));
+    (!listed(&path)).then_some(path)
 }
 
 /// What a fetch in progress knows.
@@ -275,7 +341,7 @@ impl Fetch {
             return done(env, key, &[], out);
         };
         self.token = token;
-        let (Ok(fetched), Ok(finished)) = (articles(env.storage), finished(env.storage)) else {
+        let Ok((fetched, finished)) = lists_of_account(env) else {
             self.running = false;
             return done(env, "wallabag.unreadable", &[], out);
         };
@@ -413,18 +479,15 @@ impl Fetch {
             let dir = folder(env);
             let _ = env.storage.create_dir(&dir);
             let name = clean_name(title, 80).unwrap_or_else(|| id.to_string());
-            let mut path = format!("{dir}/{name}.epub");
-            if env.storage.exists(&path) {
-                path = format!("{dir}/{name} ({id}).epub");
-            }
+            let path = book_path(env.storage, &dir, &name, id, &list)?;
             env.storage.rename(&tmp, &path).ok()?;
             out.push(paperpaw_sdk::library::added(&path, PLUGIN.as_str()));
             list.push(Article {
                 id: id.to_string(),
                 path,
             });
-            save_articles(env, &list);
-            Some(())
+            // Where it is not noted, the book stays as any other.
+            save_articles(env, &list).ok()
         });
         if saved.is_some() {
             self.fetched += 1;
@@ -492,16 +555,23 @@ fn is_id(id: &str) -> bool {
 }
 
 /// Removes an article's book and what is noted about it (nothing from a
-/// list that cannot be read); the book's removal is told.
+/// list that cannot be read); the book's removal is told. A book with the
+/// reader's annotations stays, as does one another article in the list
+/// is at too (an older version gave two articles one name): the article
+/// is only let go of.
 fn remove_article(env: &Env<'_>, id: &str, out: &mut Vec<Command>) {
     if let Ok(mut list) = articles(env.storage)
         && let Some(at) = list.iter().position(|a| a.id == id)
     {
         let article = list.remove(at);
-        if env.storage.remove(&article.path).is_ok() {
+        let shared = list.iter().any(|a| a.path == article.path);
+        if !shared
+            && !annotated(env.storage, &article.path)
+            && env.storage.remove(&article.path).is_ok()
+        {
             out.push(events::BOOK_REMOVED.emit(events::BookRemoved::new(article.path)));
         }
-        save_articles(env, &list);
+        let _ = save_articles(env, &list);
     }
     if let Ok(mut ids) = finished(env.storage)
         && let Some(at) = ids.iter().position(|f| f == id)
@@ -671,13 +741,12 @@ fn entered(typed: &Typed, out: &mut Vec<Command>) {
     };
     let text = typed.text.trim();
     let setting = |id: Setting<Text>| Command::set(&id, Cow::Owned(text.to_string()));
-    let secret = |id: &str, label: &str| {
-        Command::SetSecret(if text.is_empty() {
-            SecretChange::remove(id)
-        } else {
-            SecretChange::keep(id, label, text)
-        })
-    };
+    let secret = |id: &str, label: &str| Command::SetSecret(SecretChange::keep(id, label, text));
+    // An empty answer keeps what was kept: a confirm by mistake on the
+    // empty field (a password is never shown in it) loses nothing.
+    if text.is_empty() && matches!(row, Row::Password | Row::Secret) {
+        return;
+    }
     out.push(match row {
         Row::Server => setting(SERVER),
         Row::User => setting(USER),

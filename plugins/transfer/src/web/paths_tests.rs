@@ -227,7 +227,10 @@ fn folders_get_numbers_and_deletions_take_folders_whole() {
     );
     let delete = format!("/api/delete?k={KEY}&path=Books");
     let (status, done) = ask(&storage, "POST", &delete, None);
-    assert_eq!((status, done), (200, Some(Done::Deleted("Books".into()))));
+    assert_eq!(
+        (status, done),
+        (200, Some(Done::DeletedFolder("Books".into())))
+    );
     assert!(!storage.exists("Books/a.epub"));
     // Not the top itself.
     let top = format!("/api/delete?k={KEY}&path=/");

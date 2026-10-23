@@ -28,6 +28,8 @@ pub enum Done {
     Sent(String),
     Folder(String),
     Deleted(String),
+    /// A folder deleted with everything in it.
+    DeletedFolder(String),
     /// An upload that failed: said on the device too, so the last success
     /// is not taken for it.
     NotReceived(String),
@@ -194,7 +196,9 @@ pub fn answer(
                 Ok(found) => found.path,
                 Err(e) => return refused(e),
             };
+            let folder = files::is_dir(storage, &target);
             match files::delete(storage, &target) {
+                Ok(()) if folder => ok(Some(Done::DeletedFolder(target))),
                 Ok(()) => ok(Some(Done::Deleted(target))),
                 Err(e) => failed(e),
             }

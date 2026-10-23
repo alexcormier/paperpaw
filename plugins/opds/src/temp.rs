@@ -60,6 +60,49 @@ pub(crate) fn discard(storage: &dyn Storage, reply: &HttpReply) {
     }
 }
 
+/// Whether the file at `path`, downloaded as `name`, may be the book its
+/// name says, by its first bytes: a page a server answers with instead (a
+/// sign-in, an error) is not. Formats told by a mark need it (a ZIP's
+/// for EPUB, CBZ and ODT; PDF's, RTF's, Mobipocket's); text formats only
+/// must not be a web page.
+pub(crate) fn may_be_book(storage: &dyn Storage, path: &str, name: &str) -> bool {
+    let mut head = [0u8; 68];
+    let Ok(read) = storage.read_at(path, 0, &mut head) else {
+        return false;
+    };
+    let head = &head[..read.min(head.len())];
+    let extension = name.rsplit_once('.').map_or("", |(_, ext)| ext);
+    let is = |ext: &str| extension.eq_ignore_ascii_case(ext);
+    if is("epub") || is("cbz") || is("odt") {
+        head.starts_with(b"PK")
+    } else if is("pdf") {
+        head.starts_with(b"%PDF")
+    } else if is("rtf") {
+        head.starts_with(b"{\\rtf")
+    } else if is("mobi") || is("azw3") {
+        head.get(60..68) == Some(b"BOOKMOBI")
+    } else if is("html") || is("htm") {
+        !head.is_empty()
+    } else {
+        !head.is_empty() && !is_web_page(head)
+    }
+}
+
+/// Whether `head`, the start of a file, begins a web page.
+fn is_web_page(head: &[u8]) -> bool {
+    let head = files::without_bom(head);
+    let start = head
+        .iter()
+        .position(|b| !b.is_ascii_whitespace())
+        .unwrap_or(head.len());
+    let head = &head[start..];
+    let begins = |mark: &[u8]| {
+        head.get(..mark.len())
+            .is_some_and(|h| h.eq_ignore_ascii_case(mark))
+    };
+    begins(b"<!doctype html") || begins(b"<html")
+}
+
 /// Removes what was left before this start.
 pub(crate) fn clean(storage: &dyn Storage) {
     let _ = files::delete(storage, &dir());
@@ -85,6 +128,23 @@ mod tests {
             refused: None,
             headers: alloc::vec::Vec::new(),
         }
+    }
+
+    #[test]
+    fn books_are_told_from_pages() {
+        let mobi = [&[0u8; 60][..], b"BOOKMOBI"].concat();
+        let storage = paperpaw_sdk::MemoryStorage::new()
+            .with("zip", "PK\x03\x04")
+            .with("pdf", "%PDF-1.7")
+            .with("mobi", mobi)
+            .with("text", "Chapter 1")
+            .with("page", "\u{feff}\n <!DOCTYPE html><html>Sign in</html>")
+            .with("empty", "");
+        let book = |path: &str, name: &str| may_be_book(&storage, path, name);
+        assert!(book("zip", "a.epub") && book("pdf", "a.PDF") && book("mobi", "a.azw3"));
+        assert!(book("text", "a.txt") && book("page", "a.html"));
+        assert!(!book("page", "a.epub") && !book("page", "a.txt") && !book("text", "a.pdf"));
+        assert!(!book("empty", "a.txt") && !book("missing", "a.epub"));
     }
 
     #[test]
