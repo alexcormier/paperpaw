@@ -270,6 +270,12 @@ jobs:
             --screenshot out/two-buttons-settings.png
           $emu --headless --profile boox-go-7 --set slots.core.home=diagnostics.screen \
             --script "page-forward,long-tap:600:800"
+          # What a release hands the workshop: the registry, --stdio, the
+          # handbook.
+          $emu --registry out/registry.json
+          printf '%s\n' '{"op": "quit"}' | $emu --stdio | grep -q '"event": "ready"'
+          py="$(command -v python3 || command -v python)"
+          "$py" tools/handbook.py out/registry.json ci out/handbook.zip
       - uses: actions/upload-artifact@v7
         if: matrix.os == 'ubuntu-latest'
         with:

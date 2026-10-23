@@ -29,6 +29,16 @@ pub fn set_free_space(bytes: u64) {
     let _ = FREE_SPACE.set(bytes);
 }
 
+/// Whether the emulated device loads code plugins built for this computer
+/// (`native`); off for pictures that must not change with every build
+/// (`--no-code-plugins`: *About* shows the fingerprint, which changes).
+static CODE_PLUGINS: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(true);
+
+/// Loads code plugins built for this computer, or none.
+pub fn set_code_plugins(on: bool) {
+    CODE_PLUGINS.store(on, std::sync::atomic::Ordering::Relaxed);
+}
+
 /// The emulated device's storage in the folder `root`.
 pub fn library(root: &std::path::Path) -> std::io::Result<DirStorage> {
     let storage = DirStorage::new(root)?;
@@ -815,6 +825,12 @@ fn build_kernel(
         }
         if let Some(light) = profile.light {
             builder = builder.plugin(crate::light::Emulated(light));
+        }
+        // Code plugins built for this computer, from the card.
+        #[cfg(not(target_arch = "wasm32"))]
+        if CODE_PLUGINS.load(std::sync::atomic::Ordering::Relaxed) {
+            builder =
+                builder.code_plugins(crate::native::native(), Box::new(crate::native::HostLoader));
         }
         if let Some(add) = add {
             builder = add(builder);

@@ -175,6 +175,7 @@ mod tests {
     /// widgets, actions and every profile.
     #[test]
     fn the_registry_names_what_the_app_offers() {
+        let _one = crate::one_device_at_a_time();
         let text = registry().unwrap();
         let members = paperpaw_core::sdk::json::object(&text);
         let keys: Vec<&str> = members.iter().map(|(k, _)| k.as_str()).collect();

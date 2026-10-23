@@ -683,7 +683,13 @@ fn draw(case: &Case) -> (u32, u32, Vec<u8>, usize) {
     let shot = library.join("shot.png");
     let mut command = Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"));
     command
-        .args(["--profile", case.profile, "--headless", "--library"])
+        .args([
+            "--profile",
+            case.profile,
+            "--headless",
+            "--no-code-plugins",
+            "--library",
+        ])
         .arg(&library)
         .args(["--screenshot"])
         .arg(&shot);
@@ -774,7 +780,13 @@ fn screens_say_what_they_show() {
     };
     let library = library(&case);
     let output = Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"))
-        .args(["--profile", case.profile, "--headless", "--library"])
+        .args([
+            "--profile",
+            case.profile,
+            "--headless",
+            "--no-code-plugins",
+            "--library",
+        ])
         .arg(&library)
         .args(["--set", "reader.open-last=false"])
         .args(["--set", "help.show=false"])
@@ -825,7 +837,13 @@ fn headers_are_centred_by_their_capitals() {
             let library = library(&case);
             let shot = library.join("shot.png");
             let output = Command::new(env!("CARGO_BIN_EXE_paperpaw-emu"))
-                .args(["--profile", profile, "--headless", "--library"])
+                .args([
+                    "--profile",
+                    profile,
+                    "--headless",
+                    "--no-code-plugins",
+                    "--library",
+                ])
                 .arg(&library)
                 .args(["--screenshot"])
                 .arg(&shot)

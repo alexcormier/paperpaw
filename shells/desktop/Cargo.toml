@@ -37,6 +37,8 @@ paperpaw-sample-hello = { path = "../../samples/hello-plugin", optional = true }
 getrandom = "0.4"
 # The computer's time zone for the emulated clock.
 chrono = { version = "0.4", default-features = false, features = ["clock"] }
+# Code plugins built for this computer (`native`).
+libloading = "0.8"
 
 [features]
 default = ["window"]

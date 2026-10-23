@@ -24,6 +24,10 @@ OPTIONS:
     --check <dir> [--profile <id>]...
                           Check a plugin with paperpaw-dev (beside this program),
                           its findings as JSON on standard output
+    --trust-code          Install the code plugins built for this computer in the
+                          library (plugins/<id>/code-host.dll, .so or .dylib)
+    --no-code-plugins     Load no code plugins (the same About screen whatever
+                          the build)
     --stdio               Be driven by another program over standard input and
                           output, a JSON object a line (see the `stdio` module)
     --registry <file>     Write what the app offers data plugins (settings,
@@ -71,6 +75,8 @@ struct Options {
     /// `Some(None)` removes the budget.
     heap_budget: Option<Option<usize>>,
     heap_report: bool,
+    /// Install the code plugins built for this computer on the card.
+    trust_code: bool,
 }
 
 fn main() -> ExitCode {
@@ -95,6 +101,11 @@ fn run() -> Result<(), String> {
         .library
         .clone()
         .unwrap_or_else(|| PathBuf::from("samples/library"));
+    if options.trust_code {
+        let installed = paperpaw_emulator::native::trust(&library)
+            .map_err(|e| format!("library {}: {e}", library.display()))?;
+        eprintln!("code plugins installed: {}", installed.join(", "));
+    }
     let storage =
         device::library(&library).map_err(|e| format!("library {}: {e}", library.display()))?;
     if options.record.is_some() && options.headless {
@@ -259,6 +270,8 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
                 options.screenshot_dir = Some(PathBuf::from(value("--screenshot-dir")?));
             }
             "--heap-report" => options.heap_report = true,
+            "--trust-code" => options.trust_code = true,
+            "--no-code-plugins" => device::set_code_plugins(false),
             "--free-space" => {
                 let bytes = value("--free-space")?;
                 device::set_free_space(

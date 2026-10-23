@@ -6,6 +6,20 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- Each release also brings, for tools that work with it without a build
+  of their own (the workshop): the desktop emulator for Windows, macOS
+  (Apple silicon and Intel) and Linux with paperpaw-dev beside it
+  (`paperpaw-emu-<version>-<target>.zip`), and the handbook
+  (`paperpaw-handbook-<version>.zip`, `tools/handbook.py`: the registry,
+  the codes of paperpaw-dev's findings, the docs, the samples, the SDK's
+  items and source), each with its SHA-256 and a signature of its own
+  with the firmware's key (`paperpaw-sign check`).
+- The desktop emulator loads code plugins built for the computer it runs
+  on (`plugins/<id>/code-host.dll`, `.so` or `.dylib`, the same `plugin!`
+  entry as `.ppn` files), once installed: `--trust-code`, or
+  `"trust_code": true` when starting over `--stdio`, whose `ready` now
+  says the fingerprint and compiler they must be built with
+  (`native::CODE_FILES` names them too).
 - `paperpaw-emu --check <plugin folder> [--profile <id>]...` checks a
   plugin with paperpaw-dev (which the release puts beside it) and writes
   its findings as JSON on standard output.

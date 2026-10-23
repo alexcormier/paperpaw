@@ -12,7 +12,7 @@
 //!
 //! | `op` | Fields | Does |
 //! |------|--------|------|
-//! | `start` | `profile`, `library` (a folder), `settings` (INI text, optional) | starts a device of that profile on the folder (setup done); `started` follows, then a `frame` |
+//! | `start` | `profile`, `library` (a folder), `settings` (INI text, optional), `trust_code` (optional) | starts a device of that profile on the folder (setup done), with `trust_code` the code plugins built for this computer there installed (`native::trust`); `started` follows, then a `frame` |
 //! | `button` | `name` (`confirm`, `page-forward`, …), `pressed` | a button pressed or let go |
 //! | `pointer` | `phase` (`down`, `move`, `up`, `cancel`), `x`, `y` | a finger on a touch screen, at the panel's pixels |
 //! | `reload` | | starts the device again on its folder: plugins changed there are read anew |
@@ -22,7 +22,8 @@
 //! | `shot` | `path` (optional) | `shot`: the panel as a PNG, written there or in the event |
 //! | `quit` | | ends |
 //!
-//! Events (`event`): `ready` (`protocol`, `paperpaw`, `profiles`),
+//! Events (`event`): `ready` (`protocol`, `paperpaw`, `profiles`, and
+//! `fingerprint` and `toolchain`, which code plugins must be built for),
 //! `started` (`profile`, `width`, `height`, `buttons`, `touch`), `frame`
 //! (`width`, `height`, `png` in base64), `described` (`parts`: `role`,
 //! `label`, `x`, `y`, `width`, `height`, `focused`, `on`), `shot` (`path`
@@ -54,6 +55,7 @@ pub enum Request {
         profile: String,
         library: PathBuf,
         settings: Option<String>,
+        trust_code: bool,
     },
     Button {
         name: String,
@@ -98,6 +100,7 @@ pub fn parse(line: &str) -> Result<Request, String> {
             profile: need("profile")?,
             library: PathBuf::from(need("library")?),
             settings: text("settings"),
+            trust_code: json::raw_member(line, "trust_code").map(str::trim) == Some("true"),
         },
         "button" => Request::Button {
             name: need("name")?,
@@ -145,7 +148,7 @@ pub fn parse(line: &str) -> Result<Request, String> {
 pub struct Session {
     device: Option<Device>,
     /// What the device was started with, for `reload`.
-    started: Option<(String, PathBuf, Option<String>)>,
+    started: Option<Started>,
     shown: Vec<u8>,
 }
 
@@ -157,10 +160,13 @@ impl Session {
     /// The first event: who answers.
     pub fn ready() -> String {
         let profiles: Vec<String> = PROFILES.iter().map(|p| string(p.device.id)).collect();
+        let native = crate::native::native();
         format!(
-            "{{\"event\": \"ready\", \"protocol\": {PROTOCOL}, \"paperpaw\": {}, \"profiles\": [{}]}}",
+            "{{\"event\": \"ready\", \"protocol\": {PROTOCOL}, \"paperpaw\": {}, \"profiles\": [{}], \"fingerprint\": \"{:016x}\", \"toolchain\": {}}}",
             string(env!("CARGO_PKG_VERSION")),
-            profiles.join(", ")
+            profiles.join(", "),
+            native.fingerprint.0,
+            string(&native.toolchain)
         )
     }
 
@@ -185,20 +191,27 @@ impl Session {
                 profile,
                 library,
                 settings,
+                trust_code,
             } => {
                 self.stop();
-                let device = start(&profile, &library, settings.as_deref())?;
+                let start = Started {
+                    profile,
+                    library,
+                    settings,
+                    trust_code,
+                };
+                let device = start.device()?;
                 events.push(started(&device));
                 self.device = Some(device);
-                self.started = Some((profile, library, settings));
+                self.started = Some(start);
             }
             Request::Reload => {
-                let (profile, library, settings) = self
+                let start = self
                     .started
                     .clone()
                     .ok_or_else(|| String::from("no device started"))?;
                 self.stop();
-                let device = start(&profile, &library, settings.as_deref())?;
+                let device = start.device()?;
                 events.push(started(&device));
                 self.device = Some(device);
             }
@@ -279,8 +292,30 @@ impl Session {
 impl std::fmt::Debug for Session {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("Session")
-            .field("profile", &self.started.as_ref().map(|(p, ..)| p))
+            .field("started", &self.started)
             .finish_non_exhaustive()
+    }
+}
+
+/// What a device was started with (`start`), to start it so again.
+#[derive(Debug, Clone)]
+struct Started {
+    profile: String,
+    library: PathBuf,
+    settings: Option<String>,
+    trust_code: bool,
+}
+
+impl Started {
+    /// The device, started: the code plugins built for this computer
+    /// installed first where asked (also at every `reload`, so a new
+    /// build runs).
+    fn device(&self) -> Result<Device, String> {
+        if self.trust_code {
+            crate::native::trust(&self.library)
+                .map_err(|e| format!("{}: {e}", self.library.display()))?;
+        }
+        start(&self.profile, &self.library, self.settings.as_deref())
     }
 }
 
@@ -573,6 +608,7 @@ mod tests {
     /// fatal.
     #[test]
     fn a_device_is_driven_over_lines() {
+        let _one = crate::one_device_at_a_time();
         let folder = std::env::temp_dir().join(format!("paperpaw-stdio-{}", std::process::id()));
         let _ = std::fs::remove_dir_all(&folder);
         let (lines, received) = channel();

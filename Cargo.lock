@@ -1403,6 +1403,7 @@ version = "0.4.0-dev"
 dependencies = [
  "chrono",
  "getrandom 0.4.3",
+ "libloading",
  "paperpaw-app",
  "paperpaw-core",
  "paperpaw-fs",
