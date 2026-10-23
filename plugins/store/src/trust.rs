@@ -11,7 +11,7 @@ use alloc::format;
 use alloc::string::String;
 use alloc::vec::Vec;
 
-use paperpaw_sdk::install::Progress;
+use paperpaw_sdk::install::{self, Progress};
 use paperpaw_sdk::native::{self, Author, check_file};
 use paperpaw_sdk::{Command, Env, Storage};
 
@@ -183,7 +183,15 @@ pub(crate) fn install(
         return None;
     }
     let _ = env.storage.remove(&expected_path());
-    INSTALLER.install(env, out)
+    let version = INSTALLER
+        .folder(env.storage)
+        .and_then(|folder| install::folder_version(env.storage, &folder));
+    let installed = INSTALLER.install(env, out)?;
+    // The store's from now on: it offers its updates.
+    if let Some(version) = version {
+        install::remember_store_install(env.storage, &installed.plugin, version);
+    }
+    Some(installed)
 }
 
 /// Installs the plugin waiting for the reader's word, signed by another

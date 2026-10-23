@@ -97,6 +97,16 @@ change the plugin SDK.
   sync) says there is none. On the X4s the first scan after the radio
   comes on often found nothing, and Calibre said *no network* while
   the device joined a few seconds later.
+- The store updates only the plugins it installed. A plugin put in
+  place otherwise (the Wi-Fi transfer, a memory card, one's own build)
+  is local: its version is never counted or installed as an update, and
+  its page in the store offers *Use the store version* instead. The
+  plugin manager says of each plugin whether it is from the store or
+  local. Plugins the store installed before this version count as
+  local until the store installs them again.
+- SDK: `install::origin`, `remember_store_install`,
+  `forget_store_install` and `folder_version` tell and keep where an
+  installed plugin came from.
 - SDK: `Storage::total_space` tells a storage's size, as `free_space`
   tells what it has free.
 - SDK: `builtin::events::TYPE_TEXT` types text into the text field

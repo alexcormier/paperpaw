@@ -39,6 +39,7 @@ use alloc::string::{String, ToString};
 use alloc::vec::Vec;
 
 use paperpaw_sdk::builtin::{CORE_PLUGIN, actions, events, menus};
+use paperpaw_sdk::install::{self, Origin};
 use paperpaw_sdk::native::{NotInstalled, NotInstalledReason, SafeMode, SafeModeReason};
 use paperpaw_sdk::ui::{self, ListView, UiStyle};
 use paperpaw_sdk::{
@@ -122,6 +123,8 @@ struct PluginList {
     more: Vec<Id>,
     /// Plugin ids: the kernel first, then by name.
     plugins: Vec<Id>,
+    /// Where each plugin that is not built in came from, as installed.
+    origins: Vec<(Id, Origin)>,
     style: UiStyle,
     header: ui::Header,
     list: ListView,
@@ -151,6 +154,7 @@ impl PluginList {
         let mut manager = Self {
             more: Vec::new(),
             plugins: Vec::new(),
+            origins: Vec::new(),
             style,
             header,
             list,
@@ -179,6 +183,18 @@ impl PluginList {
             )
         });
         self.plugins = plugins.iter().map(|p| p.manifest.id.clone()).collect();
+        self.origins = plugins
+            .iter()
+            .filter(|p| p.kind != PluginKind::BuiltIn)
+            .map(|p| {
+                let version = p.update.unwrap_or(p.manifest.version);
+                let id = &p.manifest.id;
+                (
+                    id.clone(),
+                    install::origin(env.storage, id.as_str(), version),
+                )
+            })
+            .collect();
     }
 
     /// The *Restart now* button, while a change waits for a restart.
@@ -274,9 +290,9 @@ fn state(info: &PluginInfo) -> &'static str {
     }
 }
 
-/// The note below a plugin's name: what happens to it, its description
-/// and version.
-fn details(env: &Env<'_>, info: &PluginInfo) -> String {
+/// The note below a plugin's name: what happens to it, its description,
+/// version and where it came from (`origin`, for one not built in).
+fn details(env: &Env<'_>, info: &PluginInfo, origin: Option<Origin>) -> String {
     let i18n = env.i18n;
     let version = i18n.format(
         "plugin-manager.version",
@@ -328,11 +344,17 @@ fn details(env: &Env<'_>, info: &PluginInfo) -> String {
     } else {
         ""
     };
+    let origin = match origin {
+        Some(Origin::Store) => i18n.tr("plugin-manager.origin.store"),
+        Some(_) => i18n.tr("plugin-manager.origin.local"),
+        None => "",
+    };
     [
         note.as_deref().unwrap_or_default(),
         description,
         code,
         &version,
+        origin,
     ]
     .into_iter()
     .filter(|part| !part.is_empty())
@@ -441,7 +463,7 @@ impl Screen for PluginList {
             None,
             self.list.paging(len),
         );
-        let (more, plugins) = (&self.more, &self.plugins);
+        let (more, plugins, origins) = (&self.more, &self.plugins, &self.origins);
         self.list
             .draw(canvas, &style, len, |canvas, index, rect, focused| {
                 if let Some(action) = more.get(index) {
@@ -456,7 +478,11 @@ impl Screen for PluginList {
                 } else if let Some(info) = env.plugins.get(plugins[index - more.len()].as_str()) {
                     let value = env.i18n.tr(state(info));
                     let name = info.name(env.i18n);
-                    let note = details(env, info);
+                    let origin = origins
+                        .iter()
+                        .find(|(id, _)| *id == info.manifest.id)
+                        .map(|(_, origin)| *origin);
+                    let note = details(env, info, origin);
                     ui::draw_noted_row(canvas, env, &style, rect, focused, name, value, &note);
                 }
             });

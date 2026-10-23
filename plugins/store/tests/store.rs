@@ -13,7 +13,7 @@
 
 mod common;
 
-use common::{LIST, Shopping};
+use common::{LIST, Shared, Shopping};
 use paperpaw_plugin_store::OPEN;
 use paperpaw_sdk::builtin::{actions, params};
 use paperpaw_sdk::{Id, Instant, Params, Storage, Version};
@@ -182,6 +182,38 @@ fn a_plugin_is_installed_updated_and_removed() {
     assert!(!shopping.storage.exists("plugins/airy/plugin.ini"));
     let shown = shopping.shown();
     assert!(shown.contains("Install"), "{shown}");
+}
+
+/// A plugin of one's own by the store's id (copied over the Wi-Fi
+/// transfer, a memory card, a build of one's own) is not the store's: an
+/// older version of it is no update, and nothing replaces it by itself.
+/// The store's version takes its place only when the reader says so, and
+/// is updated from then on.
+#[test]
+fn a_plugin_of_ones_own_is_no_update_until_the_store_version_is_chosen() {
+    let storage = Shared::default();
+    storage
+        .write("plugins/airy/plugin.ini", manifest("0.9.0").as_bytes())
+        .unwrap();
+    let mut shopping = Shopping::with(Some("x4"), None, &list("1.0.0"), storage);
+    let shown = shopping.shown();
+    assert!(shown.contains("Installed"), "{shown}");
+    assert!(!shown.contains("update"), "{shown}");
+    let m = manifest("1.0.0");
+    shopping.open_airy(&page("1.0.0", &m, CATALOG_DE));
+    let shown = shopping.shown();
+    assert!(shown.contains("Use the store version"), "{shown}");
+    assert!(!shown.contains("Update"), "{shown}");
+    shopping.install("1.0.0", &m, CATALOG_DE);
+    assert_eq!(shopping.installed(), Some(Version::new(1, 0, 0)));
+    // The store's now: its next version is an update.
+    shopping.run(actions::BACK);
+    shopping.run(actions::BACK);
+    shopping.run(OPEN);
+    let call = shopping.request(LIST);
+    shopping.answer(&call, 200, list("1.1.0").as_bytes());
+    let shown = shopping.shown();
+    assert!(shown.contains("Installed, 1 update"), "{shown}");
 }
 
 #[test]
