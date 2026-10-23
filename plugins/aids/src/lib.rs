@@ -166,13 +166,7 @@ impl Plugin for Aids {
                     bold_beginnings(block);
                 }
             }),
-            Box::new(|env: &Env<'_>| {
-                if env.settings.read(&BOLD_BEGINNINGS) {
-                    String::from("on")
-                } else {
-                    String::new()
-                }
-            }),
+            Box::new(|env: &Env<'_>| u64::from(env.settings.read(&BOLD_BEGINNINGS))),
         ))?;
         r.add_text_filter(TextFilterSpec::new(
             Id::new_static("aids.replace"),
@@ -183,7 +177,15 @@ impl Plugin for Aids {
                     replace(block, &list);
                 }
             }),
-            Box::new(|env: &Env<'_>| env.settings.read(&REPLACE).trim().to_string()),
+            Box::new(|env: &Env<'_>| {
+                let list = env.settings.read(&REPLACE);
+                let list = list.trim();
+                if list.is_empty() {
+                    0
+                } else {
+                    paperpaw_sdk::digest::fnv1a64(list)
+                }
+            }),
         ))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/en.ini")))?;
         r.add_translations(Cow::Borrowed(include_str!("../i18n/de.ini")))?;

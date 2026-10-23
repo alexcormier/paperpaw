@@ -34,4 +34,16 @@ impl core::default::Default for paperpaw_digest::sha256::Sha256
 pub fn paperpaw_digest::sha256::Sha256::default() -> Self
 pub fn paperpaw_digest::sha256::digest(&[u8]) -> [u8; 32]
 pub fn paperpaw_digest::sha256::hex(&[u8]) -> alloc::string::String
+pub struct paperpaw_digest::Fnv1a64(_)
+impl paperpaw_digest::Fnv1a64
+pub fn paperpaw_digest::Fnv1a64::feed(&mut self, &[u8])
+pub const fn paperpaw_digest::Fnv1a64::new() -> Self
+pub const fn paperpaw_digest::Fnv1a64::value(&self) -> u64
+impl core::default::Default for paperpaw_digest::Fnv1a64
+pub fn paperpaw_digest::Fnv1a64::default() -> Self
+impl core::fmt::Write for paperpaw_digest::Fnv1a64
+pub fn paperpaw_digest::Fnv1a64::write_str(&mut self, &str) -> core::fmt::Result
+impl core::hash::Hasher for paperpaw_digest::Fnv1a64
+pub fn paperpaw_digest::Fnv1a64::finish(&self) -> u64
+pub fn paperpaw_digest::Fnv1a64::write(&mut self, &[u8])
 pub fn paperpaw_digest::fnv1a64(impl core::convert::AsRef<[u8]>) -> u64

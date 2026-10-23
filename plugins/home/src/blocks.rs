@@ -350,7 +350,7 @@ fn status_widget_targets(env: &Env<'_>, area: Rect) -> Vec<WidgetTarget> {
 
 /// What the status line shows now, to draw it again when it changes.
 fn status_signature(env: &Env<'_>) -> String {
-    PLACE.signature(env, &Params::new())
+    format!("{}", PLACE.signature(env, &Params::new()))
 }
 
 // ---- Date ---------------------------------------------------------------

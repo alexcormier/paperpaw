@@ -115,7 +115,7 @@ pub(crate) struct ReaderScreen {
     /// The last search, offered again.
     last_search: String,
     /// What the status lines showed when last drawn.
-    status_shown: String,
+    status_shown: Option<u64>,
     /// The sentence being read aloud.
     aloud: Option<Aloud>,
     /// Where reading aloud was paused: the page and its word.
@@ -155,7 +155,7 @@ impl ReaderScreen {
             selected_on: Locator::START,
             linking: None,
             last_search: String::new(),
-            status_shown: String::new(),
+            status_shown: None,
             aloud: None,
             resume: None,
             auto_turn: None,
@@ -237,7 +237,7 @@ impl ReaderScreen {
             }
         }
         cx.request_refresh(RefreshMode::Fast);
-        self.status_shown.clear();
+        self.status_shown = None;
     }
 
     /// Redraws the status lines if what they show changed, and checks again
@@ -251,8 +251,8 @@ impl ReaderScreen {
             return;
         }
         let signature = status::signature(&env, &book.status_context(&env), &book.status_lines);
-        if signature != self.status_shown {
-            self.status_shown = signature;
+        if Some(signature) != self.status_shown {
+            self.status_shown = Some(signature);
             for (area, _) in book.status_areas() {
                 cx.request_redraw_area(area);
             }
@@ -1055,7 +1055,7 @@ impl ReaderScreen {
             || changed.is_some() && !font_changed && id.starts_with("core.")
         {
             // The battery, the clock format, the time zone, …
-            self.status_shown.clear();
+            self.status_shown = None;
             self.update_status(cx);
             return;
         }

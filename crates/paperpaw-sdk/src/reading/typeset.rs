@@ -161,7 +161,7 @@ pub struct PageType {
     pub hyphenation: Option<String>,
     /// What the plugins' text filters did when it was made
     /// ([`TextFilters::signature`](crate::filters::TextFilters)).
-    pub filters: String,
+    pub filters: u64,
     /// Names this layout: what pages laid out with it look like depends
     /// on nothing else (the settings, the faces, the box, the filters, the
     /// plugins' stylesheets, the layout's version). A page index of the

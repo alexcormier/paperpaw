@@ -375,6 +375,6 @@ pub mod json {
 /// Hashes and hex (see `paperpaw-digest`): FNV-1a for names of files kept
 /// per book, MD5, SHA-1 and SHA-256 for what services and files ask.
 pub mod digest {
-    pub use paperpaw_digest::{fnv1a64, hex, md5, sha1, sha256};
+    pub use paperpaw_digest::{Fnv1a64, fnv1a64, hex, md5, sha1, sha256};
 }
 pub use paperpaw_text::{Font, FontError, LineMetrics};

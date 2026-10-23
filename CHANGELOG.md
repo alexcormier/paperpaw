@@ -474,6 +474,11 @@ file to your report.
   (`.focused()`, `.on()`, and `.disabled()` for what does nothing now),
   in place of five arguments; parts (`Described`, `semantics::Part`)
   tell whether they are disabled.
+- SDK: signatures are numbers, made without allocating: a text
+  filter's and a status line's signature returns a `u64` (0: does
+  nothing), like a decorator's. `digest::Fnv1a64` makes one, fed piece
+  by piece, as a `Hasher` or with `write!`. A menu item's label and badge
+  are a `Cow<'static, str>`, so a fixed text costs nothing.
 - SDK: the registrar's methods take ids as `impl Into<Id>` and text as
   `impl Into<Cow<'static, str>>` or `impl Into<String>`, so `&ID`, a
   setting or an event and a `&'static str` or `String` go in as they
