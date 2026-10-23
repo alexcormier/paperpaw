@@ -279,9 +279,29 @@ pub fn wrap(scene: &Scene<'_>) -> Vec<Issue> {
         if d.role == Role::Text && label.contains(char::is_whitespace) {
             continue;
         }
-        // A button's label: looked at with its button, inside its frame.
+        // A button's label told as a text of its own where it is drawn
+        // apart from the rest of the button (a tool's name, or its short
+        // form, below its icon): that text is looked at, not the button
+        // with its icon.
+        let apart = |b: &Described, t: &Described| {
+            let (label, words) = (b.label.trim().to_lowercase(), t.label.trim().to_lowercase());
+            t.role == Role::Text
+                && says_something(&words)
+                && label.contains(&words)
+                && inside(t.area, b.area)
+                && t.area.height * 3 < b.area.height * 2
+        };
+        if d.role == Role::Button && scene.parts(&[Role::Text]).any(|t| apart(d, t)) {
+            continue;
+        }
+        // Else a button's label: looked at with its button, inside its
+        // frame.
         let start = Point::new(i32::from(d.area.x), i32::from(d.area.y));
-        if d.role == Role::Text && scene.parts(&[Role::Button]).any(|b| b.area.contains(start)) {
+        if d.role == Role::Text
+            && scene
+                .parts(&[Role::Button])
+                .any(|b| b.area.contains(start) && !apart(b, d))
+        {
             continue;
         }
         let Some(visible) = scene.visible(d) else {
@@ -297,11 +317,21 @@ pub fn wrap(scene: &Scene<'_>) -> Vec<Issue> {
             continue;
         }
         // Lines of text lie a leading apart; a thin line drawn through
-        // the letters (a flip clock's tiles) is no break.
+        // the letters (a flip clock's tiles) is no break. A frame round it
+        // (a button's, a day marked in a calendar) is no line of it; the
+        // letters of a text boxed tightly are left as they are.
         let mut ink = text_ink(scene, d, region, INK);
-        if d.role == Role::Button {
+        // Words in a box filled round them (a day marked in a calendar):
+        // looked at on the box's fill.
+        if let Some((boxed, (x, y))) = ink.filled_box() {
+            let fill = scene.luma(u32::from(x), u32::from(y));
+            ink = scene.ink_with(boxed.inset(1, 1), fill, INK);
+        }
+        if d.role == Role::Button || ink.framed() {
             ink.clear_edges();
         }
+        // What a filled box's round corners leave in the corners.
+        ink.clear_corners();
         let tallest = ink.lines(2).iter().map(|l| l.1).max().unwrap_or(0);
         let lines = ink.lines((tallest / 6).max(3));
         if lines.len() >= 2 {
@@ -810,6 +840,8 @@ fn icon_column(scene: &Scene<'_>, rows: &[&Described]) -> Vec<Issue> {
         }
         let mut ink = scene.ink_in(before);
         ink.clear_lines();
+        ink.clear_right();
+        ink.clear_dotted();
         // Ink from the line's top to its bottom is something taller than
         // an icon cut by the line: a cover or a picture, not an icon.
         if let Some(icon) = ink.bounds()
@@ -975,7 +1007,18 @@ pub fn touch_targets(scene: &Scene<'_>) -> Vec<Issue> {
         } else {
             d.area.width.min(d.area.height)
         };
-        if size < least {
+        // A key in a row of many across the screen (a keyboard's): as
+        // wide as the screen lets that many be, high enough for a finger.
+        let peers = scene
+            .parts(&[Role::Button])
+            .filter(|b| b.area.y == d.area.y && b.area.height == d.area.height)
+            .count() as u16;
+        let key = scene.keyboard
+            && d.role == Role::Button
+            && peers >= 8
+            && d.area.height >= least
+            && d.area.width + scene.ui.tolerance() >= scene.screen.width / peers / 2;
+        if size < least && !key {
             small.push((d, size));
         }
     }
@@ -1041,9 +1084,12 @@ pub fn button_room(scene: &Scene<'_>) -> Vec<Issue> {
     let rows: Vec<Rect> = scene.parts(&[Role::Row]).map(|r| r.area).collect();
     // A header's note or arrows follow the header's own layout.
     let headers: Vec<Rect> = scene.parts(&[Role::Heading]).map(|h| h.area).collect();
+    // A button across the whole width (a filter row over a list) is a
+    // row: its words keep the margin, the row reaches the edges.
     let buttons: Vec<&Described> = buttons
         .into_iter()
         .filter(|b| !headers.iter().any(|h| inside(b.area, *h)))
+        .filter(|b| (b.area.x, b.area.width) != (scene.screen.x, scene.screen.width))
         .collect();
     let mut found: Vec<(String, Rect, String)> = Vec::new();
     let (left, right) = (i32::from(screen.x), screen.right() as i32);

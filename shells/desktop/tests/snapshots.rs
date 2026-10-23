@@ -268,6 +268,16 @@ const CASES: &[Case] = &[
         script: "run:core.tools,wait:300",
         colour: 0,
     },
+    // All tools in German: names on two lines, hyphenated, and the
+    // focus round the focused tool's icon and name.
+    Case {
+        name: "x4-drawer-de",
+        profile: "xteink-x4",
+        book: None,
+        sets: &["core.language=de"],
+        script: "open:home.drawer,wait:300",
+        colour: 0,
+    },
     Case {
         name: "x4-library",
         profile: "xteink-x4",

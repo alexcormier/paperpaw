@@ -52,6 +52,7 @@ use std::collections::BTreeMap;
 use std::path::PathBuf;
 
 use paperpaw_core::sdk::builtin::settings as core_settings;
+use paperpaw_core::sdk::builtin::slots as core_slots;
 use paperpaw_core::sdk::semantics::{Described, Role};
 use paperpaw_platform::Rect;
 
@@ -209,6 +210,9 @@ pub struct Looker {
     /// The texts of the language looked at that hold a "…" of their own
     /// ("Loading…"): not shortened there ([`Scene::ellipses`]).
     ellipses: Vec<String>,
+    /// The screen the keyboard slot opens: its keys may be as narrow as
+    /// the screen lets a row of them be ([`Scene::keyboard`]).
+    keyboard: Option<String>,
 }
 
 impl Looker {
@@ -230,6 +234,16 @@ impl Looker {
                 .filter(|text| text.contains('…'))
                 .collect()
         };
+        // The keyboard, as the slot opens it.
+        session.device.call(|kernel, now| {
+            kernel.open_slot(now, core_slots::KEYBOARD, paperpaw_core::sdk::Params::new())
+        });
+        session.settle();
+        let keyboard = session
+            .device
+            .kernel
+            .active_screen()
+            .map(ToString::to_string);
         cases::home(session);
         Looker {
             ui: ui(session, &variant),
@@ -243,6 +257,7 @@ impl Looker {
             buttons: !variant.has_touch(),
             labels_whole: false,
             ellipses,
+            keyboard,
         }
     }
 
@@ -258,7 +273,8 @@ impl Looker {
         let scene = Scene::new(&shown.image, own, self.screen, self.ui)
             .panel(self.panel)
             .labels_whole(self.labels_whole)
-            .ellipses(&self.ellipses);
+            .ellipses(&self.ellipses)
+            .keyboard(self.keyboard.as_deref() == Some(id));
         let mut issues = checks::all(&scene);
         if self.buttons {
             issues.extend(focus(session, id, &scene, &self.home));
