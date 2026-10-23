@@ -21,6 +21,8 @@ USAGE:
 OPTIONS:
     --profile <id>        Device to emulate (default: xteink-x4)
     --list-profiles       List available device profiles
+    --registry <file>     Write what the app offers data plugins (settings,
+                          widgets, actions, device profiles) as JSON
     --config <file>       User configuration file (paperpaw.ini)
     --set <key>=<value>   Override configuration, e.g. --set core.language=de
                           or --set slots.core.home=core.placeholder
@@ -173,6 +175,12 @@ fn parse_args(mut args: impl Iterator<Item = String>) -> Result<Option<Options>,
         match arg.as_str() {
             "-h" | "--help" => {
                 print!("{USAGE}");
+                return Ok(None);
+            }
+            "--registry" => {
+                let out = PathBuf::from(value("--registry")?);
+                let json = paperpaw_emulator::registry::registry()?;
+                std::fs::write(&out, json).map_err(|e| format!("{}: {e}", out.display()))?;
                 return Ok(None);
             }
             "--list-profiles" => {

@@ -6,6 +6,13 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- `paperpaw-emu --registry <file>` writes what the app offers data
+  plugins as JSON (registry version 2): every setting, widget, action and
+  device profile, for tools that work with a release (the handbook, the
+  workshop) without a build of their own. Profiles say whether their
+  screen is a colour panel (`colour_screen`: the Kobo Libra Colour, not
+  the Boox Go 7) and whether black and white are shown in the colours set
+  (`tinted`; `colors`, which said that, is kept).
 - The reader can name the device (*Device name* under System; by default
   the model's, "PaperPaw X4 Pro", "PaperPaw X4", on other devices the
   model). Calibre, the progress server (kosync), the Wi-Fi transfer

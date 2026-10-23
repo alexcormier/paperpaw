@@ -16,6 +16,7 @@ pub mod http;
 pub mod light;
 pub mod panel;
 pub mod profiles;
+pub mod registry;
 pub mod trace;
 pub mod wifi;
 
