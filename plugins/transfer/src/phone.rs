@@ -114,7 +114,7 @@ impl PhoneScreen {
                     at: env.now,
                 };
                 let (response, text) = answer(number, guard, &self.page, env.storage, &request);
-                cx.command(Command::Respond(response));
+                cx.command(Command::respond(response));
                 // The text to the keyboard, and done.
                 if let Some(text) = text
                     && let Some(reply) = self

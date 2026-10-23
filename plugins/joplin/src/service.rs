@@ -106,17 +106,14 @@ impl Service {
 
 /// The request signing in to Joplin Cloud or Joplin Server at `base`.
 pub fn sign_in(base: &str, email: &str, password: &str, reply: &Event<HttpReply>) -> HttpRequest {
-    let mut request = HttpRequest::new("POST", &format!("{base}/api/sessions"), reply);
-    request.headers.push((
-        String::from("Content-Type"),
-        String::from("application/json"),
-    ));
-    request.body = Some(format!(
+    let body = format!(
         "{{\"email\":{},\"password\":{}}}",
         paperpaw_sdk::json::string(email),
         paperpaw_sdk::json::string(password)
-    ));
-    request
+    );
+    HttpRequest::new("POST", &format!("{base}/api/sessions"), reply)
+        .header(String::from("Content-Type"), String::from("application/json"))
+        .body(body)
 }
 
 /// How a request proves who sends it: the session where there is one,
@@ -130,15 +127,13 @@ pub enum Auth<'a> {
 /// A request of `method` for `url` (see [`Service::url`]), answered as
 /// `reply`.
 pub fn request(url: &str, method: &str, auth: Auth<'_>, reply: &Event<HttpReply>) -> HttpRequest {
-    let mut request = HttpRequest::new(method, url, reply);
-    let header = match auth {
+    let (name, value) = match auth {
         Auth::Session(id) => (String::from("X-API-AUTH"), id.to_string()),
         Auth::Basic { user, password } => {
             (String::from("Authorization"), basic_auth(user, password))
         }
     };
-    request.headers.push(header);
-    request
+    HttpRequest::new(method, url, reply).header(name, value)
 }
 
 #[cfg(test)]
@@ -178,14 +173,14 @@ mod tests {
     #[test]
     fn signs_in_with_json_and_proves_it() {
         let r = sign_in("https://joplin.example", "me@example.org", "p\"w", &REPLY);
-        assert_eq!(r.url, "https://joplin.example/api/sessions");
+        assert_eq!(r.url(), "https://joplin.example/api/sessions");
         assert_eq!(
-            r.body.as_deref(),
+            r.body_text(),
             Some("{\"email\":\"me@example.org\",\"password\":\"p\\\"w\"}")
         );
         let r = request("https://j/x", "GET", Auth::Session("S"), &REPLY);
         assert!(
-            r.headers
+            r.headers()
                 .contains(&(String::from("X-API-AUTH"), String::from("S")))
         );
         let basic = Auth::Basic {
@@ -193,7 +188,7 @@ mod tests {
             password: "pw",
         };
         let r = request("https://d/x.md", "PUT", basic, &REPLY);
-        assert_eq!(r.headers[0].0, "Authorization");
-        assert!(r.headers[0].1.starts_with("Basic "));
+        assert_eq!(r.headers()[0].0, "Authorization");
+        assert!(r.headers()[0].1.starts_with("Basic "));
     }
 }

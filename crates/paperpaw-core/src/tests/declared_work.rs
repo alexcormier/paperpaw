@@ -94,7 +94,7 @@ impl Plugin for WorkPlugin {
         r.subscribe(
             Id::new_static("wk.fetch"),
             Box::new(|_, _, out| {
-                out.push(Command::Http(paperpaw_sdk::HttpRequest::get(
+                out.push(Command::http(paperpaw_sdk::HttpRequest::get(
                     "https://example.org/",
                     Id::new_static("wk.answered"),
                 )));
@@ -422,7 +422,7 @@ fn a_plugin_whose_network_is_off_gets_none() {
         kernel.shared.work_states.get(&Id::new_static("wk.push")),
         None
     );
-    kernel.apply(Command::Http(paperpaw_sdk::HttpRequest::get(
+    kernel.apply(Command::http(paperpaw_sdk::HttpRequest::get(
         "https://example.org/",
         Id::new_static("wk.closed"),
     )));
@@ -650,7 +650,7 @@ fn work_under_another_plugins_name_is_dropped() {
 fn a_plugin_that_does_not_declare_the_network_gets_none() {
     let mut kernel = sayer();
     kernel.take_warnings();
-    kernel.apply(Command::Http(paperpaw_sdk::HttpRequest::get(
+    kernel.apply(Command::http(paperpaw_sdk::HttpRequest::get(
         "https://example.org/",
         Id::new_static("sy.answer"),
     )));
@@ -668,7 +668,7 @@ fn a_plugin_that_does_not_declare_the_network_gets_none() {
 fn requests_are_taken_back_and_answered_so() {
     let log = log();
     let mut kernel = kernel(&log, true);
-    kernel.apply(Command::Http(paperpaw_sdk::HttpRequest::get(
+    kernel.apply(Command::http(paperpaw_sdk::HttpRequest::get(
         "https://example.org/",
         Id::new_static("wk.answered"),
     )));
@@ -691,7 +691,7 @@ fn offline_lets_out_only_what_the_reader_went_online_for() {
         4,
     );
     let request = || {
-        Command::Http(paperpaw_sdk::HttpRequest::get(
+        Command::http(paperpaw_sdk::HttpRequest::get(
             "https://example.org/",
             Id::new_static("wk.answered"),
         ))

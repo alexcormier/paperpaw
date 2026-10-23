@@ -332,7 +332,7 @@ impl State {
     ) -> Option<Command> {
         let user = env.settings.read(&USER);
         let auth = Some((user, key(env)?));
-        Some(Command::Http(server_request(
+        Some(Command::http(server_request(
             env, method, path, body, reply, params, auth,
         )))
     }
@@ -706,9 +706,13 @@ pub(crate) fn server_request(
     }
     let mut request =
         HttpRequest::new(method, &format!("{}{path}", server(env)), reply).with(params);
-    request.headers = headers;
-    request.body = body;
-    request
+    for (name, value) in headers {
+        request = request.header(name, value);
+    }
+    match body {
+        Some(body) => request.body(body),
+        None => request,
+    }
 }
 
 /// The position in the parameters of a reading event.

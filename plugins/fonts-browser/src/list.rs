@@ -97,8 +97,8 @@ impl ListScreen {
         }
         let url = env.settings.read(&CATALOG);
         let mut request = HttpRequest::new("GET", url.trim(), LOADED);
-        request.save_to = Some(fetched_path());
-        cx.command(Command::Http(request));
+        request = request.save_to(fetched_path());
+        cx.command(Command::http(request));
         self.asked = true;
         if self.fonts.is_empty() {
             self.trouble = Trouble::Loading;

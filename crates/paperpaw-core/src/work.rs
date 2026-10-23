@@ -741,10 +741,10 @@ impl Kernel {
     /// server's, a socket's): their ids are in the plugin's namespace.
     pub(crate) fn declared_network(&mut self, command: Command) -> Option<Command> {
         let owner = match &command {
-            Command::Http(request) => request.reply.namespace(),
+            Command::Http(request) => request.reply().namespace(),
             Command::Serve { server, .. } => server.namespace(),
             Command::Connect { socket, .. } => socket.namespace(),
-            Command::Broadcast { id, .. } => id.namespace(),
+            Command::Broadcast(broadcast) => broadcast.id().namespace(),
             _ => return Some(command),
         };
         // The kernel's own, and what no plugin it knows asked for, go on.
@@ -777,8 +777,9 @@ impl Kernel {
         let reason = String::from(refusal.reason.as_str());
         let (event, params) = match command {
             Command::Http(request) => {
+                let request = request.into_parts();
                 let reply = HttpReply::refused(refusal, request.params);
-                (request.reply, reply.to_params())
+                (request.reply, reply.into_params())
             }
             Command::Serve { server, events, .. } => {
                 (events, ServerNotice::Failed { server, reason }.to_params())
@@ -786,9 +787,10 @@ impl Kernel {
             Command::Connect { socket, events, .. } => {
                 (events, SocketNotice::Failed { socket, reason }.to_params())
             }
-            Command::Broadcast { id, events, .. } => {
-                let failed = SocketNotice::Failed { socket: id, reason };
-                (events, failed.to_params())
+            Command::Broadcast(broadcast) => {
+                let socket = broadcast.id().clone();
+                let failed = SocketNotice::Failed { socket, reason };
+                (broadcast.events().clone(), failed.to_params())
             }
             _ => return None,
         };

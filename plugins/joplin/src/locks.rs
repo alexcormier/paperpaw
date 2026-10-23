@@ -51,23 +51,14 @@ pub fn request(
     reply: &Event<HttpReply>,
 ) -> HttpRequest {
     let url = service.locks_url(base);
-    let mut request = match service {
-        Service::WebDav => {
-            let mut request = service::request(&url, "PROPFIND", auth, reply);
-            request
-                .headers
-                .push((String::from("Depth"), String::from("1")));
-            request.headers.push((
-                String::from("Content-Type"),
-                String::from("application/xml"),
-            ));
-            request.body = Some(String::from(PROPFIND));
-            request
-        }
+    let request = match service {
+        Service::WebDav => service::request(&url, "PROPFIND", auth, reply)
+            .header(String::from("Depth"), String::from("1"))
+            .header(String::from("Content-Type"), String::from("application/xml"))
+            .body(String::from(PROPFIND)),
         _ => service::request(&url, "GET", auth, reply),
     };
-    request.save_to = Some(save_to);
-    request
+    request.save_to(save_to)
 }
 
 /// Whether the list of locks in the file `path` (the answer to

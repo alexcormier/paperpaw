@@ -207,8 +207,8 @@ impl ListScreen {
         let list = env.settings.read(&CATALOG);
         let url = catalog::list_url(list.trim(), device, env.i18n.language());
         let mut request = HttpRequest::new("GET", &url, LOADED);
-        request.save_to = Some(catalog::list_part());
-        cx.command(Command::Http(request));
+        request = request.save_to(catalog::list_part());
+        cx.command(Command::http(request));
         if self.index.is_none() {
             self.trouble = Trouble::Loading;
             self.redraw(cx);

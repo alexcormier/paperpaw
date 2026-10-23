@@ -114,9 +114,12 @@ pub use action::{
     ActionHandler, ActionHint, ActionOverride, ActionSpec, Actions, Observer, ObserverSpec,
 };
 pub use command::{
-    Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead, Speech,
-    http_params, server_params, socket_params, speech_params,
+    Broadcast, Command, HttpOptions, HttpRequest, MAX_CLIPBOARD, ServerResponse, SocketRead,
+    Speech, http_params, server_params, socket_params, speech_params,
 };
+#[cfg(any(test, feature = "kernel"))]
+#[cfg_attr(docsrs, doc(cfg(feature = "kernel")))]
+pub use command::{HttpParts, ResponseParts};
 pub use commands::Commands;
 pub use contribution::{Contribution, Registrar};
 #[cfg(any(test, feature = "kernel"))]

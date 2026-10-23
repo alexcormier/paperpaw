@@ -304,7 +304,7 @@ impl paperpaw_sdk::Plugin for Fetcher {
     fn register(&self, r: &mut paperpaw_sdk::Registrar) -> Result<(), paperpaw_sdk::RegisterError> {
         r.add_action(
             paperpaw_sdk::ActionSpec::new(Id::new_static("net.go"), "go").handler(|_, _, out| {
-                out.push(paperpaw_sdk::Command::Http(paperpaw_sdk::HttpRequest::get(
+                out.push(paperpaw_sdk::Command::http(paperpaw_sdk::HttpRequest::get(
                     "https://example.org/",
                     Id::new_static("net.answered"),
                 )));

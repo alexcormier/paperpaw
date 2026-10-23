@@ -70,25 +70,27 @@ impl Speech {
         out: &mut Vec<Command>,
     ) {
         if !available {
-            return reply(speech.reply, speech.params, false, out);
+            return reply(speech.reply().clone(), speech.params().clone(), false, out);
         }
         let id = self.next;
         self.next = self.next.wrapping_add(1);
-        if !speech.queue {
+        let queue = speech.is_queued();
+        if !queue {
             self.speaking.clear();
         }
         self.speaking.push(Speaking {
             id,
-            reply: speech.reply,
-            params: speech.params,
+            reply: speech.reply().clone(),
+            params: speech.params().clone(),
             screens,
         });
+        let (language, rate) = (String::from(speech.language()), speech.rate());
         self.calls.push(SpeechCall::Say {
             id,
-            text: speech.text,
-            language: speech.language,
-            rate: speech.rate,
-            queue: speech.queue,
+            text: speech.into_text(),
+            language,
+            rate,
+            queue,
         });
     }
 

@@ -252,14 +252,10 @@ impl Sockets {
                     self.close(at, None, out);
                 }
             }
-            Command::Broadcast {
-                id,
-                ports,
-                data,
-                wait_ms,
-                events,
-                ..
-            } => {
+            Command::Broadcast(broadcast) => {
+                let (id, events) = (broadcast.id().clone(), broadcast.events().clone());
+                let (ports, wait_ms) = (broadcast.ports().to_vec(), broadcast.wait_ms());
+                let data = broadcast.into_data();
                 if !network {
                     let reason = String::from("no network");
                     out.push(emit(&events, SocketNotice::Done { socket: id, reason }));

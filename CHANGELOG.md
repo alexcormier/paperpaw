@@ -6,6 +6,14 @@ change the plugin SDK.
 
 ## [Unreleased]
 
+- SDK: commands stay small (a test keeps them so): `Command::Http`,
+  `Speak`, `Respond` and `Broadcast` hold their payload boxed, made with
+  `Command::http`, `speak`, `respond` and `broadcast`. `HttpRequest`,
+  `Speech`, `ServerResponse` and the new `Broadcast` keep their fields
+  to themselves: they are made with their builders
+  (`HttpRequest::param` is new; `Speech::in_language`, `at_rate`,
+  `with` and `queued` take the place of `language`, `rate`, `params`
+  and `queue`) and read with methods.
 - SDK: an HTTP answer's body is bytes as they came (`HttpReply::body`
   is a `Vec<u8>`, `text()` reads it as text), no longer decoded with
   losses, and it reaches the plugin's handler without a copy: an event

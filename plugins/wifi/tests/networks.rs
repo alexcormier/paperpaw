@@ -178,7 +178,7 @@ impl Plugin for NoticeKeeper {
         // Wants the network: a request.
         r.add_action(ActionSpec::new(FETCH, "Fetch").handler(
             |_: &Env<'_>, _, out: &mut Commands| {
-                out.push(Command::Http(HttpRequest::new(
+                out.push(Command::http(HttpRequest::new(
                     "GET",
                     "http://example.org/",
                     Id::new_static("notices.fetched"),

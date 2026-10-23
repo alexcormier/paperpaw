@@ -320,7 +320,7 @@ impl TransferScreen {
                     at: env.now,
                 };
                 let (response, done) = web::answer(env.storage, guard, &self.page, request);
-                cx.command(Command::Respond(response));
+                cx.command(Command::respond(response));
                 if let Some(done) = done {
                     // The library follows: a book added, a book removed (what
                     // plugins keep for it goes too), a folder removed (its
@@ -394,13 +394,13 @@ impl TransferScreen {
             if let Some(body) = body_file {
                 let _ = env.storage.remove(&body);
             }
-            return cx.command(Command::Respond(response));
+            return cx.command(Command::respond(response));
         }
         let mut out = paperpaw_sdk::Commands::new();
         let (response, ask) =
             self.installs
                 .answer(&env, number, method, target, body_file.as_deref(), &mut out);
-        out.push(Command::Respond(response));
+        out.push(Command::respond(response));
         for command in out {
             cx.command(command);
         }

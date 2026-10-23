@@ -217,7 +217,7 @@ impl BrowserScreen {
             .i18n
             .format("browser.loading", &[("host", Arg::Str(&host))]);
         self.say(message, cx);
-        cx.command(Command::Http(
+        cx.command(Command::http(
             HttpRequest::get(url, LOADED)
                 .header("User-Agent", "PaperPaw/0.1 (e-reader)")
                 .header(

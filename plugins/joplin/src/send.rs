@@ -220,11 +220,11 @@ impl Run {
         if account.service.signs_in() && self.session.is_none() {
             let request =
                 service::sign_in(&account.base, account.user, account.password, &SIGNED_IN);
-            return out.push(Command::Http(request));
+            return out.push(Command::http(request));
         }
         let mut request = self.request(env, INFO, "GET", &CHECKED);
-        request.save_to = Some(kept::file(INFO));
-        out.push(Command::Http(request));
+        request = request.save_to(kept::file(INFO));
+        out.push(Command::http(request));
     }
 
     /// How requests prove who sends them: the session where there is one.
@@ -253,12 +253,10 @@ impl Run {
 
     /// A request putting the file `name`; its body is the caller's.
     fn put(&self, env: &Env<'_>, name: &str, reply: &Event<HttpReply>) -> HttpRequest {
-        let mut request = self.request(env, name, "PUT", reply);
-        request.headers.push((
+        self.request(env, name, "PUT", reply).header(
             String::from("Content-Type"),
             String::from("application/octet-stream"),
-        ));
-        request
+        )
     }
 
     /// Answers that are no success, the same for every step.
@@ -327,7 +325,7 @@ impl Run {
                         let file = kept::file(LOCKS_FILE);
                         let auth = self.auth(env);
                         let request = locks::request(service, &base, auth, file, &LOCKS);
-                        return out.push(Command::Http(request));
+                        return out.push(Command::http(request));
                     }
                 };
                 self.end(env, key, &[], End::Stop, out);
@@ -366,9 +364,9 @@ impl Run {
         match kept::notebook(env.storage) {
             Some((name, id)) if name == notebook_name(env) && item::is_id(&id) => {
                 let mut request = self.request(env, &item::file_name(&id), "GET", &NOTEBOOK_FOUND);
-                request.save_to = Some(kept::file(FOUND));
-                request.params = Params::new().with(ID, id);
-                out.push(Command::Http(request));
+                request = request.save_to(kept::file(FOUND));
+                request = request.with(Params::new().with(ID, id));
+                out.push(Command::http(request));
             }
             _ => self.make_notebook(env, out),
         }
@@ -401,9 +399,9 @@ impl Run {
         let old = kept::notebook(env.storage).map(|(_, id)| id);
         let id = item::new_id(&format!("paperpaw notebook {name} {now}"), old.as_deref());
         let mut request = self.put(env, &item::file_name(&id), &NOTEBOOK_MADE);
-        request.body = Some(item::notebook(&id, name, &paperpaw_sdk::time::iso8601(now)));
-        request.params = Params::new().with(ID, id);
-        out.push(Command::Http(request));
+        request = request.body(item::notebook(&id, name, &paperpaw_sdk::time::iso8601(now)));
+        request = request.with(Params::new().with(ID, id));
+        out.push(Command::http(request));
     }
 
     pub fn notebook_made(&mut self, env: &Env<'_>, reply: &HttpReply, out: &mut Commands) {
@@ -439,8 +437,8 @@ impl Run {
                 return self.write_note(env, None, out);
             };
             let mut request = self.request(env, &found, "GET", &NOTE_FOUND);
-            request.save_to = Some(kept::file(FOUND));
-            return out.push(Command::Http(request));
+            request = request.save_to(kept::file(FOUND));
+            return out.push(Command::http(request));
         }
         self.finish(env, out);
     }
@@ -534,8 +532,8 @@ impl Run {
             return self.book_failed(env, out);
         }
         let mut request = self.put(env, &item::file_name(&sending.id), &NOTE_SENT);
-        request.body_from = Some(file);
-        out.push(Command::Http(request));
+        request = request.body_from(file);
+        out.push(Command::http(request));
         book.sending = Some(sending);
         self.book = Some(book);
     }

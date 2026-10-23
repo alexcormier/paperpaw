@@ -220,9 +220,10 @@ fn request(
     all: bool,
     (done, failed): (usize, usize),
 ) -> Command {
-    let mut request = HttpRequest::new("GET", &feed.url, FETCHED);
-    request.headers.push(paperpaw_sdk::web::user_agent_of(env));
-    request.save_to = Some(download(&feed.url));
+    let (agent, name) = paperpaw_sdk::web::user_agent_of(env);
+    let mut request = HttpRequest::new("GET", &feed.url, FETCHED)
+        .header(agent, name)
+        .save_to(download(&feed.url));
     let mut params = Params::new()
         .with(URL, feed.url.clone())
         .with(INDEX, format!("{index}"))
@@ -231,8 +232,8 @@ fn request(
     if all {
         params = params.with(ALL, "1");
     }
-    request.params = params;
-    Command::Http(request)
+    request = request.with(params);
+    Command::http(request)
 }
 
 /// Starts fetching the feed at `from`, and with `all` those after it.

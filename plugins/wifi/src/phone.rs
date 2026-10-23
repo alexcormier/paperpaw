@@ -263,7 +263,7 @@ impl PhoneScreen {
                     ("GET", "/") => (200, choose_page(&env, false, token), None),
                     _ => (404, page(&env, "<h1>404</h1>"), None),
                 };
-                cx.command(Command::Respond(ServerResponse::new(
+                cx.command(Command::respond(ServerResponse::new(
                     request,
                     status,
                     "text/html; charset=utf-8",

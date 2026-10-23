@@ -839,7 +839,7 @@ impl Kernel {
             let language = self.shared.translator.language().to_string();
             let speech =
                 paperpaw_sdk::Speech::new(text.clone(), Id::new_static("core.focus-spoken"))
-                    .language(language);
+                    .in_language(language);
             self.speak(speech);
             self.io.focus_spoken = true;
         }

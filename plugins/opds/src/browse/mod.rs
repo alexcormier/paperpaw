@@ -196,7 +196,7 @@ impl BrowseScreen {
             .format("opds.loading", &[("host", Arg::Str(host(url)))]);
         self.say(message, cx);
         let params = Params::new().with(URL, url.to_string());
-        cx.command(Command::Http(crate::list_request(
+        cx.command(Command::http(crate::list_request(
             &paperpaw_sdk::web::user_agent_of(&env),
             &self.catalog,
             url,
@@ -267,7 +267,7 @@ impl BrowseScreen {
             (None, Some(Search::Template(template))) => template.clone(),
             (None, Some(Search::Description(url))) => {
                 let url = url.clone();
-                cx.command(Command::Http(request(
+                cx.command(Command::http(request(
                     &paperpaw_sdk::web::user_agent_of(cx.env()),
                     &self.catalog,
                     &url,

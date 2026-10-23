@@ -334,14 +334,15 @@ impl Book {
 
     /// Hands `text` over to be spoken, after what is spoken with `queue`.
     pub(super) fn speak(&self, env: &Env<'_>, text: String, queue: bool, cx: &mut Cx<'_, '_>) {
-        let mut speech = paperpaw_sdk::Speech::new(text, crate::SPOKEN);
-        speech.language = self.language.clone();
-        speech.rate = env
+        let rate = env
             .settings
             .int(crate::settings::ALOUD_SPEED.as_str())
             .clamp(50, 300) as u16;
-        speech.params = Params::new().with(params::PATH, self.path.clone());
-        speech.queue = queue;
-        cx.command(Command::Speak(speech));
+        let speech = paperpaw_sdk::Speech::new(text, crate::SPOKEN)
+            .in_language(self.language.clone())
+            .at_rate(rate)
+            .with(Params::new().with(params::PATH, self.path.clone()))
+            .queued(queue);
+        cx.command(Command::speak(speech));
     }
 }

@@ -209,7 +209,7 @@ impl AccountScreen {
                         None,
                     )
                 };
-                cx.command(Command::Http(request));
+                cx.command(Command::http(request));
                 self.busy = true;
                 self.show(cx, env.i18n.tr("kosync.connecting").to_string());
             }

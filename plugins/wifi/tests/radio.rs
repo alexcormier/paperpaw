@@ -56,7 +56,7 @@ impl Plugin for Probe {
             FETCH,
             Box::new(|_, _, out| {
                 let request = HttpRequest::new("GET", "http://example.org/", REPLY);
-                out.push(Command::Http(request));
+                out.push(Command::http(request));
             }),
         )
     }

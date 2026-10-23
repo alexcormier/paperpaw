@@ -142,7 +142,7 @@ impl PhoneScreen {
                 };
                 let page = || page(&env);
                 let (response, done) = answer(number, guard, page, env.storage, &request);
-                cx.command(Command::Respond(response));
+                cx.command(Command::respond(response));
                 let Some(done) = done else {
                     return;
                 };
@@ -534,8 +534,8 @@ mod tests {
         };
         let page = || b"<page>".to_vec();
         let (response, done) = answer(1, &mut guard, page, storage, &request);
-        let body = String::from_utf8_lossy(&response.body).into_owned();
-        (response.status, body, done)
+        let body = String::from_utf8_lossy(response.body()).into_owned();
+        (response.status(), body, done)
     }
 
     /// The page's marks are filled in one pass, in the order they come.

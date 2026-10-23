@@ -325,8 +325,8 @@ impl Harness {
     fn answer(&self, request: &HttpRequest, status: u16, body: &str) -> Vec<Command> {
         let mut reply = HttpReply::new(status, body);
         reply.content_type = Some("application/json".to_string());
-        reply.context = request.params.clone();
-        self.dispatch(&request.reply, &reply.to_params())
+        reply.context = request.params().clone();
+        self.dispatch(request.reply(), &reply.to_params())
     }
 
     /// Does what the kernel does with the settings and secrets in `out`.
@@ -355,7 +355,7 @@ fn reading(percent: f32) -> Reading {
 fn requests(out: &[Command]) -> Vec<&HttpRequest> {
     out.iter()
         .filter_map(|c| match c {
-            Command::Http(request) => Some(request),
+            Command::Http(request) => Some(&**request),
             _ => None,
         })
         .collect()
@@ -365,7 +365,7 @@ fn requests(out: &[Command]) -> Vec<&HttpRequest> {
 fn fetch(out: &[Command]) -> &HttpRequest {
     let found = requests(out);
     assert_eq!(found.len(), 1, "{out:?}");
-    assert_eq!(found[0].method, "GET");
+    assert_eq!(found[0].method(), "GET");
     found[0]
 }
 
@@ -373,10 +373,10 @@ fn fetch(out: &[Command]) -> &HttpRequest {
 fn sent(out: &[Command]) -> Option<f64> {
     let puts: Vec<_> = requests(out)
         .into_iter()
-        .filter(|r| r.method == "PUT")
+        .filter(|r| r.method() == "PUT")
         .collect();
     assert!(puts.len() <= 1, "{out:?}");
-    let body = json::object(puts.first()?.body.as_deref().unwrap_or_default());
+    let body = json::object(puts.first()?.body_text().unwrap_or_default());
     json::number(&body, "percentage")
 }
 

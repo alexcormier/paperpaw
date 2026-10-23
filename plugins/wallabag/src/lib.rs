@@ -277,13 +277,10 @@ impl Fetch {
         path: &str,
         reply: &Event<HttpReply>,
     ) -> HttpRequest {
-        let mut request = HttpRequest::new(method, &format!("{}{path}", server(env)), reply);
-        request.headers.push((
-            String::from("Authorization"),
-            format!("Bearer {}", self.token),
-        ));
-        request.headers.push(paperpaw_sdk::web::user_agent_of(env));
-        request
+        let (agent, name) = paperpaw_sdk::web::user_agent_of(env);
+        HttpRequest::new(method, &format!("{}{path}", server(env)), reply)
+            .header(String::from("Authorization"), format!("Bearer {}", self.token))
+            .header(agent, name)
     }
 
     /// Starts a fetch: first a token for the account.
@@ -306,23 +303,23 @@ impl Fetch {
             running: true,
             ..Self::default()
         };
-        let mut request =
-            HttpRequest::new("POST", &format!("{}/oauth/v2/token", server(env)), &TOKEN);
-        request.headers.push((
-            String::from("Content-Type"),
-            String::from("application/x-www-form-urlencoded"),
-        ));
-        request.body = Some(format!(
+        let body = format!(
             "grant_type=password&client_id={}&client_secret={}&username={}&password={}",
             encode(client),
             encode(secret),
             encode(user),
             encode(password)
-        ));
+        );
+        let request = HttpRequest::new("POST", &format!("{}/oauth/v2/token", server(env)), &TOKEN)
+            .header(
+                String::from("Content-Type"),
+                String::from("application/x-www-form-urlencoded"),
+            )
+            .body(body);
         out.push(Command::Notify(
             env.i18n.tr("wallabag.fetching").to_string(),
         ));
-        out.push(Command::Http(request));
+        out.push(Command::http(request));
     }
 
     fn ok(reply: &HttpReply) -> Option<u16> {
@@ -357,15 +354,15 @@ impl Fetch {
     /// done.
     fn next(&mut self, env: &Env<'_>, out: &mut Commands) {
         if let Some(id) = self.archive.pop() {
-            let mut request =
-                self.request(env, "PATCH", &format!("/api/entries/{id}.json"), &ARCHIVED);
-            request.headers.push((
-                String::from("Content-Type"),
-                String::from("application/x-www-form-urlencoded"),
-            ));
-            request.body = Some(String::from("archive=1"));
-            request.params = Params::new().with(ARTICLE, id);
-            out.push(Command::Http(request));
+            let request = self
+                .request(env, "PATCH", &format!("/api/entries/{id}.json"), &ARCHIVED)
+                .header(
+                    String::from("Content-Type"),
+                    String::from("application/x-www-form-urlencoded"),
+                )
+                .body(String::from("archive=1"))
+                .with(Params::new().with(ARTICLE, id));
+            out.push(Command::http(request));
             return;
         }
         if !self.listed {
@@ -373,16 +370,16 @@ impl Fetch {
                 "/api/entries.json?archive=0&detail=metadata&sort=created&order=desc&perPage={MAX_ARTICLES}"
             );
             let mut request = self.request(env, "GET", &path, &LISTED);
-            request.save_to = Some(data("entries.json"));
-            out.push(Command::Http(request));
+            request = request.save_to(data("entries.json"));
+            out.push(Command::http(request));
             return;
         }
         if let Some(id) = self.checks.pop() {
             let mut request =
                 self.request(env, "GET", &format!("/api/entries/{id}.json"), &CHECKED);
-            request.save_to = Some(data("entry.json"));
-            request.params = Params::new().with(ARTICLE, id);
-            out.push(Command::Http(request));
+            request = request.save_to(data("entry.json"));
+            request = request.with(Params::new().with(ARTICLE, id));
+            out.push(Command::http(request));
             return;
         }
         if let Some((id, title)) = self.downloads.pop() {
@@ -392,9 +389,9 @@ impl Fetch {
                 &format!("/api/entries/{id}/export.epub"),
                 &DOWNLOADED,
             );
-            request.save_to = Some(data("article.tmp"));
-            request.params = Params::new().with(ARTICLE, id).with(params::TITLE, title);
-            out.push(Command::Http(request));
+            request = request.save_to(data("article.tmp"));
+            request = request.with(Params::new().with(ARTICLE, id).with(params::TITLE, title));
+            out.push(Command::http(request));
             return;
         }
         self.running = false;

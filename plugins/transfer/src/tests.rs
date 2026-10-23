@@ -47,7 +47,8 @@ fn ask_at(
         at: Instant(at),
     };
     let (response, done) = web::answer(storage, guard, "<page>", request);
-    (response.status, response.body, response.body_from, done)
+    let file = response.body_file().map(String::from);
+    (response.status(), response.body().to_vec(), file, done)
 }
 
 /// Answers one request with the key [`KEY`], none wrong before.
@@ -109,7 +110,7 @@ fn wrong_keys_lock_for_a_while() {
             at: Instant(5),
         };
         let (response, text) = answer(7, &mut guard, "<page>", &storage, &request);
-        (response.status, text)
+        (response.status(), text)
     };
     for _ in 0..WRONG_KEYS {
         assert_eq!(send("guess"), (403, None));
@@ -322,7 +323,7 @@ fn text_typed_on_a_phone_comes_back() {
             at: Instant(0),
         };
         let (response, text) = answer(7, &mut guard, page, &storage, &request);
-        (response.status, response.body, text)
+        (response.status(), response.body().to_vec(), text)
     };
     // Without the key: nothing.
     assert_eq!(ask("GET", "/", None).0, 403);

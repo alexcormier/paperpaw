@@ -372,11 +372,8 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Commands) {
         return;
     };
     let url = format!("{}/api/v1/updates", server(env));
-    let mut request = HttpRequest::new("POST", &url, CHECKED);
-    request.headers.push((
-        String::from("content-type"),
-        String::from("application/json"),
-    ));
+    let request = HttpRequest::new("POST", &url, CHECKED)
+        .header(String::from("content-type"), String::from("application/json"));
     let code: Vec<(&str, String)> = env
         .plugins
         .iter()
@@ -384,13 +381,13 @@ pub(crate) fn check(env: &Env<'_>, quiet: bool, out: &mut Commands) {
         .map(|p| (p.manifest.id.as_str(), p.manifest.version.to_string()))
         .collect();
     let betas = env.settings.read(&BETAS);
-    request.body = Some(question(firmware, env.native, &code, betas));
+    let mut request = request.body(question(firmware, env.native, &code, betas));
     // Asked: an update waiting is asked for again not before a day.
     waiting::tried(env.storage, paperpaw_sdk::time::unix_seconds(env));
     if quiet {
-        request.params.set(QUIET, "1");
+        request = request.param(QUIET, "1");
     }
-    out.push(Command::Http(request));
+    out.push(Command::http(request));
 }
 
 /// The answer: the update it names kept (or the one kept before let go),
@@ -464,11 +461,11 @@ pub(crate) fn download(env: &Env<'_>, offer: &Offer, out: &mut Commands) {
     } else {
         offer.url.clone()
     };
-    let mut request = HttpRequest::new("GET", &url, DOWNLOADED);
-    request.save_to = Some(String::from(PART));
-    request.params.set("version", offer.version.as_str());
-    request.params.set("size", offer.size.to_string());
-    out.push(Command::Http(request));
+    let request = HttpRequest::new("GET", &url, DOWNLOADED)
+        .save_to(String::from(PART))
+        .param("version", offer.version.as_str())
+        .param("size", offer.size.to_string());
+    out.push(Command::http(request));
 }
 
 /// The download done: whole, it takes its name in `updates` and the

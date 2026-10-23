@@ -255,12 +255,11 @@ impl Screen for PlaceScreen {
                 self.search = Search::NoNetwork;
             } else {
                 let url = data::search_url(&name, env.i18n.language());
-                let mut request = HttpRequest::new("GET", &url, SEARCHED);
-                request.headers.push((
+                let request = HttpRequest::new("GET", &url, SEARCHED).header(
                     String::from("User-Agent"),
                     String::from("PaperPaw/0.1 (e-reader)"),
-                ));
-                cx.command(Command::Http(request));
+                );
+                cx.command(Command::http(request));
                 self.search = Search::Searching(name);
             }
             Self::redraw(cx);

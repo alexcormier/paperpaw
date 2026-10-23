@@ -176,14 +176,12 @@ fn old_password(text: &str) -> String {
 impl Sync {
     /// A request for the file of this sync.
     fn request(&self, env: &Env<'_>, method: &str, reply: &Event<HttpReply>) -> HttpRequest {
-        let mut request = HttpRequest::new(method, &self.url, reply);
-        if !self.user.is_empty() {
-            request.headers.push((
-                String::from("Authorization"),
-                paperpaw_sdk::web::basic_auth(&self.user, password(env)),
-            ));
+        let request = HttpRequest::new(method, &self.url, reply);
+        if self.user.is_empty() {
+            return request;
         }
-        request
+        let auth = paperpaw_sdk::web::basic_auth(&self.user, password(env));
+        request.header(String::from("Authorization"), auth)
     }
 }
 
@@ -243,8 +241,8 @@ impl Sync {
         self.url = format!("{}/{FILE}", folder(env.settings.read(&URL)));
         self.user = env.settings.read(&USER).to_string();
         let mut get = self.request(env, "GET", &DOWNLOADED);
-        get.save_to = Some(file("incoming.sqlite3"));
-        out.push(Command::Http(get));
+        get = get.save_to(file("incoming.sqlite3"));
+        out.push(Command::http(get));
     }
 
     /// The other side's file is here (or not): merge, then upload.
@@ -314,26 +312,22 @@ impl Sync {
         }
         self.books = outcome.books;
         self.kept = outcome.kept;
-        let mut put = self.request(env, "PUT", &UPLOADED);
-        put.body_from = Some(upload);
+        let mut put = self.request(env, "PUT", &UPLOADED).body_from(upload);
         match (income, &reply.etag) {
             // There was none: only if there still is none.
-            (None, _) => put
-                .headers
-                .push((String::from("If-None-Match"), String::from("*"))),
+            (None, _) => put = put.header(String::from("If-None-Match"), String::from("*")),
             (Some(_), Some(etag)) => {
                 // A weak validator does not match strongly (as KOReader does).
                 let etag = etag.trim_start_matches("W/").trim_start_matches("w/");
-                put.headers
-                    .push((String::from("If-Match"), etag.to_string()));
+                put = put.header(String::from("If-Match"), etag.to_string());
             }
             (Some(_), None) => {}
         }
-        put.headers.push((
+        let put = put.header(
             String::from("Content-Type"),
             String::from("application/octet-stream"),
-        ));
-        out.push(Command::Http(put));
+        );
+        out.push(Command::http(put));
     }
 
     /// What the user decided for the file there with `etag`, if anything.
